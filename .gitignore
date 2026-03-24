@@ -1,0 +1,9 @@
+node_modules/
+dist/
+settings.local.js
+/docs/notes
+deprecated/
+CLAUDE.md
+AGENTS.md
+coverage/
+*.state.json

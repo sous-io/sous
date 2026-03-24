@@ -1,0 +1,48 @@
+{
+  "name": "sous-cli",
+  "version": "0.1.0",
+  "description": "Sous LLM Config Manager CLI",
+  "type": "module",
+  "bin": {
+    "xcv": "./bin/xcv"
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts"
+  },
+  "dependencies": {
+    "@inquirer/prompts": "^8.3.2",
+    "@oclif/color": "^1.0.13",
+    "@oclif/core": "^4",
+    "chokidar": "^5.0.0",
+    "glob": "^13.0.6",
+    "liquidjs": "^10.25.0",
+    "tiktoken": "^1.0.22",
+    "tsx": "^4"
+  },
+  "devDependencies": {
+    "@types/glob": "^8.1.0",
+    "@types/node": "^22",
+    "@vitest/coverage-v8": "^4.1.0",
+    "memfs": "^4.56.11",
+    "typescript": "^5",
+    "vitest": "^4.1.0"
+  },
+  "oclif": {
+    "bin": "xcv",
+    "dirname": "xcv",
+    "flexibleTaxonomy": true,
+    "topicSeparator": " ",
+    "commands": {
+      "strategy": "pattern",
+      "target": "./src/commands"
+    }
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

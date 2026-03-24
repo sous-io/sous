@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+
+# Resolve the real directory of this script, following symlinks.
+# This ensures tsx is found relative to the package root even after npm link.
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+PKG_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+exec node \
+  --import "$PKG_ROOT/node_modules/tsx/dist/esm/index.mjs" \
+  "$SCRIPT_DIR/run.js" \
+  "$@"
