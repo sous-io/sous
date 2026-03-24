@@ -4,7 +4,8 @@
   "description": "Sous LLM Config Manager CLI",
   "type": "module",
   "bin": {
-    "xcv": "./bin/xcv"
+    "xcv": "./bin/xcv",
+    "sous": "./bin/xcv"
   },
   "scripts": {
     "build": "tsc",

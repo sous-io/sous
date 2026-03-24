@@ -129,9 +129,11 @@ Auto-injected vars always available:
 In any source `.md` file, `@path/to/file.md` on its own line includes that file's content:
 
 ```markdown
-@sections/context.md
-@../shared/intro.md
+@ sections/context.md
+@ ../shared/intro.md
 ```
+
+(remove the extra spaces)
 
 Paths are resolved relative to the including file's directory. Circular includes are detected and reported as errors.
 
