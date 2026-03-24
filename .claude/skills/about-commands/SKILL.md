@@ -21,9 +21,9 @@ disable-model-invocation: true
 ---
 ```
 
-**`disable-model-invocation: true`** is the defining property of a command. It removes the skill from Claude's context entirely — it loads only when the user explicitly invokes it. See the invocation matrix in `about-agent-skills/references/frontmatter.md`.
+**`disable-model-invocation: true`** is the defining property of a command. It removes the skill from the agent's context entirely — it loads only when the user explicitly invokes it. See the invocation matrix in `about-agent-skills/references/frontmatter.md`.
 
-**Descriptions are written for humans, not Claude.** Because `disable-model-invocation: true` removes the skill from Claude's context, the description is never seen by Claude — it appears only in the `/` autocomplete menu. Strong trigger language ("YOU MUST") is unnecessary and out of place. Plain, informative language is appropriate.
+**Descriptions are written for humans, not the agent.** Because `disable-model-invocation: true` removes the skill from the agent's context, the description is never seen by the agent — it appears only in the `/` autocomplete menu. Strong trigger language ("YOU MUST") is unnecessary and out of place. Plain, informative language is appropriate.
 
 **No `# Abstract` is required.** Include one only if genuinely useful context is needed. Headings are optional — use them only if the content is complex enough to warrant structure.
 
@@ -49,8 +49,15 @@ If `$ARGUMENTS` is not present in the body but arguments are passed, Claude Code
 
 ## When to Omit `disable-model-invocation`
 
-Not every command needs it. If it makes sense for Claude to invoke the command on the user's behalf — for example, a lightweight helper with no side effects — omit the flag. The deciding question is: **does this action require explicit user intent?** If yes, set it. If no, omit it.
+Not every command needs it. If it makes sense for the agent to invoke the command on the user's behalf — for example, a lightweight helper with no side effects — omit the flag. The deciding question is: **does this action require explicit user intent?** If yes, set it. If no, omit it.
 
 # Related Skills
 
 YOU MUST load `about-agent-skills` for skill structure, frontmatter, and architecture principles.
+
+## Source for this Skill
+
+This is a local skill for the `sous` project. Since `sous` uses its CLI to compile its own LLM configs, you cannot
+edit the skill output directly. Instead, you need to edit the template.
+
+- Source Path: /home/luke/Projects/puravida/infra/sous/.sous/prompts/skills/about-commands/SKILL.tpl.md

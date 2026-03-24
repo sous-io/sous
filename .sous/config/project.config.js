@@ -10,7 +10,19 @@ const projectConstants = {
   projectMemoryEntryPointFilename: "MEMORY.root.tpl.md",
   projectRunTimeContextPromptFilename: "session-context.md",
   projectTicketPrefix: "devops-"
-}
+};
+
+/**
+ * Just some strings that can be used to reference Claude Code
+ * in the templates. These are injected into the compiler outputs
+ * so they'll only be available to Claude outputs.
+ */
+const claudeSpecificVariables = {
+  tool: "claude",
+  toolName: "Claude Code",
+  toolNameShort: "Claude",
+  toolMetaDirectory: `.claude`,
+};
 
 /**
  * Defines all of the relevant project-level paths for the Sous project.
@@ -20,6 +32,7 @@ const projectPaths = {
 
   // project sub-folders
   projectMetaRoot: "${projectRoot}/.sous",
+  projectClaudeRoot: "${projectRoot}/.claude",
 
   // meta sub-folders
   projectConfigRoot: "${projectMetaRoot}/config",
@@ -27,10 +40,14 @@ const projectPaths = {
   projectStateRoot: "${projectMetaRoot}/state",
   projectTaskRoot: "${projectMetaRoot}/tasks",
 
+  // config sub-folders
+  projectClaudeSpecificFileRoot: "${projectConfigRoot}/.claude",
+
   // prompt sub-folders
   projectMemoryRoot: "${projectPromptRoot}/memory",
   projectRuntimeContextRoot: "${projectPromptRoot}/runtime-context",
   projectSkillRoot: "${projectPromptRoot}/skills",
+
 };
 
 // --- COMPILER CONFIGS ------------------------------------------------------------------------------------------------
@@ -42,13 +59,36 @@ const mainMemoryCompilationConfig = {
   entryPoint: "${projectMemoryRoot}/${projectMemoryEntryPointFilename}",
   generateRuntimeContext: false, // todo: how is this different than `runtimeContext.generate`?
   outputs: [
-    { _vars: { tool: "claude" }, destinationFile: "${projectRoot}/CLAUDE.md" },
+    { _vars: claudeSpecificVariables, destinationFile: "${projectRoot}/CLAUDE.md" },
   ],
 };
 
-/** Bring them together **/
+/**
+ * Compiler Config: Claude-Specific Files
+ */
+const claudeSpecificCompilationConfig = {
+  entryGlob: "${projectClaudeSpecificFileRoot}/**/*",
+  outputs: [
+    { _vars: claudeSpecificVariables, destinationDir: "${projectClaudeRoot}" },
+  ],
+};
+
+/**
+ * Compiler Config: Local Skills
+ * These skills are specific to the `sous` project and are stored in its `.sous` directory.
+ */
+const localSkillsCompilationConfig = {
+  entryGlob: "${projectSkillRoot}/**/*",
+  outputs: [
+    { _vars: claudeSpecificVariables, destinationDir: "${projectClaudeRoot}/skills" },
+  ],
+};
+
+/** Bring the compiler configs together **/
 const compilationTargets = [
   mainMemoryCompilationConfig,
+  claudeSpecificCompilationConfig,
+  localSkillsCompilationConfig,
 ];
 
 // --- ADDITIONAL CONFIGS ----------------------------------------------------------------------------------------------

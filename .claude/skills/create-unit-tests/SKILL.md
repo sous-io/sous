@@ -42,3 +42,10 @@ and console capture patterns.
 # Related Skills
 
 YOU MUST load `about-unit-tests` for all conventions, strategies, and helper patterns.
+
+## Source for this Skill
+
+This is a local skill for the `sous` project. Since `sous` uses its CLI to compile its own LLM configs, you cannot
+edit the skill output directly. Instead, you need to edit the template.
+
+- Source Path: /home/luke/Projects/puravida/infra/sous/.sous/prompts/skills/create-unit-tests/SKILL.tpl.md

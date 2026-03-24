@@ -140,3 +140,10 @@ not to paper over missing tests.
 Action skills for unit tests will have "unit-tests" in their name. Find the appropriate
 action skill for what you want to do. If no appropriate action skill exists, ask the
 user whether one should be created before continuing.
+
+## Source for this Skill
+
+This is a local skill for the `sous` project. Since `sous` uses its CLI to compile its own LLM configs, you cannot
+edit the skill output directly. Instead, you need to edit the template.
+
+- Source Path: /home/luke/Projects/puravida/infra/sous/.sous/prompts/skills/about-unit-tests/SKILL.tpl.md

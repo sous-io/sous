@@ -16,13 +16,15 @@ project uses when creating and maintaining them.
 ## About Claude Code Skills
 
 A Claude Code skill is a directory containing a `SKILL.md` file and optional supporting
-files, placed under a `skills/` directory. Skills extend what Claude can do — invoke
-them directly with `/skill-name`, or Claude loads them automatically when relevant.
+files, placed under a `skills/` directory. Skills extend what the agent can do — invoke
+them directly with `/skill-name`, or the agent loads them automatically when relevant.
+
 
 Official docs: https://code.claude.com/docs/en/skills
 
+
 In the `sous` project, skills fall into two categories: **local skills** (in `.claude/skills/`,
-for use when working on sous itself) and **shared skills** (in `shared-prompts/skills/`, compiled
+for use when working on sous itself) and **shared skills** (in `shared/skills/`, compiled
 by xcv and distributed to other projects). You MUST load `about-local-skills` or `about-shared-skills`
 as appropriate before working with either type.
 
@@ -38,10 +40,10 @@ my-skill/
 ├── SKILL.md        # Required. Frontmatter + instructions.
 ├── references/     # Optional. Deep-dive docs loaded when needed.
 ├── examples/       # Optional. Example outputs.
-└── scripts/        # Optional. Executable scripts Claude can run.
+└── scripts/        # Optional. Executable scripts the agent can run.
 ```
 
-Supporting files must be referenced from `SKILL.md` — Claude will not know they exist otherwise.
+Supporting files must be referenced from `SKILL.md` — the agent will not know they exist otherwise.
 
 ## Core Frontmatter
 
@@ -59,17 +61,17 @@ user-invocable: false
 
 **`name`** — becomes the `/slash-command`. Defaults to the directory name if omitted.
 
-**`description`** — tells Claude when to invoke this skill. Keep under 500 chars. If omitted,
-Claude uses the first paragraph of the skill body.
+**`description`** — tells the agent when to invoke this skill. Keep under 500 chars. If omitted,
+the agent uses the first paragraph of the skill body.
 
-**`disable-model-invocation`** — set `true` to prevent Claude from invoking the skill
+**`disable-model-invocation`** — set `true` to prevent the agent from invoking the skill
 automatically. Use this for **commands**: skills that represent an intentional, user-initiated
 action (e.g. `/commit`, `/deploy`, `/create-local-skill`). Commands should usually have this
 set, but not always — if it makes sense for the agent to invoke the command on the user's
 behalf, omit it. Use judgement on a case-by-case basis.
 
 **`user-invocable`** — set `false` to hide the skill from the `/` menu. Use this on all
-topic skills (`about-*`). They are reference material Claude loads automatically; they are
+topic skills (`about-*`). They are reference material the agent loads automatically; they are
 not commands for the user to invoke directly.
 
 For all frontmatter fields, see [references/frontmatter.md](references/frontmatter.md).
@@ -79,7 +81,7 @@ For all frontmatter fields, see [references/frontmatter.md](references/frontmatt
 Also referred to as "topic skills". A topical skill is a knowledge hub for a concept —
 it holds reference material, background context, and any shared scripts that action skills
 draw from. Topical skills may be moderately descriptive. Always set `user-invocable: false`
-on topical skills; they are reference material Claude loads automatically, not commands for
+on topical skills; they are reference material the agent loads automatically, not commands for
 the user to invoke.
 
 **Naming:** Use the `about-*` prefix when the skill's primary purpose is background
@@ -107,8 +109,8 @@ should usually have `disable-model-invocation: true` set — but not always. If 
 sense for the agent to invoke the command on the user's behalf, omit it.
 
 Non-command action skills must NOT have `disable-model-invocation: true`. That flag
-removes the skill from Claude's context entirely, making it undiscoverable. A non-command
-action skill relies on its description to tell Claude when to invoke it automatically —
+removes the skill from the agent's context entirely, making it undiscoverable. A non-command
+action skill relies on its description to tell the agent when to invoke it automatically —
 omitting the flag is what makes that possible.
 
 **Naming:** Action skill names always begin with a verb (e.g. `create-`, `deploy-`, `run-`).
@@ -122,18 +124,22 @@ immediately distinguishes action skills from topical skills in any skill listing
   general guidance, it belongs in the topic skill instead.
 - Carry the minimum cold-start context needed to orient the agent, then point upward.
 
-i## Template Files (`.tpl.`)
+## Template Files (`.tpl.`)
 
 Any file in a skill directory can use `.tpl.` naming to opt into LiquidJS processing
 at compile time. The `.tpl.` segment is stripped from the output filename.
 
-**`SKILL.md` for any skill compiled by sous — whether in `shared-prompts/skills/` or
-in a downstream project's skill source directory — must always be named `SKILL.tpl.md`.**
-This is required because every compiled skill must include a `## Source for this Skill`
-footer containing `{{ sousTemplatePath }}`, which requires LiquidJS rendering.
-No exceptions.
+**`SKILL.md` for any skill compiled by sous — whether in `shared/skills/`, in
+`.sous/prompts/skills/` (sous's own local skills), or in a downstream project's skill
+source directory — must always be named `SKILL.tpl.md`.** This is required because every
+compiled skill must include a `## Source for this Skill` footer containing
+`{{ sousTemplatePath }}`, which requires LiquidJS rendering. No exceptions.
 
-Local skills (in `.claude/skills/`, never compiled by sous) use plain `SKILL.md`.
+In generic downstream projects, skills placed directly in `.claude/skills/` (not compiled
+by sous) use plain `SKILL.md`. In the sous project itself, however, even local skills are
+compiled — their source templates live in `.sous/prompts/skills/` and use `SKILL.tpl.md`.
+See `about-local-skills` for the full sous-specific workflow.
+
 All other files in any skill directory (references, scripts, docs) use `.tpl.` naming
 only when they genuinely need variable substitution, conditionals, or partials.
 
@@ -191,3 +197,10 @@ exists, ask the user whether one should be created before continuing.
 
 `about-local-skills` and `about-shared-skills` extend this skill for the sous-specific
 two-tier context. You MUST load them when working with sous skills specifically.
+
+## Source for this Skill
+
+This is a local skill for the `sous` project. Since `sous` uses its CLI to compile its own LLM configs, you cannot
+edit the skill output directly. Instead, you need to edit the template.
+
+- Source Path: /home/luke/Projects/puravida/infra/sous/.sous/prompts/skills/about-agent-skills/SKILL.tpl.md

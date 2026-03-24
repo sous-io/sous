@@ -9,7 +9,7 @@ description: >
 
 This action skill covers creating a new shared skill in the sous project.
 
-A **shared skill** is a skill that lives in `shared-prompts/skills/` within the `sous`
+A **shared skill** is a skill that lives in `shared/skills/` within the `sous`
 repo. It is compiled by `xcv build` and distributed to downstream projects that use sous.
 It is distinct from a **local skill** (`.claude/skills/`), which is active immediately
 and never processed by LiquidJS.
@@ -22,11 +22,11 @@ rules specific to shared skills are:
 ### 1. Location
 
 Shared skills are organized into bundles. Place the skill directory at
-`shared-prompts/skills/<bundle-name>/<skill-name>/` — not `.claude/skills/`.
+`shared/skills/<bundle-name>/<skill-name>/` — not `.claude/skills/`.
 
 The built-in sous bundle is `sous-skills`. When creating a new skill that belongs to that bundle,
-use `shared-prompts/skills/sous-skills/<skill-name>/`. When creating a new bundle, create a new
-subdirectory under `shared-prompts/skills/` and add a corresponding `entryGlob` target in each
+use `shared/skills/sous-skills/<skill-name>/`. When creating a new bundle, create a new
+subdirectory under `shared/skills/` and add a corresponding `entryGlob` target in each
 downstream project's config that should receive it.
 
 ### 2. Extended Frontmatter
@@ -65,6 +65,7 @@ naming only when the file genuinely needs LiquidJS processing. YOU MUST load
 
 Every shared `SKILL.tpl.md` must end with this block:
 
+
 ```markdown
 ## Source for this Skill
 
@@ -73,6 +74,7 @@ the output file should not be edited directly.
 
 - Source Path: {{ sousTemplatePath }}
 ```
+
 
 ### 5. Activation Requires `xcv build`
 
@@ -84,7 +86,7 @@ xcv build
 ```
 
 Verify the skill directory is covered by an `entryGlob` target in the project settings
-file. If the glob already covers `shared-prompts/skills/**/*.md`, no config changes
+file. If the glob already covers `shared/skills/**/*.md`, no config changes
 are needed.
 
 # Related Skills
@@ -93,3 +95,10 @@ YOU MUST load `about-shared-skills` for the shared vs local distinction in sous.
 MUST load `about-agent-skills` for skill structure, frontmatter, and architecture
 principles. YOU MUST load `about-liquid-templates` when deciding whether any file in
 the skill directory needs `.tpl.` naming.
+
+## Source for this Skill
+
+This is a local skill for the `sous` project. Since `sous` uses its CLI to compile its own LLM configs, you cannot
+edit the skill output directly. Instead, you need to edit the template.
+
+- Source Path: /home/luke/Projects/puravida/infra/sous/.sous/prompts/skills/create-shared-skill/SKILL.tpl.md

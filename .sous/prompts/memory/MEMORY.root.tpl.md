@@ -43,17 +43,27 @@ src/
   utils/
     formatting.ts          # console output helpers (heading, showVar, etc.)
     prompts.ts
-shared-prompts/
+shared/
   skills/                  # shared skill bundles; each subdirectory is a bundle
     sous-skills/           # built-in sous bundle, compiled + distributed to downstream projects
       about-sous/          # teaches downstream agents what Sous manages (never-edit rule)
       about-agent-skills/  # foundational skill knowledge for downstream agents
       about-liquid-templates/ # .tpl. convention + LiquidJS syntax for downstream agents
       create-skill/        # action skill: creating a skill in skillsRoot
-deprecated/
-  prompts/                 # archived — superseded by shared-prompts/skills/
-  shared-prompts/          # archived — superseded by current shared-prompts/
+    task-files/            # task file management bundle for downstream projects
 docs/notes/                # planning docs and TODOs
+.sous/                     # sous's own project config (self-compilation)
+  config/
+    sous.config.js         # entry point config (defaultProject, imports project config)
+    project.config.js      # project config: paths, compilation targets, launch config
+    .claude/               # source for Claude-specific files (settings.json)
+  prompts/
+    memory/
+      MEMORY.root.tpl.md   # source template for this file (CLAUDE.md)
+    skills/                # source templates for local skills (compiled → .claude/skills/)
+    runtime-context/       # generated session-context files (gitignored)
+  state/                   # sous state files for this project (gitignored)
+  tasks/                   # task files for runtime context
 ```
 
 ## User Configuration
@@ -98,6 +108,36 @@ export const config = {
 };
 ```
 
+## The `.sous/` Convention (Recommended Project Layout)
+
+Sous's config system is open-ended — users can organize files however they want. However, the
+recommended approach is to use a `.sous/` directory in the project root for all project-specific
+sous configuration, templates, and state. Cross-project shared content (skill bundles, partials,
+configs reused across multiple projects) should live in separate repos or directories outside any
+single project.
+
+Recommended `.sous/` layout:
+
+```
+.sous/
+  config/              # sous config files (sous.config.js, project.config.js)
+  prompts/             # source templates for compiled output
+    memory/            # root memory template(s) → CLAUDE.md, AGENTS.md, etc.
+    skills/            # project-specific skill source templates → .claude/skills/
+    runtime-context/   # generated session context (gitignored)
+  state/               # sous state files (gitignored)
+  tasks/               # task files for runtime context
+```
+
+**Sous itself follows this convention.** The `.sous/` directory in this repo contains sous's own
+project config and source templates. `xcv build` compiles them into the output locations (`.claude/`,
+`CLAUDE.md`). The `shared/` directory — which lives outside `.sous/` — contains skill bundles
+distributed to downstream projects, not project-specific content.
+
+The key distinction:
+- **`.sous/`** — project-specific: templates, skills, state, and config for *this* project
+- **`shared/`** (or a separate repo) — cross-project: skill bundles and partials distributed to *other* projects
+
 ## Variable Scoping
 
 Resolution order (later overrides earlier):
@@ -139,12 +179,16 @@ Paths are resolved relative to the including file's directory. Circular includes
 
 ## Skills System
 
-Skills live in `configs/skills/<skill-name>/SKILL.md` (plus optional `scripts/`, `references/`). They are compiled to 
-agent skill directories via `entryGlob` targets. See `prompts/skills/format.md` for the full `SKILL.md` frontmatter spec.
+Sous has two tiers of skills:
 
-Two skill types:
-- **Topic skills** — reference material and shared scripts for a concept
-- **Action skills** — lean, action-specific; reference their parent topic skill
+- **Local skills** — for working on sous itself. Source templates in `.sous/prompts/skills/`, compiled to `.claude/skills/` via `xcv build`.
+- **Shared skills** — distributed to downstream projects. Organized into bundles under `shared/skills/` (e.g. `shared/skills/sous-skills/`).
+
+Both tiers use `SKILL.tpl.md` as the main file (LiquidJS-rendered), with optional `references/`, `examples/`, and `scripts/` directories.
+
+Two skill patterns:
+- **Topic skills** (`about-*`) — reference material; `user-invocable: false`
+- **Action skills** (verb-first) — lean, action-specific; reference their parent topic skill
 
 ## State Files
 

@@ -27,6 +27,25 @@ next time Sous runs:
 If you need to change something in one of these files, the change must be made at the
 source — in the central configuration this project uses with Sous.
 
+## Recommended Project Layout
+
+Sous recommends using a `.sous/` directory in the project root for all project-specific
+configuration, templates, and state:
+
+```
+.sous/
+  config/              # sous config files (sous.config.js, project.config.js)
+  prompts/             # source templates for compiled output
+    memory/            # root memory templates → CLAUDE.md, AGENTS.md, etc.
+    skills/            # skill source templates → .claude/skills/
+    runtime-context/   # generated session context (gitignored)
+  state/               # sous state files (gitignored)
+  tasks/               # task files for runtime context
+```
+
+Content shared across multiple projects (skill bundles, partials) should live in a
+separate repo or directory — not inside `.sous/`.
+
 ## Where Your Skills Live
 
 Skills for this project live at `{{ skillsRoot }}`. That is the source directory Sous
@@ -37,7 +56,7 @@ YOU MUST load `create-skill` when creating a new skill for this project.
 
 ## Sous Reference Skills
 
-Sous ships built-in reference skills at `{{ sousRootPath }}/shared-prompts/skills/`.
+Sous ships built-in reference skills at `{{ sousRootPath }}/shared/skills/`.
 You may read these for reference. Never edit them — that path is inside the Sous
 installation itself.
 

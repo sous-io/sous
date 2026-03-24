@@ -1,7 +1,7 @@
 ---
 name: about-shared-skills
 description: >
-  YOU MUST load this skill when working with skills in shared-prompts/skills/ or when
+  YOU MUST load this skill when working with skills in shared/skills/ or when
   the user mentions "shared skill". Covers what shared skills are, the .tpl. convention,
   xcv compilation, and the extended frontmatter used in sous-distributed skills.
 user-invocable: false
@@ -21,15 +21,15 @@ When we refer to a "shared skill" or a skill being "shared", we mean a template 
 compiles and mirrors into the skill directories of **downstream projects that use sous** — not this
 project. Shared skills teach those projects' agents how to work with sous.
 
-Shared skills are organized into **bundles** under `shared-prompts/skills/`. Each bundle is a
-subdirectory (e.g. `shared-prompts/skills/sous-skills/`) containing one or more skills. Downstream
+Shared skills are organized into **bundles** under `shared/skills/`. Each bundle is a
+subdirectory (e.g. `shared/skills/sous-skills/`) containing one or more skills. Downstream
 projects point their `entryGlob` targets at specific bundle directories, allowing them to opt in to
-only the bundles they need. The built-in sous bundle lives at `shared-prompts/skills/sous-skills/`.
+only the bundles they need. The built-in sous bundle lives at `shared/skills/sous-skills/`.
 
 The main skill file for every shared skill must be named `SKILL.tpl.md` (not `SKILL.md`). It is
 rendered through LiquidJS at compile time and output as `SKILL.md` at the destination — the `.tpl.`
 segment is stripped. This is required because every shared skill must include the `## Source for this
-Skill` footer, which uses `{{ sousTemplatePath }}` and therefore requires LiquidJS rendering. This
+Skill` footer, which uses `/home/luke/Projects/puravida/infra/sous/.sous/prompts/skills/about-shared-skills/SKILL.tpl.md` and therefore requires LiquidJS rendering. This
 rule applies to all shared skill libraries — sous's built-in skills and any other library. No exceptions.
 
 Other files in the skill directory (scripts, references, supporting docs) use `.tpl.` naming only when
@@ -58,6 +58,7 @@ a supporting file needs LiquidJS processing.
 
 Every shared skill's `SKILL.tpl.md` must end with a `## Source for this Skill` block:
 
+
 ```markdown
 ## Source for this Skill
 
@@ -67,5 +68,13 @@ the output file should not be edited directly.
 - Source Path: {{ sousTemplatePath }}
 ```
 
+
 This renders the source path into the compiled output, telling downstream agents where the
 skill originated and reinforcing that the file must not be edited directly.
+
+## Source for this Skill
+
+This is a local skill for the `sous` project. Since `sous` uses its CLI to compile its own LLM configs, you cannot
+edit the skill output directly. Instead, you need to edit the template.
+
+- Source Path: /home/luke/Projects/puravida/infra/sous/.sous/prompts/skills/about-shared-skills/SKILL.tpl.md
