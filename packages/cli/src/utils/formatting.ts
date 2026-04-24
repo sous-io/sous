@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { color } from "@oclif/color";
 
 const DEFAULT_VAR_NAME_PADDING = 20;
@@ -8,10 +7,6 @@ const HEADER_LINES = [
   "  ▀▀▀▄▄▄ ██  ██ ██  ██ ▀▀▀▄▄▄  ",
   "  █████▀ ▀████▀ ▀████▀ █████▀  ",
 ];
-
-
-
-
 
 // --- Core Output Functions -----------------------------------------------------------------------
 

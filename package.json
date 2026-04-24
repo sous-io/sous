@@ -1,49 +1,30 @@
 {
-  "name": "sous-cli",
+  "name": "sous",
   "version": "0.1.0",
-  "description": "Sous LLM Config Manager CLI",
+  "description": "Sous LLM Config Manager (monorepo root)",
+  "private": true,
   "type": "module",
-  "bin": {
-    "xcv": "./bin/xcv",
-    "sous": "./bin/xcv"
-  },
   "scripts": {
-    "build": "tsc",
-    "clean": "rm -rf dist",
+    "build": "pnpm -r build",
+    "clean": "pnpm -r clean",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "vitest run --config vitest.e2e.config.ts"
-  },
-  "dependencies": {
-    "@inquirer/prompts": "^8.3.2",
-    "@oclif/color": "^1.0.13",
-    "@oclif/core": "^4",
-    "chokidar": "^5.0.0",
-    "glob": "^13.0.6",
-    "liquidjs": "^10.25.0",
-    "tiktoken": "^1.0.22",
-    "tsx": "^4"
+    "test:e2e": "pnpm --filter @sous/cli test:e2e",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
   },
   "devDependencies": {
-    "@types/glob": "^8.1.0",
-    "@types/node": "^22",
+    "@eslint/js": "^9.18.0",
     "@vitest/coverage-v8": "^4.1.0",
-    "memfs": "^4.56.11",
+    "eslint": "^9.18.0",
     "typescript": "^5",
+    "typescript-eslint": "^8.20.0",
     "vitest": "^4.1.0"
   },
-  "oclif": {
-    "bin": "xcv",
-    "dirname": "xcv",
-    "flexibleTaxonomy": true,
-    "topicSeparator": " ",
-    "commands": {
-      "strategy": "pattern",
-      "target": "./src/commands"
-    }
-  },
   "engines": {
-    "node": ">=18"
-  }
+    "node": ">=18",
+    "pnpm": ">=10"
+  },
+  "packageManager": "pnpm@10.33.0"
 }

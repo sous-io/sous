@@ -1,5 +1,7 @@
 node_modules/
 dist/
+packages/*/dist/
+packages/*/coverage/
 settings.local.js
 /docs/notes
 deprecated/
@@ -7,3 +9,4 @@ CLAUDE.md
 AGENTS.md
 coverage/
 *.state.json
+.idea/

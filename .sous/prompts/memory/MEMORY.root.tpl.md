@@ -1,48 +1,93 @@
-# Sous CLI (xcv) — Agent Configuration Manager
+# Sous (xcv) — Agent Configuration Manager
 
-Sous is a TypeScript CLI tool that compiles markdown templates and manages output files for LLM/AI coding agents 
-(Claude, Codex, etc.). The binary is named `xcv`.
+Sous is a TypeScript toolchain that compiles markdown templates and manages output files for LLM/AI coding agents
+(Claude, Codex, etc.). The user-facing entry point is a CLI binary named `xcv`.
+
+Sous is a **pnpm monorepo**. All real code currently lives in `@sous/cli`; `@sous/core` and `@sous/mcp` are skeletons
+that will be fleshed out in subsequent tasks (`core` will absorb shared internals; `mcp` will provide an MCP server).
+Everything will continue to be launched through the CLI — other packages are encapsulation boundaries, not separate
+public interfaces.
 
 ## Build & Development
 
+Requires **pnpm ≥ 10** and **Node ≥ 18**.
+
 ```bash
-npm run build    # compile TypeScript → dist/
-npm run clean    # rm -rf dist/
+pnpm install             # install all workspaces
+pnpm build               # pnpm -r build → tsc in every package
+pnpm clean               # pnpm -r clean
+pnpm test                # root vitest — runs every package's tests
+pnpm test:e2e            # cli e2e suite
+pnpm lint                # eslint across the workspace
+pnpm lint:fix            # eslint --fix across the workspace
 ```
 
-Run directly from source during development:
+Per-package scripts also work (`pnpm --filter @sous/cli build`, `pnpm --filter @sous/core test`, etc.), and every
+package exposes `build`, `test`, `lint`, and `lint:fix`.
+
+Run the CLI directly from source during development:
 ```bash
-node --import tsx/esm bin/run.js <command>
+packages/cli/bin/xcv <command>
+# or: pnpm --filter @sous/cli exec xcv <command>
 ```
 
-TypeScript: strict mode, ES2022 target, Node16 module resolution. Output goes to `dist/`.
+TypeScript: strict mode, ES2022 target, Node16 module resolution. Each package extends the root `tsconfig.base.json`
+and emits to its own `dist/`.
 
 ## Project Structure
 
 ```
-src/
-  base-command.ts          # oclif BaseCommand; bootstraps ~/.sous/, loads settings
-  commands/
-    build.ts               # compile + prune (main workflow command)
-    compile.ts             # compile only
-    prune.ts               # remove stale output files
-    clear.ts               # delete all Sous-written files for a project
-    launch.ts              # build + spawn a coding agent tool
-    configure.ts           # interactive setup wizard
-    config/
-      get.ts / set.ts / show.ts
-  lib/
-    settings.ts            # config loader, var resolution, scope chain
-    markdown-compiler.ts   # CompilationService; @-include, LiquidJS rendering
-    build-service.ts       # orchestrates compile + prune; BuildService
-    liquid-engine.ts       # LiquidJS engine factory + filters
-    state.ts               # StateService; tracks written files/dirs per project
-    user-settings.ts       # ~/.sous/ bootstrapping and profile management
-    watch-service.ts       # chokidar watcher with debounce; WatchService
-    pid-service.ts         # PidService; single-instance watcher enforcement via PID files
-  utils/
-    formatting.ts          # console output helpers (heading, showVar, etc.)
-    prompts.ts
+package.json               # workspace root: delegating scripts, shared devDeps
+pnpm-workspace.yaml        # packages/*
+tsconfig.base.json         # shared compiler options
+eslint.config.js           # shared flat config (very light rule set)
+vitest.workspace.ts        # aggregates per-package vitest configs
+.npmrc                     # link-workspace-packages=true
+
+packages/
+  cli/                     # @sous/cli — the xcv binary and all current functionality
+    package.json           # bin: xcv, sous
+    bin/
+      xcv                  # bash wrapper that runs bin/run.js via tsx
+      run.js               # oclif entry point
+    src/
+      base-command.ts      # oclif BaseCommand; bootstraps ~/.sous/, loads settings
+      commands/
+        build.ts           # compile + prune (main workflow command)
+        compile.ts         # compile only
+        prune.ts           # remove stale output files
+        clear.ts           # delete all Sous-written files for a project
+        launch.ts          # build + spawn a coding agent tool
+        configure.ts       # interactive setup wizard
+        config/
+          get.ts / set.ts / show.ts
+      lib/
+        settings.ts        # config loader, var resolution, scope chain
+        markdown-compiler.ts  # CompilationService; @-include, LiquidJS rendering
+        build-service.ts   # orchestrates compile + prune; BuildService
+        state.ts           # StateService; tracks written files/dirs per project
+        user-settings.ts   # ~/.sous/ bootstrapping and profile management
+        watch-service.ts   # chokidar watcher with debounce; WatchService
+        pid-service.ts     # PidService; single-instance watcher enforcement via PID files
+      templating/
+        init-liquid-engine.ts # LiquidJS engine factory
+        filters/, tags/    # custom LiquidJS filters + tags
+      utils/
+        formatting.ts      # console output helpers (heading, showVar, etc.)
+        prompts.ts
+      test/                # unit + integration + e2e tests live alongside src
+    vitest.config.ts       # unit + integration
+    vitest.e2e.config.ts   # e2e suite (longer timeouts)
+    tsconfig.json / eslint.config.js
+
+  core/                    # @sous/core — skeleton; shared internals will move here
+    src/index.ts
+    package.json / tsconfig.json / eslint.config.js / vitest.config.ts
+
+  mcp/                     # @sous/mcp — skeleton for the future MCP server
+    src/index.ts
+    package.json / tsconfig.json / eslint.config.js / vitest.config.ts
+
 shared/
   skills/                  # shared skill bundles; each subdirectory is a bundle
     sous-skills/           # built-in sous bundle, compiled + distributed to downstream projects
@@ -217,6 +262,8 @@ Common flags: `--project <key>`, `--rebuild`, `--dry-run`, `--strict`, `--watch`
 - `BuildService` orchestrates `CompilationService` + prune in one step
 - Watch mode uses `WatchService` (chokidar + debounce, 300ms); ignores `*.sous.state.json` files
 - `resolveScope()` in `settings.ts` performs topological sort for intra-block var dependencies
+- Internal package deps use pnpm's `workspace:*` protocol (e.g., `@sous/cli` depends on `@sous/core`)
+- ESLint runs as a shared flat config; each package's `eslint.config.js` imports the root config and can override
 
 ## Open TODOs
 

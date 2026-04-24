@@ -1,0 +1,29 @@
+{
+  "name": "@sous/core",
+  "version": "0.1.0",
+  "description": "Sous core library (shared across CLI, MCP, and hub packages)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "devDependencies": {
+    "@types/node": "^22"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
