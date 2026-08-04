@@ -90,7 +90,10 @@ export const config = {
         targets: [sousSkills, controlFlowSkills, projectSkills],
       },
       tools: {
-        claude: { command: "claude" },
+        claude: {
+          command: "claude",
+          args: ["--dangerously-skip-permissions"],
+        },
       },
     },
   },
