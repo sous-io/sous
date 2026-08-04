@@ -16,6 +16,12 @@ export const CONFIG_FILE_NAMES = [
   "sous.config.json",
 ] as const;
 
+/**
+ * The name of the optional shared-defaults env file inside `.sous/`. This file
+ * is meant to be committed: it holds values a whole team shares, never secrets.
+ */
+export const ENV_DEFAULTS_NAME = ".env";
+
 /** The name of the optional machine-specific env file inside `.sous/`. */
 export const ENV_LOCAL_NAME = ".env.local";
 

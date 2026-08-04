@@ -5,6 +5,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { globSync } from "glob";
 import { inferGlobBase, type CompilationConfig, type CompilationTarget, type ResolvedRuntimeContext } from "./markdown-compiler.js";
 import { buildAliasMap, type AliasMap } from "./include-resolver.js";
+import { ENV_DEFAULTS_NAME, ENV_LOCAL_NAME, SOUS_DIR_NAME } from "./config-discovery.js";
 import { warning } from "../utils/formatting.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -265,7 +266,7 @@ export function substituteVarsStrict(str: string, scope: VarScope, context: stri
         `  raw value: ${str}\n` +
         `  Define ${unresolved.length === 1 ? "it" : "them"} in a _vars block, or map ` +
         `${unresolved.length === 1 ? "it" : "them"} from the environment via the top-level ` +
-        `_env block (values can come from .sous/.env.local).\n` +
+        `_env block (values can come from .sous/.env.local or .sous/.env).\n` +
         `  Variables in scope here: ${available.length > 0 ? available.join(", ") : "(none)"}`
     );
   }
@@ -333,7 +334,7 @@ export function resolveScope(block: Record<string, string>, inherited: VarScope)
 /**
  * Where the active config came from. Threaded through variable resolution so
  * configs can reference their own `.sous/` directory and so error messages can
- * point at the right `.env.local`.
+ * point at the right `.env.local` / `.env`.
  */
 export type ConfigContext = {
   /** Absolute path to the `.sous/` directory holding the config. */
@@ -370,7 +371,7 @@ export function buildAutoVars(context?: ConfigContext): VarScope {
  *
  * @param settings - The root settings object.
  * @param context - The discovered config location, used to name the
- *   `.sous/.env.local` file in the error message.
+ *   `.sous/.env.local` and `.sous/.env` files in the error message.
  */
 export function resolveEnvScope(settings: Settings, context?: ConfigContext): VarScope {
   const env = settings._env ?? {};
@@ -380,13 +381,18 @@ export function resolveEnvScope(settings: Settings, context?: ConfigContext): Va
     const value = process.env[envVarName];
     if (value === undefined) {
       const envLocalPath = context
-        ? path.join(context.sousDir, ".env.local")
-        : ".sous/.env.local";
+        ? path.join(context.sousDir, ENV_LOCAL_NAME)
+        : `${SOUS_DIR_NAME}/${ENV_LOCAL_NAME}`;
+      const envDefaultsPath = context
+        ? path.join(context.sousDir, ENV_DEFAULTS_NAME)
+        : `${SOUS_DIR_NAME}/${ENV_DEFAULTS_NAME}`;
       throw new ConfigError(
         `_env resolution failed: environment variable '${envVarName}' (mapped to config ` +
           `var '${varName}') is not set.\n` +
           `  Define it in ${envLocalPath} as:\n` +
           `    ${envVarName}=<value>\n` +
+          `  ...or, if the value is shared by the whole team and is not a secret, in ` +
+          `${envDefaultsPath} (committed).\n` +
           `  ...or export it in your shell before running sous.`
       );
     }

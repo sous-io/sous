@@ -10,7 +10,8 @@ formats agents actually read: `.claude/` plus `CLAUDE.md` for Claude Code, `.cod
 - Share one set of agent configs across every project you work in, and with teammates.
 - Write a rule once as a template with variables; each project gets its own rendered copy.
 - Compile the same source to more than one agent's format.
-- Keep machine-specific values (absolute paths, tokens) in an untracked env file, out of git.
+- Keep machine-specific values (absolute paths, tokens) in an untracked env file, out of git,
+  with shared team defaults in a committed one.
 
 ## Quickstart
 
@@ -66,10 +67,16 @@ config. Config discovery walks up from the current directory until it finds a `.
 directory holding a config, so you can run it from anywhere inside the project. Pass
 `--config <path>` to point at one explicitly instead.
 
-If any value differs between machines or must stay out of git, put it in
-`.sous/.env.local` as `KEY=value` and map it in the config's top-level `_env` block. That
-file is loaded before anything resolves, and a variable already set in your shell wins
-over it. This repo ships `.sous/.env.local.example` documenting the layer.
+Values reach the config through its top-level `_env` block, which maps a config variable
+to an environment variable. Both env files use `KEY=value` lines and are loaded before
+anything resolves. There are two layers:
+
+- `.sous/.env` is committed. Put shared team defaults here, never secrets.
+- `.sous/.env.local` is gitignored. Put machine-specific values and secrets here.
+
+Precedence, highest first: your shell environment, then `.env.local`, then `.env`. So
+`FOO=bar xcv build` beats both files, and `.env.local` beats `.env` per key. This repo
+ships `.sous/.env.local.example` documenting the layer.
 
 Useful commands:
 

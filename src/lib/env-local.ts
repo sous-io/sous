@@ -1,9 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
-import { ENV_LOCAL_NAME } from "./config-discovery.js";
+import { ENV_DEFAULTS_NAME, ENV_LOCAL_NAME } from "./config-discovery.js";
 
 /**
- * Parses `.env.local` style content into a flat key/value map.
+ * Parses `.env` / `.env.local` style content into a flat key/value map.
  *
  * Supported syntax (deliberately small — this is not a shell):
  *   - `KEY=value`
@@ -83,7 +83,7 @@ function findClosingQuote(value: string, quote: string): number {
   return -1;
 }
 
-/** The outcome of an attempted `.env.local` load. */
+/** The outcome of an attempted env file load. */
 export type EnvLocalLoadResult = {
   /** Absolute path checked. */
   filePath: string;
@@ -95,24 +95,25 @@ export type EnvLocalLoadResult = {
   skipped: string[];
 };
 
+/** The outcome of loading both env layers. */
+export type EnvFilesLoadResult = {
+  /** Result for the gitignored `.sous/.env.local` layer (loaded first, so it wins). */
+  local: EnvLocalLoadResult;
+  /** Result for the committed `.sous/.env` defaults layer (loaded second). */
+  defaults: EnvLocalLoadResult;
+};
+
 /**
- * Loads `<sousDir>/.env.local` into `process.env`, if it exists.
+ * Loads a single env file into `env`, if it exists.
  *
- * Existing environment values always win: a variable already set in the real
- * environment is never overwritten, so `FOO=bar xcv build` behaves as expected.
- * Must be called before any config or variable resolution so the `_env` block
- * sees the injected values.
+ * A variable already present in `env` is never overwritten, which is what makes
+ * layering work: whoever gets there first wins.
  *
- * @param sousDir - The discovered `.sous/` directory.
- * @param env - The environment object to mutate (injectable for tests).
+ * @param filePath - Absolute path to the env file.
+ * @param env - The environment object to mutate.
  * @returns What was found and what was applied.
  */
-export function loadEnvLocal(
-  sousDir: string,
-  env: NodeJS.ProcessEnv = process.env
-): EnvLocalLoadResult {
-  const filePath = path.join(sousDir, ENV_LOCAL_NAME);
-
+function loadEnvFile(filePath: string, env: NodeJS.ProcessEnv): EnvLocalLoadResult {
   if (!fs.existsSync(filePath)) {
     return { filePath, loaded: false, applied: [], skipped: [] };
   }
@@ -131,4 +132,64 @@ export function loadEnvLocal(
   }
 
   return { filePath, loaded: true, applied, skipped };
+}
+
+/**
+ * Loads `<sousDir>/.env` (committed shared defaults) into `process.env`, if it
+ * exists. Anything already set is left alone, so both your shell and
+ * `.env.local` outrank it.
+ *
+ * @param sousDir - The discovered `.sous/` directory.
+ * @param env - The environment object to mutate (injectable for tests).
+ * @returns What was found and what was applied.
+ */
+export function loadEnvDefaults(
+  sousDir: string,
+  env: NodeJS.ProcessEnv = process.env
+): EnvLocalLoadResult {
+  return loadEnvFile(path.join(sousDir, ENV_DEFAULTS_NAME), env);
+}
+
+/**
+ * Loads `<sousDir>/.env.local` (machine-specific values and secrets) into
+ * `process.env`, if it exists.
+ *
+ * Existing environment values always win: a variable already set in the real
+ * environment is never overwritten, so `FOO=bar xcv build` behaves as expected.
+ *
+ * @param sousDir - The discovered `.sous/` directory.
+ * @param env - The environment object to mutate (injectable for tests).
+ * @returns What was found and what was applied.
+ */
+export function loadEnvLocal(
+  sousDir: string,
+  env: NodeJS.ProcessEnv = process.env
+): EnvLocalLoadResult {
+  return loadEnvFile(path.join(sousDir, ENV_LOCAL_NAME), env);
+}
+
+/**
+ * Loads both env layers out of `sousDir`. Precedence, highest first:
+ *
+ *   real shell environment > `.sous/.env.local` > `.sous/.env`
+ *
+ * Because no load ever overwrites a value that is already set, the FIRST writer
+ * of a key wins. So the higher-precedence file is loaded first: `.env.local`,
+ * then `.env` fills in only the keys nobody else supplied. The real shell
+ * environment is already populated before either runs, so it outranks both.
+ *
+ * Must be called before any config or variable resolution so the `_env` block
+ * sees the injected values.
+ *
+ * @param sousDir - The discovered `.sous/` directory.
+ * @param env - The environment object to mutate (injectable for tests).
+ * @returns The per-file results.
+ */
+export function loadEnvFiles(
+  sousDir: string,
+  env: NodeJS.ProcessEnv = process.env
+): EnvFilesLoadResult {
+  const local = loadEnvLocal(sousDir, env);
+  const defaults = loadEnvDefaults(sousDir, env);
+  return { local, defaults };
 }

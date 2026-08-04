@@ -5,7 +5,7 @@ import {
   resolveConfigFlag,
   type DiscoveredConfig,
 } from "./lib/config-discovery.js";
-import { loadEnvLocal } from "./lib/env-local.js";
+import { loadEnvFiles } from "./lib/env-local.js";
 import {
   isConfigError,
   loadSettings,
@@ -21,7 +21,8 @@ import { displayError, displayErrorBlock, header } from "./utils/formatting.js";
  * Startup sequence:
  *   1. Locate the config — `--config <path>` wins, otherwise walk up from cwd
  *      looking for a `.sous/` directory holding sous.config.{js,mjs,json}.
- *   2. Load `<.sous>/.env.local` into process.env (never overwriting real env vars).
+ *   2. Load `<.sous>/.env.local`, then `<.sous>/.env`, into process.env (never
+ *      overwriting real env vars). Precedence: shell > .env.local > .env.
  *   3. Load the config file. Variable resolution happens later, per command.
  *
  * There is no user-level config: nothing is read from `~/.sous`.
@@ -79,8 +80,8 @@ export abstract class BaseCommand extends Command {
       configPath: discovered.configPath,
     };
 
-    // Inject .sous/.env.local before anything resolves variables.
-    loadEnvLocal(discovered.sousDir);
+    // Inject .sous/.env.local and .sous/.env before anything resolves variables.
+    loadEnvFiles(discovered.sousDir);
 
     try {
       this.settings = await loadSettings(discovered.configPath);

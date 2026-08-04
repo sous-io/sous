@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { loadEnvLocal, parseEnvLocal } from "./env-local.js";
+import { loadEnvDefaults, loadEnvFiles, loadEnvLocal, parseEnvLocal } from "./env-local.js";
 import { makeTmpDir, type TmpDir } from "../test/utils/tmp.js";
 
 // ---------------------------------------------------------------------------
@@ -271,5 +271,233 @@ describe("loadEnvLocal()", () => {
     expect(env.SOUS_SHARED_PATH).toBe("/home/dev/code/sous shared");
     expect(env.TOKEN).toBe("abc123");
     expect(Object.keys(env).sort()).toEqual(["SOUS_SHARED_PATH", "TOKEN"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// loadEnvDefaults()
+// ---------------------------------------------------------------------------
+
+describe("loadEnvDefaults()", () => {
+  let tmp: TmpDir;
+
+  /** Writes .env (the committed shared-defaults layer) into the temp dir. */
+  function writeEnvDefaults(content: string): void {
+    fs.writeFileSync(path.join(tmp.path, ".env"), content, "utf8");
+  }
+
+  beforeEach(() => {
+    tmp = makeTmpDir("sous-envdefaults-");
+  });
+
+  afterEach(() => {
+    tmp.cleanup();
+  });
+
+  /**
+   * loadEnvDefaults() should report loaded=false when the `.sous/` directory has
+   * no `.env` file, since the defaults layer is optional.
+   *
+   * loadEnvDefaults("<tmp>", env); // -> { loaded: false, applied: [] }
+   */
+  it("should do nothing when .env does not exist", () => {
+    const env: NodeJS.ProcessEnv = {};
+    const result = loadEnvDefaults(tmp.path, env);
+    expect(result.loaded).toBe(false);
+    expect(result.applied).toEqual([]);
+    expect(env).toEqual({});
+  });
+
+  /**
+   * loadEnvDefaults() should read `.env`, not `.env.local`, so the two layers
+   * stay independent.
+   *
+   * loadEnvDefaults("<tmp>", env); // -> result.filePath ends in "/.env"
+   */
+  it("should target the .env file", () => {
+    const result = loadEnvDefaults(tmp.path, {});
+    expect(result.filePath).toBe(path.join(tmp.path, ".env"));
+  });
+
+  /**
+   * loadEnvDefaults() should inject `.env` values when nothing else supplied
+   * them, which is the whole point of a shared-defaults layer.
+   *
+   * // .env: FOO=shared
+   * loadEnvDefaults("<tmp>", env); // -> env.FOO === "shared"
+   */
+  it("should inject .env values into the environment", () => {
+    writeEnvDefaults("FOO=shared\nBAR=team\n");
+    const env: NodeJS.ProcessEnv = {};
+    const result = loadEnvDefaults(tmp.path, env);
+    expect(env.FOO).toBe("shared");
+    expect(env.BAR).toBe("team");
+    expect(result.loaded).toBe(true);
+    expect(result.applied.sort()).toEqual(["BAR", "FOO"]);
+  });
+
+  /**
+   * loadEnvDefaults() must not overwrite a value already in the environment, so
+   * the shell still beats the committed defaults.
+   *
+   * // env.FOO = "from-shell"; .env: FOO=shared
+   * loadEnvDefaults("<tmp>", env); // -> env.FOO stays "from-shell"
+   */
+  it("should not overwrite variables already set in the environment", () => {
+    writeEnvDefaults("FOO=shared\n");
+    const env: NodeJS.ProcessEnv = { FOO: "from-shell" };
+    const result = loadEnvDefaults(tmp.path, env);
+    expect(env.FOO).toBe("from-shell");
+    expect(result.skipped).toEqual(["FOO"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// loadEnvFiles() — the two-layer precedence chain
+// ---------------------------------------------------------------------------
+
+describe("loadEnvFiles()", () => {
+  let tmp: TmpDir;
+
+  function writeEnvDefaults(content: string): void {
+    fs.writeFileSync(path.join(tmp.path, ".env"), content, "utf8");
+  }
+
+  function writeEnvLocal(content: string): void {
+    fs.writeFileSync(path.join(tmp.path, ".env.local"), content, "utf8");
+  }
+
+  beforeEach(() => {
+    tmp = makeTmpDir("sous-envfiles-");
+  });
+
+  afterEach(() => {
+    tmp.cleanup();
+  });
+
+  /**
+   * loadEnvFiles() should work with only `.env` present, so a team can commit
+   * shared defaults and no one needs a `.env.local` at all.
+   *
+   * // .env: FOO=shared  (no .env.local)
+   * loadEnvFiles("<tmp>", env); // -> env.FOO === "shared"
+   */
+  it("should apply .env when no .env.local exists", () => {
+    writeEnvDefaults("FOO=shared\nBAR=team\n");
+    const env: NodeJS.ProcessEnv = {};
+    const result = loadEnvFiles(tmp.path, env);
+    expect(env.FOO).toBe("shared");
+    expect(env.BAR).toBe("team");
+    expect(result.defaults.loaded).toBe(true);
+    expect(result.local.loaded).toBe(false);
+  });
+
+  /**
+   * loadEnvFiles() should still work with only `.env.local` present, preserving
+   * the behaviour that existed before the defaults layer was added.
+   *
+   * // .env.local: FOO=machine  (no .env)
+   * loadEnvFiles("<tmp>", env); // -> env.FOO === "machine"
+   */
+  it("should apply .env.local when no .env exists", () => {
+    writeEnvLocal("FOO=machine\n");
+    const env: NodeJS.ProcessEnv = {};
+    const result = loadEnvFiles(tmp.path, env);
+    expect(env.FOO).toBe("machine");
+    expect(result.local.loaded).toBe(true);
+    expect(result.defaults.loaded).toBe(false);
+  });
+
+  /**
+   * loadEnvFiles() should let `.env.local` override `.env` for a key set in
+   * both: the machine-specific layer outranks the shared defaults.
+   *
+   * // .env: FOO=shared ; .env.local: FOO=machine
+   * loadEnvFiles("<tmp>", env); // -> env.FOO === "machine"
+   */
+  it("should let .env.local win over .env", () => {
+    writeEnvDefaults("FOO=shared\n");
+    writeEnvLocal("FOO=machine\n");
+    const env: NodeJS.ProcessEnv = {};
+    loadEnvFiles(tmp.path, env);
+    expect(env.FOO).toBe("machine");
+  });
+
+  /**
+   * loadEnvFiles() should merge the layers key by key: `.env` supplies the keys
+   * `.env.local` does not mention, rather than being discarded wholesale.
+   *
+   * // .env: A=shared B=shared ; .env.local: B=machine
+   * loadEnvFiles("<tmp>", env); // -> { A: "shared", B: "machine" }
+   */
+  it("should merge the two files per key", () => {
+    writeEnvDefaults("A=shared\nB=shared\n");
+    writeEnvLocal("B=machine\nC=machine\n");
+    const env: NodeJS.ProcessEnv = {};
+    loadEnvFiles(tmp.path, env);
+    expect(env.A).toBe("shared");
+    expect(env.B).toBe("machine");
+    expect(env.C).toBe("machine");
+  });
+
+  /**
+   * loadEnvFiles() should give the real shell environment the highest
+   * precedence, beating both files, so `FOO=x xcv build` always wins.
+   *
+   * // env.FOO = "from-shell" ; .env: FOO=shared ; .env.local: FOO=machine
+   * loadEnvFiles("<tmp>", env); // -> env.FOO stays "from-shell"
+   */
+  it("should let the shell environment win over both files", () => {
+    writeEnvDefaults("FOO=shared\n");
+    writeEnvLocal("FOO=machine\n");
+    const env: NodeJS.ProcessEnv = { FOO: "from-shell" };
+    loadEnvFiles(tmp.path, env);
+    expect(env.FOO).toBe("from-shell");
+  });
+
+  /**
+   * loadEnvFiles() should resolve the full three-way chain at once, each key
+   * landing at its highest-precedence source.
+   *
+   * shell > .env.local > .env, per key.
+   */
+  it("should resolve the full shell > .env.local > .env chain", () => {
+    writeEnvDefaults("FROM_DEFAULTS=d\nFROM_LOCAL=d\nFROM_SHELL=d\n");
+    writeEnvLocal("FROM_LOCAL=l\nFROM_SHELL=l\n");
+    const env: NodeJS.ProcessEnv = { FROM_SHELL: "s" };
+    loadEnvFiles(tmp.path, env);
+    expect(env.FROM_SHELL).toBe("s");
+    expect(env.FROM_LOCAL).toBe("l");
+    expect(env.FROM_DEFAULTS).toBe("d");
+  });
+
+  /**
+   * loadEnvFiles() should report `.env` keys that lost to a higher layer as
+   * skipped, so the result stays a truthful record of what was applied.
+   *
+   * // .env: FOO=shared ; .env.local: FOO=machine
+   * loadEnvFiles("<tmp>", env); // -> defaults.skipped === ["FOO"]
+   */
+  it("should report shadowed .env keys as skipped", () => {
+    writeEnvDefaults("FOO=shared\nONLY=here\n");
+    writeEnvLocal("FOO=machine\n");
+    const result = loadEnvFiles(tmp.path, {});
+    expect(result.local.applied).toEqual(["FOO"]);
+    expect(result.defaults.skipped).toEqual(["FOO"]);
+    expect(result.defaults.applied).toEqual(["ONLY"]);
+  });
+
+  /**
+   * loadEnvFiles() should do nothing when neither file exists, since both layers
+   * are optional and a fresh clone has neither.
+   *
+   * loadEnvFiles("<tmp>", env); // -> env unchanged
+   */
+  it("should do nothing when neither file exists", () => {
+    const env: NodeJS.ProcessEnv = {};
+    const result = loadEnvFiles(tmp.path, env);
+    expect(env).toEqual({});
+    expect(result.local.loaded).toBe(false);
+    expect(result.defaults.loaded).toBe(false);
   });
 });

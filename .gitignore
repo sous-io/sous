@@ -10,7 +10,8 @@ proj.sous.state.json
 sous.state.json
 sous.pid
 
-# Machine-specific env for the discovered .sous/ config
+# Machine-specific env for the discovered .sous/ config. Note that the shared
+# defaults layer, .sous/.env, is deliberately NOT ignored: it is committed.
 .sous/.env.local
 
 # Compiled agent instructions at the repo root. These are OUTPUTS written by
