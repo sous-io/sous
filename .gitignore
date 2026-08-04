@@ -1,0 +1,22 @@
+node_modules/
+dist/
+coverage/
+deprecated/
+settings.local.js
+/docs/notes
+
+# Build state written by sous itself
+proj.sous.state.json
+sous.state.json
+sous.pid
+
+# Machine-specific env for the discovered .sous/ config
+.sous/.env.local
+
+# Compiled agent instructions at the repo root. These are OUTPUTS written by
+# `xcv build`. Root-anchored on purpose: the sources under shared-prompts/ are
+# .tpl. files in subdirectories and are NOT affected by these rules.
+/CLAUDE.md
+/AGENTS.md
+/.claude/
+/.codex/
