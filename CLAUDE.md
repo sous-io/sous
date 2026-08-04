@@ -229,6 +229,14 @@ project's agent skill directories (`.claude/skills/`, `.codex/skills/`).
 A downstream project's own skills live wherever its config sets `skillsRoot`; the shared
 `create-skill` skill writes there.
 
+**In THIS repo, `skillsRoot` IS the shared bundle root** (`shared-prompts/skills/`). So when
+a compiled skill tells you to edit "this project's skills", that means editing the
+distributed bundle sources consumed by every downstream project — treat those edits with
+that blast radius in mind. Skills that are specific to developing sous itself and must NOT
+be distributed go in `.sous/skills/` instead (see the `projectSkills` target in
+`.sous/sous.config.js`). The compiled `about-sous`/`about-agent-skills` "never edit them"
+rule refers to compiled copies in consuming projects, not to these sources.
+
 The `SKILL.md` frontmatter spec lives in the `about-agent-skills` skill
 (`shared-prompts/skills/sous-skills/about-agent-skills/`), which is the authoritative reference
 for skill structure and naming.
