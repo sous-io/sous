@@ -113,8 +113,8 @@ each level can define variables:
 }
 ```
 
-Variables resolve later-wins across scopes: auto-injected, env, root, project, target,
-output. Templates read them as `{{ varName }}`; config files reference them as `${varName}`.
+Variables resolve later-wins across scopes: auto-injected, env, root, project, compilation,
+target, output. Templates read them as `{{ varName }}`; config files reference them as `${varName}`.
 The auto-injected ones include `${sousDir}` and `${sousConfigPath}` for the discovered
 config, and `${sousTemplatePath}` for the template being rendered.
 
