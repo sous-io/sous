@@ -31,6 +31,17 @@ const controlFlowSkills = {
   outputs: [{ destinationDir: "${claudeSkillsDir}" }],
 };
 
+// [SOUS] Project-local skills: hand-maintained, sous-specific skills that have no
+// shared-bundle equivalent (currently the unit-testing pair). These describe how to
+// work ON this repo, so they are NOT distributed to downstream projects and do not
+// live under shared-prompts/. They are plain SKILL.md files with no variables, so
+// compilation is effectively a mirrored copy into .claude/skills/.
+const projectSkills = {
+  entryGlob: "${projectSkillsDir}/**/*",
+  globBase: "${projectSkillsDir}",
+  outputs: [{ destinationDir: "${claudeSkillsDir}" }],
+};
+
 // Deliberately NOT compiled here:
 //   - task-files: sous development does not use per-branch task files, and the
 //     bundle needs taskFileRoot / ticketPrefix / ticketIdExample, none of which
@@ -67,12 +78,16 @@ export const config = {
         // Bundle root, used by the targets above.
         sharedSkillsRoot: "${projectRoot}/shared-prompts/skills",
 
+        // Hand-maintained skills that are specific to developing sous itself and
+        // are NOT distributed downstream. Tracked sources; see projectSkills.
+        projectSkillsDir: "${sousDir}/skills",
+
         // Compiled skill destination. Gitignored build output.
         claudeSkillsDir: "${projectRoot}/.claude/skills",
       },
       compilation: {
         includeSourceComments: false,
-        targets: [sousSkills, controlFlowSkills],
+        targets: [sousSkills, controlFlowSkills, projectSkills],
       },
       tools: {
         claude: { command: "claude" },
