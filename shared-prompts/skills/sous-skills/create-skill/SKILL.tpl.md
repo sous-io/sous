@@ -23,11 +23,34 @@ must not be edited).
 
 The directory name must match the `name` frontmatter field (lowercase, hyphens).
 
+**If `{{ skillsRoot }}` is a bundle root**, its immediate subdirectories are *bundles*, not
+skills, and the path gains a segment: `{{ skillsRoot }}/<bundle-name>/<skill-name>/`. Check
+what is already there before creating anything: a directory holding `SKILL.md` /
+`SKILL.tpl.md` files directly means skills go at the top level; a directory holding further
+subdirectories that each contain a skill means you are looking at bundles, so add the skill
+to the bundle it belongs to. When a new skill genuinely needs a new bundle, create the
+bundle directory and add a matching `entryGlob` target in the config of every project that
+should receive it — a bundle with no `entryGlob` is never compiled anywhere.
+
 ### 2. Write `SKILL.tpl.md`
 
 Create `SKILL.tpl.md` in the directory with valid frontmatter and an imperative body.
 See `about-agent-skills` for the full frontmatter reference and topic vs action
 skill guidance.
+
+**Distributed skills take extended frontmatter.** A skill compiled out to other projects
+declares its provenance and portability; a project-local skill omits these fields because
+nothing outside the project consumes it:
+
+```yaml
+license: MIT
+compatibility:
+  - claude
+  - codex
+metadata:
+  version: 1.0.0
+  tags: [<relevant>, <tags>]
+```
 
 ### 3. Add supporting files (if needed)
 
@@ -41,8 +64,11 @@ otherwise.
 ### 4. Name the main file `SKILL.tpl.md` and add the source footer
 
 Skills in `{{ skillsRoot }}` are compiled and distributed — the main skill file must
-always be named `SKILL.tpl.md`, not `SKILL.md`. No exceptions. This is required because
-every distributed skill must end with a `## Source for this Skill` footer:
+always be named `SKILL.tpl.md`, not `SKILL.md`. No exceptions, and specifically **not even
+when the skill body contains no variables at all**: the mandatory `## Source for this Skill`
+footer itself contains a template variable, so every skill needs a LiquidJS render pass by
+definition. A plain `SKILL.md` is copied verbatim, which would ship the footer's unrendered
+variable straight into the output. The footer:
 
 {% raw %}
 ```markdown
