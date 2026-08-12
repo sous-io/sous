@@ -1,0 +1,549 @@
+/* ==========================================================================
+   Sous — site stylesheet
+   --------------------------------------------------------------------------
+   Design tokens adapted from the BTCPay Server Design System (MIT):
+   https://design.btcpayserver.org · github.com/btcpayserver/btcpayserver-design
+
+   Structure:
+     1. Font loading
+     2. Design tokens (raw palette, typography, spacing, radii, shadows)
+     3. Semantic theme tokens — light (default) and dark
+     4. Base element styles
+     5. Foundational classes (deliberately few — content first)
+   ========================================================================== */
+
+@import url("https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap");
+
+/* ==========================================================================
+   2. Design tokens
+   ========================================================================== */
+
+:root {
+  /* ----- Brand ----------------------------------------------------------- */
+  --sous-brand-primary: #51b13e;   /* signature green: buttons, links, active states */
+  --sous-brand-secondary: #cedc21; /* lime accent — use sparingly */
+  --sous-brand-tertiary: #1e7a44;  /* hover / accent green */
+  --sous-brand-dark: #0f3b21;      /* deep forest green */
+  --sous-white: #ffffff;
+  --sous-black: #000000;
+
+  /* ----- Neutral scales --------------------------------------------------
+     Light scale = Bootstrap grays (500 and 900 tweaked).
+     Dark scale = GitHub's dark palette. The active --sous-neutral-* aliases
+     below point at the light scale and are remapped in reverse for dark mode. */
+  --sous-neutral-light-100: #f8f9fa;
+  --sous-neutral-light-200: #e9ecef;
+  --sous-neutral-light-300: #dee2e6;
+  --sous-neutral-light-400: #ced4da;
+  --sous-neutral-light-500: #8f979e;
+  --sous-neutral-light-600: #6c757d;
+  --sous-neutral-light-700: #495057;
+  --sous-neutral-light-800: #343a40;
+  --sous-neutral-light-900: #292929;
+
+  --sous-neutral-dark-50: #0d1117;
+  --sous-neutral-dark-100: #161b22;
+  --sous-neutral-dark-200: #21262d;
+  --sous-neutral-dark-300: #30363d;
+  --sous-neutral-dark-400: #484f58;
+  --sous-neutral-dark-500: #6e7681;
+  --sous-neutral-dark-600: #8b949e;
+  --sous-neutral-dark-700: #b1bac4;
+  --sous-neutral-dark-800: #c9d1d9;
+  --sous-neutral-dark-900: #f0f6fc;
+
+  /* ----- Color scales (100 = palest … 900 = darkest) --------------------- */
+  /* Green (brand / success) */
+  --sous-green-100: #eefaeb;
+  --sous-green-200: #c7e8c0;
+  --sous-green-300: #a0d695;
+  --sous-green-400: #78c369;
+  --sous-green-500: #51b13e;
+  --sous-green-600: #419437;
+  --sous-green-700: #307630;
+  --sous-green-800: #205928;
+  --sous-green-900: #0f3b21;
+
+  /* Primary (interactive green — hover/active steps) */
+  --sous-primary-100: #c7e6c1;
+  --sous-primary-200: #b5dead;
+  --sous-primary-300: #9dd392;
+  --sous-primary-400: #7cc46e;
+  --sous-primary-500: #44a431;
+  --sous-primary-600: #389725;
+  --sous-primary-700: #2e8a1b;
+  --sous-primary-800: #247d12;
+  --sous-primary-900: #1c710b;
+
+  /* Blue (info) */
+  --sous-blue-100: #b5e1e8;
+  --sous-blue-200: #9dd7e1;
+  --sous-blue-300: #7ccad7;
+  --sous-blue-400: #51b9c9;
+  --sous-blue-500: #17a2b8;
+  --sous-blue-600: #03899e;
+  --sous-blue-700: #007d91;
+  --sous-blue-800: #007284;
+  --sous-blue-900: #006778;
+
+  /* Yellow (warning) */
+  --sous-yellow-100: #fffaf0;
+  --sous-yellow-200: #fff2d9;
+  --sous-yellow-300: #ffe3ac;
+  --sous-yellow-400: #ffcf70;
+  --sous-yellow-500: #ffc043;
+  --sous-yellow-600: #b57e12;
+  --sous-yellow-700: #997328;
+  --sous-yellow-800: #674d1b;
+  --sous-yellow-900: #543d10;
+
+  /* Red (danger) */
+  --sous-red-100: #ffefed;
+  --sous-red-200: #fed7d2;
+  --sous-red-300: #f1998e;
+  --sous-red-400: #e85c4a;
+  --sous-red-500: #e11900;
+  --sous-red-600: #ab1300;
+  --sous-red-700: #870f00;
+  --sous-red-800: #5a0a00;
+  --sous-red-900: #420105;
+
+  /* ----- Semantic colors -------------------------------------------------- */
+  --sous-primary: var(--sous-brand-primary);
+  --sous-primary-accent: var(--sous-primary-700);
+  --sous-success: var(--sous-green-500);
+  --sous-info: var(--sous-blue-500);
+  --sous-warning: var(--sous-yellow-500);
+  --sous-danger: var(--sous-red-500);
+
+  /* "Dim" pairs: pale background + dark text, for badges/callouts */
+  --sous-success-dim-bg: var(--sous-green-100);
+  --sous-success-dim-text: var(--sous-green-800);
+  --sous-info-dim-bg: var(--sous-blue-100);
+  --sous-info-dim-text: var(--sous-blue-800);
+  --sous-warning-dim-bg: var(--sous-yellow-100);
+  --sous-warning-dim-text: var(--sous-yellow-800);
+  --sous-danger-dim-bg: var(--sous-red-100);
+  --sous-danger-dim-text: var(--sous-red-800);
+
+  /* ----- Typography ------------------------------------------------------- */
+  --sous-font-family-base: "Open Sans", "Helvetica Neue", Arial, sans-serif;
+  --sous-font-family-monospace: SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+
+  --sous-font-size-xs: 0.625rem;   /* 10px */
+  --sous-font-size-s: 0.75rem;     /* 12px */
+  --sous-font-size-base: 0.875rem; /* 14px — the compact admin feel */
+  --sous-font-size-l: 1.125rem;    /* 18px */
+  --sous-font-size-xl: 2.25rem;    /* 36px */
+  --sous-font-size-xxl: 2.8125rem; /* 45px */
+
+  --sous-font-weight-normal: 400;
+  --sous-font-weight-semibold: 600;
+  --sous-font-weight-bold: 700;
+
+  --sous-line-height-base: 1.6;
+  --sous-line-height-heading: 1.2;
+
+  /* Heading sizes (h1–h6) */
+  --sous-h1: 2.1875rem;  /* 35px */
+  --sous-h2: 1.75rem;    /* 28px */
+  --sous-h3: 1.53125rem; /* 24.5px */
+  --sous-h4: 1.3125rem;  /* 21px */
+  --sous-h5: 1.09375rem; /* 17.5px */
+  --sous-h6: 0.875rem;   /* 14px */
+
+  /* ----- Spacing ----------------------------------------------------------- */
+  --sous-space-xs: 0.25rem; /* 4px */
+  --sous-space-s: 0.5rem;   /* 8px */
+  --sous-space-m: 1rem;     /* 16px */
+  --sous-space-l: 2rem;     /* 32px */
+  --sous-space-xl: 4rem;    /* 64px */
+  --sous-space-xxl: 5rem;   /* 80px */
+
+  /* ----- Radii ------------------------------------------------------------- */
+  --sous-border-radius: 0.25rem;
+  --sous-border-radius-l: 0.5rem;
+  --sous-border-radius-xl: 1rem;
+  --sous-border-radius-xxl: 1.5rem;
+  --sous-tile-radius: 8px;
+
+  /* ----- Shadows (deliberately subtle; tiles use borders, not shadows) ----- */
+  --sous-box-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
+  --sous-box-shadow: 0 2px 2px rgba(0, 0, 0, 0.05);
+  --sous-box-shadow-lg: 0 10px 20px rgba(0, 0, 0, 0.1);
+
+  /* ----- Motion ------------------------------------------------------------ */
+  --sous-transition-fast: 0.2s;
+  --sous-transition-base: 0.3s;
+  --sous-transition-slow: 0.5s;
+
+  /* ----- Focus ------------------------------------------------------------- */
+  --sous-focus-ring: 0 0 0 2px rgba(81, 177, 62, 0.5);
+}
+
+/* ==========================================================================
+   3. Semantic theme tokens
+   ========================================================================== */
+
+/* ----- Light (default) ---------------------------------------------------- */
+:root {
+  --sous-neutral-100: var(--sous-neutral-light-100);
+  --sous-neutral-200: var(--sous-neutral-light-200);
+  --sous-neutral-300: var(--sous-neutral-light-300);
+  --sous-neutral-400: var(--sous-neutral-light-400);
+  --sous-neutral-500: var(--sous-neutral-light-500);
+  --sous-neutral-600: var(--sous-neutral-light-600);
+  --sous-neutral-700: var(--sous-neutral-light-700);
+  --sous-neutral-800: var(--sous-neutral-light-800);
+  --sous-neutral-900: var(--sous-neutral-light-900);
+
+  --sous-body-bg: var(--sous-neutral-light-100);      /* #f8f9fa */
+  --sous-body-text: var(--sous-neutral-light-900);    /* #292929 */
+  --sous-body-text-muted: var(--sous-neutral-light-500);
+  --sous-bg-tile: var(--sous-white);                  /* cards, headers, surfaces */
+  --sous-border-light: var(--sous-neutral-light-200); /* #e9ecef */
+  --sous-border-medium: var(--sous-neutral-light-300);/* #dee2e6 */
+
+  --sous-link: var(--sous-brand-primary);
+  --sous-link-hover: var(--sous-brand-tertiary);
+
+  --sous-form-bg: var(--sous-white);
+  --sous-form-text: var(--sous-body-text);
+  --sous-form-border: var(--sous-neutral-light-300);
+  --sous-form-border-focus: var(--sous-primary);
+
+  --sous-code-bg: var(--sous-neutral-light-200);
+  --sous-code-text: var(--sous-neutral-light-800);
+
+  color-scheme: light;
+}
+
+/* ----- Dark ----------------------------------------------------------------
+   Same greens on GitHub-dark neutrals. The neutral scale is remapped in
+   reverse so anything built on --sous-neutral-* flips automatically.
+   Applies via OS preference, or force with <html data-sous-theme="dark">
+   (data-sous-theme="light" opts out of the OS preference). */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-sous-theme="light"]) {
+    --sous-neutral-100: var(--sous-neutral-dark-100);
+    --sous-neutral-200: var(--sous-neutral-dark-200);
+    --sous-neutral-300: var(--sous-neutral-dark-300);
+    --sous-neutral-400: var(--sous-neutral-dark-400);
+    --sous-neutral-500: var(--sous-neutral-dark-500);
+    --sous-neutral-600: var(--sous-neutral-dark-600);
+    --sous-neutral-700: var(--sous-neutral-dark-700);
+    --sous-neutral-800: var(--sous-neutral-dark-800);
+    --sous-neutral-900: var(--sous-neutral-dark-900);
+
+    --sous-body-bg: var(--sous-neutral-dark-100);     /* #161b22 */
+    --sous-body-text: var(--sous-white);
+    --sous-body-text-muted: var(--sous-neutral-dark-600);
+    --sous-bg-tile: var(--sous-neutral-dark-50);      /* #0d1117 */
+    --sous-border-light: var(--sous-neutral-dark-200);
+    --sous-border-medium: var(--sous-neutral-dark-300);
+
+    --sous-form-bg: var(--sous-neutral-dark-50);
+    --sous-form-text: var(--sous-white);
+    --sous-form-border: var(--sous-neutral-dark-300);
+
+    --sous-code-bg: var(--sous-neutral-dark-200);
+    --sous-code-text: var(--sous-neutral-dark-800);
+
+    --sous-success-dim-bg: var(--sous-green-900);
+    --sous-success-dim-text: var(--sous-green-200);
+    --sous-info-dim-bg: var(--sous-blue-900);
+    --sous-info-dim-text: var(--sous-blue-200);
+    --sous-warning-dim-bg: var(--sous-yellow-900);
+    --sous-warning-dim-text: var(--sous-yellow-300);
+    --sous-danger-dim-bg: var(--sous-red-900);
+    --sous-danger-dim-text: var(--sous-red-300);
+
+    color-scheme: dark;
+  }
+}
+
+:root[data-sous-theme="dark"] {
+  --sous-neutral-100: var(--sous-neutral-dark-100);
+  --sous-neutral-200: var(--sous-neutral-dark-200);
+  --sous-neutral-300: var(--sous-neutral-dark-300);
+  --sous-neutral-400: var(--sous-neutral-dark-400);
+  --sous-neutral-500: var(--sous-neutral-dark-500);
+  --sous-neutral-600: var(--sous-neutral-dark-600);
+  --sous-neutral-700: var(--sous-neutral-dark-700);
+  --sous-neutral-800: var(--sous-neutral-dark-800);
+  --sous-neutral-900: var(--sous-neutral-dark-900);
+
+  --sous-body-bg: var(--sous-neutral-dark-100);
+  --sous-body-text: var(--sous-white);
+  --sous-body-text-muted: var(--sous-neutral-dark-600);
+  --sous-bg-tile: var(--sous-neutral-dark-50);
+  --sous-border-light: var(--sous-neutral-dark-200);
+  --sous-border-medium: var(--sous-neutral-dark-300);
+
+  --sous-form-bg: var(--sous-neutral-dark-50);
+  --sous-form-text: var(--sous-white);
+  --sous-form-border: var(--sous-neutral-dark-300);
+
+  --sous-code-bg: var(--sous-neutral-dark-200);
+  --sous-code-text: var(--sous-neutral-dark-800);
+
+  --sous-success-dim-bg: var(--sous-green-900);
+  --sous-success-dim-text: var(--sous-green-200);
+  --sous-info-dim-bg: var(--sous-blue-900);
+  --sous-info-dim-text: var(--sous-blue-200);
+  --sous-warning-dim-bg: var(--sous-yellow-900);
+  --sous-warning-dim-text: var(--sous-yellow-300);
+  --sous-danger-dim-bg: var(--sous-red-900);
+  --sous-danger-dim-text: var(--sous-red-300);
+
+  color-scheme: dark;
+}
+
+/* ==========================================================================
+   4. Base element styles
+   ========================================================================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--sous-font-family-base);
+  font-size: var(--sous-font-size-base);
+  font-weight: var(--sous-font-weight-normal);
+  line-height: var(--sous-line-height-base);
+  color: var(--sous-body-text);
+  background-color: var(--sous-body-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ----- Headings ------------------------------------------------------------ */
+h1, h2, h3, h4, h5, h6 {
+  margin: 0 0 var(--sous-space-s);
+  font-weight: var(--sous-font-weight-bold);
+  line-height: var(--sous-line-height-heading);
+}
+
+h1 { font-size: var(--sous-h1); }
+h2 { font-size: var(--sous-h2); }
+h3 { font-size: var(--sous-h3); }
+h4 { font-size: var(--sous-h4); }
+h5 { font-size: var(--sous-h5); }
+h6 { font-size: var(--sous-h6); }
+
+/* ----- Text ----------------------------------------------------------------- */
+p {
+  margin: 0 0 var(--sous-space-m);
+}
+
+strong, b {
+  font-weight: var(--sous-font-weight-semibold);
+}
+
+small {
+  font-size: var(--sous-font-size-s);
+}
+
+hr {
+  margin: var(--sous-space-l) 0;
+  border: 0;
+  border-top: 1px solid var(--sous-border-light);
+}
+
+blockquote {
+  margin: 0 0 var(--sous-space-m);
+  padding: var(--sous-space-s) var(--sous-space-m);
+  border-left: 3px solid var(--sous-primary);
+  color: var(--sous-body-text-muted);
+}
+
+/* ----- Links: green, no underline; hover shifts to the accent green ---------- */
+a {
+  color: var(--sous-link);
+  text-decoration: none;
+  transition: color var(--sous-transition-fast) ease;
+}
+
+a:hover {
+  color: var(--sous-link-hover);
+}
+
+/* ----- Code ------------------------------------------------------------------ */
+code, kbd, pre, samp {
+  font-family: var(--sous-font-family-monospace);
+  font-size: 0.9em;
+}
+
+code {
+  padding: 0.125em 0.375em;
+  background-color: var(--sous-code-bg);
+  color: var(--sous-code-text);
+  border-radius: var(--sous-border-radius);
+}
+
+pre {
+  margin: 0 0 var(--sous-space-m);
+  padding: var(--sous-space-m);
+  overflow-x: auto;
+  background-color: var(--sous-bg-tile);
+  border: 1px solid var(--sous-border-medium);
+  border-radius: var(--sous-tile-radius);
+}
+
+pre code {
+  padding: 0;
+  background: none;
+  color: inherit;
+  border-radius: 0;
+}
+
+/* ----- Lists ------------------------------------------------------------------ */
+ul, ol {
+  margin: 0 0 var(--sous-space-m);
+  padding-left: var(--sous-space-l);
+}
+
+/* ----- Tables ------------------------------------------------------------------ */
+table {
+  width: 100%;
+  margin-bottom: var(--sous-space-m);
+  border-collapse: collapse;
+}
+
+th {
+  font-weight: var(--sous-font-weight-semibold);
+  text-align: left;
+}
+
+th, td {
+  padding: var(--sous-space-s) var(--sous-space-m);
+  border-bottom: 1px solid var(--sous-border-light);
+}
+
+/* ----- Images ------------------------------------------------------------------- */
+img, svg {
+  max-width: 100%;
+  height: auto;
+  vertical-align: middle;
+}
+
+/* ----- Forms ---------------------------------------------------------------------- */
+input, select, textarea, button {
+  font: inherit;
+  color: inherit;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="search"],
+input[type="url"],
+select,
+textarea {
+  display: block;
+  width: 100%;
+  padding: var(--sous-space-s) var(--sous-space-m);
+  background-color: var(--sous-form-bg);
+  color: var(--sous-form-text);
+  border: 1px solid var(--sous-form-border);
+  border-radius: var(--sous-border-radius);
+  transition: border-color var(--sous-transition-fast) ease,
+    box-shadow var(--sous-transition-fast) ease;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--sous-form-border-focus);
+  box-shadow: inset 0 0 0 1px var(--sous-form-border-focus);
+}
+
+::placeholder {
+  color: var(--sous-body-text-muted);
+  opacity: 1;
+}
+
+label {
+  display: inline-block;
+  margin-bottom: var(--sous-space-xs);
+  font-weight: var(--sous-font-weight-semibold);
+  color: var(--sous-neutral-700);
+}
+
+/* ==========================================================================
+   5. Foundational classes — kept minimal until the content exists
+   ========================================================================== */
+
+.container {
+  width: 100%;
+  max-width: 1140px;
+  margin-inline: auto;
+  padding-inline: var(--sous-space-m);
+}
+
+/* Flat, bordered surface — the signature tile: radius, 1px border, NO shadow */
+.tile {
+  padding: var(--sous-space-l);
+  background-color: var(--sous-bg-tile);
+  border: 1px solid var(--sous-border-medium);
+  border-radius: var(--sous-tile-radius);
+}
+
+.text-muted {
+  color: var(--sous-body-text-muted);
+}
+
+/* ----- Buttons ---------------------------------------------------------------- */
+.btn {
+  display: inline-block;
+  padding: var(--sous-space-s) calc(var(--sous-space-m) * 1.5);
+  font-family: var(--sous-font-family-base);
+  font-size: var(--sous-font-size-base);
+  font-weight: var(--sous-font-weight-semibold);
+  line-height: var(--sous-line-height-base);
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+  border: 1px solid transparent;
+  border-radius: var(--sous-border-radius);
+  transition: color var(--sous-transition-fast) ease,
+    background-color var(--sous-transition-fast) ease,
+    border-color var(--sous-transition-fast) ease;
+}
+
+.btn:focus-visible {
+  outline: none;
+  box-shadow: var(--sous-focus-ring);
+}
+
+.btn-primary {
+  color: var(--sous-white);
+  background-color: var(--sous-primary);
+  border-color: var(--sous-primary);
+}
+
+.btn-primary:hover {
+  color: var(--sous-white);
+  background-color: var(--sous-brand-tertiary);
+  border-color: var(--sous-brand-tertiary);
+}
+
+.btn-secondary {
+  color: var(--sous-primary);
+  background-color: var(--sous-bg-tile);
+  border-color: var(--sous-border-medium);
+}
+
+.btn-secondary:hover {
+  color: var(--sous-primary-accent);
+  border-color: var(--sous-neutral-400);
+}

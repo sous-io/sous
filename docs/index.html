@@ -4,38 +4,21 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Sous — an agent configuration manager for LLM coding tools. Coming soon.">
+  <meta name="theme-color" content="#51b13e">
   <title>Sous — Coming Soon</title>
+  <link rel="stylesheet" href="css/main.css">
   <style>
-    :root {
-      --bg: #0d1117;
-      --bg-glow: #16202e;
-      --fg: #e6edf3;
-      --muted: #8b949e;
-      --accent: #f0a35e;
-      --accent-dim: rgba(240, 163, 94, 0.35);
-      --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-    }
-
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
+    /* Page-specific layout for the Coming Soon splash; theme comes from main.css */
     html, body {
       height: 100%;
     }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background: radial-gradient(ellipse 80% 60% at 50% 35%, var(--bg-glow) 0%, var(--bg) 70%);
-      color: var(--fg);
       display: flex;
       align-items: center;
       justify-content: center;
       text-align: center;
-      padding: 2rem;
-      -webkit-font-smoothing: antialiased;
+      padding: var(--sous-space-l);
     }
 
     main {
@@ -49,27 +32,25 @@
     }
 
     .mark {
-      font-family: var(--mono);
-      font-size: 0.85rem;
+      font-family: var(--sous-font-family-monospace);
+      font-size: var(--sous-font-size-base);
       letter-spacing: 0.35em;
       text-transform: uppercase;
-      color: var(--accent);
-      margin-bottom: 1.75rem;
+      color: var(--sous-primary);
+      margin-bottom: var(--sous-space-l);
     }
 
     h1 {
-      font-size: clamp(2.6rem, 8vw, 4rem);
-      font-weight: 700;
+      font-size: clamp(var(--sous-h1), 8vw, var(--sous-font-size-xxl));
       letter-spacing: -0.02em;
-      line-height: 1.1;
-      margin-bottom: 1.25rem;
+      margin-bottom: var(--sous-space-m);
     }
 
     h1 .cursor {
       display: inline-block;
       width: 0.08em;
       margin-left: 0.06em;
-      background: var(--accent);
+      background: var(--sous-primary);
       animation: blink 1.1s steps(1) infinite;
     }
 
@@ -78,52 +59,32 @@
     }
 
     .tagline {
-      font-size: 1.125rem;
-      line-height: 1.65;
-      color: var(--muted);
-      margin-bottom: 2.5rem;
+      font-size: var(--sous-font-size-l);
+      color: var(--sous-body-text-muted);
+      margin-bottom: var(--sous-space-l);
     }
 
     .tagline strong {
-      color: var(--fg);
-      font-weight: 600;
+      color: var(--sous-body-text);
     }
 
     .prompt {
       display: inline-flex;
       align-items: center;
       gap: 0.6em;
-      font-family: var(--mono);
-      font-size: 0.95rem;
-      color: var(--fg);
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 10px;
-      padding: 0.75em 1.25em;
-      box-shadow: 0 0 32px var(--accent-dim);
+      font-family: var(--sous-font-family-monospace);
+      padding: var(--sous-space-s) var(--sous-space-m);
     }
 
     .prompt .dollar {
-      color: var(--accent);
+      color: var(--sous-primary);
       user-select: none;
     }
 
     footer {
-      margin-top: 3.5rem;
-      font-size: 0.85rem;
-      color: var(--muted);
-    }
-
-    footer a {
-      color: inherit;
-      text-decoration: none;
-      border-bottom: 1px solid rgba(139, 148, 158, 0.4);
-      transition: color 0.15s ease, border-color 0.15s ease;
-    }
-
-    footer a:hover {
-      color: var(--accent);
-      border-color: var(--accent);
+      margin-top: var(--sous-space-xl);
+      font-size: var(--sous-font-size-s);
+      color: var(--sous-body-text-muted);
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -141,7 +102,7 @@
       and context for LLM coding agents from one set of sources, with everything
       prepped exactly where each tool expects it.
     </p>
-    <p class="prompt"><span class="dollar">$</span>xcv build</p>
+    <p class="prompt tile"><span class="dollar">$</span>xcv build</p>
     <footer>
       In the meantime, find us on <a href="https://github.com/sous-io/sous">GitHub</a>.
     </footer>
