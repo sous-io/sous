@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { globSync } from "glob";
 import { inferGlobBase, type CompilationConfig, type CompilationTarget, type ResolvedRuntimeContext } from "./markdown-compiler.js";
@@ -148,7 +149,15 @@ export async function loadSettings(configPath: string): Promise<Settings> {
     const raw = mod.config ?? mod.default ?? mod;
     process.stdout.write(JSON.stringify(raw));
   `;
-  const tsxPath = path.resolve(CLI_ROOT, "node_modules/tsx/dist/esm/index.cjs");
+  // Resolve tsx via module resolution so this works when npm hoists the
+  // dependency (local install, npx) as well as when it nests it (global,
+  // repo clone).
+  let tsxPath: string;
+  try {
+    tsxPath = createRequire(import.meta.url).resolve("tsx/esm");
+  } catch {
+    tsxPath = path.resolve(CLI_ROOT, "node_modules/tsx/dist/esm/index.cjs");
+  }
 
   const attempts: { label: string; args: string[] }[] = [
     { label: "node", args: ["--input-type=module"] },

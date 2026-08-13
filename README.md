@@ -18,6 +18,12 @@ formats agents actually read: `.claude/` plus `CLAUDE.md` for Claude Code, `.cod
 Install the CLI:
 
 ```bash
+npm install -g @sous-io/sous
+```
+
+Or run it from a clone (useful when developing sous itself):
+
+```bash
 git clone git@github.com:sous-io/sous.git
 cd sous
 npm install

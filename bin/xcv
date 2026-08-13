@@ -1,25 +1,5 @@
 #!/usr/bin/env bash
 
-# Resolve this script's real directory, following symlinks, so tsx is found
-# relative to the package root even after `npm link`.
-#
-# Pure POSIX shell: no `readlink -f` (GNU-only; macOS readlink has no -f) and no
-# `realpath` (not on stock macOS before 12.3). Works on macOS's bash 3.2.
-SOURCE="${BASH_SOURCE[0]}"
-while [ -L "$SOURCE" ]; do
-  LINK_DIR="$(cd -P "$(dirname "$SOURCE")" > /dev/null && pwd)"
-  SOURCE="$(readlink "$SOURCE")"
-  # A relative symlink target resolves against the link's own directory.
-  case "$SOURCE" in
-    /*) ;;
-    *) SOURCE="$LINK_DIR/$SOURCE" ;;
-  esac
-done
-
-SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" > /dev/null && pwd)"
-PKG_ROOT="$(cd -P "$SCRIPT_DIR/.." > /dev/null && pwd)"
-
-exec node \
-  --import "$PKG_ROOT/node_modules/tsx/dist/esm/index.mjs" \
-  "$SCRIPT_DIR/run.js" \
-  "$@"
+# Dev convenience wrapper used by the repo's npm scripts (`./bin/xcv ...`).
+# The published bin is run.js itself, which handles tsx registration.
+exec node "$(cd -P "$(dirname "${BASH_SOURCE[0]}")" > /dev/null && pwd)/run.js" "$@"

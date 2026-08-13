@@ -1,11 +1,41 @@
 {
-  "name": "sous-cli",
+  "name": "@sous-io/sous",
   "version": "0.1.0",
-  "description": "Sous LLM Config Manager CLI",
+  "description": "Compiles AI coding agent configuration (CLAUDE.md, skills, memories) from LiquidJS templates",
   "type": "module",
-  "bin": {
-    "xcv": "./bin/xcv"
+  "license": "Apache-2.0",
+  "author": "Luke Chavers",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sous-io/sous.git"
   },
+  "homepage": "https://sous-io.github.io/sous",
+  "bugs": "https://github.com/sous-io/sous/issues",
+  "keywords": [
+    "cli",
+    "ai",
+    "agents",
+    "claude",
+    "claude-code",
+    "codex",
+    "prompts",
+    "skills",
+    "templates",
+    "liquidjs"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "bin": {
+    "xcv": "./bin/run.js"
+  },
+  "files": [
+    "bin/run.js",
+    "src",
+    "!src/**/*.spec.ts",
+    "!src/test",
+    "shared-prompts"
+  ],
   "scripts": {
     "build": "tsc",
     "sous:build": "./bin/xcv build --rebuild",
