@@ -149,17 +149,48 @@ export class CompilationService {
    *   - or an alias path (`@~sous-shared/memories/x.md`, `@docs/x.md`), where the
    *     first segment (up to `/` or `:`) names a registered alias.
    *
+   * Lines inside fenced code blocks (``` or ~~~, per CommonMark) are left
+   * verbatim, so include syntax can be documented without being executed.
+   *
    * Resolution produces an ordered candidate list (see include-resolver); the
    * first candidate that exists on disk is used. If none exist, it errors,
    * listing every path tried.
    */
   private processIncludes(content: string, baseDir: string, projectRoot: string): string {
     // First segment allows ~, then path chars; separators / and :; allows ${...}.
-    const includePattern = /^@([~a-zA-Z0-9_${}][a-zA-Z0-9_\-/.:${}]*\.md)$/gm;
-    let result = content;
-    let match: RegExpExecArray | null;
+    const includePattern = /^@([~a-zA-Z0-9_${}][a-zA-Z0-9_\-/.:${}]*\.md)$/;
+    const fenceOpenPattern = /^ {0,3}(`{3,}|~{3,})/;
+    const fenceClosePattern = /^ {0,3}(`{3,}|~{3,})[ \t]*$/;
 
-    while ((match = includePattern.exec(content)) !== null) {
+    const out: string[] = [];
+    let fenceChar: string | null = null;
+    let fenceLength = 0;
+
+    for (const line of content.split("\n")) {
+      if (fenceChar !== null) {
+        // Inside a fence: emit verbatim; only a matching closing fence ends it.
+        const close = fenceClosePattern.exec(line);
+        if (close && close[1][0] === fenceChar && close[1].length >= fenceLength) {
+          fenceChar = null;
+        }
+        out.push(line);
+        continue;
+      }
+
+      const open = fenceOpenPattern.exec(line);
+      if (open) {
+        fenceChar = open[1][0];
+        fenceLength = open[1].length;
+        out.push(line);
+        continue;
+      }
+
+      const match = includePattern.exec(line);
+      if (!match) {
+        out.push(line);
+        continue;
+      }
+
       const includePath = match[1].trim();
       const candidates = resolveIncludeCandidates(includePath, {
         aliases: this.aliases,
@@ -172,7 +203,7 @@ export class CompilationService {
         this.handleError(
           `Include not found: @${includePath}\n  tried:\n${candidates.map((c) => `    - ${c}`).join("\n")}`
         );
-        result = result.replace(match[0], "");
+        out.push("");
         continue;
       }
 
@@ -180,7 +211,7 @@ export class CompilationService {
         this.handleError(
           `Circular dependency detected: ${this.includeStack.join(" -> ")} -> ${fullPath}`
         );
-        result = result.replace(match[0], "");
+        out.push("");
         continue;
       }
 
@@ -190,13 +221,13 @@ export class CompilationService {
         const sourceComment = this.currentIncludeSourceComments
           ? `<!-- from: ${relativePath} -->\n`
           : "";
-        result = result.replace(match[0], sourceComment + includedContent);
+        out.push(sourceComment + includedContent);
       } else {
-        result = result.replace(match[0], "");
+        out.push("");
       }
     }
 
-    return result;
+    return out.join("\n");
   }
 
   /** Load a file and recursively process its includes. */

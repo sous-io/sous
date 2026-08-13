@@ -772,4 +772,102 @@ describe("CompilationService", () => {
     // At least the immediate parent of destFile should be recorded
     expect(state.dirs.some((d: string) => d.includes("brand"))).toBe(true);
   });
+
+  // -------------------------------------------------------------------------
+  // @include lines inside fenced code blocks
+  // -------------------------------------------------------------------------
+
+  /**
+   * An `@include` directive inside a fenced code block is documentation, not
+   * an instruction: it must be emitted verbatim — not resolved, not removed,
+   * and not reported as a missing include — while directives outside the
+   * fence still resolve normally.
+   *
+   * entry.md:
+   *   @real.md
+   *   ```markdown
+   *   @does/not/exist.md
+   *   ```
+   * After compile: real.md's content is inlined; the fenced line survives
+   * literally and compile() reports no errors.
+   */
+  it("should leave @include lines inside a fenced code block verbatim", async () => {
+    tmp = makeTmpDir();
+    const entryPoint = path.join(tmp.path, "entry.md");
+    const destFile = path.join(tmp.path, "out", "entry.md");
+    fs.writeFileSync(path.join(tmp.path, "real.md"), "REAL CONTENT\n");
+    fs.writeFileSync(
+      entryPoint,
+      "# Doc\n\n@real.md\n\n```markdown\n@does/not/exist.md\n```\n"
+    );
+
+    const compiler = makeCompiler();
+    const result = await compiler.compile({
+      targets: [{ rootInputPath: entryPoint, outputs: [{ destinationFile: destFile }] }],
+    });
+
+    const output = fs.readFileSync(destFile, "utf8");
+    expect(result).toBe(true);
+    expect(output).toContain("REAL CONTENT");
+    expect(output).toContain("@does/not/exist.md");
+  });
+
+  /**
+   * Tilde fences (~~~) delimit code blocks exactly like backtick fences, and
+   * a fence with an info string (```markdown) still opens a fence.
+   *
+   * entry.md contains a resolvable @-directive inside a ~~~ block.
+   * After compile: the directive survives literally; the included file's
+   * content does NOT appear in the output.
+   */
+  it("should treat ~~~ fences the same as backtick fences", async () => {
+    tmp = makeTmpDir();
+    const entryPoint = path.join(tmp.path, "entry.md");
+    const destFile = path.join(tmp.path, "out", "entry.md");
+    fs.writeFileSync(path.join(tmp.path, "real.md"), "REAL CONTENT\n");
+    fs.writeFileSync(entryPoint, "~~~text\n@real.md\n~~~\n");
+
+    const compiler = makeCompiler();
+    const result = await compiler.compile({
+      targets: [{ rootInputPath: entryPoint, outputs: [{ destinationFile: destFile }] }],
+    });
+
+    const output = fs.readFileSync(destFile, "utf8");
+    expect(result).toBe(true);
+    expect(output).toContain("@real.md");
+    expect(output).not.toContain("REAL CONTENT");
+  });
+
+  /**
+   * Include processing must resume after a fence closes: a directive on the
+   * line after the closing fence resolves normally. A closing marker of a
+   * different character (~~~ inside a ``` block) does not close the fence.
+   *
+   * entry.md:
+   *   ```
+   *   ~~~
+   *   @fenced.md      <- still inside the ``` fence
+   *   ```
+   *   @real.md        <- outside; must resolve
+   * After compile: fenced.md's directive survives literally; real.md inlined.
+   */
+  it("should resume resolving @includes after the closing fence", async () => {
+    tmp = makeTmpDir();
+    const entryPoint = path.join(tmp.path, "entry.md");
+    const destFile = path.join(tmp.path, "out", "entry.md");
+    fs.writeFileSync(path.join(tmp.path, "real.md"), "REAL CONTENT\n");
+    fs.writeFileSync(path.join(tmp.path, "fenced.md"), "FENCED CONTENT\n");
+    fs.writeFileSync(entryPoint, "```\n~~~\n@fenced.md\n```\n\n@real.md\n");
+
+    const compiler = makeCompiler();
+    const result = await compiler.compile({
+      targets: [{ rootInputPath: entryPoint, outputs: [{ destinationFile: destFile }] }],
+    });
+
+    const output = fs.readFileSync(destFile, "utf8");
+    expect(result).toBe(true);
+    expect(output).toContain("@fenced.md");
+    expect(output).not.toContain("FENCED CONTENT");
+    expect(output).toContain("REAL CONTENT");
+  });
 });

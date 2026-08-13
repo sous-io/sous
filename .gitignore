@@ -14,10 +14,11 @@ sous.pid
 # defaults layer, .sous/.env, is deliberately NOT ignored: it is committed.
 .sous/.env.local
 
-# Compiled agent instructions at the repo root. These are OUTPUTS written by
-# `xcv build`. Root-anchored on purpose: the sources under shared-prompts/ are
-# .tpl. files in subdirectories and are NOT affected by these rules.
+# Compiled agent instructions. These are OUTPUTS written by `xcv build`; the
+# tracked sources live in .sous/prompts/. Root-anchored on purpose: the sources
+# under shared-prompts/ and .sous/prompts/ are NOT affected by these rules.
 /CLAUDE.md
 /AGENTS.md
 /.claude/
 /.codex/
+/docs/CLAUDE.md

@@ -1,21 +1,50 @@
 # Sous CLI (xcv) — Agent Configuration Manager
 
+> **GENERATED FILE — DO NOT EDIT the repo-root `CLAUDE.md` DIRECTLY.**
+> It is compiled by sous (`npm run sous:build`) from
+> `.sous/prompts/root/CLAUDE.md`. Edit that source, then rebuild. The compiled
+> copy is gitignored; the source is tracked.
+
 Sous is a TypeScript CLI tool that compiles markdown templates and manages output files for LLM/AI coding agents 
-(Claude, Codex, etc.). The binary is named `xcv`.
+(Claude, Codex, etc.). The binary is named `xcv`. Published on npm as `@sous-io/sous`.
 
 ## Build & Development
 
 ```bash
-npm run build    # compile TypeScript → dist/
+npm run build    # compile TypeScript → dist/ (type-check; dist is NOT what ships or runs)
 npm run clean    # rm -rf dist/
 ```
 
+The CLI always runs from TypeScript source via tsx — in the repo AND in the published
+package. `bin/run.js` (the published bin) registers tsx via `tsx/esm/api` then hands off
+to oclif; `bin/xcv` is a thin bash wrapper over it for the repo's npm scripts. tsx is
+resolved by module resolution (never a hardcoded `node_modules` path) so hoisted installs
+(`npx`, local deps) work; same trick in `loadSettings` (`settings.ts`) for the config
+subprocess. `run.js` sets oclif `settings.enableAutoTranspile = false` — tsx already
+handles `.ts` imports, and leaving it on makes installs without the `typescript` devDep
+warn on every run.
+
 Run directly from source during development:
 ```bash
-node --import tsx/esm bin/run.js <command>
+./bin/xcv <command>
 ```
 
-TypeScript: strict mode, ES2022 target, Node16 module resolution. Output goes to `dist/`.
+TypeScript: strict mode, ES2022 target, Node16 module resolution. `dist/` output exists
+for type-checking only.
+
+## Publishing (npm)
+
+Published as `@sous-io/sous` (npm org `sous-io`), public access, Apache-2.0. The
+package ships `bin/run.js`, `src/` (minus tests), and `shared-prompts/` — see the `files`
+allowlist in `package.json` (an allowlist, so there is no `.npmignore`; `bin/xcv` and
+everything else stays out by default). `repository.url` must keep matching the GitHub repo
+exactly; npm's trusted publishing validates it at publish time.
+
+Releases go through trusted publishing (OIDC, tokenless): publishing a GitHub Release
+triggers `.github/workflows/publish.yml`, which needs `id-token: write` and npm ≥ 11.5.1.
+The trusted publisher is configured on npmjs.com (package Settings → Trusted publishing:
+org `sous-io`, repo `sous`, workflow `publish.yml`). Version bumps: edit `version` in
+`package.json`, then create a GitHub Release; no local `npm publish`.
 
 ## Project Structure
 
@@ -58,8 +87,20 @@ shared-prompts/
     control-flow/          # generic interaction skills: approve, opine, repeat, research
     task-files/            # per-branch task file workflow (needs taskFileRoot etc.)
     automated-browser-tasks/  # headless Chrome task authoring + running (Linux only)
+bin/
+  run.js                   # published bin (`xcv`): registers tsx, hands off to oclif
+  xcv                      # bash dev wrapper over run.js, used by the repo's npm scripts
+.github/workflows/
+  publish.yml              # npm trusted publishing on GitHub Release (OIDC, tokenless)
+docs/                      # the GitHub Pages site (sous-io.github.io/sous)
+  index.html               # Coming Soon page (future: GSAP-driven presentation)
+  css/main.css             # site design system (--sous-* tokens, BTCPay-derived)
+  CLAUDE.md                # GENERATED site instructions (gitignored output)
 .sous/                     # THIS repo's own sous config — sous configures itself
-  sous.config.js           # compiles sous-skills + control-flow into .claude/skills/
+  sous.config.js           # compiles skills into .claude/skills/ + both CLAUDE.md files
+  prompts/
+    root/CLAUDE.md         # tracked SOURCE of the repo-root CLAUDE.md
+    docs-site/CLAUDE.md    # tracked SOURCE of docs/CLAUDE.md
   .env.local.example       # documents the machine-specific env layer
 deprecated/                # archived, gitignored
 docs/notes/                # planning docs and TODOs, gitignored
@@ -90,15 +131,23 @@ with the `stateFilePath` / `pidFilePath` project vars.
 ### Sous Configures Itself
 
 This repo has its own `.sous/sous.config.js`, which compiles the `sous-skills` and
-`control-flow` bundles into `.claude/skills/`. `task-files` and `automated-browser-tasks`
-are deliberately excluded: they need vars (`taskFileRoot`, `browserAutomationScriptsDir`)
-that mean nothing for developing sous itself.
+`control-flow` bundles into `.claude/skills/`, and generates two instruction files
+from tracked sources under `.sous/prompts/`:
 
-It generates NO root `CLAUDE.md`. This file is hand-written and tracked in git. The
-`/CLAUDE.md` line in `.gitignore` only affects untracked files, so the tracked copy is
-unaffected; do not add a target that writes it.
+- `.sous/prompts/root/CLAUDE.md` → `/CLAUDE.md` (this file)
+- `.sous/prompts/docs-site/CLAUDE.md` → `/docs/CLAUDE.md` (the website doc)
 
-`.claude/`, `.codex/`, and `.sous/sous.state.json` are gitignored build output.
+`task-files` and `automated-browser-tasks` are deliberately excluded: they need vars
+(`taskFileRoot`, `browserAutomationScriptsDir`) that mean nothing for developing sous
+itself.
+
+Both compiled CLAUDE.md files are gitignored OUTPUTS (`/CLAUDE.md` and `/docs/CLAUDE.md`
+in `.gitignore`); only the sources in `.sous/prompts/` are tracked. Never edit the
+compiled copies — edit the sources and run `npm run sous:build`. A fresh clone has no
+root CLAUDE.md until the first build (`npm run claude` builds before launching).
+
+`.claude/`, `.codex/`, `.sous/sous.state.json`, `/CLAUDE.md` and `/docs/CLAUDE.md` are
+gitignored build output.
 
 ## Project Settings File
 
@@ -199,6 +248,10 @@ In any source `.md` file, `@path/to/file.md` on its own line includes that file'
 @~sous-shared/_partials/resume-task.md
 @myAlias/doc.md
 ```
+
+Lines inside fenced code blocks (``` or ~~~) are NOT processed as includes — they are
+left verbatim, which is what allows this very section to document the syntax in a
+compiled file. Guarded by the fence tests in `src/test/integration/compilation.test.ts`.
 
 Resolution is handled by `src/lib/include-resolver.ts` (`resolveIncludeCandidates` +
 `buildAliasMap`), wired into `CompilationService.processIncludes` and the
@@ -308,5 +361,9 @@ same pattern under `filters/`.
 
 ## Important!
 
-When working on `sous`, update this file immediately after any change. Ensure that this file ALWAYS describes
-`sous`, its code, its configuration, and its usage ACCURATELY. It is VITAL that we keep this file up to date.
+When working on `sous`, keep this document accurate — but remember it is GENERATED:
+edit the tracked source at `.sous/prompts/root/CLAUDE.md` (never the compiled root
+`CLAUDE.md`) immediately after any change to sous, its code, its configuration, or its
+usage, then run `npm run sous:build`. It is VITAL that this file ALWAYS describes `sous`
+ACCURATELY. The same rule applies to the website doc: `.sous/prompts/docs-site/CLAUDE.md`
+is the source of `docs/CLAUDE.md`.

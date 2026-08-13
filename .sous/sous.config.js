@@ -10,10 +10,11 @@
  * loads this file. Auto-vars `${sousDir}` (this directory) and
  * `${sousConfigPath}` (this file) are injected before anything else resolves.
  *
- * OUTPUT IS LOCAL-ONLY. `.claude/` is gitignored, so everything written here is
- * a build artifact, not a tracked file. The repo's root CLAUDE.md is HAND-WRITTEN
- * and tracked, so this config deliberately compiles NO root instruction file —
- * skills only. Do not add a `destinationFile` target for CLAUDE.md or AGENTS.md.
+ * OUTPUT IS LOCAL-ONLY. `.claude/`, and every file this config writes, is
+ * gitignored build output. That includes BOTH instruction files: the repo-root
+ * CLAUDE.md and docs/CLAUDE.md are compiled from tracked sources under
+ * `.sous/prompts/` — edit those sources, never the compiled copies. A fresh
+ * clone has no root CLAUDE.md until the first `xcv build`.
  */
 
 // [SOUS] The built-in sous bundle: about-sous, about-agent-skills,
@@ -40,6 +41,21 @@ const projectSkills = {
   entryGlob: "${projectSkillsDir}/**/*",
   globBase: "${projectSkillsDir}",
   outputs: [{ destinationDir: "${claudeSkillsDir}" }],
+};
+
+// [ROOT] The repo-root CLAUDE.md: instructions for agents working ON sous.
+// The source is tracked; the compiled /CLAUDE.md is gitignored output. Plain
+// markdown (no .tpl.) — @-includes work if the doc is ever split into sections.
+const rootClaude = {
+  entryPoint: "${sousDir}/prompts/root/CLAUDE.md",
+  outputs: [{ destinationFile: "${projectRoot}/CLAUDE.md" }],
+};
+
+// [SITE] Agent instructions for the GitHub Pages site under docs/. Same
+// tracked-source / gitignored-output arrangement as rootClaude.
+const docsSiteClaude = {
+  entryPoint: "${sousDir}/prompts/docs-site/CLAUDE.md",
+  outputs: [{ destinationFile: "${projectRoot}/docs/CLAUDE.md" }],
 };
 
 // Deliberately NOT compiled here:
@@ -87,7 +103,7 @@ export const config = {
       },
       compilation: {
         includeSourceComments: false,
-        targets: [sousSkills, controlFlowSkills, projectSkills],
+        targets: [sousSkills, controlFlowSkills, projectSkills, rootClaude, docsSiteClaude],
       },
       tools: {
         claude: {
