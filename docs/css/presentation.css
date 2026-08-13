@@ -1,0 +1,635 @@
+/* ==========================================================================
+   Sous — presentation page styles (index.html)
+   --------------------------------------------------------------------------
+   Layout + player chrome for the GSAP-driven presentation. Every color, font,
+   spacing value, radius and transition comes from the tokens in main.css.
+   ========================================================================== */
+
+/* ----- Page frame ---------------------------------------------------------- */
+html,
+body {
+  height: 100%;
+}
+
+body {
+  overflow: hidden;
+}
+
+.player {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* ----- Stage & scenes ------------------------------------------------------- */
+.stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  /* The Observer scrubs touch gestures here while paused */
+  touch-action: none;
+}
+
+.scene {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--sous-space-l);
+  overflow: hidden;
+  /* All scenes except the intro start hidden (GSAP takes over via autoAlpha) */
+  opacity: 0;
+  visibility: hidden;
+}
+
+.scene[data-scene="intro"] {
+  opacity: 1;
+  visibility: visible;
+}
+
+.scene-inner {
+  width: 100%;
+  max-width: 46rem;
+}
+
+/* While scrub mode is active, pointer-dragging must not select scene text */
+.player.is-scrubbable .stage {
+  user-select: none;
+}
+
+/* ----- Scene typography ------------------------------------------------------ */
+/* Intro logo (replaces the old "Sous" text mark). Two theme-specific assets
+   swap with the color scheme, same pattern as the theme-toggle icons. */
+.scene-logo {
+  display: block;
+  height: clamp(8rem, 48vh, 32rem);
+  margin: 0 auto var(--sous-space-m);
+}
+
+.scene-logo img {
+  display: block;
+  width: auto;
+  height: 100%;
+  margin: 0 auto;
+}
+
+.scene-logo .logo-dark { display: none; }
+
+html[data-sous-theme="dark"] .scene-logo .logo-light { display: none; }
+html[data-sous-theme="dark"] .scene-logo .logo-dark { display: block; }
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-sous-theme="light"]) .scene-logo .logo-light { display: none; }
+  html:not([data-sous-theme="light"]) .scene-logo .logo-dark { display: block; }
+}
+
+.mark,
+.kicker {
+  font-family: var(--sous-font-family-monospace);
+  font-size: var(--sous-font-size-s);
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+  color: var(--sous-primary);
+  margin-bottom: var(--sous-space-m);
+}
+
+.scene-title {
+  font-size: clamp(var(--sous-h2), 6vw, var(--sous-h1));
+  letter-spacing: -0.02em;
+  margin-bottom: var(--sous-space-m);
+}
+
+.scene[data-scene="intro"] .scene-title {
+  font-size: clamp(var(--sous-h1), 8vw, var(--sous-font-size-xxl));
+}
+
+.scene-title .cursor {
+  display: inline-block;
+  width: 0.08em;
+  margin-left: 0.06em;
+  background: var(--sous-primary);
+  animation: blink 1.1s steps(1) infinite;
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+.lead {
+  font-size: var(--sous-font-size-l);
+  color: var(--sous-body-text-muted);
+  margin-bottom: var(--sous-space-m);
+  /* Distribute words so lines break near-equal in length — no orphan words */
+  text-wrap: balance;
+}
+
+.lead strong,
+.lead code {
+  color: var(--sous-body-text);
+}
+
+/* Terminal-prompt motif */
+.prompt {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6em;
+  font-family: var(--sous-font-family-monospace);
+  padding: var(--sous-space-s) var(--sous-space-m);
+  margin-bottom: var(--sous-space-m);
+}
+
+.prompt .dollar {
+  color: var(--sous-primary);
+  user-select: none;
+}
+
+/* Give the intro's install command room to breathe between the tagline
+   above it and the play button below it */
+.scene[data-scene="intro"] .prompt {
+  margin-top: var(--sous-space-m);
+  margin-bottom: var(--sous-space-l);
+}
+
+/* The Helm one-liner sits below the features grid */
+.features-tagline {
+  margin-top: var(--sous-space-l);
+}
+
+/* ----- Orbit diagram (aggregator scene) -------------------------------------- */
+.orbit-diagram {
+  display: block;
+  width: 100%;
+  max-width: 40rem;
+  height: auto;
+  margin: var(--sous-space-m) auto 0;
+}
+
+.orbit-diagram text {
+  font-family: var(--sous-font-family-base);
+  font-size: 15px;
+  font-weight: var(--sous-font-weight-semibold);
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+/* Flow lines: green dashes marching toward the center circle */
+.orbit-lines line {
+  stroke: var(--sous-primary);
+  stroke-width: 2;
+  stroke-dasharray: 6 6;
+  marker-end: url(#flowArrow);
+  animation: orbit-flow 0.6s linear infinite;
+}
+
+#flowArrow path {
+  fill: var(--sous-primary);
+}
+
+@keyframes orbit-flow {
+  to { stroke-dashoffset: -12; }
+}
+
+/* Repo nodes: flat bordered tiles, circle edition */
+.orbit-node circle {
+  fill: var(--sous-bg-tile);
+  stroke: var(--sous-border-medium);
+  stroke-width: 2;
+}
+
+.orbit-node text {
+  fill: var(--sous-body-text);
+  font-size: 13px;
+}
+
+/* Public repos stand out: dark blue fill, white label */
+.orbit-node circle.node-public {
+  fill: var(--sous-blue-800);
+  stroke: var(--sous-blue-600);
+}
+
+.orbit-node text.node-public-label {
+  fill: var(--sous-white);
+}
+
+/* The project: same tile treatment, but green (the interactive voice) */
+.orbit-center circle {
+  fill: var(--sous-bg-tile);
+  stroke: var(--sous-primary);
+  stroke-width: 2.5;
+}
+
+.orbit-center text {
+  fill: var(--sous-primary);
+}
+
+/* ----- Code window (templates scene, VS Code-like) ---------------------------- */
+/* Template + output panes overlap in one grid cell; the timeline crossfades
+   between them (sub-scenes), which frees room for a larger code font. */
+.code-stack {
+  display: grid;
+  max-width: 44rem;
+  margin: var(--sous-space-m) auto 0;
+}
+
+.code-stack .code-window {
+  grid-area: 1 / 1;
+  align-self: start;
+  width: 100%;
+}
+
+.code-window {
+  text-align: left;
+  background: var(--sous-editor-bg);
+  border: 1px solid var(--sous-editor-border);
+  border-radius: var(--sous-tile-radius);
+  overflow: hidden;
+}
+
+.code-titlebar {
+  display: flex;
+  align-items: center;
+  gap: var(--sous-space-s);
+  padding: var(--sous-space-s) var(--sous-space-m);
+  background: var(--sous-editor-chrome);
+  border-bottom: 1px solid var(--sous-editor-border);
+}
+
+.code-dot {
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 50%;
+  background: var(--sous-editor-muted);
+  opacity: 0.55;
+}
+
+.code-tab {
+  margin-left: var(--sous-space-s);
+  font-family: var(--sous-font-family-monospace);
+  font-size: var(--sous-font-size-s);
+  color: var(--sous-editor-muted);
+}
+
+.code-body {
+  margin: 0;
+  padding: var(--sous-space-m);
+  overflow-x: auto;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  font-size: var(--sous-font-size-base);
+  line-height: 1.7;
+  color: var(--sous-editor-text);
+}
+
+.code-body .tok-liquid { color: var(--sous-editor-keyword); }
+.code-body .tok-var { color: var(--sous-editor-variable); }
+.code-body .tok-str { color: var(--sous-editor-string); }
+.code-body .tok-fn { color: var(--sous-editor-function); }
+.code-body .tok-md { color: var(--sous-editor-heading); }
+.code-body .tok-dim { color: var(--sous-editor-muted); }
+
+/* ----- Timeline-synced highlights + tooltips (code windows) -------------------
+   GSAP fades .hl-bg / .hl-tip in and out during a scene's hold; colors live
+   here so the JS only ever animates opacity. */
+.hl {
+  position: relative;
+  z-index: 0;
+}
+
+.hl-bg {
+  position: absolute;
+  inset: -2px -4px;
+  z-index: -1;
+  background: rgba(81, 177, 62, 0.22);
+  border: 1px solid var(--sous-hl-outline);
+  box-shadow: var(--sous-hl-glow);
+  border-radius: var(--sous-border-radius);
+  opacity: 0;
+}
+
+.hl-tip {
+  position: absolute;
+  bottom: calc(100% + 16px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  padding: var(--sous-space-s) var(--sous-space-m);
+  font-family: var(--sous-font-family-base);
+  font-size: var(--sous-font-size-base);
+  font-weight: var(--sous-font-weight-semibold);
+  white-space: nowrap;
+  color: var(--sous-editor-text);
+  background: var(--sous-editor-chrome);
+  border: 1px solid var(--sous-editor-border);
+  border-radius: var(--sous-border-radius);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Arrow from the tooltip down to the highlighted code (bordered triangle) */
+.hl-tip::before,
+.hl-tip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 8px solid transparent;
+  border-top-color: var(--sous-editor-border);
+  border-bottom-width: 0;
+}
+
+.hl-tip::after {
+  border-width: 7px 7px 0;
+  border-top-color: var(--sous-editor-chrome);
+  margin-top: -1.5px;
+}
+
+/* Card grid used by the "problems" and "how" scenes */
+.scene-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sous-space-m);
+  margin-top: var(--sous-space-l);
+  text-align: left;
+}
+
+.scene-card {
+  padding: var(--sous-space-m);
+}
+
+.scene-card h3 {
+  font-size: var(--sous-font-size-base);
+  margin-bottom: var(--sous-space-xs);
+  color: var(--sous-primary);
+}
+
+/* Lucide icons in card headings (stroke follows the heading's green) */
+.scene-card h3 svg.card-icon {
+  width: 1.125em;
+  height: 1.125em;
+  margin-right: var(--sous-space-s);
+  vertical-align: -0.2em;
+}
+
+.scene-card p {
+  margin: 0;
+  color: var(--sous-body-text-muted);
+}
+
+/* Bullet list used by the "non-goals" scene */
+.scene-list {
+  display: inline-block;
+  margin: var(--sous-space-m) auto 0;
+  padding-left: var(--sous-space-l);
+  text-align: left;
+  max-width: 36rem;
+}
+
+.scene-list li {
+  margin-bottom: var(--sous-space-s);
+}
+
+.scene-list li::marker {
+  color: var(--sous-primary);
+}
+
+/* Prominent play button on the title scene */
+.intro-play {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sous-space-s);
+  font-size: var(--sous-font-size-l);
+  padding: var(--sous-space-s) var(--sous-space-l);
+}
+
+.intro-play svg {
+  width: 1em;
+  height: 1em;
+}
+
+/* ----- Player controls (bottom bar) ------------------------------------------ */
+.player-controls {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--sous-space-m);
+  padding: var(--sous-space-s) var(--sous-space-m);
+  background: var(--sous-bg-tile);
+  border-top: 1px solid var(--sous-border-medium);
+}
+
+.playpause {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  background: var(--sous-bg-tile);
+  color: var(--sous-primary);
+  border: 1px solid var(--sous-border-medium);
+  border-radius: var(--sous-border-radius);
+  cursor: pointer;
+  transition: color var(--sous-transition-fast) ease,
+    border-color var(--sous-transition-fast) ease;
+}
+
+.playpause:hover {
+  border-color: var(--sous-primary);
+}
+
+.playpause:focus-visible {
+  outline: none;
+  box-shadow: var(--sous-focus-ring);
+}
+
+.playpause svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.playpause .icon-pause { display: none; }
+.player.is-playing .playpause .icon-pause { display: block; }
+.player.is-playing .playpause .icon-play { display: none; }
+
+.timeline {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sous-space-xs);
+}
+
+/* Scrub slider: accessible core of the chapter bar */
+.scrub {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 0.25rem;
+  margin: var(--sous-space-xs) 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--sous-border-radius);
+  background: linear-gradient(
+    to right,
+    var(--sous-primary) var(--fill, 0%),
+    var(--sous-border-medium) var(--fill, 0%)
+  );
+  cursor: pointer;
+}
+
+.scrub::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 0.875rem;
+  height: 0.875rem;
+  border: 0;
+  border-radius: 50%;
+  background: var(--sous-primary);
+}
+
+.scrub::-moz-range-thumb {
+  width: 0.875rem;
+  height: 0.875rem;
+  border: 0;
+  border-radius: 50%;
+  background: var(--sous-primary);
+}
+
+.scrub:focus-visible {
+  outline: none;
+  box-shadow: var(--sous-focus-ring);
+}
+
+/* Named scene segments (widths set from timeline label durations by JS) */
+.scene-segments {
+  display: flex;
+  gap: var(--sous-space-xs);
+}
+
+.scene-btn {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  padding: var(--sous-space-xs) var(--sous-space-s);
+  font-size: var(--sous-font-size-s);
+  font-weight: var(--sous-font-weight-semibold);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--sous-body-text-muted);
+  background: var(--sous-bg-tile);
+  border: 1px solid var(--sous-border-medium);
+  border-radius: var(--sous-border-radius);
+  cursor: pointer;
+  transition: color var(--sous-transition-fast) ease,
+    border-color var(--sous-transition-fast) ease;
+}
+
+.scene-btn:hover {
+  color: var(--sous-primary);
+  border-color: var(--sous-primary);
+}
+
+.scene-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--sous-focus-ring);
+}
+
+.scene-btn[aria-current="true"] {
+  color: var(--sous-primary);
+  border-color: var(--sous-primary);
+}
+
+/* Per-scene progress fill (scaleX set by JS) */
+.scene-btn-fill {
+  position: absolute;
+  inset: 0;
+  background: var(--sous-success-dim-bg);
+  transform: scaleX(0);
+  transform-origin: left center;
+}
+
+.scene-btn-title {
+  position: relative;
+}
+
+/* ----- Theme toggle ----------------------------------------------------------- */
+.theme-toggle {
+  position: fixed;
+  top: var(--sous-space-m);
+  right: var(--sous-space-m);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  background: var(--sous-bg-tile);
+  color: var(--sous-body-text-muted);
+  border: 1px solid var(--sous-border-medium);
+  border-radius: var(--sous-border-radius);
+  cursor: pointer;
+  transition: color var(--sous-transition-fast) ease,
+    border-color var(--sous-transition-fast) ease;
+}
+
+.theme-toggle:hover {
+  color: var(--sous-primary);
+  border-color: var(--sous-primary);
+}
+
+.theme-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--sous-focus-ring);
+}
+
+.theme-toggle svg {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+/* Show the icon for the mode you'd switch TO: moon in light, sun in dark */
+.theme-toggle .icon-sun { display: none; }
+.theme-toggle .icon-moon { display: block; }
+
+html[data-sous-theme="dark"] .theme-toggle .icon-sun { display: block; }
+html[data-sous-theme="dark"] .theme-toggle .icon-moon { display: none; }
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-sous-theme="light"]) .theme-toggle .icon-sun { display: block; }
+  html:not([data-sous-theme="light"]) .theme-toggle .icon-moon { display: none; }
+}
+
+/* ----- Fallbacks & small screens ----------------------------------------------- */
+/* If GSAP failed to load, show the title scene statically and hide the player UI */
+html.no-gsap .player-controls {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .scene-grid {
+    grid-template-columns: 1fr;
+    gap: var(--sous-space-s);
+  }
+
+  .scene-btn-title {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scene-title .cursor {
+    animation: none;
+  }
+
+  .orbit-lines line {
+    animation: none;
+  }
+}

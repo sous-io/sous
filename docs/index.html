@@ -3,109 +3,336 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Sous — an agent configuration manager for LLM coding tools. Coming soon.">
+  <meta name="description" content="Sous: an agent configuration manager for LLM coding tools. An animated introduction.">
   <meta name="theme-color" content="#51b13e">
-  <title>Sous — Coming Soon</title>
+  <title>Sous: Agent Configuration Manager</title>
+  <script>
+    /* Apply any saved theme before first paint to avoid a flash */
+    (function () {
+      var theme = localStorage.getItem("sous-theme");
+      if (theme === "light" || theme === "dark") {
+        document.documentElement.setAttribute("data-sous-theme", theme);
+      }
+    })();
+  </script>
   <link rel="stylesheet" href="css/main.css">
-  <style>
-    /* Page-specific layout for the Coming Soon splash; theme comes from main.css */
-    html, body {
-      height: 100%;
-    }
-
-    body {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      padding: var(--sous-space-l);
-    }
-
-    main {
-      max-width: 34rem;
-      animation: rise 0.9s ease-out both;
-    }
-
-    @keyframes rise {
-      from { opacity: 0; transform: translateY(14px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-
-    .mark {
-      font-family: var(--sous-font-family-monospace);
-      font-size: var(--sous-font-size-base);
-      letter-spacing: 0.35em;
-      text-transform: uppercase;
-      color: var(--sous-primary);
-      margin-bottom: var(--sous-space-l);
-    }
-
-    h1 {
-      font-size: clamp(var(--sous-h1), 8vw, var(--sous-font-size-xxl));
-      letter-spacing: -0.02em;
-      margin-bottom: var(--sous-space-m);
-    }
-
-    h1 .cursor {
-      display: inline-block;
-      width: 0.08em;
-      margin-left: 0.06em;
-      background: var(--sous-primary);
-      animation: blink 1.1s steps(1) infinite;
-    }
-
-    @keyframes blink {
-      50% { opacity: 0; }
-    }
-
-    .tagline {
-      font-size: var(--sous-font-size-l);
-      color: var(--sous-body-text-muted);
-      margin-bottom: var(--sous-space-l);
-    }
-
-    .tagline strong {
-      color: var(--sous-body-text);
-    }
-
-    .prompt {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.6em;
-      font-family: var(--sous-font-family-monospace);
-      padding: var(--sous-space-s) var(--sous-space-m);
-    }
-
-    .prompt .dollar {
-      color: var(--sous-primary);
-      user-select: none;
-    }
-
-    footer {
-      margin-top: var(--sous-space-xl);
-      font-size: var(--sous-font-size-s);
-      color: var(--sous-body-text-muted);
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      main { animation: none; }
-      h1 .cursor { animation: none; }
-    }
-  </style>
+  <link rel="stylesheet" href="css/presentation.css">
+  <noscript>
+    <style>.player-controls { display: none; }</style>
+  </noscript>
 </head>
 <body>
-  <main>
-    <p class="mark">Sous</p>
-    <h1>Coming&nbsp;soon<span class="cursor">&nbsp;</span></h1>
-    <p class="tagline">
-      Your agent configuration <strong>sous&#8209;chef</strong> — compile prompts, skills,
-      and context for LLM coding agents from one set of sources, with everything
-      prepped exactly where each tool expects it.
-    </p>
-    <p class="prompt tile"><span class="dollar">$</span>xcv build</p>
-    <footer>
-      In the meantime, find us on <a href="https://github.com/sous-io/sous">GitHub</a>.
-    </footer>
+  <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle color theme">
+    <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+    </svg>
+    <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="5"/>
+      <line x1="12" y1="1" x2="12" y2="3"/>
+      <line x1="12" y1="21" x2="12" y2="23"/>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+      <line x1="1" y1="12" x2="3" y2="12"/>
+      <line x1="21" y1="12" x2="23" y2="12"/>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+    </svg>
+  </button>
+
+  <main class="player" id="player" aria-label="Sous presentation">
+    <div class="stage" id="stage">
+
+      <!-- Scene 1: intro / title -->
+      <section class="scene" data-scene="intro" aria-label="Intro">
+        <div class="scene-inner">
+          <span class="scene-logo anim">
+            <img class="logo-light" src="img/logo-on-white.png" alt="Sous" width="1254" height="1254">
+            <img class="logo-dark" src="img/logo-on-dark.png" alt="Sous" width="1122" height="1402">
+          </span>
+          <h1 class="scene-title anim">Your coding agent&rsquo;s assistant<span class="cursor">&nbsp;</span></h1>
+          <p class="lead anim">
+            Sous helps you to manage and share AI coding agent configurations across
+            tools, environments, projects, and teams while reducing token usage, mistakes, and wasted time.
+          </p>
+          <p class="prompt tile anim"><span class="dollar">$</span>npm install -g @sous-io/sous</p>
+          <p class="anim">
+            <button type="button" class="btn btn-primary intro-play" id="introPlay">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M8 5v14l11-7z"/>
+              </svg>
+              Play the introduction
+            </button>
+          </p>
+        </div>
+      </section>
+
+      <!-- Scene 2: the two main features -->
+      <section class="scene" data-scene="features" aria-label="Two main features">
+        <div class="scene-inner">
+          <p class="kicker anim">The Fundamentals</p>
+          <h2 class="scene-title anim">Two Core Systems.</h2>
+          <div class="scene-grid">
+            <div class="tile scene-card anim">
+              <h3><i data-lucide="combine" class="card-icon" aria-hidden="true"></i>Config Aggregator</h3>
+              <p>Pull instructions, skills, and context from shared sources into every
+                 project and tool that needs them.</p>
+            </div>
+            <div class="tile scene-card anim">
+              <h3><i data-lucide="braces" class="card-icon" aria-hidden="true"></i>Liquid Template Engine</h3>
+              <p>Markdown templates with variables, includes, partials, helper functions,
+                 formatters, and live project data; rendered at build time.</p>
+            </div>
+          </div>
+          <p class="lead anim features-tagline">
+            It&rsquo;s a bit like <a href="https://helm.sh" target="_blank" rel="noopener">Helm</a>,
+            but for AI coding tools.
+          </p>
+        </div>
+      </section>
+
+      <!-- Scene 3: the config aggregator (orbit diagram) -->
+      <section class="scene" data-scene="aggregator" aria-label="The config aggregator">
+        <div class="scene-inner">
+          <p class="kicker anim">Core System #1</p>
+          <h2 class="scene-title anim">The Config Aggregator.</h2>
+          <p class="lead anim">
+            Instructions, skills, and context flow from trusted, shared, repos into your project;
+            one build assembles them all.
+          </p>
+          <svg class="orbit-diagram anim" viewBox="0 0 640 420" role="img"
+               aria-label="Diagram: many repo circles orbit a central project circle, with flow arrows pointing inward">
+            <defs>
+              <marker id="flowArrow" viewBox="0 0 10 10" refX="8" refY="5"
+                      markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0 0L10 5L0 10z"/>
+              </marker>
+            </defs>
+            <!-- flow lines (repo edge -> project edge), dashes march inward -->
+            <g class="orbit-lines">
+              <line x1="522" y1="210" x2="386" y2="210"/>
+              <line x1="411.7" y1="305.3" x2="365" y2="256.5"/>
+              <line x1="228.3" y1="305.3" x2="275" y2="256.5"/>
+              <line x1="118" y1="210" x2="254" y2="210"/>
+              <line x1="228.3" y1="114.7" x2="275" y2="163.5"/>
+              <line x1="411.7" y1="114.7" x2="365" y2="163.5"/>
+            </g>
+            <!-- orbiting repos (same size, two-line labels) -->
+            <g class="orbit-node">
+              <circle cx="570" cy="210" r="48"/>
+              <text x="570" y="210"><tspan x="570" dy="-9">Project</tspan><tspan x="570" dy="18">Repo</tspan></text>
+              <circle cx="445" cy="339.9" r="48"/>
+              <text x="445" y="339.9"><tspan x="445" dy="-9">Department</tspan><tspan x="445" dy="18">Repo</tspan></text>
+              <circle cx="195" cy="339.9" r="48"/>
+              <text x="195" y="339.9"><tspan x="195" dy="-9">Company</tspan><tspan x="195" dy="18">Repo</tspan></text>
+              <circle cx="70" cy="210" r="48"/>
+              <text x="70" y="210"><tspan x="70" dy="-9">Personal</tspan><tspan x="70" dy="18">Repo</tspan></text>
+              <circle class="node-public" cx="195" cy="80.1" r="48"/>
+              <text class="node-public-label" x="195" y="80.1"><tspan x="195" dy="-9">Public</tspan><tspan x="195" dy="18">Repo</tspan></text>
+              <circle class="node-public" cx="445" cy="80.1" r="48"/>
+              <text class="node-public-label" x="445" y="80.1"><tspan x="445" dy="-9">Public</tspan><tspan x="445" dy="18">Repo</tspan></text>
+            </g>
+            <!-- the project at the center -->
+            <g class="orbit-center">
+              <circle cx="320" cy="210" r="56"/><text x="320" y="210">Project</text>
+            </g>
+          </svg>
+        </div>
+      </section>
+
+      <!-- Scene 4: the liquid template engine (code snippet) -->
+      <section class="scene" data-scene="templates" aria-label="The liquid template engine">
+        <div class="scene-inner">
+          <p class="kicker anim">Core System #2</p>
+          <h2 class="scene-title anim">The Liquid Template Engine.</h2>
+          <p class="lead anim">
+            One template serves every agent, machine, and project.
+          </p>
+          <div class="code-stack anim">
+            <!-- Sub-scene A: the template source -->
+            <div class="code-window code-pane-template">
+              <div class="code-titlebar">
+                <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
+                <span class="code-tab">skills/update-data-models/SKILL.tpl.md</span>
+              </div>
+              <pre class="code-body"><code><span class="tok-dim">---</span>
+<span class="tok-var">name</span>: update-data-models
+<span class="tok-var">description</span>: Use when adding or changing data models
+<span class="tok-dim">---</span>
+
+<span class="tok-md"># Update Data Models</span>
+
+The project lives at <span class="hl"><span class="hl-bg" aria-hidden="true"></span><span class="tok-liquid">{{</span> <span class="tok-var">projectRoot</span> <span class="tok-liquid">}}</span><span class="hl-tip" role="tooltip">Absolute paths, injected per machine</span></span>.
+
+<span class="tok-liquid">{% if</span> <span class="tok-var">tool</span> == <span class="tok-str">"claude-code"</span> <span class="tok-liquid">%}</span>
+Apply changes with the Edit tool.
+<span class="tok-liquid">{% elsif</span> <span class="tok-var">tool</span> == <span class="tok-str">"codex"</span> <span class="tok-liquid">%}</span>
+Apply changes with apply_patch.
+<span class="tok-liquid">{% endif %}</span>
+
+<span class="tok-md">## The Data Models</span>
+<span class="hl"><span class="hl-bg" aria-hidden="true"></span><span class="tok-liquid">{%</span> <span class="tok-fn">globDirectory</span> <span class="tok-var">dir</span>=<span class="tok-str">"{{ projectRoot }}/src/models"</span> <span class="tok-var">pattern</span>=<span class="tok-str">"**/*Model.ts"</span> <span class="tok-liquid">%}</span><span class="hl-tip" role="tooltip">Helpers embed live project data</span></span></code></pre>
+            </div>
+            <!-- Sub-scene B: the rendered output (crossfaded in by the timeline) -->
+            <div class="code-window code-pane-output">
+              <div class="code-titlebar">
+                <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
+                <span class="code-tab">SKILL.md &middot; rendered for claude-code</span>
+              </div>
+              <pre class="code-body"><code><span class="tok-dim">---
+name: update-data-models
+description: Use when adding or changing data models
+---</span>
+
+<span class="tok-md"># Update Data Models</span>
+
+The project lives at /projects/backend.
+
+Apply changes with the Edit tool.
+
+<span class="tok-md">## The Data Models</span>
+<span class="hl"><span class="hl-bg" aria-hidden="true"></span>- /projects/backend/src/models/UserModel.ts
+- /projects/backend/src/models/OrderModel.ts
+- /projects/backend/src/models/billing/PaymentModel.ts<span class="hl-tip" role="tooltip">Fresh at every build; never stale</span></span></code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Scene 5: what Sous is -->
+      <section class="scene" data-scene="what" aria-label="What is Sous">
+        <div class="scene-inner">
+          <p class="kicker anim">What is Sous?</p>
+          <h2 class="scene-title anim">Write once. Serve every agent.</h2>
+          <p class="lead anim">
+            Sous is a CLI, <code>xcv</code>, that compiles markdown templates into the
+            prompts, skills, and context files your AI coding tools expect.
+          </p>
+          <p class="lead anim">
+            Claude Code, Codex, CI bots: <strong>same sources</strong>, and each tool gets its own plate.
+          </p>
+        </div>
+      </section>
+
+      <!-- Scene 3: the problems it addresses -->
+      <section class="scene" data-scene="problems" aria-label="The problems">
+        <div class="scene-inner">
+          <p class="kicker anim">The problems</p>
+          <h2 class="scene-title anim">Agent configs don&rsquo;t share well.</h2>
+          <div class="scene-grid">
+            <div class="tile scene-card anim">
+              <h3>Sharing forks</h3>
+              <p>Share an instruction file with a teammate and it gets tweaked; parity is gone.</p>
+            </div>
+            <div class="tile scene-card anim">
+              <h3>Projects start over</h3>
+              <p>Skills get copied between projects, improved in one, and never synced back.</p>
+            </div>
+            <div class="tile scene-card anim">
+              <h3>Tool switches hurt</h3>
+              <p>Claude Code to Codex and back; every switch means converting everything.</p>
+            </div>
+            <div class="tile scene-card anim">
+              <h3>Context rots</h3>
+              <p>Hand-written lists go stale, and verbose instructions burn tokens and attention.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Scene 4: how it addresses them -->
+      <section class="scene" data-scene="how" aria-label="How Sous helps">
+        <div class="scene-inner">
+          <p class="kicker anim">How Sous helps</p>
+          <h2 class="scene-title anim">Templates + variables + one build.</h2>
+          <div class="scene-grid">
+            <div class="tile scene-card anim">
+              <h3>Variables live outside</h3>
+              <p>Developer- and machine-specific values stay out of the templates, so one set of files serves the whole team.</p>
+            </div>
+            <div class="tile scene-card anim">
+              <h3>One skill, many projects</h3>
+              <p>Project-level variables make the same instruction files versatile enough to reuse anywhere.</p>
+            </div>
+            <div class="tile scene-card anim">
+              <h3>Fresh, dynamic context</h3>
+              <p>Helpers embed live data straight from your project; no stale lists, fewer wasted tokens, faster agents.</p>
+            </div>
+            <div class="tile scene-card anim">
+              <h3>Any tool, one command</h3>
+              <p><code>xcv build</code> renders everything for virtually any agent, tool, or service.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Scene 5: what it deliberately does NOT address -->
+      <section class="scene" data-scene="non-goals" aria-label="Non-goals">
+        <div class="scene-inner">
+          <p class="kicker anim">Deliberately out of scope</p>
+          <h2 class="scene-title anim">A tool, not a framework.</h2>
+          <p class="lead anim">Sous stays in a well-defined lane: it augments your agents instead of competing with them.</p>
+          <ul class="scene-list">
+            <li class="anim">No re-implementing what your tools already do; native features are preferred.</li>
+            <li class="anim">No opinions or scaffolding to adopt; build your own systems and comforts.</li>
+            <li class="anim">Only the unfilled gap: templating, variables, and distribution.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- Scene 6: closing -->
+      <section class="scene" data-scene="outro" aria-label="Get started">
+        <div class="scene-inner">
+          <p class="kicker anim">Get started</p>
+          <h2 class="scene-title anim">Ready to cook?</h2>
+          <p class="lead anim">Sous is open source and under active development.</p>
+          <p class="prompt tile anim"><span class="dollar">$</span>xcv launch claude</p>
+          <p class="anim">
+            <a class="btn btn-primary" href="https://github.com/sous-io/sous">Find us on GitHub</a>
+          </p>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- Player controls -->
+    <div class="player-controls">
+      <button type="button" class="playpause" id="playPause" aria-label="Play presentation">
+        <svg class="icon-play" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M8 5v14l11-7z"/>
+        </svg>
+        <svg class="icon-pause" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M6 5h4v14H6zM14 5h4v14h-4z"/>
+        </svg>
+      </button>
+      <div class="timeline">
+        <input type="range" class="scrub" id="scrubRange" min="0" max="1" step="0.001" value="0"
+               aria-label="Presentation progress">
+        <div class="scene-segments" id="sceneSegments" role="group" aria-label="Scenes"></div>
+      </div>
+    </div>
   </main>
+
+  <script>
+    document.getElementById("themeToggle").addEventListener("click", function () {
+      var html = document.documentElement;
+      var current = html.getAttribute("data-sous-theme");
+      if (current !== "light" && current !== "dark") {
+        current = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      }
+      var next = current === "dark" ? "light" : "dark";
+      html.setAttribute("data-sous-theme", next);
+      localStorage.setItem("sous-theme", next);
+    });
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/Observer.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lucide@1.31.0/dist/umd/lucide.min.js"></script>
+  <script>
+    /* Swap <i data-lucide="..."> placeholders for inline SVGs */
+    if (window.lucide) { lucide.createIcons(); }
+  </script>
+  <script src="js/presentation.js"></script>
 </body>
 </html>

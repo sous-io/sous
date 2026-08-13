@@ -180,6 +180,22 @@
 
   /* ----- Focus ------------------------------------------------------------- */
   --sous-focus-ring: 0 0 0 2px rgba(81, 177, 62, 0.5);
+
+  /* ----- Code editor (VS Code-like snippet windows; dark in both themes) ---- */
+  --sous-editor-bg: #1e1e1e;
+  --sous-editor-chrome: #252526;
+  --sous-editor-border: #3c3c3c;
+  --sous-editor-text: #d4d4d4;
+  --sous-editor-muted: #858585;
+  --sous-editor-keyword: #4ec9b0;  /* liquid tags/delimiters */
+  --sous-editor-variable: #9cdcfe;
+  --sous-editor-string: #ce9178;
+  --sous-editor-function: #dcdcaa;
+  --sous-editor-heading: #569cd6;
+
+  /* Callout highlights: yellow ring + glow pull the eye to highlighted code */
+  --sous-hl-outline: rgba(255, 192, 67, 0.6);
+  --sous-hl-glow: 0 0 14px rgba(255, 192, 67, 0.35);
 }
 
 /* ==========================================================================
