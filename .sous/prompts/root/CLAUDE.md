@@ -40,11 +40,13 @@ allowlist in `package.json` (an allowlist, so there is no `.npmignore`; `bin/xcv
 everything else stays out by default). `repository.url` must keep matching the GitHub repo
 exactly; npm's trusted publishing validates it at publish time.
 
-Releases go through trusted publishing (OIDC, tokenless): publishing a GitHub Release
-triggers `.github/workflows/publish.yml`, which needs `id-token: write` and npm ≥ 11.5.1.
-The trusted publisher is configured on npmjs.com (package Settings → Trusted publishing:
-org `sous-io`, repo `sous`, workflow `publish.yml`). Version bumps: edit `version` in
-`package.json`, then create a GitHub Release; no local `npm publish`.
+Releases go through trusted publishing (OIDC, tokenless): pushing a `v*` tag triggers
+`.github/workflows/publish.yml`, which needs `id-token: write` and npm ≥ 11.5.1. The
+trusted publisher is configured on npmjs.com (package Settings → Trusted publishing:
+org `sous-io`, repo `sous`, workflow `publish.yml`). To release: bump `version` in
+`package.json`, sync the lockfile (`npm install --package-lock-only`), commit, push,
+then `git tag v<version> && git push origin v<version>`. No local `npm publish`, and
+no GitHub Releases required (the `gh` CLI is not assumed to exist).
 
 ## Project Structure
 

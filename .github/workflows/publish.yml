@@ -1,8 +1,12 @@
 name: Publish to npm
 
+# Publishing a version = pushing a v* tag (`git tag v0.1.2 && git push origin
+# v0.1.2`). Creating a GitHub Release with a NEW tag also works (that creates
+# and pushes the tag); a Release on an existing tag re-publishes nothing.
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - "v*"
 
 jobs:
   publish:
