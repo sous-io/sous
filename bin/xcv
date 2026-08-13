@@ -1,5 +1,23 @@
 #!/usr/bin/env bash
 
-# Dev convenience wrapper used by the repo's npm scripts (`./bin/xcv ...`).
-# The published bin is run.js itself, which handles tsx registration.
-exec node "$(cd -P "$(dirname "${BASH_SOURCE[0]}")" > /dev/null && pwd)/run.js" "$@"
+# Dev wrapper over run.js, used by the repo's npm scripts and by pre-rename
+# `npm link` shims that still point here. The published bin is run.js itself.
+#
+# Resolve this script's real location, following symlinks, so run.js is found
+# next to the real file even when invoked through a global bin symlink.
+# Pure POSIX shell: no `readlink -f` (GNU-only) and no `realpath` (missing on
+# stock macOS before 12.3). Works on macOS's bash 3.2.
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+  LINK_DIR="$(cd -P "$(dirname "$SOURCE")" > /dev/null && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  # A relative symlink target resolves against the link's own directory.
+  case "$SOURCE" in
+    /*) ;;
+    *) SOURCE="$LINK_DIR/$SOURCE" ;;
+  esac
+done
+
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" > /dev/null && pwd)"
+
+exec node "$SCRIPT_DIR/run.js" "$@"
