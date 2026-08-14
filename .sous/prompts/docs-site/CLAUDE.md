@@ -35,7 +35,7 @@
 | `docs/index.html` | The presentation page: scene markup (one `<section class="scene" data-scene="…">` per scene), player controls, the light/dark toggle, GSAP CDN script tags. Scene text distilled from `docs/notes/SOUS-GOALS.md`. |
 | `docs/css/main.css` | The design-system stylesheet: all tokens, base element styles, minimal foundational classes. |
 | `docs/css/presentation.css` | Page + player styles for `index.html` (stage, scenes, control bar, chapter segments, theme toggle). Everything references `--sous-*` tokens. |
-| `docs/js/presentation.js` | The presentation logic (vanilla JS IIFE): master timeline, scene builds, Observer scrubbing, chapter bar, keyboard controls. |
+| `docs/js/presentation.js` | The presentation logic (vanilla JS IIFE): master timeline, scene builds, Observer scrubbing, chapter bar, keyboard controls, FX (banners/sky/rain), pacing model. |
 | `docs/img/logo-on-white.png` | The Sous logo (chef's hat + wordmark, 1254×1254, transparent bg). Drawn for white/LIGHT backgrounds — a dark-mode variant is still being designed (source of truth: `~/GoogleDrive/Projects/Sous.io/media/`). Used in the intro scene, sized by `.scene-logo` (`clamp(8rem, 48vh, 32rem)`; 32rem is Luke's preferred size on his desktop viewport — do not shrink it without asking). |
 | `docs/CLAUDE.md` | This generated file. |
 | `docs/notes/` | Gitignored planning notes for the CLI project — NOT part of the site. |
@@ -307,8 +307,9 @@ later.
   scene's `-shown` label.
 - **Elapsed / remaining time counters** (`m:ss`, no captions) flank the scrub
   slider (`#timeElapsed` / `#timeRemaining`), fed from `tl.time()` /
-  `tl.duration()` in `syncUi` (timeline time, video-player style; the speed
-  control does not change the displayed numbers).
+  `tl.duration()` in `syncUi`, DIVIDED by the current `timeScale` so the
+  counters show wall-clock time at the selected speed (2x halves the
+  remaining time); `setSpeed()` calls `syncUi()` so they refresh instantly.
 - **The sad/happy effects** ("commercial" treatment; Luke's naming):
   status-quo slides get the SAD effect: the stage desaturates to black and
   white (a `--fx-gray` CSS var on `.stage` drives `filter: grayscale()`;
@@ -320,13 +321,19 @@ later.
   enters behind the scene: the `.fx-sky-tint` fades in (light mode: bright
   blue-tinted sky gradient, dark enough for WHITE clouds to read but never
   enough to hurt text contrast; dark mode: deep night-blue tint), the clouds
-  FLY in from their nearest screen edge, and the orb enters from the lower
-  right along an arc (different eases on x and y bend the path), reversing on
-  exit. The SAD effect adds gloom: faint diagonal rain (`.fx-rain`; two
-  pseudo-element depth layers of short tiled dashes whose fall animates
-  background-position by exactly one tile height per loop for a seamless
-  cycle; do NOT reimplement as translated pinstripes, near-vertical lines
-  moving along their own axis show no motion), an edge vignette
+  FLY in from their nearest screen edge (offscreen offsets are MEASURED from
+  layout at init, never hard-coded pixels: the wrappers sit at percentage
+  positions, so fixed offsets strand clouds on wide viewports), and the orb
+  enters from the lower right along an arc (different eases on x and y bend the path), reversing on
+  exit. The SAD effect adds gloom: faint diagonal rain (`.fx-rain`; ~75
+  JS-built drop divs in two depth layers inside a once-tilted
+  `.fx-rain-drops` wrapper, each tweened by GSAP on `y` only with
+  `repeat: -1` and randomized phase; built under
+  `gsap.matchMedia("(prefers-reduced-motion: no-preference)")` so reduced
+  motion gets no drops; `syncUi` pauses the loops while the layer is
+  invisible. Do NOT reimplement with CSS `background-position` animation:
+  it is paint-bound, Chromium throttles it under window occlusion, and it
+  reads as scrolling texture instead of rain. Transform/opacity only.), an edge vignette
   (`.fx-gloom`, above the scenes), and a slight dim that rides `--fx-gray`
   in the `.stage` filter (`brightness(calc(1 - var(--fx-gray) * 0.07))`). All other slides clear both effects. Transitions are inserted into
   the MASTER timeline at each effect boundary (`effectFor()` /
@@ -413,6 +420,10 @@ the chapter bar.
   top-highlight/bottom-shade shadows) and a bordered arrow pointing down at
   the highlight; highlights carry a subtle yellow ring + glow
   (`--sous-hl-outline` / `--sous-hl-glow` tokens) to pull focus.
+- **Intro hides the chrome:** the bottom control bar and the speed control
+  are hidden on the title scene; two `fromTo` tweens inserted into the master
+  timeline at `intro-exit` slide the bar up from below (`yPercent`) and fade
+  the speed control in, so scrubbing back into the intro re-hides them.
 - **Reload persistence:** the playhead progress is saved to sessionStorage
   (`sous-presentation-progress`) on `beforeunload` and restored (paused) on
   load; per-tab only, so fresh visitors start at 0. Added for hot-reload

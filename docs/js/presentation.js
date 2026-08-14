@@ -229,12 +229,23 @@
   var fxSadBanner = stage.querySelector(".fx-banner-sad");
   var fxHappyBanner = stage.querySelector(".fx-banner-happy");
 
-  // Clouds fly in from whichever screen edge they sit closest to
+  // Clouds fly in from whichever screen edge they sit closest to. Offscreen
+  // offsets are MEASURED from the actual layout (the wrappers are positioned
+  // in percentages, so fixed pixel offsets strand clouds on wide viewports).
+  function cloudOffscreenX(el, side) {
+    var margin = 120; // cushion so growth from a mid-session resize stays hidden
+    if (side === "left") {
+      return -(el.offsetLeft + el.offsetWidth + margin);
+    }
+    return stage.offsetWidth - el.offsetLeft + margin;
+  }
+
   var FX_CLOUDS = [
-    { el: stage.querySelector(".fx-cloud-wrap-1"), fromX: -640 },
-    { el: stage.querySelector(".fx-cloud-wrap-2"), fromX: 640 },
-    { el: stage.querySelector(".fx-cloud-wrap-3"), fromX: -900 }
+    { el: stage.querySelector(".fx-cloud-wrap-1"), side: "left" },
+    { el: stage.querySelector(".fx-cloud-wrap-2"), side: "right" },
+    { el: stage.querySelector(".fx-cloud-wrap-3"), side: "left" }
   ];
+  FX_CLOUDS.forEach(function (c) { c.fromX = cloudOffscreenX(c.el, c.side); });
   // The orb enters from the lower right and arcs up-and-left into place
   var FX_ORB_FROM = { x: 460, y: 340 };
 
@@ -248,6 +259,42 @@
     if (/-mitigation$|-example$/.test(sceneId)) { return "happy"; }
     return "none";
   }
+
+  // Rain drops: DOM elements tweened on transform only (compositor-safe).
+  // Built only when motion is allowed; syncUi pauses the loops while the
+  // rain container is invisible so hidden rain costs nothing.
+  var rainAmbient = null;
+  gsap.matchMedia().add("(prefers-reduced-motion: no-preference)", function () {
+    var dropsBox = fxRain.querySelector(".fx-rain-drops");
+    var fallDistance = stage.offsetHeight * 1.4;
+    var drops = [];
+    var t = gsap.timeline({ paused: true });
+    for (var i = 0; i < 75; i++) {
+      var far = i % 3 === 0;
+      var drop = document.createElement("div");
+      drop.className = "drop" + (far ? " drop-far" : "");
+      drop.style.left = gsap.utils.random(0, 100) + "%";
+      drop.style.opacity = String(gsap.utils.random(far ? 0.08 : 0.15, far ? 0.18 : 0.35));
+      dropsBox.appendChild(drop);
+      drops.push(drop);
+      t.fromTo(drop,
+        { y: 0, scaleY: gsap.utils.random(0.6, 1.3) },
+        {
+          y: fallDistance,
+          duration: gsap.utils.random(far ? 1.7 : 0.9, far ? 2.6 : 1.5),
+          ease: "none",
+          repeat: -1
+        }, 0);
+    }
+    // Randomize each drop's phase so the loop is mid-fall from frame one
+    t.getChildren().forEach(function (tween) { tween.progress(Math.random()); });
+    rainAmbient = t;
+    return function () {
+      t.kill();
+      drops.forEach(function (drop) { drop.remove(); });
+      rainAmbient = null;
+    };
+  });
 
   function bannerIn(banner) {
     return gsap.fromTo(
@@ -404,6 +451,20 @@
       tl.to({}, { duration: 0.3 }); // brief gap between scenes
     }
   });
+
+  /* ----- Player chrome reveal ---------------------------------------------------
+     The title scene hides the bottom timeline and the speed control; they
+     enter with the intro's exit (timeline bar slides up from below, speed
+     control fades in). Timeline-driven, so scrubbing back re-hides them. */
+  var playerControlsEl = document.querySelector(".player-controls");
+  var speedControlEl = document.getElementById("speedControl");
+
+  tl.fromTo(playerControlsEl, { yPercent: 100 },
+    { yPercent: 0, duration: 0.6, ease: "power2.out", immediateRender: true },
+    tl.labels["intro-exit"]);
+  tl.fromTo(speedControlEl, { autoAlpha: 0 },
+    { autoAlpha: 1, duration: 0.6, immediateRender: true },
+    tl.labels["intro-exit"]);
 
   /* ----- Scrubbing (paused-mode playhead driver) ------------------------------ */
   var MAX_DELTA = 60;          // clamp per-tick wheel deltas (px)
@@ -617,8 +678,10 @@
 
     scrubInput.value = String(p);
     scrubInput.style.setProperty("--fill", (p * 100).toFixed(2) + "%");
-    timeElapsedEl.textContent = formatTime(t);
-    timeRemainingEl.textContent = formatTime(total - t);
+    // Counters show wall-clock time at the current playback speed
+    var speedScale = tl.timeScale() || 1;
+    timeElapsedEl.textContent = formatTime(t / speedScale);
+    timeRemainingEl.textContent = formatTime((total - t) / speedScale);
 
     var activeGroup = GROUPS[0];
     GROUPS.forEach(function (g) {
@@ -656,6 +719,16 @@
       "aria-valuetext",
       Math.round(p * 100) + "%, " + currentTitle
     );
+
+    // Run the rain loops only while the rain layer is actually visible
+    if (rainAmbient) {
+      var rainVisible = gsap.getProperty(fxRain, "opacity") > 0.01;
+      if (rainVisible && rainAmbient.paused()) {
+        rainAmbient.play();
+      } else if (!rainVisible && !rainAmbient.paused()) {
+        rainAmbient.pause();
+      }
+    }
   }
 
   /* ----- Wire up controls ------------------------------------------------------------ */
@@ -700,6 +773,7 @@
       btn.setAttribute("aria-pressed", String(parseFloat(btn.dataset.speed) === value));
     });
     try { sessionStorage.setItem(SPEED_KEY, String(value)); } catch (e) { /* fine */ }
+    syncUi(); // the time counters scale with speed; refresh them immediately
   }
 
   speedBtns.forEach(function (btn) {
