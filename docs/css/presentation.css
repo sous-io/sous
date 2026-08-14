@@ -1032,14 +1032,3 @@ html.no-gsap .speed-control {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .scene-title .cursor {
-    animation: none;
-  }
-
-  .fx-cloud-1,
-  .fx-cloud-2,
-  .fx-cloud-3 {
-    animation: none;
-  }
-}

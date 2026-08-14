@@ -191,13 +191,7 @@
 
   /* ----- State -------------------------------------------------------------- */
   var playing = false;
-  var reducedMotion = false;
   var scrubTarget = 0;
-
-  gsap.matchMedia().add("(prefers-reduced-motion: reduce)", function () {
-    reducedMotion = true;
-    return function () { reducedMotion = false; };
-  });
 
   /* ----- Master timeline ----------------------------------------------------- */
   // Pre-hide everything GSAP will reveal (the intro scene starts visible).
@@ -263,21 +257,19 @@
   // Diagram dash march: one GSAP loop drives every dashed flow line (the CSS
   // stroke-dashoffset keyframe it replaces was paint-bound and froze on some
   // machines). 12 = one full dash period (6 on, 6 off), so the loop is
-  // seamless. Gated by reduced motion, like the other ambient movement.
-  gsap.matchMedia().add("(prefers-reduced-motion: no-preference)", function () {
-    var dashTween = gsap.fromTo(
-      stage.querySelectorAll(".orbit-lines line, .flow-lines line"),
-      { strokeDashoffset: 0 },
-      { strokeDashoffset: -12, duration: 0.6, ease: "none", repeat: -1 }
-    );
-    return function () { dashTween.kill(); };
-  });
+  // seamless. NOTE: this site deliberately IGNORES prefers-reduced-motion
+  // (Luke's direction, 2026-08-14).
+  gsap.fromTo(
+    stage.querySelectorAll(".orbit-lines line, .flow-lines line"),
+    { strokeDashoffset: 0 },
+    { strokeDashoffset: -12, duration: 0.6, ease: "none", repeat: -1 }
+  );
 
   // Rain drops: DOM elements tweened on transform only (compositor-safe).
-  // Built only when motion is allowed; syncUi pauses the loops while the
-  // rain container is invisible so hidden rain costs nothing.
+  // syncUi pauses the loops while the rain container is invisible so hidden
+  // rain costs nothing.
   var rainAmbient = null;
-  gsap.matchMedia().add("(prefers-reduced-motion: no-preference)", function () {
+  (function buildRain() {
     var dropsBox = fxRain.querySelector(".fx-rain-drops");
     var fallDistance = stage.offsetHeight * 1.4;
     var drops = [];
@@ -302,12 +294,7 @@
     // Randomize each drop's phase so the loop is mid-fall from frame one
     t.getChildren().forEach(function (tween) { tween.progress(Math.random()); });
     rainAmbient = t;
-    return function () {
-      t.kill();
-      drops.forEach(function (drop) { drop.remove(); });
-      rainAmbient = null;
-    };
-  });
+  })();
 
   function bannerIn(banner) {
     return gsap.fromTo(
@@ -514,11 +501,7 @@
       }
       delta = gsap.utils.clamp(-MAX_DELTA, MAX_DELTA, delta);
       scrubTarget = gsap.utils.clamp(0, 1, scrubTarget + (delta * SECONDS_PER_PIXEL) / tl.duration());
-      if (reducedMotion) {
-        tl.progress(scrubTarget);
-      } else {
-        progressTo(scrubTarget);
-      }
+      progressTo(scrubTarget);
     }
   });
 
@@ -576,12 +559,6 @@
   function goToLabel(label) {
     var wasPlaying = playing;
     killScrubTweens();
-    if (reducedMotion) {
-      tl.seek(label); // instant under prefers-reduced-motion
-      if (wasPlaying) { tl.play(); } else { scrubTarget = tl.progress(); }
-      syncUi();
-      return;
-    }
     disableScrub();
     // tweenTo pauses the timeline and does NOT auto-resume; restore in onComplete.
     tl.tweenTo(label, {

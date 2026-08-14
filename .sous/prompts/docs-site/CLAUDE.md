@@ -93,7 +93,11 @@ automatically.
 2. **Green is the only voice of interactivity** — links (no underline), primary
    buttons (hover `#1e7a44`), focus rings (`--sous-focus-ring`), active states.
 3. Spacing scale 4/8/16/32/64/80px (`--sous-space-*`); transitions 0.2/0.3/0.5s.
-4. Subtle motion only, always guarded by `prefers-reduced-motion`.
+4. Subtle motion only. NOTE: this site deliberately IGNORES
+   `prefers-reduced-motion` (Luke's direction, 2026-08-14; do not re-add
+   gating without asking). Rationale: the animated presentation IS the
+   content, and reduce-motion is commonly enabled by OS performance tweaks
+   rather than user intent.
 
 ### Theming mechanics
 
@@ -177,7 +181,7 @@ those apply everywhere at once, ideally by editing their single generator.
 |-------|-----------|---------|
 | `intro` | Intro | Title scene: logo, "Your coding agent's assistant", tagline, `$ npm install -g @sous-io/sous` prompt motif, big play button. Visible statically before play (and if JS/GSAP fails). Pressing play skips the rest of the intro hold and transitions away immediately (the user has already consumed the static scene). |
 | `features` | Core Systems | The two core systems as tiles with Lucide icons: Config Aggregation (`combine`) + Liquid Templates (`braces`); tagline "It's a bit like [Helm](https://helm.sh), but for AI coding tools." |
-| `aggregator` | Aggregator | Core system #1 explained: inline-SVG orbit diagram; six same-size circles (Project/Department/Company/Personal/2× Public Repo, two-line labels, r=48) orbit a central "Project" circle, green dashed flow lines (marching-dash movement driven by a single GSAP loop in presentation.js; the old CSS stroke-dashoffset keyframe was paint-bound and froze on some machines; reduced motion gets static dashes) with arrowheads pointing inward. All colors from tokens. |
+| `aggregator` | Aggregator | Core system #1 explained: inline-SVG orbit diagram; six same-size circles (Project/Department/Company/Personal/2× Public Repo, two-line labels, r=48) orbit a central "Project" circle, green dashed flow lines (marching-dash movement driven by a single GSAP loop in presentation.js; the old CSS stroke-dashoffset keyframe was paint-bound and froze on some machines) with arrowheads pointing inward. All colors from tokens. |
 | `templates` | Templates | Core system #2 explained as SUB-SCENES in one `.code-stack` (two VS Code-style windows overlapping in one grid cell; `--sous-editor-*` tokens are THEME-AWARE: Light+ palette in light mode, Dark+ in dark mode): first the `SKILL.tpl.md` template (YAML frontmatter, `{{ projectRoot }}` injection, `{% if tool %}` claude-code/codex branch about HOW TO APPLY EDITS deliberately unrelated to the glob, fictitious `{% globDirectory dir="{{ projectRoot }}/src/models" pattern="**/*Model.ts" %}`) with its callout walkthrough, then a crossfade to the rendered `SKILL.md` window (full skill output, fictitious absolute `/projects/backend/src/models/...` paths, one nested under `billing/` proving the `**`) with its single callout on the injected path list ("Absolute paths, sourced from the project, never stale. This will save your agent dozens of steps in every relevant session."). Sequenced by `templatesTimeline` in presentation.js. Hand-highlighted with `tok-*` spans; code font is `--sous-font-size-base`. |
 | `why` | Why? | Kicker "The Motivation", h2 "But, Why?": Sous fills a few gaps that AI coding harnesses don't, and likely won't, because those problems scale across multiple providers; segue into the seven problems, five slides each. |
 | `teams-statement` | Teams | P1 slide 1 (Statement): the problem, text only. |
@@ -256,7 +260,7 @@ then Discipline (`shield-check`).
 Flow diagrams share the `.flow-diagram` / `.flow-lines` / `.flow-node` /
 `.flow-src` / `.flow-engine` / `.flow-path` classes in `presentation.css` (flat
 token-colored boxes, green dashed lines whose marching motion comes from the
-shared GSAP dash loop in presentation.js, static under reduced motion); each
+shared GSAP dash loop in presentation.js); each
 SVG defines its OWN arrow-marker
 id (`teamsFlowArrow`, `projectsFlowArrow`, `toolsFlowArrow`, `tokensFlowArrow`,
 `staleFlowArrow`, `speedFlowArrow`, `docsFlowArrow`; ids are document-global, never reuse one) referenced via
@@ -329,10 +333,7 @@ later.
   exit. The SAD effect adds gloom: faint diagonal rain (`.fx-rain`; ~75
   JS-built drop divs in two depth layers inside a once-tilted
   `.fx-rain-drops` wrapper, each tweened by GSAP on `y` only with
-  `repeat: -1` and randomized phase; built under
-  `gsap.matchMedia("(prefers-reduced-motion: no-preference)")` so reduced
-  motion gets no drops; `syncUi` pauses the loops while the layer is
-  invisible. Do NOT reimplement with CSS `background-position` animation:
+  `repeat: -1` and randomized phase; `syncUi` pauses the loops while the layer is invisible. Do NOT reimplement with CSS `background-position` animation:
   it is paint-bound, Chromium throttles it under window occlusion, and it
   reads as scrolling texture instead of rain. Transform/opacity only.), an edge vignette
   (`.fx-gloom`, above the scenes), and a slight dim that rides `--fx-gray`
@@ -394,9 +395,9 @@ the chapter bar.
 - Keyboard: Space toggles play/pause (ignored when focus is on a control);
   ArrowLeft/Right jump scenes (Left returns to the current scene's `-shown`
   point first when >0.5s past it).
-- `prefers-reduced-motion` (via `gsap.matchMedia`): jumps use instant
-  `tl.seek()`, wheel scrub sets progress directly (no smoothing tween). There
-  is no autoplay at all; playback only ever starts from a user gesture.
+- There is no autoplay at all; playback only ever starts from a user
+  gesture. (Reduced-motion gating was REMOVED at Luke's direction,
+  2026-08-14; see the style principles note.)
 - **Callout system** (`SCENE_EXTRAS` map + `calloutsTimeline`): a scene can
   register an extra child timeline inserted after its `-shown` label. The
   templates scene uses it to fade `.hl` highlight/tooltip pairs in and out in
@@ -480,8 +481,7 @@ discrete-step architectures cannot pause mid-animation or scrub continuously)
     `gsap.quickTo(tl, "progress", {duration: 0.6, ease: "power3"})`; the ease
     provides inertia. Enable the observer on pause, disable on play.
 - **Chapter jumps:** `tl.tweenTo(label)` (animated). Gotchas: it pauses the
-  timeline and does NOT auto-resume — restore play state in `onComplete`; under
-  reduced motion use instant `tl.seek(label)` instead.
+  timeline and does NOT auto-resume — restore play state in `onComplete`.
 - **Chapter bar:** custom-built (~100 lines; no off-the-shelf option fits — the
   video-player chapter bars all require a media element). Accessible core: a
   styled `<input type="range" min="0" max="1" step="0.001">` with scene
@@ -496,9 +496,9 @@ discrete-step architectures cannot pause mid-animation or scrub continuously)
   player; `touch-action: none` on the player element for touch. Decide edge
   behavior at progress 0/1 (release to page scroll vs stay captured).
 - Kill any in-flight scrub tween (`gsap.killTweensOf(tl)`) before `tl.play()`.
-- Accessibility: no autoplay under `prefers-reduced-motion`
-  (`gsap.matchMedia`); Space = play/pause; ArrowLeft/Right =
-  `tl.tweenTo(tl.previousLabel()/nextLabel())`.
+- Accessibility: Space = play/pause; ArrowLeft/Right =
+  `tl.tweenTo(tl.previousLabel()/nextLabel())`. (Reduced-motion gating
+  removed at Luke's direction, 2026-08-14.)
 
 ### Reference material
 
