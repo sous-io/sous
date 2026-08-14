@@ -1,9 +1,20 @@
+<p align="center">
+  <a href="https://sous.io">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/sous-io/sous/main/docs/img/logo-on-dark-sm.png">
+      <img src="https://raw.githubusercontent.com/sous-io/sous/main/docs/img/logo-on-white-sm.png" alt="Sous" height="180">
+    </picture>
+  </a>
+</p>
+
 # sous
 
 sous compiles AI coding agent configuration from templates. You write skills, memories, and
 instructions once as LiquidJS templates in layered sources, then sous renders them into the
 formats agents actually read: `.claude/` plus `CLAUDE.md` for Claude Code, `.codex/` plus
 `AGENTS.md` for Codex. The CLI binary is named `xcv`.
+
+**New to sous? Watch the animated introduction at [sous.io](https://sous.io).**
 
 ## Why
 
