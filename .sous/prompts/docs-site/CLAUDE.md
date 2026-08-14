@@ -122,6 +122,55 @@ over spectacle — simple fade/slide scene transitions).
    progress fill, `aria-current` highlight), plus an
    `<input type="range">` scrub slider above the segments.
 
+### The five-slide problem pattern (Luke's direction, 2026-08-13)
+
+EVERY problem gets FIVE slides (Problem #1 / `teams-*` is the canonical
+implementation; match it exactly):
+
+1. **Statement** — the problem and why it exists; text only.
+2. **Status-Quo** — the pain WITHOUT Sous; usually one or more code windows.
+3. **Mitigation** — how Sous mitigates it; usually an animated diagram.
+4. **Example** — the fix demonstrated; usually one or more code windows.
+5. **Alternatives** — why others don't fill the gap, as tiles: (a) AI Coding
+   Agents (why claude-code/codex etc. don't), (b) Similar Tools where
+   applicable, and (c) **Discipline** for many/most problems (why "just be
+   careful" is hard or impossible). Two conventions are APPROVED and apply to
+   every alternatives slide: the title is exactly **"Nothing else fills this
+   gap."**, and the tiles **stack vertically** in one centered column
+   (`class="scene-grid scene-grid-stack"`), never side by side.
+
+Every problem slide's kicker stacks TWO centered lines: `Problem #<x> (pill)`
+/ `<Brief In Title Case>`. The pill is one of five types (`.pill.pill-<type>`:
+`Statement`, `Status-Quo`, `Mitigation`, `Example`, `Alternatives`) but all
+five are styled IDENTICALLY and unobtrusively: transparent background, padding
+`0 --sous-space-s` (no vertical padding; the inherited line-height provides
+the height), 1px `currentColor` border, inheriting the kicker's green. The `pill-<type>` classes stay on the markup for future
+styling hooks; do not color-vary them without direction. The brief is IDENTICAL across a
+problem's five slides. Scene ids: `<problem>-statement`,
+`<problem>-status-quo`, `<problem>-mitigation`, `<problem>-example`,
+`<problem>-alternatives`.
+
+**The kicker is GENERATED, not hand-written.** `buildProblemKickers()` in
+presentation.js holds the `PROBLEMS` table (num + brief per problem) and
+`SLIDE_TYPE_LABELS`, derives problem/type from each `data-scene` id, and
+prepends the kicker to `.scene-inner`. Do NOT add kicker markup to problem
+sections in index.html; to change the heading's format or text, edit the
+builder/table (and `.kicker-problem` CSS, which tightens letter-spacing to
+0.12em because these kickers carry a whole sentence). Prefer this pattern:
+repeated structures become helpers generated in one place.
+
+Luke refers to these as "#<x> <type>" (e.g. "#1 statement") and uses
+"slide" and "scene" interchangeably.
+
+**Iteration workflow:** Luke reviews problem by problem, slide by slide.
+Changes he requests apply immediately to the slide under review. Do NOT roll
+them forward to later problem slides until he has signed off on the tweak;
+sign-off may simply be him moving on to the next thing. Then propagate via a
+background agent. Problems already reviewed are COMPLETE; never touch them in
+rolling updates. EXCEPTION: shared formatting elements (like the generated
+problem kicker) are uniform across all slides by definition; format changes to
+those apply everywhere at once, ideally by editing their single generator.
+
 ### Scenes (in order; label name = `data-scene` attr in `index.html`)
 
 | Label | Bar title | Content |
@@ -129,17 +178,120 @@ over spectacle — simple fade/slide scene transitions).
 | `intro` | Intro | Title scene: logo, "Your coding agent's assistant", tagline, `$ npm install -g @sous-io/sous` prompt motif, big play button. Visible statically before play (and if JS/GSAP fails). Pressing play skips the rest of the intro hold and transitions away immediately (the user has already consumed the static scene). |
 | `features` | Core Systems | The two core systems as tiles with Lucide icons: Config Aggregation (`combine`) + Liquid Templates (`braces`); tagline "It's a bit like [Helm](https://helm.sh), but for AI coding tools." |
 | `aggregator` | Aggregator | Core system #1 explained: inline-SVG orbit diagram; six same-size circles (Project/Department/Company/Personal/2× Public Repo, two-line labels, r=48) orbit a central "Project" circle, green dashed flow lines (CSS `orbit-flow` marching-dash animation, disabled under reduced motion) with arrowheads pointing inward. All colors from tokens. |
-| `templates` | Templates | Core system #2 explained as SUB-SCENES in one `.code-stack` (two VS Code-style windows overlapping in one grid cell; `--sous-editor-*` tokens): first the `SKILL.tpl.md` template (YAML frontmatter, `{{ projectRoot }}` injection, `{% if tool %}` claude-code/codex branch about HOW TO APPLY EDITS deliberately unrelated to the glob, fictitious `{% globDirectory dir="{{ projectRoot }}/src/models" pattern="**/*Model.ts" %}`) with its callout walkthrough, then a crossfade to the rendered `SKILL.md` window (full skill output, fictitious absolute `/projects/backend/src/models/...` paths, one nested under `billing/` proving the `**`) with its own callout. Sequenced by `templatesTimeline` in presentation.js. Hand-highlighted with `tok-*` spans; code font is `--sous-font-size-base`. |
-| `what` | What is Sous | What Sous is: CLI (`xcv`) compiling markdown templates into prompts/skills/context per tool. |
-| `problems` | The Problems | 2×2 tile grid: sharing forks, projects start over, tool switches hurt, context rots. |
-| `how` | How It Works | 2×2 tile grid: variables live outside, one skill many projects, fresh dynamic context, one build for any tool. |
-| `non-goals` | Non-Goals | "A tool, not a framework": prefers native features, no opinions, only the unfilled gap. |
+| `templates` | Templates | Core system #2 explained as SUB-SCENES in one `.code-stack` (two VS Code-style windows overlapping in one grid cell; `--sous-editor-*` tokens are THEME-AWARE: Light+ palette in light mode, Dark+ in dark mode): first the `SKILL.tpl.md` template (YAML frontmatter, `{{ projectRoot }}` injection, `{% if tool %}` claude-code/codex branch about HOW TO APPLY EDITS deliberately unrelated to the glob, fictitious `{% globDirectory dir="{{ projectRoot }}/src/models" pattern="**/*Model.ts" %}`) with its callout walkthrough, then a crossfade to the rendered `SKILL.md` window (full skill output, fictitious absolute `/projects/backend/src/models/...` paths, one nested under `billing/` proving the `**`) with its single callout on the injected path list ("Absolute paths, sourced from the project, never stale. This will save your agent dozens of steps in every relevant session."). Sequenced by `templatesTimeline` in presentation.js. Hand-highlighted with `tok-*` spans; code font is `--sous-font-size-base`. |
+| `why` | Why? | Kicker "The Motivation", h2 "But, Why?": Sous fills a few gaps that AI coding harnesses don't, and likely won't, because those problems scale across multiple providers; segue into the seven problems, five slides each. |
+| `teams-statement` | Teams | P1 slide 1 (Statement): the problem, text only. |
+| `teams-status-quo` | Teams: Today | P1 slide 2 (Status-Quo): two side-by-side code windows in a `.scene-grid`, Alice's vs Bob's diverged `SKILL.md` copies. |
+| `teams-mitigation` | Teams: Sous | P1 slide 3 (Mitigation): `.flow-diagram` SVG, two top-to-bottom flows side by side (Alice's variables → Sous engine box → Alice's render; same for Bob) with the shared `SKILL.tpl.md` template box centered between the two Sous boxes, feeding both. Conceptual copy (no storage-location specifics). |
+| `teams-example` | Teams: Demo | P1 slide 4 (Example): side-by-side code windows; shared `SKILL.tpl.md` with `{{ devRoot }}`/`{{ deployProfile }}` next to Alice's `.env.local`. |
+| `teams-alternatives` | Teams: Alts | P1 slide 5 (Alternatives): three vertically stacked tiles with Lucide icons; AI Coding Agents (`bot`), Similar Tools (`package`), Discipline (`shield-check`). |
+| `projects-statement` | Projects | P2 slide 1 (Statement): "Improvements only ever help one project"; copied skills fork and improvements never sync back. Text only. |
+| `projects-status-quo` | Projects: Today | P2 slide 2 (Status-Quo): two side-by-side code windows; the same test-running `SKILL.md` copied into `api` and `webapp`, with the flaky-test retry trick present in only one. |
+| `projects-mitigation` | Projects: Sous | P2 slide 3 (Mitigation): `.flow-diagram` SVG (`projectsFlowArrow`); one `SKILL.tpl.md` source flows down through the `flow-engine` Sous box, which renders it into Backend/Web App/Mobile project boxes. |
+| `projects-example` | Projects: Demo | P2 slide 4 (Example): side-by-side code windows; shared `SKILL.tpl.md` using `{{ testDir }}`/`{{ testCmd }}` next to the `sous.config.js` per-project `_vars` that supply them. |
+| `projects-alternatives` | Projects: Alts | P2 slide 5 (Alternatives): stacked tiles; AI Coding Agents (`bot`), Similar Tools (`package`, `npx skills`/marketplaces install as-is), Discipline (`shield-check`, nobody backports a fix to five repos). |
+| `tools-statement` | Tools | P3 slide 1 (Statement): "Changing agents means rewriting everything"; conversions per tool, N config sets on a mixed team. Text only. |
+| `tools-status-quo` | Tools: Today | P3 slide 2 (Status-Quo): two side-by-side code windows; the same deploy skill in `.claude/skills/` and `.codex/skills/`, differing only in the Edit-tool vs `apply_patch` instruction. |
+| `tools-mitigation` | Tools: Sous | P3 slide 3 (Mitigation): `.flow-diagram` SVG (`toolsFlowArrow`); "Your sources" flows down through the `flow-engine` Sous box, out to `.claude/skills/`, `.codex/skills/`, `ci/prompts/`. |
+| `tools-example` | Tools: Demo | P3 slide 4 (Example): side-by-side code windows; `SKILL.tpl.md` with an `{% if tool == "codex" %}` branch next to the `outputs` array giving each destination its own `tool` var. |
+| `tools-alternatives` | Tools: Alts | P3 slide 5 (Alternatives): stacked tiles; AI Coding Agents (`bot`, no vendor emits a competitor's format), Similar Tools (`package`, marketplaces are Claude-Code-bound), Discipline (`shield-check`, hand-syncing N sets drifts). |
+| `tokens-statement` | Tokens | P4 slide 1 (Statement): "Wasted tokens buy you a distracted agent"; compaction, then inattention, plus re-run discovery every session. Text only. |
+| `tokens-status-quo` | Tokens: Today | P4 slide 2 (Status-Quo): two side-by-side code windows; a `SKILL.md` that says "run these first" next to the same three commands re-run in every new session (~1,400 tokens before any work). |
+| `tokens-mitigation` | Tokens: Sous | P4 slide 3 (Mitigation): `.flow-diagram` SVG (`tokensFlowArrow`), a 3-box vertical chain: "Your project" (`flow-src`, `src/**/*.ts`) down through "Sous" (`flow-engine`, "helpers run once") to "Agent context" ("0 commands"). |
+| `tokens-example` | Tokens: Demo | P4 slide 4 (Example): single `.code-window` (one-pane `.code-stack`): `{{ gitBranch }}` + a `globDirectory` helper, with a dim comment showing what the build renders them into. |
+| `tokens-alternatives` | Tokens: Alts | P4 slide 5 (Alternatives): stacked tiles; AI Coding Agents (`bot`, caching makes context cheaper, not unnecessary), Callable Scripts (`terminal`, a step plus the full output in context), Discipline (`shield-check`, nobody re-optimizes context by hand each session). |
+| `stale-statement` | Stale | P5 slide 1 (Statement): "A written list is wrong within a week"; agents default to embedding lists in skills (you have to stop them), and every list starts rotting immediately. Text only. |
+| `stale-status-quo` | Stale: Today | P5 slide 2 (Status-Quo): two side-by-side code windows; the entity list written into `SKILL.md` in March next to `src/entities` today (two new, one gone). |
+| `stale-mitigation` | Stale: Sous | P5 slide 3 (Mitigation): `.flow-diagram` SVG (`staleFlowArrow`); "The code" (`src/entities/*.ts`) flows down through the `flow-engine` Sous box ("every build"), out to the entity skill, core memory, and a review bot's prompt. |
+| `stale-example` | Stale: Demo | P5 slide 4 (Example): single `.code-window`: `globDirectory` over `src/entities` plus the always-current rendered list as a dim comment. |
+| `stale-alternatives` | Stale: Alts | P5 slide 5 (Alternatives): stacked tiles; AI Coding Agents (`bot`, writes the list once and never re-reads), Callable Scripts (`terminal`, only if the agent runs it; the stale list still reads as truth), Discipline (`shield-check`, a hand-maintained list will go stale). |
+| `speed-statement` | Speed | P6 slide 1 (Statement): "Agents spend their first minutes relearning the obvious"; every info-gathering command is a round trip, AND it is not just session start: most tasks begin the same way, so a huge share of agent time goes to relearning the basics. Text only. |
+| `speed-status-quo` | Speed: Today | P6 slide 2 (Status-Quo): single `.code-window`; the first 40 seconds of a session, five discovery commands in a row and no code changed yet. |
+| `speed-mitigation` | Speed: Sous | P6 slide 3 (Mitigation, hold 12s): the delegation-ladder `.flow-diagram` SVG (`speedFlowArrow`), a 5-rung descending staircase (240×48 boxes stepping down-right in a `0 0 640 412` viewBox): Fable 5 → Opus → Sonnet → Haiku → "Plain code" (`flow-engine`, "$0, milliseconds"). Two leads: zero-reasoning work delegates past models to plain code (a Sous helper), and just-in-time context (the api-clients skill story; path + description of every client, zero steps wasted). |
+| `speed-example` | Speed: Demo | P6 slide 4 (Example): side-by-side code windows; a model file's doc block with the team's `@summary` convention next to `skills/models/SKILL.tpl.md` using a home-grown `{% fileSummaries %}` helper, with the rendered path+summary list as a dim comment. |
+| `speed-alternatives` | Speed: Alts | P6 slide 5 (Alternatives): stacked tiles; AI Coding Agents (`bot`, parallel calls make round trips cheaper, not unnecessary), Callable Scripts (`terminal`, scripts work but each call is a round trip and a decision; Sous saves the step, helpers are cross-platform and as sophisticated as you want), Discipline (`shield-check`, "don't explore" just means it guesses). |
+| `docs-statement` | Docs | P7 slide 1 (Statement): "The same fact lives in five files"; per-directory CLAUDE.md/AGENTS.md docs are great, so they multiply; facts repeat briefly in central docs and fully next to the code, and only one copy gets updated. Text only. |
+| `docs-status-quo` | Docs: Today | P7 slide 2 (Status-Quo): two side-by-side code windows; the root `CLAUDE.md` still says invoices generate nightly (written in March) next to `src/billing/CLAUDE.md` saying hourly (updated in May, with the code). |
+| `docs-mitigation` | Docs: Sous | P7 slide 3 (Mitigation): `.flow-diagram` SVG (`docsFlowArrow`); "The billing doc" (`docs/billing.md`) flows down through the `flow-engine` Sous box, out to the root `CLAUDE.md`, `src/billing/CLAUDE.md`, and `AGENTS.md`. |
+| `docs-example` | Docs: Demo | P7 slide 4 (Example): side-by-side code windows; a source `prompts/CLAUDE.md` with an `@${docsRoot}/billing.md` include (Claude Code's @-import format, but resolved at build time with variables in the path) next to a `sous.config.js` `outputs` array writing one render to two `destinationFile`s (`CLAUDE.md` + `AGENTS.md`). |
+| `docs-alternatives` | Docs: Alts | P7 slide 5 (Alternatives): stacked tiles; AI Coding Agents (`bot`, they read nested docs wonderfully but nothing maintains them or propagates shared content between doc files), Similar Tools (`package`, they move one file to one place; nothing composes a single source into many destinations), Discipline (`shield-check`, updating every copy of a fact in the same commit is the thing people reliably fail to do). |
+| `philosophy-augment` | Augment | Principle #1: augment, don't compete; when a tool can do it natively, do it natively; Sous is for what it can't. |
+| `philosophy-collective` | The Gaps | Principle #2 (Luke's own wording): Sous actively tries to avoid competing with any tool, especially any class of tools; instead it tries to fill the COLLECTIVE gaps that most or all tools either can't or won't fill. |
+| `philosophy-unopinionated` | No Opinions | Principle #3: h2 "Be a *tool*, not a *framework*." (both words em'd; imperative voice matching the other principle titles); AVOIDS FORCING opinions (not "has none"); beyond the few core skills that teach agents to work with Sous (config dir is generated, how to edit sous skills), all built-ins are opt-in only, and even the core is opt-out-able. |
+| `philosophy-enter` | Easy In | Principle #4: h2 "Be easy to *enter*."; copies plain files just like it renders templates; marketplaces/installers still work, pointed at a Sous repo or `.sous`. |
+| `philosophy-exit` | Easy Out | Principle #5: h2 "Be easy to *exit*."; commit the built configs and delete `.sous`; playful "we know you'll miss it ;)" kept deliberately. |
 | `outro` | Get Started | `$ xcv launch claude` motif + GitHub link (github.com/sous-io/sous). Stays on screen at the end. |
+
+Philosophy-slide kickers are GENERATED like problem kickers: the `PHILOSOPHY`
+array + `buildPhilosophyKickers()` in presentation.js emit one line,
+"Principle #<n>" with a `(Philosophy)` pill (`.pill.pill-philosophy`) to its
+right. Do not hand-write kicker markup on philosophy slides.
+
+**Retired scenes.** `what` ("What is Sous"), `problems` ("The Problems" 2×2
+grid) and `how` ("How It Works" 2×2 grid) are RETIRED from the flow, replaced
+by the `why` scene and the seven five-slide problems. Their `<section>`
+markup stays in `index.html` for reference (comments marked "RETIRED from the
+flow, kept for reference"), but they have no `SCENES` entries, so the base
+`.scene` CSS (opacity 0 / visibility hidden) keeps them off screen. The old
+`non-goals` scene ("A tool, not a framework") was fully DELETED at Luke's
+direction after being split into the six philosophy scenes.
+
+**Problem-slide anatomy.** All seven problems now run on the five-slide pattern
+above; there are no `<problem>`/`<problem>-sous` pairs left. Holds are uniform:
+Statement 7.2s, Status-Quo 10s, Mitigation 10s, Example 11s, Alternatives 10s
+(exception: `speed-mitigation` holds 12s; two leads plus the 5-rung ladder).
+Statement slides are text-only (kicker, punchy h2, two `.lead` paragraphs).
+Status-Quo and Example slides use code windows: two side-by-side
+`.code-window`s inside a `.scene-grid`, or a single full-width window in a
+one-pane `.code-stack`. **Code lines in a half-width pane must stay under ~26
+characters** (the panes are ~39 mono characters wide and code windows have NO
+horizontal scroll); full-width windows tolerate ~60. Mitigation slides use a
+`.flow-diagram` SVG or comparison tiles. Alternatives slides are three
+`.tile.scene-card`s stacked in a `.scene-grid.scene-grid-stack`, all titled
+"Nothing else fills this gap.": AI Coding Agents (`bot`), then either
+Similar Tools (`package`, for the `npx skills`/marketplace argument) or
+Callable Scripts (`terminal`, the right comparison for tokens/staleness/speed),
+then Discipline (`shield-check`).
+
+Flow diagrams share the `.flow-diagram` / `.flow-lines` / `.flow-node` /
+`.flow-src` / `.flow-engine` / `.flow-path` classes in `presentation.css` (flat
+token-colored boxes, green dashed lines reusing the `orbit-flow` marching
+animation, disabled under reduced motion); each SVG defines its OWN arrow-marker
+id (`teamsFlowArrow`, `projectsFlowArrow`, `toolsFlowArrow`, `tokensFlowArrow`,
+`staleFlowArrow`, `speedFlowArrow`, `docsFlowArrow`; ids are document-global, never reuse one) referenced via
+`marker-end` attributes on the lines, not CSS.
+
+**Flow-diagram conventions (approved on P1, 2026-08-13; apply to every one).**
+They read **top to bottom**: inputs on the top row, outputs on the bottom row,
+never left to right. **Sous is visible in the pipeline** as a solid-green
+`.flow-node.flow-engine` box (white label) on the middle row, so the diagram
+shows the transformation instead of a bare fan-out. Spacing is compact and
+uniform: 64-unit-tall boxes on rows at `y=20` / `y=147` / `y=274` (63 units of
+gap), lines leaving a box 4 units below it and stopping 8 units above the next,
+in a `0 0 640 358` viewBox. `speed-mitigation` deviates deliberately: it is the
+delegation ladder, a 5-rung staircase descending down-right (not the 3-row grid),
+though it keeps the shared classes, marching-dash arrows and its own marker id.
+Diagram box labels may name concrete
+files/paths (`.flow-path`); the slide's prose may NOT (see below).
+
+**Mitigation prose stays conceptual.** A mitigation `.lead` must not name
+storage locations or config keys (`.env.local`, `_vars`, `sous.config.js`);
+those details go stale as Sous evolves. Say "values live outside the templates",
+"per-project variables". Status-Quo and Example slides, being demonstrations,
+may keep concrete detail.
+
+The problem slides carry NO `.hl` callouts/tooltips yet; Luke will direct those
+later.
 
 ### Working rules for scene work (Luke's direction, 2026-08)
 
 - **NEVER use em-dashes in copy.** Use semicolons to join clauses, commas or
   parentheses for appositives. This applies to ALL text on the site.
+- **NEVER write overconfident predictions about other tools or vendors** ("no
+  tool will ever...", "vendors will never want..."). State intent and posture
+  ("Sous actively tries to..."), not prophecy. Commitments about Sous's own
+  behavior are fine. Also: Luke's decision-making rationale is input for
+  crafting user-facing principles, not copy to paste verbatim.
 - **Never remove a scene unless explicitly told to** — superseded scenes stay
   for reference and ideas. When Luke describes a slide unlike any existing
   one, INJECT a new scene at the position being described.
@@ -157,7 +309,11 @@ the chapter bar.
 
 ### Implementation decisions (docs/js/presentation.js)
 
-- ~30s total. Scene text lives in `index.html`; elements to animate are marked
+- Roughly 9 to 10 minutes total at 1x across 46 scenes (holds and dwells were
+  doubled at Luke's direction on 2026-08-13; the problems then went from
+  two slides each to five, tripling the problem-scene count; transition/fade
+  durations were deliberately NOT doubled). Scene
+  text lives in `index.html`; elements to animate are marked
   `class="anim"`. `sceneIn`/`sceneOut` helpers build each scene's child
   timeline (autoAlpha + y, staggered); holds are per-scene in the `SCENES`
   array, which is the single scene manifest (ids, bar titles, holds).
@@ -182,16 +338,37 @@ the chapter bar.
 - **Callout system** (`SCENE_EXTRAS` map + `calloutsTimeline`): a scene can
   register an extra child timeline inserted after its `-shown` label. The
   templates scene uses it to fade `.hl` highlight/tooltip pairs in and out in
-  document order (0.35s fade, 1.8s dwell). Markup:
+  document order (0.35s fade, 6s dwell). Template-pane callouts: the
+  `{{ projectRoot }}/src/models` path ("Embedding absolute paths reduces CWD
+  mistakes that tools often make"), the whole `{% if tool %}` block
+  ("Providing tool-specific instructions increases consistency by reducing
+  ambiguity."), and the `globDirectory` line ("Using helpers to generate
+  content keeps your project code as the source of truth"). Tooltips wrap
+  at 26rem, centered, balanced. Markup:
   `<span class="hl"><span class="hl-bg"></span>…code…<span class="hl-tip">tip</span></span>`;
+  MULTI-LINE highlights need `hl hl-block` (inline-block): a fragmented
+  inline's abspos reference box ends at the last fragment's right edge, which
+  truncates the background at e.g. a short `{% endif %}`. Code windows keep
+  `overflow` VISIBLE (titlebar rounds its own top corners) so tooltips can
+  extend past the window edges; consequence: long code lines must fit the
+  window, there is no horizontal scroll;
   colors/positioning live in CSS, JS only animates autoAlpha, so it scrubs
-  correctly. Tooltips sit 16px above the highlight with a bordered arrow
-  pointing down at it; highlights carry a subtle yellow ring + glow
+  correctly. Tooltips are brand green with black text matching the `.lead`
+  type (size-l, weight 400), plus a subtle metal-plate sheen
+  (`--sous-metal-sheen` gradient layered over `--sous-primary`, with inset
+  top-highlight/bottom-shade shadows) and a bordered arrow pointing down at
+  the highlight; highlights carry a subtle yellow ring + glow
   (`--sous-hl-outline` / `--sous-hl-glow` tokens) to pull focus.
 - **Reload persistence:** the playhead progress is saved to sessionStorage
   (`sous-presentation-progress`) on `beforeunload` and restored (paused) on
   load; per-tab only, so fresh visitors start at 0. Added for hot-reload
   preview workflows (PhpStorm preview).
+- **Presentation speed:** a fixed `.speed-control` segmented toggle next to
+  the theme toggle (Speed: 1x / 1.25x / 1.5x / 2x, default 1x) drives GSAP's
+  native `tl.timeScale(v)`; applies immediately, even mid-play, and scales
+  everything (holds AND transitions, video-player semantics). Scrubbing is
+  progress-based and unaffected. Choice persists per tab in sessionStorage
+  (`sous-presentation-speed`). Hidden under `html.no-gsap`.
 - If the GSAP CDN fails, `html.no-gsap` is set: the title scene remains as a
   static splash and the player chrome is hidden (same for `<noscript>`).
 - The favicon 404 in devtools is pre-existing; the site has no favicon yet.

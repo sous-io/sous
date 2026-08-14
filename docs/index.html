@@ -41,6 +41,14 @@
     </svg>
   </button>
 
+  <div class="speed-control" id="speedControl" role="group" aria-label="Presentation speed">
+    <span class="speed-label">Speed:</span>
+    <button type="button" class="speed-btn" data-speed="1" aria-pressed="true">1x</button>
+    <button type="button" class="speed-btn" data-speed="1.25" aria-pressed="false">1.25x</button>
+    <button type="button" class="speed-btn" data-speed="1.5" aria-pressed="false">1.5x</button>
+    <button type="button" class="speed-btn" data-speed="2" aria-pressed="false">2x</button>
+  </div>
+
   <main class="player" id="player" aria-label="Sous presentation">
     <div class="stage" id="stage">
 
@@ -163,22 +171,22 @@
 
 <span class="tok-md"># Update Data Models</span>
 
-The project lives at <span class="hl"><span class="hl-bg" aria-hidden="true"></span><span class="tok-liquid">{{</span> <span class="tok-var">projectRoot</span> <span class="tok-liquid">}}</span><span class="hl-tip" role="tooltip">Absolute paths, injected per machine</span></span>.
+Data models can be found in <span class="hl"><span class="hl-bg" aria-hidden="true"></span><span class="tok-dim">`</span><span class="tok-liquid">{{</span> <span class="tok-var">projectRoot</span> <span class="tok-liquid">}}</span>/src/models<span class="tok-dim">`</span><span class="hl-tip" role="tooltip">Embedding absolute paths reduces CWD mistakes that tools often make</span></span>.
 
-<span class="tok-liquid">{% if</span> <span class="tok-var">tool</span> == <span class="tok-str">"claude-code"</span> <span class="tok-liquid">%}</span>
+<span class="hl hl-block"><span class="hl-bg" aria-hidden="true"></span><span class="tok-liquid">{% if</span> <span class="tok-var">tool</span> == <span class="tok-str">"claude-code"</span> <span class="tok-liquid">%}</span>
 Apply changes with the Edit tool.
 <span class="tok-liquid">{% elsif</span> <span class="tok-var">tool</span> == <span class="tok-str">"codex"</span> <span class="tok-liquid">%}</span>
 Apply changes with apply_patch.
-<span class="tok-liquid">{% endif %}</span>
+<span class="tok-liquid">{% endif %}</span><span class="hl-tip" role="tooltip">Providing tool-specific instructions increases consistency by reducing ambiguity.</span></span>
 
 <span class="tok-md">## The Data Models</span>
-<span class="hl"><span class="hl-bg" aria-hidden="true"></span><span class="tok-liquid">{%</span> <span class="tok-fn">globDirectory</span> <span class="tok-var">dir</span>=<span class="tok-str">"{{ projectRoot }}/src/models"</span> <span class="tok-var">pattern</span>=<span class="tok-str">"**/*Model.ts"</span> <span class="tok-liquid">%}</span><span class="hl-tip" role="tooltip">Helpers embed live project data</span></span></code></pre>
+<span class="hl"><span class="hl-bg" aria-hidden="true"></span><span class="tok-liquid">{%</span> <span class="tok-fn">globDirectory</span> <span class="tok-var">dir</span>=<span class="tok-str">"{{ projectRoot }}/src/models"</span> <span class="tok-var">pattern</span>=<span class="tok-str">"**/*Model.ts"</span> <span class="tok-liquid">%}</span><span class="hl-tip" role="tooltip">Using helpers to generate content keeps your project code as the source of truth</span></span></code></pre>
             </div>
             <!-- Sub-scene B: the rendered output (crossfaded in by the timeline) -->
             <div class="code-window code-pane-output">
               <div class="code-titlebar">
                 <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
-                <span class="code-tab">SKILL.md &middot; rendered for claude-code</span>
+                <span class="code-tab">.claude/skills/update-data-models/SKILL.md</span>
               </div>
               <pre class="code-body"><code><span class="tok-dim">---
 name: update-data-models
@@ -187,20 +195,1265 @@ description: Use when adding or changing data models
 
 <span class="tok-md"># Update Data Models</span>
 
-The project lives at /projects/backend.
+Data models can be found in <span class="tok-dim">`</span>/projects/backend/src/models<span class="tok-dim">`</span>.
 
 Apply changes with the Edit tool.
 
 <span class="tok-md">## The Data Models</span>
-<span class="hl"><span class="hl-bg" aria-hidden="true"></span>- /projects/backend/src/models/UserModel.ts
+<span class="hl hl-block"><span class="hl-bg" aria-hidden="true"></span>- /projects/backend/src/models/UserModel.ts
 - /projects/backend/src/models/OrderModel.ts
-- /projects/backend/src/models/billing/PaymentModel.ts<span class="hl-tip" role="tooltip">Fresh at every build; never stale</span></span></code></pre>
+- /projects/backend/src/models/billing/PaymentModel.ts<span class="hl-tip" role="tooltip">Absolute paths, sourced from the project, never stale. This will save your agent dozens of steps in every relevant session.</span></span></code></pre>
             </div>
           </div>
         </div>
       </section>
 
-      <!-- Scene 5: what Sous is -->
+      <!-- Scene: why Sous exists -->
+      <section class="scene" data-scene="why" aria-label="Why Sous exists">
+        <div class="scene-inner">
+          <p class="kicker anim">The Motivation</p>
+          <h2 class="scene-title anim">But, Why?</h2>
+          <p class="lead anim">
+            Sous fills a few gaps that AI coding harnesses don&rsquo;t, and likely
+            won&rsquo;t, because those problems scale across multiple providers.
+          </p>
+          <p class="lead anim">Let&rsquo;s take a look at a few of them &hellip;</p>
+        </div>
+      </section>
+
+      <!-- Scene: problem 1, sharing among coworkers -->
+      <!-- P1 Slide 1: statement -->
+      <section class="scene" data-scene="teams-statement" aria-label="Problem 1 statement">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">Sharing skills with colleagues is <em>hard</em>.</h2>
+          <p class="lead anim">
+            Instruction files always pick up personal, machine-specific details:
+            absolute paths, local tools, private quirks.
+          </p>
+          <p class="lead anim">
+            So every shared copy gets tweaked on arrival; parity dies, and
+            syncing improvements becomes impossible.
+          </p>
+        </div>
+      </section>
+
+      <!-- P1 Slide 2: status quo, two diverging copies -->
+      <section class="scene" data-scene="teams-status-quo" aria-label="Problem 1 status quo">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">Two copies, drifting apart.</h2>
+          <p class="lead anim">
+            Alice shares her skill; Bob edits it to fit his machine. Every
+            improvement now has to be made twice.
+          </p>
+          <div class="scene-grid">
+            <div class="code-window anim">
+              <div class="code-titlebar">
+                <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
+                <span class="code-tab">SKILL.md (Alice&rsquo;s)</span>
+              </div>
+              <pre class="code-body"><code><span class="tok-md"># Deploy Helper</span>
+
+Repos live in
+<span class="tok-str">/Users/alice/dev</span>
+
+Deploy with:
+deploy --profile <span class="tok-var">alice-mac</span></code></pre>
+            </div>
+            <div class="code-window anim">
+              <div class="code-titlebar">
+                <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
+                <span class="code-tab">SKILL.md (Bob&rsquo;s)</span>
+              </div>
+              <pre class="code-body"><code><span class="tok-md"># Deploy Helper</span>
+
+Repos live in
+<span class="tok-str">/home/bob/projects</span>
+
+Deploy with:
+deploy --profile <span class="tok-var">bob-win</span></code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- P1 Slide 3: mitigation, variables live outside the templates -->
+      <section class="scene" data-scene="teams-mitigation" aria-label="Problem 1 mitigation">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">Variables live outside.</h2>
+          <p class="lead anim">
+            Developer and environment values live outside the templates and are
+            injected at build; one set of templates serves every developer.
+          </p>
+          <svg class="flow-diagram anim" viewBox="0 0 640 358" role="img"
+               aria-label="Diagram: Alice's and Bob's variables each flow down through Sous, combined with one shared template in the middle, producing a custom render for each developer">
+            <defs>
+              <marker id="teamsFlowArrow" viewBox="0 0 10 10" refX="8" refY="5"
+                      markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0 0L10 5L0 10z"/>
+              </marker>
+            </defs>
+            <g class="flow-lines">
+              <!-- Alice's flow (left column, top to bottom) -->
+              <line x1="140" y1="88" x2="140" y2="139" marker-end="url(#teamsFlowArrow)"/>
+              <line x1="140" y1="215" x2="140" y2="266" marker-end="url(#teamsFlowArrow)"/>
+              <!-- Bob's flow (right column, top to bottom) -->
+              <line x1="500" y1="88" x2="500" y2="139" marker-end="url(#teamsFlowArrow)"/>
+              <line x1="500" y1="215" x2="500" y2="266" marker-end="url(#teamsFlowArrow)"/>
+              <!-- the shared template feeds both flows -->
+              <line x1="236" y1="179" x2="208" y2="179" marker-end="url(#teamsFlowArrow)"/>
+              <line x1="404" y1="179" x2="432" y2="179" marker-end="url(#teamsFlowArrow)"/>
+            </g>
+            <!-- inputs (top) -->
+            <g class="flow-node">
+              <rect x="30" y="20" width="220" height="64" rx="8"/>
+              <text x="140" y="52">Alice&rsquo;s variables</text>
+            </g>
+            <g class="flow-node">
+              <rect x="390" y="20" width="220" height="64" rx="8"/>
+              <text x="500" y="52">Bob&rsquo;s variables</text>
+            </g>
+            <!-- Sous, once per flow -->
+            <g class="flow-node flow-engine">
+              <rect x="80" y="147" width="120" height="64" rx="8"/>
+              <text x="140" y="179">Sous</text>
+            </g>
+            <g class="flow-node flow-engine">
+              <rect x="440" y="147" width="120" height="64" rx="8"/>
+              <text x="500" y="179">Sous</text>
+            </g>
+            <!-- the shared template, in the middle between the two flows -->
+            <g class="flow-node flow-src">
+              <rect x="240" y="147" width="160" height="64" rx="8"/>
+              <text x="320" y="169">One template</text>
+              <text class="flow-path" x="320" y="193">SKILL.tpl.md</text>
+            </g>
+            <!-- custom outputs (bottom) -->
+            <g class="flow-node">
+              <rect x="30" y="274" width="220" height="64" rx="8"/>
+              <text x="140" y="296">Alice&rsquo;s render</text>
+              <text class="flow-path" x="140" y="320">/Users/alice/dev/app</text>
+            </g>
+            <g class="flow-node">
+              <rect x="390" y="274" width="220" height="64" rx="8"/>
+              <text x="500" y="296">Bob&rsquo;s render</text>
+              <text class="flow-path" x="500" y="320">/home/bob/projects/app</text>
+            </g>
+          </svg>
+        </div>
+      </section>
+
+      <!-- P1 Slide 4: example, shared template + personal env -->
+      <section class="scene" data-scene="teams-example" aria-label="Problem 1 example">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">One template; personal values injected.</h2>
+          <p class="lead anim">
+            The shared file never changes; each developer&rsquo;s values arrive
+            at build time.
+          </p>
+          <div class="scene-grid">
+            <div class="code-window anim">
+              <div class="code-titlebar">
+                <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
+                <span class="code-tab">SKILL.tpl.md (shared)</span>
+              </div>
+              <pre class="code-body"><code><span class="tok-md"># Deploy Helper</span>
+
+Repos live in <span class="tok-liquid">{{</span> <span class="tok-var">devRoot</span> <span class="tok-liquid">}}</span>
+
+Deploy with:
+deploy --profile <span class="tok-liquid">{{</span> <span class="tok-var">deployProfile</span> <span class="tok-liquid">}}</span></code></pre>
+            </div>
+            <div class="code-window anim">
+              <div class="code-titlebar">
+                <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
+                <span class="code-tab">.env.local (Alice&rsquo;s)</span>
+              </div>
+              <pre class="code-body"><code><span class="tok-var">DEV_ROOT</span>=<span class="tok-str">/Users/alice/dev</span>
+<span class="tok-var">DEPLOY_PROFILE</span>=<span class="tok-str">alice-mac</span>
+
+<span class="tok-dim"># never committed;
+# never shared</span></code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- P1 Slide 5: alternatives -->
+      <section class="scene" data-scene="teams-alternatives" aria-label="Problem 1 alternatives">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">Nothing else fills this gap.</h2>
+          <div class="scene-grid scene-grid-stack">
+            <div class="tile scene-card anim">
+              <h3><i data-lucide="bot" class="card-icon" aria-hidden="true"></i>AI Coding Agents</h3>
+              <p>AI coding harnesses like Claude Code and Codex only consume
+                 static files. There is no variable layer, and adding a full
+                 templating system would push those tools far out of scope.</p>
+            </div>
+            <div class="tile scene-card anim">
+              <h3><i data-lucide="package" class="card-icon" aria-hidden="true"></i>Similar Tools</h3>
+              <p>Other skill installers and marketplaces distribute files as-is;
+                 they copy well, but nothing customizes per developer or
+                 machine.</p>
+            </div>
+            <div class="tile scene-card anim">
+              <h3><i data-lucide="shield-check" class="card-icon" aria-hidden="true"></i>Discipline</h3>
+              <p>Forcing your team to keep instructions generic creates
+                 ambiguity, which agents will backfill with inconsistency and
+                 inattention. Tightening them back up reduces reusability.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Scene: problem 2, sharing across projects -->
+      <!-- P2 Slide 1: statement -->
+      <section class="scene" data-scene="projects-statement" aria-label="Problem 2 statement">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">Improvements only ever help <em>one</em> project.</h2>
+          <p class="lead anim">
+            Skills get copied from project to project, improved in one place,
+            and never synced back.
+          </p>
+          <p class="lead anim">
+            And every project is a little different, so the copies drift
+            apart fast.
+          </p>
+        </div>
+      </section>
+
+      <!-- P2 Slide 2: status quo, one copy per project, both drifted -->
+      <section class="scene" data-scene="projects-status-quo" aria-label="Problem 2 status quo">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">Copied, tweaked, forgotten.</h2>
+          <p class="lead anim">
+            Each project got its own copy, adjusted on arrival; the fix made
+            in one never reached the other.
+          </p>
+          <div class="scene-grid">
+            <div class="code-window anim">
+              <div class="code-titlebar">
+                <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
+                <span class="code-tab">SKILL.md (api)</span>
+              </div>
+              <pre class="code-body"><code><span class="tok-md"># Run The Tests</span>
+
+Tests live in <span class="tok-str">tests/</span>
+Run: <span class="tok-fn">npm test</span>
+
+<span class="tok-dim"># flaky-test retry
+# trick added here</span></code></pre>
+            </div>
+            <div class="code-window anim">
+              <div class="code-titlebar">
+                <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
+                <span class="code-tab">SKILL.md (webapp)</span>
+              </div>
+              <pre class="code-body"><code><span class="tok-md"># Run The Tests</span>
+
+Tests live in <span class="tok-str">src/tests/</span>
+Run: <span class="tok-fn">pnpm vitest</span>
+
+<span class="tok-dim"># still missing the
+# retry trick</span></code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- P2 Slide 3: mitigation, project variables make one skill portable -->
+      <section class="scene" data-scene="projects-mitigation" aria-label="Problem 2 mitigation">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">One skill, many projects.</h2>
+          <p class="lead anim">
+            Project-level variables shape the output; the same skill source
+            renders correctly in any project.
+          </p>
+          <svg class="flow-diagram anim" viewBox="0 0 640 358" role="img"
+               aria-label="Diagram: one skill source flows down through Sous, which renders it into the Backend, Web App and Mobile projects">
+            <defs>
+              <marker id="projectsFlowArrow" viewBox="0 0 10 10" refX="8" refY="5"
+                      markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0 0L10 5L0 10z"/>
+              </marker>
+            </defs>
+            <g class="flow-lines">
+              <!-- source into Sous -->
+              <line x1="320" y1="88" x2="320" y2="139" marker-end="url(#projectsFlowArrow)"/>
+              <!-- Sous out to each project -->
+              <line x1="285" y1="215" x2="140" y2="266" marker-end="url(#projectsFlowArrow)"/>
+              <line x1="320" y1="215" x2="320" y2="266" marker-end="url(#projectsFlowArrow)"/>
+              <line x1="355" y1="215" x2="500" y2="266" marker-end="url(#projectsFlowArrow)"/>
+            </g>
+            <!-- the one source (top) -->
+            <g class="flow-node flow-src">
+              <rect x="210" y="20" width="220" height="64" rx="8"/>
+              <text x="320" y="42">One skill</text>
+              <text class="flow-path" x="320" y="66">SKILL.tpl.md</text>
+            </g>
+            <!-- Sous does the rendering -->
+            <g class="flow-node flow-engine">
+              <rect x="260" y="147" width="120" height="64" rx="8"/>
+              <text x="320" y="179">Sous</text>
+            </g>
+            <!-- per-project renders (bottom) -->
+            <g class="flow-node">
+              <rect x="30" y="274" width="180" height="64" rx="8"/>
+              <text x="120" y="296">Backend</text>
+              <text class="flow-path" x="120" y="320">api/</text>
+            </g>
+            <g class="flow-node">
+              <rect x="230" y="274" width="180" height="64" rx="8"/>
+              <text x="320" y="296">Web App</text>
+              <text class="flow-path" x="320" y="320">webapp/</text>
+            </g>
+            <g class="flow-node">
+              <rect x="430" y="274" width="180" height="64" rx="8"/>
+              <text x="520" y="296">Mobile</text>
+              <text class="flow-path" x="520" y="320">mobile/</text>
+            </g>
+          </svg>
+        </div>
+      </section>
+
+      <!-- P2 Slide 4: example, one template plus per-project vars -->
+      <section class="scene" data-scene="projects-example" aria-label="Problem 2 example">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">One source; per-project values.</h2>
+          <p class="lead anim">
+            The skill exists once; each project supplies its own paths and
+            commands in the config.
+          </p>
+          <div class="scene-grid">
+            <div class="code-window anim">
+              <div class="code-titlebar">
+                <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
+                <span class="code-tab">SKILL.tpl.md (shared)</span>
+              </div>
+              <pre class="code-body"><code><span class="tok-md"># Run The Tests</span>
+
+Tests live in <span class="tok-liquid">{{</span> <span class="tok-var">testDir</span> <span class="tok-liquid">}}</span>
+
+Run:
+<span class="tok-liquid">{{</span> <span class="tok-var">testCmd</span> <span class="tok-liquid">}}</span></code></pre>
+            </div>
+            <div class="code-window anim">
+              <div class="code-titlebar">
+                <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
+                <span class="code-tab">sous.config.js</span>
+              </div>
+              <pre class="code-body"><code><span class="tok-var">api</span>: { <span class="tok-var">_vars</span>: {
+  <span class="tok-var">testDir</span>: <span class="tok-str">"tests/"</span>,
+  <span class="tok-var">testCmd</span>: <span class="tok-str">"npm test"</span>
+}},
+<span class="tok-var">webapp</span>: { <span class="tok-var">_vars</span>: {
+  <span class="tok-var">testDir</span>: <span class="tok-str">"src/tests/"</span>,
+  <span class="tok-var">testCmd</span>: <span class="tok-str">"pnpm vitest"</span>
+}},</code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- P2 Slide 5: alternatives -->
+      <section class="scene" data-scene="projects-alternatives" aria-label="Problem 2 alternatives">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">Nothing else fills this gap.</h2>
+          <div class="scene-grid scene-grid-stack">
+            <div class="tile scene-card anim">
+              <h3><i data-lucide="bot" class="card-icon" aria-hidden="true"></i>AI Coding Agents</h3>
+              <p>AI coding harnesses read whatever files are sitting in the
+                 project you opened. Nothing renders one shared source into each
+                 of your repos, and building that is well outside what a coding
+                 harness sets out to do.</p>
+            </div>
+            <div class="tile scene-card anim">
+              <h3><i data-lucide="package" class="card-icon" aria-hidden="true"></i>Similar Tools</h3>
+              <p>Other skill installers and marketplaces distribute files as-is,
+                 so every project-specific difference has to be hand-edited back
+                 in after each install.</p>
+            </div>
+            <div class="tile scene-card anim">
+              <h3><i data-lucide="shield-check" class="card-icon" aria-hidden="true"></i>Discipline</h3>
+              <p>Copy-and-tweak holds up until the second improvement.
+                 Backporting one fix into five repos is work nobody signs up
+                 for, so the copies keep drifting apart.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Scene: problem 3, tool compatibility -->
+      <!-- P3 Slide 1: statement -->
+      <section class="scene" data-scene="tools-statement" aria-label="Problem 3 statement">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">Changing agents changes <em>everything</em>.</h2>
+          <p class="lead anim">
+            Adapting skills from Claude to Codex requires an overhaul of your
+            configs.
+          </p>
+          <p class="lead anim">
+            Teams that mix AI coding harnesses across developers or tools will
+            have multiple instruction sets to manage.
+          </p>
+        </div>
+      </section>
+
+      <!-- P3 Slide 2: status quo, the same instructions in two formats -->
+      <section class="scene" data-scene="tools-status-quo" aria-label="Problem 3 status quo">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">Same instructions, twice.</h2>
+          <p class="lead anim">
+            Two formats, two directory layouts, two tool vocabularies; every
+            edit has to land in both.
+          </p>
+          <div class="scene-grid">
+            <div class="code-window anim">
+              <div class="code-titlebar">
+                <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
+                <span class="code-tab">.claude/skills/deploy/SKILL.md</span>
+              </div>
+              <pre class="code-body"><code><span class="tok-dim">---</span>
+<span class="tok-var">name</span>: <span class="tok-str">deploy-app</span>
+<span class="tok-var">description</span>: <span class="tok-str">Ship it</span>
+<span class="tok-dim">---</span>
+
+Use the <span class="tok-fn">Edit</span> tool.</code></pre>
+            </div>
+            <div class="code-window anim">
+              <div class="code-titlebar">
+                <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
+                <span class="code-tab">.codex/skills/deploy/SKILL.md</span>
+              </div>
+              <pre class="code-body"><code><span class="tok-dim">---</span>
+<span class="tok-var">name</span>: <span class="tok-str">deploy-app</span>
+<span class="tok-var">description</span>: <span class="tok-str">Ship it</span>
+<span class="tok-dim">---</span>
+
+Use <span class="tok-fn">apply_patch</span>.</code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- P3 Slide 3: mitigation, write once and render for any tool -->
+      <section class="scene" data-scene="tools-mitigation" aria-label="Problem 3 mitigation">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">Write once, render anywhere.</h2>
+          <p class="lead anim">
+            The same sources render for virtually any agent, tool, or CI bot;
+            supporting one more is a config entry, not a rewrite.
+          </p>
+          <svg class="flow-diagram anim" viewBox="0 0 640 358" role="img"
+               aria-label="Diagram: your sources flow down through Sous, which renders them for Claude Code, Codex and a CI bot">
+            <defs>
+              <marker id="toolsFlowArrow" viewBox="0 0 10 10" refX="8" refY="5"
+                      markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0 0L10 5L0 10z"/>
+              </marker>
+            </defs>
+            <g class="flow-lines">
+              <!-- sources into Sous -->
+              <line x1="320" y1="88" x2="320" y2="139" marker-end="url(#toolsFlowArrow)"/>
+              <!-- Sous out to each tool -->
+              <line x1="285" y1="215" x2="140" y2="266" marker-end="url(#toolsFlowArrow)"/>
+              <line x1="320" y1="215" x2="320" y2="266" marker-end="url(#toolsFlowArrow)"/>
+              <line x1="355" y1="215" x2="500" y2="266" marker-end="url(#toolsFlowArrow)"/>
+            </g>
+            <!-- your sources (top) -->
+            <g class="flow-node flow-src">
+              <rect x="210" y="20" width="220" height="64" rx="8"/>
+              <text x="320" y="42">Your sources</text>
+              <text class="flow-path" x="320" y="66">templates + config</text>
+            </g>
+            <!-- Sous does the rendering -->
+            <g class="flow-node flow-engine">
+              <rect x="260" y="147" width="120" height="64" rx="8"/>
+              <text x="320" y="179">Sous</text>
+            </g>
+            <!-- one render per tool (bottom) -->
+            <g class="flow-node">
+              <rect x="30" y="274" width="180" height="64" rx="8"/>
+              <text x="120" y="296">Claude Code</text>
+              <text class="flow-path" x="120" y="320">.claude/skills/</text>
+            </g>
+            <g class="flow-node">
+              <rect x="230" y="274" width="180" height="64" rx="8"/>
+              <text x="320" y="296">Codex</text>
+              <text class="flow-path" x="320" y="320">.codex/skills/</text>
+            </g>
+            <g class="flow-node">
+              <rect x="430" y="274" width="180" height="64" rx="8"/>
+              <text x="520" y="296">CI Bot</text>
+              <text class="flow-path" x="520" y="320">ci/prompts/</text>
+            </g>
+          </svg>
+        </div>
+      </section>
+
+      <!-- P3 Slide 4: example, one template branching per tool -->
+      <section class="scene" data-scene="tools-example" aria-label="Problem 3 example">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">One template; a tool switch.</h2>
+          <p class="lead anim">
+            Only the tool-specific lines branch; each output directory gets its
+            own <code>tool</code> value.
+          </p>
+          <div class="scene-grid">
+            <div class="code-window anim">
+              <div class="code-titlebar">
+                <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
+                <span class="code-tab">SKILL.tpl.md (shared)</span>
+              </div>
+              <pre class="code-body"><code><span class="tok-liquid">{% if</span> <span class="tok-var">tool</span> == <span class="tok-str">"codex"</span> <span class="tok-liquid">%}</span>
+Use <span class="tok-fn">apply_patch</span> to edit.
+<span class="tok-liquid">{% else %}</span>
+Use the <span class="tok-fn">Edit</span> tool.
+<span class="tok-liquid">{% endif %}</span></code></pre>
+            </div>
+            <div class="code-window anim">
+              <div class="code-titlebar">
+                <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
+                <span class="code-tab">sous.config.js</span>
+              </div>
+              <pre class="code-body"><code><span class="tok-var">outputs</span>: [
+  { <span class="tok-var">destinationDir</span>:
+      <span class="tok-str">".claude/skills"</span>,
+    <span class="tok-var">_vars</span>: { <span class="tok-var">tool</span>:
+      <span class="tok-str">"claude"</span> } },
+  { <span class="tok-var">destinationDir</span>:
+      <span class="tok-str">".codex/skills"</span>,
+    <span class="tok-var">_vars</span>: { <span class="tok-var">tool</span>:
+      <span class="tok-str">"codex"</span> } },
+]</code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- P3 Slide 5: alternatives -->
+      <section class="scene" data-scene="tools-alternatives" aria-label="Problem 3 alternatives">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">Nothing else fills this gap.</h2>
+          <div class="scene-grid scene-grid-stack">
+            <div class="tile scene-card anim">
+              <h3><i data-lucide="bot" class="card-icon" aria-hidden="true"></i>AI Coding Agents</h3>
+              <p>Every vendor picks its own file names, directories and wording
+                 for how you edit code. None of them are going to emit a
+                 competitor&rsquo;s format, and writing out formats you do not
+                 own is out of scope for a coding harness.</p>
+            </div>
+            <div class="tile scene-card anim">
+              <h3><i data-lucide="package" class="card-icon" aria-hidden="true"></i>Similar Tools</h3>
+              <p>Other skill installers and marketplaces are built around one
+                 harness and copy files as-is. With no rendering step, there is
+                 nothing to branch on per tool.</p>
+            </div>
+            <div class="tile scene-card anim">
+              <h3><i data-lucide="shield-check" class="card-icon" aria-hidden="true"></i>Discipline</h3>
+              <p>You can keep two sets of files in sync by hand for about a
+                 week. Then a tool-specific tweak lands in one of them, and
+                 nobody notices the other is behind until an agent acts on
+                 it.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Scene: problem 4, token usage -->
+      <!-- P4 Slide 1: statement -->
+      <section class="scene" data-scene="tokens-statement" aria-label="Problem 4 statement">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">Wasted tokens buy you a <em>distracted</em> agent.</h2>
+          <p class="lead anim">
+            Verbose instructions used to force compaction; bigger limits just
+            traded it for inattention.
+          </p>
+          <p class="lead anim">
+            Worse, agents burn context re-running the same discovery commands,
+            directory listings and file searches, every single session.
+          </p>
+        </div>
+      </section>
+
+      <!-- P4 Slide 2: status quo, the agent pays for discovery every session -->
+      <section class="scene" data-scene="tokens-status-quo" aria-label="Problem 4 status quo">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">Paying for the same answers.</h2>
+          <p class="lead anim">
+            The instructions tell the agent to go find out; it obeys, and the
+            output lands in context, session after session.
+          </p>
+          <div class="scene-grid">
+            <div class="code-window anim">
+              <div class="code-titlebar">
+                <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
+                <span class="code-tab">SKILL.md</span>
+              </div>
+              <pre class="code-body"><code><span class="tok-md"># Explore The Project</span>
+
+Run these first:
+<span class="tok-fn">git branch --show-current</span>
+<span class="tok-fn">find src -name "*.ts"</span>
+<span class="tok-fn">ls -R src/models</span></code></pre>
+            </div>
+            <div class="code-window anim">
+              <div class="code-titlebar">
+                <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
+                <span class="code-tab">every new session</span>
+              </div>
+              <pre class="code-body"><code><span class="tok-dim">$</span> git branch
+<span class="tok-dim">$</span> find src -name "*.ts"
+<span class="tok-dim">$</span> ls -R src/models
+
+<span class="tok-dim"># 3 round trips and
+# ~1,400 tokens spent
+# before any work</span></code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- P4 Slide 3: mitigation, the build pays the discovery cost once -->
+      <section class="scene" data-scene="tokens-mitigation" aria-label="Problem 4 mitigation">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">The build pays, once.</h2>
+          <p class="lead anim">
+            Helpers run at build time and embed exactly the information the
+            agent needs; the session starts with the answers already in hand.
+          </p>
+          <svg class="flow-diagram anim" viewBox="0 0 640 358" role="img"
+               aria-label="Diagram: your project flows down into Sous, whose helpers run once at build time, producing agent context that needs zero discovery commands">
+            <defs>
+              <marker id="tokensFlowArrow" viewBox="0 0 10 10" refX="8" refY="5"
+                      markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0 0L10 5L0 10z"/>
+              </marker>
+            </defs>
+            <g class="flow-lines">
+              <line x1="320" y1="88" x2="320" y2="139" marker-end="url(#tokensFlowArrow)"/>
+              <line x1="320" y1="215" x2="320" y2="266" marker-end="url(#tokensFlowArrow)"/>
+            </g>
+            <!-- the project (top) -->
+            <g class="flow-node flow-src">
+              <rect x="150" y="20" width="340" height="64" rx="8"/>
+              <text x="320" y="42">Your project</text>
+              <text class="flow-path" x="320" y="66">src/**/*.ts</text>
+            </g>
+            <!-- Sous runs the helpers, once -->
+            <g class="flow-node flow-engine">
+              <rect x="230" y="147" width="180" height="64" rx="8"/>
+              <text x="320" y="169">Sous</text>
+              <text class="flow-path" x="320" y="193">helpers run once</text>
+            </g>
+            <!-- what the agent starts with (bottom) -->
+            <g class="flow-node">
+              <rect x="150" y="274" width="340" height="64" rx="8"/>
+              <text x="320" y="296">Agent context</text>
+              <text class="flow-path" x="320" y="320">0 commands</text>
+            </g>
+          </svg>
+        </div>
+      </section>
+
+      <!-- P4 Slide 4: example, helpers embed the answers at build time -->
+      <section class="scene" data-scene="tokens-example" aria-label="Problem 4 example">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">Bake it in at build time.</h2>
+          <p class="lead anim">
+            Two helper lines replace three commands and their output; what
+            reaches the agent is only the part it needed.
+          </p>
+          <div class="code-stack anim">
+            <div class="code-window">
+              <div class="code-titlebar">
+                <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
+                <span class="code-tab">skills/explore-project/SKILL.tpl.md</span>
+              </div>
+              <pre class="code-body"><code><span class="tok-md"># Explore The Project</span>
+
+The current branch is <span class="tok-liquid">{{</span> <span class="tok-var">gitBranch</span> <span class="tok-liquid">}}</span>.
+<span class="tok-liquid">{%</span> <span class="tok-fn">globDirectory</span> <span class="tok-var">dir</span>=<span class="tok-str">"src/models"</span> <span class="tok-var">pattern</span>=<span class="tok-str">"**/*.ts"</span> <span class="tok-liquid">%}</span>
+
+<span class="tok-dim">&lt;!-- the build renders that into: --&gt;</span>
+<span class="tok-dim">The current branch is release/2.4.
+- src/models/UserModel.ts
+- src/models/billing/PaymentModel.ts</span></code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- P4 Slide 5: alternatives -->
+      <section class="scene" data-scene="tokens-alternatives" aria-label="Problem 4 alternatives">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">Nothing else fills this gap.</h2>
+          <div class="scene-grid scene-grid-stack">
+            <div class="tile scene-card anim">
+              <h3><i data-lucide="bot" class="card-icon" aria-hidden="true"></i>AI Coding Agents</h3>
+              <p>Caching and compaction make a big context cheaper to carry, not
+                 smaller. Coding harnesses do not pre-compute anything about
+                 your project before a session starts, so the agent goes and
+                 rediscovers the same facts every time.</p>
+            </div>
+            <div class="tile scene-card anim">
+              <h3><i data-lucide="terminal" class="card-icon" aria-hidden="true"></i>Callable Scripts</h3>
+              <p>A script can gather the same facts, but the agent burns a turn
+                 running it and the whole output lands in context anyway. Sous
+                 puts in just the part that mattered.</p>
+            </div>
+            <div class="tile scene-card anim">
+              <h3><i data-lucide="shield-check" class="card-icon" aria-hidden="true"></i>Discipline</h3>
+              <p>Nobody sits down and re-optimizes their context by hand at the
+                 start of a session. Trim it by feel and you tend to cut the one
+                 thing the agent actually needed.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Scene: problem 5, staleness -->
+      <!-- P5 Slide 1: statement -->
+      <section class="scene" data-scene="stale-statement" aria-label="Problem 5 statement">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">A written list is <em>wrong</em> within a week.</h2>
+          <p class="lead anim">
+            Let an agent help you build a skill and it will embed lists:
+            entities, models, endpoints. It's the default move; you literally
+            have to stop it.
+          </p>
+          <p class="lead anim">
+            And every one of those lists starts rotting the moment it's
+            written. The code keeps moving; the list stays put.
+          </p>
+        </div>
+      </section>
+
+      <!-- P5 Slide 2: status quo, the written list vs the real directory -->
+      <section class="scene" data-scene="stale-status-quo" aria-label="Problem 5 status quo">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">Two sources; one is wrong.</h2>
+          <p class="lead anim">
+            The list was correct the day it was written. The project moved on
+            without it, and the agent still trusts the file.
+          </p>
+          <div class="scene-grid">
+            <div class="code-window anim">
+              <div class="code-titlebar">
+                <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
+                <span class="code-tab">SKILL.md (written once)</span>
+              </div>
+              <pre class="code-body"><code><span class="tok-md">## The Entities</span>
+- <span class="tok-str">UserEntity.ts</span>
+- <span class="tok-str">OrderEntity.ts</span>
+- <span class="tok-str">ProductEntity.ts</span>
+
+<span class="tok-dim"># last touched in
+# March</span></code></pre>
+            </div>
+            <div class="code-window anim">
+              <div class="code-titlebar">
+                <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
+                <span class="code-tab">src/entities (today)</span>
+              </div>
+              <pre class="code-body"><code><span class="tok-str">UserEntity.ts</span>
+<span class="tok-str">OrderEntity.ts</span>
+<span class="tok-str">billing/InvoiceEntity.ts</span>
+<span class="tok-str">payments/PayoutEntity.ts</span>
+
+<span class="tok-dim"># two new, one gone,
+# nobody told the skill</span></code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- P5 Slide 3: mitigation, one source of truth feeds every document -->
+      <section class="scene" data-scene="stale-mitigation" aria-label="Problem 5 mitigation">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">The code is the source of truth.</h2>
+          <p class="lead anim">
+            Helpers read the project on every build, so every document that
+            mentions the list gets today&rsquo;s version of it.
+          </p>
+          <svg class="flow-diagram anim" viewBox="0 0 640 358" role="img"
+               aria-label="Diagram: the code in src/entities flows down through Sous on every build, regenerating the entity skill, core memory and a review bot's prompt">
+            <defs>
+              <marker id="staleFlowArrow" viewBox="0 0 10 10" refX="8" refY="5"
+                      markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0 0L10 5L0 10z"/>
+              </marker>
+            </defs>
+            <g class="flow-lines">
+              <!-- the code into Sous -->
+              <line x1="320" y1="88" x2="320" y2="139" marker-end="url(#staleFlowArrow)"/>
+              <!-- Sous out to every document that mentions the list -->
+              <line x1="285" y1="215" x2="140" y2="266" marker-end="url(#staleFlowArrow)"/>
+              <line x1="320" y1="215" x2="320" y2="266" marker-end="url(#staleFlowArrow)"/>
+              <line x1="355" y1="215" x2="500" y2="266" marker-end="url(#staleFlowArrow)"/>
+            </g>
+            <!-- the single source of truth (top) -->
+            <g class="flow-node flow-src">
+              <rect x="210" y="20" width="220" height="64" rx="8"/>
+              <text x="320" y="42">The code</text>
+              <text class="flow-path" x="320" y="66">src/entities/*.ts</text>
+            </g>
+            <!-- Sous rereads it on every build -->
+            <g class="flow-node flow-engine">
+              <rect x="245" y="147" width="150" height="64" rx="8"/>
+              <text x="320" y="169">Sous</text>
+              <text class="flow-path" x="320" y="193">every build</text>
+            </g>
+            <!-- the regenerated documents (bottom) -->
+            <g class="flow-node">
+              <rect x="30" y="274" width="180" height="64" rx="8"/>
+              <text x="120" y="296">Entity skill</text>
+              <text class="flow-path" x="120" y="320">SKILL.md</text>
+            </g>
+            <g class="flow-node">
+              <rect x="230" y="274" width="180" height="64" rx="8"/>
+              <text x="320" y="296">Core memory</text>
+              <text class="flow-path" x="320" y="320">CLAUDE.md</text>
+            </g>
+            <g class="flow-node">
+              <rect x="430" y="274" width="180" height="64" rx="8"/>
+              <text x="520" y="296">Review bot</text>
+              <text class="flow-path" x="520" y="320">ci/prompts/</text>
+            </g>
+          </svg>
+        </div>
+      </section>
+
+      <!-- P5 Slide 4: example, helpers pull lists live from the code -->
+      <section class="scene" data-scene="stale-example" aria-label="Problem 5 example">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">One line instead of a list.</h2>
+          <p class="lead anim">
+            The helper replaces the hand-written list; the instructions
+            can&rsquo;t drift from the code, because they are built from it.
+          </p>
+          <div class="code-stack anim">
+            <div class="code-window">
+              <div class="code-titlebar">
+                <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
+                <span class="code-tab">skills/manage-entities/SKILL.tpl.md</span>
+              </div>
+              <pre class="code-body"><code><span class="tok-md">## The Entities</span>
+<span class="tok-liquid">{%</span> <span class="tok-fn">globDirectory</span> <span class="tok-var">dir</span>=<span class="tok-str">"src/entities"</span> <span class="tok-var">pattern</span>=<span class="tok-str">"**/*Entity.ts"</span> <span class="tok-liquid">%}</span>
+
+<span class="tok-dim">&lt;!-- every build renders the current list --&gt;</span>
+<span class="tok-dim">- src/entities/UserEntity.ts
+- src/entities/OrderEntity.ts
+- src/entities/billing/InvoiceEntity.ts
+- src/entities/payments/PayoutEntity.ts</span></code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- P5 Slide 5: alternatives -->
+      <section class="scene" data-scene="stale-alternatives" aria-label="Problem 5 alternatives">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">Nothing else fills this gap.</h2>
+          <div class="scene-grid scene-grid-stack">
+            <div class="tile scene-card anim">
+              <h3><i data-lucide="bot" class="card-icon" aria-hidden="true"></i>AI Coding Agents</h3>
+              <p>An agent will happily write the list for you, once. Nothing
+                 re-reads your project afterward and rewrites it; coding
+                 harnesses do not inject live project data into your instruction
+                 files, so the snapshot starts rotting the day it lands.</p>
+            </div>
+            <div class="tile scene-card anim">
+              <h3><i data-lucide="terminal" class="card-icon" aria-hidden="true"></i>Callable Scripts</h3>
+              <p>A script can print the current list, but that is another round
+                 trip and a decision the agent can get wrong or skip; meanwhile
+                 the stale list is still sitting in the file, reading like the
+                 truth. Sous just renders the fresh list into the file itself.</p>
+            </div>
+            <div class="tile scene-card anim">
+              <h3><i data-lucide="shield-check" class="card-icon" aria-hidden="true"></i>Discipline</h3>
+              <p>A hand-maintained list will go stale. Nobody remembers to
+                 update the instructions in the same commit that adds an entity,
+                 and nothing in the file warns the next reader that it is
+                 out of date.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Scene: problem 6, speed -->
+      <!-- P6 Slide 1: statement -->
+      <section class="scene" data-scene="speed-statement" aria-label="Problem 6 statement">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">Agents spend their first minutes relearning the <em>obvious</em>.</h2>
+          <p class="lead anim">
+            Every command an agent runs to gather information is a round trip:
+            run, read, think, repeat.
+          </p>
+          <p class="lead anim">
+            And it&rsquo;s not just session start; most tasks begin the same way.
+            A huge share of an agent&rsquo;s time goes to relearning the basics
+            instead of doing the work.
+          </p>
+        </div>
+      </section>
+
+      <!-- P6 Slide 2: status quo, the first minute is all round trips -->
+      <section class="scene" data-scene="speed-status-quo" aria-label="Problem 6 status quo">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">The first minute is round trips.</h2>
+          <p class="lead anim">
+            Run, read, think, repeat. Each step waits on the last, and none of
+            them changes any code.
+          </p>
+          <div class="code-stack anim">
+            <div class="code-window">
+              <div class="code-titlebar">
+                <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
+                <span class="code-tab">agent session, first 40 seconds</span>
+              </div>
+              <pre class="code-body"><code><span class="tok-dim">$</span> ls -R src
+<span class="tok-dim">$</span> cat package.json
+<span class="tok-dim">$</span> git branch --show-current
+<span class="tok-dim">$</span> rg "Entity" src
+<span class="tok-dim">$</span> cat src/entities/UserEntity.ts
+
+<span class="tok-dim"># five round trips, one after another</span>
+<span class="tok-dim"># not one line of code changed yet</span></code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- P6 Slide 3: mitigation, the delegation ladder ends at plain code -->
+      <section class="scene" data-scene="speed-mitigation" aria-label="Problem 6 mitigation">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">Delegate all the way down.</h2>
+          <p class="lead anim">
+            You already delegate down this ladder; smaller models run faster
+            and cost less. For work that needs zero reasoning, keep going:
+            plain code costs nothing, answers in milliseconds, and that is
+            exactly what a Sous helper is.
+          </p>
+          <p class="lead anim">
+            Context like that is good in a memory file and better in a skill,
+            where it lands exactly when needed: an agent about to edit an API
+            client loads the api-clients skill and finds the path and a
+            description of every client already there; zero steps wasted.
+          </p>
+          <svg class="flow-diagram anim" viewBox="0 0 640 412" role="img"
+               aria-label="Diagram: the delegation ladder. Fable 5 delegates to Opus, Opus to Sonnet, Sonnet to Haiku; each rung down is faster and cheaper. The bottom rung is plain code at zero dollars and milliseconds, which is what a Sous helper is.">
+            <defs>
+              <marker id="speedFlowArrow" viewBox="0 0 10 10" refX="8" refY="5"
+                      markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0 0L10 5L0 10z"/>
+              </marker>
+            </defs>
+            <g class="flow-lines">
+              <line x1="170" y1="60" x2="170" y2="88" marker-end="url(#speedFlowArrow)"/>
+              <line x1="270" y1="148" x2="270" y2="176" marker-end="url(#speedFlowArrow)"/>
+              <line x1="370" y1="236" x2="370" y2="264" marker-end="url(#speedFlowArrow)"/>
+              <line x1="470" y1="324" x2="470" y2="352" marker-end="url(#speedFlowArrow)"/>
+            </g>
+            <g class="flow-node">
+              <rect x="0" y="8" width="240" height="48" rx="8"/>
+              <text x="120" y="24">Fable 5</text>
+              <text class="flow-path" x="120" y="44">deep reasoning</text>
+            </g>
+            <g class="flow-node">
+              <rect x="100" y="96" width="240" height="48" rx="8"/>
+              <text x="220" y="112">Opus</text>
+              <text class="flow-path" x="220" y="132">less reasoning</text>
+            </g>
+            <g class="flow-node">
+              <rect x="200" y="184" width="240" height="48" rx="8"/>
+              <text x="320" y="200">Sonnet</text>
+              <text class="flow-path" x="320" y="220">even less</text>
+            </g>
+            <g class="flow-node">
+              <rect x="300" y="272" width="240" height="48" rx="8"/>
+              <text x="420" y="288">Haiku</text>
+              <text class="flow-path" x="420" y="308">yet less</text>
+            </g>
+            <!-- the punchline rung: zero reasoning, so no model at all -->
+            <g class="flow-node flow-engine">
+              <rect x="400" y="360" width="240" height="48" rx="8"/>
+              <text x="520" y="376">Plain code</text>
+              <text class="flow-path" x="520" y="396">$0, milliseconds</text>
+            </g>
+          </svg>
+        </div>
+      </section>
+
+      <!-- P6 Slide 4: example, your convention, your own helper -->
+      <section class="scene" data-scene="speed-example" aria-label="Problem 6 example">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">Write the helper yourself.</h2>
+          <p class="lead anim">
+            Say you want every model listed with a description. The team adds
+            one rule: every model file&rsquo;s doc block carries an
+            <code>@summary</code>. Your own helper globs the directory, reads
+            each summary, and renders the list before the session even starts.
+          </p>
+          <div class="scene-grid">
+            <div class="code-window anim">
+              <div class="code-titlebar">
+                <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
+                <span class="code-tab">src/models/CartModel.ts</span>
+              </div>
+              <pre class="code-body"><code><span class="tok-dim">/**
+ * <span class="tok-fn">@summary</span> Carts and
+ *   their totals at
+ *   checkout.
+ */</span>
+<span class="tok-liquid">export class</span> <span class="tok-fn">CartModel</span> {
+  <span class="tok-dim">...</span>
+}</code></pre>
+            </div>
+            <div class="code-window anim">
+              <div class="code-titlebar">
+                <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
+                <span class="code-tab">skills/models/SKILL.tpl.md</span>
+              </div>
+              <pre class="code-body"><code><span class="tok-md">## Our models</span>
+
+<span class="tok-liquid">{%</span> <span class="tok-fn">fileSummaries</span>
+   <span class="tok-var">dir</span>=<span class="tok-str">"src/models"</span>
+   <span class="tok-var">pattern</span>=<span class="tok-str">"**/*Model.ts"</span>
+<span class="tok-liquid">%}</span>
+
+<span class="tok-dim">&lt;!-- build renders: --&gt;</span>
+<span class="tok-dim">- src/models/CartModel.ts
+  Carts and their totals
+  at checkout.
+- src/models/UserModel.ts
+  Accounts and identity.</span></code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- P6 Slide 5: alternatives -->
+      <section class="scene" data-scene="speed-alternatives" aria-label="Problem 6 alternatives">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">Nothing else fills this gap.</h2>
+          <div class="scene-grid scene-grid-stack">
+            <div class="tile scene-card anim">
+              <h3><i data-lucide="bot" class="card-icon" aria-hidden="true"></i>AI Coding Agents</h3>
+              <p>Parallel tool calls and faster models make round trips cheaper,
+                 not unnecessary. The agent still has to ask before it knows,
+                 and no coding harness hands it the answers up front.</p>
+            </div>
+            <div class="tile scene-card anim">
+              <h3><i data-lucide="terminal" class="card-icon" aria-hidden="true"></i>Callable Scripts</h3>
+              <p>Writing scripts and telling the agent how to use them works,
+                 but every call is still a round trip and a decision it can
+                 get wrong. Sous saves that step, and its helpers can be
+                 cross-platform and as sophisticated as you want them to
+                 be.</p>
+            </div>
+            <div class="tile scene-card anim">
+              <h3><i data-lucide="shield-check" class="card-icon" aria-hidden="true"></i>Discipline</h3>
+              <p>You can tell an agent to stop exploring, and it will. Then it
+                 guesses, because you took away the only way it had to find
+                 out.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Scene: problem 7, docs drift -->
+      <!-- P7 Slide 1: statement -->
+      <section class="scene" data-scene="docs-statement" aria-label="Problem 7 statement">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">The same fact lives in <em>five</em> files.</h2>
+          <p class="lead anim">
+            Per-directory docs are one of the best features of modern coding
+            agents; a CLAUDE.md or AGENTS.md can sit right next to the code it
+            describes. So you end up with a lot of them.
+          </p>
+          <p class="lead anim">
+            Facts repeat: briefly in the central docs, fully next to the thing
+            itself. When the thing changes you update one copy, never all of
+            them, and the rest start drifting.
+          </p>
+        </div>
+      </section>
+
+      <!-- P7 Slide 2: status quo, two docs disagree about the same fact -->
+      <section class="scene" data-scene="docs-status-quo" aria-label="Problem 7 status quo">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">You updated one of them.</h2>
+          <p class="lead anim">
+            The billing job changed in May. The doc next to the code got the
+            update; the root doc is still confidently wrong.
+          </p>
+          <div class="scene-grid">
+            <div class="code-window anim">
+              <div class="code-titlebar">
+                <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
+                <span class="code-tab">CLAUDE.md (root)</span>
+              </div>
+              <pre class="code-body"><code><span class="tok-md">## Billing</span>
+
+Invoices generate
+nightly at 02:00.
+
+<span class="tok-dim">&lt;!-- written in March;
+     nobody came back --&gt;</span></code></pre>
+            </div>
+            <div class="code-window anim">
+              <div class="code-titlebar">
+                <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
+                <span class="code-tab">src/billing/CLAUDE.md</span>
+              </div>
+              <pre class="code-body"><code><span class="tok-md">## Invoices</span>
+
+Invoices generate
+hourly, on the hour.
+
+<span class="tok-dim">&lt;!-- updated in May,
+     with the code --&gt;</span></code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- P7 Slide 3: mitigation, one source distributed to every doc -->
+      <section class="scene" data-scene="docs-mitigation" aria-label="Problem 7 mitigation">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">One source; every copy current.</h2>
+          <p class="lead anim">
+            Centralize each fact in one source file. Includes and templates
+            compose it into every doc that mentions it, and one build writes
+            the result to every destination.
+          </p>
+          <p class="lead anim">
+            When the fact changes, you edit one file; the next build updates
+            every copy at once.
+          </p>
+          <svg class="flow-diagram anim" viewBox="0 0 640 358" role="img"
+               aria-label="Diagram: one billing doc flows down through Sous, which writes it into the root CLAUDE.md, src/billing/CLAUDE.md and AGENTS.md">
+            <defs>
+              <marker id="docsFlowArrow" viewBox="0 0 10 10" refX="8" refY="5"
+                      markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0 0L10 5L0 10z"/>
+              </marker>
+            </defs>
+            <g class="flow-lines">
+              <!-- the source doc into Sous -->
+              <line x1="320" y1="88" x2="320" y2="139" marker-end="url(#docsFlowArrow)"/>
+              <!-- Sous out to each destination -->
+              <line x1="285" y1="215" x2="140" y2="266" marker-end="url(#docsFlowArrow)"/>
+              <line x1="320" y1="215" x2="320" y2="266" marker-end="url(#docsFlowArrow)"/>
+              <line x1="355" y1="215" x2="500" y2="266" marker-end="url(#docsFlowArrow)"/>
+            </g>
+            <!-- the one source doc (top) -->
+            <g class="flow-node flow-src">
+              <rect x="210" y="20" width="220" height="64" rx="8"/>
+              <text x="320" y="42">The billing doc</text>
+              <text class="flow-path" x="320" y="66">docs/billing.md</text>
+            </g>
+            <!-- Sous does the composing -->
+            <g class="flow-node flow-engine">
+              <rect x="260" y="147" width="120" height="64" rx="8"/>
+              <text x="320" y="179">Sous</text>
+            </g>
+            <!-- every doc that mentions it (bottom) -->
+            <g class="flow-node">
+              <rect x="30" y="274" width="180" height="64" rx="8"/>
+              <text x="120" y="296">CLAUDE.md</text>
+              <text class="flow-path" x="120" y="320">project root</text>
+            </g>
+            <g class="flow-node">
+              <rect x="230" y="274" width="180" height="64" rx="8"/>
+              <text x="320" y="296">CLAUDE.md</text>
+              <text class="flow-path" x="320" y="320">src/billing/</text>
+            </g>
+            <g class="flow-node">
+              <rect x="430" y="274" width="180" height="64" rx="8"/>
+              <text x="520" y="296">AGENTS.md</text>
+              <text class="flow-path" x="520" y="320">for Codex</text>
+            </g>
+          </svg>
+        </div>
+      </section>
+
+      <!-- P7 Slide 4: example, an @-include composed and multi-written -->
+      <section class="scene" data-scene="docs-example" aria-label="Problem 7 example">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">Include it once; ship it everywhere.</h2>
+          <p class="lead anim">
+            It is the same @-import format Claude Code already reads, except
+            Sous resolves it at build time with variables in the path; the
+            outputs list then writes one render to as many files as you want.
+          </p>
+          <div class="scene-grid">
+            <div class="code-window anim">
+              <div class="code-titlebar">
+                <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
+                <span class="code-tab">memories/apis.tpl.md</span>
+              </div>
+              <pre class="code-body"><code><span class="tok-md"># Acme API</span>
+
+<span class="tok-md">## Billing</span>
+
+<span class="tok-fn">@</span><span class="tok-liquid">${</span><span class="tok-var">docsRoot</span><span class="tok-liquid">}</span>/billing.md
+
+<span class="tok-dim">&lt;!-- src/billing's doc
+     includes it too --&gt;</span></code></pre>
+            </div>
+            <div class="code-window anim">
+              <div class="code-titlebar">
+                <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
+                <span class="code-tab">sous.config.js</span>
+              </div>
+              <pre class="code-body"><code><span class="tok-var">outputs</span>: [
+  { <span class="tok-var">destinationFile</span>:
+      <span class="tok-str">"CLAUDE.md"</span> },
+  { <span class="tok-var">destinationFile</span>:
+      <span class="tok-str">"AGENTS.md"</span> },
+  { <span class="tok-var">destinationFile</span>:
+      <span class="tok-str">"src/api/CLAUDE.md"</span> },
+]
+
+<span class="tok-dim">// one render, three
+// identical files</span></code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- P7 Slide 5: alternatives -->
+      <section class="scene" data-scene="docs-alternatives" aria-label="Problem 7 alternatives">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">Nothing else fills this gap.</h2>
+          <div class="scene-grid scene-grid-stack">
+            <div class="tile scene-card anim">
+              <h3><i data-lucide="bot" class="card-icon" aria-hidden="true"></i>AI Coding Agents</h3>
+              <p>Agents read nested docs wonderfully; that is the whole appeal.
+                 But nothing maintains them: no harness propagates shared
+                 content from one doc file into another, and none of them
+                 treats your docs as something to compile.</p>
+            </div>
+            <div class="tile scene-card anim">
+              <h3><i data-lucide="package" class="card-icon" aria-hidden="true"></i>Similar Tools</h3>
+              <p>Other skill installers and marketplaces move files between
+                 machines, one file to one place. Nothing composes a single
+                 source into many destinations, so every copy is still its
+                 own problem.</p>
+            </div>
+            <div class="tile scene-card anim">
+              <h3><i data-lucide="shield-check" class="card-icon" aria-hidden="true"></i>Discipline</h3>
+              <p>Updating every copy of a fact in the same commit is exactly
+                 the thing people reliably fail to do. You remember the doc
+                 next to the change, usually, and find the others months
+                 later.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- RETIRED from the flow, kept for reference: what Sous is -->
       <section class="scene" data-scene="what" aria-label="What is Sous">
         <div class="scene-inner">
           <p class="kicker anim">What is Sous?</p>
@@ -215,7 +1468,7 @@ Apply changes with the Edit tool.
         </div>
       </section>
 
-      <!-- Scene 3: the problems it addresses -->
+      <!-- RETIRED from the flow, kept for reference: the problems it addresses -->
       <section class="scene" data-scene="problems" aria-label="The problems">
         <div class="scene-inner">
           <p class="kicker anim">The problems</p>
@@ -241,7 +1494,7 @@ Apply changes with the Edit tool.
         </div>
       </section>
 
-      <!-- Scene 4: how it addresses them -->
+      <!-- RETIRED from the flow, kept for reference: how it addresses them -->
       <section class="scene" data-scene="how" aria-label="How Sous helps">
         <div class="scene-inner">
           <p class="kicker anim">How Sous helps</p>
@@ -268,16 +1521,80 @@ Apply changes with the Edit tool.
       </section>
 
       <!-- Scene 5: what it deliberately does NOT address -->
-      <section class="scene" data-scene="non-goals" aria-label="Non-goals">
+      <!-- Philosophy 1: augment, don't compete -->
+      <section class="scene" data-scene="philosophy-augment" aria-label="Philosophy: augment, don't compete">
         <div class="scene-inner">
-          <p class="kicker anim">Deliberately out of scope</p>
-          <h2 class="scene-title anim">A tool, not a framework.</h2>
-          <p class="lead anim">Sous stays in a well-defined lane: it augments your agents instead of competing with them.</p>
-          <ul class="scene-list">
-            <li class="anim">No re-implementing what your tools already do; native features are preferred.</li>
-            <li class="anim">No opinions or scaffolding to adopt; build your own systems and comforts.</li>
-            <li class="anim">Only the unfilled gap: templating, variables, and distribution.</li>
-          </ul>
+          <h2 class="scene-title anim">Augment; don&rsquo;t compete.</h2>
+          <p class="lead anim">
+            Sous is there to augment your agents, not to replace anything they
+            already do well.
+          </p>
+          <p class="lead anim">
+            When a tool can do something natively, do it natively. Sous will
+            make every effort to stay off the toes of your other tools.
+          </p>
+        </div>
+      </section>
+
+      <!-- Philosophy 2: the collective gap is the bar -->
+      <section class="scene" data-scene="philosophy-collective" aria-label="Philosophy: fill the collective gaps">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">Fill the <em>collective</em> gaps.</h2>
+          <p class="lead anim">
+            Sous actively tries to avoid competing with any tool, and especially
+            tries to avoid competing with any class of tools.
+          </p>
+          <p class="lead anim">
+            Instead, Sous tries to fill the <em>collective</em> gaps that most
+            or all tools either can&rsquo;t or won&rsquo;t fill.
+          </p>
+        </div>
+      </section>
+
+      <!-- Philosophy 3: no opinions -->
+      <section class="scene" data-scene="philosophy-unopinionated" aria-label="Philosophy: no opinions to adopt">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">Be a <em>tool</em>, not a <em>framework</em>.</h2>
+          <p class="lead anim">
+            Sous avoids forcing opinions on your team; build your own systems
+            and comforts.
+          </p>
+          <p class="lead anim">
+            Beyond a few core skills that teach agents how to work with Sous
+            itself, everything built in is opt-in only; and even that core can
+            be opted out of.
+          </p>
+        </div>
+      </section>
+
+      <!-- Philosophy 4: easy to enter -->
+      <section class="scene" data-scene="philosophy-enter" aria-label="Philosophy: easy to enter">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">Be easy to <em>enter</em>.</h2>
+          <p class="lead anim">
+            Sous can copy plain files just like it renders templates. You can
+            still use plain skills and implement the templating features at
+            your own pace.
+          </p>
+          <p class="lead anim">
+            Marketplaces and skill installers still work, too; just point them
+            at any of your Sous repos, including the project repo inside of
+            your project&rsquo;s <code>.sous</code> directory.
+          </p>
+        </div>
+      </section>
+
+      <!-- Philosophy 6: easy to exit -->
+      <section class="scene" data-scene="philosophy-exit" aria-label="Philosophy: easy to exit">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">Be easy to <em>exit</em>.</h2>
+          <p class="lead anim">
+            Want to stop using Sous? Commit the configs it built and delete
+            <code>.sous</code>. That is the whole exit.
+          </p>
+          <p class="lead anim">
+            We know you&rsquo;ll miss it ;) but Sous will never lock you in.
+          </p>
         </div>
       </section>
 

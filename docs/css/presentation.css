@@ -86,6 +86,39 @@ html[data-sous-theme="dark"] .scene-logo .logo-dark { display: block; }
   html:not([data-sous-theme="light"]) .scene-logo .logo-dark { display: block; }
 }
 
+/* Slide-type pills inside problem-slide kickers. Unobtrusive: transparent
+   background, border and text in the kicker's own color (inherited green via
+   currentColor); the pill-<type> classes remain on the markup for future use. */
+.kicker .pill {
+  display: inline-block;
+  padding: 0 var(--sous-space-s);
+  font-family: var(--sous-font-family-base);
+  font-size: var(--sous-font-size-xs);
+  font-weight: var(--sous-font-weight-bold);
+  letter-spacing: 0.08em;
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: var(--sous-border-radius-xxl);
+  vertical-align: middle;
+}
+
+/* Problem kickers stack two lines: "Problem #<x> (pill)" / brief. Tighter
+   tracking than the base kicker; the brief carries a whole sentence. */
+.kicker-problem {
+  letter-spacing: 0.12em;
+}
+
+/* Line 1: "Problem #<x> (pill)"; line 2: the brief */
+.kicker-problem .kicker-brief {
+  display: block;
+  margin-top: var(--sous-space-xs);
+}
+
+.kicker-problem .pill {
+  margin-left: var(--sous-space-s);
+}
+
+
 .mark,
 .kicker {
   font-family: var(--sous-font-family-monospace);
@@ -104,6 +137,11 @@ html[data-sous-theme="dark"] .scene-logo .logo-dark { display: block; }
 
 .scene[data-scene="intro"] .scene-title {
   font-size: clamp(var(--sous-h1), 8vw, var(--sous-font-size-xxl));
+}
+
+/* Emphasized words in titles: subtle color shift to the brand green */
+.scene-title em {
+  color: var(--sous-primary);
 }
 
 .scene-title .cursor {
@@ -225,6 +263,77 @@ html[data-sous-theme="dark"] .scene-logo .logo-dark { display: block; }
   fill: var(--sous-primary);
 }
 
+/* ----- Flow diagrams (solution scenes) ------------------------------------------
+   A source box fans out to destination boxes over green dashed flow lines
+   (same marching-dash motif as the orbit diagram). Each SVG carries its OWN
+   arrow-marker id (ids are document-global); lines reference it via their
+   marker-end attribute. */
+.flow-diagram {
+  display: block;
+  width: 100%;
+  max-width: 40rem;
+  height: auto;
+  margin: var(--sous-space-m) auto 0;
+}
+
+.flow-lines line {
+  stroke: var(--sous-primary);
+  stroke-width: 2;
+  stroke-dasharray: 6 6;
+  animation: orbit-flow 0.6s linear infinite;
+}
+
+.flow-diagram marker path {
+  fill: var(--sous-primary);
+}
+
+/* Boxes: flat bordered tiles, SVG edition */
+.flow-node rect {
+  fill: var(--sous-bg-tile);
+  stroke: var(--sous-border-medium);
+  stroke-width: 2;
+}
+
+.flow-node text {
+  font-family: var(--sous-font-family-base);
+  font-size: 15px;
+  font-weight: var(--sous-font-weight-semibold);
+  text-anchor: middle;
+  dominant-baseline: central;
+  fill: var(--sous-body-text);
+}
+
+.flow-node text.flow-path {
+  font-family: var(--sous-font-family-monospace);
+  font-size: 12px;
+  font-weight: var(--sous-font-weight-normal);
+  fill: var(--sous-body-text-muted);
+}
+
+/* The Sous engine box: solid green, white label */
+.flow-node.flow-engine rect {
+  fill: var(--sous-primary);
+  stroke: var(--sous-brand-tertiary);
+}
+
+.flow-node.flow-engine text {
+  fill: var(--sous-white);
+}
+
+/* The source box speaks green, like the orbit center */
+.flow-node.flow-src rect {
+  stroke: var(--sous-primary);
+  stroke-width: 2.5;
+}
+
+.flow-node.flow-src text {
+  fill: var(--sous-primary);
+}
+
+.flow-node.flow-src text.flow-path {
+  fill: var(--sous-body-text-muted);
+}
+
 /* ----- Code window (templates scene, VS Code-like) ---------------------------- */
 /* Template + output panes overlap in one grid cell; the timeline crossfades
    between them (sub-scenes), which frees room for a larger code font. */
@@ -240,12 +349,14 @@ html[data-sous-theme="dark"] .scene-logo .logo-dark { display: block; }
   width: 100%;
 }
 
+/* overflow stays VISIBLE so callout tooltips can extend past the window
+   edges; the titlebar rounds its own top corners instead. Long code lines
+   must therefore fit the window (no horizontal scroll). */
 .code-window {
   text-align: left;
   background: var(--sous-editor-bg);
   border: 1px solid var(--sous-editor-border);
   border-radius: var(--sous-tile-radius);
-  overflow: hidden;
 }
 
 .code-titlebar {
@@ -255,6 +366,7 @@ html[data-sous-theme="dark"] .scene-logo .logo-dark { display: block; }
   padding: var(--sous-space-s) var(--sous-space-m);
   background: var(--sous-editor-chrome);
   border-bottom: 1px solid var(--sous-editor-border);
+  border-radius: calc(var(--sous-tile-radius) - 1px) calc(var(--sous-tile-radius) - 1px) 0 0;
 }
 
 .code-dot {
@@ -275,7 +387,7 @@ html[data-sous-theme="dark"] .scene-logo .logo-dark { display: block; }
 .code-body {
   margin: 0;
   padding: var(--sous-space-m);
-  overflow-x: auto;
+  overflow: visible; /* tooltips may extend beyond the window */
   background: none;
   border: 0;
   border-radius: 0;
@@ -299,6 +411,13 @@ html[data-sous-theme="dark"] .scene-logo .logo-dark { display: block; }
   z-index: 0;
 }
 
+/* Multi-line highlights: a fragmented inline's abspos reference box ends at
+   the LAST fragment's right edge (e.g. a short `{% endif %}`), truncating the
+   .hl-bg. inline-block makes the span a real box sized to its longest line. */
+.hl-block {
+  display: inline-block;
+}
+
 .hl-bg {
   position: absolute;
   inset: -2px -4px;
@@ -315,16 +434,22 @@ html[data-sous-theme="dark"] .scene-logo .logo-dark { display: block; }
   bottom: calc(100% + 16px);
   left: 50%;
   transform: translateX(-50%);
-  z-index: 2;
+  z-index: 10; /* above the code windows */
   padding: var(--sous-space-s) var(--sous-space-m);
   font-family: var(--sous-font-family-base);
-  font-size: var(--sous-font-size-base);
-  font-weight: var(--sous-font-weight-semibold);
-  white-space: nowrap;
-  color: var(--sous-editor-text);
-  background: var(--sous-editor-chrome);
-  border: 1px solid var(--sous-editor-border);
+  font-size: var(--sous-font-size-l);
+  font-weight: var(--sous-font-weight-normal);
+  width: max-content;
+  max-width: 26rem;
+  text-align: center;
+  text-wrap: balance;
+  color: var(--sous-black);
+  /* Metal-plate sheen layered over the brand green */
+  background: var(--sous-metal-sheen), var(--sous-primary);
+  border: 1px solid var(--sous-brand-tertiary);
   border-radius: var(--sous-border-radius);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.15);
   opacity: 0;
   pointer-events: none;
 }
@@ -338,23 +463,33 @@ html[data-sous-theme="dark"] .scene-logo .logo-dark { display: block; }
   left: 50%;
   transform: translateX(-50%);
   border: 8px solid transparent;
-  border-top-color: var(--sous-editor-border);
+  border-top-color: var(--sous-brand-tertiary);
   border-bottom-width: 0;
 }
 
 .hl-tip::after {
   border-width: 7px 7px 0;
-  border-top-color: var(--sous-editor-chrome);
+  border-top-color: var(--sous-primary);
   margin-top: -1.5px;
 }
 
-/* Card grid used by the "problems" and "how" scenes */
+/* Card grid used by the "features", alternatives and "speed-mitigation" scenes
+   (side-by-side code windows use it too; also the retired
+   "problems"/"how" scenes) */
 .scene-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--sous-space-m);
   margin-top: var(--sous-space-l);
   text-align: left;
+}
+
+/* Stacked variant: one tile per row, centered column */
+.scene-grid-stack {
+  grid-template-columns: 1fr;
+  max-width: 36rem;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .scene-card {
@@ -607,9 +742,61 @@ html[data-sous-theme="dark"] .theme-toggle .icon-moon { display: none; }
   html:not([data-sous-theme="light"]) .theme-toggle .icon-moon { display: none; }
 }
 
+/* ----- Speed control (next to the theme toggle) --------------------------------- */
+.speed-control {
+  position: fixed;
+  top: var(--sous-space-m);
+  right: calc(var(--sous-space-m) + 2.5rem + var(--sous-space-s));
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: var(--sous-space-xs);
+  height: 2.5rem;
+  padding: 0 var(--sous-space-s);
+  background: var(--sous-bg-tile);
+  border: 1px solid var(--sous-border-medium);
+  border-radius: var(--sous-border-radius);
+}
+
+.speed-label {
+  font-size: var(--sous-font-size-s);
+  font-weight: var(--sous-font-weight-semibold);
+  color: var(--sous-body-text-muted);
+  margin-right: var(--sous-space-xs);
+}
+
+.speed-btn {
+  padding: var(--sous-space-xs) var(--sous-space-s);
+  font-size: var(--sous-font-size-s);
+  font-weight: var(--sous-font-weight-semibold);
+  color: var(--sous-body-text-muted);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--sous-border-radius);
+  cursor: pointer;
+  transition: color var(--sous-transition-fast) ease,
+    border-color var(--sous-transition-fast) ease;
+}
+
+.speed-btn:hover {
+  color: var(--sous-primary);
+}
+
+.speed-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--sous-focus-ring);
+}
+
+.speed-btn[aria-pressed="true"] {
+  color: var(--sous-primary);
+  border-color: var(--sous-primary);
+  background: var(--sous-success-dim-bg);
+}
+
 /* ----- Fallbacks & small screens ----------------------------------------------- */
 /* If GSAP failed to load, show the title scene statically and hide the player UI */
-html.no-gsap .player-controls {
+html.no-gsap .player-controls,
+html.no-gsap .speed-control {
   display: none;
 }
 
@@ -629,7 +816,8 @@ html.no-gsap .player-controls {
     animation: none;
   }
 
-  .orbit-lines line {
+  .orbit-lines line,
+  .flow-lines line {
     animation: none;
   }
 }

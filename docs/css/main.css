@@ -154,6 +154,7 @@
   --sous-h6: 0.875rem;   /* 14px */
 
   /* ----- Spacing ----------------------------------------------------------- */
+  --sous-space-xxs: 0.125rem; /* 2px */
   --sous-space-xs: 0.25rem; /* 4px */
   --sous-space-s: 0.5rem;   /* 8px */
   --sous-space-m: 1rem;     /* 16px */
@@ -181,21 +182,30 @@
   /* ----- Focus ------------------------------------------------------------- */
   --sous-focus-ring: 0 0 0 2px rgba(81, 177, 62, 0.5);
 
-  /* ----- Code editor (VS Code-like snippet windows; dark in both themes) ---- */
-  --sous-editor-bg: #1e1e1e;
-  --sous-editor-chrome: #252526;
-  --sous-editor-border: #3c3c3c;
-  --sous-editor-text: #d4d4d4;
-  --sous-editor-muted: #858585;
-  --sous-editor-keyword: #4ec9b0;  /* liquid tags/delimiters */
-  --sous-editor-variable: #9cdcfe;
-  --sous-editor-string: #ce9178;
-  --sous-editor-function: #dcdcaa;
-  --sous-editor-heading: #569cd6;
+  /* ----- Code editor (VS Code-like snippet windows) --------------------------
+     Light+ palette here; the dark theme blocks below swap in Dark+. */
+  --sous-editor-bg: #ffffff;
+  --sous-editor-chrome: #f3f3f3;
+  --sous-editor-border: #d0d0d0;
+  --sous-editor-text: #1f1f1f;
+  --sous-editor-muted: #6e6e6e;
+  --sous-editor-keyword: #267f99;  /* liquid tags/delimiters */
+  --sous-editor-variable: #001080;
+  --sous-editor-string: #a31515;
+  --sous-editor-function: #795e26;
+  --sous-editor-heading: #800000;
 
   /* Callout highlights: yellow ring + glow pull the eye to highlighted code */
   --sous-hl-outline: rgba(255, 192, 67, 0.6);
   --sous-hl-glow: 0 0 14px rgba(255, 192, 67, 0.35);
+
+  /* Subtle metal-plate sheen, layered over a solid fill (tooltips) */
+  --sous-metal-sheen: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.25) 0%,
+    rgba(255, 255, 255, 0.05) 35%,
+    rgba(0, 0, 0, 0.1) 100%
+  );
 }
 
 /* ==========================================================================
@@ -275,6 +285,17 @@
     --sous-danger-dim-bg: var(--sous-red-900);
     --sous-danger-dim-text: var(--sous-red-300);
 
+    --sous-editor-bg: #1e1e1e;
+    --sous-editor-chrome: #252526;
+    --sous-editor-border: #3c3c3c;
+    --sous-editor-text: #d4d4d4;
+    --sous-editor-muted: #858585;
+    --sous-editor-keyword: #4ec9b0;
+    --sous-editor-variable: #9cdcfe;
+    --sous-editor-string: #ce9178;
+    --sous-editor-function: #dcdcaa;
+    --sous-editor-heading: #569cd6;
+
     color-scheme: dark;
   }
 }
@@ -312,6 +333,17 @@
   --sous-warning-dim-text: var(--sous-yellow-300);
   --sous-danger-dim-bg: var(--sous-red-900);
   --sous-danger-dim-text: var(--sous-red-300);
+
+  --sous-editor-bg: #1e1e1e;
+  --sous-editor-chrome: #252526;
+  --sous-editor-border: #3c3c3c;
+  --sous-editor-text: #d4d4d4;
+  --sous-editor-muted: #858585;
+  --sous-editor-keyword: #4ec9b0;
+  --sous-editor-variable: #9cdcfe;
+  --sous-editor-string: #ce9178;
+  --sous-editor-function: #dcdcaa;
+  --sous-editor-heading: #569cd6;
 
   color-scheme: dark;
 }
