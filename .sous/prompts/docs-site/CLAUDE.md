@@ -224,7 +224,7 @@ those apply everywhere at once, ideally by editing their single generator.
 | `philosophy-unopinionated` | No Opinions | Principle #3: h2 "Be a *tool*, not a *framework*." (both words em'd; imperative voice matching the other principle titles); AVOIDS FORCING opinions (not "has none"); beyond the few core skills that teach agents to work with Sous (config dir is generated, how to edit sous skills), all built-ins are opt-in only, and even the core is opt-out-able. |
 | `philosophy-enter` | Easy In | Principle #4: h2 "Be easy to *enter*."; copies plain files just like it renders templates; marketplaces/installers still work, pointed at a Sous repo or `.sous`. |
 | `philosophy-exit` | Easy Out | Principle #5: h2 "Be easy to *exit*."; commit the built configs and delete `.sous`; playful "we know you'll miss it ;)" kept deliberately. |
-| `outro` | Get Started | Logo reprise (smaller `.scene-logo`), `$ npm install -g @sous-io/sous` motif (matches the intro, incl. its prompt margins), GitHub link. Gets the HAPPY effect (blue sky, clouds, orb, With Sous ribbon). Stays on screen at the end. |
+| `outro` | Get Started | h2 "Try it on one project."; logo reprise (smaller `.scene-logo`), `$ npm install -g @sous-io/sous` motif (matches the intro, incl. its prompt margins), GitHub link. Gets the HAPPY effect (blue sky, clouds, orb, With Sous ribbon). Stays on screen at the end. |
 
 Philosophy-slide kickers are GENERATED like problem kickers: the `PHILOSOPHY`
 array + `buildPhilosophyKickers()` in presentation.js emit one line,
