@@ -12,13 +12,13 @@
 (function () {
   "use strict";
 
-  if (!window.gsap || !window.Observer) {
+  if (!window.gsap || !window.Observer || !window.TextPlugin) {
     // CDN failed: leave the static title scene visible, hide the player chrome.
     document.documentElement.classList.add("no-gsap");
     return;
   }
 
-  gsap.registerPlugin(Observer);
+  gsap.registerPlugin(Observer, TextPlugin);
 
   /* ----- Elements ---------------------------------------------------------- */
   var player = document.getElementById("player");
@@ -49,6 +49,11 @@
     ];
   }
 
+  // Problem #1 breaks convention with an extra Followup slide after its
+  // status-quo (an opt-in sixth type; not every problem gets one).
+  var teamsScenes = problemScenes("teams", "Teams");
+  teamsScenes.splice(2, 0, { id: "teams-followup", group: "Teams", title: "Followup" });
+
   var SCENES = [
     { id: "intro", group: "Intro", title: "Title", hold: 4.8 }, // play() skips past it; keep the timeline lean
     { id: "features", group: "Intro", title: "Systems" },
@@ -56,9 +61,7 @@
     { id: "templates", group: "Intro", title: "Templates", hold: 4 }, // callout sequence supplies most of the dwell time
     { id: "why", group: "Intro", title: "Why?" }
   ].concat(
-    problemScenes("teams", "Teams"),
-    problemScenes("projects", "Projects"),
-    problemScenes("tools", "Tools"),
+    teamsScenes,
     problemScenes("tokens", "Tokens"),
     problemScenes("stale", "Stale"),
     problemScenes("speed", "Speed"),
@@ -117,17 +120,16 @@
      built here, from this table, so its format can be changed in ONE place.
      Scene ids follow `<problem>-<slide-type>`. */
   var PROBLEMS = {
-    teams: { num: 1, brief: "Shared Configs Fork Instantly" },
-    projects: { num: 2, brief: "Every Project Starts Over" },
-    tools: { num: 3, brief: "Tool Switches Hurt" },
-    tokens: { num: 4, brief: "Context Is Expensive" },
-    stale: { num: 5, brief: "Hand-Written Lists Rot" },
-    speed: { num: 6, brief: "Sessions Crawl" },
-    docs: { num: 7, brief: "Scattered Docs Drift Apart" }
+    teams: { num: 1, brief: "Configs Don't Travel" },
+    tokens: { num: 2, brief: "Context Is Expensive" },
+    stale: { num: 3, brief: "Hand-Written Lists Rot" },
+    speed: { num: 4, brief: "Sessions Crawl" },
+    docs: { num: 5, brief: "Scattered Docs Drift Apart" }
   };
 
   var SLIDE_TYPE_LABELS = {
     "statement": "Statement",
+    "followup": "Followup",
     "status-quo": "Status-Quo",
     "mitigation": "Mitigation",
     "example": "Example",
@@ -203,6 +205,10 @@
     }
   });
 
+  // Followup-scene elements that its choreography reveals late
+  gsap.set(stage.querySelectorAll(".followup-reveal"), { autoAlpha: 0, y: 24 });
+  gsap.set(stage.querySelectorAll(".type-cursor-2"), { autoAlpha: 0 });
+
   // Callout highlights/tooltips start hidden (CSS sets opacity: 0; this adds
   // visibility so autoAlpha tweens manage both). Output panes crossfade in
   // during their scene's sub-scene sequence.
@@ -249,7 +255,7 @@
   FX_CLOUDS.forEach(function (c) { gsap.set(c.el, { x: c.fromX, autoAlpha: 0 }); });
 
   function effectFor(sceneId) {
-    if (/-statement$|-status-quo$/.test(sceneId)) { return "sad"; }
+    if (/-statement$|-status-quo$|-followup$/.test(sceneId)) { return "sad"; }
     if (/-mitigation$|-example$/.test(sceneId) || sceneId === "outro") { return "happy"; }
     return "none";
   }
@@ -373,7 +379,7 @@
 
   function sceneOut(el) {
     var t = gsap.timeline();
-    t.to(el.querySelectorAll(".anim"), {
+    t.to(el.querySelectorAll(".anim, .scene-exit"), {
       autoAlpha: 0,
       y: -24,
       duration: 0.45,
@@ -421,9 +427,30 @@
     return t;
   }
 
+  // Followup scene: Matrix-style typer. Line 1 types, pause, line 2 types
+  // (the blinking cursor hops lines), beat, then the code box and the
+  // description below it rise in. TextPlugin tweens scrub like anything else.
+  function followupTimeline(el) {
+    var lines = el.querySelectorAll(".type-text");
+    var cursor1 = el.querySelector(".type-cursor-1");
+    var cursor2 = el.querySelector(".type-cursor-2");
+    var reveals = el.querySelectorAll(".followup-reveal");
+    var t = gsap.timeline();
+    t.to(lines[0], { text: lines[0].getAttribute("data-type-text"), duration: 1.6, ease: "none" });
+    t.to({}, { duration: 1.2 }); // pause on line 1
+    t.set(cursor1, { autoAlpha: 0 });
+    t.set(cursor2, { autoAlpha: 1 });
+    t.to(lines[1], { text: lines[1].getAttribute("data-type-text"), duration: 2.2, ease: "none" });
+    t.to({}, { duration: 0.9 }); // brief pause
+    t.fromTo(reveals, { autoAlpha: 0, y: 24 },
+      { autoAlpha: 1, y: 0, duration: 0.6, stagger: 0.25, ease: "power2.out", immediateRender: false });
+    return t;
+  }
+
   // Optional per-scene timeline extensions, added after the scene has entered.
   var SCENE_EXTRAS = {
-    templates: templatesTimeline
+    templates: templatesTimeline,
+    "teams-followup": followupTimeline
   };
 
   var tl = gsap.timeline({ paused: true, onUpdate: syncUi, onComplete: onEnded });

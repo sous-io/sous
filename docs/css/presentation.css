@@ -192,6 +192,16 @@ html[data-sous-theme="dark"] .scene-logo .logo-dark { display: block; }
   margin-bottom: var(--sous-space-l);
 }
 
+/* Followup scene: typed lines stack; each keeps its own hopping cursor */
+.followup-typer .type-line {
+  display: block;
+  min-height: 1.2em;
+}
+
+.followup-desc {
+  margin-top: var(--sous-space-l);
+}
+
 /* Side-by-side CTA buttons (outro) */
 .btn-row {
   display: flex;
