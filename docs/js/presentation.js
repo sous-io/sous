@@ -250,7 +250,7 @@
 
   function effectFor(sceneId) {
     if (/-statement$|-status-quo$/.test(sceneId)) { return "sad"; }
-    if (/-mitigation$|-example$/.test(sceneId)) { return "happy"; }
+    if (/-mitigation$|-example$/.test(sceneId) || sceneId === "outro") { return "happy"; }
     return "none";
   }
 

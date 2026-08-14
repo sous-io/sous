@@ -184,11 +184,17 @@ html[data-sous-theme="dark"] .scene-logo .logo-dark { display: block; }
   user-select: none;
 }
 
-/* Give the intro's install command room to breathe between the tagline
-   above it and the play button below it */
-.scene[data-scene="intro"] .prompt {
+/* Give the install command room to breathe between the text above it and
+   the button below it (intro and outro share the treatment) */
+.scene[data-scene="intro"] .prompt,
+.scene[data-scene="outro"] .prompt {
   margin-top: var(--sous-space-m);
   margin-bottom: var(--sous-space-l);
+}
+
+/* The outro's logo is a smaller reprise of the intro's */
+.scene[data-scene="outro"] .scene-logo {
+  height: clamp(6rem, 20vh, 12rem);
 }
 
 /* The Helm one-liner sits below the features grid */
