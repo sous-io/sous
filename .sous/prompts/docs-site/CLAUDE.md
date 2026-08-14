@@ -224,7 +224,7 @@ those apply everywhere at once, ideally by editing their single generator.
 | `philosophy-unopinionated` | No Opinions | Principle #3: h2 "Be a *tool*, not a *framework*." (both words em'd; imperative voice matching the other principle titles); AVOIDS FORCING opinions (not "has none"); beyond the few core skills that teach agents to work with Sous (config dir is generated, how to edit sous skills), all built-ins are opt-in only, and even the core is opt-out-able. |
 | `philosophy-enter` | Easy In | Principle #4: h2 "Be easy to *enter*."; copies plain files just like it renders templates; marketplaces/installers still work, pointed at a Sous repo or `.sous`. |
 | `philosophy-exit` | Easy Out | Principle #5: h2 "Be easy to *exit*."; commit the built configs and delete `.sous`; playful "we know you'll miss it ;)" kept deliberately. |
-| `outro` | Get Started | h2 "Try it on one project."; logo reprise (smaller `.scene-logo`), `$ npm install -g @sous-io/sous` motif (matches the intro, incl. its prompt margins), GitHub link. Gets the HAPPY effect (blue sky, clouds, orb, With Sous ribbon). Stays on screen at the end. |
+| `outro` | Get Started | h2 "Ready, when you are."; logo reprise (smaller `.scene-logo`), `$ npm install -g @sous-io/sous` motif (matches the intro, incl. its prompt margins), side-by-side `.btn-row` CTAs ("GitHub →" primary, "NPM →" secondary). Gets the HAPPY effect (blue sky, clouds, orb, With Sous ribbon). Stays on screen at the end. |
 
 Philosophy-slide kickers are GENERATED like problem kickers: the `PHILOSOPHY`
 array + `buildPhilosophyKickers()` in presentation.js emit one line,
@@ -427,9 +427,11 @@ the chapter bar.
   hidden in CSS (`opacity: 0`), and GSAP owns the reveal; JS-only initial
   hiding flashes for a frame before scripts run. The orb's working opacity is
   0.55, faded up by `skyIn`.
-- **Repo link:** a fixed top-left GitHub-mark icon button (`.repo-link`,
-  same tile chrome as the theme toggle) linking to github.com/sous-io/sous
-  in a new tab; always visible, like the theme toggle.
+- **Corner links:** fixed top-RIGHT icon buttons (`.repo-link` chrome,
+  matching the theme toggle), ordered left-to-right: [speed control]
+  [theme toggle] [GitHub mark] [npm text mark]; GitHub links to the repo,
+  npm to npmjs.com/package/@sous-io/sous, both new-tab and always visible.
+  Positions are right-anchored calc() offsets in 2.5rem + gap steps.
 - **Intro hides the chrome:** the bottom control bar and the speed control
   are hidden on the title scene; two `fromTo` tweens inserted into the master
   timeline at `intro-exit` slide the bar up from below (`yPercent`) and fade

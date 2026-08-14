@@ -192,6 +192,13 @@ html[data-sous-theme="dark"] .scene-logo .logo-dark { display: block; }
   margin-bottom: var(--sous-space-l);
 }
 
+/* Side-by-side CTA buttons (outro) */
+.btn-row {
+  display: flex;
+  justify-content: center;
+  gap: var(--sous-space-s);
+}
+
 /* The outro's logo is a smaller reprise of the intro's */
 .scene[data-scene="outro"] .scene-logo {
   height: clamp(6rem, 20vh, 12rem);
@@ -731,7 +738,8 @@ html[data-sous-theme="dark"] .scene-logo .logo-dark { display: block; }
 .repo-link {
   position: fixed;
   top: var(--sous-space-m);
-  left: var(--sous-space-m);
+  /* sits right of the theme toggle: [speed] [theme] [GitHub] [npm] */
+  right: calc(var(--sous-space-m) + 2.5rem + var(--sous-space-s));
   z-index: 10;
   display: flex;
   align-items: center;
@@ -761,11 +769,21 @@ html[data-sous-theme="dark"] .scene-logo .logo-dark { display: block; }
   height: 1.25rem;
 }
 
+.npm-link {
+  right: var(--sous-space-m);
+}
+
+.npm-mark {
+  font-family: var(--sous-font-family-monospace);
+  font-size: var(--sous-font-size-xs);
+  font-weight: var(--sous-font-weight-bold);
+}
+
 /* ----- Theme toggle ----------------------------------------------------------- */
 .theme-toggle {
   position: fixed;
   top: var(--sous-space-m);
-  right: var(--sous-space-m);
+  right: calc(var(--sous-space-m) + 2 * (2.5rem + var(--sous-space-s)));
   z-index: 10;
   display: flex;
   align-items: center;
@@ -815,7 +833,7 @@ html[data-sous-theme="dark"] .theme-toggle .icon-moon { display: none; }
   opacity: 0;
   position: fixed;
   top: var(--sous-space-m);
-  right: calc(var(--sous-space-m) + 2.5rem + var(--sous-space-s));
+  right: calc(var(--sous-space-m) + 3 * (2.5rem + var(--sous-space-s)));
   z-index: 10;
   display: flex;
   align-items: center;
