@@ -213,21 +213,18 @@ html[data-sous-theme="dark"] .scene-logo .logo-dark { display: block; }
   dominant-baseline: central;
 }
 
-/* Flow lines: green dashes marching toward the center circle */
+/* Flow lines: green dashes marching toward the center circle. The march is
+   driven by GSAP (see presentation.js), NOT a CSS keyframe: stroke-dashoffset
+   animation is paint-bound and freezes on some machines. */
 .orbit-lines line {
   stroke: var(--sous-primary);
   stroke-width: 2;
   stroke-dasharray: 6 6;
   marker-end: url(#flowArrow);
-  animation: orbit-flow 0.6s linear infinite;
 }
 
 #flowArrow path {
   fill: var(--sous-primary);
-}
-
-@keyframes orbit-flow {
-  to { stroke-dashoffset: -12; }
 }
 
 /* Repo nodes: flat bordered tiles, circle edition */
@@ -280,7 +277,6 @@ html[data-sous-theme="dark"] .scene-logo .logo-dark { display: block; }
   stroke: var(--sous-primary);
   stroke-width: 2;
   stroke-dasharray: 6 6;
-  animation: orbit-flow 0.6s linear infinite;
 }
 
 .flow-diagram marker path {
@@ -722,6 +718,40 @@ html[data-sous-theme="dark"] .scene-logo .logo-dark { display: block; }
   position: relative;
 }
 
+/* ----- Repo link (top-left, mirrors the theme toggle's chrome) ----------------- */
+.repo-link {
+  position: fixed;
+  top: var(--sous-space-m);
+  left: var(--sous-space-m);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  color: var(--sous-body-text-muted);
+  background: var(--sous-bg-tile);
+  border: 1px solid var(--sous-border-medium);
+  border-radius: var(--sous-border-radius);
+  transition: color var(--sous-transition-fast) ease,
+    border-color var(--sous-transition-fast) ease;
+}
+
+.repo-link:hover {
+  color: var(--sous-primary);
+  border-color: var(--sous-primary);
+}
+
+.repo-link:focus-visible {
+  outline: none;
+  box-shadow: var(--sous-focus-ring);
+}
+
+.repo-link svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
 /* ----- Theme toggle ----------------------------------------------------------- */
 .theme-toggle {
   position: fixed;
@@ -997,11 +1027,6 @@ html.no-gsap .speed-control {
 
 @media (prefers-reduced-motion: reduce) {
   .scene-title .cursor {
-    animation: none;
-  }
-
-  .orbit-lines line,
-  .flow-lines line {
     animation: none;
   }
 

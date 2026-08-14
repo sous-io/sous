@@ -177,7 +177,7 @@ those apply everywhere at once, ideally by editing their single generator.
 |-------|-----------|---------|
 | `intro` | Intro | Title scene: logo, "Your coding agent's assistant", tagline, `$ npm install -g @sous-io/sous` prompt motif, big play button. Visible statically before play (and if JS/GSAP fails). Pressing play skips the rest of the intro hold and transitions away immediately (the user has already consumed the static scene). |
 | `features` | Core Systems | The two core systems as tiles with Lucide icons: Config Aggregation (`combine`) + Liquid Templates (`braces`); tagline "It's a bit like [Helm](https://helm.sh), but for AI coding tools." |
-| `aggregator` | Aggregator | Core system #1 explained: inline-SVG orbit diagram; six same-size circles (Project/Department/Company/Personal/2× Public Repo, two-line labels, r=48) orbit a central "Project" circle, green dashed flow lines (CSS `orbit-flow` marching-dash animation, disabled under reduced motion) with arrowheads pointing inward. All colors from tokens. |
+| `aggregator` | Aggregator | Core system #1 explained: inline-SVG orbit diagram; six same-size circles (Project/Department/Company/Personal/2× Public Repo, two-line labels, r=48) orbit a central "Project" circle, green dashed flow lines (marching-dash movement driven by a single GSAP loop in presentation.js; the old CSS stroke-dashoffset keyframe was paint-bound and froze on some machines; reduced motion gets static dashes) with arrowheads pointing inward. All colors from tokens. |
 | `templates` | Templates | Core system #2 explained as SUB-SCENES in one `.code-stack` (two VS Code-style windows overlapping in one grid cell; `--sous-editor-*` tokens are THEME-AWARE: Light+ palette in light mode, Dark+ in dark mode): first the `SKILL.tpl.md` template (YAML frontmatter, `{{ projectRoot }}` injection, `{% if tool %}` claude-code/codex branch about HOW TO APPLY EDITS deliberately unrelated to the glob, fictitious `{% globDirectory dir="{{ projectRoot }}/src/models" pattern="**/*Model.ts" %}`) with its callout walkthrough, then a crossfade to the rendered `SKILL.md` window (full skill output, fictitious absolute `/projects/backend/src/models/...` paths, one nested under `billing/` proving the `**`) with its single callout on the injected path list ("Absolute paths, sourced from the project, never stale. This will save your agent dozens of steps in every relevant session."). Sequenced by `templatesTimeline` in presentation.js. Hand-highlighted with `tok-*` spans; code font is `--sous-font-size-base`. |
 | `why` | Why? | Kicker "The Motivation", h2 "But, Why?": Sous fills a few gaps that AI coding harnesses don't, and likely won't, because those problems scale across multiple providers; segue into the seven problems, five slides each. |
 | `teams-statement` | Teams | P1 slide 1 (Statement): the problem, text only. |
@@ -255,8 +255,9 @@ then Discipline (`shield-check`).
 
 Flow diagrams share the `.flow-diagram` / `.flow-lines` / `.flow-node` /
 `.flow-src` / `.flow-engine` / `.flow-path` classes in `presentation.css` (flat
-token-colored boxes, green dashed lines reusing the `orbit-flow` marching
-animation, disabled under reduced motion); each SVG defines its OWN arrow-marker
+token-colored boxes, green dashed lines whose marching motion comes from the
+shared GSAP dash loop in presentation.js, static under reduced motion); each
+SVG defines its OWN arrow-marker
 id (`teamsFlowArrow`, `projectsFlowArrow`, `toolsFlowArrow`, `tokensFlowArrow`,
 `staleFlowArrow`, `speedFlowArrow`, `docsFlowArrow`; ids are document-global, never reuse one) referenced via
 `marker-end` attributes on the lines, not CSS.
@@ -420,6 +421,9 @@ the chapter bar.
   top-highlight/bottom-shade shadows) and a bordered arrow pointing down at
   the highlight; highlights carry a subtle yellow ring + glow
   (`--sous-hl-outline` / `--sous-hl-glow` tokens) to pull focus.
+- **Repo link:** a fixed top-left GitHub-mark icon button (`.repo-link`,
+  same tile chrome as the theme toggle) linking to github.com/sous-io/sous
+  in a new tab; always visible, like the theme toggle.
 - **Intro hides the chrome:** the bottom control bar and the speed control
   are hidden on the title scene; two `fromTo` tweens inserted into the master
   timeline at `intro-exit` slide the bar up from below (`yPercent`) and fade

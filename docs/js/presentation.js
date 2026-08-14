@@ -260,6 +260,19 @@
     return "none";
   }
 
+  // Diagram dash march: one GSAP loop drives every dashed flow line (the CSS
+  // stroke-dashoffset keyframe it replaces was paint-bound and froze on some
+  // machines). 12 = one full dash period (6 on, 6 off), so the loop is
+  // seamless. Gated by reduced motion, like the other ambient movement.
+  gsap.matchMedia().add("(prefers-reduced-motion: no-preference)", function () {
+    var dashTween = gsap.fromTo(
+      stage.querySelectorAll(".orbit-lines line, .flow-lines line"),
+      { strokeDashoffset: 0 },
+      { strokeDashoffset: -12, duration: 0.6, ease: "none", repeat: -1 }
+    );
+    return function () { dashTween.kill(); };
+  });
+
   // Rain drops: DOM elements tweened on transform only (compositor-safe).
   // Built only when motion is allowed; syncUi pauses the loops while the
   // rain container is invisible so hidden rain costs nothing.
