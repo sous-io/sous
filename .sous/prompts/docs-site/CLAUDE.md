@@ -421,6 +421,11 @@ the chapter bar.
   top-highlight/bottom-shade shadows) and a bordered arrow pointing down at
   the highlight; highlights carry a subtle yellow ring + glow
   (`--sous-hl-outline` / `--sous-hl-glow` tokens) to pull focus.
+- **No load flicker:** every element that should start hidden (player
+  controls, speed control, orb, cloud wraps, tint, gloom, rain, banners) is
+  hidden in CSS (`opacity: 0`), and GSAP owns the reveal; JS-only initial
+  hiding flashes for a frame before scripts run. The orb's working opacity is
+  0.55, faded up by `skyIn`.
 - **Repo link:** a fixed top-left GitHub-mark icon button (`.repo-link`,
   same tile chrome as the theme toggle) linking to github.com/sous-io/sous
   in a new tab; always visible, like the theme toggle.

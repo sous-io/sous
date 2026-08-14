@@ -544,6 +544,9 @@ html[data-sous-theme="dark"] .scene-logo .logo-dark { display: block; }
 
 /* ----- Player controls (bottom bar) ------------------------------------------ */
 .player-controls {
+  /* starts hidden (revealed by the intro-exit tween); CSS-hidden so it never
+     flashes before the scripts run */
+  opacity: 0;
   flex: 0 0 auto;
   display: flex;
   align-items: center;
@@ -802,6 +805,8 @@ html[data-sous-theme="dark"] .theme-toggle .icon-moon { display: none; }
 
 /* ----- Speed control (next to the theme toggle) --------------------------------- */
 .speed-control {
+  /* starts hidden (revealed by the intro-exit tween); no pre-script flash */
+  opacity: 0;
   position: fixed;
   top: var(--sous-space-m);
   right: calc(var(--sous-space-m) + 2.5rem + var(--sous-space-s));
@@ -966,11 +971,13 @@ html[data-sous-theme="dark"] .theme-toggle .icon-moon { display: none; }
   border-radius: 50%;
   background: var(--sous-fx-orb-core);
   box-shadow: 0 0 80px 30px var(--sous-fx-orb-glow);
-  opacity: 0.55;
+  /* GSAP fades this up to 0.55 during the happy transition */
+  opacity: 0;
 }
 
 .fx-cloud-wrap {
   position: absolute;
+  opacity: 0; /* GSAP reveals with the fly-in */
 }
 
 .fx-cloud-wrap-1 { top: 16%; left: 8%; width: 220px; height: 44px; }

@@ -251,8 +251,8 @@
 
   gsap.set([fxSadBanner, fxHappyBanner], { rotation: -45, x: 240, y: 240, autoAlpha: 0 });
   gsap.set([fxTint, fxRain, fxGloom], { autoAlpha: 0 });
-  gsap.set(fxOrb, FX_ORB_FROM);
-  FX_CLOUDS.forEach(function (c) { gsap.set(c.el, { x: c.fromX }); });
+  gsap.set(fxOrb, { x: FX_ORB_FROM.x, y: FX_ORB_FROM.y, autoAlpha: 0 });
+  FX_CLOUDS.forEach(function (c) { gsap.set(c.el, { x: c.fromX, autoAlpha: 0 }); });
 
   function effectFor(sceneId) {
     if (/-statement$|-status-quo$/.test(sceneId)) { return "sad"; }
@@ -327,22 +327,26 @@
   function skyIn(t, at) {
     t.to(fxTint, { autoAlpha: 1, duration: 1.2, ease: "power1.inOut" }, at);
     FX_CLOUDS.forEach(function (c, i) {
-      t.fromTo(c.el, { x: c.fromX },
-        { x: 0, duration: 1.4, ease: "power2.out", immediateRender: false }, at + 0.1 + i * 0.15);
+      t.fromTo(c.el, { x: c.fromX, autoAlpha: 0 },
+        { x: 0, autoAlpha: 1, duration: 1.4, ease: "power2.out", immediateRender: false }, at + 0.1 + i * 0.15);
     });
     t.fromTo(fxOrb, { x: FX_ORB_FROM.x },
       { x: 0, duration: 1.6, ease: "power1.inOut", immediateRender: false }, at + 0.1);
     t.fromTo(fxOrb, { y: FX_ORB_FROM.y },
       { y: 0, duration: 1.6, ease: "power3.out", immediateRender: false }, at + 0.1);
+    // The orb's working opacity is 0.55 (CSS base is 0 to prevent load flicker)
+    t.fromTo(fxOrb, { autoAlpha: 0 },
+      { autoAlpha: 0.55, duration: 1.0, immediateRender: false }, at + 0.1);
   }
 
   function skyOut(t, at) {
     t.to(fxTint, { autoAlpha: 0, duration: 0.6 }, at);
     FX_CLOUDS.forEach(function (c) {
-      t.to(c.el, { x: c.fromX, duration: 0.8, ease: "power2.in" }, at);
+      t.to(c.el, { x: c.fromX, autoAlpha: 0, duration: 0.8, ease: "power2.in" }, at);
     });
     t.to(fxOrb, { x: FX_ORB_FROM.x, duration: 0.9, ease: "power1.inOut" }, at);
     t.to(fxOrb, { y: FX_ORB_FROM.y, duration: 0.9, ease: "power3.in" }, at);
+    t.to(fxOrb, { autoAlpha: 0, duration: 0.9 }, at);
   }
 
   function fxTransition(fx) {
