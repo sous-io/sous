@@ -311,7 +311,7 @@ later.
   counters show wall-clock time at the selected speed (2x halves the
   remaining time); `setSpeed()` calls `syncUi()` so they refresh instantly.
 - **The sad/happy effects** ("commercial" treatment; Luke's naming):
-  status-quo slides get the SAD effect: the stage desaturates to black and
+  statement and status-quo slides get the SAD effect: the stage desaturates to black and
   white (a `--fx-gray` CSS var on `.stage` drives `filter: grayscale()`;
   GSAP animates the var) and a dark "Without Sous" corner ribbon flies into
   the bottom-right. Mitigation and EXAMPLE slides get the HAPPY effect: color

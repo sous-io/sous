@@ -255,7 +255,7 @@
   FX_CLOUDS.forEach(function (c) { gsap.set(c.el, { x: c.fromX }); });
 
   function effectFor(sceneId) {
-    if (/-status-quo$/.test(sceneId)) { return "sad"; }
+    if (/-statement$|-status-quo$/.test(sceneId)) { return "sad"; }
     if (/-mitigation$|-example$/.test(sceneId)) { return "happy"; }
     return "none";
   }
