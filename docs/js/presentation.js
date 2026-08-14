@@ -472,8 +472,10 @@
   var playerControlsEl = document.querySelector(".player-controls");
   var speedControlEl = document.getElementById("speedControl");
 
-  tl.fromTo(playerControlsEl, { yPercent: 100 },
-    { yPercent: 0, duration: 0.6, ease: "power2.out", immediateRender: true },
+  // autoAlpha rides along so the bar is hidden even if its measured height
+  // drifts after the webfont loads (yPercent alone left a sliver visible)
+  tl.fromTo(playerControlsEl, { yPercent: 100, autoAlpha: 0 },
+    { yPercent: 0, autoAlpha: 1, duration: 0.6, ease: "power2.out", immediateRender: true },
     tl.labels["intro-exit"]);
   tl.fromTo(speedControlEl, { autoAlpha: 0 },
     { autoAlpha: 1, duration: 0.6, immediateRender: true },
