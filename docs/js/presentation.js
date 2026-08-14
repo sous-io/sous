@@ -51,7 +51,7 @@
 
   // Problem #1 breaks convention with an extra Followup slide after its
   // status-quo (an opt-in sixth type; not every problem gets one).
-  var teamsScenes = problemScenes("teams", "Teams");
+  var teamsScenes = problemScenes("teams", "Reusability");
   teamsScenes.splice(2, 0, { id: "teams-followup", group: "Teams", title: "Followup" });
 
   var SCENES = [
