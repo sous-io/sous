@@ -322,8 +322,11 @@ later.
   enough to hurt text contrast; dark mode: deep night-blue tint), the clouds
   FLY in from their nearest screen edge, and the orb enters from the lower
   right along an arc (different eases on x and y bend the path), reversing on
-  exit. The SAD effect adds gloom: faint diagonal rain (`.fx-rain`, two
-  layered repeating gradients falling behind the scenes), an edge vignette
+  exit. The SAD effect adds gloom: faint diagonal rain (`.fx-rain`; two
+  pseudo-element depth layers of short tiled dashes whose fall animates
+  background-position by exactly one tile height per loop for a seamless
+  cycle; do NOT reimplement as translated pinstripes, near-vertical lines
+  moving along their own axis show no motion), an edge vignette
   (`.fx-gloom`, above the scenes), and a slight dim that rides `--fx-gray`
   in the `.stage` filter (`brightness(calc(1 - var(--fx-gray) * 0.07))`). All other slides clear both effects. Transitions are inserted into
   the MASTER timeline at each effect boundary (`effectFor()` /

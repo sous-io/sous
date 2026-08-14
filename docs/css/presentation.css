@@ -836,22 +836,46 @@ html[data-sous-theme="dark"] .theme-toggle .icon-moon { display: none; }
    dim rides --fx-gray in the .stage filter above. */
 .fx-rain {
   position: absolute;
-  inset: -80px 0 0 0;
+  inset: 0;
   z-index: 0;
+  overflow: hidden;
   pointer-events: none;
   opacity: 0;
-  background-image:
-    repeating-linear-gradient(100deg,
-      var(--sous-fx-rain) 0px, var(--sous-fx-rain) 1px,
-      transparent 1px, transparent 31px),
-    repeating-linear-gradient(102deg,
-      var(--sous-fx-rain) 0px, var(--sous-fx-rain) 1px,
-      transparent 1px, transparent 47px);
-  animation: fx-rain-fall 0.9s linear infinite;
 }
 
-@keyframes fx-rain-fall {
-  to { transform: translateY(80px); }
+/* Two depth layers of short diagonal streaks. Each tile holds one dash; the
+   fall animates background-position by EXACTLY one tile height per loop, so
+   the motion is seamless. (Do not switch this to a transform translate: the
+   old pinstripe version moved near-vertical lines along their own axis,
+   which reads as no motion at all.) */
+.fx-rain::before,
+.fx-rain::after {
+  content: "";
+  position: absolute;
+  inset: -160px 0 0 0;
+  background-image: linear-gradient(100deg,
+    transparent 0 46%,
+    var(--sous-fx-rain) 46% 54%,
+    transparent 54% 100%);
+}
+
+.fx-rain::before {
+  background-size: 23px 110px;
+  animation: fx-rain-near 0.8s linear infinite;
+}
+
+.fx-rain::after {
+  background-size: 37px 160px;
+  opacity: 0.6;
+  animation: fx-rain-far 1.2s linear infinite;
+}
+
+@keyframes fx-rain-near {
+  to { background-position: 0 110px; }
+}
+
+@keyframes fx-rain-far {
+  to { background-position: 0 160px; }
 }
 
 .fx-gloom {
@@ -994,7 +1018,8 @@ html.no-gsap .speed-control {
   .fx-cloud-1,
   .fx-cloud-2,
   .fx-cloud-3,
-  .fx-rain {
+  .fx-rain::before,
+  .fx-rain::after {
     animation: none;
   }
 }
