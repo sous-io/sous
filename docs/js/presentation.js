@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Sous — landing-page presentation
+   Sous; landing-page presentation
    --------------------------------------------------------------------------
    One master gsap.timeline({ paused: true }) is the single source of truth;
    one child timeline per scene, with a label at each scene start. Two playhead
@@ -31,55 +31,82 @@
   /* ----- Scenes (order = presentation order; ids match data-scene attrs) ----
      The "what"/"problems"/"how" sections are RETIRED: their markup stays in
      index.html for reference, but omitting them here keeps them hidden (the
-     base .scene CSS starts every section at opacity 0 / visibility hidden). */
+     base .scene CSS starts every section at opacity 0 / visibility hidden).
+
+     Holds are COMPUTED from each scene's text via computeStepDelay() (a
+     reading-speed model; see the pacing constants below). An explicit
+     `hold` (seconds) on an entry is a rarely-used trump card that bypasses
+     the computation. */
+  // Titles are group-relative: the chapter bar shows GROUPS on its top row
+  // and the active group's scenes on the bottom row.
+  function problemScenes(key, groupTitle) {
+    return [
+      { id: key + "-statement", group: groupTitle, title: "Statement" },
+      { id: key + "-status-quo", group: groupTitle, title: "Today" },
+      { id: key + "-mitigation", group: groupTitle, title: "Sous" },
+      { id: key + "-example", group: groupTitle, title: "Demo" },
+      { id: key + "-alternatives", group: groupTitle, title: "Alts" }
+    ];
+  }
+
   var SCENES = [
-    { id: "intro", title: "Intro", hold: 4.8 },
-    { id: "features", title: "Core Systems", hold: 7.2 },
-    { id: "aggregator", title: "Aggregator", hold: 10 },
-    { id: "templates", title: "Templates", hold: 4 }, // callout sequence supplies most of the dwell time
-    { id: "why", title: "Why?", hold: 7.2 },
-    { id: "teams-statement", title: "Teams", hold: 7.2 },
-    { id: "teams-status-quo", title: "Teams: Today", hold: 10 },
-    { id: "teams-mitigation", title: "Teams: Sous", hold: 10 },
-    { id: "teams-example", title: "Teams: Demo", hold: 11 },
-    { id: "teams-alternatives", title: "Teams: Alts", hold: 10 },
-    { id: "projects-statement", title: "Projects", hold: 7.2 },
-    { id: "projects-status-quo", title: "Projects: Today", hold: 10 },
-    { id: "projects-mitigation", title: "Projects: Sous", hold: 10 },
-    { id: "projects-example", title: "Projects: Demo", hold: 11 },
-    { id: "projects-alternatives", title: "Projects: Alts", hold: 10 },
-    { id: "tools-statement", title: "Tools", hold: 7.2 },
-    { id: "tools-status-quo", title: "Tools: Today", hold: 10 },
-    { id: "tools-mitigation", title: "Tools: Sous", hold: 10 },
-    { id: "tools-example", title: "Tools: Demo", hold: 11 },
-    { id: "tools-alternatives", title: "Tools: Alts", hold: 10 },
-    { id: "tokens-statement", title: "Tokens", hold: 7.2 },
-    { id: "tokens-status-quo", title: "Tokens: Today", hold: 10 },
-    { id: "tokens-mitigation", title: "Tokens: Sous", hold: 10 },
-    { id: "tokens-example", title: "Tokens: Demo", hold: 11 },
-    { id: "tokens-alternatives", title: "Tokens: Alts", hold: 10 },
-    { id: "stale-statement", title: "Stale", hold: 7.2 },
-    { id: "stale-status-quo", title: "Stale: Today", hold: 10 },
-    { id: "stale-mitigation", title: "Stale: Sous", hold: 10 },
-    { id: "stale-example", title: "Stale: Demo", hold: 11 },
-    { id: "stale-alternatives", title: "Stale: Alts", hold: 10 },
-    { id: "speed-statement", title: "Speed", hold: 7.2 },
-    { id: "speed-status-quo", title: "Speed: Today", hold: 10 },
-    { id: "speed-mitigation", title: "Speed: Sous", hold: 12 },
-    { id: "speed-example", title: "Speed: Demo", hold: 11 },
-    { id: "speed-alternatives", title: "Speed: Alts", hold: 10 },
-    { id: "docs-statement", title: "Docs", hold: 7.2 },
-    { id: "docs-status-quo", title: "Docs: Today", hold: 10 },
-    { id: "docs-mitigation", title: "Docs: Sous", hold: 10 },
-    { id: "docs-example", title: "Docs: Demo", hold: 11 },
-    { id: "docs-alternatives", title: "Docs: Alts", hold: 10 },
-    { id: "philosophy-augment", title: "Augment", hold: 6 },
-    { id: "philosophy-collective", title: "The Gaps", hold: 6 },
-    { id: "philosophy-unopinionated", title: "No Opinions", hold: 6 },
-    { id: "philosophy-enter", title: "Easy In", hold: 6 },
-    { id: "philosophy-exit", title: "Easy Out", hold: 6 },
-    { id: "outro", title: "Get Started", hold: 2.4 }
-  ];
+    { id: "intro", group: "Intro", title: "Title", hold: 4.8 }, // play() skips past it; keep the timeline lean
+    { id: "features", group: "Intro", title: "Systems" },
+    { id: "aggregator", group: "Intro", title: "Aggregator" },
+    { id: "templates", group: "Intro", title: "Templates", hold: 4 }, // callout sequence supplies most of the dwell time
+    { id: "why", group: "Intro", title: "Why?" }
+  ].concat(
+    problemScenes("teams", "Teams"),
+    problemScenes("projects", "Projects"),
+    problemScenes("tools", "Tools"),
+    problemScenes("tokens", "Tokens"),
+    problemScenes("stale", "Stale"),
+    problemScenes("speed", "Speed"),
+    problemScenes("docs", "Docs"),
+    [
+      { id: "philosophy-augment", group: "Philosophy", title: "Augment" },
+      { id: "philosophy-collective", group: "Philosophy", title: "The Gaps" },
+      { id: "philosophy-unopinionated", group: "Philosophy", title: "No Opinions" },
+      { id: "philosophy-enter", group: "Philosophy", title: "Easy In" },
+      { id: "philosophy-exit", group: "Philosophy", title: "Easy Out" },
+      { id: "outro", group: "End", title: "Get Started", hold: 2.4 } // end card; onComplete leaves it on screen anyway
+    ]
+  );
+
+  /* ----- Pacing (the calibration knobs) ---------------------------------------
+     A "token" is a word, weighted by length: ceil(letters / 5). So "variables"
+     counts ~2, "and" counts 1 (the chars-per-5 standard behind WPM math).
+     Delays are for 1x; the speed control's timeScale handles the rest. */
+  var baseDelay = 190;            // THE pacing knob; everything below scales from it
+  var perTokenDelay = baseDelay;                 // ms per prose token
+  var perDiagramTokenDelay = baseDelay * 1.75;   // ms per diagram-label token (labels ~ structure)
+  var minStepDelay = baseDelay * 25;             // floor: no scene flashes past
+  var calloutBaseDelay = baseDelay * 15.625;     // ms per callout for eye travel + code cross-reference
+
+  function countTokens(text) {
+    var n = 0;
+    String(text || "").trim().split(/\s+/).forEach(function (word) {
+      if (word) { n += Math.ceil(word.length / 5); }
+    });
+    return n;
+  }
+
+  // A scene's 1x hold in ms: prose tokens at the prose rate, diagram-label
+  // tokens at the (slower) diagram rate. Tooltip text is excluded; callouts
+  // carry their own dwell. Uses textContent (scenes are hidden at init;
+  // innerText is layout-dependent).
+  function computeStepDelay(element) {
+    var svgTokens = 0;
+    element.querySelectorAll("svg").forEach(function (svg) {
+      svgTokens += countTokens(svg.textContent);
+    });
+    var tipTokens = 0;
+    element.querySelectorAll(".hl-tip").forEach(function (tip) {
+      tipTokens += countTokens(tip.textContent);
+    });
+    var proseTokens = Math.max(0, countTokens(element.textContent) - svgTokens - tipTokens);
+    return Math.max(minStepDelay, proseTokens * perTokenDelay + svgTokens * perDiagramTokenDelay);
+  }
 
   function sceneEl(id) {
     return stage.querySelector('[data-scene="' + id + '"]');
@@ -188,6 +215,100 @@
   gsap.set(stage.querySelectorAll(".hl-bg, .hl-tip"), { autoAlpha: 0 });
   gsap.set(stage.querySelectorAll(".code-pane-output"), { autoAlpha: 0 });
 
+  /* ----- Sad/happy effects (the "commercial" treatment) -----------------------
+     Status-quo slides get the SAD effect: the stage desaturates (--fx-gray
+     drives a grayscale filter) and a "Without Sous" ribbon flies into the
+     corner. Mitigation/example slides get the HAPPY effect: color returns, a
+     blue "With Sous" ribbon flies in, and the ambient sky (orb + clouds)
+     fades up. Everything runs inside the master timeline, so it scrubs.
+     REMOVABLE AS A UNIT with the .fx-* markup and CSS. */
+  var fxTint = stage.querySelector(".fx-sky-tint");
+  var fxOrb = stage.querySelector(".fx-orb");
+  var fxRain = stage.querySelector(".fx-rain");
+  var fxGloom = stage.querySelector(".fx-gloom");
+  var fxSadBanner = stage.querySelector(".fx-banner-sad");
+  var fxHappyBanner = stage.querySelector(".fx-banner-happy");
+
+  // Clouds fly in from whichever screen edge they sit closest to
+  var FX_CLOUDS = [
+    { el: stage.querySelector(".fx-cloud-wrap-1"), fromX: -640 },
+    { el: stage.querySelector(".fx-cloud-wrap-2"), fromX: 640 },
+    { el: stage.querySelector(".fx-cloud-wrap-3"), fromX: -900 }
+  ];
+  // The orb enters from the lower right and arcs up-and-left into place
+  var FX_ORB_FROM = { x: 460, y: 340 };
+
+  gsap.set([fxSadBanner, fxHappyBanner], { rotation: -45, x: 240, y: 240, autoAlpha: 0 });
+  gsap.set([fxTint, fxRain, fxGloom], { autoAlpha: 0 });
+  gsap.set(fxOrb, FX_ORB_FROM);
+  FX_CLOUDS.forEach(function (c) { gsap.set(c.el, { x: c.fromX }); });
+
+  function effectFor(sceneId) {
+    if (/-status-quo$/.test(sceneId)) { return "sad"; }
+    if (/-mitigation$|-example$/.test(sceneId)) { return "happy"; }
+    return "none";
+  }
+
+  function bannerIn(banner) {
+    return gsap.fromTo(
+      banner,
+      { rotation: -45, x: 240, y: 240, autoAlpha: 0 },
+      { rotation: -45, x: 0, y: 0, autoAlpha: 1, duration: 0.7, ease: "power3.out", immediateRender: false }
+    );
+  }
+
+  function bannerOut(banner) {
+    return gsap.to(banner, { x: 240, y: 240, autoAlpha: 0, duration: 0.5, ease: "power2.in" });
+  }
+
+  // Sky entrance: tint fades up, clouds fly in from their nearest edge, and
+  // the orb rises along an arc (different eases on x and y bend the path:
+  // y climbs fast then settles, x keeps gliding left; the reverse on exit).
+  function skyIn(t, at) {
+    t.to(fxTint, { autoAlpha: 1, duration: 1.2, ease: "power1.inOut" }, at);
+    FX_CLOUDS.forEach(function (c, i) {
+      t.fromTo(c.el, { x: c.fromX },
+        { x: 0, duration: 1.4, ease: "power2.out", immediateRender: false }, at + 0.1 + i * 0.15);
+    });
+    t.fromTo(fxOrb, { x: FX_ORB_FROM.x },
+      { x: 0, duration: 1.6, ease: "power1.inOut", immediateRender: false }, at + 0.1);
+    t.fromTo(fxOrb, { y: FX_ORB_FROM.y },
+      { y: 0, duration: 1.6, ease: "power3.out", immediateRender: false }, at + 0.1);
+  }
+
+  function skyOut(t, at) {
+    t.to(fxTint, { autoAlpha: 0, duration: 0.6 }, at);
+    FX_CLOUDS.forEach(function (c) {
+      t.to(c.el, { x: c.fromX, duration: 0.8, ease: "power2.in" }, at);
+    });
+    t.to(fxOrb, { x: FX_ORB_FROM.x, duration: 0.9, ease: "power1.inOut" }, at);
+    t.to(fxOrb, { y: FX_ORB_FROM.y, duration: 0.9, ease: "power3.in" }, at);
+  }
+
+  function fxTransition(fx) {
+    var t = gsap.timeline();
+    if (fx === "sad") {
+      t.to(stage, { "--fx-gray": 1, duration: 0.8, ease: "power2.inOut" }, 0);
+      t.add(bannerOut(fxHappyBanner), 0);
+      skyOut(t, 0);
+      t.to([fxGloom, fxRain], { autoAlpha: 1, duration: 1.1, ease: "power1.inOut" }, 0.2);
+      t.add(bannerIn(fxSadBanner), 0.15);
+    } else if (fx === "happy") {
+      t.to(stage, { "--fx-gray": 0, duration: 0.8, ease: "power2.inOut" }, 0);
+      t.add(bannerOut(fxSadBanner), 0);
+      t.to([fxGloom, fxRain], { autoAlpha: 0, duration: 0.5 }, 0);
+      skyIn(t, 0.1);
+      t.add(bannerIn(fxHappyBanner), 0.15);
+    } else {
+      t.to(stage, { "--fx-gray": 0, duration: 0.6, ease: "power2.inOut" }, 0);
+      t.add(bannerOut(fxSadBanner), 0);
+      t.add(bannerOut(fxHappyBanner), 0);
+      t.to([fxGloom, fxRain], { autoAlpha: 0, duration: 0.5 }, 0);
+      skyOut(t, 0);
+    }
+    return t;
+  }
+
   function sceneIn(el) {
     var t = gsap.timeline();
     t.set(el, { autoAlpha: 1 });
@@ -219,8 +340,12 @@
     var t = gsap.timeline();
     container.querySelectorAll(".hl").forEach(function (hl) {
       var parts = hl.querySelectorAll(".hl-bg, .hl-tip");
+      var tip = hl.querySelector(".hl-tip");
+      // Dwell scales with the tooltip's text; the base covers eye travel and
+      // reading the highlighted code itself.
+      var dwell = (calloutBaseDelay + countTokens(tip ? tip.textContent : "") * perTokenDelay) / 1000;
       t.to(parts, { autoAlpha: 1, duration: 0.35 });
-      t.to({}, { duration: 6 }); // dwell while the viewer reads the tooltip
+      t.to({}, { duration: dwell });
       t.to(parts, { autoAlpha: 0, duration: 0.35 });
     });
     return t;
@@ -252,6 +377,7 @@
 
   var tl = gsap.timeline({ paused: true, onUpdate: syncUi, onComplete: onEnded });
 
+  var prevFx = "none";
   SCENES.forEach(function (scene, i) {
     var el = sceneEl(scene.id);
     var last = i === SCENES.length - 1;
@@ -259,11 +385,19 @@
     if (scene.id !== "intro") {
       tl.add(sceneIn(el));
     }
+    // Sad/happy effect transitions ride along with the scene entrance
+    var fx = effectFor(scene.id);
+    if (fx !== prevFx) {
+      tl.add(fxTransition(fx), "<");
+      prevFx = fx;
+    }
     tl.addLabel(scene.id + "-shown"); // fully entered: the jump target
     if (SCENE_EXTRAS[scene.id]) {
       tl.add(SCENE_EXTRAS[scene.id](el));
     }
-    tl.to({}, { duration: scene.hold }); // hold the scene on screen
+    // Explicit hold (seconds) trumps; otherwise pace by the scene's content
+    var holdSec = scene.hold != null ? scene.hold : computeStepDelay(el) / 1000;
+    tl.to({}, { duration: holdSec }); // hold the scene on screen
     if (!last) {
       tl.addLabel(scene.id + "-exit"); // hold over, exit animation begins
       tl.add(sceneOut(el));
@@ -327,7 +461,7 @@
       tl.progress(0); // replay from the top
     }
     // The title scene is static and already consumed by the time the user
-    // presses play — skip the rest of its hold and transition away at once.
+    // presses play; skip the rest of its hold and transition away at once.
     if (tl.time() < tl.labels["intro-exit"]) {
       tl.seek("intro-exit");
     }
@@ -403,55 +537,116 @@
     goToLabel(SCENES[target].id + "-shown");
   }
 
-  /* ----- Chapter bar -------------------------------------------------------------- */
-  var segments = [];
+  /* ----- Chapter bar (two rows: groups on top, active group's scenes below) -------- */
+  var groupsEl = document.getElementById("groupSegments");
+  var timeElapsedEl = document.getElementById("timeElapsed");
+  var timeRemainingEl = document.getElementById("timeRemaining");
+
+  var GROUPS = [];       // { key, scenes, start, end }
+  var sceneTimes = {};   // id -> { start, end }
+  var groupRow = [];     // { group, btn, fill }
+  var sceneRow = [];     // rebuilt whenever the active group changes
+  var activeGroupKey = null;
+
+  function makeSegmentButton(labelText, ariaLabel, onClick) {
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "scene-btn";
+    btn.setAttribute("aria-label", ariaLabel);
+    var fill = document.createElement("span");
+    fill.className = "scene-btn-fill";
+    fill.setAttribute("aria-hidden", "true");
+    var title = document.createElement("span");
+    title.className = "scene-btn-title";
+    title.textContent = labelText;
+    btn.appendChild(fill);
+    btn.appendChild(title);
+    btn.addEventListener("click", onClick);
+    return { btn: btn, fill: fill };
+  }
 
   (function buildChapterBar() {
     var total = tl.duration();
     SCENES.forEach(function (scene, i) {
-      var start = tl.labels[scene.id];
-      var end = i < SCENES.length - 1 ? tl.labels[SCENES[i + 1].id] : total;
-
-      var btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "scene-btn";
-      btn.style.flexGrow = String(end - start);
-      btn.setAttribute("aria-label", "Go to scene: " + scene.title);
-
-      var fill = document.createElement("span");
-      fill.className = "scene-btn-fill";
-      fill.setAttribute("aria-hidden", "true");
-
-      var title = document.createElement("span");
-      title.className = "scene-btn-title";
-      title.textContent = scene.title;
-
-      btn.appendChild(fill);
-      btn.appendChild(title);
-      // Jump to the scene's fully-entered state, not the blank frame at its start
-      btn.addEventListener("click", function () { goToLabel(scene.id + "-shown"); });
-      segmentsEl.appendChild(btn);
-
-      segments.push({ id: scene.id, title: scene.title, start: start, end: end, btn: btn, fill: fill });
+      sceneTimes[scene.id] = {
+        start: tl.labels[scene.id],
+        end: i < SCENES.length - 1 ? tl.labels[SCENES[i + 1].id] : total
+      };
+      var tail = GROUPS[GROUPS.length - 1];
+      if (!tail || tail.key !== scene.group) {
+        tail = { key: scene.group, scenes: [] };
+        GROUPS.push(tail);
+      }
+      tail.scenes.push(scene);
+    });
+    GROUPS.forEach(function (g) {
+      g.start = sceneTimes[g.scenes[0].id].start;
+      g.end = sceneTimes[g.scenes[g.scenes.length - 1].id].end;
+      var seg = makeSegmentButton(g.key, "Go to section: " + g.key, function () {
+        goToLabel(g.scenes[0].id + "-shown");
+      });
+      groupsEl.appendChild(seg.btn); // equal widths (.scene-btn flex: 1 1 0)
+      groupRow.push({ group: g, btn: seg.btn, fill: seg.fill });
     });
   })();
+
+  function renderSceneRow(group) {
+    segmentsEl.textContent = "";
+    sceneRow = [];
+    group.scenes.forEach(function (scene) {
+      var times = sceneTimes[scene.id];
+      // Jump to the scene's fully-entered state, not the blank frame at its start
+      var seg = makeSegmentButton(scene.title, "Go to scene: " + group.key + ": " + scene.title, function () {
+        goToLabel(scene.id + "-shown");
+      });
+      segmentsEl.appendChild(seg.btn); // equal widths (.scene-btn flex: 1 1 0)
+      sceneRow.push({ scene: scene, start: times.start, end: times.end, btn: seg.btn, fill: seg.fill });
+    });
+  }
+
+  function formatTime(seconds) {
+    var s = Math.max(0, Math.floor(seconds));
+    return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+  }
 
   /* ----- UI sync (single render path for playing AND scrubbing) -------------------- */
   function syncUi() {
     var p = tl.progress();
     var t = tl.time();
+    var total = tl.duration();
 
     scrubInput.value = String(p);
     scrubInput.style.setProperty("--fill", (p * 100).toFixed(2) + "%");
+    timeElapsedEl.textContent = formatTime(t);
+    timeRemainingEl.textContent = formatTime(total - t);
 
-    var currentTitle = "";
-    segments.forEach(function (seg) {
+    var activeGroup = GROUPS[0];
+    GROUPS.forEach(function (g) {
+      if (t >= g.start - 0.001) { activeGroup = g; }
+    });
+    if (activeGroup.key !== activeGroupKey) {
+      activeGroupKey = activeGroup.key;
+      renderSceneRow(activeGroup);
+    }
+
+    groupRow.forEach(function (row) {
+      var frac = gsap.utils.clamp(0, 1, (t - row.group.start) / (row.group.end - row.group.start));
+      row.fill.style.transform = "scaleX(" + frac + ")";
+      if (row.group === activeGroup) {
+        row.btn.setAttribute("aria-current", "true");
+      } else {
+        row.btn.removeAttribute("aria-current");
+      }
+    });
+
+    var currentTitle = activeGroup.key;
+    sceneRow.forEach(function (seg) {
       var frac = gsap.utils.clamp(0, 1, (t - seg.start) / (seg.end - seg.start));
       seg.fill.style.transform = "scaleX(" + frac + ")";
-      var active = t >= seg.start && (t < seg.end || seg.end >= tl.duration());
+      var active = t >= seg.start && (t < seg.end || seg.end >= total);
       if (active) {
         seg.btn.setAttribute("aria-current", "true");
-        currentTitle = seg.title;
+        currentTitle = activeGroup.key + ": " + seg.scene.title;
       } else {
         seg.btn.removeAttribute("aria-current");
       }
@@ -459,7 +654,7 @@
 
     scrubInput.setAttribute(
       "aria-valuetext",
-      Math.round(p * 100) + "% — " + currentTitle
+      Math.round(p * 100) + "%, " + currentTitle
     );
   }
 
@@ -515,7 +710,7 @@
 
   try {
     var savedSpeed = parseFloat(sessionStorage.getItem(SPEED_KEY));
-    if (savedSpeed >= 1 && savedSpeed <= 2) { setSpeed(savedSpeed); }
+    if (savedSpeed >= 0.5 && savedSpeed <= 2) { setSpeed(savedSpeed); }
   } catch (e) { /* fine */ }
 
   /* ----- Survive page reloads at the same spot (per tab) ------------------------------ */

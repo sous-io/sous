@@ -206,6 +206,27 @@
     rgba(255, 255, 255, 0.05) 35%,
     rgba(0, 0, 0, 0.1) 100%
   );
+
+  /* ----- Presentation ambient FX (happy-effect sky) -------------------------
+     Light mode: bright blue-tinted sky, white clouds, soft sun. The dark
+     blocks below swap in a deep night tint, faint clouds, silvery moon. */
+  --sous-fx-cloud: rgba(255, 255, 255, 0.85);
+  --sous-fx-orb-core: #ffe08a;
+  --sous-fx-orb-glow: rgba(255, 192, 67, 0.4);
+  --sous-fx-sky-tint: linear-gradient(
+    180deg,
+    #c9e6f6 0%,
+    #e3f1fa 55%,
+    rgba(248, 249, 250, 0) 100%
+  );
+
+  /* Sad-effect gloom: an edge vignette and faint falling rain */
+  --sous-fx-gloom: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 0) 55%,
+    rgba(0, 0, 0, 0.28) 100%
+  );
+  --sous-fx-rain: rgba(73, 80, 87, 0.16);
 }
 
 /* ==========================================================================
@@ -296,6 +317,22 @@
     --sous-editor-function: #dcdcaa;
     --sous-editor-heading: #569cd6;
 
+    --sous-fx-cloud: rgba(240, 246, 252, 0.05);
+    --sous-fx-orb-core: #cdd6df;
+    --sous-fx-orb-glow: rgba(201, 209, 217, 0.22);
+    --sous-fx-sky-tint: linear-gradient(
+      180deg,
+      rgba(56, 82, 120, 0.3) 0%,
+      rgba(33, 48, 71, 0.15) 55%,
+      rgba(22, 27, 34, 0) 100%
+    );
+    --sous-fx-gloom: radial-gradient(
+      ellipse at center,
+      rgba(0, 0, 0, 0) 50%,
+      rgba(0, 0, 0, 0.5) 100%
+    );
+    --sous-fx-rain: rgba(139, 148, 158, 0.14);
+
     color-scheme: dark;
   }
 }
@@ -344,6 +381,22 @@
   --sous-editor-string: #ce9178;
   --sous-editor-function: #dcdcaa;
   --sous-editor-heading: #569cd6;
+
+  --sous-fx-cloud: rgba(240, 246, 252, 0.05);
+  --sous-fx-orb-core: #cdd6df;
+  --sous-fx-orb-glow: rgba(201, 209, 217, 0.22);
+  --sous-fx-sky-tint: linear-gradient(
+    180deg,
+    rgba(56, 82, 120, 0.3) 0%,
+    rgba(33, 48, 71, 0.15) 55%,
+    rgba(22, 27, 34, 0) 100%
+  );
+  --sous-fx-gloom: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 0) 50%,
+    rgba(0, 0, 0, 0.5) 100%
+  );
+  --sous-fx-rain: rgba(139, 148, 158, 0.14);
 
   color-scheme: dark;
 }

@@ -600,6 +600,27 @@ html[data-sous-theme="dark"] .scene-logo .logo-dark { display: block; }
   gap: var(--sous-space-xs);
 }
 
+/* Elapsed/remaining counters flank the scrub slider */
+.scrub-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sous-space-s);
+}
+
+.scrub-row .scrub {
+  flex: 1 1 auto;
+  width: auto;
+}
+
+.time-badge {
+  flex: 0 0 auto;
+  min-width: 2.5rem;
+  font-family: var(--sous-font-family-monospace);
+  font-size: var(--sous-font-size-xs);
+  color: var(--sous-body-text-muted);
+  text-align: center;
+}
+
 /* Scrub slider: accessible core of the chapter bar */
 .scrub {
   -webkit-appearance: none;
@@ -641,10 +662,17 @@ html[data-sous-theme="dark"] .scene-logo .logo-dark { display: block; }
   box-shadow: var(--sous-focus-ring);
 }
 
-/* Named scene segments (widths set from timeline label durations by JS) */
+/* Named segments (widths set from timeline label durations by JS). Two rows:
+   groups on top, the ACTIVE group's scenes below. */
 .scene-segments {
   display: flex;
   gap: var(--sous-space-xs);
+}
+
+.scene-segments-sub .scene-btn {
+  padding: var(--sous-space-xxs) var(--sous-space-xs);
+  font-size: var(--sous-font-size-xs);
+  font-weight: var(--sous-font-weight-normal);
 }
 
 .scene-btn {
@@ -793,6 +821,148 @@ html[data-sous-theme="dark"] .theme-toggle .icon-moon { display: none; }
   background: var(--sous-success-dim-bg);
 }
 
+/* ----- Sad/happy effects (status-quo vs mitigation/example slides) -------------
+   REMOVABLE AS A UNIT: this section, the .fx-* markup in index.html, and the
+   "Sad/happy effects" section of presentation.js.
+   The stage desaturates for the sad effect via --fx-gray (GSAP animates it). */
+.stage {
+  --fx-gray: 0;
+  /* full desaturation plus a slight dim as the sad effect takes hold */
+  filter: grayscale(var(--fx-gray)) brightness(calc(1 - var(--fx-gray) * 0.07));
+}
+
+/* Sad-effect gloom: faint diagonal rain (behind the scenes) and an edge
+   vignette (above them). Both fade in with the sad transition; the slight
+   dim rides --fx-gray in the .stage filter above. */
+.fx-rain {
+  position: absolute;
+  inset: -80px 0 0 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  background-image:
+    repeating-linear-gradient(100deg,
+      var(--sous-fx-rain) 0px, var(--sous-fx-rain) 1px,
+      transparent 1px, transparent 31px),
+    repeating-linear-gradient(102deg,
+      var(--sous-fx-rain) 0px, var(--sous-fx-rain) 1px,
+      transparent 1px, transparent 47px);
+  animation: fx-rain-fall 0.9s linear infinite;
+}
+
+@keyframes fx-rain-fall {
+  to { transform: translateY(80px); }
+}
+
+.fx-gloom {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  opacity: 0;
+  background: var(--sous-fx-gloom);
+}
+
+/* Corner ribbons: rotated strips crossing the bottom-right corner; the stage's
+   overflow clips them. GSAP owns their transform (rotation + fly-in offset). */
+.fx-banner {
+  position: absolute;
+  right: -84px;
+  bottom: 48px;
+  z-index: 6;
+  width: 320px;
+  padding: var(--sous-space-s) 0;
+  text-align: center;
+  font-size: var(--sous-font-size-base);
+  font-weight: var(--sous-font-weight-bold);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  pointer-events: none;
+  opacity: 0;
+}
+
+/* Both tokens flip with the theme, so text always contrasts the strip:
+   light mode is near-black bg + near-white text; dark mode inverts. */
+.fx-banner-sad {
+  background: var(--sous-neutral-800);
+  color: var(--sous-neutral-100);
+}
+
+.fx-banner-happy {
+  background: var(--sous-blue-600);
+  color: var(--sous-white);
+}
+
+/* The happy-effect sky: a blue-tinted backdrop, a soft orb (sun in light mode,
+   moon in dark, via the --sous-fx-* tokens) and three drifting clouds, all
+   behind the scenes. The tint fades; the orb and clouds FLY in and out (GSAP
+   moves the .fx-cloud-wrap/.fx-orb transforms, so the ambient CSS drift lives
+   on the inner .fx-cloud where the two never fight). */
+.fx-sky {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.fx-sky-tint {
+  position: absolute;
+  inset: 0;
+  background: var(--sous-fx-sky-tint);
+  opacity: 0;
+}
+
+.fx-orb {
+  position: absolute;
+  top: 10%;
+  right: 14%;
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  background: var(--sous-fx-orb-core);
+  box-shadow: 0 0 80px 30px var(--sous-fx-orb-glow);
+  opacity: 0.55;
+}
+
+.fx-cloud-wrap {
+  position: absolute;
+}
+
+.fx-cloud-wrap-1 { top: 16%; left: 8%; width: 220px; height: 44px; }
+.fx-cloud-wrap-2 { top: 30%; right: 22%; width: 170px; height: 36px; }
+.fx-cloud-wrap-3 { top: 8%; left: 42%; width: 140px; height: 30px; }
+
+.fx-cloud,
+.fx-cloud::before,
+.fx-cloud::after {
+  position: absolute;
+  background: var(--sous-fx-cloud);
+  border-radius: 999px;
+}
+
+.fx-cloud {
+  inset: 0;
+}
+
+.fx-cloud::before,
+.fx-cloud::after {
+  content: "";
+}
+
+.fx-cloud-1 { animation: fx-drift 53s ease-in-out infinite alternate; }
+.fx-cloud-2 { animation: fx-drift 71s ease-in-out infinite alternate-reverse; }
+.fx-cloud-3 { animation: fx-drift 89s ease-in-out infinite alternate; }
+
+/* two puffs give each pill a cloud silhouette */
+.fx-cloud::before { width: 45%; height: 160%; left: 18%; bottom: 30%; }
+.fx-cloud::after { width: 34%; height: 120%; right: 20%; bottom: 45%; }
+
+@keyframes fx-drift {
+  from { transform: translateX(-48px); }
+  to { transform: translateX(48px); }
+}
+
 /* ----- Fallbacks & small screens ----------------------------------------------- */
 /* If GSAP failed to load, show the title scene statically and hide the player UI */
 html.no-gsap .player-controls,
@@ -818,6 +988,13 @@ html.no-gsap .speed-control {
 
   .orbit-lines line,
   .flow-lines line {
+    animation: none;
+  }
+
+  .fx-cloud-1,
+  .fx-cloud-2,
+  .fx-cloud-3,
+  .fx-rain {
     animation: none;
   }
 }
