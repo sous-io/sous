@@ -360,7 +360,7 @@ the chapter bar.
   presentation.js derives each scene's 1x hold from its text via a
   reading-speed model: a token is a word weighted by length
   (`ceil(letters / 5)`, so "variables" ~2, "and" 1). ALL pacing scales from
-  ONE knob, `baseDelay` (currently 190): prose tokens cost `perTokenDelay`
+  ONE knob, `baseDelay` (currently 200): prose tokens cost `perTokenDelay`
   (baseDelay), diagram-label tokens (text inside `svg`) cost
   `perDiagramTokenDelay` (baseDelay × 1.75; labels are a proxy for structural
   density), `minStepDelay` (baseDelay × 25) floors everything, and callout

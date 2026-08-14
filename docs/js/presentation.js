@@ -77,7 +77,7 @@
      A "token" is a word, weighted by length: ceil(letters / 5). So "variables"
      counts ~2, "and" counts 1 (the chars-per-5 standard behind WPM math).
      Delays are for 1x; the speed control's timeScale handles the rest. */
-  var baseDelay = 190;            // THE pacing knob; everything below scales from it
+  var baseDelay = 200;            // THE pacing knob; everything below scales from it
   var perTokenDelay = baseDelay;                 // ms per prose token
   var perDiagramTokenDelay = baseDelay * 1.75;   // ms per diagram-label token (labels ~ structure)
   var minStepDelay = baseDelay * 25;             // floor: no scene flashes past
