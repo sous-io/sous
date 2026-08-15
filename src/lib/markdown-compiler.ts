@@ -557,8 +557,16 @@ ${taskFileContents}
         subheading("Done.", "✓");
       }
 
-      // Update state with fresh entries
-      state.files = stateFileEntries;
+      // Update state: fresh entries for everything compiled this pass, plus
+      // carried-forward entries for outputs this pass did not touch — other
+      // targets' outputs during a partial rebuild, and outputs dropped from the
+      // config, which must stay tracked so prune/clear can still find them.
+      // Entries whose files are gone from disk are released.
+      const writtenDests = new Set(stateFileEntries.map((e) => e.dest));
+      state.files = [
+        ...stateFileEntries,
+        ...state.files.filter((f) => !writtenDests.has(f.dest) && fs.existsSync(f.dest)),
+      ];
       state.lastBuild = new Date().toISOString();
 
       if (stateFilePath && !this.dryRun) {

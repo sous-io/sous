@@ -138,9 +138,10 @@ export class BuildService {
 
     let success = true;
 
-    // When --rebuild, clear all previously written files before compiling so that
-    // orphaned outputs (files no longer produced by the current config) are removed.
-    // Prune cannot catch these because compile overwrites the state file before prune runs.
+    // When --rebuild, clear all previously written files before compiling so the
+    // rebuild starts from a physically clean slate. Orphaned outputs are also
+    // caught by prune (compile carries prior state entries forward), so this is
+    // the aggressive path: delete everything up front rather than prune after.
     if (options.rebuild && !options.dryRun && !options.noCompile) {
       const existingState = await stateService.load(stateFilePath);
       if (existingState?.files.length) {
