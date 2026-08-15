@@ -78,7 +78,7 @@ export default class Compile extends BaseCommand {
     }
 
     if (flags.watch) {
-      const watchConfig = resolveWatchConfig(project, rootScope, project.key);
+      const watchConfig = resolveWatchConfig(project, rootScope, project.key, this.settings);
       const watchService = new WatchService();
 
       watchService.watch(watchConfig, async (changedFile) => {

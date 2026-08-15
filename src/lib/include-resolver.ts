@@ -92,6 +92,24 @@ export function resolveIncludeCandidates(
 }
 
 /**
+ * Expand a leading alias segment in a path or glob pattern to one candidate
+ * per alias base, in the alias's base order. Used for config entry paths
+ * (`entryGlob`/watch patterns), where — unlike @include resolution — there is
+ * no including file to supply a relative fallback, so a non-alias path is
+ * returned unchanged as the sole candidate.
+ *
+ * @param p - The path or glob pattern (already ${var}-substituted).
+ * @param aliases - The resolved alias map (name → ordered base dirs).
+ * @returns Ordered candidate paths/patterns; `[p]` when no alias applies.
+ */
+export function resolveAliasPrefix(p: string, aliases: AliasMap): string[] {
+  if (path.isAbsolute(p)) return [p];
+  const { key, rest } = splitAliasKey(p);
+  if (!key || !Object.prototype.hasOwnProperty.call(aliases, key)) return [p];
+  return aliases[key].map((base) => path.resolve(base, rest));
+}
+
+/**
  * Build the resolved alias map from built-in aliases and user-defined
  * `_aliases` entries.
  *
