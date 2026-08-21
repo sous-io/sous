@@ -114,7 +114,7 @@ export default class Build extends BaseCommand {
        */
       const buildWatchConfig = () => {
         const currentRootScope = resolveRootScope(this.settings, this.configContext);
-        const config = resolveWatchConfig(project, currentRootScope, project.key);
+        const config = resolveWatchConfig(project, currentRootScope, project.key, this.settings);
         config.fullRebuildPaths = [
           ...(config.fullRebuildPaths ?? []),
           configPath,

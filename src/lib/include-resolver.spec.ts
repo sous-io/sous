@@ -3,8 +3,44 @@ import {
   substituteVars,
   splitAliasKey,
   resolveIncludeCandidates,
+  resolveAliasPrefix,
   buildAliasMap,
 } from "./include-resolver.js";
+
+describe("resolveAliasPrefix()", () => {
+  const aliases = {
+    "~sous-shared": ["/opt/sous/shared-prompts"],
+    team: ["/team/prompts", "/opt/sous/shared-prompts"],
+  };
+
+  it("returns an absolute path unchanged as the sole candidate", () => {
+    expect(resolveAliasPrefix("/abs/skills/**/*", aliases)).toEqual(["/abs/skills/**/*"]);
+  });
+
+  it("returns a non-alias relative pattern unchanged", () => {
+    expect(resolveAliasPrefix("skills/**/*", aliases)).toEqual(["skills/**/*"]);
+  });
+
+  it("expands an alias to one candidate per base, in base order", () => {
+    expect(resolveAliasPrefix("team/skills/**/*", aliases)).toEqual([
+      "/team/prompts/skills/**/*",
+      "/opt/sous/shared-prompts/skills/**/*",
+    ]);
+  });
+
+  it("expands a built-in ~ alias", () => {
+    expect(resolveAliasPrefix("~sous-shared/skills/**/*", aliases)).toEqual([
+      "/opt/sous/shared-prompts/skills/**/*",
+    ]);
+  });
+
+  it("accepts the colon separator", () => {
+    expect(resolveAliasPrefix("team:skills/**/*", aliases)).toEqual([
+      "/team/prompts/skills/**/*",
+      "/opt/sous/shared-prompts/skills/**/*",
+    ]);
+  });
+});
 
 describe("substituteVars()", () => {
   it("substitutes known vars and leaves unknown ones", () => {

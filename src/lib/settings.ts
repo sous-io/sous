@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { globSync } from "glob";
 import { inferGlobBase, type CompilationConfig, type CompilationTarget, type ResolvedRuntimeContext } from "./markdown-compiler.js";
-import { buildAliasMap, type AliasMap } from "./include-resolver.js";
+import { buildAliasMap, resolveAliasPrefix, type AliasMap } from "./include-resolver.js";
 import { ENV_DEFAULTS_NAME, ENV_LOCAL_NAME, SOUS_DIR_NAME } from "./config-discovery.js";
 import { warning } from "../utils/formatting.js";
 
@@ -617,13 +617,26 @@ export function resolveProjectCompilation(
       }
 
       /* c8 ignore start */
-      // Glob target: expand pattern into one CompilationTarget per matched file, skipping dirs
-      const pattern = substituteVarsStrict(target.entryGlob!, targetScope, `${where}.entryGlob`);
-      const matchedFiles = globSync(pattern, { absolute: true })
-        .filter(filePath => fs.statSync(filePath).isFile());
+      // Glob target: expand pattern into one CompilationTarget per matched file, skipping dirs.
+      // A leading alias (`~sous-shared/skills/**`) expands to one candidate pattern per alias
+      // base; the first base that matches any files wins, mirroring the first-existing-wins
+      // rule of @include resolution.
+      const rawPattern = substituteVarsStrict(target.entryGlob!, targetScope, `${where}.entryGlob`);
+      const patternCandidates = resolveAliasPrefix(rawPattern, aliases);
+      let pattern = patternCandidates[0];
+      let matchedFiles: string[] = [];
+      for (const candidate of patternCandidates) {
+        const matches = globSync(candidate, { absolute: true })
+          .filter(filePath => fs.statSync(filePath).isFile());
+        if (matches.length > 0) {
+          pattern = candidate;
+          matchedFiles = matches;
+          break;
+        }
+      }
 
       if (matchedFiles.length === 0) {
-        warning(`Glob pattern matched no files:\n${pattern}`);
+        warning(`Glob pattern matched no files:\n${patternCandidates.join("\n")}`);
       }
 
       const globBase = normalizeConfigPath(
@@ -662,16 +675,22 @@ export type WatchConfig = {
  *
  * - entryPoint targets → exact file path in `files`.
  * - entryGlob targets → resolved glob string in `globs`.
+ *
+ * When `settings` is provided, alias prefixes in entryGlob patterns are
+ * expanded (every base of the alias is watched, matching compile's
+ * fall-through resolution); without it, patterns pass through as before.
  */
 export function resolveWatchConfig(
   project: RawProject,
   rootScope: VarScope = {},
-  projectKey = project.name
+  projectKey = project.name,
+  settings?: Settings
 ): WatchConfig {
   if (!project.compilation) return { files: [], globs: [] };
 
   const projectScope = resolveScope(project._vars ?? {}, rootScope);
   const compilationScope = resolveScope(project.compilation._vars ?? {}, projectScope);
+  const aliases = settings ? resolveAliases(settings, project, projectScope) : undefined;
   const files: string[] = [];
   const globs: string[] = [];
 
@@ -684,7 +703,8 @@ export function resolveWatchConfig(
     }
 
     if (target.entryGlob) {
-      globs.push(substituteVarsStrict(target.entryGlob, targetScope, `${where}.entryGlob`));
+      const pattern = substituteVarsStrict(target.entryGlob, targetScope, `${where}.entryGlob`);
+      globs.push(...(aliases ? resolveAliasPrefix(pattern, aliases) : [pattern]));
     }
   }
 
