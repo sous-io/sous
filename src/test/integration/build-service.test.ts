@@ -259,6 +259,66 @@ describe("BuildService", () => {
     });
 
     /**
+     * A PLAIN build (compile + prune, no flags) removes a file dropped from the config.
+     *
+     * This is the everyday workflow — edit the config, run `xcv build` — with no
+     * noCompile workaround. It regresses the orphaning bug where compile replaced
+     * state.files wholesale with only the current pass's outputs, so by the time
+     * prune ran the dropped file was already gone from state and survived on disk
+     * forever (no later prune, build, or clear could ever find it).
+     *
+     * Example: V1 writes stale.md and keep.md → state = [stale.md, keep.md].
+     * V2 config drops stale.md. Plain build(V2) → stale.md deleted from disk and
+     * state; keep.md untouched.
+     */
+    it("should remove a file dropped from the config on a plain build", async () => {
+      const staleFile = path.join(tmp.path, "stale.md");
+
+      // V1: two outputs from the same source
+      const settingsV1 = makeProjectSettings({
+        name: "Test Project",
+        compilation: {
+          targets: [
+            {
+              entryPoint: srcFile,
+              outputs: [
+                { destinationFile: destFile },
+                { destinationFile: staleFile },
+              ],
+            },
+          ],
+        },
+      });
+
+      const service = new BuildService();
+      await build(service, settingsV1);
+      expect(fs.existsSync(staleFile)).toBe(true);
+
+      // V2: staleFile is dropped; run a PLAIN build — no noCompile, no rebuild
+      const settingsV2 = makeProjectSettings({
+        name: "Test Project",
+        compilation: {
+          targets: [
+            {
+              entryPoint: srcFile,
+              outputs: [{ destinationFile: destFile }],
+            },
+          ],
+        },
+      });
+
+      await build(service, settingsV2);
+
+      expect(fs.existsSync(staleFile)).toBe(false);
+      expect(fs.existsSync(destFile)).toBe(true);
+
+      const stateService = new StateService();
+      const state = await stateService.load(stateFilePath);
+      expect(state?.files.find((f) => f.dest === staleFile)).toBeUndefined();
+      expect(state?.files.find((f) => f.dest === destFile)).toBeDefined();
+    });
+
+    /**
      * prune() removes an empty Sous-created directory after its last output file is pruned.
      *
      * Step 1: build() writes output into a new subdirectory and records the dir in state.dirs.

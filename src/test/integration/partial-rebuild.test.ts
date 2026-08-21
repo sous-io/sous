@@ -5,6 +5,7 @@ import { makeTmpDir, type TmpDir } from "../utils/tmp.js";
 import { makeSettings } from "../utils/settings.js";
 import type { ConfigContext, Settings } from "../../lib/settings.js";
 import { BuildService, type BuildOptions } from "../../lib/build-service.js";
+import { StateService } from "../../lib/state.js";
 
 describe("BuildService", () => {
   describe("build() with changedFile", () => {
@@ -188,6 +189,51 @@ describe("BuildService", () => {
       expect(ok).toBe(true);
       expect(fs.existsSync(destA)).toBe(true);
       expect(fs.existsSync(destB)).toBe(true);
+    });
+
+    /**
+     * A partial rebuild must not truncate the state file to the changed target.
+     *
+     * During `build --watch`, a change to source A narrows compilation to target A.
+     * The compiler writes state from what it compiled this pass, so without the
+     * carry-forward merge, target B's entry vanished from state on every watch
+     * event — leaving clear/prune blind to output-b.md for the rest of the session.
+     *
+     * Example: full build writes output-a.md and output-b.md → state = [A, B].
+     * build({changedFile: a.md}) compiles only target A.
+     * Expected: state still contains BOTH entries.
+     */
+    it("should keep other targets' state entries after a partial rebuild", async () => {
+      const srcA = path.join(tmp.path, "a.md");
+      const srcB = path.join(tmp.path, "b.md");
+      const destA = path.join(tmp.path, "output-a.md");
+      const destB = path.join(tmp.path, "output-b.md");
+
+      fs.writeFileSync(srcA, "# File A\n", "utf8");
+      fs.writeFileSync(srcB, "# File B\n", "utf8");
+
+      const settings = makeProjectSettings({
+        name: "Test Project",
+        compilation: {
+          targets: [
+            { entryPoint: srcA, outputs: [{ destinationFile: destA }] },
+            { entryPoint: srcB, outputs: [{ destinationFile: destB }] },
+          ],
+        },
+      });
+
+      const service = new BuildService();
+      await build(service, settings);
+
+      // Touch source A and rebuild only its target, as the watcher would
+      fs.writeFileSync(srcA, "# File A (edited)\n", "utf8");
+      const ok = await build(service, settings, { changedFile: srcA });
+      expect(ok).toBe(true);
+
+      const stateService = new StateService();
+      const state = await stateService.load(path.join(tmp.path, "sous.state.json"));
+      expect(state?.files.find((f) => f.dest === destA)).toBeDefined();
+      expect(state?.files.find((f) => f.dest === destB)).toBeDefined();
     });
   });
 });
