@@ -55,18 +55,14 @@ describe("launch pass-through args", () => {
     fs.writeFileSync(
       configPath,
       JSON.stringify({
-        projects: {
-          demo: {
-            name: "Demo",
-            _vars: { projectRoot: "${sousDir}/.." },
-            tools: {
-              dump: { command: process.execPath, args: [dumpScript, "--defined-arg"] },
-              dumpWithPrompt: {
-                command: process.execPath,
-                args: [dumpScript, "--defined-arg"],
-                promptFile,
-              },
-            },
+        name: "Demo",
+        _vars: { projectRoot: "${sousDir}/.." },
+        tools: {
+          dump: { command: process.execPath, args: [dumpScript, "--defined-arg"] },
+          dumpWithPrompt: {
+            command: process.execPath,
+            args: [dumpScript, "--defined-arg"],
+            promptFile,
           },
         },
       })
@@ -117,7 +113,7 @@ describe("launch pass-through args", () => {
    * otherwise parse as sous flags: claude's `-c` (--continue) and `-p` (print)
    * collide with sous's --config/--project shorthands, and `--` is the escape
    * hatch. sous must still resolve its own config normally (here via discovery
-   * from cwd plus the single-project default).
+   * from cwd).
    *
    * xcv launch dump --no-build -- -c -p hello
    *   → tool receives ["--defined-arg", "-c", "-p", "hello"]

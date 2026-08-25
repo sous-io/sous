@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   substituteVars,
@@ -7,12 +9,14 @@ import {
   buildAutoVars,
   resolveEnvScope,
   resolveRootScope,
-  resolveProjectTools,
+  resolveTools,
   resolveWatchConfig,
-  resolveProjectCompilation,
+  resolveCompilation,
+  loadSettings,
+  isConfigError,
   type Settings,
-  type RawProject,
 } from "./settings.js";
+import { makeTmpDir } from "../test/utils/tmp.js";
 
 // ---------------------------------------------------------------------------
 // substituteVars()
@@ -132,11 +136,11 @@ describe("substituteVarsStrict()", () => {
    * substituteVarsStrict() should throw when a reference cannot be resolved,
    * naming the variable and the place it was referenced from.
    *
-   * substituteVarsStrict("${typo}/x", {}, "project 'p' → targets[0].entryPoint");
+   * substituteVarsStrict("${typo}/x", {}, "compilation.targets[0].entryPoint");
    * // -> throws Error naming "${typo}" and the context string
    */
   it("should throw naming the variable and the context", () => {
-    const where = "project 'p' → compilation.targets[0].entryPoint";
+    const where = "compilation.targets[0].entryPoint";
     expect(() => substituteVarsStrict("${typo}/x", { other: "y" }, where)).toThrow(/\$\{typo\}/);
     expect(() => substituteVarsStrict("${typo}/x", { other: "y" }, where)).toThrow(
       /compilation\.targets\[0\]\.entryPoint/
@@ -364,14 +368,13 @@ describe("resolveEnvScope()", () => {
    * corresponding environment variable when it is set.
    *
    * // process.env.MY_HOME = "/home/user"
-   * resolveEnvScope({ _env: { userHome: "MY_HOME" }, projects: {} });
+   * resolveEnvScope({ _env: { userHome: "MY_HOME" } });
    * // -> { userHome: "/home/user" }
    */
   it("should map config var names to environment variable values", () => {
     vi.stubEnv("MY_HOME", "/home/user");
     const settings: Settings = {
       _env: { userHome: "MY_HOME" },
-      projects: {},
     };
     const scope = resolveEnvScope(settings);
     expect(scope.userHome).toBe("/home/user");
@@ -381,14 +384,13 @@ describe("resolveEnvScope()", () => {
    * resolveEnvScope() should throw a descriptive error when a referenced
    * environment variable is not set in process.env.
    *
-   * resolveEnvScope({ _env: { missingVar: "NOT_SET_XYZ" }, projects: {} });
+   * resolveEnvScope({ _env: { missingVar: "NOT_SET_XYZ" } });
    * // -> throws Error containing "NOT_SET_XYZ"
    */
   it("should throw when a referenced environment variable is not set", () => {
     // Ensure the env var is definitely not set
     const settings: Settings = {
       _env: { missingVar: "SOUS_TEST_NOT_SET_XYZ_12345" },
-      projects: {},
     };
     expect(() => resolveEnvScope(settings)).toThrow(/SOUS_TEST_NOT_SET_XYZ_12345/);
   });
@@ -403,7 +405,6 @@ describe("resolveEnvScope()", () => {
   it("should name the discovered .sous/.env.local file in the error", () => {
     const settings: Settings = {
       _env: { missingVar: "SOUS_TEST_NOT_SET_XYZ_12345" },
-      projects: {},
     };
     const context = { sousDir: "/proj/.sous", configPath: "/proj/.sous/sous.config.js" };
     expect(() => resolveEnvScope(settings, context)).toThrow(
@@ -420,7 +421,6 @@ describe("resolveEnvScope()", () => {
   it("should mention .sous/.env.local generically when no context is supplied", () => {
     const settings: Settings = {
       _env: { missingVar: "SOUS_TEST_NOT_SET_XYZ_12345" },
-      projects: {},
     };
     expect(() => resolveEnvScope(settings)).toThrow(/\.sous\/\.env\.local/);
   });
@@ -429,11 +429,11 @@ describe("resolveEnvScope()", () => {
    * resolveEnvScope() should return an empty scope when the settings object
    * has no _env block.
    *
-   * resolveEnvScope({ projects: {} });
+   * resolveEnvScope({});
    * // -> {}
    */
   it("should return an empty scope when _env is absent", () => {
-    const settings: Settings = { projects: {} };
+    const settings: Settings = {};
     expect(resolveEnvScope(settings)).toEqual({});
   });
 
@@ -442,7 +442,7 @@ describe("resolveEnvScope()", () => {
    * in a single call.
    *
    * // process.env.ALPHA = "a", process.env.BETA = "b"
-   * resolveEnvScope({ _env: { alpha: "ALPHA", beta: "BETA" }, projects: {} });
+   * resolveEnvScope({ _env: { alpha: "ALPHA", beta: "BETA" } });
    * // -> { alpha: "a", beta: "b" }
    */
   it("should resolve multiple env var mappings", () => {
@@ -450,7 +450,6 @@ describe("resolveEnvScope()", () => {
     vi.stubEnv("BETA_TEST_VAR", "b");
     const settings: Settings = {
       _env: { alpha: "ALPHA_TEST_VAR", beta: "BETA_TEST_VAR" },
-      projects: {},
     };
     const scope = resolveEnvScope(settings);
     expect(scope).toEqual({ alpha: "a", beta: "b" });
@@ -470,11 +469,11 @@ describe("resolveRootScope()", () => {
    * resolveRootScope() should include the auto-vars (sousRootPath, sousVersion)
    * in the returned scope.
    *
-   * resolveRootScope({ projects: {} });
+   * resolveRootScope({});
    * // -> { sousRootPath: "...", sousVersion: "...", ... }
    */
   it("should include auto-vars in the returned scope", () => {
-    const scope = resolveRootScope({ projects: {} });
+    const scope = resolveRootScope({});
     expect(typeof scope.sousRootPath).toBe("string");
     expect(typeof scope.sousVersion).toBe("string");
   });
@@ -487,7 +486,6 @@ describe("resolveRootScope()", () => {
    * resolveRootScope({
    *   _env: { codeBase: "CODE_BASE" },
    *   _vars: { projectRoot: "${codeBase}/myapp" },
-   *   projects: {}
    * });
    * // -> { ..., codeBase: "/projects", projectRoot: "/projects/myapp" }
    */
@@ -496,7 +494,6 @@ describe("resolveRootScope()", () => {
     const settings: Settings = {
       _env: { codeBase: "CODE_BASE_TEST" },
       _vars: { projectRoot: "${codeBase}/myapp" },
-      projects: {},
     };
     const scope = resolveRootScope(settings);
     expect(scope.codeBase).toBe("/projects");
@@ -509,14 +506,12 @@ describe("resolveRootScope()", () => {
    *
    * resolveRootScope({
    *   _vars: { myPath: "${sousRootPath}/configs" },
-   *   projects: {}
    * });
    * // -> { ..., myPath: "<sousRootPath>/configs" }
    */
   it("should allow root _vars to reference auto-vars", () => {
     const settings: Settings = {
       _vars: { myPath: "${sousRootPath}/configs" },
-      projects: {},
     };
     const scope = resolveRootScope(settings);
     const autoVars = buildAutoVars();
@@ -525,127 +520,124 @@ describe("resolveRootScope()", () => {
 });
 
 // ---------------------------------------------------------------------------
-// resolveProjectTools()
+// resolveTools()
 // ---------------------------------------------------------------------------
 
-describe("resolveProjectTools()", () => {
+describe("resolveTools()", () => {
   /**
-   * resolveProjectTools() should return an empty object when the project has
+   * resolveTools() should return an empty object when the project has
    * no tools configured.
    *
-   * resolveProjectTools({ name: "My Project", compilation: undefined });
+   * resolveTools({ name: "My Project", compilation: undefined });
    * // -> {}
    */
   it("should return an empty object when the project has no tools", () => {
-    const project: RawProject = { name: "My Project" };
-    expect(resolveProjectTools(project)).toEqual({});
+    const settings: Settings = { name: "My Project" };
+    expect(resolveTools(settings)).toEqual({});
   });
 
   /**
-   * resolveProjectTools() should resolve ${varName} references in promptFile
-   * paths using the project-scoped vars.
+   * resolveTools() should resolve ${varName} references in promptFile
+   * paths using the resolved settings scope.
    *
-   * resolveProjectTools(
-   *   { name: "P", _vars: { root: "/home/user" },
-   *     tools: { claude: { command: "claude", promptFile: "${root}/CLAUDE.md" } } },
-   *   {}
-   * );
+   * resolveTools(settings, resolveRootScope(settings));
+   * // with _vars: { root: "/home/user" } and promptFile "${root}/CLAUDE.md"
    * // -> { claude: { command: "claude", promptFile: "/home/user/CLAUDE.md" } }
    */
-  it("should resolve promptFile paths using project-scoped vars", () => {
-    const project: RawProject = {
+  it("should resolve promptFile paths using the settings scope", () => {
+    const settings: Settings = {
       name: "P",
       _vars: { root: "/home/user" },
       tools: {
         claude: { command: "claude", promptFile: "${root}/CLAUDE.md" },
       },
     };
-    const result = resolveProjectTools(project, {});
+    const result = resolveTools(settings, resolveRootScope(settings));
     expect(result.claude.promptFile).toBe("/home/user/CLAUDE.md");
   });
 
   /**
-   * resolveProjectTools() should pass through the command string unchanged.
+   * resolveTools() should pass through the command string unchanged.
    *
-   * resolveProjectTools({ name: "P", tools: { claude: { command: "claude" } } });
+   * resolveTools({ name: "P", tools: { claude: { command: "claude" } } });
    * // -> { claude: { command: "claude" } }
    */
   it("should pass through the command unchanged", () => {
-    const project: RawProject = {
+    const settings: Settings = {
       name: "P",
       tools: { claude: { command: "claude" } },
     };
-    const result = resolveProjectTools(project, {});
+    const result = resolveTools(settings, {});
     expect(result.claude.command).toBe("claude");
   });
 
   /**
-   * resolveProjectTools() should pass through the args array unchanged.
+   * resolveTools() should pass through the args array unchanged.
    *
-   * resolveProjectTools(
+   * resolveTools(
    *   { name: "P", tools: { claude: { command: "claude", args: ["--verbose"] } } }
    * );
    * // -> { claude: { command: "claude", args: ["--verbose"] } }
    */
   it("should pass through args unchanged", () => {
-    const project: RawProject = {
+    const settings: Settings = {
       name: "P",
       tools: { claude: { command: "claude", args: ["--verbose"] } },
     };
-    const result = resolveProjectTools(project, {});
+    const result = resolveTools(settings, {});
     expect(result.claude.args).toEqual(["--verbose"]);
   });
 
   /**
-   * resolveProjectTools() should omit the promptFile key from the result when
+   * resolveTools() should omit the promptFile key from the result when
    * it is not set on the tool config.
    *
-   * resolveProjectTools({ name: "P", tools: { claude: { command: "claude" } } });
+   * resolveTools({ name: "P", tools: { claude: { command: "claude" } } });
    * // -> { claude: { command: "claude" } }  (no promptFile key)
    */
   it("should omit promptFile from the result when not set on the tool config", () => {
-    const project: RawProject = {
+    const settings: Settings = {
       name: "P",
       tools: { claude: { command: "claude" } },
     };
-    const result = resolveProjectTools(project, {});
+    const result = resolveTools(settings, {});
     expect("promptFile" in result.claude).toBe(false);
   });
 
   /**
-   * resolveProjectTools() should use rootScope vars when resolving promptFile
+   * resolveTools() should use rootScope vars when resolving promptFile
    * if the project has no _vars of its own.
    *
-   * resolveProjectTools(
+   * resolveTools(
    *   { name: "P", tools: { myTool: { command: "run", promptFile: "${base}/prompt.md" } } },
    *   { base: "/root" }
    * );
    * // -> { myTool: { command: "run", promptFile: "/root/prompt.md" } }
    */
   it("should fall back to rootScope vars when the project has no _vars", () => {
-    const project: RawProject = {
+    const settings: Settings = {
       name: "P",
       tools: { myTool: { command: "run", promptFile: "${base}/prompt.md" } },
     };
-    const result = resolveProjectTools(project, { base: "/root" });
+    const result = resolveTools(settings, { base: "/root" });
     expect(result.myTool.promptFile).toBe("/root/prompt.md");
   });
 
   /**
-   * resolveProjectTools() should throw when a promptFile references a variable
+   * resolveTools() should throw when a promptFile references a variable
    * that is not in scope, rather than handing the launcher a literal `${var}`
    * path that will fail later with a confusing "file not found".
    *
-   * resolveProjectTools({ name: "P", tools: { t: { command: "c", promptFile: "${typo}/x" } } }, {});
+   * resolveTools({ name: "P", tools: { t: { command: "c", promptFile: "${typo}/x" } } }, {});
    * // -> throws Error naming ${typo} and tools.t.promptFile
    */
   it("should throw when a promptFile references an unknown variable", () => {
-    const project: RawProject = {
+    const settings: Settings = {
       name: "P",
       tools: { claude: { command: "claude", promptFile: "${typo}/CLAUDE.md" } },
     };
-    expect(() => resolveProjectTools(project, {}, "p")).toThrow(/\$\{typo\}/);
-    expect(() => resolveProjectTools(project, {}, "p")).toThrow(/tools\.claude\.promptFile/);
+    expect(() => resolveTools(settings, {})).toThrow(/\$\{typo\}/);
+    expect(() => resolveTools(settings, {})).toThrow(/tools\.claude\.promptFile/);
   });
 });
 
@@ -662,30 +654,27 @@ describe("resolveWatchConfig()", () => {
    * // -> { files: [], globs: [] }
    */
   it("should return empty files and globs when project has no compilation", () => {
-    const project: RawProject = { name: "P" };
-    expect(resolveWatchConfig(project)).toEqual({ files: [], globs: [] });
+    const settings: Settings = { name: "P" };
+    expect(resolveWatchConfig(settings)).toEqual({ files: [], globs: [] });
   });
 
   /**
    * resolveWatchConfig() should put entryPoint targets into the files array
    * with variable substitution applied.
    *
-   * resolveWatchConfig(
-   *   { name: "P", _vars: { root: "/proj" },
-   *     compilation: { targets: [{ entryPoint: "${root}/AGENTS.md", outputs: [] }] } },
-   *   {}
-   * );
+   * resolveWatchConfig(settings, resolveRootScope(settings));
+   * // with _vars: { root: "/proj" } and entryPoint "${root}/AGENTS.md"
    * // -> { files: ["/proj/AGENTS.md"], globs: [] }
    */
   it("should put entryPoint targets into the files array with var substitution", () => {
-    const project: RawProject = {
+    const settings: Settings = {
       name: "P",
       _vars: { root: "/proj" },
       compilation: {
         targets: [{ entryPoint: "${root}/AGENTS.md", outputs: [] }],
       },
     };
-    const result = resolveWatchConfig(project, {});
+    const result = resolveWatchConfig(settings, resolveRootScope(settings));
     expect(result.files).toEqual(["/proj/AGENTS.md"]);
     expect(result.globs).toEqual([]);
   });
@@ -694,22 +683,19 @@ describe("resolveWatchConfig()", () => {
    * resolveWatchConfig() should put entryGlob targets into the globs array
    * with variable substitution applied.
    *
-   * resolveWatchConfig(
-   *   { name: "P", _vars: { root: "/proj" },
-   *     compilation: { targets: [{ entryGlob: "${root}/skills/**\/*.md", outputs: [] }] } },
-   *   {}
-   * );
+   * resolveWatchConfig(settings, resolveRootScope(settings));
+   * // with _vars: { root: "/proj" } and entryGlob "${root}/skills/**\/*.md"
    * // -> { files: [], globs: ["/proj/skills/**\/*.md"] }
    */
   it("should put entryGlob targets into the globs array with var substitution", () => {
-    const project: RawProject = {
+    const settings: Settings = {
       name: "P",
       _vars: { root: "/proj" },
       compilation: {
         targets: [{ entryGlob: "${root}/skills/**/*.md", outputs: [] }],
       },
     };
-    const result = resolveWatchConfig(project, {});
+    const result = resolveWatchConfig(settings, resolveRootScope(settings));
     expect(result.globs).toEqual(["/proj/skills/**/*.md"]);
     expect(result.files).toEqual([]);
   });
@@ -727,7 +713,7 @@ describe("resolveWatchConfig()", () => {
    * // -> { files: ["/same/file.md"], globs: [] }
    */
   it("should deduplicate identical file entries", () => {
-    const project: RawProject = {
+    const settings: Settings = {
       name: "P",
       compilation: {
         targets: [
@@ -736,7 +722,7 @@ describe("resolveWatchConfig()", () => {
         ],
       },
     };
-    const result = resolveWatchConfig(project, {});
+    const result = resolveWatchConfig(settings, {});
     expect(result.files).toEqual(["/same/file.md"]);
   });
 
@@ -753,7 +739,7 @@ describe("resolveWatchConfig()", () => {
    * // -> { files: [], globs: ["/skills/**\/*.md"] }
    */
   it("should deduplicate identical glob entries", () => {
-    const project: RawProject = {
+    const settings: Settings = {
       name: "P",
       compilation: {
         targets: [
@@ -762,7 +748,7 @@ describe("resolveWatchConfig()", () => {
         ],
       },
     };
-    const result = resolveWatchConfig(project, {});
+    const result = resolveWatchConfig(settings, {});
     expect(result.globs).toEqual(["/skills/**/*.md"]);
   });
 
@@ -779,7 +765,7 @@ describe("resolveWatchConfig()", () => {
    * // -> { files: ["/file.md"], globs: ["/skills/**\/*.md"] }
    */
   it("should handle a mix of entryPoint and entryGlob targets", () => {
-    const project: RawProject = {
+    const settings: Settings = {
       name: "P",
       compilation: {
         targets: [
@@ -788,7 +774,7 @@ describe("resolveWatchConfig()", () => {
         ],
       },
     };
-    const result = resolveWatchConfig(project, {});
+    const result = resolveWatchConfig(settings, {});
     expect(result.files).toEqual(["/file.md"]);
     expect(result.globs).toEqual(["/skills/**/*.md"]);
   });
@@ -801,73 +787,64 @@ describe("resolveWatchConfig()", () => {
    * // -> throws Error naming ${typo}
    */
   it("should throw when an entry path references an unknown variable", () => {
-    const project: RawProject = {
+    const settings: Settings = {
       name: "P",
       compilation: {
         targets: [{ entryPoint: "${typo}/AGENTS.md", outputs: [] }],
       },
     };
-    expect(() => resolveWatchConfig(project, {})).toThrow(/\$\{typo\}/);
+    expect(() => resolveWatchConfig(settings, {})).toThrow(/\$\{typo\}/);
   });
 });
 
 // ---------------------------------------------------------------------------
-// resolveProjectCompilation()
+// resolveCompilation()
 // ---------------------------------------------------------------------------
 
-describe("resolveProjectCompilation()", () => {
+describe("resolveCompilation()", () => {
   /**
-   * resolveProjectCompilation() should return null when the project has no
+   * resolveCompilation() should return null when the project has no
    * compilation config.
    *
-   * resolveProjectCompilation({ name: "P" });
+   * resolveCompilation({ name: "P" });
    * // -> null
    */
   it("should return null when project has no compilation config", () => {
-    const project: RawProject = { name: "P" };
-    expect(resolveProjectCompilation(project)).toBeNull();
+    const settings: Settings = { name: "P" };
+    expect(resolveCompilation(settings)).toBeNull();
   });
 
   /**
-   * resolveProjectCompilation() should resolve an entryPoint target, performing
+   * resolveCompilation() should resolve an entryPoint target, performing
    * variable substitution on the path.
    *
-   * resolveProjectCompilation(
-   *   { name: "P", _vars: { root: "/proj" },
-   *     compilation: { targets: [{ entryPoint: "${root}/AGENTS.md", outputs: [] }] } },
-   *   {}
-   * );
+   * resolveCompilation(settings, resolveRootScope(settings));
+   * // with _vars: { root: "/proj" } and entryPoint "${root}/AGENTS.md"
    * // -> { targets: [{ rootInputPath: "/proj/AGENTS.md", ... }] }
    */
   it("should resolve a single entryPoint target with var substitution", () => {
-    const project: RawProject = {
+    const settings: Settings = {
       name: "P",
       _vars: { root: "/proj" },
       compilation: {
         targets: [{ entryPoint: "${root}/AGENTS.md", outputs: [] }],
       },
     };
-    const result = resolveProjectCompilation(project, {});
+    const result = resolveCompilation(settings, resolveRootScope(settings));
     expect(result).not.toBeNull();
     expect(result!.targets[0].rootInputPath).toBe("/proj/AGENTS.md");
   });
 
   /**
-   * resolveProjectCompilation() should resolve output destinationFile paths
+   * resolveCompilation() should resolve output destinationFile paths
    * with variable substitution.
    *
-   * resolveProjectCompilation(
-   *   { name: "P", _vars: { root: "/proj" },
-   *     compilation: { targets: [{
-   *       entryPoint: "/src.md",
-   *       outputs: [{ destinationFile: "${root}/out.md" }]
-   *     }] } },
-   *   {}
-   * );
+   * resolveCompilation(settings, resolveRootScope(settings));
+   * // with _vars: { root: "/proj" } and destinationFile "${root}/out.md"
    * // -> targets[0].outputs[0].destinationFile === "/proj/out.md"
    */
   it("should resolve output destinationFile with var substitution", () => {
-    const project: RawProject = {
+    const settings: Settings = {
       name: "P",
       _vars: { root: "/proj" },
       compilation: {
@@ -877,26 +854,20 @@ describe("resolveProjectCompilation()", () => {
         }],
       },
     };
-    const result = resolveProjectCompilation(project, {});
+    const result = resolveCompilation(settings, resolveRootScope(settings));
     expect(result!.targets[0].outputs[0].destinationFile).toBe("/proj/out.md");
   });
 
   /**
-   * resolveProjectCompilation() should resolve output destinationDir paths
+   * resolveCompilation() should resolve output destinationDir paths
    * with variable substitution.
    *
-   * resolveProjectCompilation(
-   *   { name: "P", _vars: { root: "/proj" },
-   *     compilation: { targets: [{
-   *       entryPoint: "/src.md",
-   *       outputs: [{ destinationDir: "${root}/dist" }]
-   *     }] } },
-   *   {}
-   * );
+   * resolveCompilation(settings, resolveRootScope(settings));
+   * // with _vars: { root: "/proj" } and destinationDir "${root}/dist"
    * // -> targets[0].outputs[0].destinationDir === "/proj/dist"
    */
   it("should resolve output destinationDir with var substitution", () => {
-    const project: RawProject = {
+    const settings: Settings = {
       name: "P",
       _vars: { root: "/proj" },
       compilation: {
@@ -906,21 +877,21 @@ describe("resolveProjectCompilation()", () => {
         }],
       },
     };
-    const result = resolveProjectCompilation(project, {});
+    const result = resolveCompilation(settings, resolveRootScope(settings));
     expect(result!.targets[0].outputs[0].destinationDir).toBe("/proj/dist");
   });
 
   /**
-   * resolveProjectCompilation() should throw when a target specifies both
+   * resolveCompilation() should throw when a target specifies both
    * entryPoint and entryGlob, since exactly one is required.
    *
-   * resolveProjectCompilation({ name: "P", compilation: { targets: [{
+   * resolveCompilation({ name: "P", compilation: { targets: [{
    *   entryPoint: "/a.md", entryGlob: "/b/**\/*.md", outputs: []
    * }] } });
    * // -> throws Error
    */
   it("should throw when a target has both entryPoint and entryGlob", () => {
-    const project: RawProject = {
+    const settings: Settings = {
       name: "P",
       compilation: {
         targets: [{
@@ -930,47 +901,41 @@ describe("resolveProjectCompilation()", () => {
         }],
       },
     };
-    expect(() => resolveProjectCompilation(project, {})).toThrow(
+    expect(() => resolveCompilation(settings, {})).toThrow(
       /both entryPoint and entryGlob/
     );
   });
 
   /**
-   * resolveProjectCompilation() should throw when a target specifies neither
+   * resolveCompilation() should throw when a target specifies neither
    * entryPoint nor entryGlob.
    *
-   * resolveProjectCompilation({ name: "P", compilation: { targets: [{ outputs: [] }] } });
+   * resolveCompilation({ name: "P", compilation: { targets: [{ outputs: [] }] } });
    * // -> throws Error
    */
   it("should throw when a target has neither entryPoint nor entryGlob", () => {
-    const project: RawProject = {
+    const settings: Settings = {
       name: "P",
       compilation: {
         // TypeScript would normally prevent this, but test the runtime guard
         targets: [{ outputs: [] } as any],
       },
     };
-    expect(() => resolveProjectCompilation(project, {})).toThrow(
+    expect(() => resolveCompilation(settings, {})).toThrow(
       /either entryPoint or entryGlob/
     );
   });
 
   /**
-   * resolveProjectCompilation() should include an output when its _if condition
+   * resolveCompilation() should include an output when its _if condition
    * matches the current scope value.
    *
-   * resolveProjectCompilation(
-   *   { name: "P", _vars: { env: "prod" },
-   *     compilation: { targets: [{
-   *       entryPoint: "/src.md",
-   *       outputs: [{ _if: { env: { eq: "prod" } }, destinationFile: "/out.md" }]
-   *     }] } },
-   *   {}
-   * );
+   * resolveCompilation(settings, resolveRootScope(settings));
+   * // with _vars: { env: "prod" } and _if: { env: { eq: "prod" } }
    * // -> output is included (1 output)
    */
   it("should include an output when its _if condition matches", () => {
-    const project: RawProject = {
+    const settings: Settings = {
       name: "P",
       _vars: { env: "prod" },
       compilation: {
@@ -980,27 +945,21 @@ describe("resolveProjectCompilation()", () => {
         }],
       },
     };
-    const result = resolveProjectCompilation(project, {});
+    const result = resolveCompilation(settings, resolveRootScope(settings));
     expect(result!.targets[0].outputs).toHaveLength(1);
     expect(result!.targets[0].outputs[0].destinationFile).toBe("/out.md");
   });
 
   /**
-   * resolveProjectCompilation() should exclude an output when its _if condition
+   * resolveCompilation() should exclude an output when its _if condition
    * does not match the current scope value.
    *
-   * resolveProjectCompilation(
-   *   { name: "P", _vars: { env: "dev" },
-   *     compilation: { targets: [{
-   *       entryPoint: "/src.md",
-   *       outputs: [{ _if: { env: { eq: "prod" } }, destinationFile: "/out.md" }]
-   *     }] } },
-   *   {}
-   * );
+   * resolveCompilation(settings, resolveRootScope(settings));
+   * // with _vars: { env: "dev" } and _if: { env: { eq: "prod" } }
    * // -> output is excluded (0 outputs)
    */
   it("should exclude an output when its _if condition does not match", () => {
-    const project: RawProject = {
+    const settings: Settings = {
       name: "P",
       _vars: { env: "dev" },
       compilation: {
@@ -1010,15 +969,15 @@ describe("resolveProjectCompilation()", () => {
         }],
       },
     };
-    const result = resolveProjectCompilation(project, {});
+    const result = resolveCompilation(settings, resolveRootScope(settings));
     expect(result!.targets[0].outputs).toHaveLength(0);
   });
 
   /**
-   * resolveProjectCompilation() should include outputs that have no _if
+   * resolveCompilation() should include outputs that have no _if
    * condition regardless of scope values.
    *
-   * resolveProjectCompilation(
+   * resolveCompilation(
    *   { name: "P", compilation: { targets: [{
    *     entryPoint: "/src.md",
    *     outputs: [{ destinationFile: "/out.md" }]
@@ -1028,7 +987,7 @@ describe("resolveProjectCompilation()", () => {
    * // -> 1 output included
    */
   it("should include outputs with no _if condition unconditionally", () => {
-    const project: RawProject = {
+    const settings: Settings = {
       name: "P",
       compilation: {
         targets: [{
@@ -1037,17 +996,17 @@ describe("resolveProjectCompilation()", () => {
         }],
       },
     };
-    const result = resolveProjectCompilation(project, {});
+    const result = resolveCompilation(settings, {});
     expect(result!.targets[0].outputs).toHaveLength(1);
   });
 
   /**
-   * resolveProjectCompilation() with an entryGlob target should expand the
+   * resolveCompilation() with an entryGlob target should expand the
    * glob pattern and return one CompilationTarget per matched file.
    * globSync and fs.statSync are mocked so no real filesystem access occurs.
    *
    * globSync("/skills/**\/*.md") -> ["/skills/a.md", "/skills/b.md"]
-   * resolveProjectCompilation({ name: "P", compilation: {
+   * resolveCompilation({ name: "P", compilation: {
    *   targets: [{ entryGlob: "/skills/**\/*.md", outputs: [] }]
    * }});
    * // -> targets with rootInputPath "/skills/a.md" and "/skills/b.md"
@@ -1058,30 +1017,30 @@ describe("resolveProjectCompilation()", () => {
   });
 
   /**
-   * resolveProjectCompilation() should throw when an entryPoint references a
+   * resolveCompilation() should throw when an entryPoint references a
    * variable that is not in scope. Previously the reference passed through
    * verbatim and the compiler reported a baffling "file not found: ${typo}/x.md".
    *
-   * resolveProjectCompilation({ ..., targets: [{ entryPoint: "${typo}/x.md", ... }] }, {});
+   * resolveCompilation({ ..., targets: [{ entryPoint: "${typo}/x.md", ... }] }, {});
    * // -> throws Error naming ${typo} and the target index
    */
   it("should throw when an entryPoint references an unknown variable", () => {
-    const project: RawProject = {
+    const settings: Settings = {
       name: "P",
       compilation: {
         targets: [{ entryPoint: "${typo}/AGENTS.md", outputs: [] }],
       },
     };
-    expect(() => resolveProjectCompilation(project, {}, { projects: {} }, "p")).toThrow(
+    expect(() => resolveCompilation(settings, {})).toThrow(
       /\$\{typo\}/
     );
-    expect(() => resolveProjectCompilation(project, {}, { projects: {} }, "p")).toThrow(
+    expect(() => resolveCompilation(settings, {})).toThrow(
       /targets\[0\]\.entryPoint/
     );
   });
 
   /**
-   * resolveProjectCompilation() should throw when a destinationFile references a
+   * resolveCompilation() should throw when a destinationFile references a
    * variable that is not in scope, so sous never writes a directory literally
    * named "${typo}".
    *
@@ -1089,7 +1048,7 @@ describe("resolveProjectCompilation()", () => {
    * // -> throws Error naming ${typo} and outputs[0].destinationFile
    */
   it("should throw when a destinationFile references an unknown variable", () => {
-    const project: RawProject = {
+    const settings: Settings = {
       name: "P",
       compilation: {
         targets: [
@@ -1097,20 +1056,20 @@ describe("resolveProjectCompilation()", () => {
         ],
       },
     };
-    expect(() => resolveProjectCompilation(project, {}, { projects: {} }, "p")).toThrow(
+    expect(() => resolveCompilation(settings, {})).toThrow(
       /outputs\[0\]\.destinationFile/
     );
   });
 
   /**
-   * resolveProjectCompilation() should throw when a destinationDir references a
+   * resolveCompilation() should throw when a destinationDir references a
    * variable that is not in scope.
    *
    * // outputs: [{ destinationDir: "${typo}/dist" }]
    * // -> throws Error naming outputs[0].destinationDir
    */
   it("should throw when a destinationDir references an unknown variable", () => {
-    const project: RawProject = {
+    const settings: Settings = {
       name: "P",
       compilation: {
         targets: [
@@ -1118,20 +1077,20 @@ describe("resolveProjectCompilation()", () => {
         ],
       },
     };
-    expect(() => resolveProjectCompilation(project, {}, { projects: {} }, "p")).toThrow(
+    expect(() => resolveCompilation(settings, {})).toThrow(
       /outputs\[0\]\.destinationDir/
     );
   });
 
   /**
-   * resolveProjectCompilation() should NOT throw for an output that is filtered
+   * resolveCompilation() should NOT throw for an output that is filtered
    * out by its _if condition — an inactive output's paths are never used.
    *
    * // outputs: [{ _if: { env: { eq: "prod" } }, destinationFile: "${typo}/x.md" }] with env=dev
    * // -> does not throw; 0 outputs
    */
   it("should not validate the paths of an output excluded by _if", () => {
-    const project: RawProject = {
+    const settings: Settings = {
       name: "P",
       _vars: { env: "dev" },
       compilation: {
@@ -1143,12 +1102,12 @@ describe("resolveProjectCompilation()", () => {
         ],
       },
     };
-    const result = resolveProjectCompilation(project, {}, { projects: {} }, "p");
+    const result = resolveCompilation(settings, resolveRootScope(settings));
     expect(result!.targets[0].outputs).toHaveLength(0);
   });
 
   /**
-   * resolveProjectCompilation() should resolve `${sousDir}` in paths when the root
+   * resolveCompilation() should resolve `${sousDir}` in paths when the root
    * scope carries it, which is the normal case once a `.sous/` config is discovered.
    *
    * // rootScope: { sousDir: "/proj/.sous" }; entryPoint: "${sousDir}/AGENTS.md"
@@ -1158,7 +1117,7 @@ describe("resolveProjectCompilation()", () => {
    * root from a discovered `.sous/`) collapses instead of being kept literally.
    */
   it("should resolve ${sousDir} in target paths", () => {
-    const project: RawProject = {
+    const settings: Settings = {
       name: "P",
       compilation: {
         targets: [
@@ -1169,18 +1128,13 @@ describe("resolveProjectCompilation()", () => {
         ],
       },
     };
-    const result = resolveProjectCompilation(
-      project,
-      { sousDir: "/proj/.sous" },
-      { projects: {} },
-      "p"
-    );
+    const result = resolveCompilation(settings, { sousDir: "/proj/.sous" });
     expect(result!.targets[0].rootInputPath).toBe("/proj/.sous/AGENTS.md");
     expect(result!.targets[0].outputs[0].destinationFile).toBe("/proj/AGENTS.md");
   });
 
   /**
-   * resolveProjectCompilation() should normalize a `destinationDir` containing `..`
+   * resolveCompilation() should normalize a `destinationDir` containing `..`
    * so it matches the paths Sous actually writes.
    *
    * Regression test. The files Sous writes are built with path.join and come out
@@ -1194,7 +1148,7 @@ describe("resolveProjectCompilation()", () => {
    * // -> destinationDir === "/proj/.claude/skills"
    */
   it("should normalize a destinationDir containing .. segments", () => {
-    const project: RawProject = {
+    const settings: Settings = {
       name: "P",
       compilation: {
         targets: [
@@ -1205,12 +1159,7 @@ describe("resolveProjectCompilation()", () => {
         ],
       },
     };
-    const result = resolveProjectCompilation(
-      project,
-      { sousDir: "/proj/.sous" },
-      { projects: {} },
-      "p"
-    );
+    const result = resolveCompilation(settings, { sousDir: "/proj/.sous" });
     const destinationDir = result!.targets[0].outputs[0].destinationDir!;
     expect(destinationDir).toBe("/proj/.claude/skills");
     // The property prune relies on: a written file's path is prefixed by destinationDir.
@@ -1219,10 +1168,79 @@ describe("resolveProjectCompilation()", () => {
 });
 
 // ---------------------------------------------------------------------------
-// resolveProjectCompilation() — glob expansion (mocked)
+// resolveCompilation() — glob expansion (mocked)
 // ---------------------------------------------------------------------------
 // NOTE: Full glob-expansion tests require vi.mock("glob", ...) at the module
 // level. Because ESM hoisting constraints make conditional mocking complex
 // within a single spec file that also tests pure-logic paths, the glob
 // expansion behaviour is covered by integration tests. The pure-logic paths
 // (entryPoint, _if filtering, var substitution) are fully exercised above.
+
+// ---------------------------------------------------------------------------
+// loadSettings() — flat-schema guard
+// ---------------------------------------------------------------------------
+
+describe("loadSettings() flat-schema guard", () => {
+  /**
+   * loadSettings() should reject a config written in the removed multi-project
+   * schema. A JSON config containing a `projects` key must throw a ConfigError
+   * whose message tells the user to hoist the single project's fields to the
+   * top level of the config.
+   *
+   * loadSettings("/tmp/x/sous.config.json"); // file: { "projects": { ... } }
+   * // -> rejects with a ConfigError naming 'projects' and the migration
+   */
+  it("should throw a ConfigError with a migration message when the config has a projects key", async () => {
+    const tmp = makeTmpDir();
+    try {
+      const configPath = path.join(tmp.path, "sous.config.json");
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({ projects: { myproject: { name: "My Project" } } })
+      );
+
+      let error: unknown;
+      try {
+        await loadSettings(configPath);
+      } catch (caught) {
+        error = caught;
+      }
+
+      expect(error).toBeDefined();
+      expect(isConfigError(error)).toBe(true);
+      const message = (error as Error).message;
+      expect(message).toMatch(/projects/);
+      expect(message).toMatch(/top level/);
+    } finally {
+      tmp.cleanup();
+    }
+  });
+
+  /**
+   * loadSettings() should apply the same guard to a lone `defaultProject` key,
+   * which only existed in the removed multi-project schema.
+   *
+   * loadSettings("/tmp/x/sous.config.json"); // file: { "defaultProject": "p" }
+   * // -> rejects with a ConfigError naming the removed schema
+   */
+  it("should throw a ConfigError when the config has a defaultProject key", async () => {
+    const tmp = makeTmpDir();
+    try {
+      const configPath = path.join(tmp.path, "sous.config.json");
+      fs.writeFileSync(configPath, JSON.stringify({ defaultProject: "myproject" }));
+
+      let error: unknown;
+      try {
+        await loadSettings(configPath);
+      } catch (caught) {
+        error = caught;
+      }
+
+      expect(error).toBeDefined();
+      expect(isConfigError(error)).toBe(true);
+      expect((error as Error).message).toMatch(/defaultProject/);
+    } finally {
+      tmp.cleanup();
+    }
+  });
+});

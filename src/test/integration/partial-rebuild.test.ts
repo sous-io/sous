@@ -12,26 +12,13 @@ describe("BuildService", () => {
     let tmp: TmpDir;
     let configContext: ConfigContext;
 
-    /**
-     * Builds a Settings object for the "proj" project. The state file location
-     * comes from the ConfigContext (the tmp dir stands in for `.sous/`), which
-     * keeps state out of the repo working directory.
-     *
-     * Mirrors the same helper pattern used in build-service.test.ts.
-     */
-    function makeProjectSettings(
-      projectOverrides: Parameters<typeof makeSettings>[1]
-    ): Settings {
-      return makeSettings("proj", projectOverrides);
-    }
-
     /** Runs build() with the test's ConfigContext attached. */
     function build(
       service: BuildService,
       settings: Settings,
       options: BuildOptions = {}
     ): Promise<boolean> {
-      return service.build("proj", settings, { ...options, configContext });
+      return service.build(settings, { ...options, configContext });
     }
 
     beforeEach(() => {
@@ -67,7 +54,7 @@ describe("BuildService", () => {
       fs.writeFileSync(srcA, "# File A\n", "utf8");
       fs.writeFileSync(srcB, "# File B\n", "utf8");
 
-      const settings = makeProjectSettings({
+      const settings = makeSettings({
         name: "Test Project",
         compilation: {
           targets: [
@@ -104,7 +91,7 @@ describe("BuildService", () => {
       fs.writeFileSync(includedFile, "## Included Section\n\nSome shared content.\n", "utf8");
       fs.writeFileSync(entryFile, "# Entry\n\n@included.md\n", "utf8");
 
-      const settings = makeProjectSettings({
+      const settings = makeSettings({
         name: "Test Project",
         compilation: {
           targets: [
@@ -138,7 +125,7 @@ describe("BuildService", () => {
       fs.writeFileSync(srcA, "# File A\n", "utf8");
       fs.writeFileSync(unrelated, "# Unrelated\n", "utf8");
 
-      const settings = makeProjectSettings({
+      const settings = makeSettings({
         name: "Test Project",
         compilation: {
           targets: [
@@ -173,7 +160,7 @@ describe("BuildService", () => {
       fs.writeFileSync(srcA, "# File A\n", "utf8");
       fs.writeFileSync(srcB, "# File B\n", "utf8");
 
-      const settings = makeProjectSettings({
+      const settings = makeSettings({
         name: "Test Project",
         compilation: {
           targets: [
@@ -212,7 +199,7 @@ describe("BuildService", () => {
       fs.writeFileSync(srcA, "# File A\n", "utf8");
       fs.writeFileSync(srcB, "# File B\n", "utf8");
 
-      const settings = makeProjectSettings({
+      const settings = makeSettings({
         name: "Test Project",
         compilation: {
           targets: [

@@ -11,13 +11,13 @@ describe("entryGlob alias resolution", () => {
   let configContext: ConfigContext;
   let outDir: string;
 
-  /** Runs build() for the "proj" project with the test's ConfigContext attached. */
+  /** Runs build() with the test's ConfigContext attached. */
   function build(
     service: BuildService,
     settings: Settings,
     options: BuildOptions = {}
   ): Promise<boolean> {
-    return service.build("proj", settings, { ...options, configContext });
+    return service.build(settings, { ...options, configContext });
   }
 
   beforeEach(() => {
@@ -59,18 +59,14 @@ describe("entryGlob alias resolution", () => {
 
     const settings: Settings = {
       _aliases: { team: teamRoot },
-      projects: {
-        proj: {
-          name: "Test Project",
-          compilation: {
-            targets: [
-              {
-                entryGlob: "team/skills/**/*",
-                outputs: [{ destinationDir: outDir }],
-              },
-            ],
+      name: "Test Project",
+      compilation: {
+        targets: [
+          {
+            entryGlob: "team/skills/**/*",
+            outputs: [{ destinationDir: outDir }],
           },
-        },
+        ],
       },
     };
 
@@ -96,18 +92,14 @@ describe("entryGlob alias resolution", () => {
 
     const settings: Settings = {
       _vars: { sousRootPath: fakeRoot },
-      projects: {
-        proj: {
-          name: "Test Project",
-          compilation: {
-            targets: [
-              {
-                entryGlob: "~sous-shared/skills/**/*",
-                outputs: [{ destinationDir: outDir }],
-              },
-            ],
+      name: "Test Project",
+      compilation: {
+        targets: [
+          {
+            entryGlob: "~sous-shared/skills/**/*",
+            outputs: [{ destinationDir: outDir }],
           },
-        },
+        ],
       },
     };
 
@@ -133,18 +125,14 @@ describe("entryGlob alias resolution", () => {
 
     const settings: Settings = {
       _aliases: { layered: [emptyRoot, fullRoot] },
-      projects: {
-        proj: {
-          name: "Test Project",
-          compilation: {
-            targets: [
-              {
-                entryGlob: "layered/skills/**/*",
-                outputs: [{ destinationDir: outDir }],
-              },
-            ],
+      name: "Test Project",
+      compilation: {
+        targets: [
+          {
+            entryGlob: "layered/skills/**/*",
+            outputs: [{ destinationDir: outDir }],
           },
-        },
+        ],
       },
     };
 
@@ -156,36 +144,28 @@ describe("entryGlob alias resolution", () => {
   });
 
   /**
-   * resolveWatchConfig expands alias entryGlobs when given settings, so watch
-   * mode watches the real alias bases rather than a bogus relative pattern.
-   * Every base of the alias is watched (compile falls through between bases,
-   * so a change in any of them can affect the build).
+   * resolveWatchConfig expands alias entryGlobs, so watch mode watches the
+   * real alias bases rather than a bogus relative pattern. Every base of the
+   * alias is watched (compile falls through between bases, so a change in any
+   * of them can affect the build).
    */
-  it("should expand alias entryGlobs in the watch config when settings are provided", () => {
+  it("should expand alias entryGlobs in the watch config", () => {
     const teamRoot = path.join(tmp.path, "team-prompts");
 
     const settings: Settings = {
       _aliases: { team: teamRoot },
-      projects: {
-        proj: {
-          name: "Test Project",
-          compilation: {
-            targets: [
-              {
-                entryGlob: "team/skills/**/*",
-                outputs: [{ destinationDir: outDir }],
-              },
-            ],
+      name: "Test Project",
+      compilation: {
+        targets: [
+          {
+            entryGlob: "team/skills/**/*",
+            outputs: [{ destinationDir: outDir }],
           },
-        },
+        ],
       },
     };
 
-    const watchConfig = resolveWatchConfig(settings.projects.proj, {}, "proj", settings);
+    const watchConfig = resolveWatchConfig(settings, {});
     expect(watchConfig.globs).toEqual([path.join(teamRoot, "skills", "**", "*")]);
-
-    // Without settings, the raw pattern passes through unchanged (old behavior).
-    const legacy = resolveWatchConfig(settings.projects.proj, {}, "proj");
-    expect(legacy.globs).toEqual(["team/skills/**/*"]);
   });
 });

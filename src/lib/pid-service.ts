@@ -3,44 +3,42 @@ import path from "node:path";
 import type { VarScope } from "./settings.js";
 
 /**
- * Manages PID files for the Sous watcher, enforcing single-instance per project.
+ * Manages PID files for the Sous watcher, enforcing a single instance per config.
  * The PID file lives at <sousDir>/sous.pid by default.
  */
 export class PidService {
   /**
-   * Returns the PID file path for a project.
+   * Returns the PID file path for a config.
    *
    * Precedence (mirrors StateService.getFilePath):
-   *   1. A `pidFilePath` variable in the PROJECT scope (explicit override).
-   *   2. `<sousDir>/sous.pid`, or `<sousDir>/<key>.sous.pid` when the config
-   *      defines several projects.
-   *   3. `<cwd>/<key>.sous.pid` as a last resort.
+   *   1. A `pidFilePath` variable in the settings scope (explicit override).
+   *   2. `<sousDir>/sous.pid`.
+   *   3. `<cwd>/sous.pid` as a last resort.
    *
-   * @param projectKey - The project's key in the config's `projects` map.
-   * @param projectVars - The resolved PROJECT-scope variables.
-   * @param projectCount - How many projects the active config defines.
+   * @param vars - The resolved settings-scope variables.
    */
-  getFilePath(projectKey: string, projectVars?: VarScope, projectCount = 1): string {
-    if (projectVars?.pidFilePath) {
-      return projectVars.pidFilePath;
+  getFilePath(vars?: VarScope): string {
+    if (vars?.pidFilePath) {
+      return vars.pidFilePath;
     }
-    if (projectVars?.sousDir) {
-      const fileName = projectCount > 1 ? `${projectKey}.sous.pid` : "sous.pid";
-      return path.join(projectVars.sousDir, fileName);
+    if (vars?.sousDir) {
+      return path.join(vars.sousDir, "sous.pid");
     }
-    return path.join(process.cwd(), `${projectKey}.sous.pid`);
+    return path.join(process.cwd(), "sous.pid");
   }
 
   /**
-   * Checks if a watcher is already running for this project.
+   * Checks if a watcher is already running for this config.
    * - If a PID file exists and the process is alive, throws an Error.
    * - If a PID file exists but the process is dead (stale), overwrites it.
    * - If no PID file exists, creates one with the current process.pid.
    *
    * @param pidFilePath - Path from getFilePath().
-   * @param projectKey - Project key, named in the "already running" error.
+   * @param label - Human-readable project label used in the "already running"
+   *   error (e.g. `BaseCommand.projectLabel`). Falls back to a label derived
+   *   from the PID file path.
    */
-  async acquire(pidFilePath: string, projectKey?: string): Promise<void> {
+  async acquire(pidFilePath: string, label?: string): Promise<void> {
     if (fs.existsSync(pidFilePath)) {
       const raw = fs.readFileSync(pidFilePath, "utf8").trim();
       const existingPid = parseInt(raw, 10);
@@ -48,9 +46,8 @@ export class PidService {
       if (!isNaN(existingPid)) {
         const alive = this._isProcessAlive(existingPid);
         if (alive) {
-          const label = projectKey ?? path.basename(path.dirname(pidFilePath));
           throw new Error(
-            `A watcher is already running for project '${label}' (PID ${existingPid}). Stop it first or delete ${pidFilePath}.`
+            `A watcher is already running for project '${label ?? deriveLabel(pidFilePath)}' (PID ${existingPid}). Stop it first or delete ${pidFilePath}.`
           );
         }
         // Stale PID file — fall through and overwrite
@@ -85,4 +82,18 @@ export class PidService {
       return false;
     }
   }
+}
+
+/**
+ * Derives a project label from a PID file path when the caller supplied none.
+ * The default PID file lives at `<project>/.sous/sous.pid`, so a plain
+ * `basename(dirname(...))` would always say ".sous"; skip past that directory
+ * to the project directory itself.
+ */
+function deriveLabel(pidFilePath: string): string {
+  let dir = path.dirname(pidFilePath);
+  if (path.basename(dir) === ".sous") {
+    dir = path.dirname(dir);
+  }
+  return path.basename(dir);
 }

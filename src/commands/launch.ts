@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import { BaseCommand } from "../base-command.js";
 import { BuildService } from "../lib/build-service.js";
-import { resolveProjectTools, resolveRootScope, resolveScope } from "../lib/settings.js";
+import { resolveRootScope, resolveTools } from "../lib/settings.js";
 import { displayError, footer, heading, showCommandVars } from "../utils/formatting.js";
 
 export default class Launch extends BaseCommand {
@@ -13,7 +13,6 @@ export default class Launch extends BaseCommand {
     "<%= config.bin %> launch claude",
     "<%= config.bin %> launch codex --no-build",
     "<%= config.bin %> launch claude --continuous",
-    "<%= config.bin %> launch codex --project myproject",
     "<%= config.bin %> launch claude --resume",
     "<%= config.bin %> launch claude -- -c",
   ];
@@ -61,24 +60,22 @@ export default class Launch extends BaseCommand {
     // is the tool name itself.
     const passThroughArgs = [...argv.slice(1).map(String), ...verbatimArgs];
 
-    const project = this.resolveProject(flags.project);
     const rootScope = resolveRootScope(this.settings, this.configContext);
-    const tools = resolveProjectTools(project, rootScope, project.key);
+    const tools = resolveTools(this.settings, rootScope);
     const toolConfig = tools[args.tool];
 
     if (!toolConfig) {
       displayError(
-        `Tool '${args.tool}' not found in project '${project.key}'. ` +
+        `Tool '${args.tool}' not found in ${this.configContext.configPath}. ` +
           `Available tools: ${Object.keys(tools).join(", ") || "(none)"}`
       );
       this.exit(1);
     }
 
-    const projectScope = resolveScope(project._vars ?? {}, rootScope);
-    const projectRoot = projectScope.projectRoot ?? process.cwd();
+    const projectRoot = rootScope.projectRoot ?? process.cwd();
 
     showCommandVars({
-      Project: project.name,
+      Project: this.projectLabel,
       Config: this.configContext.configPath,
       Tool: args.tool,
       "Project Root": projectRoot,
@@ -93,7 +90,7 @@ export default class Launch extends BaseCommand {
       // Build step (unless --no-build)
       if (!flags["no-build"]) {
         heading("Building");
-        await buildService.build(project.key, this.settings, {
+        await buildService.build(this.settings, {
           configContext: this.configContext,
         });
         footer();

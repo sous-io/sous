@@ -54,26 +54,22 @@ A config that compiles one file:
 
 ```js
 export const config = {
-  projects: {
-    myproject: {
-      name: "My Project",
-      _vars: { projectRoot: "${sousDir}/.." },
-      compilation: {
-        targets: [
-          {
-            entryPoint: "${sousDir}/AGENTS.md",
-            outputs: [{ destinationFile: "${projectRoot}/CLAUDE.md" }],
-          },
-        ],
+  name: "My Project",
+  _vars: { projectRoot: "${sousDir}/.." },
+  compilation: {
+    targets: [
+      {
+        entryPoint: "${sousDir}/AGENTS.md",
+        outputs: [{ destinationFile: "${projectRoot}/CLAUDE.md" }],
       },
-    },
+    ],
   },
 };
 ```
 
 `${sousDir}` is the `.sous/` directory sous found, so a config can name paths relative to
-itself without hardcoding anything machine-specific. With a single project defined you do
-not need `defaultProject`; sous uses the only one. Then build:
+itself without hardcoding anything machine-specific. One config describes one project. Then
+build:
 
 ```bash
 xcv build
@@ -130,7 +126,7 @@ each level can define variables:
 }
 ```
 
-Variables resolve later-wins across scopes: auto-injected, env, root, project, compilation,
+Variables resolve later-wins across scopes: auto-injected, env, config, compilation,
 target, output. Templates read them as `{{ varName }}`; config files reference them as `${varName}`.
 The auto-injected ones include `${sousDir}` and `${sousConfigPath}` for the discovered
 config, and `${sousTemplatePath}` for the template being rendered.

@@ -126,11 +126,14 @@ config the same way, in `BaseCommand.init()`:
 4. The config is loaded in a fresh Node subprocess and round-tripped through JSON, so
    functions, RegExp and Date do not survive.
 
-`defaultProject` is optional when the config defines exactly one project.
+One config = one project. The config is flat: `name`, `_env`, `_vars`, `_aliases`,
+`compilation`, and `tools` all live at the top level. The old multi-project schema
+(`projects:` map + `defaultProject`) is a hard error: `loadSettings` throws a
+`ConfigError` with a migration message (`assertFlatConfig` in `settings.ts`) telling the
+user to hoist the single project's fields to the top level.
 
-State and PID files default into the discovered `.sous/`: `sous.state.json` and `sous.pid`
-(prefixed with the project key when the config has several projects). Override per project
-with the `stateFilePath` / `pidFilePath` project vars.
+State and PID files default into the discovered `.sous/`: `sous.state.json` and `sous.pid`.
+Override with the `stateFilePath` / `pidFilePath` config vars.
 
 ### Sous Configures Itself
 
@@ -162,35 +165,33 @@ gitignored build output.
 
 ## Project Settings File
 
-A JS or JSON file in a project's `.sous/` directory. Example shape:
+A JS or JSON file in a project's `.sous/` directory. One config describes one project;
+everything is at the top level. Example shape:
 
 ```js
 export const config = {
+  name: "My Project",                  // optional display name
   _env: { userHome: "HOME" },          // map config vars to env vars (top-level only)
-  _vars: { codeBase: "${userHome}/Projects/my-project" },
-  defaultProject: "myproject",         // optional when there is exactly one project
-  projects: {
-    myproject: {
-      name: "My Project",
-      // ${sousDir} is the discovered .sous/ dir, so this needs nothing machine-specific.
-      _vars: { projectRoot: "${sousDir}/.." },
-      compilation: {
-        targets: [
-          {
-            entryPoint: "${projectRoot}/prompts/AGENTS.md",
-            generateRuntimeContext: true,
-            outputs: [{ destinationFile: "${projectRoot}/AGENTS.md" }],
-          },
-          {
-            entryGlob: "${projectRoot}/configs/skills/**/*.md",
-            outputs: [{ destinationDir: "${projectRoot}/.claude/skills" }],
-          },
-        ],
+  _vars: {
+    codeBase: "${userHome}/Projects/my-project",
+    // ${sousDir} is the discovered .sous/ dir, so this needs nothing machine-specific.
+    projectRoot: "${sousDir}/..",
+  },
+  compilation: {
+    targets: [
+      {
+        entryPoint: "${projectRoot}/prompts/AGENTS.md",
+        generateRuntimeContext: true,
+        outputs: [{ destinationFile: "${projectRoot}/AGENTS.md" }],
       },
-      tools: {
-        claude: { command: "claude", promptFile: "${projectRoot}/CLAUDE.md" },
+      {
+        entryGlob: "${projectRoot}/configs/skills/**/*.md",
+        outputs: [{ destinationDir: "${projectRoot}/.claude/skills" }],
       },
-    },
+    ],
+  },
+  tools: {
+    claude: { command: "claude", promptFile: "${projectRoot}/CLAUDE.md" },
   },
 };
 ```
@@ -200,7 +201,7 @@ export const config = {
 Resolution order (later overrides earlier):
 
 ```
-auto-vars  →  _env scope  →  root _vars  →  project _vars  →  target _vars  →  output _vars
+auto-vars  →  _env scope  →  _vars  →  compilation _vars  →  target _vars  →  output _vars
 ```
 
 - `_vars` blocks use `${varName}` syntax (resolved by Sous internally, topological order)
@@ -281,10 +282,11 @@ Resolution is handled by `src/lib/include-resolver.ts` (`resolveIncludeCandidate
 
 **Aliases.** Built-ins are reserved and `~`-prefixed: `~sous-shared` → the CLI's
 `shared-prompts` dir, `~project` → the project root (see `buildBuiltInAliases` in
-`settings.ts`). Projects add their own via an `_aliases` block (root + project level;
-string or array values, `${var}`-substituted); user names may not start with `~`.
-Precedence: built-ins → root `_aliases` → project `_aliases`, where later **prepends**
-(user bases tried first, falling through to built-in bases of the same name).
+`settings.ts`). Projects add their own via the top-level `_aliases` block (string or
+array values, `${var}`-substituted); user names may not start with `~`. Precedence:
+built-ins → `_aliases`, where the user block **prepends** (user bases tried first,
+falling through to built-in bases of the same name). Resolved by
+`resolveAliases(settings, scope)`.
 
 **Candidate order.** Each alias base in order, then the path resolved relative to the
 including file (full path incl. the alias segment — so an alias can *augment* a real
@@ -319,7 +321,7 @@ Two skill types:
 
 ## State Files
 
-Sous tracks every file and directory it writes in a state file (default: `<sousDir>/sous.state.json`, or `<sousDir>/<key>.sous.state.json` in a multi-project config). 
+Sous tracks every file and directory it writes in a state file (default: `<sousDir>/sous.state.json`; override with the `stateFilePath` config var). 
 This enables `xcv prune` (remove stale outputs) and `xcv clear` (delete all outputs) to work precisely.
 
 ## Key Commands
@@ -337,15 +339,15 @@ were removed when walk-up `.sous/` discovery replaced them. The removed source i
 under `docs/notes/removed-xcv-config/` (see its `MANIFEST.md`) and on the
 `preserve/xcv-config` branch. Do not reintroduce them without being asked.
 
-Common flags on every command: `--project <key>` / `-p`, `--config <path>` / `-c`.
-Also: `--rebuild`, `--dry-run`, `--strict`, `--watch` / `-w` (build/compile),
+Common flag on every command: `--config <path>` / `-c`. There is no `--project` / `-p`
+flag; one config describes one project. Also: `--rebuild`, `--dry-run`, `--strict`, `--watch` / `-w` (build/compile),
 `--no-prune` / `--no-compile` (build), `--force` / `-f` (clear),
 `--no-build` / `--continuous` (launch).
 
 **Launch pass-through:** any argument `launch` does not recognize is forwarded to the
 tool, after the config-defined `tools.<name>.args` and before the `promptFile` content
 (e.g. `xcv launch claude --resume`). Flags that collide with sous's own (claude's `-c`
-/ `-p` vs sous's `--config` / `--project` shorthands) go after a bare `--`, which
+vs sous's `--config` shorthand) go after a bare `--`, which
 forwards everything following it verbatim: `xcv launch claude -- -c`. Implementation:
 `launch.ts` sets oclif `strict = false` plus `"--" = false` (oclif rejects unknown
 flags even in non-strict mode otherwise) and splits argv at the first `--` itself;
@@ -360,6 +362,10 @@ flags even in non-strict mode otherwise) and splits argv at the first `--` itsel
 - `BuildService` orchestrates `CompilationService` + prune in one step
 - Watch mode uses `WatchService` (chokidar + debounce, 300ms); ignores `*.sous.state.json` files
 - `resolveScope()` in `settings.ts` performs topological sort for intra-block var dependencies
+- `resolveRootScope(settings, context?)` builds THE settings scope (auto-vars → `_env` → `_vars`);
+  the other resolvers take it directly: `resolveCompilation(settings, scope)`,
+  `resolveTools(settings, scope)`, `resolveWatchConfig(settings, scope)`,
+  `resolveAliases(settings, scope)`
 - LiquidJS engine is built by `createLiquidEngine()` in `src/templating/init-liquid-engine.ts`;
   custom tags/filters self-register via the arrays in `tags/index.ts` and `filters/index.ts`
 

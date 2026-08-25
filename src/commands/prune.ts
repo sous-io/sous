@@ -9,7 +9,6 @@ export default class Prune extends BaseCommand {
   static examples = [
     "<%= config.bin %> prune",
     "<%= config.bin %> prune --dry-run",
-    "<%= config.bin %> prune --project myproject",
   ];
 
   static flags = {
@@ -23,11 +22,10 @@ export default class Prune extends BaseCommand {
   async run(): Promise<void> {
     const { flags } = await this.parse(Prune);
 
-    const project = this.resolveProject(flags.project);
-    const stateFilePath = resolveStateFilePath(project.key, this.settings, this.configContext);
+    const stateFilePath = resolveStateFilePath(this.settings, this.configContext);
 
     showCommandVars({
-      Project: project.name,
+      Project: this.projectLabel,
       Config: this.configContext.configPath,
       "Dry Run": flags["dry-run"],
     });
@@ -35,13 +33,7 @@ export default class Prune extends BaseCommand {
     heading("Pruning");
 
     const buildService = new BuildService();
-    await buildService.prune(
-      project.key,
-      this.settings,
-      stateFilePath,
-      flags["dry-run"],
-      this.configContext
-    );
+    await buildService.prune(this.settings, stateFilePath, flags["dry-run"], this.configContext);
 
     footer();
   }

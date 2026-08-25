@@ -1,7 +1,7 @@
 import path from "node:path";
 import fs from "node:fs";
 import type { ConfigContext, Settings } from "./settings.js";
-import { resolveProjectCompilation, resolveRootScope, resolveScope } from "./settings.js";
+import { resolveCompilation, resolveRootScope } from "./settings.js";
 import { resolveIncludeCandidates } from "./include-resolver.js";
 import { CompilationService } from "./markdown-compiler.js";
 import type { CompilationConfig, CompilationTarget } from "./markdown-compiler.js";
@@ -92,49 +92,33 @@ export function findAffectedTargets(
 }
 
 /**
- * Resolves the state file path for a project.
+ * Resolves the state file path for a config.
  *
- * The path is derived from the PROJECT scope (root vars → project `_vars`), so a
- * `stateFilePath` or `sousDir` defined at either level is honoured. Resolving
- * from the root scope alone was a bug: project-level values were ignored and
- * state silently landed in cwd.
+ * The path is derived from the resolved settings scope, so a `stateFilePath`
+ * or `sousDir` defined in `_vars` (or injected by discovery) is honoured.
  *
- * @param projectKey - The project's key in `settings.projects`.
- * @param settings - The loaded root settings.
+ * @param settings - The loaded settings.
  * @param configContext - Where the config was discovered (supplies `sousDir`).
- * @returns Absolute path to the project's state file.
+ * @returns Absolute path to the state file.
  */
 export function resolveStateFilePath(
-  projectKey: string,
   settings: Settings,
   configContext?: ConfigContext
 ): string {
-  const rootScope = resolveRootScope(settings, configContext);
-  const project = settings.projects[projectKey];
-  const projectScope = resolveScope(project?._vars ?? {}, rootScope);
-  const projectCount = Object.keys(settings.projects ?? {}).length;
-  return new StateService().getFilePath(projectKey, projectScope, projectCount);
+  const scope = resolveRootScope(settings, configContext);
+  return new StateService().getFilePath(scope);
 }
 
 export class BuildService {
   /**
-   * Runs compile + prune for a project.
+   * Runs compile + prune for the configured project.
    * Returns true if all steps succeeded.
    */
-  async build(
-    projectKey: string,
-    settings: Settings,
-    options: BuildOptions = {}
-  ): Promise<boolean> {
+  async build(settings: Settings, options: BuildOptions = {}): Promise<boolean> {
     const rootScope = resolveRootScope(settings, options.configContext);
-    const project = settings.projects[projectKey];
-
-    if (!project) {
-      throw new Error(`Project '${projectKey}' not found in settings`);
-    }
 
     const stateService = new StateService();
-    const stateFilePath = resolveStateFilePath(projectKey, settings, options.configContext);
+    const stateFilePath = resolveStateFilePath(settings, options.configContext);
 
     let success = true;
 
@@ -151,7 +135,7 @@ export class BuildService {
 
     // Compile step
     if (!options.noCompile) {
-      const config = resolveProjectCompilation(project, rootScope, settings, projectKey);
+      const config = resolveCompilation(settings, rootScope);
       if (config) {
         let effectiveConfig: CompilationConfig = config;
 
@@ -183,13 +167,7 @@ export class BuildService {
 
     // Prune step
     if (!options.noPrune && success) {
-      await this.prune(
-        projectKey,
-        settings,
-        stateFilePath,
-        options.dryRun,
-        options.configContext
-      );
+      await this.prune(settings, stateFilePath, options.dryRun, options.configContext);
     }
 
     return success;
@@ -200,7 +178,6 @@ export class BuildService {
    * Also removes Sous-created directories that are now empty.
    */
   async prune(
-    projectKey: string,
     settings: Settings,
     stateFilePath: string,
     dryRun = false,
@@ -211,10 +188,7 @@ export class BuildService {
     if (!state || state.files.length === 0) return;
 
     const rootScope = resolveRootScope(settings, configContext);
-    const project = settings.projects[projectKey];
-    const config = project
-      ? resolveProjectCompilation(project, rootScope, settings, projectKey)
-      : null;
+    const config = resolveCompilation(settings, rootScope);
 
     // Collect the current output set: explicit files and active destinationDir prefixes
     const currentOutputFiles = new Set<string>();

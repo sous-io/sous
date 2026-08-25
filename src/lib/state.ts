@@ -40,30 +40,24 @@ export type StateFile = {
  */
 export class StateService {
   /**
-   * Derives the state file path for a project.
+   * Derives the state file path for a config.
    *
    * Precedence:
-   *   1. A `stateFilePath` variable in the PROJECT scope (explicit override).
-   *   2. `<sousDir>/sous.state.json` for a single-project config, or
-   *      `<sousDir>/<key>.sous.state.json` when the config defines several
-   *      projects (they must not share one state file).
-   *   3. `<cwd>/<key>.sous.state.json` as a last resort.
+   *   1. A `stateFilePath` variable in the settings scope (explicit override).
+   *   2. `<sousDir>/sous.state.json`.
+   *   3. `<cwd>/sous.state.json` as a last resort.
    *
-   * @param projectKey - The project's key in the config's `projects` map.
-   * @param projectVars - The resolved PROJECT-scope variables. `sousDir` is
+   * @param vars - The resolved settings-scope variables. `sousDir` is
    *   auto-injected by buildAutoVars when a config has been discovered.
-   * @param projectCount - How many projects the active config defines. Defaults
-   *   to 1 (the expected case: one `.sous/` per project).
    */
-  getFilePath(projectKey: string, projectVars?: VarScope, projectCount = 1): string {
-    if (projectVars?.stateFilePath) {
-      return projectVars.stateFilePath;
+  getFilePath(vars?: VarScope): string {
+    if (vars?.stateFilePath) {
+      return vars.stateFilePath;
     }
-    if (projectVars?.sousDir) {
-      const fileName = projectCount > 1 ? `${projectKey}.sous.state.json` : "sous.state.json";
-      return path.join(projectVars.sousDir, fileName);
+    if (vars?.sousDir) {
+      return path.join(vars.sousDir, "sous.state.json");
     }
-    return path.join(process.cwd(), `${projectKey}.sous.state.json`);
+    return path.join(process.cwd(), "sous.state.json");
   }
 
   /** Loads the state file for a project. Returns null if it does not exist. */

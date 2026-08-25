@@ -1,21 +1,16 @@
-import type { Settings, RawProject } from "../../lib/settings.js";
+import type { Settings } from "../../lib/settings.js";
 
 /**
  * Builds a minimal valid Settings object for use in tests.
- * Provide project overrides to add compilation targets, tools, etc.
+ * Provide overrides to add compilation targets, tools, etc.
  *
  * Usage:
- *   const settings = makeSettings("myproject", {
+ *   const settings = makeSettings({
  *     compilation: { targets: [...] },
  *   });
  */
 export function makeSettings(
-  projectKey: string,
-  project: Partial<RawProject> & Pick<RawProject, "name"> = { name: "Test Project" }
+  overrides: Partial<Settings> = { name: "Test Project" }
 ): Settings {
-  return {
-    projects: {
-      [projectKey]: { ...project },
-    },
-  };
+  return { ...overrides };
 }

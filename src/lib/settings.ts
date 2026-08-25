@@ -83,27 +83,21 @@ type ToolConfig = {
   promptFile?: string;
 };
 
-export type RawProject = {
+export type Settings = {
+  _env?: Record<string, string>;
   /**
-   * Project-level variables. A few names are read by Sous itself:
+   * Config variables. A few names are read by Sous itself:
    * `stateFilePath` overrides where the build state file is written (see
    * StateService.getFilePath), and `pidFilePath` does the same for the watcher
-   * PID file. Both resolve through the PROJECT scope.
+   * PID file. Both resolve through the settings scope.
    */
   _vars?: Record<string, string>;
   _aliases?: Record<string, string | string[]>;
-  name: string;
+  /** Optional display name for the configured project. */
+  name?: string;
   compilation?: RawProjectCompilation;
   runtimeContext?: RawRuntimeContext;
   tools?: Record<string, ToolConfig>;
-};
-
-export type Settings = {
-  _env?: Record<string, string>;
-  _vars?: Record<string, string>;
-  _aliases?: Record<string, string | string[]>;
-  defaultProject?: string;
-  projects: Record<string, RawProject>;
 };
 
 // --- Loader -------------------------------------------------------------------------------------
@@ -134,13 +128,14 @@ export async function loadSettings(configPath: string): Promise<Settings> {
   }
 
   if (configPath.endsWith(".json")) {
+    let raw: unknown;
     try {
-      const raw = JSON.parse(fs.readFileSync(configPath, "utf8"));
-      return raw as Settings;
+      raw = JSON.parse(fs.readFileSync(configPath, "utf8"));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(`Failed to parse settings JSON at ${configPath}: ${message}`);
     }
+    return assertFlatConfig(raw, configPath);
   }
 
   const settingsUrl = pathToFileURL(configPath).href;
@@ -173,20 +168,46 @@ export async function loadSettings(configPath: string): Promise<Settings> {
     });
 
     if (result.status === 0) {
+      let raw: unknown;
       try {
-        return JSON.parse(result.stdout) as Settings;
+        raw = JSON.parse(result.stdout);
       } catch {
         throw new Error(
           `Config at ${configPath} did not produce valid JSON. It must export a plain ` +
             `object (as \`config\` or \`default\`).\n  Got: ${result.stdout.slice(0, 300)}`
         );
       }
+      return assertFlatConfig(raw, configPath);
     }
 
     failures.push(`  [via ${attempt.label}] ${result.stderr?.trim() || "unknown error"}`);
   }
 
   throw new Error(`Failed to load config from ${configPath}\n${failures.join("\n\n")}`);
+}
+
+/**
+ * Rejects configs written in the removed multi-project schema. One config now
+ * describes exactly one project; the fields that used to live inside a
+ * `projects.<key>` entry sit at the top level instead.
+ */
+function assertFlatConfig(raw: unknown, configPath: string): Settings {
+  if (
+    raw !== null &&
+    typeof raw === "object" &&
+    ("projects" in raw || "defaultProject" in raw)
+  ) {
+    throw new ConfigError(
+      `Config at ${configPath} uses the removed multi-project schema ` +
+        `('projects' / 'defaultProject').\n` +
+        `  A sous config now describes exactly one project. To migrate:\n` +
+        `    1. Move your single project's fields (name, _vars, _aliases, compilation,\n` +
+        `       runtimeContext, tools) to the top level of the config.\n` +
+        `    2. Delete the 'projects' and 'defaultProject' keys.\n` +
+        `  A config with several projects must be split into one config per project.`
+    );
+  }
+  return raw as Settings;
 }
 
 // --- Variable Resolution -------------------------------------------------------------------------
@@ -258,7 +279,7 @@ export function normalizeConfigPath(value: string): string {
  * @param str - The raw value from the config.
  * @param scope - The resolved variable scope.
  * @param context - Where the value came from, e.g.
- *   `project 'foundry' → compilation.targets[0].entryPoint`. Named in the error.
+ *   `compilation.targets[0].entryPoint`. Named in the error.
  * @returns The fully substituted string.
  * @throws When one or more `${var}` references are unresolved.
  */
@@ -444,23 +465,18 @@ export function buildBuiltInAliases(scope: VarScope): AliasMap {
 }
 
 /**
- * Resolve the full `@include` alias map for a project: built-ins, then root
- * `_aliases`, then project `_aliases` (later prepends to earlier so user entries
- * are tried first and fall through to built-in bases). User alias names starting
+ * Resolve the full `@include` alias map: built-ins, then the config's
+ * `_aliases` block (user entries prepend, so they are tried first and fall
+ * through to built-in bases of the same name). User alias names starting
  * with `~` are rejected (reserved).
  *
- * @param settings - The root settings (for root-level `_aliases`).
- * @param project - The project (for project-level `_aliases`).
- * @param scope - The resolved project scope (for ${var} substitution + projectRoot).
+ * @param settings - The loaded settings (for the `_aliases` block).
+ * @param scope - The resolved settings scope (for ${var} substitution + projectRoot).
  */
-export function resolveAliases(
-  settings: Settings,
-  project: RawProject,
-  scope: VarScope
-): AliasMap {
+export function resolveAliases(settings: Settings, scope: VarScope): AliasMap {
   return buildAliasMap({
     builtIns: buildBuiltInAliases(scope),
-    userAliases: [settings._aliases, project._aliases],
+    userAliases: [settings._aliases],
     scope,
     onError: warning,
   });
@@ -474,20 +490,20 @@ export type ResolvedToolConfig = {
 };
 
 /**
- * Resolves a project's tools config, substituting vars in promptFile paths.
+ * Resolves the config's tools block, substituting vars in promptFile paths.
  * Returns an empty object if no tools are configured.
+ *
+ * @param settings - The loaded settings.
+ * @param scope - The resolved settings scope (from resolveRootScope).
  */
-export function resolveProjectTools(
-  project: RawProject,
-  rootScope: VarScope = {},
-  projectKey = project.name
+export function resolveTools(
+  settings: Settings,
+  scope: VarScope = {}
 ): Record<string, ResolvedToolConfig> {
-  if (!project.tools) return {};
-
-  const projectScope = resolveScope(project._vars ?? {}, rootScope);
+  if (!settings.tools) return {};
 
   return Object.fromEntries(
-    Object.entries(project.tools).map(([name, tool]) => [
+    Object.entries(settings.tools).map(([name, tool]) => [
       name,
       {
         command: tool.command,
@@ -495,8 +511,8 @@ export function resolveProjectTools(
         ...(tool.promptFile !== undefined && {
           promptFile: substituteVarsStrict(
             tool.promptFile,
-            projectScope,
-            `project '${projectKey}' → tools.${name}.promptFile`
+            scope,
+            `tools.${name}.promptFile`
           ),
         }),
       },
@@ -524,30 +540,27 @@ function resolveRuntimeContext(
 }
 
 /**
- * Resolves a project's compilation config into the shape the compiler expects.
- * Walks the config tree resolving _vars at each level (root → project → target → output).
- * Pass rootScope from resolveRootScope(settings) to thread root vars down.
- * Returns null if the project has no compilation config.
+ * Resolves the config's compilation block into the shape the compiler expects.
+ * Walks the config tree resolving _vars at each level (settings → compilation → target → output).
+ * Pass scope from resolveRootScope(settings) to thread the settings vars down.
+ * Returns null if the config has no compilation block.
  */
-export function resolveProjectCompilation(
-  project: RawProject,
-  rootScope: VarScope = {},
-  settings: Settings = { projects: {} },
-  projectKey = project.name
+export function resolveCompilation(
+  settings: Settings,
+  scope: VarScope = {}
 ): CompilationConfig | null {
-  if (!project.compilation) return null;
+  if (!settings.compilation) return null;
 
-  const projectScope = resolveScope(project._vars ?? {}, rootScope);
-  const compilationScope = resolveScope(project.compilation._vars ?? {}, projectScope);
-  const aliases = resolveAliases(settings, project, projectScope);
+  const compilationScope = resolveScope(settings.compilation._vars ?? {}, scope);
+  const aliases = resolveAliases(settings, scope);
 
   return {
-    includeSourceComments: project.compilation.includeSourceComments,
+    includeSourceComments: settings.compilation.includeSourceComments,
     aliases,
-    includeScope: projectScope,
-    targets: project.compilation.targets.flatMap((target, targetIndex): CompilationTarget[] => {
+    includeScope: scope,
+    targets: settings.compilation.targets.flatMap((target, targetIndex): CompilationTarget[] => {
       const targetScope = resolveScope(target._vars ?? {}, compilationScope);
-      const where = `project '${projectKey}' → compilation.targets[${targetIndex}]`;
+      const where = `compilation.targets[${targetIndex}]`;
       const hasSingle = target.entryPoint !== undefined;
       const hasGlob = target.entryGlob !== undefined;
 
@@ -600,12 +613,8 @@ export function resolveProjectCompilation(
 
       if (hasSingle) {
         const runtimeContext =
-          target.generateRuntimeContext && project.runtimeContext
-            ? resolveRuntimeContext(
-                project.runtimeContext,
-                projectScope,
-                `project '${projectKey}' → runtimeContext`
-              )
+          target.generateRuntimeContext && settings.runtimeContext
+            ? resolveRuntimeContext(settings.runtimeContext, scope, "runtimeContext")
             : undefined;
         return [{
           rootInputPath: normalizeConfigPath(
@@ -671,32 +680,25 @@ export type WatchConfig = {
 };
 
 /**
- * Returns the watch configuration for a project's compilation targets.
+ * Returns the watch configuration for the config's compilation targets.
  *
  * - entryPoint targets → exact file path in `files`.
  * - entryGlob targets → resolved glob string in `globs`.
  *
- * When `settings` is provided, alias prefixes in entryGlob patterns are
- * expanded (every base of the alias is watched, matching compile's
- * fall-through resolution); without it, patterns pass through as before.
+ * Alias prefixes in entryGlob patterns are expanded (every base of the alias
+ * is watched, matching compile's fall-through resolution).
  */
-export function resolveWatchConfig(
-  project: RawProject,
-  rootScope: VarScope = {},
-  projectKey = project.name,
-  settings?: Settings
-): WatchConfig {
-  if (!project.compilation) return { files: [], globs: [] };
+export function resolveWatchConfig(settings: Settings, scope: VarScope = {}): WatchConfig {
+  if (!settings.compilation) return { files: [], globs: [] };
 
-  const projectScope = resolveScope(project._vars ?? {}, rootScope);
-  const compilationScope = resolveScope(project.compilation._vars ?? {}, projectScope);
-  const aliases = settings ? resolveAliases(settings, project, projectScope) : undefined;
+  const compilationScope = resolveScope(settings.compilation._vars ?? {}, scope);
+  const aliases = resolveAliases(settings, scope);
   const files: string[] = [];
   const globs: string[] = [];
 
-  for (const [targetIndex, target] of project.compilation.targets.entries()) {
+  for (const [targetIndex, target] of settings.compilation.targets.entries()) {
     const targetScope = resolveScope(target._vars ?? {}, compilationScope);
-    const where = `project '${projectKey}' → compilation.targets[${targetIndex}]`;
+    const where = `compilation.targets[${targetIndex}]`;
 
     if (target.entryPoint) {
       files.push(substituteVarsStrict(target.entryPoint, targetScope, `${where}.entryPoint`));
@@ -704,7 +706,7 @@ export function resolveWatchConfig(
 
     if (target.entryGlob) {
       const pattern = substituteVarsStrict(target.entryGlob, targetScope, `${where}.entryGlob`);
-      globs.push(...(aliases ? resolveAliasPrefix(pattern, aliases) : [pattern]));
+      globs.push(...resolveAliasPrefix(pattern, aliases));
     }
   }
 

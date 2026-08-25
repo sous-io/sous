@@ -90,76 +90,70 @@ import { fileURLToPath } from "node:url";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 export const config = {
+  name: "Sous",
   _vars: {
     projectRoot: repoRoot,
+
+    // Where this repo's own shared skill sources live. `about-sous`,
+    // `about-agent-skills` and `create-skill` all render this path to tell
+    // the agent where to write skills. For sous itself the sources are the
+    // shared bundles, so it points at the bundle root rather than at some
+    // separate per-project skills directory.
+    skillsRoot: "${projectRoot}/shared-prompts/skills",
+
+    // Bundle root, used by the targets above.
+    sharedSkillsRoot: "${projectRoot}/shared-prompts/skills",
+
+    // Hand-maintained skills that are specific to developing sous itself and
+    // are NOT distributed downstream. Tracked sources; see projectSkills.
+    projectSkillsDir: "${sousDir}/skills",
+
+    // Compiled skill destination. Gitignored build output.
+    claudeSkillsDir: "${projectRoot}/.claude/skills",
+
+    // --- task-files bundle ---
+    // Per-branch task files, gitignored local working notes.
+    taskFileRoot: "${sousDir}/tasks",
+    // Ticket IDs are GitHub issue numbers written `gh-<number>` so they stay
+    // greppable in branch names (a bare number is too ambiguous).
+    ticketPrefix: "gh-",
+    ticketIdExample: "gh-123",
+    featureBranchPrefix: "lc/",
+
+    // --- github-projects bundle ---
+    userFullName: "Luke Chavers",
+    githubUserLogin: "vmadman",
+    githubRepo: "sous-io/sous",
+    // The "Sous" Projects v2 board: https://github.com/orgs/sous-io/projects/1
+    githubProjectOwner: "sous-io",
+    githubProjectNumber: "1",
+    githubProjectId: "PVT_kwDOEB_-as4BhYAc",
+    // Single-select "Status" field and its option IDs. Stable for the life of
+    // the field; re-discover with `gh project field-list 1 --owner sous-io`
+    // if item-edit ever rejects them.
+    githubStatusFieldId: "PVTSSF_lADOEB_-as4BhYAczhgT-M8",
+    githubStatusBacklogId: "e3a82f26",
+    githubStatusReadyId: "c4edfe80",
+    githubStatusInProgressId: "f11d9dfc",
+    githubStatusInReviewId: "6f473a66",
+    githubStatusDoneId: "4c16e1a4",
   },
-  projects: {
-    // Single-project config: no defaultProject needed, sous uses the only key.
-    sous: {
-      name: "Sous",
-      _vars: {
-        // Where this repo's own shared skill sources live. `about-sous`,
-        // `about-agent-skills` and `create-skill` all render this path to tell
-        // the agent where to write skills. For sous itself the sources are the
-        // shared bundles, so it points at the bundle root rather than at some
-        // separate per-project skills directory.
-        skillsRoot: "${projectRoot}/shared-prompts/skills",
-
-        // Bundle root, used by the targets above.
-        sharedSkillsRoot: "${projectRoot}/shared-prompts/skills",
-
-        // Hand-maintained skills that are specific to developing sous itself and
-        // are NOT distributed downstream. Tracked sources; see projectSkills.
-        projectSkillsDir: "${sousDir}/skills",
-
-        // Compiled skill destination. Gitignored build output.
-        claudeSkillsDir: "${projectRoot}/.claude/skills",
-
-        // --- task-files bundle ---
-        // Per-branch task files, gitignored local working notes.
-        taskFileRoot: "${sousDir}/tasks",
-        // Ticket IDs are GitHub issue numbers written `gh-<number>` so they stay
-        // greppable in branch names (a bare number is too ambiguous).
-        ticketPrefix: "gh-",
-        ticketIdExample: "gh-123",
-        featureBranchPrefix: "lc/",
-
-        // --- github-projects bundle ---
-        userFullName: "Luke Chavers",
-        githubUserLogin: "vmadman",
-        githubRepo: "sous-io/sous",
-        // The "Sous" Projects v2 board: https://github.com/orgs/sous-io/projects/1
-        githubProjectOwner: "sous-io",
-        githubProjectNumber: "1",
-        githubProjectId: "PVT_kwDOEB_-as4BhYAc",
-        // Single-select "Status" field and its option IDs. Stable for the life of
-        // the field; re-discover with `gh project field-list 1 --owner sous-io`
-        // if item-edit ever rejects them.
-        githubStatusFieldId: "PVTSSF_lADOEB_-as4BhYAczhgT-M8",
-        githubStatusBacklogId: "e3a82f26",
-        githubStatusReadyId: "c4edfe80",
-        githubStatusInProgressId: "f11d9dfc",
-        githubStatusInReviewId: "6f473a66",
-        githubStatusDoneId: "4c16e1a4",
-      },
-      compilation: {
-        includeSourceComments: false,
-        targets: [
-          sousSkills,
-          controlFlowSkills,
-          taskFilesSkills,
-          githubProjectsSkills,
-          projectSkills,
-          rootClaude,
-          docsSiteClaude,
-        ],
-      },
-      tools: {
-        claude: {
-          command: "claude",
-          args: ["--dangerously-skip-permissions"],
-        },
-      },
+  compilation: {
+    includeSourceComments: false,
+    targets: [
+      sousSkills,
+      controlFlowSkills,
+      taskFilesSkills,
+      githubProjectsSkills,
+      projectSkills,
+      rootClaude,
+      docsSiteClaude,
+    ],
+  },
+  tools: {
+    claude: {
+      command: "claude",
+      args: ["--dangerously-skip-permissions"],
     },
   },
 };

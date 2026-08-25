@@ -370,6 +370,22 @@ describe("config-discovery", () => {
     });
 
     /**
+     * The embedded sample config must show the flat single-project shape: fields
+     * like `name` and `compilation` at the top level, with no `projects` map or
+     * `defaultProject` key.
+     *
+     * formatNotFoundMessage("/a/b");
+     * // -> sample contains 'name: "My Project"' but no "projects"/"defaultProject"
+     */
+    it("should show a flat sample config with no projects map or defaultProject", () => {
+      const message = formatNotFoundMessage("/a/b");
+      expect(message).toContain('name: "My Project"');
+      expect(message).toContain("compilation:");
+      expect(message).not.toContain("projects");
+      expect(message).not.toContain("defaultProject");
+    });
+
+    /**
      * formatNotFoundMessage() should summarise rather than list every ancestor
      * when the start directory is deeply nested.
      *

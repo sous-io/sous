@@ -157,53 +157,40 @@ describe("StateService.getFilePath()", () => {
 
   /**
    * getFilePath() should return the stateFilePath var directly when it
-   * is explicitly set in projectVars, bypassing any derivation.
+   * is explicitly set in the settings scope, bypassing any derivation.
    *
-   * getFilePath("myproject", { stateFilePath: "/custom/state.json" });
+   * getFilePath({ stateFilePath: "/custom/state.json" });
    * // -> "/custom/state.json"
    */
   it("should return stateFilePath directly when set in vars", () => {
-    const result = service.getFilePath("myproject", { stateFilePath: "/custom/state.json" });
+    const result = service.getFilePath({ stateFilePath: "/custom/state.json" });
     expect(result).toBe("/custom/state.json");
   });
 
   /**
-   * getFilePath() should put the state file directly in the discovered `.sous/`
-   * directory for a single-project config.
+   * getFilePath() should put the state file directly in the discovered
+   * `.sous/` directory when stateFilePath is not set.
    *
-   * getFilePath("myproject", { sousDir: "/proj/.sous" });
+   * getFilePath({ sousDir: "/proj/.sous" });
    * // -> "/proj/.sous/sous.state.json"
    */
   it("should derive the path from sousDir when stateFilePath is not set", () => {
-    const result = service.getFilePath("myproject", { sousDir: "/proj/.sous" });
+    const result = service.getFilePath({ sousDir: "/proj/.sous" });
     expect(result).toBe("/proj/.sous/sous.state.json");
   });
 
   /**
-   * getFilePath() should qualify the file name with the project key when the
-   * config defines more than one project, so projects never share a state file.
-   *
-   * getFilePath("myproject", { sousDir: "/proj/.sous" }, 2);
-   * // -> "/proj/.sous/myproject.sous.state.json"
-   */
-  it("should include the project key in the file name for a multi-project config", () => {
-    const result = service.getFilePath("myproject", { sousDir: "/proj/.sous" }, 2);
-    expect(result).toBe("/proj/.sous/myproject.sous.state.json");
-  });
-
-  /**
    * getFilePath() should prefer an explicit stateFilePath over the sousDir
-   * default, even in a multi-project config.
+   * default.
    *
-   * getFilePath("myproject", { stateFilePath: "/custom/state.json", sousDir: "/x" }, 3);
+   * getFilePath({ stateFilePath: "/custom/state.json", sousDir: "/x" });
    * // -> "/custom/state.json"
    */
   it("should prefer stateFilePath over the sousDir default", () => {
-    const result = service.getFilePath(
-      "myproject",
-      { stateFilePath: "/custom/state.json", sousDir: "/x" },
-      3
-    );
+    const result = service.getFilePath({
+      stateFilePath: "/custom/state.json",
+      sousDir: "/x",
+    });
     expect(result).toBe("/custom/state.json");
   });
 
@@ -211,12 +198,12 @@ describe("StateService.getFilePath()", () => {
    * getFilePath() should fall back to a path next to the cwd when
    * no vars are provided.
    *
-   * getFilePath("myproject");
-   * // -> "<cwd>/myproject.sous.state.json"
+   * getFilePath();
+   * // -> "<cwd>/sous.state.json"
    */
   it("should fall back to process.cwd() when no vars are provided", () => {
-    const result = service.getFilePath("myproject");
-    expect(result).toBe(path.join(process.cwd(), "myproject.sous.state.json"));
+    const result = service.getFilePath();
+    expect(result).toBe(path.join(process.cwd(), "sous.state.json"));
   });
 });
 

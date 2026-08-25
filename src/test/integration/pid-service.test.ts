@@ -24,37 +24,25 @@ describe("PidService", () => {
 
   describe("getFilePath()", () => {
     /**
-     * When projectVars contains a sousDir, getFilePath() puts the PID file
-     * directly in it: <sousDir>/sous.pid
+     * When the settings scope contains a sousDir, getFilePath() puts the PID
+     * file directly in it: <sousDir>/sous.pid
      *
-     * Example: getFilePath("myproj", { sousDir: "/proj/.sous" })
+     * Example: getFilePath({ sousDir: "/proj/.sous" })
      *   → "/proj/.sous/sous.pid"
      */
     it("should return the sousDir-relative path when sousDir is provided", () => {
-      const result = service.getFilePath("myproj", { sousDir: "/proj/.sous" });
+      const result = service.getFilePath({ sousDir: "/proj/.sous" });
       expect(result).toBe("/proj/.sous/sous.pid");
-    });
-
-    /**
-     * When the config defines more than one project, getFilePath() qualifies the
-     * file name with the project key so two watchers do not fight over one file.
-     *
-     * Example: getFilePath("myproj", { sousDir: "/proj/.sous" }, 2)
-     *   → "/proj/.sous/myproj.sous.pid"
-     */
-    it("should include the project key in the file name for a multi-project config", () => {
-      const result = service.getFilePath("myproj", { sousDir: "/proj/.sous" }, 2);
-      expect(result).toBe("/proj/.sous/myproj.sous.pid");
     });
 
     /**
      * An explicit pidFilePath var wins over the sousDir default.
      *
-     * Example: getFilePath("myproj", { pidFilePath: "/custom/x.pid", sousDir: "/y" })
+     * Example: getFilePath({ pidFilePath: "/custom/x.pid", sousDir: "/y" })
      *   → "/custom/x.pid"
      */
     it("should prefer an explicit pidFilePath var", () => {
-      const result = service.getFilePath("myproj", {
+      const result = service.getFilePath({
         pidFilePath: "/custom/x.pid",
         sousDir: "/y",
       });
@@ -62,14 +50,14 @@ describe("PidService", () => {
     });
 
     /**
-     * When no projectVars (or no sousDir) is supplied, getFilePath() falls
-     * back to a cwd-relative path: <cwd>/<key>.sous.pid
+     * When no vars (or no sousDir) are supplied, getFilePath() falls back to a
+     * cwd-relative path: <cwd>/sous.pid
      *
-     * Example: getFilePath("myproj") → "/current/working/dir/myproj.sous.pid"
+     * Example: getFilePath() → "/current/working/dir/sous.pid"
      */
     it("should return the cwd-relative fallback path when sousDir is absent", () => {
-      const result = service.getFilePath("myproj");
-      expect(result).toBe(path.join(process.cwd(), "myproj.sous.pid"));
+      const result = service.getFilePath();
+      expect(result).toBe(path.join(process.cwd(), "sous.pid"));
     });
   });
 

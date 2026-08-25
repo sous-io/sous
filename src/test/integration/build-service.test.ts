@@ -15,17 +15,6 @@ describe("BuildService", () => {
   let configContext: ConfigContext;
 
   /**
-   * Builds a Settings object for the "proj" project. No path vars are needed:
-   * the state file location comes from the ConfigContext (the discovered `.sous/`
-   * directory), which the tmp dir stands in for.
-   */
-  function makeProjectSettings(
-    projectOverrides: Parameters<typeof makeSettings>[1]
-  ): Settings {
-    return makeSettings("proj", projectOverrides);
-  }
-
-  /**
    * Runs BuildService.build() with the test's ConfigContext attached, mirroring
    * how the commands call it.
    */
@@ -34,7 +23,7 @@ describe("BuildService", () => {
     settings: Settings,
     options: BuildOptions = {}
   ): Promise<boolean> {
-    return service.build("proj", settings, { ...options, configContext });
+    return service.build(settings, { ...options, configContext });
   }
 
   beforeEach(() => {
@@ -45,7 +34,7 @@ describe("BuildService", () => {
       sousDir: tmp.path,
       configPath: path.join(tmp.path, "sous.config.js"),
     };
-    // Single-project config → the state file sits directly in the .sous/ dir.
+    // The state file sits directly in the .sous/ dir.
     stateFilePath = path.join(tmp.path, "sous.state.json");
 
     fs.writeFileSync(srcFile, "# Hello\n\nThis is test content.\n", "utf8");
@@ -70,7 +59,7 @@ describe("BuildService", () => {
      * as source.md.
      */
     it("should compile and write the output file", async () => {
-      const settings = makeProjectSettings({
+      const settings = makeSettings({
         name: "Test Project",
         compilation: {
           targets: [
@@ -94,14 +83,14 @@ describe("BuildService", () => {
 
     /**
      * build() should create a sous.state.json file recording the output file.
-     * For a single-project config the state file goes in the discovered `.sous/`
-     * directory: <sousDir>/sous.state.json.
+     * The state file goes in the discovered `.sous/` directory:
+     * <sousDir>/sous.state.json.
      *
      * Given sousDir=tmp.path, the state file should be at tmp/sous.state.json and
      * contain an entry for the output file.
      */
     it("should write a state file containing the output file entry", async () => {
-      const settings = makeProjectSettings({
+      const settings = makeSettings({
         name: "Test Project",
         compilation: {
           targets: [
@@ -137,7 +126,7 @@ describe("BuildService", () => {
      * The prune step still runs (with no state to prune, it is a no-op).
      */
     it("should skip compilation when noCompile is true", async () => {
-      const settings = makeProjectSettings({
+      const settings = makeSettings({
         name: "Test Project",
         compilation: {
           targets: [
@@ -167,7 +156,7 @@ describe("BuildService", () => {
       const staleFile = path.join(tmp.path, "stale.md");
 
       // First build: write staleFile
-      const settingsV1 = makeProjectSettings({
+      const settingsV1 = makeSettings({
         name: "Test Project",
         compilation: {
           targets: [
@@ -184,7 +173,7 @@ describe("BuildService", () => {
       expect(fs.existsSync(staleFile)).toBe(true);
 
       // Second build: new config points to destFile, noPrune=true — staleFile must survive
-      const settingsV2 = makeProjectSettings({
+      const settingsV2 = makeSettings({
         name: "Test Project",
         compilation: {
           targets: [
@@ -219,7 +208,7 @@ describe("BuildService", () => {
       const staleFile = path.join(tmp.path, "stale.md");
 
       // V1: compile and record staleFile in state
-      const settingsV1 = makeProjectSettings({
+      const settingsV1 = makeSettings({
         name: "Test Project",
         compilation: {
           targets: [
@@ -236,7 +225,7 @@ describe("BuildService", () => {
       expect(fs.existsSync(staleFile)).toBe(true);
 
       // V2: config no longer references staleFile; run prune-only so the old state is visible
-      const settingsV2 = makeProjectSettings({
+      const settingsV2 = makeSettings({
         name: "Test Project",
         compilation: {
           targets: [
@@ -275,7 +264,7 @@ describe("BuildService", () => {
       const staleFile = path.join(tmp.path, "stale.md");
 
       // V1: two outputs from the same source
-      const settingsV1 = makeProjectSettings({
+      const settingsV1 = makeSettings({
         name: "Test Project",
         compilation: {
           targets: [
@@ -295,7 +284,7 @@ describe("BuildService", () => {
       expect(fs.existsSync(staleFile)).toBe(true);
 
       // V2: staleFile is dropped; run a PLAIN build — no noCompile, no rebuild
-      const settingsV2 = makeProjectSettings({
+      const settingsV2 = makeSettings({
         name: "Test Project",
         compilation: {
           targets: [
@@ -329,7 +318,7 @@ describe("BuildService", () => {
       const subDir = path.join(tmp.path, "sous-created-dir");
       const staleFile = path.join(subDir, "output.md");
 
-      const settingsV1 = makeProjectSettings({
+      const settingsV1 = makeSettings({
         name: "Test Project",
         compilation: {
           targets: [
@@ -353,7 +342,7 @@ describe("BuildService", () => {
       expect(stateBefore!.dirs).toContain(subDir);
 
       // V2: prune-only — new config has destFile instead of staleFile
-      const settingsV2 = makeProjectSettings({
+      const settingsV2 = makeSettings({
         name: "Test Project",
         compilation: {
           targets: [
@@ -390,7 +379,7 @@ describe("BuildService", () => {
       const srcFile2 = path.join(tmp.path, "source2.md");
       fs.writeFileSync(srcFile2, "# Source 2\n", "utf8");
 
-      const settingsV1 = makeProjectSettings({
+      const settingsV1 = makeSettings({
         name: "Test Project",
         compilation: {
           targets: [
@@ -412,7 +401,7 @@ describe("BuildService", () => {
       expect(fs.existsSync(staleFile)).toBe(true);
 
       // V2: prune-only — only keptFile is in the new config
-      const settingsV2 = makeProjectSettings({
+      const settingsV2 = makeSettings({
         name: "Test Project",
         compilation: {
           targets: [
@@ -442,7 +431,7 @@ describe("BuildService", () => {
     it("should log 'would prune' but not delete files when dryRun is true", async () => {
       const staleFile = path.join(tmp.path, "stale.md");
 
-      const settingsV1 = makeProjectSettings({
+      const settingsV1 = makeSettings({
         name: "Test Project",
         compilation: {
           targets: [
@@ -464,7 +453,7 @@ describe("BuildService", () => {
         logCalls.push(args.map(String).join(" "));
       });
 
-      const settingsV2 = makeProjectSettings({
+      const settingsV2 = makeSettings({
         name: "Test Project",
         compilation: {
           targets: [
@@ -496,89 +485,48 @@ describe("BuildService", () => {
 
   describe("resolveStateFilePath()", () => {
     /**
-     * resolveStateFilePath() should default to <sousDir>/sous.state.json for a
-     * config that defines one project.
+     * resolveStateFilePath() should default to <sousDir>/sous.state.json when
+     * no `stateFilePath` var is defined.
      *
-     * resolveStateFilePath("proj", oneProjectSettings, { sousDir: "<tmp>", ... });
+     * resolveStateFilePath(settings, { sousDir: "<tmp>", ... });
      * // -> "<tmp>/sous.state.json"
      */
-    it("should default to <sousDir>/sous.state.json for a single-project config", () => {
-      const settings = makeProjectSettings({ name: "Test Project" });
-      expect(resolveStateFilePath("proj", settings, configContext)).toBe(
+    it("should default to <sousDir>/sous.state.json", () => {
+      const settings = makeSettings({ name: "Test Project" });
+      expect(resolveStateFilePath(settings, configContext)).toBe(
         path.join(tmp.path, "sous.state.json")
       );
     });
 
     /**
-     * resolveStateFilePath() should qualify the file name with the project key
-     * when the config defines several projects, so they cannot share one state file.
+     * resolveStateFilePath() should honour a `stateFilePath` var defined in
+     * `_vars`, overriding the <sousDir> default.
      *
-     * // settings.projects has "a" and "b"
-     * resolveStateFilePath("a", settings, ctx); // -> "<tmp>/a.sous.state.json"
+     * // _vars: { stateFilePath: "<tmp>/custom-state.json" }
+     * resolveStateFilePath(settings, ctx); // -> "<tmp>/custom-state.json"
      */
-    it("should include the project key when the config has several projects", () => {
-      const settings: Settings = {
-        projects: { a: { name: "A" }, b: { name: "B" } },
-      };
-      expect(resolveStateFilePath("a", settings, configContext)).toBe(
-        path.join(tmp.path, "a.sous.state.json")
-      );
-      expect(resolveStateFilePath("b", settings, configContext)).toBe(
-        path.join(tmp.path, "b.sous.state.json")
-      );
-    });
-
-    /**
-     * resolveStateFilePath() should honour a `stateFilePath` var defined at the
-     * PROJECT level. Resolving from the root scope alone was a bug: a project-level
-     * override was ignored and state silently landed in cwd.
-     *
-     * // project _vars: { stateFilePath: "<tmp>/custom.json" }
-     * resolveStateFilePath("proj", settings, ctx); // -> "<tmp>/custom.json"
-     */
-    it("should honour a stateFilePath var defined at the project level", () => {
+    it("should honour a stateFilePath var override", () => {
       const custom = path.join(tmp.path, "custom-state.json");
-      const settings = makeProjectSettings({
+      const settings = makeSettings({
         name: "Test Project",
         _vars: { stateFilePath: custom },
       });
-      expect(resolveStateFilePath("proj", settings, configContext)).toBe(custom);
+      expect(resolveStateFilePath(settings, configContext)).toBe(custom);
     });
 
     /**
-     * resolveStateFilePath() should honour a root-level `stateFilePath` var too,
-     * since project scope inherits from root scope.
+     * resolveStateFilePath() should resolve `${sousDir}` inside a
+     * `stateFilePath` var, since the var resolves through the settings scope.
      *
-     * // settings._vars: { stateFilePath: "<tmp>/root-state.json" }
-     * resolveStateFilePath("proj", settings, ctx); // -> "<tmp>/root-state.json"
+     * // _vars: { stateFilePath: "${sousDir}/proj-state.json" }
+     * resolveStateFilePath(settings, ctx); // -> "<tmp>/proj-state.json"
      */
-    it("should honour a stateFilePath var defined at the root level", () => {
-      const custom = path.join(tmp.path, "root-state.json");
+    it("should resolve ${sousDir} inside a stateFilePath var", () => {
       const settings: Settings = {
-        _vars: { stateFilePath: custom },
-        projects: { proj: { name: "Test Project" } },
+        name: "Test Project",
+        _vars: { stateFilePath: "${sousDir}/proj-state.json" },
       };
-      expect(resolveStateFilePath("proj", settings, configContext)).toBe(custom);
-    });
-
-    /**
-     * resolveStateFilePath() should let a project-level `stateFilePath` override a
-     * root-level one, and should resolve `${sousDir}` inside it.
-     *
-     * // root _vars sets one path; project _vars sets "${sousDir}/proj-state.json"
-     * resolveStateFilePath("proj", settings, ctx); // -> "<tmp>/proj-state.json"
-     */
-    it("should let the project level override the root level and resolve ${sousDir}", () => {
-      const settings: Settings = {
-        _vars: { stateFilePath: path.join(tmp.path, "root-state.json") },
-        projects: {
-          proj: {
-            name: "Test Project",
-            _vars: { stateFilePath: "${sousDir}/proj-state.json" },
-          },
-        },
-      };
-      expect(resolveStateFilePath("proj", settings, configContext)).toBe(
+      expect(resolveStateFilePath(settings, configContext)).toBe(
         path.join(tmp.path, "proj-state.json")
       );
     });

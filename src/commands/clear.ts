@@ -26,8 +26,7 @@ export default class Clear extends BaseCommand {
   async run(): Promise<void> {
     const { flags } = await this.parse(Clear);
 
-    const project = this.resolveProject(flags.project);
-    const stateFilePath = resolveStateFilePath(project.key, this.settings, this.configContext);
+    const stateFilePath = resolveStateFilePath(this.settings, this.configContext);
 
     const stateService = new StateService();
     const state = await stateService.load(stateFilePath);
@@ -39,14 +38,14 @@ export default class Clear extends BaseCommand {
       this.exit(1);
     }
 
-    showCommandVars({ Project: project.name, Config: this.configContext.configPath });
+    showCommandVars({ Project: this.projectLabel, Config: this.configContext.configPath });
 
     const fileCount = state!.files.length;
     const dirCount = state!.dirs.length;
 
     if (!flags.force) {
       const confirmed = await confirm({
-        message: `Delete ${fileCount} file(s) and ${dirCount} director(ies) for project '${project.key}'?`,
+        message: `Delete ${fileCount} file(s) and ${dirCount} director(ies) for '${this.projectLabel}'?`,
         default: false,
       });
       if (!confirmed) {

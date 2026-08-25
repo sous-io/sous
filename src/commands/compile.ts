@@ -1,7 +1,7 @@
 import { Flags } from "@oclif/core";
 import { BaseCommand } from "../base-command.js";
 import { CompilationService } from "../lib/markdown-compiler.js";
-import { resolveProjectCompilation, resolveRootScope, resolveWatchConfig } from "../lib/settings.js";
+import { resolveCompilation, resolveRootScope, resolveWatchConfig } from "../lib/settings.js";
 import { resolveStateFilePath } from "../lib/build-service.js";
 import { WatchService } from "../lib/watch-service.js";
 import { displayError, footer, heading, log, showCommandVars } from "../utils/formatting.js";
@@ -11,7 +11,6 @@ export default class Compile extends BaseCommand {
 
   static examples = [
     "<%= config.bin %> compile",
-    "<%= config.bin %> compile --project myproject",
     "<%= config.bin %> compile --rebuild",
     "<%= config.bin %> compile --dry-run",
     "<%= config.bin %> compile --strict",
@@ -41,19 +40,18 @@ export default class Compile extends BaseCommand {
   async run(): Promise<void> {
     const { flags } = await this.parse(Compile);
 
-    const project = this.resolveProject(flags.project);
     const rootScope = resolveRootScope(this.settings, this.configContext);
-    const config = resolveProjectCompilation(project, rootScope, this.settings, project.key);
+    const config = resolveCompilation(this.settings, rootScope);
 
     if (!config) {
-      displayError(`Project '${project.key}' has no compilation config`);
+      displayError(`No compilation config found in ${this.configContext.configPath}`);
       this.exit(1);
     }
 
-    const stateFilePath = resolveStateFilePath(project.key, this.settings, this.configContext);
+    const stateFilePath = resolveStateFilePath(this.settings, this.configContext);
 
     showCommandVars({
-      Project: project.name,
+      Project: this.projectLabel,
       Config: this.configContext.configPath,
       Strict: flags.strict,
       Rebuild: flags.rebuild,
@@ -78,7 +76,7 @@ export default class Compile extends BaseCommand {
     }
 
     if (flags.watch) {
-      const watchConfig = resolveWatchConfig(project, rootScope, project.key, this.settings);
+      const watchConfig = resolveWatchConfig(this.settings, rootScope);
       const watchService = new WatchService();
 
       watchService.watch(watchConfig, async (changedFile) => {

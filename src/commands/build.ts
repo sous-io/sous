@@ -3,7 +3,7 @@ import { Flags } from "@oclif/core";
 import { BaseCommand } from "../base-command.js";
 import { BuildService } from "../lib/build-service.js";
 import { PidService } from "../lib/pid-service.js";
-import { CLI_ROOT, loadSettings, resolveRootScope, resolveScope, resolveWatchConfig } from "../lib/settings.js";
+import { CLI_ROOT, loadSettings, resolveRootScope, resolveWatchConfig } from "../lib/settings.js";
 import type { WatchHandle } from "../lib/watch-service.js";
 import { WatchService } from "../lib/watch-service.js";
 import { footer, heading, log, showCommandVars } from "../utils/formatting.js";
@@ -50,10 +50,8 @@ export default class Build extends BaseCommand {
   async run(): Promise<void> {
     const { flags } = await this.parse(Build);
 
-    const project = this.resolveProject(flags.project);
-
     showCommandVars({
-      Project: project.name,
+      Project: this.projectLabel,
       Config: this.configContext.configPath,
       Rebuild: flags.rebuild,
       "Dry Run": flags["dry-run"],
@@ -73,7 +71,7 @@ export default class Build extends BaseCommand {
     };
 
     const buildService = new BuildService();
-    const success = await buildService.build(project.key, this.settings, buildOptions);
+    const success = await buildService.build(this.settings, buildOptions);
 
     footer();
 
@@ -85,12 +83,11 @@ export default class Build extends BaseCommand {
       const configPath = this.configContext.configPath;
 
       const rootScope = resolveRootScope(this.settings, this.configContext);
-      const projectScope = resolveScope(project._vars ?? {}, rootScope);
 
       // --- PID file enforcement ---
       const pidService = new PidService();
-      const pidFilePath = pidService.getFilePath(project.key, projectScope, this.projectCount);
-      await pidService.acquire(pidFilePath, project.key);
+      const pidFilePath = pidService.getFilePath(rootScope);
+      await pidService.acquire(pidFilePath, this.projectLabel);
 
       let isRebuilding = false;
 
@@ -114,7 +111,7 @@ export default class Build extends BaseCommand {
        */
       const buildWatchConfig = () => {
         const currentRootScope = resolveRootScope(this.settings, this.configContext);
-        const config = resolveWatchConfig(project, currentRootScope, project.key, this.settings);
+        const config = resolveWatchConfig(this.settings, currentRootScope);
         config.fullRebuildPaths = [
           ...(config.fullRebuildPaths ?? []),
           configPath,
@@ -132,7 +129,7 @@ export default class Build extends BaseCommand {
             isRebuilding = true;
             log(`\nChange detected: ${event.filePath}`);
             heading("Rebuilding");
-            await buildService.build(project.key, this.settings, {
+            await buildService.build(this.settings, {
               ...buildOptions,
               // --rebuild means full clean build on every trigger; skip partial optimisation
               changedFile: buildOptions.rebuild ? undefined : event.filePath,
@@ -149,7 +146,7 @@ export default class Build extends BaseCommand {
             this.settings = await loadSettings(configPath);
 
             heading("Rebuilding");
-            await buildService.build(project.key, this.settings, buildOptions);
+            await buildService.build(this.settings, buildOptions);
             footer();
             isRebuilding = false;
 
@@ -166,7 +163,7 @@ export default class Build extends BaseCommand {
         isRebuilding = true;
         log(`\n${reason}`);
         heading("Rebuilding");
-        await buildService.build(project.key, this.settings, buildOptions);
+        await buildService.build(this.settings, buildOptions);
         footer();
         isRebuilding = false;
       };

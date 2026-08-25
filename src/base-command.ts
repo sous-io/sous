@@ -1,3 +1,4 @@
+import path from "node:path";
 import { Command, Flags } from "@oclif/core";
 import {
   discoverConfig,
@@ -10,7 +11,6 @@ import {
   isConfigError,
   loadSettings,
   type ConfigContext,
-  type RawProject,
   type Settings,
 } from "./lib/settings.js";
 import { displayError, displayErrorBlock, header } from "./utils/formatting.js";
@@ -29,10 +29,6 @@ import { displayError, displayErrorBlock, header } from "./utils/formatting.js";
  */
 export abstract class BaseCommand extends Command {
   static baseFlags = {
-    project: Flags.string({
-      char: "p",
-      description: "Project key to operate on",
-    }),
     config: Flags.string({
       char: "c",
       description:
@@ -108,39 +104,11 @@ export abstract class BaseCommand extends Command {
   }
 
   /**
-   * Resolves the active project from the --project flag or settings.defaultProject.
-   * Exits with an error if no project key is available or the key is not found.
+   * Human-readable label for the configured project: the config's `name` when
+   * set, otherwise the basename of the directory holding `.sous/`.
    */
-  protected resolveProject(flagValue: string | undefined): RawProject & { key: string } {
-    const keys = Object.keys(this.settings.projects ?? {});
-    const key = flagValue ?? this.settings.defaultProject ?? (keys.length === 1 ? keys[0] : undefined);
-
-    if (!key) {
-      displayError(
-        "No project specified.\n" +
-          `  Config: ${this.configContext.configPath}\n` +
-          `  Projects defined: ${keys.length > 0 ? keys.join(", ") : "(none)"}\n` +
-          "  Use --project <key>, or set defaultProject in your config."
-      );
-      this.exit(1);
-    }
-
-    const project = this.settings.projects?.[key!];
-
-    if (!project) {
-      displayError(
-        `Project '${key}' not found in ${this.configContext.configPath}\n` +
-          `  Projects defined: ${keys.length > 0 ? keys.join(", ") : "(none)"}`
-      );
-      this.exit(1);
-    }
-
-    return { ...project!, key: key! };
-  }
-
-  /** Number of projects defined in the active config. */
-  protected get projectCount(): number {
-    return Object.keys(this.settings.projects ?? {}).length;
+  protected get projectLabel(): string {
+    return this.settings.name ?? path.basename(path.dirname(this.configContext.sousDir));
   }
 }
 
