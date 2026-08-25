@@ -84,13 +84,27 @@ export function indent(text: string, count = 2, char = " "): string {
 // --- Header & Footer -----------------------------------------------------------------------------
 
 /**
- * Writes the CLI header to the console.
+ * Writes the CLI header using the given line writer.
+ *
+ * Factored out so commands whose stdout must stay machine-readable (the
+ * `xcv config *` commands, which emit JSON) can route the decorative banner to
+ * stderr instead — see ConfigCommand.emitHeader.
+ *
+ * @param write - Receives one already-formatted line at a time (no trailing newline).
+ */
+export function headerTo(write: (line: string) => void): void {
+  write(" ");
+  write(" ");
+  write(color.cyan(HEADER_LINES.join("\n")));
+  write("  Agent Configuration Manager         ");
+  write(" ");
+}
+
+/**
+ * Writes the CLI header to stdout.
  */
 export function header(): void {
-  blankLines();
-  log(color.cyan(HEADER_LINES.join("\n")));
-  log("  Agent Configuration Manager         ");
-  blankLine();
+  headerTo(log);
 }
 
 /**
@@ -236,17 +250,22 @@ export function deleteStatus(recordsDeleted: number, totalRecordsToDelete: numbe
 
 /**
  * Writes an error message to the console in red.
+ *
+ * @param text - The message to display.
+ * @param write - Line sink (default stdout via `log`). Commands whose stdout must
+ *   stay machine-readable (the `xcv config *` JSON commands) pass a stderr writer
+ *   so error text never corrupts a piped stdout stream.
  */
-export function displayError(text: string): void {
+export function displayError(text: string, write: (line: string) => void = log): void {
   const lines = text.split("\n");
-  log("");
+  write("");
   for (const line of lines) {
     if (line.trim() !== "") {
-      log(indent(color.redBright(line.trim())));
+      write(indent(color.redBright(line.trim())));
     }
   }
-  log("");
-  log("");
+  write("");
+  write("");
 }
 
 /**
@@ -257,16 +276,21 @@ export function displayError(text: string): void {
  * structure (a checked-paths list, a code sample, numbered steps). `displayError`
  * trims every line and drops blanks, which flattens that structure.
  *
+ * @param text - The pre-formatted, multi-line message to display.
+ * @param write - Line sink (default stdout via `log`). Commands whose stdout must
+ *   stay machine-readable (the `xcv config *` JSON commands) pass a stderr writer
+ *   so error text never corrupts a piped stdout stream.
+ *
  * @example
  * displayErrorBlock("No config found.\n\n  Checked:\n    /a/.sous/");
  */
-export function displayErrorBlock(text: string): void {
-  log("");
+export function displayErrorBlock(text: string, write: (line: string) => void = log): void {
+  write("");
   for (const line of text.split("\n")) {
-    log(line === "" ? " " : indent(color.redBright(line)));
+    write(line === "" ? " " : indent(color.redBright(line)));
   }
-  log("");
-  log("");
+  write("");
+  write("");
 }
 
 /**

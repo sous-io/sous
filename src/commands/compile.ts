@@ -1,10 +1,11 @@
 import { Flags } from "@oclif/core";
 import { BaseCommand } from "../base-command.js";
 import { CompilationService } from "../lib/markdown-compiler.js";
-import { resolveCompilation, resolveRootScope, resolveWatchConfig } from "../lib/settings.js";
+import { resolveCompilation, resolveRootScope } from "../lib/settings.js";
 import { resolveStateFilePath } from "../lib/build-service.js";
+import { buildReloadWatchConfig, startConfigReloadWatch } from "../lib/watch-loop.js";
 import { WatchService } from "../lib/watch-service.js";
-import { displayError, footer, heading, log, showCommandVars } from "../utils/formatting.js";
+import { displayError, footer, heading, showCommandVars } from "../utils/formatting.js";
 
 export default class Compile extends BaseCommand {
   static description = "Compile markdown templates into output files";
@@ -76,15 +77,33 @@ export default class Compile extends BaseCommand {
     }
 
     if (flags.watch) {
-      const watchConfig = resolveWatchConfig(this.settings, rootScope);
       const watchService = new WatchService();
 
-      watchService.watch(watchConfig, async (changedFile) => {
-        log(`\nChange detected: ${changedFile}`);
+      // Recompiles using the command's CURRENT settings. Called for partial
+      // rebuilds (a changed source) and, after a clean reload, for full
+      // rebuilds. The compilation config and state-file path are re-resolved
+      // each time so a config reload takes effect. Owns the "Recompiling"
+      // heading/footer. (`changedFile` is accepted for parity with build and
+      // logged by the watch loop; compile always does a full recompile.)
+      const rebuild = async (_changedFile?: string) => {
+        const currentRootScope = resolveRootScope(this.settings, this.configContext);
+        const currentConfig = resolveCompilation(this.settings, currentRootScope);
+        if (!currentConfig) {
+          displayError(`No compilation config found in ${this.configContext.configPath}`);
+          return;
+        }
+        const currentStateFilePath = resolveStateFilePath(this.settings, this.configContext);
         heading("Recompiling");
         const recompiler = new CompilationService(compilerOptions);
-        await recompiler.compile(config!, stateFilePath);
+        await recompiler.compile(currentConfig, currentStateFilePath);
         footer();
+      };
+
+      startConfigReloadWatch({
+        watchService,
+        buildWatchConfig: () => buildReloadWatchConfig(this.settings, this.configContext),
+        rebuild,
+        reloadConfig: () => this.reloadDiscoveredConfig(),
       });
 
       await new Promise(() => {}); // keep process alive

@@ -162,13 +162,18 @@ export function assertUniqueLayerBaseNames(layerPaths: string[]): void {
 /**
  * Builds a full DiscoveredConfig from a located primary config: computes the
  * conf.d directory, enumerates its layers, and runs the duplicate-baseName check.
+ *
+ * @param confDirOverride - Absolute path to use as the conf.d directory instead
+ *   of `<sousDir>/conf.d`. Set from the `--sous-confd` flag or `SOUS_CONFD` env
+ *   var; discovery then builds its layers from the overridden directory.
  */
 function buildDiscoveredConfig(
   configPath: string,
   sousDir: string,
-  source: DiscoveredConfig["source"]
+  source: DiscoveredConfig["source"],
+  confDirOverride?: string
 ): DiscoveredConfig {
-  const confDir = path.join(sousDir, CONFD_DIR_NAME);
+  const confDir = confDirOverride ?? path.join(sousDir, CONFD_DIR_NAME);
   const layerPaths = [configPath, ...listConfDirLayers(confDir)];
   assertUniqueLayerBaseNames(layerPaths);
   return { configPath, sousDir, confDir, layerPaths, source };
@@ -178,9 +183,17 @@ function buildDiscoveredConfig(
  * Re-runs the conf.d enumeration and duplicate-baseName check for an existing
  * discovery. Used by watch mode: layer files can appear or disappear while
  * watching, so the layer list must be rebuilt before every settings reload.
+ *
+ * The existing `confDir` is preserved (not recomputed from `sousDir`), so a
+ * `SOUS_CONFD` / `--sous-confd` override survives across watch reloads.
  */
 export function refreshDiscoveredConfig(discovered: DiscoveredConfig): DiscoveredConfig {
-  return buildDiscoveredConfig(discovered.configPath, discovered.sousDir, discovered.source);
+  return buildDiscoveredConfig(
+    discovered.configPath,
+    discovered.sousDir,
+    discovered.source,
+    discovered.confDir
+  );
 }
 
 /**
@@ -189,17 +202,22 @@ export function refreshDiscoveredConfig(discovered: DiscoveredConfig): Discovere
  * without a config file does not stop the walk.
  *
  * @param startDir - Directory to start from (normally `process.cwd()`).
+ * @param confDirOverride - Absolute conf.d directory to use instead of
+ *   `<sousDir>/conf.d` (from `--sous-confd` / `SOUS_CONFD`).
  * @returns The discovered config, or null when nothing was found.
  * @throws ConfigError when a `.sous/` holds several primary configs, or when
  *   loaded layer baseNames collide.
  */
-export function discoverConfig(startDir: string = process.cwd()): DiscoveredConfig | null {
+export function discoverConfig(
+  startDir: string = process.cwd(),
+  confDirOverride?: string
+): DiscoveredConfig | null {
   for (const dir of candidateDirs(startDir)) {
     const sousDir = path.join(dir, SOUS_DIR_NAME);
     if (!fs.existsSync(sousDir) || !fs.statSync(sousDir).isDirectory()) continue;
 
     const configPath = findConfigInSousDir(sousDir);
-    if (configPath) return buildDiscoveredConfig(configPath, sousDir, "walk-up");
+    if (configPath) return buildDiscoveredConfig(configPath, sousDir, "walk-up", confDirOverride);
   }
 
   return null;
@@ -214,40 +232,47 @@ export function discoverConfig(startDir: string = process.cwd()): DiscoveredConf
  *
  * @param configFlag - The raw `--config` value (relative paths resolve against cwd).
  * @param cwd - Base directory for relative paths.
+ * @param confDirOverride - Absolute conf.d directory to use instead of
+ *   `<sousDir>/conf.d` (from `--sous-confd` / `SOUS_CONFD`).
+ * @param sourceLabel - How the caller supplied the value (`--config`,
+ *   `--sous-config`, `SOUS_CONFIG`, `--sous-dir`, `SOUS_DIR`). Used only in error
+ *   messages so a user who set `SOUS_DIR` is not told to fix `--config`.
  * @returns The resolved config.
  * @throws When the path does not exist or holds no recognised config file.
  */
 export function resolveConfigFlag(
   configFlag: string,
-  cwd: string = process.cwd()
+  cwd: string = process.cwd(),
+  confDirOverride?: string,
+  sourceLabel = "--config"
 ): DiscoveredConfig {
   const resolved = path.resolve(cwd, expandHome(configFlag));
 
   if (!fs.existsSync(resolved)) {
-    throw new Error(`--config path not found: ${resolved}`);
+    throw new Error(`${sourceLabel} path not found: ${resolved}`);
   }
 
   if (fs.statSync(resolved).isDirectory()) {
     const direct = findConfigInSousDir(resolved);
     if (direct) {
-      return buildDiscoveredConfig(direct, resolved, "flag");
+      return buildDiscoveredConfig(direct, resolved, "flag", confDirOverride);
     }
 
     const nested = path.join(resolved, SOUS_DIR_NAME);
     if (fs.existsSync(nested) && fs.statSync(nested).isDirectory()) {
       const nestedConfig = findConfigInSousDir(nested);
       if (nestedConfig) {
-        return buildDiscoveredConfig(nestedConfig, nested, "flag");
+        return buildDiscoveredConfig(nestedConfig, nested, "flag", confDirOverride);
       }
     }
 
     throw new Error(
-      `--config points at a directory with no sous config file: ${resolved}\n` +
+      `${sourceLabel} points at a directory with no sous config file: ${resolved}\n` +
         `Looked for: ${CONFIG_FILE_NAMES.join(", ")}`
     );
   }
 
-  return buildDiscoveredConfig(resolved, path.dirname(resolved), "flag");
+  return buildDiscoveredConfig(resolved, path.dirname(resolved), "flag", confDirOverride);
 }
 
 /**

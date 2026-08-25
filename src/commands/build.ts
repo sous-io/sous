@@ -1,10 +1,9 @@
-import path from "node:path";
 import { Flags } from "@oclif/core";
 import { BaseCommand } from "../base-command.js";
 import { BuildService } from "../lib/build-service.js";
-import { refreshDiscoveredConfig } from "../lib/config-discovery.js";
 import { PidService } from "../lib/pid-service.js";
-import { CLI_ROOT, loadSettings, resolveRootScope, resolveWatchConfig } from "../lib/settings.js";
+import { resolveRootScope } from "../lib/settings.js";
+import { buildReloadWatchConfig, startConfigReloadWatch } from "../lib/watch-loop.js";
 import type { WatchHandle } from "../lib/watch-service.js";
 import { WatchService } from "../lib/watch-service.js";
 import { footer, heading, log, showCommandVars } from "../utils/formatting.js";
@@ -88,8 +87,6 @@ export default class Build extends BaseCommand {
       const pidFilePath = pidService.getFilePath(rootScope);
       await pidService.acquire(pidFilePath, this.projectLabel);
 
-      let isRebuilding = false;
-
       const cleanup = async (watchHandle?: WatchHandle) => {
         if (process.stdin.isTTY) {
           process.stdin.setRawMode(false);
@@ -104,99 +101,25 @@ export default class Build extends BaseCommand {
 
       const watchService = new WatchService();
 
-      /**
-       * Builds a WatchConfig from current settings, injecting the primary config
-       * file, the conf.d/ drop-in DIRECTORY, and the templating directory into
-       * fullRebuildPaths. Watching the conf.d directory (not each layer file)
-       * covers layer files appearing, changing, or disappearing at runtime, since
-       * full-rebuild matching is exact-or-directory-prefix.
-       */
-      const buildWatchConfig = () => {
-        const currentRootScope = resolveRootScope(this.settings, this.configContext);
-        const config = resolveWatchConfig(this.settings, currentRootScope);
-        config.fullRebuildPaths = [
-          ...(config.fullRebuildPaths ?? []),
-          this.configContext.configPath,
-          this.discovered.confDir,
-          path.join(CLI_ROOT, "src", "templating"),
-        ];
-        return config;
-      };
-
-      /** Starts a new watcher and updates the shared handle reference. */
-      const startWatcher = (handle: { current: WatchHandle | null }) => {
-        const watchConfig = buildWatchConfig();
-        handle.current = watchService.watch(watchConfig, async (event) => {
-          if (event.type === "partial") {
-            if (isRebuilding) return;
-            isRebuilding = true;
-            log(`\nChange detected: ${event.filePath}`);
-            heading("Rebuilding");
-            await buildService.build(this.settings, {
-              ...buildOptions,
-              // --rebuild means full clean build on every trigger; skip partial optimisation
-              changedFile: buildOptions.rebuild ? undefined : event.filePath,
-            });
-            footer();
-            isRebuilding = false;
-          } else {
-            // Full rebuild: stop current watcher, reload settings, restart
-            if (isRebuilding) return;
-            isRebuilding = true;
-            log(`\nConfig changed (${event.filePath}), reloading settings and restarting watcher...`);
-            await handle.current!.stop();
-
-            try {
-              // Re-run discovery: conf.d layer files can appear or disappear
-              // while watching, so the ordered layer list must be rebuilt (and
-              // the duplicate-baseName check re-run) before reloading settings.
-              const refreshed = refreshDiscoveredConfig(this.discovered);
-              const reloaded = await loadSettings(refreshed);
-
-              // Only commit the new config once it loaded cleanly, so a failed
-              // reload leaves the last-good config in place.
-              this.discovered = refreshed;
-              this.configContext = {
-                sousDir: refreshed.sousDir,
-                configPath: refreshed.configPath,
-                confDir: refreshed.confDir,
-                layerPaths: refreshed.layerPaths,
-              };
-              this.settings = reloaded;
-
-              heading("Rebuilding");
-              await buildService.build(this.settings, buildOptions);
-              footer();
-            } catch (error) {
-              // A broken config edit (bad JSON/JS, colliding conf.d baseNames,
-              // configure() throw, etc.) must not wedge the session: report it,
-              // keep the last-good config, and fall through to restart the
-              // watcher so the next edit can recover.
-              log(
-                `\nConfig reload failed; keeping the last-good config. Fix the config and save again to retry.\n  ${
-                  error instanceof Error ? error.message : String(error)
-                }`
-              );
-            } finally {
-              isRebuilding = false;
-              startWatcher(handle);
-            }
-          }
-        });
-      };
-
-      const handle: { current: WatchHandle | null } = { current: null };
-      startWatcher(handle);
-
-      const triggerFullRebuild = async (reason: string) => {
-        if (isRebuilding) return;
-        isRebuilding = true;
-        log(`\n${reason}`);
+      // Reruns compile + prune with the command's current settings. Called for
+      // partial rebuilds (with the changed file) and, after a clean reload, for
+      // full rebuilds. Owns the "Rebuilding" heading/footer.
+      const rebuild = async (changedFile?: string) => {
         heading("Rebuilding");
-        await buildService.build(this.settings, buildOptions);
+        await buildService.build(this.settings, {
+          ...buildOptions,
+          // --rebuild means full clean build on every trigger; skip partial optimisation
+          changedFile: buildOptions.rebuild ? undefined : changedFile,
+        });
         footer();
-        isRebuilding = false;
       };
+
+      const { handle, triggerFullRebuild } = startConfigReloadWatch({
+        watchService,
+        buildWatchConfig: () => buildReloadWatchConfig(this.settings, this.configContext),
+        rebuild,
+        reloadConfig: () => this.reloadDiscoveredConfig(),
+      });
 
       // Display the interactive prompt
       log("[ Press Q to quit  |  any other key: rebuild ]");

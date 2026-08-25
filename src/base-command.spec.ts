@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readConfigFlagFromArgv } from "./base-command.js";
+import { readConfigFlagFromArgv, readLongFlagFromArgv } from "./base-command.js";
 
 /**
  * BaseCommand.init() must inject `.sous/.env.local` into process.env BEFORE any
@@ -104,5 +104,101 @@ describe("readConfigFlagFromArgv()", () => {
    */
   it("should read a config flag that appears before --", () => {
     expect(readConfigFlagFromArgv(["launch", "claude", "-c", "/a.js", "--", "-c"])).toBe("/a.js");
+  });
+});
+
+/**
+ * The `--sous-config`, `--sous-dir` and `--sous-confd` aliases (Phase 5) are
+ * read off raw argv by readLongFlagFromArgv() for the same reason as `--config`:
+ * they locate the config (and thus `.env.local`) before oclif's parse() runs.
+ * These tests cover that reader for all three long-only flags.
+ */
+describe("readLongFlagFromArgv()", () => {
+  for (const flag of ["sous-config", "sous-dir", "sous-confd"]) {
+    /**
+     * readLongFlagFromArgv() should read the value that follows `--<flag>`.
+     *
+     * readLongFlagFromArgv(["--sous-dir", "/a/.sous"], "sous-dir"); // -> "/a/.sous"
+     */
+    it(`should read a space-separated --${flag} value`, () => {
+      expect(readLongFlagFromArgv(["--" + flag, "/a/b"], flag)).toBe("/a/b");
+    });
+
+    /**
+     * readLongFlagFromArgv() should support the `--<flag>=VALUE` form.
+     *
+     * readLongFlagFromArgv(["--sous-dir=/a/.sous"], "sous-dir"); // -> "/a/.sous"
+     */
+    it(`should read a --${flag}=VALUE form`, () => {
+      expect(readLongFlagFromArgv(["--" + flag + "=/a/b"], flag)).toBe("/a/b");
+    });
+
+    /**
+     * readLongFlagFromArgv() should find the flag among other arguments, not just
+     * at the start.
+     */
+    it(`should find --${flag} among other arguments`, () => {
+      expect(readLongFlagFromArgv(["build", "--watch", "--" + flag, "/x"], flag)).toBe("/x");
+    });
+
+    /**
+     * readLongFlagFromArgv() should return undefined when the flag is absent, so
+     * env vars / discovery take over.
+     */
+    it(`should return undefined when --${flag} is absent`, () => {
+      expect(readLongFlagFromArgv(["build", "--watch"], flag)).toBeUndefined();
+    });
+
+    /**
+     * readLongFlagFromArgv() should return undefined when the flag is last with no
+     * value, letting oclif's own parser report the problem.
+     */
+    it(`should return undefined when --${flag} has no value`, () => {
+      expect(readLongFlagFromArgv(["--" + flag], flag)).toBeUndefined();
+    });
+
+    /**
+     * readLongFlagFromArgv() should stop scanning at a bare `--`: everything after
+     * it belongs to a launched tool, so `xcv launch claude -- --sous-config x`
+     * forwards `--sous-config` to the tool rather than consuming it as sous's.
+     */
+    it(`should ignore --${flag} that appears after --`, () => {
+      expect(
+        readLongFlagFromArgv(["launch", "claude", "--", "--" + flag, "x"], flag)
+      ).toBeUndefined();
+    });
+
+    /**
+     * readLongFlagFromArgv() should still read a value that appears BEFORE the
+     * bare `--` separator.
+     */
+    it(`should read --${flag} that appears before --`, () => {
+      expect(
+        readLongFlagFromArgv(["launch", "claude", "--" + flag, "/a", "--", "x"], flag)
+      ).toBe("/a");
+    });
+  }
+
+  /**
+   * readLongFlagFromArgv() only reads its own named flag: `--sous-dir` must not
+   * be picked up when asking for `--sous-config`, and vice versa (the three
+   * aliases must not bleed into one another).
+   */
+  it("should not confuse one sous-* flag for another", () => {
+    const argv = ["--sous-dir", "/d", "--sous-confd", "/c"];
+    expect(readLongFlagFromArgv(argv, "sous-config")).toBeUndefined();
+    expect(readLongFlagFromArgv(argv, "sous-dir")).toBe("/d");
+    expect(readLongFlagFromArgv(argv, "sous-confd")).toBe("/c");
+  });
+
+  /**
+   * The `--config`/`-c` reader and the long-alias reader scan argv independently,
+   * so `-c` and `--sous-config` can coexist on the same command line: each reader
+   * returns its own flag's value.
+   */
+  it("should coexist with -c: each reader returns its own flag's value", () => {
+    const argv = ["build", "-c", "/short.js", "--sous-config", "/long.js"];
+    expect(readConfigFlagFromArgv(argv)).toBe("/short.js");
+    expect(readLongFlagFromArgv(argv, "sous-config")).toBe("/long.js");
   });
 });
