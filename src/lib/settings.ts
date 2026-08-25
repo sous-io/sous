@@ -14,6 +14,7 @@ import {
   type DiscoveredConfig,
 } from "./config-discovery.js";
 import { ConfigError } from "./errors.js";
+import { validateSettings } from "./config-schema.js";
 import { warning } from "../utils/formatting.js";
 
 // Re-exported for backwards compatibility: ConfigError moved to ./errors.ts so
@@ -95,6 +96,8 @@ type ToolConfig = {
 };
 
 export type Settings = {
+  /** Config schema version. Optional; when present must be 1 (validated at load). */
+  version?: number;
   _env?: Record<string, string>;
   /**
    * Config variables. A few names are read by Sous itself:
@@ -229,8 +232,12 @@ export async function loadSettingsWithLayers(
             `  Got: ${result.stdout.slice(0, 300)}`
         );
       }
+      // assertFlatConfig runs FIRST: its multi-project migration message is more
+      // actionable than a generic unknown-key error. validateSettings then checks
+      // the MERGED config against the zod schema (version, strict keys, shapes).
+      const flat = assertFlatConfig(parsed.config, configPath);
       return {
-        settings: assertFlatConfig(parsed.config, configPath),
+        settings: validateSettings(flat, configPath),
         layers: parsed.layers ?? [],
       };
     }
@@ -360,10 +367,20 @@ export function substituteVarsStrict(str: string, scope: VarScope, context: stri
 }
 
 /**
- * Resolves a _vars block into a new scope by:
- * 1. Merging the inherited scope with the block (block keys take precedence)
- * 2. Topologically sorting intra-block dependencies so vars can reference each other
- * 3. Substituting all variable references in topological order
+ * Resolves a _vars block into a new scope with a FIXPOINT loop:
+ *
+ * 1. Start from the inherited scope. Every block entry begins unresolved.
+ * 2. Each round, substitute every still-unresolved entry against the current
+ *    scope (inherited vars + entries already finalized this pass). An entry
+ *    whose `${refs}` all resolve is finalized and added to the scope.
+ * 3. Repeat until a round finalizes nothing.
+ *
+ * Because each round re-scans every unresolved entry, declaration order does not
+ * matter: `{ file: "${root}/x", root: "/data" }` resolves as readily as the
+ * reverse. When progress stops with entries still unresolved, that is a hard
+ * error (see buildUnresolvedScopeError): a `${ref}` that never resolves — a typo,
+ * a cycle, or a name defined nowhere — is a config mistake, not a literal to be
+ * passed through silently.
  */
 export function resolveScope(block: Record<string, string>, inherited: VarScope): VarScope {
   const blockKeys = Object.keys(block);
@@ -375,45 +392,158 @@ export function resolveScope(block: Record<string, string>, inherited: VarScope)
     }
   }
 
-  // Build intra-block dependency map (only deps on other block keys, not inherited)
-  const deps = new Map<string, Set<string>>();
-  for (const key of blockKeys) {
-    const refs = [...block[key].matchAll(/\$\{([^}]+)\}/g)].map(m => m[1]);
-    deps.set(key, new Set(refs.filter(r => blockKeys.includes(r))));
-  }
-
-  // Topological sort (DFS with cycle guard)
-  const sorted: string[] = [];
-  const visited = new Set<string>();
-  const visiting = new Set<string>();
-
-  function visit(key: string): void {
-    if (visited.has(key)) return;
-    if (visiting.has(key)) {
-      // Circular dep — add as-is to avoid infinite loop
-      sorted.push(key);
-      return;
-    }
-    visiting.add(key);
-    for (const dep of deps.get(key) ?? []) {
-      visit(dep);
-    }
-    visiting.delete(key);
-    visited.add(key);
-    sorted.push(key);
-  }
-
-  for (const key of blockKeys) {
-    visit(key);
-  }
-
-  // Resolve in topological order, starting from the inherited scope
   const scope: VarScope = { ...inherited };
-  for (const key of sorted) {
-    scope[key] = substituteVars(block[key], scope);
+  const unresolved = new Set(blockKeys);
+
+  let progressed = true;
+  while (progressed && unresolved.size > 0) {
+    progressed = false;
+    for (const key of unresolved) {
+      const substituted = substituteVars(block[key], scope);
+      if (findUnresolvedVars(substituted).length === 0) {
+        scope[key] = substituted;
+        unresolved.delete(key);
+        progressed = true;
+      }
+    }
+  }
+
+  if (unresolved.size > 0) {
+    throw buildUnresolvedScopeError(block, scope, unresolved);
   }
 
   return scope;
+}
+
+/**
+ * Builds the ConfigError thrown when resolveScope's fixpoint stops with entries
+ * still unresolved. The message names each unresolved entry and the exact
+ * `${names}` it still needs, then separates the two failure modes: reference
+ * CYCLES (entries that depend on each other, no starting point) and UNDEFINED
+ * references (names defined nowhere). It closes with the variables that ARE in
+ * scope, so a typo is obvious at a glance.
+ *
+ * @param block - The raw _vars block being resolved.
+ * @param scope - The working scope (inherited vars + every entry that DID
+ *   resolve); its keys are the "in scope" list.
+ * @param unresolved - The block keys that never resolved.
+ */
+function buildUnresolvedScopeError(
+  block: Record<string, string>,
+  scope: VarScope,
+  unresolved: Set<string>
+): ConfigError {
+  // For each unresolved entry, the ${names} still missing after fixpoint. Every
+  // such name is either another unresolved block key (an intra-block edge) or a
+  // name defined nowhere (resolvable block keys and inherited vars are already
+  // in `scope`, so they never appear here).
+  const needs = new Map<string, string[]>();
+  for (const key of unresolved) {
+    needs.set(key, findUnresolvedVars(substituteVars(block[key], scope)));
+  }
+
+  // Dependency graph among unresolved entries: u -> v when u still needs the
+  // still-unresolved block key v. SCCs of this graph are the reference cycles.
+  const edges = new Map<string, string[]>();
+  for (const key of unresolved) {
+    edges.set(key, (needs.get(key) ?? []).filter((n) => unresolved.has(n)));
+  }
+  const cycles = findCycles([...unresolved], edges);
+
+  // Undefined references: needed names that are not block keys at all.
+  const undefinedRefs = new Map<string, string[]>();
+  for (const key of unresolved) {
+    for (const name of needs.get(key) ?? []) {
+      if (!unresolved.has(name)) {
+        const referrers = undefinedRefs.get(name) ?? [];
+        referrers.push(key);
+        undefinedRefs.set(name, referrers);
+      }
+    }
+  }
+
+  const lines: string[] = [
+    "Unresolved variables after fixpoint resolution of a _vars block:",
+  ];
+  for (const key of [...unresolved].sort()) {
+    const names = (needs.get(key) ?? []).map((n) => `\${${n}}`).join(", ");
+    lines.push(`  - ${key} still needs ${names || "(nothing resolvable)"}`);
+  }
+
+  if (cycles.length > 0) {
+    lines.push("");
+    lines.push("Reference cycles (these variables reference each other):");
+    for (const cycle of cycles) {
+      const sorted = [...cycle].sort();
+      lines.push(`  - ${[...sorted, sorted[0]].join(" -> ")}`);
+    }
+  }
+
+  if (undefinedRefs.size > 0) {
+    lines.push("");
+    lines.push("Undefined references (names defined nowhere — no _vars, _env, or auto-var):");
+    for (const name of [...undefinedRefs.keys()].sort()) {
+      const referrers = [...new Set(undefinedRefs.get(name) ?? [])].sort();
+      lines.push(`  - \${${name}} (needed by ${referrers.join(", ")})`);
+    }
+  }
+
+  const inScope = Object.keys(scope).sort();
+  lines.push("");
+  lines.push(`Variables in scope here: ${inScope.length > 0 ? inScope.join(", ") : "(none)"}`);
+
+  return new ConfigError(lines.join("\n"));
+}
+
+/**
+ * Finds reference cycles in a directed graph via Tarjan's strongly-connected-
+ * component algorithm. A cycle is an SCC with more than one member, or a single
+ * node that references itself. Returns each cycle as its member list.
+ */
+function findCycles(nodes: string[], edges: Map<string, string[]>): string[][] {
+  const index = new Map<string, number>();
+  const low = new Map<string, number>();
+  const onStack = new Set<string>();
+  const stack: string[] = [];
+  const sccs: string[][] = [];
+  let counter = 0;
+
+  function strongconnect(v: string): void {
+    index.set(v, counter);
+    low.set(v, counter);
+    counter++;
+    stack.push(v);
+    onStack.add(v);
+
+    for (const w of edges.get(v) ?? []) {
+      if (!index.has(w)) {
+        strongconnect(w);
+        low.set(v, Math.min(low.get(v)!, low.get(w)!));
+      } else if (onStack.has(w)) {
+        low.set(v, Math.min(low.get(v)!, index.get(w)!));
+      }
+    }
+
+    if (low.get(v) === index.get(v)) {
+      const component: string[] = [];
+      let w: string;
+      do {
+        w = stack.pop()!;
+        onStack.delete(w);
+        component.push(w);
+      } while (w !== v);
+      sccs.push(component);
+    }
+  }
+
+  for (const v of nodes) {
+    if (!index.has(v)) strongconnect(v);
+  }
+
+  return sccs.filter(
+    (component) =>
+      component.length > 1 || (edges.get(component[0]) ?? []).includes(component[0])
+  );
 }
 
 /**

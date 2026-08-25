@@ -270,18 +270,6 @@ describe("resolveScope()", () => {
   });
 
   /**
-   * resolveScope() should not throw when intra-block variables form a circular
-   * dependency. The cycle guard prevents infinite recursion and the vars are
-   * included in the result with partial (possibly unresolved) values.
-   *
-   * resolveScope({ a: "${b}", b: "${a}" }, {});
-   * // -> does not throw
-   */
-  it("should handle circular intra-block dependencies without throwing", () => {
-    expect(() => resolveScope({ a: "${b}", b: "${a}" }, {})).not.toThrow();
-  });
-
-  /**
    * resolveScope() should return the inherited scope unchanged when the block
    * is empty.
    *
@@ -291,6 +279,170 @@ describe("resolveScope()", () => {
   it("should return the inherited scope when the block is empty", () => {
     const result = resolveScope({}, { x: "1" });
     expect(result).toEqual({ x: "1" });
+  });
+
+  // --- Fixpoint resolution (Phase 3) --------------------------------------
+
+  /**
+   * resolveScope() runs a fixpoint, not a declaration-ordered pass: an entry
+   * that references a LATER sibling resolves identically to the reverse order.
+   *
+   * resolveScope({ file: "${root}/x", root: "/data" }, {});
+   * // -> same as resolveScope({ root: "/data", file: "${root}/x" }, {})
+   */
+  it("should resolve an entry that references a later sibling (declaration order independent)", () => {
+    const forward = resolveScope({ root: "/data", file: "${root}/x" }, {});
+    const reverse = resolveScope({ file: "${root}/x", root: "/data" }, {});
+    expect(reverse.file).toBe("/data/x");
+    expect(reverse.root).toBe("/data");
+    expect(reverse).toEqual(forward);
+  });
+
+  /**
+   * resolveScope() should resolve a multi-hop chain (a -> b -> c) regardless of
+   * the order the entries are declared in.
+   *
+   * resolveScope({ a: "${b}/a", c: "root", b: "${c}/b" }, {});
+   * // -> { c: "root", b: "root/b", a: "root/b/a" }
+   */
+  it("should resolve a multi-hop chain declared in scrambled order", () => {
+    const result = resolveScope({ a: "${b}/a", c: "root", b: "${c}/b" }, {});
+    expect(result.c).toBe("root");
+    expect(result.b).toBe("root/b");
+    expect(result.a).toBe("root/b/a");
+  });
+
+  /**
+   * resolveScope() should let an entry resolve against a name that only exists
+   * in the inherited scope (not the block itself).
+   *
+   * resolveScope({ full: "${base}/sub/${leaf}" }, { base: "/home", leaf: "x" });
+   * // -> full === "/home/sub/x"
+   */
+  it("should resolve entries against inherited-scope-only references", () => {
+    const result = resolveScope(
+      { full: "${base}/sub/${leaf}" },
+      { base: "/home", leaf: "x" }
+    );
+    expect(result.full).toBe("/home/sub/x");
+  });
+
+  /**
+   * Nested-block inheritance still works: chaining resolveScope with each
+   * block's resolved scope as the next block's inherited scope (root ->
+   * compilation._vars -> target._vars) lets a target var see a root var.
+   *
+   * root { root: "/proj" } -> comp { sub: "${root}/x" } -> target { file: "${sub}/AGENTS.md" }
+   * // -> file === "/proj/x/AGENTS.md"
+   */
+  it("should thread inherited scope through nested blocks (compilation sees top-level _vars)", () => {
+    const rootScope = resolveScope({ root: "/proj" }, {});
+    const compScope = resolveScope({ sub: "${root}/x" }, rootScope);
+    const targetScope = resolveScope({ file: "${sub}/AGENTS.md" }, compScope);
+    expect(targetScope.file).toBe("/proj/x/AGENTS.md");
+    expect(targetScope.root).toBe("/proj");
+    expect(targetScope.sub).toBe("/proj/x");
+  });
+
+  /**
+   * resolveScope() should throw a ConfigError on a direct cycle (a -> b -> a),
+   * naming BOTH members and flagging it as a reference cycle. This is a
+   * strictness CHANGE from the pre-fixpoint behavior, which passed cycles
+   * through as literal ${refs}.
+   *
+   * resolveScope({ a: "${b}", b: "${a}" }, {});
+   * // -> throws ConfigError naming a, b, and "cycle"
+   */
+  it("should throw a ConfigError on a direct cycle naming both members", () => {
+    let error: unknown;
+    try {
+      resolveScope({ a: "${b}", b: "${a}" }, {});
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeDefined();
+    expect(isConfigError(error)).toBe(true);
+    const message = (error as Error).message;
+    expect(message).toMatch(/cycle/i);
+    expect(message).toContain("a");
+    expect(message).toContain("b");
+    // Both cycle members are named in the cycle listing.
+    expect(message).toMatch(/a -> b -> a|b -> a -> b/);
+  });
+
+  /**
+   * resolveScope() should throw a ConfigError on a self-cycle (a -> a), which
+   * can never resolve.
+   *
+   * resolveScope({ a: "${a}" }, {});
+   * // -> throws ConfigError naming a as a cycle
+   */
+  it("should throw a ConfigError on a self-cycle", () => {
+    let error: unknown;
+    try {
+      resolveScope({ a: "${a}" }, {});
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeDefined();
+    expect(isConfigError(error)).toBe(true);
+    const message = (error as Error).message;
+    expect(message).toMatch(/cycle/i);
+    expect(message).toMatch(/a -> a/);
+  });
+
+  /**
+   * resolveScope() should throw a ConfigError on an undefined reference (a name
+   * defined nowhere), naming the missing var AND listing the variables that ARE
+   * in scope so a typo is obvious.
+   *
+   * resolveScope({ path: "${missing}/x" }, { present: "/p" });
+   * // -> throws ConfigError naming ${missing} and listing "present"
+   */
+  it("should throw a ConfigError on an undefined reference, naming it and the in-scope vars", () => {
+    let error: unknown;
+    try {
+      resolveScope({ path: "${missing}/x" }, { present: "/p" });
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeDefined();
+    expect(isConfigError(error)).toBe(true);
+    const message = (error as Error).message;
+    expect(message).toContain("missing");
+    expect(message).toMatch(/undefined/i);
+    // The entry that needed it and the in-scope var are both named.
+    expect(message).toContain("path");
+    expect(message).toMatch(/in scope/i);
+    expect(message).toContain("present");
+  });
+
+  /**
+   * Mixed case: one resolvable entry alongside a cyclic pair. The fixpoint
+   * finalizes the resolvable entry BEFORE it errors on the cycle — the working
+   * scope reported in the error (the "in scope" list) therefore includes the
+   * finalized entry, and the error still cleanly flags the cycle members.
+   *
+   * resolveScope({ good: "${base}/x", a: "${b}", b: "${a}" }, { base: "/root" });
+   * // -> throws ConfigError; cycle a<->b named; "good" is in scope
+   */
+  it("should finalize the resolvable entry before erroring on a co-resident cycle", () => {
+    let error: unknown;
+    try {
+      resolveScope({ good: "${base}/x", a: "${b}", b: "${a}" }, { base: "/root" });
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeDefined();
+    expect(isConfigError(error)).toBe(true);
+    const message = (error as Error).message;
+    // The cycle is flagged with both members.
+    expect(message).toMatch(/cycle/i);
+    expect(message).toMatch(/a -> b -> a|b -> a -> b/);
+    // The resolvable entry was finalized before the throw: it appears in the
+    // "Variables in scope here" listing (alongside the inherited base).
+    expect(message).toMatch(/in scope[\s\S]*good/i);
+    expect(message).toMatch(/in scope[\s\S]*base/i);
   });
 });
 

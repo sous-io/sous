@@ -34,13 +34,15 @@
     "src",
     "!src/**/*.spec.ts",
     "!src/test",
-    "shared-prompts"
+    "shared-prompts",
+    "sous.config.schema.json"
   ],
   "scripts": {
     "build": "tsc",
     "sous:build": "./bin/xcv build --rebuild",
     "claude": "./bin/xcv launch claude",
     "clean": "rm -rf dist",
+    "schema:build": "tsx scripts/build-schema.mts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -56,7 +58,8 @@
     "minimatch": "^10.2.4",
     "tiktoken": "^1.0.22",
     "tsx": "^4",
-    "yaml": "^2.9.0"
+    "yaml": "^2.9.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/glob": "^8.1.0",

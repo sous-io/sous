@@ -3,7 +3,7 @@ import path from "node:path";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { makeTmpDir, type TmpDir } from "../utils/tmp.js";
 import { discoverConfig, type DiscoveredConfig } from "../../lib/config-discovery.js";
-import { loadSettings, loadSettingsWithLayers } from "../../lib/settings.js";
+import { loadSettings, loadSettingsWithLayers, type Settings } from "../../lib/settings.js";
 
 /**
  * These tests drive the REAL config kernel: loadSettings/loadSettingsWithLayers
@@ -56,12 +56,14 @@ describe("config kernel (real subprocess)", () => {
   it(
     "merges primary first, then conf.d layers in bytewise filename order",
     async () => {
-      write("sous.config.json", JSON.stringify({ order: ["primary"] }));
-      write("conf.d/10-a.json", JSON.stringify({ order: ["a"] }));
-      write("conf.d/20-b.json", JSON.stringify({ order: ["b"] }));
+      // Uses _aliases (a schema-valid record of string arrays) as the array-merge
+      // probe: same key across layers concatenates, so its final value reveals order.
+      write("sous.config.json", JSON.stringify({ _aliases: { order: ["primary"] } }));
+      write("conf.d/10-a.json", JSON.stringify({ _aliases: { order: ["a"] } }));
+      write("conf.d/20-b.json", JSON.stringify({ _aliases: { order: ["b"] } }));
 
-      const settings = (await loadSettings(discover())) as Record<string, unknown>;
-      expect(settings.order).toEqual(["primary", "a", "b"]);
+      const settings = await loadSettings(discover());
+      expect(settings._aliases?.order).toEqual(["primary", "a", "b"]);
     },
     T
   );
@@ -69,13 +71,13 @@ describe("config kernel (real subprocess)", () => {
   it(
     "sorts conf.d bytewise, so '10-' loads before '2-'",
     async () => {
-      write("sous.config.json", JSON.stringify({ order: ["primary"] }));
-      write("conf.d/2-late.json", JSON.stringify({ order: ["two"] }));
-      write("conf.d/10-early.json", JSON.stringify({ order: ["ten"] }));
+      write("sous.config.json", JSON.stringify({ _aliases: { order: ["primary"] } }));
+      write("conf.d/2-late.json", JSON.stringify({ _aliases: { order: ["two"] } }));
+      write("conf.d/10-early.json", JSON.stringify({ _aliases: { order: ["ten"] } }));
 
-      const settings = (await loadSettings(discover())) as Record<string, unknown>;
+      const settings = await loadSettings(discover());
       // Bytewise (not numeric): "10-early" < "2-late".
-      expect(settings.order).toEqual(["primary", "ten", "two"]);
+      expect(settings._aliases?.order).toEqual(["primary", "ten", "two"]);
     },
     T
   );
@@ -156,16 +158,18 @@ describe("config kernel (real subprocess)", () => {
   it(
     "runs a configure() export that mutates currentConfig by reference",
     async () => {
+      // Mutations land in schema-valid locations (name + _vars) so the merged
+      // config still validates; the point is that configure() sees currentConfig.
       write(
         "sous.config.mjs",
         `export const config = { name: "seed" };
-export function configure(cfg) { cfg.mutated = "yes"; cfg.sawName = cfg.name; }
+export function configure(cfg) { cfg._vars = { mutated: "yes", sawName: cfg.name }; }
 `
       );
 
-      const settings = (await loadSettings(discover())) as Record<string, unknown>;
-      expect(settings.mutated).toBe("yes");
-      expect(settings.sawName).toBe("seed");
+      const settings = await loadSettings(discover());
+      expect(settings._vars?.mutated).toBe("yes");
+      expect(settings._vars?.sawName).toBe("seed");
     },
     T
   );
@@ -175,15 +179,15 @@ export function configure(cfg) { cfg.mutated = "yes"; cfg.sawName = cfg.name; }
     async () => {
       write(
         "sous.config.mjs",
-        `export const config = { seed: "objval" };
-export function configure(cfg) { cfg.readBack = cfg.seed + "-seen"; }
+        `export const config = { _vars: { seed: "objval" } };
+export function configure(cfg) { cfg._vars.readBack = cfg._vars.seed + "-seen"; }
 `
       );
 
-      const settings = (await loadSettings(discover())) as Record<string, unknown>;
+      const settings = await loadSettings(discover());
       // Proof of ordering: configure could only read seed if the object merged first.
-      expect(settings.seed).toBe("objval");
-      expect(settings.readBack).toBe("objval-seen");
+      expect(settings._vars?.seed).toBe("objval");
+      expect(settings._vars?.readBack).toBe("objval-seen");
     },
     T
   );
@@ -203,10 +207,10 @@ export function configure(cfg) { cfg.readBack = cfg.seed + "-seen"; }
   it(
     "accepts a default-export function as configure()",
     async () => {
-      write("sous.config.mjs", `export default (cfg) => { cfg.viaDefault = true; };\n`);
+      write("sous.config.mjs", `export default (cfg) => { cfg.name = "via-default-fn"; };\n`);
 
-      const settings = (await loadSettings(discover())) as Record<string, unknown>;
-      expect(settings.viaDefault).toBe(true);
+      const settings = await loadSettings(discover());
+      expect(settings.name).toBe("via-default-fn");
     },
     T
   );
@@ -218,13 +222,13 @@ export function configure(cfg) { cfg.readBack = cfg.seed + "-seen"; }
         "sous.config.mjs",
         `export async function configure(cfg) {
   const v = await Promise.resolve("async-value");
-  cfg.asyncField = v;
+  cfg._vars = { asyncField: v };
 }
 `
       );
 
-      const settings = (await loadSettings(discover())) as Record<string, unknown>;
-      expect(settings.asyncField).toBe("async-value");
+      const settings = await loadSettings(discover());
+      expect(settings._vars?.asyncField).toBe("async-value");
     },
     T
   );
@@ -234,11 +238,11 @@ export function configure(cfg) { cfg.readBack = cfg.seed + "-seen"; }
     async () => {
       write(
         "sous.config.mjs",
-        `export function configure() { return { returned: "merged-after" }; }\n`
+        `export function configure() { return { _vars: { returned: "merged-after" } }; }\n`
       );
 
-      const settings = (await loadSettings(discover())) as Record<string, unknown>;
-      expect(settings.returned).toBe("merged-after");
+      const settings = await loadSettings(discover());
+      expect(settings._vars?.returned).toBe("merged-after");
     },
     T
   );
@@ -250,11 +254,11 @@ export function configure(cfg) { cfg.readBack = cfg.seed + "-seen"; }
     async () => {
       write(
         "sous.config.mjs",
-        `export function configure(cfg, builder) { builder.merge({ extra: "via-merge" }); }\n`
+        `export function configure(cfg, builder) { builder.merge({ _vars: { extra: "via-merge" } }); }\n`
       );
 
-      const settings = (await loadSettings(discover())) as Record<string, unknown>;
-      expect(settings.extra).toBe("via-merge");
+      const settings = await loadSettings(discover());
+      expect(settings._vars?.extra).toBe("via-merge");
     },
     T
   );
@@ -267,15 +271,17 @@ export function configure(cfg) { cfg.readBack = cfg.seed + "-seen"; }
         write(
           "sous.config.mjs",
           `export function configure(cfg, builder) {
-  cfg.present = builder.env("SOUS_KERNEL_TEST_VAR", "fallback");
-  cfg.missing = builder.env("SOUS_KERNEL_DEFINITELY_UNSET", "fallback-used");
+  cfg._vars = {
+    present: builder.env("SOUS_KERNEL_TEST_VAR", "fallback"),
+    missing: builder.env("SOUS_KERNEL_DEFINITELY_UNSET", "fallback-used"),
+  };
 }
 `
         );
 
-        const settings = (await loadSettings(discover())) as Record<string, unknown>;
-        expect(settings.present).toBe("from-env");
-        expect(settings.missing).toBe("fallback-used");
+        const settings = await loadSettings(discover());
+        expect(settings._vars?.present).toBe("from-env");
+        expect(settings._vars?.missing).toBe("fallback-used");
       } finally {
         delete process.env.SOUS_KERNEL_TEST_VAR;
       }
@@ -287,8 +293,8 @@ export function configure(cfg) { cfg.readBack = cfg.seed + "-seen"; }
     "supports builder.loadConfig() with a relative path and a ${sousDir} auto-var path",
     async () => {
       // These sub-configs live outside conf.d so only the builder loads them.
-      write("extra/rel.json", JSON.stringify({ fromRelative: true }));
-      write("extra/abs.json", JSON.stringify({ fromAutoVar: true }));
+      write("extra/rel.json", JSON.stringify({ _vars: { fromRelative: "yes" } }));
+      write("extra/abs.json", JSON.stringify({ _vars: { fromAutoVar: "yes" } }));
       write(
         "sous.config.mjs",
         `export async function configure(cfg, builder) {
@@ -298,9 +304,9 @@ export function configure(cfg) { cfg.readBack = cfg.seed + "-seen"; }
 `
       );
 
-      const settings = (await loadSettings(discover())) as Record<string, unknown>;
-      expect(settings.fromRelative).toBe(true);
-      expect(settings.fromAutoVar).toBe(true);
+      const settings = await loadSettings(discover());
+      expect(settings._vars?.fromRelative).toBe("yes");
+      expect(settings._vars?.fromAutoVar).toBe("yes");
     },
     T
   );
@@ -308,19 +314,19 @@ export function configure(cfg) { cfg.readBack = cfg.seed + "-seen"; }
   it(
     "supports builder.loadConfigs() globbing in bytewise order",
     async () => {
-      write("parts/20-b.json", JSON.stringify({ order: ["b"] }));
-      write("parts/10-a.json", JSON.stringify({ order: ["a"] }));
+      write("parts/20-b.json", JSON.stringify({ _aliases: { order: ["b"] } }));
+      write("parts/10-a.json", JSON.stringify({ _aliases: { order: ["a"] } }));
       write(
         "sous.config.mjs",
         `export async function configure(cfg, builder) {
-  cfg.order = ["primary"];
+  cfg._aliases = { order: ["primary"] };
   await builder.loadConfigs("\${sousDir}/parts/*.json");
 }
 `
       );
 
-      const settings = (await loadSettings(discover())) as Record<string, unknown>;
-      expect(settings.order).toEqual(["primary", "a", "b"]);
+      const settings = await loadSettings(discover());
+      expect(settings._aliases?.order).toEqual(["primary", "a", "b"]);
     },
     T
   );
@@ -366,23 +372,62 @@ export function configure(cfg) { cfg.readBack = cfg.seed + "-seen"; }
     T
   );
 
+  it(
+    "validates the MERGED result, not individual fragments: an incomplete fragment " +
+      "loads fine, but a conf.d layer that adds a typo key makes the merge invalid",
+    async () => {
+      // Primary is a complete, valid config. The conf.d fragment is NOT a valid
+      // standalone config: compilation.targets is required, and this fragment omits
+      // it — yet the load succeeds, because validation runs on the MERGED result
+      // (which has targets from the primary), never on the fragment alone.
+      const primary = write(
+        "sous.config.json",
+        JSON.stringify({
+          name: "ok",
+          compilation: { targets: [{ entryPoint: "a.md", outputs: [] }] },
+        })
+      );
+      write("conf.d/10-frag.json", JSON.stringify({ compilation: { includeSourceComments: true } }));
+
+      const settings = await loadSettings(discover());
+      expect(settings.name).toBe("ok");
+      expect(settings.compilation?.includeSourceComments).toBe(true);
+      expect(settings.compilation?.targets).toHaveLength(1);
+
+      // Now add a second conf.d layer with a typo key. Each fragment on its own is
+      // fine, but the MERGED config carries the unknown key, so validation rejects
+      // it through the real loadSettings with the readable, named message.
+      write("conf.d/20-typo.json", JSON.stringify({ compilaton: {} }));
+
+      await expect(loadSettings(discover())).rejects.toThrow(/compilaton/);
+      await expect(loadSettings(discover())).rejects.toThrow(/typo/i);
+      // The primary config file is named in the message, not the conf.d fragment.
+      await expect(loadSettings(discover())).rejects.toThrow(
+        new RegExp(primary.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+      );
+    },
+    T
+  );
+
   // --- trace mode -------------------------------------------------------------------------------
 
   it(
     "returns one cumulative snapshot per source when trace is enabled",
     async () => {
-      const primary = write("sous.config.json", JSON.stringify({ order: ["primary"] }));
-      const a = write("conf.d/10-a.json", JSON.stringify({ order: ["a"] }));
-      const b = write("conf.d/20-b.json", JSON.stringify({ order: ["b"] }));
+      const primary = write("sous.config.json", JSON.stringify({ _aliases: { order: ["primary"] } }));
+      const a = write("conf.d/10-a.json", JSON.stringify({ _aliases: { order: ["a"] } }));
+      const b = write("conf.d/20-b.json", JSON.stringify({ _aliases: { order: ["b"] } }));
 
       const { settings, layers } = await loadSettingsWithLayers(discover(), { trace: true });
 
+      const order = (config: unknown) =>
+        (config as { _aliases?: { order?: unknown } })._aliases?.order;
       expect(layers.map((l) => l.path)).toEqual([primary, a, b]);
       // Each snapshot is the CUMULATIVE config after that source merged.
-      expect((layers[0].config as Record<string, unknown>).order).toEqual(["primary"]);
-      expect((layers[1].config as Record<string, unknown>).order).toEqual(["primary", "a"]);
-      expect((layers[2].config as Record<string, unknown>).order).toEqual(["primary", "a", "b"]);
-      expect((settings as Record<string, unknown>).order).toEqual(["primary", "a", "b"]);
+      expect(order(layers[0].config)).toEqual(["primary"]);
+      expect(order(layers[1].config)).toEqual(["primary", "a"]);
+      expect(order(layers[2].config)).toEqual(["primary", "a", "b"]);
+      expect(settings._aliases?.order).toEqual(["primary", "a", "b"]);
     },
     T
   );
@@ -403,25 +448,30 @@ export function configure(cfg) { cfg.readBack = cfg.seed + "-seen"; }
   it(
     "drops functions and undefined values from a js layer (JSON forcing)",
     async () => {
+      // Non-JSON values sit in schema-valid spots: `fn` is dropped before validation
+      // (functions never survive the round-trip); `gone`/`when` live under _vars, a
+      // record of strings once JSON-forced.
       write(
         "sous.config.mjs",
         `export const config = {
   name: "kept",
   fn: () => "should not survive",
-  gone: undefined,
-  when: new Date("2020-01-01T00:00:00.000Z"),
+  _vars: {
+    gone: undefined,
+    when: new Date("2020-01-01T00:00:00.000Z"),
+  },
 };
 `
       );
 
-      const settings = (await loadSettings(discover())) as Record<string, unknown>;
+      const settings = (await loadSettings(discover())) as Settings & Record<string, unknown>;
       expect(settings.name).toBe("kept");
       // Functions and undefined values are stripped by the JSON round-trip.
       expect("fn" in settings).toBe(false);
-      expect("gone" in settings).toBe(false);
+      expect("gone" in (settings._vars ?? {})).toBe(false);
       // A Date does not survive as a Date object; it serialises to an ISO string.
-      expect(typeof settings.when).toBe("string");
-      expect(settings.when).toBe("2020-01-01T00:00:00.000Z");
+      expect(typeof settings._vars?.when).toBe("string");
+      expect(settings._vars?.when).toBe("2020-01-01T00:00:00.000Z");
     },
     T
   );
