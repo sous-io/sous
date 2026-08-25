@@ -2,12 +2,23 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { globSync } from "glob";
 import { inferGlobBase, type CompilationConfig, type CompilationTarget, type ResolvedRuntimeContext } from "./markdown-compiler.js";
 import { buildAliasMap, resolveAliasPrefix, type AliasMap } from "./include-resolver.js";
-import { ENV_DEFAULTS_NAME, ENV_LOCAL_NAME, SOUS_DIR_NAME } from "./config-discovery.js";
+import {
+  CONFD_DIR_NAME,
+  ENV_DEFAULTS_NAME,
+  ENV_LOCAL_NAME,
+  SOUS_DIR_NAME,
+  type DiscoveredConfig,
+} from "./config-discovery.js";
+import { ConfigError } from "./errors.js";
 import { warning } from "../utils/formatting.js";
+
+// Re-exported for backwards compatibility: ConfigError moved to ./errors.ts so
+// config-discovery.ts can throw it without importing this module (cycle).
+export { ConfigError, isConfigError } from "./errors.js";
 
 const __filename = fileURLToPath(import.meta.url);
 
@@ -102,48 +113,88 @@ export type Settings = {
 
 // --- Loader -------------------------------------------------------------------------------------
 
+/** Options accepted by loadSettings / loadSettingsWithLayers. */
+export type LoadSettingsOptions = {
+  /**
+   * When true, the kernel returns one cumulative-config snapshot per top-level
+   * layer (the provenance seam behind `sous config get --layers`).
+   */
+  trace?: boolean;
+};
+
+/** One trace-mode snapshot: the cumulative config AFTER `path` was merged. */
+export type SettingsLayer = {
+  path: string;
+  config: unknown;
+};
+
+/** Absolute path to the config kernel subprocess entry (plain .mjs, ships in src/). */
+const CONFIG_KERNEL_PATH = path.join(CLI_ROOT, "src", "lib", "config-kernel.mjs");
+
 /**
- * Loads settings from the given config file path.
- * Supports .js / .mjs (ES module with a `config` or `default` export)
- * and .json (plain JSON matching the Settings shape).
+ * Loads settings from a discovered config (primary file + conf.d layers) and
+ * returns the merged result together with any trace-mode layer snapshots.
  *
- * A JS/MJS config is imported in a FRESH Node subprocess that serialises it to
- * JSON. Two attempts are made, in this order:
+ * Every layer — .js, .mjs, .json and .yaml alike — is loaded by ONE kernel
+ * subprocess (src/lib/config-kernel.mjs), which parses/imports each file in
+ * order, JSON-forces it, deep-merges it into a live cumulative config, runs
+ * `configure(currentConfig, builder)` exports, and serialises the final JSON
+ * once. Uniform kernel semantics beat the spawn cost, so there is no
+ * parent-side shortcut for plain JSON.
+ *
+ * Two spawn attempts are made, in this order:
  *
  *   1. Plain Node, no loader. This is what a normal ESM config needs, and it is
  *      the only thing that works for a `.sous/sous.config.js` sitting in a repo
  *      whose package.json has no `"type": "module"` (under the tsx loader such a
  *      file is treated as CJS and dies with ERR_REQUIRE_CYCLE_MODULE).
  *   2. The tsx loader, so a config may use TypeScript syntax and extensionless
- *      relative imports.
+ *      relative imports. (The kernel itself is plain .mjs and runs under both.)
  *
  * The subprocess (rather than a direct `import()`) avoids the require(esm) cycle
- * that tsx triggers in the parent process. Because the result is round-tripped
+ * that tsx triggers in the parent process. Because every layer is round-tripped
  * through JSON, functions, RegExp, Date and undefined values are dropped.
+ *
+ * @param source - The full DiscoveredConfig, or a bare config file path. A bare
+ *   string means exactly that one file: no conf.d scan is performed (back-compat
+ *   for tests and direct callers).
+ * @param options - `{ trace }` — see LoadSettingsOptions.
  */
-/* c8 ignore next 60 */
-export async function loadSettings(configPath: string): Promise<Settings> {
+/* c8 ignore next 75 */
+export async function loadSettingsWithLayers(
+  source: DiscoveredConfig | string,
+  options: LoadSettingsOptions = {}
+): Promise<{ settings: Settings; layers: SettingsLayer[] }> {
+  let configPath: string;
+  let sousDir: string;
+  let confDir: string;
+  let layerPaths: string[];
+
+  if (typeof source === "string") {
+    configPath = path.resolve(source);
+    sousDir = path.dirname(configPath);
+    confDir = path.join(sousDir, CONFD_DIR_NAME);
+    layerPaths = [configPath];
+  } else {
+    ({ configPath, sousDir, confDir, layerPaths } = source);
+  }
+
   if (!fs.existsSync(configPath)) {
     throw new Error(`Settings file not found: ${configPath}`);
   }
 
-  if (configPath.endsWith(".json")) {
-    let raw: unknown;
-    try {
-      raw = JSON.parse(fs.readFileSync(configPath, "utf8"));
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`Failed to parse settings JSON at ${configPath}: ${message}`);
-    }
-    return assertFlatConfig(raw, configPath);
-  }
+  const kernelInput = JSON.stringify({
+    sources: layerPaths,
+    context: {
+      sousDir,
+      confDir,
+      sousRootPath: CLI_ROOT,
+      sousVersion: SOUS_VERSION,
+      configPath,
+    },
+    trace: options.trace === true,
+  });
 
-  const settingsUrl = pathToFileURL(configPath).href;
-  const loaderScript = `
-    const mod = await import(${JSON.stringify(settingsUrl)});
-    const raw = mod.config ?? mod.default ?? mod;
-    process.stdout.write(JSON.stringify(raw));
-  `;
   // Resolve tsx via module resolution so this works when npm hoists the
   // dependency (local install, npx) as well as when it nests it (global,
   // repo clone).
@@ -155,35 +206,63 @@ export async function loadSettings(configPath: string): Promise<Settings> {
   }
 
   const attempts: { label: string; args: string[] }[] = [
-    { label: "node", args: ["--input-type=module"] },
-    { label: "tsx", args: ["--import", tsxPath, "--input-type=module"] },
+    { label: "node", args: [CONFIG_KERNEL_PATH] },
+    { label: "tsx", args: ["--import", tsxPath, CONFIG_KERNEL_PATH] },
   ];
 
-  const failures: string[] = [];
+  const failures: { label: string; message: string }[] = [];
 
   for (const attempt of attempts) {
     const result = spawnSync(process.execPath, attempt.args, {
-      input: loaderScript,
+      input: kernelInput,
       encoding: "utf8",
     });
 
     if (result.status === 0) {
-      let raw: unknown;
+      let parsed: { config: unknown; layers?: SettingsLayer[] };
       try {
-        raw = JSON.parse(result.stdout);
+        parsed = JSON.parse(result.stdout) as { config: unknown; layers?: SettingsLayer[] };
       } catch {
         throw new Error(
-          `Config at ${configPath} did not produce valid JSON. It must export a plain ` +
-            `object (as \`config\` or \`default\`).\n  Got: ${result.stdout.slice(0, 300)}`
+          `Config at ${configPath} did not produce valid JSON. Every layer must resolve ` +
+            `to a plain object (a \`config\`/default export, or a \`configure\` function).\n` +
+            `  Got: ${result.stdout.slice(0, 300)}`
         );
       }
-      return assertFlatConfig(raw, configPath);
+      return {
+        settings: assertFlatConfig(parsed.config, configPath),
+        layers: parsed.layers ?? [],
+      };
     }
 
-    failures.push(`  [via ${attempt.label}] ${result.stderr?.trim() || "unknown error"}`);
+    failures.push({ label: attempt.label, message: result.stderr?.trim() || "unknown error" });
   }
 
-  throw new Error(`Failed to load config from ${configPath}\n${failures.join("\n\n")}`);
+  // Kernel-side errors (bad JSON/YAML, old schema, configure() throw, cycle,
+  // bad builder var, non-object layer) are raised inside the .mjs kernel, which
+  // runs identically under both the `node` and `tsx` attempts — so both stderrs
+  // are the same. Collapse identical messages so a single config error is not
+  // printed twice as if it were two distinct failures.
+  const uniqueMessages = [...new Set(failures.map((f) => f.message))];
+  const detail =
+    uniqueMessages.length === 1
+      ? `  ${uniqueMessages[0]}`
+      : failures.map((f) => `  [via ${f.label}] ${f.message}`).join("\n\n");
+
+  throw new ConfigError(`Failed to load config from ${configPath}\n${detail}`);
+}
+
+/**
+ * Loads the merged settings for a discovered config (or a bare config file
+ * path). Thin wrapper over loadSettingsWithLayers for callers that do not need
+ * the trace-mode layer snapshots.
+ */
+export async function loadSettings(
+  source: DiscoveredConfig | string,
+  options: LoadSettingsOptions = {}
+): Promise<Settings> {
+  const { settings } = await loadSettingsWithLayers(source, options);
+  return settings;
 }
 
 /**
@@ -218,30 +297,6 @@ function assertFlatConfig(raw: unknown, configPath: string): Settings {
  */
 export function substituteVars(str: string, scope: VarScope): string {
   return str.replace(/\$\{([^}]+)\}/g, (match, name: string) => scope[name] ?? match);
-}
-
-/**
- * A user-facing configuration error: the config file (or environment) is wrong,
- * not the CLI. Commands render these as a plain message with no stack trace,
- * since the stack points at Sous internals and tells the user nothing.
- */
-export class ConfigError extends Error {
-  readonly isConfigError = true;
-
-  constructor(message: string) {
-    super(message);
-    this.name = "ConfigError";
-  }
-}
-
-/** True when the value is a ConfigError (safe across module instances). */
-export function isConfigError(error: unknown): boolean {
-  return (
-    error instanceof ConfigError ||
-    (typeof error === "object" &&
-      error !== null &&
-      (error as { isConfigError?: boolean }).isConfigError === true)
-  );
 }
 
 /** Returns the names of every `${var}` reference left unresolved in a string. */
@@ -369,8 +424,12 @@ export function resolveScope(block: Record<string, string>, inherited: VarScope)
 export type ConfigContext = {
   /** Absolute path to the `.sous/` directory holding the config. */
   sousDir: string;
-  /** Absolute path to the config file itself. */
+  /** Absolute path to the primary config file itself. */
   configPath: string;
+  /** Absolute path to the `conf.d/` drop-in directory (may not exist). */
+  confDir?: string;
+  /** Ordered absolute paths of every loaded config layer (primary first). */
+  layerPaths?: string[];
 };
 
 /**
@@ -379,8 +438,8 @@ export type ConfigContext = {
  * The 'sous*' namespace is reserved — warns if user defines a var starting with 'sous'.
  *
  * @param context - The discovered config location. When supplied, adds
- *   `sousDir` and `sousConfigPath` so configs can build paths relative to
- *   their own `.sous/` directory.
+ *   `sousDir` and `sousConfigPath` (plus `sousConfDir` when known) so configs
+ *   can build paths relative to their own `.sous/` directory.
  */
 export function buildAutoVars(context?: ConfigContext): VarScope {
   return {
@@ -389,6 +448,9 @@ export function buildAutoVars(context?: ConfigContext): VarScope {
     ...(context !== undefined && {
       sousDir: context.sousDir,
       sousConfigPath: context.configPath,
+    }),
+    ...(context?.confDir !== undefined && {
+      sousConfDir: context.confDir,
     }),
   };
 }

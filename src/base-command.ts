@@ -20,10 +20,12 @@ import { displayError, displayErrorBlock, header } from "./utils/formatting.js";
  *
  * Startup sequence:
  *   1. Locate the config — `--config <path>` wins, otherwise walk up from cwd
- *      looking for a `.sous/` directory holding sous.config.{js,mjs,json}.
+ *      looking for a `.sous/` directory holding sous.config.{js,mjs,json,yaml}.
+ *      Discovery also enumerates `.sous/conf.d/` drop-in layers.
  *   2. Load `<.sous>/.env.local`, then `<.sous>/.env`, into process.env (never
  *      overwriting real env vars). Precedence: shell > .env.local > .env.
- *   3. Load the config file. Variable resolution happens later, per command.
+ *   3. Load every config layer (primary + conf.d) through the config kernel and
+ *      deep-merge them. Variable resolution happens later, per command.
  *
  * There is no user-level config: nothing is read from `~/.sous`.
  */
@@ -74,13 +76,15 @@ export abstract class BaseCommand extends Command {
     this.configContext = {
       sousDir: discovered.sousDir,
       configPath: discovered.configPath,
+      confDir: discovered.confDir,
+      layerPaths: discovered.layerPaths,
     };
 
     // Inject .sous/.env.local and .sous/.env before anything resolves variables.
     loadEnvFiles(discovered.sousDir);
 
     try {
-      this.settings = await loadSettings(discovered.configPath);
+      this.settings = await loadSettings(discovered);
     } catch (error) {
       displayErrorBlock(error instanceof Error ? error.message : String(error));
       return this.exit(1);

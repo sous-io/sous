@@ -149,4 +149,113 @@ describe("WatchService + BuildService", () => {
       expect(evt.filePath).toBe("/sous/src/templating/filters/my-filter.ts");
     });
   });
+
+  /**
+   * Phase 2 conf.d wiring. `build.ts`'s watch loop injects the conf.d/ DIRECTORY
+   * (not each layer file) into `fullRebuildPaths` — see `buildWatchConfig` in
+   * src/commands/build.ts, which appends `this.discovered.confDir`. Because
+   * WatchService full-rebuild matching is exact-or-directory-prefix, watching the
+   * directory covers layer files that appear, change, or disappear at runtime.
+   *
+   * These cases exercise that contract through WatchService (the public surface
+   * build.ts builds on): a conf.d directory placed in fullRebuildPaths must be
+   * handed to chokidar as a watch path, and add/change/unlink of any layer file
+   * beneath it must fire a full rebuild.
+   */
+  describe("conf.d directory in fullRebuildPaths", () => {
+    const confDir = "/project/.sous/conf.d";
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.spyOn(console, "log").mockImplementation(() => {});
+      vi.mocked(chokidar.watch).mockClear();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    });
+
+    /**
+     * The conf.d directory listed in fullRebuildPaths must be passed to chokidar
+     * as one of the watched paths, so events for files created inside it later
+     * (layer drop-ins) are observed at all.
+     *
+     * Example:
+     *   watch({ files: [], globs: [], fullRebuildPaths: ["/project/.sous/conf.d"] })
+     *   → chokidar.watch called with an array containing "/project/.sous/conf.d"
+     */
+    it("should hand the conf.d directory to chokidar as a watch path", () => {
+      new WatchService().watch(
+        { files: [], globs: [], fullRebuildPaths: [confDir] },
+        vi.fn().mockResolvedValue(undefined)
+      );
+
+      const watchPaths = vi.mocked(chokidar.watch).mock.calls[0][0] as string[];
+      expect(watchPaths).toContain(confDir);
+    });
+
+    /**
+     * A NEW layer file dropped into the conf.d directory (chokidar 'add' event)
+     * must fire a full rebuild — this is how a freshly added conf.d/*.json layer
+     * gets picked up while watching. Directory-prefix matching covers it without
+     * the file having been listed at watch-start time.
+     *
+     * Example:
+     *   fullRebuildPaths: ["/project/.sous/conf.d"]
+     *   emit('all', 'add', '/project/.sous/conf.d/50-new-layer.json')
+     *   → advance 350 ms → onChange({ type: "full", ... })
+     */
+    it("should fire a full rebuild when a new layer file is added under conf.d", async () => {
+      const onChange = vi.fn().mockResolvedValue(undefined);
+
+      new WatchService().watch(
+        { files: [], globs: [], fullRebuildPaths: [confDir] },
+        onChange
+      );
+
+      const newLayer = `${confDir}/50-new-layer.json`;
+      mockWatcher.emit("all", "add", newLayer);
+
+      expect(onChange).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(350);
+
+      expect(onChange).toHaveBeenCalledOnce();
+      expect(onChange).toHaveBeenCalledWith<[WatchEvent]>({
+        type: "full",
+        reason: newLayer,
+        filePath: newLayer,
+      });
+    });
+
+    /**
+     * Removing a layer file (chokidar 'unlink' event) beneath the watched conf.d
+     * directory must also fire a full rebuild, so the merged config drops that
+     * layer's contribution on the next build.
+     *
+     * Example:
+     *   fullRebuildPaths: ["/project/.sous/conf.d"]
+     *   emit('all', 'unlink', '/project/.sous/conf.d/10-repos.yaml')
+     *   → advance 350 ms → onChange({ type: "full", ... })
+     */
+    it("should fire a full rebuild when a layer file is removed from conf.d", async () => {
+      const onChange = vi.fn().mockResolvedValue(undefined);
+
+      new WatchService().watch(
+        { files: [], globs: [], fullRebuildPaths: [confDir] },
+        onChange
+      );
+
+      const removed = `${confDir}/10-repos.yaml`;
+      mockWatcher.emit("all", "unlink", removed);
+
+      await vi.advanceTimersByTimeAsync(350);
+
+      expect(onChange).toHaveBeenCalledOnce();
+      const evt = onChange.mock.calls[0][0] as WatchEvent;
+      expect(evt.type).toBe("full");
+      expect(evt.filePath).toBe(removed);
+    });
+  });
 });

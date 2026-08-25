@@ -55,7 +55,8 @@
     "liquidjs": "^10.25.0",
     "minimatch": "^10.2.4",
     "tiktoken": "^1.0.22",
-    "tsx": "^4"
+    "tsx": "^4",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@types/glob": "^8.1.0",

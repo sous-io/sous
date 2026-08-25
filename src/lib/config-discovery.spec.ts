@@ -3,13 +3,19 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   CONFIG_FILE_NAMES,
+  CONFD_DIR_NAME,
+  LAYER_EXTENSIONS,
   candidateDirs,
   discoverConfig,
   expandHome,
   findConfigInSousDir,
   formatNotFoundMessage,
+  listConfDirLayers,
+  assertUniqueLayerBaseNames,
+  refreshDiscoveredConfig,
   resolveConfigFlag,
 } from "./config-discovery.js";
+import { ConfigError } from "./errors.js";
 import { makeTmpDir, type TmpDir } from "../test/utils/tmp.js";
 
 /**
@@ -111,18 +117,41 @@ describe("config-discovery", () => {
     });
 
     /**
-     * findConfigInSousDir() should prefer .js over .mjs over .json when more than
-     * one is present, matching CONFIG_FILE_NAMES order.
+     * findConfigInSousDir() should recognise sous.config.yaml, added in the
+     * composable-config work. CONFIG_FILE_NAMES lists it (and NOT .yml).
      *
-     * // all three exist
-     * findConfigInSousDir("<tmp>/.sous"); // -> ".../sous.config.js"
+     * // only .sous/sous.config.yaml exists
+     * findConfigInSousDir("<tmp>/.sous"); // -> ".../sous.config.yaml"
      */
-    it("should prefer .js over .mjs over .json", () => {
-      write(".sous/sous.config.json");
-      write(".sous/sous.config.mjs");
+    it("should find sous.config.yaml (and CONFIG_FILE_NAMES lists yaml, not yml)", () => {
+      const yaml = write("y/.sous/sous.config.yaml", "name: x\n");
+      expect(findConfigInSousDir(path.join(tmp.path, "y/.sous"))).toBe(yaml);
+      expect(CONFIG_FILE_NAMES).toContain("sous.config.yaml");
+      expect(CONFIG_FILE_NAMES).not.toContain("sous.config.yml");
+    });
+
+    /**
+     * findConfigInSousDir() must NOT silently pick a winner when more than one
+     * primary config exists in a single .sous/. It throws a ConfigError whose
+     * message names every conflicting file.
+     *
+     * // .sous/ holds both sous.config.js and sous.config.json
+     * findConfigInSousDir("<tmp>/.sous"); // -> throws ConfigError naming both
+     */
+    it("should throw ConfigError listing every file when multiple primaries exist", () => {
       const js = write(".sous/sous.config.js");
-      expect(findConfigInSousDir(path.join(tmp.path, ".sous"))).toBe(js);
-      expect(CONFIG_FILE_NAMES[0]).toBe("sous.config.js");
+      const json = write(".sous/sous.config.json");
+      const sousDir = path.join(tmp.path, ".sous");
+      expect(() => findConfigInSousDir(sousDir)).toThrow(ConfigError);
+      try {
+        findConfigInSousDir(sousDir);
+        throw new Error("expected findConfigInSousDir to throw");
+      } catch (error) {
+        expect(error).toBeInstanceOf(ConfigError);
+        const message = (error as Error).message;
+        expect(message).toContain(js);
+        expect(message).toContain(json);
+      }
     });
 
     /**
@@ -165,10 +194,13 @@ describe("config-discovery", () => {
      */
     it("should find a config in the start directory's .sous/", () => {
       const configPath = write(".sous/sous.config.js");
+      const sousDir = path.join(tmp.path, ".sous");
       const result = discoverConfig(tmp.path);
       expect(result).toEqual({
         configPath,
-        sousDir: path.join(tmp.path, ".sous"),
+        sousDir,
+        confDir: path.join(sousDir, CONFD_DIR_NAME),
+        layerPaths: [configPath],
         source: "walk-up",
       });
     });
@@ -238,6 +270,116 @@ describe("config-discovery", () => {
       write(".sous", "not a directory");
       expect(discoverConfig(tmp.path)).toBeNull();
     });
+
+    /**
+     * discoverConfig() should set confDir to <sousDir>/conf.d and, when the
+     * directory exists, append its layer files to layerPaths after the primary.
+     * The primary config is always first.
+     *
+     * // .sous/sous.config.js + .sous/conf.d/10-a.json exist
+     * discoverConfig("<tmp>").layerPaths;
+     * // -> [".../sous.config.js", ".../conf.d/10-a.json"]
+     */
+    it("should populate confDir and append conf.d layers after the primary", () => {
+      const configPath = write(".sous/sous.config.js");
+      const layer = write(".sous/conf.d/10-a.json");
+      const sousDir = path.join(tmp.path, ".sous");
+      const result = discoverConfig(tmp.path);
+      expect(result?.confDir).toBe(path.join(sousDir, CONFD_DIR_NAME));
+      expect(result?.layerPaths).toEqual([configPath, layer]);
+    });
+
+    /**
+     * conf.d enumeration is BYTEWISE (plain string <), not numeric: a file named
+     * 10-b.json sorts before 2-a.json because '1' < '2'. The primary config
+     * always leads regardless.
+     *
+     * // conf.d holds 2-a.json and 10-b.json
+     * discoverConfig("<tmp>").layerPaths;
+     * // -> [primary, ".../conf.d/10-b.json", ".../conf.d/2-a.json"]
+     */
+    it("should order conf.d layers bytewise so 10-b sorts before 2-a", () => {
+      const configPath = write(".sous/sous.config.js");
+      const ten = write(".sous/conf.d/10-b.json");
+      const two = write(".sous/conf.d/2-a.json");
+      const result = discoverConfig(tmp.path);
+      expect(result?.layerPaths).toEqual([configPath, ten, two]);
+    });
+
+    /**
+     * conf.d enumeration is non-recursive and extension-filtered: files in a
+     * nested subdirectory, and files with an unrecognised extension, are ignored.
+     *
+     * // conf.d/keep.json, conf.d/notes.md, conf.d/nested/deep.json
+     * discoverConfig("<tmp>").layerPaths; // -> [primary, ".../conf.d/keep.json"]
+     */
+    it("should ignore nested and non-layer files in conf.d", () => {
+      const configPath = write(".sous/sous.config.js");
+      const keep = write(".sous/conf.d/keep.json");
+      write(".sous/conf.d/notes.md", "# not a layer");
+      write(".sous/conf.d/nested/deep.json");
+      const result = discoverConfig(tmp.path);
+      expect(result?.layerPaths).toEqual([configPath, keep]);
+    });
+
+    /**
+     * A missing conf.d directory is not an error: layerPaths is just the primary.
+     *
+     * // no .sous/conf.d/ at all
+     * discoverConfig("<tmp>").layerPaths; // -> [primary]
+     */
+    it("should treat a missing conf.d directory as no layers", () => {
+      const configPath = write(".sous/sous.config.js");
+      const result = discoverConfig(tmp.path);
+      expect(fs.existsSync(path.join(tmp.path, ".sous", CONFD_DIR_NAME))).toBe(false);
+      expect(result?.layerPaths).toEqual([configPath]);
+    });
+
+    /**
+     * The duplicate-baseName rule spans the primary AND conf.d: a conf.d layer
+     * whose baseName (filename minus final extension) matches the primary's
+     * baseName throws a ConfigError naming both files.
+     *
+     * // primary sous.config.json + conf.d/sous.config.yaml
+     * discoverConfig("<tmp>"); // -> throws ConfigError naming both
+     */
+    it("should throw when a conf.d layer's baseName collides with the primary", () => {
+      const primary = write(".sous/sous.config.json");
+      const dup = write(".sous/conf.d/sous.config.yaml", "name: x\n");
+      expect(() => discoverConfig(tmp.path)).toThrow(ConfigError);
+      try {
+        discoverConfig(tmp.path);
+        throw new Error("expected discoverConfig to throw");
+      } catch (error) {
+        expect(error).toBeInstanceOf(ConfigError);
+        const message = (error as Error).message;
+        expect(message).toContain(primary);
+        expect(message).toContain(dup);
+      }
+    });
+
+    /**
+     * The duplicate-baseName rule also catches two conf.d layers that differ only
+     * by extension: 500-repos.json and 500-repos.yaml share the baseName
+     * '500-repos'.
+     *
+     * // conf.d/500-repos.json + conf.d/500-repos.yaml
+     * discoverConfig("<tmp>"); // -> throws ConfigError naming both
+     */
+    it("should throw when two conf.d layers differ only by extension", () => {
+      write(".sous/sous.config.js");
+      const asJson = write(".sous/conf.d/500-repos.json");
+      const asYaml = write(".sous/conf.d/500-repos.yaml", "a: 1\n");
+      expect(() => discoverConfig(tmp.path)).toThrow(ConfigError);
+      try {
+        discoverConfig(tmp.path);
+        throw new Error("expected discoverConfig to throw");
+      } catch (error) {
+        const message = (error as Error).message;
+        expect(message).toContain(asJson);
+        expect(message).toContain(asYaml);
+      }
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -254,11 +396,32 @@ describe("config-discovery", () => {
      */
     it("should accept a direct path to a config file", () => {
       const configPath = write(".sous/sous.config.js");
+      const sousDir = path.join(tmp.path, ".sous");
       expect(resolveConfigFlag(configPath)).toEqual({
         configPath,
-        sousDir: path.join(tmp.path, ".sous"),
+        sousDir,
+        confDir: path.join(sousDir, CONFD_DIR_NAME),
+        layerPaths: [configPath],
         source: "flag",
       });
+    });
+
+    /**
+     * resolveConfigFlag() must populate confDir/layerPaths just like discovery:
+     * it enumerates the sibling conf.d/ of the resolved config and runs the
+     * duplicate-baseName check.
+     *
+     * // --config .../sous.config.js, with conf.d/10-a.json alongside
+     * resolveConfigFlag(configPath).layerPaths;
+     * // -> [configPath, ".../conf.d/10-a.json"]
+     */
+    it("should populate confDir and conf.d layers for a flag path", () => {
+      const configPath = write(".sous/sous.config.js");
+      const layer = write(".sous/conf.d/10-a.json");
+      const sousDir = path.join(tmp.path, ".sous");
+      const result = resolveConfigFlag(configPath);
+      expect(result.confDir).toBe(path.join(sousDir, CONFD_DIR_NAME));
+      expect(result.layerPaths).toEqual([configPath, layer]);
     });
 
     /**
@@ -370,6 +533,16 @@ describe("config-discovery", () => {
     });
 
     /**
+     * formatNotFoundMessage() should mention sous.config.yaml among the config
+     * file names it looked for, now that yaml is a recognised primary.
+     *
+     * formatNotFoundMessage("/a/b"); // -> text containing "sous.config.yaml"
+     */
+    it("should mention sous.config.yaml among the recognised names", () => {
+      expect(formatNotFoundMessage("/a/b")).toContain("sous.config.yaml");
+    });
+
+    /**
      * The embedded sample config must show the flat single-project shape: fields
      * like `name` and `compilation` at the top level, with no `projects` map or
      * `defaultProject` key.
@@ -395,6 +568,120 @@ describe("config-discovery", () => {
     it("should summarise the tail of a long ancestor list", () => {
       const message = formatNotFoundMessage("/a/b/c/d/e/f/g/h/i/j");
       expect(message).toMatch(/and \d+ more parent director/);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // listConfDirLayers()
+  // -------------------------------------------------------------------------
+
+  describe("listConfDirLayers()", () => {
+    /**
+     * listConfDirLayers() returns an empty list (no error) when the directory
+     * does not exist.
+     */
+    it("should return [] for a missing conf.d directory", () => {
+      expect(listConfDirLayers(path.join(tmp.path, "conf.d"))).toEqual([]);
+    });
+
+    /**
+     * listConfDirLayers() keeps only files with a recognised layer extension,
+     * ignoring other files, and returns them bytewise-sorted as absolute paths.
+     * LAYER_EXTENSIONS covers .js/.mjs/.json/.yaml.
+     */
+    it("should keep only layer-extension files, sorted bytewise", () => {
+      const confDir = mkdir("conf.d");
+      const a = write("conf.d/10-b.json");
+      const b = write("conf.d/2-a.yaml", "x: 1\n");
+      const c = write("conf.d/1-c.mjs", "export const config = {};");
+      write("conf.d/README.md", "# ignore");
+      write("conf.d/notes.txt", "ignore");
+      expect(listConfDirLayers(confDir)).toEqual([c, a, b]);
+      expect(LAYER_EXTENSIONS).toEqual([".js", ".mjs", ".json", ".yaml"]);
+    });
+
+    /**
+     * listConfDirLayers() is non-recursive: a nested directory (even one holding
+     * a layer-extension file) is not descended into.
+     */
+    it("should not recurse into subdirectories", () => {
+      const confDir = mkdir("conf.d");
+      const top = write("conf.d/top.json");
+      write("conf.d/sub/inner.json");
+      expect(listConfDirLayers(confDir)).toEqual([top]);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // assertUniqueLayerBaseNames()
+  // -------------------------------------------------------------------------
+
+  describe("assertUniqueLayerBaseNames()", () => {
+    /**
+     * assertUniqueLayerBaseNames() is a no-op when every baseName (filename minus
+     * final extension) is unique, even across different extensions.
+     */
+    it("should not throw when all baseNames are unique", () => {
+      expect(() =>
+        assertUniqueLayerBaseNames(["/x/sous.config.js", "/x/conf.d/10-a.json", "/x/conf.d/20-b.yaml"])
+      ).not.toThrow();
+    });
+
+    /**
+     * assertUniqueLayerBaseNames() throws a ConfigError naming both files when two
+     * paths share a baseName once their final extension is stripped.
+     */
+    it("should throw ConfigError naming both duplicates", () => {
+      const paths = ["/x/conf.d/500-repos.json", "/x/conf.d/500-repos.yaml"];
+      expect(() => assertUniqueLayerBaseNames(paths)).toThrow(ConfigError);
+      try {
+        assertUniqueLayerBaseNames(paths);
+        throw new Error("expected assertUniqueLayerBaseNames to throw");
+      } catch (error) {
+        const message = (error as Error).message;
+        expect(message).toContain("500-repos");
+        expect(message).toContain(paths[0]);
+        expect(message).toContain(paths[1]);
+      }
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // refreshDiscoveredConfig()
+  // -------------------------------------------------------------------------
+
+  describe("refreshDiscoveredConfig()", () => {
+    /**
+     * refreshDiscoveredConfig() re-enumerates conf.d so layer files added after
+     * the initial discovery show up. This is what watch mode relies on.
+     *
+     * // discover with no conf.d, then drop in a layer, then refresh
+     * refreshDiscoveredConfig(discovered).layerPaths; // -> [primary, newLayer]
+     */
+    it("should pick up conf.d layers added after the initial discovery", () => {
+      const configPath = write(".sous/sous.config.js");
+      const discovered = discoverConfig(tmp.path);
+      expect(discovered?.layerPaths).toEqual([configPath]);
+
+      const layer = write(".sous/conf.d/10-a.json");
+      const refreshed = refreshDiscoveredConfig(discovered!);
+      expect(refreshed.layerPaths).toEqual([configPath, layer]);
+      expect(refreshed.configPath).toBe(configPath);
+      expect(refreshed.source).toBe(discovered!.source);
+    });
+
+    /**
+     * refreshDiscoveredConfig() drops layer files that have since disappeared.
+     */
+    it("should drop conf.d layers removed after the initial discovery", () => {
+      const configPath = write(".sous/sous.config.js");
+      const layer = write(".sous/conf.d/10-a.json");
+      const discovered = discoverConfig(tmp.path);
+      expect(discovered?.layerPaths).toEqual([configPath, layer]);
+
+      fs.rmSync(layer);
+      const refreshed = refreshDiscoveredConfig(discovered!);
+      expect(refreshed.layerPaths).toEqual([configPath]);
     });
   });
 });
