@@ -219,6 +219,74 @@ html[data-sous-theme="dark"] .scene-logo .logo-dark { display: block; }
   margin-top: var(--sous-space-l);
 }
 
+/* Lead sentences on the TL;DR, configs and great-skill scenes: emphasized
+   words take the brand green, matching the emphasized words in the titles
+   above them */
+.features-lead em,
+.configs-reveal em,
+.skill-reveal em {
+  color: var(--sous-primary);
+}
+
+/* The great-skill closing line starts hidden (no load flicker);
+   greatSkillTimeline reveals it after the last callout */
+.skill-reveal {
+  margin-top: var(--sous-space-l);
+  opacity: 0;
+}
+
+/* Inline code inside a tooltip rides the tooltip's green plate; the global
+   code chip colors would clash on it */
+.hl-tip code {
+  padding: 0;
+  background: none;
+  color: inherit;
+}
+
+/* ----- "What is a config?" scene ----------------------------------------------
+   Four category columns of flat item tiles. The two closing lines start
+   hidden HERE (no load flicker); configsTimeline in presentation.js reveals
+   them and then spotlights the Skills tile. */
+.config-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sous-space-m);
+  margin: var(--sous-space-l) 0;
+}
+
+.config-col-title {
+  margin: 0 0 var(--sous-space-s);
+  font-size: var(--sous-font-size-base);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--sous-body-text-muted);
+}
+
+.config-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sous-space-s);
+}
+
+.config-item {
+  padding: var(--sous-space-s);
+  background: var(--sous-bg-tile);
+  border: 1px solid var(--sous-border-medium);
+  border-radius: var(--sous-border-radius);
+  font-weight: var(--sous-font-weight-semibold);
+}
+
+.configs-reveal {
+  opacity: 0;
+}
+
+@media (max-width: 640px) {
+  .config-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--sous-space-s);
+  }
+}
+
 /* ----- Orbit diagram (aggregator scene) -------------------------------------- */
 .orbit-diagram {
   display: block;
@@ -463,12 +531,15 @@ html[data-sous-theme="dark"] .scene-logo .logo-dark { display: block; }
   text-align: center;
   text-wrap: balance;
   color: var(--sous-black);
-  /* Metal-plate sheen layered over the brand green */
+  /* Metal-plate sheen layered over the brand green; thin 1px edge catches
+     (not thick bevels, which read as embossed) plus a soft drop shadow so
+     the plate floats over the code */
   background: var(--sous-metal-sheen), var(--sous-primary);
   border: 1px solid var(--sous-brand-tertiary);
   border-radius: var(--sous-border-radius);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.15);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.2),
+    0 3px 10px rgba(0, 0, 0, 0.22);
   opacity: 0;
   pointer-events: none;
 }

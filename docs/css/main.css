@@ -199,12 +199,17 @@
   --sous-hl-outline: rgba(255, 192, 67, 0.6);
   --sous-hl-glow: 0 0 14px rgba(255, 192, 67, 0.35);
 
-  /* Subtle metal-plate sheen, layered over a solid fill (tooltips) */
+  /* Metal-plate sheen, layered over a solid fill (tooltips). Metal reads as
+     metal because its luminance is NON-monotonic: angled specular bands
+     alternate light and dark instead of one smooth top-to-bottom fade
+     (which reads as embossed plastic). */
   --sous-metal-sheen: linear-gradient(
-    165deg,
-    rgba(255, 255, 255, 0.25) 0%,
-    rgba(255, 255, 255, 0.05) 35%,
-    rgba(0, 0, 0, 0.1) 100%
+    150deg,
+    rgba(255, 255, 255, 0.18) 0%,
+    rgba(255, 255, 255, 0.05) 22%,
+    rgba(0, 0, 0, 0.05) 45%,
+    rgba(255, 255, 255, 0.11) 62%,
+    rgba(0, 0, 0, 0.07) 100%
   );
 
   /* ----- Presentation ambient FX (happy-effect sky) -------------------------

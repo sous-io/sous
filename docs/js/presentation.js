@@ -56,7 +56,10 @@
 
   var SCENES = [
     { id: "intro", group: "Intro", title: "Title", hold: 4.8 }, // play() skips past it; keep the timeline lean
-    { id: "features", group: "Intro", title: "Systems" },
+    { id: "features", group: "Intro", title: "The Idea" },
+    { id: "configs", group: "Intro", title: "Configs", hold: 2.6 }, // the reveal/spotlight sequence supplies most of the dwell time
+    { id: "great-skill", group: "Intro", title: "Skills", hold: 3 }, // the callout sequence supplies most of the dwell time
+    { id: "skill-followup", group: "Intro", title: "The Catch", hold: 3 }, // typer + callouts supply the dwell time
     { id: "aggregator", group: "Intro", title: "Aggregator" },
     { id: "templates", group: "Intro", title: "Templates", hold: 4 }, // callout sequence supplies most of the dwell time
     { id: "why", group: "Intro", title: "Why?" }
@@ -447,8 +450,82 @@
     return t;
   }
 
+  // "What is a config?" scene: the grid sits for a beat, the two closing
+  // lines rise in, then the Skills tile gets the spotlight (solid brand
+  // green, slight grow) while everything else in the grid dims. Colors are
+  // read from the tokens once at build time; both are theme-independent.
+  function configsTimeline(el) {
+    var reveals = el.querySelectorAll(".configs-reveal");
+    var skills = el.querySelector(".config-item-skills");
+    var rest = el.querySelectorAll(".config-item:not(.config-item-skills), .config-col-title");
+    var css = getComputedStyle(document.documentElement);
+    var t = gsap.timeline();
+    t.to({}, { duration: 3.6 }); // sit with the grid
+    t.fromTo(reveals[0], { autoAlpha: 0, y: 24 },
+      { autoAlpha: 1, y: 0, duration: 0.6, ease: "power2.out", immediateRender: false });
+    t.to({}, { duration: 3.2 });
+    t.fromTo(reveals[1], { autoAlpha: 0, y: 24 },
+      { autoAlpha: 1, y: 0, duration: 0.6, ease: "power2.out", immediateRender: false });
+    t.to({}, { duration: 0.6 });
+    t.to(rest, { opacity: 0.35, duration: 0.5, ease: "power1.inOut" });
+    t.to(skills, {
+      scale: 1.1,
+      backgroundColor: css.getPropertyValue("--sous-primary").trim(),
+      borderColor: css.getPropertyValue("--sous-brand-tertiary").trim(),
+      color: css.getPropertyValue("--sous-white").trim(),
+      duration: 0.5,
+      ease: "back.out(2)"
+    }, "<");
+    return t;
+  }
+
+  // "A great skill" scene: time to read the title and lead and take in the
+  // rendered skill, then the callouts in document order. Each code callout
+  // carries a data-sync naming the lead word (data-quality) whose highlight
+  // fades in and out WITH it; the closing line rises in after the last one.
+  function greatSkillTimeline(el) {
+    var reveal = el.querySelector(".skill-reveal");
+    var t = gsap.timeline();
+    t.to({}, { duration: 4.5 });
+    el.querySelectorAll(".code-body .hl").forEach(function (hl) {
+      var tip = hl.querySelector(".hl-tip");
+      var parts = Array.prototype.slice.call(hl.querySelectorAll(".hl-bg, .hl-tip"));
+      var sync = el.querySelector(
+        '.great-skill-lead .hl[data-quality="' + hl.getAttribute("data-sync") + '"] .hl-bg'
+      );
+      if (sync) { parts.push(sync); }
+      var dwell = (calloutBaseDelay + countTokens(tip ? tip.textContent : "") * perTokenDelay) / 1000;
+      t.to(parts, { autoAlpha: 1, duration: 0.35 });
+      t.to({}, { duration: dwell });
+      t.to(parts, { autoAlpha: 0, duration: 0.35 });
+    });
+    t.to({}, { duration: 0.5 });
+    t.fromTo(reveal, { autoAlpha: 0, y: 24 },
+      { autoAlpha: 1, y: 0, duration: 0.6, ease: "power2.out", immediateRender: false });
+    return t;
+  }
+
+  // "The catch" scene: the line types out, the lead and the (familiar) skill
+  // window rise in, then the same three highlights return carrying the
+  // portability counterpoints.
+  function skillFollowupTimeline(el) {
+    var line = el.querySelector(".type-text");
+    var reveals = el.querySelectorAll(".followup-reveal");
+    var t = gsap.timeline();
+    t.to(line, { text: line.getAttribute("data-type-text"), duration: 1.6, ease: "none" });
+    t.to({}, { duration: 0.9 }); // beat on the typed line
+    t.fromTo(reveals, { autoAlpha: 0, y: 24 },
+      { autoAlpha: 1, y: 0, duration: 0.6, stagger: 0.25, ease: "power2.out", immediateRender: false });
+    t.to({}, { duration: 1.2 }); // re-orient on the familiar skill
+    t.add(calloutsTimeline(el));
+    return t;
+  }
+
   // Optional per-scene timeline extensions, added after the scene has entered.
   var SCENE_EXTRAS = {
+    configs: configsTimeline,
+    "great-skill": greatSkillTimeline,
+    "skill-followup": skillFollowupTimeline,
     templates: templatesTimeline,
     "teams-followup": followupTimeline
   };

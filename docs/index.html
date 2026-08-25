@@ -105,27 +105,148 @@
         </div>
       </section>
 
-      <!-- Scene 2: the two main features -->
-      <section class="scene" data-scene="features" aria-label="Two main features">
+      <!-- Scene 2: the big idea (reusable, shareable configs) -->
+      <section class="scene" data-scene="features" aria-label="What Sous is for">
         <div class="scene-inner">
-          <p class="kicker anim">The Fundamentals</p>
-          <h2 class="scene-title anim">Two Core Systems.</h2>
-          <div class="scene-grid">
-            <div class="tile scene-card anim">
-              <h3><i data-lucide="combine" class="card-icon" aria-hidden="true"></i>Config Aggregator</h3>
-              <p>Pull instructions, skills, and context from shared sources into every
-                 project and tool that needs them.</p>
-            </div>
-            <div class="tile scene-card anim">
-              <h3><i data-lucide="braces" class="card-icon" aria-hidden="true"></i>Liquid Template Engine</h3>
-              <p>Markdown templates with variables, includes, partials, helper functions,
-                 formatters, and live project data; rendered at build time.</p>
-            </div>
-          </div>
+          <p class="kicker anim">TL;DR</p>
+          <h2 class="scene-title anim">
+            Sous makes configs<br>
+            <em>reusable</em> and <em>shareable</em>.
+          </h2>
+          <p class="lead anim features-lead">
+            It does this by adding a <em>build layer</em> that can pull your AI
+            configurations from multiple sources. The Sous build engine makes
+            your configs composable, dynamic, and optimized for token usage
+            and speed.
+          </p>
           <p class="lead anim features-tagline">
             It&rsquo;s a bit like <a href="https://helm.sh" target="_blank" rel="noopener">Helm</a>,
             but for AI coding tools.
           </p>
+        </div>
+      </section>
+
+      <!-- Scene: what counts as a "config" (four category columns; the two
+           closing lines and the Skills spotlight are choreographed by
+           configsTimeline in presentation.js, so they are NOT .anim) -->
+      <section class="scene" data-scene="configs" aria-label="What is a config?">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">What do we mean by &ldquo;<em>config</em>&rdquo;?</h2>
+          <div class="config-grid">
+            <div class="config-col anim">
+              <h3 class="config-col-title">Knowledge</h3>
+              <div class="config-item">Memory Files</div>
+              <div class="config-item config-item-skills">Skills</div>
+              <div class="config-item">Commands</div>
+              <div class="config-item">Reference Docs</div>
+            </div>
+            <div class="config-col anim">
+              <h3 class="config-col-title">Actors</h3>
+              <div class="config-item">Sub-agents</div>
+              <div class="config-item">Modes</div>
+              <div class="config-item">Workflows</div>
+              <div class="config-item">Scheduled Tasks</div>
+            </div>
+            <div class="config-col anim">
+              <h3 class="config-col-title">Capabilities</h3>
+              <div class="config-item">MCP Servers</div>
+              <div class="config-item">Plugins</div>
+              <div class="config-item">Hooks</div>
+              <div class="config-item">Scripts</div>
+            </div>
+            <div class="config-col anim">
+              <h3 class="config-col-title">Controls</h3>
+              <div class="config-item">Permission Settings</div>
+              <div class="config-item">Ignore Files</div>
+              <div class="config-item">Tool Settings</div>
+              <div class="config-item">Model Preferences</div>
+            </div>
+          </div>
+          <p class="lead configs-reveal scene-exit">Sous can help you manage all of these...</p>
+          <p class="lead configs-reveal scene-exit">...but, for brevity, we&rsquo;ll focus on <em>skills</em>.</p>
+        </div>
+      </section>
+
+      <!-- Scene: what makes a skill great (rendered-output walkthrough;
+           callout dwells choreographed by greatSkillTimeline in
+           presentation.js, same .hl system as the templates scene) -->
+      <section class="scene" data-scene="great-skill" aria-label="What makes a great skill">
+        <div class="scene-inner">
+          <h2 class="scene-title anim">A <em>great</em> skill &hellip;</h2>
+          <p class="lead anim great-skill-lead">
+            &hellip; is <span class="hl" data-quality="specific"><span class="hl-bg" aria-hidden="true"></span>specific</span>,
+            <span class="hl" data-quality="assertive"><span class="hl-bg" aria-hidden="true"></span>assertive</span>, and
+            <span class="hl" data-quality="comprehensive"><span class="hl-bg" aria-hidden="true"></span>comprehensive</span>;
+            the goal of all instruction files should be to
+            <strong>abbreviate discovery</strong>.
+          </p>
+          <div class="code-stack anim">
+            <div class="code-window">
+              <div class="code-titlebar">
+                <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
+                <span class="code-tab">.claude/skills/update-data-models/SKILL.md</span>
+              </div>
+              <pre class="code-body"><code><span class="tok-dim">---</span>
+<span class="tok-var">name</span>: update-data-models
+<span class="tok-var">description</span>: Use when adding or changing data models
+<span class="tok-dim">---</span>
+
+<span class="tok-md"># Update Data Models</span>
+Data models live in <span class="hl" data-sync="specific"><span class="hl-bg" aria-hidden="true"></span><span class="tok-dim">`</span>/projects/backend/src/models<span class="tok-dim">`</span><span class="hl-tip" role="tooltip">Embedding absolute paths eliminates CWD issues and reduces discovery. In turn, that saves time and tokens.</span></span>.
+Every model extends BaseModel and ends in <span class="tok-dim">`</span>Model.ts<span class="tok-dim">`</span>.
+
+<span class="hl" data-sync="assertive"><span class="hl-bg" aria-hidden="true"></span>Apply changes using the Edit tool; NEVER use sed or heredocs.<span class="hl-tip" role="tooltip">Telling models <em>exactly</em> what to do (and not do) keeps them consistent and avoids rabbit holes.</span></span>
+After every change, run <span class="tok-dim">`</span><span class="tok-fn">npm run test:models</span><span class="tok-dim">`</span>.
+
+<span class="hl hl-block" data-sync="comprehensive"><span class="hl-bg" aria-hidden="true"></span><span class="tok-md">## Existing Models</span>
+- /projects/backend/src/models/UserModel.ts
+- /projects/backend/src/models/OrderModel.ts
+- /projects/backend/src/models/billing/PaymentModel.ts<span class="hl-tip" role="tooltip">Listing entities and their paths saves <code>list</code> and <code>find</code> cycles.</span></span></code></pre>
+            </div>
+          </div>
+          <p class="lead skill-reveal scene-exit">
+            Optimized skills are basically <em>curated</em> discovery.
+          </p>
+        </div>
+      </section>
+
+      <!-- Scene: the catch (typer + SAD effect rides the -followup id; the
+           lead and code window rise in via skillFollowupTimeline in
+           presentation.js, so they are NOT .anim). The SAME skill and the
+           SAME three highlights as great-skill, now with the portability
+           counterpoints. -->
+      <section class="scene" data-scene="skill-followup" aria-label="The catch: great skills resist reuse">
+        <div class="scene-inner">
+          <h2 class="scene-title followup-typer scene-exit">
+            <span class="type-line"><span class="type-text" data-type-text="But there's a catch ..."></span><span class="cursor">&nbsp;</span></span>
+          </h2>
+          <p class="lead followup-reveal scene-exit">
+            &hellip; everything that makes a skill great, reduces portability.
+          </p>
+          <div class="code-stack followup-reveal scene-exit">
+            <div class="code-window">
+              <div class="code-titlebar">
+                <span class="code-dot"></span><span class="code-dot"></span><span class="code-dot"></span>
+                <span class="code-tab">.claude/skills/update-data-models/SKILL.md</span>
+              </div>
+              <pre class="code-body"><code><span class="tok-dim">---</span>
+<span class="tok-var">name</span>: update-data-models
+<span class="tok-var">description</span>: Use when adding or changing data models
+<span class="tok-dim">---</span>
+
+<span class="tok-md"># Update Data Models</span>
+Data models live in <span class="hl"><span class="hl-bg" aria-hidden="true"></span><span class="tok-dim">`</span>/projects/backend/src/models<span class="tok-dim">`</span><span class="hl-tip" role="tooltip">This path is one machine&rsquo;s truth; on a teammate&rsquo;s laptop, in CI, or in another project, it points at nothing.</span></span>.
+Every model extends BaseModel and ends in <span class="tok-dim">`</span>Model.ts<span class="tok-dim">`</span>.
+
+<span class="hl"><span class="hl-bg" aria-hidden="true"></span>Apply changes using the Edit tool; NEVER use sed or heredocs.<span class="hl-tip" role="tooltip">These commands speak Claude Code; other tools have their own dialects, so every tool needs its own copy.</span></span>
+After every change, run <span class="tok-dim">`</span><span class="tok-fn">npm run test:models</span><span class="tok-dim">`</span>.
+
+<span class="hl hl-block"><span class="hl-bg" aria-hidden="true"></span><span class="tok-md">## Existing Models</span>
+- /projects/backend/src/models/UserModel.ts
+- /projects/backend/src/models/OrderModel.ts
+- /projects/backend/src/models/billing/PaymentModel.ts<span class="hl-tip" role="tooltip">And this list was only true the day it was written; every model added, renamed, or deleted makes it staler.</span></span></code></pre>
+            </div>
+          </div>
         </div>
       </section>
 
