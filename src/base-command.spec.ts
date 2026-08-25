@@ -83,4 +83,26 @@ describe("readConfigFlagFromArgv()", () => {
   it("should return undefined when --config has no value", () => {
     expect(readConfigFlagFromArgv(["--config"])).toBeUndefined();
   });
+
+  /**
+   * readConfigFlagFromArgv() should stop scanning at a bare `--`: everything
+   * after it belongs to the launched tool (launch's pass-through args), so a
+   * tool flag like claude's `-c` must not be read as sous's config flag.
+   *
+   * readConfigFlagFromArgv(["launch", "claude", "--", "-c"]); // -> undefined
+   */
+  it("should ignore a -c that appears after --", () => {
+    expect(readConfigFlagFromArgv(["launch", "claude", "--", "-c"])).toBeUndefined();
+    expect(readConfigFlagFromArgv(["launch", "claude", "--", "--config", "/x.js"])).toBeUndefined();
+  });
+
+  /**
+   * readConfigFlagFromArgv() should still read a config flag that appears
+   * before the `--` separator.
+   *
+   * readConfigFlagFromArgv(["launch", "claude", "-c", "/a.js", "--", "-c"]); // -> "/a.js"
+   */
+  it("should read a config flag that appears before --", () => {
+    expect(readConfigFlagFromArgv(["launch", "claude", "-c", "/a.js", "--", "-c"])).toBe("/a.js");
+  });
 });

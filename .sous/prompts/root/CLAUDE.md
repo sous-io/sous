@@ -342,6 +342,16 @@ Also: `--rebuild`, `--dry-run`, `--strict`, `--watch` / `-w` (build/compile),
 `--no-prune` / `--no-compile` (build), `--force` / `-f` (clear),
 `--no-build` / `--continuous` (launch).
 
+**Launch pass-through:** any argument `launch` does not recognize is forwarded to the
+tool, after the config-defined `tools.<name>.args` and before the `promptFile` content
+(e.g. `xcv launch claude --resume`). Flags that collide with sous's own (claude's `-c`
+/ `-p` vs sous's `--config` / `--project` shorthands) go after a bare `--`, which
+forwards everything following it verbatim: `xcv launch claude -- -c`. Implementation:
+`launch.ts` sets oclif `strict = false` plus `"--" = false` (oclif rejects unknown
+flags even in non-strict mode otherwise) and splits argv at the first `--` itself;
+`readConfigFlagFromArgv` in `base-command.ts` also stops scanning at `--`. Guarded by
+`src/test/integration/launch-passthrough.test.ts`.
+
 ## Important Patterns
 
 - All commands extend `BaseCommand`, which discovers the config, loads `.env.local`, and

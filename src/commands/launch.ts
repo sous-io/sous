@@ -14,6 +14,8 @@ export default class Launch extends BaseCommand {
     "<%= config.bin %> launch codex --no-build",
     "<%= config.bin %> launch claude --continuous",
     "<%= config.bin %> launch codex --project myproject",
+    "<%= config.bin %> launch claude --resume",
+    "<%= config.bin %> launch claude -- -c",
   ];
 
   static args = {
@@ -35,8 +37,29 @@ export default class Launch extends BaseCommand {
     }),
   };
 
+  // Any argument launch does not recognize is forwarded to the tool, after the
+  // config-defined tool args. Flags that collide with sous's own (e.g. claude's
+  // -c / --continue vs sous's -c / --config) can be forced through with `--`:
+  // everything after it is forwarded verbatim.
+  //
+  // strict=false lets extra positionals through; "--"=false is what routes
+  // unknown flags into argv instead of a NonExistentFlagsError (oclif rejects
+  // them even in non-strict mode otherwise). Disabling oclif's `--` handling
+  // means it would keep parsing sous flags past the separator, so run() splits
+  // argv at the first `--` itself, before oclif ever sees the tail.
+  static strict = false;
+  static "--" = false;
+
   async run(): Promise<void> {
-    const { args, flags } = await this.parse(Launch);
+    const sepIndex = this.argv.indexOf("--");
+    const ownArgv = sepIndex === -1 ? this.argv : this.argv.slice(0, sepIndex);
+    const verbatimArgs = sepIndex === -1 ? [] : this.argv.slice(sepIndex + 1);
+
+    const { args, argv, flags } = await this.parse(Launch, ownArgv);
+
+    // argv holds every token oclif did not claim, in original order; the first
+    // is the tool name itself.
+    const passThroughArgs = [...argv.slice(1).map(String), ...verbatimArgs];
 
     const project = this.resolveProject(flags.project);
     const rootScope = resolveRootScope(this.settings, this.configContext);
@@ -61,6 +84,7 @@ export default class Launch extends BaseCommand {
       "Project Root": projectRoot,
       "No Build": flags["no-build"],
       Continuous: flags.continuous,
+      ...(passThroughArgs.length > 0 && { "Tool Args": passThroughArgs.join(" ") }),
     });
 
     const buildService = new BuildService();
@@ -75,8 +99,8 @@ export default class Launch extends BaseCommand {
         footer();
       }
 
-      // Resolve promptFile content
-      const launchArgs = [...(toolConfig.args ?? [])];
+      // Config-defined args first, then pass-through, then promptFile content
+      const launchArgs = [...(toolConfig.args ?? []), ...passThroughArgs];
       if (toolConfig.promptFile) {
         if (!fs.existsSync(toolConfig.promptFile)) {
           displayError(`promptFile not found: ${toolConfig.promptFile}`);

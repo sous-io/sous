@@ -148,6 +148,9 @@ export abstract class BaseCommand extends Command {
  * Pulls the value of `--config` / `-c` out of a raw argv array.
  * Supports `--config X`, `--config=X`, `-c X`, and `-cX`.
  *
+ * Scanning stops at a bare `--`: anything after it belongs to a launched tool
+ * (see `launch`'s pass-through args), never to sous.
+ *
  * @param argv - Raw arguments (oclif's `this.argv`, i.e. argv minus the command).
  * @returns The flag value, or undefined when the flag is absent.
  */
@@ -155,6 +158,7 @@ export function readConfigFlagFromArgv(argv: string[]): string | undefined {
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
 
+    if (arg === "--") return undefined;
     if (arg === "--config" || arg === "-c") return argv[i + 1];
     if (arg.startsWith("--config=")) return arg.slice("--config=".length);
     if (arg.startsWith("-c") && arg.length > 2 && !arg.startsWith("-c-")) return arg.slice(2);
