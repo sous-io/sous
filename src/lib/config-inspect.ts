@@ -78,7 +78,11 @@ export function lookupPath(root: unknown, segments: (string | number)[]): unknow
       }
       current = current[segment];
     } else {
-      if (!(segment in (current as Record<string, unknown>))) {
+      // Use hasOwnProperty, NOT the `in` operator: `in` walks the prototype
+      // chain, so inherited Object.prototype members (`constructor`, `toString`,
+      // `hasOwnProperty`, `__proto__`, …) would falsely "resolve" and print
+      // garbage instead of NOT_FOUND.
+      if (!Object.prototype.hasOwnProperty.call(current, segment)) {
         return NOT_FOUND;
       }
       current = (current as Record<string, unknown>)[segment];

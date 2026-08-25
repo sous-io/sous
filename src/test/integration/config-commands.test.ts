@@ -187,6 +187,21 @@ describe("xcv config commands", () => {
   );
 
   it(
+    "config get of an inherited prototype key exits non-zero with empty stdout",
+    () => {
+      // Regression: lookupPath used the `in` operator, which walks the prototype
+      // chain, so `constructor`/`__proto__`/etc. "resolved" and printed garbage
+      // ("undefined"/"{}") to stdout with exit 0.
+      for (const key of ["constructor", "__proto__", "compilation.constructor"]) {
+        const { stdout, status } = runXcv(root, "config", "get", key);
+        expect(status).not.toBe(0);
+        expect(stdout.trim()).toBe("");
+      }
+    },
+    CLI_TIMEOUT
+  );
+
+  it(
     "config get --layers lists each layer that changed the value, incl. the (unset) first change",
     () => {
       const { stdout, status } = runXcv(root, "config", "get", "name", "--layers");

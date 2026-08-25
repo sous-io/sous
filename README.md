@@ -42,7 +42,7 @@ npm link
 ```
 
 Then set up a project. A project needs a `.sous/` directory holding a config file, named
-`sous.config.js`, `sous.config.mjs`, or `sous.config.json`:
+`sous.config.js`, `sous.config.mjs`, `sous.config.json`, or `sous.config.yaml`:
 
 ```bash
 cd /path/to/your/project
@@ -101,6 +101,9 @@ Useful commands:
 | `xcv prune` | Remove outputs no longer in the config |
 | `xcv clear` | Delete every file sous wrote for the project |
 | `xcv launch claude` | Build, then start the agent |
+| `xcv config show` | Print the merged config (all layers) as JSON |
+| `xcv config get <path>` | Read one value by dot-path; `--layers` shows which file set it |
+| `xcv config validate` | Validate the merged config: schema, then variable resolution |
 
 ## How it works
 
@@ -147,6 +150,73 @@ built-in skill bundle to compile it into your project. Define your own aliases w
 
 Sous records every file and directory it writes in a state file, `.sous/sous.state.json` by
 default, which is what lets `prune` and `clear` clean up precisely instead of guessing.
+
+## Composing config from layers
+
+One config can grow large, so sous lets you split it. Alongside the primary
+`sous.config.*`, any file matching `.sous/conf.d/*.{js,mjs,json,yaml}` is a layer. Sous loads
+the primary first, then the `conf.d/` files sorted bytewise-lexicographically (identical order
+on every machine), and merges them into one config: objects deep-merge key by key, scalars are
+later-wins, and arrays concatenate in load order. Every layer is forced back to plain JSON
+before merging, so functions, `RegExp`, `Date`, and `undefined` do not survive a layer.
+
+```
+.sous/
+  sous.config.js          # base config
+  conf.d/
+    100-tools.json        # adds or overrides tools
+    200-skills.yaml       # adds compilation targets
+```
+
+For anything JSON cannot express, a `.js`/`.mjs` layer may export a `configure` function
+instead of (or alongside) a `config` object. Sous calls it with the cumulative config so far
+and a small builder, and merges the result:
+
+```js
+export function configure(currentConfig, builder) {
+  // currentConfig is the live merged config; mutate it by reference, or return
+  // an object to merge. builder.env(name, fallback), builder.loadConfig(path),
+  // builder.loadConfigs(glob), and builder.merge(obj) are available.
+  currentConfig._vars.apiBase = builder.env("API_BASE", "https://example.com");
+}
+```
+
+`configure` may be async. Builder paths (`loadConfig`/`loadConfigs`) run before variable
+resolution, so they accept only the auto-vars `${sousDir}`, `${sousConfDir}`, `${sousRootPath}`,
+and `${sousVersion}`; any other `${var}` in a builder path is an error.
+
+## Locating the config
+
+By default sous walks up from the current directory to find the `.sous/` holding a config.
+You can point it elsewhere with an environment variable or a flag; every command accepts these:
+
+| Flag | Env var | What it overrides |
+|---|---|---|
+| `--config` / `-c` / `--sous-config` | `SOUS_CONFIG` | The exact primary config file |
+| `--sous-dir` | `SOUS_DIR` | The `.sous/` directory to use |
+| `--sous-confd` | `SOUS_CONFD` | The `conf.d/` directory (defaults to `<sousDir>/conf.d`) |
+
+Precedence, highest first: flag, then env var, then walk-up discovery. These location inputs
+are read from the real environment only, never from `.env` or `.env.local` (those files are
+found by discovery, so they cannot decide where discovery looks).
+
+## Validating and inspecting config
+
+`xcv config validate` runs the full pipeline: it merges every layer, checks it against the
+schema, then resolves variables, reporting the first failure with a readable message.
+`xcv config show` prints the merged config as JSON, and `xcv config get <dot.path>` reads a
+single value; add `--layers` to see which layer file set it and to what.
+
+Config is validated against a JSON Schema on every load. A config may declare a `version`
+field; omit it or set it to `1`. JSON layers can point an editor at the shipped schema with a
+`"$schema"` key for autocompletion and inline validation:
+
+```json
+{
+  "$schema": "./sous.config.schema.json",
+  "version": 1
+}
+```
 
 ## Platform support
 

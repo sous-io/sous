@@ -947,6 +947,44 @@ describe("resolveWatchConfig()", () => {
     };
     expect(() => resolveWatchConfig(settings, {})).toThrow(/\$\{typo\}/);
   });
+
+  /**
+   * Regression: resolveWatchConfig() must NORMALIZE absolute entry paths so they
+   * match chokidar's OS-normalized change events. With the canonical
+   * `${sousDir}/..` idiom the substituted path contains `/.sous/..`; if that were
+   * watched verbatim, WatchService's exact-match against the normalized event path
+   * would never fire and `--watch` would silently never rebuild on source edits.
+   *
+   * resolveWatchConfig(settings, ...)  // entryPoint "/proj/.sous/../prompts/A.md"
+   * // -> { files: ["/proj/prompts/A.md"], ... }
+   */
+  it("should normalize absolute entryPoint paths (collapse ${sousDir}/.. so events match)", () => {
+    const settings: Settings = {
+      name: "P",
+      _vars: { projectRoot: "/proj/.sous/.." },
+      compilation: {
+        targets: [{ entryPoint: "${projectRoot}/prompts/A.md", outputs: [] }],
+      },
+    };
+    const result = resolveWatchConfig(settings, resolveRootScope(settings));
+    expect(result.files).toEqual(["/proj/prompts/A.md"]);
+  });
+
+  /**
+   * Regression: entryGlob patterns are normalized the same way, so a `..` segment
+   * from the `${sousDir}/..` idiom collapses in the watched glob too.
+   */
+  it("should normalize absolute entryGlob patterns", () => {
+    const settings: Settings = {
+      name: "P",
+      _vars: { projectRoot: "/proj/.sous/.." },
+      compilation: {
+        targets: [{ entryGlob: "${projectRoot}/skills/**/*.md", outputs: [] }],
+      },
+    };
+    const result = resolveWatchConfig(settings, resolveRootScope(settings));
+    expect(result.globs).toEqual(["/proj/skills/**/*.md"]);
+  });
 });
 
 // ---------------------------------------------------------------------------

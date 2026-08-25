@@ -250,11 +250,24 @@ export async function loadSettingsWithLayers(
   // runs identically under both the `node` and `tsx` attempts — so both stderrs
   // are the same. Collapse identical messages so a single config error is not
   // printed twice as if it were two distinct failures.
-  const uniqueMessages = [...new Set(failures.map((f) => f.message))];
+  //
+  // The tsx attempt re-imports an ESM `.js` config that the `node` attempt
+  // already loaded and reported a real error for; on the tsx attempt this
+  // surfaces as a spurious "Cannot require() ES Module … in a cycle"
+  // (ERR_REQUIRE_CYCLE_MODULE) that is never a real user-config problem. Drop it
+  // whenever another attempt produced a genuine error, so the real message is
+  // not buried under an unrelated require(esm)-cycle warning.
+  const isTsxCycleArtifact = (message: string): boolean =>
+    /ERR_REQUIRE_CYCLE_MODULE/.test(message) ||
+    /Cannot require\(\) ES Module .* in a cycle/.test(message);
+  const meaningfulFailures = failures.filter((f) => !isTsxCycleArtifact(f.message));
+  const effectiveFailures = meaningfulFailures.length > 0 ? meaningfulFailures : failures;
+
+  const uniqueMessages = [...new Set(effectiveFailures.map((f) => f.message))];
   const detail =
     uniqueMessages.length === 1
       ? `  ${uniqueMessages[0]}`
-      : failures.map((f) => `  [via ${f.label}] ${f.message}`).join("\n\n");
+      : effectiveFailures.map((f) => `  [via ${f.label}] ${f.message}`).join("\n\n");
 
   throw new ConfigError(`Failed to load config from ${configPath}\n${detail}`);
 }
@@ -893,12 +906,20 @@ export function resolveWatchConfig(settings: Settings, scope: VarScope = {}): Wa
     const where = `compilation.targets[${targetIndex}]`;
 
     if (target.entryPoint) {
-      files.push(substituteVarsStrict(target.entryPoint, targetScope, `${where}.entryPoint`));
+      // Normalize to match the compilation path (rootInputPath) and, more
+      // importantly, chokidar's change events: chokidar reports the OS-normalized
+      // path, so an unnormalized `${sousDir}/../prompts/A.md` entry would never
+      // string-match the `/prompts/A.md` event and the partial rebuild would never fire.
+      files.push(
+        normalizeConfigPath(
+          substituteVarsStrict(target.entryPoint, targetScope, `${where}.entryPoint`)
+        )
+      );
     }
 
     if (target.entryGlob) {
       const pattern = substituteVarsStrict(target.entryGlob, targetScope, `${where}.entryGlob`);
-      globs.push(...resolveAliasPrefix(pattern, aliases));
+      globs.push(...resolveAliasPrefix(pattern, aliases).map(normalizeConfigPath));
     }
   }
 

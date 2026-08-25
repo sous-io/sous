@@ -247,6 +247,45 @@ export function configure(cfg) { cfg._vars.readBack = cfg._vars.seed + "-seen"; 
     T
   );
 
+  it(
+    "does not duplicate arrays when configure() mutates AND returns currentConfig",
+    async () => {
+      // Regression: the mutate-and-return-for-chaining pattern (`return cfg;`)
+      // used to deepMerge currentConfig onto itself, concatenating every array
+      // (so compilation.targets doubled and sous compiled/pruned each output twice).
+      write(
+        "sous.config.mjs",
+        `export function configure(cfg) {
+  cfg.compilation = { targets: [{ entryPoint: "a.md", outputs: [] }, { entryPoint: "b.md", outputs: [] }] };
+  return cfg;
+}
+`
+      );
+
+      const settings = await loadSettings(discover());
+      expect(settings.compilation?.targets.map((t) => t.entryPoint)).toEqual(["a.md", "b.md"]);
+    },
+    T
+  );
+
+  it(
+    "does not duplicate arrays when configure() returns builder.config",
+    async () => {
+      write(
+        "sous.config.mjs",
+        `export function configure(cfg, builder) {
+  cfg._aliases = { order: ["x", "y"] };
+  return builder.config;
+}
+`
+      );
+
+      const settings = await loadSettings(discover());
+      expect(settings._aliases?.order).toEqual(["x", "y"]);
+    },
+    T
+  );
+
   // --- builder API ------------------------------------------------------------------------------
 
   it(
@@ -405,6 +444,33 @@ export function configure(cfg) { cfg._vars.readBack = cfg._vars.seed + "-seen"; 
       await expect(loadSettings(discover())).rejects.toThrow(
         new RegExp(primary.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
       );
+    },
+    T
+  );
+
+  it(
+    "reports a .js configure() throw once, without the spurious tsx require-cycle artifact",
+    async () => {
+      // Regression: a `.js` (ESM) config that throws is imported fine by the node
+      // attempt (which reports the real error) but the tsx fallback then fails to
+      // re-import the same ESM `.js` with "Cannot require() ES Module … in a cycle"
+      // (ERR_REQUIRE_CYCLE_MODULE). Because the two stderrs differ, the dedup did
+      // not fire and BOTH were printed, burying the real error under scary noise.
+      write("sous.config.js", `export function configure() { throw new Error("boom in configure"); }\n`);
+
+      let message = "";
+      try {
+        await loadSettings(discover());
+        throw new Error("expected loadSettings to reject");
+      } catch (error) {
+        message = error instanceof Error ? error.message : String(error);
+      }
+
+      expect(message).toMatch(/boom in configure/);
+      expect(message).not.toMatch(/cycle/i);
+      expect(message).not.toMatch(/ERR_REQUIRE_CYCLE_MODULE/);
+      // The real error is reported once, not duplicated across two [via ...] lines.
+      expect(message).not.toMatch(/\[via /);
     },
     T
   );

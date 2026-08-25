@@ -36,7 +36,8 @@
  *     * both: the object merges FIRST, then the function runs.
  *   The function is awaited: `await fn(currentConfig, builder)`. It may mutate
  *   `currentConfig` by reference freely; a returned object (if any) is merged
- *   after it resolves.
+ *   after it resolves — UNLESS it is `currentConfig` itself (mutate-and-return
+ *   for chaining), which is skipped so self-merge does not duplicate arrays.
  *
  * Every layer object is forced through a JSON round-trip BEFORE merging, so
  * functions, RegExp, Date and undefined values drop at the layer boundary.
@@ -283,7 +284,12 @@ async function main() {
         }
         if (configureFn !== undefined) {
           const returned = await configureFn(currentConfig, builder);
-          if (returned !== undefined && returned !== null) {
+          // A configure() may mutate currentConfig by reference AND return it for
+          // chaining (`cfg.x = ...; return cfg;`, or `return builder.config`).
+          // Merging currentConfig back onto itself would deepMerge it with itself,
+          // concatenating (and so duplicating) every array. Only merge a returned
+          // value when it is a DISTINCT object.
+          if (returned !== undefined && returned !== null && returned !== currentConfig) {
             mergeLayerObject(returned, resolved);
           }
         }
