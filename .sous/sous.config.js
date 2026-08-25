@@ -32,6 +32,23 @@ const controlFlowSkills = {
   outputs: [{ destinationDir: "${claudeSkillsDir}" }],
 };
 
+// [SOUS] Per-branch task files: the shared task-files bundle, compiled here so
+// sous development itself uses ticketed branches and task files. Ticket IDs are
+// GitHub issue numbers written as `gh-<number>` (see the github-projects bundle).
+const taskFilesSkills = {
+  entryGlob: "${sharedSkillsRoot}/task-files/**/*",
+  outputs: [{ destinationDir: "${claudeSkillsDir}" }],
+};
+
+// [SOUS] GitHub Projects workflow: about-github-projects + create-issue,
+// pick-issue and /techdebt. Long-term tracking lives on the "Sous" Projects v2
+// board (https://github.com/orgs/sous-io/projects/1); the board/field/option IDs
+// below are compiled into the skills so commands are ready to run.
+const githubProjectsSkills = {
+  entryGlob: "${sharedSkillsRoot}/github-projects/**/*",
+  outputs: [{ destinationDir: "${claudeSkillsDir}" }],
+};
+
 // [SOUS] Project-local skills: hand-maintained, sous-specific skills that have no
 // shared-bundle equivalent (currently the unit-testing pair). These describe how to
 // work ON this repo, so they are NOT distributed to downstream projects and do not
@@ -59,9 +76,6 @@ const docsSiteClaude = {
 };
 
 // Deliberately NOT compiled here:
-//   - task-files: sous development does not use per-branch task files, and the
-//     bundle needs taskFileRoot / ticketPrefix / ticketIdExample, none of which
-//     mean anything for this repo.
 //   - automated-browser-tasks: needs browserAutomationScriptsDir pointing at a
 //     real script directory. sous has none.
 
@@ -100,10 +114,45 @@ export const config = {
 
         // Compiled skill destination. Gitignored build output.
         claudeSkillsDir: "${projectRoot}/.claude/skills",
+
+        // --- task-files bundle ---
+        // Per-branch task files, gitignored local working notes.
+        taskFileRoot: "${sousDir}/tasks",
+        // Ticket IDs are GitHub issue numbers written `gh-<number>` so they stay
+        // greppable in branch names (a bare number is too ambiguous).
+        ticketPrefix: "gh-",
+        ticketIdExample: "gh-123",
+        featureBranchPrefix: "lc/",
+
+        // --- github-projects bundle ---
+        userFullName: "Luke Chavers",
+        githubUserLogin: "vmadman",
+        githubRepo: "sous-io/sous",
+        // The "Sous" Projects v2 board: https://github.com/orgs/sous-io/projects/1
+        githubProjectOwner: "sous-io",
+        githubProjectNumber: "1",
+        githubProjectId: "PVT_kwDOEB_-as4BhYAc",
+        // Single-select "Status" field and its option IDs. Stable for the life of
+        // the field; re-discover with `gh project field-list 1 --owner sous-io`
+        // if item-edit ever rejects them.
+        githubStatusFieldId: "PVTSSF_lADOEB_-as4BhYAczhgT-M8",
+        githubStatusBacklogId: "e3a82f26",
+        githubStatusReadyId: "c4edfe80",
+        githubStatusInProgressId: "f11d9dfc",
+        githubStatusInReviewId: "6f473a66",
+        githubStatusDoneId: "4c16e1a4",
       },
       compilation: {
         includeSourceComments: false,
-        targets: [sousSkills, controlFlowSkills, projectSkills, rootClaude, docsSiteClaude],
+        targets: [
+          sousSkills,
+          controlFlowSkills,
+          taskFilesSkills,
+          githubProjectsSkills,
+          projectSkills,
+          rootClaude,
+          docsSiteClaude,
+        ],
       },
       tools: {
         claude: {

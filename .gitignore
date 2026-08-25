@@ -14,6 +14,9 @@ sous.pid
 # defaults layer, .sous/.env, is deliberately NOT ignored: it is committed.
 .sous/.env.local
 
+# Per-branch task files (taskFileRoot). Local working notes, never committed.
+/.sous/tasks/
+
 # Compiled agent instructions. These are OUTPUTS written by `xcv build`; the
 # tracked sources live in .sous/prompts/. Root-anchored on purpose: the sources
 # under shared-prompts/ and .sous/prompts/ are NOT affected by these rules.

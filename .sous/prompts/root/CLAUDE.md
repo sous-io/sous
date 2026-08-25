@@ -88,6 +88,8 @@ shared-prompts/
       create-skill/        # action skill: creating a skill in skillsRoot
     control-flow/          # generic interaction skills: approve, opine, repeat, research
     task-files/            # per-branch task file workflow (needs taskFileRoot etc.)
+    github-projects/       # GitHub Issues + Projects v2 workflow (about-github-projects,
+                           #   create-issue, pick-issue, /techdebt)
     automated-browser-tasks/  # headless Chrome task authoring + running (Linux only)
 bin/
   run.js                   # published bin (`xcv`): registers tsx, hands off to oclif
@@ -132,16 +134,23 @@ with the `stateFilePath` / `pidFilePath` project vars.
 
 ### Sous Configures Itself
 
-This repo has its own `.sous/sous.config.js`, which compiles the `sous-skills` and
-`control-flow` bundles into `.claude/skills/`, and generates two instruction files
-from tracked sources under `.sous/prompts/`:
+This repo has its own `.sous/sous.config.js`, which compiles the `sous-skills`,
+`control-flow`, `task-files` and `github-projects` bundles into `.claude/skills/`, and
+generates two instruction files from tracked sources under `.sous/prompts/`:
 
 - `.sous/prompts/root/CLAUDE.md` → `/CLAUDE.md` (this file)
 - `.sous/prompts/docs-site/CLAUDE.md` → `/docs/CLAUDE.md` (the website doc)
 
-`task-files` and `automated-browser-tasks` are deliberately excluded: they need vars
-(`taskFileRoot`, `browserAutomationScriptsDir`) that mean nothing for developing sous
-itself.
+`automated-browser-tasks` is deliberately excluded: it needs
+`browserAutomationScriptsDir` pointing at a real script directory, and sous has none.
+
+**Sous's own task management:** tickets are GitHub issues in `sous-io/sous`, tracked on
+the "Sous" GitHub Projects v2 board (https://github.com/orgs/sous-io/projects/1, statuses
+Backlog → Ready → In Progress → In Review → Done). Ticket IDs are written `gh-<number>`
+(issue `#47` → ticket `gh-47`, branch `lc/gh-47-short-desc`); the `gh-` prefix keeps them
+greppable in branch names. Per-branch task files live in `.sous/tasks/` (gitignored). The
+board, Status field and option IDs are recorded as `github*` vars in `.sous/sous.config.js`
+and compiled into the skills.
 
 Both compiled CLAUDE.md files are gitignored OUTPUTS (`/CLAUDE.md` and `/docs/CLAUDE.md`
 in `.gitignore`); only the sources in `.sous/prompts/` are tracked. Never edit the
@@ -229,6 +238,14 @@ variable for the bundles you compile.
 | `featureBranchPrefix` | Prefix for new feature branch names (include the trailing separator, or leave empty) | `luke/` | `task-files` bundle |
 | `ticketPrefix` | Ticket key prefix used when composing a branch name from a ticket number | `PROJ-` | `task-files/start-task` |
 | `skillsRoot` | Where the project's own skill sources live (not the compiled `.claude/skills/`) | `prompts/skills` | `sous-skills` bundle (`about-sous`, `about-agent-skills`, `create-skill`) |
+| `userFullName` | The user's display name | `Luke Chavers` | `github-projects` bundle |
+| `githubUserLogin` | The user's GitHub login, used for assignment | `vmadman` | `github-projects` bundle |
+| `githubRepo` | The `owner/repo` slug issues live in | `sous-io/sous` | `github-projects` bundle |
+| `githubProjectOwner` | Org or user that owns the Projects v2 board | `sous-io` | `github-projects` bundle |
+| `githubProjectNumber` | The board's project number | `1` | `github-projects` bundle |
+| `githubProjectId` | The board's GraphQL node ID (`gh project view --format json`) | `PVT_...` | `github-projects` bundle |
+| `githubStatusFieldId` | Node ID of the board's `Status` field (`gh project field-list`) | `PVTSSF_...` | `github-projects` bundle |
+| `githubStatusBacklogId`, `githubStatusReadyId`, `githubStatusInProgressId`, `githubStatusInReviewId`, `githubStatusDoneId` | Option IDs of the five `Status` values (`gh project field-list`) | `e3a82f26` | `github-projects/about-github-projects/references/workflow` |
 | `browserAutomationScriptsDir` | Absolute path to the project's browser task scripts; the runtime and the task manifest both read it | `/home/me/proj/browser-tasks` | `automated-browser-tasks` bundle, `memories/automated-browser-tasks/INDEX.tpl.md` |
 | `chromeProfile` | Default Chrome profile name for browser tasks (defaults to `Default` at runtime if unset) | `Profile 1` | `automated-browser-tasks` bundle (optional) |
 
