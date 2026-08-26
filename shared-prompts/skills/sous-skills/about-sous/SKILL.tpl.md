@@ -35,11 +35,15 @@ compiles from. Create and edit skills there — never in `.claude/skills/` or
 
 YOU MUST load `create-skill` when creating a new skill for this project.
 
+YOU MUST load `about-sous-configuration` when creating or editing the project's sous
+config (`sous.config.*`, `conf.d/` layers), defining or debugging config variables, or
+diagnosing a ConfigError.
+
 ## Sous's Shared Skill Bundles
 
 Sous ships shared skill bundles at `{{ sousRootPath }}/shared-prompts/skills/`, which is
-where the `about-sous`, `about-agent-skills` and `about-liquid-templates` skills you are
-reading came from. Edit them only in the sous repository itself, where they are the
+where the `about-sous`, `about-sous-configuration`, `about-agent-skills` and
+`about-liquid-templates` skills you are reading came from. Edit them only in the sous repository itself, where they are the
 sources. Never edit a compiled copy of them inside a consuming project — that copy is
 build output and is overwritten on the next Sous run.
 
