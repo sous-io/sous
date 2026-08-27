@@ -325,6 +325,15 @@ html[data-sous-theme="dark"] .markdown-section .logo-dark { display: inline-bloc
   border-left: 3px solid var(--sous-info);
 }
 
+/* Inline code inside a callout matches the callout's palette instead of the
+   standalone gray chip: it inherits the callout text color and tints its
+   background from that same color. */
+.markdown-section p.tip code,
+.markdown-section p.warn code {
+  color: inherit;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+
 /* ----- Code blocks ---------------------------------------------------------------
    Fenced blocks use the theme-aware --sous-editor-* palette (the same one the
    presentation's code windows use), so docs code matches the presentation. */
@@ -412,12 +421,13 @@ html[data-sous-theme="dark"] .markdown-section .logo-dark { display: inline-bloc
 }
 
 .pagination-item-label {
-  color: var(--sous-body-text-muted) !important;
+  color: var(--sous-body-text) !important;
   font-size: var(--sous-font-size-s) !important;
+  font-weight: var(--sous-font-weight-semibold) !important;
 }
 
 .pagination-item-label svg {
-  stroke: var(--sous-body-text-muted) !important;
+  stroke: var(--sous-body-text) !important;
 }
 
 .pagination-item-title {
@@ -428,6 +438,14 @@ html[data-sous-theme="dark"] .markdown-section .logo-dark { display: inline-bloc
 
 .pagination-item:hover .pagination-item-title {
   color: var(--sous-link-hover) !important;
+}
+
+/* The plugin fades the previous side to opacity 0.3 (0.6 for labels) until
+   hover; hard to see in both themes. Full opacity always; hover still shifts
+   the title green. */
+.pagination-item .pagination-item-label,
+.pagination-item .pagination-item-title {
+  opacity: 1 !important;
 }
 
 /* ----- Terminal demos (termynal) ---------------------------------------------------
