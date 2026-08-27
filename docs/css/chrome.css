@@ -1,0 +1,111 @@
+/* ==========================================================================
+   Sous — shared page chrome
+   --------------------------------------------------------------------------
+   The fixed top-right corner buttons (icon links + theme toggle) shared by
+   every page of the site. Extracted from presentation.css so the docs shell
+   reuses the exact same chrome. Everything references --sous-* tokens.
+
+   Corner slots are right-anchored calc() offsets in 2.5rem + gap steps,
+   counted from the right edge: slot 1 = npm, slot 2 = GitHub, slot 3 =
+   theme toggle. Pages add their own links in higher slots (the presentation
+   puts its speed control in slot 4; page-specific slot classes live in the
+   page's stylesheet or below).
+   ========================================================================== */
+
+/* ----- Icon-link chrome (default position: slot 2, GitHub) ------------------ */
+.repo-link {
+  position: fixed;
+  top: var(--sous-space-m);
+  right: calc(var(--sous-space-m) + 2.5rem + var(--sous-space-s));
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  color: var(--sous-body-text-muted);
+  background: var(--sous-bg-tile);
+  border: 1px solid var(--sous-border-medium);
+  border-radius: var(--sous-border-radius);
+  transition: color var(--sous-transition-fast) ease,
+    border-color var(--sous-transition-fast) ease;
+}
+
+.repo-link:hover {
+  color: var(--sous-primary);
+  border-color: var(--sous-primary);
+}
+
+.repo-link:focus-visible {
+  outline: none;
+  box-shadow: var(--sous-focus-ring);
+}
+
+.repo-link svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+/* Slot 1 (rightmost): npm */
+.npm-link {
+  right: var(--sous-space-m);
+}
+
+.npm-mark {
+  font-family: var(--sous-font-family-monospace);
+  font-size: var(--sous-font-size-xs);
+  font-weight: var(--sous-font-weight-bold);
+}
+
+/* Slot 5: the presentation page's Docs link (slot 4 is its speed control) */
+.docs-link {
+  right: calc(var(--sous-space-m) + 4 * (2.5rem + var(--sous-space-s)));
+}
+
+/* ----- Theme toggle (slot 3) ------------------------------------------------ */
+.theme-toggle {
+  position: fixed;
+  top: var(--sous-space-m);
+  right: calc(var(--sous-space-m) + 2 * (2.5rem + var(--sous-space-s)));
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  background: var(--sous-bg-tile);
+  color: var(--sous-body-text-muted);
+  border: 1px solid var(--sous-border-medium);
+  border-radius: var(--sous-border-radius);
+  cursor: pointer;
+  transition: color var(--sous-transition-fast) ease,
+    border-color var(--sous-transition-fast) ease;
+}
+
+.theme-toggle:hover {
+  color: var(--sous-primary);
+  border-color: var(--sous-primary);
+}
+
+.theme-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--sous-focus-ring);
+}
+
+.theme-toggle svg {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+/* Show the icon for the mode you'd switch TO: moon in light, sun in dark */
+.theme-toggle .icon-sun { display: none; }
+.theme-toggle .icon-moon { display: block; }
+
+html[data-sous-theme="dark"] .theme-toggle .icon-sun { display: block; }
+html[data-sous-theme="dark"] .theme-toggle .icon-moon { display: none; }
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-sous-theme="light"]) .theme-toggle .icon-sun { display: block; }
+  html:not([data-sous-theme="light"]) .theme-toggle .icon-moon { display: none; }
+}
