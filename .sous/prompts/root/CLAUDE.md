@@ -35,7 +35,9 @@ for type-checking only.
 ## Publishing (npm)
 
 Published as `@sous-io/sous` (npm org `sous-io`), public access, Apache-2.0. The
-package ships `bin/run.js`, `src/` (minus tests), and `shared-prompts/` — see the `files`
+package ships `bin/run.js`, `src/` (minus tests), `shared-prompts/`, and the documentation
+markdown (`docs/markdown/*.md`; agent-readable reference matching the installed version, pointed
+to by the distributed `about-sous` skill; the web shell around it stays out) — see the `files`
 allowlist in `package.json` (an allowlist, so there is no `.npmignore`; `bin/xcv` and
 everything else stays out by default). `repository.url` must keep matching the GitHub repo
 exactly; npm's trusted publishing validates it at publish time.
