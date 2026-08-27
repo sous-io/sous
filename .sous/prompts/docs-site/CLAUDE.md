@@ -22,8 +22,8 @@ pages exist:
   movie-player controls.
 - `markdown/`: the documentation section; markdown files rendered live in the
   browser by docsify. The shell is real; the pages are currently EXAMPLE
-  placeholders, and real reference content is future work Luke will direct by
-  hand.
+  placeholders, and real reference content will be directed by hand; do not
+  write it unprompted.
 
 ### Hard constraints
 
@@ -45,9 +45,6 @@ pages exist:
 
 ## Design system
 
-Adapted from the BTCPay Server Design System (MIT), re-prefixed `--btcpay-*`
-to `--sous-*`; Luke specifically likes the BTCPayServer settings-UI vibe.
-
 - **Every color, font size, font name, spacing value, radius, shadow and
   transition lives in a CSS variable** in the token block at the top of
   `main.css`. Never hard-code a value that belongs in a token; add a token if
@@ -58,13 +55,13 @@ to `--sous-*`; Luke specifically likes the BTCPayServer settings-UI vibe.
 - **Green is the only voice of interactivity**: links (no underline),
   primary buttons, focus rings, active states.
 - **Do not add granular utility/component classes** until real content
-  demands them (Luke's direction).
+  demands them (standing direction).
 - The dark-mode neutral scale is GitHub's dark palette mapped in reverse over
   the light neutrals, so anything built on `--sous-neutral-*` flips
   automatically. The `--sous-editor-*` tokens are the theme-aware code
   palette (VS Code Light+/Dark+), used by the presentation's code windows,
   the docs' fenced code, and the terminal demos.
-- This site deliberately IGNORES `prefers-reduced-motion` (Luke's direction,
+- This site deliberately IGNORES `prefers-reduced-motion` (decided
   2026-08-14; do not re-add gating without asking): the animation IS the
   content, and reduce-motion is commonly enabled by OS performance tweaks.
 
@@ -84,8 +81,9 @@ CSS shows one per theme).
   for appositives.
 - **NEVER write overconfident predictions about other tools or vendors.**
   State intent and posture ("Sous actively tries to..."), not prophecy.
-  Commitments about Sous's own behavior are fine. Luke's decision rationale
-  is input for crafting copy, never copy to paste verbatim.
+  Commitments about Sous's own behavior are fine. Decision rationale from
+  review conversations is input for crafting copy, never copy to paste
+  verbatim.
 
 ## The presentation
 
@@ -99,7 +97,7 @@ chapter bar, time counters, and speed control all render from the timeline.
 markup and copy live in `index.html`; the `PROBLEMS`/`PHILOSOPHY` tables in
 `presentation.js` generate the problem/philosophy kickers.
 
-### Standing directions (Luke, 2026-08)
+### Standing directions (2026-08)
 
 - **Never remove a scene unless explicitly told to**; superseded scenes stay
   in the markup as commented reference.
@@ -112,12 +110,12 @@ markup and copy live in `index.html`; the `PROBLEMS`/`PHILOSOPHY` tables in
 - **Mitigation prose stays conceptual**: it must not name storage locations
   or config keys (those go stale as Sous evolves). Status-Quo and Example
   slides may keep concrete detail.
-- **Iteration workflow:** Luke reviews slide by slide; his tweaks apply to
-  the slide under review and do NOT roll forward until he signs off; reviewed
-  problems are complete, never touch them in rolling updates. Exception:
+- **Iteration workflow:** review happens slide by slide; requested tweaks
+  apply to the slide under review and do NOT roll forward until sign-off.
+  Reviewed problems are complete, never touch them in rolling updates. Exception:
   shared generated elements (kickers) change everywhere at once via their
   generator.
-- The intro logo's desktop size is Luke's preference; do not shrink it
+- The intro logo's desktop size is a deliberate choice; do not shrink it
   without asking.
 
 ### Architecture decisions that hold
@@ -169,8 +167,8 @@ would otherwise own. All CDN pins and `$docsify` config live in
 - NO stock docsify theme is loaded; `docs.css` styles docsify's bare DOM
   directly from tokens, so both themes flip automatically. The article's
   vertical rhythm is set by `--sous-docs-rhythm` in `docs.css` (looser than
-  the compact admin base; Luke tuned it live). Headings have NO underline
-  rules (removed at Luke's direction; do not re-add).
+  the compact admin base; tuned live during review). Headings have NO
+  underline rules (removed deliberately; do not re-add).
 - Terminal demos: the engine is termynal (MIT, pinned CDN); the ```` ```term ````
   fence conversion and play-on-scroll are OUR glue in `docs/js/term-demos.js`.
   Never give a demo container the `.termy` class (termynal auto-plays those

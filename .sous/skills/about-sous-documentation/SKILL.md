@@ -35,7 +35,7 @@ before changing anything; it holds the site's rules and pitfalls.
 ## Current state
 
 The pages in `docs/markdown/` are EXAMPLE placeholders demonstrating the
-shell's features. Luke directs the real reference content by hand; do not
+shell's features. The real reference content is directed by hand; do not
 write or restructure reference documentation unprompted.
 
 ## Local preview

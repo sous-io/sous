@@ -114,7 +114,7 @@ sous.config.schema.json    # committed JSON Schema artifact; shipped in the npm 
 docs/                      # the GitHub Pages site (sous-io.github.io/sous)
   index.html               # the animated GSAP presentation page
   markdown/                # the documentation shell (docsify, client-side markdown render)
-  css/main.css             # site design system (--sous-* tokens, BTCPay-derived)
+  css/main.css             # site design system (--sous-* design tokens)
   CLAUDE.md                # GENERATED site instructions (gitignored output); the site's
                            #   full documentation lives there, not here
 .sous/                     # THIS repo's own sous config — sous configures itself
