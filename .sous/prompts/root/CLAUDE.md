@@ -95,8 +95,9 @@ shared-prompts/
   skills/                  # shared skill bundles; each subdirectory is a bundle
     sous-skills/           # built-in sous bundle, compiled + distributed to downstream projects
       about-sous/          # teaches downstream agents what Sous manages (never-edit rule)
-      about-sous-configuration/ # how sous is configured: sources, layers, vars, validation
-                           #   (light SKILL.md; deep dives live in its references/)
+      about-sous-configuration/ # thin router: orientation + rules; the config reference
+                           #   itself lives in docs/markdown/config*.md (single source of
+                           #   truth, shipped in the npm package)
       about-agent-skills/  # foundational skill knowledge for downstream agents
       about-liquid-templates/ # .tpl. convention + LiquidJS syntax for downstream agents
       create-skill/        # action skill: creating a skill in skillsRoot

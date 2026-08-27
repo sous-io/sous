@@ -1,4 +1,10 @@
 - [Overview](/)
+- **Configuration**
+  - [The config file](configuration.md)
+  - [Discovery and overrides](config-discovery.md)
+  - [Layers and merging](config-layers.md)
+  - [Variables](config-variables.md)
+  - [Inspecting and validating](config-inspection.md)
 - **Examples**
   - [Typography](example-typography.md)
   - [Code blocks](example-code.md)

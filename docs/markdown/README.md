@@ -13,8 +13,9 @@ building "My Project"...
 compiled 4 targets, pruned 1 stale file
 ```
 
-?> These docs are young. The pages in the **Examples** section demonstrate what this
-documentation shell can render; real reference content will replace them as it is written.
+?> These docs are young. The **Configuration** section is real reference material; the pages in
+the **Examples** section demonstrate what this documentation shell can render and will be
+replaced as real content is written.
 
 ## How this site works
 
@@ -30,5 +31,6 @@ There is no build step and no generated HTML.
 ## Where to look
 
 - Watch the [animated introduction](../) for the full pitch
+- Learn [how sous is configured](configuration.md)
 - Browse the example pages in the sidebar to see what these docs can do
 - Read the [source on GitHub](https://github.com/sous-io/sous)
