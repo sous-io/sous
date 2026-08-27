@@ -162,7 +162,7 @@ highlight.js because it ships the router, sidebar, and client-side search we
 would otherwise own. All CDN pins and `$docsify` config live in
 `docs/markdown/index.html`.
 
-@../_partials/docs-authoring.md
+@${sousDir}/prompts/_partials/docs-authoring.md
 
 ### Shell engineering notes
 
