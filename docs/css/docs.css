@@ -1,0 +1,453 @@
+/* ==========================================================================
+   Sous — docs shell stylesheet (docs/docs/index.html)
+   --------------------------------------------------------------------------
+   Docsify runs WITHOUT a stock theme; this file styles its bare DOM directly
+   on the --sous-* tokens (main.css), so light/dark flips automatically with
+   the shared theme mechanism. Docsify renders:
+
+     body > main > button.sidebar-toggle
+                 + aside.sidebar   (h1.app-name, .search [plugin], .sidebar-nav)
+                 + section.content (article.markdown-section)
+
+   Docsify toggles body.close on the sidebar-toggle button: on desktop it
+   HIDES the sidebar, on mobile (<= 768px) it SHOWS it.
+   ========================================================================== */
+
+:root {
+  --sous-docs-sidebar-width: 17rem;
+  --sous-docs-content-width: 52rem;
+}
+
+/* ----- Layout ---------------------------------------------------------------- */
+main {
+  display: block;
+  position: relative;
+  min-height: 100vh;
+}
+
+.sidebar {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 20;
+  width: var(--sous-docs-sidebar-width);
+  padding: var(--sous-space-l);
+  overflow-y: auto;
+  background: var(--sous-bg-tile);
+  border-right: 1px solid var(--sous-border-medium);
+  transition: transform var(--sous-transition-base) ease;
+}
+
+.content {
+  min-height: 100vh;
+  padding-left: var(--sous-docs-sidebar-width);
+  transition: padding-left var(--sous-transition-base) ease;
+}
+
+.markdown-section {
+  max-width: var(--sous-docs-content-width);
+  margin: 0 auto;
+  padding: var(--sous-space-xl) var(--sous-space-l) var(--sous-space-xxl);
+}
+
+body.close .sidebar {
+  transform: translateX(calc(-1 * var(--sous-docs-sidebar-width)));
+}
+
+body.close .content {
+  padding-left: 0;
+}
+
+/* ----- Sidebar: app name ------------------------------------------------------ */
+.sidebar .app-name {
+  margin: 0 0 var(--sous-space-m);
+  font-size: var(--sous-h4);
+  line-height: var(--sous-line-height-heading);
+}
+
+.sidebar .app-name-link {
+  color: var(--sous-body-text);
+}
+
+.sidebar .app-name-link:hover {
+  color: var(--sous-primary);
+}
+
+/* ----- Sidebar: nav tree -------------------------------------------------------
+   li.active marks the current page; the current page's own headings
+   (subMaxLevel) render as a nested ul inside it. */
+.sidebar-nav ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sidebar-nav ul ul {
+  padding-left: var(--sous-space-m);
+}
+
+.sidebar-nav li {
+  margin: 0;
+  /* non-link section labels in _sidebar.md render as bare li text */
+  color: var(--sous-body-text-muted);
+  font-size: var(--sous-font-size-s);
+  font-weight: var(--sous-font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding-top: var(--sous-space-s);
+}
+
+.sidebar-nav li li {
+  padding-top: 0;
+}
+
+.sidebar-nav a {
+  display: block;
+  padding: var(--sous-space-xs) var(--sous-space-s);
+  margin-left: calc(-1 * var(--sous-space-s));
+  color: var(--sous-body-text);
+  font-size: var(--sous-font-size-base);
+  font-weight: var(--sous-font-weight-normal);
+  text-transform: none;
+  letter-spacing: normal;
+  border-left: 2px solid transparent;
+  border-radius: 0 var(--sous-border-radius) var(--sous-border-radius) 0;
+}
+
+.sidebar-nav a:hover {
+  color: var(--sous-primary);
+}
+
+.sidebar-nav li.active > a,
+.sidebar-nav li.active > p > a {
+  color: var(--sous-primary);
+  font-weight: var(--sous-font-weight-semibold);
+  border-left-color: var(--sous-primary);
+  background: var(--sous-success-dim-bg);
+}
+
+/* ----- Sidebar: search plugin ---------------------------------------------------
+   The plugin injects its own base styles; these override colors/spacing. */
+.sidebar .search {
+  margin: 0 0 var(--sous-space-m);
+  padding: 0;
+  border: 0;
+}
+
+.sidebar .search input[type="search"] {
+  font-size: var(--sous-font-size-base);
+}
+
+.sidebar .search .clear-button {
+  cursor: pointer;
+}
+
+.sidebar .search .clear-button svg {
+  stroke: var(--sous-body-text-muted);
+}
+
+.sidebar .search .results-panel {
+  margin-top: var(--sous-space-s);
+}
+
+.sidebar .search .matching-post {
+  padding: var(--sous-space-s) 0;
+  border-bottom: 1px solid var(--sous-border-light);
+}
+
+.sidebar .search .matching-post a {
+  color: var(--sous-body-text);
+}
+
+.sidebar .search .matching-post a:hover h2 {
+  color: var(--sous-primary);
+}
+
+.sidebar .search .matching-post h2 {
+  margin: 0 0 var(--sous-space-xs);
+  font-size: var(--sous-font-size-base);
+}
+
+.sidebar .search .matching-post p {
+  margin: 0;
+  font-size: var(--sous-font-size-s);
+  color: var(--sous-body-text-muted);
+}
+
+.sidebar .search .search-keyword {
+  color: var(--sous-primary);
+  font-style: normal;
+  font-weight: var(--sous-font-weight-semibold);
+}
+
+/* ----- Sidebar toggle (hamburger, bottom-left) --------------------------------- */
+.sidebar-toggle {
+  position: fixed;
+  bottom: var(--sous-space-m);
+  left: var(--sous-space-m);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  background: var(--sous-bg-tile);
+  border: 1px solid var(--sous-border-medium);
+  border-radius: var(--sous-border-radius);
+  cursor: pointer;
+  transition: border-color var(--sous-transition-fast) ease;
+}
+
+.sidebar-toggle:hover {
+  border-color: var(--sous-primary);
+}
+
+.sidebar-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--sous-focus-ring);
+}
+
+.sidebar-toggle span {
+  display: block;
+  width: 1rem;
+  height: 2px;
+  margin: 2px auto;
+  background: var(--sous-body-text-muted);
+  border-radius: 1px;
+  transition: background var(--sous-transition-fast) ease;
+}
+
+.sidebar-toggle:hover span {
+  background: var(--sous-primary);
+}
+
+/* ----- Article body -------------------------------------------------------------
+   main.css already styles the elements; this adds the GitHub-flavored article
+   conventions: ruled h1/h2, breathing room above headings, inherit-colored
+   heading anchors (docsify wraps every heading's text in an anchor link). */
+.markdown-section h1,
+.markdown-section h2 {
+  padding-bottom: var(--sous-space-s);
+  border-bottom: 1px solid var(--sous-border-light);
+}
+
+.markdown-section h2,
+.markdown-section h3,
+.markdown-section h4 {
+  margin-top: var(--sous-space-l);
+}
+
+.markdown-section .anchor {
+  color: inherit;
+}
+
+.markdown-section .anchor:hover {
+  color: var(--sous-primary);
+}
+
+.markdown-section img {
+  border-radius: var(--sous-tile-radius);
+}
+
+/* Task-list items render their own checkboxes; suppress the bullet */
+.markdown-section li input[type="checkbox"] {
+  margin-right: var(--sous-space-xs);
+  accent-color: var(--sous-primary);
+}
+
+.markdown-section li.task-list-item {
+  list-style: none;
+}
+
+.markdown-section ul li.task-list-item {
+  margin-left: calc(-1 * var(--sous-space-m));
+}
+
+/* ----- Callouts (docsify helpers) ------------------------------------------------
+   `!>` renders <p class="tip"> (important), `?>` renders <p class="warn"> (note). */
+.markdown-section p.tip,
+.markdown-section p.warn {
+  padding: var(--sous-space-s) var(--sous-space-m);
+  border-radius: var(--sous-border-radius);
+}
+
+.markdown-section p.tip {
+  background: var(--sous-danger-dim-bg);
+  color: var(--sous-danger-dim-text);
+  border-left: 3px solid var(--sous-danger);
+}
+
+.markdown-section p.warn {
+  background: var(--sous-info-dim-bg);
+  color: var(--sous-info-dim-text);
+  border-left: 3px solid var(--sous-info);
+}
+
+/* ----- Code blocks ---------------------------------------------------------------
+   Fenced blocks use the theme-aware --sous-editor-* palette (the same one the
+   presentation's code windows use), so docs code matches the presentation. */
+.markdown-section pre {
+  position: relative; /* anchors the copy-code button */
+  background: var(--sous-editor-bg);
+  border-color: var(--sous-editor-border);
+}
+
+.markdown-section pre > code {
+  display: block;
+  padding: 0;
+  background: none;
+  color: var(--sous-editor-text);
+  font-size: var(--sous-font-size-base);
+  line-height: var(--sous-line-height-base);
+}
+
+/* Prism token colors, mapped onto the editor tokens */
+.token.comment,
+.token.prolog,
+.token.cdata {
+  color: var(--sous-editor-muted);
+}
+
+.token.punctuation,
+.token.operator {
+  color: var(--sous-editor-text);
+}
+
+.token.keyword,
+.token.tag,
+.token.atrule,
+.token.rule {
+  color: var(--sous-editor-keyword);
+}
+
+.token.string,
+.token.attr-value,
+.token.char,
+.token.regex {
+  color: var(--sous-editor-string);
+}
+
+.token.function,
+.token.selector {
+  color: var(--sous-editor-function);
+}
+
+.token.variable,
+.token.attr-name,
+.token.property,
+.token.parameter,
+.token.key {
+  color: var(--sous-editor-variable);
+}
+
+.token.number,
+.token.boolean,
+.token.constant,
+.token.builtin {
+  color: var(--sous-editor-number);
+}
+
+.token.title,
+.token.important {
+  color: var(--sous-editor-heading);
+  font-weight: var(--sous-font-weight-semibold);
+}
+
+/* ----- Copy-code plugin overrides ------------------------------------------------ */
+.docsify-copy-code-button {
+  background: var(--sous-neutral-700) !important;
+  color: var(--sous-neutral-100) !important;
+  font-family: var(--sous-font-family-base) !important;
+  font-size: var(--sous-font-size-s) !important;
+  border-radius: 0 var(--sous-tile-radius) 0 var(--sous-border-radius) !important;
+}
+
+/* ----- Pagination plugin overrides ------------------------------------------------ */
+.docsify-pagination-container {
+  border-top: 1px solid var(--sous-border-light) !important;
+  margin-top: var(--sous-space-xl) !important;
+}
+
+.pagination-item-label {
+  color: var(--sous-body-text-muted) !important;
+  font-size: var(--sous-font-size-s) !important;
+}
+
+.pagination-item-label svg {
+  stroke: var(--sous-body-text-muted) !important;
+}
+
+.pagination-item-title {
+  color: var(--sous-link) !important;
+  font-size: var(--sous-font-size-l) !important;
+  font-weight: var(--sous-font-weight-semibold) !important;
+}
+
+.pagination-item:hover .pagination-item-title {
+  color: var(--sous-link-hover) !important;
+}
+
+/* ----- Terminal demos (termynal) ---------------------------------------------------
+   Re-themes the CDN termynal.css onto the tokens. Terminals stay dark in BOTH
+   themes (built on the raw --sous-neutral-dark-* scale, which never flips). */
+[data-termynal] {
+  background: var(--sous-neutral-dark-50);
+  color: var(--sous-neutral-dark-800);
+  font-family: var(--sous-font-family-monospace);
+  font-size: var(--sous-font-size-base);
+  border: 1px solid var(--sous-border-medium);
+  border-radius: var(--sous-tile-radius);
+  padding: calc(var(--sous-space-l) + var(--sous-space-s)) var(--sous-space-l) var(--sous-space-m);
+  margin: 0 0 var(--sous-space-m);
+}
+
+[data-termynal]:after {
+  color: var(--sous-neutral-dark-600);
+  font-size: var(--sous-font-size-s);
+  top: var(--sous-space-xs);
+}
+
+[data-ty="input"]:before,
+[data-ty-prompt]:before {
+  color: var(--sous-brand-primary);
+}
+
+.term-comment {
+  color: var(--sous-neutral-dark-600);
+}
+
+button[data-terminal-control] {
+  color: var(--sous-brand-primary) !important;
+  font-family: var(--sous-font-family-base);
+  font-size: var(--sous-font-size-s);
+}
+
+button[data-terminal-control]:hover {
+  color: var(--sous-brand-tertiary) !important;
+}
+
+/* ----- Corner chrome: back-to-presentation link (slot 4) -------------------------- */
+.pres-link {
+  right: calc(var(--sous-space-m) + 3 * (2.5rem + var(--sous-space-s)));
+}
+
+/* ----- Responsive ------------------------------------------------------------------ */
+@media (max-width: 768px) {
+  .sidebar {
+    transform: translateX(calc(-1 * var(--sous-docs-sidebar-width)));
+  }
+
+  .content {
+    padding-left: 0;
+  }
+
+  body.close .sidebar {
+    transform: translateX(0);
+  }
+
+  .markdown-section {
+    padding: var(--sous-space-xl) var(--sous-space-m) var(--sous-space-xxl);
+  }
+}
