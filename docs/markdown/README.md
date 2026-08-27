@@ -19,10 +19,10 @@ documentation shell can render; real reference content will replace them as it i
 ## How this site works
 
 The whole docs section is a thin static shell: every page is a plain markdown file in the
-[repository](https://github.com/sous-io/sous/tree/main/docs/docs), fetched and rendered live in
+[repository](https://github.com/sous-io/sous/tree/main/docs/markdown), fetched and rendered live in
 your browser. Publishing a new page is a two-line change:
 
-1. Commit a markdown file to `docs/docs/`
+1. Commit a markdown file to `docs/markdown/`
 2. Add one line to `_sidebar.md`
 
 There is no build step and no generated HTML.

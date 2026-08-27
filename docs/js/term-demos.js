@@ -5,7 +5,7 @@
    containers and plays each demo the FIRST time it scrolls into view.
 
    The animation engine is termynal.js (MIT), loaded from the CDN pin in
-   docs/docs/index.html (termynal/termynal.py @ v0.14.0). This file is
+   docs/markdown/index.html (termynal/termynal.py @ v0.14.0). This file is
    site-owned glue, not a third-party library.
 
    Fence line syntax:

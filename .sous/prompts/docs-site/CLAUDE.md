@@ -37,7 +37,7 @@
 |------|------|
 | `docs/index.html` | The presentation page: scene markup (one `<section class="scene" data-scene="…">` per scene), player controls, the light/dark toggle, GSAP CDN script tags. Scene text distilled from `docs/notes/SOUS-GOALS.md`. |
 | `docs/.nojekyll` | Empty; keeps GitHub Pages' default Jekyll pass off the site (it would otherwise swallow docsify's `_sidebar.md`). |
-| `docs/docs/` | The docs shell: `index.html` (docsify mount, CDN pins, corner chrome) plus the markdown content itself (`README.md` home, `_sidebar.md` nav manifest, `example-*.md` pages). |
+| `docs/markdown/` | The docs shell: `index.html` (docsify mount, CDN pins, corner chrome) plus the markdown content itself (`README.md` home, `_sidebar.md` nav manifest, `example-*.md` pages). |
 | `docs/css/main.css` | The design-system stylesheet: all tokens, base element styles, minimal foundational classes. |
 | `docs/css/chrome.css` | The shared corner-button chrome (`.repo-link`, `.npm-link`, `.theme-toggle`, slot classes), used by BOTH pages. Extracted from presentation.css when the docs shell landed. |
 | `docs/css/presentation.css` | Page + player styles for `index.html` (stage, scenes, control bar, chapter segments, theme toggle). Everything references `--sous-*` tokens. |
@@ -113,21 +113,21 @@ automatically.
   `data-sous-theme="light|dark"` on `<html>`.
 - The toggle persists to localStorage key **`sous-theme`**; an inline `<head>`
   script re-applies it before first paint (no flash). Both pages
-  (`index.html` and `docs/docs/index.html`) carry the same pre-paint script
+  (`index.html` and `docs/markdown/index.html`) carry the same pre-paint script
   and toggle handler. Keep this mechanism on every future page.
 
 ## The docs shell (implemented; gh-8)
 
-The documentation section lives at `/docs/` (repo path `docs/docs/`; the outer
+The documentation section lives at `/markdown/` (repo path `docs/markdown/`; the outer
 `docs/` is just the GitHub Pages site root). It is a thin client-side shell:
-**docsify** fetches the markdown files in `docs/docs/` and renders them in the
+**docsify** fetches the markdown files in `docs/markdown/` and renders them in the
 browser. Publishing a page = commit one markdown file + one `_sidebar.md`
 line; there is no build step and no generated HTML, which is exactly the site's
 hard constraint. Chosen over hand-rolling marked + highlight.js because it
 ships the router, sidebar, and client-side search we would otherwise own;
 VitePress-style chrome was the runner-up styling reference.
 
-### Stack (all pinned CDN URLs in `docs/docs/index.html`)
+### Stack (all pinned CDN URLs in `docs/markdown/index.html`)
 
 - **docsify 4.13.1** + its bundled Prism, plus grammar components from
   `prismjs@1.30.0` (bash, json, yaml, typescript, markdown,
