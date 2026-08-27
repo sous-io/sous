@@ -16,10 +16,10 @@
 :root {
   --sous-docs-sidebar-width: 17rem;
   --sous-docs-content-width: 52rem;
-  /* Article vertical rhythm: the docs breathe MUCH more than the compact
-     admin base (Luke's direction, 2026-08-27). Derived from the spacing
-     tokens. */
-  --sous-docs-rhythm: var(--sous-space-l); /* 32px */
+  /* Article vertical rhythm: the docs breathe more than the compact admin
+     base, but not airily (Luke tuned this live, 2026-08-27). Derived from
+     the spacing tokens. */
+  --sous-docs-rhythm: calc(var(--sous-space-m) * 1.5); /* 24px */
 }
 
 /* ----- Layout ---------------------------------------------------------------- */
@@ -63,19 +63,24 @@ body.close .content {
   padding-left: 0;
 }
 
-/* ----- Sidebar: app name ------------------------------------------------------ */
+/* ----- Sidebar: app name (the theme-paired Sous logo) -------------------------- */
 .sidebar .app-name {
   margin: 0 0 var(--sous-space-m);
-  font-size: var(--sous-h4);
-  line-height: var(--sous-line-height-heading);
 }
 
 .sidebar .app-name-link {
-  color: var(--sous-body-text);
+  display: block;
 }
 
-.sidebar .app-name-link:hover {
-  color: var(--sous-primary);
+/* Sizing/centering only; visibility belongs to the .logo-light/.logo-dark
+   swap rules below (a display here would out-rank the swap's display:none) */
+.sidebar .app-name {
+  text-align: center;
+}
+
+.sidebar .app-name img {
+  height: 7.5rem;
+  width: auto;
 }
 
 /* ----- Sidebar: nav tree -------------------------------------------------------
@@ -99,7 +104,7 @@ body.close .content {
   font-weight: var(--sous-font-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  padding-top: var(--sous-space-l);
+  padding-top: var(--sous-space-m);
 }
 
 .sidebar-nav li li {
@@ -108,7 +113,7 @@ body.close .content {
 
 .sidebar-nav a {
   display: block;
-  padding: var(--sous-space-s) var(--sous-space-s);
+  padding: calc(var(--sous-space-xs) * 1.5) var(--sous-space-s);
   margin-left: calc(-1 * var(--sous-space-s));
   color: var(--sous-body-text);
   font-size: var(--sous-font-size-base);
@@ -233,17 +238,17 @@ body.close .content {
    inherit-colored heading anchors (docsify wraps every heading's text in an
    anchor link). */
 .markdown-section h1 {
-  margin-bottom: var(--sous-space-l);
+  margin-bottom: var(--sous-space-m);
 }
 
 .markdown-section h2 {
-  margin-top: var(--sous-space-xl);
+  margin-top: calc(var(--sous-space-l) * 1.5);
   margin-bottom: var(--sous-space-m);
 }
 
 .markdown-section h3,
 .markdown-section h4 {
-  margin-top: calc(var(--sous-space-l) * 1.5);
+  margin-top: var(--sous-space-l);
   margin-bottom: var(--sous-space-m);
 }
 
@@ -259,7 +264,7 @@ body.close .content {
 }
 
 .markdown-section li + li {
-  margin-top: var(--sous-space-s);
+  margin-top: var(--sous-space-xs);
 }
 
 .markdown-section th,
@@ -280,15 +285,16 @@ body.close .content {
 }
 
 /* Theme-paired logo images: same .logo-light/.logo-dark swap pattern as the
-   presentation's intro logo (author both <img>s; one shows per theme) */
-.markdown-section .logo-dark { display: none; }
+   presentation's intro logo (author both <img>s; one shows per theme).
+   Applies in the article AND the sidebar app-name. */
+main .logo-dark { display: none; }
 
-html[data-sous-theme="dark"] .markdown-section .logo-light { display: none; }
-html[data-sous-theme="dark"] .markdown-section .logo-dark { display: inline-block; }
+html[data-sous-theme="dark"] main .logo-light { display: none; }
+html[data-sous-theme="dark"] main .logo-dark { display: inline-block; }
 
 @media (prefers-color-scheme: dark) {
-  html:not([data-sous-theme="light"]) .markdown-section .logo-light { display: none; }
-  html:not([data-sous-theme="light"]) .markdown-section .logo-dark { display: inline-block; }
+  html:not([data-sous-theme="light"]) main .logo-light { display: none; }
+  html:not([data-sous-theme="light"]) main .logo-dark { display: inline-block; }
 }
 
 /* Task-list items render their own checkboxes; suppress the bullet */

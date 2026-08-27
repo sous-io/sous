@@ -72,7 +72,10 @@
 
   <script>
     window.$docsify = {
-      name: "Sous",
+      /* The app name is the theme-paired logo (docsify injects this HTML
+         into the sidebar's h1.app-name; docs.css sizes and swaps it) */
+      name: '<img class="logo-light" src="../img/logo-on-white.png" alt="Sous">' +
+            '<img class="logo-dark" src="../img/logo-on-dark.png" alt="Sous">',
       nameLink: "#/",
       loadSidebar: true,
       subMaxLevel: 2,
