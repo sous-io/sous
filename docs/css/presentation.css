@@ -746,7 +746,7 @@ html[data-sous-theme="dark"] .scene-logo .logo-dark { display: block; }
 
 /* The corner-button chrome (.repo-link, .npm-link, .theme-toggle) lives in
    the shared css/chrome.css; this page arranges [speed] [theme] [GitHub]
-   [npm] with its Docs link in slot 5. */
+   [npm] top-right, plus the top-LEFT "Documentation" text link (.docs-link). */
 
 /* ----- Speed control (next to the theme toggle) --------------------------------- */
 .speed-control {

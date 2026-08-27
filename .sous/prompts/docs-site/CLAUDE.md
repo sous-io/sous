@@ -168,11 +168,10 @@ VitePress-style chrome was the runner-up styling reference.
   the styling is ours and is correct.
 - **Corner chrome:** the docs page reuses `css/chrome.css` with, right to
   left: npm (slot 1), GitHub (2), theme toggle (3), and a play-circle link
-  back to the presentation (`.pres-link`, slot 4). The presentation page adds
-  a book-icon link to the docs (`.docs-link`, slot 5; slot 4 there is the
-  speed control, hidden during the intro, so a gap next to the book icon on
-  the title scene is expected). Same `sous-theme` pre-paint + toggle scripts
-  as the presentation; keep them in sync.
+  back to the presentation (`.pres-link`, slot 4). The presentation links
+  HERE via its top-left "Documentation" text link and the intro's
+  "... or, jump straight into the docs." line. Same `sous-theme` pre-paint +
+  toggle scripts as the presentation; keep them in sync.
 - The `example-*.md` pages are PLACEHOLDERS demonstrating shell features
   (typography, code highlighting, callouts/tasks, routing/search, terminal
   demos). Luke will direct the real reference content by hand; do not start
@@ -261,7 +260,7 @@ those apply everywhere at once, ideally by editing their single generator.
 
 | Label | Bar title | Content |
 |-------|-----------|---------|
-| `intro` | Intro | Title scene: logo, "Your coding agent's assistant", tagline, `$ npm install -g @sous-io/sous` prompt motif, big play button. Visible statically before play (and if JS/GSAP fails). Pressing play skips the rest of the intro hold and transitions away immediately (the user has already consumed the static scene). |
+| `intro` | Intro | Title scene: logo, "Your coding agent's assistant", tagline, `$ npm install -g @sous-io/sous` prompt motif, big play button ("Play the Introduction", Title Case) with a "... or, jump straight into the docs." link (`.intro-docs`, to `docs/#/`) beneath it. Visible statically before play (and if JS/GSAP fails). Pressing play skips the rest of the intro hold and transitions away immediately (the user has already consumed the static scene). |
 | `features` | Core Systems | The two core systems as tiles with Lucide icons: Config Aggregation (`combine`) + Liquid Templates (`braces`); tagline "It's a bit like [Helm](https://helm.sh), but for AI coding tools." |
 | `aggregator` | Aggregator | Core system #1 explained: inline-SVG orbit diagram; six same-size circles (Project/Department/Company/Personal/2× Public Repo, two-line labels, r=48) orbit a central "Project" circle, green dashed flow lines (marching-dash movement driven by a single GSAP loop in presentation.js; the old CSS stroke-dashoffset keyframe was paint-bound and froze on some machines) with arrowheads pointing inward. All colors from tokens. |
 | `templates` | Templates | Core system #2 explained as SUB-SCENES in one `.code-stack` (two VS Code-style windows overlapping in one grid cell; `--sous-editor-*` tokens are THEME-AWARE: Light+ palette in light mode, Dark+ in dark mode): first the `SKILL.tpl.md` template (YAML frontmatter, `{{ projectRoot }}` injection, `{% if tool %}` claude-code/codex branch about HOW TO APPLY EDITS deliberately unrelated to the glob, fictitious `{% globDirectory dir="{{ projectRoot }}/src/models" pattern="**/*Model.ts" %}`) with its callout walkthrough, then a crossfade to the rendered `SKILL.md` window (full skill output, fictitious absolute `/projects/backend/src/models/...` paths, one nested under `billing/` proving the `**`) with its single callout on the injected path list ("Absolute paths, sourced from the project, never stale. This will save your agent dozens of steps in every relevant session."). Sequenced by `templatesTimeline` in presentation.js. Hand-highlighted with `tok-*` spans; code font is `--sous-font-size-base`. |
@@ -501,12 +500,14 @@ the chapter bar.
   hiding flashes for a frame before scripts run. The orb's working opacity is
   0.55, faded up by `skyIn`.
 - **Corner links:** fixed top-RIGHT icon buttons (`.repo-link` chrome, shared
-  via css/chrome.css), ordered left-to-right: [docs book icon] [speed control]
-  [theme toggle] [GitHub mark] [npm text mark]; docs links to `docs/#/`,
-  GitHub to the repo, npm to npmjs.com/package/@sous-io/sous (GitHub/npm
-  new-tab), all always visible except the speed control (hidden during the
-  intro). Positions are right-anchored calc() offsets in 2.5rem + gap steps
-  (slot classes; see chrome.css).
+  via css/chrome.css), ordered left-to-right: [speed control] [theme toggle]
+  [GitHub mark] [npm text mark]; GitHub links to the repo, npm to
+  npmjs.com/package/@sous-io/sous, both new-tab and always visible.
+  Positions are right-anchored calc() offsets in 2.5rem + gap steps.
+  Fixed top-LEFT sits a plain "Documentation" TEXT link (`.docs-link` in
+  chrome.css; NO button chrome, Luke's direction 2026-08-27): body-text
+  colored (so white in dark mode), semibold, green on hover, linking to
+  `docs/#/`.
 - **Intro hides the chrome:** the bottom control bar and the speed control
   are hidden on the title scene; two `fromTo` tweens inserted into the master
   timeline at `intro-exit` slide the bar up from below (`yPercent`) and fade

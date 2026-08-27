@@ -9,7 +9,8 @@
    counted from the right edge: slot 1 = npm, slot 2 = GitHub, slot 3 =
    theme toggle. Pages add their own links in higher slots (the presentation
    puts its speed control in slot 4; page-specific slot classes live in the
-   page's stylesheet or below).
+   page's stylesheet or below). The presentation's Documentation link is the
+   exception: a text link anchored top-LEFT (.docs-link).
    ========================================================================== */
 
 /* ----- Icon-link chrome (default position: slot 2, GitHub) ------------------ */
@@ -57,9 +58,30 @@
   font-weight: var(--sous-font-weight-bold);
 }
 
-/* Slot 5: the presentation page's Docs link (slot 4 is its speed control) */
+/* The presentation page's Documentation link: a plain text link, top-LEFT.
+   No button chrome. Body-text colored (white in dark mode) so it reads as
+   quiet chrome, going green on hover like everything interactive. */
 .docs-link {
-  right: calc(var(--sous-space-m) + 4 * (2.5rem + var(--sous-space-s)));
+  position: fixed;
+  top: var(--sous-space-m);
+  left: var(--sous-space-m);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  height: 2.5rem;
+  color: var(--sous-body-text);
+  font-size: var(--sous-font-size-base);
+  font-weight: var(--sous-font-weight-semibold);
+  transition: color var(--sous-transition-fast) ease;
+}
+
+.docs-link:hover {
+  color: var(--sous-primary);
+}
+
+.docs-link:focus-visible {
+  outline: none;
+  box-shadow: var(--sous-focus-ring);
 }
 
 /* ----- Theme toggle (slot 3) ------------------------------------------------ */
