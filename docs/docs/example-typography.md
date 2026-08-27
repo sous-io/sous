@@ -10,8 +10,8 @@ including [a link](example-code.md), some **semibold emphasis**, some *italics*,
 
 ## Headings
 
-Headings follow the `--sous-h1` through `--sous-h6` scale. The two largest get a bottom rule,
-GitHub style. Here is what the next two levels look like:
+Headings follow the `--sous-h1` through `--sous-h6` scale. Here is what the next two levels
+look like:
 
 ### A third-level heading
 
@@ -64,4 +64,5 @@ And an ordered one:
 
 ---
 
-<img src="../img/logo-on-white.png" width="160" alt="The Sous logo">
+<img class="logo-light" src="../img/logo-on-white.png" width="160" alt="The Sous logo">
+<img class="logo-dark" src="../img/logo-on-dark.png" width="128" alt="The Sous logo">

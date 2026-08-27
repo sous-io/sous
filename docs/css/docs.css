@@ -16,6 +16,10 @@
 :root {
   --sous-docs-sidebar-width: 17rem;
   --sous-docs-content-width: 52rem;
+  /* Article vertical rhythm: the docs breathe MUCH more than the compact
+     admin base (Luke's direction, 2026-08-27). Derived from the spacing
+     tokens. */
+  --sous-docs-rhythm: var(--sous-space-l); /* 32px */
 }
 
 /* ----- Layout ---------------------------------------------------------------- */
@@ -95,7 +99,7 @@ body.close .content {
   font-weight: var(--sous-font-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  padding-top: var(--sous-space-s);
+  padding-top: var(--sous-space-l);
 }
 
 .sidebar-nav li li {
@@ -104,7 +108,7 @@ body.close .content {
 
 .sidebar-nav a {
   display: block;
-  padding: var(--sous-space-xs) var(--sous-space-s);
+  padding: var(--sous-space-s) var(--sous-space-s);
   margin-left: calc(-1 * var(--sous-space-s));
   color: var(--sous-body-text);
   font-size: var(--sous-font-size-base);
@@ -224,19 +228,43 @@ body.close .content {
 }
 
 /* ----- Article body -------------------------------------------------------------
-   main.css already styles the elements; this adds the GitHub-flavored article
-   conventions: ruled h1/h2, breathing room above headings, inherit-colored
-   heading anchors (docsify wraps every heading's text in an anchor link). */
-.markdown-section h1,
-.markdown-section h2 {
-  padding-bottom: var(--sous-space-s);
-  border-bottom: 1px solid var(--sous-border-light);
+   main.css already styles the elements; this adds generous breathing room
+   above headings (no heading underlines; Luke's direction) and
+   inherit-colored heading anchors (docsify wraps every heading's text in an
+   anchor link). */
+.markdown-section h1 {
+  margin-bottom: var(--sous-space-l);
 }
 
-.markdown-section h2,
+.markdown-section h2 {
+  margin-top: var(--sous-space-xl);
+  margin-bottom: var(--sous-space-m);
+}
+
 .markdown-section h3,
 .markdown-section h4 {
-  margin-top: var(--sous-space-l);
+  margin-top: calc(var(--sous-space-l) * 1.5);
+  margin-bottom: var(--sous-space-m);
+}
+
+/* Looser vertical rhythm between article blocks */
+.markdown-section p,
+.markdown-section ul,
+.markdown-section ol,
+.markdown-section table,
+.markdown-section pre,
+.markdown-section blockquote,
+.markdown-section [data-termynal] {
+  margin-bottom: var(--sous-docs-rhythm);
+}
+
+.markdown-section li + li {
+  margin-top: var(--sous-space-s);
+}
+
+.markdown-section th,
+.markdown-section td {
+  padding: calc(var(--sous-space-s) * 1.5) var(--sous-space-m);
 }
 
 .markdown-section .anchor {
@@ -249,6 +277,18 @@ body.close .content {
 
 .markdown-section img {
   border-radius: var(--sous-tile-radius);
+}
+
+/* Theme-paired logo images: same .logo-light/.logo-dark swap pattern as the
+   presentation's intro logo (author both <img>s; one shows per theme) */
+.markdown-section .logo-dark { display: none; }
+
+html[data-sous-theme="dark"] .markdown-section .logo-light { display: none; }
+html[data-sous-theme="dark"] .markdown-section .logo-dark { display: inline-block; }
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-sous-theme="light"]) .markdown-section .logo-light { display: none; }
+  html:not([data-sous-theme="light"]) .markdown-section .logo-dark { display: inline-block; }
 }
 
 /* Task-list items render their own checkboxes; suppress the bullet */
@@ -269,7 +309,7 @@ body.close .content {
    `!>` renders <p class="tip"> (important), `?>` renders <p class="warn"> (note). */
 .markdown-section p.tip,
 .markdown-section p.warn {
-  padding: var(--sous-space-s) var(--sous-space-m);
+  padding: var(--sous-space-m);
   border-radius: var(--sous-border-radius);
 }
 
@@ -290,6 +330,7 @@ body.close .content {
    presentation's code windows use), so docs code matches the presentation. */
 .markdown-section pre {
   position: relative; /* anchors the copy-code button */
+  padding: var(--sous-docs-rhythm);
   background: var(--sous-editor-bg);
   border-color: var(--sous-editor-border);
 }
@@ -390,21 +431,22 @@ body.close .content {
 }
 
 /* ----- Terminal demos (termynal) ---------------------------------------------------
-   Re-themes the CDN termynal.css onto the tokens. Terminals stay dark in BOTH
-   themes (built on the raw --sous-neutral-dark-* scale, which never flips). */
+   Re-themes the CDN termynal.css onto the theme-aware --sous-editor-* palette
+   (the same one fenced code uses), so terminals read as light editor windows
+   on the light theme instead of imposing dark boxes, and flip with the theme. */
 [data-termynal] {
-  background: var(--sous-neutral-dark-50);
-  color: var(--sous-neutral-dark-800);
+  background: var(--sous-editor-bg);
+  color: var(--sous-editor-text);
   font-family: var(--sous-font-family-monospace);
   font-size: var(--sous-font-size-base);
-  border: 1px solid var(--sous-border-medium);
+  border: 1px solid var(--sous-editor-border);
   border-radius: var(--sous-tile-radius);
-  padding: calc(var(--sous-space-l) + var(--sous-space-s)) var(--sous-space-l) var(--sous-space-m);
-  margin: 0 0 var(--sous-space-m);
+  padding: calc(var(--sous-space-l) + var(--sous-space-s)) var(--sous-space-l) var(--sous-space-l);
+  margin: 0 0 var(--sous-docs-rhythm);
 }
 
 [data-termynal]:after {
-  color: var(--sous-neutral-dark-600);
+  color: var(--sous-editor-muted);
   font-size: var(--sous-font-size-s);
   top: var(--sous-space-xs);
 }
@@ -415,7 +457,7 @@ body.close .content {
 }
 
 .term-comment {
-  color: var(--sous-neutral-dark-600);
+  color: var(--sous-editor-muted);
 }
 
 button[data-terminal-control] {

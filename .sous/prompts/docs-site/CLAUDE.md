@@ -41,7 +41,7 @@
 | `docs/css/main.css` | The design-system stylesheet: all tokens, base element styles, minimal foundational classes. |
 | `docs/css/chrome.css` | The shared corner-button chrome (`.repo-link`, `.npm-link`, `.theme-toggle`, slot classes), used by BOTH pages. Extracted from presentation.css when the docs shell landed. |
 | `docs/css/presentation.css` | Page + player styles for `index.html` (stage, scenes, control bar, chapter segments, theme toggle). Everything references `--sous-*` tokens. |
-| `docs/css/docs.css` | The docs-shell stylesheet: docsify layout/sidebar/search styling, GitHub-flavored article rules, the Prism token theme, termynal overrides. Styles docsify's BARE DOM (no stock theme). |
+| `docs/css/docs.css` | The docs-shell stylesheet: docsify layout/sidebar/search styling, article typography/rhythm rules, the Prism token theme, termynal overrides. Styles docsify's BARE DOM (no stock theme). |
 | `docs/js/term-demos.js` | Site-owned docsify plugin: converts ```` ```term ```` fences into termynal markup and plays each demo on first scroll-into-view. |
 | `docs/js/presentation.js` | The presentation logic (vanilla JS IIFE): master timeline, scene builds, Observer scrubbing, chapter bar, keyboard controls, FX (banners/sky/rain), pacing model. |
 | `docs/img/logo-on-white.png` | The Sous logo (chef's hat + wordmark, 1254×1254, transparent bg). Drawn for white/LIGHT backgrounds — a dark-mode variant is still being designed (source of truth: `~/GoogleDrive/Projects/Sous.io/media/`). Used in the intro scene, sized by `.scene-logo` (`clamp(8rem, 48vh, 32rem)`; 32rem is Luke's preferred size on his desktop viewport — do not shrink it without asking). |
@@ -158,10 +158,21 @@ VitePress-style chrome was the runner-up styling reference.
   authoring page documents the syntax, and it must stay indented.
 - **Theming:** no stock docsify theme is loaded; `docs/css/docs.css` styles
   the bare DOM from `--sous-*` tokens, so both themes flip automatically.
-  Fenced code uses the theme-aware `--sous-editor-*` palette (same as the
-  presentation's code windows; `--sous-editor-number` was added for Prism).
-  Terminal demos deliberately stay DARK in both themes (built on the raw
-  `--sous-neutral-dark-*` scale, which never flips), green `$` prompts.
+  Fenced code AND the terminal demos use the theme-aware `--sous-editor-*`
+  palette (same as the presentation's code windows; `--sous-editor-number`
+  was added for Prism), so terminals read as light editor windows on the
+  light theme (always-dark terminals looked imposing on white; Luke's
+  direction 2026-08-27), green `$` prompts in both.
+  The article's vertical rhythm is MUCH looser than the compact admin base:
+  `--sous-docs-rhythm` (32px, defined in docs.css) spaces the article blocks,
+  h2 gets `--sous-space-xl` above (h3/h4 1.5x `--sous-space-l`), and
+  sidebar/table/code paddings are similarly widened (same direction, same
+  date); keep new docs styles on that rhythm, not the presentation's tighter
+  one. Headings have NO underline rules (removed at Luke's direction; do not
+  re-add the GitHub-style h1/h2 border-bottom).
+  Logo images in doc pages use the same `.logo-light`/`.logo-dark` theme-swap
+  pattern as the presentation's intro logo (author BOTH `<img>`s; docs.css
+  scopes the swap to `.markdown-section`).
   Docsify callout helpers: `!>` renders `<p class="tip">` styled as IMPORTANT
   (danger dim pair); `?>` renders `<p class="warn">` styled as a NOTE
   (info dim pair). The class names are docsify's, and they read backwards;
