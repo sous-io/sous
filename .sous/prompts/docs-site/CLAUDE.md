@@ -8,9 +8,8 @@
 **This document records rules, decisions, and pointers; never enumerations.**
 If the code already holds a fact (scene lists, token values, CDN pins, file
 inventories), point at the code instead of restating it. Hand-maintained
-lists rot; this file has been burned by that before. Update the source in the
-same change as any decision-level change to the site, and delete anything
-here the code has made false.
+lists rot. Update the source in the same change as any decision-level change
+to the site, and delete anything here the code has made false.
 
 ## What this site is
 
@@ -55,15 +54,15 @@ pages exist:
 - **Green is the only voice of interactivity**: links (no underline),
   primary buttons, focus rings, active states.
 - **Do not add granular utility/component classes** until real content
-  demands them (standing direction).
+  demands them.
 - The dark-mode neutral scale is GitHub's dark palette mapped in reverse over
   the light neutrals, so anything built on `--sous-neutral-*` flips
   automatically. The `--sous-editor-*` tokens are the theme-aware code
   palette (VS Code Light+/Dark+), used by the presentation's code windows,
   the docs' fenced code, and the terminal demos.
-- This site deliberately IGNORES `prefers-reduced-motion` (decided
-  2026-08-14; do not re-add gating without asking): the animation IS the
-  content, and reduce-motion is commonly enabled by OS performance tweaks.
+- This site deliberately IGNORES `prefers-reduced-motion` (do not re-add
+  gating without asking): the animation IS the content, and reduce-motion is
+  commonly enabled by OS performance tweaks.
 
 ### Theming mechanics
 
@@ -97,7 +96,7 @@ chapter bar, time counters, and speed control all render from the timeline.
 markup and copy live in `index.html`; the `PROBLEMS`/`PHILOSOPHY` tables in
 `presentation.js` generate the problem/philosophy kickers.
 
-### Standing directions (2026-08)
+### Standing directions
 
 - **Never remove a scene unless explicitly told to**; superseded scenes stay
   in the markup as commented reference.
@@ -112,9 +111,9 @@ markup and copy live in `index.html`; the `PROBLEMS`/`PHILOSOPHY` tables in
   slides may keep concrete detail.
 - **Iteration workflow:** review happens slide by slide; requested tweaks
   apply to the slide under review and do NOT roll forward until sign-off.
-  Reviewed problems are complete, never touch them in rolling updates. Exception:
-  shared generated elements (kickers) change everywhere at once via their
-  generator.
+  Reviewed problems are complete, never touch them in rolling updates.
+  Exception: shared generated elements (kickers) change everywhere at once
+  via their generator.
 - The intro logo's desktop size is a deliberate choice; do not shrink it
   without asking.
 
@@ -153,8 +152,9 @@ markup and copy live in `index.html`; the `PROBLEMS`/`PHILOSOPHY` tables in
 
 ## The docs shell (`docs/markdown/`)
 
-A thin client-side shell: **docsify** (v4, pinned; v5 exists but the plugin
-ecosystem and DOM contract here are v4-proven) renders the markdown in
+A thin client-side shell: **docsify** v4 (pinned; the plugin ecosystem and
+DOM contract here are v4-proven; do not bump the major without direction)
+renders the markdown in
 `docs/markdown/` in the browser. Chosen over hand-rolling marked +
 highlight.js because it ships the router, sidebar, and client-side search we
 would otherwise own. All CDN pins and `$docsify` config live in
@@ -167,8 +167,8 @@ would otherwise own. All CDN pins and `$docsify` config live in
 - NO stock docsify theme is loaded; `docs.css` styles docsify's bare DOM
   directly from tokens, so both themes flip automatically. The article's
   vertical rhythm is set by `--sous-docs-rhythm` in `docs.css` (looser than
-  the compact admin base; tuned live during review). Headings have NO
-  underline rules (removed deliberately; do not re-add).
+  the compact admin base). Headings have NO underline rules; do not add
+  any.
 - Terminal demos: the engine is termynal (MIT, pinned CDN); the ```` ```term ````
   fence conversion and play-on-scroll are OUR glue in `docs/js/term-demos.js`.
   Never give a demo container the `.termy` class (termynal auto-plays those
@@ -186,8 +186,8 @@ would otherwise own. All CDN pins and `$docsify` config live in
 ## Working on the site
 
 - Local preview: `npx live-server docs --port=8321` (auto-reload; plain
-  `python3 -m http.server` works but browsers cache its responses, which has
-  caused phantom-stale-CSS confusion during review).
+  `python3 -m http.server` works but browsers cache its responses
+  aggressively, which reads as your changes not applying).
 - The site's HTML/CSS/JS under `docs/` is hand-written and tracked normally.
   The ONLY sous-generated file in `docs/` is this CLAUDE.md.
 - The repo-root `CLAUDE.md` covers the Sous CLI; this file covers only the
