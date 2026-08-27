@@ -112,9 +112,11 @@ sous.config.schema.json    # committed JSON Schema artifact; shipped in the npm 
 .github/workflows/
   publish.yml              # npm trusted publishing on GitHub Release (OIDC, tokenless)
 docs/                      # the GitHub Pages site (sous-io.github.io/sous)
-  index.html               # Coming Soon page (future: GSAP-driven presentation)
+  index.html               # the animated GSAP presentation page
+  docs/                    # the documentation shell (docsify, client-side markdown render)
   css/main.css             # site design system (--sous-* tokens, BTCPay-derived)
-  CLAUDE.md                # GENERATED site instructions (gitignored output)
+  CLAUDE.md                # GENERATED site instructions (gitignored output); the site's
+                           #   full documentation lives there, not here
 .sous/                     # THIS repo's own sous config — sous configures itself
   sous.config.js           # the primary config; compiles skills into .claude/skills/ + both CLAUDE.md files
   conf.d/                  # optional drop-in layer dir (*.js|mjs|json|yaml); merged after the primary config

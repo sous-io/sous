@@ -16,8 +16,11 @@
 - GitHub Pages serves the `main` branch's `/docs` directory at
   **https://sous-io.github.io/sous/** (repo: `github.com/sous-io/sous`).
 - **Today:** the main page is a GSAP-driven animated *presentation* introducing
-  Sous, with movie-player controls (see "The presentation" below).
-- **Someday:** full documentation for Sous.
+  Sous, with movie-player controls (see "The presentation" below), plus a
+  **documentation section** at `/docs/` (see "The docs shell" below): markdown
+  files rendered live in the browser by docsify. The shell is real; its pages
+  are currently EXAMPLE placeholders, and the actual reference content is
+  future work Luke will direct by hand (gh-8 covered the shell only).
 
 ### Hard constraints
 
@@ -33,8 +36,13 @@
 | File | Role |
 |------|------|
 | `docs/index.html` | The presentation page: scene markup (one `<section class="scene" data-scene="…">` per scene), player controls, the light/dark toggle, GSAP CDN script tags. Scene text distilled from `docs/notes/SOUS-GOALS.md`. |
+| `docs/.nojekyll` | Empty; keeps GitHub Pages' default Jekyll pass off the site (it would otherwise swallow docsify's `_sidebar.md`). |
+| `docs/docs/` | The docs shell: `index.html` (docsify mount, CDN pins, corner chrome) plus the markdown content itself (`README.md` home, `_sidebar.md` nav manifest, `example-*.md` pages). |
 | `docs/css/main.css` | The design-system stylesheet: all tokens, base element styles, minimal foundational classes. |
+| `docs/css/chrome.css` | The shared corner-button chrome (`.repo-link`, `.npm-link`, `.theme-toggle`, slot classes), used by BOTH pages. Extracted from presentation.css when the docs shell landed. |
 | `docs/css/presentation.css` | Page + player styles for `index.html` (stage, scenes, control bar, chapter segments, theme toggle). Everything references `--sous-*` tokens. |
+| `docs/css/docs.css` | The docs-shell stylesheet: docsify layout/sidebar/search styling, GitHub-flavored article rules, the Prism token theme, termynal overrides. Styles docsify's BARE DOM (no stock theme). |
+| `docs/js/term-demos.js` | Site-owned docsify plugin: converts ```` ```term ```` fences into termynal markup and plays each demo on first scroll-into-view. |
 | `docs/js/presentation.js` | The presentation logic (vanilla JS IIFE): master timeline, scene builds, Observer scrubbing, chapter bar, keyboard controls, FX (banners/sky/rain), pacing model. |
 | `docs/img/logo-on-white.png` | The Sous logo (chef's hat + wordmark, 1254×1254, transparent bg). Drawn for white/LIGHT backgrounds — a dark-mode variant is still being designed (source of truth: `~/GoogleDrive/Projects/Sous.io/media/`). Used in the intro scene, sized by `.scene-logo` (`clamp(8rem, 48vh, 32rem)`; 32rem is Luke's preferred size on his desktop viewport — do not shrink it without asking). |
 | `docs/CLAUDE.md` | This generated file. |
@@ -103,9 +111,74 @@ automatically.
 
 - Auto light/dark via `prefers-color-scheme`; forced via
   `data-sous-theme="light|dark"` on `<html>`.
-- The toggle in `index.html` persists to localStorage key **`sous-theme`**; an
-  inline `<head>` script re-applies it before first paint (no flash). Keep this
-  mechanism on every future page.
+- The toggle persists to localStorage key **`sous-theme`**; an inline `<head>`
+  script re-applies it before first paint (no flash). Both pages
+  (`index.html` and `docs/docs/index.html`) carry the same pre-paint script
+  and toggle handler. Keep this mechanism on every future page.
+
+## The docs shell (implemented; gh-8)
+
+The documentation section lives at `/docs/` (repo path `docs/docs/`; the outer
+`docs/` is just the GitHub Pages site root). It is a thin client-side shell:
+**docsify** fetches the markdown files in `docs/docs/` and renders them in the
+browser. Publishing a page = commit one markdown file + one `_sidebar.md`
+line; there is no build step and no generated HTML, which is exactly the site's
+hard constraint. Chosen over hand-rolling marked + highlight.js because it
+ships the router, sidebar, and client-side search we would otherwise own;
+VitePress-style chrome was the runner-up styling reference.
+
+### Stack (all pinned CDN URLs in `docs/docs/index.html`)
+
+- **docsify 4.13.1** + its bundled Prism, plus grammar components from
+  `prismjs@1.30.0` (bash, json, yaml, typescript, markdown,
+  markup-templating + liquid). docsify 5.0.0 exists but the plugin ecosystem
+  and DOM contract here are v4-proven; upgrading is a deliberate future task.
+- **Plugins:** `search` (ships with docsify), `docsify-copy-code@3.0.0`,
+  `docsify-pagination@2.10.1`.
+- **termynal** (`termynal/termynal.py@v0.14.0` on jsdelivr, MIT): the animated
+  terminal engine. `docs/js/term-demos.js` is OUR glue (not a library):
+  a docsify plugin whose `beforeEach` converts ```` ```term ```` fences into
+  termynal containers and whose `doneEach` arms an IntersectionObserver that
+  calls `Termynal.init()` on first visibility (constructed `noInit: true`).
+  Do NOT give demo containers the `.termy` class; termynal.js auto-plays
+  those at script load.
+
+### Config and conventions
+
+- `window.$docsify`: `loadSidebar: true`, `subMaxLevel: 2` (the active page's
+  h2s nest under it in the sidebar), `auto2top`, `executeScript: true`.
+- `_sidebar.md` must stay a TIGHT list (no blank lines between items):
+  loose lists make docsify wrap links in `<p>`, which breaks the active-item
+  CSS (both shapes are styled, but keep it tight anyway). Non-link items
+  (`- **Examples**`) render as uppercase muted section labels.
+- ```` ```term ```` fence line syntax (docs on the example-terminal page):
+  `$ ` typed input, `// ` subtle comment, `>> ` progress bar, blank = spacer,
+  anything else = output. The transform only matches fences at COLUMN 0, so an
+  indented ```` ```term ```` block renders literally; that is how the
+  authoring page documents the syntax, and it must stay indented.
+- **Theming:** no stock docsify theme is loaded; `docs/css/docs.css` styles
+  the bare DOM from `--sous-*` tokens, so both themes flip automatically.
+  Fenced code uses the theme-aware `--sous-editor-*` palette (same as the
+  presentation's code windows; `--sous-editor-number` was added for Prism).
+  Terminal demos deliberately stay DARK in both themes (built on the raw
+  `--sous-neutral-dark-*` scale, which never flips), green `$` prompts.
+  Docsify callout helpers: `!>` renders `<p class="tip">` styled as IMPORTANT
+  (danger dim pair); `?>` renders `<p class="warn">` styled as a NOTE
+  (info dim pair). The class names are docsify's, and they read backwards;
+  the styling is ours and is correct.
+- **Corner chrome:** the docs page reuses `css/chrome.css` with, right to
+  left: npm (slot 1), GitHub (2), theme toggle (3), and a play-circle link
+  back to the presentation (`.pres-link`, slot 4). The presentation page adds
+  a book-icon link to the docs (`.docs-link`, slot 5; slot 4 there is the
+  speed control, hidden during the intro, so a gap next to the book icon on
+  the title scene is expected). Same `sous-theme` pre-paint + toggle scripts
+  as the presentation; keep them in sync.
+- The `example-*.md` pages are PLACEHOLDERS demonstrating shell features
+  (typography, code highlighting, callouts/tasks, routing/search, terminal
+  demos). Luke will direct the real reference content by hand; do not start
+  writing real docs unprompted.
+- Local preview: `python3 -m http.server` from `docs/`, then
+  `http://localhost:8000/docs/#/`.
 
 ## The presentation (implemented)
 
@@ -427,11 +500,13 @@ the chapter bar.
   hidden in CSS (`opacity: 0`), and GSAP owns the reveal; JS-only initial
   hiding flashes for a frame before scripts run. The orb's working opacity is
   0.55, faded up by `skyIn`.
-- **Corner links:** fixed top-RIGHT icon buttons (`.repo-link` chrome,
-  matching the theme toggle), ordered left-to-right: [speed control]
-  [theme toggle] [GitHub mark] [npm text mark]; GitHub links to the repo,
-  npm to npmjs.com/package/@sous-io/sous, both new-tab and always visible.
-  Positions are right-anchored calc() offsets in 2.5rem + gap steps.
+- **Corner links:** fixed top-RIGHT icon buttons (`.repo-link` chrome, shared
+  via css/chrome.css), ordered left-to-right: [docs book icon] [speed control]
+  [theme toggle] [GitHub mark] [npm text mark]; docs links to `docs/#/`,
+  GitHub to the repo, npm to npmjs.com/package/@sous-io/sous (GitHub/npm
+  new-tab), all always visible except the speed control (hidden during the
+  intro). Positions are right-anchored calc() offsets in 2.5rem + gap steps
+  (slot classes; see chrome.css).
 - **Intro hides the chrome:** the bottom control bar and the speed control
   are hidden on the title scene; two `fromTo` tweens inserted into the master
   timeline at `intro-exit` slide the bar up from below (`yPercent`) and fade
