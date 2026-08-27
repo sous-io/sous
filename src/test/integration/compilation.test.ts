@@ -92,6 +92,44 @@ describe("CompilationService", () => {
   });
 
   // -------------------------------------------------------------------------
+  // Dot-relative @includes (./ and ../)
+  // -------------------------------------------------------------------------
+
+  /**
+   * An @include path may be dot-relative: ./sibling.md, or ../shared.md to
+   * climb out of the including file's directory (documented in the root
+   * CLAUDE.md include examples). Guards the include pattern's first
+   * character class, which must accept a leading dot.
+   */
+  it("should resolve @includes that start with ./ and ../", async () => {
+    tmp = makeTmpDir();
+    const subDir = path.join(tmp.path, "sub");
+    fs.mkdirSync(subDir, { recursive: true });
+    fs.writeFileSync(path.join(tmp.path, "shared.md"), "# Parent Shared\n");
+    fs.writeFileSync(path.join(subDir, "sibling.md"), "# Dot Sibling\n");
+    const entryPoint = path.join(subDir, "entry.md");
+    fs.writeFileSync(entryPoint, "# Entry\n\n@./sibling.md\n\n@../shared.md\n");
+    const destFile = path.join(tmp.path, "out", "dot-relative.md");
+
+    const compiler = makeCompiler();
+    const result = await compiler.compile({
+      targets: [
+        {
+          rootInputPath: entryPoint,
+          outputs: [{ destinationFile: destFile }],
+        },
+      ],
+    });
+
+    expect(result).toBe(true);
+    const output = fs.readFileSync(destFile, "utf8");
+    expect(output).toContain("# Dot Sibling");
+    expect(output).toContain("# Parent Shared");
+    expect(output).not.toContain("@./sibling.md");
+    expect(output).not.toContain("@../shared.md");
+  });
+
+  // -------------------------------------------------------------------------
   // Nested @include (A -> B -> C)
   // -------------------------------------------------------------------------
 

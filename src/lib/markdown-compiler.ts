@@ -157,8 +157,9 @@ export class CompilationService {
    * listing every path tried.
    */
   private processIncludes(content: string, baseDir: string, projectRoot: string): string {
-    // First segment allows ~, then path chars; separators / and :; allows ${...}.
-    const includePattern = /^@([~a-zA-Z0-9_${}][a-zA-Z0-9_\-/.:${}]*\.md)$/;
+    // First segment allows ~ and . (so ./ and ../ work), then path chars;
+    // separators / and :; allows ${...}.
+    const includePattern = /^@([~a-zA-Z0-9_.${}][a-zA-Z0-9_\-/.:${}]*\.md)$/;
     const fenceOpenPattern = /^ {0,3}(`{3,}|~{3,})/;
     const fenceClosePattern = /^ {0,3}(`{3,}|~{3,})[ \t]*$/;
 
