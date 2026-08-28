@@ -35,7 +35,9 @@ for type-checking only.
 ## Publishing (npm)
 
 Published as `@sous-io/sous` (npm org `sous-io`), public access, Apache-2.0. The
-package ships `bin/run.js`, `src/` (minus tests), and `shared-prompts/` — see the `files`
+package ships `bin/run.js`, `src/` (minus tests), `shared-prompts/`, and the documentation
+markdown (`docs/markdown/*.md`; agent-readable reference matching the installed version, pointed
+to by the distributed `about-sous` skill; the web shell around it stays out) — see the `files`
 allowlist in `package.json` (an allowlist, so there is no `.npmignore`; `bin/xcv` and
 everything else stays out by default). `repository.url` must keep matching the GitHub repo
 exactly; npm's trusted publishing validates it at publish time.
@@ -93,8 +95,9 @@ shared-prompts/
   skills/                  # shared skill bundles; each subdirectory is a bundle
     sous-skills/           # built-in sous bundle, compiled + distributed to downstream projects
       about-sous/          # teaches downstream agents what Sous manages (never-edit rule)
-      about-sous-configuration/ # how sous is configured: sources, layers, vars, validation
-                           #   (light SKILL.md; deep dives live in its references/)
+      about-sous-configuration/ # thin router: orientation + rules; the config reference
+                           #   itself lives in docs/markdown/config*.md (single source of
+                           #   truth, shipped in the npm package)
       about-agent-skills/  # foundational skill knowledge for downstream agents
       about-liquid-templates/ # .tpl. convention + LiquidJS syntax for downstream agents
       create-skill/        # action skill: creating a skill in skillsRoot
@@ -112,9 +115,11 @@ sous.config.schema.json    # committed JSON Schema artifact; shipped in the npm 
 .github/workflows/
   publish.yml              # npm trusted publishing on GitHub Release (OIDC, tokenless)
 docs/                      # the GitHub Pages site (sous-io.github.io/sous)
-  index.html               # Coming Soon page (future: GSAP-driven presentation)
-  css/main.css             # site design system (--sous-* tokens, BTCPay-derived)
-  CLAUDE.md                # GENERATED site instructions (gitignored output)
+  index.html               # the animated GSAP presentation page
+  markdown/                # the documentation shell (docsify, client-side markdown render)
+  css/main.css             # site design system (--sous-* design tokens)
+  CLAUDE.md                # GENERATED site instructions (gitignored output); the site's
+                           #   full documentation lives there, not here
 .sous/                     # THIS repo's own sous config — sous configures itself
   sous.config.js           # the primary config; compiles skills into .claude/skills/ + both CLAUDE.md files
   conf.d/                  # optional drop-in layer dir (*.js|mjs|json|yaml); merged after the primary config

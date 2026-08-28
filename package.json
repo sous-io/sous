@@ -35,6 +35,7 @@
     "!src/**/*.spec.ts",
     "!src/test",
     "shared-prompts",
+    "docs/markdown/*.md",
     "sous.config.schema.json"
   ],
   "scripts": {

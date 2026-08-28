@@ -193,6 +193,7 @@
   --sous-editor-variable: #001080;
   --sous-editor-string: #a31515;
   --sous-editor-function: #795e26;
+  --sous-editor-number: #098658;
   --sous-editor-heading: #800000;
 
   /* Callout highlights: yellow ring + glow pull the eye to highlighted code */
@@ -315,6 +316,7 @@
     --sous-editor-variable: #9cdcfe;
     --sous-editor-string: #ce9178;
     --sous-editor-function: #dcdcaa;
+    --sous-editor-number: #b5cea8;
     --sous-editor-heading: #569cd6;
 
     --sous-fx-cloud: rgba(240, 246, 252, 0.05);
@@ -380,6 +382,7 @@
   --sous-editor-variable: #9cdcfe;
   --sous-editor-string: #ce9178;
   --sous-editor-function: #dcdcaa;
+  --sous-editor-number: #b5cea8;
   --sous-editor-heading: #569cd6;
 
   --sous-fx-cloud: rgba(240, 246, 252, 0.05);
