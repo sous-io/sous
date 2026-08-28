@@ -34,9 +34,8 @@ before changing anything; it holds the site's rules and pitfalls.
 
 ## Current state
 
-The pages in `docs/markdown/` are EXAMPLE placeholders demonstrating the
-shell's features. The real reference content is directed by hand; do not
-write or restructure reference documentation unprompted.
+Reference content in `docs/markdown/` is written incrementally and directed
+by hand; do not write or restructure documentation pages unprompted.
 
 ## Local preview
 

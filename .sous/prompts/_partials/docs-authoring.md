@@ -23,8 +23,8 @@ tags) plus:
   commands and plays on first scroll-into-view. Line syntax: `$ ` typed
   input, `// ` subtle comment, `>> ` progress bar, blank line = spacer,
   anything else = printed output. The fence MUST start at column 0; an
-  indented ```` ```term ```` block renders literally (that is how the
-  example page documents the syntax).
+  indented ```` ```term ```` block renders literally, which is how a page can
+  document the syntax without the fence being animated.
 - Fenced code is Prism-highlighted; the loaded grammars are pinned as script
   tags in `docs/markdown/index.html`.
 - Logo images must be authored as a theme pair, and one shows per theme:

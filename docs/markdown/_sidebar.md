@@ -5,9 +5,3 @@
   - [Layers and merging](config-layers.md)
   - [Variables](config-variables.md)
   - [Inspecting and validating](config-inspection.md)
-- **Examples**
-  - [Typography](example-typography.md)
-  - [Code blocks](example-code.md)
-  - [Callouts and tasks](example-callouts.md)
-  - [Links and navigation](example-navigation.md)
-  - [Terminal demos](example-terminal.md)

@@ -20,9 +20,8 @@ pages exist:
 - `index.html`: a GSAP-driven animated presentation introducing Sous, with
   movie-player controls.
 - `markdown/`: the documentation section; markdown files rendered live in the
-  browser by docsify. The shell is real; the pages are currently EXAMPLE
-  placeholders, and real reference content will be directed by hand; do not
-  write it unprompted.
+  browser by docsify. Reference content is written incrementally and directed
+  by hand; do not add or restructure pages unprompted.
 
 ### Hard constraints
 
