@@ -192,3 +192,5 @@ would otherwise own. All CDN pins and `$docsify` config live in
 - The repo-root `CLAUDE.md` covers the Sous CLI; this file covers only the
   website. Both are sous-generated from tracked sources under
   `.sous/prompts/`.
+
+@${sousDir}/prompts/_partials/sources-of-truth.md

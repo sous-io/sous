@@ -1,7 +1,10 @@
 - [Overview](/)
+- [Design principles](design-principles.md)
 - **Configuration**
   - [The config file](configuration.md)
   - [Discovery and overrides](config-discovery.md)
   - [Layers and merging](config-layers.md)
   - [Variables](config-variables.md)
   - [Inspecting and validating](config-inspection.md)
+- **ADRs**
+  - [0001: Repositories](adrs/0001-repositories.md)

@@ -539,6 +539,8 @@ To add a tag: create `src/templating/tags/<name>.ts` exporting a `register<Name>
 function, then add it to the array in `src/templating/tags/index.ts`. Filters follow the
 same pattern under `filters/`.
 
+@${sousDir}/prompts/_partials/sources-of-truth.md
+
 ## Important!
 
 When working on `sous`, keep this document accurate — but remember it is GENERATED:
