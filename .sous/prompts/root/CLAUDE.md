@@ -8,6 +8,10 @@
 Sous is a TypeScript CLI tool that compiles markdown templates and manages output files for LLM/AI coding agents 
 (Claude, Codex, etc.). The binary is named `xcv`. Published on npm as `@sous-io/sous`.
 
+@${sousDir}/prompts/_partials/agent-conduct.md
+
+@${sousDir}/prompts/_partials/writing-standards.md
+
 ## Build & Development
 
 ```bash

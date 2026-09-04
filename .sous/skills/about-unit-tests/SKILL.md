@@ -175,6 +175,16 @@ function captureStdout(fn: () => void): string[] {
 }
 ```
 
+## Hard-Won Gotchas
+
+- Watch tests that assert on `chokidar.watch` call counts must call
+  `vi.mocked(chokidar.watch).mockClear()` in `beforeEach`; without it, call counts accumulate
+  across tests and assertions pass or fail depending on execution order.
+- `PidService._isProcessAlive` is deliberately public (not private) so specs can spy on it;
+  do not "clean it up" into a private member.
+- In test settings objects, `configsRoot` must live in the root-level `settings._vars`, not a
+  project-level `_vars` block, or `StateService.getFilePath` cannot resolve it.
+
 ## Dead Code and Coverage Hints
 
 Use `/* c8 ignore next */` (or `/* c8 ignore next N */`) to annotate dead code branches
