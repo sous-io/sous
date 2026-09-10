@@ -78,6 +78,7 @@ src/
     config-inspect.ts      # dot-path lookup + JSON rendering helpers for `config show/get`
     errors.ts              # ConfigError + isConfigError (own module to avoid an import cycle)
     env-local.ts           # parses .sous/.env.local and .sous/.env into process.env
+    sous-home.ts           # the user-level sous dir (~/.sous or $SOUS_HOME) and its subpaths
     settings.ts            # config loader (spawns the kernel), var resolution, scope chain
     markdown-compiler.ts   # CompilationService; @-include, LiquidJS rendering
     include-resolver.ts    # @-include alias/${var}/relative path resolution
@@ -160,8 +161,10 @@ points at it.
 
 ## Config Discovery
 
-There is no user-level config; nothing is read from `~/.sous`. Every command locates its
-config the same way, in `BaseCommand.init()` (see `config-discovery.ts`).
+There is no user-level config LAYER; no configuration is read from the user-level sous
+directory (`~/.sous`, or `$SOUS_HOME`), which holds only machine-wide state such as the
+recipe store. Every command locates its config the same way, in `BaseCommand.init()` (see
+`config-discovery.ts`).
 
 **Locating the primary config.** Precedence, highest first (flag beats env; both beat
 walk-up):
@@ -364,6 +367,9 @@ Auto-injected vars always available:
 - `sousDir` — the discovered `.sous/` directory holding the active config
 - `sousConfDir`: the `conf.d/` drop-in directory for the active config
 - `sousConfigPath`: absolute path to the active (primary) config file
+- `sousHome`: the user-level sous directory (`~/.sous`, or `$SOUS_HOME`); holds the
+  machine-wide recipe store and globally linked checkouts. Resolved from `process.env` on
+  every call, because `SOUS_HOME` is file-settable (see `src/lib/sous-home.ts`)
 - `sousTemplatePath` — absolute path to the `.tpl.` file currently being rendered (render-time only)
 - `sousTemplateDir` — directory of the `.tpl.` file currently being rendered (render-time only)
 

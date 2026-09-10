@@ -14,6 +14,7 @@ import {
   type DiscoveredConfig,
 } from "./config-discovery.js";
 import { ConfigError } from "./errors.js";
+import { resolveSousHome } from "./sous-home.js";
 import { validateSettings } from "./config-schema.js";
 import { warning } from "../utils/formatting.js";
 
@@ -633,6 +634,10 @@ export type ConfigContext = {
  * and injected first, before _env and _vars.
  * The 'sous*' namespace is reserved — warns if user defines a var starting with 'sous'.
  *
+ * `sousHome` is resolved from `process.env` on every call rather than captured
+ * once, because `SOUS_HOME` is file-settable: `.sous/.env.local` and
+ * `.sous/.env` are loaded into `process.env` before settings resolve.
+ *
  * @param context - The discovered config location. When supplied, adds
  *   `sousDir` and `sousConfigPath` (plus `sousConfDir` when known) so configs
  *   can build paths relative to their own `.sous/` directory.
@@ -641,6 +646,7 @@ export function buildAutoVars(context?: ConfigContext): VarScope {
   return {
     sousRootPath: CLI_ROOT,
     sousVersion: SOUS_VERSION,
+    sousHome: resolveSousHome(),
     ...(context !== undefined && {
       sousDir: context.sousDir,
       sousConfigPath: context.configPath,
