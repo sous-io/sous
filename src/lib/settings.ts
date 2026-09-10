@@ -166,6 +166,12 @@ export type Settings = {
   subscriptions?: Record<string, SubscriptionEntry>;
   /** Knobs for the machine-wide recipe store. */
   store?: StoreConfig;
+  /**
+   * Variable mapping records, keyed by environment variable name, each bound to
+   * one recipe variable written as `namespace/recipe/variableName` with an
+   * optional `repo:` qualifier. The top rung of the answer resolution ladder.
+   */
+  varMappings?: Record<string, string>;
 };
 
 // --- Loader -------------------------------------------------------------------------------------

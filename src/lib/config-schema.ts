@@ -154,6 +154,22 @@ const storeSchema = z
   })
   .strict();
 
+// --- Variable mappings --------------------------------------------------------------------------
+
+/**
+ * A mapping record's target: one variable, named in full, as
+ * `namespace/recipe/variableName` with an optional `repo:` qualifier. Mapping
+ * records are the top rung of the answer resolution ladder and the universal
+ * resolver when two recipes want the same environment variable name.
+ */
+const mappingTargetSchema = z
+  .string()
+  .regex(
+    /^([a-z][a-z0-9-]*:)?[a-z][a-z0-9-]*\/[a-z][a-z0-9-]*\/[a-z][a-zA-Z0-9]*$/,
+    "a variable mapping target must be written as 'namespace/recipe/variableName', " +
+      "optionally qualified with a repository as 'repo:namespace/recipe/variableName'"
+  );
+
 /**
  * The full merged-config schema. `version`, when present, must be exactly
  * `SUPPORTED_CONFIG_VERSION` — but validateSettings pre-checks it with a clearer
@@ -168,6 +184,10 @@ export const settingsSchema = z
     // as reserved and never flag it, so rejecting it here would break the
     // documented workflow. sous itself ignores the value.
     $schema: z.string().optional(),
+    // Allowed so a machine-written JSON layer can explain itself in a way that
+    // survives a JSON round trip (JSON has no comments). sous writes one into
+    // `conf.d/520-var-mappings.json`; the value is ignored.
+    $comment: z.string().optional(),
     version: z.literal(SUPPORTED_CONFIG_VERSION).optional(),
     _env: stringRecord.optional(),
     _vars: stringRecord.optional(),
@@ -207,6 +227,25 @@ export const settingsSchema = z
       .optional(),
     /** Knobs for the machine-wide recipe store. */
     store: storeSchema.optional(),
+    /**
+     * Variable mapping records, keyed by environment variable name. Each entry
+     * binds that name to one recipe variable, which is how an answer is stored
+     * under a name of your choosing when the generated names are taken. Written
+     * by `sous vars ask` into `conf.d/520-var-mappings.json`, and hand-writable
+     * in the primary config.
+     */
+    varMappings: z
+      .record(
+        z
+          .string()
+          .regex(
+            /^[A-Z][A-Z0-9_]*$/,
+            "an environment variable name must be upper snake case: a capital " +
+              "letter, then capitals, digits or underscores"
+          ),
+        mappingTargetSchema
+      )
+      .optional(),
   })
   .strict();
 
