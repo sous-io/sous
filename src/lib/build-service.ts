@@ -8,6 +8,8 @@ import { createProjectNamespaceResolver } from "./repos/locked-namespace-resolve
 import { CompilationService } from "./markdown-compiler.js";
 import type { CompilationConfig, CompilationTarget } from "./markdown-compiler.js";
 import { StateService } from "./state.js";
+import { isProtectedPath } from "./state.js";
+import { protectedRepoPaths } from "./repos/links.js";
 import { log } from "../utils/formatting.js";
 
 export type BuildOptions = {
@@ -38,6 +40,18 @@ export type BuildOptions = {
    */
   namespaceResolver?: NamespaceResolver;
 };
+
+/**
+ * The directories a build's deletions must never reach into, for the project the
+ * options describe. Empty when the caller gave no config context, which is the
+ * case only in tests that build a settings object by hand.
+ *
+ * @param options - The build options, for the config context.
+ */
+function protectedPathsFor(options: BuildOptions): string[] {
+  if (options.configContext === undefined) return [];
+  return protectedRepoPaths(options.configContext.sousDir);
+}
 
 /**
  * The namespace resolver a build should use: the one the caller supplied, or the
@@ -162,6 +176,7 @@ export class BuildService {
   async build(settings: Settings, options: BuildOptions = {}): Promise<boolean> {
     const rootScope = resolveRootScope(settings, options.configContext);
     const namespaceResolver = resolveNamespaceResolver(settings, options);
+    const protectedPaths = protectedPathsFor(options);
 
     const stateService = new StateService();
     const stateFilePath = resolveStateFilePath(settings, options.configContext);
@@ -175,7 +190,11 @@ export class BuildService {
     if (options.rebuild && !options.dryRun && !options.noCompile) {
       const existingState = await stateService.load(stateFilePath);
       if (existingState?.files.length) {
-        stateService.deleteTrackedFiles(existingState.files, existingState.dirs);
+        stateService.deleteTrackedFiles(
+          existingState.files,
+          existingState.dirs,
+          protectedPaths
+        );
       }
     }
 
@@ -239,6 +258,7 @@ export class BuildService {
     const state = await stateService.load(stateFilePath);
     if (!state || state.files.length === 0) return;
 
+    const protectedPaths = configContext ? protectedRepoPaths(configContext.sousDir) : [];
     const rootScope = resolveRootScope(settings, configContext);
     const config = resolveCompilation(settings, rootScope);
 
@@ -264,8 +284,11 @@ export class BuildService {
       return false;
     }
 
-    // Find files to prune
-    const toDelete = state.files.filter(f => !isCurrentOutput(f.dest));
+    // Find files to prune. Anything inside a linked checkout or the shared
+    // recipe store is never a prune candidate, whatever the state file says.
+    const toDelete = state.files.filter(
+      f => !isCurrentOutput(f.dest) && !isProtectedPath(f.dest, protectedPaths)
+    );
 
     if (dryRun) {
       for (const entry of toDelete) {
@@ -274,11 +297,12 @@ export class BuildService {
       return;
     }
 
-    stateService.deleteTrackedFiles(toDelete, state.dirs);
+    stateService.deleteTrackedFiles(toDelete, state.dirs, protectedPaths);
     for (const entry of toDelete) console.log(`  ✗ pruned: ${entry.dest}`);
 
     // Update state: remove pruned entries and any dirs that no longer exist
-    state.files = state.files.filter(f => isCurrentOutput(f.dest));
+    const deleted = new Set(toDelete.map(entry => entry.dest));
+    state.files = state.files.filter(f => !deleted.has(f.dest));
     state.dirs = state.dirs.filter(d => fs.existsSync(d));
     await stateService.save(stateFilePath, state);
   }

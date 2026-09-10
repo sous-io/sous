@@ -31,6 +31,29 @@ export type StateFile = {
   files: StateFileEntry[];
 };
 
+// --- Protected paths -----------------------------------------------------------------------------
+
+/**
+ * True when a path is one of the protected roots, or sits underneath one.
+ *
+ * Both sides are normalized and resolved first, so a state file written with a
+ * different spelling of the same directory is still recognised.
+ *
+ * isProtectedPath("/home/me/.sous/cache/r/n/x/1.0.0/a.md", ["/home/me/.sous/cache"]);
+ * // -> true
+ *
+ * @param target - The path something is about to delete.
+ * @param protectedRoots - The directories that must never be reached into.
+ */
+export function isProtectedPath(target: string, protectedRoots: string[]): boolean {
+  if (protectedRoots.length === 0) return false;
+  const candidate = path.resolve(target);
+  return protectedRoots.some((root) => {
+    const resolved = path.resolve(root);
+    return candidate === resolved || candidate.startsWith(resolved + path.sep);
+  });
+}
+
 // --- StateService --------------------------------------------------------------------------------
 
 /**
@@ -71,15 +94,30 @@ export class StateService {
     }
   }
 
-  /** Deletes all tracked files and removes any now-empty tracked directories. */
-  deleteTrackedFiles(files: StateFileEntry[], dirs: string[]): void {
+  /**
+   * Deletes all tracked files and removes any now-empty tracked directories.
+   *
+   * @param files - The tracked output files to delete.
+   * @param dirs - The directories Sous created, removed when they end up empty.
+   * @param protectedRoots - Directories nothing here may reach into, whatever the
+   *   state file says. Pass `protectedRepoPaths(sousDir)` so a stale entry can
+   *   never make prune or clear delete a linked checkout or the shared recipe
+   *   store.
+   */
+  deleteTrackedFiles(
+    files: StateFileEntry[],
+    dirs: string[],
+    protectedRoots: string[] = []
+  ): void {
     for (const entry of files) {
+      if (isProtectedPath(entry.dest, protectedRoots)) continue;
       if (fs.existsSync(entry.dest)) fs.rmSync(entry.dest);
     }
     const sortedDirs = [...dirs].sort(
       (a, b) => b.split(path.sep).length - a.split(path.sep).length
     );
     for (const dir of sortedDirs) {
+      if (isProtectedPath(dir, protectedRoots)) continue;
       if (fs.existsSync(dir) && fs.readdirSync(dir).length === 0) {
         fs.rmdirSync(dir);
       }

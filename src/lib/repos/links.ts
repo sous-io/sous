@@ -21,7 +21,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { ConfigError } from "../errors.js";
-import { resolveSousHome } from "../sous-home.js";
+import { resolveSousHome, resolveStoreRoot } from "../sous-home.js";
 import { LINKS_FILENAME } from "./formats/common.js";
 import {
   createEmptyLinksMap,
@@ -103,6 +103,27 @@ export function projectReposDir(sousDir: string): string {
  */
 export function globalReposDir(env: NodeJS.ProcessEnv = process.env): string {
   return path.join(resolveSousHomeDir(env), REPOS_DIRNAME);
+}
+
+/**
+ * The directories nothing sous deletes may ever reach into: the project's linked
+ * checkouts, the machine-wide linked checkouts, and the machine-wide recipe
+ * store.
+ *
+ * A linked checkout is somebody's working copy with unpushed edits in it, and
+ * the store is shared by every project on the machine, so a stale state entry
+ * pointing into either one must never turn `sous prune` or `sous clear` into a
+ * data loss. Prune and clear only ever touch paths recorded in the state file,
+ * which nothing here writes; this is the belt that survives a future bug.
+ *
+ * @param sousDir - The project's discovered `.sous/` directory.
+ * @param env - The environment to read.
+ */
+export function protectedRepoPaths(
+  sousDir: string,
+  env: NodeJS.ProcessEnv = process.env
+): string[] {
+  return [projectReposDir(sousDir), globalReposDir(env), resolveStoreRoot(env)];
 }
 
 // --- Reading ------------------------------------------------------------------------------------

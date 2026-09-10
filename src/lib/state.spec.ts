@@ -6,6 +6,7 @@ import {
   hashFile,
   recordDirCreation,
   didSousCreateDir,
+  isProtectedPath,
   StateService,
   type StateFile,
 } from "./state.js";
@@ -288,5 +289,107 @@ describe("StateService.save()", () => {
   it("should create parent directories if they do not exist", async () => {
     await service.save("/deep/nested/path/sous.state.json", emptyState());
     expect(vol.existsSync("/deep/nested/path")).toBe(true);
+  });
+});
+
+// ---- isProtectedPath ------------------------------------------------------------------------
+
+describe("isProtectedPath()", () => {
+  /**
+   * isProtectedPath() should return false when there are no protected roots, so
+   * a caller that passes none keeps the behaviour it always had.
+   *
+   * isProtectedPath("/proj/out.md", []); // -> false
+   */
+  it("should return false when no roots are protected", () => {
+    expect(isProtectedPath("/proj/out.md", [])).toBe(false);
+  });
+
+  /**
+   * isProtectedPath() should recognise a path that sits underneath a protected
+   * root, however deep, and the root directory itself.
+   *
+   * isProtectedPath("/home/me/.sous/cache/r/n/x/1.0.0/a.md", ["/home/me/.sous/cache"]);
+   * // -> true
+   */
+  it("should recognise a path inside a protected root", () => {
+    const roots = ["/home/me/.sous/cache", "/proj/.sous/repos"];
+    expect(isProtectedPath("/home/me/.sous/cache/r/n/x/1.0.0/a.md", roots)).toBe(true);
+    expect(isProtectedPath("/proj/.sous/repos", roots)).toBe(true);
+  });
+
+  /**
+   * isProtectedPath() should not treat a sibling whose name merely starts with a
+   * protected root's name as protected, since prefix matching on raw strings
+   * would otherwise protect the wrong directory.
+   *
+   * isProtectedPath("/proj/.sous/repos-backup/a.md", ["/proj/.sous/repos"]);
+   * // -> false
+   */
+  it("should not protect a sibling with a longer name", () => {
+    expect(isProtectedPath("/proj/.sous/repos-backup/a.md", ["/proj/.sous/repos"])).toBe(
+      false
+    );
+  });
+});
+
+// ---- StateService.deleteTrackedFiles --------------------------------------------------------
+
+describe("StateService.deleteTrackedFiles()", () => {
+  const service = new StateService();
+
+  /** A tracked file entry with only its destination filled in. */
+  const entry = (dest: string) => ({
+    dest,
+    srcHash: "",
+    destHash: "",
+    size: 0,
+    builtAt: "",
+  });
+
+  /**
+   * deleteTrackedFiles() should delete every tracked file it is given and then
+   * remove the tracked directories that ended up empty.
+   *
+   * deleteTrackedFiles([{ dest: "/out/a.md", ... }], ["/out"]);
+   * // -> both the file and the directory are gone
+   */
+  it("should delete tracked files and the directories they emptied", () => {
+    vol.fromJSON({ "/out/a.md": "written by sous" });
+
+    service.deleteTrackedFiles([entry("/out/a.md")], ["/out"]);
+
+    expect(vol.existsSync("/out/a.md")).toBe(false);
+    expect(vol.existsSync("/out")).toBe(false);
+  });
+
+  /**
+   * deleteTrackedFiles() should refuse to touch anything inside a protected
+   * root, so a stale state entry pointing at a linked checkout or at the shared
+   * recipe store can never turn a prune or a clear into data loss.
+   *
+   * deleteTrackedFiles(entries, dirs, ["/proj/.sous/repos", "/home/me/.sous/cache"]);
+   * // -> only the ordinary output is deleted
+   */
+  it("should never delete anything inside a protected root", () => {
+    vol.fromJSON({
+      "/proj/.sous/repos/checkout/a.md": "somebody's working copy",
+      "/home/me/.sous/cache/r/n/x/1.0.0/b.md": "a shared store entry",
+      "/out/c.md": "an ordinary output",
+    });
+
+    service.deleteTrackedFiles(
+      [
+        entry("/proj/.sous/repos/checkout/a.md"),
+        entry("/home/me/.sous/cache/r/n/x/1.0.0/b.md"),
+        entry("/out/c.md"),
+      ],
+      ["/proj/.sous/repos/checkout", "/out"],
+      ["/proj/.sous/repos", "/home/me/.sous/cache"]
+    );
+
+    expect(vol.existsSync("/proj/.sous/repos/checkout/a.md")).toBe(true);
+    expect(vol.existsSync("/home/me/.sous/cache/r/n/x/1.0.0/b.md")).toBe(true);
+    expect(vol.existsSync("/out/c.md")).toBe(false);
   });
 });

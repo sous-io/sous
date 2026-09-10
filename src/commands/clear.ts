@@ -3,7 +3,8 @@ import { confirm } from "@inquirer/prompts";
 import fs from "node:fs";
 import { BaseCommand } from "../base-command.js";
 import { resolveStateFilePath } from "../lib/build-service.js";
-import { StateService } from "../lib/state.js";
+import { isProtectedPath, StateService } from "../lib/state.js";
+import { protectedRepoPaths } from "../lib/repos/links.js";
 import { displayError, footer, heading, log, showCommandVars } from "../utils/formatting.js";
 
 export default class Clear extends BaseCommand {
@@ -40,7 +41,15 @@ export default class Clear extends BaseCommand {
 
     showCommandVars({ Project: this.projectLabel, Config: this.configContext.configPath });
 
-    const fileCount = state!.files.length;
+    // A linked checkout holds somebody's unpushed edits and the recipe store is
+    // shared by every project on this machine, so neither is ever clearable,
+    // whatever a stale state entry claims.
+    const protectedPaths = protectedRepoPaths(this.configContext.sousDir);
+    const clearable = state!.files.filter(
+      (entry) => !isProtectedPath(entry.dest, protectedPaths)
+    );
+
+    const fileCount = clearable.length;
     const dirCount = state!.dirs.length;
 
     if (!flags.force) {
@@ -56,8 +65,8 @@ export default class Clear extends BaseCommand {
 
     heading("Clearing");
 
-    stateService.deleteTrackedFiles(state!.files, state!.dirs);
-    for (const entry of state!.files) log(`  ✗ ${entry.dest}`);
+    stateService.deleteTrackedFiles(clearable, state!.dirs, protectedPaths);
+    for (const entry of clearable) log(`  ✗ ${entry.dest}`);
 
     // Delete state file itself
     if (fs.existsSync(stateFilePath)) {
