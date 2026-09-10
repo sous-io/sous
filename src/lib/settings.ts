@@ -82,6 +82,53 @@ type RawProjectCompilation = {
   targets: RawTarget[];
 };
 
+/**
+ * One trusted repository, keyed in `Settings.repos` by the short name refs use
+ * in their `repo:` qualifier. Adding a repo is what trusts it.
+ */
+type RepoEntry = {
+  /** Where the repository lives. */
+  url: string;
+  /** Which provider handles it. Inferred from the URL when omitted. */
+  provider?: "github" | "gitlab";
+  /** Install a newer in-range version whenever one exists, rather than holding the lock. */
+  alwaysPull?: boolean;
+  /** When the repo was added. */
+  addedAt?: string;
+  /** Who required it: "user", or the ref of the recipe whose dependency pulled it in. */
+  addedBy?: string;
+};
+
+/**
+ * One subscription, keyed in `Settings.subscriptions` by a ref key: a bare
+ * namespace, or `namespace/recipe`.
+ */
+type SubscriptionEntry = {
+  /** The semantic version range to resolve within. Defaults to "*". */
+  range?: string;
+  /** Let prerelease versions take part in range matching. */
+  prerelease?: boolean;
+  /** Per-subscription form of the repo-level always-pull flag. */
+  alwaysPull?: boolean;
+  /** When the subscription was added. */
+  addedAt?: string;
+  /** Who required it: "user", or the ref of the recipe that co-subscribed it. */
+  addedBy?: string;
+};
+
+/**
+ * Knobs for the machine-wide recipe store. Defaults are applied by the store
+ * itself, not here; see config-schema.ts for the values sous ships.
+ */
+type StoreConfig = {
+  /** Size cap, past which least-recently-used entries are collected. */
+  maxBytes?: number;
+  /** How long a fetched index stays fresh before sous re-checks upstream. */
+  freshnessSeconds?: number;
+  /** How often watch mode polls upstream. */
+  watchPollSeconds?: number;
+};
+
 /** Configuration for a launchable tool (e.g. claude, codex). */
 type ToolConfig = {
   /** The executable command to run. */
@@ -112,6 +159,12 @@ export type Settings = {
   compilation?: RawProjectCompilation;
   runtimeContext?: RawRuntimeContext;
   tools?: Record<string, ToolConfig>;
+  /** Trusted repositories, keyed by the short name refs use. */
+  repos?: Record<string, RepoEntry>;
+  /** Subscriptions, keyed by ref key (`namespace` or `namespace/recipe`). */
+  subscriptions?: Record<string, SubscriptionEntry>;
+  /** Knobs for the machine-wide recipe store. */
+  store?: StoreConfig;
 };
 
 // --- Loader -------------------------------------------------------------------------------------

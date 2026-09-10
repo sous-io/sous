@@ -19,6 +19,8 @@
 
 import { z } from "zod";
 import { ConfigError } from "./errors.js";
+import { semverRangeSchema } from "./repos/formats/common.js";
+import { REF_KEY_PATTERN, REPO_NAME_PATTERN } from "./repos/formats/patterns.js";
 import type { Settings } from "./settings.js";
 
 /** The only config version this sous understands. */
@@ -75,6 +77,83 @@ const toolSchema = z
   })
   .strict();
 
+// --- Repositories -------------------------------------------------------------------------------
+
+/**
+ * One trusted repository, keyed by the short name refs use in the `repo:`
+ * qualifier. Adding a repo IS trusting it: `sous repo add` writes the entry
+ * into the machine-written `conf.d/500-repos.json` layer, and removing the
+ * entry withdraws the trust. A user may also hand-write `repos:` in the primary
+ * config; the two layers merge like anything else.
+ */
+const repoEntrySchema = z
+  .object({
+    /** Where the repository lives. */
+    url: z.url(),
+    /**
+     * Which provider handles it. Inferred from the URL when omitted; set it
+     * explicitly for a self-hosted instance the URL does not give away.
+     */
+    provider: z.enum(["github", "gitlab"]).optional(),
+    /**
+     * When true, sous installs a newer in-range version whenever one exists
+     * rather than holding the locked one. The flag never widens the range a
+     * subscription or a dependency declared.
+     */
+    alwaysPull: z.boolean().optional(),
+    /** When the repo was added, for provenance. */
+    addedAt: z.string().optional(),
+    /**
+     * Who required the repo: the literal "user" for a deliberate add, or the ref
+     * of the recipe whose dependency pulled it in. Removal hygiene reads this.
+     */
+    addedBy: z.string().optional(),
+  })
+  .strict();
+
+/**
+ * One subscription, keyed by a ref key: a bare namespace (every recipe in it,
+ * including ones published later) or `namespace/recipe`. Written by
+ * `sous subscribe` into the machine-written `conf.d/510-subscriptions.json`
+ * layer, and hand-writable in the primary config.
+ */
+const subscriptionEntrySchema = z
+  .object({
+    /** The semantic version range to resolve within. Defaults to "*". */
+    range: semverRangeSchema.optional(),
+    /** When true, prerelease versions take part in range matching. */
+    prerelease: z.boolean().optional(),
+    /** Per-subscription form of the repo-level always-pull flag. */
+    alwaysPull: z.boolean().optional(),
+    /** When the subscription was added, for provenance. */
+    addedAt: z.string().optional(),
+    /** Who required it: "user", or the ref of the recipe that co-subscribed it. */
+    addedBy: z.string().optional(),
+  })
+  .strict();
+
+/**
+ * Knobs for the machine-wide recipe store under the user-level sous directory.
+ * Every value here is a number the user can change; the numbers sous ships are
+ * defaults, not assumptions. Phase 2 applies them, so all three are optional
+ * here and the defaults live with the store itself: one gigabyte for maxBytes,
+ * 300 seconds for freshnessSeconds, and 300 seconds for watchPollSeconds.
+ */
+const storeSchema = z
+  .object({
+    /** Size cap for the store, past which least-recently-used entries are collected. */
+    maxBytes: z.number().int().positive().optional(),
+    /**
+     * How long a fetched index stays fresh. A non-watch build checks upstream
+     * only once this window has lapsed, and a failed check never breaks a
+     * build; the last good answer stands.
+     */
+    freshnessSeconds: z.number().int().nonnegative().optional(),
+    /** How often watch mode polls upstream for a newer in-range version. */
+    watchPollSeconds: z.number().int().nonnegative().optional(),
+  })
+  .strict();
+
 /**
  * The full merged-config schema. `version`, when present, must be exactly
  * `SUPPORTED_CONFIG_VERSION` — but validateSettings pre-checks it with a clearer
@@ -99,6 +178,35 @@ export const settingsSchema = z
     compilation: compilationSchema.optional(),
     runtimeContext: runtimeContextSchema.optional(),
     tools: z.record(z.string(), toolSchema).optional(),
+    /** Trusted repositories, keyed by the short name refs use. */
+    repos: z
+      .record(
+        z
+          .string()
+          .regex(
+            REPO_NAME_PATTERN,
+            "a repo name must be lowercase kebab-case: a letter, then letters, " +
+              "digits or hyphens"
+          ),
+        repoEntrySchema
+      )
+      .optional(),
+    /** Subscriptions, keyed by ref key (`namespace` or `namespace/recipe`). */
+    subscriptions: z
+      .record(
+        z
+          .string()
+          .regex(
+            REF_KEY_PATTERN,
+            "a subscription key must be a namespace such as 'workflow', or a " +
+              "namespace and recipe such as 'workflow/task-files', with no repo " +
+              "qualifier and no version range"
+          ),
+        subscriptionEntrySchema
+      )
+      .optional(),
+    /** Knobs for the machine-wide recipe store. */
+    store: storeSchema.optional(),
   })
   .strict();
 
@@ -128,6 +236,12 @@ function formatZodError(error: z.ZodError, configPath: string): ConfigError {
       lines.push(
         `  - unknown key(s) ${keys} ${loc} — likely a typo. Check ${configPath}.`
       );
+    } else if (issue.code === "invalid_key") {
+      // zod reports a bad record KEY as a bare "Invalid key in record" and hides
+      // the reason in a nested issue list. Surface the reason, since that is the
+      // part telling the user how to fix the key.
+      const reasons = issue.issues.map((inner) => inner.message).join("; ");
+      lines.push(`  - ${where}: invalid key; ${reasons}`);
     } else {
       lines.push(`  - ${where.length > 0 ? where : "(root)"}: ${issue.message}`);
     }

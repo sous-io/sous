@@ -194,6 +194,91 @@
         ],
         "additionalProperties": false
       }
+    },
+    "repos": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "github",
+              "gitlab"
+            ]
+          },
+          "alwaysPull": {
+            "type": "boolean"
+          },
+          "addedAt": {
+            "type": "string"
+          },
+          "addedBy": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "subscriptions": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*(\\/[a-z][a-z0-9-]*)?$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "range": {
+            "type": "string"
+          },
+          "prerelease": {
+            "type": "boolean"
+          },
+          "alwaysPull": {
+            "type": "boolean"
+          },
+          "addedAt": {
+            "type": "string"
+          },
+          "addedBy": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "store": {
+      "type": "object",
+      "properties": {
+        "maxBytes": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "freshnessSeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "watchPollSeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false,
