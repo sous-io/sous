@@ -294,6 +294,12 @@ A recipe entry holds `path`, an optional `description`, and `versions`: a map fr
 version to `{ hash, tag, prerelease, releasedAt? }`. Every recipe needs at least one version,
 and its namespace must be one the index declares.
 
+A version's `tag` must be exactly `<namespace>/<recipe>@<version>` for the entry it sits under,
+and an index that says otherwise is refused when it is read. The tag is what the provider
+fetches, so an index publishing `1.0.0` with `tag: "main"` would point a pinned version at a
+branch: the content behind it changes on every push and the pinned hash then simply starts
+failing, with nothing on the consumer's side able to say why.
+
 Content hashes are written as `sha256-` followed by 64 lowercase hexadecimal characters. The
 hash of a version is checked after every fetch, and against the lockfile before a cached copy is
 used.

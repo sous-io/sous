@@ -29,7 +29,11 @@ import {
 export const indexVersionSchema = z.strictObject({
   /** Content hash of the recipe folder at this version, verified after every fetch. */
   hash: contentHashSchema,
-  /** The git tag carrying this version, shaped `namespace/recipe@version`. */
+  /**
+   * The git tag carrying this version, shaped `namespace/recipe@version`. The
+   * index's `superRefine` checks it against the key and version it sits under,
+   * so a version can never point at a branch or at another recipe's tag.
+   */
   tag: z.string().min(1, "must not be empty"),
   /** True when the version is a prerelease, which ranges skip unless opted in. */
   prerelease: z.boolean(),
@@ -92,6 +96,27 @@ export const indexFileSchema = z
           message:
             `belongs to the namespace '${namespace}', which this index does not ` +
             `declare under 'namespaces'`,
+        });
+      }
+    }
+
+    // A version's tag is what the provider fetches, so a tag that does not
+    // name this exact recipe and version is a version pointing somewhere else.
+    // Nothing on the consumer side could otherwise tell: an index publishing
+    // `1.0.0` with `tag: "main"` would hand `git clone --branch main` a moving
+    // target, whose content changes on every push and whose pinned hash then
+    // simply starts failing. Sous writes these tags itself, so requiring the
+    // shape it writes costs a correct index nothing.
+    for (const [key, recipe] of Object.entries(index.recipes)) {
+      for (const [version, published] of Object.entries(recipe.versions)) {
+        const expected = `${key}@${version}`;
+        if (published.tag === expected) continue;
+        ctx.addIssue({
+          code: "custom",
+          path: ["recipes", key, "versions", version, "tag"],
+          message:
+            `is '${published.tag}', but a published version's tag names the recipe and ` +
+            `the version it carries, so this one must be '${expected}'`,
         });
       }
     }

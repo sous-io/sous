@@ -139,7 +139,11 @@ describe("seedCoreRecipe()", () => {
         [CORE_RECIPE_KEY]: {
           path: "recipes/core/sous-skills",
           versions: {
-            "9.9.9": { hash: `sha256-${"a".repeat(64)}`, tag: "t", prerelease: false },
+            "9.9.9": {
+              hash: `sha256-${"a".repeat(64)}`,
+              tag: `${CORE_RECIPE_KEY}@9.9.9`,
+              prerelease: false,
+            },
           },
         },
       },

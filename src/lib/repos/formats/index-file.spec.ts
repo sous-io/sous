@@ -118,6 +118,52 @@ describe("parseIndexFile()", () => {
   });
 
   /**
+   * A version's tag is what the provider actually fetches, so an index
+   * publishing a "version" whose tag is a branch name hands `git clone
+   * --branch` a moving target: the content behind the pin changes on every
+   * push and the pinned hash simply starts failing. The tag has to name the
+   * recipe and the version it sits under.
+   *
+   * { "workflow/task-files": { versions: { "1.0.0": { tag: "main" } } } }
+   * // -> rejected, naming 'workflow/task-files@1.0.0'
+   */
+  it("should reject a version whose tag does not name that recipe and version", () => {
+    const index = validIndex();
+    const message = expectRejectMessage({
+      ...index,
+      recipes: {
+        "workflow/task-files": {
+          ...index.recipes["workflow/task-files"],
+          versions: {
+            "1.0.0": { hash: HASH, tag: "main", prerelease: false },
+          },
+        },
+      },
+    });
+    expect(message).toContain("workflow/task-files@1.0.0");
+  });
+
+  /**
+   * The same check catches a tag borrowed from another recipe in the same
+   * repository, which would install the wrong files under the right name.
+   */
+  it("should reject a version tagged with another recipe's tag", () => {
+    const index = validIndex();
+    const message = expectRejectMessage({
+      ...index,
+      recipes: {
+        "workflow/task-files": {
+          ...index.recipes["workflow/task-files"],
+          versions: {
+            "1.0.0": { hash: HASH, tag: "core/sous-skills@1.0.0", prerelease: false },
+          },
+        },
+      },
+    });
+    expect(message).toContain("workflow/task-files@1.0.0");
+  });
+
+  /**
    * A recipe with no published versions is not usable and signals a broken
    * release.
    */
