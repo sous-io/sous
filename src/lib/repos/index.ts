@@ -41,3 +41,9 @@ export * from "./managed-layer.js";
 export * from "./trust.js";
 export * from "./lock-service.js";
 export * from "./freshness.js";
+
+// Phase 3: the consumer surface. Where a locked recipe's files are, the
+// namespace resolver and compile targets built from that, and the service the
+// `repo`, `subscribe` and `unsubscribe` commands drive.
+export * from "./locked-recipes.js";
+export * from "./locked-namespace-resolver.js";

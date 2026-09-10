@@ -3,6 +3,7 @@ import { BaseCommand } from "../base-command.js";
 import { CompilationService } from "../lib/markdown-compiler.js";
 import { resolveCompilation, resolveRootScope } from "../lib/settings.js";
 import { resolveStateFilePath } from "../lib/build-service.js";
+import { createProjectNamespaceResolver } from "../lib/repos/locked-namespace-resolver.js";
 import { buildReloadWatchConfig, startConfigReloadWatch } from "../lib/watch-loop.js";
 import { WatchService } from "../lib/watch-service.js";
 import { displayError, footer, heading, showCommandVars } from "../utils/formatting.js";
@@ -61,13 +62,24 @@ export default class Compile extends BaseCommand {
 
     heading("Compiling");
 
+    // Rebuilt on every compile rather than captured once: a watch-mode reload
+    // may follow a subscribe, and the lockfile is what this reads.
+    const namespaceResolver = () =>
+      createProjectNamespaceResolver({
+        sousDir: this.configContext.sousDir,
+        settings: this.settings,
+      });
+
     const compilerOptions = {
       strict: flags.strict,
       rebuild: flags.rebuild,
       dryRun: flags["dry-run"],
     };
 
-    const compiler = new CompilationService(compilerOptions);
+    const compiler = new CompilationService({
+      ...compilerOptions,
+      namespaceResolver: namespaceResolver(),
+    });
     const success = await compiler.compile(config!, stateFilePath);
 
     footer();
@@ -94,7 +106,10 @@ export default class Compile extends BaseCommand {
         }
         const currentStateFilePath = resolveStateFilePath(this.settings, this.configContext);
         heading("Recompiling");
-        const recompiler = new CompilationService(compilerOptions);
+        const recompiler = new CompilationService({
+          ...compilerOptions,
+          namespaceResolver: namespaceResolver(),
+        });
         await recompiler.compile(currentConfig, currentStateFilePath);
         footer();
       };

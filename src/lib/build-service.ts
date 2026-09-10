@@ -4,6 +4,7 @@ import type { ConfigContext, Settings } from "./settings.js";
 import { resolveCompilation, resolveRootScope } from "./settings.js";
 import { resolveIncludeCandidates } from "./include-resolver.js";
 import type { NamespaceResolver } from "./repos/namespace-resolver.js";
+import { createProjectNamespaceResolver } from "./repos/locked-namespace-resolver.js";
 import { CompilationService } from "./markdown-compiler.js";
 import type { CompilationConfig, CompilationTarget } from "./markdown-compiler.js";
 import { StateService } from "./state.js";
@@ -30,9 +31,34 @@ export type BuildOptions = {
    * Resolves `~namespace` include and render paths against recipe namespaces.
    * Passed straight through to the compiler and to the include-graph walk, so a
    * partial rebuild follows namespace includes too.
+   *
+   * When it is omitted and `configContext` is given, the build builds the
+   * project's own resolver from its lockfile, links map and store. Pass one
+   * explicitly to override that, which is what tests do.
    */
   namespaceResolver?: NamespaceResolver;
 };
+
+/**
+ * The namespace resolver a build should use: the one the caller supplied, or the
+ * project's own, built from its lockfile. A project that locks no recipes gets
+ * undefined, which leaves `~` in an include line meaning an alias and nothing
+ * else.
+ *
+ * @param settings - The merged project config.
+ * @param options - The build options, for the config context and any override.
+ */
+function resolveNamespaceResolver(
+  settings: Settings,
+  options: BuildOptions
+): NamespaceResolver | undefined {
+  if (options.namespaceResolver !== undefined) return options.namespaceResolver;
+  if (options.configContext === undefined) return undefined;
+  return createProjectNamespaceResolver({
+    sousDir: options.configContext.sousDir,
+    settings,
+  });
+}
 
 /**
  * Recursively collects all file paths reachable from `filePath` via @include chains.
@@ -135,6 +161,7 @@ export class BuildService {
    */
   async build(settings: Settings, options: BuildOptions = {}): Promise<boolean> {
     const rootScope = resolveRootScope(settings, options.configContext);
+    const namespaceResolver = resolveNamespaceResolver(settings, options);
 
     const stateService = new StateService();
     const stateFilePath = resolveStateFilePath(settings, options.configContext);
@@ -162,7 +189,7 @@ export class BuildService {
           const affectedTargets = findAffectedTargets(
             options.changedFile,
             config,
-            options.namespaceResolver
+            namespaceResolver
           );
           if (affectedTargets.length === 0) {
             log(`  ⊘ No targets affected by change to ${options.changedFile} — skipping compilation`);
@@ -172,7 +199,7 @@ export class BuildService {
               strict: options.strict,
               rebuild: options.rebuild,
               dryRun: options.dryRun,
-              namespaceResolver: options.namespaceResolver,
+              namespaceResolver,
             });
             const compileOk = await compiler.compile(effectiveConfig, stateFilePath);
             if (!compileOk) success = false;
@@ -182,7 +209,7 @@ export class BuildService {
             strict: options.strict,
             rebuild: options.rebuild,
             dryRun: options.dryRun,
-            namespaceResolver: options.namespaceResolver,
+            namespaceResolver,
           });
           const compileOk = await compiler.compile(effectiveConfig, stateFilePath);
           if (!compileOk) success = false;
