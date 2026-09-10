@@ -181,6 +181,11 @@ export function mappedNamesFor(
  * their arrays by concatenation; rewriting the whole object is the only way to
  * keep one record per environment variable.
  *
+ * The replacement stages to a temporary name and renames over the layer, like
+ * every other file sous writes for a machine. A layer truncated by an interrupt
+ * would fail to parse and break every later command until someone deleted it by
+ * hand; a rename either happens or does not, so the previous layer survives.
+ *
  * @param confDir - The project's `conf.d/` directory (`configContext.confDir`).
  * @param envName - The environment variable the answer is stored under.
  * @param target - The variable the name is bound to.
@@ -200,11 +205,22 @@ export function writeMappingRecord(
   const varMappings: Record<string, string> = { ...existing, [envName]: rendered };
 
   fs.mkdirSync(confDir, { recursive: true });
-  fs.writeFileSync(
-    filePath,
-    stableJsonStringify({ $comment: VAR_MAPPINGS_COMMENT, varMappings }),
-    "utf8"
+  const body = stableJsonStringify({ $comment: VAR_MAPPINGS_COMMENT, varMappings });
+  const temporary = path.join(
+    confDir,
+    `.${VAR_MAPPINGS_LAYER_FILENAME}.tmp-${process.pid}`
   );
+  try {
+    fs.writeFileSync(temporary, body, "utf8");
+    fs.renameSync(temporary, filePath);
+  } catch (error) {
+    fs.rmSync(temporary, { force: true });
+    throw new ConfigError(
+      `Sous could not write its variable mapping layer at ${filePath}.\n  ` +
+        `${(error as Error).message}`
+    );
+  }
+
   return filePath;
 }
 

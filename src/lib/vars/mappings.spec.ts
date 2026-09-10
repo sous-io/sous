@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeTmpDir, type TmpDir } from "../../test/utils/tmp.js";
+import { ConfigError } from "../errors.js";
 import type { DefinedVariable } from "./definition-source.js";
 import {
   formatMappingTarget,
@@ -151,6 +152,37 @@ describe("writeMappingRecord()", () => {
       FIRST_NAME: "misc/stuff/apiUrl",
       SECOND_NAME: "misc/other/apiUrl",
     });
+  });
+
+  /**
+   * The layer is staged to a temporary name and renamed over the previous one,
+   * so a write that fails part way through leaves the previous layer intact
+   * rather than a truncated file that breaks every later command. The failure
+   * is simulated by making the rename fail.
+   *
+   * writeMappingRecord(confDir, "SECOND_NAME", ...);  // rename fails
+   * // -> throws; the file still holds only FIRST_NAME, and no scratch file is left
+   */
+  it("should leave the previous layer intact when a mapping-record write is interrupted", () => {
+    const confDir = path.join(tmp.path, "conf.d");
+    const filePath = path.join(confDir, VAR_MAPPINGS_LAYER_FILENAME);
+    writeMappingRecord(confDir, "FIRST_NAME", "misc/stuff/apiUrl");
+    const before = fs.readFileSync(filePath, "utf8");
+
+    const rename = vi.spyOn(fs, "renameSync").mockImplementation(() => {
+      throw new Error("interrupted");
+    });
+    try {
+      expect(() => writeMappingRecord(confDir, "SECOND_NAME", "misc/other/apiUrl")).toThrow(
+        ConfigError
+      );
+    } finally {
+      rename.mockRestore();
+    }
+
+    expect(fs.readFileSync(filePath, "utf8")).toBe(before);
+    expect(readMappingRecords(filePath)).toEqual({ FIRST_NAME: "misc/stuff/apiUrl" });
+    expect(fs.readdirSync(confDir)).toEqual([VAR_MAPPINGS_LAYER_FILENAME]);
   });
 
   /**
