@@ -41,14 +41,18 @@ function linksWith(entries: Record<string, string>): LinksMap {
 describe("resolveSousHomeDir()", () => {
   /**
    * resolveSousHomeDir should honour SOUS_HOME when it is set to something
-   * other than whitespace, and fall back to `~/.sous` otherwise.
+   * other than whitespace, and fall back to the operating system's own home
+   * directory otherwise. The fallback comes from the operating system rather
+   * than from a HOME entry in the environment that was passed in, because this
+   * function is a thin alias of resolveSousHome in src/lib/sous-home.ts, the one
+   * definition the store, the links maps and the sousHome variable all share.
    *
    * resolveSousHomeDir({ SOUS_HOME: "/opt/sous" }); // -> "/opt/sous"
-   * resolveSousHomeDir({ HOME: "/home/me" });       // -> "/home/me/.sous"
+   * resolveSousHomeDir({});                         // -> "<os.homedir()>/.sous"
    */
   it("should use SOUS_HOME when set, and ~/.sous otherwise", () => {
     expect(resolveSousHomeDir({ SOUS_HOME: "/opt/sous" })).toBe("/opt/sous");
-    expect(resolveSousHomeDir({ HOME: "/home/me" })).toBe(path.join("/home/me", ".sous"));
+    expect(resolveSousHomeDir({})).toBe(path.join(os.homedir(), ".sous"));
   });
 
   /**
@@ -56,27 +60,23 @@ describe("resolveSousHomeDir()", () => {
    * unset, the way every other sous environment variable is treated, so a bare
    * `export SOUS_HOME=` never turns the working directory into the store.
    *
-   * resolveSousHomeDir({ SOUS_HOME: "   ", HOME: "/home/me" }); // -> "/home/me/.sous"
+   * resolveSousHomeDir({ SOUS_HOME: "   " }); // -> "<os.homedir()>/.sous"
    */
   it("should treat a blank SOUS_HOME as unset", () => {
-    expect(resolveSousHomeDir({ SOUS_HOME: "   ", HOME: "/home/me" })).toBe(
-      path.join("/home/me", ".sous")
-    );
-    expect(resolveSousHomeDir({ SOUS_HOME: "", HOME: "/home/me" })).toBe(
-      path.join("/home/me", ".sous")
-    );
+    expect(resolveSousHomeDir({ SOUS_HOME: "   " })).toBe(path.join(os.homedir(), ".sous"));
+    expect(resolveSousHomeDir({ SOUS_HOME: "" })).toBe(path.join(os.homedir(), ".sous"));
   });
 
   /**
    * resolveSousHomeDir should expand a leading tilde in SOUS_HOME, so a value
    * set in an env file behaves the way it reads.
    *
-   * resolveSousHomeDir({ SOUS_HOME: "~/elsewhere", HOME: "/home/me" });
-   * // -> "/home/me/elsewhere"
+   * resolveSousHomeDir({ SOUS_HOME: "~/elsewhere" });
+   * // -> "<os.homedir()>/elsewhere"
    */
   it("should expand a leading tilde in SOUS_HOME", () => {
-    expect(resolveSousHomeDir({ SOUS_HOME: "~/elsewhere", HOME: "/home/me" })).toBe(
-      path.join("/home/me", "elsewhere")
+    expect(resolveSousHomeDir({ SOUS_HOME: "~/elsewhere" })).toBe(
+      path.join(os.homedir(), "elsewhere")
     );
   });
 
@@ -407,9 +407,9 @@ describe("ensureReposIgnoreFiles()", () => {
 
 describe("resolveSousHomeDir() without an environment", () => {
   /**
-   * With neither SOUS_HOME nor HOME set, resolveSousHomeDir should still return
-   * an absolute path, falling back to the operating system's own idea of the
-   * home directory.
+   * With no SOUS_HOME set, resolveSousHomeDir should still return an absolute
+   * path, falling back to the operating system's own idea of the home
+   * directory.
    *
    * resolveSousHomeDir({}); // -> "<os.homedir()>/.sous"
    */

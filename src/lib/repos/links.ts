@@ -19,9 +19,9 @@
  */
 
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { ConfigError } from "../errors.js";
+import { resolveSousHome } from "../sous-home.js";
 import { LINKS_FILENAME } from "./formats/common.js";
 import {
   createEmptyLinksMap,
@@ -57,20 +57,15 @@ export const IGNORE_BLOCK_ENTRIES = [
 // --- Locations ----------------------------------------------------------------------------------
 
 /**
- * The user-level sous directory: `$SOUS_HOME` when it is set to something other
- * than whitespace, and `~/.sous` otherwise. A leading `~` is expanded, so a
- * `SOUS_HOME=~/elsewhere` line in an env file behaves the way it reads.
- *
- * TODO(gh-4 integration): replace with resolveSousHome from src/lib/sous-home.ts
+ * The user-level sous directory, re-exported under the name this module has
+ * always used. The one definition lives in `src/lib/sous-home.ts`, so the store,
+ * the links maps and the auto-injected `${sousHome}` variable can never disagree
+ * about where it is.
  *
  * @param env - The environment to read, so tests need not mutate the real one.
  */
 export function resolveSousHomeDir(env: NodeJS.ProcessEnv = process.env): string {
-  const configured = env.SOUS_HOME;
-  if (configured !== undefined && configured.trim() !== "") {
-    return path.resolve(expandTilde(configured.trim(), env));
-  }
-  return path.join(env.HOME !== undefined && env.HOME !== "" ? env.HOME : os.homedir(), ".sous");
+  return resolveSousHome(env);
 }
 
 /**
@@ -328,12 +323,4 @@ function writeIfChanged(filePath: string, contents: string): void {
   if (fs.existsSync(filePath) && fs.readFileSync(filePath, "utf8") === contents) return;
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, contents, "utf8");
-}
-
-/** Expands a leading `~` against the given environment's HOME. */
-function expandTilde(value: string, env: NodeJS.ProcessEnv): string {
-  const home = env.HOME !== undefined && env.HOME !== "" ? env.HOME : os.homedir();
-  if (value === "~") return home;
-  if (value.startsWith("~/")) return path.join(home, value.slice(2));
-  return value;
 }
