@@ -25,3 +25,10 @@ export * from "./store/contract.js";
 export * from "./store/hash.js";
 export * from "./store/recipe-store.js";
 export * from "./store/settings.js";
+
+// Phase 6a: the CLI surface for editable checkouts (`sous repo init`, `link`,
+// `unlink`). The links map and its ignore hygiene, the thin git layer both of
+// them use, and the scaffold that `repo init` writes.
+export * from "./links.js";
+export * from "./git-clone.js";
+export * from "./scaffold/index.js";

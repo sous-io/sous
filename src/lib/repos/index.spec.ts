@@ -112,6 +112,54 @@ const EXPECTED_EXPORTS = [
   "resolveStoreSettings",
 ];
 
+/**
+ * The names Phase 6a added: the links map and its ignore hygiene, the git layer
+ * `sous repo link` uses, and the scaffold `sous repo init` writes. Kept as its
+ * own list so each phase's additions stay legible next to the surface that was
+ * there before it.
+ */
+const PHASE_6A_EXPORTS = [
+  "EXAMPLE_RECIPE_NAME",
+  "IGNORE_BLOCK_END",
+  "IGNORE_BLOCK_ENTRIES",
+  "IGNORE_BLOCK_START",
+  "REPOS_DIRNAME",
+  "applyManagedIgnoreBlock",
+  "buildExampleSkill",
+  "buildGitignore",
+  "buildIndexFile",
+  "buildReadme",
+  "buildRecipeManifest",
+  "buildReleaseWorkflow",
+  "buildRepoManifest",
+  "cloneRepo",
+  "describeLinkedRepos",
+  "ensureReposIgnoreFiles",
+  "exampleRecipePath",
+  "globalLinksPath",
+  "globalReposDir",
+  "isGitCheckout",
+  "linkedPathFor",
+  "looksLikeRepoUrl",
+  "normalizeRemoteUrl",
+  "projectLinksPath",
+  "projectReposDir",
+  "readEffectiveLinks",
+  "readGlobalLinks",
+  "readLinksFile",
+  "readProjectLinks",
+  "remoteUrlOf",
+  "repoNameFromUrl",
+  "repoSlugFromUrl",
+  "resolveSousHomeDir",
+  "runGit",
+  "sameRemote",
+  "scaffoldRepo",
+  "writeGlobalLinks",
+  "writeLinksFile",
+  "writeProjectLinks",
+];
+
 describe("the repos barrel", () => {
   /**
    * The barrel exposes exactly the documented surface: nothing missing, and
@@ -120,7 +168,8 @@ describe("the repos barrel", () => {
    * Object.keys(repos).sort();  // -> EXPECTED_EXPORTS
    */
   it("should export exactly the documented surface", () => {
-    expect(Object.keys(repos).sort()).toEqual([...EXPECTED_EXPORTS].sort());
+    const expected = [...EXPECTED_EXPORTS, ...PHASE_6A_EXPORTS].sort();
+    expect(Object.keys(repos).sort()).toEqual(expected);
   });
 
   /**
