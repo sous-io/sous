@@ -67,7 +67,13 @@ src/
     prune.ts               # remove stale output files
     clear.ts               # delete all Sous-written files for a project
     launch.ts              # build + spawn a coding agent tool
+    subscribe.ts           # subscribe to a namespace or recipe; installs the whole closure
+    unsubscribe.ts         # remove a subscription and whatever only it brought in
     repo/
+      add.ts               # add (and thereby trust) a repository; fetches only its index
+      list.ts              # list the trusted repositories and what they publish
+      search.ts            # search the cached indexes by name and description
+      gc.ts                # collect the machine-wide store, protecting locked entries
       init.ts              # scaffold a new recipe repository (no project config needed)
       link.ts              # point a repo at a working copy; clone, or link a given path
       unlink.ts            # drop the link and leave the checkout on disk
@@ -112,6 +118,11 @@ src/
         index-builder.ts   # buildIndex: regenerates sous.index.json from manifests + tags
         bump.ts            # raises a recipe version in place, keeping comments
         submit-service.ts  # the whole submit flow, behind the injectable command runner
+      subscription-service.ts  # the workflow: add, subscribe, unsubscribe, restore, check
+      locked-recipes.ts    # where each locked recipe's files are (a link beats the store)
+      locked-namespace-resolver.ts # the real NamespaceResolver, built from the lockfile
+      recipe-targets.ts    # subscribed recipe contents -> compile targets; recipeOutputs
+      recipe-config-layers.ts  # a recipe's `config` contents, as config layers
     vars/                  # recipe variable definitions, answers and the resolution ladder
       index.ts             # barrel; import the whole layer from here
       definition-source.ts # where definitions come from; the one wiring seam
@@ -125,7 +136,7 @@ src/
       managed-layer.ts     # reads/writes the machine-written conf.d/5xx layers
       lock-service.ts      # LockService; read/write/apply/diff the lock, restore the store
       freshness.ts         # when to look upstream; always-pull's in-range lookup
-      providers/           # GitHub and GitLab, read path only, plus the index cache
+      providers/           # GitHub, GitLab and file, read path only, plus the index cache
   templating/
     init-liquid-engine.ts  # LiquidJS engine factory (createLiquidEngine)
     tags/                  # custom Liquid tags: showVars, exportScalarVarsJs, getFiles, listFiles
@@ -289,6 +300,62 @@ fails hard without a terminal unless `--trust` was passed, writing accepted repo
 and restores the store to exactly what the lock pins without prompting or changing a version;
 `freshness.ts` decides when sous looks upstream at all.
 
+`providers/file.ts` is the third built-in provider: a repository that lives on this machine,
+named by an absolute path or the same path in `file:///...` form. It exists for local
+development and for tests, and its trust semantics are IDENTICAL to a hosted one; a local
+path is added, and therefore trusted, through the same ceremony, because the recipes in it
+still run here. It reads the index from the working tree when there is one (so an index
+being authored is picked up) and from `git show HEAD:sous.index.json` otherwise, and fetches
+a recipe by cloning the local path at the version's tag, falling back to a copy for a
+directory that is not a git repository. It is what makes an end-to-end CLI test possible
+with no network at all.
+
+**The consumer surface.** `subscription-service.ts` is the one place that puts the parts
+above in the right order, and the order IS the design: nothing is fetched from a repository
+before it is trusted; resolution is iterative, with one consolidated trust question per
+round; the store is filled only after a version is settled; and a subscription is not
+finished until the variables its recipes publish have been answered. `SubscriptionService`
+takes every collaborator as an injectable option, and `subscriptionServiceFor({
+configContext, settings, shellEnv })` builds one from what a running command already has.
+Its methods are `addRepo`, `subscribe`, `unsubscribe`, `restore`, `checkUpstream`,
+`needsRestore` and `prepareForBuild`. Unsubscribing drops the project's own hold on the
+recipes one subscription pulled in and lets the lockfile's refcounting decide what actually
+goes.
+
+**Where a locked recipe's files are.** `locked-recipes.ts` answers that once, for everyone
+who needs it: a LINKED repository is read from its working copy (a link is a deliberate
+instruction to bypass versions and the lockfile), and everything else from its immutable
+store entry at the pinned version. A recipe the store does not hold yet comes back with
+`present: false` rather than an error, so a fresh clone can be restored instead of refused.
+`locked-namespace-resolver.ts` builds the real `NamespaceResolver` from that plus each
+recipe's declared `depends` and `subscribes`; `vars/definition-source.ts` reads the same
+list for `sous vars`; `recipe-targets.ts` turns it into compile targets.
+
+**Recipe outputs.** `recipe-targets.ts` turns each subscribed recipe's manifest `contents`
+into ordinary `entryGlob`-style compile targets: the recipe directory is the glob root, the
+static part of each include pattern is the base the output tree mirrors, and the `.tpl.`
+convention applies unchanged. Only recipes held through `subscribes` contribute files; a
+recipe held only through `depends` is fetched, pinned and addressable from the recipe that
+declared it, and its files never enter the output. Destinations come from the top-level
+`recipeOutputs` config key (`{ skills?: string[], memories?: string[], prompts?: string[] }`,
+each `${var}`-substituted). Only `skills` has a default, `<project root>/.claude/skills`;
+a kind with no destination is skipped with ONE warning naming the key, because sous cannot
+guess where a project wants its memories or its prompts. `BuildService` appends these
+targets to the project's own, so compile, prune and clear all see them, and prune counts
+them file by file rather than by their shared destination directory (every recipe writes
+into the same one, so a directory prefix would leave an unsubscribed recipe's files behind
+forever). `resolveOutputPath` in `markdown-compiler.ts` is the one definition of where a
+target's output lands, shared by the compiler and prune.
+
+**What a build does with all this.** `sous build` announces every linked repository loudly
+before it compiles (`describeLinkedRepos`), restores whatever the store is missing, and asks
+upstream for the repositories that prefer a newer in-range version; a failed check is warned
+about and the last good answer stands. Watch mode watches every linked checkout (they are in
+`fullRebuildPaths`) and polls upstream on `store.watchPollSeconds`. Prune and clear never
+reach into a linked checkout or the store: `protectedRepoPaths` names the three roots and
+`StateService.deleteTrackedFiles` refuses to touch anything under them, whatever the state
+file claims.
+
 ## Config Discovery
 
 There is no user-level config LAYER; no configuration is read from the user-level sous
@@ -330,6 +397,20 @@ unique baseName once its FINAL extension is stripped: `500-repos.json` and
 `500-repos.yaml` collide and are a `ConfigError` (`assertUniqueLayerBaseNames`), since
 their merge order would otherwise hinge on extension.
 
+**Config layers from recipes.** A subscribed recipe may contribute `config` content, and
+those files are config layers too. They load AFTER the primary config and BEFORE the
+`conf.d/` layers, so a recipe supplies defaults and the project always wins over them.
+`listRecipeConfigLayers` (`repos/recipe-config-layers.ts`) enumerates them from the
+lockfile, the links map and the store alone, because this has to work before the settings
+exist. Only `.json` and `.yaml` are accepted from a recipe: the kernel would happily import
+a `.js` layer, and the whole trust story rests on sous reading what a repository publishes
+without running any of it, so an executable layer from a recipe is refused with a warning.
+Recipe layers are deliberately left out of the duplicate-baseName check; that check exists
+so a person never has to guess which of two files THEY wrote merges last, and a recipe's
+file names are not theirs to rename. `BaseCommand.init()` enumerates them twice: once
+during discovery, and again through `refreshDiscoveredConfig` after the env files load,
+because `SOUS_HOME` is file-settable and it decides where the store is.
+
 **Env files.** Before any variable resolves, sous loads `<sousDir>/.env.local` then
 `<sousDir>/.env` into `process.env` (`env-local.ts`). Precedence, highest first: real
 shell environment > `.env.local` (gitignored, machine-specific/secret) > `.env`
@@ -365,9 +446,9 @@ migration message) and then by the zod schema in `config-schema.ts` (`validateSe
 
 One config = one project. The config is flat: `version`, `$schema`, `$comment`, `name`,
 `_env`, `_vars`, `_aliases`, `compilation`, `runtimeContext`, `tools`, `repos`,
-`subscriptions`, `store` and `varMappings` all live at the top level. The last four belong
-to the Repositories system; see `docs/markdown/repositories-file-formats.md` for their
-shape. A top-level `$comment` string is accepted and ignored alongside `$schema`, which is
+`subscriptions`, `store`, `recipeOutputs` and `varMappings` all live at the top level. The
+last five belong to the Repositories system; see
+`docs/markdown/repositories-file-formats.md` for their shape. A top-level `$comment` string is accepted and ignored alongside `$schema`, which is
 how the machine-written `conf.d/500-repos.json`, `conf.d/510-subscriptions.json` and
 `conf.d/520-var-mappings.json` layers say in the file itself that sous wrote them (JSON has
 no comment syntax); `repos/managed-layer.ts` and `vars/mappings.ts` write them and always
@@ -651,6 +732,12 @@ This enables `sous prune` (remove stale outputs) and `sous clear` (delete all ou
 | `sous config show` | Print the merged config (all layers merged, before var resolution) as JSON |
 | `sous config get <path>` | Print one value by dot-path (e.g. `compilation.targets[0].entryPoint`); `--layers` shows per-layer provenance |
 | `sous config validate` | Validate the merged config: schema, then full variable resolution |
+| `sous repo add <url>` | Add a repository, which is also how you trust it, then fetch only its index (`--name`, `--provider`, `--trust`, `--dry-run`) |
+| `sous repo list` | List the trusted repositories: name, location, provider, namespaces, recipe count, and whether it is linked |
+| `sous repo search <text>` | Search the cached indexes by namespace, recipe name and description (`--limit`) |
+| `sous repo gc` | Collect the machine-wide store back to its size cap, protecting everything the lockfile pins (`--max-bytes`, `--dry-run`) |
+| `sous subscribe <ref>` | Subscribe to a namespace or a recipe, install the whole closure, and answer the variables it publishes (`--prerelease`, `--always-pull`, `--trust`, `--dry-run`) |
+| `sous unsubscribe <ref>` | Remove a subscription and everything only it brought in, refcounted (`--dry-run`) |
 | `sous repo init [dir]` | Scaffold a new recipe repository (`--name`, `--namespace`, `--force`) |
 | `sous repo link <repo> [path]` | Read a repository from a working copy: clone it, or link a checkout already on disk (`--global`) |
 | `sous repo unlink <repo>` | Drop the link and go back to published versions; the checkout stays (`--global`) |
@@ -668,8 +755,14 @@ TTY; `--layers` walks the trace-mode snapshots and prints one `old -> new` line 
 that changed the value. `validate` runs the resolvers (fixpoint + substitution) that
 schema validation alone cannot, surfacing cycles and undefined `${vars}`.
 
-The `repo` namespace manages repositories. `repo init` is the ONE command that does not
-extend `BaseCommand`: it creates a repository, which is not a sous project and usually has no
+The `repo` namespace manages repositories. `repo add` is the trust ceremony, and adding IS
+trusting: nothing is downloaded from a repository before the question is answered, and once
+it is, exactly one file is fetched (`sous.index.json`). `repo list` and `repo search` read
+only what is already cached, so both work offline; a repository whose index has never been
+fetched is named rather than silently left out. `repo gc` protects everything this project's
+lockfile pins, whatever that does to the total, since a cache that is too large is a
+nuisance while evicting a pinned entry breaks a build. `repo init` is the ONE command that
+does not extend `BaseCommand`: it creates a repository, which is not a sous project and usually has no
 `.sous/` above it, so config discovery would only get in its way. `repo link` clones into
 `.sous/repos/<owner>/<name>` (or `$SOUS_HOME/repos/...` with `--global`), reuses a checkout of
 the same remote rather than re-cloning, and refuses a checkout of a different one; `repo

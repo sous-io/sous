@@ -492,9 +492,11 @@ command with an error rather than a guess about where the block ends.
 
 ## Project configuration
 
-Three optional top-level keys in a project's sous config carry the consumer side. `sous repo add`
+Four optional top-level keys in a project's sous config carry the consumer side. `sous repo add`
 and `sous subscribe` write the first two into machine-managed `conf.d/` layers, and you may also
-hand-write them in the primary config; the layers merge like anything else.
+hand-write them in the primary config; the layers merge like anything else. The fourth,
+`recipeOutputs`, is always yours to write and is covered under
+[Consuming recipes](#consuming-recipes).
 
 ```yaml
 # Trusted repositories, keyed by the short name refs use. Adding a repository IS
@@ -570,6 +572,82 @@ JSON has no comment syntax, so each file says what it is in a `$comment` key ins
 
 Sous accepts and ignores `$comment` at the top level of any config file, exactly as it does
 `$schema`.
+
+## Consuming recipes
+
+Subscribing pins a recipe; building is what turns it into files in your project. A recipe's
+`contents` block says what it contributes and of what kind, and each kind lands somewhere your
+config decides.
+
+### `recipeOutputs`: where the files land
+
+```yaml
+# Where the files subscribed recipes contribute are written, per content kind.
+# Every path is ${var} substituted like any other config path, and a kind may
+# name several destinations so one recipe feeds more than one agent directory.
+recipeOutputs:
+  skills:
+    - ${projectRoot}/.claude/skills
+    - ${projectRoot}/.codex/skills
+  memories:
+    - ${projectRoot}/.claude/memories
+  prompts:
+    - ${projectRoot}/prompts/recipes
+```
+
+Only `skills` has a default: `<project root>/.claude/skills`, the project root being the parent
+of your `.sous/` directory. That is where every agent looks, so it is worth defaulting. Nothing
+else is: a kind with no destination is skipped, and sous says so once, naming this key. It will
+not guess where you want your memories or your prompts.
+
+Files are written the same way an `entryGlob` target of your own writes them. The static part of
+each include pattern is the base the output tree mirrors, so a recipe publishing
+`skills/task-files/SKILL.md` under `include: ["skills/**/*.md"]` writes
+`<destination>/task-files/SKILL.md`. The [`.tpl.` convention](configuration.md) applies
+unchanged: a `.tpl.md` file is rendered and loses the `.tpl.` from its name, and everything else
+is copied verbatim.
+
+?> Only recipes you are subscribed to contribute files. A recipe pulled in through `depends` is
+fetched, pinned and addressable from the recipe that declared it, and its files never enter your
+output. That is the whole difference between the two dependency kinds.
+
+Recipe outputs are tracked like every other file sous writes, so `sous prune` removes what an
+unsubscribed recipe used to write, and `sous clear` removes all of it. Neither ever reaches into
+a linked checkout or the machine-wide store; both hold work that is not a project's to delete.
+
+### `config` contents: recipes that configure
+
+A recipe's `config` contents are not written anywhere. They are config layers, and they load
+after your primary config and before your own `conf.d/` layers, so a recipe can supply defaults
+and your project always wins over them.
+
+A recipe's config layer is JSON or YAML only. Sous must be able to read everything a repository
+publishes without running any of it, so an executable layer from a recipe is refused with a
+warning rather than loaded, exactly as manifests are.
+
+### The `file` provider: repositories on this machine
+
+A repository does not have to be hosted. Name one by an absolute path, or by the same path in
+`file:///...` form, and sous reads it through the built-in `file` provider:
+
+```bash
+sous repo add /home/me/Projects/my-recipes --name my-recipes
+```
+
+It is meant for local development and for tests: authoring a repository, trying a recipe before
+publishing it, or running a whole workflow with no network at all. The index is read from the
+working tree when the file is there, so an index you are still writing is picked up without a
+commit, and from the committed copy otherwise. A recipe's files come from the version's tag in
+the local git repository; a directory that is not a git repository has no versions to honour, so
+its working tree is copied instead.
+
+!> Trust semantics are identical to a hosted repository. A local path is added, and therefore
+trusted, through the same ceremony, because the recipes in it still run on this machine. "It is
+already on my disk" is not a reason to skip the question.
+
+For editing a repository you are already subscribed to, reach for `sous repo link` instead: it
+redirects one repository's resolution at a working copy without changing what your project
+subscribes to.
 
 ## Variables and answers
 
