@@ -83,6 +83,7 @@ src/
     errors.ts              # ConfigError + isConfigError (own module to avoid an import cycle)
     env-local.ts           # parses .sous/.env.local and .sous/.env into process.env
     sous-home.ts           # the user-level sous dir (~/.sous or $SOUS_HOME) and its subpaths
+    env-file.ts            # line-preserving WRITER for those same two files
     settings.ts            # config loader (spawns the kernel), var resolution, scope chain
     markdown-compiler.ts   # CompilationService; @-include, LiquidJS rendering
     include-resolver.ts    # @-include alias/${var}/relative path resolution
@@ -104,6 +105,14 @@ src/
       links.ts             # the links maps, their merged view, and the .gitignore hygiene
       git-clone.ts         # the injectable git layer `repo link` clones and inspects with
       scaffold/            # string builders + scaffoldRepo(), what `repo init` writes
+    vars/                  # recipe variable definitions, answers and the resolution ladder
+      index.ts             # barrel; import the whole layer from here
+      definition-source.ts # where definitions come from; the one wiring seam
+      names.ts             # generates the candidate env var names (never parses one)
+      ladder.ts            # walks the five rungs and says which name answered
+      mappings.ts          # mapping records; writes conf.d/520-var-mappings.json
+      validate.ts          # the JSON constraint vocabulary, checked with zod
+      ask.ts               # asks what is missing and stores the answers
   templating/
     init-liquid-engine.ts  # LiquidJS engine factory (createLiquidEngine)
     tags/                  # custom Liquid tags: showVars, exportScalarVarsJs, getFiles, listFiles
@@ -207,6 +216,32 @@ markers are ever rewritten; anything above or below them is left alone, and an o
 with no closing partner is a hard `ConfigError` rather than a guess. Both files are written
 only when their contents would change, so linking repeatedly never produces a diff.
 
+### Variables and answers (`src/lib/vars/`)
+
+Recipes publish variable DEFINITIONS (specifications); a project's env files hold the
+ANSWERS. `definition-source.ts` is the only place that knows where definitions come from:
+`loadProjectDefinitions(settings, sousDir)` is the seam the subscription resolver replaces,
+`FileDefinitionSource` reads a standalone definitions file for `sous vars ask --file`, and
+`StaticDefinitionSource` backs the tests. `names.ts` GENERATES candidate environment
+variable names and nothing ever parses one back into scopes (`_` is both delimiter and
+identifier character, so no parse would be trustworthy). `ladder.ts` walks five rungs, most
+specific first: a mapping record, the recipe-scoped name, the namespace-scoped name, the
+shared name, then the definition's own declared name; inside a rung the real shell
+environment beats `.sous/.env.local` beats `.sous/.env`. That is why `BaseCommand` snapshots
+`process.env` into `this.shellEnv` BEFORE `loadEnvFiles` injects the files: afterwards the
+layers are indistinguishable. `mappings.ts` binds an arbitrary env var name to one fully
+qualified variable under the top-level `varMappings` config key, writing sous's own records
+into the managed `conf.d/520-var-mappings.json` layer (replaced wholesale, since layer
+objects merge key-wise). `ask.ts` keeps and reports the answers already in scope, asks for
+the rest through `@inquirer/prompts`, stores each through `src/lib/env-file.ts`, and fails a
+run with no terminal by naming the env vars that would answer. `env-file.ts` is the write
+half of `env-local.ts`: it parses a line model, rewrites exactly one value line or appends
+one under a generated header comment, and writes atomically, so comments, order and quoting
+survive. Comments are output only and are never read back.
+
+The ladder, the env files, the mapping records and the `sous vars` commands are documented
+in `docs/markdown/repositories-file-formats.md`.
+
 ## Config Discovery
 
 There is no user-level config LAYER; no configuration is read from the user-level sous
@@ -281,10 +316,12 @@ order, JSON-forces it, and deep-merges it into one live cumulative config:
 `assertFlatConfig` (rejects the removed `projects:`/`defaultProject` schema with a
 migration message) and then by the zod schema in `config-schema.ts` (`validateSettings`).
 
-One config = one project. The config is flat: `version`, `$schema`, `name`, `_env`,
-`_vars`, `_aliases`, `compilation`, `runtimeContext`, `tools`, `repos`, `subscriptions`
-and `store` all live at the top level. The last three belong to the Repositories system;
-see `docs/markdown/repositories-file-formats.md` for their shape.
+One config = one project. The config is flat: `version`, `$schema`, `$comment`, `name`,
+`_env`, `_vars`, `_aliases`, `compilation`, `runtimeContext`, `tools`, `repos`,
+`subscriptions`, `store` and `varMappings` all live at the top level. The last four belong
+to the Repositories system; see `docs/markdown/repositories-file-formats.md` for their
+shape. `$comment` is accepted and ignored, so a machine-written JSON layer can explain
+itself where JSON has no comments.
 
 State and PID files default into the discovered `.sous/`: `sous.state.json` and `sous.pid`
 (unprefixed; one config is one project). Override with the `stateFilePath` / `pidFilePath`
@@ -379,11 +416,12 @@ and named.
 
 ### Managed 5xx layer convention
 
-`conf.d/500-*` through `conf.d/599-*` is a band reserved for layers a future sous CLI
-writes for you (e.g. a `sous repo add` writing `conf.d/500-repos.json`). Machine-written
-layers are stable, pretty-printed JSON (minimal VCS diffs), and sous never edits a user's
-hand-written primary config or non-5xx layers. There are no such write commands yet; the
-convention is established now so the band stays clear.
+`conf.d/500-*` through `conf.d/599-*` is a band reserved for layers the sous CLI writes
+for you (`sous repo add` writes `conf.d/500-repos.json`, `sous subscribe` writes
+`conf.d/510-subscriptions.json`, and `sous vars ask` writes `conf.d/520-var-mappings.json`).
+Machine-written layers are stable, pretty-printed JSON with sorted keys (minimal VCS diffs),
+each replaced wholesale rather than appended to, and sous never edits a user's hand-written
+primary config or non-5xx layers.
 
 ## Variable Scoping
 
@@ -566,6 +604,9 @@ This enables `sous prune` (remove stale outputs) and `sous clear` (delete all ou
 | `sous repo init [dir]` | Scaffold a new recipe repository (`--name`, `--namespace`, `--force`) |
 | `sous repo link <repo> [path]` | Read a repository from a working copy: clone it, or link a checkout already on disk (`--global`) |
 | `sous repo unlink <repo>` | Drop the link and go back to published versions; the checkout stays (`--global`) |
+| `sous vars` | List every recipe variable in play: its answer, the env var that supplied it, and the source |
+| `sous vars <name>` | Show one variable in full, with every candidate env var name and the rung that answered |
+| `sous vars ask [name]` | Answer what is unanswered (or one variable, or everything with `--all`); `--file` reads a standalone definitions file, `--dry-run` writes nothing |
 
 The `sous config` namespace inspects the merged config. `show` and `get` emit machine-
 readable stdout (`config show | jq` works): they extend `ConfigCommand`, which routes the

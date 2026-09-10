@@ -531,3 +531,75 @@ repository qualifier or a version range, because the range belongs in the entry.
 locked one. It never widens the range a subscription or a dependency declared, and the lockfile
 is still regenerated continuously so it records what the last build actually used. A freshness
 check that fails never breaks a build; the last good answer stands.
+
+## Variables and answers
+
+A variable **definition** is a published specification; an **answer** is the stored value. A
+question is asked only when a subscribed recipe needs a variable and nothing in scope answers
+it, or when the answer in scope no longer fits the definition.
+
+### Where answers live
+
+Answers are stored in the project's own env files, and sous edits them the way a careful person
+would: exactly one value line is rewritten or appended, and comments, blank lines, ordering and
+quoting all survive. A newly added entry gets a short generated header comment above it saying
+where the value came from. Comments are output only; sous never reads one back.
+
+| File | Committed | Holds |
+|------|-----------|-------|
+| `.sous/.env` | yes | Shared answers (`scope: shared`), the team's defaults |
+| `.sous/.env.local` | no, gitignored | Machine-specific answers (`scope: local`) and every secret |
+
+### The resolution ladder
+
+For each variable sous generates a list of environment variable names and tries them in order,
+most specific first. Within a rung, the real shell environment wins, then `.sous/.env.local`,
+then `.sous/.env`.
+
+| Rung | Name | Example |
+|------|------|---------|
+| 1. mapping record | whatever the record names | `TEAM_API_URL` |
+| 2. recipe scope | `SOUS_VAR_<NAMESPACE>_<RECIPE>_<VARIABLE>` | `SOUS_VAR_MISC_STUFF_API_URL` |
+| 3. namespace scope | `SOUS_VAR_<NAMESPACE>_<VARIABLE>` | `SOUS_VAR_MISC_API_URL` |
+| 4. shared scope | `SOUS_VAR_<VARIABLE>` | `SOUS_VAR_API_URL` |
+| 5. declared name | the definition's own `env` field | `GITHUB_TOKEN` |
+
+!> Candidate names are only ever GENERATED and looked up, never parsed back into scopes. The
+underscore is both the delimiter and a legal identifier character, so no parse of a name would
+be trustworthy. When names collide, a mapping record settles it.
+
+### Mapping records
+
+A mapping record binds one environment variable, of any name, to one fully qualified variable.
+It is the top rung of the ladder and the universal conflict resolver: two recipes wanting the
+same name, or a name already meaning something else in your environment.
+
+```json
+{
+  "$comment": "Written by sous. Each entry binds an environment variable to one recipe variable.",
+  "varMappings": {
+    "TEAM_API_URL": "sous-recipes:misc/stuff/apiUrl"
+  }
+}
+```
+
+A target is written `namespace/recipe/variableName`, optionally qualified as
+`repo:namespace/recipe/variableName`. Records live under the top-level `varMappings` config key;
+sous writes the ones it creates into the machine-managed `conf.d/520-var-mappings.json` layer,
+replacing that file wholesale so each name has exactly one record, and you may hand-write
+`varMappings` in the primary config too.
+
+### The commands
+
+| Command | What it does |
+|---------|--------------|
+| `sous vars` | Lists every variable in play: its recipe, the environment variable that answered it, the value (hidden for a secret) and the source |
+| `sous vars <name>` | Shows one variable in full, including every environment variable on the ladder and which rung answered |
+| `sous vars ask [name]` | Answers what is unanswered, or one named variable; `--all` asks everything again |
+| `sous vars ask --file <path>` | Asks the definitions in a standalone file holding the same `variables:` array a recipe manifest carries |
+
+`sous vars` and `sous vars ask` both accept `--file`, and `sous vars ask` accepts `--dry-run`.
+
+Answers already in scope are listed visibly and never re-asked. Without a terminal, an
+unanswered required variable fails the run and names the exact environment variables that would
+satisfy it, most specific first, which is what a continuous integration log needs.
