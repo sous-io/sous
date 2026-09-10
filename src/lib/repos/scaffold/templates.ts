@@ -247,9 +247,16 @@ committed. Do not edit it by hand.
 
 ## Publishing
 
-Merging to \`main\` runs \`sous repo release\`, which validates every manifest,
-regenerates \`${INDEX_FILENAME}\`, and cuts a git tag for each new version. Tags
-are shaped \`namespace/recipe@version\`.
+Raise a recipe's version in its \`${RECIPE_MANIFEST_BASENAME}.yaml\` (by hand, or
+with \`sous repo release --bump patch\`), run \`sous repo release\` to regenerate
+\`${INDEX_FILENAME}\`, and commit both. Merging to \`main\` then runs
+\`sous repo release --tag --push\`, which cuts and pushes a git tag for each
+version that does not have one. Tags are shaped \`namespace/recipe@version\`, and
+a version is published when its tag exists.
+
+To propose a change to a repository you do not maintain, commit it and run
+\`sous repo submit\`, which validates everything first and then opens a pull
+request through your provider's own command line tool.
 
 ## Using it
 
@@ -291,10 +298,13 @@ export function buildReleaseWorkflow(): string {
 #   only reads; it never writes, commits or tags. That makes it the right thing
 #   to run on a pull request.
 #
-#   'sous repo release --tag' does the same validation, regenerates the index,
-#   commits it, and creates a git tag (shaped 'namespace/recipe@version') for
-#   every recipe version that does not have one yet. That makes it the right
-#   thing to run once a change has been merged.
+#   'sous repo release --tag --push' does the same validation, then creates a
+#   git tag (shaped 'namespace/recipe@version') for every recipe version that
+#   does not have one yet, and pushes those tags. It refuses while anything is
+#   uncommitted or the committed index is out of date, so a merge that skipped
+#   the check above stops here rather than publishing something inconsistent.
+#   Sous never commits for you; once the tags exist it rewrites the index to
+#   record them, and the step after it commits that file.
 
 name: sous release
 
@@ -333,8 +343,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Regenerate the index and tag new versions
-        run: npx --yes @sous-io/sous repo release --tag
+      - name: Tag every new version and push the tags
+        run: npx --yes @sous-io/sous repo release --tag --push
+      - name: Commit the index, when tagging changed it
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- sous.index.json; then
+            echo "The index already recorded every published version."
+          else
+            git add sous.index.json
+            git commit -m "Record the newly tagged recipe versions in the index"
+            git push
+          fi
 `;
 }
 
