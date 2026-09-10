@@ -2,10 +2,16 @@ import { describe, it, expect } from "vitest";
 import {
   substituteVars,
   splitAliasKey,
+  resolveInclude,
   resolveIncludeCandidates,
   resolveAliasPrefix,
   buildAliasMap,
 } from "./include-resolver.js";
+import type {
+  NamespaceRequest,
+  NamespaceResolution,
+  NamespaceResolver,
+} from "./repos/namespace-resolver.js";
 
 describe("resolveAliasPrefix()", () => {
   const aliases = {
@@ -174,5 +180,118 @@ describe("buildAliasMap()", () => {
     expect(map.ok).toEqual(["/fine"]);
     expect(errors).toHaveLength(1);
     expect(errors[0]).toMatch(/reserved/);
+  });
+});
+
+describe("resolveInclude() with a namespace resolver", () => {
+  const baseDir = "/proj/prompts";
+
+  /** Builds a resolver that records every request and answers from a fixed table. */
+  function makeSpyResolver(
+    answer: NamespaceResolution = { kind: "candidates", candidates: ["/store/ns/recipe/x.md"] }
+  ) {
+    const calls: NamespaceRequest[] = [];
+    const resolver: NamespaceResolver = {
+      resolve(request) {
+        calls.push(request);
+        return answer;
+      },
+    };
+    return { resolver, calls };
+  }
+
+  /**
+   * A `~namespace` first segment is handed to the resolver, whose candidates
+   * land after any alias bases and before the relative fallback.
+   *
+   * resolveInclude("~ns/recipe/x.md", { namespaceResolver, baseDir: "/proj/prompts" })
+   * // -> candidates: ["/store/ns/recipe/x.md", "/proj/prompts/~ns/recipe/x.md"]
+   */
+  it("should consult the resolver for a ~namespace path and keep the relative fallback last", () => {
+    const { resolver, calls } = makeSpyResolver();
+    const out = resolveInclude("~ns/recipe/x.md", {
+      namespaceResolver: resolver,
+      baseDir,
+      fromFile: "/proj/prompts/AGENTS.md",
+    });
+
+    expect(out.candidates).toEqual(["/store/ns/recipe/x.md", "/proj/prompts/~ns/recipe/x.md"]);
+    expect(out.namespaceIssue).toBeUndefined();
+    expect(calls).toEqual([
+      { namespace: "ns", rest: "recipe/x.md", fromFile: "/proj/prompts/AGENTS.md" },
+    ]);
+  });
+
+  /**
+   * Alias bases are tried before the namespace resolver, so a built-in alias
+   * keeps its meaning even when a namespace shares its name.
+   */
+  it("should put alias bases ahead of namespace candidates", () => {
+    const { resolver } = makeSpyResolver({
+      kind: "candidates",
+      candidates: ["/store/sous-shared/recipe/x.md"],
+    });
+    const out = resolveInclude("~sous-shared/recipe/x.md", {
+      aliases: { "~sous-shared": ["/opt/sous/shared-prompts"] },
+      namespaceResolver: resolver,
+      baseDir,
+    });
+
+    expect(out.candidates[0]).toBe("/opt/sous/shared-prompts/recipe/x.md");
+    expect(out.candidates).toContain("/store/sous-shared/recipe/x.md");
+  });
+
+  /**
+   * A path with no `~` sigil is a relative path or a declared alias and never
+   * reaches the resolver, so include lines cannot masquerade as namespace
+   * references.
+   */
+  it("should never consult the resolver for a bare path", () => {
+    const { resolver, calls } = makeSpyResolver();
+    const out = resolveInclude("shared/x.md", { namespaceResolver: resolver, baseDir });
+
+    expect(calls).toEqual([]);
+    expect(out.candidates).toEqual(["/proj/prompts/shared/x.md"]);
+  });
+
+  /**
+   * When the resolver cannot satisfy the reference, the reason comes back
+   * alongside the remaining candidates so the caller can explain the failure.
+   */
+  it("should return the resolver's reason as a namespace issue", () => {
+    const { resolver } = makeSpyResolver({ kind: "unknown-namespace", known: ["core"] });
+    const out = resolveInclude("~ns/recipe/x.md", {
+      namespaceResolver: resolver,
+      baseDir,
+      fromFile: "/proj/prompts/AGENTS.md",
+    });
+
+    expect(out.namespaceIssue).toEqual({
+      namespace: "ns",
+      rest: "recipe/x.md",
+      fromFile: "/proj/prompts/AGENTS.md",
+      resolution: { kind: "unknown-namespace", known: ["core"] },
+    });
+    expect(out.candidates).toEqual(["/proj/prompts/~ns/recipe/x.md"]);
+  });
+
+  /**
+   * With no resolver supplied, a `~` path behaves exactly as it did before
+   * namespaces existed: alias bases, then the relative fallback.
+   */
+  it("should behave like a plain alias path when no resolver is supplied", () => {
+    const out = resolveInclude("~ns/recipe/x.md", { baseDir });
+    expect(out.candidates).toEqual(["/proj/prompts/~ns/recipe/x.md"]);
+    expect(out.namespaceIssue).toBeUndefined();
+  });
+
+  /**
+   * The including file defaults to the including directory, which is all the
+   * resolver needs to locate the owning recipe.
+   */
+  it("should default fromFile to the including directory", () => {
+    const { resolver, calls } = makeSpyResolver();
+    resolveInclude("~ns/recipe/x.md", { namespaceResolver: resolver, baseDir });
+    expect(calls[0].fromFile).toBe(baseDir);
   });
 });
