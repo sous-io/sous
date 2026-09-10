@@ -160,6 +160,31 @@ const storeSchema = z
   })
   .strict();
 
+/**
+ * Where the files a subscribed recipe contributes are written, one list of
+ * destination directories per content kind. Each destination is `${var}`
+ * substituted like any other config path, and a kind may name several so the
+ * same recipe feeds more than one agent directory (`.claude/skills` and
+ * `.codex/skills`, say).
+ *
+ * Only `skills` has a default: `<project root>/.claude/skills`, the project root
+ * being the parent of the discovered `.sous/` directory. A kind with no
+ * destination is skipped, with one warning naming this key, because sous cannot
+ * guess where a project wants its memories or its prompts. A recipe's `config`
+ * contents are not listed here; they are loaded as config layers rather than
+ * written anywhere.
+ */
+const recipeOutputsSchema = z
+  .object({
+    /** Where recipe skill bundles are written. */
+    skills: z.array(z.string()).optional(),
+    /** Where recipe memory files are written. */
+    memories: z.array(z.string()).optional(),
+    /** Where recipe prompt files are written. */
+    prompts: z.array(z.string()).optional(),
+  })
+  .strict();
+
 // --- Variable mappings --------------------------------------------------------------------------
 
 /**
@@ -234,6 +259,8 @@ export const settingsSchema = z
       .optional(),
     /** Knobs for the machine-wide recipe store. */
     store: storeSchema.optional(),
+    /** Where the files subscribed recipes contribute are written, per content kind. */
+    recipeOutputs: recipeOutputsSchema.optional(),
     /**
      * Variable mapping records, keyed by environment variable name. Each entry
      * binds that name to one recipe variable, which is how an answer is stored

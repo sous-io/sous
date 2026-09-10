@@ -292,6 +292,30 @@
       },
       "additionalProperties": false
     },
+    "recipeOutputs": {
+      "type": "object",
+      "properties": {
+        "skills": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "memories": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "prompts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     "varMappings": {
       "type": "object",
       "propertyNames": {

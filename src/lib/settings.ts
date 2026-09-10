@@ -90,8 +90,11 @@ type RawProjectCompilation = {
 type RepoEntry = {
   /** Where the repository lives. */
   url: string;
-  /** Which provider handles it. Inferred from the URL when omitted. */
-  provider?: "github" | "gitlab";
+  /**
+   * Which provider handles it. Inferred from the URL when omitted. `file` is a
+   * repository on this machine, for local development and tests.
+   */
+  provider?: "github" | "gitlab" | "file";
   /** Install a newer in-range version whenever one exists, rather than holding the lock. */
   alwaysPull?: boolean;
   /** When the repo was added. */
@@ -130,6 +133,26 @@ type StoreConfig = {
   watchPollSeconds?: number;
 };
 
+/**
+ * Where the files a subscribed recipe contributes are written, one list of
+ * destination directories per content kind. Each destination is `${var}`
+ * substituted like any other config path, and a kind may name several so the
+ * same recipe feeds more than one agent directory.
+ *
+ * Only `skills` has a default (`<project root>/.claude/skills`, the project root
+ * being the parent of `.sous/`). A kind with no destination is skipped, with one
+ * warning naming this config key, because sous cannot guess where a project
+ * wants its memories or its prompts.
+ */
+type RecipeOutputs = {
+  /** Where recipe skill bundles are written. */
+  skills?: string[];
+  /** Where recipe memory files are written. */
+  memories?: string[];
+  /** Where recipe prompt files are written. */
+  prompts?: string[];
+};
+
 /** Configuration for a launchable tool (e.g. claude, codex). */
 type ToolConfig = {
   /** The executable command to run. */
@@ -166,6 +189,10 @@ export type Settings = {
   subscriptions?: Record<string, SubscriptionEntry>;
   /** Knobs for the machine-wide recipe store. */
   store?: StoreConfig;
+  /**
+   * Where the files subscribed recipes contribute are written, per content kind.
+   */
+  recipeOutputs?: RecipeOutputs;
   /**
    * Variable mapping records, keyed by environment variable name, each bound to
    * one recipe variable written as `namespace/recipe/variableName` with an
