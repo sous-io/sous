@@ -92,6 +92,11 @@ src/
       ref.ts               # parses/formats refs (repo qualifier, namespace/recipe, @range)
       load-manifest.ts     # YAML + permissive-JSON manifest reading; exactly-one discovery
       formats/             # one module per on-disk format, each with schema, type, parseX()
+      store/               # the machine-wide recipe store under $SOUS_HOME/cache
+        contract.ts        # the store interface every filler and reader is written against
+        hash.ts            # hashDirectory: the canonical sha256-<hex> content hash
+        recipe-store.ts    # RecipeStore: put/get/has/remove/list/gc, atomic and verified
+        settings.ts        # the store's tunables and the defaults sous ships
   templating/
     init-liquid-engine.ts  # LiquidJS engine factory (createLiquidEngine)
     tags/                  # custom Liquid tags: showVars, exportScalarVarsJs, getFiles, listFiles
@@ -155,9 +160,27 @@ on reading a repository without running its code), and `index.ts` is the barrel 
 phase imports from. Hand-written formats reject unknown keys except a reserved `x-` extension
 namespace; machine-written formats reject them outright and serialize with sorted keys.
 
+`store/` holds the machine-wide recipe store: one immutable directory per recipe version at
+`<storeRoot>/<repo>/<namespace>/<recipe>/<version>/`, with the `.sous.entry.json` marker
+INSIDE it. `RecipeStore` (`store/recipe-store.ts`) stages a write in a temporary sibling
+directory, hashes it, verifies it against the caller's expected hash and renames it into
+place, so a crash leaves either the old entry or the new one; `get()` re-verifies the hash on
+every call, removes an entry that no longer matches and reports it as absent through the
+`onWarning` sink. `hashDirectory` (`store/hash.ts`) is the canonical content hash: files in
+bytewise path order, each contributing path, byte length and bytes, with `.git`, the marker
+and file modes excluded. `resolveStoreSettings` (`store/settings.ts`) applies the defaults for
+the optional top-level `store:` config block.
+
+The store lives under the USER-LEVEL sous directory, resolved by `src/lib/sous-home.ts`:
+`~/.sous`, or `$SOUS_HOME`. `SOUS_HOME` does NOT decide which project is active, so unlike
+`SOUS_CONFIG`, `SOUS_DIR` and `SOUS_CONFD` it is file-settable from `.sous/.env.local` and
+`.sous/.env`; every resolver there reads `process.env` at CALL time and nothing may capture
+the value at import time. Nothing under `$SOUS_HOME` is configuration: the user-level config
+layer is a separate effort.
+
 The formats themselves, field by field, are documented in
-`docs/markdown/repositories-file-formats.md`; that page is the reference, and this file only
-points at it.
+`docs/markdown/repositories-file-formats.md`; that page is the reference (including the store
+layout), and this file only points at it.
 
 ## Config Discovery
 

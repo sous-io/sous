@@ -7,7 +7,7 @@
  * a canonical byte stream built from the same information a tar entry would
  * carry that we actually care about (the path and the file's bytes), in a
  * canonical order. Tar's variable header fields (mode, owner, group, mtime,
- * block padding, format flavour) are deliberately excluded, so the same tree
+ * block padding, format variant) are deliberately excluded, so the same tree
  * hashes the same after a copy, a clone or an archive round-trip on a different
  * machine.
  *

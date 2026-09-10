@@ -378,6 +378,44 @@ The store is disposable by design: everything in it is re-fetchable from the pin
 lockfile. Builds read inputs from the store and render or copy outputs into the project; sous
 does not symlink store content into a project, and store content is never edited in place.
 
+## The store on disk
+
+The store is a plain directory tree under the user-level sous directory, which is `~/.sous`
+unless `SOUS_HOME` says otherwise. Unlike `SOUS_CONFIG` and `SOUS_DIR`, `SOUS_HOME` does not
+decide which project is active, so it may be set in an env file (`.sous/.env.local` or
+`.sous/.env`) as well as in the shell. The same directory holds globally linked checkouts
+(`repos/`) and the machine-wide links map.
+
+```text
+$SOUS_HOME/
+  cache/                                   the store root
+    <repo>/<namespace>/<recipe>/<version>/
+      .sous.entry.json                     the marker for this entry
+      ...                                  the recipe's files, exactly as fetched
+  repos/<owner>/<repo>/                    checkouts linked with --global
+  sous.links.json                          the machine-wide links map
+```
+
+An entry is written atomically: sous copies the fetched files into a temporary directory
+beside the entry's final home, hashes them, checks the hash against the pin it was given,
+writes the marker, and only then renames the directory into place. A published version is
+immutable, so re-storing one is allowed only when the content hashes the same; different
+content under a version already in the store is an error rather than a silent overwrite.
+
+The content hash is SHA-256 over a canonical serialization of the folder: files in bytewise
+order of their relative paths, each contributing its path, its byte length and its bytes.
+File modes, owners and timestamps are excluded, so the same recipe hashes the same after a
+copy, a clone or an archive round-trip. `.git` and the entry's own `.sous.entry.json` are
+skipped, which is what lets sous touch the marker without invalidating the entry. Every read
+re-verifies the hash; an entry that no longer matches is removed and re-fetched, and the
+build says so.
+
+Collection is size-capped and least-recently-used. `store.maxBytes` sets the cap (one
+gigabyte by default) and `lastAccessAt` in each marker sets the order; entries a lockfile
+still pins are never evicted, even when honoring the cap would require it. Everything in
+the store is re-fetchable from those pins, so deleting the whole directory costs a download
+and nothing else.
+
 ## `sous.links.json`: the links map
 
 A link redirects a repository's resolution away from the store and at a real working copy, which
