@@ -78,7 +78,12 @@ import {
 } from "./freshness.js";
 import { REPO_NAME_PATTERN } from "./formats/patterns.js";
 import { linkedPathFor } from "./links.js";
-import { listLockedRecipes, mapLinkedRecipes, readRecipeManifestIn } from "./locked-recipes.js";
+import {
+  keysHeldBySubscription,
+  listLockedRecipes,
+  mapLinkedRecipes,
+  readRecipeManifestIn,
+} from "./locked-recipes.js";
 import { resolveStoreRoot } from "../sous-home.js";
 import { seedCoreRecipe, type SeedCoreRecipeReport } from "./seed.js";
 import { enabledRepos, enabledSubscriptions } from "./defaults.js";
@@ -467,6 +472,15 @@ export class SubscriptionService {
   /**
    * Resolves a ref and everything beneath it, running the trust round as often
    * as resolution keeps turning up repositories the project has not added.
+   *
+   * IN PRACTICE THIS RUNS AT MOST ONE TRUST ROUND TODAY, and the loop is the
+   * shape rather than the behavior. A recipe names the repository it depends on
+   * by short name only, so nothing in a manifest carries a URL and every missing
+   * repository comes back under `needUrl`, which throws below. The loop earns
+   * its keep the moment any source of URLs exists (a repository hint block, or
+   * the lockfile of a project restoring someone else's commit); until then, read
+   * it as "one round, then either resolution succeeds or the person is told what
+   * to add".
    *
    * @param parsed - The ref being subscribed to.
    * @param options - The prerelease and trust flags.
@@ -1267,19 +1281,15 @@ export class SubscriptionService {
   // --- Lockfile bookkeeping ----------------------------------------------------------------------
 
   /**
-   * The lockfile keys one subscription holds directly. A recipe ref holds its
-   * own key; a namespace ref holds every recipe in that namespace.
+   * The lockfile keys one subscription holds directly. The rule itself lives in
+   * `keysHeldBySubscription` (`locked-recipes.ts`), beside the other readers of
+   * the lockfile's holder lists.
    *
    * @param lock - The lockfile as it stands.
    * @param key - The subscription's ref key.
    */
   private keysHeldBySubscription(lock: Lockfile, key: string): string[] {
-    if (key.includes("/")) {
-      return Object.hasOwn(lock.recipes, key) ? [key] : [];
-    }
-    return Object.keys(lock.recipes)
-      .filter((entry) => entry.startsWith(`${key}/`))
-      .sort();
+    return keysHeldBySubscription(lock, key);
   }
 
   /**

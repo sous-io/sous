@@ -147,6 +147,34 @@ describe("TrustService", () => {
   });
 
   /**
+   * A repository several recipes need records every one of them. Keeping only
+   * the first left removal hygiene looking at an incomplete picture, so a
+   * repository three recipes need could read as needed by one.
+   *
+   * confirmTrust([{ name, url, requiredBy: [a, b] }]);
+   * // -> the entry records "workflow/a, workflow/b"
+   */
+  it("should record every recipe that required a repository, not just the first", async () => {
+    const { service } = makeService({ answer: true });
+
+    await service.confirmTrust([
+      {
+        name: "vendor-recipes",
+        url: "https://github.com/vendor/recipes",
+        requiredBy: [
+          { ref: "vendor-recipes:core/partials", requestedBy: "workflow/b" },
+          { ref: "vendor-recipes:core/other", requestedBy: "workflow/a" },
+          { ref: "vendor-recipes:core/partials", requestedBy: "workflow/a" },
+        ],
+      },
+    ]);
+
+    expect(service.listManaged()["vendor-recipes"]).toMatchObject({
+      addedBy: "workflow/a, workflow/b",
+    });
+  });
+
+  /**
    * A recipe names a repository by its short name only, so sous may not know a
    * URL. Those are reported rather than guessed at.
    */

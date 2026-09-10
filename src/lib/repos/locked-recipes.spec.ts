@@ -4,6 +4,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { makeTmpDir, type TmpDir } from "../../test/utils/tmp.js";
 import { makeSettings } from "../../test/utils/settings.js";
 import {
+  keysHeldBySubscription,
   listLockedRecipes,
   mapLinkedRecipes,
   projectSubscriptionRefs,
@@ -231,6 +232,50 @@ describe("projectSubscriptionRefs()", () => {
       "core",
       "workflow/task-files",
     ]);
+  });
+});
+
+describe("keysHeldBySubscription()", () => {
+  /**
+   * A namespace subscription holds the recipes in that namespace the PROJECT
+   * holds. A recipe that arrived purely as another recipe's `depends` sits under
+   * the same namespace but was never the project's to hold; counting it made
+   * `sous unsubscribe workflow` report it as having "stayed" when the project
+   * had never held it.
+   *
+   * keysHeldBySubscription(lock, "workflow"); // -> ["workflow/task-files"]
+   */
+  it("should count only the recipes the project itself holds", () => {
+    writeLock([
+      { key: "workflow/task-files", requestedBy: ["project"] },
+      { key: "workflow/shared", requestedBy: ["workflow/task-files"] },
+      { key: "workflow/both", requestedBy: ["project", "workflow/task-files"] },
+    ]);
+    const lock = readProjectLockfile(sousDir);
+
+    expect(keysHeldBySubscription(lock, "workflow")).toEqual([
+      "workflow/both",
+      "workflow/task-files",
+    ]);
+  });
+
+  /**
+   * A recipe ref holds its own key, and only when the project holds it.
+   *
+   * keysHeldBySubscription(lock, "workflow/shared"); // -> []
+   */
+  it("should hold a recipe key only when the project holds that entry", () => {
+    writeLock([
+      { key: "workflow/task-files", requestedBy: ["project"] },
+      { key: "workflow/shared", requestedBy: ["workflow/task-files"] },
+    ]);
+    const lock = readProjectLockfile(sousDir);
+
+    expect(keysHeldBySubscription(lock, "workflow/task-files")).toEqual([
+      "workflow/task-files",
+    ]);
+    expect(keysHeldBySubscription(lock, "workflow/shared")).toEqual([]);
+    expect(keysHeldBySubscription(lock, "workflow/nothing")).toEqual([]);
   });
 });
 

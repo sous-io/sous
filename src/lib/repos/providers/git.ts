@@ -176,6 +176,10 @@ export async function fetchSubtree(options: {
         "--sparse",
         "--branch",
         tag,
+        // Everything after this is a path or a URL, never an option, whatever it
+        // starts with. `repoUrlSchema` already refuses a leading hyphen; this is
+        // the second lock on the same door, and it is what `git-clone.ts` does.
+        "--",
         cloneUrl,
         checkoutDir,
       ],

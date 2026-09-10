@@ -83,6 +83,7 @@ const EXPECTED_EXPORTS = [
   "isNamespaceRef",
   "isValidRef",
   "isoTimestampSchema",
+  "keysHeldBySubscription",
   "linksMapSchema",
   "loadJsonFile",
   "loadManifestFile",

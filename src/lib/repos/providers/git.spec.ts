@@ -114,6 +114,13 @@ describe("fetchSubtree()", () => {
     expect(calls[0]).toEqual(
       expect.arrayContaining(["clone", "--depth", "1", "--filter=blob:none", "--sparse"])
     );
+    // The URL and the destination sit after `--`, so neither can ever be read as
+    // an option, whatever they start with.
+    expect(calls[0]!.slice(-3)).toEqual([
+      "--",
+      "https://github.com/owner/repo.git",
+      calls[0]![calls[0]!.length - 1],
+    ]);
     expect(calls[1]).toEqual([
       "git",
       "sparse-checkout",

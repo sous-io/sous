@@ -203,6 +203,30 @@ export function listLockedRecipes(
 }
 
 /**
+ * The lockfile keys one subscription holds DIRECTLY. A recipe ref holds its own
+ * key; a namespace ref holds every recipe in that namespace.
+ *
+ * Only entries the project itself holds count. A recipe that arrived purely as
+ * another recipe's `depends` sits under the same namespace but was never the
+ * project's to hold, and counting it made `sous unsubscribe <namespace>` report
+ * it as having "stayed" when the project had never held it in the first place.
+ *
+ * @param lock - The lockfile as it stands.
+ * @param key - The subscription's ref key: a namespace, or `namespace/recipe`.
+ */
+export function keysHeldBySubscription(lock: Lockfile, key: string): string[] {
+  const heldByProject = (entry: string): boolean =>
+    lock.recipes[entry]?.requestedBy.includes(PROJECT_HOLDER) === true;
+
+  if (key.includes("/")) {
+    return heldByProject(key) ? [key] : [];
+  }
+  return Object.keys(lock.recipes)
+    .filter((entry) => entry.startsWith(`${key}/`) && heldByProject(entry))
+    .sort();
+}
+
+/**
  * The refs a project's own templates may address: everything it subscribed to
  * directly. Both sources are read, because a subscription may be written by
  * `sous subscribe` into the managed layer, hand-written in the primary config,

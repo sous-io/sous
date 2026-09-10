@@ -260,10 +260,16 @@ export class TrustService {
         needUrl.push(repo.name);
         continue;
       }
+      // Every requester is recorded, not just the first. Removal hygiene reads
+      // this to say why a repository is there, and a repository three recipes
+      // need looks removable when the entry names only one of them.
+      const requesters = [
+        ...new Set(repo.requiredBy.map((entry) => entry.requestedBy)),
+      ].sort();
       this.addRepo({
         name: repo.name,
         url: repo.url,
-        addedBy: repo.requiredBy[0]?.requestedBy ?? USER_ADDED_BY,
+        addedBy: requesters.length > 0 ? requesters.join(", ") : USER_ADDED_BY,
       });
       added.push(repo.name);
     }
