@@ -1,6 +1,6 @@
-# Sous CLI — Agent Configuration Manager
+# Sous CLI: Agent Configuration Manager
 
-> **GENERATED FILE — DO NOT EDIT the repo-root `CLAUDE.md` DIRECTLY.**
+> **GENERATED FILE. DO NOT EDIT the repo-root `CLAUDE.md` DIRECTLY.**
 > It is compiled by sous (`npm run sous:build`) from
 > `.sous/prompts/root/CLAUDE.md`. Edit that source, then rebuild. The compiled
 > copy is gitignored; the source is tracked.
@@ -20,12 +20,12 @@ npm run build    # compile TypeScript → dist/ (type-check; dist is NOT what sh
 npm run clean    # rm -rf dist/
 ```
 
-The CLI always runs from TypeScript source via tsx — in the repo AND in the published
+The CLI always runs from TypeScript source via tsx, in the repo AND in the published
 package. `bin/run.js` (the published bin) registers tsx via `tsx/esm/api` then hands off
 to oclif; `bin/sous` is a thin bash wrapper over it for the repo's npm scripts. tsx is
 resolved by module resolution (never a hardcoded `node_modules` path) so hoisted installs
 (`npx`, local deps) work; same trick in `loadSettings` (`settings.ts`) for the config
-subprocess. `run.js` sets oclif `settings.enableAutoTranspile = false` — tsx already
+subprocess. `run.js` sets oclif `settings.enableAutoTranspile = false`; tsx already
 handles `.ts` imports, and leaving it on makes installs without the `typescript` devDep
 warn on every run.
 
@@ -40,20 +40,37 @@ for type-checking only.
 ## Publishing (npm)
 
 Published as `@sous-io/sous` (npm org `sous-io`), public access, Apache-2.0. The
-package ships `bin/run.js`, `src/` (minus tests), `shared-prompts/`, and the documentation
-markdown (`docs/markdown/*.md`; agent-readable reference matching the installed version, pointed
-to by the distributed `about-sous` skill; the web shell around it stays out) — see the `files`
-allowlist in `package.json` (an allowlist, so there is no `.npmignore`; `bin/sous` and
-everything else stays out by default). `repository.url` must keep matching the GitHub repo
-exactly; npm's trusted publishing validates it at publish time.
+package ships `bin/run.js`, `src/` (minus tests), `recipes/` (the core recipe seed), and the
+documentation markdown (`docs/markdown/*.md`; agent-readable reference matching the installed
+version, pointed to by the distributed `about-sous` skill; the web shell around it stays out).
+See the `files` allowlist in `package.json` (an allowlist, so there is no `.npmignore`;
+`bin/sous` and everything else stays out by default). `repository.url` must keep matching the
+GitHub repo exactly; npm's trusted publishing validates it at publish time.
 
 Releases go through trusted publishing (OIDC, tokenless): pushing a `v*` tag triggers
-`.github/workflows/publish.yml`, which needs `id-token: write` and npm ≥ 11.5.1. The
-trusted publisher is configured on npmjs.com (package Settings → Trusted publishing:
+`.github/workflows/publish.yml`, which needs `id-token: write` and npm >= 11.5.1. The
+trusted publisher is configured on npmjs.com (package Settings, then Trusted publishing:
 org `sous-io`, repo `sous`, workflow `publish.yml`). To release: bump `version` in
-`package.json`, sync the lockfile (`npm install --package-lock-only`), commit, push,
-then `git tag v<version> && git push origin v<version>`. No local `npm publish`, and
-no GitHub Releases required (the `gh` CLI is not assumed to exist).
+`package.json`, bump `recipes/core/sous-skills/sous.recipe.yaml` to the SAME version (see
+below), sync the lockfile (`npm install --package-lock-only`), commit, push, then
+`git tag v<version> && git push origin v<version>`. No local `npm publish`, and no GitHub
+Releases required (the `gh` CLI is not assumed to exist).
+
+**Core recipe parity.** The `core` namespace exists in two places and they must never
+disagree: `recipes/core/sous-skills/` inside this package (the source of truth, and the
+offline seed) and `core/sous-skills` in `sous-io/sous-recipes` (machine-written distribution
+output). The packaged recipe's version is always exactly the package's version, because every
+project's implicit `core` subscription asks for exactly the running sous version.
+`src/lib/repos/core-recipe.spec.ts` fails the build when the two version numbers drift.
+
+`.github/workflows/publish-recipes.yml` keeps the published copy in step. It runs on
+`workflow_run` after `publish.yml` succeeds (a separate workflow, so publish.yml and its OIDC
+permissions are never edited for this, and the recipe repository's write key never shares a run
+with the npm publishing token), verifies the packaged version matches the tag, copies the
+recipe over the published one, regenerates the index with the sous version just published, and
+commits and pushes the release tag. It needs one repository secret, installed BY HAND:
+`SOUS_RECIPES_DEPLOY_KEY`, the private half of an SSH key whose public half is a write-enabled
+deploy key on `sous-io/sous-recipes`.
 
 ## Project Structure
 
@@ -77,6 +94,11 @@ src/
       init.ts              # scaffold a new recipe repository (no project config needed)
       link.ts              # point a repo at a working copy; clone, or link a given path
       unlink.ts            # drop the link and leave the checkout on disk
+      release.ts           # validate a recipe repo, regenerate its index, cut the tags
+      submit.ts            # propose this recipe repo's committed changes to its maintainers
+    vars/
+      index.ts             # `sous vars` and `sous vars <name>`: what is answered, and how
+      ask.ts               # `sous vars ask`: answer what is unanswered, into the env files
     config/
       show.ts              # print the merged config as JSON
       get.ts               # print one value by dot-path (--layers for provenance)
@@ -145,23 +167,12 @@ src/
   utils/
     formatting.ts          # console output helpers (heading, showVar, sortObjectKeys, etc.)
     prompts.ts
-shared-prompts/
-  memories/                # shared memory partials composed into downstream core memory files
-    automated-browser-tasks/  # INDEX.tpl.md — getFiles-driven task manifest
-  skills/                  # shared skill bundles; each subdirectory is a bundle
-    sous-skills/           # built-in sous bundle, compiled + distributed to downstream projects
-      about-sous/          # teaches downstream agents what Sous manages (never-edit rule)
-      about-sous-configuration/ # thin router: orientation + rules; the config reference
-                           #   itself lives in docs/markdown/config*.md (single source of
-                           #   truth, shipped in the npm package)
-      about-agent-skills/  # foundational skill knowledge for downstream agents
-      about-liquid-templates/ # .tpl. convention + LiquidJS syntax for downstream agents
-      create-skill/        # action skill: creating a skill in skillsRoot
-    control-flow/          # generic interaction skills: approve, opine, repeat, research
-    task-files/            # per-branch task file workflow (needs taskFileRoot etc.)
-    github-projects/       # GitHub Issues + Projects v2 workflow (about-github-projects,
-                           #   create-issue, pick-issue, /techdebt)
-    automated-browser-tasks/  # headless Chrome task authoring + running (Linux only)
+recipes/                   # the recipes that SHIP INSIDE the package; see "Skills System"
+  core/
+    sous-skills/           # the core recipe: the offline seed, version-locked to the package
+      sous.recipe.yaml     # its manifest; `version` must equal package.json's `version`
+      skills/              # about-sous, about-sous-configuration, about-agent-skills,
+                           #   about-liquid-templates, create-skill
 bin/
   run.js                   # published bin (`sous`): registers tsx, hands off to oclif
   sous                     # bash dev wrapper over run.js, used by the repo's npm scripts
@@ -169,19 +180,24 @@ scripts/
   build-schema.mts         # emits sous.config.schema.json from the zod schema (npm run schema:build)
 sous.config.schema.json    # committed JSON Schema artifact; shipped in the npm files allowlist
 .github/workflows/
-  publish.yml              # npm trusted publishing on GitHub Release (OIDC, tokenless)
+  publish.yml              # npm trusted publishing on a v* tag (OIDC, tokenless)
+  publish-recipes.yml      # pushes the core recipe to sous-io/sous-recipes after that succeeds
 docs/                      # the GitHub Pages site (sous-io.github.io/sous)
   index.html               # the animated GSAP presentation page
   markdown/                # the documentation shell (docsify, client-side markdown render)
   css/main.css             # site design system (--sous-* design tokens)
   CLAUDE.md                # GENERATED site instructions (gitignored output); the site's
                            #   full documentation lives there, not here
-.sous/                     # THIS repo's own sous config — sous configures itself
-  sous.config.js           # the primary config; compiles skills into .claude/skills/ + both CLAUDE.md files
+.sous/                     # THIS repo's own sous config; sous configures itself
+  sous.config.js           # the primary config: subscriptions, recipeOutputs, and three targets
+  sous.lock.json           # COMMITTED; pins every recipe version this repo builds with
   conf.d/                  # optional drop-in layer dir (*.js|mjs|json|yaml); merged after the primary config
+  skills/                  # this repo's OWN skills (skillsRoot); not published as recipes
   prompts/
     root/CLAUDE.md         # tracked SOURCE of the repo-root CLAUDE.md
     docs-site/CLAUDE.md    # tracked SOURCE of docs/CLAUDE.md
+    _partials/             # shared blocks both of the above @-include
+  tasks/                   # per-branch task files (taskFileRoot), gitignored
   .env.local.example       # documents the machine-specific env layer (.env.local); .env holds shared defaults
 deprecated/                # archived, gitignored
 docs/notes/                # planning docs and TODOs, gitignored
@@ -454,21 +470,51 @@ how the machine-written `conf.d/500-repos.json`, `conf.d/510-subscriptions.json`
 no comment syntax); `repos/managed-layer.ts` and `vars/mappings.ts` write them and always
 replace the whole file, since the kernel concatenates arrays rather than merging them by key.
 
+**The entries sous provides itself.** Two config entries are laid UNDER whatever the layers
+produced, after the kernel merges and before the schema validates (`applyRepoDefaults` in
+`repos/defaults.ts`): the repository `sous-recipes`, and a `core` namespace subscription whose
+range is exactly the running sous version. They are ordinary entries, so `sous config show`
+prints them and `sous repo list` marks the repository "built in" (their `addedBy` is `sous`).
+The merge is per FIELD, which is what makes the shortest opt-out a complete entry:
+
+```js
+subscriptions: { core: { enabled: false } }      // keep the repository, drop the skills
+repos: { "sous-recipes": { enabled: false } }    // drop the repository entirely
+```
+
+`enabled` defaults to true on both `repos` and `subscriptions` entries. A disabled entry stays
+in the config, so the opt-out is legible, and takes part in nothing; `enabledRepos` and
+`enabledSubscriptions` are what every read path calls. Switching the repository off also
+withdraws the core subscription, since it could not resolve without it.
+
 State and PID files default into the discovered `.sous/`: `sous.state.json` and `sous.pid`
 (unprefixed; one config is one project). Override with the `stateFilePath` / `pidFilePath`
 config vars.
 
 ### Sous Configures Itself
 
-This repo has its own `.sous/sous.config.js`, which compiles the `sous-skills`,
-`control-flow`, `task-files` and `github-projects` bundles into `.claude/skills/`, and
-generates two instruction files from tracked sources under `.sous/prompts/`:
+This repo has its own `.sous/sous.config.js`, and it gets its skills the way any other
+project does: it subscribes to recipes published by `sous-io/sous-recipes` and pins them in
+the COMMITTED `.sous/sous.lock.json`. Three sources feed `.claude/skills/`:
 
-- `.sous/prompts/root/CLAUDE.md` → `/CLAUDE.md` (this file)
-- `.sous/prompts/docs-site/CLAUDE.md` → `/docs/CLAUDE.md` (the website doc)
+- `core/sous-skills`, which every project gets without asking. It is not listed in the config
+  at all; sous provides that subscription itself, and `recipes/core/sous-skills/` at the root
+  of this repository is its source.
+- The subscriptions the config declares: `workflow/task-files`, `workflow/github-projects` and
+  `communication/control-flow`, written into `recipeOutputs.skills`.
+- This repository's own skills in `.sous/skills/`, compiled by the `projectSkills` target.
 
-`automated-browser-tasks` is deliberately excluded: it needs
+`tool-usage/automated-browser-tasks` is deliberately NOT subscribed to: it needs
 `browserAutomationScriptsDir` pointing at a real script directory, and sous has none.
+
+The config also generates two instruction files from tracked sources under `.sous/prompts/`:
+
+- `.sous/prompts/root/CLAUDE.md` -> `/CLAUDE.md` (this file)
+- `.sous/prompts/docs-site/CLAUDE.md` -> `/docs/CLAUDE.md` (the website doc)
+
+`sous-recipes` needs no `repos:` entry here; it is built in. The lockfile IS committed, and it
+is the point: a colleague, a fresh clone or CI builds this repository from exactly the recipe
+versions it records, with no prompts.
 
 **Sous's own task management:** tickets are GitHub issues in `sous-io/sous`, tracked on
 the "Sous" GitHub Projects v2 board (https://github.com/orgs/sous-io/projects/1, statuses
@@ -480,7 +526,7 @@ and compiled into the skills.
 
 Both compiled CLAUDE.md files are gitignored OUTPUTS (`/CLAUDE.md` and `/docs/CLAUDE.md`
 in `.gitignore`); only the sources in `.sous/prompts/` are tracked. Never edit the
-compiled copies — edit the sources and run `npm run sous:build`. A fresh clone has no
+compiled copies; edit the sources and run `npm run sous:build`. A fresh clone has no
 root CLAUDE.md until the first build (`npm run claude` builds before launching).
 
 `.claude/`, `.codex/`, `.sous/sous.state.json`, `/CLAUDE.md` and `/docs/CLAUDE.md` are
@@ -565,7 +611,7 @@ auto-vars  →  _env scope  →  _vars  →  compilation _vars  →  target _var
 - `_vars` blocks use `${varName}` syntax (resolved by Sous internally by a fixpoint loop)
 - Template files use `{{ varName }}` syntax (resolved by LiquidJS at render time)
 - `_env` is top-level only; maps `configVarName: "ENV_VAR_NAME"`
-- Reserved `sous*` namespace — do not define vars starting with `sous`
+- Reserved `sous*` namespace: do not define vars starting with `sous`
 
 **Fixpoint resolution.** Each `_vars` block resolves by a fixpoint loop (`resolveScope` in
 `settings.ts`), not a one-pass topological sort: every round re-scans every still-
@@ -579,16 +625,16 @@ scope. Every value Sous acts on (entry points, destinations, prompt files) also 
 through `substituteVarsStrict`, which raises a `ConfigError` on any leftover `${var}`.
 
 Auto-injected vars always available:
-- `sousRootPath` — absolute path to the Sous CLI install directory
-- `sousVersion` — current CLI version
-- `sousDir` — the discovered `.sous/` directory holding the active config
+- `sousRootPath`: absolute path to the Sous CLI install directory
+- `sousVersion`: current CLI version
+- `sousDir`: the discovered `.sous/` directory holding the active config
 - `sousConfDir`: the `conf.d/` drop-in directory for the active config
 - `sousConfigPath`: absolute path to the active (primary) config file
 - `sousHome`: the user-level sous directory (`~/.sous`, or `$SOUS_HOME`); holds the
   machine-wide recipe store and globally linked checkouts. Resolved from `process.env` on
   every call, because `SOUS_HOME` is file-settable (see `src/lib/sous-home.ts`)
-- `sousTemplatePath` — absolute path to the `.tpl.` file currently being rendered (render-time only)
-- `sousTemplateDir` — directory of the `.tpl.` file currently being rendered (render-time only)
+- `sousTemplatePath`: absolute path to the `.tpl.` file currently being rendered (render-time only)
+- `sousTemplateDir`: directory of the `.tpl.` file currently being rendered (render-time only)
 
 Absolute `entryPoint`, `globBase`, `destinationFile` and `destinationDir` values are
 normalized after substitution (`normalizeConfigPath` in `settings.ts`), so `${sousDir}/..`
@@ -597,31 +643,22 @@ collapses to the parent directory. This is required, not cosmetic: Sous writes f
 tracked destinations against `destinationDir`. An un-normalized `destinationDir` matched
 nothing and prune deleted everything compile had just written.
 
-### Variables Required by the Shared Prompts
+### Variables a Recipe Needs
 
-The bundles in `shared-prompts/` reference project variables that Sous does not provide. A
-consuming project must define these in `_vars` for the bundles it uses. The engine runs with
-`strictVariables: false`, so an undefined variable renders as an empty string; nothing fails, the
-output just silently loses the value (e.g. a path becomes `/[branch-name].md`). Define every
-variable for the bundles you compile.
+Sous no longer keeps a hand-maintained list of the variables its prompts want; a recipe
+PUBLISHES its own variable definitions in its manifest, and `sous vars` lists every one in
+play for the current project, with its environment variable, its value, where that value came
+from, and what is still unanswered. `sous vars <name>` shows one in full and `sous vars ask`
+answers what is missing. Read the definitions, not a table here.
 
-| Variable | Purpose | Example | Needed by |
-|----------|---------|---------|-----------|
-| `taskFileRoot` | Directory holding task files, one per git branch | `.claude/tasks` | `task-files` bundle, `_partials/resume-task.md`, `_partials/update-task-file.md` |
-| `ticketIdExample` | A sample ticket ID, used in skill trigger phrases and example branch/file names | `PROJ-1234` | `task-files` bundle |
-| `featureBranchPrefix` | Prefix for new feature branch names (include the trailing separator, or leave empty) | `luke/` | `task-files` bundle |
-| `ticketPrefix` | Ticket key prefix used when composing a branch name from a ticket number | `PROJ-` | `task-files/start-task` |
-| `skillsRoot` | Where the project's own skill sources live (not the compiled `.claude/skills/`) | `prompts/skills` | `sous-skills` bundle (`about-sous`, `about-agent-skills`, `create-skill`) |
-| `userFullName` | The user's display name | `Luke Chavers` | `github-projects` bundle |
-| `githubUserLogin` | The user's GitHub login, used for assignment | `vmadman` | `github-projects` bundle |
-| `githubRepo` | The `owner/repo` slug issues live in | `sous-io/sous` | `github-projects` bundle |
-| `githubProjectOwner` | Org or user that owns the Projects v2 board | `sous-io` | `github-projects` bundle |
-| `githubProjectNumber` | The board's project number | `1` | `github-projects` bundle |
-| `githubProjectId` | The board's GraphQL node ID (`gh project view --format json`) | `PVT_...` | `github-projects` bundle |
-| `githubStatusFieldId` | Node ID of the board's `Status` field (`gh project field-list`) | `PVTSSF_...` | `github-projects` bundle |
-| `githubStatusBacklogId`, `githubStatusReadyId`, `githubStatusInProgressId`, `githubStatusInReviewId`, `githubStatusDoneId` | Option IDs of the five `Status` values (`gh project field-list`) | `e3a82f26` | `github-projects/about-github-projects/references/workflow` |
-| `browserAutomationScriptsDir` | Absolute path to the project's browser task scripts; the runtime and the task manifest both read it | `/home/me/proj/browser-tasks` | `automated-browser-tasks` bundle, `memories/automated-browser-tasks/INDEX.tpl.md` |
-| `chromeProfile` | Default Chrome profile name for browser tasks (defaults to `Default` at runtime if unset) | `Profile 1` | `automated-browser-tasks` bundle (optional) |
+Two systems meet in a template, and it is worth knowing which is which. A recipe's variable
+DEFINITIONS are answered in the project's env files and resolved through the five-rung ladder
+in `src/lib/vars/`; a project's own `_vars` and `_env` are the zero-ceremony system, and they
+are what a `{{ variable }}` in a template renders from. The engine runs with
+`strictVariables: false`, so an undefined variable renders as an empty string: nothing fails,
+the output just silently loses the value (a path becomes `/[branch-name].md`). So define, in
+`_vars`, every variable the recipes you subscribe to name; `sous vars` is how you find out
+which those are.
 
 ## The `.tpl.` Convention
 
@@ -637,13 +674,13 @@ In any source `.md` file, `@path/to/file.md` on its own line includes that file'
 ```markdown
 @sections/context.md
 @../shared/intro.md
-@${sousRootPath}/shared-prompts/x.md
-@~sous-shared/_partials/resume-task.md
+@${projectRoot}/prompts/x.md
+@~project/prompts/intro.md
 @~workflow/task-files/_partials/resume.md
 @myAlias/doc.md
 ```
 
-Lines inside fenced code blocks (``` or ~~~) are NOT processed as includes — they are
+Lines inside fenced code blocks (``` or ~~~) are NOT processed as includes; they are
 left verbatim, which is what allows this very section to document the syntax in a
 compiled file. Guarded by the fence tests in `src/test/integration/compilation.test.ts`.
 
@@ -653,16 +690,17 @@ Resolution is handled by `src/lib/include-resolver.ts` (`resolveInclude` /
 namespaces work in both). A `@`-path may be:
 - **relative** to the including file,
 - **`${var}`-substituted** (settings-scope vars; an absolute result is used directly),
-- **aliased** — the first segment (up to `/` or `:`; both separators work) names an alias,
+- **aliased**: the first segment (up to `/` or `:`; both separators work) names an alias,
 - **namespaced**: a first segment carrying the reserved `~` sigil names a recipe
   namespace (see below).
 
-**Aliases.** Built-ins are reserved and `~`-prefixed: `~sous-shared` → the CLI's
-`shared-prompts` dir, `~project` → the project root (see `buildBuiltInAliases` in
-`settings.ts`). Projects add their own via the top-level `_aliases` block (string or
-array values, `${var}`-substituted); user names may not start with `~`. Precedence:
-built-ins → `_aliases`, where the user block **prepends** (user bases tried first,
-falling through to built-in bases of the same name). Resolved by
+**Aliases.** There is exactly ONE built-in, reserved and `~`-prefixed: `~project`, the
+project root (see `buildBuiltInAliases` in `settings.ts`). Everything sous once reached
+through a built-in alias into its own package is published as a recipe now, and a recipe's
+files are addressed by namespace instead. Projects add their own aliases via the top-level
+`_aliases` block (string or array values, `${var}`-substituted); user names may not start with
+`~`. Precedence: built-ins, then `_aliases`, where the user block **prepends** (user bases
+tried first, falling through to built-in bases of the same name). Resolved by
 `resolveAliases(settings, scope)`.
 
 **Recipe namespaces (the `~` sigil).** A first segment written `~<namespace>` addresses a
@@ -683,7 +721,7 @@ supplied the `~` sigil only ever means an alias.
 (only for a `~` first segment, and only when a resolver was supplied), then the path
 resolved relative to the including file (full path incl. the first segment, so an alias
 can *augment* a real local dir). Aliases therefore always beat a namespace of the same
-name, which keeps `~sous-shared` and `~project` stable. First candidate that exists wins;
+name, which keeps `~project` stable. First candidate that exists wins;
 none → error naming the including file, listing every path tried, and explaining the
 namespace lookup when one was attempted (unknown namespace, unknown recipe, or a recipe the
 including recipe must add to its `depends`). Circular includes are detected and reported,
@@ -691,29 +729,38 @@ including cycles that run through namespace references.
 
 ## Skills System
 
-This repo's own shared skills live in `shared-prompts/skills/<bundle>/<skill-name>/`: a
-`SKILL.md` or `SKILL.tpl.md` plus optional `scripts/`, `references/`, and `examples/`. A
-consuming project points an `entryGlob` target at a bundle and Sous compiles it into that
-project's agent skill directories (`.claude/skills/`, `.codex/skills/`).
+A skill is a directory holding a `SKILL.md` or `SKILL.tpl.md` plus optional `scripts/`,
+`references/` and `examples/`. Sous compiles skills into a project's agent skill directories
+(`.claude/skills/`, `.codex/skills/`), and there are exactly three places a skill can come
+from. Knowing which one you are editing is the whole point of this section, because the blast
+radius of each is completely different.
 
-A downstream project's own skills live wherever its config sets `skillsRoot`; the shared
-`create-skill` skill writes there.
+1. **`recipes/core/sous-skills/skills/` in THIS repository.** The core skills that teach an
+   agent what sous is: `about-sous`, `about-sous-configuration`, `about-agent-skills`,
+   `about-liquid-templates` and `create-skill`. This is the SOURCE for every project in the
+   world that installs sous, so an edit here reaches all of them at the next release. The
+   published copy in `sous-io/sous-recipes` is distribution output; edit it here.
+2. **A recipe in `sous-io/sous-recipes`.** Everything else sous publishes lives there and is
+   edited there, in a real checkout. `sous repo link sous-recipes` points this project at one
+   so an edit is visible in a build immediately, without a release.
+3. **`.sous/skills/` in THIS repository (`skillsRoot`).** Skills about developing sous
+   itself. They are not published, not distributed, and reach nobody else. A skill that is
+   only useful to someone working ON sous belongs here; anything worth sharing belongs in a
+   recipe.
 
-**In THIS repo, `skillsRoot` IS the shared bundle root** (`shared-prompts/skills/`). So when
-a compiled skill tells you to edit "this project's skills", that means editing the
-distributed bundle sources consumed by every downstream project — treat those edits with
-that blast radius in mind. Skills that are specific to developing sous itself and must NOT
-be distributed go in `.sous/skills/` instead (see the `projectSkills` target in
-`.sous/sous.config.js`). The compiled `about-sous`/`about-agent-skills` "never edit them"
-rule refers to compiled copies in consuming projects, not to these sources.
+`skillsRoot` is what a compiled skill renders when it tells an agent where "this project's
+skills" live, and in this repository it points at `.sous/skills/`. So when `create-skill`
+says to write a skill into this project, that is category 3 above. The compiled
+`about-sous` and `about-agent-skills` "never edit them" rule refers to the compiled copies
+inside a consuming project, which are build output; it is not about any of these sources.
 
 The `SKILL.md` frontmatter spec lives in the `about-agent-skills` skill
-(`shared-prompts/skills/sous-skills/about-agent-skills/`), which is the authoritative reference
+(`recipes/core/sous-skills/skills/about-agent-skills/`), which is the authoritative reference
 for skill structure and naming.
 
 Two skill types:
-- **Topic skills** — reference material and shared scripts for a concept
-- **Action skills** — lean, action-specific; reference their parent topic skill
+- **Topic skills**: reference material and shared scripts for a concept
+- **Action skills**: lean, action-specific; reference their parent topic skill
 
 ## State Files
 
@@ -815,7 +862,7 @@ flags even in non-strict mode otherwise) and splits argv at the first `--` itsel
 ## Important Patterns
 
 - All commands extend `BaseCommand`, which discovers the config, loads `.env.local`, and
-  loads settings on every run. Discovery is required — there is no opt-out.
+  loads settings on every run. Discovery is required; there is no opt-out.
 - `CompilationService` (alias `MarkdownCompiler`) is the core compiler class
 - `BuildService` orchestrates `CompilationService` + prune in one step
 - Watch mode uses `WatchService` (chokidar + debounce, 300ms); ignores `*.sous.state.json` files
@@ -839,7 +886,7 @@ Registered automatically by `createLiquidEngine()`:
 |------|------|---------|
 | `{% showVars %}` | tag | Dump all in-scope vars as a fenced JSON block (dev aid) |
 | `{% exportScalarVarsJs %}` | tag | Emit in-scope scalars (string/finite-number/boolean) as `export default {...};`, keys sorted. For compiling a `settings.tpl.mjs` that runtime code imports. Skips objects, arrays, null, functions, NaN/Infinity. |
-| `{% getFiles <var> root="..." include="..." exclude="..." import="..." %}` | tag | Glob files under `root`; assign `[{path,dir,relPath,name}]` to `<var>` (renders nothing — use a `{% for %}`). `include`/`exclude` are comma-separated globs; attrs accept quoted strings or scope vars. Optional `import="<export>"` dynamically imports each file and attaches that export (e.g. `import="meta"` → `file.meta`); files that fail to import or lack the export are dropped. Requires the async render path. |
+| `{% getFiles <var> root="..." include="..." exclude="..." import="..." %}` | tag | Glob files under `root`; assign `[{path,dir,relPath,name}]` to `<var>` (renders nothing; use a `{% for %}`). `include`/`exclude` are comma-separated globs; attrs accept quoted strings or scope vars. Optional `import="<export>"` dynamically imports each file and attaches that export (e.g. `import="meta"` → `file.meta`); files that fail to import or lack the export are dropped. Requires the async render path. |
 | `{% listFiles root="..." include="..." exclude="..." relative="true" %}` | tag | Convenience counterpart to `getFiles`: globs and renders a markdown bullet list of file names (or relative paths) inline. Glob-only. |
 | `bulletList` | filter | Convert an array to a markdown bullet list |
 
@@ -847,7 +894,7 @@ The glob core (`globFiles`, `parseGlobList`) lives in `src/templating/lib/glob-f
 and is shared by both file tags; it uses the `glob` package (matching `entryGlob`).
 `getFiles import=` uses `importNamedExport` in `src/templating/lib/import-export.ts`.
 
-**Async render:** the compiler renders via `engine.parseAndRender` (async) — see
+**Async render:** the compiler renders via `engine.parseAndRender` (async); see
 `renderContent`/`compileTarget` in `markdown-compiler.ts`. This is required so tags
 like `getFiles import=` can `import()` files. Do not revert to `parseAndRenderSync`;
 `src/test/integration/get-files-tag.test.ts` guards this.
@@ -860,7 +907,7 @@ same pattern under `filters/`.
 
 ## Important!
 
-When working on `sous`, keep this document accurate — but remember it is GENERATED:
+When working on `sous`, keep this document accurate, but remember it is GENERATED:
 edit the tracked source at `.sous/prompts/root/CLAUDE.md` (never the compiled root
 `CLAUDE.md`) immediately after any change to sous, its code, its configuration, or its
 usage, then run `npm run sous:build`. It is VITAL that this file ALWAYS describes `sous`
