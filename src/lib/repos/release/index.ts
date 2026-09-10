@@ -12,3 +12,4 @@ export * from "./tags.js";
 export * from "./git-state.js";
 export * from "./index-builder.js";
 export * from "./bump.js";
+export * from "./submit-service.js";

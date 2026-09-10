@@ -49,8 +49,11 @@ export async function findGithubToken(options: {
 export class GithubProvider implements RepoProvider {
   readonly id = "github" as const;
 
-  /** Submitting a change arrives with the authoring commands, in a later phase. */
-  readonly features: ProviderFeature[] = ["fetch"];
+  /**
+   * Reads the index and recipe subtrees, and proposes a change through
+   * the GitHub CLI ('gh').
+   */
+  readonly features: ProviderFeature[] = ["fetch", "submit"];
 
   matches(url: string): boolean {
     const parts = splitRepoUrl(url);

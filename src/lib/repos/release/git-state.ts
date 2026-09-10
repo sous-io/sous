@@ -189,6 +189,29 @@ export async function pushBranch(
 }
 
 /**
+ * The subject line of the most recent commit, or undefined when there is none.
+ * It is the default title for a proposed change, which is what a contributor
+ * would have typed anyway.
+ *
+ * @param rootDir - The repository's root directory.
+ * @param options - The command runner to use.
+ */
+export async function lastCommitSubject(
+  rootDir: string,
+  options: RunOptions = {}
+): Promise<string | undefined> {
+  try {
+    const subject = await runGit(["log", "-1", "--format=%s"], {
+      cwd: rootDir,
+      run: options.run,
+    });
+    return subject.length > 0 ? subject : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * The branch name sous proposes for a submission, stamped with the minute it
  * was made so two submissions from one checkout never collide.
  *

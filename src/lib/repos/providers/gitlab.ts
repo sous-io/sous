@@ -52,8 +52,11 @@ export async function findGitlabToken(options: {
 export class GitlabProvider implements RepoProvider {
   readonly id = "gitlab" as const;
 
-  /** Submitting a change arrives with the authoring commands, in a later phase. */
-  readonly features: ProviderFeature[] = ["fetch"];
+  /**
+   * Reads the index and recipe subtrees, and proposes a change through
+   * the GitLab CLI ('glab').
+   */
+  readonly features: ProviderFeature[] = ["fetch", "submit"];
 
   matches(url: string): boolean {
     const parts = splitRepoUrl(url);

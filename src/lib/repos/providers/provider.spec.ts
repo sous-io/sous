@@ -78,13 +78,14 @@ describe("buildCanonicalRepo()", () => {
 describe("the built-in provider list", () => {
   /**
    * builtInProviders should return the two providers version one ships, each
-   * declaring the read path and not yet the submit path.
+   * declaring both the read path and the propose-a-change path, which they
+   * delegate to their own command line tools.
    */
-  it("should ship GitHub and GitLab, both with the fetch feature only", () => {
+  it("should ship GitHub and GitLab, both able to fetch and to submit", () => {
     const providers = builtInProviders();
     expect(providers.map((provider) => provider.id)).toEqual(["github", "gitlab"]);
     for (const provider of providers) {
-      expect(provider.features).toEqual(["fetch"]);
+      expect(provider.features).toEqual(["fetch", "submit"]);
     }
   });
 
