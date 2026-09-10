@@ -14,7 +14,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { ConfigError, isConfigError } from "../../errors.js";
+import { ConfigError } from "../../errors.js";
 import { MANIFEST_EXTENSIONS, REPO_MANIFEST_BASENAME } from "../formats/common.js";
 import {
   parseRecipeManifest,
@@ -222,6 +222,17 @@ export function wellKnownEnvReason(envName: string): string | undefined {
 
 // --- Internals ----------------------------------------------------------------------------------
 
+/**
+ * The message a thrown value should be reported with. A ConfigError already
+ * carries plain-language wording, and every other Error at least carries a
+ * message; anything else is rendered as it stands.
+ *
+ * @param error - The value that was thrown.
+ */
+export function describeError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 /** Renders an absolute path as a repository-relative one, with forward slashes. */
 function relative(rootDir: string, target: string): string {
   return path.relative(rootDir, target).split(path.sep).join("/");
@@ -256,7 +267,7 @@ function readRecipe(
     problems.push({
       level: "error",
       where: recipePath,
-      message: isConfigError(error) ? error.message : String(error),
+      message: describeError(error),
     });
     return undefined;
   }
@@ -281,7 +292,7 @@ function readRecipe(
     problems.push({
       level: "error",
       where: relative(rootDir, manifestPath),
-      message: isConfigError(error) ? error.message : String(error),
+      message: describeError(error),
     });
     return undefined;
   }
