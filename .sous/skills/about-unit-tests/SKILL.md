@@ -52,9 +52,8 @@ src/test/
   utils/             # shared test helpers (tmp dirs, fixtures, settings builder)
 ```
 
-The default config's `include` covers three patterns: `src/**/*.spec.ts`,
-`src/test/**/*.test.ts`, and `shared-prompts/**/*.spec.mjs` (the browser-automation
-bundle ships its own `.mjs` specs, which run alongside the TypeScript ones).
+The default config's `include` covers two patterns: `src/**/*.spec.ts` and
+`src/test/**/*.test.ts`.
 
 ## Naming Conventions
 

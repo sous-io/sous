@@ -759,17 +759,19 @@ export function resolveRootScope(settings: Settings, context?: ConfigContext): V
 /**
  * Built-in `@include` aliases, always available and reserved (their names begin
  * with `~` so user `_aliases` can never shadow them). Add new entries here as
- * needed — keep names kebab-case.
+ * needed; keep names kebab-case.
  *
- * - `~sous-shared` → the Sous CLI's `shared-prompts` directory (the only dir
- *   downstream projects consume; path into it, e.g. `@~sous-shared/skills/...`).
- * - `~project`     → the consuming project's root (`projectRoot`).
+ * - `~project` → the consuming project's root (`projectRoot`).
+ *
+ * There is exactly one, on purpose. Files that used to be reached through a
+ * built-in alias pointing inside the sous package are published as recipes now,
+ * and a recipe's files are addressed by its namespace (`@~workflow/task-files/
+ * _partials/resume-task.md`), resolved against what the project has pinned. A
+ * `~namespace` reference is NOT an alias: it is resolved separately, after the
+ * alias map has been tried; see `locked-namespace-resolver.ts`.
  */
 export function buildBuiltInAliases(scope: VarScope): AliasMap {
-  const sousRoot = scope.sousRootPath ?? CLI_ROOT;
-  const builtIns: AliasMap = {
-    "~sous-shared": [path.join(sousRoot, "shared-prompts")],
-  };
+  const builtIns: AliasMap = {};
   if (scope.projectRoot) builtIns["~project"] = [scope.projectRoot];
   return builtIns;
 }
@@ -937,7 +939,7 @@ export function resolveCompilation(
 
       /* c8 ignore start */
       // Glob target: expand pattern into one CompilationTarget per matched file, skipping dirs.
-      // A leading alias (`~sous-shared/skills/**`) expands to one candidate pattern per alias
+      // A leading alias (`~project/skills/**`) expands to one candidate pattern per alias
       // base; the first base that matches any files wins, mirroring the first-existing-wins
       // rule of @include resolution.
       const rawPattern = substituteVarsStrict(target.entryGlob!, targetScope, `${where}.entryGlob`);

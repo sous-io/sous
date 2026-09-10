@@ -15,8 +15,8 @@ import type {
 
 describe("resolveAliasPrefix()", () => {
   const aliases = {
-    "~sous-shared": ["/opt/sous/shared-prompts"],
-    team: ["/team/prompts", "/opt/sous/shared-prompts"],
+    "~project": ["/proj-root"],
+    team: ["/team/prompts", "/proj-root"],
   };
 
   it("returns an absolute path unchanged as the sole candidate", () => {
@@ -30,20 +30,20 @@ describe("resolveAliasPrefix()", () => {
   it("expands an alias to one candidate per base, in base order", () => {
     expect(resolveAliasPrefix("team/skills/**/*", aliases)).toEqual([
       "/team/prompts/skills/**/*",
-      "/opt/sous/shared-prompts/skills/**/*",
+      "/proj-root/skills/**/*",
     ]);
   });
 
   it("expands a built-in ~ alias", () => {
-    expect(resolveAliasPrefix("~sous-shared/skills/**/*", aliases)).toEqual([
-      "/opt/sous/shared-prompts/skills/**/*",
+    expect(resolveAliasPrefix("~project/skills/**/*", aliases)).toEqual([
+      "/proj-root/skills/**/*",
     ]);
   });
 
   it("accepts the colon separator", () => {
     expect(resolveAliasPrefix("team:skills/**/*", aliases)).toEqual([
       "/team/prompts/skills/**/*",
-      "/opt/sous/shared-prompts/skills/**/*",
+      "/proj-root/skills/**/*",
     ]);
   });
 });
@@ -66,7 +66,7 @@ describe("splitAliasKey()", () => {
     expect(splitAliasKey("file.md")).toEqual({ key: "file.md", rest: "" });
   });
   it("keeps ~ as part of the key", () => {
-    expect(splitAliasKey("~sous-shared/a/b.md")).toEqual({ key: "~sous-shared", rest: "a/b.md" });
+    expect(splitAliasKey("~project/a/b.md")).toEqual({ key: "~project", rest: "a/b.md" });
   });
 });
 
@@ -82,13 +82,13 @@ describe("resolveIncludeCandidates()", () => {
   });
 
   it("resolves an alias to its base, then the relative fallback", () => {
-    const out = resolveIncludeCandidates("~sous-shared/memories/x.md", {
-      aliases: { "~sous-shared": ["/opt/sous/shared-prompts"] },
+    const out = resolveIncludeCandidates("~project/memories/x.md", {
+      aliases: { "~project": ["/proj-root"] },
       baseDir,
     });
     expect(out).toEqual([
-      "/opt/sous/shared-prompts/memories/x.md",
-      "/proj/memories/tools/~sous-shared/memories/x.md",
+      "/proj-root/memories/x.md",
+      "/proj/memories/tools/~project/memories/x.md",
     ]);
   });
 
@@ -114,11 +114,11 @@ describe("resolveIncludeCandidates()", () => {
   });
 
   it("accepts the colon separator for aliases", () => {
-    const out = resolveIncludeCandidates("~sous-shared:memories/x.md", {
-      aliases: { "~sous-shared": ["/opt/sous/shared-prompts"] },
+    const out = resolveIncludeCandidates("~project:memories/x.md", {
+      aliases: { "~project": ["/proj-root"] },
       baseDir,
     });
-    expect(out[0]).toBe("/opt/sous/shared-prompts/memories/x.md");
+    expect(out[0]).toBe("/proj-root/memories/x.md");
   });
 
   it("treats an unregistered first segment as purely relative", () => {
@@ -147,8 +147,8 @@ describe("resolveIncludeCandidates()", () => {
 
 describe("buildAliasMap()", () => {
   it("includes built-ins as-is", () => {
-    const map = buildAliasMap({ builtIns: { "~sous-shared": ["/opt/sous/shared-prompts"] } });
-    expect(map["~sous-shared"]).toEqual(["/opt/sous/shared-prompts"]);
+    const map = buildAliasMap({ builtIns: { "~project": ["/proj-root"] } });
+    expect(map["~project"]).toEqual(["/proj-root"]);
   });
 
   it("adds user aliases with var substitution (string or array)", () => {
@@ -162,7 +162,7 @@ describe("buildAliasMap()", () => {
 
   it("prepends project bases ahead of built-in bases of the same name", () => {
     const map = buildAliasMap({
-      builtIns: { "~sous-shared": ["/builtin"] },
+      builtIns: { "~project": ["/builtin"] },
       // a user can't reuse ~ names, but demonstrate prepend with a normal name
       userAliases: [{ shared: ["/root-level"] }, { shared: ["/project-level"] }],
     });
@@ -172,11 +172,11 @@ describe("buildAliasMap()", () => {
   it("rejects user aliases that use the reserved ~ prefix", () => {
     const errors: string[] = [];
     const map = buildAliasMap({
-      builtIns: { "~sous-shared": ["/builtin"] },
-      userAliases: [{ "~sous-shared": ["/hijack"], ok: ["/fine"] }],
+      builtIns: { "~project": ["/builtin"] },
+      userAliases: [{ "~project": ["/hijack"], ok: ["/fine"] }],
       onError: (m) => errors.push(m),
     });
-    expect(map["~sous-shared"]).toEqual(["/builtin"]); // unchanged
+    expect(map["~project"]).toEqual(["/builtin"]); // unchanged
     expect(map.ok).toEqual(["/fine"]);
     expect(errors).toHaveLength(1);
     expect(errors[0]).toMatch(/reserved/);
@@ -229,16 +229,16 @@ describe("resolveInclude() with a namespace resolver", () => {
   it("should put alias bases ahead of namespace candidates", () => {
     const { resolver } = makeSpyResolver({
       kind: "candidates",
-      candidates: ["/store/sous-shared/recipe/x.md"],
+      candidates: ["/store/project/recipe/x.md"],
     });
-    const out = resolveInclude("~sous-shared/recipe/x.md", {
-      aliases: { "~sous-shared": ["/opt/sous/shared-prompts"] },
+    const out = resolveInclude("~project/recipe/x.md", {
+      aliases: { "~project": ["/proj-root"] },
       namespaceResolver: resolver,
       baseDir,
     });
 
-    expect(out.candidates[0]).toBe("/opt/sous/shared-prompts/recipe/x.md");
-    expect(out.candidates).toContain("/store/sous-shared/recipe/x.md");
+    expect(out.candidates[0]).toBe("/proj-root/recipe/x.md");
+    expect(out.candidates).toContain("/store/project/recipe/x.md");
   });
 
   /**

@@ -138,23 +138,23 @@ describe("~namespace includes (real compile path)", () => {
    * A built-in or user alias keeps its meaning even when a recipe namespace
    * shares its name, because alias bases are tried before the resolver.
    *
-   * With alias "~sous-shared" pointing at a real directory AND a namespace
-   * named "sous-shared" in the store, the ALIAS file is inlined.
+   * With the built-in alias "~project" pointing at a real directory AND a
+   * namespace named "project" in the store, the ALIAS file is inlined.
    */
   it("should prefer an alias over a namespace of the same name", async () => {
     tmp = makeTmpDir("ns-inc-");
     write("shared/recipe/file.md", "ALIAS WINS");
-    write("store/sous-shared/recipe/file.md", "NAMESPACE LOSES");
-    const entry = write("project/AGENTS.md", "@~sous-shared/recipe/file.md\n");
+    write("store/project/recipe/file.md", "NAMESPACE LOSES");
+    const entry = write("project/AGENTS.md", "@~project/recipe/file.md\n");
     const dest = at("out/AGENTS.md");
 
     const resolver = new StaticNamespaceResolver({
-      recipes: { "sous-shared/recipe": at("store/sous-shared/recipe") },
+      recipes: { "project/recipe": at("store/project/recipe") },
     });
 
     const compiler = new CompilationService({ namespaceResolver: resolver });
     const ok = await compiler.compile({
-      aliases: { "~sous-shared": [at("shared")] },
+      aliases: { "~project": [at("shared")] },
       targets: [{ rootInputPath: entry, outputs: [{ destinationFile: dest }] }],
     });
 

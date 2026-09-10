@@ -17,7 +17,7 @@ import type { NamespaceResolution, NamespaceResolver } from "./repos/namespace-r
  *      join(base, rest) for EACH base in the alias's ordered array.
  *   3. If the key begins with `~` and a namespace resolver was supplied, ask it
  *      for the recipe namespace named by the key (minus the `~`) and push its
- *      candidates. Aliases are consulted first, so `~sous-shared` keeps meaning
+ *      candidates. Aliases are consulted first, so `~project` keeps meaning
  *      the built-in alias even if a namespace of that name exists.
  *   4. Always push the relative candidate: join(baseDir, P) — the FULL path
  *      including the alias segment. This lets an alias augment a real relative

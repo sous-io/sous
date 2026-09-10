@@ -136,17 +136,20 @@ config, and `${sousTemplatePath}` for the template being rendered.
 
 Sources come in three tiers, each able to build on the one above it:
 
-1. **Built-in** shared prompts that ship with sous, covering skill authoring, templating, and
-   the sous conventions themselves.
-2. **Team-shared**, a repo your team owns, holding the configs everyone should get.
+1. **Published recipes**, fetched from a recipe repository and pinned in your project's
+   lockfile. The official repository publishes the `core` namespace, which teaches an agent
+   about sous itself and which every project gets without asking, plus recipes for skill
+   authoring, task tracking and more.
+2. **Team-shared**, a recipe repository your team owns, holding the recipes everyone should
+   get.
 3. **Per-project**, the project's own `.sous/` directory, for anything specific to it.
 
-The built-in tier is reachable without knowing where sous is installed. `@include` paths
-accept aliases, and two are always defined: `~sous-shared` for the shared prompts that ship
-with sous, and `~project` for the project root. So `@~sous-shared/_partials/sub-agent-delegation.md`
-composes a built-in block into your own instruction file, and an `entryGlob` can point at a
-built-in skill bundle to compile it into your project. Define your own aliases with an
-`_aliases` block to do the same for a team-shared repo.
+A recipe's files are reachable without knowing where anything is installed. An `@include`
+path may name a recipe by its namespace, so
+`@~workflow/task-files/_partials/resume-task.md` composes a block published by the recipe
+`workflow/task-files`, at the version your project has pinned, into your own instruction
+file. `@~project/...` names your project's root, and you can define your own aliases with
+an `_aliases` block.
 
 Sous records every file and directory it writes in a state file, `.sous/sous.state.json` by
 default, which is what lets `prune` and `clear` clean up precisely instead of guessing.

@@ -27,7 +27,7 @@ export type EngineAliasOptions = {
 
 /**
  * A node-backed LiquidJS FS that additionally understands alias and namespace
- * render paths — `{% render "@~sous-shared/x.md" %}`, `{% render "@docs/y.md" %}`,
+ * render paths — `{% render "@~project/x.md" %}`, `{% render "@docs/y.md" %}`,
  * `{% render "@${var}/z.md" %}` and `{% render "~workflow/task-files/x.md" %}` —
  * resolving them through the same alias/namespace/var/relative candidate logic
  * as `@include`. The leading `@` is optional for a `~`-sigil path, since `~`

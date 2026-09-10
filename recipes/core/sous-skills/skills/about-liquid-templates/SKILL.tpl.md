@@ -130,7 +130,7 @@ prefix it with a word, or wrap it in backticks inline).
 A `@`-path may be any of:
 
 - **Relative** to the including file: `@sections/intro.md` (traverse up with `../`).
-- **Variable-substituted**: `@${sousRootPath}/shared-prompts/x.md` — `${var}` is
+- **Variable-substituted**: `@${projectRoot}/prompts/x.md` — `${var}` is
   substituted before resolving; if the result is absolute it is used directly.
 - **Aliased**: `@<alias>/rest.md`, where the first segment names a registered alias.
 
@@ -152,12 +152,12 @@ may address the project's subscriptions. Anything else is an error naming what w
 so a reference can never quietly pick up a recipe nobody asked for.
 
 Built-in **aliases** are reserved, always begin with `~`, and are consulted before recipe
-namespaces:
+namespaces. There is exactly one:
 
 - `@~project/...` → the consuming project's root.
-- `@~sous-shared/...` → the directory of prompts shipped inside the Sous CLI package
-  itself. That directory now holds only the core seed, so a recipe reference is almost
-  always what you want instead.
+
+Everything else sous once shipped inside its own package is published as a recipe now, so
+a recipe reference is what reaches it.
 
 Projects register their own aliases in settings via an `_aliases` block (root and/or
 project level); names may **not** start with `~` (reserved). An alias value is a string

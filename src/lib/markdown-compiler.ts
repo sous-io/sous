@@ -189,7 +189,7 @@ export class CompilationService {
    * Matches an `@`-prefixed `.md` path on its own line. The path may be:
    *   - relative to the including file (`@sections/intro.md`),
    *   - a `${var}`-substituted path (`@${sousRootPath}/x.md`),
-   *   - an alias path (`@~sous-shared/memories/x.md`, `@docs/x.md`), where the
+   *   - an alias path (`@~project/memories/x.md`, `@docs/x.md`), where the
    *     first segment (up to `/` or `:`) names a registered alias,
    *   - or a recipe namespace path (`@~workflow/task-files/_partials/x.md`),
    *     where the `~` sigil names a namespace and the rest names a recipe and a
