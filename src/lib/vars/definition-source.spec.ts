@@ -55,13 +55,74 @@ describe("StaticDefinitionSource", () => {
 
 describe("loadProjectDefinitions()", () => {
   /**
-   * loadProjectDefinitions should return a source that loads nothing until the
-   * resolver is wired in, so every `sous vars` command reports an empty project
-   * rather than failing.
+   * loadProjectDefinitions should return an empty list for a project with no
+   * lockfile, so `sous vars` reports an empty project rather than failing.
+   *
+   * loadProjectDefinitions(settings, sousDir).load(); // -> []
    */
-  it("should return a source with no definitions yet", async () => {
+  it("should return no definitions when the project locks nothing", async () => {
     const source = loadProjectDefinitions({} as Settings, tmp.path);
     await expect(source.load()).resolves.toEqual([]);
+  });
+
+  /**
+   * loadProjectDefinitions should return one entry per `variables:` entry of
+   * every recipe the lockfile pins, attributed to the recipe that published it,
+   * so `sous vars` can name where each question came from.
+   *
+   * loadProjectDefinitions(settings, sousDir).load();
+   * // -> [{ definition: { name: "apiUrl", ... }, recipe: { namespace: "workflow", ... } }]
+   */
+  it("should read the variables of every locked recipe", async () => {
+    const sousDir = path.join(tmp.path, ".sous");
+    const storeRoot = path.join(tmp.path, "home", "cache");
+    const recipeDir = path.join(storeRoot, "fixtures", "workflow", "task-files", "1.0.0");
+
+    fs.mkdirSync(sousDir, { recursive: true });
+    fs.mkdirSync(recipeDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(sousDir, "sous.lock.json"),
+      JSON.stringify({
+        formatVersion: 1,
+        repos: { fixtures: { url: "https://example.com/owner/fixtures" } },
+        recipes: {
+          "workflow/task-files": {
+            repo: "fixtures",
+            version: "1.0.0",
+            hash: `sha256-${"b".repeat(64)}`,
+            requestedBy: ["project"],
+            kind: "subscribes",
+          },
+        },
+      }),
+      "utf8"
+    );
+    fs.writeFileSync(
+      path.join(recipeDir, "sous.recipe.json"),
+      JSON.stringify({
+        formatVersion: 1,
+        namespace: "workflow",
+        name: "task-files",
+        version: "1.0.0",
+        contents: [],
+        variables: [{ name: "apiUrl", type: "url", prompt: "Where does the API live?" }],
+      }),
+      "utf8"
+    );
+
+    const source = loadProjectDefinitions({} as Settings, sousDir, {
+      SOUS_HOME: path.join(tmp.path, "home"),
+    });
+    const defined = await source.load();
+
+    expect(defined).toHaveLength(1);
+    expect(defined[0]!.definition.name).toBe("apiUrl");
+    expect(defined[0]!.recipe).toEqual({
+      repo: "fixtures",
+      namespace: "workflow",
+      name: "task-files",
+      version: "1.0.0",
+    });
   });
 });
 

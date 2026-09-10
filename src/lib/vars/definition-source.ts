@@ -4,11 +4,10 @@
  * A definition is a published specification, not a value: it says what a
  * variable is called, what shape an answer takes, and what question to ask.
  * Definitions ship inside recipe manifests, so the real source is the set of
- * recipes a project subscribes to. That set is assembled by the resolver, which
- * arrives in a later phase, so every consumer here goes through ONE seam:
- * `loadProjectDefinitions`. Replacing what that factory returns is the whole
- * wiring job; nothing else in the variables layer knows where definitions came
- * from.
+ * recipes a project's lockfile pins. Every consumer goes through ONE seam,
+ * `loadProjectDefinitions`; nothing else in the variables layer knows where
+ * definitions came from, which is what lets `sous vars ask --file` read a
+ * standalone file through the same machinery.
  */
 
 import path from "node:path";
@@ -19,6 +18,10 @@ import {
   type VariableDefinition,
 } from "../repos/formats/recipe-manifest.js";
 import { loadManifestFile } from "../repos/load-manifest.js";
+import {
+  listLockedRecipes,
+  readRecipeManifestIn,
+} from "../repos/locked-recipes.js";
 import type { Settings } from "../settings.js";
 
 /** Which recipe published a definition, spelled out for display and for naming. */
@@ -65,46 +68,69 @@ export class StaticDefinitionSource implements VariableDefinitionSource {
 
 /**
  * The project's own definitions: every variable declared by every recipe the
- * project is subscribed to, plus the recipes those pull in.
+ * lockfile pins, whether the project subscribed to it directly or a dependency
+ * pulled it in.
  *
- * WIRING POINT. Subscriptions are resolved to concrete recipe versions by the
- * resolver and the store, which land in a later phase; until then this source
- * loads nothing and every `sous vars` command reports an empty project. When
- * the resolver exists, `load()` walks the resolved recipe set, reads each
- * recipe manifest's `variables:` array, and returns one DefinedVariable per
- * entry. No caller needs to change.
+ * Both kinds count, deliberately. A recipe may `depends` on another purely to
+ * reuse its published variable definitions, and a build that cannot answer
+ * those variables is just as broken as one that cannot answer a subscription's.
+ *
+ * A recipe the store does not hold yet contributes nothing rather than failing:
+ * a fresh clone lists what it can until `sous build` restores the rest.
  */
 export class ProjectDefinitionSource implements VariableDefinitionSource {
   /**
    * @param settings - The merged project config, which holds the subscriptions.
    * @param sousDir - The project's `.sous/` directory, where the lockfile lives.
+   * @param env - The environment to read; decides where the store is.
    */
   constructor(
     private readonly settings: Settings,
-    private readonly sousDir: string
+    private readonly sousDir: string,
+    private readonly env: NodeJS.ProcessEnv = process.env
   ) {}
 
-  /** The project's definitions; empty until the resolver is wired in. */
+  /** Every variable published by every recipe this project's lockfile pins. */
   async load(): Promise<DefinedVariable[]> {
     void this.settings;
-    void this.sousDir;
-    return [];
+
+    const defined: DefinedVariable[] = [];
+
+    for (const located of listLockedRecipes({ sousDir: this.sousDir, env: this.env })) {
+      if (!located.present) continue;
+
+      const manifest = readRecipeManifestIn(located.dir);
+      if (manifest === undefined) continue;
+
+      const recipe: DefiningRecipe = {
+        repo: located.repo,
+        namespace: located.namespace,
+        name: located.name,
+        version: located.version,
+      };
+      for (const definition of manifest.variables ?? []) {
+        defined.push({ definition, recipe });
+      }
+    }
+
+    return defined;
   }
 }
 
 /**
  * Builds the definition source for a project. This is the single injection
- * point every `sous vars` command uses; a later phase replaces the body with
- * the resolved subscription set and the commands keep working unchanged.
+ * point every `sous vars` command uses.
  *
  * @param settings - The merged project config.
  * @param sousDir - The project's `.sous/` directory.
+ * @param env - The environment to read; decides where the store is.
  */
 export function loadProjectDefinitions(
   settings: Settings,
-  sousDir: string
+  sousDir: string,
+  env: NodeJS.ProcessEnv = process.env
 ): VariableDefinitionSource {
-  return new ProjectDefinitionSource(settings, sousDir);
+  return new ProjectDefinitionSource(settings, sousDir, env);
 }
 
 // --- Standalone definition files ------------------------------------------------------------------
