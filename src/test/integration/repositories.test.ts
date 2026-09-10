@@ -1,0 +1,628 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { execFileSync, spawnSync } from "node:child_process";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { makeTmpDir, type TmpDir } from "../utils/tmp.js";
+import { hashDirectory } from "../../lib/repos/store/hash.js";
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+const binPath = path.join(repoRoot, "bin", "run.js");
+
+/** Per-test budget: every one of these boots the real CLI several times. */
+const CLI_TIMEOUT = 90_000;
+
+type RunResult = { stdout: string; stderr: string; status: number | null };
+
+let tmp: TmpDir;
+/** The project the commands run in. */
+let projectRoot: string;
+let sousDir: string;
+/** The user-level sous directory, which holds the store. */
+let sousHome: string;
+let storeRoot: string;
+/** The two local fixture repositories. */
+let mainRepo: string;
+let extrasRepo: string;
+
+/**
+ * Runs `sous <args...>` through the real published bin, from `cwd`, with the
+ * store pointed at this test's temporary directory. The `SOUS_*` project
+ * variables are stripped so the child discovers its config by walking up from
+ * `cwd`, and nothing this test does can reach the developer's own store.
+ */
+function sous(cwd: string, ...args: string[]): RunResult {
+  const env = { ...process.env, SOUS_HOME: sousHome };
+  delete env.SOUS_CONFIG;
+  delete env.SOUS_DIR;
+  delete env.SOUS_CONFD;
+  const result = spawnSync(process.execPath, [binPath, ...args], {
+    cwd,
+    encoding: "utf8",
+    env,
+  });
+  return { stdout: result.stdout, stderr: result.stderr, status: result.status };
+}
+
+/** Writes a file, creating its parent directories. Returns the full path. */
+function write(filePath: string, contents: string): string {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, contents, "utf8");
+  return filePath;
+}
+
+/** Reads a JSON file that the CLI wrote. */
+function readJson(filePath: string): Record<string, unknown> {
+  return JSON.parse(fs.readFileSync(filePath, "utf8")) as Record<string, unknown>;
+}
+
+/** Runs git in a directory, with an identity so committing works anywhere. */
+function git(cwd: string, ...args: string[]): void {
+  execFileSync("git", args, {
+    cwd,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      GIT_AUTHOR_NAME: "Sous Test",
+      GIT_AUTHOR_EMAIL: "test@example.invalid",
+      GIT_COMMITTER_NAME: "Sous Test",
+      GIT_COMMITTER_EMAIL: "test@example.invalid",
+    },
+  });
+}
+
+/** One recipe to write into a fixture repository. */
+type RecipeFixture = {
+  namespace: string;
+  name: string;
+  version: string;
+  description?: string;
+  depends?: string[];
+  files: Record<string, string>;
+  variables?: unknown[];
+};
+
+/**
+ * Builds a local git repository publishing the given recipes, complete with a
+ * repo manifest, one recipe manifest each, a generated index carrying the real
+ * content hash of every recipe folder, and one tag per published version.
+ *
+ * This is what the `file` provider reads, so the whole system runs end to end
+ * with no network at all.
+ */
+async function buildFixtureRepo(
+  directory: string,
+  name: string,
+  recipes: RecipeFixture[]
+): Promise<void> {
+  const namespaces: Record<string, unknown> = {};
+  const indexRecipes: Record<string, unknown> = {};
+  const paths: string[] = [];
+
+  for (const recipe of recipes) {
+    const relative = `recipes/${recipe.namespace}/${recipe.name}`;
+    const recipeDir = path.join(directory, relative);
+    paths.push(relative);
+    namespaces[recipe.namespace] = { description: `The ${recipe.namespace} namespace` };
+
+    write(
+      path.join(recipeDir, "sous.recipe.json"),
+      JSON.stringify(
+        {
+          formatVersion: 1,
+          namespace: recipe.namespace,
+          name: recipe.name,
+          version: recipe.version,
+          ...(recipe.description === undefined ? {} : { description: recipe.description }),
+          ...(recipe.depends === undefined ? {} : { depends: recipe.depends }),
+          contents: [{ kind: "skills", include: ["skills/**/*.md"] }],
+          ...(recipe.variables === undefined ? {} : { variables: recipe.variables }),
+        },
+        null,
+        2
+      )
+    );
+
+    for (const [relativeFile, contents] of Object.entries(recipe.files)) {
+      write(path.join(recipeDir, relativeFile), contents);
+    }
+  }
+
+  write(
+    path.join(directory, "sous.repo.json"),
+    JSON.stringify(
+      { formatVersion: 1, name, namespaces, recipes: paths },
+      null,
+      2
+    )
+  );
+
+  // The index carries the real content hash of each recipe folder, which the
+  // store verifies after every fetch, so it has to be computed from the files
+  // that were just written.
+  for (const recipe of recipes) {
+    const relative = `recipes/${recipe.namespace}/${recipe.name}`;
+    const hash = await hashDirectory(path.join(directory, relative));
+    indexRecipes[`${recipe.namespace}/${recipe.name}`] = {
+      path: relative,
+      ...(recipe.description === undefined ? {} : { description: recipe.description }),
+      versions: {
+        [recipe.version]: {
+          hash,
+          tag: `${recipe.namespace}/${recipe.name}@${recipe.version}`,
+          prerelease: false,
+          releasedAt: "2026-01-01T00:00:00.000Z",
+        },
+      },
+    };
+  }
+
+  write(
+    path.join(directory, "sous.index.json"),
+    JSON.stringify(
+      {
+        formatVersion: 1,
+        name,
+        generatedAt: "2026-01-01T00:00:00.000Z",
+        generator: "0.1.1",
+        namespaces,
+        recipes: indexRecipes,
+      },
+      null,
+      2
+    )
+  );
+
+  git(directory, "init", "--quiet", "--initial-branch", "main");
+  git(directory, "add", "-A");
+  git(directory, "commit", "--quiet", "-m", "Publish the fixture recipes");
+  for (const recipe of recipes) {
+    git(directory, "tag", `${recipe.namespace}/${recipe.name}@${recipe.version}`);
+  }
+}
+
+/**
+ * Drives the whole consumer surface end to end through the real CLI: adding a
+ * local repository, subscribing to a recipe, compiling what it contributes,
+ * addressing it from a project template, listing its variables, unsubscribing,
+ * restoring a fresh clone and collecting the store.
+ *
+ * Everything runs against local fixture repositories read through the `file`
+ * provider, so no test here touches the network.
+ */
+describe("the repositories consumer surface", () => {
+  beforeAll(async () => {
+    tmp = makeTmpDir("sous-repositories-");
+    sousHome = path.join(tmp.path, "sous-home");
+    storeRoot = path.join(sousHome, "cache");
+    projectRoot = path.join(tmp.path, "project");
+    sousDir = path.join(projectRoot, ".sous");
+    mainRepo = path.join(tmp.path, "fixtures");
+    extrasRepo = path.join(tmp.path, "extras");
+
+    await buildFixtureRepo(mainRepo, "fixtures", [
+      {
+        namespace: "workflow",
+        name: "task-files",
+        version: "1.0.0",
+        description: "Keeps one task file per branch",
+        files: {
+          "skills/task-files/SKILL.md": "# Task files\n\nA skill from the fixture repo.\n",
+          "partials/shared.md": "A shared partial from the fixture repo.\n",
+        },
+        variables: [
+          {
+            name: "apiUrl",
+            type: "url",
+            prompt: "Where does the API live?",
+            required: true,
+          },
+          {
+            name: "taskFileRoot",
+            type: "path",
+            prompt: "Where do task files live?",
+            required: false,
+          },
+        ],
+      },
+      {
+        namespace: "workflow",
+        name: "needs-extras",
+        version: "1.0.0",
+        description: "Depends on a recipe from another repository",
+        depends: ["extras:tooling/formatter"],
+        files: { "skills/needs-extras/SKILL.md": "# Needs extras\n" },
+      },
+    ]);
+
+    await buildFixtureRepo(extrasRepo, "extras", [
+      {
+        namespace: "tooling",
+        name: "formatter",
+        version: "1.0.0",
+        description: "A formatter recipe",
+        files: { "skills/formatter/SKILL.md": "# Formatter\n" },
+      },
+    ]);
+
+    // The project: one template of its own, which also includes a file from the
+    // recipe through the reserved `~namespace` sigil.
+    write(
+      path.join(sousDir, "sous.config.js"),
+      [
+        "export const config = {",
+        '  name: "Repositories Test Project",',
+        '  _vars: { projectRoot: "${sousDir}/.." },',
+        "  compilation: {",
+        "    targets: [",
+        "      {",
+        '        entryPoint: "${sousDir}/prompts/AGENTS.md",',
+        '        outputs: [{ destinationFile: "${projectRoot}/AGENTS.md" }],',
+        "      },",
+        "    ],",
+        "  },",
+        "};",
+        "",
+      ].join("\n")
+    );
+    write(
+      path.join(sousDir, "prompts", "AGENTS.md"),
+      "# The project\n\n@~workflow/task-files/partials/shared.md\n"
+    );
+    // An answer already in scope, so the required variable is inherited rather
+    // than asked for; a run with no terminal cannot answer a question.
+    write(path.join(sousDir, ".env"), "SOUS_VAR_API_URL=https://api.example.invalid\n");
+  }, CLI_TIMEOUT);
+
+  afterAll(() => {
+    tmp.cleanup();
+  });
+
+  /**
+   * `sous repo add` must not add anything without an answer to the trust
+   * question, and a run with no terminal cannot answer one. It should fail
+   * naming the repository and the flag that acknowledges the trust.
+   *
+   * sous repo add /path/to/fixtures   // -> exits non-zero, names --trust
+   */
+  it(
+    "should refuse to add a repository with no terminal and no --trust",
+    () => {
+      const result = sous(projectRoot, "repo", "add", mainRepo);
+
+      expect(result.status).not.toBe(0);
+      expect(result.stdout + result.stderr).toContain("fixtures");
+      expect(result.stdout + result.stderr).toContain("--trust");
+      expect(fs.existsSync(path.join(sousDir, "conf.d", "500-repos.json"))).toBe(false);
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * With `--trust`, the repository is written into the managed 500-repos layer
+   * and exactly one file is fetched from it: its index. Nothing is installed.
+   *
+   * sous repo add /path/to/fixtures --trust
+   */
+  it(
+    "should add a repository with --trust and fetch only its index",
+    () => {
+      const result = sous(projectRoot, "repo", "add", mainRepo, "--trust");
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("workflow");
+
+      const layer = readJson(path.join(sousDir, "conf.d", "500-repos.json"));
+      const repos = layer.repos as Record<string, { url: string; addedBy: string }>;
+      expect(repos.fixtures!.url).toBe(mainRepo);
+      expect(repos.fixtures!.addedBy).toBe("user");
+
+      // The index is cached, and nothing else has been downloaded.
+      expect(fs.existsSync(path.join(storeRoot, "_indexes", "fixtures.json"))).toBe(true);
+      expect(fs.existsSync(path.join(storeRoot, "fixtures"))).toBe(false);
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * `sous repo list` shows the trusted repository with what its cached index
+   * says it publishes, and `sous repo search` finds a recipe by its
+   * description. Both read only what is already on disk.
+   */
+  it(
+    "should list and search the trusted repositories",
+    () => {
+      const list = sous(projectRoot, "repo", "list");
+      expect(list.status).toBe(0);
+      expect(list.stdout).toContain("fixtures");
+      expect(list.stdout).toContain("workflow");
+
+      const search = sous(projectRoot, "repo", "search", "task file per branch");
+      expect(search.status).toBe(0);
+      expect(search.stdout).toContain("workflow/task-files");
+      expect(search.stdout).toContain("1.0.0");
+
+      const nothing = sous(projectRoot, "repo", "search", "nothing-matches-this");
+      expect(nothing.status).toBe(0);
+      expect(nothing.stdout).toContain("Nothing in the repositories");
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * A dependency on a recipe in a repository the project has not added stops the
+   * install and names the repository, rather than fetching from somewhere the
+   * project never agreed to trust.
+   *
+   * sous subscribe workflow/needs-extras   // -> exits non-zero, names 'extras'
+   */
+  it(
+    "should refuse a dependency on an untrusted repository",
+    () => {
+      const result = sous(projectRoot, "subscribe", "workflow/needs-extras", "--trust");
+
+      expect(result.status).not.toBe(0);
+      expect(result.stdout + result.stderr).toContain("extras");
+      expect(fs.existsSync(path.join(sousDir, "sous.lock.json"))).toBe(false);
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * Once the second repository is added, the same subscription resolves the
+   * whole closure: the recipe the project asked for, plus the build dependency
+   * it declares, each pinned at an exact version.
+   */
+  it(
+    "should install a dependency closure once its repository is trusted",
+    () => {
+      expect(sous(projectRoot, "repo", "add", extrasRepo, "--trust").status).toBe(0);
+
+      const result = sous(projectRoot, "subscribe", "workflow/needs-extras");
+      expect(result.status).toBe(0);
+
+      const lock = readJson(path.join(sousDir, "sous.lock.json"));
+      const recipes = lock.recipes as Record<string, { repo: string; kind: string }>;
+      expect(Object.keys(recipes).sort()).toEqual([
+        "tooling/formatter",
+        "workflow/needs-extras",
+      ]);
+      expect(recipes["tooling/formatter"]!.kind).toBe("depends");
+      expect(recipes["workflow/needs-extras"]!.kind).toBe("subscribes");
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * Subscribing writes the lockfile, fills the store, records the subscription
+   * in the managed 510 layer, and reports the answers it inherited rather than
+   * asking for them again.
+   *
+   * sous subscribe workflow/task-files
+   */
+  it(
+    "should subscribe to a recipe and record it everywhere",
+    () => {
+      const result = sous(projectRoot, "subscribe", "workflow/task-files");
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("workflow/task-files");
+
+      const lock = readJson(path.join(sousDir, "sous.lock.json"));
+      const recipes = lock.recipes as Record<string, { version: string; repo: string }>;
+      expect(recipes["workflow/task-files"]!.version).toBe("1.0.0");
+      expect(recipes["workflow/task-files"]!.repo).toBe("fixtures");
+
+      const subscriptions = readJson(
+        path.join(sousDir, "conf.d", "510-subscriptions.json")
+      ).subscriptions as Record<string, { addedBy: string }>;
+      expect(subscriptions["workflow/task-files"]!.addedBy).toBe("user");
+
+      const entryDir = path.join(
+        storeRoot,
+        "fixtures",
+        "workflow",
+        "task-files",
+        "1.0.0"
+      );
+      expect(fs.existsSync(path.join(entryDir, "skills", "task-files", "SKILL.md"))).toBe(
+        true
+      );
+      expect(fs.existsSync(path.join(entryDir, ".sous.entry.json"))).toBe(true);
+
+      // The required variable already had an answer in scope, so it was
+      // inherited and reported rather than asked for.
+      expect(result.stdout).toContain("apiUrl");
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * `sous vars` lists the variables the subscribed recipes publish, with the
+   * environment variable that answered each one.
+   */
+  it(
+    "should list the subscribed recipe's variables",
+    () => {
+      const result = sous(projectRoot, "vars");
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("apiUrl");
+      expect(result.stdout).toContain("workflow/task-files");
+      expect(result.stdout).toContain("SOUS_VAR_API_URL");
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * A build compiles what the subscribed recipes contribute into the project's
+   * skills directory, alongside the project's own targets, and resolves a
+   * `@~namespace/recipe/file.md` include against the pinned recipe.
+   */
+  it(
+    "should compile recipe skills and resolve a namespace include",
+    () => {
+      const result = sous(projectRoot, "build");
+      expect(result.status).toBe(0);
+
+      const skill = path.join(
+        projectRoot,
+        ".claude",
+        "skills",
+        "task-files",
+        "SKILL.md"
+      );
+      expect(fs.readFileSync(skill, "utf8")).toContain("A skill from the fixture repo.");
+
+      const agents = fs.readFileSync(path.join(projectRoot, "AGENTS.md"), "utf8");
+      expect(agents).toContain("A shared partial from the fixture repo.");
+
+      // The build dependency's files never enter the project's output; that is
+      // the whole difference between `depends` and `subscribes`.
+      expect(
+        fs.existsSync(path.join(projectRoot, ".claude", "skills", "formatter"))
+      ).toBe(false);
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * Neither prune nor clear may ever reach into a linked checkout or the shared
+   * recipe store, whatever a stale state entry claims, because both hold work
+   * that is not this project's to delete.
+   */
+  it(
+    "should never prune or clear anything under .sous/repos or the store",
+    () => {
+      const checkoutFile = write(
+        path.join(sousDir, "repos", "someone", "checkout", "WORK.md"),
+        "unpushed work"
+      );
+      const storeFile = path.join(
+        storeRoot,
+        "fixtures",
+        "workflow",
+        "task-files",
+        "1.0.0",
+        "skills",
+        "task-files",
+        "SKILL.md"
+      );
+
+      // Poison the state file with entries pointing at both, the way a bug or a
+      // hand edit could.
+      const statePath = path.join(sousDir, "sous.state.json");
+      const state = readJson(statePath) as {
+        files: Array<Record<string, unknown>>;
+        dirs: string[];
+      };
+      const poison = (dest: string) => ({
+        dest,
+        srcHash: "",
+        destHash: "",
+        size: 0,
+        builtAt: "2026-01-01T00:00:00.000Z",
+      });
+      state.files.push(poison(checkoutFile), poison(storeFile));
+      fs.writeFileSync(statePath, JSON.stringify(state, null, 2), "utf8");
+
+      expect(sous(projectRoot, "build").status).toBe(0);
+      expect(fs.existsSync(checkoutFile)).toBe(true);
+      expect(fs.existsSync(storeFile)).toBe(true);
+
+      expect(sous(projectRoot, "clear", "--force").status).toBe(0);
+      expect(fs.existsSync(checkoutFile)).toBe(true);
+      expect(fs.existsSync(storeFile)).toBe(true);
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * A fresh clone has a lockfile and no store. A build restores exactly what the
+   * lockfile pins, asking nothing, and produces the same output as before.
+   */
+  it(
+    "should restore a fresh clone with no prompts",
+    () => {
+      fs.rmSync(storeRoot, { recursive: true, force: true });
+      fs.rmSync(path.join(projectRoot, ".claude"), { recursive: true, force: true });
+
+      const result = sous(projectRoot, "build");
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("Restoring recipes");
+
+      const skill = path.join(projectRoot, ".claude", "skills", "task-files", "SKILL.md");
+      expect(fs.readFileSync(skill, "utf8")).toContain("A skill from the fixture repo.");
+      expect(
+        fs.existsSync(
+          path.join(storeRoot, "fixtures", "workflow", "task-files", "1.0.0")
+        )
+      ).toBe(true);
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * Unsubscribing is refcounted: the recipe the project asked for goes, and so
+   * does the build dependency nothing else holds, while a recipe another
+   * subscription still holds stays and is reported as having stayed.
+   */
+  it(
+    "should unsubscribe with refcounting",
+    () => {
+      const result = sous(projectRoot, "unsubscribe", "workflow/needs-extras");
+      expect(result.status).toBe(0);
+
+      const lock = readJson(path.join(sousDir, "sous.lock.json"));
+      const recipes = lock.recipes as Record<string, unknown>;
+      expect(Object.keys(recipes).sort()).toEqual(["workflow/task-files"]);
+
+      const subscriptions = readJson(
+        path.join(sousDir, "conf.d", "510-subscriptions.json")
+      ).subscriptions as Record<string, unknown>;
+      expect(Object.keys(subscriptions)).toEqual(["workflow/task-files"]);
+
+      // What it used to write is pruned on the next build.
+      expect(sous(projectRoot, "build").status).toBe(0);
+      expect(
+        fs.existsSync(path.join(projectRoot, ".claude", "skills", "needs-extras"))
+      ).toBe(false);
+      expect(
+        fs.existsSync(path.join(projectRoot, ".claude", "skills", "task-files"))
+      ).toBe(true);
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * `sous repo gc` collects the store back to its cap, protecting everything the
+   * lockfile still pins. A dry run removes nothing at all.
+   */
+  it(
+    "should collect the store while protecting what the lockfile pins",
+    () => {
+      const dry = sous(projectRoot, "repo", "gc", "--max-bytes", "1", "--dry-run");
+      expect(dry.status).toBe(0);
+      expect(
+        fs.existsSync(
+          path.join(storeRoot, "fixtures", "workflow", "task-files", "1.0.0")
+        )
+      ).toBe(true);
+
+      const real = sous(projectRoot, "repo", "gc", "--max-bytes", "1");
+      expect(real.status).toBe(0);
+
+      // Still pinned, so still there, however small the cap.
+      expect(
+        fs.existsSync(
+          path.join(storeRoot, "fixtures", "workflow", "task-files", "1.0.0")
+        )
+      ).toBe(true);
+      // No longer pinned by anything, so collected.
+      expect(
+        fs.existsSync(path.join(storeRoot, "extras", "tooling", "formatter", "1.0.0"))
+      ).toBe(false);
+    },
+    CLI_TIMEOUT
+  );
+});

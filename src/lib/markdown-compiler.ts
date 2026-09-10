@@ -84,6 +84,36 @@ export type CompilationServiceOptions = {
  *   "/foo/bar/*\/baz.md" → "/foo/bar"
  *   "/**\/*"             → "/"
  */
+/**
+ * The file one output of one target writes, or undefined when the output names
+ * neither a destination file nor a destination directory.
+ *
+ * A `destinationFile` is used as it stands. A `destinationDir` mirrors the
+ * source tree underneath it, relative to the target's `globBase`, with `.tpl.`
+ * stripped from the name.
+ *
+ * Exported because prune needs the same answer without compiling: a group of
+ * targets that share one destination directory (every subscribed recipe writing
+ * into `.claude/skills`, say) can only be pruned precisely if the exact set of
+ * files they write is known.
+ *
+ * @param target - The compilation target.
+ * @param output - One of its outputs.
+ */
+export function resolveOutputPath(
+  target: Pick<CompilationTarget, "rootInputPath" | "globBase">,
+  output: ResolvedOutput
+): string | undefined {
+  if (output.destinationFile) return output.destinationFile;
+  if (!output.destinationDir) return undefined;
+
+  const sourceRelative = target.globBase
+    ? path.relative(target.globBase, target.rootInputPath)
+    : path.basename(target.rootInputPath);
+
+  return path.join(output.destinationDir, sourceRelative.replace(/\.tpl\./, "."));
+}
+
 export function inferGlobBase(pattern: string): string {
   const parts = pattern.split("/");
   const staticParts: string[] = [];
@@ -427,22 +457,10 @@ ${taskFileContents}
       // Resolve destination path: prefer destinationFile, fall back to destinationDir mirroring
       let destFile: string;
 
-      if (output.destinationFile) {
-        destFile = output.destinationFile;
-      } else if (output.destinationDir) {
-        // Mirror source path structure under destinationDir
-        const sourceRelative = target.globBase
-          ? path.relative(target.globBase, target.rootInputPath)
-          : path.basename(target.rootInputPath);
-
-        // Strip .tpl. from the output filename (e.g. foo.tpl.md -> foo.md)
-        const outputRelative = sourceRelative.replace(/\.tpl\./, ".");
-
-        destFile = path.join(output.destinationDir, outputRelative);
-      } else {
-        // Neither set — skip
-        continue;
-      }
+      const resolvedDest = resolveOutputPath(target, output);
+      // Neither destinationFile nor destinationDir set — skip
+      if (resolvedDest === undefined) continue;
+      destFile = resolvedDest;
 
       // Skip if content is unchanged and file already exists (unless --rebuild)
       const existingEntry = state.files.find(f => f.dest === destFile);

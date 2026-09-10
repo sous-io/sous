@@ -6,7 +6,7 @@ import { resolveIncludeCandidates } from "./include-resolver.js";
 import type { NamespaceResolver } from "./repos/namespace-resolver.js";
 import { createProjectNamespaceResolver } from "./repos/locked-namespace-resolver.js";
 import { buildRecipeTargets, type RecipeTargets } from "./repos/recipe-targets.js";
-import { CompilationService } from "./markdown-compiler.js";
+import { CompilationService, resolveOutputPath } from "./markdown-compiler.js";
 import type { CompilationConfig, CompilationTarget } from "./markdown-compiler.js";
 import { StateService } from "./state.js";
 import { isProtectedPath } from "./state.js";
@@ -330,12 +330,7 @@ export class BuildService {
     const protectedPaths = configContext ? protectedRepoPaths(configContext.sousDir) : [];
     const rootScope = resolveRootScope(settings, configContext);
     const recipes = resolveRecipeTargets(settings, rootScope, configContext);
-    const config = withRecipeTargets(
-      resolveCompilation(settings, rootScope),
-      recipes,
-      settings,
-      rootScope
-    );
+    const config = resolveCompilation(settings, rootScope);
 
     // Collect the current output set: explicit files and active destinationDir prefixes
     const currentOutputFiles = new Set<string>();
@@ -348,10 +343,17 @@ export class BuildService {
         }
       }
     }
-    // A recipe destination stays current even when nothing matched a glob this
-    // run, so an empty recipe never makes prune delete a directory a moment
-    // before the next build refills it.
-    for (const destination of recipes.destinations) currentOutputDirs.add(destination);
+
+    // Recipe targets are counted file by file rather than by their destination
+    // directory. Every subscribed recipe writes into the same directory, so a
+    // directory prefix would make everything ever written there look current and
+    // an unsubscribed recipe's files would stay forever.
+    for (const target of recipes.targets) {
+      for (const output of target.outputs) {
+        const dest = resolveOutputPath(target, output);
+        if (dest !== undefined) currentOutputFiles.add(dest);
+      }
+    }
 
     // A state entry is current if it matches an explicit destinationFile, or if its dest
     // path falls under an active destinationDir (glob target output).
