@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-# Dev wrapper over run.js, used by the repo's npm scripts and by pre-rename
-# `npm link` shims that still point here. The published bin is run.js itself.
+# Dev wrapper over run.js, used by the repo's npm scripts. The published bin
+# is run.js itself.
 #
 # Resolve this script's real location, following symlinks, so run.js is found
 # next to the real file even when invoked through a global bin symlink.

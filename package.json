@@ -27,7 +27,7 @@
     "access": "public"
   },
   "bin": {
-    "xcv": "./bin/run.js"
+    "sous": "./bin/run.js"
   },
   "files": [
     "bin/run.js",
@@ -40,8 +40,8 @@
   ],
   "scripts": {
     "build": "tsc",
-    "sous:build": "./bin/xcv build --rebuild",
-    "claude": "./bin/xcv launch claude",
+    "sous:build": "./bin/sous build --rebuild",
+    "claude": "./bin/sous launch claude",
     "clean": "rm -rf dist",
     "schema:build": "tsx scripts/build-schema.mts",
     "test": "vitest run",
@@ -71,8 +71,8 @@
     "vitest": "^4.1.0"
   },
   "oclif": {
-    "bin": "xcv",
-    "dirname": "xcv",
+    "bin": "sous",
+    "dirname": "sous",
     "flexibleTaxonomy": true,
     "topicSeparator": " ",
     "commands": {
