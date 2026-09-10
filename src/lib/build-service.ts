@@ -1,16 +1,17 @@
 import path from "node:path";
 import fs from "node:fs";
 import type { ConfigContext, Settings } from "./settings.js";
-import { resolveCompilation, resolveRootScope } from "./settings.js";
+import { resolveAliases, resolveCompilation, resolveRootScope } from "./settings.js";
 import { resolveIncludeCandidates } from "./include-resolver.js";
 import type { NamespaceResolver } from "./repos/namespace-resolver.js";
 import { createProjectNamespaceResolver } from "./repos/locked-namespace-resolver.js";
+import { buildRecipeTargets, type RecipeTargets } from "./repos/recipe-targets.js";
 import { CompilationService } from "./markdown-compiler.js";
 import type { CompilationConfig, CompilationTarget } from "./markdown-compiler.js";
 import { StateService } from "./state.js";
 import { isProtectedPath } from "./state.js";
 import { protectedRepoPaths } from "./repos/links.js";
-import { log } from "../utils/formatting.js";
+import { log, warning } from "../utils/formatting.js";
 
 export type BuildOptions = {
   strict?: boolean;
@@ -40,6 +41,63 @@ export type BuildOptions = {
    */
   namespaceResolver?: NamespaceResolver;
 };
+
+/** An empty recipe-target result, for a build with no config context. */
+const NO_RECIPE_TARGETS: RecipeTargets = {
+  targets: [],
+  destinations: [],
+  watchDirs: [],
+  warnings: [],
+};
+
+/**
+ * The compile targets a project's subscribed recipes contribute, for the project
+ * the options describe. Empty when the caller gave no config context, which is
+ * the case only in tests that build a settings object by hand.
+ *
+ * @param settings - The merged project config.
+ * @param rootScope - The resolved settings scope, for `${var}` in destinations.
+ * @param configContext - Where the active config was discovered.
+ */
+export function resolveRecipeTargets(
+  settings: Settings,
+  rootScope: Record<string, string>,
+  configContext?: ConfigContext
+): RecipeTargets {
+  if (configContext === undefined) return NO_RECIPE_TARGETS;
+  return buildRecipeTargets({
+    sousDir: configContext.sousDir,
+    settings,
+    scope: rootScope,
+  });
+}
+
+/**
+ * Adds the recipe targets to a project's own compilation config. A project with
+ * no compilation block of its own still compiles its recipes, so the config is
+ * created when there is none and there is something to compile.
+ *
+ * @param config - The project's own compilation config, or null when it has none.
+ * @param recipes - The targets the subscribed recipes contribute.
+ * @param settings - The merged project config, for its aliases.
+ * @param rootScope - The resolved settings scope.
+ */
+export function withRecipeTargets(
+  config: CompilationConfig | null,
+  recipes: RecipeTargets,
+  settings: Settings,
+  rootScope: Record<string, string>
+): CompilationConfig | null {
+  if (recipes.targets.length === 0) return config;
+  if (config === null) {
+    return {
+      targets: recipes.targets,
+      aliases: resolveAliases(settings, rootScope),
+      includeScope: rootScope,
+    };
+  }
+  return { ...config, targets: [...config.targets, ...recipes.targets] };
+}
 
 /**
  * The directories a build's deletions must never reach into, for the project the
@@ -198,9 +256,20 @@ export class BuildService {
       }
     }
 
-    // Compile step
+    // Compile step. The recipes this project subscribes to contribute compile
+    // targets alongside its own, so a recipe's files are compiled by exactly the
+    // same machinery as everything else, and are pruned and cleared by it too.
     if (!options.noCompile) {
-      const config = resolveCompilation(settings, rootScope);
+      const recipes = resolveRecipeTargets(settings, rootScope, options.configContext);
+      for (const notice of recipes.warnings) warning(notice);
+
+      const config = withRecipeTargets(
+        resolveCompilation(settings, rootScope),
+        recipes,
+        settings,
+        rootScope
+      );
+
       if (config) {
         let effectiveConfig: CompilationConfig = config;
 
@@ -260,7 +329,13 @@ export class BuildService {
 
     const protectedPaths = configContext ? protectedRepoPaths(configContext.sousDir) : [];
     const rootScope = resolveRootScope(settings, configContext);
-    const config = resolveCompilation(settings, rootScope);
+    const recipes = resolveRecipeTargets(settings, rootScope, configContext);
+    const config = withRecipeTargets(
+      resolveCompilation(settings, rootScope),
+      recipes,
+      settings,
+      rootScope
+    );
 
     // Collect the current output set: explicit files and active destinationDir prefixes
     const currentOutputFiles = new Set<string>();
@@ -273,6 +348,10 @@ export class BuildService {
         }
       }
     }
+    // A recipe destination stays current even when nothing matched a glob this
+    // run, so an empty recipe never makes prune delete a directory a moment
+    // before the next build refills it.
+    for (const destination of recipes.destinations) currentOutputDirs.add(destination);
 
     // A state entry is current if it matches an explicit destinationFile, or if its dest
     // path falls under an active destinationDir (glob target output).

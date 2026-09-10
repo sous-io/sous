@@ -8,17 +8,22 @@ import {
   type WatchConfig,
 } from "./settings.js";
 import type { WatchHandle, WatchService } from "./watch-service.js";
+import { readEffectiveLinks } from "./repos/links.js";
 import { log } from "../utils/formatting.js";
 
 /**
  * Builds a WatchConfig from current settings, injecting the primary config
- * file, the conf.d/ drop-in DIRECTORY, and the templating directory into
- * fullRebuildPaths. Watching the conf.d directory (not each layer file) covers
- * layer files appearing, changing, or disappearing at runtime, since
- * full-rebuild matching is exact-or-directory-prefix.
+ * file, the conf.d/ drop-in DIRECTORY, the templating directory and every linked
+ * repository's working copy into fullRebuildPaths. Watching a directory (not
+ * each file inside it) covers files appearing, changing, or disappearing at
+ * runtime, since full-rebuild matching is exact-or-directory-prefix.
  *
- * Shared by `build --watch` and `compile --watch` so both react to config and
- * template edits identically.
+ * A linked repository is watched because that is the whole point of a link: the
+ * recipes are being edited right now, in that checkout, and a watch that ignored
+ * them would make the link useless.
+ *
+ * Shared by `build --watch` and `compile --watch` so both react to config,
+ * template and linked-recipe edits identically.
  */
 export function buildReloadWatchConfig(
   settings: Settings,
@@ -26,10 +31,12 @@ export function buildReloadWatchConfig(
 ): WatchConfig {
   const rootScope = resolveRootScope(settings, configContext);
   const config = resolveWatchConfig(settings, rootScope);
+  const links = readEffectiveLinks(configContext.sousDir);
   const reloadPaths = [
     configContext.configPath,
     configContext.confDir,
     path.join(CLI_ROOT, "src", "templating"),
+    ...Object.values(links).map((link) => link.path),
   ].filter((p): p is string => typeof p === "string");
   config.fullRebuildPaths = [...(config.fullRebuildPaths ?? []), ...reloadPaths];
   return config;

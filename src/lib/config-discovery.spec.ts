@@ -201,6 +201,8 @@ describe("config-discovery", () => {
         sousDir,
         confDir: path.join(sousDir, CONFD_DIR_NAME),
         layerPaths: [configPath],
+        recipeLayerPaths: [],
+        recipeLayerWarnings: [],
         source: "walk-up",
       });
     });
@@ -402,6 +404,8 @@ describe("config-discovery", () => {
         sousDir,
         confDir: path.join(sousDir, CONFD_DIR_NAME),
         layerPaths: [configPath],
+        recipeLayerPaths: [],
+        recipeLayerWarnings: [],
         source: "flag",
       });
     });

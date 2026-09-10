@@ -2,11 +2,23 @@ import { Flags } from "@oclif/core";
 import { BaseCommand } from "../base-command.js";
 import { CompilationService } from "../lib/markdown-compiler.js";
 import { resolveCompilation, resolveRootScope } from "../lib/settings.js";
-import { resolveStateFilePath } from "../lib/build-service.js";
+import {
+  resolveRecipeTargets,
+  resolveStateFilePath,
+  withRecipeTargets,
+} from "../lib/build-service.js";
 import { createProjectNamespaceResolver } from "../lib/repos/locked-namespace-resolver.js";
+import { describeLinkedRepos } from "../lib/repos/links.js";
 import { buildReloadWatchConfig, startConfigReloadWatch } from "../lib/watch-loop.js";
 import { WatchService } from "../lib/watch-service.js";
-import { displayError, footer, heading, showCommandVars } from "../utils/formatting.js";
+import {
+  displayError,
+  footer,
+  heading,
+  log,
+  showCommandVars,
+  warning,
+} from "../utils/formatting.js";
 
 export default class Compile extends BaseCommand {
   static description = "Compile markdown templates into output files";
@@ -42,8 +54,23 @@ export default class Compile extends BaseCommand {
   async run(): Promise<void> {
     const { flags } = await this.parse(Compile);
 
-    const rootScope = resolveRootScope(this.settings, this.configContext);
-    const config = resolveCompilation(this.settings, rootScope);
+    // The recipes this project subscribes to contribute compile targets
+    // alongside its own; both go through the same compiler.
+    const withRecipes = () => {
+      const scope = resolveRootScope(this.settings, this.configContext);
+      const recipes = resolveRecipeTargets(this.settings, scope, this.configContext);
+      for (const notice of recipes.warnings) warning(notice);
+      return withRecipeTargets(
+        resolveCompilation(this.settings, scope),
+        recipes,
+        this.settings,
+        scope
+      );
+    };
+
+    for (const line of describeLinkedRepos(this.configContext.sousDir)) log(line);
+
+    const config = withRecipes();
 
     if (!config) {
       displayError(`No compilation config found in ${this.configContext.configPath}`);
@@ -98,8 +125,7 @@ export default class Compile extends BaseCommand {
       // heading/footer. (`changedFile` is accepted for parity with build and
       // logged by the watch loop; compile always does a full recompile.)
       const rebuild = async (_changedFile?: string) => {
-        const currentRootScope = resolveRootScope(this.settings, this.configContext);
-        const currentConfig = resolveCompilation(this.settings, currentRootScope);
+        const currentConfig = withRecipes();
         if (!currentConfig) {
           displayError(`No compilation config found in ${this.configContext.configPath}`);
           return;

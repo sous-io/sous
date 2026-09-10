@@ -223,6 +223,7 @@ const PHASE_3_EXPORTS = [
   "readRecipeManifestIn",
   "readRepoManifestIn",
   "repoUrlSchema",
+  "subscriptionServiceFor",
 ];
 
 describe("the repos barrel", () => {

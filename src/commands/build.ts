@@ -3,10 +3,24 @@ import { BaseCommand } from "../base-command.js";
 import { BuildService } from "../lib/build-service.js";
 import { PidService } from "../lib/pid-service.js";
 import { resolveRootScope } from "../lib/settings.js";
+import { describeLinkedRepos } from "../lib/repos/links.js";
+import { resolveStoreSettings } from "../lib/repos/store/settings.js";
+import {
+  subscriptionServiceFor,
+  type SubscriptionService,
+} from "../lib/repos/subscription-service.js";
 import { buildReloadWatchConfig, startConfigReloadWatch } from "../lib/watch-loop.js";
 import type { WatchHandle } from "../lib/watch-service.js";
 import { WatchService } from "../lib/watch-service.js";
-import { footer, heading, log, showCommandVars } from "../utils/formatting.js";
+import {
+  blankLine,
+  footer,
+  heading,
+  indent,
+  log,
+  showCommandVars,
+  warning,
+} from "../utils/formatting.js";
 
 export default class Build extends BaseCommand {
   static description = "Compile outputs and prune stale files (compile + prune)";
@@ -58,6 +72,22 @@ export default class Build extends BaseCommand {
       "No Compile": flags["no-compile"],
       "No Prune": flags["no-prune"],
     });
+
+    // A linked repository is read from a working copy instead of a published
+    // version, so it is announced every single time; a build that silently
+    // produced something different would be far worse than a noisy one.
+    const linked = describeLinkedRepos(this.configContext.sousDir);
+    if (linked.length > 0) warning(linked.join("\n"));
+
+    const repositories = subscriptionServiceFor({
+      configContext: this.configContext,
+      settings: this.settings,
+      shellEnv: this.shellEnv,
+    });
+
+    if (!flags["dry-run"] && !flags["no-compile"]) {
+      await this.prepareRepositories(repositories);
+    }
 
     heading("Building");
 
@@ -121,6 +151,28 @@ export default class Build extends BaseCommand {
         reloadConfig: () => this.reloadDiscoveredConfig(),
       });
 
+      // Watch mode polls upstream for the repositories that prefer a newer
+      // in-range version. The poll is cheap (one index request per repository)
+      // and a failure never breaks the watch; the last good answer stands.
+      const pollSeconds = resolveStoreSettings(this.settings).watchPollSeconds;
+      if (pollSeconds > 0) {
+        const poll = setInterval(() => {
+          void repositories
+            .checkUpstream()
+            .then(async (report) => {
+              if (report.updated.length === 0) return;
+              for (const change of report.updated) {
+                log(indent(`  ${change.key} moved from ${change.from} to ${change.to}.`));
+              }
+              await triggerFullRebuild("A newer recipe version arrived upstream.");
+            })
+            .catch(() => {
+              // checkUpstream already reports its own failures as warnings.
+            });
+        }, pollSeconds * 1000);
+        poll.unref();
+      }
+
       // Display the interactive prompt
       log("[ Press Q to quit  |  any other key: rebuild ]");
 
@@ -142,5 +194,50 @@ export default class Build extends BaseCommand {
 
       await new Promise(() => {}); // keep process alive
     }
+  }
+
+  /**
+   * Gets this project's recipes ready to compile: restores whatever the store is
+   * missing (a fresh clone, or a collected store) and then asks upstream for the
+   * repositories that prefer a newer in-range version.
+   *
+   * Restoring asks nothing and decides nothing; it fetches exactly what the
+   * lockfile pins. An upstream check that fails is reported and then ignored,
+   * because a build must not depend on the network being up.
+   *
+   * @param repositories - The subscription service for this project.
+   */
+  private async prepareRepositories(repositories: SubscriptionService): Promise<void> {
+    const needsRestore = repositories.needsRestore();
+    if (needsRestore) {
+      heading("Restoring recipes");
+      blankLine();
+      log(
+        indent(
+          "This project's lockfile pins recipes that are not in the store on this " +
+            "machine, so they are being fetched at exactly the versions it records."
+        )
+      );
+    }
+
+    const { restored, upstream } = await repositories.prepareForBuild();
+
+    if (restored !== undefined && restored.restored.length > 0) {
+      blankLine();
+      for (const key of restored.restored) log(indent(`  restored: ${key}`));
+    }
+
+    for (const change of upstream.updated) {
+      log(indent(`  ${change.key} moved from ${change.from} to ${change.to}.`));
+    }
+
+    for (const failure of upstream.failed) {
+      warning(
+        `Sous could not check the repository '${failure.repo}' for a newer version, so ` +
+          `this build uses the versions it already had.\n${failure.reason}`
+      );
+    }
+
+    if (needsRestore) footer();
   }
 }

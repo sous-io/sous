@@ -15,7 +15,7 @@ import {
   type ConfigContext,
   type Settings,
 } from "./lib/settings.js";
-import { displayError, displayErrorBlock, header, log } from "./utils/formatting.js";
+import { displayError, displayErrorBlock, header, log, warning } from "./utils/formatting.js";
 
 /**
  * Base class for all CLI commands.
@@ -148,6 +148,23 @@ export abstract class BaseCommand extends Command {
       return this.exit(1);
     }
 
+    // Inject .sous/.env.local and .sous/.env before anything resolves variables,
+    // keeping a copy of what the shell itself set so the variables layer can
+    // still tell the two apart.
+    this.shellEnv = { ...process.env };
+    loadEnvFiles(discovered.sousDir);
+
+    // Enumerated a second time now that the env files are loaded: `SOUS_HOME` is
+    // file-settable, and it decides where the store holding a subscribed
+    // recipe's config layers is. A first pass already ran during discovery, when
+    // only the real environment was known.
+    try {
+      discovered = refreshDiscoveredConfig(discovered);
+    } catch (error) {
+      displayErrorBlock(error instanceof Error ? error.message : String(error), this.errorSink);
+      return this.exit(1);
+    }
+
     this.discovered = discovered;
     this.configContext = {
       sousDir: discovered.sousDir,
@@ -156,11 +173,7 @@ export abstract class BaseCommand extends Command {
       layerPaths: discovered.layerPaths,
     };
 
-    // Inject .sous/.env.local and .sous/.env before anything resolves variables,
-    // keeping a copy of what the shell itself set so the variables layer can
-    // still tell the two apart.
-    this.shellEnv = { ...process.env };
-    loadEnvFiles(discovered.sousDir);
+    for (const notice of discovered.recipeLayerWarnings) warning(notice);
 
     try {
       this.settings = await loadSettings(discovered);

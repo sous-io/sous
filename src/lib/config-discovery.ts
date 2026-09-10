@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { ConfigError } from "./errors.js";
+import { listRecipeConfigLayers } from "./repos/recipe-config-layers.js";
 
 /**
  * The directory name sous looks for when walking up from the working directory.
@@ -52,9 +53,19 @@ export type DiscoveredConfig = {
   confDir: string;
   /**
    * Ordered absolute paths of every config layer: the primary config first,
-   * then the `conf.d/` layers in bytewise filename order.
+   * then any config layers subscribed recipes contribute, then the `conf.d/`
+   * layers in bytewise filename order. Recipes sit in the middle so a recipe can
+   * supply defaults and the project always wins over them.
    */
   layerPaths: string[];
+  /** The subset of `layerPaths` that came from subscribed recipes. */
+  recipeLayerPaths: string[];
+  /**
+   * Complete, plain-language sentences about anything a recipe contributed that
+   * sous declined to load. Printed by the command, since discovery runs before
+   * there is anywhere good to print.
+   */
+  recipeLayerWarnings: string[];
   /** How the config was located. */
   source: "flag" | "walk-up";
 };
@@ -161,7 +172,14 @@ export function assertUniqueLayerBaseNames(layerPaths: string[]): void {
 
 /**
  * Builds a full DiscoveredConfig from a located primary config: computes the
- * conf.d directory, enumerates its layers, and runs the duplicate-baseName check.
+ * conf.d directory, enumerates its layers and the layers subscribed recipes
+ * contribute, and runs the duplicate-baseName check.
+ *
+ * Recipe layers load after the primary config and before the `conf.d/` layers,
+ * so a recipe supplies defaults and the project always wins over them. They are
+ * left out of the duplicate-baseName check deliberately: that check exists so a
+ * person never has to guess which of two files they wrote merges last, and a
+ * recipe's file names are not theirs to rename.
  *
  * @param confDirOverride - Absolute path to use as the conf.d directory instead
  *   of `<sousDir>/conf.d`. Set from the `--sous-confd` flag or `SOUS_CONFD` env
@@ -174,15 +192,35 @@ function buildDiscoveredConfig(
   confDirOverride?: string
 ): DiscoveredConfig {
   const confDir = confDirOverride ?? path.join(sousDir, CONFD_DIR_NAME);
-  const layerPaths = [configPath, ...listConfDirLayers(confDir)];
-  assertUniqueLayerBaseNames(layerPaths);
-  return { configPath, sousDir, confDir, layerPaths, source };
+  const projectLayers = [configPath, ...listConfDirLayers(confDir)];
+  assertUniqueLayerBaseNames(projectLayers);
+
+  const recipes = listRecipeConfigLayers(sousDir);
+  const layerPaths = [
+    configPath,
+    ...recipes.layers,
+    ...projectLayers.slice(1),
+  ];
+
+  return {
+    configPath,
+    sousDir,
+    confDir,
+    layerPaths,
+    recipeLayerPaths: recipes.layers,
+    recipeLayerWarnings: recipes.warnings,
+    source,
+  };
 }
 
 /**
- * Re-runs the conf.d enumeration and duplicate-baseName check for an existing
- * discovery. Used by watch mode: layer files can appear or disappear while
- * watching, so the layer list must be rebuilt before every settings reload.
+ * Re-runs the conf.d enumeration, the recipe layer enumeration and the
+ * duplicate-baseName check for an existing discovery.
+ *
+ * Two callers need it. Watch mode calls it because layer files can appear or
+ * disappear while watching. `BaseCommand.init()` calls it once after the
+ * `.sous/` env files are loaded, because `SOUS_HOME` is file-settable and it
+ * decides where the store holding the recipe layers is.
  *
  * The existing `confDir` is preserved (not recomputed from `sousDir`), so a
  * `SOUS_CONFD` / `--sous-confd` override survives across watch reloads.
