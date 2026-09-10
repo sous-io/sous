@@ -63,6 +63,14 @@ export abstract class BaseCommand extends Command {
   protected discovered!: DiscoveredConfig;
 
   /**
+   * The real shell environment, snapshotted BEFORE the `.sous/` env files are
+   * injected into `process.env`. The variables layer needs it to tell a value
+   * the shell supplied from one an env file supplied; after injection the two
+   * are indistinguishable.
+   */
+  protected shellEnv: NodeJS.ProcessEnv = {};
+
+  /**
    * Emits the decorative CLI header during init(). The default writes it to
    * stdout. Commands whose stdout must stay machine-readable (the `sous config *`
    * JSON commands) override this to route the banner to stderr.
@@ -148,7 +156,10 @@ export abstract class BaseCommand extends Command {
       layerPaths: discovered.layerPaths,
     };
 
-    // Inject .sous/.env.local and .sous/.env before anything resolves variables.
+    // Inject .sous/.env.local and .sous/.env before anything resolves variables,
+    // keeping a copy of what the shell itself set so the variables layer can
+    // still tell the two apart.
+    this.shellEnv = { ...process.env };
     loadEnvFiles(discovered.sousDir);
 
     try {
