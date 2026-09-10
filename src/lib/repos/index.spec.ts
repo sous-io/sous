@@ -99,6 +99,17 @@ const EXPECTED_EXPORTS = [
   "variableDefinitionSchema",
   "variableNameSchema",
   "variableValidationSchema",
+
+  // Phase 2a: the recipe store. Appended as its own block, and the assertion
+  // sorts both sides, so each phase adds its names without reflowing the list.
+  "DEFAULT_FRESHNESS_SECONDS",
+  "DEFAULT_STORE_MAX_BYTES",
+  "DEFAULT_WATCH_POLL_SECONDS",
+  "RecipeStore",
+  "formatStoreKey",
+  "hashDirectory",
+  "hashesEqual",
+  "resolveStoreSettings",
 ];
 
 describe("the repos barrel", () => {
@@ -109,7 +120,7 @@ describe("the repos barrel", () => {
    * Object.keys(repos).sort();  // -> EXPECTED_EXPORTS
    */
   it("should export exactly the documented surface", () => {
-    expect(Object.keys(repos).sort()).toEqual(EXPECTED_EXPORTS);
+    expect(Object.keys(repos).sort()).toEqual([...EXPECTED_EXPORTS].sort());
   });
 
   /**

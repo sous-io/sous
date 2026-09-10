@@ -19,3 +19,9 @@ export * from "./formats/store-entry.js";
 export * from "./formats/links-map.js";
 export * from "./load-manifest.js";
 export * from "./ref.js";
+
+// Phase 2a: the machine-wide recipe store, under the user-level sous directory.
+export * from "./store/contract.js";
+export * from "./store/hash.js";
+export * from "./store/recipe-store.js";
+export * from "./store/settings.js";
