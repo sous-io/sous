@@ -1,0 +1,217 @@
+name: Publish the core recipe
+
+# WHAT THIS IS FOR
+#
+# The `core` namespace exists in two places, and they must never disagree.
+#
+#   1. Inside this package, at `recipes/core/sous-skills/`. That copy is the
+#      source of truth, and it is what seeds a machine's store so a fresh,
+#      offline install still has the core skills.
+#   2. In the official recipe repository, `sous-io/sous-recipes`. That copy is
+#      machine-written distribution output, and it is what an online project
+#      resolves and pins like any other recipe.
+#
+# The rule tying them together is version parity: the core recipe's version is
+# always exactly the version of the sous package that ships it, and every
+# project's implicit `core` subscription asks for exactly the running sous
+# version. So the moment a version of sous is published to npm, the same version
+# of the core recipe has to appear in the recipe repository, or an online project
+# on the new sous would have nothing to resolve.
+#
+# This workflow is what makes that happen. It runs after a successful npm
+# publish, copies the packaged recipe over the repository's copy, regenerates the
+# repository's index with the sous version that was just published, commits, and
+# pushes the release tag.
+#
+# WHY IT IS A SEPARATE WORKFLOW
+#
+# It could have been another job inside publish.yml. It is not, deliberately.
+# publish.yml mints an OIDC token for npm's trusted publishing, and its
+# permissions block is the security-critical part of this repository's CI. Adding
+# a job there means editing that file every time this process changes, and it
+# means the recipe repository's write credentials would live in the same workflow
+# run as the npm publishing token. A `workflow_run` trigger leaves publish.yml
+# untouched, and keeps the two credentials in two separate runs.
+#
+# WHAT YOU HAVE TO SET UP BY HAND
+#
+# One repository secret, `SOUS_RECIPES_DEPLOY_KEY`: the PRIVATE half of an SSH
+# key pair whose public half is installed on `sous-io/sous-recipes` as a deploy
+# key WITH write access. Nothing here can create that for you.
+
+on:
+  workflow_run:
+    workflows: ["Publish to npm"]
+    types:
+      - completed
+
+# This workflow only reads its own repository; everything it writes goes to the
+# other repository over SSH, using the deploy key. It never needs an OIDC token.
+permissions:
+  contents: read
+
+jobs:
+  publish-core-recipe:
+    runs-on: ubuntu-latest
+
+    # Only after a publish that actually succeeded, and only for the tag pushes
+    # that publish a version. For a tag push, `head_branch` is the tag name.
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      startsWith(github.event.workflow_run.head_branch, 'v')
+
+    steps:
+      # The exact commit the publish ran on, so what is copied is what was
+      # published, not whatever main happens to hold now.
+      - name: Check out sous at the published commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          path: sous
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # The tag is `v1.2.3`; the version is `1.2.3`. Both are needed below, so
+      # they are worked out once and put where later steps can read them.
+      - name: Work out which version was published
+        id: version
+        run: |
+          set -euo pipefail
+          tag='${{ github.event.workflow_run.head_branch }}'
+          version="${tag#v}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Publishing the core recipe for sous $version (tag $tag)."
+
+      # Version parity is a hard rule, and this is where it is enforced for real.
+      # A mismatch here means the package was released without its core recipe
+      # being bumped alongside it, which would leave every project on the new
+      # sous unable to resolve the core namespace. Fail loudly rather than
+      # publishing something wrong.
+      - name: Check that the core recipe matches the published version
+        run: |
+          set -euo pipefail
+          manifest="sous/recipes/core/sous-skills/sous.recipe.yaml"
+          # The `xargs` with no command is the usual shell way to trim spaces and
+          # strip any surrounding quotes from a single value.
+          recipe_version="$(sed -n 's/^version:[[:space:]]*//p' "$manifest" | head -1 | xargs)"
+          published='${{ steps.version.outputs.version }}'
+          if [ "$recipe_version" != "$published" ]; then
+            echo "The core recipe says version $recipe_version, but sous $published was published."
+            echo "These two versions have to match exactly. Bump"
+            echo "recipes/core/sous-skills/sous.recipe.yaml alongside package.json and tag again."
+            exit 1
+          fi
+          echo "The core recipe is at $recipe_version, which matches."
+
+      # The deploy key is written to a file rather than loaded into an ssh-agent,
+      # because an agent's environment does not survive from one step to the
+      # next; GIT_SSH_COMMAND does. The host key is pinned by scanning it once,
+      # so git never has to be told to trust an unknown host.
+      - name: Give git the deploy key for the recipe repository
+        env:
+          DEPLOY_KEY: ${{ secrets.SOUS_RECIPES_DEPLOY_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DEPLOY_KEY:-}" ]; then
+            echo "The secret SOUS_RECIPES_DEPLOY_KEY is not set on this repository."
+            echo "It must hold the private half of an SSH key whose public half is installed"
+            echo "on sous-io/sous-recipes as a deploy key with write access."
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/sous_recipes_deploy_key
+          chmod 600 ~/.ssh/sous_recipes_deploy_key
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+          echo "GIT_SSH_COMMAND=ssh -i ~/.ssh/sous_recipes_deploy_key -o IdentitiesOnly=yes" >> "$GITHUB_ENV"
+
+      - name: Check out the recipe repository
+        run: |
+          set -euo pipefail
+          git clone --branch main git@github.com:sous-io/sous-recipes.git recipes
+          cd recipes
+          git config user.name "sous release"
+          git config user.email "sous-release@users.noreply.github.com"
+
+      # The packaged copy wins outright. Anything that was in the repository's
+      # copy and is not in the package's is distribution output that no longer
+      # belongs there, so the folder is replaced rather than merged.
+      - name: Copy the packaged core recipe over the published one
+        run: |
+          set -euo pipefail
+          rm -rf recipes/recipes/core/sous-skills
+          mkdir -p recipes/recipes/core
+          cp -R sous/recipes/core/sous-skills recipes/recipes/core/sous-skills
+          echo "Copied the packaged recipe into the repository."
+
+      # npm can take a moment to serve a version it has just accepted, and the
+      # next step installs exactly that version on purpose: the index has to be
+      # regenerated by the sous that shipped the recipe, so the generator field
+      # it records is true.
+      - name: Wait for the published version to be installable
+        run: |
+          set -euo pipefail
+          version='${{ steps.version.outputs.version }}'
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if npm view "@sous-io/sous@$version" version > /dev/null 2>&1; then
+              echo "@sous-io/sous@$version is available on npm."
+              exit 0
+            fi
+            echo "Attempt $attempt: @sous-io/sous@$version is not on npm yet; waiting 30 seconds."
+            sleep 30
+          done
+          echo "@sous-io/sous@$version never became available on npm."
+          exit 1
+
+      # A plain release run regenerates sous.index.json and writes nothing else.
+      # It deliberately does not commit or tag; that is the next two steps.
+      - name: Regenerate the repository index
+        working-directory: recipes
+        run: npx --yes "@sous-io/sous@${{ steps.version.outputs.version }}" repo release
+
+      # Tagging refuses to run against a dirty working tree, on purpose: a tag
+      # names one commit, so everything the release publishes has to be in it.
+      # When the recipe and the index are both unchanged, this is a re-run of a
+      # release that already happened and there is simply nothing to commit.
+      - name: Commit the recipe and the index
+        working-directory: recipes
+        run: |
+          set -euo pipefail
+          git add recipes/core/sous-skills sous.index.json
+          if git diff --cached --quiet; then
+            echo "The repository already holds this version of the core recipe."
+          else
+            git commit -m "Publish core/sous-skills ${{ steps.version.outputs.version }}
+
+          Machine-written by the sous release pipeline, from the copy inside
+          @sous-io/sous@${{ steps.version.outputs.version }}."
+            echo "Committed the new version of the core recipe."
+          fi
+
+      # Creates the release tag for every version that does not have one, pushes
+      # those tags, and rewrites the index to record them. Running it twice is
+      # safe: a version that is already tagged is reported and skipped.
+      - name: Tag and push the release
+        working-directory: recipes
+        run: npx --yes "@sous-io/sous@${{ steps.version.outputs.version }}" repo release --tag --push
+
+      # Tagging rewrites the index one last time, to record the tag each version
+      # was published under. That final state is what subscribers read, so it is
+      # committed and pushed here.
+      - name: Push the tagged index
+        working-directory: recipes
+        run: |
+          set -euo pipefail
+          git add sous.index.json
+          if git diff --cached --quiet; then
+            echo "The index already records the tags; nothing more to push."
+          else
+            git commit -m "Record the release tags in sous.index.json
+
+          Machine-written by the sous release pipeline."
+          fi
+          git push origin main
+          echo "The recipe repository is up to date with sous ${{ steps.version.outputs.version }}."
