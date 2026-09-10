@@ -86,6 +86,11 @@ src/
     watch-service.ts       # chokidar watcher with debounce; WatchService
     watch-loop.ts          # shared build/compile --watch reload loop (config + template edits)
     pid-service.ts         # PidService; single-instance watcher enforcement via PID files
+    repos/                 # the Repositories layer: on-disk formats, loaders, ref parser
+      index.ts             # barrel; import the whole layer from here
+      ref.ts               # parses/formats refs (repo qualifier, namespace/recipe, @range)
+      load-manifest.ts     # YAML + permissive-JSON manifest reading; exactly-one discovery
+      formats/             # one module per on-disk format, each with schema, type, parseX()
   templating/
     init-liquid-engine.ts  # LiquidJS engine factory (createLiquidEngine)
     tags/                  # custom Liquid tags: showVars, exportScalarVarsJs, getFiles, listFiles
@@ -135,6 +140,23 @@ docs/                      # the GitHub Pages site (sous-io.github.io/sous)
 deprecated/                # archived, gitignored
 docs/notes/                # planning docs and TODOs, gitignored
 ```
+
+### The Repositories layer (`src/lib/repos/`)
+
+Every on-disk format of the Repositories system lives in `src/lib/repos/formats/`, one module
+per format, each exporting its zod schema, the inferred TypeScript type and a `parseX(value,
+sourceLabel)` helper that throws a `ConfigError` naming the file and the path of every bad
+field. `formats/patterns.ts` holds the shared regular expressions and imports nothing, so
+`config-schema.ts` can reuse them; `formats/common.ts` composes them into the primitives the
+formats share. `ref.ts` parses the ref grammar, `load-manifest.ts` reads manifests off disk
+(YAML, or JSON with comments and trailing commas; never JavaScript, because repo trust rests
+on reading a repository without running its code), and `index.ts` is the barrel every later
+phase imports from. Hand-written formats reject unknown keys except a reserved `x-` extension
+namespace; machine-written formats reject them outright and serialize with sorted keys.
+
+The formats themselves, field by field, are documented in
+`docs/markdown/repositories-file-formats.md`; that page is the reference, and this file only
+points at it.
 
 ## Config Discovery
 
@@ -209,8 +231,9 @@ order, JSON-forces it, and deep-merges it into one live cumulative config:
 migration message) and then by the zod schema in `config-schema.ts` (`validateSettings`).
 
 One config = one project. The config is flat: `version`, `$schema`, `name`, `_env`,
-`_vars`, `_aliases`, `compilation`, `runtimeContext`, and `tools` all live at the top
-level.
+`_vars`, `_aliases`, `compilation`, `runtimeContext`, `tools`, `repos`, `subscriptions`
+and `store` all live at the top level. The last three belong to the Repositories system;
+see `docs/markdown/repositories-file-formats.md` for their shape.
 
 State and PID files default into the discovered `.sous/`: `sous.state.json` and `sous.pid`
 (unprefixed; one config is one project). Override with the `stateFilePath` / `pidFilePath`
