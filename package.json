@@ -55,8 +55,10 @@
     "@oclif/core": "^4",
     "chokidar": "^5.0.0",
     "glob": "^13.0.6",
+    "jsonc-parser": "^3.3.1",
     "liquidjs": "^10.25.0",
     "minimatch": "^10.2.4",
+    "semver": "^7.8.5",
     "tiktoken": "^1.0.22",
     "tsx": "^4",
     "yaml": "^2.9.0",
@@ -65,6 +67,7 @@
   "devDependencies": {
     "@types/glob": "^8.1.0",
     "@types/node": "^22",
+    "@types/semver": "^7.8.0",
     "@vitest/coverage-v8": "^4.1.0",
     "memfs": "^4.56.11",
     "typescript": "^5",
