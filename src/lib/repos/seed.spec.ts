@@ -175,24 +175,24 @@ describe("seedCoreRecipe()", () => {
   });
 
   /**
-   * The sidecar decides when sous next looks upstream. A stand-in is recorded as
-   * freshly fetched, so an offline machine does not warn about a check it could
-   * never have won.
+   * The sidecar is what says when a cached index was fetched, and a stand-in was
+   * not fetched at all. Leaving it out is what makes the very first command with
+   * a network go and get the real index, instead of waiting out a freshness
+   * window the stand-in never earned.
    */
-  it("records the stand-in as freshly fetched", async () => {
+  it("writes no sidecar, so the stand-in is never treated as fresh", async () => {
     const { store, root } = makeStore();
-    const when = new Date("2026-05-05T12:00:00.000Z");
-    await seedCoreRecipe({ store, sousVersion: SOUS_VERSION, now: () => when });
+    const sidecar = path.join(
+      root,
+      INDEX_CACHE_DIRNAME,
+      `${OFFICIAL_REPO_NAME}${INDEX_SIDECAR_SUFFIX}`
+    );
+    fs.mkdirSync(path.dirname(sidecar), { recursive: true });
+    fs.writeFileSync(sidecar, JSON.stringify({ fetchedAt: new Date().toISOString() }));
 
-    const sidecar = JSON.parse(
-      fs.readFileSync(
-        path.join(root, INDEX_CACHE_DIRNAME, `${OFFICIAL_REPO_NAME}${INDEX_SIDECAR_SUFFIX}`),
-        "utf8"
-      )
-    ) as { fetchedAt: string; lastCheckedAt: string };
+    await seedCoreRecipe({ store, sousVersion: SOUS_VERSION });
 
-    expect(sidecar.fetchedAt).toBe(when.toISOString());
-    expect(sidecar.lastCheckedAt).toBe(when.toISOString());
+    expect(fs.existsSync(sidecar)).toBe(false);
   });
 
   /**

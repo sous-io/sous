@@ -113,8 +113,15 @@ describe("the core namespace with no network", () => {
     () => {
       const result = sousOffline(projectRoot, "build");
 
-      expect(result.stdout + result.stderr).not.toContain("offline: this test machine");
       expect(result.status).toBe(0);
+
+      // Sous tried to reach the repository, could not, and said so before
+      // carrying on with what it already had. That is the same last-good
+      // behavior every repository gets, and it is what proves the network really
+      // was unreachable rather than quietly succeeding.
+      expect(result.stdout + result.stderr).toContain(
+        "could not check the repository 'sous-recipes'"
+      );
     },
     CLI_TIMEOUT
   );

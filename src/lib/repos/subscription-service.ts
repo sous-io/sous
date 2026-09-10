@@ -77,6 +77,8 @@ import { listLockedRecipes, mapLinkedRecipes, readRecipeManifestIn } from "./loc
 import { resolveStoreRoot } from "../sous-home.js";
 import { seedCoreRecipe, type SeedCoreRecipeReport } from "./seed.js";
 import { enabledRepos, enabledSubscriptions } from "./defaults.js";
+import { CORE_RECIPE_KEY, OFFICIAL_REPO_NAME, packagedCoreRecipeDir } from "./core-recipe.js";
+import { hashDirectory } from "./store/hash.js";
 
 // --- Options and reports ------------------------------------------------------------------------
 
@@ -653,7 +655,7 @@ export class SubscriptionService {
     const subscriptions = this.allSubscriptions();
     const before = this.lock.read();
 
-    const requests: RefRequest[] = [];
+    const pending: Array<{ key: string; request: RefRequest }> = [];
     for (const key of Object.keys(subscriptions).sort()) {
       const entry = subscriptions[key]!;
       if (this.subscriptionIsLocked(key, entry, before)) continue;
@@ -666,64 +668,108 @@ export class SubscriptionService {
         continue;
       }
 
-      report.resolved.push(key);
-      requests.push({
-        ref: {
-          ...parsed,
-          ...(entry.range === undefined ? {} : { range: entry.range }),
+      pending.push({
+        key,
+        request: {
+          ref: {
+            ...parsed,
+            ...(entry.range === undefined ? {} : { range: entry.range }),
+          },
+          requestedBy: PROJECT_REQUESTER,
+          kind: "subscribes",
+          ...(entry.prerelease === true ? { prerelease: true } : {}),
         },
-        requestedBy: PROJECT_REQUESTER,
-        kind: "subscribes",
-        ...(entry.prerelease === true ? { prerelease: true } : {}),
       });
     }
 
-    if (requests.length === 0) return report;
+    if (pending.length === 0) return report;
 
     const repos = this.resolverRepos();
     const indexes = await this.loadIndexes(Object.keys(repos), { lock: before });
 
-    let result;
-    try {
-      result = await resolveRefs(requests, {
-        indexes,
-        repos,
-        loadManifest: (recipe) => this.loadRecipeManifest(recipe, false),
-      });
-    } catch (error) {
-      const reason = describeError(error);
-      for (const key of report.resolved) report.failed.push({ key, reason });
-      report.resolved = [];
-      return report;
-    }
-
-    // A repository something needs but the project has not added is a trust
-    // decision, and a build is the wrong moment to ask for one. Say which
-    // command grants it and carry on with what did resolve.
-    for (const missing of result.missingRepos) {
-      report.failed.push({
-        key: missing.requiredBy.map((entry) => entry.ref).join(", "),
-        reason:
-          `Sous has not been told where the repository '${missing.name}' lives, so ` +
-          `nothing from it could be resolved.\n` +
-          `  Add it with 'sous repo add <url> --name ${missing.name}'.`,
-      });
-    }
-
-    const stored: ResolvedRecipe[] = [];
-    for (const recipe of result.resolved) {
+    // Each subscription is resolved on its own. Resolving them together would be
+    // one call, but the resolver raises on the first ref it cannot settle, and a
+    // project should not lose four subscriptions because one of them names a
+    // recipe that no longer exists. What the separate resolutions produce is
+    // merged back together below, so a recipe two subscriptions both depend on
+    // still records both of them as holders.
+    const stored = new Map<string, ResolvedRecipe>();
+    for (const { key, request } of pending) {
+      let result;
       try {
-        await this.ensureStored(recipe);
-        stored.push(recipe);
+        result = await resolveRefs([request], {
+          indexes,
+          repos,
+          loadManifest: (recipe) => this.loadRecipeManifest(recipe, false),
+        });
       } catch (error) {
-        report.failed.push({ key: recipe.key, reason: describeError(error) });
+        report.failed.push({ key, reason: describeError(error) });
+        continue;
+      }
+
+      // A repository something needs but the project has not added is a trust
+      // decision, and a build is the wrong moment to ask for one. Say which
+      // command grants it, and leave this subscription alone.
+      if (result.missingRepos.length > 0) {
+        const names = result.missingRepos.map((missing) => missing.name);
+        report.failed.push({
+          key,
+          reason:
+            `Sous has not been told where ${
+              names.length === 1
+                ? `the repository '${names[0]}' lives`
+                : `these repositories live: ${names.map((n) => `'${n}'`).join(", ")}`
+            }, so it could not be resolved.\n` +
+            names.map((name) => `  sous repo add <url> --name ${name}`).join("\n"),
+        });
+        continue;
+      }
+
+      let failed = false;
+      const settled: ResolvedRecipe[] = [];
+      for (const recipe of result.resolved) {
+        try {
+          await this.ensureStored(recipe);
+          settled.push(recipe);
+        } catch (error) {
+          report.failed.push({ key, reason: describeError(error) });
+          failed = true;
+          break;
+        }
+      }
+
+      if (failed) continue;
+      report.resolved.push(key);
+
+      for (const recipe of settled) {
+        const already = stored.get(recipe.key);
+        if (already === undefined) {
+          stored.set(recipe.key, recipe);
+          continue;
+        }
+
+        if (already.version !== recipe.version) {
+          report.failed.push({
+            key: recipe.key,
+            reason:
+              `Two of this project's subscriptions want different versions of ` +
+              `'${recipe.key}': ${already.version} and ${recipe.version}. Sous kept ` +
+              `${already.version}.\n` +
+              `  Subscribe to '${recipe.key}' directly, with the range you want, so ` +
+              `there is one answer.`,
+          });
+          continue;
+        }
+
+        stored.set(recipe.key, mergeHolders(already, recipe));
       }
     }
 
-    if (stored.length === 0) return report;
+    if (stored.size === 0) return report;
 
-    const after = this.lock.applyResolution(before, stored, this.lockRepoInputs());
-    for (const recipe of stored) {
+    const settledRecipes = [...stored.values()];
+    const after = this.lock.applyResolution(before, settledRecipes, this.lockRepoInputs());
+    for (const recipe of settledRecipes) {
       const previous = before.recipes[recipe.key];
       if (previous === undefined) {
         report.added.push({ key: recipe.key, version: recipe.version });
@@ -1033,6 +1079,17 @@ export class SubscriptionService {
     const hit = await this.storeInstance.get(key);
     if (hit !== undefined && hit.entry.hash === recipe.hash) return;
 
+    // The store refuses to overwrite an entry whose content differs, because a
+    // published version is immutable and one that changed underneath a project
+    // is worth refusing loudly. There is exactly one entry that is not a
+    // published version: the packaged core recipe sous seeds so a project can
+    // build before it has ever reached the network. That copy is a stand-in for
+    // the published one, not a rival to it, so when the two disagree at the same
+    // version it steps aside and the published copy is fetched over it.
+    if (hit !== undefined && (await this.isSeededCoreEntry(key, hit.entry.hash))) {
+      await this.storeInstance.remove(key);
+    }
+
     const repos = this.currentRepos();
     const url = repos[recipe.repo]?.url;
     if (url === undefined) {
@@ -1053,6 +1110,30 @@ export class SubscriptionService {
       url,
       providerId: repos[recipe.repo]?.provider,
     });
+  }
+
+  /**
+   * True when a store entry is the packaged core recipe that seeding put there,
+   * rather than anything fetched from a repository.
+   *
+   * The test is deliberately exact: the entry has to be the core recipe in the
+   * official repository, AND its content has to hash to what this installation's
+   * package holds. An entry that was genuinely fetched, or a seeded entry from a
+   * different installation, is left alone.
+   *
+   * @param key - The store key being written to.
+   * @param storedHash - The hash the entry currently holds.
+   */
+  private async isSeededCoreEntry(key: StoreKey, storedHash: string): Promise<boolean> {
+    if (key.repo !== OFFICIAL_REPO_NAME) return false;
+    if (`${key.namespace}/${key.name}` !== CORE_RECIPE_KEY) return false;
+
+    try {
+      return (await hashDirectory(packagedCoreRecipeDir())) === storedHash;
+    } catch {
+      // No packaged recipe to compare against means nothing here was seeded.
+      return false;
+    }
   }
 
   /**
@@ -1320,6 +1401,38 @@ export type SubscriptionEntry = {
   /** Who required it: "user", or the ref of the recipe that co-subscribed it. */
   addedBy?: string;
 };
+
+/**
+ * Combines two resolutions of the SAME recipe version into one, so the lockfile
+ * records every holder rather than only the last resolution's.
+ *
+ * This matters for removal: a recipe several subscriptions depend on has to
+ * survive unsubscribing from one of them, and the lockfile's refcounting is what
+ * decides that. A recipe anyone holds as a co-subscription is a co-subscription;
+ * it is only a build dependency while nothing subscribes to it.
+ *
+ * @param left - The resolution already recorded.
+ * @param right - The resolution to fold into it.
+ */
+function mergeHolders(left: ResolvedRecipe, right: ResolvedRecipe): ResolvedRecipe {
+  const requestedBy = [...new Set([...left.requestedBy, ...right.requestedBy])].sort();
+
+  const ranges = [...left.ranges];
+  for (const entry of right.ranges) {
+    const known = ranges.some(
+      (seen) => seen.range === entry.range && seen.requestedBy === entry.requestedBy
+    );
+    if (!known) ranges.push(entry);
+  }
+
+  return {
+    ...left,
+    requestedBy,
+    ranges,
+    kind:
+      left.kind === "subscribes" || right.kind === "subscribes" ? "subscribes" : "depends",
+  };
+}
 
 /** The store key a resolved recipe is filed under. */
 function storeKeyFor(recipe: ResolvedRecipe): StoreKey {

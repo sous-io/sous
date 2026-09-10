@@ -1,0 +1,57 @@
+{
+  "formatVersion": 1,
+  "recipes": {
+    "communication/control-flow": {
+      "hash": "sha256-7f036e8789ba950f9dbb31b1ef1f3d4383ee8329038c5696618707864e3b83e3",
+      "kind": "subscribes",
+      "repo": "sous-recipes",
+      "requestedBy": [
+        "project"
+      ],
+      "version": "1.0.0"
+    },
+    "core/sous-skills": {
+      "hash": "sha256-48a01305f8f887f0176723c7814fa266be1886a37bda3d4d001ec2bb28745e19",
+      "kind": "subscribes",
+      "repo": "sous-recipes",
+      "requestedBy": [
+        "project"
+      ],
+      "version": "0.1.1"
+    },
+    "workflow/github-projects": {
+      "hash": "sha256-a658405ab7b1ac54cb0344648a7334ce4b43ac917fd60a1d576f237c48fd5931",
+      "kind": "subscribes",
+      "repo": "sous-recipes",
+      "requestedBy": [
+        "project"
+      ],
+      "version": "1.0.0"
+    },
+    "workflow/sub-agent-delegation": {
+      "hash": "sha256-6841b6f61a9a62d84152bc0fcfe246af35b7f75001527d6addf55e51068f8387",
+      "kind": "depends",
+      "repo": "sous-recipes",
+      "requestedBy": [
+        "communication/control-flow",
+        "workflow/github-projects",
+        "workflow/task-files"
+      ],
+      "version": "1.0.0"
+    },
+    "workflow/task-files": {
+      "hash": "sha256-b22d870884cfbb62e1b145903d4d8e59e039b3a6460d228171f3a8badf9bb897",
+      "kind": "subscribes",
+      "repo": "sous-recipes",
+      "requestedBy": [
+        "project"
+      ],
+      "version": "1.0.0"
+    }
+  },
+  "repos": {
+    "sous-recipes": {
+      "url": "https://github.com/sous-io/sous-recipes"
+    }
+  }
+}

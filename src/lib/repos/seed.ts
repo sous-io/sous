@@ -25,14 +25,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import semver from "semver";
-import { stableJsonStringify } from "./formats/common.js";
 import {
   parseIndexFile,
   stringifyIndexFile,
   type IndexFile,
 } from "./formats/index-file.js";
 import { INDEX_CACHE_DIRNAME, INDEX_SIDECAR_SUFFIX } from "./providers/index-cache.js";
-import type { IndexMeta } from "./providers/index-cache.js";
 import type { RecipeStoreLike, StoreKey } from "./store/contract.js";
 import {
   CORE_NAMESPACE,
@@ -207,15 +205,18 @@ function writeSeedIndex(input: {
     },
   };
 
-  // The stand-in is written as though it had just been fetched, so the ordinary
-  // freshness window governs when sous next looks upstream. A build on a machine
-  // that has never had a network connection therefore prints nothing at all,
-  // rather than warning about a failed check it was never going to win.
-  const meta: IndexMeta = { fetchedAt: timestamp, lastCheckedAt: timestamp };
-
+  // No sidecar is written, deliberately. The sidecar is what says "this copy was
+  // fetched at such a time", and this copy was not fetched at all. Without one,
+  // sous treats the stand-in as infinitely old and tries upstream on the very
+  // next command: the first run with a network gets the real index immediately
+  // rather than waiting out a freshness window it never earned. When there is no
+  // network the fetch fails, the stand-in is used, and sous says so, which is the
+  // same last-good behavior every other repository gets.
+  //
+  // Any sidecar left over from an earlier fetch is removed for the same reason.
   fs.mkdirSync(directory, { recursive: true });
   fs.writeFileSync(indexPath, stringifyIndexFile(index), "utf8");
-  fs.writeFileSync(sidecarPath, stableJsonStringify(meta), "utf8");
+  fs.rmSync(sidecarPath, { force: true });
   return true;
 }
 
