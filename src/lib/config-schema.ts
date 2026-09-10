@@ -184,9 +184,10 @@ export const settingsSchema = z
     // as reserved and never flag it, so rejecting it here would break the
     // documented workflow. sous itself ignores the value.
     $schema: z.string().optional(),
-    // Allowed so a machine-written JSON layer can explain itself in a way that
-    // survives a JSON round trip (JSON has no comments). sous writes one into
-    // `conf.d/520-var-mappings.json`; the value is ignored.
+    // Allowed so a machine-written layer can say, in the file itself, that sous
+    // wrote it and replaces it in full. JSON has no comment syntax, and the
+    // managed `conf.d/5xx` layers are JSON; see `repos/managed-layer.ts`. Sous
+    // ignores the value.
     $comment: z.string().optional(),
     version: z.literal(SUPPORTED_CONFIG_VERSION).optional(),
     _env: stringRecord.optional(),
