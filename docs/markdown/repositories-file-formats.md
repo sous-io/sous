@@ -532,6 +532,45 @@ locked one. It never widens the range a subscription or a dependency declared, a
 is still regenerated continuously so it records what the last build actually used. A freshness
 check that fails never breaks a build; the last good answer stands.
 
+## Managed config layers
+
+Sous writes two of those keys itself, into the `conf.d/` band reserved for machine-written
+layers:
+
+| File | Holds | Written by |
+|------|-------|------------|
+| `conf.d/500-repos.json` | the `repos:` map | `sous repo add`, `sous repo remove` |
+| `conf.d/510-subscriptions.json` | the `subscriptions:` map | `sous subscribe`, `sous unsubscribe` |
+
+Both are ordinary config layers: they load in filename order after your primary config and merge
+into it, so a repository you hand-write in your own config and one sous added are the same thing
+by the time anything reads them. Sous never edits your primary config, and never edits a layer
+outside the `500` through `599` band.
+
+Each file is replaced **in full** every time it changes. Config layers deep-merge, and the merge
+concatenates arrays rather than matching their entries up, so a managed layer only ever holds
+maps keyed by name, and rewriting the whole file is the only way a removal actually removes
+something. Keys are sorted and the JSON is pretty-printed, so a change to one repository shows up
+as a change to one repository in your version control history.
+
+JSON has no comment syntax, so each file says what it is in a `$comment` key instead:
+
+```json
+{
+  "$comment": "This file is written by sous. It is replaced in full whenever it changes, so hand-written edits are lost. Repositories and subscriptions can be changed with the 'sous repo' and 'sous subscribe' commands, or written by hand in your primary config, which sous never edits.",
+  "repos": {
+    "sous-recipes": {
+      "url": "https://github.com/sous-io/sous-recipes",
+      "addedAt": "2026-09-09T14:03:11.482Z",
+      "addedBy": "user"
+    }
+  }
+}
+```
+
+Sous accepts and ignores `$comment` at the top level of any config file, exactly as it does
+`$schema`.
+
 ## Variables and answers
 
 A variable **definition** is a published specification; an **answer** is the stored value. A

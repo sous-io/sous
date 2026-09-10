@@ -113,6 +113,12 @@ src/
       mappings.ts          # mapping records; writes conf.d/520-var-mappings.json
       validate.ts          # the JSON constraint vocabulary, checked with zod
       ask.ts               # asks what is missing and stores the answers
+      resolver.ts          # apt-style ref lookup across every added repo; dependency closure
+      trust.ts             # TrustService; added equals trusted, one consolidated question
+      managed-layer.ts     # reads/writes the machine-written conf.d/5xx layers
+      lock-service.ts      # LockService; read/write/apply/diff the lock, restore the store
+      freshness.ts         # when to look upstream; always-pull's in-range lookup
+      providers/           # GitHub and GitLab, read path only, plus the index cache
   templating/
     init-liquid-engine.ts  # LiquidJS engine factory (createLiquidEngine)
     tags/                  # custom Liquid tags: showVars, exportScalarVarsJs, getFiles, listFiles
@@ -242,6 +248,21 @@ survive. Comments are output only and are never read back.
 The ladder, the env files, the mapping records and the `sous vars` commands are documented
 in `docs/markdown/repositories-file-formats.md`.
 
+Above the formats sit the read-path services. `providers/` holds the internal provider
+interface plus the GitHub and GitLab built-ins: an index is one raw HTTPS GET (with a bearer
+token from the environment, or from `gh` / `glab` when either is installed and signed in), and
+a recipe is a shallow, blobless, sparse checkout of its own folder, never a whole repository.
+Every network and subprocess seam is injectable, so no test in this layer touches either.
+`providers/index-cache.ts` keeps one index per repo under the store root's `_indexes/`
+directory and falls back to the copy it already holds when a check fails. `resolver.ts` looks a
+ref up across every added repo at once and refuses an ambiguous one instead of picking a
+winner; a ref naming a repo the project has not added is returned as a `MissingRepo` with its
+provenance rather than fetched. `trust.ts` asks about those in one consolidated question and
+fails hard without a terminal unless `--trust` was passed, writing accepted repos through
+`managed-layer.ts`. `lock-service.ts` applies a resolution to the lockfile, refcounts removal,
+and restores the store to exactly what the lock pins without prompting or changing a version;
+`freshness.ts` decides when sous looks upstream at all.
+
 ## Config Discovery
 
 There is no user-level config LAYER; no configuration is read from the user-level sous
@@ -320,8 +341,11 @@ One config = one project. The config is flat: `version`, `$schema`, `$comment`, 
 `_env`, `_vars`, `_aliases`, `compilation`, `runtimeContext`, `tools`, `repos`,
 `subscriptions`, `store` and `varMappings` all live at the top level. The last four belong
 to the Repositories system; see `docs/markdown/repositories-file-formats.md` for their
-shape. `$comment` is accepted and ignored, so a machine-written JSON layer can explain
-itself where JSON has no comments.
+shape. A top-level `$comment` string is accepted and ignored alongside `$schema`, which is
+how the machine-written `conf.d/500-repos.json`, `conf.d/510-subscriptions.json` and
+`conf.d/520-var-mappings.json` layers say in the file itself that sous wrote them (JSON has
+no comment syntax); `repos/managed-layer.ts` and `vars/mappings.ts` write them and always
+replace the whole file, since the kernel concatenates arrays rather than merging them by key.
 
 State and PID files default into the discovered `.sous/`: `sous.state.json` and `sous.pid`
 (unprefixed; one config is one project). Override with the `stateFilePath` / `pidFilePath`
