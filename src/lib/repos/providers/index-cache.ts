@@ -21,6 +21,10 @@ import { parseIndexFile, type IndexFile } from "../formats/index-file.js";
 import { stableJsonStringify } from "../formats/common.js";
 import { ConfigError, isConfigError } from "../../errors.js";
 import { warning } from "../../../utils/formatting.js";
+// The freshness window has one definition, and it lives with the rest of the
+// freshness rules; that module only borrows a type from here, so nothing loads
+// in a circle at run time.
+import { DEFAULT_FRESHNESS_SECONDS } from "../freshness.js";
 import type { ProviderOptions, RepoProvider } from "./provider.js";
 
 /** The directory, under the store root, that cached indexes live in. */
@@ -28,9 +32,6 @@ export const INDEX_CACHE_DIRNAME = "_indexes";
 
 /** The suffix of the sidecar written beside each cached index. */
 export const INDEX_SIDECAR_SUFFIX = ".meta.json";
-
-/** How long a cached index stays fresh when nothing says otherwise: five minutes. */
-export const DEFAULT_FRESHNESS_SECONDS = 300;
 
 /**
  * What sous remembers about a cached index. Written as JSON beside the index

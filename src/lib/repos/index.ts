@@ -32,3 +32,12 @@ export * from "./store/settings.js";
 export * from "./links.js";
 export * from "./git-clone.js";
 export * from "./scaffold/index.js";
+
+// Phase 2b: the store contract, the providers, the resolver, the trust layer
+// and the lockfile service.
+export * from "./providers/index.js";
+export * from "./resolver.js";
+export * from "./managed-layer.js";
+export * from "./trust.js";
+export * from "./lock-service.js";
+export * from "./freshness.js";
