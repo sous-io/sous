@@ -14,11 +14,14 @@ building "My Project"...
 compiled 4 targets, pruned 1 stale file
 ```
 
-?> These docs are young. The **Configuration** section is the first reference material; more
-will follow.
+?> These docs are young. **Configuration** and **Repositories** are the reference material so
+far; more will follow.
 
 ## Where to look
 
 - Watch the [animated introduction](../) for the full pitch
 - Learn [how sous is configured](configuration.md)
+- Share configuration between projects with [repositories](repositories.md)
+- Look up a command in the [command reference](commands.md)
+- Read the [design principles](design-principles.md) that constrain every feature
 - Read the [source on GitHub](https://github.com/sous-io/sous)

@@ -1,10 +1,18 @@
 - [Overview](/)
 - [Design principles](design-principles.md)
+- [Skill categories](skill-categories.md)
+- [Command reference](commands.md)
 - **Configuration**
   - [The config file](configuration.md)
   - [Discovery and overrides](config-discovery.md)
   - [Layers and merging](config-layers.md)
   - [Variables](config-variables.md)
   - [Inspecting and validating](config-inspection.md)
+- **Repositories**
+  - [Overview](repositories.md)
+  - [Consuming recipes](repositories-consuming.md)
+  - [Recipe variables](repositories-variables.md)
+  - [Authoring a repository](repositories-authoring.md)
+  - [File formats](repositories-file-formats.md)
 - **ADRs**
   - [0001: Repositories](adrs/0001-repositories.md)
