@@ -39,13 +39,17 @@ YOU MUST load `about-sous-configuration` when creating or editing the project's 
 config (`sous.config.*`, `conf.d/` layers), defining or debugging config variables, or
 diagnosing a ConfigError.
 
-## Sous's Shared Skill Bundles
+## Sous's Shared Recipes
 
-Sous ships shared skill bundles at `{{ sousRootPath }}/shared-prompts/skills/`, which is
-where the `about-sous`, `about-sous-configuration`, `about-agent-skills` and
-`about-liquid-templates` skills you are reading came from. Edit them only in the sous repository itself, where they are the
-sources. Never edit a compiled copy of them inside a consuming project — that copy is
-build output and is overwritten on the next Sous run.
+The `about-sous`, `about-sous-configuration`, `about-agent-skills` and
+`about-liquid-templates` skills you are reading come from the `core/sous-skills` recipe,
+published by the official sous recipe repository (https://github.com/sous-io/sous-recipes).
+A copy of that recipe also ships inside the installed sous package, where it seeds the
+machine-wide store so a fresh, offline install still has these skills.
+
+Edit them only in the recipe repository, where they are the sources. Never edit a compiled
+copy of them inside a consuming project; that copy is build output and is overwritten on
+the next sous run.
 
 ## Sous's Own Documentation
 

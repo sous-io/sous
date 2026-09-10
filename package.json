@@ -34,6 +34,7 @@
     "src",
     "!src/**/*.spec.ts",
     "!src/test",
+    "recipes",
     "shared-prompts",
     "docs/markdown/*.md",
     "sous.config.schema.json"

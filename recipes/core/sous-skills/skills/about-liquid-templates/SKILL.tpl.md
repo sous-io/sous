@@ -92,9 +92,9 @@ Include another file at render time (path **relative to the template file's dire
 {% endraw %}
 
 `render` resolves paths relative to the template file. For files outside that tree, use
-a path **alias** (`@~sous-shared/...`, `@~project/...`, or a user-defined alias) or a
-`@`-prefixed `${var}` path — the same alias resolution as `@include` (see below) works in
-`render` too.
+a recipe reference (`@~<namespace>/<recipe>/...`), a path **alias** (`@~project/...`, or a
+user-defined alias) or a `@`-prefixed `${var}` path; the same resolution as `@include`
+(see below) works in `render` too.
 
 To prevent template sequences from being processed in a code example, wrap the block in
 `raw` / `endraw` tag blocks. These blocks cannot be nested: the first `endraw`
@@ -134,15 +134,30 @@ A `@`-path may be any of:
   substituted before resolving; if the result is absolute it is used directly.
 - **Aliased**: `@<alias>/rest.md`, where the first segment names a registered alias.
 
-### Path aliases
+### Recipe references and path aliases
 
-The first path segment, up to the first `/` or `:` (both separators work — `@a/b.md`
-≡ `@a:b.md`), is matched against the alias registry. Built-in aliases are reserved and
-always begin with `~`:
+The first path segment, up to the first `/` or `:` (both separators work, so `@a/b.md`
+is the same as `@a:b.md`), is matched first against the alias registry and then, when it begins with
+`~`, against the recipe namespaces this project or recipe can address.
 
-- `@~sous-shared/...` → the Sous CLI's `shared-prompts` directory (skills, memories,
-  `_partials`, etc.). Example: `@~sous-shared/_partials/resume-task.md`.
+The normal way to reach a file that another recipe publishes is a **recipe reference**,
+written `@~<namespace>/<recipe>/<path inside that recipe>`:
+
+- `@~workflow/task-files/_partials/resume-task.md` → the file `_partials/resume-task.md`
+  inside the recipe `workflow/task-files`, at the version this project has pinned.
+
+Scoping is deliberate. A file inside a recipe may address that recipe itself plus the
+recipes it declares under `depends` or `subscribes`; a file in the project's own templates
+may address the project's subscriptions. Anything else is an error naming what was missing,
+so a reference can never quietly pick up a recipe nobody asked for.
+
+Built-in **aliases** are reserved, always begin with `~`, and are consulted before recipe
+namespaces:
+
 - `@~project/...` → the consuming project's root.
+- `@~sous-shared/...` → the directory of prompts shipped inside the Sous CLI package
+  itself. That directory now holds only the core seed, so a recipe reference is almost
+  always what you want instead.
 
 Projects register their own aliases in settings via an `_aliases` block (root and/or
 project level); names may **not** start with `~` (reserved). An alias value is a string

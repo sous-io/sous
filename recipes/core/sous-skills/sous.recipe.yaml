@@ -1,0 +1,39 @@
+# core/sous-skills
+#
+# SPECIAL: this recipe's source of truth stays inside the sous npm package, where
+# it seeds the machine-wide store on first run so a fresh, offline setup works.
+# The release pipeline pushes a copy here, versioned to match the sous
+# application version. That copy is machine-written distribution output.
+#
+# Because it is the offline seed, this recipe declares NO dependencies. Nothing
+# it ships may point at a recipe that has to be fetched.
+formatVersion: 1
+
+namespace: core
+name: sous-skills
+version: 0.1.1
+
+description: >-
+  The skills that teach an agent what sous is and how it works: which files sous
+  owns and must never be hand-edited, how a sous configuration is written and
+  debugged, the .tpl. template convention and LiquidJS syntax, what an agent
+  skill is, and how to create one.
+
+contents:
+  - kind: skills
+    include:
+      - skills/**/*
+
+variables:
+  - name: skillsRoot
+    type: path
+    prompt: Where do this project's own skill sources live?
+    description: >-
+      The directory holding the skill sources this project writes and maintains,
+      not the compiled output directory. The create-skill skill writes new skills
+      here, and about-sous and about-agent-skills point agents at it.
+    default: prompts/skills
+    required: true
+    scope: shared
+    validate:
+      minLength: 1

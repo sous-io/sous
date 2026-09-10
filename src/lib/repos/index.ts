@@ -48,3 +48,8 @@ export * from "./freshness.js";
 export * from "./locked-recipes.js";
 export * from "./locked-namespace-resolver.js";
 export * from "./subscription-service.js";
+
+// Phase 7: the core namespace. The recipe that ships inside the package, the
+// seed that puts it in the store on first run, and the built-in repository and
+// subscription every project gets unless it opts out.
+export * from "./core-recipe.js";

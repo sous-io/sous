@@ -93,8 +93,7 @@ Once the files exist in `{{ skillsRoot }}`, distribution is handled automaticall
 
 ### 6. Write the body for whoever executes it
 
-Per the sub-agent delegation pattern
-(`~sous-shared/_partials/sub-agent-delegation.md`), a skill's steps may run in a delegated
+Per the sub-agent delegation pattern, a skill's steps may run in a delegated
 sub-agent with fresh context. Mark which steps are delegated and which are
 orchestrator-only (anything needing the user or this conversation's contents), and
 phrase skill-loading requirements as "The agent performing this work MUST load `x`".
