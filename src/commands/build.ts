@@ -220,7 +220,11 @@ export default class Build extends BaseCommand {
       );
     }
 
-    const { restored, upstream } = await repositories.prepareForBuild();
+    const { seed, restored, upstream } = await repositories.prepareForBuild();
+
+    // Seeding the packaged core recipe is silent when it works, which is almost
+    // always; it is only worth a word when it could not be done at all.
+    if (seed.skippedBecause !== undefined) warning(seed.skippedBecause);
 
     if (restored !== undefined && restored.restored.length > 0) {
       blankLine();

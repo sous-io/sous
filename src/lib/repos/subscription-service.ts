@@ -22,7 +22,7 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { ConfigError, isConfigError } from "../errors.js";
-import type { ConfigContext, Settings } from "../settings.js";
+import { SOUS_VERSION, type ConfigContext, type Settings } from "../settings.js";
 import { CONFD_DIR_NAME } from "../config-discovery.js";
 import { warning } from "../../utils/formatting.js";
 import { isInteractive } from "../../utils/prompts.js";
@@ -73,6 +73,7 @@ import { REPO_NAME_PATTERN } from "./formats/patterns.js";
 import { linkedPathFor } from "./links.js";
 import { listLockedRecipes, mapLinkedRecipes, readRecipeManifestIn } from "./locked-recipes.js";
 import { resolveStoreRoot } from "../sous-home.js";
+import { seedCoreRecipe, type SeedCoreRecipeReport } from "./seed.js";
 
 // --- Options and reports ------------------------------------------------------------------------
 
@@ -238,6 +239,13 @@ export class SubscriptionService {
   private readonly trust: TrustService;
 
   private readonly lock: LockService;
+
+  /**
+   * What seeding the packaged core recipe did, once it has been done. Seeding is
+   * idempotent but not free (it verifies the store entry against its content
+   * hash), so one service instance does it at most once.
+   */
+  private seedReport: SeedCoreRecipeReport | undefined;
 
   /**
    * @param options - The project's directories, its config, and any collaborator to override.
@@ -582,11 +590,31 @@ export class SubscriptionService {
   }
 
   /**
+   * Puts the core recipe that ships inside the sous package into the store, and
+   * writes a stand-in index for the official repository when nothing real has
+   * ever been fetched. This runs before anything else a build does, because it
+   * is what lets a project with no network resolve the `core` namespace at all.
+   *
+   * Idempotent, offline, and never fatal: a failure comes back in the report as
+   * a sentence to warn about.
+   */
+  async seedCore(): Promise<SeedCoreRecipeReport> {
+    if (this.seedReport !== undefined) return this.seedReport;
+    this.seedReport = await seedCoreRecipe({
+      store: this.storeInstance,
+      sousVersion: SOUS_VERSION,
+      now: this.now,
+    });
+    return this.seedReport;
+  }
+
+  /**
    * Makes the store hold exactly what the lockfile pins. Nothing here decides a
    * version and nothing here asks a question; that is what makes a fresh clone
    * reproducible.
    */
   async restore(): Promise<RestoreReport> {
+    await this.seedCore();
     const lock = this.lock.read();
     if (Object.keys(lock.recipes).length === 0) {
       return { restored: [], alreadyPresent: [] };
@@ -701,19 +729,25 @@ export class SubscriptionService {
   }
 
   /**
-   * Everything a build needs done before it compiles: restore whatever the store
-   * is missing, then look upstream for the repositories that want a newer
-   * version. Both are quiet when there is nothing to do.
+   * Everything a build needs done before it compiles: seed the packaged core
+   * recipe, restore whatever else the store is missing, then look upstream for
+   * the repositories that want a newer version. All three are quiet when there
+   * is nothing to do.
    *
    * @param options - Whether to force the upstream check, and which freshness window to use.
    */
   async prepareForBuild(
     options: { force?: boolean; freshnessSeconds?: number } = {}
-  ): Promise<{ restored: RestoreReport | undefined; upstream: UpstreamCheckReport }> {
+  ): Promise<{
+    seed: SeedCoreRecipeReport;
+    restored: RestoreReport | undefined;
+    upstream: UpstreamCheckReport;
+  }> {
+    const seed = await this.seedCore();
     let restored: RestoreReport | undefined;
     if (this.needsRestore()) restored = await this.restore();
     const upstream = await this.checkUpstream(options);
-    return { restored, upstream };
+    return { seed, restored, upstream };
   }
 
   // --- Reading the project's state ---------------------------------------------------------------

@@ -53,3 +53,4 @@ export * from "./subscription-service.js";
 // seed that puts it in the store on first run, and the built-in repository and
 // subscription every project gets unless it opts out.
 export * from "./core-recipe.js";
+export * from "./seed.js";

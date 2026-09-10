@@ -59,6 +59,15 @@ export const indexNamespaceSchema = z.strictObject({
 /** The repo index schema. */
 export const indexFileSchema = z
   .strictObject({
+    /**
+     * A plain-language note about where this copy of the index came from. JSON
+     * has no comment syntax and an index is machine-written, so this is the one
+     * place a writer can say something to whoever opens the file. Sous ignores
+     * the value everywhere except one place: the seed index it writes for its
+     * own built-in repository carries `SEED_INDEX_COMMENT`, which is how a
+     * later run recognizes its own placeholder and is willing to replace it.
+     */
+    $comment: z.string().optional(),
     formatVersion: formatVersionSchema,
     /** The repo's suggested short name, copied from its manifest. */
     name: repoNameSchema,
