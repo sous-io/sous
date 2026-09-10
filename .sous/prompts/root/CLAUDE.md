@@ -393,6 +393,7 @@ In any source `.md` file, `@path/to/file.md` on its own line includes that file'
 @../shared/intro.md
 @${sousRootPath}/shared-prompts/x.md
 @~sous-shared/_partials/resume-task.md
+@~workflow/task-files/_partials/resume.md
 @myAlias/doc.md
 ```
 
@@ -400,12 +401,15 @@ Lines inside fenced code blocks (``` or ~~~) are NOT processed as includes — t
 left verbatim, which is what allows this very section to document the syntax in a
 compiled file. Guarded by the fence tests in `src/test/integration/compilation.test.ts`.
 
-Resolution is handled by `src/lib/include-resolver.ts` (`resolveIncludeCandidates` +
-`buildAliasMap`), wired into `CompilationService.processIncludes` and the
-`{% render %}` engine FS (so aliases work in both). A `@`-path may be:
+Resolution is handled by `src/lib/include-resolver.ts` (`resolveInclude` /
+`resolveIncludeCandidates` + `buildAliasMap`), wired into
+`CompilationService.processIncludes` and the `{% render %}` engine FS (so aliases and
+namespaces work in both). A `@`-path may be:
 - **relative** to the including file,
 - **`${var}`-substituted** (settings-scope vars; an absolute result is used directly),
-- **aliased** — the first segment (up to `/` or `:`; both separators work) names an alias.
+- **aliased** — the first segment (up to `/` or `:`; both separators work) names an alias,
+- **namespaced**: a first segment carrying the reserved `~` sigil names a recipe
+  namespace (see below).
 
 **Aliases.** Built-ins are reserved and `~`-prefixed: `~sous-shared` → the CLI's
 `shared-prompts` dir, `~project` → the project root (see `buildBuiltInAliases` in
@@ -415,10 +419,29 @@ built-ins → `_aliases`, where the user block **prepends** (user bases tried fi
 falling through to built-in bases of the same name). Resolved by
 `resolveAliases(settings, scope)`.
 
-**Candidate order.** Each alias base in order, then the path resolved relative to the
-including file (full path incl. the alias segment — so an alias can *augment* a real
-local dir). First candidate that exists wins; none → error listing all tried. Circular
-includes are detected and reported.
+**Recipe namespaces (the `~` sigil).** A first segment written `~<namespace>` addresses a
+recipe namespace rather than the filesystem; everything after it starts with the recipe
+name and continues with the path inside that recipe, so
+`@~workflow/task-files/_partials/resume.md` means the file `_partials/resume.md` in recipe
+`workflow/task-files`. A bare `@path` (no `~`) never falls through to a namespace; it stays
+a relative path or a declared alias. Scoping is enforced by the resolver: inside a recipe's
+own files a namespace resolves only against that recipe's declared dependencies (`depends`
+plus `subscribes`) at their pinned versions, while a project's own templates resolve
+against the project's subscriptions. The contract lives in
+`src/lib/repos/namespace-resolver.ts` (`NamespaceResolver`, plus the in-memory
+`StaticNamespaceResolver` used by tests); a resolver is injected through the
+`namespaceResolver` option on `CompilationService` and `BuildService`, and when none is
+supplied the `~` sigil only ever means an alias.
+
+**Candidate order.** Each alias base in order, then the namespace resolver's candidates
+(only for a `~` first segment, and only when a resolver was supplied), then the path
+resolved relative to the including file (full path incl. the first segment, so an alias
+can *augment* a real local dir). Aliases therefore always beat a namespace of the same
+name, which keeps `~sous-shared` and `~project` stable. First candidate that exists wins;
+none → error naming the including file, listing every path tried, and explaining the
+namespace lookup when one was attempted (unknown namespace, unknown recipe, or a recipe the
+including recipe must add to its `depends`). Circular includes are detected and reported,
+including cycles that run through namespace references.
 
 ## Skills System
 
