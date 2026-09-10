@@ -9,7 +9,7 @@ user-invocable: false
 
 # About Sous
 
-Sous (`xcv`) is a CLI tool that compiles markdown templates and manages output files
+Sous (`sous`) is a CLI tool that compiles markdown templates and manages output files
 for AI coding agents. It reads a central configuration, resolves variables, and
 copies or renders files to their destinations in this project.
 

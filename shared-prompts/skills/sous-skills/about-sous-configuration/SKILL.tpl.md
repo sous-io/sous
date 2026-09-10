@@ -45,7 +45,7 @@ Read these files for anything beyond this page; do not guess and do not search t
 - `{{ sousRootPath }}/docs/markdown/config-variables.md`: the scope chain; auto-vars; fixpoint
   resolution; error anatomy; `stateFilePath`/`pidFilePath`
 - `{{ sousRootPath }}/docs/markdown/config-inspection.md`: the validation pipeline; the JSON
-  Schema artifact; the `xcv config` commands
+  Schema artifact; the `sous config` commands
 
 These files match the INSTALLED sous version. The same content is published at
 https://sous-io.github.io/sous/markdown/#/configuration, which tracks the latest release;
@@ -53,9 +53,9 @@ prefer the on-disk copies.
 
 ## Rules
 
-- After editing any config file, run `xcv config validate`: it runs schema validation plus
+- After editing any config file, run `sous config validate`: it runs schema validation plus
   full variable resolution, surfacing cycles and undefined `${refs}`. Use
-  `xcv config get <path> --layers` to see which file set a value.
+  `sous config get <path> --layers` to see which file set a value.
 - Hand-written config belongs in the primary file or your own `conf.d/` layers. Never
   hand-edit `conf.d/500-*` through `conf.d/599-*`; that band is reserved for layers the sous
   CLI writes.

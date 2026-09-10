@@ -4,9 +4,9 @@
  * This is the config sous uses on its own repository. It exists both because
  * the sous repo genuinely wants compiled agent skills and because dogfooding
  * keeps the discovery path, the `${sousDir}` auto-var and the skill bundles
- * honest: if any of them break, `xcv build` on this repo breaks.
+ * honest: if any of them break, `sous build` on this repo breaks.
  *
- * Discovery: `xcv build` walks up from cwd, finds this `.sous/` directory and
+ * Discovery: `sous build` walks up from cwd, finds this `.sous/` directory and
  * loads this file. Auto-vars `${sousDir}` (this directory) and
  * `${sousConfigPath}` (this file) are injected before anything else resolves.
  *
@@ -14,7 +14,7 @@
  * gitignored build output. That includes BOTH instruction files: the repo-root
  * CLAUDE.md and docs/CLAUDE.md are compiled from tracked sources under
  * `.sous/prompts/` — edit those sources, never the compiled copies. A fresh
- * clone has no root CLAUDE.md until the first `xcv build`.
+ * clone has no root CLAUDE.md until the first `sous build`.
  */
 
 // [SOUS] The built-in sous bundle: about-sous, about-agent-skills,

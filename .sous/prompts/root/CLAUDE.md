@@ -1,4 +1,4 @@
-# Sous CLI (xcv) — Agent Configuration Manager
+# Sous CLI — Agent Configuration Manager
 
 > **GENERATED FILE — DO NOT EDIT the repo-root `CLAUDE.md` DIRECTLY.**
 > It is compiled by sous (`npm run sous:build`) from
@@ -6,7 +6,8 @@
 > copy is gitignored; the source is tracked.
 
 Sous is a TypeScript CLI tool that compiles markdown templates and manages output files for LLM/AI coding agents 
-(Claude, Codex, etc.). The binary is named `xcv`. Published on npm as `@sous-io/sous`.
+(Claude, Codex, etc.). The binary is named `sous`. Published on npm as `@sous-io/sous`.
+The binary was called `xcv` in earlier releases; the name is now `sous` everywhere, with no alias.
 
 @${sousDir}/prompts/_partials/agent-conduct.md
 
@@ -21,7 +22,7 @@ npm run clean    # rm -rf dist/
 
 The CLI always runs from TypeScript source via tsx — in the repo AND in the published
 package. `bin/run.js` (the published bin) registers tsx via `tsx/esm/api` then hands off
-to oclif; `bin/xcv` is a thin bash wrapper over it for the repo's npm scripts. tsx is
+to oclif; `bin/sous` is a thin bash wrapper over it for the repo's npm scripts. tsx is
 resolved by module resolution (never a hardcoded `node_modules` path) so hoisted installs
 (`npx`, local deps) work; same trick in `loadSettings` (`settings.ts`) for the config
 subprocess. `run.js` sets oclif `settings.enableAutoTranspile = false` — tsx already
@@ -30,7 +31,7 @@ warn on every run.
 
 Run directly from source during development:
 ```bash
-./bin/xcv <command>
+./bin/sous <command>
 ```
 
 TypeScript: strict mode, ES2022 target, Node16 module resolution. `dist/` output exists
@@ -42,7 +43,7 @@ Published as `@sous-io/sous` (npm org `sous-io`), public access, Apache-2.0. The
 package ships `bin/run.js`, `src/` (minus tests), `shared-prompts/`, and the documentation
 markdown (`docs/markdown/*.md`; agent-readable reference matching the installed version, pointed
 to by the distributed `about-sous` skill; the web shell around it stays out) — see the `files`
-allowlist in `package.json` (an allowlist, so there is no `.npmignore`; `bin/xcv` and
+allowlist in `package.json` (an allowlist, so there is no `.npmignore`; `bin/sous` and
 everything else stays out by default). `repository.url` must keep matching the GitHub repo
 exactly; npm's trusted publishing validates it at publish time.
 
@@ -111,8 +112,8 @@ shared-prompts/
                            #   create-issue, pick-issue, /techdebt)
     automated-browser-tasks/  # headless Chrome task authoring + running (Linux only)
 bin/
-  run.js                   # published bin (`xcv`): registers tsx, hands off to oclif
-  xcv                      # bash dev wrapper over run.js, used by the repo's npm scripts
+  run.js                   # published bin (`sous`): registers tsx, hands off to oclif
+  sous                     # bash dev wrapper over run.js, used by the repo's npm scripts
 scripts/
   build-schema.mts         # emits sous.config.schema.json from the zod schema (npm run schema:build)
 sous.config.schema.json    # committed JSON Schema artifact; shipped in the npm files allowlist
@@ -178,7 +179,7 @@ their merge order would otherwise hinge on extension.
 `<sousDir>/.env` into `process.env` (`env-local.ts`). Precedence, highest first: real
 shell environment > `.env.local` (gitignored, machine-specific/secret) > `.env`
 (committed, shared team defaults). No load ever overwrites an already-set value, so the
-first writer wins and `FOO=bar xcv build` beats both files. Syntax is small and
+first writer wins and `FOO=bar sous build` beats both files. Syntax is small and
 deliberately not a shell: `KEY=value`, `#` comments, optional `export ` prefix,
 single/double-quoted values (`\n`/`\t` expand inside double quotes), inline `# comment`
 stripped from unquoted values; lines without `=` are ignored.
@@ -448,22 +449,22 @@ Two skill types:
 ## State Files
 
 Sous tracks every file and directory it writes in a state file (default: `<sousDir>/sous.state.json`; override with the `stateFilePath` config var). 
-This enables `xcv prune` (remove stale outputs) and `xcv clear` (delete all outputs) to work precisely.
+This enables `sous prune` (remove stale outputs) and `sous clear` (delete all outputs) to work precisely.
 
 ## Key Commands
 
 | Command | Description |
 |---------|-------------|
-| `xcv build` | Compile + prune (main workflow) |
-| `xcv compile` | Compile only |
-| `xcv prune` | Remove output files no longer in config |
-| `xcv clear` | Delete all Sous-written files for a project |
-| `xcv launch <tool>` | Build then spawn agent (e.g., `xcv launch claude`) |
-| `xcv config show` | Print the merged config (all layers merged, before var resolution) as JSON |
-| `xcv config get <path>` | Print one value by dot-path (e.g. `compilation.targets[0].entryPoint`); `--layers` shows per-layer provenance |
-| `xcv config validate` | Validate the merged config: schema, then full variable resolution |
+| `sous build` | Compile + prune (main workflow) |
+| `sous compile` | Compile only |
+| `sous prune` | Remove output files no longer in config |
+| `sous clear` | Delete all Sous-written files for a project |
+| `sous launch <tool>` | Build then spawn agent (e.g., `sous launch claude`) |
+| `sous config show` | Print the merged config (all layers merged, before var resolution) as JSON |
+| `sous config get <path>` | Print one value by dot-path (e.g. `compilation.targets[0].entryPoint`); `--layers` shows per-layer provenance |
+| `sous config validate` | Validate the merged config: schema, then full variable resolution |
 
-The `xcv config` namespace inspects the merged config. `show` and `get` emit machine-
+The `sous config` namespace inspects the merged config. `show` and `get` emit machine-
 readable stdout (`config show | jq` works): they extend `ConfigCommand`, which routes the
 decorative header and any error block to stderr so a broken config never corrupts a piped
 stream. `get` prints scalars raw and objects/arrays as pretty JSON, colorized only for a
@@ -471,8 +472,8 @@ TTY; `--layers` walks the trace-mode snapshots and prints one `old -> new` line 
 that changed the value. `validate` runs the resolvers (fixpoint + substitution) that
 schema validation alone cannot, surfacing cycles and undefined `${vars}`.
 
-This `config` namespace is a fresh design, distinct from the old `xcv configure` /
-`xcv config *` commands and the `~/.sous` profile layer that were removed when walk-up
+This `config` namespace is a fresh design, distinct from the old `configure` /
+`config *` commands and the `~/.sous` profile layer that were removed when walk-up
 `.sous/` discovery replaced them. That removed source stays archived under
 `docs/notes/removed-xcv-config/` (see its `MANIFEST.md`) and on the `preserve/xcv-config`
 branch, as history only; do not resurrect it.
@@ -491,9 +492,9 @@ project. Also: `--rebuild`, `--dry-run`, `--strict`, `--watch` / `-w` (build/com
 
 **Launch pass-through:** any argument `launch` does not recognize is forwarded to the
 tool, after the config-defined `tools.<name>.args` and before the `promptFile` content
-(e.g. `xcv launch claude --resume`). Flags that collide with sous's own (claude's `-c`
+(e.g. `sous launch claude --resume`). Flags that collide with sous's own (claude's `-c`
 vs sous's `--config` shorthand) go after a bare `--`, which
-forwards everything following it verbatim: `xcv launch claude -- -c`. Implementation:
+forwards everything following it verbatim: `sous launch claude -- -c`. Implementation:
 `launch.ts` sets oclif `strict = false` plus `"--" = false` (oclif rejects unknown
 flags even in non-strict mode otherwise) and splits argv at the first `--` itself;
 `readConfigFlagFromArgv` in `base-command.ts` also stops scanning at `--`. Guarded by

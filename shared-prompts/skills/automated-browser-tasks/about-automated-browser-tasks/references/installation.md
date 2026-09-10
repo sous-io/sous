@@ -89,7 +89,7 @@ it into a memory file (e.g. `tools/README.md`) with a plain relative Sous includ
 put an `@`-prefixed line containing just the rendered filename
 (`automated-browser-tasks.md`) on its own line in that file.
 
-The manifest auto-rebuilds on every `xcv build`, so newly created tasks appear
+The manifest auto-rebuilds on every `sous build`, so newly created tasks appear
 automatically. It requires `browserAutomationScriptsDir` to be in scope (the
 absolute path to the task scripts).
 

@@ -16,7 +16,7 @@ Use this structure for defects and regressions (label: `bug`).
 
 ## Conventions
 
-- Titles state the symptom, not the suspected cause ("`xcv prune` deletes fresh outputs when X",
+- Titles state the symptom, not the suspected cause ("`sous prune` deletes fresh outputs when X",
   not "normalize paths in settings.ts").
 - One bug per issue; related-but-separate breakage gets its own issue, cross-linked with
   `#<number>`.
