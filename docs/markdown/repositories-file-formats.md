@@ -288,6 +288,7 @@ subscribes to something inside it.
 | `generator` | yes | exact semantic version | The version of sous that generated it |
 | `namespaces` | yes | map of name to `{ description? }` | Copied from the repository manifest |
 | `recipes` | yes | map of `namespace/recipe` to a recipe entry | Every recipe published |
+| `$comment` | no | string | A note about where this copy came from. JSON has no comment syntax, and an index is machine-written, so this is the one place a writer can say something to whoever opens the file. Sous ignores it, with one exception: the seed index below |
 
 A recipe entry holds `path`, an optional `description`, and `versions`: a map from an exact
 version to `{ hash, tag, prerelease, releasedAt? }`. Every recipe needs at least one version,
@@ -296,6 +297,21 @@ and its namespace must be one the index declares.
 Content hashes are written as `sha256-` followed by 64 lowercase hexadecimal characters. The
 hash of a version is checked after every fetch, and against the lockfile before a cached copy is
 used.
+
+### The seed index
+
+One index is not published by any repository: sous writes a stand-in index for its own
+`sous-recipes` entry, into the index cache, when nothing real has ever been fetched from it. It
+lists exactly one recipe, `core/sous-skills`, at the version of the running sous, with the hash
+of the copy that was just seeded out of the installed package. That is what lets a project
+resolve the core namespace on a machine that has never had a network connection.
+
+The stand-in says so in its `$comment`, which is how a later run recognizes its own placeholder
+and is willing to replace it; an index a repository actually published is never overwritten. No
+freshness sidecar is written beside it, so the very first command that does have a network
+fetches the real index rather than waiting out a window the stand-in never earned. When there is
+still no network, sous reports that it could not check and uses the stand-in, which is the same
+last-good behavior every repository gets.
 
 ## `sous.lock.json`: the project lockfile
 
@@ -502,19 +518,19 @@ hand-write them in the primary config; the layers merge like anything else. The 
 # Trusted repositories, keyed by the short name refs use. Adding a repository IS
 # trusting it, and removing the entry withdraws that trust.
 repos:
-  sous-recipes:
-    url: https://github.com/sous-io/sous-recipes
+  team-recipes:
+    url: https://github.com/example-org/team-recipes
     provider: github        # inferred from the URL when omitted
+    enabled: true           # defaults to true; false takes it out of play entirely
     alwaysPull: false
     addedAt: 2026-09-09T14:03:11.482Z
-    addedBy: user           # "user", or the ref of the recipe that required it
+    addedBy: user           # "user", "sous", or the ref of the recipe that required it
 
 # What the project subscribes to, keyed by ref key.
 subscriptions:
-  core:
-    range: "*"
   workflow/task-files:
     range: ^1.2.0
+    enabled: true           # defaults to true
     prerelease: false
     alwaysPull: false
 
@@ -528,6 +544,49 @@ store:
 
 A subscription key is a ref key: a namespace, or a namespace and a recipe. It never carries a
 repository qualifier or a version range, because the range belongs in the entry.
+
+### The entries sous provides itself
+
+Two entries are there without you writing them. Sous lays them UNDER whatever your config
+layers produced, so `sous config show` prints them and `sous repo list` marks the repository
+"built in":
+
+- the repository `sous-recipes`, pointing at `https://github.com/sous-io/sous-recipes`, and
+- a `core` subscription, whose range is exactly the version of sous you are running.
+
+The `core` namespace holds the skills that teach an agent what sous is and how it works, and a
+copy of it ships inside the sous package, so a brand new project builds with those skills even
+with no network. Trust is not a question here: sous itself ships the recipe and pins the
+version to its own.
+
+The range being the exact running version is deliberate. Core is published in lockstep with the
+CLI, so upgrading sous upgrades core with it, and a build re-pins core the first time it notices
+that the locked version no longer satisfies the range.
+
+### Switching either one off
+
+`enabled` is an ordinary field on any `repos` or `subscriptions` entry. It defaults to true, and
+setting it to false takes that entry out of play entirely: nothing resolves through it, nothing
+is fetched for it, and nothing it publishes is compiled. The entry stays in your config, so the
+opt-out is legible to whoever reads it next.
+
+The two entries above are what it is mostly for:
+
+```yaml
+# Keep the repository, but do not install the core skills.
+subscriptions:
+  core:
+    enabled: false
+
+# Or drop the repository entirely, which withdraws the core subscription with it.
+repos:
+  sous-recipes:
+    enabled: false
+```
+
+Those two lines are complete entries on their own. Sous merges your fields over its own field by
+field, so `{ enabled: false }` inherits the URL and provider underneath it; writing a `url`
+repoints the repository and changes nothing else.
 
 `alwaysPull` installs a newer in-range version whenever one exists rather than holding the
 locked one. It never widens the range a subscription or a dependency declared, and the lockfile
