@@ -45,6 +45,27 @@ describe("LockService", () => {
   let sousDir: string;
   let service: LockService;
 
+  /**
+   * What `sous unsubscribe <key>` does to the lockfile: drop the project's own
+   * hold on that recipe, and when nothing else holds it, remove it and release
+   * everything it held. Mirrors `SubscriptionService.dropProjectHold`, which is
+   * private to that service.
+   */
+  function unsubscribeFrom(lock: Lockfile, key: string): Lockfile {
+    const entry = lock.recipes[key];
+    if (entry === undefined) return lock;
+
+    const kept = entry.requestedBy.filter((holder) => holder !== "project");
+    const recipes = { ...lock.recipes };
+    if (kept.length > 0) {
+      recipes[key] = { ...entry, requestedBy: kept };
+      return { ...lock, recipes };
+    }
+
+    delete recipes[key];
+    return service.removeHolder({ ...lock, recipes }, key);
+  }
+
   beforeEach(() => {
     tmp = makeTmpDir("sous-lock-");
     sousDir = path.join(tmp.path, ".sous");
@@ -129,6 +150,77 @@ describe("LockService", () => {
     );
 
     expect(Object.keys(second.recipes)).toEqual(["quality/reviews", "workflow/task-files"]);
+  });
+
+  /**
+   * A resolution only walks the closure it was asked about, so its
+   * `requestedBy` is who holds a recipe within that closure, not who holds it in
+   * the project. Replacing the list would erase the hold an earlier resolution
+   * recorded, and unsubscribing from the second recipe would then delete
+   * something the person had subscribed to directly.
+   *
+   * subscribe a           // -> a requestedBy ["project"]
+   * subscribe b (deps a)  // -> a requestedBy ["project", "workflow/b"]
+   * unsubscribe b         // -> a survives, held by the project
+   */
+  it("should keep an existing project holder when a later resolution re-records the same recipe", () => {
+    const afterA = service.applyResolution(
+      createEmptyLockfile(),
+      [resolvedRecipe("workflow/a", "1.0.0")],
+      REPOS
+    );
+    expect(afterA.recipes["workflow/a"]!.requestedBy).toEqual(["project"]);
+
+    // Subscribing to `b` resolves only `b`'s closure, in which `a` is held by
+    // `b` alone; the project's own hold on `a` is not part of that closure.
+    const afterB = service.applyResolution(
+      afterA,
+      [
+        resolvedRecipe("workflow/b", "1.0.0"),
+        resolvedRecipe("workflow/a", "1.0.0", {
+          kind: "depends",
+          requestedBy: ["workflow/b"],
+        }),
+      ],
+      REPOS
+    );
+
+    expect(afterB.recipes["workflow/a"]!.requestedBy).toEqual(["project", "workflow/b"]);
+    expect(afterB.recipes["workflow/a"]!.kind).toBe("subscribes");
+
+    // Unsubscribing from `b` drops the project's hold on `b` and then releases
+    // everything `b` held; `a` stays, because the project holds it too.
+    const afterUnsubscribeB = unsubscribeFrom(afterB, "workflow/b");
+    expect(Object.keys(afterUnsubscribeB.recipes)).toEqual(["workflow/a"]);
+    expect(afterUnsubscribeB.recipes["workflow/a"]!.requestedBy).toEqual(["project"]);
+
+    // Only unsubscribing from `a` itself finally removes it.
+    const afterUnsubscribeA = unsubscribeFrom(afterUnsubscribeB, "workflow/a");
+    expect(Object.keys(afterUnsubscribeA.recipes)).toEqual([]);
+  });
+
+  /**
+   * A hand-edited or badly merged lockfile can pin a recipe to a repository its
+   * own `repos` block no longer describes. Writing `undefined` there produced a
+   * lockfile that failed its own validation on the next read, so it is a named
+   * error instead.
+   *
+   * removeHolder(lockMissingItsRepoEntry, "workflow/b");
+   * // -> throws, naming the lockfile and the missing repository
+   */
+  it("should refuse a lockfile that pins a recipe to a repository it does not describe", () => {
+    const lock = service.applyResolution(
+      createEmptyLockfile(),
+      [
+        resolvedRecipe("workflow/a", "1.0.0"),
+        resolvedRecipe("workflow/b", "1.0.0"),
+      ],
+      REPOS
+    );
+
+    const damaged: Lockfile = { ...lock, repos: {} };
+
+    expect(() => service.removeHolder(damaged, "nobody")).toThrow(/sous-recipes/);
   });
 
   /**

@@ -152,10 +152,23 @@ export class LockService {
   }
 
   /**
-   * Builds the lockfile a resolution implies. Recipes the resolution covered
-   * are replaced outright, since the resolver worked out who holds each one;
-   * anything the resolution did not mention is carried through untouched, so a
-   * partial install never drops the rest of the project.
+   * Builds the lockfile a resolution implies. A recipe the resolution covered
+   * takes the resolution's version and hash; anything the resolution did not
+   * mention is carried through untouched, so a partial install never drops the
+   * rest of the project.
+   *
+   * Holders are MERGED rather than replaced. A resolution only walks the
+   * closure it was asked about, so its `requestedBy` is who holds a recipe
+   * WITHIN that closure, not who holds it in the project. Replacing the list
+   * would erase a hold recorded by an earlier resolution: subscribing to `b`,
+   * which depends on `a`, would drop the `project` hold that subscribing to `a`
+   * recorded, and unsubscribing from `b` would then delete `a` outright. The
+   * union is refcounting done right; `removeHolder` is the only thing that ever
+   * takes a holder away.
+   *
+   * `kind` merges the same way, since an entry the project still holds directly
+   * stays a subscription even when a later resolution reached it as a
+   * dependency.
    *
    * @param lock - The lockfile as it stands.
    * @param resolved - What the resolver settled on.
@@ -169,12 +182,17 @@ export class LockService {
     const recipes: Record<string, LockedRecipe> = { ...lock.recipes };
 
     for (const recipe of resolved) {
+      const previous = lock.recipes[recipe.key];
+      const holders = new Set([...(previous?.requestedBy ?? []), ...recipe.requestedBy]);
       recipes[recipe.key] = {
         repo: recipe.repo,
         version: recipe.version,
         hash: recipe.hash,
-        requestedBy: [...recipe.requestedBy].sort(),
-        kind: recipe.kind,
+        requestedBy: [...holders].sort(),
+        kind:
+          previous?.kind === "subscribes" || recipe.kind === "subscribes"
+            ? "subscribes"
+            : "depends",
       };
     }
 
@@ -234,8 +252,32 @@ export class LockService {
 
     const usedRepos = new Set(Object.values(recipes).map((entry) => entry.repo));
     const lockedRepos: Lockfile["repos"] = {};
+    const orphaned: string[] = [];
     for (const name of [...usedRepos].sort()) {
-      lockedRepos[name] = lock.repos[name]!;
+      const entry = lock.repos[name];
+      // A hand-edited or badly merged lockfile can pin a recipe to a repository
+      // its own `repos` block no longer describes. Asserting the entry exists
+      // wrote `undefined`, which JSON.stringify drops, producing a lockfile that
+      // fails its own validation the next time anything reads it.
+      if (entry === undefined) {
+        orphaned.push(name);
+        continue;
+      }
+      lockedRepos[name] = entry;
+    }
+
+    if (orphaned.length > 0) {
+      throw new ConfigError(
+        `The lockfile at ${this.filePath} pins recipes to ${
+          orphaned.length === 1 ? "a repository" : "repositories"
+        } it does not describe: ${orphaned.join(", ")}.\n` +
+          `  Every repository a locked recipe came from has to have an entry in the ` +
+          `lockfile's 'repos' block, and ${
+            orphaned.length === 1 ? "that one has" : "those have"
+          } none.\n` +
+          `  This usually means the file was edited by hand or merged badly. Delete it ` +
+          `and run 'sous subscribe' again to rebuild it from your config.`
+      );
     }
 
     return { formatVersion: 1, repos: lockedRepos, recipes: sortRecipes(recipes) };
