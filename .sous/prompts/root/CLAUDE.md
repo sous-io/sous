@@ -224,7 +224,12 @@ place, so a crash leaves either the old entry or the new one; `get()` re-verifie
 every call, removes an entry that no longer matches and reports it as absent through the
 `onWarning` sink. `hashDirectory` (`store/hash.ts`) is the canonical content hash: files in
 bytewise path order, each contributing path, byte length and bytes, with `.git`, the marker
-and file modes excluded. `resolveStoreSettings` (`store/settings.ts`) applies the defaults for
+and file modes excluded. SYMLINKS ARE SKIPPED by the hash AND by `copyTree` in
+`recipe-store.ts`, and so is anything under a linked directory: the two must agree, or a
+consumer's `put()` computes a hash the index does not carry and every install fails. A link
+points at bytes the repository does not own, so following one made a published version hash
+differently per machine; `release/validate.ts` refuses to publish a recipe folder containing
+one. `resolveStoreSettings` (`store/settings.ts`) applies the defaults for
 the optional top-level `store:` config block.
 
 The store lives under the USER-LEVEL sous directory, resolved by `src/lib/sous-home.ts`:

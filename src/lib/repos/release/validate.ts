@@ -172,6 +172,8 @@ export function validateRepo(rootDir: string): RepoValidation {
       seenKeys.set(found.key, relative(rootDir, found.manifestPath));
     }
 
+    problems.push(...checkSymlinks(recipePath, dir));
+
     recipes.push(found);
   }
 
@@ -409,4 +411,53 @@ function isDirectory(candidate: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Reports every symbolic link inside a recipe folder as an error.
+ *
+ * A published version's content hash is computed over the recipe folder, and a
+ * link points at bytes the repository does not own. Sous skips links when it
+ * hashes and when it copies into the store, so a linked file is simply not part
+ * of what a consumer receives; publishing one would ship a recipe that is
+ * missing a file it expects. The fix is always the same, so it is refused here
+ * rather than surfacing later as a puzzling absence.
+ *
+ * @param recipePath - The recipe folder's path relative to the repository root.
+ * @param dir - The recipe folder's absolute path.
+ */
+function checkSymlinks(recipePath: string, dir: string): ValidationProblem[] {
+  const problems: ValidationProblem[] = [];
+
+  const walk = (current: string, prefix: string): void => {
+    let entries;
+    try {
+      entries = fs.readdirSync(current, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      if (entry.name === ".git") continue;
+      const relativePath = prefix.length > 0 ? `${prefix}/${entry.name}` : entry.name;
+
+      if (entry.isSymbolicLink()) {
+        problems.push({
+          level: "error",
+          where: `${recipePath}/${relativePath}`,
+          message:
+            "this is a symbolic link, and a recipe may not publish one. A published " +
+            "version's content hash covers the recipe folder itself, so sous neither " +
+            "hashes nor installs what a link points at; the file would simply be missing " +
+            "for everyone who installs the recipe. Replace the link with the file itself.",
+        });
+        continue;
+      }
+
+      if (entry.isDirectory()) walk(path.join(current, entry.name), relativePath);
+    }
+  };
+
+  walk(dir, "");
+  return problems;
 }

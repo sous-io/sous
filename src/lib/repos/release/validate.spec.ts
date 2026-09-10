@@ -121,6 +121,39 @@ describe("validateRepo()", () => {
   });
 
   /**
+   * A published version's content hash covers the recipe folder, and sous
+   * neither hashes nor installs what a link points at, so a published link is a
+   * file that is simply missing for everyone who installs the recipe. It is
+   * refused at release time rather than surfacing later as a puzzling absence.
+   *
+   * // recipes/core/example/link.md -> ../../../outside.md
+   * validateRepo(repo);  // -> an error naming the link
+   */
+  it("should refuse a recipe folder that publishes a symbolic link", () => {
+    writeRepoManifest(["core"], ["recipes/core/example"]);
+    writeRecipe("recipes/core/example", "core", "example");
+    write("outside.md", "bytes this recipe does not own");
+    fs.symlinkSync(
+      path.join(tmp.path, "outside.md"),
+      path.join(tmp.path, "recipes/core/example/link.md")
+    );
+    write("recipes/core/example/nested/real.md", "a real file");
+    fs.symlinkSync(
+      path.join(tmp.path, "outside.md"),
+      path.join(tmp.path, "recipes/core/example/nested/deep.md")
+    );
+
+    const result = validateRepo(tmp.path);
+
+    expect(hasErrors(result.problems)).toBe(true);
+    expect(errorsIn(result.problems).map((entry) => entry.where).sort()).toEqual([
+      "recipes/core/example/link.md",
+      "recipes/core/example/nested/deep.md",
+    ]);
+    expect(errorsIn(result.problems)[0]!.message).toMatch(/symbolic link/);
+  });
+
+  /**
    * A recipe folder with no recipe manifest in it is an error rather than a
    * silently skipped folder.
    */

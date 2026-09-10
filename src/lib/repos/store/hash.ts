@@ -17,9 +17,16 @@
  *
  * Files are visited in bytewise order of their relative paths. `.git` and the
  * store's own `.sous.entry.json` marker are skipped, so an entry's hash is
- * independent of the marker that records it. Symlinks are followed and hashed
- * as the file they point at. Empty directories contribute nothing, since they
- * carry no content a recipe can use.
+ * independent of the marker that records it. Empty directories contribute
+ * nothing, since they carry no content a recipe can use.
+ *
+ * SYMLINKS ARE SKIPPED ENTIRELY, and so is anything under one. A hash has to
+ * mean the same thing on the publisher's machine and the consumer's, and a link
+ * points at bytes the repository does not own: following it made the hash depend
+ * on whatever happened to be at the target, so the same published version hashed
+ * differently on two machines and failed its own pin on every install. A recipe
+ * that needs a file ships the file; `sous repo release` refuses to publish a
+ * recipe folder containing a link.
  */
 
 import { createHash } from "node:crypto";
@@ -49,22 +56,16 @@ async function collectFiles(dir: string, prefix = ""): Promise<string[]> {
     if (entry.name === GIT_DIR_NAME) continue;
     if (entry.name === STORE_ENTRY_FILENAME) continue;
 
+    // `withFileTypes` reports the entry itself, not what it points at, so a
+    // symlink is recognised here and skipped whole. Nothing stats through it,
+    // which is the point: a hash may only depend on bytes the repository owns.
+    if (entry.isSymbolicLink()) continue;
+
     const relative = prefix.length > 0 ? `${prefix}/${entry.name}` : entry.name;
     const absolute = path.join(dir, entry.name);
 
-    // A symlink is followed and treated as whatever it points at, so stat (not
-    // lstat) decides. A dangling link is skipped rather than failing the hash.
-    let isDirectory: boolean;
-    try {
-      const stats = await fs.stat(absolute);
-      isDirectory = stats.isDirectory();
-      if (!isDirectory && !stats.isFile()) continue;
-    } catch {
-      continue;
-    }
-
-    if (isDirectory) found.push(...(await collectFiles(absolute, relative)));
-    else found.push(relative);
+    if (entry.isDirectory()) found.push(...(await collectFiles(absolute, relative)));
+    else if (entry.isFile()) found.push(relative);
   }
 
   return found;

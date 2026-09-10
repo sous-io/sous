@@ -113,9 +113,9 @@ async function removeTree(target: string): Promise<void> {
  * Copies a directory tree, skipping `.git` and any stale store marker, and
  * returns the total number of content bytes copied.
  *
- * Symlinks are dereferenced: the store holds real files only, so a linked file
- * is copied as the file it points at. This matches how the content hash treats
- * symlinks, so a copied tree hashes the same as its source.
+ * Symlinks are skipped, and so is anything under one. The store holds real files
+ * that the repository itself published, and the content hash skips links for the
+ * same reason, so a copied tree hashes the same as its source on any machine.
  *
  * @param source - The directory to copy from.
  * @param destination - The directory to copy into; created if missing.
@@ -129,11 +129,20 @@ async function copyTree(source: string, destination: string): Promise<number> {
     if (entry.name === GIT_DIR_NAME) continue;
     if (entry.name === STORE_ENTRY_FILENAME) continue;
 
+    // A symlink is skipped whole, exactly as the hash skips it, so what lands in
+    // the store is what the hash was computed over. Following one would copy
+    // bytes the repository does not own and make the entry differ per machine.
+    if (entry.isSymbolicLink()) continue;
+
     const from = path.join(source, entry.name);
     const to = path.join(destination, entry.name);
 
-    // stat, not lstat: a symlink is copied as its target. A dangling link is
-    // skipped, exactly as the hash skips it.
+    if (entry.isDirectory()) {
+      bytes += await copyTree(from, to);
+      continue;
+    }
+    if (!entry.isFile()) continue;
+
     let stats;
     try {
       stats = await fs.stat(from);
@@ -141,13 +150,9 @@ async function copyTree(source: string, destination: string): Promise<number> {
       continue;
     }
 
-    if (stats.isDirectory()) {
-      bytes += await copyTree(from, to);
-    } else if (stats.isFile()) {
-      await fs.copyFile(from, to);
-      await fs.chmod(to, stats.mode & 0o777);
-      bytes += stats.size;
-    }
+    await fs.copyFile(from, to);
+    await fs.chmod(to, stats.mode & 0o777);
+    bytes += stats.size;
   }
 
   return bytes;

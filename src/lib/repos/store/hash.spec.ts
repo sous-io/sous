@@ -157,17 +157,65 @@ describe("hashDirectory()", () => {
   });
 
   /**
-   * hashDirectory should follow a symlink and hash the file it points at, so a
-   * linked file counts as content at its own relative path.
+   * A hash has to mean the same thing on the publisher's machine and the
+   * consumer's. A symlink points at bytes the repository does not own, so
+   * following it made the hash depend on whatever happened to be at the target;
+   * the same published version then hashed differently on two machines and
+   * failed its own pin on every install. Links contribute nothing at all.
+   *
+   * // a tree with a link, and the same tree without it
+   * hashDirectory(withLink) === hashDirectory(withoutLink);  // -> true
    */
-  it("should follow a symlink and hash it as a file", async () => {
+  it("should hash a tree containing a symlink the same as one without it", async () => {
     const dir = tmp();
     write(dir, "a.md", "alpha");
     fs.symlinkSync(path.join(dir, "a.md"), path.join(dir, "link.md"));
 
     const plain = tmp();
     write(plain, "a.md", "alpha");
-    write(plain, "link.md", "alpha");
+
+    expect(await hashDirectory(dir)).toBe(await hashDirectory(plain));
+  });
+
+  /**
+   * The whole point of skipping links is that the target's presence cannot
+   * change the answer, so a tree hashes the same on a machine where the target
+   * is missing as on one where it is there.
+   *
+   * // link -> /usr/share/doc/x, present on one machine and not the other
+   * hashDirectory(present) === hashDirectory(dangling);  // -> true
+   */
+  it("should hash a tree containing a symlink the same on a machine where the target is missing", async () => {
+    const target = tmp();
+    write(target, "outside.md", "bytes this repository does not own");
+
+    const present = tmp();
+    write(present, "a.md", "alpha");
+    fs.symlinkSync(path.join(target, "outside.md"), path.join(present, "link.md"));
+
+    const dangling = tmp();
+    write(dangling, "a.md", "alpha");
+    fs.symlinkSync(path.join(dangling, "nothing-is-here.md"), path.join(dangling, "link.md"));
+
+    expect(await hashDirectory(present)).toBe(await hashDirectory(dangling));
+  });
+
+  /**
+   * A linked DIRECTORY is skipped whole, so nothing under it is walked either.
+   *
+   * // linkedDir -> a directory full of files outside the recipe
+   * hashDirectory(withLinkedDir) === hashDirectory(withoutIt);  // -> true
+   */
+  it("should not walk into a linked directory", async () => {
+    const outside = tmp();
+    write(outside, "deep/other.md", "not ours");
+
+    const dir = tmp();
+    write(dir, "a.md", "alpha");
+    fs.symlinkSync(outside, path.join(dir, "linked"));
+
+    const plain = tmp();
+    write(plain, "a.md", "alpha");
 
     expect(await hashDirectory(dir)).toBe(await hashDirectory(plain));
   });

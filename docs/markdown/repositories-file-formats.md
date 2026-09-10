@@ -426,6 +426,14 @@ skipped, which is what lets sous touch the marker without invalidating the entry
 re-verifies the hash; an entry that no longer matches is removed and re-fetched, and the
 build says so.
 
+Symbolic links are skipped entirely, by the hash and by the copy into the store alike, and so
+is anything under a linked directory. A link points at bytes the repository does not own, so
+following one would make the same published version hash differently on the publisher's
+machine and the consumer's, and every install would then fail against its own pin.
+`sous repo release` refuses to publish a recipe folder containing a link, naming it, so this
+is caught where it can be fixed rather than at install time. A recipe that needs a file ships
+the file.
+
 Collection is size-capped and least-recently-used. `store.maxBytes` sets the cap (one
 gigabyte by default) and `lastAccessAt` in each marker sets the order; entries a lockfile
 still pins are never evicted, even when honoring the cap would require it. Everything in

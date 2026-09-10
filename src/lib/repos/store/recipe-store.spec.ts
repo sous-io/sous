@@ -184,18 +184,24 @@ describe("RecipeStore", () => {
     });
 
     /**
-     * put should never place a symlink in the store: a linked source file is
-     * copied as the file it points at.
+     * A symlink in the source is skipped whole, exactly as the content hash
+     * skips it, so what lands in the store is what the hash was computed over.
+     * Copying through a link would put bytes the repository does not own into
+     * the store and make the entry differ from machine to machine.
+     *
+     * // source holds alias.md -> SKILL.md
+     * put(key, source);  // -> the store has SKILL.md and no alias.md
      */
-    it("should dereference symlinks rather than storing them", async () => {
+    it("should skip symlinks rather than storing what they point at", async () => {
       const { store } = makeStore();
       const source = makeSource();
       fs.symlinkSync(path.join(source, "SKILL.md"), path.join(source, "alias.md"));
 
       await store.put(key, source);
-      const stored = path.join(store.entryDir(key), "alias.md");
-      expect(fs.lstatSync(stored).isSymbolicLink()).toBe(false);
-      expect(fs.readFileSync(stored, "utf8")).toBe("alpha");
+      expect(fs.existsSync(path.join(store.entryDir(key), "alias.md"))).toBe(false);
+      expect(
+        fs.readFileSync(path.join(store.entryDir(key), "SKILL.md"), "utf8")
+      ).toBe("alpha");
     });
 
     /**
