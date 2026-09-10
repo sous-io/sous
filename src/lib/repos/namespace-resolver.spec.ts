@@ -208,6 +208,83 @@ describe("StaticNamespaceResolver", () => {
       includingRecipe: null,
     });
   });
+
+  /**
+   * A `~namespace` reference addresses a recipe's own files. Without a guard,
+   * `..` segments walked straight out of the pinned recipe directory and the
+   * compiler rendered whatever it found into the project's output. Every other
+   * path in the system rejects `..`; this one does too now.
+   *
+   * resolve({ namespace: "workflow",
+   *           rest: "task-files/../../../../../../home/me/.ssh/id_rsa", ... })
+   * // -> { kind: "escapes-recipe", recipe: "workflow/task-files", reference: ... }
+   */
+  it("should refuse a `~namespace` reference containing `..` segments", () => {
+    const rest = "task-files/../../../../../../home/me/.ssh/id_rsa";
+
+    const result = makeResolver().resolve({
+      namespace: "workflow",
+      rest,
+      fromFile: "/project/prompts/AGENTS.md",
+    });
+
+    expect(result).toEqual({
+      kind: "escapes-recipe",
+      recipe: "workflow/task-files",
+      reference: `workflow/${rest}`,
+    });
+  });
+
+  /**
+   * A single `.` segment goes nowhere, but accepting it would mean the resolver
+   * inspects path syntax in one place and trusts it in another. It is refused
+   * the same way, along with anything else that leaves the recipe directory.
+   *
+   * resolve({ namespace: "workflow", rest: "task-files/./x.md", ... })
+   * // -> { kind: "escapes-recipe", ... }
+   */
+  it("should refuse a `.` segment and an inner path that leaves the recipe", () => {
+    for (const rest of [
+      "task-files/./partial.md",
+      "task-files/sub/../../github-projects/partial.md",
+    ]) {
+      const result = makeResolver().resolve({
+        namespace: "workflow",
+        rest,
+        fromFile: "/project/prompts/AGENTS.md",
+      });
+      expect(result.kind).toBe("escapes-recipe");
+    }
+  });
+
+  /**
+   * The recipe root itself is still addressable, and so is any file under it;
+   * the guard must not refuse ordinary references.
+   *
+   * resolve({ namespace: "workflow", rest: "task-files", ... })
+   * // -> { kind: "candidates", candidates: ["/store/recipes/workflow/task-files"] }
+   */
+  it("should still resolve the recipe root and ordinary inner paths", () => {
+    const root = makeResolver().resolve({
+      namespace: "workflow",
+      rest: "task-files",
+      fromFile: "/project/prompts/AGENTS.md",
+    });
+    expect(root).toEqual({
+      kind: "candidates",
+      candidates: [path.join(STORE, "workflow", "task-files")],
+    });
+
+    const nested = makeResolver().resolve({
+      namespace: "workflow",
+      rest: "task-files/a/b/c.md",
+      fromFile: "/project/prompts/AGENTS.md",
+    });
+    expect(nested).toEqual({
+      kind: "candidates",
+      candidates: [path.join(STORE, "workflow", "task-files", "a", "b", "c.md")],
+    });
+  });
 });
 
 describe("normalizeRef()", () => {

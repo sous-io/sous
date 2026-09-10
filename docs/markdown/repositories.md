@@ -201,6 +201,11 @@ start meaning a recipe. Inside a recipe's own files, `~<namespace>` resolves aga
 recipe's declared dependencies at their pinned versions; in your project's templates it resolves
 against your project's subscriptions.
 
+A `~namespace` reference addresses a recipe's own files and nothing else, so the path after the
+recipe name may not contain `.` or `..` segments and may not be absolute. One that tries to leave
+the recipe directory is refused with an error saying so, exactly as every other path sous reads
+refuses `..`.
+
 ## Freshness, always-pull, and links
 
 By default a build uses what the lockfile pins and does not talk to the network. Two things

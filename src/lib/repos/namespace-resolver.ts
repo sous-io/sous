@@ -74,7 +74,14 @@ export type NamespaceResolution =
    * including file is one of the project's own templates (in which case the
    * project simply does not subscribe to the recipe).
    */
-  | { kind: "not-a-dependency"; recipe: string; includingRecipe: string | null };
+  | { kind: "not-a-dependency"; recipe: string; includingRecipe: string | null }
+  /**
+   * The reference tried to leave the recipe directory: it carried a `.` or `..`
+   * segment, or an absolute inner path. A `~namespace` reference addresses a
+   * recipe's own files and nothing else, so this is refused rather than
+   * resolved. `reference` is the reference as it was written.
+   */
+  | { kind: "escapes-recipe"; recipe: string; reference: string };
 
 /** Resolves `~namespace/rest` references to candidate absolute paths. */
 export interface NamespaceResolver {
@@ -142,6 +149,19 @@ export function formatNamespaceProblem(opts: {
         `Subscribe to it before addressing it as "~${opts.namespace}" from a project template.`
       );
     }
+  } else if (resolution.kind === "escapes-recipe") {
+    lines.push(`recipe: ${resolution.recipe}`);
+    lines.push(
+      `The reference "~${resolution.reference}" points outside the recipe "${resolution.recipe}".`
+    );
+    lines.push(
+      `A "~namespace" reference addresses a recipe's own files, so it may not contain ` +
+        `"." or ".." segments and may not be an absolute path.`
+    );
+    lines.push(
+      `Write the path of a file inside the recipe, or include the other file by a ` +
+        `relative path or a declared alias.`
+    );
   }
 
   return lines.map((line) => `  ${line}`).join("\n");
@@ -257,8 +277,42 @@ export class StaticNamespaceResolver implements NamespaceResolver {
     }
 
     const inner = segments.slice(1).join("/");
-    return { kind: "candidates", candidates: [path.resolve(recipeDir, inner)] };
+    const resolved = path.resolve(recipeDir, inner);
+
+    // A `~namespace` reference addresses a recipe's own files. Without this the
+    // reference could walk out of the recipe with `..` segments and have the
+    // compiler render anything on the machine into the project's output. The
+    // segment check catches the written form, and the relative check catches
+    // everything else, including an absolute inner path and any symlink-free
+    // route out that normalisation would otherwise hide.
+    if (escapesRecipe(recipeDir, segments.slice(1), inner, resolved)) {
+      return { kind: "escapes-recipe", recipe: ref, reference: `${namespace}/${rest}` };
+    }
+
+    return { kind: "candidates", candidates: [resolved] };
   }
+}
+
+/**
+ * Whether an inner path would address something outside the recipe directory.
+ *
+ * @param recipeDir - The recipe's absolute directory.
+ * @param innerSegments - The inner path's segments, as they were written.
+ * @param inner - Those segments rejoined.
+ * @param resolved - What the inner path resolved to.
+ */
+function escapesRecipe(
+  recipeDir: string,
+  innerSegments: string[],
+  inner: string,
+  resolved: string
+): boolean {
+  if (innerSegments.some((segment) => segment === "." || segment === "..")) return true;
+  if (inner !== "" && path.isAbsolute(inner)) return true;
+  if (resolved === recipeDir) return false;
+
+  const relative = path.relative(recipeDir, resolved);
+  return relative === "" || relative.startsWith("..") || path.isAbsolute(relative);
 }
 
 /**

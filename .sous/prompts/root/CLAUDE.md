@@ -724,7 +724,11 @@ name and continues with the path inside that recipe, so
 a relative path or a declared alias. Scoping is enforced by the resolver: inside a recipe's
 own files a namespace resolves only against that recipe's declared dependencies (`depends`
 plus `subscribes`) at their pinned versions, while a project's own templates resolve
-against the project's subscriptions. The contract lives in
+against the project's subscriptions. The inner path may not contain `.` or `..` segments and
+may not be absolute, and the resolved candidate is `path.relative`-checked against the recipe
+directory; a reference that leaves it returns `{ kind: "escapes-recipe" }` rather than a path,
+because otherwise a recipe file could render anything on the machine into a project's output.
+The contract lives in
 `src/lib/repos/namespace-resolver.ts` (`NamespaceResolver`, plus the in-memory
 `StaticNamespaceResolver` used by tests); a resolver is injected through the
 `namespaceResolver` option on `CompilationService` and `BuildService`, and when none is
