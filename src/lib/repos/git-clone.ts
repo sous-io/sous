@@ -127,11 +127,24 @@ export function remoteUrlOf(directory: string, options: GitOptions = {}): string
   return result.stdout;
 }
 
+/** What a clone actually did. */
+export type CloneResult = {
+  /** The depth git was finally asked for; 0 means the full history. */
+  depth: number;
+  /** True when a shallow clone was refused and the full history was fetched instead. */
+  fellBackToFullClone: boolean;
+};
+
 /**
  * Clones a repository into a directory that does not yet exist, creating its
  * parents. A shallow clone is the default for a link, because a linked checkout
  * exists to be read and edited, not to carry the project's whole history; pass
- * `depth: 0` for a full clone.
+ * `depth: 0` to ask for the full history outright.
+ *
+ * Not every remote will serve a shallow clone (`file://` transports and some
+ * servers refuse one), so a failed shallow attempt is retried in full rather
+ * than reported as a failure. The result says whether that happened, so the
+ * caller can tell the user why the clone took longer than they expected.
  *
  * @param url - Where the repository lives.
  * @param destDir - Absolute path the working copy is created at.
@@ -141,7 +154,7 @@ export function cloneRepo(
   url: string,
   destDir: string,
   options: GitOptions & { depth?: number } = {}
-): void {
+): CloneResult {
   if (fs.existsSync(destDir) && !isEmptyDirectory(destDir)) {
     throw new ConfigError(
       `Cannot clone into ${destDir}: the directory already exists and is not empty.\n` +
@@ -153,11 +166,22 @@ export function cloneRepo(
   fs.mkdirSync(path.dirname(destDir), { recursive: true });
 
   const depth = options.depth ?? 1;
-  const args = ["clone"];
-  if (depth > 0) args.push("--depth", String(depth));
-  args.push("--", url, destDir);
+  const runner = options.runner ?? runGit;
 
-  runGitOrThrow(args, { runner: options.runner, what: `Cloning ${url}` });
+  if (depth > 0) {
+    const shallow = runner(["clone", "--depth", String(depth), "--", url, destDir], {});
+    if (shallow.status === 0) return { depth, fellBackToFullClone: false };
+    // git leaves the destination behind on some failures; clear it so the retry
+    // is not refused by its own leftovers.
+    fs.rmSync(destDir, { recursive: true, force: true });
+  }
+
+  runGitOrThrow(["clone", "--", url, destDir], {
+    runner: options.runner,
+    what: `Cloning ${url}`,
+  });
+
+  return { depth: 0, fellBackToFullClone: depth > 0 };
 }
 
 /**

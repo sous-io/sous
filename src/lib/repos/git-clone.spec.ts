@@ -260,8 +260,9 @@ describe("cloneRepo()", () => {
       [`clone --depth 1 -- https://x/y ${dest}`]: { status: 0 },
     });
 
-    cloneRepo("https://x/y", dest, { runner });
+    const result = cloneRepo("https://x/y", dest, { runner });
 
+    expect(runner.calls).toHaveLength(1);
     expect(runner.calls[0]!.args).toEqual([
       "clone",
       "--depth",
@@ -270,7 +271,31 @@ describe("cloneRepo()", () => {
       "https://x/y",
       dest,
     ]);
+    expect(result).toEqual({ depth: 1, fellBackToFullClone: false });
     expect(fs.existsSync(path.dirname(dest))).toBe(true);
+  });
+
+  /**
+   * cloneRepo should retry in full when a remote refuses a shallow clone, which
+   * some servers and every `file://` transport do, and should say so in its
+   * result rather than reporting a failure.
+   *
+   * cloneRepo(url, dest); // -> { depth: 0, fellBackToFullClone: true }
+   */
+  it("should retry the full history when a shallow clone is refused", () => {
+    const dest = path.join(tmp.path, "repo");
+    const runner = fakeRunner({
+      [`clone --depth 1 -- https://x/y ${dest}`]: {
+        status: 128,
+        stderr: "fatal: remote transport reported error",
+      },
+      [`clone -- https://x/y ${dest}`]: { status: 0 },
+    });
+
+    const result = cloneRepo("https://x/y", dest, { runner });
+
+    expect(runner.calls).toHaveLength(2);
+    expect(result).toEqual({ depth: 0, fellBackToFullClone: true });
   });
 
   /**
@@ -283,9 +308,10 @@ describe("cloneRepo()", () => {
     const dest = path.join(tmp.path, "repo");
     const runner = fakeRunner({ [`clone -- https://x/y ${dest}`]: { status: 0 } });
 
-    cloneRepo("https://x/y", dest, { runner, depth: 0 });
+    const result = cloneRepo("https://x/y", dest, { runner, depth: 0 });
 
     expect(runner.calls[0]!.args).toEqual(["clone", "--", "https://x/y", dest]);
+    expect(result).toEqual({ depth: 0, fellBackToFullClone: false });
   });
 
   /**
@@ -318,7 +344,8 @@ describe("cloneRepo()", () => {
   it("should carry git's message into the error when a clone fails", () => {
     const dest = path.join(tmp.path, "repo");
     const runner = fakeRunner({
-      [`clone --depth 1 -- https://x/y ${dest}`]: {
+      [`clone --depth 1 -- https://x/y ${dest}`]: { status: 128 },
+      [`clone -- https://x/y ${dest}`]: {
         status: 128,
         stderr: "fatal: repository 'https://x/y' not found",
       },
