@@ -338,6 +338,17 @@ Its methods are `addRepo`, `subscribe`, `unsubscribe`, `restore`, `checkUpstream
 recipes one subscription pulled in and lets the lockfile's refcounting decide what actually
 goes.
 
+**Always-pull never widens a range.** `checkUpstream` asks
+`effectiveRangeForHolders` (`freshness.ts`) what range each locked entry may move within,
+and passes the answer to `findNewerInRange`. The range comes from the entry's HOLDERS: the
+`project` holder means the subscription's range, and a recipe holder means the range that
+recipe's manifest declares in `depends`, re-derived from the manifest because no
+subscription carries it. Several holders are ANDed into one range. When any holder's
+declaration cannot be read, the answer is `undefined` and the entry does not move; never
+fall back to `*` here, since that is exactly how a `depends`-held recipe used to escape the
+constraint its parent declared. `applyResolution` in `lock-service.ts` merges holders rather
+than replacing them, for the same refcounting reason.
+
 **Where a locked recipe's files are.** `locked-recipes.ts` answers that once, for everyone
 who needs it: a LINKED repository is read from its working copy (a link is a deliberate
 instruction to bypass versions and the lockfile), and everything else from its immutable

@@ -70,7 +70,12 @@ import { normalizeRepoUrl } from "./providers/provider.js";
 import { RecipeStore } from "./store/recipe-store.js";
 import type { RecipeStoreLike, StoreKey } from "./store/contract.js";
 import { resolveStoreSettings } from "./store/settings.js";
-import { findNewerInRange, recordUpstreamCheck, shouldCheckUpstream } from "./freshness.js";
+import {
+  effectiveRangeForHolders,
+  findNewerInRange,
+  recordUpstreamCheck,
+  shouldCheckUpstream,
+} from "./freshness.js";
 import { REPO_NAME_PATTERN } from "./formats/patterns.js";
 import { linkedPathFor } from "./links.js";
 import { listLockedRecipes, mapLinkedRecipes, readRecipeManifestIn } from "./locked-recipes.js";
@@ -263,6 +268,14 @@ export class SubscriptionService {
    * hash), so one service instance does it at most once.
    */
   private seedReport: SeedCoreRecipeReport | undefined;
+
+  /**
+   * Where each locked recipe's files are, keyed by recipe key, once it has been
+   * looked up. Deriving the range a `depends`-held recipe may move within asks
+   * for this once per lockfile entry, and the answer does not change during a
+   * command.
+   */
+  private lockedDirectories: Record<string, string> | undefined;
 
   /**
    * @param options - The project's directories, its config, and any collaborator to override.
@@ -901,11 +914,19 @@ export class SubscriptionService {
       for (const [key, entry] of Object.entries(recipes)) {
         if (entry.repo !== repoName) continue;
         const subscription = subscriptions[key] ?? subscriptions[key.split("/")[0]!];
+
+        // Always-pull re-resolves WITHIN what was declared; it never widens it.
+        // A recipe held only through another recipe's `depends` has no
+        // subscription to read a range from, and treating that as "any version"
+        // would move it straight past the constraint the dependency declared.
+        const range = this.effectiveRangeFor(key, entry, subscriptions);
+        if (range === undefined) continue;
+
         const newer = findNewerInRange({
           index,
           key,
           lockedVersion: entry.version,
-          ...(subscription?.range === undefined ? {} : { range: subscription.range }),
+          ...(range === "*" ? {} : { range }),
           ...(subscription?.prerelease === undefined
             ? {}
             : { prerelease: subscription.prerelease }),
@@ -1310,6 +1331,91 @@ export class SubscriptionService {
     }
 
     return false;
+  }
+
+  /**
+   * The version range an always-pull check may move one locked recipe within,
+   * or undefined when sous cannot tell and therefore must not move it.
+   *
+   * The rule itself lives in `effectiveRangeForHolders`; this supplies it with
+   * the two lookups it needs, one reading the project's subscriptions and one
+   * reading the manifest of each holding recipe.
+   *
+   * @param key - The locked recipe key, `namespace/recipe`.
+   * @param entry - Its lockfile entry, for its holders.
+   * @param subscriptions - Every subscription, from the config and the managed layer.
+   */
+  private effectiveRangeFor(
+    key: string,
+    entry: LockedRecipe,
+    subscriptions: Record<string, SubscriptionEntry>
+  ): string | undefined {
+    const namespace = key.split("/")[0]!;
+    return effectiveRangeForHolders(key, entry.requestedBy, {
+      subscriptionRange: (held) => {
+        // A subscription the config no longer declares is not a hold sous can
+        // read a range from; leave the entry alone rather than guessing.
+        const subscription = subscriptions[held] ?? subscriptions[namespace];
+        return subscription === undefined ? undefined : (subscription.range ?? "*");
+      },
+      dependencyRange: (holder, held) =>
+        this.declaredDependencyRange(holder, held, namespace),
+    });
+  }
+
+  /**
+   * The range one recipe's manifest declares for a dependency, or undefined when
+   * its manifest cannot be read or no longer names that dependency.
+   *
+   * @param holder - The holding recipe's key, `namespace/recipe`.
+   * @param key - The held recipe's key.
+   * @param namespace - The held recipe's namespace, since a `depends` entry may
+   *   name a whole namespace rather than one recipe.
+   */
+  private declaredDependencyRange(
+    holder: string,
+    key: string,
+    namespace: string
+  ): string | undefined {
+    const directory = this.lockedRecipeDirectories()[holder];
+    if (directory === undefined) return undefined;
+
+    let manifest;
+    try {
+      manifest = readRecipeManifestIn(directory);
+    } catch {
+      return undefined;
+    }
+    if (manifest === undefined) return undefined;
+
+    for (const dependency of manifest.depends ?? []) {
+      let parsed: ParsedRef;
+      try {
+        parsed = parseRef(dependency);
+      } catch {
+        continue;
+      }
+      const dependencyKey = refKey(parsed);
+      if (dependencyKey !== key && dependencyKey !== namespace) continue;
+      return parsed.range ?? "*";
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Where each locked recipe's files are, keyed by recipe key. Read once per
+   * command, because an always-pull check asks for the same answer for every
+   * entry in the lockfile.
+   */
+  private lockedRecipeDirectories(): Record<string, string> {
+    if (this.lockedDirectories === undefined) {
+      this.lockedDirectories = {};
+      for (const located of listLockedRecipes({ sousDir: this.sousDir, env: this.env })) {
+        if (located.present) this.lockedDirectories[located.key] = located.dir;
+      }
+    }
+    return this.lockedDirectories;
   }
 
   // --- Variables ----------------------------------------------------------------------------------

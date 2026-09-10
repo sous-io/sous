@@ -143,3 +143,66 @@ export function findNewerInRange(options: {
 
   return { key: options.key, from: options.lockedVersion, to: best };
 }
+
+/** The holder meaning the project subscribed to a recipe itself. */
+const PROJECT = "project";
+
+/** Every range a locked recipe's holders declared, or nothing when one cannot be told. */
+export type DeclaredRangeLookup = {
+  /**
+   * The range the project's subscription declares for a recipe key, `"*"` when
+   * the subscription declares none, or undefined when the project holds nothing
+   * matching it any more.
+   */
+  subscriptionRange(key: string): string | undefined;
+  /**
+   * The range one holding recipe's manifest declares for a dependency, `"*"`
+   * when it declares none, or undefined when its manifest cannot be read or no
+   * longer names that dependency.
+   */
+  dependencyRange(holder: string, key: string): string | undefined;
+};
+
+/**
+ * The version range an always-pull check may move ONE locked recipe within, or
+ * undefined when sous cannot tell and therefore must not move it at all.
+ *
+ * Always-pull re-resolves within what was declared; it never widens it. What was
+ * declared depends on who holds the recipe. The project's own hold means the
+ * subscription's range, which may genuinely be any version. A hold by another
+ * recipe means the range that recipe's manifest declared in `depends`, and no
+ * subscription anywhere carries it, so falling back to `*` for such an entry
+ * would move it straight past the constraint the dependency declared. Several
+ * holders mean every one of their ranges at once: whitespace between comparator
+ * sets is AND in semver, which is exactly that.
+ *
+ * Returning undefined is the safe answer, and the entry stays where the lockfile
+ * pins it. It happens when a holder's declaration cannot be read and when the
+ * combined range is not one semver can express.
+ *
+ * @param key - The locked recipe key, `namespace/recipe`.
+ * @param requestedBy - Its lockfile holders: "project", and any recipe keys.
+ * @param lookup - How to read what each holder declared.
+ */
+export function effectiveRangeForHolders(
+  key: string,
+  requestedBy: readonly string[],
+  lookup: DeclaredRangeLookup
+): string | undefined {
+  const ranges: string[] = [];
+
+  for (const holder of requestedBy) {
+    const declared =
+      holder === PROJECT ? lookup.subscriptionRange(key) : lookup.dependencyRange(holder, key);
+    if (declared === undefined) return undefined;
+    ranges.push(declared);
+  }
+
+  if (ranges.length === 0) return undefined;
+
+  const constraints = [...new Set(ranges.filter((range) => range !== "*"))];
+  if (constraints.length === 0) return "*";
+
+  const combined = constraints.join(" ");
+  return semver.validRange(combined) === null ? undefined : combined;
+}

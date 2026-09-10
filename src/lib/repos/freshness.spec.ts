@@ -5,6 +5,7 @@
 import { describe, it, expect } from "vitest";
 import {
   DEFAULT_FRESHNESS_SECONDS,
+  effectiveRangeForHolders,
   findNewerInRange,
   recordUpstreamCheck,
   shouldCheckUpstream,
@@ -191,6 +192,122 @@ describe("findNewerInRange()", () => {
   it("should return undefined for a recipe the index does not publish", () => {
     expect(
       findNewerInRange({ index, key: "quality/reviews", lockedVersion: "1.0.0" })
+    ).toBeUndefined();
+  });
+});
+
+describe("effectiveRangeForHolders()", () => {
+  const partials = makeIndexFile("sous-recipes", {
+    "core/partials": { versions: ["1.2.0", "1.2.5", "2.0.0", "3.0.0"] },
+  });
+
+  /**
+   * A recipe held ONLY through another recipe's `depends` has no subscription to
+   * read a range from. Falling back to "any version" moved always-pull straight
+   * past the constraint the dependency declared, so the range is re-derived from
+   * the holder's manifest instead.
+   *
+   * effectiveRangeForHolders("core/partials", ["workflow/task-files"], lookup);
+   * // -> "~1.2"   (never "*", so 3.0.0 stays out of reach)
+   */
+  it("should not widen the range a `depends` entry declared", () => {
+    const range = effectiveRangeForHolders("core/partials", ["workflow/task-files"], {
+      subscriptionRange: () => "*",
+      dependencyRange: (holder, key) =>
+        holder === "workflow/task-files" && key === "core/partials" ? "~1.2" : undefined,
+    });
+
+    expect(range).toBe("~1.2");
+    expect(
+      findNewerInRange({
+        index: partials,
+        key: "core/partials",
+        lockedVersion: "1.2.0",
+        range: range!,
+      })
+    ).toEqual({ key: "core/partials", from: "1.2.0", to: "1.2.5" });
+  });
+
+  /**
+   * The project's own hold reads the subscription's range, and a subscription
+   * that declares none really does mean any version.
+   *
+   * effectiveRangeForHolders("workflow/task-files", ["project"], lookup); // -> "^1.0.0"
+   */
+  it("should take the subscription's range for the project's own hold", () => {
+    expect(
+      effectiveRangeForHolders("workflow/task-files", ["project"], {
+        subscriptionRange: () => "^1.0.0",
+        dependencyRange: () => undefined,
+      })
+    ).toBe("^1.0.0");
+
+    expect(
+      effectiveRangeForHolders("workflow/task-files", ["project"], {
+        subscriptionRange: () => "*",
+        dependencyRange: () => undefined,
+      })
+    ).toBe("*");
+  });
+
+  /**
+   * Several holders mean every one of their ranges at once. Whitespace between
+   * comparator sets is AND in semver, which is exactly that.
+   *
+   * effectiveRangeForHolders("core/partials", ["project", "workflow/a"], lookup);
+   * // -> "^1.0.0 ~1.2"
+   */
+  it("should combine every holder's range into one", () => {
+    const range = effectiveRangeForHolders("core/partials", ["project", "workflow/a"], {
+      subscriptionRange: () => "^1.0.0",
+      dependencyRange: () => "~1.2",
+    });
+
+    expect(range).toBe("^1.0.0 ~1.2");
+    expect(
+      findNewerInRange({
+        index: partials,
+        key: "core/partials",
+        lockedVersion: "1.2.0",
+        range: range!,
+      })
+    ).toEqual({ key: "core/partials", from: "1.2.0", to: "1.2.5" });
+  });
+
+  /**
+   * When a holder's declaration cannot be read at all, sous must not guess. The
+   * safe answer is undefined, and the caller leaves the entry exactly where the
+   * lockfile pins it.
+   *
+   * effectiveRangeForHolders("core/partials", ["workflow/gone"], lookup); // -> undefined
+   */
+  it("should return undefined when a holder's declaration cannot be read", () => {
+    expect(
+      effectiveRangeForHolders("core/partials", ["workflow/gone"], {
+        subscriptionRange: () => "*",
+        dependencyRange: () => undefined,
+      })
+    ).toBeUndefined();
+
+    expect(
+      effectiveRangeForHolders("core/partials", [], {
+        subscriptionRange: () => "*",
+        dependencyRange: () => "*",
+      })
+    ).toBeUndefined();
+  });
+
+  /**
+   * A combination semver cannot express is treated the same way: no move.
+   *
+   * effectiveRangeForHolders("core/partials", ["project"], badLookup); // -> undefined
+   */
+  it("should return undefined when the combined range is not valid semver", () => {
+    expect(
+      effectiveRangeForHolders("core/partials", ["project"], {
+        subscriptionRange: () => "not a range",
+        dependencyRange: () => "*",
+      })
     ).toBeUndefined();
   });
 });

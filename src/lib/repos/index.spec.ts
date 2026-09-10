@@ -61,6 +61,7 @@ const EXPECTED_EXPORTS = [
   "createIndexCache",
   "detectProvider",
   "detectProviderIn",
+  "effectiveRangeForHolders",
   "envVarNameSchema",
   "extensibleObject",
   "fetchSubtree",
