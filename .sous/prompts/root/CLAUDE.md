@@ -67,6 +67,10 @@ src/
     prune.ts               # remove stale output files
     clear.ts               # delete all Sous-written files for a project
     launch.ts              # build + spawn a coding agent tool
+    repo/
+      init.ts              # scaffold a new recipe repository (no project config needed)
+      link.ts              # point a repo at a working copy; clone, or link a given path
+      unlink.ts            # drop the link and leave the checkout on disk
     config/
       show.ts              # print the merged config as JSON
       get.ts               # print one value by dot-path (--layers for provenance)
@@ -97,6 +101,9 @@ src/
         hash.ts            # hashDirectory: the canonical sha256-<hex> content hash
         recipe-store.ts    # RecipeStore: put/get/has/remove/list/gc, atomic and verified
         settings.ts        # the store's tunables and the defaults sous ships
+      links.ts             # the links maps, their merged view, and the .gitignore hygiene
+      git-clone.ts         # the injectable git layer `repo link` clones and inspects with
+      scaffold/            # string builders + scaffoldRepo(), what `repo init` writes
   templating/
     init-liquid-engine.ts  # LiquidJS engine factory (createLiquidEngine)
     tags/                  # custom Liquid tags: showVars, exportScalarVarsJs, getFiles, listFiles
@@ -181,6 +188,24 @@ layer is a separate effort.
 The formats themselves, field by field, are documented in
 `docs/markdown/repositories-file-formats.md`; that page is the reference (including the store
 layout), and this file only points at it.
+
+**Editable checkouts.** A LINK redirects one repository away from the store and at a real
+working copy, which is how a maintainer edits recipes. `links.ts` reads the project's
+`.sous/sous.links.json` and the machine-wide `$SOUS_HOME/sous.links.json` and merges them with
+the project's entries winning; `describeLinkedRepos()` returns the lines a build prints so a
+link is never a silent change to what a build produces. Cloning and checkout inspection go
+through `git-clone.ts`, which shells out to the user's own `git` (so their credentials and
+configuration apply) behind an injectable runner, so nothing in the tests needs git or a
+network. `resolveSousHomeDir()` in `links.ts` is a private stand-in for the shared
+`resolveSousHome`, marked with a TODO for the swap.
+
+**Ignore hygiene.** `ensureReposIgnoreFiles(sousDir)` writes `.sous/repos/.gitignore` holding a
+single `*` (which covers the ignore file itself, so the directory contributes nothing to the
+project's repository) and maintains a delimited managed block inside `.sous/.gitignore` listing
+`sous.links.json`, `sous.state.json`, `sous.pid` and `repos/`. Only the lines between the
+markers are ever rewritten; anything above or below them is left alone, and an opening marker
+with no closing partner is a hard `ConfigError` rather than a guess. Both files are written
+only when their contents would change, so linking repeatedly never produces a diff.
 
 ## Config Discovery
 
@@ -538,6 +563,9 @@ This enables `sous prune` (remove stale outputs) and `sous clear` (delete all ou
 | `sous config show` | Print the merged config (all layers merged, before var resolution) as JSON |
 | `sous config get <path>` | Print one value by dot-path (e.g. `compilation.targets[0].entryPoint`); `--layers` shows per-layer provenance |
 | `sous config validate` | Validate the merged config: schema, then full variable resolution |
+| `sous repo init [dir]` | Scaffold a new recipe repository (`--name`, `--namespace`, `--force`) |
+| `sous repo link <repo> [path]` | Read a repository from a working copy: clone it, or link a checkout already on disk (`--global`) |
+| `sous repo unlink <repo>` | Drop the link and go back to published versions; the checkout stays (`--global`) |
 
 The `sous config` namespace inspects the merged config. `show` and `get` emit machine-
 readable stdout (`config show | jq` works): they extend `ConfigCommand`, which routes the
@@ -546,6 +574,16 @@ stream. `get` prints scalars raw and objects/arrays as pretty JSON, colorized on
 TTY; `--layers` walks the trace-mode snapshots and prints one `old -> new` line per layer
 that changed the value. `validate` runs the resolvers (fixpoint + substitution) that
 schema validation alone cannot, surfacing cycles and undefined `${vars}`.
+
+The `repo` namespace manages repositories. `repo init` is the ONE command that does not
+extend `BaseCommand`: it creates a repository, which is not a sous project and usually has no
+`.sous/` above it, so config discovery would only get in its way. `repo link` clones into
+`.sous/repos/<owner>/<name>` (or `$SOUS_HOME/repos/...` with `--global`), reuses a checkout of
+the same remote rather than re-cloning, and refuses a checkout of a different one; `repo
+unlink` removes the map entry and never touches the checkout. Both maintain the managed
+`.gitignore` block described above, so `.sous/repos/` and the links map stay out of version
+control. Prune and clear only ever touch paths recorded in the state file, so nothing in
+`.sous/repos/` is at risk from them.
 
 This `config` namespace is a fresh design, distinct from the old `configure` /
 `config *` commands and the `~/.sous` profile layer that were removed when walk-up

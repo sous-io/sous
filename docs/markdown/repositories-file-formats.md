@@ -449,6 +449,47 @@ committed. A link bypasses versions, the lockfile and freshness checks, and thos
 belong to one person's machine rather than to the team, so builds announce a linked repository
 loudly.
 
+### Where a linked checkout lives
+
+`sous repo link <repo>` with no path clones the repository for you. The working copy lands in
+`.sous/repos/<owner>/<name>`, or in `$SOUS_HOME/repos/<owner>/<name>` with `--global`, where
+every project on the machine shares one checkout. A directory that is already a checkout of the
+same remote is reused rather than cloned again, so running the command twice is harmless; one
+holding a different remote is an error, because reading the wrong recipes silently would be
+worse than stopping.
+
+`sous repo link <repo> <path>` links a checkout that already exists and clones nothing. The path
+must hold a repo manifest at its root, since a directory without one is not a repository.
+
+`sous repo unlink <repo>` removes the map entry and nothing else. The checkout stays where it
+is, and its path is printed so you can delete it yourself if you want to.
+
+### Ignore hygiene
+
+Everything sous keeps under `.sous/` for one machine is kept out of the project's repository,
+and linking maintains both files that do it:
+
+- `.sous/repos/.gitignore` holds a single `*`. That covers the ignore file itself, so a cloned
+  checkout underneath it contributes nothing at all to the project's repository.
+- `.sous/.gitignore` carries a delimited managed block:
+
+```
+# >>> sous managed (do not edit between these markers)
+sous.links.json
+sous.state.json
+sous.pid
+repos/
+# <<< sous managed
+```
+
+Only the lines between the markers are ever rewritten. Anything you put above or below them is
+left exactly as it was, and both files are written only when their contents would change, so
+linking repeatedly never produces a diff. An opening marker with no closing partner stops the
+command with an error rather than a guess about where the block ends.
+
+`sous prune` and `sous clear` only ever touch paths recorded in the state file, so nothing in
+`.sous/repos/` is at risk from either of them.
+
 ## Project configuration
 
 Three optional top-level keys in a project's sous config carry the consumer side. `sous repo add`
