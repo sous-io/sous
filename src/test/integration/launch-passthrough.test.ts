@@ -12,7 +12,7 @@ const binPath = path.join(repoRoot, "bin", "run.js");
 const CLI_TIMEOUT = 30_000;
 
 /**
- * These tests exercise `xcv launch` end to end through the real CLI entry
+ * These tests exercise `sous launch` end to end through the real CLI entry
  * point, using a tool whose command is a small Node script that dumps the argv
  * it received to a JSON file. That dump is exactly what a real agent tool
  * (claude, codex) would have received.
@@ -22,7 +22,7 @@ describe("launch pass-through args", () => {
   let dumpFile: string;
   let configPath: string;
 
-  /** Runs `xcv launch <argv...>` and returns the argv the tool received. */
+  /** Runs `sous launch <argv...>` and returns the argv the tool received. */
   function launch(...argv: string[]): { toolArgv: string[] | null; status: number | null; output: string } {
     fs.rmSync(dumpFile, { force: true });
     const result = spawnSync(process.execPath, [binPath, "launch", ...argv], {
@@ -79,7 +79,7 @@ describe("launch pass-through args", () => {
    * flag/value pairs survive). sous's own flags (--no-build here) are consumed
    * and never forwarded.
    *
-   * xcv launch dump --no-build --resume --model opus
+   * sous launch dump --no-build --resume --model opus
    *   → tool receives ["--defined-arg", "--resume", "--model", "opus"]
    */
   it(
@@ -95,7 +95,7 @@ describe("launch pass-through args", () => {
   /**
    * The `--flag=value` form is forwarded as a single token, exactly as typed.
    *
-   * xcv launch dump --no-build --model=opus
+   * sous launch dump --no-build --model=opus
    *   → tool receives ["--defined-arg", "--model=opus"]
    */
   it(
@@ -115,7 +115,7 @@ describe("launch pass-through args", () => {
    * hatch. sous must still resolve its own config normally (here via discovery
    * from cwd).
    *
-   * xcv launch dump --no-build -- -c -p hello
+   * sous launch dump --no-build -- -c -p hello
    *   → tool receives ["--defined-arg", "-c", "-p", "hello"]
    */
   it(
@@ -133,7 +133,7 @@ describe("launch pass-through args", () => {
    * the config, and pass-through collected before and after `--` is combined in
    * order.
    *
-   * xcv launch dump --no-build -c <config> --resume -- -c
+   * sous launch dump --no-build -c <config> --resume -- -c
    *   → tool receives ["--defined-arg", "--resume", "-c"]
    */
   it(
@@ -150,7 +150,7 @@ describe("launch pass-through args", () => {
    * The promptFile content stays the LAST argument, after pass-through args, so
    * tools that treat a trailing positional as the prompt keep working.
    *
-   * xcv launch dumpWithPrompt --no-build --resume
+   * sous launch dumpWithPrompt --no-build --resume
    *   → tool receives ["--defined-arg", "--resume", "PROMPT-CONTENT"]
    */
   it(
@@ -167,7 +167,7 @@ describe("launch pass-through args", () => {
    * With no extra arguments the tool receives only the config-defined args —
    * the pre-pass-through behavior is unchanged.
    *
-   * xcv launch dump --no-build
+   * sous launch dump --no-build
    *   → tool receives ["--defined-arg"]
    */
   it(

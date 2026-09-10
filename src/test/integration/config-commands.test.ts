@@ -18,7 +18,7 @@ const ANSI_RE = /\[/;
 type RunResult = { stdout: string; stderr: string; status: number | null };
 
 /**
- * Runs `xcv <args...>` through the real published bin, from `cwd`. SOUS_* env
+ * Runs `sous <args...>` through the real published bin, from `cwd`. SOUS_* env
  * vars are stripped so the child resolves its config purely by walk-up discovery
  * from `cwd` (an ambient SOUS_CONFIG in the runner's env must not leak in).
  */
@@ -44,7 +44,7 @@ function writeSous(sousDir: string, rel: string, content: string): string {
 }
 
 /**
- * These tests exercise the `xcv config *` inspection commands (show / get /
+ * These tests exercise the `sous config *` inspection commands (show / get /
  * validate) end to end through the real CLI, against temp configs that use
  * conf.d layers: a primary config plus two drop-in layers, one overriding a
  * scalar and one appending a compilation target.
@@ -52,7 +52,7 @@ function writeSous(sousDir: string, rel: string, content: string): string {
  * `${...}` refs in fixtures are ordinary quoted strings (never template
  * literals) so they reach the child verbatim instead of interpolating here.
  */
-describe("xcv config commands", () => {
+describe("sous config commands", () => {
   let tmp: TmpDir;
   let root: string;
   let sousDir: string;
@@ -250,7 +250,7 @@ describe("xcv config commands", () => {
  * not affect the others. `config validate` must exit non-zero and name the
  * specific problem.
  */
-describe("xcv config validate failures", () => {
+describe("sous config validate failures", () => {
   const tmps: TmpDir[] = [];
 
   /** Makes a fresh temp project whose `.sous/sous.config.json` is `config`. */
