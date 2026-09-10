@@ -15,12 +15,15 @@
 import path from "node:path";
 import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../base-command.js";
+import { ConfigError } from "../../lib/errors.js";
 import {
   askForMissing,
+  definedVariableKey,
   FileDefinitionSource,
   formatAskReport,
   loadLadderContext,
   loadProjectDefinitions,
+  type DefinedVariable,
 } from "../../lib/vars/index.js";
 import {
   blankLine,
@@ -31,6 +34,11 @@ import {
   log,
   showCommandVars,
 } from "../../utils/formatting.js";
+
+/** True when a name (bare, or the full namespace/recipe.name key) names this variable. */
+function matchesName(defined: DefinedVariable, name: string): boolean {
+  return defined.definition.name === name || definedVariableKey(defined) === name;
+}
 
 export default class VarsAsk extends BaseCommand {
   static description =
@@ -98,6 +106,13 @@ export default class VarsAsk extends BaseCommand {
       );
       footer();
       return;
+    }
+
+    if (args.name !== undefined && !defined.some((entry) => matchesName(entry, args.name!))) {
+      throw new ConfigError(
+        `No variable named '${args.name}' is in play.\n` +
+          `  Run 'sous vars' to see every variable this project's recipes define.`
+      );
     }
 
     const context = loadLadderContext({
