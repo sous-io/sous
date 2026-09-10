@@ -47,3 +47,4 @@ export * from "./freshness.js";
 // `repo`, `subscribe` and `unsubscribe` commands drive.
 export * from "./locked-recipes.js";
 export * from "./locked-namespace-resolver.js";
+export * from "./subscription-service.js";

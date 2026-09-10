@@ -206,12 +206,13 @@ const PHASE_6A_EXPORTS = [
 
 /**
  * The names Phase 3 added: where a locked recipe's files are, the namespace
- * resolver built from that, the local file provider, and the paths nothing sous
- * deletes may reach into.
+ * resolver built from that, the local file provider, the paths nothing sous
+ * deletes may reach into, and the service the consumer commands drive.
  */
 const PHASE_3_EXPORTS = [
   "FILE_PROVIDER_ID",
   "FileProvider",
+  "SubscriptionService",
   "createProjectNamespaceResolver",
   "listLockedRecipes",
   "localRepoPath",
