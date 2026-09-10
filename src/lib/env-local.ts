@@ -155,7 +155,7 @@ export function loadEnvDefaults(
  * `process.env`, if it exists.
  *
  * Existing environment values always win: a variable already set in the real
- * environment is never overwritten, so `FOO=bar xcv build` behaves as expected.
+ * environment is never overwritten, so `FOO=bar sous build` behaves as expected.
  *
  * @param sousDir - The discovered `.sous/` directory.
  * @param env - The environment object to mutate (injectable for tests).

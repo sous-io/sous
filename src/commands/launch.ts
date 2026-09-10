@@ -27,7 +27,7 @@ export default class Launch extends BaseCommand {
   static flags = {
     ...BaseCommand.baseFlags,
     "no-build": Flags.boolean({
-      description: "Skip xcv build before launching",
+      description: "Skip sous build before launching",
       default: false,
     }),
     continuous: Flags.boolean({

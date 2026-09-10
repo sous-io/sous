@@ -159,7 +159,7 @@ describe("readLongFlagFromArgv()", () => {
 
     /**
      * readLongFlagFromArgv() should stop scanning at a bare `--`: everything after
-     * it belongs to a launched tool, so `xcv launch claude -- --sous-config x`
+     * it belongs to a launched tool, so `sous launch claude -- --sous-config x`
      * forwards `--sous-config` to the tool rather than consuming it as sous's.
      */
     it(`should ignore --${flag} that appears after --`, () => {

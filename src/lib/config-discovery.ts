@@ -315,7 +315,7 @@ export function formatNotFoundMessage(startDir: string = process.cwd()): string 
     "",
     "  To fix this, either:",
     `    1. Create ${SOUS_DIR_NAME}/${CONFIG_FILE_NAMES[0]} in your project root, or`,
-    "    2. Pass the config explicitly: xcv <command> --config <path>",
+    "    2. Pass the config explicitly: sous <command> --config <path>",
     "",
     `  A minimal ${CONFIG_FILE_NAMES[0]}:`,
     "",

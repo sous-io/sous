@@ -3,7 +3,7 @@ import { lookupPath, NOT_FOUND, parsePath } from "./config-inspect.js";
 
 /**
  * Unit tests for the config-inspect dot-path helpers shared by the
- * `xcv config get` command. The focus here is lookupPath's contract: it must
+ * `sous config get` command. The focus here is lookupPath's contract: it must
  * return NOT_FOUND for absent paths and never leak inherited prototype members.
  */
 

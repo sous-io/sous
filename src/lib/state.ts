@@ -36,7 +36,7 @@ export type StateFile = {
 /**
  * Manages reading and writing the project state file.
  * The state file tracks all files and directories Sous has written,
- * enabling xcv prune and xcv clear to clean up precisely.
+ * enabling sous prune and sous clear to clean up precisely.
  */
 export class StateService {
   /**

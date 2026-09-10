@@ -33,7 +33,7 @@ export default class Clear extends BaseCommand {
 
     if (!state) {
       displayError(
-        `No state file found at ${stateFilePath}. Run 'xcv build' first, then 'xcv clear' to recover.`
+        `No state file found at ${stateFilePath}. Run 'sous build' first, then 'sous clear' to recover.`
       );
       this.exit(1);
     }

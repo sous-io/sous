@@ -87,7 +87,7 @@ export function indent(text: string, count = 2, char = " "): string {
  * Writes the CLI header using the given line writer.
  *
  * Factored out so commands whose stdout must stay machine-readable (the
- * `xcv config *` commands, which emit JSON) can route the decorative banner to
+ * `sous config *` commands, which emit JSON) can route the decorative banner to
  * stderr instead — see ConfigCommand.emitHeader.
  *
  * @param write - Receives one already-formatted line at a time (no trailing newline).
@@ -253,7 +253,7 @@ export function deleteStatus(recordsDeleted: number, totalRecordsToDelete: numbe
  *
  * @param text - The message to display.
  * @param write - Line sink (default stdout via `log`). Commands whose stdout must
- *   stay machine-readable (the `xcv config *` JSON commands) pass a stderr writer
+ *   stay machine-readable (the `sous config *` JSON commands) pass a stderr writer
  *   so error text never corrupts a piped stdout stream.
  */
 export function displayError(text: string, write: (line: string) => void = log): void {
@@ -278,7 +278,7 @@ export function displayError(text: string, write: (line: string) => void = log):
  *
  * @param text - The pre-formatted, multi-line message to display.
  * @param write - Line sink (default stdout via `log`). Commands whose stdout must
- *   stay machine-readable (the `xcv config *` JSON commands) pass a stderr writer
+ *   stay machine-readable (the `sous config *` JSON commands) pass a stderr writer
  *   so error text never corrupts a piped stdout stream.
  *
  * @example

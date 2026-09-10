@@ -64,7 +64,7 @@ export abstract class BaseCommand extends Command {
 
   /**
    * Emits the decorative CLI header during init(). The default writes it to
-   * stdout. Commands whose stdout must stay machine-readable (the `xcv config *`
+   * stdout. Commands whose stdout must stay machine-readable (the `sous config *`
    * JSON commands) override this to route the banner to stderr.
    */
   protected emitHeader(): void {
@@ -73,9 +73,9 @@ export abstract class BaseCommand extends Command {
 
   /**
    * Line sink for error rendering during init()/catch(). Defaults to stdout (via
-   * `log`). Commands whose stdout must stay machine-readable (the `xcv config *`
+   * `log`). Commands whose stdout must stay machine-readable (the `sous config *`
    * JSON commands) override this to route error text to stderr, so a broken
-   * config never corrupts a piped stdout stream (e.g. `xcv config show | jq`).
+   * config never corrupts a piped stdout stream (e.g. `sous config show | jq`).
    */
   protected errorSink: (line: string) => void = log;
 

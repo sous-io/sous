@@ -442,7 +442,7 @@ describe("loadEnvFiles()", () => {
 
   /**
    * loadEnvFiles() should give the real shell environment the highest
-   * precedence, beating both files, so `FOO=x xcv build` always wins.
+   * precedence, beating both files, so `FOO=x sous build` always wins.
    *
    * // env.FOO = "from-shell" ; .env: FOO=shared ; .env.local: FOO=machine
    * loadEnvFiles("<tmp>", env); // -> env.FOO stays "from-shell"

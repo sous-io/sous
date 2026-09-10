@@ -50,7 +50,7 @@ export default class ConfigGet extends ConfigCommand {
       throw new ConfigError(
         `No value at config path '${args.path}'.\n` +
           `  It is not present in the merged config (${this.configContext.configPath}).\n` +
-          `  Run 'xcv config show' to see the whole config.`
+          `  Run 'sous config show' to see the whole config.`
       );
     }
 
@@ -97,7 +97,7 @@ export default class ConfigGet extends ConfigCommand {
     if (!printedAny) {
       throw new ConfigError(
         `No value at config path '${pathStr}' in any config layer.\n` +
-          `  Run 'xcv config show' to see the whole merged config.`
+          `  Run 'sous config show' to see the whole merged config.`
       );
     }
   }
