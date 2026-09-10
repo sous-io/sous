@@ -148,21 +148,16 @@ export async function submitRepo(options: SubmitOptions): Promise<SubmitResult> 
   };
 
   // --- Preflight: is this a repository sous can propose a change to? --------
+  //
+  // The cheap, actionable checks come first. A repository with an uncommitted
+  // file is the commonest reason a submission stops, and saying so is far more
+  // useful than a content hash disagreeing because of that same uncommitted
+  // file. The manifests are read this early only for the contribution
+  // pointer; what the recipes say is only judged once the ground is firm.
 
   step("Reading the repository manifest and every recipe in it");
   const validation = validateRepo(rootDir);
-  assertRepoValidates(validation);
   completed.push("Read the repository manifest and every recipe in it");
-
-  step("Confirming the committed index is current");
-  const built = await buildIndex({
-    validation,
-    existing: readIndexFile(rootDir),
-    sousVersion,
-    run,
-  });
-  assertIndexReady(built, readIndexFile(rootDir));
-  completed.push("Confirmed the committed index is current");
 
   step("Looking up where this repository was cloned from");
   const upstreamUrl = await remoteUrl(rootDir, UPSTREAM_REMOTE, { run });
@@ -203,6 +198,22 @@ export async function submitRepo(options: SubmitOptions): Promise<SubmitResult> 
     );
   }
   completed.push("Checked that everything is committed");
+
+  // --- Validate what is about to be proposed --------------------------------
+
+  step("Checking that every recipe describes itself correctly");
+  assertRepoValidates(validation);
+  completed.push("Checked that every recipe describes itself correctly");
+
+  step("Confirming the committed index is current");
+  const built = await buildIndex({
+    validation,
+    existing: readIndexFile(rootDir),
+    sousVersion,
+    run,
+  });
+  assertIndexReady(built, readIndexFile(rootDir));
+  completed.push("Confirmed the committed index is current");
 
   // --- The branch the change lives on ---------------------------------------
 
