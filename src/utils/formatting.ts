@@ -306,18 +306,24 @@ export function dryRunNotice(text: string): void {
 
 /**
  * Writes a warning message to the console with a yellow banner.
+ *
+ * @param text - The message to display.
+ * @param write - Line sink (default stdout via `log`). Commands whose stdout must
+ *   stay machine-readable (the `sous config *` JSON commands) pass a stderr writer
+ *   so warning text never corrupts a piped stdout stream.
  */
-export function warning(text: string): void {
-  blankLines();
-  log(color.bgYellowBright(color.black("   WARNING:   ")));
+export function warning(text: string, write: (line: string) => void = log): void {
+  write("");
+  write("");
+  write(color.bgYellowBright(color.black("   WARNING:   ")));
 
   const lines = text.split("\n");
   for (const line of lines) {
     if (line.trim() !== "") {
-      log(highlightUpperCaseWords(indent(line.trim())));
+      write(highlightUpperCaseWords(indent(line.trim())));
     }
   }
-  blankLine();
+  write("");
 }
 
 // --- Miscellaneous Helpers -----------------------------------------------------------------------

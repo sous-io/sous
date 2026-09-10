@@ -1,7 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { ConfigError } from "./errors.js";
-import { listRecipeConfigLayers } from "./repos/recipe-config-layers.js";
+import {
+  listRecipeConfigLayers,
+  type RecipeConfigLayer,
+} from "./repos/recipe-config-layers.js";
 
 /**
  * The directory name sous looks for when walking up from the working directory.
@@ -60,6 +63,13 @@ export type DiscoveredConfig = {
   layerPaths: string[];
   /** The subset of `layerPaths` that came from subscribed recipes. */
   recipeLayerPaths: string[];
+  /**
+   * The recipe layers themselves, already read and already filtered down to the
+   * keys a recipe is allowed to set. Sous reads these instead of handing their
+   * paths to the config kernel, so a recipe cannot set a key that would change
+   * what sous trusts or what sous runs. See `repos/recipe-config-layers.ts`.
+   */
+  recipeLayers: RecipeConfigLayer[];
   /**
    * Complete, plain-language sentences about anything a recipe contributed that
    * sous declined to load. Printed by the command, since discovery runs before
@@ -198,7 +208,7 @@ function buildDiscoveredConfig(
   const recipes = listRecipeConfigLayers(sousDir);
   const layerPaths = [
     configPath,
-    ...recipes.layers,
+    ...recipes.paths,
     ...projectLayers.slice(1),
   ];
 
@@ -207,7 +217,8 @@ function buildDiscoveredConfig(
     sousDir,
     confDir,
     layerPaths,
-    recipeLayerPaths: recipes.layers,
+    recipeLayerPaths: recipes.paths,
+    recipeLayers: recipes.layers,
     recipeLayerWarnings: recipes.warnings,
     source,
   };

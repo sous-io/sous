@@ -173,7 +173,9 @@ export abstract class BaseCommand extends Command {
       layerPaths: discovered.layerPaths,
     };
 
-    for (const notice of discovered.recipeLayerWarnings) warning(notice);
+    // Routed through the command's error sink, not stdout: a recipe layer
+    // warning must not land in the middle of `sous config show | jq`.
+    for (const notice of discovered.recipeLayerWarnings) warning(notice, this.errorSink);
 
     try {
       this.settings = await loadSettings(discovered);

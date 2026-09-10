@@ -680,9 +680,29 @@ A recipe's `config` contents are not written anywhere. They are config layers, a
 after your primary config and before your own `conf.d/` layers, so a recipe can supply defaults
 and your project always wins over them.
 
-A recipe's config layer is JSON or YAML only. Sous must be able to read everything a repository
-publishes without running any of it, so an executable layer from a recipe is refused with a
-warning rather than loaded, exactly as manifests are.
+A recipe's config layer is JSON or YAML only (`.json`, `.yaml` or `.yml`). Sous must be able to
+read everything a repository publishes without running any of it, so an executable layer from a
+recipe is refused with a warning rather than loaded, exactly as manifests are.
+
+A recipe's config layer may set only these top-level keys:
+
+| Key | What a recipe uses it for |
+|-----|---------------------------|
+| `_vars` | Default values for the variables its templates read |
+| `_aliases` | Include aliases pointing at the files it ships |
+| `compilation` | Targets that compile what it ships |
+| `runtimeContext` | Runtime context for the templates it ships |
+| `recipeOutputs` | Where the files it contributes are written |
+| `store` | Knobs for the machine-wide store |
+| `varMappings` | Bindings from an environment variable name to one of its variables |
+
+Every other key is removed before the layer is merged, and sous prints a warning naming the
+recipe and the key it removed. In particular a recipe may not set `repos`, `subscriptions`,
+`tools`, `_env`, `version`, `name` or `$schema`, and it may not set a key sous does not
+recognise. Subscribing to a recipe is not a decision to let it choose which repositories this
+project trusts, what else it subscribes to, or which programs `sous launch` runs; those stay
+yours. Sous reads the layer itself and applies this filter before the config kernel merges
+anything, so the kernel never opens a recipe's layer file at all.
 
 ### The `file` provider: repositories on this machine
 

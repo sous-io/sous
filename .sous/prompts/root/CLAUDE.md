@@ -418,9 +418,22 @@ those files are config layers too. They load AFTER the primary config and BEFORE
 `conf.d/` layers, so a recipe supplies defaults and the project always wins over them.
 `listRecipeConfigLayers` (`repos/recipe-config-layers.ts`) enumerates them from the
 lockfile, the links map and the store alone, because this has to work before the settings
-exist. Only `.json` and `.yaml` are accepted from a recipe: the kernel would happily import
-a `.js` layer, and the whole trust story rests on sous reading what a repository publishes
-without running any of it, so an executable layer from a recipe is refused with a warning.
+exist. Only `.json`, `.yaml` and `.yml` are accepted from a recipe: the kernel would happily
+import a `.js` layer, and the whole trust story rests on sous reading what a repository
+publishes without running any of it, so an executable layer from a recipe is refused with a
+warning.
+
+A recipe layer is READ by `listRecipeConfigLayers` and filtered to
+`RECIPE_CONFIG_ALLOWED_KEYS` (`filterRecipeConfigLayer`) before anything merges; the
+already-parsed, already-filtered object is handed to the kernel as an inline
+`{ path, config }` source, so the kernel never opens a recipe's layer file. A recipe may
+set only keys that configure the recipe itself, and every other key is dropped with a
+warning naming the recipe and the key. Subscribing to a recipe is not a decision to let it
+choose what the project trusts or what sous runs, so `repos`, `subscriptions`, `tools` and
+`_env` in particular can never come from one. Change the allowlist only in
+`recipe-config-layers.ts`, and keep `docs/markdown/repositories-consuming.md` and
+`docs/markdown/repositories-file-formats.md` in step with it.
+
 Recipe layers are deliberately left out of the duplicate-baseName check; that check exists
 so a person never has to guess which of two files THEY wrote merges last, and a recipe's
 file names are not theirs to rename. `BaseCommand.init()` enumerates them twice: once

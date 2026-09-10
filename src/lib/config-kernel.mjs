@@ -11,7 +11,13 @@
  * --------
  * stdin (one JSON document):
  *   {
- *     sources: string[],            // ordered absolute layer paths, primary first
+ *     sources: (string | { path, config })[],  // ordered layers, primary first.
+ *                                   // A string is an absolute layer path the
+ *                                   // kernel reads itself. An object is a layer
+ *                                   // the parent already read and filtered (a
+ *                                   // subscribed recipe's config layer); the
+ *                                   // kernel merges `config` as-is and never
+ *                                   // opens `path`.
  *     context: { sousDir, confDir, sousRootPath, sousVersion, configPath },
  *     trace: boolean
  *   }
@@ -311,9 +317,26 @@ async function main() {
   }
 
   for (const source of sources) {
-    await loadLayer(source);
+    // An inline source is a layer the PARENT already read and already filtered
+    // (a subscribed recipe's config layer; see repos/recipe-config-layers.ts).
+    // The kernel merges the content it was handed and never opens the file, so
+    // the filtering cannot be sidestepped by re-reading it here.
+    if (isPlainObject(source)) {
+      const previousFile = currentFile;
+      currentFile = source.path;
+      try {
+        mergeLayerObject(source.config, source.path);
+      } finally {
+        currentFile = previousFile;
+      }
+    } else {
+      await loadLayer(source);
+    }
     if (trace) {
-      layers.push({ path: source, config: jsonRoundTrip(currentConfig) });
+      layers.push({
+        path: isPlainObject(source) ? source.path : source,
+        config: jsonRoundTrip(currentConfig),
+      });
     }
   }
 

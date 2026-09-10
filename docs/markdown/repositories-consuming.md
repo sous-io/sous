@@ -126,6 +126,15 @@ or YAML only; sous must be able to read everything a repository publishes withou
 it, so an executable layer from a recipe is refused with a warning rather than loaded. Ordering
 among recipe layers is by recipe key and then by path, which makes it the same on every machine.
 
+A recipe layer may set only the keys that configure the recipe itself: `_vars`, `_aliases`,
+`compilation`, `runtimeContext`, `recipeOutputs`, `store` and `varMappings`. Sous removes
+anything else before merging and prints a warning naming the recipe and the key it removed.
+
+!> Subscribing to a recipe is not a decision to let it decide what else you trust. A recipe
+cannot add a repository to `repos:`, subscribe you to anything, point a `tools:` entry at a
+program `sous launch` would run, map new environment variables in through `_env`, or rename your
+project. Those decisions stay yours, and stay in your own config.
+
 ## Answer the variables a recipe needs
 
 A recipe publishes variable **definitions**; you supply **answers**. Subscribing asks whatever

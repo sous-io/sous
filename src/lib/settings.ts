@@ -17,6 +17,7 @@ import { ConfigError } from "./errors.js";
 import { resolveSousHome } from "./sous-home.js";
 import { validateSettings } from "./config-schema.js";
 import { applyRepoDefaults } from "./repos/defaults.js";
+import type { RecipeConfigLayer } from "./repos/recipe-config-layers.js";
 import { warning } from "../utils/formatting.js";
 
 // Re-exported for backwards compatibility: ConfigError moved to ./errors.ts so
@@ -267,22 +268,36 @@ export async function loadSettingsWithLayers(
   let sousDir: string;
   let confDir: string;
   let layerPaths: string[];
+  let recipeLayers: RecipeConfigLayer[];
 
   if (typeof source === "string") {
     configPath = path.resolve(source);
     sousDir = path.dirname(configPath);
     confDir = path.join(sousDir, CONFD_DIR_NAME);
     layerPaths = [configPath];
+    recipeLayers = [];
   } else {
     ({ configPath, sousDir, confDir, layerPaths } = source);
+    recipeLayers = source.recipeLayers ?? [];
   }
 
   if (!fs.existsSync(configPath)) {
     throw new Error(`Settings file not found: ${configPath}`);
   }
 
+  // A recipe layer is handed to the kernel as content, not as a path, because
+  // it has already been read and filtered down to the keys a recipe may set
+  // (see `repos/recipe-config-layers.ts`). The kernel never opens the file, so
+  // there is no second, unfiltered reading of it.
+  const recipeLayerByPath = new Map(recipeLayers.map((layer) => [layer.path, layer]));
+  const sources = layerPaths.map((layerPath) => {
+    const recipeLayer = recipeLayerByPath.get(layerPath);
+    if (recipeLayer === undefined) return layerPath;
+    return { path: recipeLayer.path, config: recipeLayer.config };
+  });
+
   const kernelInput = JSON.stringify({
-    sources: layerPaths,
+    sources,
     context: {
       sousDir,
       confDir,
