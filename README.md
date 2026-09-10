@@ -12,7 +12,7 @@
 sous compiles AI coding agent configuration from templates. You write skills, memories, and
 instructions once as LiquidJS templates in layered sources, then sous renders them into the
 formats agents actually read: `.claude/` plus `CLAUDE.md` for Claude Code, `.codex/` plus
-`AGENTS.md` for Codex. The CLI binary is named `xcv`.
+`AGENTS.md` for Codex. The CLI binary is named `sous`.
 
 **New to sous? Watch the animated introduction at [sous.io](https://sous.io).**
 
@@ -72,10 +72,10 @@ itself without hardcoding anything machine-specific. One config describes one pr
 build:
 
 ```bash
-xcv build
+sous build
 ```
 
-`xcv build` compiles every configured target and prunes outputs that are no longer in the
+`sous build` compiles every configured target and prunes outputs that are no longer in the
 config. Config discovery walks up from the current directory until it finds a `.sous/`
 directory holding a config, so you can run it from anywhere inside the project. Pass
 `--config <path>` to point at one explicitly instead.
@@ -88,22 +88,22 @@ anything resolves. There are two layers:
 - `.sous/.env.local` is gitignored. Put machine-specific values and secrets here.
 
 Precedence, highest first: your shell environment, then `.env.local`, then `.env`. So
-`FOO=bar xcv build` beats both files, and `.env.local` beats `.env` per key. This repo
+`FOO=bar sous build` beats both files, and `.env.local` beats `.env` per key. This repo
 ships `.sous/.env.local.example` documenting the layer.
 
 Useful commands:
 
 | Command | What it does |
 |---|---|
-| `xcv build` | Compile, then prune stale outputs |
-| `xcv build --watch` | Rebuild on source changes |
-| `xcv compile` | Compile only |
-| `xcv prune` | Remove outputs no longer in the config |
-| `xcv clear` | Delete every file sous wrote for the project |
-| `xcv launch claude` | Build, then start the agent |
-| `xcv config show` | Print the merged config (all layers) as JSON |
-| `xcv config get <path>` | Read one value by dot-path; `--layers` shows which file set it |
-| `xcv config validate` | Validate the merged config: schema, then variable resolution |
+| `sous build` | Compile, then prune stale outputs |
+| `sous build --watch` | Rebuild on source changes |
+| `sous compile` | Compile only |
+| `sous prune` | Remove outputs no longer in the config |
+| `sous clear` | Delete every file sous wrote for the project |
+| `sous launch claude` | Build, then start the agent |
+| `sous config show` | Print the merged config (all layers) as JSON |
+| `sous config get <path>` | Read one value by dot-path; `--layers` shows which file set it |
+| `sous config validate` | Validate the merged config: schema, then variable resolution |
 
 ## How it works
 
@@ -202,9 +202,9 @@ found by discovery, so they cannot decide where discovery looks).
 
 ## Validating and inspecting config
 
-`xcv config validate` runs the full pipeline: it merges every layer, checks it against the
+`sous config validate` runs the full pipeline: it merges every layer, checks it against the
 schema, then resolves variables, reporting the first failure with a readable message.
-`xcv config show` prints the merged config as JSON, and `xcv config get <dot.path>` reads a
+`sous config show` prints the merged config as JSON, and `sous config get <dot.path>` reads a
 single value; add `--layers` to see which layer file set it and to what.
 
 Config is validated against a JSON Schema on every load. A config may declare a `version`

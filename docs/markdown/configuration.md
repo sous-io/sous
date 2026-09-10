@@ -58,7 +58,7 @@ directly inside `.sous/conf.d/` is loaded after the primary config and deep-merg
 - [Layers and merging](config-layers.md): `conf.d/` ordering, merge semantics, the JS
   `configure()` contract
 - [Variables](config-variables.md): the `${var}` scope chain, auto-vars, fixpoint resolution
-- [Inspecting and validating](config-inspection.md): the `xcv config` commands and the
+- [Inspecting and validating](config-inspection.md): the `sous config` commands and the
   validation pipeline
 
 ## Rules of the road

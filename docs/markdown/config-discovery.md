@@ -61,9 +61,9 @@ All are hard `ConfigError`s; sous never guesses:
   only by extension is an error naming both files, because their merge order would otherwise
   depend on extension.
 
-## Interaction with `xcv launch` pass-through
+## Interaction with `sous launch` pass-through
 
-`xcv launch` forwards unrecognized arguments to the launched tool. The `--sous-config`,
+`sous launch` forwards unrecognized arguments to the launched tool. The `--sous-config`,
 `--sous-dir` and `--sous-confd` flags are declared on every command, so launch consumes them
 rather than forwarding. To pass a literally-named flag through to the tool, put it after a bare
 `--`, which forwards everything following it verbatim.
