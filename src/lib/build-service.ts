@@ -3,6 +3,7 @@ import fs from "node:fs";
 import type { ConfigContext, Settings } from "./settings.js";
 import { resolveCompilation, resolveRootScope } from "./settings.js";
 import { resolveIncludeCandidates } from "./include-resolver.js";
+import type { NamespaceResolver } from "./repos/namespace-resolver.js";
 import { CompilationService } from "./markdown-compiler.js";
 import type { CompilationConfig, CompilationTarget } from "./markdown-compiler.js";
 import { StateService } from "./state.js";
@@ -25,6 +26,12 @@ export type BuildOptions = {
    * `${sousDir}` resolves and so state/PID paths default into `.sous/`.
    */
   configContext?: ConfigContext;
+  /**
+   * Resolves `~namespace` include and render paths against recipe namespaces.
+   * Passed straight through to the compiler and to the include-graph walk, so a
+   * partial rebuild follows namespace includes too.
+   */
+  namespaceResolver?: NamespaceResolver;
 };
 
 /**
@@ -37,7 +44,11 @@ export type BuildOptions = {
  */
 function collectIncludeGraph(
   filePath: string,
-  resolveOpts: { aliases?: Record<string, string[]>; scope?: Record<string, string> } = {},
+  resolveOpts: {
+    aliases?: Record<string, string[]>;
+    scope?: Record<string, string>;
+    namespaceResolver?: NamespaceResolver;
+  } = {},
   visited: Set<string> = new Set()
 ): Set<string> {
   if (visited.has(filePath)) return visited;
@@ -62,6 +73,8 @@ function collectIncludeGraph(
       aliases: resolveOpts.aliases,
       scope: resolveOpts.scope,
       baseDir,
+      namespaceResolver: resolveOpts.namespaceResolver,
+      fromFile: filePath,
     });
     const fullPath = candidates.find((c) => fs.existsSync(c)) ?? candidates[0];
     collectIncludeGraph(fullPath, resolveOpts, visited);
@@ -77,15 +90,21 @@ function collectIncludeGraph(
  *
  * Uses a simple recursive file scan — reads each .md file and checks for
  * @<path> include lines. Does not compile; just walks the include graph.
+ *
+ * @param filePath - The changed file.
+ * @param config - The resolved compilation config.
+ * @param namespaceResolver - Optional resolver so `~namespace` includes are followed too.
  */
 export function findAffectedTargets(
   filePath: string,
-  config: CompilationConfig
+  config: CompilationConfig,
+  namespaceResolver?: NamespaceResolver
 ): CompilationTarget[] {
   return config.targets.filter(target => {
     const graph = collectIncludeGraph(target.rootInputPath, {
       aliases: config.aliases,
       scope: config.includeScope,
+      namespaceResolver,
     });
     return graph.has(filePath);
   });
@@ -140,7 +159,11 @@ export class BuildService {
         let effectiveConfig: CompilationConfig = config;
 
         if (options.changedFile) {
-          const affectedTargets = findAffectedTargets(options.changedFile, config);
+          const affectedTargets = findAffectedTargets(
+            options.changedFile,
+            config,
+            options.namespaceResolver
+          );
           if (affectedTargets.length === 0) {
             log(`  ⊘ No targets affected by change to ${options.changedFile} — skipping compilation`);
           } else {
@@ -149,6 +172,7 @@ export class BuildService {
               strict: options.strict,
               rebuild: options.rebuild,
               dryRun: options.dryRun,
+              namespaceResolver: options.namespaceResolver,
             });
             const compileOk = await compiler.compile(effectiveConfig, stateFilePath);
             if (!compileOk) success = false;
@@ -158,6 +182,7 @@ export class BuildService {
             strict: options.strict,
             rebuild: options.rebuild,
             dryRun: options.dryRun,
+            namespaceResolver: options.namespaceResolver,
           });
           const compileOk = await compiler.compile(effectiveConfig, stateFilePath);
           if (!compileOk) success = false;
