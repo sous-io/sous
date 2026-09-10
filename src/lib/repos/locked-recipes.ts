@@ -33,6 +33,7 @@ import {
   loadManifestFile,
 } from "./load-manifest.js";
 import { readEffectiveLinks } from "./links.js";
+import { enabledSubscriptions } from "./defaults.js";
 import { PROJECT_HOLDER } from "./formats/lockfile.js";
 
 /** One locked recipe, together with the directory its files are read from. */
@@ -214,7 +215,7 @@ export function projectSubscriptionRefs(
   settings: Settings,
   locked: LockedRecipeLocation[]
 ): string[] {
-  const refs = new Set<string>(Object.keys(settings.subscriptions ?? {}));
+  const refs = new Set<string>(Object.keys(enabledSubscriptions(settings)));
   for (const recipe of locked) {
     if (recipe.requestedBy.includes(PROJECT_HOLDER)) refs.add(recipe.key);
   }

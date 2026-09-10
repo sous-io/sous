@@ -272,6 +272,12 @@ function expandNamespace(item: WorkItem, context: ResolveContext): WorkItem[] {
           namespace,
           recipe: key.slice(namespace.length + 1),
           ...(qualifier === undefined ? {} : { repo: qualifier }),
+          // A namespace ref cannot carry a range when it is WRITTEN, but a
+          // namespace subscription entry can carry one, and a caller builds the
+          // request from that entry. When it does, the range applies to every
+          // recipe in the namespace; that is how the built-in `core`
+          // subscription stays pinned to the running sous version.
+          ...(item.ref.range === undefined ? {} : { range: item.ref.range }),
         },
         requestedBy: item.requestedBy,
         kind: item.kind,

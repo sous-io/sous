@@ -11,6 +11,7 @@
 import { BaseCommand } from "../../base-command.js";
 import { subscriptionServiceFor } from "../../lib/repos/subscription-service.js";
 import { readEffectiveLinks } from "../../lib/repos/links.js";
+import { BUILT_IN_ADDED_BY } from "../../lib/repos/defaults.js";
 import { renderTable } from "../../lib/vars/display.js";
 import {
   blankLine,
@@ -73,6 +74,7 @@ export default class RepoList extends BaseCommand {
         name,
         entry.url,
         entry.provider ?? "detected from the URL",
+        describeOrigin(entry.addedBy),
         namespaces.length > 0 ? namespaces : "none",
         recipes,
         links[name] === undefined ? "no" : `yes: ${links[name]!.path}`,
@@ -80,7 +82,7 @@ export default class RepoList extends BaseCommand {
     });
 
     for (const line of renderTable(
-      ["Repository", "Location", "Provider", "Namespaces", "Recipes", "Linked"],
+      ["Repository", "Location", "Provider", "Origin", "Namespaces", "Recipes", "Linked"],
       rows
     )) {
       log(indent(line));
@@ -93,7 +95,25 @@ export default class RepoList extends BaseCommand {
           "recipe count as unknown. Run 'sous repo add <url>' again to refresh it."
       )
     );
+    log(
+      indent(
+        "A repository whose origin is 'built in' is one sous provides itself. To stop " +
+          "using it, write it into your own config with 'enabled: false'."
+      )
+    );
 
     footer();
   }
+}
+
+/**
+ * Plain-language wording for a repository entry's `addedBy` field, so the table
+ * says who wanted the repository rather than printing a bare marker value.
+ *
+ * @param addedBy - What the entry recorded, when it recorded anything.
+ */
+function describeOrigin(addedBy: string | undefined): string {
+  if (addedBy === BUILT_IN_ADDED_BY) return "built in";
+  if (addedBy === undefined || addedBy === "user") return "you added it";
+  return `required by ${addedBy}`;
 }

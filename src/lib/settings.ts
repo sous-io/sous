@@ -16,22 +16,18 @@ import {
 import { ConfigError } from "./errors.js";
 import { resolveSousHome } from "./sous-home.js";
 import { validateSettings } from "./config-schema.js";
+import { applyRepoDefaults } from "./repos/defaults.js";
 import { warning } from "../utils/formatting.js";
 
 // Re-exported for backwards compatibility: ConfigError moved to ./errors.ts so
 // config-discovery.ts can throw it without importing this module (cycle).
 export { ConfigError, isConfigError } from "./errors.js";
 
-const __filename = fileURLToPath(import.meta.url);
-
-/** Resolved path to the cli/ package root (two levels up from src/lib/) */
-export const CLI_ROOT = path.resolve(path.dirname(__filename), "../..");
-
-/** Version string read from package.json at module load time. */
-const _pkgJson = JSON.parse(
-  fs.readFileSync(path.join(CLI_ROOT, "package.json"), "utf8")
-) as { version: string };
-export const SOUS_VERSION: string = _pkgJson.version;
+// CLI_ROOT and SOUS_VERSION live in their own module so that modules this one
+// imports can read them without importing this one back. Re-exported here under
+// the names everything already uses.
+import { CLI_ROOT, SOUS_VERSION } from "./package-info.js";
+export { CLI_ROOT, SOUS_VERSION };
 
 // --- Variable scope ------------------------------------------------------------------------------
 
@@ -87,9 +83,15 @@ type RawProjectCompilation = {
  * One trusted repository, keyed in `Settings.repos` by the short name refs use
  * in their `repo:` qualifier. Adding a repo is what trusts it.
  */
-type RepoEntry = {
+export type RepoEntry = {
   /** Where the repository lives. */
   url: string;
+  /**
+   * Whether the repository takes part in anything. Defaults to true; setting it
+   * to false is how a project opts out of a repository sous provides itself,
+   * without deleting an entry it does not own.
+   */
+  enabled?: boolean;
   /**
    * Which provider handles it. Inferred from the URL when omitted. `file` is a
    * repository on this machine, for local development and tests.
@@ -107,7 +109,13 @@ type RepoEntry = {
  * One subscription, keyed in `Settings.subscriptions` by a ref key: a bare
  * namespace, or `namespace/recipe`.
  */
-type SubscriptionEntry = {
+export type SubscriptionEntry = {
+  /**
+   * Whether the subscription takes part in anything. Defaults to true; setting
+   * it to false is how a project opts out of the `core` namespace sous
+   * subscribes it to.
+   */
+  enabled?: boolean;
   /** The semantic version range to resolve within. Defaults to "*". */
   range?: string;
   /** Let prerelease versions take part in range matching. */
@@ -323,8 +331,13 @@ export async function loadSettingsWithLayers(
       // actionable than a generic unknown-key error. validateSettings then checks
       // the MERGED config against the zod schema (version, strict keys, shapes).
       const flat = assertFlatConfig(parsed.config, configPath);
+      // The built-in repository and the implicit `core` subscription are added
+      // UNDER whatever the layers produced, and BEFORE validation, so that the
+      // shortest opt-out a project can write (`{ enabled: false }`) is a
+      // complete, valid entry once the built-in fields are underneath it. See
+      // `repos/defaults.ts`.
       return {
-        settings: validateSettings(flat, configPath),
+        settings: validateSettings(applyRepoDefaults(flat), configPath),
         layers: parsed.layers ?? [],
       };
     }

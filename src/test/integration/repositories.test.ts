@@ -253,6 +253,13 @@ describe("the repositories consumer surface", () => {
         "export const config = {",
         '  name: "Repositories Test Project",',
         '  _vars: { projectRoot: "${sousDir}/.." },',
+        // Every project is given the official repository and the core namespace
+        // unless it says otherwise. This one says otherwise, so the whole file
+        // runs against its two local fixture repositories and nothing else:
+        // no network, and no chance of a fixture recipe name colliding with a
+        // real published one. The offline defaults are covered on their own in
+        // core-namespace.test.ts.
+        '  repos: { "sous-recipes": { enabled: false } },',
         "  compilation: {",
         "    targets: [",
         "      {",

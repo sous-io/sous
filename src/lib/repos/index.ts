@@ -54,3 +54,4 @@ export * from "./subscription-service.js";
 // subscription every project gets unless it opts out.
 export * from "./core-recipe.js";
 export * from "./seed.js";
+export * from "./defaults.js";

@@ -21,6 +21,7 @@
 
 import fsp from "node:fs/promises";
 import path from "node:path";
+import semver from "semver";
 import { ConfigError, isConfigError } from "../errors.js";
 import { SOUS_VERSION, type ConfigContext, type Settings } from "../settings.js";
 import { CONFD_DIR_NAME } from "../config-discovery.js";
@@ -44,6 +45,7 @@ import { formatRef, parseRef, refKey, type ParsedRef } from "./ref.js";
 import {
   PROJECT_REQUESTER,
   resolveRefs,
+  type RefRequest,
   type ResolvedRecipe,
   type ResolverRepo,
 } from "./resolver.js";
@@ -74,6 +76,7 @@ import { linkedPathFor } from "./links.js";
 import { listLockedRecipes, mapLinkedRecipes, readRecipeManifestIn } from "./locked-recipes.js";
 import { resolveStoreRoot } from "../sous-home.js";
 import { seedCoreRecipe, type SeedCoreRecipeReport } from "./seed.js";
+import { enabledRepos, enabledSubscriptions } from "./defaults.js";
 
 // --- Options and reports ------------------------------------------------------------------------
 
@@ -196,6 +199,18 @@ export type UnsubscribeOutcome = {
   stayed: Array<{ key: string; heldBy: string[] }>;
   /** True when nothing was written, because this was a dry run. */
   dryRun: boolean;
+};
+
+/** What bringing the lockfile in line with the declared subscriptions produced. */
+export type SubscriptionSyncReport = {
+  /** The subscriptions that had to be resolved, by ref key. */
+  resolved: string[];
+  /** Recipes the lockfile did not pin before and pins now. */
+  added: Array<{ key: string; version: string }>;
+  /** Recipes whose pinned version moved to satisfy a subscription's range. */
+  moved: Array<{ key: string; from: string; to: string }>;
+  /** Subscriptions that could not be resolved, each with a plain-language reason. */
+  failed: Array<{ key: string; reason: string }>;
 };
 
 /** What an upstream check found. */
@@ -520,7 +535,7 @@ export class SubscriptionService {
     const dryRun = options.dryRun === true;
 
     const managed = this.readSubscriptionEntries();
-    const configured = this.settings.subscriptions ?? {};
+    const configured = enabledSubscriptions(this.settings);
     const before = this.lock.read();
     const held = this.keysHeldBySubscription(before, key);
 
@@ -606,6 +621,156 @@ export class SubscriptionService {
       now: this.now,
     });
     return this.seedReport;
+  }
+
+  /**
+   * Brings the lockfile in line with the subscriptions the config declares.
+   *
+   * A subscription is normally written by `sous subscribe`, which locks it on
+   * the spot. Two cases leave one declared but unlocked, and both have to work
+   * without anyone typing a command: a subscription hand-written into the config
+   * (or arriving with a colleague's commit), and the built-in `core`
+   * subscription, whose range is the running sous version and therefore changes
+   * every time sous is upgraded.
+   *
+   * So a subscription is resolved here when the lockfile pins nothing for it, or
+   * pins something its range no longer allows. Everything else is left exactly
+   * as the lockfile has it; a build never re-decides a version it already has.
+   *
+   * Nothing here is fatal and nothing here prompts. A build must not stop
+   * because a repository is unreachable, and it must never block on a question,
+   * so a subscription that cannot be resolved comes back in the report as a
+   * sentence to warn about.
+   */
+  async ensureSubscriptionsLocked(): Promise<SubscriptionSyncReport> {
+    const report: SubscriptionSyncReport = {
+      resolved: [],
+      added: [],
+      moved: [],
+      failed: [],
+    };
+
+    const subscriptions = this.allSubscriptions();
+    const before = this.lock.read();
+
+    const requests: RefRequest[] = [];
+    for (const key of Object.keys(subscriptions).sort()) {
+      const entry = subscriptions[key]!;
+      if (this.subscriptionIsLocked(key, entry, before)) continue;
+
+      let parsed: ParsedRef;
+      try {
+        parsed = parseRef(key);
+      } catch (error) {
+        report.failed.push({ key, reason: describeError(error) });
+        continue;
+      }
+
+      report.resolved.push(key);
+      requests.push({
+        ref: {
+          ...parsed,
+          ...(entry.range === undefined ? {} : { range: entry.range }),
+        },
+        requestedBy: PROJECT_REQUESTER,
+        kind: "subscribes",
+        ...(entry.prerelease === true ? { prerelease: true } : {}),
+      });
+    }
+
+    if (requests.length === 0) return report;
+
+    const repos = this.resolverRepos();
+    const indexes = await this.loadIndexes(Object.keys(repos), { lock: before });
+
+    let result;
+    try {
+      result = await resolveRefs(requests, {
+        indexes,
+        repos,
+        loadManifest: (recipe) => this.loadRecipeManifest(recipe, false),
+      });
+    } catch (error) {
+      const reason = describeError(error);
+      for (const key of report.resolved) report.failed.push({ key, reason });
+      report.resolved = [];
+      return report;
+    }
+
+    // A repository something needs but the project has not added is a trust
+    // decision, and a build is the wrong moment to ask for one. Say which
+    // command grants it and carry on with what did resolve.
+    for (const missing of result.missingRepos) {
+      report.failed.push({
+        key: missing.requiredBy.map((entry) => entry.ref).join(", "),
+        reason:
+          `Sous has not been told where the repository '${missing.name}' lives, so ` +
+          `nothing from it could be resolved.\n` +
+          `  Add it with 'sous repo add <url> --name ${missing.name}'.`,
+      });
+    }
+
+    const stored: ResolvedRecipe[] = [];
+    for (const recipe of result.resolved) {
+      try {
+        await this.ensureStored(recipe);
+        stored.push(recipe);
+      } catch (error) {
+        report.failed.push({ key: recipe.key, reason: describeError(error) });
+      }
+    }
+
+    if (stored.length === 0) return report;
+
+    const after = this.lock.applyResolution(before, stored, this.lockRepoInputs());
+    for (const recipe of stored) {
+      const previous = before.recipes[recipe.key];
+      if (previous === undefined) {
+        report.added.push({ key: recipe.key, version: recipe.version });
+      } else if (previous.version !== recipe.version) {
+        report.moved.push({
+          key: recipe.key,
+          from: previous.version,
+          to: recipe.version,
+        });
+      }
+    }
+
+    this.lock.write(after);
+    return report;
+  }
+
+  /**
+   * True when the lockfile already pins everything one subscription asks for, at
+   * a version its range still allows.
+   *
+   * @param key - The subscription's ref key: a namespace, or `namespace/recipe`.
+   * @param entry - The subscription entry, which carries the range.
+   * @param lock - The lockfile as it stands.
+   */
+  private subscriptionIsLocked(
+    key: string,
+    entry: SubscriptionEntry,
+    lock: Lockfile
+  ): boolean {
+    const matches = key.includes("/")
+      ? lock.recipes[key] === undefined
+        ? []
+        : [lock.recipes[key]!]
+      : Object.entries(lock.recipes)
+          .filter(([lockedKey]) => lockedKey.startsWith(`${key}/`))
+          .map(([, locked]) => locked);
+
+    if (matches.length === 0) return false;
+
+    const range = entry.range;
+    const includePrerelease = entry.prerelease === true;
+
+    return matches.every((locked) => {
+      if (!locked.requestedBy.includes(PROJECT_HOLDER)) return false;
+      if (range === undefined || range === "*") return true;
+      return semver.satisfies(locked.version, range, { includePrerelease });
+    });
   }
 
   /**
@@ -740,14 +905,16 @@ export class SubscriptionService {
     options: { force?: boolean; freshnessSeconds?: number } = {}
   ): Promise<{
     seed: SeedCoreRecipeReport;
+    subscriptions: SubscriptionSyncReport;
     restored: RestoreReport | undefined;
     upstream: UpstreamCheckReport;
   }> {
     const seed = await this.seedCore();
+    const subscriptions = await this.ensureSubscriptionsLocked();
     let restored: RestoreReport | undefined;
     if (this.needsRestore()) restored = await this.restore();
     const upstream = await this.checkUpstream(options);
-    return { seed, restored, upstream };
+    return { seed, subscriptions, restored, upstream };
   }
 
   // --- Reading the project's state ---------------------------------------------------------------
@@ -759,7 +926,7 @@ export class SubscriptionService {
    */
   currentRepos(): Record<string, TrustedRepo> {
     return {
-      ...((this.settings.repos ?? {}) as Record<string, TrustedRepo>),
+      ...(enabledRepos(this.settings) as Record<string, TrustedRepo>),
       ...this.trust.listManaged(),
     };
   }
@@ -767,7 +934,7 @@ export class SubscriptionService {
   /** Every subscription, from the config and from the managed layer. */
   allSubscriptions(): Record<string, SubscriptionEntry> {
     return {
-      ...((this.settings.subscriptions ?? {}) as Record<string, SubscriptionEntry>),
+      ...(enabledSubscriptions(this.settings) as Record<string, SubscriptionEntry>),
       ...this.readSubscriptionEntries(),
     };
   }

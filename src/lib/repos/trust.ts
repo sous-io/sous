@@ -30,6 +30,7 @@ import {
 } from "./managed-layer.js";
 import type { MissingRepo } from "./resolver.js";
 import type { ProviderId } from "./providers/provider.js";
+import { enabledRepos } from "./defaults.js";
 
 /** The `addedBy` value meaning a person deliberately added the repository. */
 export const USER_ADDED_BY = "user";
@@ -135,7 +136,7 @@ export class TrustService {
    * @param settings - The merged settings. Defaults to the ones given at construction.
    */
   listTrusted(settings: Settings | undefined = this.settings): Record<string, TrustedRepo> {
-    return { ...(settings?.repos ?? {}) } as Record<string, TrustedRepo>;
+    return { ...enabledRepos(settings) } as Record<string, TrustedRepo>;
   }
 
   /**

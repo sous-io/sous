@@ -8,6 +8,7 @@ import {
   REPO_MANIFEST_BASENAME,
 } from "../../lib/repos/formats/common.js";
 import { findRepoManifest } from "../../lib/repos/load-manifest.js";
+import { enabledRepos } from "../../lib/repos/defaults.js";
 import type { LinkOrigin } from "../../lib/repos/formats/links-map.js";
 import {
   cloneRepo,
@@ -165,7 +166,7 @@ export default class RepoLink extends BaseCommand {
    * @param input - The repo argument as the user typed it.
    */
   private resolveRepo(input: string): { name: string; url?: string } {
-    const configured = this.settings.repos?.[input];
+    const configured = enabledRepos(this.settings)[input];
     if (configured !== undefined) {
       return { name: input, url: configured.url };
     }
@@ -174,7 +175,7 @@ export default class RepoLink extends BaseCommand {
       return { name: repoNameFromUrl(input), url: input };
     }
 
-    const known = Object.keys(this.settings.repos ?? {}).sort();
+    const known = Object.keys(enabledRepos(this.settings)).sort();
     const knownList =
       known.length > 0
         ? `  This project knows about: ${known.join(", ")}.\n`

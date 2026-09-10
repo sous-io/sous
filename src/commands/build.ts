@@ -220,11 +220,44 @@ export default class Build extends BaseCommand {
       );
     }
 
-    const { seed, restored, upstream } = await repositories.prepareForBuild();
+    const { seed, subscriptions, restored, upstream } =
+      await repositories.prepareForBuild();
 
     // Seeding the packaged core recipe is silent when it works, which is almost
     // always; it is only worth a word when it could not be done at all.
     if (seed.skippedBecause !== undefined) warning(seed.skippedBecause);
+
+    // A subscription the lockfile did not pin yet has just been pinned. That is
+    // a change to a committed file, so it is always announced.
+    if (subscriptions.added.length > 0 || subscriptions.moved.length > 0) {
+      heading("Locking subscribed recipes");
+      blankLine();
+      for (const entry of subscriptions.added) {
+        log(indent(`  pinned: ${entry.key} at version ${entry.version}.`));
+      }
+      for (const change of subscriptions.moved) {
+        log(
+          indent(
+            `  ${change.key} moved from version ${change.from} to version ${change.to}.`
+          )
+        );
+      }
+      blankLine();
+      log(
+        indent(
+          "The lockfile has been updated. Commit it, so everyone building this project " +
+            "gets exactly these versions."
+        )
+      );
+      footer();
+    }
+
+    for (const failure of subscriptions.failed) {
+      warning(
+        `Sous could not work out which version of '${failure.key}' to use, so nothing ` +
+          `from it was compiled.\n${failure.reason}`
+      );
+    }
 
     if (restored !== undefined && restored.restored.length > 0) {
       blankLine();

@@ -226,6 +226,34 @@ const PHASE_3_EXPORTS = [
   "subscriptionServiceFor",
 ];
 
+/**
+ * The names Phase 7 added: the core recipe that ships inside the package, the
+ * seed that puts it in the store, and the built-in repository and subscription
+ * every project gets unless it opts out.
+ */
+const PHASE_7_EXPORTS = [
+  "BUILT_IN_ADDED_BY",
+  "CORE_NAMESPACE",
+  "CORE_RECIPE_KEY",
+  "CORE_RECIPE_NAME",
+  "CORE_RECIPE_PATH",
+  "OFFICIAL_REPO_NAME",
+  "OFFICIAL_REPO_PROVIDER",
+  "OFFICIAL_REPO_URL",
+  "PACKAGED_RECIPES_DIRNAME",
+  "SEED_INDEX_COMMENT",
+  "applyRepoDefaults",
+  "builtInCoreSubscription",
+  "builtInRepoEntry",
+  "coreRecipeVersion",
+  "enabledRepos",
+  "enabledSubscriptions",
+  "isBuiltInEntry",
+  "packagedCoreRecipeDir",
+  "readPackagedCoreManifest",
+  "seedCoreRecipe",
+];
+
 describe("the repos barrel", () => {
   /**
    * The barrel exposes exactly the documented surface: nothing missing, and
@@ -238,6 +266,7 @@ describe("the repos barrel", () => {
       ...EXPECTED_EXPORTS,
       ...PHASE_6A_EXPORTS,
       ...PHASE_3_EXPORTS,
+      ...PHASE_7_EXPORTS,
     ].sort();
     expect(Object.keys(repos).sort()).toEqual(expected);
   });

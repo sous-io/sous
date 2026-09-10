@@ -95,6 +95,13 @@ const repoEntrySchema = z
      */
     url: repoUrlSchema,
     /**
+     * Whether the repository takes part in anything at all. Defaults to true.
+     * Setting it to false is how a project opts out of a repository sous
+     * provides itself (the official `sous-recipes`), without having to delete an
+     * entry it never wrote.
+     */
+    enabled: z.boolean().optional(),
+    /**
      * Which provider handles it. Inferred from the URL when omitted; set it
      * explicitly for a self-hosted instance the URL does not give away.
      * `file` is a repository on this machine, for local development and tests;
@@ -125,6 +132,12 @@ const repoEntrySchema = z
  */
 const subscriptionEntrySchema = z
   .object({
+    /**
+     * Whether the subscription takes part in anything at all. Defaults to true.
+     * Setting it to false is how a project opts out of the `core` namespace sous
+     * subscribes every project to.
+     */
+    enabled: z.boolean().optional(),
     /** The semantic version range to resolve within. Defaults to "*". */
     range: semverRangeSchema.optional(),
     /** When true, prerelease versions take part in range matching. */

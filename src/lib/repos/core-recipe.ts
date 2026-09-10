@@ -24,7 +24,7 @@
  */
 
 import path from "node:path";
-import { CLI_ROOT, SOUS_VERSION } from "../settings.js";
+import { CLI_ROOT, SOUS_VERSION } from "../package-info.js";
 import { ConfigError } from "../errors.js";
 import { findRecipeManifest, loadManifestFile } from "./load-manifest.js";
 import { parseRecipeManifest, type RecipeManifest } from "./formats/recipe-manifest.js";
