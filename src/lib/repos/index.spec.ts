@@ -204,6 +204,26 @@ const PHASE_6A_EXPORTS = [
   "writeProjectLinks",
 ];
 
+/**
+ * The names Phase 3 added: where a locked recipe's files are, the namespace
+ * resolver built from that, the local file provider, and the paths nothing sous
+ * deletes may reach into.
+ */
+const PHASE_3_EXPORTS = [
+  "FILE_PROVIDER_ID",
+  "FileProvider",
+  "createProjectNamespaceResolver",
+  "listLockedRecipes",
+  "localRepoPath",
+  "mapLinkedRecipes",
+  "projectSubscriptionRefs",
+  "protectedRepoPaths",
+  "readProjectLockfile",
+  "readRecipeManifestIn",
+  "readRepoManifestIn",
+  "repoUrlSchema",
+];
+
 describe("the repos barrel", () => {
   /**
    * The barrel exposes exactly the documented surface: nothing missing, and
@@ -212,7 +232,11 @@ describe("the repos barrel", () => {
    * Object.keys(repos).sort();  // -> EXPECTED_EXPORTS
    */
   it("should export exactly the documented surface", () => {
-    const expected = [...EXPECTED_EXPORTS, ...PHASE_6A_EXPORTS].sort();
+    const expected = [
+      ...EXPECTED_EXPORTS,
+      ...PHASE_6A_EXPORTS,
+      ...PHASE_3_EXPORTS,
+    ].sort();
     expect(Object.keys(repos).sort()).toEqual(expected);
   });
 

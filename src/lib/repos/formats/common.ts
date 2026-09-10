@@ -178,6 +178,21 @@ export const byteCountSchema = z
   .int("must be a whole number of bytes")
   .min(0, "must not be negative");
 
+/**
+ * Where a repository lives. A hosted repository is named by a URL; a repository
+ * on this machine, which the `file` provider reads, is named by an absolute
+ * path or by the same path in `file:///...` form (which is already a URL).
+ */
+export const repoUrlSchema = z.union([
+  z.url(),
+  z
+    .string()
+    .min(1, "must not be empty")
+    .refine((value) => value.startsWith("/") || /^[A-Za-z]:[\\/]/.test(value), {
+      message: "must be a repository URL, or an absolute path to one on this machine",
+    }),
+]);
+
 /** An absolute filesystem path. */
 export const absolutePathSchema = z
   .string()

@@ -77,15 +77,26 @@ describe("buildCanonicalRepo()", () => {
 
 describe("the built-in provider list", () => {
   /**
-   * builtInProviders should return the two providers version one ships, each
-   * declaring both the read path and the propose-a-change path, which they
-   * delegate to their own command line tools.
+   * builtInProviders should return the two hosted providers version one ships,
+   * each declaring the read path and the propose-a-change path (delegated to
+   * their command line tools), plus the local file provider, which can only
+   * fetch. The file provider comes last, and matches only a local path, so it
+   * can never intercept a hosted repository's URL.
+   *
+   * builtInProviders().map((provider) => provider.id);
+   * // -> ["github", "gitlab", "file"]
    */
-  it("should ship GitHub and GitLab, both able to fetch and to submit", () => {
+  it("should ship GitHub, GitLab and file, with submit only on the hosted two", () => {
     const providers = builtInProviders();
-    expect(providers.map((provider) => provider.id)).toEqual(["github", "gitlab"]);
+    expect(providers.map((provider) => provider.id)).toEqual([
+      "github",
+      "gitlab",
+      "file",
+    ]);
     for (const provider of providers) {
-      expect(provider.features).toEqual(["fetch", "submit"]);
+      expect(provider.features).toEqual(
+        provider.id === "file" ? ["fetch"] : ["fetch", "submit"],
+      );
     }
   });
 

@@ -19,7 +19,7 @@
 
 import { z } from "zod";
 import { ConfigError } from "./errors.js";
-import { semverRangeSchema } from "./repos/formats/common.js";
+import { repoUrlSchema, semverRangeSchema } from "./repos/formats/common.js";
 import { REF_KEY_PATTERN, REPO_NAME_PATTERN } from "./repos/formats/patterns.js";
 import type { Settings } from "./settings.js";
 
@@ -88,13 +88,19 @@ const toolSchema = z
  */
 const repoEntrySchema = z
   .object({
-    /** Where the repository lives. */
-    url: z.url(),
+    /**
+     * Where the repository lives. A hosted repository is named by its URL; a
+     * repository on this machine, which the `file` provider reads, is named by
+     * an absolute path or the same path in `file:///...` form.
+     */
+    url: repoUrlSchema,
     /**
      * Which provider handles it. Inferred from the URL when omitted; set it
      * explicitly for a self-hosted instance the URL does not give away.
+     * `file` is a repository on this machine, for local development and tests;
+     * its trust semantics are identical to a hosted one.
      */
-    provider: z.enum(["github", "gitlab"]).optional(),
+    provider: z.enum(["github", "gitlab", "file"]).optional(),
     /**
      * When true, sous installs a newer in-range version whenever one exists
      * rather than holding the locked one. The flag never widens the range a

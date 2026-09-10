@@ -20,6 +20,7 @@ import {
   parseFormat,
   recipeKeySchema,
   repoNameSchema,
+  repoUrlSchema,
   semverVersionSchema,
   stableJsonStringify,
 } from "./common.js";
@@ -32,8 +33,11 @@ export const LOCK_KINDS = ["subscribes", "depends"] as const;
 
 /** One repo the project resolves against. */
 export const lockedRepoSchema = z.strictObject({
-  /** The repo's URL, as recorded when it was added. */
-  url: z.url(),
+  /**
+   * Where the repo lives, as recorded when it was added: a URL, or an absolute
+   * path for a repository on this machine read through the `file` provider.
+   */
+  url: repoUrlSchema,
   /** Content hash of the index this lock was resolved against, when known. */
   indexHash: contentHashSchema.optional(),
 });
