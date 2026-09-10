@@ -315,7 +315,12 @@ Every network and subprocess seam is injectable, so no test in this layer touche
 directory and falls back to the copy it already holds when a check fails. `resolver.ts` looks a
 ref up across every added repo at once and refuses an ambiguous one instead of picking a
 winner; a ref naming a repo the project has not added is returned as a `MissingRepo` with its
-provenance rather than fetched. `trust.ts` asks about those in one consolidated question and
+provenance rather than fetched. Because the walk resolves refs in the order it meets them, a
+recipe can be walked at one version and again at a lower one once a second holder narrows it;
+`keepOnlyReachable` then re-walks the settled closure and drops whatever only the replaced
+version reached, trimming each survivor's `requestedBy`, `ranges` and `kind` to what still
+declares it. It never re-picks a version, since trimming only removes constraints and
+re-picking could undo the narrowing. `trust.ts` asks about those in one consolidated question and
 fails hard without a terminal unless `--trust` was passed, writing accepted repos through
 `managed-layer.ts`. `lock-service.ts` applies a resolution to the lockfile, refcounts removal,
 and restores the store to exactly what the lock pins without prompting or changing a version;

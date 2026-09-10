@@ -213,6 +213,12 @@ export async function resolveRefs(
     }
   }
 
+  // A recipe whose version was narrowed by a later holder has had TWO of its
+  // versions walked, and the dependencies discovered from the version that was
+  // replaced are still sitting in `resolved`. Walk the closure once more over
+  // the versions actually settled on, and keep only what that reaches.
+  await keepOnlyReachable(resolved, context);
+
   const ordered = [...resolved.values()].sort((left, right) =>
     left.key < right.key ? -1 : left.key > right.key ? 1 : 0
   );
@@ -226,6 +232,117 @@ export async function resolveRefs(
     missingManifests: [...missingManifests].sort(),
     cycles,
   };
+}
+
+/**
+ * Drops every resolved recipe the settled closure no longer reaches, and trims
+ * the holders and ranges of the ones that stay.
+ *
+ * The walk resolves refs in the order it meets them, so a recipe can be walked
+ * at one version and then walked again at a lower one once a second holder
+ * narrows its range. The lower version is what the closure settles on, but the
+ * dependencies discovered from the higher one are already in `resolved`, held by
+ * a parent that no longer declares them. Installing those is wrong twice over:
+ * they are content nothing asked for, and the lockfile would record a holder
+ * that does not hold them.
+ *
+ * So the closure is walked once more over the versions actually settled on. This
+ * re-reads manifests that have already been read, which the loader serves from
+ * the store; nothing is fetched. A recipe the loader cannot produce a manifest
+ * for keeps everything it reached, since the alternative is dropping a
+ * dependency because a manifest was unreadable.
+ *
+ * Versions are NOT re-picked. Trimming can only remove constraints, so the
+ * version already chosen still satisfies every holder that remains; re-picking
+ * could raise it and undo the narrowing that made this pass necessary.
+ *
+ * @param resolved - What the walk produced, edited in place.
+ * @param context - The manifest loader.
+ */
+async function keepOnlyReachable(
+  resolved: Map<string, ResolvedRecipe>,
+  context: ResolveContext
+): Promise<void> {
+  /** Who declares each key, and under which kind, in the settled closure. */
+  const holders = new Map<string, Map<string, LockKind>>();
+
+  /** Records one declaration, and reports whether the child is newly reached. */
+  const declare = (parent: string, child: string, kind: LockKind): boolean => {
+    const existing = holders.get(child);
+    if (existing === undefined) {
+      holders.set(child, new Map([[parent, kind]]));
+      return true;
+    }
+    const previous = existing.get(parent);
+    existing.set(parent, previous === "subscribes" || kind === "subscribes" ? "subscribes" : kind);
+    return false;
+  };
+
+  const queue: string[] = [];
+  for (const recipe of resolved.values()) {
+    if (!recipe.requestedBy.includes(PROJECT_REQUESTER)) continue;
+    if (declare(PROJECT_REQUESTER, recipe.key, "subscribes")) queue.push(recipe.key);
+  }
+
+  while (queue.length > 0) {
+    const key = queue.shift()!;
+    const recipe = resolved.get(key);
+    if (recipe === undefined) continue;
+
+    let manifest;
+    try {
+      manifest = await context.loadManifest(recipe);
+    } catch {
+      manifest = undefined;
+    }
+
+    if (manifest === undefined) {
+      // An unreadable manifest is already reported as a missing manifest. Keep
+      // everything this recipe held rather than dropping a dependency over it.
+      for (const other of resolved.values()) {
+        if (!other.requestedBy.includes(key)) continue;
+        const kind = other.kind;
+        if (declare(key, other.key, kind)) queue.push(other.key);
+      }
+      continue;
+    }
+
+    for (const [kind, refs] of [
+      ["depends", manifest.depends ?? []],
+      ["subscribes", manifest.subscribes ?? []],
+    ] as Array<[LockKind, string[]]>) {
+      for (const written of refs) {
+        let parsed: ParsedRef;
+        try {
+          parsed = parseRef(written);
+        } catch {
+          continue;
+        }
+        // A namespace ref means every recipe in it, exactly as the walk expanded it.
+        const targets =
+          parsed.recipe === undefined
+            ? [...resolved.keys()].filter((entry) =>
+                entry.startsWith(`${parsed.namespace}/`)
+              )
+            : [refKey(parsed)];
+        for (const target of targets) {
+          if (!resolved.has(target)) continue;
+          if (declare(key, target, kind)) queue.push(target);
+        }
+      }
+    }
+  }
+
+  for (const [key, recipe] of [...resolved]) {
+    const reached = holders.get(key);
+    if (reached === undefined) {
+      resolved.delete(key);
+      continue;
+    }
+    recipe.requestedBy = [...reached.keys()];
+    recipe.ranges = recipe.ranges.filter((entry) => reached.has(entry.requestedBy));
+    recipe.kind = [...reached.values()].includes("subscribes") ? "subscribes" : "depends";
+  }
 }
 
 /** Records one more reason a repository is needed. */

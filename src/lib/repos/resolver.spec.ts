@@ -297,6 +297,79 @@ describe("resolveRefs()", () => {
   });
 
   /**
+   * The walk resolves refs in the order it meets them, so a recipe can be walked
+   * at one version and walked again at a lower one once a second holder narrows
+   * its range. The lower version is what the closure settles on, and the
+   * dependencies discovered from the higher one must not survive: they are
+   * content nothing asked for, and the lockfile would record a holder that does
+   * not hold them.
+   *
+   * a depends on c (any version); b depends on c@1.x; c@2.0.0 depends on d.
+   * resolveRefs([a, b]);  // -> c@1.9.0, and no d
+   */
+  it("should drop dependencies of a version a later holder replaced", async () => {
+    const context = makeContext({
+      indexes: {
+        "sous-recipes": makeIndexFile("sous-recipes", {
+          "workflow/a": ["1.0.0"],
+          "workflow/b": ["1.0.0"],
+          "core/c": ["1.9.0", "2.0.0"],
+          "core/only-in-two": ["1.0.0"],
+        }),
+      },
+      manifests: {
+        "workflow/a": manifest("workflow/a", "1.0.0", { depends: ["core/c"] }),
+        "workflow/b": manifest("workflow/b", "1.0.0", { depends: ["core/c@1.x"] }),
+        "core/c@2.0.0": manifest("core/c", "2.0.0", { depends: ["core/only-in-two"] }),
+        "core/c@1.9.0": manifest("core/c", "1.9.0"),
+        "core/only-in-two": manifest("core/only-in-two", "1.0.0"),
+      },
+    });
+
+    const result = await resolveRefs([ask("workflow/a"), ask("workflow/b")], context);
+    const keys = result.resolved.map((entry) => entry.key).sort();
+
+    expect(keys).toEqual(["core/c", "workflow/a", "workflow/b"]);
+    expect(result.resolved.find((entry) => entry.key === "core/c")).toMatchObject({
+      version: "1.9.0",
+      requestedBy: ["workflow/a", "workflow/b"],
+    });
+  });
+
+  /**
+   * The reachability pass must not trim a recipe a namespace dependency reaches,
+   * since a namespace ref means every recipe in it, exactly as the walk expanded
+   * it.
+   *
+   * a depends on the whole `core` namespace.
+   * resolveRefs([a]);  // -> a, plus every core recipe
+   */
+  it("should keep every recipe a namespace dependency reaches", async () => {
+    const context = makeContext({
+      indexes: {
+        "sous-recipes": makeIndexFile("sous-recipes", {
+          "workflow/a": ["1.0.0"],
+          "core/one": ["1.0.0"],
+          "core/two": ["1.0.0"],
+        }),
+      },
+      manifests: {
+        "workflow/a": manifest("workflow/a", "1.0.0", { depends: ["core"] }),
+        "core/one": manifest("core/one", "1.0.0"),
+        "core/two": manifest("core/two", "1.0.0"),
+      },
+    });
+
+    const result = await resolveRefs([ask("workflow/a")], context);
+
+    expect(result.resolved.map((entry) => entry.key).sort()).toEqual([
+      "core/one",
+      "core/two",
+      "workflow/a",
+    ]);
+  });
+
+  /**
    * Ranges that cannot both hold are an error naming each range and who asked
    * for it.
    */
