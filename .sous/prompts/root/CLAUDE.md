@@ -799,7 +799,7 @@ This enables `sous prune` (remove stale outputs) and `sous clear` (delete all ou
 | `sous subscribe <ref>` | Subscribe to a namespace or a recipe, install the whole closure, and answer the variables it publishes (`--prerelease`, `--always-pull`, `--trust`, `--dry-run`) |
 | `sous unsubscribe <ref>` | Remove a subscription and everything only it brought in, refcounted (`--dry-run`) |
 | `sous repo init [dir]` | Scaffold a new recipe repository (`--name`, `--namespace`, `--force`) |
-| `sous repo link <repo> [path]` | Read a repository from a working copy: clone it, or link a checkout already on disk (`--global`) |
+| `sous repo link <repo> [path]` | Read a repository from a working copy: clone it, or link a checkout already on disk (`--global`, `--trust`) |
 | `sous repo unlink <repo>` | Drop the link and go back to published versions; the checkout stays (`--global`) |
 | `sous repo release` | Validate a recipe repository, regenerate its index, and propose the release (`--check`, `--bump`, `--recipe`, `--tag`, `--push`, `--dry-run`) |
 | `sous repo submit` | Propose this repository's committed changes to its maintainers (`--title`, `--body`, `--draft`, `--dry-run`) |
@@ -826,7 +826,11 @@ does not extend `BaseCommand`: it creates a repository, which is not a sous proj
 `.sous/` above it, so config discovery would only get in its way. `repo link` clones into
 `.sous/repos/<owner>/<name>` (or `$SOUS_HOME/repos/...` with `--global`), reuses a checkout of
 the same remote rather than re-cloning, and refuses a checkout of a different one; `repo
-unlink` removes the map entry and never touches the checkout. Both maintain the managed
+unlink` removes the map entry and never touches the checkout. A `repo link` argument that is a
+URL rather than a configured short name goes through `SubscriptionService.addRepo`, so it runs
+the SAME trust ceremony `repo add` runs (and gets `addRepo`'s short-name collision check) before
+anything is cloned; linking reads recipes with no version, lockfile or hash check, so there is
+no path by which sous reads a repository the project has not trusted. Both maintain the managed
 `.gitignore` block described above, so `.sous/repos/` and the links map stay out of version
 control. Prune and clear only ever touch paths recorded in the state file, so nothing in
 `.sous/repos/` is at risk from them.

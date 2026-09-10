@@ -9,13 +9,13 @@ import {
 } from "../../lib/repos/formats/common.js";
 import { findRepoManifest } from "../../lib/repos/load-manifest.js";
 import { enabledRepos } from "../../lib/repos/defaults.js";
+import { subscriptionServiceFor } from "../../lib/repos/subscription-service.js";
 import type { LinkOrigin } from "../../lib/repos/formats/links-map.js";
 import {
   cloneRepo,
   isGitCheckout,
   looksLikeRepoUrl,
   remoteUrlOf,
-  repoNameFromUrl,
   repoSlugFromUrl,
   sameRemote,
 } from "../../lib/repos/git-clone.js";
@@ -47,6 +47,12 @@ import {
  * into `$SOUS_HOME/repos/<owner>/<name>` with --global, where two projects can
  * share one checkout. With a path, an existing checkout is linked in place and
  * nothing is cloned.
+ *
+ * A linked repository's recipes are read from the checkout with no version, no
+ * lockfile and no hash check, so linking one is at least as consequential as
+ * adding one. Naming a repository this project has not added therefore runs the
+ * same trust ceremony `sous repo add` runs, rather than skipping it; there is no
+ * way to read from a repository this project does not trust.
  */
 export default class RepoLink extends BaseCommand {
   static description =
@@ -79,6 +85,11 @@ export default class RepoLink extends BaseCommand {
         "Link for every project on this machine, sharing one checkout, rather than for this project",
       default: false,
     }),
+    trust: Flags.boolean({
+      description:
+        "Accept trust for a repository this project has not added yet, without being asked",
+      default: false,
+    }),
     "dry-run": Flags.boolean({
       description: "Print what would change without cloning or writing anything",
       default: false,
@@ -91,7 +102,7 @@ export default class RepoLink extends BaseCommand {
     const isGlobal = flags.global;
     const dryRun = flags["dry-run"];
 
-    const { name, url } = this.resolveRepo(args.repo);
+    const { name, url } = await this.resolveRepo(args.repo, flags.trust, dryRun);
 
     showCommandVars({
       Project: this.projectLabel,
@@ -160,19 +171,37 @@ export default class RepoLink extends BaseCommand {
   /**
    * Works out which repository is being linked and where it lives. A short name
    * is looked up in the project's `repos:` config, which is where `sous repo
-   * add` records a trusted repository; anything that looks like a URL is used
-   * directly, and its last segment becomes the short name.
+   * add` records a trusted repository.
+   *
+   * A URL is NOT taken on its own. Linking reads recipes straight out of a
+   * checkout, so a URL for a repository this project has not added goes through
+   * `addRepo`, which is the trust ceremony: it asks (or requires `--trust`),
+   * writes the repository into the managed layer, and refuses outright when the
+   * short name it derives already belongs to a different repository. Only then
+   * is anything cloned.
    *
    * @param input - The repo argument as the user typed it.
+   * @param trustFlag - The `--trust` flag, passed through to the ceremony.
+   * @param dryRun - When true, nothing is trusted, written or downloaded.
    */
-  private resolveRepo(input: string): { name: string; url?: string } {
+  private async resolveRepo(
+    input: string,
+    trustFlag: boolean,
+    dryRun: boolean
+  ): Promise<{ name: string; url?: string }> {
     const configured = enabledRepos(this.settings)[input];
     if (configured !== undefined) {
       return { name: input, url: configured.url };
     }
 
     if (looksLikeRepoUrl(input)) {
-      return { name: repoNameFromUrl(input), url: input };
+      const service = subscriptionServiceFor({
+        configContext: this.configContext,
+        settings: this.settings,
+        shellEnv: this.shellEnv,
+      });
+      const outcome = await service.addRepo({ url: input, trust: trustFlag, dryRun });
+      return { name: outcome.name, url: outcome.url };
     }
 
     const known = Object.keys(enabledRepos(this.settings)).sort();
@@ -184,8 +213,8 @@ export default class RepoLink extends BaseCommand {
     throw new ConfigError(
       `'${input}' is not a repository this project knows about, and it is not a URL.\n` +
         knownList +
-        `  Add the repository first with 'sous repo add <url>', or pass its full URL ` +
-        `to link it without adding it.`
+        `  Add the repository first with 'sous repo add <url>', then link it by its ` +
+        `short name.`
     );
   }
 

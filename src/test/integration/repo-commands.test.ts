@@ -291,6 +291,32 @@ describe("sous repo init / link / unlink", () => {
   );
 
   /**
+   * A linked repository's recipes are read straight from a checkout, with no
+   * version, no lockfile and no hash check. Taking a bare URL for a repository
+   * the project never added would therefore download and read an untrusted
+   * repository, which is the one thing adding a repository exists to gate. It
+   * must be refused, nothing may be cloned, and the message must not offer a way
+   * around the gate.
+   *
+   * sous repo link /path/to/some-repo   // -> exits non-zero, names 'sous repo add'
+   */
+  it(
+    "should refuse to link a URL for a repository this project has not added",
+    () => {
+      const result = runSous(projectRoot, env, "repo", "link", sourceRepo);
+
+      expect(result.status).not.toBe(0);
+      const output = result.stdout + result.stderr;
+      expect(output).toContain("sous repo add");
+      expect(output).not.toContain("without adding it");
+      expect(
+        fs.existsSync(path.join(sousDir, "repos", "source-repo"))
+      ).toBe(false);
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
    * `sous repo unlink` should remove the entry and leave the checkout on disk,
    * printing where it is.
    */

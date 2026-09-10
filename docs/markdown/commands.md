@@ -76,7 +76,7 @@ See [Inspecting and validating](config-inspection.md).
 | `sous repo list` | none | none |
 | `sous repo search` | `TEXT` | `--limit <n>` (default 25) |
 | `sous repo gc` | none | `--max-bytes <n>`, `--dry-run` |
-| `sous repo link` | `REPO` `[PATH]` | `--global`, `--dry-run` |
+| `sous repo link` | `REPO` `[PATH]` | `--global`, `--trust`, `--dry-run` |
 | `sous repo unlink` | `REPO` | `--global`, `--dry-run` |
 | `sous subscribe` | `REF` | `--prerelease`, `--always-pull`, `--trust`, `--dry-run` |
 | `sous unsubscribe` | `REF` | `--dry-run` |
@@ -92,7 +92,10 @@ qualified with `repo:`. See
 
 `repo link` with no `PATH` clones the repository into `.sous/repos/<owner>/<name>`, or into
 `$SOUS_HOME/repos/<owner>/<name>` with `--global`; with a `PATH` it links an existing checkout
-and clones nothing.
+and clones nothing. `REPO` is normally the short name of a repository this project has already
+added. Naming one by URL instead runs the same trust ceremony `repo add` runs, since a linked
+repository's recipes are read with no version, lockfile or hash check; it asks inline, and
+`--trust` acknowledges instead for a run with no terminal.
 
 ## Authoring a repository
 

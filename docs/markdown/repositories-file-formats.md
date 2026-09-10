@@ -477,6 +477,13 @@ worse than stopping.
 `sous repo link <repo> <path>` links a checkout that already exists and clones nothing. The path
 must hold a repo manifest at its root, since a directory without one is not a repository.
 
+`<repo>` is normally the short name of a repository this project has already added. A URL is
+accepted, but it is not a way around adding one: a linked repository's recipes are read with no
+version, no lockfile and no hash check, so a URL the project has not added runs the same trust
+ceremony `sous repo add` runs before anything is cloned or linked. It asks inline, `--trust`
+acknowledges instead for a run with no terminal, and a URL whose short name already belongs to a
+different repository is refused outright.
+
 `sous repo unlink <repo>` removes the map entry and nothing else. The checkout stays where it
 is, and its path is printed so you can delete it yourself if you want to.
 
