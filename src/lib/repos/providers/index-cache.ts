@@ -24,7 +24,7 @@ import { warning } from "../../../utils/formatting.js";
 // The freshness window has one definition, and it lives with the rest of the
 // freshness rules; that module only borrows a type from here, so nothing loads
 // in a circle at run time.
-import { DEFAULT_FRESHNESS_SECONDS } from "../freshness.js";
+import { DEFAULT_FRESHNESS_SECONDS } from "../store/settings.js";
 import type { ProviderOptions, RepoProvider } from "./provider.js";
 
 /** The directory, under the store root, that cached indexes live in. */
