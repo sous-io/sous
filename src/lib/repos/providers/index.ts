@@ -16,7 +16,10 @@ import {
   type RepoProvider,
 } from "./provider.js";
 
-export * from "./git.js";
+// `runGit` is deliberately not re-exported here: `git-clone.ts` exports a `runGit` of its
+// own and the repos barrel cannot carry two. Import this one from `providers/git.js` directly.
+export { spawnCommand, tryCommand, fetchSubtree } from "./git.js";
+export type { CommandResult, CommandRunner, RunOptions } from "./git.js";
 export * from "./http.js";
 export * from "./provider.js";
 export * from "./github.js";
