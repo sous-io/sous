@@ -22,7 +22,7 @@
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { ConfigError, isConfigError } from "../errors.js";
-import type { Settings } from "../settings.js";
+import type { ConfigContext, Settings } from "../settings.js";
 import { CONFD_DIR_NAME } from "../config-discovery.js";
 import { warning } from "../../utils/formatting.js";
 import { isInteractive } from "../../utils/prompts.js";
@@ -287,6 +287,11 @@ export class SubscriptionService {
   /** The lockfile service this project uses. */
   get lockService(): LockService {
     return this.lock;
+  }
+
+  /** The index cache, for a command that wants to read a cached index without fetching. */
+  get indexes(): IndexCache {
+    return this.indexCache;
   }
 
   // --- Adding a repository ----------------------------------------------------------------------
@@ -1072,6 +1077,34 @@ export class SubscriptionService {
 }
 
 // --- Helpers ------------------------------------------------------------------------------------
+
+/**
+ * Builds the subscription service for a running command, from what every
+ * command already has: where its config was discovered, the merged settings,
+ * and the shell environment as it was before the `.sous/` env files were loaded.
+ *
+ * @param options - The discovered config context, the settings, and the shell environment.
+ */
+export function subscriptionServiceFor(options: {
+  /** Where the active config was found. */
+  configContext: ConfigContext;
+  /** The merged project config. */
+  settings: Settings;
+  /** The shell environment as it was before the env files were injected. */
+  shellEnv?: NodeJS.ProcessEnv;
+  /** Whether sous may ask questions. Defaults to whether both streams are a terminal. */
+  interactive?: boolean;
+}): SubscriptionService {
+  return new SubscriptionService({
+    sousDir: options.configContext.sousDir,
+    ...(options.configContext.confDir === undefined
+      ? {}
+      : { confDir: options.configContext.confDir }),
+    settings: options.settings,
+    ...(options.shellEnv === undefined ? {} : { shellEnv: options.shellEnv }),
+    ...(options.interactive === undefined ? {} : { interactive: options.interactive }),
+  });
+}
 
 /** One subscription entry, as it is written into the managed layer. */
 export type SubscriptionEntry = {
