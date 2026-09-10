@@ -105,6 +105,13 @@ src/
       links.ts             # the links maps, their merged view, and the .gitignore hygiene
       git-clone.ts         # the injectable git layer `repo link` clones and inspects with
       scaffold/            # string builders + scaffoldRepo(), what `repo init` writes
+      release/             # the publish side: `repo release` and `repo submit`
+        validate.ts        # findRepoRoot + validateRepo; every publish-side consistency rule
+        tags.ts            # release tag naming, listing, reading and creating
+        git-state.ts       # what git says about the working tree, branches and remotes
+        index-builder.ts   # buildIndex: regenerates sous.index.json from manifests + tags
+        bump.ts            # raises a recipe version in place, keeping comments
+        submit-service.ts  # the whole submit flow, behind the injectable command runner
     vars/                  # recipe variable definitions, answers and the resolution ladder
       index.ts             # barrel; import the whole layer from here
       definition-source.ts # where definitions come from; the one wiring seam
@@ -213,6 +220,25 @@ through `git-clone.ts`, which shells out to the user's own `git` (so their crede
 configuration apply) behind an injectable runner, so nothing in the tests needs git or a
 network. `resolveSousHomeDir()` in `links.ts` is a private stand-in for the shared
 `resolveSousHome`, marked with a TODO for the swap.
+
+**Publishing (`repos/release/`).** A recipe's METADATA is the source of truth for its
+version; a git tag shaped `namespace/recipe@1.2.3` is a convenience ref, and the two must
+agree. `validateRepo` (`release/validate.ts`) checks everything that can be checked without
+git: each listed recipe folder exists and holds a manifest, each recipe is in a declared
+namespace, no two recipes share a key, and no two variable definitions of DIFFERENT names
+claim one environment variable (two definitions of the SAME name may, since that is the shared
+rung of the ladder doing its job). Claiming a well-known system or secret name warns unless
+the definition carries `x-intentional: true`, which is read from the RAW manifest because the
+schema drops every `x-` key before validation. `buildIndex` (`release/index-builder.ts`)
+regenerates `sous.index.json` under three rules: a published version is immutable, so its hash
+is carried forward and a disagreement is an error; a version is published only when a tag
+carries it, so an untagged version is left OUT of the index (the schema requires a tag on
+every entry) and reported as pending instead; and every tagged version missing from the index
+is rebuilt from its tag, so a lost index regenerates whole. Reading a tagged tree goes through
+`withTaggedTree` (`release/tags.ts`), which adds a linked git worktree rather than piping
+`git archive`, because the injectable command runner captures output as text and an archive's
+bytes would not survive that. Every git call in this directory takes the runner from
+`providers/git.ts`, so no test needs a network.
 
 **Ignore hygiene.** `ensureReposIgnoreFiles(sousDir)` writes `.sous/repos/.gitignore` holding a
 single `*` (which covers the ignore file itself, so the directory contributes nothing to the
@@ -628,6 +654,8 @@ This enables `sous prune` (remove stale outputs) and `sous clear` (delete all ou
 | `sous repo init [dir]` | Scaffold a new recipe repository (`--name`, `--namespace`, `--force`) |
 | `sous repo link <repo> [path]` | Read a repository from a working copy: clone it, or link a checkout already on disk (`--global`) |
 | `sous repo unlink <repo>` | Drop the link and go back to published versions; the checkout stays (`--global`) |
+| `sous repo release` | Validate a recipe repository, regenerate its index, and propose the release (`--check`, `--bump`, `--recipe`, `--tag`, `--push`, `--dry-run`) |
+| `sous repo submit` | Propose this repository's committed changes to its maintainers (`--title`, `--body`, `--draft`, `--dry-run`) |
 | `sous vars` | List every recipe variable in play: its answer, the env var that supplied it, and the source |
 | `sous vars <name>` | Show one variable in full, with every candidate env var name and the rung that answered |
 | `sous vars ask [name]` | Answer what is unanswered (or one variable, or everything with `--all`); `--file` reads a standalone definitions file, `--dry-run` writes nothing |
@@ -649,6 +677,19 @@ unlink` removes the map entry and never touches the checkout. Both maintain the 
 `.gitignore` block described above, so `.sous/repos/` and the links map stay out of version
 control. Prune and clear only ever touch paths recorded in the state file, so nothing in
 `.sous/repos/` is at risk from them.
+
+`repo release` and `repo submit` do not extend `BaseCommand` either, and for the same reason
+as `repo init`: they run INSIDE a recipe repository. A default `repo release` validates,
+regenerates the index and proposes the release; `--check` is the read-only form a pull request
+runs and exits non-zero when the committed index is stale; `--bump` raises a version in place;
+`--tag` cuts the annotated tags, refusing while anything is uncommitted or the index is out of
+date, and `--push` sends exactly those tags. Sous writes files and tags and NEVER commits for
+the author, which is why the workflow `repo init` scaffolds commits the regenerated index in a
+step of its own. `repo submit` is validate-then-propose: it checks the tooling and the working
+tree, then the recipes and the index, and only then hands the fork, branch and pull request to
+`gh` or `glab`; every step prints before it runs, and a failure names the steps that already
+completed. A provider that does not advertise the `submit` feature prints the repo manifest's
+own `contribute` pointer instead.
 
 This `config` namespace is a fresh design, distinct from the old `configure` /
 `config *` commands and the `~/.sous` profile layer that were removed when walk-up

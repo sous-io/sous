@@ -642,3 +642,97 @@ replacing that file wholesale so each name has exactly one record, and you may h
 Answers already in scope are listed visibly and never re-asked. Without a terminal, an
 unanswered required variable fails the run and names the exact environment variables that would
 satisfy it, most specific first, which is what a continuous integration log needs.
+
+## Releasing and contributing
+
+Two commands work inside a recipe repository rather than inside a project, so neither one looks
+for a `.sous/` directory: `sous repo release` publishes, and `sous repo submit` proposes a change
+to a repository someone else maintains. Both refuse to do anything until the repository describes
+itself consistently.
+
+### What is checked
+
+Every run of either command checks the same things, and reports all of them at once rather than
+stopping at the first:
+
+- Every folder listed under `recipes` in `sous.repo.yaml` exists and holds exactly one recipe
+  manifest.
+- Every recipe belongs to a namespace the repository manifest declares, and no two recipes share
+  a `namespace/name` key.
+- Every `depends` and `subscribes` ref parses.
+- No two variable definitions of DIFFERENT names claim the same environment variable. Two
+  definitions of the SAME name may share one, because that is exactly what the shared rung of the
+  resolution ladder is for.
+- A tag exists for the version its recipe manifest declares, or that version is pending; when the
+  tag does exist, the manifest carried by that tag declares the same version, and the folder's
+  content still matches what the tag published.
+
+Claiming a well-known name such as `PATH`, `HOME`, `GITHUB_TOKEN` or anything beginning `AWS_` or
+`SOUS_` is a warning rather than an error. Binding an existing token is legitimate; it just
+deserves saying out loud. Add `x-intentional: true` to the definition to say you meant it.
+
+### Versions, tags and the index
+
+Recipe metadata is the source of truth for versions. A tag shaped `namespace/recipe@1.2.3` is a
+convenience ref that records which commit a version was published from, and `sous.index.json` is
+the catalog subscribers read. The three are kept in step by three rules:
+
+- **A published version never changes.** Its hash is carried forward exactly as published, and a
+  disagreement is an error telling you to bump the version rather than republish it.
+- **A version is published when its tag exists.** A version whose tag has not been cut yet is left
+  out of the index and reported as pending instead, because every index entry names its tag.
+- **The tags are the backstop.** A tagged version missing from the index is rebuilt from its tag,
+  so deleting `sous.index.json` and regenerating it restores the same catalog.
+
+!> Sous writes files and creates tags; it never commits for you. Every command here stops and
+tells you what to commit instead, so nothing enters a repository's history without you asking.
+
+### `sous repo release`
+
+| Invocation | What it does |
+|------------|--------------|
+| `sous repo release` | Validates, regenerates `sous.index.json`, and prints what a release would publish. Nothing is committed or tagged. |
+| `sous repo release --check` | Reads only. Exits non-zero when anything is wrong or the committed index is out of date, naming what is stale. This is what a pull request runs. |
+| `sous repo release --bump <level>` | Raises a recipe's version in place (`patch`, `minor`, `major` or `prerelease`), then regenerates the index. Name the recipe with `--recipe namespace/name` when the repository publishes more than one. |
+| `sous repo release --tag` | Creates the annotated tag for every version that has none, after confirming the working tree is clean and the committed index is current. Then it rewrites the index to record the new versions, for you to commit. |
+| `sous repo release --tag --push` | The same, and pushes exactly those tags to `origin`. Nothing else is pushed. |
+
+`--dry-run` works with all of them and changes nothing.
+
+A version bump edits the manifest in place, so its comments, its field order and its layout
+survive. Two small normalizations happen in a YAML manifest: a folded block of prose may be
+re-wrapped, and the spacing before a trailing comment is collapsed to one space.
+
+The workflow `sous repo init` scaffolds runs `--check` on every pull request and
+`--tag --push` on a merge, with a step of its own that commits the regenerated index.
+
+### `sous repo submit`
+
+`submit` means "propose a change for maintainers to review". It never publishes and never writes
+to a repository directly.
+
+Sous validates first, because a proposal that fails the maintainer's own checks wastes their
+review, and then hands the mechanics to the provider's own command line tool, which already holds
+your credentials:
+
+1. **Preflight.** An `origin` remote exists, sous recognizes its provider, that provider's CLI
+   (`gh` or `glab`) is installed and signed in, and everything is committed.
+2. **Validation.** The repository validates, and the committed index is current.
+3. **Delegation.** On GitHub, sous asks whether you can push to the repository itself; if you
+   cannot, it forks it onto your own account and proposes from there. The branch is pushed and a
+   pull request (a merge request on GitLab) is opened. A change sitting on the default branch is
+   moved to a branch named `sous/submit-<date>-<time>` first.
+
+| Flag | What it does |
+|------|--------------|
+| `--title <text>` | The proposal's title. Defaults to your last commit's subject. |
+| `--body <text>` | The proposal's body. Defaults to a summary sous writes, listing the recipes and the versions the change would publish. |
+| `--draft` | Opens the proposal as a draft. |
+| `--dry-run` | Runs the whole preflight and sends nothing. |
+
+Every step prints before it runs, and a failure says exactly which steps completed. A pushed
+branch with no proposal behind it is a normal outcome of a network failure, and you are told
+about it rather than left guessing.
+
+?> If a repository's provider cannot open a proposal for you, sous prints the `contribute` pointer
+from its `sous.repo.yaml` instead, so you are never left without a route.
