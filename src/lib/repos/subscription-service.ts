@@ -1037,10 +1037,17 @@ export class SubscriptionService {
           confDir: this.confDir,
         });
       } else {
+        // A subscription sous provides itself has no entry to delete, so the
+        // opt-out is written as the entry instead; anything else is removed.
         updateManagedLayer(
           this.sousDir,
           SUBSCRIPTIONS_LAYER_FILENAME,
-          [{ path: ["subscriptions", key], value: undefined }],
+          [
+            {
+              path: ["subscriptions", key],
+              value: builtIn ? { enabled: false } : undefined,
+            },
+          ],
           { confDir: this.confDir }
         );
       }
