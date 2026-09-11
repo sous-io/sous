@@ -70,7 +70,8 @@ Do you trust this repository? (y/N)
 
 Where there is no terminal to ask on, such as continuous integration, the run fails and names
 both the repositories and the exact command that grants the trust. `--trust` acknowledges
-without being asked, and is the flag a script uses:
+without being asked, and is the flag a script uses; it is one spelling of the shared
+confirmation flag, alongside `-y`, `--yes`, `-f` and `--force`:
 
 ```bash
 sous repo add https://github.com/sous-io/sous-recipes --trust

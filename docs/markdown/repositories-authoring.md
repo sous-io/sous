@@ -34,6 +34,10 @@ directory called `My-Recipes` yields `my-recipes`. `repo init` refuses to write 
 that already holds a repo manifest unless you pass `--force`, and it reads every manifest back
 after writing it, so the scaffold it leaves behind is one that validates.
 
+?> `repo init --force` means overwrite, not "answer yes". It is unrelated to the shared
+confirmation flag other commands spell `--yes`, `-y`, `--force` or `--trust`, and `repo init`
+does not accept those other spellings.
+
 ## The layout
 
 ```text

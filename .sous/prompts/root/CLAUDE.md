@@ -340,7 +340,7 @@ recipe can be walked at one version and again at a lower one once a second holde
 version reached, trimming each survivor's `requestedBy`, `ranges` and `kind` to what still
 declares it. It never re-picks a version, since trimming only removes constraints and
 re-picking could undo the narrowing. `trust.ts` asks about those in one consolidated question and
-fails hard without a terminal unless `--trust` was passed, writing accepted repos through
+fails hard without a terminal unless the confirmation flag was passed, writing accepted repos through
 `managed-layer.ts`. `lock-service.ts` applies a resolution to the lockfile, refcounts removal,
 and restores the store to exactly what the lock pins without prompting or changing a version;
 `freshness.ts` decides when sous looks upstream at all.
@@ -374,7 +374,7 @@ fetched or written, on the cached indexes alone: a one-word ref is resolved to a
 qualified one (`ref-search.ts`: exact namespace matches first, then exact recipe-name
 matches, ordered by repository as given, then namespace, then recipe name, with the
 whole-namespace candidate ahead of its recipes; several matches ask, `--accept-first`
-takes the first), and then the plan is printed and confirmed (`--yes` skips the question,
+takes the first), and then the plan is printed and confirmed (the confirmation flag skips the question,
 a dry run states the plan and never asks, declining aborts with nothing written). Keep
 that order: the confirmation is worthless once a manifest has been fetched to read it,
 which is why the plan names untrusted dependency repositories only as far as what is
@@ -859,20 +859,21 @@ This enables `sous prune` (remove stale outputs) and `sous clear` (delete all ou
 | `sous build` | Compile + prune (main workflow) |
 | `sous compile` | Compile only |
 | `sous prune` | Remove output files no longer in config |
-| `sous clear` | Delete all Sous-written files for a project |
+| `sous clear` | Delete all Sous-written files for a project (`--force` / `-f`, also `--yes` / `-y`) |
+| `sous help [topic] [command]` | Print the same screen `--help` and `-h` print, for the CLI, a topic or a command |
 | `sous launch <tool>` | Build then spawn agent (e.g., `sous launch claude`) |
 | `sous config show` | Print the merged config (all layers merged, before var resolution) as JSON |
 | `sous config get <path>` | Print one value by dot-path (e.g. `compilation.targets[0].entryPoint`); `--layers` shows per-layer provenance |
 | `sous config validate` | Validate the merged config: schema, then full variable resolution |
-| `sous repo add <url>` | Add a repository, which is also how you trust it, then fetch only its index (`--name`, `--provider`, `--trust`, `--dry-run`) |
+| `sous repo add <url>` | Add a repository, which is also how you trust it, then fetch only its index (`--name`, `--provider`, `--yes` / `-y` / `--trust`, `--dry-run`) |
 | `sous repo list` | List the trusted repositories: name, location, provider, namespaces, recipe count, and whether it is linked |
 | `sous repo search <text>` | Search the cached indexes by namespace, recipe name and description (`--limit`); also the top-level `sous search <text>` |
 | `sous repo gc` | Collect the machine-wide store back to its size cap, protecting everything the lockfile pins (`--max-bytes`, `--dry-run`) |
 | `sous subscription list` | List what the project subscribes to: range, the versions the lockfile pins, origin, and whether it is on |
-| `sous subscription add <ref>` | Subscribe to a namespace or a recipe, install the whole closure, and answer the variables it publishes (`--yes` / `-y`, `--accept-first`, `--prerelease`, `--always-pull`, `--trust`, `--dry-run`); also `sous subscribe` |
+| `sous subscription add <ref>` | Subscribe to a namespace or a recipe, install the whole closure, and answer the variables it publishes (`--yes` / `-y` / `--trust`, `--accept-first`, `--prerelease`, `--always-pull`, `--dry-run`); also `sous subscribe` |
 | `sous subscription remove <ref>` | Remove a subscription and everything only it brought in, refcounted (`--dry-run`); also `sous unsubscribe` |
 | `sous repo init [dir]` | Scaffold a new recipe repository (`--name`, `--namespace`, `--force`) |
-| `sous repo link <repo> [path]` | Read a repository from a working copy: clone it, or link a checkout already on disk (`--global`, `--trust`) |
+| `sous repo link <repo> [path]` | Read a repository from a working copy: clone it, or link a checkout already on disk (`--global`, `--yes` / `-y` / `--trust`) |
 | `sous repo unlink <repo>` | Drop the link and go back to published versions; the checkout stays (`--global`) |
 | `sous repo release` | Validate a recipe repository, regenerate its index, and propose the release (`--check`, `--bump`, `--recipe`, `--tag`, `--push`, `--dry-run`) |
 | `sous repo submit` | Propose this repository's committed changes to its maintainers (`--title`, `--body`, `--draft`, `--dry-run`) |
@@ -947,8 +948,24 @@ Common config-locating flags on every command: `--config <path>` / `-c` (alias
 `SOUS_DIR`, `SOUS_CONFD`). There is no `--project` / `-p` flag; one config describes one
 project. Every command also carries `--non-interactive`. Also: `--rebuild`, `--dry-run`,
 `--strict`, `--watch` / `-w` (build/compile), `--no-prune` / `--no-compile` (build),
-`--force` / `-f` (clear), `--no-build` / `--continuous` (launch), `--yes` / `-y` and
-`--accept-first` (subscribe), `--trust` (repo add, subscribe).
+`--no-build` / `--continuous` (launch), `--accept-first` (subscribe).
+
+**One confirmation flag.** Every yes-or-no question a command would ask is answered by one
+shared boolean, built by `confirmationFlag()` in `src/utils/flags.ts`: `--yes` / `-y`, with
+`--force` / `-f` as oclif flag aliases, plus `--trust` on the commands that run the trust
+ceremony (`repo add`, `repo link`, `subscription add`). `clear` files it under `force`
+instead (`confirmationFlag({ primary: "force" })`), so `--force` stays its primary spelling
+and `--yes` / `-y` are aliases there. Aliases are never separate flags: the factory appends
+a dim "(also -f, --force)" suffix generated from the alias list, so help lists the flag
+once. `repo init --force` is NOT this flag; there `--force` means overwrite. A new command
+that asks a confirmation uses the factory rather than declaring its own boolean.
+
+**Help in four forms.** `--help`, `-h` (registered through `oclif.additionalHelpFlags` in
+`package.json`), and the `help` command (`src/commands/help.ts`: `sous help`, `sous help
+<command>`, `sous help <topic>`, `sous help <topic> <command>`) all draw the same screen,
+because all of them go through `loadHelpClass`. `@oclif/plugin-help` is deliberately not
+installed. `src/commands/help.ts` extends `Command`, not `BaseCommand`: reading help must
+work where no config can be discovered.
 
 **One interactivity rule.** `src/lib/interactive.ts` owns it, and every prompt in sous is
 gated by it; do not reintroduce an ad hoc `process.stdin.isTTY` check anywhere.

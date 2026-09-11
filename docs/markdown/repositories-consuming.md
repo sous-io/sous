@@ -27,7 +27,7 @@ repository costs one small request and installs nothing.
 |------|--------------|
 | `--name <name>` | The short name refs will use. Defaults to the last segment of the URL |
 | `--provider github\|gitlab\|local` | The provider that handles it, for a host the URL does not give away |
-| `--trust` | Accept trust without being asked, for a run with no terminal |
+| `-y, --yes` | Accept trust without being asked, for a run with no terminal. `--trust`, `--force` and `-f` are the same flag |
 | `--dry-run` | Print what would change without trusting or fetching anything |
 
 The entry lands in `.sous/conf.d/500-repos.jsonc`, which is committed, so your colleagues inherit
@@ -50,11 +50,10 @@ are whole or not at all.
 
 | Flag | What it does |
 |------|--------------|
-| `--yes`, `-y` | Accept the confirmation and subscribe without being asked |
+| `-y, --yes` | Answer yes to both questions this command can ask: the subscribe confirmation, and the trust question for any repository it has to add. `--trust`, `--force` and `-f` are the same flag |
 | `--accept-first` | When a one-word ref matches several things, take the first one listed |
 | `--prerelease` | Let prerelease versions take part in version range matching |
 | `--always-pull` | Install a newer in-range version whenever one exists, rather than holding the locked one |
-| `--trust` | Accept trust for every repository this command adds, without being asked |
 | `--dry-run` | Print what would be installed without writing or downloading anything |
 
 ### One-word refs
@@ -115,7 +114,8 @@ $ sous subscribe workflow/task-files
 ```
 
 Answering no ends the command with nothing downloaded, no lockfile entry and no change to your
-config. `--yes` accepts the plan without being asked, which is what a script or a Makefile wants.
+config. `--yes` accepts the plan without being asked, which is what a script or a Makefile wants;
+`-y`, `--force`, `-f` and `--trust` are spellings of that same flag.
 `--dry-run` states the plan and then reports what would be installed, asking nothing, because
 there is nothing to decline.
 
@@ -272,16 +272,18 @@ nothing at all, when any of these is true:
 
 A run like that fails rather than guessing, and the failure names the question that could not be
 asked along with the flag that would have answered it ahead of time: `--yes` for the subscribe
-confirmation, `--accept-first` for the choice between candidate refs, `--trust` for the trust
-question, and the exact environment variables for a variable question. The command's own help is
-printed underneath the error, so every other flag is in front of you:
+confirmation and for the trust question (`-y`, `--force`, `-f` and `--trust` all mean the same
+thing), `--accept-first` for the choice between candidate refs, and the exact environment
+variables for a variable question. The command's own help is printed underneath the error, so
+every other flag is in front of you, and `sous help <command>` prints the same screen on demand:
 
 ```term
 $ CI=true sous subscription add workflow/task-files
   Sous has to ask whether to go ahead with subscribing to
   'sous-recipes:workflow/task-files', and it is not running where it can ask.
     Why: the 'CI' environment variable is set to 'true'.
-    Answer it ahead of time: pass '--yes' to accept the plan above without being asked.
+    Answer it ahead of time: pass '--yes' (spelled '-y', '--force' or '--trust' if
+    you prefer) to accept the plan above without being asked.
 ```
 
 ?> The error and the help both go to stderr, so piping a command's output somewhere

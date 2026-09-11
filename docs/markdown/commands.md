@@ -23,6 +23,35 @@ beats the matching variable, and both beat walk-up discovery.
 inside a project: `sous repo init`, `sous repo release` and `sous repo submit`. A recipe
 repository has no `.sous/` directory to discover.
 
+## Flags common to many commands
+
+A few flags mean the same thing wherever they appear, so the tables below name them without
+explaining them again.
+
+| Flag | What it does |
+|------|--------------|
+| `-y, --yes` | Answers yes to every confirmation the command would ask. `--force` and `-f` are the same flag; so is `--trust` on the commands that trust a repository |
+| `--non-interactive` | The opposite instruction: never ask anything. A run that would have prompted fails instead, naming the question and the flag that would have answered it |
+| `--dry-run` | Prints what the command would do and writes, downloads and asks nothing |
+| `-h, --help` | Prints the command's own help and exits |
+
+`sous clear` is the one command whose primary spelling is `--force` rather than `--yes`, because
+that is the spelling it has always had; `-y` and `--yes` are aliases of it there and behave
+identically. `sous repo init --force` is a different flag with a different meaning (overwrite an
+existing repository), and it is not a confirmation.
+
+Help is available in four forms, all of which draw the same screen:
+
+```bash
+sous --help
+sous repo add --help
+sous repo add -h
+sous help repo add
+```
+
+`sous help` on its own lists the topics and commands, and `sous help <topic>` lists one topic's
+commands.
+
 ## Singular and plural
 
 Every topic answers to both spellings of its name, so nothing hinges on remembering which one
@@ -37,7 +66,7 @@ exactly the same command.
 | `sous build` | none | `--no-prune`, `--no-compile`, `--rebuild`, `--dry-run`, `--strict`, `-w, --watch` |
 | `sous compile` | none | `--strict`, `--rebuild`, `--dry-run`, `-w, --watch` |
 | `sous prune` | none | `--dry-run` |
-| `sous clear` | none | `-f, --force` |
+| `sous clear` | none | `-f, --force` (also `-y, --yes`) |
 | `sous launch` | `TOOL...` | `--no-build`, `--continuous` |
 
 `build` is compile plus prune, and is the command you want almost always. `--rebuild` ignores
@@ -46,7 +75,7 @@ rather than reporting and continuing; `--watch` rebuilds on every change to a so
 config layer, or a linked recipe checkout.
 
 `clear` deletes every file and directory sous has written for the project, and asks first unless
-you pass `--force`. Neither `prune` nor `clear` ever reaches into a linked checkout or the
+you pass `--force` (or `-y`, or `--yes`). Neither `prune` nor `clear` ever reaches into a linked checkout or the
 machine-wide recipe store.
 
 `launch` builds and then spawns a coding agent configured under `tools` in your config. Any
@@ -79,15 +108,16 @@ See [Inspecting and validating](config-inspection.md).
 
 | Command | Arguments | Own flags |
 |---------|-----------|-----------|
-| `sous repo add` | `URL` | `--name <name>`, `--provider github\|gitlab\|file`, `--trust`, `--dry-run` |
+| `sous repo add` | `URL` | `--name <name>`, `--provider github\|gitlab\|file`, `-y, --yes` (also `--trust`), `--dry-run` |
 | `sous repo list` | none | none |
 | `sous repo search` | `TEXT` | `--limit <n>` (default 25) |
 | `sous repo gc` | none | `--max-bytes <n>`, `--dry-run` |
-| `sous repo link` | `REPO` `[PATH]` | `--global`, `--trust`, `--dry-run` |
+| `sous repo link` | `REPO` `[PATH]` | `--global`, `-y, --yes` (also `--trust`), `--dry-run` |
 | `sous repo unlink` | `REPO` | `--global`, `--dry-run` |
 
-`repo add` is the trust ceremony; it asks inline, and `--trust` is how a run with no terminal
-acknowledges instead. `URL` may be an address or an absolute path to a repository on this
+`repo add` is the trust ceremony; it asks inline, and the confirmation flag is how a run with no
+terminal acknowledges instead. `--trust` is the spelling the ceremony reads best with, and it is
+the same flag as `-y`, `--yes`, `-f` and `--force`. `URL` may be an address or an absolute path to a repository on this
 machine. `list` and `search` read only what is already cached, so both work offline and neither
 downloads anything.
 
@@ -99,7 +129,7 @@ subscribe to before you know what any of it is called.
 | Command | Arguments | Own flags |
 |---------|-----------|-----------|
 | `sous subscription list` | none | none |
-| `sous subscription add` | `REF` | `--prerelease`, `--always-pull`, `--trust`, `--dry-run` |
+| `sous subscription add` | `REF` | `--prerelease`, `--always-pull`, `-y, --yes` (also `--trust`), `--accept-first`, `--dry-run` |
 | `sous subscription remove` | `REF` | `--dry-run` |
 
 `sous subscribe` and `sous unsubscribe` are the original spellings of `subscription add` and
@@ -123,7 +153,8 @@ repository stays trusted and keeps appearing in `repo list` as built in.
 and clones nothing. `REPO` is normally the short name of a repository this project has already
 added. Naming one by URL instead runs the same trust ceremony `repo add` runs, since a linked
 repository's recipes are read with no version, lockfile or hash check; it asks inline, and
-`--trust` acknowledges instead for a run with no terminal.
+`--trust` (or any other spelling of the confirmation flag) acknowledges instead for a run with no
+terminal.
 
 ## Authoring a repository
 
