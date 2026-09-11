@@ -131,6 +131,20 @@ describe("TrustService", () => {
   });
 
   /**
+   * The notice is given room of its own: a blank line before it, so it never
+   * lands pressed under whatever the command printed last, and a blank line
+   * after it, so the question that follows stands on its own.
+   */
+  it("should open and close the notice with a blank line", async () => {
+    const { service } = makeService({ answer: true });
+
+    await service.confirmTrust(missingWithUrl);
+
+    expect(written[0]?.trim()).toBe("");
+    expect(strip(written.at(-1) ?? "").split("\n").at(-1)?.trim()).toBe("");
+  });
+
+  /**
    * Accepting the question adds every repository whose URL sous knows.
    */
   it("should add the accepted repositories whose URL is known", async () => {

@@ -246,6 +246,10 @@ export class TrustService {
     }
 
     if (!trustFlag) {
+      // The notice opens with a blank line of its own, so it never lands
+      // pressed up against whatever the command printed before it, wherever the
+      // ceremony runs from.
+      this.write(" ");
       this.write(this.trustNotice(missing));
       const plural = missing.length === 1 ? "this repository" : "these repositories";
       const accepted = await this.ask(`Do you trust ${plural}?`);
@@ -301,12 +305,18 @@ export class TrustService {
           : `${missing.length} repositories have to be trusted before this can continue.`
       )
     );
-    lines.push("");
+    lines.push(" ");
 
     for (const repo of missing) {
       lines.push(`  ${color.bold(repo.name)}`);
+      // The location is the one thing a person actually weighs when deciding,
+      // so it carries the accent color the rest of the CLI uses for values.
       lines.push(
-        `    Location:  ${repo.url ?? "not known to sous; a ref named it by its short name only"}`
+        `    Location:  ${
+          repo.url === undefined
+            ? "not known to sous; a ref named it by its short name only"
+            : color.cyan(repo.url)
+        }`
       );
       if (repo.identity !== undefined) {
         lines.push(`    Identity:  ${repo.identity}`);
@@ -315,16 +325,29 @@ export class TrustService {
         const who = entry.requestedBy === "project" ? "this project" : `'${entry.requestedBy}'`;
         lines.push(`    Required:  ${entry.ref}, by ${who}`);
       }
-      lines.push("");
+      lines.push(" ");
     }
 
-    lines.push("  Trusting a repository trusts every namespace and every recipe in it,");
+    // The two phrases that carry the actual risk are highlighted, so a reader
+    // skimming the block still takes in the part that matters.
+    lines.push(
+      `  Trusting a repository trusts ${color.yellowBright(
+        "every namespace and every recipe"
+      )} in it,`
+    );
     lines.push("  including ones published later. Trusting on its own executes nothing;");
-    lines.push("  subscribing to something inside it can, and probably will, run scripts");
+    lines.push(
+      `  subscribing to something inside it ${color.yellowBright(
+        "can, and probably will,"
+      )} run scripts`
+    );
     lines.push("  on this machine. This question is the last gate before that happens.");
-    lines.push("");
+    lines.push(" ");
     lines.push("  Sous cannot tell you whether a repository deserves trust. Look at the");
     lines.push("  location above, and at who publishes it, before answering.");
+    // The block closes on a blank line, so the question that follows it stands
+    // on its own rather than reading as the last line of the notice.
+    lines.push(" ");
     return lines.join("\n");
   }
 
