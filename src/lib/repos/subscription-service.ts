@@ -1912,19 +1912,57 @@ export class SubscriptionService {
    */
   private async askVariables(resolved: ResolvedRecipe[]): Promise<AskReport | undefined> {
     const defined: DefinedVariable[] = [];
+    const byKey = new Map(resolved.map((recipe) => [recipe.key, recipe]));
+    const repos = this.currentRepos();
 
-    for (const recipe of resolved) {
-      const manifest = readRecipeManifestIn(this.recipeDirectory(recipe));
-      if (manifest === undefined) continue;
-
-      const publisher: DefiningRecipe = {
+    /** One resolved recipe, described the way the variables layer shows it. */
+    const describe = (recipe: ResolvedRecipe): DefiningRecipe => {
+      const url = repos[recipe.repo]?.url;
+      return {
         repo: recipe.repo,
         namespace: recipe.namespace,
         name: recipe.name,
         version: recipe.version,
+        path: recipe.path,
+        dir: this.recipeDirectory(recipe),
+        ...(url === undefined ? {} : { url }),
       };
+    };
+
+    /** How a recipe came to be here: the subscribed recipe first, then each holder. */
+    const chainFor = (recipe: ResolvedRecipe): ResolvedRecipe[] => {
+      const chain = [recipe];
+      const seen = new Set([recipe.key]);
+      let current = recipe;
+
+      while (!current.requestedBy.includes(PROJECT_HOLDER)) {
+        const holderKey = current.requestedBy.find(
+          (holder) => holder !== PROJECT_HOLDER && byKey.has(holder) && !seen.has(holder)
+        );
+        if (holderKey === undefined) break;
+        current = byKey.get(holderKey)!;
+        seen.add(holderKey);
+        chain.unshift(current);
+      }
+
+      return chain;
+    };
+
+    // The subscribed recipe's own questions come first, then each dependency in
+    // the order the closure reached it, so the run reads the way it happened.
+    const ordered = [...resolved].sort((left, right) => {
+      const depth = chainFor(left).length - chainFor(right).length;
+      return depth !== 0 ? depth : left.key.localeCompare(right.key);
+    });
+
+    for (const recipe of ordered) {
+      const manifest = readRecipeManifestIn(this.recipeDirectory(recipe));
+      if (manifest === undefined) continue;
+
+      const publisher = describe(recipe);
+      const requiredBy = chainFor(recipe).map(describe);
       for (const definition of manifest.variables ?? []) {
-        defined.push({ definition, recipe: publisher });
+        defined.push({ definition, recipe: publisher, requiredBy });
       }
     }
 

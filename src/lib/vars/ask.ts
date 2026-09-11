@@ -18,22 +18,33 @@
  */
 
 import path from "node:path";
-import { confirm, input, password, select } from "@inquirer/prompts";
+import { confirm, input as input_, select } from "@inquirer/prompts";
+import { color } from "@oclif/color";
 import { ENV_DEFAULTS_NAME, ENV_LOCAL_NAME } from "../config-discovery.js";
 import { updateEnvFile } from "../env-file.js";
 import { ConfigError } from "../errors.js";
-import { blankLine, indent, log } from "../../utils/formatting.js";
+import {
+  blankLine,
+  indent,
+  log,
+  terminalColumns,
+  warning,
+  wrapText,
+} from "../../utils/formatting.js";
+import { valuePrompt } from "../../utils/value-prompt.js";
+import { ENV_VAR_NAME_PATTERN } from "../repos/formats/patterns.js";
 import type { VariableDefinition } from "../repos/formats/recipe-manifest.js";
 import {
   definedVariableKey,
   definingRecipeKey,
   type DefinedVariable,
 } from "./definition-source.js";
-import { displayValue, documentationRows } from "./display.js";
+import { displayValue, renderFacts, variableFacts } from "./display.js";
 import {
   describeSource,
   diagnoseVariable,
   lookupEnvName,
+  variableCandidates,
   recordAnswerInContext,
   RUNG_LABELS,
   type LadderCandidate,
@@ -46,8 +57,13 @@ import {
   mappingTargetFor,
   writeMappingRecord,
 } from "./mappings.js";
-import { bareName, recipeScopedName } from "./names.js";
-import { constraintHints, validateAnswer } from "./validate.js";
+import {
+  bareName,
+  namespaceScopedName,
+  recipeScopedName,
+  sharedName,
+} from "./names.js";
+import { validateAnswer } from "./validate.js";
 
 /** Which env file an answer was written to. */
 export type AnswerFile = typeof ENV_LOCAL_NAME | typeof ENV_DEFAULTS_NAME;
@@ -172,85 +188,445 @@ function buildNonInteractiveError(
   return new ConfigError(lines.join("\n"));
 }
 
+/** Where one answer will be stored: which env file, and under what name. */
+export interface StoragePlan {
+  /** The env file the answer goes into. */
+  file: AnswerFile;
+  /** The environment variable name the answer is stored under. */
+  envName: string;
+}
+
+/** One question sous is going to ask, and the value Enter alone would accept. */
+interface PlannedQuestion {
+  /** The variable being asked about. */
+  defined: DefinedVariable;
+  /** The value offered as the default, when there is one. */
+  suggestion?: string;
+}
+
+/** The questions one recipe contributes, in the order they will be asked. */
+interface QuestionGroup {
+  /** The recipe's `namespace/recipe` key. */
+  key: string;
+  /** Whether the project subscribed to this recipe itself. */
+  direct: boolean;
+  /** The questions, in declaration order. */
+  questions: PlannedQuestion[];
+}
+
+/** "1 answer" or "4 answers", so no count is ever printed with the wrong noun. */
+function answerCount(count: number): string {
+  return count === 1 ? "1 answer" : `${count} answers`;
+}
+
 /**
- * The explanatory block printed above a question: which recipe is asking, what
- * the variable is called, the publisher's description and example, the
- * constraints an answer has to meet, and exactly where the answer will be
- * stored. Every published definition carries a description and an example, so
- * the person answering never has to guess what the one-line question means.
+ * The single sentence printed before any question when the run spans more than
+ * one recipe, so the size of what is about to be asked is known up front. A run
+ * covering one recipe needs no lead-in; its own opening line says everything.
  *
- * @param defined - The variable being asked about, and the recipe that published it.
- * @returns The lines to print, without indentation or trailing blank line.
+ * @param groups - Each recipe, how many questions it contributes, and whether the project subscribed to it directly.
+ * @returns The lead-in, or undefined when there is only one recipe.
+ *
+ * @example
+ * askLeadIn([
+ *   { key: "workflow/task-files", count: 4, direct: true },
+ *   { key: "workflow/sub-agent-delegation", count: 2, direct: false },
+ * ]);
+ * // -> "workflow/task-files needs 4 answers, and workflow/sub-agent-delegation, which it depends on, needs 2."
  */
-export function questionBlock(defined: DefinedVariable): string[] {
+export function askLeadIn(
+  groups: Array<{ key: string; count: number; direct: boolean }>
+): string | undefined {
+  if (groups.length < 2) return undefined;
+
+  const parts = groups.map((group, index) => {
+    const relation = index === 0 || group.direct ? "" : ", which it depends on,";
+    const needs = index === 0 ? answerCount(group.count) : String(group.count);
+    return `${group.key}${relation} needs ${needs}`;
+  });
+
+  const last = parts.pop()!;
+  return `${[...parts, `and ${last}`].join(", ")}.`;
+}
+
+/**
+ * The opening line of one recipe's questions, printed once before the first of
+ * them.
+ *
+ * @param key - The recipe's `namespace/recipe` key.
+ * @param count - How many questions the recipe contributes.
+ *
+ * @example
+ * recipeOpeningLine("workflow/task-files", 4);
+ * // -> "workflow/task-files needs 4 answers before it can be used."
+ */
+export function recipeOpeningLine(key: string, count: number): string {
+  return `${key} needs ${answerCount(count)} before it can be used.`;
+}
+
+/** Everything the basic view of one question draws. */
+export interface BasicViewInput {
+  /** The variable being asked about. */
+  defined: DefinedVariable;
+  /** This question's place in its recipe's run, counting from one. */
+  index: number;
+  /** How many questions that recipe contributes. */
+  total: number;
+  /** Where the answer is going, as it stands right now. */
+  plan: StoragePlan;
+  /** The value Enter alone would accept, when there is one. */
+  suggestion?: string;
+  /** The column to wrap the description at. */
+  width?: number;
+}
+
+/**
+ * The basic view of one question: the header, the publisher's description
+ * wrapped to the terminal, the default and the example, the one muted line
+ * saying where the answer will be stored, and the hint naming the two keys that
+ * do anything here.
+ *
+ * @param input - The question, its place in the run, and where the answer is going.
+ * @returns The lines to print, without indentation.
+ */
+export function basicViewLines(input: BasicViewInput): string[] {
+  const { defined, index, total, plan } = input;
   const { definition } = defined;
-  const rows: Record<string, string> = {
-    "Recipe asking": definingRecipeKey(defined.recipe),
-    Variable: definition.name,
-    ...documentationRows(definition),
-    Constraints: constraintHints(definition).join("; "),
-    "Stored in": `${answerFileFor(definition)}, as ${bareName(definition)}`,
+  const width = input.width ?? terminalColumns();
+
+  const lines: string[] = [
+    color.bold(`Question ${index} of ${total}: ${color.cyan(definition.name)}`),
+    "",
+    ...wrapText(definition.description, width),
+    "",
+  ];
+
+  const rows: Array<[string, string]> = [];
+  if (definition.default !== undefined) rows.push(["@default", String(definition.default)]);
+  rows.push(["@example", String(definition.example)]);
+  const labelWidth = Math.max(...rows.map(([label]) => label.length)) + 2;
+  for (const [label, value] of rows) {
+    lines.push(`  ${color.cyan(label.padEnd(labelWidth))}${value}`);
+  }
+  lines.push(
+    color.gray(`  Stored as ${plan.envName} in ${plan.file}`)
+  );
+
+  lines.push("");
+  lines.push(
+    color.gray(
+      input.suggestion === undefined || input.suggestion === ""
+        ? "[TAB for advanced info and options]"
+        : "[ENTER to accept the default; TAB for advanced info and options]"
+    )
+  );
+
+  return lines;
+}
+
+/**
+ * The advanced view of one question: the same header and description, then
+ * every fact about the variable, laid out by the renderer `sous vars show`
+ * uses, so the vocabulary never drifts between the two.
+ *
+ * @param input - The question, its place in the run, and where the answer is going.
+ * @param storagePath - The absolute path of the env file the answer goes into.
+ * @returns The lines to print, without indentation.
+ */
+export function advancedViewLines(input: BasicViewInput, storagePath: string): string[] {
+  const { defined, index, total } = input;
+  const width = input.width ?? terminalColumns();
+
+  return [
+    color.bold("[Advanced Variable Settings]"),
+    "",
+    color.bold(`Question ${index} of ${total}: ${color.cyan(defined.definition.name)}`),
+    "",
+    ...wrapText(defined.definition.description, width),
+    "",
+    ...renderFacts(
+      variableFacts({ defined, storagePath, storedAs: input.plan.envName }),
+      width
+    ),
+  ];
+}
+
+/** Prints a block of lines indented under the question, followed by a blank line. */
+function printBlock(lines: string[]): void {
+  blankLine();
+  for (const line of lines) log(line === "" ? " " : indent(line));
+  blankLine();
+}
+
+/**
+ * The value the name picker returns when the name is to be typed by hand. It is
+ * lowercase, so it can never collide with an environment variable name, which
+ * is always upper snake case.
+ */
+export const ANOTHER_NAME = "another-name";
+
+/**
+ * Every environment variable name the ladder would look this variable up
+ * under, in ladder order, as a pick list. Choosing one of these keeps the
+ * answer findable with no mapping record at all.
+ *
+ * @param defined - The variable and the recipe that published it.
+ */
+export function nameChoices(
+  defined: DefinedVariable
+): Array<{ name: string; value: string }> {
+  const { namespace, name: recipe } = defined.recipe;
+  const variable = defined.definition.name;
+
+  const rungs: Array<[string, string]> = [
+    ["recipe scope", recipeScopedName(namespace, recipe, variable)],
+    ["namespace scope", namespaceScopedName(namespace, variable)],
+    ["shared scope", sharedName(variable)],
+    ["declared name", bareName(defined.definition)],
+  ];
+
+  const seen = new Set<string>();
+  const choices: Array<{ name: string; value: string }> = [];
+  for (const [label, envName] of rungs) {
+    if (seen.has(envName)) continue;
+    seen.add(envName);
+    choices.push({ name: `${envName}  (${label})`, value: envName });
+  }
+
+  choices.push({ name: "Another name, which you type yourself", value: ANOTHER_NAME });
+  return choices;
+}
+
+/**
+ * The two env files an answer can go into, described by what each one means for
+ * the team rather than by its name alone.
+ */
+export function fileChoices(): Array<{ name: string; value: AnswerFile }> {
+  return [
+    {
+      name: `${ENV_DEFAULTS_NAME} (committed, shared with everyone on the project)`,
+      value: ENV_DEFAULTS_NAME,
+    },
+    {
+      name: `${ENV_LOCAL_NAME} (gitignored, this machine only)`,
+      value: ENV_LOCAL_NAME,
+    },
+  ];
+}
+
+/**
+ * The warning shown when a value the definition marked secret or local is about
+ * to be pointed at the committed env file. Sous does not prevent it; it says
+ * plainly what happens and asks.
+ *
+ * @param defined - The variable being answered.
+ */
+export function committedFileWarning(defined: DefinedVariable): string {
+  const why = defined.definition.secret
+    ? "declared this variable a secret"
+    : "declared this variable machine-specific";
+  return (
+    `${definingRecipeKey(defined.recipe)} ${why}, and ${ENV_DEFAULTS_NAME} is committed ` +
+    `to git. An answer stored there enters your project's git history, is pushed with ` +
+    `every clone, and is visible to everyone who can read the repository.`
+  );
+}
+
+/**
+ * The advanced view and its menu. It runs until the person answering returns to
+ * the value question, and hands back where the answer should be stored: the
+ * plan it was given when nothing was changed or the changes were discarded, and
+ * the edited plan when they were saved.
+ *
+ * @param input - The question, its place in the run, and the plan as it stands.
+ * @param options - Where the env files live, and whether questions may be asked.
+ * @returns The storage plan to use for this answer.
+ */
+async function runAdvancedView(
+  input: BasicViewInput,
+  options: AskOptions
+): Promise<StoragePlan> {
+  const original = input.plan;
+  let working: StoragePlan = { ...original };
+
+  for (;;) {
+    printBlock(
+      advancedViewLines(
+        { ...input, plan: working },
+        path.join(options.sousDir, working.file)
+      )
+    );
+
+    const changed = working.file !== original.file || working.envName !== original.envName;
+    const choices = [
+      changed
+        ? { name: "Save changes and return to value entry", value: "save" }
+        : { name: "Return to value entry", value: "return" },
+      ...(changed
+        ? [{ name: "Discard changes and return to value entry", value: "discard" }]
+        : []),
+      { name: "Change the storage file", value: "file" },
+      { name: "Change the stored variable name", value: "name" },
+    ];
+
+    const action = await select({ message: "What would you like to do?", choices });
+
+    if (action === "return" || action === "save") return working;
+    if (action === "discard") return original;
+
+    if (action === "file") {
+      const file = await select({
+        message: "Which file should this answer be stored in?",
+        choices: fileChoices(),
+        default: working.file,
+      });
+
+      if (file === ENV_DEFAULTS_NAME && answerFileFor(input.defined.definition) === ENV_LOCAL_NAME) {
+        warning(committedFileWarning(input.defined));
+        const accepted = await confirm({
+          message: `Store this answer in ${ENV_DEFAULTS_NAME} anyway?`,
+          default: false,
+        });
+        if (!accepted) continue;
+      }
+
+      working = { ...working, file };
+      continue;
+    }
+
+    const picked = await select({
+      message: "Which environment variable should hold this answer?",
+      choices: nameChoices(input.defined),
+      default: working.envName,
+    });
+
+    if (picked !== ANOTHER_NAME) {
+      working = { ...working, envName: picked };
+      continue;
+    }
+
+    const typed = await input_({
+      message: "What should the environment variable be called?",
+      default: working.envName,
+      validate: (value: string) =>
+        ENV_VAR_NAME_PATTERN.test(value.trim())
+          ? true
+          : "An environment variable name is upper snake case: a letter or underscore, then letters, digits or underscores.",
+    });
+    working = { ...working, envName: typed.trim() };
+  }
+}
+
+/**
+ * Asks one question and hands back the answer together with where it should be
+ * stored. Tab opens the advanced view; returning from it prints the basic view
+ * again, with whatever the advanced view changed, and asks once more.
+ *
+ * @param question - The variable and the value Enter alone would accept.
+ * @param place - This question's place in its recipe's run.
+ * @param options - Where the env files live.
+ * @returns The answer as text, and the storage plan it should be written with.
+ */
+async function askOneQuestion(
+  question: PlannedQuestion,
+  place: { index: number; total: number },
+  options: AskOptions
+): Promise<{ answer: string; plan: StoragePlan }> {
+  const { defined } = question;
+  const { definition } = defined;
+
+  let plan: StoragePlan = {
+    file: answerFileFor(definition),
+    envName: bareName(definition),
   };
-
-  const width = Math.max(...Object.keys(rows).map((label) => label.length)) + 1;
-  return Object.entries(rows).map(([label, value]) => `${label.padEnd(width)}: ${value}`);
-}
-
-/** Prints the explanatory block for one question, followed by a blank line. */
-function showQuestionBlock(defined: DefinedVariable): void {
-  blankLine();
-  for (const line of questionBlock(defined)) log(indent(line));
-  blankLine();
-}
-
-/** Asks one question, re-asking until the answer fits the definition. */
-async function promptForAnswer(
-  defined: DefinedVariable,
-  suggestion: string | undefined
-): Promise<string> {
-  const { definition } = defined;
-  const message = `${definition.prompt} (${definingRecipeKey(defined.recipe)})`;
-  const hints = constraintHints(definition).join("; ");
-
-  showQuestionBlock(defined);
 
   const validate = (value: string): true | string => {
     const result = validateAnswer(definition, value);
     return result.ok ? true : result.message;
   };
 
-  if (definition.type === "enum") {
-    const options = definition.validate?.enum ?? [];
-    return select({
-      message,
-      choices: options.map((option) => ({ name: option, value: option })),
-      default: suggestion !== undefined && options.includes(suggestion) ? suggestion : undefined,
+  for (;;) {
+    const view: BasicViewInput = {
+      defined,
+      index: place.index,
+      total: place.total,
+      plan,
+      ...(question.suggestion === undefined ? {} : { suggestion: question.suggestion }),
+    };
+
+    printBlock(basicViewLines(view));
+
+    if (definition.type === "enum") {
+      const enumOptions = definition.validate?.enum ?? [];
+      const picked = await select({
+        message: definition.prompt,
+        choices: enumOptions.map((option) => ({ name: option, value: option })),
+        ...(question.suggestion !== undefined && enumOptions.includes(question.suggestion)
+          ? { default: question.suggestion }
+          : {}),
+      });
+      return { answer: picked, plan };
+    }
+
+    if (definition.type === "boolean") {
+      const current = question.suggestion ?? String(definition.default ?? "");
+      const answered = await confirm({
+        message: definition.prompt,
+        default: ["true", "yes", "y", "on", "1"].includes(current.toLowerCase()),
+      });
+      return { answer: String(answered), plan };
+    }
+
+    const result = await valuePrompt({
+      message: definition.prompt,
+      validate,
+      ...(question.suggestion === undefined ? {} : { default: question.suggestion }),
+      ...(definition.secret ? { mask: true } : {}),
     });
+
+    if (result.kind === "value") return { answer: result.value, plan };
+
+    plan = await runAdvancedView(view, options);
+  }
+}
+
+/**
+ * Groups the questions by the recipe that published them, keeping the order
+ * they arrived in: the subscribed recipe first, then each dependency in closure
+ * order.
+ *
+ * @param questions - Every question that will be asked, in order.
+ */
+function groupQuestions(questions: PlannedQuestion[]): QuestionGroup[] {
+  const groups = new Map<string, QuestionGroup>();
+
+  for (const question of questions) {
+    const key = definingRecipeKey(question.defined.recipe);
+    const chain = question.defined.requiredBy;
+    const existing = groups.get(key);
+    if (existing === undefined) {
+      groups.set(key, {
+        key,
+        direct: chain === undefined || chain.length <= 1,
+        questions: [question],
+      });
+    } else {
+      existing.questions.push(question);
+    }
   }
 
-  if (definition.type === "boolean") {
-    const current = suggestion ?? String(definition.default ?? "");
-    const answered = await confirm({
-      message,
-      default: ["true", "yes", "y", "on", "1"].includes(current.toLowerCase()),
-    });
-    return String(answered);
-  }
-
-  if (definition.secret) {
-    return password({ message: `${message} [${hints}]`, mask: true, validate });
-  }
-
-  return input({
-    message: `${message} [${hints}]`,
-    default: suggestion,
-    validate,
-  });
+  return [...groups.values()];
 }
 
 /**
  * Walks every definition, keeps the answers that already fit, asks for the ones
  * that do not, and stores what it collects in the project's env files.
+ *
+ * Everything is decided before the first question is printed, so the run can
+ * say how many answers each recipe needs before it asks for any of them. In a
+ * subscribe, this runs strictly after the dependency closure has resolved and
+ * every new repository has been trusted; a question is never interleaved with a
+ * trust decision.
  *
  * @param defined - Every variable definition in play.
  * @param context - The environment layers and mapping records to resolve against.
@@ -265,6 +641,10 @@ export async function askForMissing(
   const report: AskReport = { answered: [], inherited: [], skipped: [] };
   const pending: { defined: DefinedVariable; candidates: LadderCandidate[]; current?: string }[] =
     [];
+  const questions: PlannedQuestion[] = [];
+  const deferred: DefinedVariable[] = [];
+  /** Names an earlier question in this same run will write. */
+  const plannedNames = new Set<string>();
 
   for (const entry of defined) {
     if (options.only !== undefined && !isNamed(entry, options.only)) continue;
@@ -281,8 +661,22 @@ export async function askForMissing(
       continue;
     }
 
+    // A question earlier in this run is about to answer one of the names this
+    // variable resolves under, so it is inherited rather than asked; which name
+    // answered is settled once the answer is really stored.
+    if (
+      existing === undefined &&
+      options.reask !== true &&
+      !named &&
+      diagnosis.candidates.some((candidate) => plannedNames.has(candidate.envName))
+    ) {
+      deferred.push(entry);
+      continue;
+    }
+
     const invalid = existing !== undefined && validity?.ok === false;
-    const mustAsk = invalid || (existing === undefined && definition.required) || options.reask === true || named;
+    const mustAsk =
+      invalid || (existing === undefined && definition.required) || options.reask === true || named;
 
     if (!mustAsk) {
       report.skipped.push({
@@ -308,43 +702,166 @@ export async function askForMissing(
           ? String(definition.default)
           : undefined;
 
-    const answer = await promptForAnswer(entry, suggestion);
-    const validated = validateAnswer(definition, answer);
-    if (!validated.ok) {
-      report.skipped.push({ defined: entry, reason: validated.message });
-      continue;
-    }
-
-    const stored = String(validated.value);
-    report.answered.push(await storeAnswer(entry, stored, context, options));
+    plannedNames.add(bareName(definition));
+    questions.push({ defined: entry, ...(suggestion === undefined ? {} : { suggestion }) });
   }
 
   if (pending.length > 0) throw buildNonInteractiveError(pending);
+
+  const groups = groupQuestions(questions);
+  const leadIn = askLeadIn(
+    groups.map((group) => ({
+      key: group.key,
+      count: group.questions.length,
+      direct: group.direct,
+    }))
+  );
+  if (leadIn !== undefined) {
+    blankLine();
+    log(indent(leadIn));
+  }
+
+  for (const group of groups) {
+    blankLine();
+    log(indent(recipeOpeningLine(group.key, group.questions.length)));
+
+    for (const [position, question] of group.questions.entries()) {
+      await runQuestion(
+        question,
+        { index: position + 1, total: group.questions.length },
+        context,
+        options,
+        report
+      );
+    }
+  }
+
+  // A variable another answer was expected to cover: if it really is answered
+  // now, it is inherited; if it is not, it is asked on its own.
+  for (const entry of deferred) {
+    const diagnosis = diagnoseVariable(entry, context);
+    const validity =
+      diagnosis.resolved === undefined
+        ? undefined
+        : validateAnswer(entry.definition, diagnosis.resolved.value);
+
+    if (diagnosis.resolved !== undefined && validity?.ok === true) {
+      report.inherited.push({ defined: entry, resolved: diagnosis.resolved });
+      continue;
+    }
+
+    blankLine();
+    log(indent(recipeOpeningLine(definingRecipeKey(entry.recipe), 1)));
+    await runQuestion(
+      { defined: entry },
+      { index: 1, total: 1 },
+      context,
+      options,
+      report
+    );
+  }
 
   return report;
 }
 
 /**
- * Stores one answer, choosing the env file the definition asks for and, when
- * the name it would use is already bound to something that does not fit,
- * offering to record a mapping instead.
+ * Asks one question, stores the answer, and prints the two lines that say what
+ * was stored and where.
+ *
+ * @param question - The variable and the value Enter alone would accept.
+ * @param place - This question's place in its recipe's run.
+ * @param context - The environment layers, updated as answers are stored.
+ * @param options - Where to write, and whether this is a dry run.
+ * @param report - The report to record the outcome in.
+ */
+async function runQuestion(
+  question: PlannedQuestion,
+  place: { index: number; total: number },
+  context: LadderContext,
+  options: AskOptions,
+  report: AskReport
+): Promise<void> {
+  const { answer, plan } = await askOneQuestion(question, place, options);
+  const validated = validateAnswer(question.defined.definition, answer);
+
+  if (!validated.ok) {
+    report.skipped.push({ defined: question.defined, reason: validated.message });
+    return;
+  }
+
+  const stored = await storeAnswer(
+    question.defined,
+    String(validated.value),
+    context,
+    options,
+    plan
+  );
+  report.answered.push(stored);
+
+  blankLine();
+  log(
+    indent(
+      `  ${color.cyan(stored.envName)}=${displayValue(
+        stored.value,
+        question.defined.definition.secret
+      )}`
+    )
+  );
+  log(
+    indent(
+      `  ${options.dryRun === true ? "Would be saved to" : "Saved to"} ${stored.filePath}`
+    )
+  );
+}
+
+/**
+ * Stores one answer, in the env file and under the name the plan asks for (the
+ * definition's own choices when there is no plan). A name the resolution ladder
+ * would never look at, which is what "another name" in the advanced view
+ * produces, gets a mapping record so the answer is still found; and when the
+ * name the definition asks for is already bound to something that does not fit,
+ * a mapping is offered rather than an overwrite.
+ *
+ * @param defined - The variable being answered.
+ * @param value - The validated answer, in its stored form.
+ * @param context - The environment layers, updated so later lookups see the answer.
+ * @param options - Where to write, and whether this is a dry run.
+ * @param plan - Where the answer should go, when the advanced view settled it.
  */
 async function storeAnswer(
   defined: DefinedVariable,
   value: string,
   context: LadderContext,
-  options: AskOptions
+  options: AskOptions,
+  plan?: StoragePlan
 ): Promise<AnsweredVariable> {
   const { definition } = defined;
-  const file = answerFileFor(definition);
+  const file = plan?.file ?? answerFileFor(definition);
   const filePath = path.join(options.sousDir, file);
 
-  let envName = bareName(definition);
+  let envName = plan?.envName ?? bareName(definition);
   let mapping: AnsweredVariable["mapping"];
+
+  // A chosen name the ladder never looks at needs a record binding it to this
+  // variable, or the answer would be written and then never found again.
+  const reachable = variableCandidates(defined, context).some(
+    (candidate) => candidate.envName === envName
+  );
+  if (!reachable) {
+    const target = formatMappingTarget(mappingTargetFor(defined));
+    const mappingPath =
+      options.dryRun === true
+        ? path.join(options.confDir, VAR_MAPPINGS_LAYER_FILENAME)
+        : writeMappingRecord(options.confDir, envName, target);
+    mapping = { envName, target, filePath: mappingPath };
+    context.mappings = { ...context.mappings, [envName]: target };
+  }
 
   const occupant = lookupEnvName(envName, context);
   const conflicts =
-    occupant !== undefined && validateAnswer(definition, occupant.value).ok === false;
+    mapping === undefined &&
+    occupant !== undefined &&
+    validateAnswer(definition, occupant.value).ok === false;
 
   if (conflicts) {
     const scopedName = recipeScopedName(

@@ -13,15 +13,27 @@ import {
 } from "../../lib/vars/index.js";
 
 // The questions themselves are inquirer's job; these tests are about what sous
-// does with the answers, so the prompts are replaced by queued replies.
+// does with the answers, so every prompt is replaced by queued replies. The
+// value question is sous's own prompt, mocked at its module boundary; queueing
+// the TAB sentinel is how a test presses Tab.
 const answers: string[] = [];
 const choices: unknown[] = [];
+
+/** Queue this in place of an answer to press Tab and open the advanced view. */
+const TAB = "<tab>";
 
 vi.mock("@inquirer/prompts", () => ({
   input: vi.fn(async () => answers.shift() ?? ""),
   password: vi.fn(async () => answers.shift() ?? ""),
   confirm: vi.fn(async () => (answers.shift() ?? "true") === "true"),
   select: vi.fn(async () => choices.shift()),
+}));
+
+vi.mock("../../utils/value-prompt.js", () => ({
+  valuePrompt: vi.fn(async () => {
+    const next = answers.shift() ?? "";
+    return next === TAB ? { kind: "advanced" } : { kind: "value", value: next };
+  }),
 }));
 
 let tmp: TmpDir;
@@ -68,6 +80,22 @@ function context() {
 function readEnv(name: string): string {
   const filePath = path.join(sousDir, name);
   return fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf8") : "";
+}
+
+/** Runs something with console.log captured, and hands back the plain-text lines. */
+async function captureLog(run: () => Promise<void>): Promise<string[]> {
+  const lines: string[] = [];
+  const spy = vi
+    .spyOn(console, "log")
+    .mockImplementation((...args: unknown[]) =>
+      lines.push(args.join(" ").replace(/\x1b\[[0-9;]*m/g, ""))
+    );
+  try {
+    await run();
+  } finally {
+    spy.mockRestore();
+  }
+  return lines;
 }
 
 /**
@@ -240,5 +268,145 @@ describe("asking for missing variable answers", () => {
     expect(report.answered).toHaveLength(1);
     expect(report.inherited).toHaveLength(1);
     expect(report.inherited[0]!.resolved.source.envName).toBe("SOUS_VAR_API_URL");
+  });
+});
+
+/**
+ * The advanced view: what Tab opens, what its menu changes, and what happens to
+ * those changes when they are saved and when they are discarded.
+ */
+describe("the advanced view of a question", () => {
+  /**
+   * Tab, then "Change the stored variable name", then the recipe-scoped name,
+   * then "Save changes and return to value entry" should store the answer under
+   * the chosen name, with no mapping record needed, because that name is one the
+   * resolution ladder already looks at.
+   */
+  it("should store under the chosen name when the change is saved", async () => {
+    answers.push(TAB, "https://example.com");
+    choices.push("name", "SOUS_VAR_MISC_STUFF_API_URL", "save");
+
+    const report = await askForMissing([defined()], context(), {
+      sousDir,
+      confDir,
+      interactive: true,
+    });
+
+    expect(report.answered[0]!.envName).toBe("SOUS_VAR_MISC_STUFF_API_URL");
+    expect(report.answered[0]!.mapping).toBeUndefined();
+    expect(parseEnvLocal(readEnv(".env")).SOUS_VAR_MISC_STUFF_API_URL).toBe(
+      "https://example.com"
+    );
+  });
+
+  /**
+   * Discarding the change should put the plan back exactly as it was, so the
+   * answer lands under the name the definition asked for.
+   */
+  it("should keep the original name when the change is discarded", async () => {
+    answers.push(TAB, "https://example.com");
+    choices.push("name", "SOUS_VAR_MISC_STUFF_API_URL", "discard");
+
+    const report = await askForMissing([defined()], context(), {
+      sousDir,
+      confDir,
+      interactive: true,
+    });
+
+    expect(report.answered[0]!.envName).toBe("SOUS_VAR_API_URL");
+    expect(parseEnvLocal(readEnv(".env")).SOUS_VAR_API_URL).toBe("https://example.com");
+  });
+
+  /**
+   * A secret may be pointed at the committed env file, because the rule is
+   * informed consent rather than prevention: the warning is printed, the
+   * question is asked, and a yes moves the answer to `.sous/.env`.
+   */
+  it("should move a secret to the committed file after a confirmation", async () => {
+    answers.push(TAB, "true", "super-secret-token");
+    choices.push("file", ".env", "save");
+
+    const report = await askForMissing(
+      [defined({ name: "apiToken", type: "string", secret: true, scope: "local" })],
+      context(),
+      { sousDir, confDir, interactive: true }
+    );
+
+    expect(report.answered[0]!.file).toBe(".env");
+    expect(parseEnvLocal(readEnv(".env")).SOUS_VAR_API_TOKEN).toBe("super-secret-token");
+    expect(readEnv(".env.local")).toBe("");
+  });
+
+  /**
+   * Refusing the confirmation should leave the secret where the definition put
+   * it, in the gitignored file.
+   */
+  it("should keep a secret local when the confirmation is refused", async () => {
+    answers.push(TAB, "false", "super-secret-token");
+    choices.push("file", ".env", "return");
+
+    const report = await askForMissing(
+      [defined({ name: "apiToken", type: "string", secret: true, scope: "local" })],
+      context(),
+      { sousDir, confDir, interactive: true }
+    );
+
+    expect(report.answered[0]!.file).toBe(".env.local");
+    expect(readEnv(".env")).toBe("");
+  });
+});
+
+/**
+ * How a run that spans several recipes introduces itself before it asks
+ * anything.
+ */
+describe("questions grouped by recipe", () => {
+  /**
+   * A closure covering more than one recipe should print one lead-in naming
+   * every recipe and its count, then one opening line per recipe before its
+   * own questions.
+   */
+  it("should print the lead-in and one opening line per recipe", async () => {
+    const dependency = {
+      ...defined({ name: "retries", type: "number", prompt: "How many retries?" }),
+      recipe: { repo: "sous-recipes", namespace: "misc", name: "helper", version: "1.0.0" },
+      requiredBy: [
+        { repo: "sous-recipes", namespace: "misc", name: "stuff", version: "1.0.0" },
+        { repo: "sous-recipes", namespace: "misc", name: "helper", version: "1.0.0" },
+      ],
+    } as DefinedVariable;
+
+    answers.push("https://example.com", "3");
+
+    const lines = await captureLog(async () => {
+      await askForMissing([defined(), dependency], context(), {
+        sousDir,
+        confDir,
+        interactive: true,
+      });
+    });
+
+    const joined = lines.join("\n");
+    expect(joined).toContain(
+      "misc/stuff needs 1 answer, and misc/helper, which it depends on, needs 1."
+    );
+    expect(joined).toContain("misc/stuff needs 1 answer before it can be used.");
+    expect(joined).toContain("misc/helper needs 1 answer before it can be used.");
+    expect(joined).toContain("Question 1 of 1: apiUrl");
+  });
+
+  /**
+   * A run covering one recipe needs no lead-in: its opening line already says
+   * everything the lead-in would.
+   */
+  it("should print no lead-in for a single recipe", async () => {
+    answers.push("https://example.com");
+
+    const lines = await captureLog(async () => {
+      await askForMissing([defined()], context(), { sousDir, confDir, interactive: true });
+    });
+
+    expect(lines.join("\n")).not.toContain("which it depends on");
+    expect(lines.join("\n")).toContain("misc/stuff needs 1 answer before it can be used.");
   });
 });

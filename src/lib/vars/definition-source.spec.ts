@@ -127,12 +127,16 @@ describe("loadProjectDefinitions()", () => {
 
     expect(defined).toHaveLength(1);
     expect(defined[0]!.definition.name).toBe("apiUrl");
-    expect(defined[0]!.recipe).toEqual({
+    expect(defined[0]!.recipe).toMatchObject({
       repo: "fixtures",
       namespace: "workflow",
       name: "task-files",
       version: "1.0.0",
+      url: "https://example.com/owner/fixtures",
     });
+    expect(defined[0]!.recipe.dir).toContain(
+      path.join("fixtures", "workflow", "task-files", "1.0.0")
+    );
   });
 });
 
