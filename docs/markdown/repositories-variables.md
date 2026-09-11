@@ -189,8 +189,10 @@ workflow/task-files needs 4 answers, and workflow/sub-agent-delegation, which it
 ```
 
 Each question then prints its own view: the header, the publisher's description wrapped to your
-terminal, the default and the example, one muted line saying exactly where the answer will be
-stored, and a hint naming the two keys that do anything here.
+terminal, four labeled facts (the default, the example, and exactly where the answer will be
+stored and under what name), and a hint naming the two keys that do anything here. Those facts are
+drawn by the renderer the advanced view uses, so the same label means the same thing and lines up
+the same way on both.
 
 ```term
 workflow/task-files needs 4 answers before it can be used.
@@ -203,9 +205,10 @@ will store and search for your task files. The default value stores task files i
 the project's .sous directory, but you can specify any local path, either relative
 to the project root or absolute.
 
-  @default  .sous/tasks
-  @example  ~/my-task-files
-  Stored as SOUS_VAR_TASK_FILE_ROOT in .sous/.env
+  @default       .sous/tasks
+  @example       ~/my-task-files
+  @stored-as     SOUS_VAR_TASK_FILE_ROOT
+  @storage-path  /home/you/project/.sous/.env
 
 [ENTER to accept the default; TAB for advanced info and options]
 ? Where should task files be stored? (.sous/tasks):
@@ -252,14 +255,14 @@ will store and search for your task files. The default value stores task files i
 the project's .sous directory, but you can specify any local path, either relative
 to the project root or absolute.
 
-@default       .sous/tasks
-@example       ~/my-task-files
-@required-by   workflow/task-files (https://example.com/owner/recipes/workflow/task-files)
-@defined-by    workflow/task-files (https://example.com/owner/recipes/workflow/task-files)
-@storage-path  /home/you/project/.sous/.env
-@stored-as     SOUS_VAR_TASK_FILE_ROOT
-@constraints   - must be a value of the type path (type: path)
-               - must be at least 1 character long (minLength: 1)
+  @default       .sous/tasks
+  @example       ~/my-task-files
+  @required-by   workflow/task-files (https://example.com/owner/recipes/workflow/task-files)
+  @defined-by    workflow/task-files (https://example.com/owner/recipes/workflow/task-files)
+  @storage-path  /home/you/project/.sous/.env
+  @stored-as     SOUS_VAR_TASK_FILE_ROOT
+  @constraints   - must be a value of the type path (type: path)
+                 - must be at least 1 character long (minLength: 1)
 
 ? What would you like to do?
   Return to value entry
@@ -281,7 +284,8 @@ becomes "Save changes and return to value entry" and a "Discard changes" item jo
 A secret, or a variable the publisher declared machine-specific, may still be pointed at the
 committed file. Sous does not prevent it; it says plainly that the value would enter your git
 history and asks you to confirm, which is informed consent rather than a locked door. Returning to
-the value question prints its view again, with the updated "Stored as" line.
+the value question prints its view again, with the updated `@stored-as` and `@storage-path`
+facts.
 
 Every run ends with the same three-part report: what was inherited from an answer already in
 scope, what was stored and under which name in which file, and what was left unanswered and why.

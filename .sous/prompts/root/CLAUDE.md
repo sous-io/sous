@@ -357,8 +357,10 @@ the advanced view, whose menu changes the storage file or the stored env var nam
 or discard. A secret may still be pointed at the committed
 file, after a warning and a confirmation; informed consent, not prevention. The labeled facts
 block (`@default`, `@example`, `@required-by`, `@defined-by`, `@storage-path`, `@stored-as`,
-`@constraints`) is ONE renderer in `display.ts`, used by the advanced view and by
-`sous vars show`, so the vocabulary cannot drift. `env-file.ts` is the write
+`@constraints`) is ONE renderer in `display.ts`, used by the basic view (narrowed to
+`BASIC_FACT_LABELS` via `selectFacts`), the advanced view and `sous vars show`, so neither the
+vocabulary nor the indentation can drift; `renderFacts` indents the block itself, so no caller
+adds its own. `env-file.ts` is the write
 half of `env-local.ts`: it parses a line model, rewrites exactly one value line or appends
 one under a generated header comment, and writes atomically, so comments, order and quoting
 survive. Comments are output only and are never read back.

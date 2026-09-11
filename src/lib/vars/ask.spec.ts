@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  advancedViewLines,
   ANOTHER_NAME,
   askLeadIn,
   basicViewLines,
@@ -89,28 +90,75 @@ describe("recipeOpeningLine()", () => {
 /** The view printed above every value question. */
 describe("basicViewLines()", () => {
   /**
-   * The basic view should carry the question header, the description, the
-   * default and example, the one line saying where the answer is stored, and
-   * the hint naming both keys that do anything.
+   * The basic view should carry the question header, the description, the four
+   * labeled facts a person needs before typing an answer, and the hint naming
+   * both keys that do anything. The facts are indented and labeled exactly as
+   * the advanced view draws them.
    */
-  it("should draw the header, the facts and the hint", () => {
-    const lines = basicViewLines({
+  it("should draw the header, the labeled facts and the hint", () => {
+    const lines = basicViewLines(
+      {
+        defined: defined(),
+        index: 1,
+        total: 4,
+        plan: { file: ".env", envName: "SOUS_VAR_TASK_FILE_ROOT" },
+        suggestion: ".sous/tasks",
+        width: 80,
+      },
+      "/home/me/project/.sous/.env"
+    ).map(strip);
+
+    expect(lines[0]).toBe("Question 1 of 4: taskFileRoot");
+    expect(lines).toContain("This recipe stores task files locally.");
+    expect(lines).toContain("  @default       .sous/tasks");
+    expect(lines).toContain("  @example       ~/my-task-files");
+    expect(lines).toContain("  @stored-as     SOUS_VAR_TASK_FILE_ROOT");
+    expect(lines).toContain("  @storage-path  /home/me/project/.sous/.env");
+    expect(lines[lines.length - 1]).toBe(
+      "[ENTER to accept the default; TAB for advanced info and options]"
+    );
+  });
+
+  /**
+   * The muted sentence that used to say where the answer would be stored is
+   * gone; the two labeled facts say it instead.
+   */
+  it("should not repeat the storage facts as a sentence", () => {
+    const lines = basicViewLines(
+      {
+        defined: defined(),
+        index: 1,
+        total: 4,
+        plan: { file: ".env", envName: "SOUS_VAR_TASK_FILE_ROOT" },
+        width: 80,
+      },
+      "/home/me/project/.sous/.env"
+    ).map(strip);
+
+    expect(lines.join("\n")).not.toContain("Stored as");
+  });
+
+  /**
+   * The basic and the advanced view draw their shared facts identically, down
+   * to the indentation and the label column, because both come from the one
+   * renderer.
+   */
+  it("should draw its facts exactly as the advanced view draws them", () => {
+    const input = {
       defined: defined(),
       index: 1,
       total: 4,
       plan: { file: ".env", envName: "SOUS_VAR_TASK_FILE_ROOT" },
-      suggestion: ".sous/tasks",
       width: 80,
-    }).map(strip);
+    };
+    const storagePath = "/home/me/project/.sous/.env";
 
-    expect(lines[0]).toBe("Question 1 of 4: taskFileRoot");
-    expect(lines).toContain("This recipe stores task files locally.");
-    expect(lines).toContain("  @default  .sous/tasks");
-    expect(lines).toContain("  @example  ~/my-task-files");
-    expect(lines).toContain("  Stored as SOUS_VAR_TASK_FILE_ROOT in .env");
-    expect(lines[lines.length - 1]).toBe(
-      "[ENTER to accept the default; TAB for advanced info and options]"
-    );
+    const basic = basicViewLines(input, storagePath).map(strip);
+    const advanced = advancedViewLines(input, storagePath).map(strip);
+
+    for (const line of basic.filter((text) => text.startsWith("  @"))) {
+      expect(advanced).toContain(line);
+    }
   });
 
   /**
@@ -120,13 +168,16 @@ describe("basicViewLines()", () => {
   it("should drop the Enter half of the hint when there is no default", () => {
     const entry = defined();
     delete entry.definition.default;
-    const lines = basicViewLines({
-      defined: entry,
-      index: 2,
-      total: 2,
-      plan: { file: ".env.local", envName: "SOUS_VAR_TASK_FILE_ROOT" },
-      width: 80,
-    }).map(strip);
+    const lines = basicViewLines(
+      {
+        defined: entry,
+        index: 2,
+        total: 2,
+        plan: { file: ".env.local", envName: "SOUS_VAR_TASK_FILE_ROOT" },
+        width: 80,
+      },
+      "/home/me/project/.sous/.env.local"
+    ).map(strip);
 
     expect(lines.join("\n")).not.toContain("@default");
     expect(lines[lines.length - 1]).toBe("[TAB for advanced info and options]");
@@ -141,14 +192,17 @@ describe("basicViewLines()", () => {
       { type: "enum" as const, validate: { enum: ["red", "blue"] } },
       { type: "boolean" as const },
     ]) {
-      const lines = basicViewLines({
-        defined: defined(definition),
-        index: 1,
-        total: 1,
-        plan: { file: ".env", envName: "SOUS_VAR_TASK_FILE_ROOT" },
-        suggestion: "red",
-        width: 80,
-      }).map(strip);
+      const lines = basicViewLines(
+        {
+          defined: defined(definition),
+          index: 1,
+          total: 1,
+          plan: { file: ".env", envName: "SOUS_VAR_TASK_FILE_ROOT" },
+          suggestion: "red",
+          width: 80,
+        },
+        "/home/me/project/.sous/.env"
+      ).map(strip);
 
       expect(lines[lines.length - 1]).toBe(
         "[ENTER to choose; TAB for advanced info and options]"

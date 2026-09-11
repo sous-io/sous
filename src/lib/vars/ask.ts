@@ -41,7 +41,13 @@ import {
   definingRecipeKey,
   type DefinedVariable,
 } from "./definition-source.js";
-import { displayValue, renderFacts, variableFacts } from "./display.js";
+import {
+  BASIC_FACT_LABELS,
+  displayValue,
+  renderFacts,
+  selectFacts,
+  variableFacts,
+} from "./display.js";
 import {
   describeSource,
   diagnoseVariable,
@@ -302,40 +308,34 @@ export interface BasicViewInput {
 
 /**
  * The basic view of one question: the header, the publisher's description
- * wrapped to the terminal, the default and the example, the one muted line
- * saying where the answer will be stored, and the hint naming the two keys that
- * do anything here.
+ * wrapped to the terminal, the facts a person needs before typing an answer,
+ * and the hint naming the two keys that do anything here. The facts are the
+ * same labeled block the advanced view draws, narrowed to four labels, so the
+ * two views always read and line up the same way.
  *
  * @param input - The question, its place in the run, and where the answer is going.
+ * @param storagePath - The absolute path of the env file the answer goes into.
  * @returns The lines to print, without indentation.
  */
-export function basicViewLines(input: BasicViewInput): string[] {
+export function basicViewLines(input: BasicViewInput, storagePath: string): string[] {
   const { defined, index, total, plan } = input;
   const { definition } = defined;
   const width = input.width ?? terminalColumns();
 
-  const lines: string[] = [
+  const facts = selectFacts(
+    variableFacts({ defined, storagePath, storedAs: plan.envName }),
+    BASIC_FACT_LABELS
+  );
+
+  return [
     color.bold(`Question ${index} of ${total}: ${color.cyan(definition.name)}`),
     "",
     ...wrapText(definition.description, width),
     "",
+    ...renderFacts(facts, width),
+    "",
+    color.gray(questionHint(definition, input.suggestion)),
   ];
-
-  const rows: Array<[string, string]> = [];
-  if (definition.default !== undefined) rows.push(["@default", String(definition.default)]);
-  rows.push(["@example", String(definition.example)]);
-  const labelWidth = Math.max(...rows.map(([label]) => label.length)) + 2;
-  for (const [label, value] of rows) {
-    lines.push(`  ${color.cyan(label.padEnd(labelWidth))}${value}`);
-  }
-  lines.push(
-    color.gray(`  Stored as ${plan.envName} in ${plan.file}`)
-  );
-
-  lines.push("");
-  lines.push(color.gray(questionHint(definition, input.suggestion)));
-
-  return lines;
 }
 
 /**
@@ -645,7 +645,7 @@ async function askOneQuestion(
       ...(question.suggestion === undefined ? {} : { suggestion: question.suggestion }),
     };
 
-    printBlock(basicViewLines(view));
+    printBlock(basicViewLines(view, path.join(options.sousDir, plan.file)));
 
     // Every kind of question ends the same way: an answer, or a request for the
     // advanced view, which is shown and then hands back here to ask again.

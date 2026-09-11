@@ -141,23 +141,58 @@ export function variableFacts(input: VariableFactsInput): LabeledFact[] {
 }
 
 /**
+ * The facts the basic view of a question shows, in the order it shows them. It
+ * is a subset of the same list the advanced view prints, selected by label, so
+ * the two views can never word a fact differently or lay it out differently.
+ */
+export const BASIC_FACT_LABELS = [
+  "@default",
+  "@example",
+  "@stored-as",
+  "@storage-path",
+];
+
+/**
+ * Picks the named facts out of a fact list, in the order the labels were given
+ * and skipping any the variable does not have (a variable with no default has
+ * no `@default` fact).
+ *
+ * @param facts - Every fact about the variable.
+ * @param labels - The labels to keep, in the order they should be shown.
+ */
+export function selectFacts(facts: LabeledFact[], labels: string[]): LabeledFact[] {
+  const byLabel = new Map(facts.map((fact) => [fact.label, fact]));
+  return labels
+    .map((label) => byLabel.get(label))
+    .filter((fact): fact is LabeledFact => fact !== undefined);
+}
+
+/**
+ * How far a rendered facts block is indented under the text above it. Every
+ * caller gets it from the renderer, so a facts block is indented the same
+ * amount wherever it appears.
+ */
+export const FACTS_INDENT = 2;
+
+/**
  * Lays the labeled facts out with the labels aligned and every continuation
  * line hanging under the first, wrapping the text to the width it was given.
  *
  * @param facts - The facts to render.
- * @param width - The column to wrap at.
- * @returns The rendered lines, colored for a terminal, without indentation.
+ * @param width - The column to wrap at, indentation included.
+ * @returns The rendered lines, colored for a terminal, indented by `FACTS_INDENT`.
  */
 export function renderFacts(facts: LabeledFact[], width = 100): string[] {
+  const pad = " ".repeat(FACTS_INDENT);
   const labelWidth = Math.max(...facts.map((fact) => fact.label.length)) + 2;
-  const textWidth = Math.max(20, width - labelWidth);
+  const textWidth = Math.max(20, width - labelWidth - FACTS_INDENT);
   const lines: string[] = [];
 
   for (const fact of facts) {
     const wrapped = fact.lines.flatMap((line) => wrapText(line, textWidth));
     wrapped.forEach((text, index) => {
       const label = index === 0 ? fact.label.padEnd(labelWidth) : " ".repeat(labelWidth);
-      lines.push(`${color.cyan(label)}${text}`);
+      lines.push(`${pad}${color.cyan(label)}${text}`);
     });
   }
 

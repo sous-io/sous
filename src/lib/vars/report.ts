@@ -206,7 +206,9 @@ export function printVariableDetail(
         options.sousDir === undefined ? file : path.join(options.sousDir, file),
       storedAs: resolved?.source.envName ?? bareName(definition),
     });
-    for (const line of renderFacts(facts, terminalColumns() - 2)) log(indent(line));
+    // renderFacts indents the block itself, so every facts block in the CLI
+    // sits at the same depth.
+    for (const line of renderFacts(facts, terminalColumns())) log(line);
 
     blankLine();
     subheading("Environment variables sous looks at, most specific first");

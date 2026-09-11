@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  BASIC_FACT_LABELS,
   recipeLink,
   renderFacts,
+  selectFacts,
   variableFacts,
   type LabeledFact,
 } from "./display.js";
@@ -156,8 +158,40 @@ describe("renderFacts()", () => {
       40
     ).map(strip);
 
-    expect(lines[0]).toBe("@default      .sous/tasks");
-    expect(lines[1]).toBe("@constraints  - one");
-    expect(lines[2]).toBe("              - two");
+    expect(lines[0]).toBe("  @default      .sous/tasks");
+    expect(lines[1]).toBe("  @constraints  - one");
+    expect(lines[2]).toBe("                - two");
+  });
+
+  /**
+   * The block indents itself, so every view that prints facts puts them at the
+   * same depth without each caller remembering to.
+   */
+  it("should indent every line it renders", () => {
+    const lines = renderFacts([{ label: "@example", lines: ["~/tasks"] }], 40).map(strip);
+    for (const line of lines) expect(line.startsWith("  ")).toBe(true);
+  });
+});
+
+/** The subset of facts the basic view of a question shows. */
+describe("selectFacts()", () => {
+  /**
+   * selectFacts should return the named facts in the order they were asked for,
+   * and quietly drop one the variable does not have.
+   */
+  it("should keep the named facts in order and skip missing ones", () => {
+    const facts = variableFacts({
+      defined: defined(),
+      storagePath: "/home/me/project/.sous/.env",
+      storedAs: "SOUS_VAR_TASK_FILE_ROOT",
+    });
+
+    expect(selectFacts(facts, BASIC_FACT_LABELS).map((fact) => fact.label)).toEqual([
+      "@default",
+      "@example",
+      "@stored-as",
+      "@storage-path",
+    ]);
+    expect(selectFacts(facts, ["@nothing-defines-this"])).toEqual([]);
   });
 });
