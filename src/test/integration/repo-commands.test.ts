@@ -9,6 +9,10 @@ import { parseIndexFile } from "../../lib/repos/formats/index-file.js";
 import { parseRecipeManifest } from "../../lib/repos/formats/recipe-manifest.js";
 import { parseRepoManifest } from "../../lib/repos/formats/repo-manifest.js";
 import { parseLinksMap, type LinksMap } from "../../lib/repos/formats/links-map.js";
+import {
+  readManagedLayer,
+  REPOS_LAYER_FILENAME,
+} from "../../lib/repos/managed-layer.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const binPath = path.join(repoRoot, "bin", "run.js");
@@ -466,10 +470,13 @@ describe("sous repo add with a local path", () => {
     tmp.cleanup();
   });
 
-  /** Reads the managed repositories layer sous writes when a repository is added. */
+  /**
+   * Reads the managed repositories layer sous writes when a repository is
+   * added. The layer is JSON with comments, so it is read through the same
+   * reader the CLI uses rather than through `JSON.parse`.
+   */
   function readReposLayer(): Record<string, { url: string; provider?: string }> {
-    const file = path.join(sousDir, "conf.d", "500-repos.json");
-    const layer = JSON.parse(fs.readFileSync(file, "utf8")) as {
+    const layer = readManagedLayer(sousDir, REPOS_LAYER_FILENAME) as {
       repos?: Record<string, { url: string; provider?: string }>;
     };
     return layer.repos ?? {};
