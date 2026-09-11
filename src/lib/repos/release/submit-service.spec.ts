@@ -1,9 +1,34 @@
+/**
+ * Unit tests for the submission sequencer.
+ *
+ * The provider is a fake implementing the provider interface, which is the
+ * point: `submitRepo` is meant to know the ORDER of the steps and nothing about
+ * the host, so every host-specific answer here comes from a stand-in and every
+ * test can assert on what the sequencer asked for. Real git runs against a
+ * temporary repository; a push is intercepted, and a call to anything that is
+ * not git fails the test outright.
+ */
+
 import fs from "node:fs";
 import path from "node:path";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { makeTmpDir, type TmpDir } from "../../../test/utils/tmp.js";
 import { commitAll, git, initRepo, writeFile } from "../../../test/utils/git-repo.js";
-import { spawnCommand, type CommandResult, type CommandRunner } from "../providers/git.js";
+import { ProviderBase } from "../providers/base.js";
+import { spawnCommand, type CommandRunner } from "../providers/git.js";
+import {
+  buildCanonicalRepo,
+  splitRepoUrl,
+  type AuthStatus,
+  type CanonicalRepo,
+  type ChangeProposal,
+  type FetchedIndex,
+  type ForkedRepo,
+  type ProposedChange,
+  type ProviderCli,
+  type ProviderFeature,
+  type ProviderOptions,
+} from "../providers/provider.js";
 import { submitRepo } from "./submit-service.js";
 import { buildIndex, indexFilePath } from "./index-builder.js";
 import { validateRepo } from "./validate.js";
@@ -15,56 +40,117 @@ let calls: Array<{ command: string; args: string[] }>;
 /** The sous version recorded when the index is regenerated for the check. */
 const GENERATOR = "1.2.3";
 
-/** A successful result with the given standard output. */
-function ok(stdout = ""): CommandResult {
-  return { code: 0, stdout, stderr: "" };
-}
+/** What the fake provider should answer on the write path. */
+type FakeAnswers = {
+  /** What the sign-in check reports. Defaults to signed in. */
+  auth?: AuthStatus;
+  /** What push permission comes back as. Defaults to "you may push". */
+  canPush?: boolean | undefined;
+  /** When set, forking fails with this message. */
+  forkError?: string;
+  /** When set, proposing fails with this message. */
+  proposeError?: string;
+  /** The address the proposal reports. Defaults to a pull request URL. */
+  proposalUrl?: string;
+  /** The features the provider declares. Defaults to fetch and submit. */
+  features?: ProviderFeature[];
+};
 
-/** A failed result with the given standard error. */
-function fail(stderr: string, code = 1): CommandResult {
-  return { code, stdout: "", stderr };
+/**
+ * A provider stand-in. It answers the write path from a table and records every
+ * call, so a test sees exactly what the sequencer asked of it, in order.
+ */
+class FakeProvider extends ProviderBase {
+  readonly id = "github" as const;
+  readonly features: ProviderFeature[];
+  readonly cli: ProviderCli = {
+    command: "fake-cli",
+    label: "the stand-in host CLI",
+    install: "https://example.com/install",
+  };
+  readonly proposalNoun = "pull request";
+
+  /** Every write-path call the sequencer made, in order. */
+  readonly asked: string[] = [];
+
+  /** The proposal the sequencer composed, once it has composed one. */
+  proposal: ChangeProposal | undefined;
+
+  constructor(private readonly answers: FakeAnswers = {}) {
+    super();
+    this.features = answers.features ?? ["fetch", "submit"];
+  }
+
+  matches(url: string): boolean {
+    return splitRepoUrl(url)?.host === "github.com";
+  }
+
+  canonicalize(url: string): CanonicalRepo {
+    const parts = splitRepoUrl(url)!;
+    return buildCanonicalRepo(parts.host, parts.owner, parts.name);
+  }
+
+  async fetchIndex(): Promise<FetchedIndex> {
+    throw new Error("the submission never reads an index through the provider");
+  }
+
+  async fetchRecipeTree(): Promise<void> {
+    throw new Error("the submission never fetches a recipe tree");
+  }
+
+  async authStatus(_options: ProviderOptions = {}): Promise<AuthStatus> {
+    this.asked.push("authStatus");
+    return this.answers.auth ?? { ok: true, detail: "signed in to the stand-in host." };
+  }
+
+  async canPush(
+    _repo: CanonicalRepo,
+    _options: ProviderOptions = {}
+  ): Promise<boolean | undefined> {
+    this.asked.push("canPush");
+    return "canPush" in this.answers ? this.answers.canPush : true;
+  }
+
+  async fork(repo: CanonicalRepo, _options: ProviderOptions = {}): Promise<ForkedRepo> {
+    this.asked.push("fork");
+    if (this.answers.forkError !== undefined) throw new Error(this.answers.forkError);
+    return {
+      owner: "contributor",
+      name: repo.name,
+      httpsUrl: `https://${repo.host}/contributor/${repo.name}.git`,
+      sshUrl: `git@${repo.host}:contributor/${repo.name}.git`,
+    };
+  }
+
+  async proposeChange(
+    _repo: CanonicalRepo,
+    proposal: ChangeProposal,
+    _options: ProviderOptions = {}
+  ): Promise<ProposedChange> {
+    this.asked.push("proposeChange");
+    this.proposal = proposal;
+    if (this.answers.proposeError !== undefined) throw new Error(this.answers.proposeError);
+    const url = this.answers.proposalUrl ?? "https://github.com/owner/recipes/pull/7";
+    return { url, detail: `The pull request is at ${url}.` };
+  }
 }
 
 /**
- * A runner that lets real git run against the temporary repository, and answers
- * for the provider's CLI. A push is always intercepted: the origin URL has to
- * look like a real GitHub address for the provider to be detected, and no test
- * here is allowed to reach one. Every call is recorded, so a test can assert on
- * exactly what would have been sent.
+ * A runner that lets real git run against the temporary repository. A push is
+ * always intercepted: the origin URL has to look like a real GitHub address for
+ * the provider to match it, and no test here is allowed to reach one. Anything
+ * that is not git fails the test, which is how these tests prove the sequencer
+ * never spawns a provider's command line tool itself.
  */
-function makeRunner(
-  answer: (command: string, args: string[]) => CommandResult | undefined
-): CommandRunner {
+function makeRunner(): CommandRunner {
   return async (command, args, options) => {
     calls.push({ command, args });
-    const answered = answer(command, args);
-    if (answered !== undefined) return answered;
-    if (command === "git" && args[0] === "push") return ok("");
+    if (command === "git" && args[0] === "push") return { code: 0, stdout: "", stderr: "" };
     if (command === "git") return spawnCommand(command, args, options);
-    throw new Error(`unexpected command in this test: ${command} ${args.join(" ")}`);
+    throw new Error(
+      `the sequencer spawned '${command}' itself; the provider owns every host command`
+    );
   };
-}
-
-/** The provider CLI answers a well-behaved GitHub submission produces. */
-function githubAnswers(overrides: Partial<Record<string, CommandResult>> = {}) {
-  return (command: string, args: string[]): CommandResult | undefined => {
-    if (command !== "gh") return undefined;
-    const key = args.slice(0, 2).join(" ");
-    if (Object.hasOwn(overrides, key)) return overrides[key];
-    if (key === "auth status") return ok("");
-    if (key === "api repos/owner/recipes") return ok("true\n");
-    if (key === "api user") return ok("contributor\n");
-    if (key === "repo fork") return ok("");
-    if (key === "pr create") return ok("https://github.com/owner/recipes/pull/7\n");
-    return undefined;
-  };
-}
-
-/** Finds the recorded call to one command, by its first two arguments. */
-function callTo(command: string, key: string) {
-  return calls.find(
-    (entry) => entry.command === command && entry.args.slice(0, 2).join(" ") === key
-  );
 }
 
 beforeEach(() => {
@@ -88,7 +174,7 @@ beforeEach(() => {
   writeFile(repo, "recipes/core/example/skills/one.md", "first\n");
   commitAll(repo, "add the example recipe");
 
-  // A real GitHub address, so the provider is detected; every push is
+  // A real GitHub address, so the stand-in provider matches it; every push is
   // intercepted by the runner, so nothing leaves the machine.
   git(repo, "remote", "add", "origin", "https://github.com/owner/recipes.git");
 });
@@ -108,15 +194,21 @@ async function commitCurrentIndex(): Promise<void> {
   commitAll(repo, "regenerate the index");
 }
 
-/** Runs a submission against the temporary repository. */
+/** Runs a submission against the temporary repository, through one provider. */
 async function submit(
-  run: CommandRunner,
-  options: { dryRun?: boolean; title?: string; draft?: boolean } = {}
+  provider: FakeProvider,
+  options: {
+    dryRun?: boolean;
+    title?: string;
+    draft?: boolean;
+    onNotice?: (message: string) => void;
+  } = {}
 ) {
   return submitRepo({
     rootDir: repo,
     sousVersion: GENERATOR,
-    run,
+    run: makeRunner(),
+    providers: [provider],
     now: new Date(2026, 8, 10, 14, 3),
     ...options,
   });
@@ -125,13 +217,14 @@ async function submit(
 describe("submitRepo()", () => {
   /**
    * The whole path, for a contributor who can push to the repository itself: a
-   * branch is made, pushed to origin, and a pull request is opened against the
-   * default branch with the title and body sous composed.
+   * branch is made, pushed to origin, and the provider is handed a proposal
+   * against the default branch with the title and body sous composed.
    */
-  it("should branch, push to origin and open a pull request", async () => {
+  it("should branch, push to origin and ask the provider to propose the change", async () => {
     await commitCurrentIndex();
+    const provider = new FakeProvider();
 
-    const result = await submit(makeRunner(githubAnswers()));
+    const result = await submit(provider);
 
     expect(result.provider).toBe("github");
     expect(result.branch).toBe("sous/submit-20260910-1403");
@@ -140,64 +233,93 @@ describe("submitRepo()", () => {
     expect(result.url).toBe("https://github.com/owner/recipes/pull/7");
     expect(result.title).toBe("regenerate the index");
 
-    const created = callTo("gh", "pr create")!;
-    expect(created.args).toContain("--repo");
-    expect(created.args).toContain("owner/recipes");
-    expect(created.args).toContain("--head");
-    expect(created.args).toContain("sous/submit-20260910-1403");
-    expect(created.args).not.toContain("--draft");
-    expect(created.args.join("\n")).toMatch(/core\/example at version 1\.0\.0/);
+    expect(provider.asked).toEqual(["authStatus", "canPush", "proposeChange"]);
+    expect(provider.proposal?.branch).toBe("sous/submit-20260910-1403");
+    expect(provider.proposal?.head).toBeUndefined();
+    expect(provider.proposal?.draft).toBe(false);
+    expect(provider.proposal?.body).toMatch(/core\/example at version 1\.0\.0/);
     expect(git(repo, "branch", "--list", "sous/submit-20260910-1403")).not.toBe("");
   });
 
   /**
-   * A contributor who cannot push forks the repository first, and the pull
-   * request's head names the fork's owner, which is what a cross-repository
-   * proposal needs.
+   * The sequencer owns no host command. Everything it spawns for itself is git;
+   * the fork and the proposal are asked of the provider.
+   *
+   * calls.every((entry) => entry.command === "git");  // -> true
+   */
+  it("should spawn nothing but git of its own accord", async () => {
+    await commitCurrentIndex();
+
+    await submit(new FakeProvider({ canPush: false }));
+
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls.every((entry) => entry.command === "git")).toBe(true);
+  });
+
+  /**
+   * A contributor who cannot push has the repository forked by the provider,
+   * and the proposal names the fork's owner as its head, which is what a
+   * cross-repository proposal needs.
    */
   it("should fork and propose from the fork when the contributor cannot push", async () => {
     await commitCurrentIndex();
+    const provider = new FakeProvider({ canPush: false });
 
-    const run = makeRunner(githubAnswers({ "api repos/owner/recipes": ok("false\n") }));
-
-    const result = await submit(run);
+    const result = await submit(provider);
 
     expect(result.usedFork).toBe(true);
     expect(result.pushedTo).toBe("fork");
-    expect(callTo("gh", "repo fork")!.args).toContain("--remote=false");
-    expect(callTo("gh", "pr create")!.args).toContain(
-      "contributor:sous/submit-20260910-1403"
-    );
+    expect(provider.asked).toEqual(["authStatus", "canPush", "fork", "proposeChange"]);
+    expect(provider.proposal?.head).toEqual({ owner: "contributor" });
     expect(git(repo, "remote", "get-url", "fork")).toBe(
       "https://github.com/contributor/recipes.git"
     );
   });
 
   /**
-   * A draft proposal passes the flag through, so the maintainers see it is not
-   * ready for review yet.
+   * A provider that cannot tell whether the contributor may push is taken at
+   * its word: nothing is forked, the change goes to origin, and the
+   * contributor is told why.
    */
-  it("should open a draft when asked for one", async () => {
+  it("should push to origin and say so when push permission is unknowable", async () => {
     await commitCurrentIndex();
+    const notices: string[] = [];
+    const provider = new FakeProvider({ canPush: undefined });
 
-    await submit(makeRunner(githubAnswers()), { draft: true, title: "Work in progress" });
+    const result = await submit(provider, { onNotice: (message) => notices.push(message) });
 
-    const created = callTo("gh", "pr create")!;
-    expect(created.args).toContain("--draft");
-    expect(created.args).toContain("Work in progress");
+    expect(result.usedFork).toBe(false);
+    expect(result.pushedTo).toBe("origin");
+    expect(provider.asked).not.toContain("fork");
+    expect(notices.join("\n")).toMatch(/could not tell whether you can push/);
+  });
+
+  /**
+   * A draft proposal reaches the provider as a draft, so the maintainers see it
+   * is not ready for review yet.
+   */
+  it("should pass a draft and a given title through to the provider", async () => {
+    await commitCurrentIndex();
+    const provider = new FakeProvider();
+
+    await submit(provider, { draft: true, title: "Work in progress" });
+
+    expect(provider.proposal?.draft).toBe(true);
+    expect(provider.proposal?.title).toBe("Work in progress");
   });
 
   /**
    * A dry run checks everything and sends nothing: no branch, no push, no
-   * proposal.
+   * fork, no proposal.
    */
   it("should check everything and send nothing on a dry run", async () => {
     await commitCurrentIndex();
+    const provider = new FakeProvider({ canPush: false });
 
-    const result = await submit(makeRunner(githubAnswers()), { dryRun: true });
+    const result = await submit(provider, { dryRun: true });
 
     expect(result.dryRun).toBe(true);
-    expect(callTo("gh", "pr create")).toBeUndefined();
+    expect(provider.asked).toEqual(["authStatus", "canPush"]);
     expect(calls.some((entry) => entry.command === "git" && entry.args[0] === "push")).toBe(
       false
     );
@@ -205,18 +327,32 @@ describe("submitRepo()", () => {
   });
 
   /**
-   * The provider's CLI is how the proposal is sent, so a missing or signed-out
-   * one stops the run, and the message carries the repository's own
-   * contribution pointer.
+   * The provider is how the proposal is sent, so a provider that is not signed
+   * in stops the run. The explanation is the provider's own, and the
+   * repository's contribution pointer is added to it.
    */
-  it("should stop and print the contribution pointer when the provider CLI is not usable", async () => {
+  it("should stop with the provider's reason and the contribution pointer", async () => {
     await commitCurrentIndex();
+    const provider = new FakeProvider({
+      auth: { ok: false, detail: "The stand-in host CLI is not signed in." },
+    });
 
-    const run = makeRunner((command, args) =>
-      command === "gh" && args[0] === "auth" ? fail("not logged in", 1) : githubAnswers()(command, args)
-    );
+    await expect(submit(provider)).rejects.toThrow(/not signed in/);
+    await expect(submit(provider)).rejects.toThrow(/recipes@example\.com/);
+  });
 
-    await expect(submit(run)).rejects.toThrow(/recipes@example\.com/);
+  /**
+   * A provider that does not promise the submit feature is never asked to
+   * carry a proposal, and the message points at the route the repository
+   * documents instead.
+   */
+  it("should refuse a provider that does not promise to submit", async () => {
+    await commitCurrentIndex();
+    const provider = new FakeProvider({ features: ["fetch"] });
+
+    await expect(submit(provider)).rejects.toThrow(/cannot propose a change on your behalf/);
+    await expect(submit(provider)).rejects.toThrow(/recipes@example\.com/);
+    expect(provider.asked).toEqual([]);
   });
 
   /**
@@ -227,9 +363,7 @@ describe("submitRepo()", () => {
     await commitCurrentIndex();
     writeFile(repo, "recipes/core/example/skills/two.md", "second\n");
 
-    await expect(submit(makeRunner(githubAnswers()))).rejects.toThrow(
-      /skills\/two\.md/
-    );
+    await expect(submit(new FakeProvider())).rejects.toThrow(/skills\/two\.md/);
   });
 
   /**
@@ -239,9 +373,7 @@ describe("submitRepo()", () => {
   it("should refuse while the committed index is out of date", async () => {
     git(repo, "tag", "--annotate", "core/example@1.0.0", "--message", "release");
 
-    await expect(submit(makeRunner(githubAnswers()))).rejects.toThrow(
-      /Run 'sous repo release'/
-    );
+    await expect(submit(new FakeProvider())).rejects.toThrow(/Run 'sous repo release'/);
   });
 
   /**
@@ -252,9 +384,7 @@ describe("submitRepo()", () => {
     await commitCurrentIndex();
     git(repo, "remote", "remove", "origin");
 
-    await expect(submit(makeRunner(githubAnswers()))).rejects.toThrow(
-      /no 'origin' remote/
-    );
+    await expect(submit(new FakeProvider())).rejects.toThrow(/no 'origin' remote/);
   });
 
   /**
@@ -263,15 +393,10 @@ describe("submitRepo()", () => {
    */
   it("should report which steps completed when a step fails", async () => {
     await commitCurrentIndex();
+    const provider = new FakeProvider({ proposeError: "the API rejected the request" });
 
-    const run = makeRunner((command, args) =>
-      command === "gh" && args.slice(0, 2).join(" ") === "pr create"
-        ? fail("the API rejected the request")
-        : githubAnswers()(command, args)
-    );
-
-    await expect(submit(run)).rejects.toThrow(/What had already been done/);
-    await expect(submit(run)).rejects.toThrow(/Pushing 'sous\/submit-20260910-1403'/);
+    await expect(submit(provider)).rejects.toThrow(/What had already been done/);
+    await expect(submit(provider)).rejects.toThrow(/Pushing 'sous\/submit-20260910-1403'/);
   });
 
   /**
@@ -282,7 +407,7 @@ describe("submitRepo()", () => {
     await commitCurrentIndex();
     git(repo, "checkout", "--quiet", "-b", "add-a-recipe");
 
-    const result = await submit(makeRunner(githubAnswers()));
+    const result = await submit(new FakeProvider());
 
     expect(result.branch).toBe("add-a-recipe");
   });
