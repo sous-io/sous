@@ -4,8 +4,8 @@
  * Shows every repository this project trusts, what it publishes, and whether it
  * is currently being read from a working copy instead of a published version.
  * It reads only what sous already has on disk: a repository whose index has
- * never been fetched is listed with its counts unknown rather than triggering a
- * download, so the command is safe to run offline.
+ * never been fetched says so in its own row rather than triggering a download,
+ * so the command is safe to run offline.
  */
 
 import { Flags } from "@oclif/core";
@@ -18,9 +18,9 @@ import { renderTable, type TableColumn } from "../../utils/table.js";
 import {
   blankLine,
   footer,
-  heading,
   indent,
   log,
+  section,
   showCommandVars,
 } from "../../utils/formatting.js";
 
@@ -45,7 +45,7 @@ const COLUMNS: TableColumn[] = [
     priority: "medium",
     minWidth: 6,
   },
-  { key: "recipes", header: "Recipes", kind: "number", priority: "low" },
+  { key: "recipes", header: "Recipes", kind: "number", priority: "low", minWidth: 11 },
   {
     key: "url",
     header: "URL",
@@ -88,7 +88,7 @@ export default class RepoList extends BaseCommand {
       Config: this.configContext.configPath,
     });
 
-    heading("Repositories this project trusts");
+    section("Repositories this project trusts");
 
     const service = subscriptionServiceFor({
       configContext: this.configContext,
@@ -98,8 +98,6 @@ export default class RepoList extends BaseCommand {
 
     const repos = service.currentRepos();
     const names = Object.keys(repos).sort();
-
-    blankLine();
 
     if (names.length === 0) {
       log(
@@ -118,8 +116,13 @@ export default class RepoList extends BaseCommand {
       const entry = repos[name]!;
       const index = service.cachedIndex(name);
       const namespaces =
-        index === undefined ? "not fetched yet" : Object.keys(index.namespaces).sort().join(", ");
-      const recipes = index === undefined ? "unknown" : String(Object.keys(index.recipes).length);
+        index === undefined ? "not fetched" : Object.keys(index.namespaces).sort().join(", ");
+      // A repository whose index has never been fetched says so in the cell
+      // itself. The count is not unknown in any interesting sense; sous simply
+      // has not downloaded the one file that holds it, and saying that in the
+      // row saves a note under the table.
+      const recipes =
+        index === undefined ? "not fetched" : String(Object.keys(index.recipes).length);
       return {
         name,
         url: entry.url,
@@ -140,26 +143,16 @@ export default class RepoList extends BaseCommand {
       log(indent(line, INDENT));
     }
 
-    blankLine();
-    log(
-      indent(
-        "A repository whose index has not been fetched yet reports its recipe count as " +
-          "unknown. Run 'sous repo add <url>' again to refresh it."
-      )
-    );
+    // Everything the table can say, the table says. The only line left under it
+    // is the one that points at the other view of the same data.
     if (!flags.verbose) {
+      blankLine();
       log(
         indent(
           "Run 'sous repo list --verbose' to see the namespaces each repository publishes."
         )
       );
     }
-    log(
-      indent(
-        "A repository whose origin is 'built in' is one sous provides itself. To stop " +
-          "using it, write it into your own config with 'enabled: false'."
-      )
-    );
 
     footer();
   }
