@@ -216,6 +216,14 @@ hand-write `repos:`, `subscriptions:` and `varMappings:` there yourself, and by 
 reads them the two are one merged map. See
 [Managed config layers](repositories-file-formats.md#managed-config-layers).
 
+Every directory sous creates for its own bookkeeping explains itself. The first time sous
+creates one (`.sous/conf.d/`, `.sous/repos/`, `~/.sous` and everything under it), it writes a
+short `README.md` there saying what the directory is, who writes to it, whether you may edit or
+delete what is inside, and whether it is committed, plus an `AGENTS.md` and a `CLAUDE.md` holding
+one line each pointing at that README. None of the three is ever overwritten, so anything you
+write in them stays. Directories that hold rendered output are deliberately left alone: what
+lands there is yours.
+
 The store is disposable by design. Every entry in it is re-fetchable from the pins in some
 project's lockfile, so deleting `~/.sous/cache` costs a download and nothing else. `sous repo gc`
 collects it back to a size cap, least recently used first, and never evicts an entry this

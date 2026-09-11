@@ -178,6 +178,10 @@ src/
     formatting.ts          # console output helpers (heading, showVar, wrapText, displayWidth, etc.)
     table.ts               # renderTable: the responsive table every listing prints through
     prompts.ts
+    sous-directory.ts      # ensureSousDirectory: creates a directory sous owns and writes its
+                           #   README.md + AGENTS.md/CLAUDE.md pointers, never overwriting them;
+                           #   plus the per-directory wording (conf.d, repos, cache, _indexes,
+                           #   $SOUS_HOME). NOT for rendered output directories.
     value-prompt.ts        # the Tab-aware value question used by `sous vars ask`
 recipes/                   # the recipes that SHIP INSIDE the package; see "Skills System"
   core/
@@ -291,6 +295,15 @@ project's repository) and maintains a delimited managed block inside `.sous/.git
 markers are ever rewritten; anything above or below them is left alone, and an opening marker
 with no closing partner is a hard `ConfigError` rather than a guess. Both files are written
 only when their contents would change, so linking repeatedly never produces a diff.
+
+**Self-describing directories.** Every directory sous creates for its OWN bookkeeping is created
+through `ensureSousDirectory(dir, readme)` in `src/utils/sous-directory.ts`, which writes a
+`README.md` explaining the directory plus an `AGENTS.md` and a `CLAUDE.md` holding one pointer
+line each, and never overwrites any of the three. The named wrappers in that module own the
+wording for `conf.d/`, project and global `repos/`, the store root, `_indexes/` and `$SOUS_HOME`
+itself; a new sous-owned directory gets a wrapper there rather than a bare `mkdirSync`.
+Directories a compilation target RENDERS INTO are excluded, and so is `.sous/` itself: what is
+there belongs to the user.
 
 ### Variables and answers (`src/lib/vars/`)
 
