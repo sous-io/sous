@@ -356,6 +356,11 @@ describe("the repositories consumer surface", () => {
    * `--verbose` adds the namespaces its cached index says it publishes.
    * `sous repo search` finds a recipe by its description. All of it reads only
    * what is already on disk.
+   *
+   * The Provider column names the provider that actually handles the entry,
+   * even though this entry never named one, and nothing is printed under the
+   * table: the listing shows facts, and never closes on a hint about another
+   * way to run it.
    */
   it(
     "should list and search the trusted repositories",
@@ -363,6 +368,9 @@ describe("the repositories consumer surface", () => {
       const list = sous(projectRoot, "repo", "list");
       expect(list.status).toBe(0);
       expect(list.stdout).toContain("fixtures");
+      expect(list.stdout).toMatch(/fixtures\s+local\b/);
+      expect(list.stdout).not.toContain("detected from the URL");
+      expect(list.stdout).not.toContain("--verbose");
 
       const verbose = sous(projectRoot, "repo", "list", "--verbose");
       expect(verbose.status).toBe(0);

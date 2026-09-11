@@ -14,15 +14,9 @@ import { BaseCommand } from "../../base-command.js";
 import { subscriptionServiceFor } from "../../lib/repos/subscription-service.js";
 import { readEffectiveLinks } from "../../lib/repos/links.js";
 import { BUILT_IN_ADDED_BY } from "../../lib/repos/defaults.js";
+import { requireProvider } from "../../lib/repos/providers/index.js";
 import { renderTable, type TableColumn } from "../../utils/table.js";
-import {
-  blankLine,
-  footer,
-  indent,
-  log,
-  section,
-  showCommandVars,
-} from "../../utils/formatting.js";
+import { footer, indent, log, section, showCommandVars } from "../../utils/formatting.js";
 
 /** How far every line of this command's output is indented. */
 const INDENT = 2;
@@ -126,7 +120,7 @@ export default class RepoList extends BaseCommand {
       return {
         name,
         url: entry.url,
-        provider: entry.provider ?? "detected from the URL",
+        provider: describeProvider(entry.url, entry.provider),
         origin: describeOrigin(entry.addedBy),
         namespaces: namespaces.length > 0 ? namespaces : "none",
         recipes,
@@ -143,18 +137,27 @@ export default class RepoList extends BaseCommand {
       log(indent(line, INDENT));
     }
 
-    // Everything the table can say, the table says. The only line left under it
-    // is the one that points at the other view of the same data.
-    if (!flags.verbose) {
-      blankLine();
-      log(
-        indent(
-          "Run 'sous repo list --verbose' to see the namespaces each repository publishes."
-        )
-      );
-    }
-
+    // Everything the table can say, the table says; nothing goes under it.
     footer();
+  }
+}
+
+/**
+ * The identifier of the provider that actually handles a repository entry: the
+ * one the entry names, otherwise the one that recognizes its URL. The column
+ * reports the provider doing the work, not how sous arrived at it, so an entry
+ * that leaves `provider` out still reads `local` or `github` rather than a note
+ * about detection. An entry no provider can claim reads `unknown`; the listing
+ * is a read-only view of what is on disk and refuses nothing.
+ *
+ * @param url - The repository entry's URL.
+ * @param providerId - The provider the entry named, when it named one.
+ */
+function describeProvider(url: string, providerId: string | undefined): string {
+  try {
+    return requireProvider(url, providerId).id;
+  } catch {
+    return "unknown";
   }
 }
 
