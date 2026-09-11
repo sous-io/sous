@@ -100,7 +100,10 @@ variables:
   - name: taskFileRoot
     type: path
     prompt: Where should task files live?
-    description: One file per git branch is written here.
+    description: >-
+      One markdown file per git branch is written here. Most projects keep these
+      as local working notes and gitignore the directory.
+    example: .sous/tasks
     default: .sous/tasks
     required: true
     scope: shared
@@ -109,6 +112,10 @@ variables:
     type: string
     env: SERVICE_TOKEN
     prompt: What is the service token for this project?
+    description: >-
+      The token this recipe authenticates with. Create one under Settings, then
+      Tokens, and give it read access to the project you are configuring.
+    example: svc_0123456789abcdef0123
     secret: true
     scope: local
     validate:
@@ -118,6 +125,14 @@ variables:
 The rules worth knowing while you write one:
 
 - **`name` is camelCase**, and it is how templates refer to the variable.
+- **`description` and `example` are both required.** The one-line `prompt` is rarely enough on its
+  own, and the person answering it cannot read your mind. The description is the paragraph shown
+  above the question and by `sous vars <name>`: say what the variable is for and what changes when
+  it is set. The example is a realistic sample answer, shown with the question.
+- **An example is documentation, a default is a value.** Sous never stores an example and never
+  offers it as the answer; it only ever shows it. Use `default` for a value a project should
+  actually start with. The same text may appear in both when the sample answer really is the right
+  starting value.
 - **`env` names the environment variable** an answer binds to. Omit it and `sous repo release`
   derives one from the name: `apiUrl` becomes `SOUS_VAR_API_URL`. Naming it explicitly is how a
   recipe reuses a value the environment already carries, such as `GITHUB_TOKEN`.

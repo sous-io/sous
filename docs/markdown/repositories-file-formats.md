@@ -140,7 +140,10 @@ variables:
     env: SOUS_VAR_TASK_FILE_ROOT
     type: path
     prompt: Where should task files live?
-    description: One file per git branch is written here.
+    description: >-
+      One markdown file per git branch is written here. Most projects keep these
+      as local working notes and gitignore the directory.
+    example: .sous/tasks
     default: .sous/tasks
     required: true
     scope: shared
@@ -148,6 +151,10 @@ variables:
   - name: ticketSystem
     type: enum
     prompt: Which ticket system do you use?
+    description: >-
+      Decides which ticket identifiers the skills expect and which links they
+      write into a task file.
+    example: github
     default: github
     validate:
       enum: [github, jira, linear]
@@ -189,13 +196,20 @@ recipe paths, include and exclude patterns may not escape the recipe folder.
 | `name` | yes | camelCase string | How templates refer to the variable |
 | `env` | no | upper snake case string | The environment variable an answer binds to. `sous repo release` derives a default when it is omitted; the runtime never derives one |
 | `type` | yes | `string`, `number`, `boolean`, `enum`, `path` or `url` | How the answer is validated and prompted for |
-| `prompt` | yes | string | The question text |
-| `description` | no | string | Shown alongside the question and by `sous vars` |
+| `prompt` | yes | string | The one-line question text |
+| `description` | yes | non-empty string | The paragraph explaining what the variable is for. Shown above the question when sous asks, and by `sous vars <name>` |
+| `example` | yes | string, number or boolean | A realistic sample answer, shown with the question. Checked against the declared type and the enum options exactly as `default` is, but never stored and never offered as the answer |
 | `default` | no | string, number or boolean | Must match the declared type, and for an enum must be one of the options |
 | `required` | no | boolean, default `true` | Whether a build needs an answer |
 | `secret` | no | boolean, default `false` | A secret is always stored in the gitignored `.sous/.env.local` |
 | `scope` | no | `shared` or `local`, default `shared` | Which env file the answer is written to |
 | `validate` | no | object | Constraints, below |
+
+A publisher has to explain every variable: `description` and `example` are both required, and a
+manifest missing either is refused. The two are not interchangeable. An `example` is documentation
+only, so it shows what a real answer looks like without sous ever storing it; a `default` is a real
+value, offered as the answer when nothing else is in scope. A variable whose sample answer is
+genuinely the right starting value carries the same text in both.
 
 `scope: shared` writes to `.sous/.env`, which is committed and shared with the team.
 `scope: local` writes to `.sous/.env.local`, which is gitignored and machine-specific. A secret

@@ -121,14 +121,17 @@ project asks questions no recipe publishes yet.
 
 ## `sous vars <name>`
 
-Shows one variable in full: its question, its description, the recipe and version that published
-it, its constraints, which env file an answer would be stored in, the value in scope, and whether
-that value fits the definition. Then it prints every name on the ladder and says which rung
-actually answered.
+Shows one variable in full: its question, the publisher's description and example, the recipe and
+version that published it, its constraints, which env file an answer would be stored in, the value
+in scope, and whether that value fits the definition. Then it prints every name on the ladder and
+says which rung actually answered.
 
 ```term
 $ sous vars apiUrl
 Question:     Where does the API live?
+About:        The service every request this recipe generates is sent to. Point
+              it at your own deployment; staging and production each have one.
+For example:  https://api.example.com
 Recipe:       workflow/task-files version 1.2.0 from sous-recipes
 Constraints:  must be a URL
 Stored in:    .env
@@ -157,6 +160,22 @@ Asks the questions the project's definitions imply and stores the answers.
 | `sous vars ask --all` | Asks every variable again, including the ones already answered |
 | `sous vars ask --file <path>` | Reads definitions from a standalone definitions file |
 | `sous vars ask --dry-run` | Reports what would be asked and written, without writing anything |
+
+Every question is introduced by a block that says who is asking and what is being asked for, so
+nobody has to guess what a one-line question means. A publisher must supply the description and
+the example, so both are always there:
+
+```term
+Recipe asking : workflow/task-files
+Variable      : apiUrl
+About         : The service every request this recipe generates is sent to. Point
+                it at your own deployment; staging and production each have one.
+For example   : https://api.example.com
+Constraints   : type: url
+Stored in     : .env, as SOUS_VAR_API_URL
+
+? Where does the API live? (workflow/task-files) [type: url]
+```
 
 Every run ends with the same three-part report: what was inherited from an answer already in
 scope, what was stored and under which name in which file, and what was left unanswered and why.
