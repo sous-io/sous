@@ -113,6 +113,8 @@ src/
     config-schema.ts       # zod schema for the merged config; validateSettings; JSON Schema source
     config-inspect.ts      # dot-path lookup + JSON rendering helpers for `config show/get`
     errors.ts              # ConfigError + isConfigError (own module to avoid an import cycle)
+    interactive.ts         # the one rule for whether sous may ask a question, and the
+                           #   error a prompt that cannot be shown raises
     env-local.ts           # parses .sous/.env.local and .sous/.env into process.env
     sous-home.ts           # the user-level sous dir (~/.sous or $SOUS_HOME) and its subpaths
     env-file.ts            # line-preserving WRITER for those same two files
@@ -144,6 +146,7 @@ src/
         index-builder.ts   # buildIndex: regenerates sous.index.json from manifests + tags
         bump.ts            # raises a recipe version in place, keeping comments
         submit-service.ts  # the whole submit flow, behind the injectable command runner
+      ref-search.ts        # what a one-word ref means: namespace first, then recipe names
       subscription-service.ts  # the workflow: add, subscribe, unsubscribe, restore, check
       locked-recipes.ts    # where each locked recipe's files are (a link beats the store)
       locked-namespace-resolver.ts # the real NamespaceResolver, built from the lockfile
@@ -354,7 +357,17 @@ finished until the variables its recipes publish have been answered. `Subscripti
 takes every collaborator as an injectable option, and `subscriptionServiceFor({
 configContext, settings, shellEnv })` builds one from what a running command already has.
 Its methods are `addRepo`, `subscribe`, `unsubscribe`, `listSubscriptions`, `restore`,
-`checkUpstream`, `needsRestore` and `prepareForBuild`. Unsubscribing drops the project's own
+`checkUpstream`, `needsRestore` and `prepareForBuild`. Two steps run inside `subscribe` BEFORE anything is
+fetched or written, on the cached indexes alone: a one-word ref is resolved to a fully
+qualified one (`ref-search.ts`: exact namespace matches first, then exact recipe-name
+matches, ordered by repository as given, then namespace, then recipe name, with the
+whole-namespace candidate ahead of its recipes; several matches ask, `--accept-first`
+takes the first), and then the plan is printed and confirmed (`--yes` skips the question,
+a dry run states the plan and never asks, declining aborts with nothing written). Keep
+that order: the confirmation is worthless once a manifest has been fetched to read it,
+which is why the plan names untrusted dependency repositories only as far as what is
+already on disk knows, and leaves the real answer to the trust ceremony during resolution.
+Unsubscribing drops the project's own
 hold on the recipes one subscription pulled in and lets the lockfile's refcounting decide
 what actually goes. A subscription sous provides itself has no entry to delete, so removing
 one writes `{ enabled: false }` into the managed 510 layer instead; every reader of the
@@ -844,7 +857,7 @@ This enables `sous prune` (remove stale outputs) and `sous clear` (delete all ou
 | `sous repo search <text>` | Search the cached indexes by namespace, recipe name and description (`--limit`); also the top-level `sous search <text>` |
 | `sous repo gc` | Collect the machine-wide store back to its size cap, protecting everything the lockfile pins (`--max-bytes`, `--dry-run`) |
 | `sous subscription list` | List what the project subscribes to: range, the versions the lockfile pins, origin, and whether it is on |
-| `sous subscription add <ref>` | Subscribe to a namespace or a recipe, install the whole closure, and answer the variables it publishes (`--prerelease`, `--always-pull`, `--trust`, `--dry-run`); also `sous subscribe` |
+| `sous subscription add <ref>` | Subscribe to a namespace or a recipe, install the whole closure, and answer the variables it publishes (`--yes` / `-y`, `--accept-first`, `--prerelease`, `--always-pull`, `--trust`, `--dry-run`); also `sous subscribe` |
 | `sous subscription remove <ref>` | Remove a subscription and everything only it brought in, refcounted (`--dry-run`); also `sous unsubscribe` |
 | `sous repo init [dir]` | Scaffold a new recipe repository (`--name`, `--namespace`, `--force`) |
 | `sous repo link <repo> [path]` | Read a repository from a working copy: clone it, or link a checkout already on disk (`--global`, `--trust`) |
@@ -920,9 +933,22 @@ via `z.toJSONSchema`. Re-run it whenever the schema changes; it ships in the pac
 Common config-locating flags on every command: `--config <path>` / `-c` (alias
 `--sous-config`), plus `--sous-dir` and `--sous-confd` (env equivalents `SOUS_CONFIG`,
 `SOUS_DIR`, `SOUS_CONFD`). There is no `--project` / `-p` flag; one config describes one
-project. Also: `--rebuild`, `--dry-run`, `--strict`, `--watch` / `-w` (build/compile),
-`--no-prune` / `--no-compile` (build), `--force` / `-f` (clear),
-`--no-build` / `--continuous` (launch).
+project. Every command also carries `--non-interactive`. Also: `--rebuild`, `--dry-run`,
+`--strict`, `--watch` / `-w` (build/compile), `--no-prune` / `--no-compile` (build),
+`--force` / `-f` (clear), `--no-build` / `--continuous` (launch), `--yes` / `-y` and
+`--accept-first` (subscribe), `--trust` (repo add, subscribe).
+
+**One interactivity rule.** `src/lib/interactive.ts` owns it, and every prompt in sous is
+gated by it; do not reintroduce an ad hoc `process.stdin.isTTY` check anywhere.
+`isInteractive()` is false when `--non-interactive` is on the command line (scanning stops
+at a bare `--`), when `CI` is set to anything but `0`/`false`/`no`/`off`, or when stdin or
+stdout is not a TTY; every input is injectable for tests. A prompt that cannot be shown
+throws a `NonInteractiveError` (a `ConfigError` carrying `showHelp`), whose message names
+the question, why sous could not ask it, and the flag or env vars that would have answered
+it; `BaseCommand.catch` then prints the command's own help underneath, through oclif's
+`loadHelpClass` (sous does not install the help plugin, so there is no `help` COMMAND to
+run) with `process.stdout.write` pointed at stderr for the duration, so a piped stdout
+stays machine-readable.
 
 **Launch pass-through:** any argument `launch` does not recognize is forwarded to the
 tool, after the config-defined `tools.<name>.args` and before the `promptFile` content

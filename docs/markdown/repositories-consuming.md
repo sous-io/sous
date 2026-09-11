@@ -50,10 +50,74 @@ are whole or not at all.
 
 | Flag | What it does |
 |------|--------------|
+| `--yes`, `-y` | Accept the confirmation and subscribe without being asked |
+| `--accept-first` | When a one-word ref matches several things, take the first one listed |
 | `--prerelease` | Let prerelease versions take part in version range matching |
 | `--always-pull` | Install a newer in-range version whenever one exists, rather than holding the locked one |
 | `--trust` | Accept trust for every repository this command adds, without being asked |
 | `--dry-run` | Print what would be installed without writing or downloading anything |
+
+### One-word refs
+
+You do not have to remember which namespace a recipe lives in. A ref of one word is looked for
+as a namespace first, and as a recipe name second, across the cached index of every repository
+the project trusts:
+
+```term
+$ sous subscribe task-files
+  'task-files' resolves to sous-recipes:workflow/task-files  (the recipe 'task-files' in the
+  namespace 'workflow' of the repository 'sous-recipes': keeps one task file per branch).
+```
+
+When the word means more than one thing, including the case where it is a namespace in one
+repository and a recipe name in another, sous lists every candidate as a full ref and asks which
+one you meant:
+
+```term
+$ sous subscribe formatter
+? Which 'formatter' did you mean?
+  > my-recipes:formatter  (the whole namespace 'formatter' in the repository 'my-recipes')
+    sous-recipes:tooling/formatter  (the recipe 'formatter' in the namespace 'tooling' of the
+    repository 'sous-recipes': formats what a recipe writes)
+```
+
+The order is stable and worth knowing, because `--accept-first` takes the first candidate without
+asking: repositories come first in the order your config names them, with the built-in
+`sous-recipes` ahead of them; then namespaces alphabetically; then, inside a namespace, the whole
+namespace ahead of the recipes in it, which are alphabetical. A word that matches nothing is an
+error naming every repository that was searched.
+
+### The confirmation
+
+Subscribing changes your project, so sous says what it is about to do and asks before doing any
+of it. Nothing is downloaded and nothing is written until the question is answered:
+
+```term
+$ sous subscribe workflow/task-files
+
+  Subscribing to 'sous-recipes:workflow/task-files' installs the recipe 'task-files' from the
+  namespace 'workflow'.
+
+  Here is what that does:
+
+    The files it ships are compiled into this project on the next build, which writes them into
+    this project's agent directories.
+    Any scripts it ships can be run on this machine when an agent uses them. Sous does not run
+    them itself, and it cannot vouch for what they do.
+    The variables it publishes are asked about at the end of this command, and the answers are
+    written into this project's env files.
+    Its dependencies are fetched and pinned in this project's lockfile, at the exact versions
+    resolved now.
+    If a dependency turns out to live in a repository this project does not trust, sous stops and
+    asks about that repository by name before fetching anything from it.
+
+? Proceed? (y/N)
+```
+
+Answering no ends the command with nothing downloaded, no lockfile entry and no change to your
+config. `--yes` accepts the plan without being asked, which is what a script or a Makefile wants.
+`--dry-run` states the plan and then reports what would be installed, asking nothing, because
+there is nothing to decline.
 
 Three files change: `.sous/conf.d/510-subscriptions.jsonc` records the subscription,
 `.sous/sous.lock.json` records the exact versions and hashes, and the machine-wide store under
@@ -195,6 +259,33 @@ lockfile pins for it, where it came from, and whether it is on. `repo search`, w
 top-level `sous search`, matches text against recipe names, namespace names and descriptions
 across every cached index. A repository whose index has never been fetched is reported as such
 rather than silently left out; run `sous repo add` on it again to refresh the index.
+
+## When sous cannot ask
+
+Every question in sous is gated by one rule. Sous treats a run as non-interactive, and so asks
+nothing at all, when any of these is true:
+
+- the global `--non-interactive` flag is passed (every command accepts it);
+- the `CI` environment variable is set to anything other than `0`, `false`, `no` or `off`, which
+  is what every continuous integration runner does;
+- stdin or stdout is not a terminal, which is what piping or scripting a command looks like.
+
+A run like that fails rather than guessing, and the failure names the question that could not be
+asked along with the flag that would have answered it ahead of time: `--yes` for the subscribe
+confirmation, `--accept-first` for the choice between candidate refs, `--trust` for the trust
+question, and the exact environment variables for a variable question. The command's own help is
+printed underneath the error, so every other flag is in front of you:
+
+```term
+$ CI=true sous subscription add workflow/task-files
+  Sous has to ask whether to go ahead with subscribing to
+  'sous-recipes:workflow/task-files', and it is not running where it can ask.
+    Why: the 'CI' environment variable is set to 'true'.
+    Answer it ahead of time: pass '--yes' to accept the plan above without being asked.
+```
+
+?> The error and the help both go to stderr, so piping a command's output somewhere
+(`sous config show | jq`) keeps working whether or not the run fails.
 
 ## Remove a subscription
 

@@ -39,6 +39,11 @@ the project has added; a genuine conflict is an error asking for the qualified f
 silent first match. The full grammar is in
 [Refs: how anything is named](repositories-file-formats.md#refs-how-anything-is-named).
 
+A ref of one word is a guess at a name, and sous works out what it meant: it looks for a
+namespace with that name first, and for a recipe with that name second, across every repository
+the project trusts. One match is used and reported by its full ref; several are a question. See
+[Subscribe to a recipe](repositories-consuming.md#subscribe-to-a-recipe).
+
 ## Trust
 
 Adding a repository **is** trusting it. There is no separate trust command, no trusted-but-not-
