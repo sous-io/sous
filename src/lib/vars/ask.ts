@@ -559,7 +559,9 @@ async function askOneQuestion(
   };
 
   const validate = (value: string): true | string => {
-    const result = validateAnswer(definition, value);
+    const result = validateAnswer(definition, value, {
+      recipe: definingRecipeKey(defined.recipe),
+    });
     return result.ok ? true : result.message;
   };
 
@@ -673,7 +675,11 @@ export async function askForMissing(
     const diagnosis = diagnoseVariable(entry, context);
     const existing = diagnosis.resolved;
     const validity =
-      existing === undefined ? undefined : validateAnswer(definition, existing.value);
+      existing === undefined
+        ? undefined
+        : validateAnswer(definition, existing.value, {
+            recipe: definingRecipeKey(entry.recipe),
+          });
 
     if (existing !== undefined && validity?.ok === true && options.reask !== true && !named) {
       report.inherited.push({ defined: entry, resolved: existing });
@@ -762,7 +768,9 @@ export async function askForMissing(
     const validity =
       diagnosis.resolved === undefined
         ? undefined
-        : validateAnswer(entry.definition, diagnosis.resolved.value);
+        : validateAnswer(entry.definition, diagnosis.resolved.value, {
+            recipe: definingRecipeKey(entry.recipe),
+          });
 
     if (diagnosis.resolved !== undefined && validity?.ok === true) {
       report.inherited.push({ defined: entry, resolved: diagnosis.resolved });
@@ -801,7 +809,9 @@ async function runQuestion(
   report: AskReport
 ): Promise<void> {
   const { answer, plan } = await askOneQuestion(question, place, options);
-  const validated = validateAnswer(question.defined.definition, answer);
+  const validated = validateAnswer(question.defined.definition, answer, {
+    recipe: definingRecipeKey(question.defined.recipe),
+  });
 
   if (!validated.ok) {
     report.skipped.push({ defined: question.defined, reason: validated.message });
@@ -880,7 +890,8 @@ async function storeAnswer(
   const conflicts =
     mapping === undefined &&
     occupant !== undefined &&
-    validateAnswer(definition, occupant.value).ok === false;
+    validateAnswer(definition, occupant.value, { recipe: definingRecipeKey(defined.recipe) }).ok ===
+      false;
 
   if (conflicts) {
     const scopedName = recipeScopedName(

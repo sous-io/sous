@@ -320,7 +320,9 @@ export function validateProvidedAnswers(
     if (targets.length === 0) throw unknownAnswerError(answer, defined);
 
     for (const target of targets) {
-      const validated = validateAnswer(target.definition, answer.value);
+      const validated = validateAnswer(target.definition, answer.value, {
+        recipe: definingRecipeKey(target.recipe),
+      });
       if (!validated.ok) throw invalidAnswerError(answer, target, validated.message);
       applicable.push({ answer, target, value: String(validated.value) });
     }

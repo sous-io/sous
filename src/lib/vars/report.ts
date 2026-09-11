@@ -175,7 +175,11 @@ export function printVariableDetail(
     const { definition } = entry;
     const { resolved, candidates } = diagnoseVariable(entry, context);
     const validity =
-      resolved === undefined ? undefined : validateAnswer(definition, resolved.value);
+      resolved === undefined
+        ? undefined
+        : validateAnswer(definition, resolved.value, {
+            recipe: definingRecipeKey(entry.recipe),
+          });
 
     const file = answerFileFor(definition);
 

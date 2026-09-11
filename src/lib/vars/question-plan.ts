@@ -72,7 +72,10 @@ export function planQuestions(
     const file = answerFileFor(entry.definition);
     const existing = resolveVariable(entry, context);
     const answered =
-      existing !== undefined && validateAnswer(entry.definition, existing.value).ok;
+      existing !== undefined &&
+      validateAnswer(entry.definition, existing.value, {
+        recipe: definingRecipeKey(entry.recipe),
+      }).ok;
 
     return {
       defined: entry,

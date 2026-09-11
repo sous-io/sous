@@ -131,6 +131,31 @@ describe("asking for missing variable answers", () => {
   });
 
   /**
+   * A runaway pattern is the recipe author's problem, not the answerer's, so
+   * the refusal has to say which recipe published it. askForMissing knows the
+   * defining recipe, so the message names it as `namespace/name` rather than
+   * falling back to describing the publisher in words.
+   */
+  it("should name the defining recipe when a pattern runs out of time", async () => {
+    // A string of many letters followed by one that cannot match makes the
+    // pattern backtrack for far longer than the budget allows.
+    answers.push("a".repeat(39) + "!");
+
+    const report = await askForMissing(
+      [defined({ type: "string", validate: { pattern: "^(a+)+$" } })],
+      context(),
+      { sousDir, confDir, interactive: true }
+    );
+
+    expect(report.answered).toHaveLength(0);
+    expect(report.skipped).toHaveLength(1);
+    const reason = report.skipped[0]!.reason;
+    expect(reason).toContain("apiUrl could not be checked");
+    expect(reason).toContain("published by the recipe misc/stuff");
+    expect(reason).not.toContain("the recipe that defines it");
+  });
+
+  /**
    * A secret should go to the gitignored `.sous/.env.local`, never to the
    * committed `.sous/.env`, and its value should not appear in the report text.
    */
