@@ -102,13 +102,13 @@ Choosing the record writes both the answer under the scoped name and the record 
 the run reports the pair. Where there is no terminal, the record is written, because overwriting
 a value something else is already using would be the worse of the two guesses.
 
-## `sous vars`
+## `sous vars list`
 
 Lists every variable in play: its name, the recipe that published it, the environment variable
 that answered it, the value, and where the value came from. A secret's value is hidden.
 
 ```term
-$ sous vars
+$ sous vars list
 Variable      Recipe               Answered by          Value                     Source
 apiUrl        workflow/task-files  SOUS_VAR_API_URL     https://api.example.com   shared scope, the .env file
 taskFileRoot  workflow/task-files  SOUS_VAR_TASK_...    .sous/tasks               shared scope, the .env file
@@ -119,7 +119,7 @@ serviceToken  tooling/deploy                                                    
 recipes. The file holds the same `variables:` array a recipe manifest carries, which is how a
 project asks questions no recipe publishes yet.
 
-## `sous vars <name>`
+## `sous vars show <name>`
 
 Shows one variable in full: its question, the publisher's description and example, the recipe and
 version that published it, its constraints, which env file an answer would be stored in, the value
@@ -127,7 +127,7 @@ in scope, and whether that value fits the definition. Then it prints every name 
 says which rung actually answered.
 
 ```term
-$ sous vars apiUrl
+$ sous vars show apiUrl
 Question:     Where does the API live?
 About:        The service every request this recipe generates is sent to. Point
               it at your own deployment; staging and production each have one.

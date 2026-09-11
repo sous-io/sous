@@ -23,6 +23,13 @@ beats the matching variable, and both beat walk-up discovery.
 inside a project: `sous repo init`, `sous repo release` and `sous repo submit`. A recipe
 repository has no `.sous/` directory to discover.
 
+## Singular and plural
+
+Every topic answers to both spellings of its name, so nothing hinges on remembering which one
+sous prefers: `repo` and `repos`, `subscription` and `subscriptions`, `var` and `vars`, `config`
+and `configs`. The tables below print the spelling `sous --help` shows; the other one runs
+exactly the same command.
+
 ## Building
 
 | Command | Arguments | Own flags |
@@ -78,17 +85,38 @@ See [Inspecting and validating](config-inspection.md).
 | `sous repo gc` | none | `--max-bytes <n>`, `--dry-run` |
 | `sous repo link` | `REPO` `[PATH]` | `--global`, `--trust`, `--dry-run` |
 | `sous repo unlink` | `REPO` | `--global`, `--dry-run` |
-| `sous subscribe` | `REF` | `--prerelease`, `--always-pull`, `--trust`, `--dry-run` |
-| `sous unsubscribe` | `REF` | `--dry-run` |
 
 `repo add` is the trust ceremony; it asks inline, and `--trust` is how a run with no terminal
 acknowledges instead. `URL` may be an address or an absolute path to a repository on this
 machine. `list` and `search` read only what is already cached, so both work offline and neither
 downloads anything.
 
+`repo search` is also a top-level `sous search`, because searching is how you find something to
+subscribe to before you know what any of it is called.
+
+## Subscriptions
+
+| Command | Arguments | Own flags |
+|---------|-----------|-----------|
+| `sous subscription list` | none | none |
+| `sous subscription add` | `REF` | `--prerelease`, `--always-pull`, `--trust`, `--dry-run` |
+| `sous subscription remove` | `REF` | `--dry-run` |
+
+`sous subscribe` and `sous unsubscribe` are the original spellings of `subscription add` and
+`subscription remove`, and both still work.
+
 `REF` is a ref: `namespace`, `namespace/recipe`, either with an `@<range>`, and optionally
 qualified with `repo:`. See
 [Refs: how anything is named](repositories-file-formats.md#refs-how-anything-is-named).
+
+`subscription list` reads the config and the lockfile only, so it works offline. It reports every
+subscription the project declares, switched-off ones included, with the range it resolves within,
+the versions the lockfile pins for it, where it came from, and whether it is on.
+
+Removing the `core` subscription sous provides itself records `core: { enabled: false }` in the
+managed subscriptions layer rather than deleting an entry, because the default would otherwise
+come back on the next run. Adding it back clears the opt-out. Either way the `sous-recipes`
+repository stays trusted and keeps appearing in `repo list` as built in.
 
 `repo link` with no `PATH` clones the repository into `.sous/repos/<owner>/<name>`, or into
 `$SOUS_HOME/repos/<owner>/<name>` with `--global`; with a `PATH` it links an existing checkout
@@ -114,13 +142,19 @@ These three run inside a recipe repository and take none of the config-locating 
 
 | Command | Arguments | Own flags |
 |---------|-----------|-----------|
-| `sous vars` | `[NAME]` | `--file <path>` |
+| `sous vars list` | none | `--file <path>` |
+| `sous vars show` | `NAME` | `--file <path>` |
 | `sous vars ask` | `[NAME]` | `--all`, `--file <path>`, `--dry-run` |
 
-`sous vars` with no argument lists every variable in play; with a name it shows that one in full,
-including every environment variable on the resolution ladder. `NAME` is a bare variable name or
-a full `namespace/recipe.name` key. `--file` reads definitions from a standalone definitions file
-instead of the project's subscribed recipes.
+`vars list` prints every variable in play, with the environment variable that answered each one
+and where the value came from. `vars show` prints one variable in full, including every
+environment variable on the resolution ladder and which rung answered. `NAME` is a bare variable
+name or a full `namespace/recipe.name` key. `--file` reads definitions from a standalone
+definitions file instead of the project's subscribed recipes.
+
+Bare `sous vars` is shorthand for `vars list`, and `sous vars <name>` for `vars show <name>`. A
+variable whose name is also a subcommand name (`list`, `show` or `ask`) has to be reached the
+long way, as `sous vars show list`.
 
 See [Recipe variables](repositories-variables.md).
 

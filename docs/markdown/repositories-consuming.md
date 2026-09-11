@@ -37,8 +37,12 @@ it yourself, comments included, stays where you put it.
 ## Subscribe to a recipe
 
 ```bash
-sous subscribe workflow/task-files
+sous subscription add workflow/task-files
 ```
+
+?> `sous subscribe` is the original spelling of this command and still works, as does
+`sous unsubscribe` for `subscription remove`. Every topic also answers to both spellings of its
+name, so `sous subscriptions add`, `sous repos list` and `sous var show` all work too.
 
 The ref names a namespace, one recipe, or either with a version range. The whole dependency
 closure is resolved before anything is downloaded, and only then is anything written; installs
@@ -59,7 +63,7 @@ If the closure reaches a repository you have not added, sous stops and asks abou
 showing which recipe requires it. Declining aborts the whole install:
 
 ```term
-$ sous subscribe workflow/needs-extras
+$ sous subscription add workflow/needs-extras
 // resolution reaches a repository this project has not added
 One repository has to be trusted before this can continue.
   extras
@@ -178,22 +182,25 @@ records and the `sous vars` commands in full.
 
 ```bash
 sous repo list
-sous repo search task
+sous subscription list
+sous search task
 sous repo search browser --limit 50
 ```
 
-Both read only what is already on disk, so both work offline and neither downloads anything.
-`repo list` shows each trusted repository with its location, provider, namespaces, recipe count,
-and whether it is currently linked to a working copy. `repo search` matches text against recipe
-names, namespace names and descriptions across every cached index. A repository whose index has
-never been fetched is reported as such rather than silently left out; run `sous repo add` on it
-again to refresh the index.
+All three read only what is already on disk, so all three work offline and none of them downloads
+anything. `repo list` shows each trusted repository with its location, provider, namespaces,
+recipe count, and whether it is currently linked to a working copy. `subscription list` shows
+every subscription the project declares, with the range it resolves within, the versions the
+lockfile pins for it, where it came from, and whether it is on. `repo search`, which is also the
+top-level `sous search`, matches text against recipe names, namespace names and descriptions
+across every cached index. A repository whose index has never been fetched is reported as such
+rather than silently left out; run `sous repo add` on it again to refresh the index.
 
-## Unsubscribe
+## Remove a subscription
 
 ```bash
-sous unsubscribe workflow/task-files
-sous unsubscribe workflow/task-files --dry-run
+sous subscription remove workflow/task-files
+sous subscription remove workflow/task-files --dry-run
 ```
 
 Removal is refcounted. Every lockfile entry records who holds it, so unsubscribing removes what
@@ -258,6 +265,12 @@ subscriptions:
   core:
     enabled: false
 ```
+
+`sous subscription remove core` writes exactly that line into the managed subscriptions layer for
+you, because there is no entry to delete: the one sous provides comes back on the next run, so
+only a recorded opt-out outlives it. `sous subscription add core` clears the opt-out again.
+Either way the `sous-recipes` repository stays trusted and keeps appearing in `repo list` as
+built in.
 
 Disabling the built-in `sous-recipes` repository entry the same way switches off the auto-
 subscription along with everything else that repository provides. Removing `core` means your

@@ -103,7 +103,8 @@ subscriptions:
     enabled: false
 ```
 
-Everything else in the official repository is opt-in, one `sous subscribe` at a time.
+Everything else in the official repository is opt-in, one `sous subscription add` at a time, and
+`sous subscription remove core` records that opt-out for you.
 
 ?> Namespace subscriptions are a first-class feature and are worth reaching for on other
 repositories, especially a team repository whose namespace is genuinely one coherent set. In the
@@ -213,7 +214,7 @@ change that.
 
 **Always-pull** installs a newer in-range version whenever one exists, rather than holding the
 locked one. It is set per repository or per subscription, or asked for once with
-`sous subscribe --always-pull`. It never widens the range a subscription or a dependency
+`sous subscription add --always-pull`. It never widens the range a subscription or a dependency
 declared; it re-resolves within it. The lockfile is still regenerated every time, so it always
 records what the last build actually used, and a project using always-pull simply accepts
 routine lockfile diffs as the record of what changed.

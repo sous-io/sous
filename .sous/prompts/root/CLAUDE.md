@@ -84,8 +84,10 @@ src/
     prune.ts               # remove stale output files
     clear.ts               # delete all Sous-written files for a project
     launch.ts              # build + spawn a coding agent tool
-    subscribe.ts           # subscribe to a namespace or recipe; installs the whole closure
-    unsubscribe.ts         # remove a subscription and whatever only it brought in
+    subscription/
+      list.ts              # what the project subscribes to, with ranges, pins and origin
+      add.ts               # subscribe to a namespace or recipe; installs the whole closure
+      remove.ts            # remove a subscription and whatever only it brought in
     repo/
       add.ts               # add (and thereby trust) a repository; fetches only its index
       list.ts              # list the trusted repositories and what they publish
@@ -97,7 +99,9 @@ src/
       release.ts           # validate a recipe repo, regenerate its index, cut the tags
       submit.ts            # propose this recipe repo's committed changes to its maintainers
     vars/
-      index.ts             # `sous vars` and `sous vars <name>`: what is answered, and how
+      index.ts             # bare `sous vars` and `sous vars <name>`: the hidden shorthand
+      list.ts              # `sous vars list`: every variable, its answer and its source
+      show.ts              # `sous vars show <name>`: one variable, and every rung of its ladder
       ask.ts               # `sous vars ask`: answer what is unanswered, into the env files
     config/
       show.ts              # print the merged config as JSON
@@ -349,10 +353,12 @@ round; the store is filled only after a version is settled; and a subscription i
 finished until the variables its recipes publish have been answered. `SubscriptionService`
 takes every collaborator as an injectable option, and `subscriptionServiceFor({
 configContext, settings, shellEnv })` builds one from what a running command already has.
-Its methods are `addRepo`, `subscribe`, `unsubscribe`, `restore`, `checkUpstream`,
-`needsRestore` and `prepareForBuild`. Unsubscribing drops the project's own hold on the
-recipes one subscription pulled in and lets the lockfile's refcounting decide what actually
-goes.
+Its methods are `addRepo`, `subscribe`, `unsubscribe`, `listSubscriptions`, `restore`,
+`checkUpstream`, `needsRestore` and `prepareForBuild`. Unsubscribing drops the project's own
+hold on the recipes one subscription pulled in and lets the lockfile's refcounting decide
+what actually goes. A subscription sous provides itself has no entry to delete, so removing
+one writes `{ enabled: false }` into the managed 510 layer instead; every reader of the
+project's subscriptions drops a switched-off entry, and subscribing again replaces it.
 
 **Always-pull never widens a range.** `checkUpstream` asks
 `effectiveRangeForHolders` (`freshness.ts`) what range each locked entry may move within,
@@ -638,7 +644,7 @@ and named.
 ### Managed 5xx layer convention
 
 `conf.d/500-*` through `conf.d/599-*` is a band reserved for layers the sous CLI writes
-for you (`sous repo add` writes `conf.d/500-repos.jsonc`, `sous subscribe` writes
+for you (`sous repo add` writes `conf.d/500-repos.jsonc`, `sous subscription add` writes
 `conf.d/510-subscriptions.jsonc`, and `sous vars ask` writes
 `conf.d/520-var-mappings.jsonc`). They are `.jsonc`, each opening with a header comment
 stating the policy: sous edits these files by key; you may edit them too. Writes go through
@@ -696,10 +702,10 @@ nothing and prune deleted everything compile had just written.
 ### Variables a Recipe Needs
 
 Sous no longer keeps a hand-maintained list of the variables its prompts want; a recipe
-PUBLISHES its own variable definitions in its manifest, and `sous vars` lists every one in
-play for the current project, with its environment variable, its value, where that value came
-from, and what is still unanswered. `sous vars <name>` shows one in full and `sous vars ask`
-answers what is missing. Read the definitions, not a table here.
+PUBLISHES its own variable definitions in its manifest, and `sous vars list` lists every one
+in play for the current project, with its environment variable, its value, where that value
+came from, and what is still unanswered. `sous vars show <name>` shows one in full and
+`sous vars ask` answers what is missing. Read the definitions, not a table here.
 
 Two systems meet in a template, and it is worth knowing which is which. A recipe's variable
 DEFINITIONS are answered in the project's env files and resolved through the five-rung ladder
@@ -707,7 +713,7 @@ in `src/lib/vars/`; a project's own `_vars` and `_env` are the zero-ceremony sys
 are what a `{{ variable }}` in a template renders from. The engine runs with
 `strictVariables: false`, so an undefined variable renders as an empty string: nothing fails,
 the output just silently loses the value (a path becomes `/[branch-name].md`). So define, in
-`_vars`, every variable the recipes you subscribe to name; `sous vars` is how you find out
+`_vars`, every variable the recipes you subscribe to name; `sous vars list` is how you find out
 which those are.
 
 ## The `.tpl.` Convention
@@ -835,18 +841,29 @@ This enables `sous prune` (remove stale outputs) and `sous clear` (delete all ou
 | `sous config validate` | Validate the merged config: schema, then full variable resolution |
 | `sous repo add <url>` | Add a repository, which is also how you trust it, then fetch only its index (`--name`, `--provider`, `--trust`, `--dry-run`) |
 | `sous repo list` | List the trusted repositories: name, location, provider, namespaces, recipe count, and whether it is linked |
-| `sous repo search <text>` | Search the cached indexes by namespace, recipe name and description (`--limit`) |
+| `sous repo search <text>` | Search the cached indexes by namespace, recipe name and description (`--limit`); also the top-level `sous search <text>` |
 | `sous repo gc` | Collect the machine-wide store back to its size cap, protecting everything the lockfile pins (`--max-bytes`, `--dry-run`) |
-| `sous subscribe <ref>` | Subscribe to a namespace or a recipe, install the whole closure, and answer the variables it publishes (`--prerelease`, `--always-pull`, `--trust`, `--dry-run`) |
-| `sous unsubscribe <ref>` | Remove a subscription and everything only it brought in, refcounted (`--dry-run`) |
+| `sous subscription list` | List what the project subscribes to: range, the versions the lockfile pins, origin, and whether it is on |
+| `sous subscription add <ref>` | Subscribe to a namespace or a recipe, install the whole closure, and answer the variables it publishes (`--prerelease`, `--always-pull`, `--trust`, `--dry-run`); also `sous subscribe` |
+| `sous subscription remove <ref>` | Remove a subscription and everything only it brought in, refcounted (`--dry-run`); also `sous unsubscribe` |
 | `sous repo init [dir]` | Scaffold a new recipe repository (`--name`, `--namespace`, `--force`) |
 | `sous repo link <repo> [path]` | Read a repository from a working copy: clone it, or link a checkout already on disk (`--global`, `--trust`) |
 | `sous repo unlink <repo>` | Drop the link and go back to published versions; the checkout stays (`--global`) |
 | `sous repo release` | Validate a recipe repository, regenerate its index, and propose the release (`--check`, `--bump`, `--recipe`, `--tag`, `--push`, `--dry-run`) |
 | `sous repo submit` | Propose this repository's committed changes to its maintainers (`--title`, `--body`, `--draft`, `--dry-run`) |
-| `sous vars` | List every recipe variable in play: its answer, the env var that supplied it, and the source |
-| `sous vars <name>` | Show one variable in full, with every candidate env var name and the rung that answered |
+| `sous vars list` | List every recipe variable in play: its answer, the env var that supplied it, and the source |
+| `sous vars show <name>` | Show one variable in full, with every candidate env var name and the rung that answered |
 | `sous vars ask [name]` | Answer what is unanswered (or one variable, or everything with `--all`); `--file` reads a standalone definitions file, `--dry-run` writes nothing |
+
+Every topic answers to both spellings of its name (`repo`/`repos`, `subscription`/
+`subscriptions`, `var`/`vars`, `config`/`configs`), implemented as oclif `aliases` on each
+command plus a `hidden: true` topic entry in the `oclif.topics` block of `package.json`;
+that block is also where each topic's one-sentence description lives. `subscribe` and
+`unsubscribe` stay as `hiddenAliases` of `subscription add` and `subscription remove`, and
+`search` is a visible alias of `repo search`. A name listed in BOTH `aliases` and
+`hiddenAliases` is registered visible first and never hidden, so each alternate name goes in
+exactly one of the two lists. Bare `sous vars` is a hidden command carrying the optional
+name argument, so the top-level listing names `vars` once, as a topic.
 
 The `sous config` namespace inspects the merged config. `show` and `get` emit machine-
 readable stdout (`config show | jq` works): they extend `ConfigCommand`, which routes the

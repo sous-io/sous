@@ -197,7 +197,7 @@ recipe paths, include and exclude patterns may not escape the recipe folder.
 | `env` | no | upper snake case string | The environment variable an answer binds to. `sous repo release` derives a default when it is omitted; the runtime never derives one |
 | `type` | yes | `string`, `number`, `boolean`, `enum`, `path` or `url` | How the answer is validated and prompted for |
 | `prompt` | yes | string | The one-line question text |
-| `description` | yes | non-empty string | The paragraph explaining what the variable is for. Shown above the question when sous asks, and by `sous vars <name>` |
+| `description` | yes | non-empty string | The paragraph explaining what the variable is for. Shown above the question when sous asks, and by `sous vars show <name>` |
 | `example` | yes | string, number or boolean | A realistic sample answer, shown with the question. Checked against the declared type and the enum options exactly as `default` is, but never stored and never offered as the answer |
 | `default` | no | string, number or boolean | Must match the declared type, and for an enum must be one of the options |
 | `required` | no | boolean, default `true` | Whether a build needs an answer |
@@ -544,7 +544,7 @@ command with an error rather than a guess about where the block ends.
 ## Project configuration
 
 Four optional top-level keys in a project's sous config carry the consumer side. `sous repo add`
-and `sous subscribe` write the first two into machine-managed `conf.d/` layers, and you may also
+and `sous subscription add` write the first two into machine-managed `conf.d/` layers, and you may also
 hand-write them in the primary config; the layers merge like anything else. The fourth,
 `recipeOutputs`, is always yours to write and is covered under
 [Consuming recipes](#consuming-recipes).
@@ -636,7 +636,7 @@ layers:
 | File | Holds | Written by |
 |------|-------|------------|
 | `conf.d/500-repos.jsonc` | the `repos:` map | `sous repo add`, `sous repo remove` |
-| `conf.d/510-subscriptions.jsonc` | the `subscriptions:` map | `sous subscribe`, `sous unsubscribe` |
+| `conf.d/510-subscriptions.jsonc` | the `subscriptions:` map | `sous subscription add`, `sous subscription remove` |
 | `conf.d/520-var-mappings.jsonc` | the `varMappings:` map | `sous vars ask` |
 
 All three are ordinary config layers: they load in filename order after your primary config and
@@ -848,12 +848,13 @@ the primary config too.
 
 | Command | What it does |
 |---------|--------------|
-| `sous vars` | Lists every variable in play: its recipe, the environment variable that answered it, the value (hidden for a secret) and the source |
-| `sous vars <name>` | Shows one variable in full, including every environment variable on the ladder and which rung answered |
+| `sous vars list` | Lists every variable in play: its recipe, the environment variable that answered it, the value (hidden for a secret) and the source |
+| `sous vars show <name>` | Shows one variable in full, including every environment variable on the ladder and which rung answered |
 | `sous vars ask [name]` | Answers what is unanswered, or one named variable; `--all` asks everything again |
 | `sous vars ask --file <path>` | Asks the definitions in a standalone file holding the same `variables:` array a recipe manifest carries |
 
-`sous vars` and `sous vars ask` both accept `--file`, and `sous vars ask` accepts `--dry-run`.
+`sous vars list`, `sous vars show` and `sous vars ask` all accept `--file`, and `sous vars ask`
+accepts `--dry-run`.
 
 Answers already in scope are listed visibly and never re-asked. Without a terminal, an
 unanswered required variable fails the run and names the exact environment variables that would
