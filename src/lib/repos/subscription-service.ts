@@ -55,7 +55,7 @@ import {
   SUBSCRIPTIONS_LAYER_FILENAME,
   readManagedLayer,
   removeManagedLayer,
-  writeManagedLayer,
+  updateManagedLayer,
 } from "./managed-layer.js";
 import {
   builtInProviders,
@@ -622,10 +622,10 @@ export class SubscriptionService {
           confDir: this.confDir,
         });
       } else {
-        writeManagedLayer(
+        updateManagedLayer(
           this.sousDir,
           SUBSCRIPTIONS_LAYER_FILENAME,
-          { subscriptions: remaining },
+          [{ path: ["subscriptions", key], value: undefined }],
           { confDir: this.confDir }
         );
       }
@@ -1265,7 +1265,7 @@ export class SubscriptionService {
   }
 
   /**
-   * Records one subscription in the managed layer, replacing the file in full.
+   * Records one subscription in the managed layer, editing only that entry.
    *
    * @param key - The ref key the subscription is recorded under.
    * @param parsed - The ref as parsed, for its version range.
@@ -1284,10 +1284,10 @@ export class SubscriptionService {
       addedBy: USER_ADDED_BY,
     };
 
-    writeManagedLayer(
+    updateManagedLayer(
       this.sousDir,
       SUBSCRIPTIONS_LAYER_FILENAME,
-      { subscriptions: { ...this.readSubscriptionEntries(), [key]: entry } },
+      [{ path: ["subscriptions", key], value: entry }],
       { confDir: this.confDir }
     );
   }

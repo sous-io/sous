@@ -65,7 +65,7 @@ describe("TrustService", () => {
    * addRepo should write the repository into the managed layer with its
    * provenance, which is what trusting one means.
    *
-   * addRepo({ name: "team-recipes", url }) // -> conf.d/500-repos.json holds it
+   * addRepo({ name: "team-recipes", url }) // -> conf.d/500-repos.jsonc holds it
    */
   it("should write an added repository into the managed layer", () => {
     const { service } = makeService();

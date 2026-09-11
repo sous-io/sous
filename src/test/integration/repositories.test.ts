@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { parse as parseJsonc } from "jsonc-parser";
 import { makeTmpDir, type TmpDir } from "../utils/tmp.js";
 import { buildFixtureRepo } from "../utils/fixture-repo.js";
 
@@ -54,6 +55,13 @@ function write(filePath: string, contents: string): string {
 /** Reads a JSON file that the CLI wrote. */
 function readJson(filePath: string): Record<string, unknown> {
   return JSON.parse(fs.readFileSync(filePath, "utf8")) as Record<string, unknown>;
+}
+
+/**
+ * Reads one of the managed `conf.d/` layers, which are JSON with comments.
+ */
+function readJsonc(filePath: string): Record<string, unknown> {
+  return parseJsonc(fs.readFileSync(filePath, "utf8")) as Record<string, unknown>;
 }
 
 
@@ -180,7 +188,7 @@ describe("the repositories consumer surface", () => {
       expect(result.status).not.toBe(0);
       expect(result.stdout + result.stderr).toContain("fixtures");
       expect(result.stdout + result.stderr).toContain("--trust");
-      expect(fs.existsSync(path.join(sousDir, "conf.d", "500-repos.json"))).toBe(false);
+      expect(fs.existsSync(path.join(sousDir, "conf.d", "500-repos.jsonc"))).toBe(false);
     },
     CLI_TIMEOUT
   );
@@ -199,7 +207,7 @@ describe("the repositories consumer surface", () => {
       expect(result.status).toBe(0);
       expect(result.stdout).toContain("workflow");
 
-      const layer = readJson(path.join(sousDir, "conf.d", "500-repos.json"));
+      const layer = readJsonc(path.join(sousDir, "conf.d", "500-repos.jsonc"));
       const repos = layer.repos as Record<string, { url: string; addedBy: string }>;
       expect(repos.fixtures!.url).toBe(mainRepo);
       expect(repos.fixtures!.addedBy).toBe("user");
@@ -300,8 +308,8 @@ describe("the repositories consumer surface", () => {
       expect(recipes["workflow/task-files"]!.version).toBe("1.0.0");
       expect(recipes["workflow/task-files"]!.repo).toBe("fixtures");
 
-      const subscriptions = readJson(
-        path.join(sousDir, "conf.d", "510-subscriptions.json")
+      const subscriptions = readJsonc(
+        path.join(sousDir, "conf.d", "510-subscriptions.jsonc")
       ).subscriptions as Record<string, { addedBy: string }>;
       expect(subscriptions["workflow/task-files"]!.addedBy).toBe("user");
 
@@ -464,8 +472,8 @@ describe("the repositories consumer surface", () => {
       const recipes = lock.recipes as Record<string, unknown>;
       expect(Object.keys(recipes).sort()).toEqual(["workflow/task-files"]);
 
-      const subscriptions = readJson(
-        path.join(sousDir, "conf.d", "510-subscriptions.json")
+      const subscriptions = readJsonc(
+        path.join(sousDir, "conf.d", "510-subscriptions.jsonc")
       ).subscriptions as Record<string, unknown>;
       expect(Object.keys(subscriptions)).toEqual(["workflow/task-files"]);
 

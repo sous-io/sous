@@ -25,7 +25,7 @@ import { askYesNo, isInteractive } from "../../utils/prompts.js";
 import {
   REPOS_LAYER_FILENAME,
   readManagedLayer,
-  writeManagedLayer,
+  updateManagedLayer,
   type ManagedLayerOptions,
 } from "./managed-layer.js";
 import type { MissingRepo } from "./resolver.js";
@@ -165,7 +165,6 @@ export class TrustService {
    * @param request - The repository's name, URL and provenance.
    */
   addRepo(request: AddRepoRequest): TrustedRepo {
-    const existing = this.listManaged();
     const entry: TrustedRepo = {
       url: request.url,
       ...(request.provider === undefined ? {} : { provider: request.provider }),
@@ -174,10 +173,10 @@ export class TrustService {
       addedBy: request.addedBy ?? USER_ADDED_BY,
     };
 
-    writeManagedLayer(
+    updateManagedLayer(
       this.sousDir,
       REPOS_LAYER_FILENAME,
-      { repos: { ...existing, [request.name]: entry } },
+      [{ path: ["repos", request.name], value: entry }],
       this.layerOptions
     );
     return entry;
@@ -208,12 +207,10 @@ export class TrustService {
       );
     }
 
-    const remaining = { ...existing };
-    delete remaining[name];
-    writeManagedLayer(
+    updateManagedLayer(
       this.sousDir,
       REPOS_LAYER_FILENAME,
-      { repos: remaining },
+      [{ path: ["repos", name], value: undefined }],
       this.layerOptions
     );
   }

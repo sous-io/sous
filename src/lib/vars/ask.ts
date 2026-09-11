@@ -41,6 +41,7 @@ import {
   type ResolvedVariable,
 } from "./ladder.js";
 import {
+  VAR_MAPPINGS_LAYER_FILENAME,
   formatMappingTarget,
   mappingTargetFor,
   writeMappingRecord,
@@ -368,7 +369,7 @@ async function storeAnswer(
     if (useMapping) {
       envName = scopedName;
       const mappingPath = options.dryRun === true
-        ? path.join(options.confDir, "520-var-mappings.json")
+        ? path.join(options.confDir, VAR_MAPPINGS_LAYER_FILENAME)
         : writeMappingRecord(options.confDir, scopedName, target);
       mapping = { envName: scopedName, target, filePath: mappingPath };
       context.mappings = { ...context.mappings, [scopedName]: target };

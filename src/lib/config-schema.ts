@@ -82,7 +82,7 @@ const toolSchema = z
 /**
  * One trusted repository, keyed by the short name refs use in the `repo:`
  * qualifier. Adding a repo IS trusting it: `sous repo add` writes the entry
- * into the machine-written `conf.d/500-repos.json` layer, and removing the
+ * into the machine-written `conf.d/500-repos.jsonc` layer, and removing the
  * entry withdraws the trust. A user may also hand-write `repos:` in the primary
  * config; the two layers merge like anything else.
  */
@@ -127,7 +127,7 @@ const repoEntrySchema = z
 /**
  * One subscription, keyed by a ref key: a bare namespace (every recipe in it,
  * including ones published later) or `namespace/recipe`. Written by
- * `sous subscribe` into the machine-written `conf.d/510-subscriptions.json`
+ * `sous subscribe` into the machine-written `conf.d/510-subscriptions.jsonc`
  * layer, and hand-writable in the primary config.
  */
 const subscriptionEntrySchema = z
@@ -228,11 +228,6 @@ export const settingsSchema = z
     // as reserved and never flag it, so rejecting it here would break the
     // documented workflow. sous itself ignores the value.
     $schema: z.string().optional(),
-    // Allowed so a machine-written layer can say, in the file itself, that sous
-    // wrote it and replaces it in full. JSON has no comment syntax, and the
-    // managed `conf.d/5xx` layers are JSON; see `repos/managed-layer.ts`. Sous
-    // ignores the value.
-    $comment: z.string().optional(),
     version: z.literal(SUPPORTED_CONFIG_VERSION).optional(),
     _env: stringRecord.optional(),
     _vars: stringRecord.optional(),
@@ -278,7 +273,7 @@ export const settingsSchema = z
      * Variable mapping records, keyed by environment variable name. Each entry
      * binds that name to one recipe variable, which is how an answer is stored
      * under a name of your choosing when the generated names are taken. Written
-     * by `sous vars ask` into `conf.d/520-var-mappings.json`, and hand-writable
+     * by `sous vars ask` into `conf.d/520-var-mappings.jsonc`, and hand-writable
      * in the primary config.
      */
     varMappings: z

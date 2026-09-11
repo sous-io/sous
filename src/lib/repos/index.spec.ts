@@ -260,6 +260,18 @@ const PHASE_7_EXPORTS = [
   "seedCoreRecipe",
 ];
 
+/**
+ * The names the managed-layer work added: the header comment every machine
+ * written `conf.d/` layer opens with, the old `.json` path read during a
+ * migration, and the key-path editor the writers use instead of replacing a
+ * layer wholesale.
+ */
+const MANAGED_LAYER_EXPORTS = [
+  "legacyManagedLayerPath",
+  "managedLayerHeader",
+  "updateManagedLayer",
+];
+
 describe("the repos barrel", () => {
   /**
    * The barrel exposes exactly the documented surface: nothing missing, and
@@ -273,6 +285,7 @@ describe("the repos barrel", () => {
       ...PHASE_6A_EXPORTS,
       ...PHASE_3_EXPORTS,
       ...PHASE_7_EXPORTS,
+      ...MANAGED_LAYER_EXPORTS,
     ].sort();
     expect(Object.keys(repos).sort()).toEqual(expected);
   });

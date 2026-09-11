@@ -5,9 +5,6 @@
     "$schema": {
       "type": "string"
     },
-    "$comment": {
-      "type": "string"
-    },
     "version": {
       "type": "number",
       "const": 1

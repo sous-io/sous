@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { parse as parseJsonc } from "jsonc-parser";
 import { makeTmpDir, type TmpDir } from "../utils/tmp.js";
 import { parseEnvLocal } from "../../lib/env-local.js";
 import {
@@ -159,7 +160,9 @@ describe("asking for missing variable answers", () => {
     expect(answered.envName).toBe("SOUS_VAR_MISC_STUFF_API_URL");
     expect(answered.mapping?.target).toBe("sous-recipes:misc/stuff/apiUrl");
 
-    const layer = JSON.parse(fs.readFileSync(path.join(confDir, VAR_MAPPINGS_LAYER_FILENAME), "utf8"));
+    const layer = parseJsonc(
+      fs.readFileSync(path.join(confDir, VAR_MAPPINGS_LAYER_FILENAME), "utf8")
+    ) as { varMappings: Record<string, string> };
     expect(layer.varMappings).toEqual({
       SOUS_VAR_MISC_STUFF_API_URL: "sous-recipes:misc/stuff/apiUrl",
     });

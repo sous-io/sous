@@ -126,24 +126,91 @@ describe("mappingMatches() and mappedNamesFor()", () => {
 
 describe("writeMappingRecord()", () => {
   /**
-   * writeMappingRecord should write the machine-written layer file with a
-   * plain-language `$comment` and the record under `varMappings`, creating the
-   * conf.d directory when it does not exist yet.
+   * writeMappingRecord should write the machine-written layer file with its
+   * header comment and the record under `varMappings`, creating the conf.d
+   * directory when it does not exist yet.
    */
-  it("should write a stable, commented layer file", () => {
+  it("should write a commented layer file", () => {
     const confDir = path.join(tmp.path, "conf.d");
     const written = writeMappingRecord(confDir, "TEAM_API_URL", mappingTargetFor(defined()));
 
     expect(written).toBe(path.join(confDir, VAR_MAPPINGS_LAYER_FILENAME));
-    const parsed = JSON.parse(fs.readFileSync(written, "utf8"));
-    expect(parsed.$comment).toContain("Written by sous");
-    expect(parsed.varMappings).toEqual({ TEAM_API_URL: "sous-recipes:misc/stuff/apiUrl" });
+    const text = fs.readFileSync(written, "utf8");
+    expect(text.startsWith("// This file is managed by sous")).toBe(true);
+    expect(text).toContain("'sous vars'");
+    expect(text).not.toContain("$comment");
+    expect(readMappingRecords(written)).toEqual({
+      TEAM_API_URL: "sous-recipes:misc/stuff/apiUrl",
+    });
   });
 
   /**
-   * writeMappingRecord should replace the file wholesale while keeping the
-   * records already in it, because config layers concatenate arrays and merge
-   * objects; appending would leave two entries for one name.
+   * The record is written by key, so a note somebody left beside another record
+   * is still there afterwards.
+   */
+  it("should keep a comment a user wrote in the layer", () => {
+    const confDir = path.join(tmp.path, "conf.d");
+    fs.mkdirSync(confDir, { recursive: true });
+    const filePath = path.join(confDir, VAR_MAPPINGS_LAYER_FILENAME);
+    fs.writeFileSync(
+      filePath,
+      [
+        "// mine, hands off",
+        "{",
+        '  "varMappings": {',
+        "    // the staging endpoint",
+        '    "FIRST_NAME": "misc/stuff/apiUrl"',
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+      "utf8"
+    );
+
+    writeMappingRecord(confDir, "SECOND_NAME", "misc/other/apiUrl");
+
+    const text = fs.readFileSync(filePath, "utf8");
+    expect(text).toContain("// mine, hands off");
+    expect(text).toContain("// the staging endpoint");
+    expect(readMappingRecords(filePath)).toEqual({
+      FIRST_NAME: "misc/stuff/apiUrl",
+      SECOND_NAME: "misc/other/apiUrl",
+    });
+  });
+
+  /**
+   * A layer still under the old `520-var-mappings.json` name is read as a
+   * fallback, and the next write migrates it to `.jsonc` and removes the old
+   * file.
+   */
+  it("should migrate an old .json mapping layer", () => {
+    const confDir = path.join(tmp.path, "conf.d");
+    fs.mkdirSync(confDir, { recursive: true });
+    const legacy = path.join(confDir, "520-var-mappings.json");
+    fs.writeFileSync(
+      legacy,
+      JSON.stringify({ varMappings: { FIRST_NAME: "misc/stuff/apiUrl" } }, null, 2),
+      "utf8"
+    );
+
+    expect(readMappingRecords(path.join(confDir, VAR_MAPPINGS_LAYER_FILENAME))).toEqual({
+      FIRST_NAME: "misc/stuff/apiUrl",
+    });
+
+    writeMappingRecord(confDir, "SECOND_NAME", "misc/other/apiUrl");
+
+    expect(fs.existsSync(legacy)).toBe(false);
+    expect(fs.readdirSync(confDir)).toEqual([VAR_MAPPINGS_LAYER_FILENAME]);
+    expect(readMappingRecords(path.join(confDir, VAR_MAPPINGS_LAYER_FILENAME))).toEqual({
+      FIRST_NAME: "misc/stuff/apiUrl",
+      SECOND_NAME: "misc/other/apiUrl",
+    });
+  });
+
+  /**
+   * writeMappingRecord should keep the records already in the file when adding
+   * another, because config layers concatenate arrays and merge objects;
+   * appending a second entry for one name would resolve unpredictably.
    */
   it("should keep existing records when adding another", () => {
     const confDir = path.join(tmp.path, "conf.d");
