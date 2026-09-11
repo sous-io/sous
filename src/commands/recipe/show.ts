@@ -67,13 +67,13 @@ const VARIABLE_COLUMNS: TableColumn[] = [
 /** The columns the content listing shows. */
 const CONTENT_COLUMNS: TableColumn[] = [
   { key: "kind", header: "Content", minWidth: 7 },
-  { key: "include", header: "Files", overflow: "wrap", minWidth: 10 },
+  { key: "include", header: "Files", overflow: "wrap", flex: 1, minWidth: 14 },
   {
     key: "destination",
     header: "Where they land",
     kind: "path",
     overflow: "wrap",
-    flex: 1,
+    flex: 2,
     minWidth: 16,
   },
 ];
