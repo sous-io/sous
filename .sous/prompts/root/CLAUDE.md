@@ -172,8 +172,9 @@ src/
     filters/               # custom Liquid filters: bulletList
     lib/                   # shared tag helpers: glob-files.ts, tag-args.ts
   utils/
-    formatting.ts          # console output helpers (heading, showVar, sortObjectKeys, etc.)
+    formatting.ts          # console output helpers (heading, showVar, wrapText, etc.)
     prompts.ts
+    value-prompt.ts        # the Tab-aware value question used by `sous vars ask`
 recipes/                   # the recipes that SHIP INSIDE the package; see "Skills System"
   core/
     sous-skills/           # the core recipe: the offline seed, version-locked to the package
@@ -304,8 +305,19 @@ layers are indistinguishable. `mappings.ts` binds an arbitrary env var name to o
 qualified variable under the top-level `varMappings` config key, writing sous's own records
 into the managed `conf.d/520-var-mappings.jsonc` layer (one key-path edit per record, through
 `updateManagedLayer`). `ask.ts` keeps and reports the answers already in scope, asks for
-the rest through `@inquirer/prompts`, stores each through `src/lib/env-file.ts`, and fails a
-run with no terminal by naming the env vars that would answer. `env-file.ts` is the write
+the rest, stores each through `src/lib/env-file.ts`, and fails a run with no terminal by
+naming the env vars that would answer. It decides everything BEFORE printing anything, so it
+can open with how many answers each recipe needs; questions then run per recipe, the
+subscribed one first (a subscribe calls it only after the closure resolved and every new
+repository was trusted, never interleaved). Each question prints a basic view and then the
+custom value prompt in `src/utils/value-prompt.ts` (built on `createPrompt` from
+`@inquirer/core`, a DIRECT dependency for exactly this): Enter answers, Tab resolves with
+`{ kind: "advanced" }` and opens the advanced view, whose menu changes the storage file or the
+stored env var name and can save or discard. A secret may still be pointed at the committed
+file, after a warning and a confirmation; informed consent, not prevention. The labeled facts
+block (`@default`, `@example`, `@required-by`, `@defined-by`, `@storage-path`, `@stored-as`,
+`@constraints`) is ONE renderer in `display.ts`, used by the advanced view and by
+`sous vars show`, so the vocabulary cannot drift. `env-file.ts` is the write
 half of `env-local.ts`: it parses a line model, rewrites exactly one value line or appends
 one under a generated header comment, and writes atomically, so comments, order and quoting
 survive. Comments are output only and are never read back.
