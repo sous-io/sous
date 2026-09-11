@@ -123,6 +123,43 @@ describe("validateAnswer()", () => {
   });
 
   /**
+   * validateAnswer should stop waiting for a pattern that cannot finish, and
+   * refuse the answer with a message that names the variable, the recipe and
+   * the pattern, and blames the pattern rather than the answer.
+   *
+   * validateAnswer(slowDefinition, "aaa...!", { recipe: "acme/web-app" });
+   * // -> { ok: false, message: "apiUrl could not be checked: the pattern ..." }
+   */
+  it("should refuse an answer whose pattern runs out of time", () => {
+    const slow = definition({ validate: { pattern: "^(a+)+$" } });
+    const result = validateAnswer(slow, "a".repeat(39) + "!", {
+      recipe: "acme/web-app",
+      patternBudgetMs: 50,
+    });
+
+    expect(result.ok).toBe(false);
+    const message = result.ok === false ? result.message : "";
+    expect(message).toContain("apiUrl could not be checked");
+    expect(message).toContain("the pattern ^(a+)+$");
+    expect(message).toContain("published by the recipe acme/web-app");
+    expect(message).toContain("took longer than 50 milliseconds to run");
+    expect(message).toContain("the answer was not the problem");
+  });
+
+  /**
+   * validateAnswer should still name a slow pattern usefully when the caller
+   * does not know which recipe published it.
+   */
+  it("should describe the publisher in words when the recipe is unknown", () => {
+    const slow = definition({ validate: { pattern: "^(a+)+$" } });
+    const result = validateAnswer(slow, "a".repeat(39) + "!", { patternBudgetMs: 50 });
+
+    expect(result.ok === false && result.message).toContain(
+      "published by the recipe that defines it"
+    );
+  });
+
+  /**
    * validateAnswer should enforce declared string lengths.
    */
   it("should enforce declared string lengths", () => {

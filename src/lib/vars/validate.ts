@@ -10,13 +10,31 @@
  *
  * Answers are stored as text in env files, so validation always starts from a
  * string and hands back the coerced value.
+ *
+ * A `pattern` comes from a recipe, which is code from somewhere else, so it is
+ * never run on this thread without a limit; see `safe-regex.ts`. A pattern that
+ * exceeds its budget fails validation, and the failure says so plainly rather
+ * than telling the person that their answer is wrong.
  */
 
 import { z } from "zod";
 import type { VariableDefinition } from "../repos/formats/recipe-manifest.js";
+import { DEFAULT_PATTERN_BUDGET_MS, matchWithBudget } from "./safe-regex.js";
 
 /** The value an answer coerces to, once it has been validated. */
 export type AnswerValue = string | number | boolean;
+
+/** What the caller knows about where a definition came from, for messages. */
+export interface ValidationContext {
+  /**
+   * The recipe that published the definition, named the way it should read in a
+   * message (for example 'acme/web-app'). Omitted when the caller does not know
+   * it, in which case messages describe it in words instead.
+   */
+  recipe?: string;
+  /** How long a declared pattern may run, in milliseconds. */
+  patternBudgetMs?: number;
+}
 
 /** A validated answer, or the reason it was refused. */
 export type AnswerValidation =
@@ -35,8 +53,12 @@ const FALSE_WORDS = new Set(["false", "no", "n", "off", "0"]);
  * boolean a `number` or `boolean` variable promised.
  *
  * @param definition - The variable definition to build a schema for.
+ * @param context - What is known about the recipe, for the pattern message.
  */
-export function validationSchemaFor(definition: VariableDefinition): z.ZodType<AnswerValue> {
+export function validationSchemaFor(
+  definition: VariableDefinition,
+  context: ValidationContext = {}
+): z.ZodType<AnswerValue> {
   const rules = definition.validate;
 
   switch (definition.type) {
@@ -122,9 +144,18 @@ export function validationSchemaFor(definition: VariableDefinition): z.ZodType<A
       });
     }
     if (rules?.pattern !== undefined) {
-      const pattern = new RegExp(rules.pattern);
-      schema = schema.refine((value) => pattern.test(value), {
-        message: `must match the pattern ${rules.pattern}`,
+      const pattern = rules.pattern;
+      const budget = context.patternBudgetMs ?? DEFAULT_PATTERN_BUDGET_MS;
+      schema = schema.superRefine((value, ctx) => {
+        const outcome = matchWithBudget(pattern, value, budget);
+        if (outcome === "match") return;
+        ctx.addIssue({
+          code: "custom",
+          message:
+            outcome === "timeout"
+              ? patternTooSlowMessage(pattern, budget, context.recipe)
+              : `must match the pattern ${pattern}`,
+        });
       });
     }
 
@@ -133,15 +164,41 @@ export function validationSchemaFor(definition: VariableDefinition): z.ZodType<A
 }
 
 /**
+ * The failure for a pattern that ran out of time. It names the pattern and the
+ * recipe that published it, and says plainly that the pattern is the problem;
+ * the person answering has no way to write an answer that a runaway pattern
+ * would finish on.
+ *
+ * @param pattern - The regular expression source the recipe declared.
+ * @param budgetMs - The budget it exceeded, in milliseconds.
+ * @param recipe - The recipe that published it, when the caller knows it.
+ */
+function patternTooSlowMessage(
+  pattern: string,
+  budgetMs: number,
+  recipe?: string
+): string {
+  const publisher = recipe === undefined ? "the recipe that defines it" : `the recipe ${recipe}`;
+  return (
+    `could not be checked: the pattern ${pattern}, published by ${publisher}, ` +
+    `took longer than ${budgetMs} milliseconds to run, so sous stopped waiting ` +
+    "for it. The pattern is too slow to run, and the answer was not the problem; " +
+    "this needs to be reported to whoever publishes the recipe"
+  );
+}
+
+/**
  * Validates one answer against its definition.
  *
  * @param definition - The variable definition the answer is for.
  * @param raw - The answer as text, as typed or as read from an env file.
+ * @param context - What is known about the recipe, for the pattern message.
  * @returns The coerced value, or a plain-language message naming what is wrong.
  */
 export function validateAnswer(
   definition: VariableDefinition,
-  raw: string
+  raw: string,
+  context: ValidationContext = {}
 ): AnswerValidation {
   const trimmed = typeof raw === "string" ? raw.trim() : "";
 
@@ -149,7 +206,7 @@ export function validateAnswer(
     return { ok: true, value: "" };
   }
 
-  const result = validationSchemaFor(definition).safeParse(trimmed);
+  const result = validationSchemaFor(definition, context).safeParse(trimmed);
   if (result.success) return { ok: true, value: result.data };
 
   const first = result.error.issues[0];
