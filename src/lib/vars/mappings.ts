@@ -41,7 +41,8 @@ export const VAR_MAPPINGS_LAYER_FILENAME = "520-var-mappings.jsonc";
 export const VAR_MAPPINGS_DESCRIPTION = [
   "Each entry under 'varMappings' binds an environment variable to one recipe",
   "variable, so an answer can be stored under a name of your choosing when the",
-  "usual names are taken. Run 'sous vars' to see which name answered what.",
+  "usual names are taken. The 'sous vars ask' command writes them; run",
+  "'sous vars' to see which name answered what.",
 ];
 
 /** The header comment sous writes at the top of the mapping record layer. */

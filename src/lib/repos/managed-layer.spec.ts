@@ -10,6 +10,7 @@ import { parse as parseJsonc } from "jsonc-parser";
 import {
   MANAGED_LAYER_COMMENT,
   REPOS_LAYER_FILENAME,
+  SUBSCRIPTIONS_LAYER_FILENAME,
   managedLayerHeader,
   readManagedLayer,
   removeManagedLayer,
@@ -76,6 +77,24 @@ describe("the managed config layers", () => {
     expect(REPOS_LAYER_FILENAME.endsWith(".jsonc")).toBe(true);
     expect(managedLayerHeader(REPOS_LAYER_FILENAME)).toContain("// This file is managed by sous");
     expect(MANAGED_LAYER_COMMENT).toContain("you may edit them");
+  });
+
+  /**
+   * A header tells the reader which command to run next, so it may only name
+   * commands sous actually has. Removal has no command yet, and the canonical
+   * subscription commands are the `sous subscription` pair, not their aliases.
+   */
+  it("should name only commands sous really has", () => {
+    const repos = managedLayerHeader(REPOS_LAYER_FILENAME);
+    expect(repos).toContain("'sous repo add'");
+    expect(repos).toContain("delete the entry by hand or");
+    expect(repos).not.toContain("sous repo remove");
+
+    const subscriptions = managedLayerHeader(SUBSCRIPTIONS_LAYER_FILENAME);
+    expect(subscriptions).toContain("'sous subscription add'");
+    expect(subscriptions).toContain("'sous subscription remove'");
+    expect(subscriptions).not.toContain("'sous subscribe'");
+    expect(subscriptions).not.toContain("'sous unsubscribe'");
   });
 
   /**
