@@ -218,7 +218,8 @@ export function providerByIdIn(
 /**
  * Finds the provider for a repo entry: the one it names, otherwise the one that
  * recognizes its URL. Raises a ConfigError naming the URL and listing the
- * providers sous knows when neither works.
+ * providers sous knows when neither works, and another when the named provider
+ * contradicts a URL a different provider plainly owns.
  *
  * @param url - The repository URL.
  * @param providerId - The provider named by the repo entry, when it named one.
@@ -233,11 +234,28 @@ export function requireProviderIn(
 
   if (providerId !== undefined) {
     const named = providerByIdIn(providerId, providers);
-    if (named !== undefined) return named;
-    throw new ConfigError(
-      `The repository at ${url} names the provider '${providerId}', which sous does not ` +
-        `have.\n  Sous ships these providers: ${known}.`
-    );
+    if (named === undefined) {
+      throw new ConfigError(
+        `The repository at ${url} names the provider '${providerId}', which sous does not ` +
+          `have.\n  Sous ships these providers: ${known}.`
+      );
+    }
+
+    // A named provider is honoured for a host nobody recognizes, which is what a
+    // self-hosted instance needs. It is refused only when a DIFFERENT provider
+    // plainly owns the URL, because that is a contradiction rather than a hint.
+    if (!named.matches(url)) {
+      const owner = detectProviderIn(url, providers);
+      if (owner !== undefined) {
+        throw new ConfigError(
+          `The ${named.id} provider does not handle ${url}; that is ` +
+            `${describeRepoUrl(owner.id)}, which the ${owner.id} provider handles.\n` +
+            `  Drop '--provider' and let sous work it out, or name '${owner.id}'.`
+        );
+      }
+    }
+
+    return named;
   }
 
   const detected = detectProviderIn(url, providers);
@@ -246,7 +264,12 @@ export function requireProviderIn(
   throw new ConfigError(
     `Sous does not recognize the host in the repository URL ${url}.\n` +
       `  Sous ships these providers: ${known}. For a self-hosted instance, name the ` +
-      `provider on the repository entry, for example with ` +
-      `'sous repo add ${url} --provider gitlab'.`
+      `provider that host runs on the repository entry, as in ` +
+      `'sous repo add ${url} --provider <provider>'.`
   );
+}
+
+/** How a URL a provider recognizes is described in a mismatch message. */
+function describeRepoUrl(providerId: ProviderId): string {
+  return providerId === "local" ? "a local path" : `a ${providerId} URL`;
 }

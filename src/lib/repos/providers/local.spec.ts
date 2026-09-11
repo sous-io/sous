@@ -1,8 +1,15 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { makeTmpDir, type TmpDir } from "../../../test/utils/tmp.js";
-import { LocalProvider, localRepoPath } from "./local.js";
+import {
+  LocalProvider,
+  assertLocalRepoDirectory,
+  localRepoPath,
+  looksLikeLocalPath,
+  resolveRepoArgument,
+} from "./local.js";
 import { builtInProviders, detectProvider, requireProvider } from "./index.js";
 import type { CommandResult, CommandRunner } from "./git.js";
 
@@ -17,7 +24,7 @@ const notAGitRepo: CommandRunner = async (): Promise<CommandResult> => ({
 });
 
 beforeEach(() => {
-  tmp = makeTmpDir("sous-file-provider-");
+  tmp = makeTmpDir("sous-local-provider-");
   repoDir = path.join(tmp.path, "recipes");
   fs.mkdirSync(repoDir, { recursive: true });
 });
@@ -184,5 +191,165 @@ describe("LocalProvider", () => {
         { run: notAGitRepo }
       )
     ).rejects.toThrow(/has no folder 'recipes\/missing'/);
+  });
+});
+
+describe("looksLikeLocalPath()", () => {
+  /**
+   * A path a person actually types should be recognized as a path: an explicit
+   * relative one, a `~` one and an absolute one all count, whether or not they
+   * exist yet, so a typo still gets a path error rather than a provider error.
+   *
+   * looksLikeLocalPath("../my-recipes"); // -> true
+   */
+  it("should recognize relative, home and absolute paths", () => {
+    expect(looksLikeLocalPath("../my-recipes", tmp.path)).toBe(true);
+    expect(looksLikeLocalPath("./my-recipes", tmp.path)).toBe(true);
+    expect(looksLikeLocalPath("~/my-recipes", tmp.path)).toBe(true);
+    expect(looksLikeLocalPath("/home/me/my-recipes", tmp.path)).toBe(true);
+    expect(looksLikeLocalPath("file:///home/me/my-recipes", tmp.path)).toBe(true);
+  });
+
+  /**
+   * A hosted URL should never be read as a path, in any of the spellings people
+   * paste, so the hosted providers keep their URLs.
+   *
+   * looksLikeLocalPath("https://github.com/owner/repo"); // -> false
+   */
+  it("should not claim a hosted URL", () => {
+    expect(looksLikeLocalPath("https://github.com/owner/repo", tmp.path)).toBe(false);
+    expect(looksLikeLocalPath("ssh://gitlab.com/group/repo", tmp.path)).toBe(false);
+    expect(looksLikeLocalPath("git@github.com:owner/repo.git", tmp.path)).toBe(false);
+    expect(looksLikeLocalPath("   ", tmp.path)).toBe(false);
+  });
+
+  /**
+   * A bare segment is a path only when a directory of that name really is
+   * there, so a host name is never mistaken for a folder.
+   *
+   * looksLikeLocalPath("recipes", tmpPath); // -> true, the directory exists
+   */
+  it("should claim a bare segment only when the directory exists", () => {
+    expect(looksLikeLocalPath("recipes", tmp.path)).toBe(true);
+    expect(looksLikeLocalPath("not-there", tmp.path)).toBe(false);
+  });
+});
+
+describe("resolveRepoArgument()", () => {
+  /**
+   * A relative path should come back absolute, resolved against the working
+   * directory it was typed in, because that absolute form is what gets stored.
+   *
+   * resolveRepoArgument("./recipes", tmpPath); // -> "<tmp>/recipes"
+   */
+  it("should resolve a relative path against the working directory", () => {
+    expect(resolveRepoArgument("./recipes", tmp.path)).toBe(repoDir);
+    expect(resolveRepoArgument("recipes", tmp.path)).toBe(repoDir);
+    expect(resolveRepoArgument(`file://${repoDir}`, tmp.path)).toBe(repoDir);
+  });
+
+  /**
+   * A `~` path should be expanded, and a hosted URL should come back untouched,
+   * so normalization never rewrites something a provider is about to parse.
+   *
+   * resolveRepoArgument("https://github.com/owner/repo"); // -> unchanged
+   */
+  it("should expand a home path and leave a URL alone", () => {
+    expect(resolveRepoArgument("~/my-recipes", tmp.path)).toBe(
+      path.join(os.homedir(), "my-recipes")
+    );
+    expect(resolveRepoArgument("https://github.com/owner/repo", tmp.path)).toBe(
+      "https://github.com/owner/repo"
+    );
+  });
+});
+
+describe("assertLocalRepoDirectory()", () => {
+  /**
+   * A path that is not there should be reported as a path: what was typed, the
+   * absolute path sous tried, and what it expected to find there. Which
+   * provider handles it is not the reader's problem.
+   *
+   * assertLocalRepoDirectory("../nope", "/tmp/nope"); // throws
+   */
+  it("should name the typed path and the resolved path when nothing is there", () => {
+    const resolved = path.join(tmp.path, "nope");
+    expect(() => assertLocalRepoDirectory("../nope", resolved)).toThrow(
+      /There is no directory at '\.\.\/nope'/
+    );
+    expect(() => assertLocalRepoDirectory("../nope", resolved)).toThrow(resolved);
+    expect(() => assertLocalRepoDirectory("../nope", resolved)).not.toThrow(/--provider/);
+  });
+
+  /**
+   * A directory that exists but publishes no repo manifest is not a repository,
+   * and the message should say exactly that rather than failing later.
+   *
+   * assertLocalRepoDirectory("./recipes", repoDir); // throws
+   */
+  it("should say when a directory holds no repository manifest", () => {
+    expect(() => assertLocalRepoDirectory("./recipes", repoDir)).toThrow(
+      /is not a sous repository/
+    );
+    expect(() => assertLocalRepoDirectory("./recipes", repoDir)).toThrow(
+      /sous\.repo\.yaml/
+    );
+  });
+
+  /**
+   * A directory holding a manifest should pass, which is the point of the
+   * check: only a real repository gets through to the provider.
+   */
+  it("should accept a directory holding a repo manifest", () => {
+    fs.writeFileSync(path.join(repoDir, "sous.repo.yaml"), "name: recipes\n");
+    expect(() => assertLocalRepoDirectory("./recipes", repoDir)).not.toThrow();
+  });
+});
+
+describe("requireProvider() with an explicit provider", () => {
+  /**
+   * Naming a provider that plainly does not own the URL should be refused, and
+   * the message should name the one that does, so '--provider github' on a path
+   * is a clear mistake rather than a confusing failure later.
+   *
+   * requireProvider("/home/me/repo", "github"); // throws
+   */
+  it("should refuse a provider that contradicts the URL", () => {
+    expect(() => requireProvider("/home/me/repo", "github")).toThrow(
+      /The github provider does not handle \/home\/me\/repo/
+    );
+    expect(() => requireProvider("/home/me/repo", "github")).toThrow(
+      /that is a local path, which the local provider handles/
+    );
+    expect(() => requireProvider("https://github.com/owner/repo", "local")).toThrow(
+      /the github provider handles/
+    );
+  });
+
+  /**
+   * A named provider should still be honoured for a host nobody recognizes,
+   * which is exactly what a self-hosted instance needs.
+   *
+   * requireProvider("https://git.mycorp.example/group/repo", "gitlab").id; // -> "gitlab"
+   */
+  it("should honour a named provider for an unrecognized host", () => {
+    expect(requireProvider("https://git.mycorp.example/group/repo", "gitlab").id).toBe(
+      "gitlab"
+    );
+  });
+
+  /**
+   * With no provider named, an unrecognized host should list the providers sous
+   * ships without pushing the reader at one of them.
+   *
+   * requireProvider("https://git.mycorp.example/group/repo"); // throws
+   */
+  it("should list providers without suggesting one for an unknown host", () => {
+    expect(() => requireProvider("https://git.mycorp.example/group/repo")).toThrow(
+      /Sous ships these providers: github, gitlab, local/
+    );
+    expect(() => requireProvider("https://git.mycorp.example/group/repo")).toThrow(
+      /--provider <provider>/
+    );
   });
 });

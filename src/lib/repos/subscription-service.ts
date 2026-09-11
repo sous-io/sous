@@ -67,6 +67,11 @@ import {
   type RepoProvider,
 } from "./providers/index.js";
 import { normalizeRepoUrl } from "./providers/provider.js";
+import {
+  assertLocalRepoDirectory,
+  looksLikeLocalPath,
+  resolveRepoArgument,
+} from "./providers/local.js";
 import { RecipeStore } from "./store/recipe-store.js";
 import type { RecipeStoreLike, StoreKey } from "./store/contract.js";
 import { resolveStoreSettings } from "./store/settings.js";
@@ -344,10 +349,19 @@ export class SubscriptionService {
    * exactly one file from it: its index. Nothing is downloaded before the trust
    * question is answered.
    *
+   * A path is normalized before anything else happens: `~` is expanded and a
+   * relative path is resolved against the working directory, so what gets
+   * stored is always absolute (a repository on this machine is machine-specific
+   * whichever way it was typed). A path that is not a repository is reported as
+   * a path mistake, naming what was typed and where sous looked, rather than as
+   * a provider that could not be found.
+   *
    * @param options - The URL, an optional short name and provider, and the trust flag.
    */
   async addRepo(options: AddRepoOptions): Promise<AddRepoOutcome> {
-    const url = options.url.trim();
+    const typed = options.url.trim();
+    const url = resolveRepoArgument(typed);
+    if (looksLikeLocalPath(typed)) assertLocalRepoDirectory(typed, url);
     const provider = requireProvider(url, options.provider, this.providers);
     const canonical = provider.canonicalize(url);
     const name = options.name ?? canonical.name;

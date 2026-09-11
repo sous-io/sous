@@ -35,12 +35,13 @@ export default class RepoAdd extends BaseCommand {
     "<%= config.bin %> repo add https://github.com/sous-io/sous-recipes",
     "<%= config.bin %> repo add https://github.com/sous-io/sous-recipes --name recipes",
     "<%= config.bin %> repo add /home/me/Projects/my-recipes --trust",
+    "<%= config.bin %> repo add ../my-recipes --trust",
   ];
 
   static args = {
     url: Args.string({
       description:
-        "Where the repository lives: its URL, or an absolute path to one on this machine",
+        "Where the repository lives: its URL, or the path of one on this machine",
       required: true,
     }),
   };

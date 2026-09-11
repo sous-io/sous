@@ -20,6 +20,10 @@ import {
   sameRemote,
 } from "../../lib/repos/git-clone.js";
 import {
+  expandHomePath,
+  looksLikeLocalPath,
+} from "../../lib/repos/providers/local.js";
+import {
   ensureReposIgnoreFiles,
   globalReposDir,
   projectReposDir,
@@ -194,7 +198,9 @@ export default class RepoLink extends BaseCommand {
       return { name: input, url: configured.url };
     }
 
-    if (looksLikeRepoUrl(input)) {
+    // A path counts as well as a URL: `sous repo link ../my-recipes` is the
+    // same intent, and `addRepo` resolves it to an absolute path itself.
+    if (looksLikeRepoUrl(input) || looksLikeLocalPath(input)) {
       const service = subscriptionServiceFor({
         configContext: this.configContext,
         settings: this.settings,
@@ -226,7 +232,7 @@ export default class RepoLink extends BaseCommand {
    * @param given - The path as the user typed it, resolved against the working directory.
    */
   private planLinkToPath(given: string): LinkPlan {
-    const directory = path.resolve(process.cwd(), given);
+    const directory = path.resolve(process.cwd(), expandHomePath(given));
 
     if (!fs.existsSync(directory)) {
       throw new ConfigError(
