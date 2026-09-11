@@ -79,6 +79,9 @@
     "dirname": "sous",
     "flexibleTaxonomy": true,
     "topicSeparator": " ",
+    "additionalHelpFlags": [
+      "-h"
+    ],
     "commands": {
       "strategy": "pattern",
       "target": "./src/commands"

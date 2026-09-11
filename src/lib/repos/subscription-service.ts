@@ -736,7 +736,9 @@ export class SubscriptionService {
     if (!this.interactive) {
       throw nonInteractiveError({
         prompt: `whether to go ahead with subscribing to '${formatRef(parsed)}'`,
-        remedy: "pass '--yes' to accept the plan above without being asked.",
+        remedy:
+          "pass '--yes' (spelled '-y', '--force' or '--trust' if you prefer) to accept " +
+          "the plan above without being asked.",
       });
     }
 

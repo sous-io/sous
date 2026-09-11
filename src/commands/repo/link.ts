@@ -41,6 +41,7 @@ import {
   showVars,
   warning,
 } from "../../utils/formatting.js";
+import { confirmationFlag } from "../../utils/flags.js";
 
 /**
  * `sous repo link` points this project (or this machine) at a working copy of a
@@ -95,11 +96,10 @@ export default class RepoLink extends BaseCommand {
         "Link for every project on this machine, sharing one checkout, rather than for this project",
       default: false,
     }),
-    trust: Flags.boolean({
-      description:
-        "Accept trust for a repository this project has not added yet, without being asked",
-      default: false,
-    }),
+    // Linking a repository this project has not added yet asks the trust
+    // question first; the shared confirmation flag answers it, under `--trust`
+    // as well as the usual spellings.
+    yes: confirmationFlag({ extraAliases: ["trust"] }),
     "dry-run": Flags.boolean({
       description: "Print what would change without cloning or writing anything",
       default: false,
@@ -112,7 +112,7 @@ export default class RepoLink extends BaseCommand {
     const isGlobal = flags.global;
     const dryRun = flags["dry-run"];
 
-    const { name, url } = await this.resolveRepo(args.repo, flags.trust, dryRun);
+    const { name, url } = await this.resolveRepo(args.repo, flags.yes, dryRun);
 
     showCommandVars({
       Project: this.projectLabel,

@@ -33,6 +33,7 @@ import {
   subheading,
   warning,
 } from "../../utils/formatting.js";
+import { confirmationFlag } from "../../utils/flags.js";
 
 export default class SubscriptionAdd extends BaseCommand {
   static description =
@@ -73,16 +74,11 @@ export default class SubscriptionAdd extends BaseCommand {
         "Install a newer in-range version whenever one exists, rather than holding the locked one",
       default: false,
     }),
-    trust: Flags.boolean({
-      description:
-        "Accept trust for every repository this command adds, without being asked",
-      default: false,
-    }),
-    yes: Flags.boolean({
-      char: "y",
-      description: "Accept the confirmation and subscribe without being asked",
-      default: false,
-    }),
+    // One flag answers both questions this command can ask: the trust question
+    // for a repository it has to add, and the subscribe confirmation. `--trust`
+    // is kept as a spelling of it because the trust ceremony reads naturally
+    // with that word.
+    yes: confirmationFlag({ extraAliases: ["trust"] }),
     "accept-first": Flags.boolean({
       description:
         "When a one-word ref matches several things, take the first one listed",
@@ -119,7 +115,7 @@ export default class SubscriptionAdd extends BaseCommand {
       ref: args.ref,
       prerelease: flags.prerelease,
       alwaysPull: flags["always-pull"],
-      trust: flags.trust,
+      trust: flags.yes,
       yes: flags.yes,
       acceptFirst: flags["accept-first"],
       dryRun,

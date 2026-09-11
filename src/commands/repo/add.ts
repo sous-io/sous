@@ -26,6 +26,7 @@ import {
   showCommandVars,
   showVars,
 } from "../../utils/formatting.js";
+import { confirmationFlag } from "../../utils/flags.js";
 
 export default class RepoAdd extends BaseCommand {
   static description =
@@ -63,11 +64,10 @@ export default class RepoAdd extends BaseCommand {
         "The provider that handles it, for a host the URL does not give away",
       options: ["github", "gitlab", "local"],
     }),
-    trust: Flags.boolean({
-      description:
-        "Accept trust for this repository without being asked, for a run with no terminal",
-      default: false,
-    }),
+    // The only question this command asks is the trust question, so the shared
+    // confirmation flag answers it; `--trust` stays a spelling of it, because
+    // that is the word the ceremony is named after.
+    yes: confirmationFlag({ extraAliases: ["trust"] }),
     "dry-run": Flags.boolean({
       description: "Print what would change without trusting or fetching anything",
       default: false,
@@ -101,7 +101,7 @@ export default class RepoAdd extends BaseCommand {
       ...(flags.provider === undefined
         ? {}
         : { provider: flags.provider as ProviderId }),
-      trust: flags.trust,
+      trust: flags.yes,
       dryRun,
     });
 

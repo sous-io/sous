@@ -1,10 +1,10 @@
-import { Flags } from "@oclif/core";
 import { confirm } from "@inquirer/prompts";
 import fs from "node:fs";
 import { BaseCommand } from "../base-command.js";
 import { resolveStateFilePath } from "../lib/build-service.js";
 import { isProtectedPath, StateService } from "../lib/state.js";
 import { protectedRepoPaths } from "../lib/repos/links.js";
+import { confirmationFlag } from "../utils/flags.js";
 import { displayError, footer, heading, log, showCommandVars } from "../utils/formatting.js";
 
 export default class Clear extends BaseCommand {
@@ -13,15 +13,15 @@ export default class Clear extends BaseCommand {
   static examples = [
     "<%= config.bin %> clear",
     "<%= config.bin %> clear --force",
+    "<%= config.bin %> clear -y",
   ];
 
   static flags = {
     ...BaseCommand.baseFlags,
-    force: Flags.boolean({
-      char: "f",
-      description: "Skip confirmation prompt",
-      default: false,
-    }),
+    // `--force` is this command's original spelling, so it stays the primary
+    // one; `--yes` and `-y` are aliases of it, and the confirmation therefore
+    // answers the same way here as it does on every other command.
+    force: confirmationFlag({ primary: "force" }),
   };
 
   async run(): Promise<void> {

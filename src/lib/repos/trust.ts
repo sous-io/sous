@@ -72,7 +72,11 @@ export type AddRepoRequest = {
 export type ConfirmTrustOptions = {
   /** Whether sous may ask. Defaults to whether both streams are a terminal. */
   interactive?: boolean;
-  /** The `--trust` flag: acknowledge every repository this command adds, without asking. */
+  /**
+   * The confirmation flag, spelled `--trust` on the commands that perform this
+   * ceremony (and `--yes`, `-y`, `-f` or `--force`): acknowledge every
+   * repository this command adds, without asking.
+   */
   trustFlag?: boolean;
 };
 
@@ -352,6 +356,11 @@ export class TrustService {
     for (const repo of missing) {
       lines.push(`    sous repo add ${repo.url ?? "<url>"} --name ${repo.name} --trust`);
     }
+    lines.push("");
+    lines.push(
+      "  '--trust' is one spelling of the confirmation flag; '--yes', '-y' and"
+    );
+    lines.push("  '--force' mean exactly the same thing.");
 
     return lines.join("\n");
   }

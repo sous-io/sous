@@ -14,9 +14,13 @@
  *
  * When a prompt cannot be shown, the run fails rather than guessing, and the
  * failure names both the question that could not be asked and the flag (or the
- * environment variables) that would have answered it ahead of time. The command
- * layer prints the command's own help underneath that error, so the caller can
- * see every flag without going looking.
+ * environment variables) that would have answered it ahead of time. Every
+ * confirmation in sous is answered by one shared flag, `--yes` (also `-y`,
+ * `--force`, and `--trust` on the commands that trust a repository), so a
+ * remedy names that flag and lists its other spellings once. The command layer
+ * prints the command's own help underneath that error, so the caller can see
+ * every flag without going looking; `sous help <command>` prints the same
+ * screen on demand.
  *
  * Every input is injectable, so a test can describe a terminal, a pipe or a CI
  * runner without touching the real process.
@@ -129,7 +133,13 @@ export function wantsHelp(error: unknown): boolean {
 export type BlockedPrompt = {
   /** The question that could not be asked, named as a person would name it. */
   prompt: string;
-  /** How to answer it ahead of time: a flag, or the environment variables. */
+  /**
+   * How to answer it ahead of time: a flag, or the environment variables. A
+   * remedy names the flag's primary spelling, and lists its alternate spellings
+   * once, in one parenthetical; the alternates are defined in
+   * `utils/flags.ts` and the command's own help (printed underneath this error)
+   * lists them too.
+   */
   remedy: string;
   /** Extra lines of context, such as the candidates that could not be chosen between. */
   details?: string[];

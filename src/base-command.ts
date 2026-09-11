@@ -232,8 +232,8 @@ export abstract class BaseCommand extends Command {
    * stdout is being piped (`sous config show | jq`) must not have a help screen
    * spliced into its stream. oclif's help writes to stdout, so stdout is pointed
    * at stderr for the duration and put back afterwards. The help class is the
-   * one oclif itself uses for `--help`; there is no `help` command to run, since
-   * sous does not install the help plugin.
+   * one oclif itself uses for `--help`, `-h` and the `help` command, so all
+   * four routes draw exactly the same screen.
    */
   protected async showHelpWithError(): Promise<void> {
     const writeToStdout = process.stdout.write.bind(process.stdout);
