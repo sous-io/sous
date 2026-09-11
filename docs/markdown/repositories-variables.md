@@ -156,8 +156,9 @@ two views say the same thing in the same words.
 The name may be the bare variable name or its full `namespace/recipe.name` key, which is what you
 use when two recipes publish the same name.
 
-?> One variable cannot be shown this way: a variable literally called `ask`, because
-`sous vars ask` is the command below. `sous vars` still lists it.
+?> Three names cannot be reached by the `sous vars <name>` shorthand: `list`, `show` and `ask`,
+because each of those is a subcommand. A variable with one of those names is reached the long
+way, as `sous vars show ask`.
 
 ## `sous vars ask`
 
@@ -210,7 +211,21 @@ to the project root or absolute.
 ? Where should task files be stored? (.sous/tasks):
 ```
 
-Enter accepts what is typed, or the default when nothing is. Once an answer is stored, two lines
+Enter accepts what is typed, or the default when nothing is. A question with no default drops
+the Enter half of the hint, since there is nothing for Enter alone to accept, and prints
+`[TAB for advanced info and options]`. A question answered from a list rather than typed says so
+instead:
+
+```term
+[ENTER to choose; TAB for advanced info and options]
+? Which ticket system do you use?
+> github
+  jira
+  linear
+```
+
+Tab opens the advanced view from every kind of question: a typed one, a pick-one list, and a
+yes-or-no confirmation alike. The word is always "Advanced". Once an answer is stored, two lines
 say what was stored and where:
 
 ```term

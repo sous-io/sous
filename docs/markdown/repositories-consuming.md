@@ -63,7 +63,7 @@ as a namespace first, and as a recipe name second, across the cached index of ev
 the project trusts:
 
 ```term
-$ sous subscribe task-files
+$ sous subscription add task-files
   'task-files' resolves to sous-recipes:workflow/task-files  (the recipe 'task-files' in the
   namespace 'workflow' of the repository 'sous-recipes': keeps one task file per branch).
 ```
@@ -73,7 +73,7 @@ repository and a recipe name in another, sous lists every candidate as a full re
 one you meant:
 
 ```term
-$ sous subscribe formatter
+$ sous subscription add formatter
 ? Which 'formatter' did you mean?
   > my-recipes:formatter  (the whole namespace 'formatter' in the repository 'my-recipes')
     sous-recipes:tooling/formatter  (the recipe 'formatter' in the namespace 'tooling' of the
@@ -92,7 +92,7 @@ Subscribing changes your project, so sous says what it is about to do and asks b
 of it. Nothing is downloaded and nothing is written until the question is answered:
 
 ```term
-$ sous subscribe workflow/task-files
+$ sous subscription add workflow/task-files
 
   Subscribing to 'sous-recipes:workflow/task-files' installs the recipe 'task-files' from the
   namespace 'workflow'.
@@ -347,7 +347,9 @@ rather than silently left out; run `sous repo add` on it again to refresh the in
 Every question in sous is gated by one rule. Sous treats a run as non-interactive, and so asks
 nothing at all, when any of these is true:
 
-- the global `--non-interactive` flag is passed (every command accepts it);
+- the `--non-interactive` flag is passed (every command that works on a project accepts it;
+  the three that run inside a recipe repository do not, because they have no `.sous/` to find
+  and take none of the project flags);
 - the `CI` environment variable is set to anything other than `0`, `false`, `no` or `off`, which
   is what every continuous integration runner does;
 - stdin or stdout is not a terminal, which is what piping or scripting a command looks like.

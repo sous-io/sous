@@ -219,9 +219,10 @@ The user-level directory is `~/.sous`, and `SOUS_HOME` moves it. Unlike `SOUS_CO
 `SOUS_DIR`, `SOUS_HOME` does not decide which project is active, so it may be set in
 `.sous/.env.local` or `.sous/.env` as well as in the shell.
 
-The three files in the `500` to `599` band are written by sous, replaced in full whenever they
-change, and are not yours to hand-edit; the band exists precisely so that machine-written layers
-never collide with the config you wrote. Sous never edits your primary config. You may
+The three files in the `500` to `599` band are written by sous, and the band exists precisely so
+that machine-written layers never collide with the config you wrote. Sous edits them by key, so
+your comments, your key order and your formatting survive a write, and you may edit them
+yourself. Sous never edits your primary config. You may
 hand-write `repos:`, `subscriptions:` and `varMappings:` there yourself, and by the time anything
 reads them the two are one merged map. See
 [Managed config layers](repositories-file-formats.md#managed-config-layers).
@@ -244,7 +245,7 @@ project's lockfile still pins.
 A recipe's files are addressable from a template through the reserved `~` include sigil:
 
 ```markdown
-@~workflow/task-files/partials/shared.md
+@~workflow/task-files/_partials/shared.md
 ```
 
 The `~` is required. A bare `@path` in an include is always a relative path or a declared alias,
