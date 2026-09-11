@@ -11,7 +11,8 @@
  * therefore reads nothing but the lockfile, the links map and the store, all of
  * which are locatable from the `.sous/` directory and the environment alone.
  *
- * A recipe layer is JSON or YAML only. The config kernel would happily import a
+ * A recipe layer is JSON (`.json`, or `.jsonc` for JSON with comments) or YAML
+ * only. The config kernel would happily import a
  * `.js` layer, and a repository's whole trust story rests on sous being able to
  * read what it publishes without running any of it, so an executable layer from
  * a recipe is refused rather than loaded.
@@ -26,10 +27,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { globSync } from "glob";
 import { parse as parseYaml } from "yaml";
+import { parseJsoncText } from "./load-manifest.js";
 import { listLockedRecipes, readRecipeManifestIn } from "./locked-recipes.js";
 
 /** The layer extensions a recipe may contribute; the executable ones are refused. */
-export const RECIPE_LAYER_EXTENSIONS = [".json", ".yaml", ".yml"] as const;
+export const RECIPE_LAYER_EXTENSIONS = [".json", ".jsonc", ".yaml", ".yml"] as const;
 
 /** Extensions sous can load as a config layer but deliberately will not take from a recipe. */
 export const RECIPE_LAYER_EXECUTABLE_EXTENSIONS = [".js", ".mjs", ".cjs", ".ts"] as const;
@@ -74,7 +76,6 @@ const REFUSAL_REASONS: Record<string, string> = {
   version: "the config version is the project's own to declare",
   name: "the project's display name is the project's own to declare",
   $schema: "the schema binding is the project's own editor setting",
-  $comment: "a layer comment describes the project's own file",
 };
 
 /** One recipe config layer, already read and already filtered. */
@@ -270,7 +271,9 @@ export function listRecipeConfigLayers(
 /** Reads and parses one recipe config layer according to its extension. */
 function readLayerFile(layerPath: string): unknown {
   const text = fs.readFileSync(layerPath, "utf8");
-  if (path.extname(layerPath).toLowerCase() === ".json") return JSON.parse(text);
+  const extension = path.extname(layerPath).toLowerCase();
+  if (extension === ".jsonc") return parseJsoncText(text, layerPath);
+  if (extension === ".json") return JSON.parse(text);
   return parseYaml(text);
 }
 

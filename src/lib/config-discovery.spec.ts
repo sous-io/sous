@@ -593,17 +593,18 @@ describe("config-discovery", () => {
     /**
      * listConfDirLayers() keeps only files with a recognised layer extension,
      * ignoring other files, and returns them bytewise-sorted as absolute paths.
-     * LAYER_EXTENSIONS covers .js/.mjs/.json/.yaml.
+     * LAYER_EXTENSIONS covers .js/.mjs/.json/.jsonc/.yaml.
      */
     it("should keep only layer-extension files, sorted bytewise", () => {
       const confDir = mkdir("conf.d");
       const a = write("conf.d/10-b.json");
       const b = write("conf.d/2-a.yaml", "x: 1\n");
       const c = write("conf.d/1-c.mjs", "export const config = {};");
+      const d = write("conf.d/3-d.jsonc", "// a comment\n{}\n");
       write("conf.d/README.md", "# ignore");
       write("conf.d/notes.txt", "ignore");
-      expect(listConfDirLayers(confDir)).toEqual([c, a, b]);
-      expect(LAYER_EXTENSIONS).toEqual([".js", ".mjs", ".json", ".yaml"]);
+      expect(listConfDirLayers(confDir)).toEqual([c, a, b, d]);
+      expect(LAYER_EXTENSIONS).toEqual([".js", ".mjs", ".json", ".jsonc", ".yaml"]);
     });
 
     /**
@@ -631,6 +632,18 @@ describe("config-discovery", () => {
       expect(() =>
         assertUniqueLayerBaseNames(["/x/sous.config.js", "/x/conf.d/10-a.json", "/x/conf.d/20-b.yaml"])
       ).not.toThrow();
+    });
+
+    /**
+     * A managed layer and its old `.json` name share a baseName too, which is
+     * what stops a half-finished migration from loading twice.
+     *
+     * assertUniqueLayerBaseNames(["500-repos.json", "500-repos.jsonc"]);
+     * // -> throws ConfigError
+     */
+    it("should throw when a layer exists as both .json and .jsonc", () => {
+      const paths = ["/x/conf.d/500-repos.json", "/x/conf.d/500-repos.jsonc"];
+      expect(() => assertUniqueLayerBaseNames(paths)).toThrow(ConfigError);
     });
 
     /**

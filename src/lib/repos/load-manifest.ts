@@ -4,8 +4,9 @@
  * Manifests are HAND-WRITTEN, and deliberately never JavaScript: trust in the
  * Repositories system rests on being able to read a repo's whole surface
  * without executing any of its code. So a manifest is YAML (`.yaml`, `.yml`) or
- * JSON (`.json`), and the JSON dialect is permissive, allowing line comments,
- * block comments and trailing commas, so a manifest can explain itself.
+ * JSON (`.json`, `.jsonc`), and the JSON dialect is permissive, allowing line
+ * comments, block comments and trailing commas, so a manifest can explain
+ * itself.
  *
  * Machine-written files (the index, the lockfile, store entry markers, the
  * links map) are strict JSON; nothing writes a comment into them, so nothing
@@ -49,7 +50,8 @@ function describeOffset(text: string, offset: number): string {
 
 /**
  * Parses permissive JSON: standard JSON plus line comments, block comments and
- * trailing commas. Used for hand-written `.json` manifests only.
+ * trailing commas. Used for hand-written `.json` and `.jsonc` files, and for
+ * `.jsonc` config layers.
  *
  * @param text - The file's contents.
  * @param sourceLabel - The file path, named in error messages.
@@ -91,7 +93,8 @@ export function parseYamlText(text: string, sourceLabel: string): unknown {
 
 /**
  * Loads a hand-written manifest, picking the parser by extension: `.yaml` and
- * `.yml` are YAML, `.json` is permissive JSON. Returns raw, unvalidated data.
+ * `.yml` are YAML, `.json` and `.jsonc` are permissive JSON. Returns raw,
+ * unvalidated data.
  *
  * @param filePath - Absolute path to the manifest file.
  */
@@ -102,7 +105,7 @@ export function loadManifestFile(filePath: string): unknown {
   if (extension === ".yaml" || extension === ".yml") {
     return parseYamlText(text, filePath);
   }
-  if (extension === ".json") {
+  if (extension === ".json" || extension === ".jsonc") {
     return parseJsoncText(text, filePath);
   }
 

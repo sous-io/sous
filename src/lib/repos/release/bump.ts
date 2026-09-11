@@ -62,7 +62,9 @@ export function bumpRecipeVersion(manifestPath: string, level: BumpLevel): BumpR
   const text = fs.readFileSync(manifestPath, "utf8");
   const extension = path.extname(manifestPath).toLowerCase();
 
-  if (extension === ".json") return bumpJson(manifestPath, text, level);
+  if (extension === ".json" || extension === ".jsonc") {
+    return bumpJson(manifestPath, text, level);
+  }
   return bumpYaml(manifestPath, text, level);
 }
 
@@ -83,7 +85,7 @@ function bumpYaml(manifestPath: string, text: string, level: BumpLevel): BumpRes
   return { manifestPath, from, to };
 }
 
-/** Rewrites the version in a JSON manifest, editing only that value's bytes. */
+/** Rewrites the version in a JSON or JSONC manifest, editing only that value's bytes. */
 function bumpJson(manifestPath: string, text: string, level: BumpLevel): BumpResult {
   // The manifest dialect allows comments and trailing commas, so it is read
   // through the loader's own permissive parser rather than JSON.parse.

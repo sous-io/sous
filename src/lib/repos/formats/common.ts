@@ -75,10 +75,10 @@ export const LINKS_FILENAME = "sous.links.json";
 
 /**
  * Extensions a hand-written manifest may use, in the order they are tried when
- * discovering one. `.json` is parsed permissively (comments and trailing commas
- * are allowed); see `load-manifest.ts`.
+ * discovering one. Both `.json` and `.jsonc` are parsed permissively (comments
+ * and trailing commas are allowed); see `load-manifest.ts`.
  */
-export const MANIFEST_EXTENSIONS = [".yaml", ".yml", ".json"] as const;
+export const MANIFEST_EXTENSIONS = [".yaml", ".yml", ".json", ".jsonc"] as const;
 
 // --- Name primitives ----------------------------------------------------------------------------
 

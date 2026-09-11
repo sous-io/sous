@@ -115,11 +115,21 @@ describe("filterRecipeConfigLayer()", () => {
    * the same format and refusing one of the spellings tells the author nothing
    * useful.
    *
-   * RECIPE_LAYER_EXTENSIONS; // -> [".json", ".yaml", ".yml"]
+   * RECIPE_LAYER_EXTENSIONS; // -> [".json", ".jsonc", ".yaml", ".yml"]
    */
   it("should accept .yml alongside .yaml as a layer extension", () => {
     expect(RECIPE_LAYER_EXTENSIONS).toContain(".yml");
     expect(RECIPE_LAYER_EXTENSIONS).toContain(".yaml");
     expect(RECIPE_LAYER_EXTENSIONS).toContain(".json");
+  });
+
+  /**
+   * A recipe may publish its config layer as JSON with comments, the same
+   * dialect sous reads a manifest in and writes its own managed layers in.
+   *
+   * RECIPE_LAYER_EXTENSIONS; // -> includes ".jsonc"
+   */
+  it("should accept .jsonc as a layer extension", () => {
+    expect(RECIPE_LAYER_EXTENSIONS).toContain(".jsonc");
   });
 });

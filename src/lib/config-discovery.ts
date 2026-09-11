@@ -20,18 +20,24 @@ export const CONFIG_FILE_NAMES = [
   "sous.config.js",
   "sous.config.mjs",
   "sous.config.json",
+  "sous.config.jsonc",
   "sous.config.yaml",
 ] as const;
 
 /**
  * The drop-in config layer directory inside `.sous/`. Every
- * `conf.d/*.{js,mjs,json,yaml}` file (non-recursive) is loaded after the
+ * `conf.d/*.{js,mjs,json,jsonc,yaml}` file (non-recursive) is loaded after the
  * primary config and deep-merged in bytewise filename order.
  */
 export const CONFD_DIR_NAME = "conf.d";
 
-/** File extensions recognised as config layers inside `conf.d/`. */
-export const LAYER_EXTENSIONS = [".js", ".mjs", ".json", ".yaml"] as const;
+/**
+ * File extensions recognised as config layers inside `conf.d/`. A `.jsonc`
+ * layer is JSON with comments: line comments, block comments and trailing
+ * commas are all allowed in it, which is why the layers sous manages for a
+ * project are written that way.
+ */
+export const LAYER_EXTENSIONS = [".js", ".mjs", ".json", ".jsonc", ".yaml"] as const;
 
 /**
  * The name of the optional shared-defaults env file inside `.sous/`. This file
@@ -136,7 +142,7 @@ function bytewiseCompare(a: string, b: string): number {
 
 /**
  * Lists the config layer files inside a `conf.d/` directory: every
- * `*.{js,mjs,json,yaml}` file directly inside it (non-recursive), sorted
+ * `*.{js,mjs,json,jsonc,yaml}` file directly inside it (non-recursive), sorted
  * bytewise by filename. A missing directory yields an empty list.
  */
 export function listConfDirLayers(confDir: string): string[] {
@@ -156,9 +162,11 @@ export function listConfDirLayers(confDir: string): string[] {
 
 /**
  * Asserts that every loaded config file (primary + conf.d layers) has a unique
- * baseName — the filename minus its FINAL extension. Two layers named
- * `500-repos.json` and `500-repos.yaml` would otherwise merge in an order that
- * depends on their extensions, which is never what the author meant.
+ * baseName; the filename minus its FINAL extension. Two layers named
+ * `500-repos.json` and `500-repos.jsonc` would otherwise merge in an order that
+ * depends on their extensions, which is never what the author meant. It is also
+ * what stops a managed layer from existing under both its old `.json` name and
+ * its `.jsonc` one.
  *
  * @throws ConfigError naming both conflicting files.
  */
