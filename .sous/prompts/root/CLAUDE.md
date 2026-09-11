@@ -103,6 +103,7 @@ src/
       list.ts              # `sous vars list`: every variable, its answer and its source
       show.ts              # `sous vars show <name>`: one variable, and every rung of its ladder
       ask.ts               # `sous vars ask`: answer what is unanswered, into the env files
+                           #   (--answer / --answers-file answer ahead of the questions)
     config/
       show.ts              # print the merged config as JSON
       get.ts               # print one value by dot-path (--layers for provenance)
@@ -160,6 +161,8 @@ src/
       mappings.ts          # mapping records; writes conf.d/520-var-mappings.jsonc
       validate.ts          # the JSON constraint vocabulary, checked with zod
       ask.ts               # asks what is missing and stores the answers
+      preanswers.ts        # answers supplied with --answer / --answers-file, before any question
+      question-plan.ts     # what a dry run says a subscription would ask, and where it would go
       resolver.ts          # apt-style ref lookup across every added repo; dependency closure
       trust.ts             # TrustService; added equals trusted, one consolidated question
       managed-layer.ts     # the machine-written conf.d/5xx .jsonc layers; key-path edits
@@ -322,6 +325,18 @@ block (`@default`, `@example`, `@required-by`, `@defined-by`, `@storage-path`, `
 half of `env-local.ts`: it parses a line model, rewrites exactly one value line or appends
 one under a generated header comment, and writes atomically, so comments, order and quoting
 survive. Comments are output only and are never read back.
+
+`preanswers.ts` is the other way a question gets answered: `--answer <name>=<value>` (split
+on the FIRST `=` only) and `--answers-file <path>` (a YAML or permissive-JSON map, laid under
+the flags), on both `sous subscription add` and `sous vars ask`. `validateProvidedAnswers`
+runs before anything is installed or written, so a value that does not fit its definition or
+a name no recipe declares fails the whole run; `applyProvidedAnswers` then stores what is
+left the way the interactive flow would, overwriting an existing answer WHERE IT LIVES rather
+than under a name a lower rung would shadow, and `askForMissing` skips those keys through its
+`skip` option. `question-plan.ts` is what `subscription add --dry-run` prints after the plan:
+every variable the closure declares, grouped by recipe, through the same `renderFacts`
+renderer. A dry run downloads nothing, so a recipe the store does not hold yet has no manifest
+to read; that is reported (`SubscribeOutcome.unreadable`) rather than being fatal.
 
 The ladder, the env files, the mapping records and the `sous vars` commands are documented
 in `docs/markdown/repositories-file-formats.md`.
@@ -883,7 +898,7 @@ This enables `sous prune` (remove stale outputs) and `sous clear` (delete all ou
 | `sous repo search <text>` | Search the cached indexes by namespace, recipe name and description (`--limit`); also the top-level `sous search <text>` |
 | `sous repo gc` | Collect the machine-wide store back to its size cap, protecting everything the lockfile pins (`--max-bytes`, `--dry-run`) |
 | `sous subscription list` | List what the project subscribes to: range, the versions the lockfile pins, origin, and whether it is on |
-| `sous subscription add <ref>` | Subscribe to a namespace or a recipe, install the whole closure, and answer the variables it publishes (`--yes` / `-y` / `--trust`, `--accept-first`, `--prerelease`, `--always-pull`, `--dry-run`); also `sous subscribe` |
+| `sous subscription add <ref>` | Subscribe to a namespace or a recipe, install the whole closure, and answer the variables it publishes (`--yes` / `-y` / `--trust`, `--accept-first`, `--prerelease`, `--always-pull`, `--answer <name>=<value>`, `--answers-file <path>`, `--dry-run`, which also prints every question the closure would ask); also `sous subscribe` |
 | `sous subscription remove <ref>` | Remove a subscription and everything only it brought in, refcounted (`--dry-run`); also `sous unsubscribe` |
 | `sous repo init [dir]` | Scaffold a new recipe repository (`--name`, `--namespace`, `--force`) |
 | `sous repo link <repo> [path]` | Read a repository from a working copy: clone it, or link a checkout already on disk (`--global`, `--yes` / `-y` / `--trust`) |
@@ -892,7 +907,7 @@ This enables `sous prune` (remove stale outputs) and `sous clear` (delete all ou
 | `sous repo submit` | Propose this repository's committed changes to its maintainers (`--title`, `--body`, `--draft`, `--dry-run`) |
 | `sous vars list` | List every recipe variable in play: its answer, the env var that supplied it, and the source |
 | `sous vars show <name>` | Show one variable in full, with every candidate env var name and the rung that answered |
-| `sous vars ask [name]` | Answer what is unanswered (or one variable, or everything with `--all`); `--file` reads a standalone definitions file, `--dry-run` writes nothing |
+| `sous vars ask [name]` | Answer what is unanswered (or one variable, or everything with `--all`); `--file` reads a standalone definitions file, `--answer <name>=<value>` and `--answers-file <path>` answer ahead of the questions, `--dry-run` writes nothing |
 
 Every topic answers to both spellings of its name (`repo`/`repos`, `subscription`/
 `subscriptions`, `var`/`vars`, `config`/`configs`), implemented as oclif `aliases` on each

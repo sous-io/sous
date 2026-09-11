@@ -242,6 +242,88 @@ Set any one of those names in the environment your pipeline runs in and the run 
 [Recipe variables](repositories-variables.md) covers the ladder, the two env files, mapping
 records and the `sous vars` commands in full.
 
+## Answering questions ahead of time
+
+A script, a pipeline or a coding agent has no terminal and usually knows every answer already, so
+it supplies them with the subscription rather than being asked for them. It takes two commands:
+one to see the questions, one to answer them all.
+
+First, ask what the subscription wants to know. A dry run installs nothing and writes nothing; it
+prints the plan, and then every question the closure would ask, grouped by the recipe that
+publishes it:
+
+```bash
+sous subscription add workflow/task-files --dry-run --non-interactive
+```
+
+```text
+Questions these recipes ask
+
+These recipes ask 2 questions, 1 of which nothing answers yet.
+
+workflow/task-files asks 2 questions:
+
+  taskFileRoot
+    @about         The directory holding one task file per git branch.
+    @example       .sous/tasks
+    @stored-as     SOUS_VAR_TASK_FILE_ROOT
+    @storage-path  /home/you/project/.sous/.env
+    @answered      no, and this recipe requires an answer
+    @answer-with   --answer taskFileRoot=<value>
+
+  apiUrl
+    @about         The service every request this recipe generates is sent to.
+    @example       https://api.example.com
+    @stored-as     SOUS_VAR_API_URL
+    @storage-path  /home/you/project/.sous/.env
+    @answered      yes, from the shared scope name SOUS_VAR_API_URL, from the .env file
+    @answer-with   --answer apiUrl=<value>
+```
+
+Then do the whole thing in one command, with an answer for each question and `--yes` for the
+confirmation:
+
+```bash
+sous subscription add workflow/task-files --yes \
+  --answer taskFileRoot=.sous/tasks \
+  --answer apiUrl=https://api.example.com
+```
+
+The rules are deliberately strict, because nobody reads a supplied answer before it is stored:
+
+- Every answer is checked against its definition before anything is installed or written, so a run
+  either stores all of them or none of them. A value that does not fit fails the run naming the
+  constraint it violated and the publisher's example of a real answer.
+- A name no recipe declares fails the run and lists every variable that is in play, grouped by
+  recipe, so a typo can never become a stored value under a name nothing reads.
+- An answer for a variable that already has one replaces it, where that answer lives, and the
+  report says what it replaced.
+- Anything left unanswered is asked for as usual, or, with no terminal, fails naming the
+  environment variables that would answer it.
+
+The name is spelled exactly as the recipe declares it, in camelCase; the full
+`namespace/recipe.name` key works too, which is what you use when two recipes publish the same
+name. Everything after the first `=` is the answer, so a value may contain as many more as it
+likes.
+
+Answers can also come from a file, which suits a longer list or a value with spaces in it. It is
+YAML or JSON (comments allowed), one entry per variable, and an `--answer` on the command line
+wins over the same name in the file:
+
+```yaml
+# answers.yaml
+taskFileRoot: .sous/tasks
+apiUrl: https://api.example.com
+```
+
+```bash
+sous subscription add workflow/task-files --yes --answers-file ./answers.yaml
+```
+
+?> A dry run downloads nothing, so a recipe your machine does not hold yet has no manifest to
+read and its questions cannot be listed. The run still succeeds and names the recipes it could
+not describe; install them, or answer their questions when they are asked.
+
 ## Look at what you have
 
 ```bash

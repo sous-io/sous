@@ -169,6 +169,8 @@ Asks the questions the project's definitions imply and stores the answers.
 | `sous vars ask <name>` | Asks just that one variable, by name or by full key |
 | `sous vars ask --all` | Asks every variable again, including the ones already answered |
 | `sous vars ask --file <path>` | Reads definitions from a standalone definitions file |
+| `sous vars ask --answer <name>=<value>` | Answers one question ahead of time; repeat it for each answer |
+| `sous vars ask --answers-file <path>` | Reads answers from a YAML or JSON file of `name: value` pairs |
 | `sous vars ask --dry-run` | Reports what would be asked and written, without writing anything |
 
 ### How the questions run
@@ -272,6 +274,28 @@ scope, what was stored and under which name in which file, and what was left una
 Subscribing runs the same machinery, so in normal use you rarely invoke `vars ask` by hand;
 reach for it after editing an env file, after a recipe upgrade tightened a constraint, or when
 you want to re-answer something deliberately with `--all`.
+
+### Answering ahead of the questions
+
+`--answer <name>=<value>` answers a question before it is asked, and repeats for as many answers
+as there are questions; `--answers-file <path>` reads the same pairs from a YAML or JSON file
+(comments allowed), and an `--answer` wins over the same name in the file. Both flags work the
+same way on `sous subscription add`, which is where a run with no terminal usually meets them;
+[Consuming recipes](repositories-consuming.md#answering-questions-ahead-of-time) walks through
+that flow, dry run first.
+
+```bash
+sous vars ask --answer taskFileRoot=.sous/tasks --answer apiUrl=https://api.example.com
+sous vars ask --answers-file ./answers.yaml
+```
+
+The name is spelled exactly as the recipe declares it, in camelCase, or as its full
+`namespace/recipe.name` key; everything after the first `=` is the answer. Every supplied answer
+is checked against its definition before anything is written, so a value that does not fit fails
+the run naming the constraint and the publisher's example, and a name no recipe declares fails
+naming every variable that is in play. An answer for a variable that already has one replaces it,
+where that answer lives, and the report says what it replaced. Whatever is left over is asked for
+as usual.
 
 ## Without a terminal
 

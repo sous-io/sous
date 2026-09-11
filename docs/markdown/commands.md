@@ -129,7 +129,7 @@ subscribe to before you know what any of it is called.
 | Command | Arguments | Own flags |
 |---------|-----------|-----------|
 | `sous subscription list` | none | none |
-| `sous subscription add` | `REF` | `--prerelease`, `--always-pull`, `-y, --yes` (also `--trust`), `--accept-first`, `--dry-run` |
+| `sous subscription add` | `REF` | `--prerelease`, `--always-pull`, `-y, --yes` (also `--trust`), `--accept-first`, `--answer <name>=<value>`, `--answers-file <path>`, `--dry-run` |
 | `sous subscription remove` | `REF` | `--dry-run` |
 
 `sous subscribe` and `sous unsubscribe` are the original spellings of `subscription add` and
@@ -138,6 +138,13 @@ subscribe to before you know what any of it is called.
 `REF` is a ref: `namespace`, `namespace/recipe`, either with an `@<range>`, and optionally
 qualified with `repo:`. See
 [Refs: how anything is named](repositories-file-formats.md#refs-how-anything-is-named).
+
+`subscription add --dry-run` installs nothing and, after the plan, prints every question the
+recipes would ask: what each variable is for, where its answer would be stored, and whether
+anything answers it already. `--answer <name>=<value>`, repeated, answers those questions ahead of
+time, and `--answers-file <path>` reads the same pairs from a YAML or JSON file; together they are
+how a run with no terminal subscribes to a recipe that asks questions. See
+[Answering questions ahead of time](repositories-consuming.md#answering-questions-ahead-of-time).
 
 `subscription list` reads the config and the lockfile only, so it works offline. It reports every
 subscription the project declares, switched-off ones included, with the range it resolves within,
@@ -175,13 +182,14 @@ These three run inside a recipe repository and take none of the config-locating 
 |---------|-----------|-----------|
 | `sous vars list` | none | `--file <path>` |
 | `sous vars show` | `NAME` | `--file <path>` |
-| `sous vars ask` | `[NAME]` | `--all`, `--file <path>`, `--dry-run` |
+| `sous vars ask` | `[NAME]` | `--all`, `--file <path>`, `--answer <name>=<value>`, `--answers-file <path>`, `--dry-run` |
 
 `vars list` prints every variable in play, with the environment variable that answered each one
 and where the value came from. `vars show` prints one variable in full, including every
 environment variable on the resolution ladder and which rung answered. `NAME` is a bare variable
 name or a full `namespace/recipe.name` key. `--file` reads definitions from a standalone
-definitions file instead of the project's subscribed recipes.
+definitions file instead of the project's subscribed recipes. `--answer` and `--answers-file`
+answer questions ahead of time, exactly as they do on `subscription add`.
 
 Bare `sous vars` is shorthand for `vars list`, and `sous vars <name>` for `vars show <name>`. A
 variable whose name is also a subcommand name (`list`, `show` or `ask`) has to be reached the
