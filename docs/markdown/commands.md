@@ -58,7 +58,8 @@ commands.
 ## Singular and plural
 
 Every topic answers to both spellings of its name, so nothing hinges on remembering which one
-sous prefers: `repo` and `repos`, `subscription` and `subscriptions`, `var` and `vars`, `config`
+sous prefers: `repo` and `repos`, `subscription` and `subscriptions`, `namespace` and
+`namespaces`, `recipe` and `recipes`, `lock` and `locks`, `var` and `vars`, `config`
 and `configs`. The tables below print the spelling `sous --help` shows; the other one runs
 exactly the same command.
 
@@ -126,6 +127,50 @@ downloads anything.
 
 `repo search` is also a top-level `sous search`, because searching is how you find something to
 subscribe to before you know what any of it is called.
+
+## Browsing what a project trusts
+
+| Command | Arguments | Own flags |
+|---------|-----------|-----------|
+| `sous namespace list` | none | none |
+| `sous namespace show` | `REF` (a namespace, optionally `repo:namespace`) | none |
+| `sous recipe list` | none | none |
+| `sous recipe show` | `REF` (a recipe, a recipe name on its own, or either with a `repo:` qualifier) | none |
+
+All four read the cached repository indexes and the lockfile, so they work offline and download
+nothing. A trusted repository whose index has never been fetched is named at the end of a listing
+rather than left out of it.
+
+`namespace list` shows every namespace, how many recipes it holds, and how much of it this project
+subscribes to: the whole namespace, some recipes, or none. `namespace show` adds every recipe in
+one namespace, with the latest published version, the version this project pins, and whether it is
+subscribed.
+
+`recipe list` shows the same per-recipe columns across every namespace. `recipe show` describes one
+recipe completely: the repository and its location, every published version labeled as the latest
+one, the pinned one or an earlier one, what the version depends on (both as the recipe's manifest
+declares it and as its repository's index resolved it at release time), the questions it asks with
+the environment variable each answer is stored under, and the directories its files are written
+into. The questions and the file list come from the recipe's own manifest, so a recipe this machine
+does not hold yet is described from its index alone and says so.
+
+## The lockfile
+
+| Command | Arguments | Own flags |
+|---------|-----------|-----------|
+| `sous lock show` | none | none |
+| `sous lock rebuild` | none | `--dry-run` |
+
+`lock show` prints what `.sous/sous.lock.json` pins: the recipe, the version, the repository it came
+from, and who holds it (this project, or the recipes that require it).
+
+`lock rebuild` recomputes the whole file from the subscriptions the config declares and the cached
+indexes, then writes it. It starts from an empty lockfile, so an entry nothing holds any more is
+dropped rather than carried through; that makes it the repair for a file that has drifted from the
+config through a hand edit or a bad merge. It asks nothing and grants no trust: a subscription whose
+closure reaches a repository this project has not added fails, naming the repository. It downloads
+nothing, so a recipe whose files are not on this machine has its own dependencies left out, and is
+named when that happens. `--dry-run` prints the same summary and writes nothing.
 
 ## Subscriptions
 

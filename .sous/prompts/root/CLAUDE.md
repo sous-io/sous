@@ -86,6 +86,15 @@ src/
     prune.ts               # remove stale output files
     clear.ts               # delete all Sous-written files for a project
     launch.ts              # build + spawn a coding agent tool
+    namespace/
+      list.ts              # every namespace the trusted repos publish, and your coverage of it
+      show.ts              # one namespace, and every recipe in it
+    recipe/
+      list.ts              # every recipe the trusted repos publish, with latest and pinned
+      show.ts              # one recipe: versions, dependencies, variables, where files land
+    lock/
+      show.ts              # what the lockfile pins, and who holds each entry
+      rebuild.ts           # recompute the lockfile from the subscriptions and cached indexes
     subscription/
       list.ts              # what the project subscribes to, with ranges, pins and origin
       add.ts               # subscribe to a namespace or recipe; installs the whole closure
@@ -152,6 +161,9 @@ src/
         bump.ts            # raises a recipe version in place, keeping comments
         submit-service.ts  # the whole submit flow, behind the injectable command runner
       ref-search.ts        # what a one-word ref means: namespace first, then recipe names
+      catalog.ts           # pure reads over the cached indexes, the lockfile and the subs
+      catalog-inputs.ts    # wires a running command to the catalog; also locates recipe files
+      catalog-display.ts   # the shared wording and recipe table the browsing commands print
       subscription-service.ts  # the workflow: add, subscribe, unsubscribe, restore, check
       locked-recipes.ts    # where each locked recipe's files are (a link beats the store)
       locked-namespace-resolver.ts # the real NamespaceResolver, built from the lockfile
@@ -946,6 +958,12 @@ This enables `sous prune` (remove stale outputs) and `sous clear` (delete all ou
 | `sous repo list` | List the trusted repositories: name, location, provider, namespaces, recipe count, and whether it is linked |
 | `sous repo search <text>` | Search the cached indexes by namespace, recipe name and description (`--limit`); also the top-level `sous search <text>` |
 | `sous repo gc` | Collect the machine-wide store back to its size cap, protecting everything the lockfile pins (`--max-bytes`, `--dry-run`) |
+| `sous namespace list` | List every namespace the trusted repositories publish, with its recipe count and how much of it the project subscribes to |
+| `sous namespace show <ref>` | Show one namespace and every recipe in it, with each recipe's latest version, pinned version and subscription state |
+| `sous recipe list` | List every recipe the trusted repositories publish: latest version, pinned version, subscribed, description |
+| `sous recipe show <ref>` | Show one recipe in full: every published version, its dependencies as declared and as the index resolved them, the variables it declares, and where its files land |
+| `sous lock show` | Print what the lockfile pins: recipe, version, repository, and who holds it |
+| `sous lock rebuild` | Recompute the lockfile from the declared subscriptions and the cached indexes, dropping what nothing holds (`--dry-run`) |
 | `sous subscription list` | List what the project subscribes to: range, the versions the lockfile pins, origin, and whether it is on |
 | `sous subscription add <ref>` | Subscribe to a namespace or a recipe, install the whole closure, answer the variables it publishes, then build the project (`--yes` / `-y` / `--trust`, `--accept-first`, `--prerelease`, `--always-pull`, `--answer <name>=<value>`, `--answers-file <path>`, `--dry-run`, which also prints every question the closure would ask, `--no-build`); also `sous subscribe` |
 | `sous subscription remove <ref>` | Remove a subscription and everything only it brought in, refcounted, then build the project so its files are pruned (`--dry-run`, `--no-build`); also `sous unsubscribe` |
@@ -959,7 +977,8 @@ This enables `sous prune` (remove stale outputs) and `sous clear` (delete all ou
 | `sous vars ask [name]` | Answer what is unanswered (or one variable, or everything with `--all`); `--file` reads a standalone definitions file, `--answer <name>=<value>` and `--answers-file <path>` answer ahead of the questions, `--dry-run` writes nothing |
 
 Every topic answers to both spellings of its name (`repo`/`repos`, `subscription`/
-`subscriptions`, `var`/`vars`, `config`/`configs`), implemented as oclif `aliases` on each
+`subscriptions`, `namespace`/`namespaces`, `recipe`/`recipes`, `lock`/`locks`, `var`/`vars`,
+`config`/`configs`), implemented as oclif `aliases` on each
 command plus a `hidden: true` topic entry in the `oclif.topics` block of `package.json`;
 that block is also where each topic's one-sentence description lives. `subscribe` and
 `unsubscribe` stay as `hiddenAliases` of `subscription add` and `subscription remove`, and

@@ -34,6 +34,41 @@ The entry lands in `.sous/conf.d/500-repos.jsonc`, which is committed, so your c
 both the repository and the trust decision. Sous edits that file by key, so anything you write in
 it yourself, comments included, stays where you put it.
 
+## Browse what you trust
+
+Four commands read the cached indexes and the lockfile, so all four work offline and none of them
+downloads anything:
+
+```bash
+sous namespace list
+sous namespace show workflow
+sous recipe list
+sous recipe show workflow/task-files
+```
+
+The listings answer "what is there, and what do I already have of it": every namespace with how
+many recipes it holds and how much of it you subscribe to, and every recipe with its latest
+version, the version your lockfile pins and whether you are subscribed.
+
+`sous recipe show` is the one to read before subscribing to something. It describes one recipe
+completely from what sous already has: every published version, what the version depends on (as the
+recipe's manifest declares it, beside the exact version its repository's index resolved that to),
+the questions it will ask you and where each answer is stored, and the directories its files would
+be written into in this project.
+
+```term
+$ sous recipe show workflow/task-files
+Repository       sous-recipes
+Location         https://github.com/sous-io/sous-recipes
+Folder           recipes/workflow/task-files
+Latest version   1.0.1
+Pinned version   1.0.1
+Subscribed       yes
+```
+
+The questions and the file list live inside the recipe's own files, so a recipe you have not
+installed is described from its index alone and says as much; subscribing to it fetches the rest.
+
 ## Subscribe to a recipe
 
 ```bash
@@ -349,6 +384,11 @@ lockfile pins for it, where it came from, and whether it is on. `repo search`, w
 top-level `sous search`, matches text against recipe names, namespace names and descriptions
 across every cached index. A repository whose index has never been fetched is reported as such
 rather than silently left out; run `sous repo add` on it again to refresh the index.
+
+`sous lock show` prints the other half of the picture: every recipe version your lockfile pins, the
+repository it came from, and who holds it. When that file has drifted from your config, through a
+hand edit or a bad merge, `sous lock rebuild` recomputes it from the subscriptions you declare and
+drops whatever nothing holds any more; `--dry-run` shows the same summary and writes nothing.
 
 ## When sous cannot ask
 
