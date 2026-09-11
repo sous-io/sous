@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { VariableDefinition } from "../repos/formats/recipe-manifest.js";
-import { constraintHints, validateAnswer } from "./validate.js";
+import { constraintBullets, constraintHints, validateAnswer } from "./validate.js";
 
 /** Builds a variable definition with the defaults the schema applies. */
 function definition(overrides: Partial<VariableDefinition> = {}): VariableDefinition {
@@ -186,5 +186,35 @@ describe("constraintHints()", () => {
       definition({ type: "enum", validate: { enum: ["red", "blue"] }, required: false })
     );
     expect(hints).toEqual(["type: enum", "one of: red, blue", "optional"]);
+  });
+});
+
+describe("constraintBullets()", () => {
+  /**
+   * constraintBullets should describe an enum by the options it allows, so no
+   * sentence ever puts an article in front of a type name ("a enum").
+   *
+   * constraintBullets({ type: "enum", validate: { enum: ["red", "blue"] }, ... });
+   * // -> ["must be one of: red, blue (type: enum)"]
+   */
+  it("should describe an enum by its options rather than by its type name", () => {
+    const bullets = constraintBullets(
+      definition({ type: "enum", validate: { enum: ["red", "blue"] } })
+    );
+
+    expect(bullets).toEqual(["must be one of: red, blue (type: enum)"]);
+  });
+
+  /**
+   * Every other type is named without an article in front of it, for the same
+   * reason: the article would have to change with the type name.
+   */
+  it("should name every other type without an article in front of it", () => {
+    expect(constraintBullets(definition({ type: "url" }))).toEqual([
+      "must be a value of the type url (type: url)",
+    ]);
+    expect(constraintBullets(definition({ type: "number" }))).toEqual([
+      "must be a value of the type number (type: number)",
+    ]);
   });
 });

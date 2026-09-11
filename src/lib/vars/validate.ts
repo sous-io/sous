@@ -269,16 +269,23 @@ function characters(count: number): string {
  *
  * @example
  * constraintBullets(definition);
- * // -> ["must be a url value (type: url)", "must match the pattern /^https/ (pattern: ^https)"]
+ * // -> ["must be a value of the type url (type: url)", "must match the pattern /^https/ (pattern: ^https)"]
  */
 export function constraintBullets(definition: VariableDefinition): string[] {
   const rules = definition.validate;
-  const bullets: string[] = [`must be a ${definition.type} value (type: ${definition.type})`];
+  const options = rules?.enum;
 
-  if (rules?.enum !== undefined) {
-    bullets.push(
-      `must be one of ${rules.enum.join(", ")} (enum: ${rules.enum.join(", ")})`
-    );
+  // The type sentence never puts an article in front of the type name, because
+  // the article would have to change with the name ('a path', but 'an enum').
+  // An enum is described by the options it allows, which says more than the
+  // word 'enum' does and reads as one sentence rather than two.
+  const bullets: string[] =
+    definition.type === "enum" && options !== undefined
+      ? [`must be one of: ${options.join(", ")} (type: enum)`]
+      : [`must be a value of the type ${definition.type} (type: ${definition.type})`];
+
+  if (options !== undefined && definition.type !== "enum") {
+    bullets.push(`must be one of: ${options.join(", ")} (enum: ${options.join(", ")})`);
   }
   if (rules?.minLength !== undefined) {
     bullets.push(

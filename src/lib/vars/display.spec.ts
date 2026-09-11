@@ -68,7 +68,7 @@ describe("variableFacts()", () => {
       "/home/me/project/.sous/.env",
     ]);
     expect(facts.find((fact) => fact.label === "@constraints")?.lines).toEqual([
-      "- must be a path value (type: path)",
+      "- must be a value of the type path (type: path)",
       "- must be at least 1 character long (minLength: 1)",
     ]);
   });

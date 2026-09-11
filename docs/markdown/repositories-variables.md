@@ -142,7 +142,7 @@ Value:        https://api.example.com
 @defined-by    workflow/task-files (https://example.com/owner/recipes/workflow/task-files)
 @storage-path  /home/you/project/.sous/.env
 @stored-as     SOUS_VAR_API_URL
-@constraints   - must be a url value (type: url)
+@constraints   - must be a value of the type url (type: url)
 
 Environment variable                     Rung             Status
 SOUS_VAR_WORKFLOW_TASK_FILES_API_URL     recipe scope     not set
@@ -258,7 +258,7 @@ to the project root or absolute.
 @defined-by    workflow/task-files (https://example.com/owner/recipes/workflow/task-files)
 @storage-path  /home/you/project/.sous/.env
 @stored-as     SOUS_VAR_TASK_FILE_ROOT
-@constraints   - must be a path value (type: path)
+@constraints   - must be a value of the type path (type: path)
                - must be at least 1 character long (minLength: 1)
 
 ? What would you like to do?
