@@ -9,9 +9,9 @@ Sous is a TypeScript CLI tool that compiles markdown templates and manages outpu
 (Claude, Codex, etc.). The binary is named `sous`. Published on npm as `@sous-io/sous`.
 The binary was called `xcv` in earlier releases; the name is now `sous` everywhere, with no alias.
 
-@${sousDir}/prompts/_partials/agent-conduct.md
+@${sousDir}/prompts/memories/agent-conduct.md
 
-@${sousDir}/prompts/_partials/writing-standards.md
+@${sousDir}/prompts/memories/writing-standards.md
 
 ## Build & Development
 
@@ -212,7 +212,7 @@ docs/                      # the GitHub Pages site (sous-io.github.io/sous)
   prompts/
     root/CLAUDE.md         # tracked SOURCE of the repo-root CLAUDE.md
     docs-site/CLAUDE.md    # tracked SOURCE of docs/CLAUDE.md
-    _partials/             # shared blocks both of the above @-include
+    memories/              # memory fragments composed into both of the above
   tasks/                   # per-branch task files (taskFileRoot), gitignored
   .env.local.example       # documents the machine-specific env layer (.env.local); .env holds shared defaults
 deprecated/                # archived, gitignored
@@ -627,6 +627,11 @@ The config also generates two instruction files from tracked sources under `.sou
 
 - `.sous/prompts/root/CLAUDE.md` -> `/CLAUDE.md` (this file)
 - `.sous/prompts/docs-site/CLAUDE.md` -> `/docs/CLAUDE.md` (the website doc)
+
+The fragments both sources `@`-include live in `.sous/prompts/memories/`. In this project a
+MEMORY is a fragment composed into an agent's always-loaded instruction file; a PARTIAL is a
+fragment that other content includes. These are memories, so that is what the directory is
+called; add a new one there and include it from every instruction file it belongs in.
 
 `sous-recipes` needs no `repos:` entry here; it is built in. The lockfile IS committed, and it
 is the point: a colleague, a fresh clone or CI builds this repository from exactly the recipe
@@ -1083,7 +1088,7 @@ To add a tag: create `src/templating/tags/<name>.ts` exporting a `register<Name>
 function, then add it to the array in `src/templating/tags/index.ts`. Filters follow the
 same pattern under `filters/`.
 
-@${sousDir}/prompts/_partials/sources-of-truth.md
+@${sousDir}/prompts/memories/sources-of-truth.md
 
 ## Important!
 
