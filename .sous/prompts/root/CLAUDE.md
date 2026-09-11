@@ -13,6 +13,8 @@ The binary was called `xcv` in earlier releases; the name is now `sous` everywhe
 
 @${sousDir}/prompts/memories/writing-standards.md
 
+@${sousDir}/prompts/memories/cli-conventions.md
+
 ## Build & Development
 
 ```bash
