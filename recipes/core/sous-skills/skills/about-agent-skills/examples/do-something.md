@@ -4,7 +4,7 @@
 ---
 name: deploy
 description: >
-  YOU MUST use this skill when deploying the application. Do not use for rollbacks —
+  YOU MUST use this skill when deploying the application. Do not use for rollbacks;
   those follow a different process.
 disable-model-invocation: true
 ---

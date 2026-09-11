@@ -3,7 +3,7 @@
 ## Dynamic Context Injection
 
 The `` !`command` `` syntax runs a shell command before skill content is sent to Claude.
-The output replaces the placeholder — Claude receives the rendered result, not the command.
+The output replaces the placeholder; Claude receives the rendered result, not the command.
 
 ```yaml
 ---
@@ -44,16 +44,16 @@ Research $ARGUMENTS thoroughly:
 ```
 
 The `agent` field selects the subagent configuration:
-- `Explore` — read-only tools optimized for codebase exploration
-- `Plan` — planning-oriented execution
-- `general-purpose` — default; full tool access
+- `Explore`: read-only tools optimized for codebase exploration
+- `Plan`: planning-oriented execution
+- `general-purpose`: default, full tool access
 - Any custom agent defined in `.claude/agents/`
 
 Results are summarized and returned to the main conversation.
 
 > Only use `context: fork` for skills with explicit task instructions. Skills containing
 > only reference guidelines (e.g. "use these conventions") will return without meaningful
-> output — the subagent has no actionable task.
+> output; the subagent has no actionable task.
 
 ## Restricting Tool Access (`allowed-tools`)
 
@@ -76,7 +76,7 @@ and reference them from the skill body so Claude knows when to load them.
 ```
 my-skill/
 ├── SKILL.md             # Overview, navigation, fundamental instructions
-├── references/          # Deep-dive docs — loaded when needed, not always
+├── references/          # Deep-dive docs: loaded when needed, not always
 │   └── api-spec.md
 ├── examples/            # Example outputs showing expected format
 └── scripts/             # Executable scripts; referenced via $CLAUDE_SKILL_DIR

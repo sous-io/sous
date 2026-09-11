@@ -19,18 +19,18 @@ Sous manages certain files in this project by compiling them from a central sour
 **You must never edit these directly.** Your changes will be silently overwritten the
 next time Sous runs:
 
-- `.claude/` — Claude Code configuration, skills, and instructions
-- `.codex/` — Codex configuration and skills
-- `AGENTS.md` and `CLAUDE.md` — agent instruction files
+- `.claude/`: Claude Code configuration, skills, and instructions
+- `.codex/`: Codex configuration and skills
+- `AGENTS.md` and `CLAUDE.md`: agent instruction files
 - Any file you did not create yourself in a designated source directory
 
 If you need to change something in one of these files, the change must be made at the
-source — in the central configuration this project uses with Sous.
+source, in the central configuration this project uses with Sous.
 
 ## Where Your Skills Live
 
 Skills for this project live at `{{ skillsRoot }}`. That is the source directory Sous
-compiles from. Create and edit skills there — never in `.claude/skills/` or
+compiles from. Create and edit skills there, never in `.claude/skills/` or
 `.codex/skills/` directly.
 
 YOU MUST load `create-skill` when creating a new skill for this project.

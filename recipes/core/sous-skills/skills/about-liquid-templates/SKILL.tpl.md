@@ -22,15 +22,15 @@ at compile time. The `.tpl.` segment is stripped from the output filename.
 | `config.tpl.sh`      | Yes        | `config.sh`       |
 | `README.md`          | No         | `README.md`       |
 
-**`SKILL.md` for any skill compiled by sous must always be `SKILL.tpl.md`** — the
+**`SKILL.md` for any skill compiled by sous must always be `SKILL.tpl.md`**; the
 required `## Source for this Skill` footer cannot be rendered without LiquidJS
 processing. See `about-agent-skills` for the full rule.
 
 For all other files, use `.tpl.` only when the file genuinely needs variable
-substitution, partials, or conditionals. Static files are copied verbatim — faster
-and safer.
+substitution, partials, or conditionals. Static files are copied verbatim (faster
+and safer).
 
-## Two Syntaxes — Do Not Mix
+## Two Syntaxes: Do Not Mix
 
 Sous uses two different variable syntaxes at two different stages. Using the wrong one in
 the wrong place silently produces the literal text instead of a value.
@@ -119,7 +119,7 @@ filter name shows up only as missing or unfiltered output.
 ### Gotcha: `@include` fires inside fenced code blocks
 
 The `@include` processor runs on the raw file content *before* LiquidJS and has no
-markdown awareness whatsoever — it matches any line that is nothing but an `@`-prefixed
+markdown awareness whatsoever; it matches any line that is nothing but an `@`-prefixed
 `.md` path. A fenced code block does not protect it: an `@path.md` line inside triple
 backticks is still executed and replaced with the file's content. There is no escape
 syntax. To show an `@`-path as an example, put something else on the line (indent it,
@@ -130,7 +130,7 @@ prefix it with a word, or wrap it in backticks inline).
 A `@`-path may be any of:
 
 - **Relative** to the including file: `@sections/intro.md` (traverse up with `../`).
-- **Variable-substituted**: `@${projectRoot}/prompts/x.md` — `${var}` is
+- **Variable-substituted**: `@${projectRoot}/prompts/x.md`; `${var}` is
   substituted before resolving; if the result is absolute it is used directly.
 - **Aliased**: `@<alias>/rest.md`, where the first segment names a registered alias.
 
@@ -174,23 +174,23 @@ wins**; if none exist, the build errors listing every path tried:
 
 1. Each base of the matched alias, in order (project `_aliases` are tried before root,
    before built-in bases of the same name).
-2. The path resolved **relative to the including file** — using the *full* path
+2. The path resolved **relative to the including file**, using the *full* path
    including the alias segment. So an alias miss can fall through to a real relative
    directory of the same name, letting an alias **augment** a local directory.
 
 ## Custom Tags
 
-**`showVars`** — dumps all variables currently in scope as a fenced JSON block.
+**`showVars`**: dumps all variables currently in scope as a fenced JSON block.
 Useful during development to see exactly what variables are available at a given point
 in a template. Remove before finalizing.
 
-**`getFiles`** — globs files under a root directory and assigns the resulting array to a
+**`getFiles`**: globs files under a root directory and assigns the resulting array to a
 template variable. It renders nothing; present the results yourself with a `for` loop.
 Each entry has `path`, `dir`, `relPath`, and `name`. `include`/`exclude` take
 comma-separated glob patterns matched relative to `root`, and attribute values may be
 quoted strings or scope variables. The optional `import="<exportName>"` dynamically
 imports each file and attaches that export to the entry (files that fail to import, or
-that lack the export, are dropped) — this is how a manifest of scripts reads its own
+that lack the export, are dropped); this is how a manifest of scripts reads its own
 metadata:
 
 {% raw %}
@@ -203,7 +203,7 @@ metadata:
 ```
 {% endraw %}
 
-**`listFiles`** — the convenience counterpart to `getFiles`: it globs and renders a
+**`listFiles`**: the convenience counterpart to `getFiles`: it globs and renders a
 markdown bullet list of file names inline, with no loop needed. Add `relative="true"` to
 render paths relative to the root instead of bare file names:
 
@@ -213,7 +213,7 @@ render paths relative to the root instead of bare file names:
 ```
 {% endraw %}
 
-**`exportScalarVarsJs`** — emits every in-scope scalar variable (string, finite number,
+**`exportScalarVarsJs`**: emits every in-scope scalar variable (string, finite number,
 boolean) as an ES module default export, keys sorted. Objects, arrays, `null` and
 non-finite numbers are skipped. Use it to compile a settings module that runtime code
 imports, rather than re-deriving project configuration:
@@ -226,7 +226,7 @@ imports, rather than re-deriving project configuration:
 
 ## Custom Filters
 
-**`bulletList`** — converts an array variable to a markdown bullet list:
+**`bulletList`**: converts an array variable to a markdown bullet list:
 
 {% raw %}
 ```
@@ -246,7 +246,7 @@ Given a non-array value, `bulletList` returns it as a plain string with no bulle
 ## Authoring Guidelines
 
 Templates (`.tpl.*` files) must be **maximally reusable**. A well-written template
-can be copied between projects or shared across teams without edits — only the
+can be copied between projects or shared across teams without edits; only the
 project's variables change.
 
 **Rules:**
@@ -259,7 +259,7 @@ project's variables change.
    a variable is set, wrap it in {% raw %}`{% if varName %} ... {% endif %}`{% endraw %} so the
    block disappears cleanly for projects that don't define it.
 3. **Prefer derived variables over raw values.** Example: `ticketPrefix` is derived
-   from `jiraProjectKey` — templates use `ticketPrefix` so they stay correct if the
+   from `jiraProjectKey`; templates use `ticketPrefix` so they stay correct if the
    key changes.
 4. **Test portability mentally.** Before finalizing a template, ask: "If I compiled
    this for a different project with different settings, would the output still make
@@ -267,7 +267,7 @@ project's variables change.
 
 ## Reference Files
 
-- [liquid-filters.md](references/liquid-filters.md) — complete standard LiquidJS filter catalogue (string, array, number, date, default)
+- [liquid-filters.md](references/liquid-filters.md): complete standard LiquidJS filter catalogue (string, array, number, date, default)
 
 ## Available Variables
 

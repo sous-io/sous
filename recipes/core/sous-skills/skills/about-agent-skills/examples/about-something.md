@@ -25,9 +25,9 @@ has its own configuration file under `deploy/config/`.
 
 ## Reference Files
 
-- [references/environments.md](references/environments.md) — per-environment config
+- [references/environments.md](references/environments.md): per-environment config
   options, required env vars, and access requirements
-- [references/rollback.md](references/rollback.md) — rollback procedures and known
+- [references/rollback.md](references/rollback.md): rollback procedures and known
   failure modes
 
 # Other Skills

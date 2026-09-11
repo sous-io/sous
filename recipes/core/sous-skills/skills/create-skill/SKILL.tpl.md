@@ -9,7 +9,7 @@ description: >
 The agent performing this work MUST load `about-agent-skills` for skill structure,
 frontmatter, and architecture principles.
 
-Skills for this project live at `{{ skillsRoot }}`. Create new skills there — not in
+Skills for this project live at `{{ skillsRoot }}`. Create new skills there, not in
 `.claude/skills/` or `.codex/skills/` directly (those are managed automatically and
 must not be edited).
 
@@ -30,7 +30,7 @@ what is already there before creating anything: a directory holding `SKILL.md` /
 subdirectories that each contain a skill means you are looking at bundles, so add the skill
 to the bundle it belongs to. When a new skill genuinely needs a new bundle, create the
 bundle directory and add a matching `entryGlob` target in the config of every project that
-should receive it — a bundle with no `entryGlob` is never compiled anywhere.
+should receive it; a bundle with no `entryGlob` is never compiled anywhere.
 
 ### 2. Write `SKILL.tpl.md`
 
@@ -54,16 +54,16 @@ metadata:
 
 ### 3. Add supporting files (if needed)
 
-- `references/` — supplementary documentation loaded on demand
-- `scripts/` — executable scripts the skill uses
-- `examples/` — example outputs
+- `references/`: supplementary documentation loaded on demand
+- `scripts/`: executable scripts the skill uses
+- `examples/`: example outputs
 
-Reference all supporting files from `SKILL.md` — the agent will not discover them
+Reference all supporting files from `SKILL.md`; the agent will not discover them
 otherwise.
 
 ### 4. Name the main file `SKILL.tpl.md` and add the source footer
 
-Skills in `{{ skillsRoot }}` are compiled and distributed — the main skill file must
+Skills in `{{ skillsRoot }}` are compiled and distributed; the main skill file must
 always be named `SKILL.tpl.md`, not `SKILL.md`. No exceptions, and specifically **not even
 when the skill body contains no variables at all**: the mandatory `## Source for this Skill`
 footer itself contains a template variable, so every skill needs a LiquidJS render pass by
