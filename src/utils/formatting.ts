@@ -372,3 +372,63 @@ export function sortObjectKeys<T extends Record<string, any>>(obj: T): T {
 function findLongestKeyLength(vars: Record<string, any>): number {
   return Math.max(...Object.keys(vars).map(key => key.length));
 }
+
+// --- Width-Aware Wrapping ------------------------------------------------------------------------
+
+/**
+ * The width sous wraps prose to when the output is not a terminal, or when the
+ * terminal never said how wide it is.
+ */
+export const DEFAULT_WRAP_COLUMNS = 100;
+
+/**
+ * How many columns the output has to work with: the real terminal width when
+ * there is a terminal, and the default width otherwise, so a piped or recorded
+ * run always wraps the same way.
+ *
+ * @param stream - The stream to measure. Defaults to stdout.
+ */
+export function terminalColumns(stream: { columns?: number } = process.stdout): number {
+  const columns = stream.columns;
+  return typeof columns === "number" && columns > 0 ? columns : DEFAULT_WRAP_COLUMNS;
+}
+
+/**
+ * Wraps a paragraph to a width, breaking on spaces and never inside a word. A
+ * word longer than the width (a URL, a path) is left whole on a line of its
+ * own, because half a URL is worse than a long line. Newlines already in the
+ * text are honored: each line is wrapped on its own.
+ *
+ * @param text - The prose to wrap.
+ * @param width - The column to wrap at. Defaults to the terminal's width.
+ * @returns One string per rendered line, without trailing spaces.
+ *
+ * @example
+ * wrapText("one two three", 7);
+ * // -> ["one two", "three"]
+ */
+export function wrapText(text: string, width: number = terminalColumns()): string[] {
+  const limit = Math.max(1, Math.floor(width));
+  const lines: string[] = [];
+
+  for (const paragraph of String(text ?? "").split("\n")) {
+    const words = paragraph.split(/\s+/).filter(word => word.length > 0);
+    if (words.length === 0) {
+      lines.push("");
+      continue;
+    }
+
+    let current = "";
+    for (const word of words) {
+      if (current.length === 0) current = word;
+      else if (current.length + 1 + word.length <= limit) current = `${current} ${word}`;
+      else {
+        lines.push(current);
+        current = word;
+      }
+    }
+    lines.push(current);
+  }
+
+  return lines;
+}

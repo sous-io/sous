@@ -18,6 +18,9 @@ import {
   displayError,
   dryRunNotice,
   warning,
+  wrapText,
+  terminalColumns,
+  DEFAULT_WRAP_COLUMNS,
 } from "./formatting.js";
 
 // Strip ANSI escape codes so we can assert on plain text
@@ -627,5 +630,62 @@ describe("deleteStatus()", () => {
     const joined = captureStdout(() => deleteStatus(7, 20)).join("");
     expect(joined).toContain("7");
     expect(joined).toContain("20");
+  });
+});
+
+// ---- wrapText -------------------------------------------------------------------------------
+
+describe("wrapText()", () => {
+  /**
+   * wrapText() should break a paragraph on spaces at the given width, never
+   * inside a word, and never leave a line longer than the width unless one word
+   * is longer than the width on its own.
+   *
+   * wrapText("one two three", 7);
+   * // -> ["one two", "three"]
+   */
+  it("should wrap a paragraph on spaces at the given width", () => {
+    expect(wrapText("one two three", 7)).toEqual(["one two", "three"]);
+  });
+
+  /**
+   * A word longer than the width should be left whole on its own line, since
+   * half a URL is less useful than a long line.
+   *
+   * wrapText("see https://example.com/a/very/long/path now", 10);
+   * // -> ["see", "https://example.com/a/very/long/path", "now"]
+   */
+  it("should leave a word longer than the width whole", () => {
+    const lines = wrapText("see https://example.com/a/very/long/path now", 10);
+    expect(lines).toEqual(["see", "https://example.com/a/very/long/path", "now"]);
+  });
+
+  /**
+   * Newlines already in the text should be honored: each line wraps on its own,
+   * so a deliberate paragraph break survives.
+   *
+   * wrapText("a b\nc d", 3);
+   * // -> ["a b", "c d"]
+   */
+  it("should wrap each existing line on its own", () => {
+    expect(wrapText("a b\nc d", 3)).toEqual(["a b", "c d"]);
+  });
+});
+
+// ---- terminalColumns ------------------------------------------------------------------------
+
+describe("terminalColumns()", () => {
+  /**
+   * terminalColumns() should report the stream's own width when it has one, and
+   * fall back to the documented default when it does not, so a piped run always
+   * wraps the same way.
+   *
+   * terminalColumns({ columns: 60 });  // -> 60
+   * terminalColumns({});               // -> 100
+   */
+  it("should use the stream width when there is one and the default otherwise", () => {
+    expect(terminalColumns({ columns: 60 })).toBe(60);
+    expect(terminalColumns({})).toBe(DEFAULT_WRAP_COLUMNS);
+    expect(terminalColumns({ columns: 0 })).toBe(DEFAULT_WRAP_COLUMNS);
   });
 });
