@@ -175,10 +175,49 @@ describe("buildIndex()", () => {
   });
 
   /**
-   * An index that publishes a version no tag carries is hiding a version behind
-   * a missing tag, which the design forbids outright.
+   * The version a manifest declares right now is the one a release is in the
+   * middle of publishing: the index is committed first and the tag is cut on
+   * that commit, so an index recording it without a tag is expected.
    */
-  it("should report an index version whose tag does not exist", async () => {
+  it("should keep the current version an index records while its tag is pending", async () => {
+    const existing: IndexFile = {
+      formatVersion: 1,
+      name: "test-repo",
+      generatedAt: "2026-01-01T00:00:00.000Z",
+      generator: GENERATOR,
+      namespaces: { core: {} },
+      recipes: {
+        "core/example": {
+          path: "recipes/core/example",
+          versions: {
+            "1.0.0": {
+              hash: `sha256-${"0".repeat(64)}`,
+              tag: "core/example@1.0.0",
+              prerelease: false,
+            },
+          },
+        },
+      },
+    };
+
+    const result = await build(existing);
+
+    // A release writes the index, commits it, and tags that commit, so between
+    // the two the index describes a version whose tag is about to exist. That
+    // is the version the manifest declares, and only that one.
+    expect(errorsIn(result.problems)).toEqual([]);
+    expect(Object.keys(result.index.recipes["core/example"]!.versions)).toEqual(["1.0.0"]);
+    expect(result.pending.map((entry) => entry.tag)).toEqual(["core/example@1.0.0"]);
+  });
+
+  /**
+   * An OLDER version the index publishes is history, and history with no tag is
+   * a published version nothing can fetch.
+   */
+  it("should report an older index version whose tag does not exist", async () => {
+    writeRecipe("1.1.0");
+    commitAll(repo, "raise the version");
+
     const existing: IndexFile = {
       formatVersion: 1,
       name: "test-repo",
@@ -219,6 +258,70 @@ describe("buildIndex()", () => {
     const rebuilt = await build();
 
     expect(rebuilt.index.recipes).toEqual(first.index.recipes);
+  });
+
+  /**
+   * Each published version records what it was released against, so a consumer
+   * installs the versions the recipe was published with rather than
+   * re-resolving its ranges later. A sibling with no range means "the version
+   * released alongside me".
+   */
+  it("should record a sibling dependency at the version it is released with", async () => {
+    writeFile(
+      repo,
+      "sous.repo.yaml",
+      "formatVersion: 1\nname: test-repo\nnamespaces:\n  core:\n    description: Core recipes.\n" +
+        "recipes:\n  - recipes/core/example\n  - recipes/core/partials\n"
+    );
+    writeFile(
+      repo,
+      "recipes/core/partials/sous.recipe.yaml",
+      "formatVersion: 1\nnamespace: core\nname: partials\nversion: 2.0.0\n"
+    );
+    writeFile(repo, "recipes/core/partials/one.md", "partial\n");
+    writeFile(
+      repo,
+      "recipes/core/example/sous.recipe.yaml",
+      "formatVersion: 1\nnamespace: core\nname: example\nversion: 1.0.0\n" +
+        "description: An example recipe.\ndepends:\n  - core/partials\n"
+    );
+    commitAll(repo, "add a sibling dependency");
+    git(repo, "tag", "--annotate", "core/example@1.0.0", "--message", "release");
+    git(repo, "tag", "--annotate", "core/partials@2.0.0", "--message", "release");
+
+    const result = await build();
+
+    expect(
+      result.index.recipes["core/example"]!.versions["1.0.0"]!.dependencies
+    ).toEqual({ "core/partials": { version: "2.0.0" } });
+  });
+
+  /**
+   * A dependency in another repository carries that repository's identity,
+   * which is what a consumer needs in order to add it and find the recipe; its
+   * exact version belongs to that repository's own index.
+   */
+  it("should record a cross-repository dependency by identity", async () => {
+    writeFile(
+      repo,
+      "recipes/core/example/sous.recipe.yaml",
+      "formatVersion: 1\nnamespace: core\nname: example\nversion: 1.0.0\n" +
+        "description: An example recipe.\n" +
+        "depends:\n  - github://sous-io/sous-recipes/workflow/task-files@^1.1\n"
+    );
+    commitAll(repo, "depend on another repository");
+    git(repo, "tag", "--annotate", "core/example@1.0.0", "--message", "release");
+
+    const result = await build();
+
+    expect(
+      result.index.recipes["core/example"]!.versions["1.0.0"]!.dependencies
+    ).toEqual({
+      "workflow/task-files": {
+        repo: "github.com/sous-io/sous-recipes",
+        range: "^1.1",
+      },
+    });
   });
 
   /**

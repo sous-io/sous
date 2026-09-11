@@ -8,12 +8,20 @@
  * 1. A published version is IMMUTABLE. An entry that is already in the index
  *    keeps the hash it was published with; a recomputed hash that disagrees is
  *    reported as an error, never quietly written over.
- * 2. A version is published when a tag carries it. The index schema requires a
- *    tag on every version entry, so a version whose tag has not been cut yet is
- *    left OUT of the index and reported as pending instead.
+ * 2. A version is published when a tag carries it, and every version the index
+ *    records has to have one. The single exception is the version a recipe's
+ *    manifest declares right now: a release regenerates the index, commits it
+ *    alongside the manifests, and tags that commit, so for the length of that
+ *    one commit the index describes a version whose tag is about to exist. Any
+ *    OLDER version without a tag is an error, because that is a published
+ *    version nothing can fetch.
  * 3. The tags are the backstop. A version that has a tag but is missing from the
  *    index is rebuilt from the tagged tree, so deleting the index file and
  *    regenerating it restores the same catalog.
+ *
+ * Each version entry also records what it was released against, so a consumer
+ * installs the versions a recipe was published with rather than re-resolving
+ * its ranges long afterwards.
  */
 
 import fs from "node:fs";
@@ -23,6 +31,7 @@ import { INDEX_FILENAME } from "../formats/common.js";
 import {
   parseIndexFile,
   stringifyIndexFile,
+  type IndexDependency,
   type IndexFile,
   type IndexRecipe,
   type IndexVersion,
@@ -40,7 +49,13 @@ import {
   withTaggedTree,
   type RecipeTag,
 } from "./tags.js";
-import { describeError, type RepoValidation, type ValidationProblem } from "./validate.js";
+import {
+  describeError,
+  type RepoValidation,
+  type ValidatedRecipe,
+  type ValidationProblem,
+} from "./validate.js";
+import { parseDependencyRef } from "../ref.js";
 
 /** A version that is ready to publish but has no tag yet. */
 export type PendingRelease = {
@@ -86,6 +101,13 @@ export type BuildIndexOptions = {
   tags?: RecipeTag[];
   /** The command runner git calls go through. */
   run?: RunOptions["run"];
+  /**
+   * The versions this run is about to publish, keyed `namespace/recipe`. Their
+   * tags do not exist yet: the index is regenerated, committed alongside the
+   * manifests, and only then tagged, so the tagged commit already carries an
+   * index that describes itself.
+   */
+  publishing?: Record<string, string>;
 };
 
 /** The index file's absolute path in a repository. */
@@ -134,6 +156,25 @@ export async function buildIndex(
 
   const recipes: IndexFile["recipes"] = {};
 
+  // What each recipe in this repository is published at once this run is done,
+  // and every version each of them publishes. Both are needed to turn a
+  // dependency's declared range into the exact version a consumer installs.
+  const publishing = options.publishing ?? {};
+  const siblingVersions = new Map<string, string>();
+  const publishedVersions = new Map<string, string[]>();
+  for (const recipe of validation.recipes) {
+    const settled = publishing[recipe.key] ?? recipe.manifest.version;
+    siblingVersions.set(recipe.key, settled);
+    const known = new Set(
+      (tagsByKey.get(recipe.key) ?? []).map((tag) => tag.version)
+    );
+    for (const version of Object.keys(existing?.recipes[recipe.key]?.versions ?? {})) {
+      known.add(version);
+    }
+    known.add(settled);
+    publishedVersions.set(recipe.key, [...known]);
+  }
+
   for (const recipe of validation.recipes) {
     if (!Object.hasOwn(namespaces, recipe.manifest.namespace)) continue;
 
@@ -160,6 +201,29 @@ export async function buildIndex(
     const hasTag = recipeTags.some((entry) => entry.tag === tagName);
     const workingHash = await hashDirectory(recipe.dir);
     const where = relativeTo(rootDir, recipe.manifestPath);
+    const dependencies = resolveIndexDependencies(
+      recipe,
+      validation,
+      siblingVersions,
+      publishedVersions
+    );
+
+    // A version the index publishes must have a tag, with one exception: the
+    // version the manifest declares right now, which is the one a release is in
+    // the middle of publishing. Everything older is history, and history with a
+    // missing tag is a published version nothing can fetch.
+    for (const [known, published] of Object.entries(existingVersions)) {
+      if (known === version) continue;
+      if (recipeTags.some((entry) => entry.version === known)) continue;
+      problems.push({
+        level: "error",
+        where: `${INDEX_FILENAME} recipes['${key}'].versions['${known}']`,
+        message:
+          `the index publishes version ${known}, but the tag '${published.tag}' does not ` +
+          `exist in this repository. A missing tag must never hide a published version; ` +
+          `restore the tag, or remove the version from the index.`,
+      });
+    }
 
     if (hasTag) {
       problems.push(
@@ -179,44 +243,63 @@ export async function buildIndex(
             `or the index was edited; restore whichever is wrong before releasing again.`,
         });
       } else {
+        // A release records a version before its tag exists, dating it from the
+        // run; the tag that follows carries a date of its own. Keeping the date
+        // the index already published is what stops the very next regeneration
+        // from calling a perfectly current index stale.
         versions[version] = {
           hash: taggedHash,
           tag: tagName,
           prerelease: semver.prerelease(version) !== null,
-          ...(await releasedAtOf(rootDir, tagName, run)),
+          ...(published?.releasedAt === undefined
+            ? await releasedAtOf(rootDir, tagName, run)
+            : { releasedAt: published.releasedAt }),
+          ...(dependencies === undefined ? {} : { dependencies }),
         };
       }
 
       if (taggedHash !== workingHash) {
+        // A recipe this run is not publishing is allowed to have unpublished
+        // changes sitting in it: that is what a scoped release leaves behind,
+        // and it is worth saying rather than stopping for.
+        const publishingThis =
+          options.publishing === undefined || Object.hasOwn(publishing, key);
         problems.push({
-          level: "error",
+          level: publishingThis ? "error" : "warning",
           where,
-          message:
-            `version ${version} was already published as the tag '${tagName}', and the files ` +
-            `in this folder no longer match what that tag carries. A published version never ` +
-            `changes: bump the version in this manifest, or with 'sous repo release --bump patch'.`,
+          message: publishingThis
+            ? `version ${version} was already published as the tag '${tagName}', and the ` +
+              `files in this folder no longer match what that tag carries. A published ` +
+              `version never changes: bump the version in this manifest, or with ` +
+              `'sous repo release --bump patch'.`
+            : `version ${version} is published as the tag '${tagName}', and this folder has ` +
+              `changed since. Those changes are outside this release, so they stay ` +
+              `unpublished; release '${key}' to publish them.`,
         });
       }
     } else {
+      // No tag yet. The version is either one this run is about to cut, or one
+      // a release commit already recorded and CI will cut after the merge; in
+      // both cases the index describes it from the working tree, and the tag
+      // follows on the very commit that carries this index.
       const published = existingVersions[version];
-      if (published !== undefined) {
-        problems.push({
-          level: "error",
-          where: `${INDEX_FILENAME} recipes['${key}'].versions['${version}']`,
-          message:
-            `the index publishes version ${version}, but the tag '${tagName}' does not exist ` +
-            `in this repository. A missing tag must never hide a published version; restore ` +
-            `the tag, or remove the version from the index.`,
-        });
-      } else {
-        pending.push({
-          key,
-          path: recipe.path,
-          version,
-          tag: tagName,
+      if (options.publishing?.[key] === version || published !== undefined) {
+        versions[version] = {
           hash: workingHash,
-        });
+          tag: tagName,
+          prerelease: semver.prerelease(version) !== null,
+          releasedAt: published?.releasedAt ?? now.toISOString(),
+          ...(dependencies === undefined ? {} : { dependencies }),
+        };
       }
+
+      pending.push({
+        key,
+        path: recipe.path,
+        version,
+        tag: tagName,
+        hash: workingHash,
+      });
     }
 
     if (Object.keys(versions).length > 0) {
@@ -335,6 +418,86 @@ export function describeIndexDrift(
 }
 
 // --- Internals ----------------------------------------------------------------------------------
+
+/**
+ * Turns one recipe's declared dependencies into the exact versions its index
+ * entry publishes.
+ *
+ * This is the whole point of recording dependencies in the index: a consumer
+ * installing version 1.4.0 of a recipe installs what 1.4.0 was released
+ * against, not whatever its ranges happen to reach months later.
+ *
+ *   - A SIBLING with no range means "the version released alongside me", which
+ *     is the version this run settles that sibling on.
+ *   - A SIBLING with a range resolves against the versions this repository
+ *     publishes, including the ones this run is adding.
+ *   - A CROSS-REPOSITORY dependency carries the identity of the repository it
+ *     lives in, which is what a consumer needs in order to add that repository
+ *     and find the recipe. Its exact version belongs to that repository's own
+ *     index, so the range the manifest declared is recorded instead.
+ *
+ * @param recipe - The recipe whose dependencies are being resolved.
+ * @param validation - The validated repository, for expanding namespace refs.
+ * @param siblingVersions - What each recipe here is published at after this run.
+ * @param publishedVersions - Every version each recipe here publishes.
+ */
+function resolveIndexDependencies(
+  recipe: ValidatedRecipe,
+  validation: RepoValidation,
+  siblingVersions: Map<string, string>,
+  publishedVersions: Map<string, string[]>
+): Record<string, IndexDependency> | undefined {
+  const declared = [
+    ...(recipe.manifest.depends ?? []),
+    ...(recipe.manifest.subscribes ?? []),
+  ];
+  if (declared.length === 0) return undefined;
+
+  const resolved: Record<string, IndexDependency> = {};
+
+  /** Records one sibling, at the version this run settles it on. */
+  const recordSibling = (key: string, range: string | undefined): void => {
+    if (range === undefined) {
+      const settled = siblingVersions.get(key);
+      resolved[key] = settled === undefined ? { range: "*" } : { version: settled };
+      return;
+    }
+    const best = semver.maxSatisfying(publishedVersions.get(key) ?? [], range);
+    resolved[key] = best === null ? { range } : { version: best };
+  };
+
+  for (const written of declared) {
+    let parsed;
+    try {
+      parsed = parseDependencyRef(written);
+    } catch {
+      // A dependency that does not parse is already reported by validation.
+      continue;
+    }
+
+    if (parsed.kind === "remote") {
+      resolved[`${parsed.namespace}/${parsed.recipe}`] = {
+        repo: parsed.canonicalRepo!,
+        range: parsed.range ?? "*",
+      };
+      continue;
+    }
+
+    if (parsed.recipe !== undefined) {
+      recordSibling(`${parsed.namespace}/${parsed.recipe}`, parsed.range);
+      continue;
+    }
+
+    // A whole-namespace dependency means every recipe in that namespace.
+    for (const entry of validation.recipes) {
+      if (entry.manifest.namespace !== parsed.namespace) continue;
+      if (entry.key === recipe.key) continue;
+      recordSibling(entry.key, undefined);
+    }
+  }
+
+  return Object.keys(resolved).length === 0 ? undefined : resolved;
+}
 
 /** Groups release tags by the recipe key they belong to. */
 function groupTagsByKey(tags: ReadonlyArray<RecipeTag>): Map<string, RecipeTag[]> {

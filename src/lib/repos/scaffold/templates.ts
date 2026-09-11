@@ -266,12 +266,27 @@ committed. Do not edit it by hand.
 
 ## Publishing
 
-Raise a recipe's version in its \`${RECIPE_MANIFEST_BASENAME}.yaml\` (by hand, or
-with \`sous repo release --bump patch\`), run \`sous repo release\` to regenerate
-\`${INDEX_FILENAME}\`, and commit both. Merging to \`main\` then runs
-\`sous repo release --tag --push\`, which cuts and pushes a git tag for each
-version that does not have one. Tags are shaped \`namespace/recipe@version\`, and
-a version is published when its tag exists.
+Commit your recipe changes, then run \`sous repo release\`. It shows you what it
+would publish and asks once, then raises the version of every recipe whose files
+changed since the tag that last published it, regenerates \`${INDEX_FILENAME}\`,
+commits both, and cuts an annotated tag for each version. Add \`--push\` to push
+the commit and the tags, or push them yourself.
+
+Useful ways to narrow or steer it:
+
+\`\`\`bash
+sous repo release --dry-run                    # show the plan and stop
+sous repo release --namespace ${context.namespace}            # only this namespace
+sous repo release --recipe ${context.namespace}/${context.recipe}   # only this recipe
+sous repo release --bump minor                 # a minor step instead of a patch
+sous repo release --include-unchanged          # release everything in scope anyway
+\`\`\`
+
+On a branch other than \`main\`, a release bumps and commits but cuts no tags:
+tags are cut on the default branch, by the workflow in
+\`.github/workflows/sous-release.yml\` after the merge. Pass \`--tag\` to cut them
+anyway. Tags are shaped \`namespace/recipe@version\`, and a version is published
+when its tag exists.
 
 To propose a change to a repository you do not maintain, commit it and run
 \`sous repo submit\`, which validates everything first and then opens a pull
@@ -313,17 +328,16 @@ export function buildReleaseWorkflow(): string {
 #
 #   'sous repo release --check' validates every manifest, confirms each recipe
 #   folder matches what the repo manifest lists, and confirms the committed
-#   index and the git tags agree with the versions in the recipe manifests. It
-#   only reads; it never writes, commits or tags. That makes it the right thing
-#   to run on a pull request.
+#   index agrees with the versions and dependencies the recipe manifests
+#   declare. It only reads; it never writes, commits or tags. That makes it the
+#   right thing to run on a pull request.
 #
-#   'sous repo release --tag --push' does the same validation, then creates a
-#   git tag (shaped 'namespace/recipe@version') for every recipe version that
-#   does not have one yet, and pushes those tags. It refuses while anything is
-#   uncommitted or the committed index is out of date, so a merge that skipped
-#   the check above stops here rather than publishing something inconsistent.
-#   Sous never commits for you; once the tags exist it rewrites the index to
-#   record them, and the step after it commits that file.
+#   'sous repo release --ci --push' does the same validation and then publishes.
+#   '--ci' raises no versions and asks no questions: the version bump belongs in
+#   the change being merged, so a recipe that changed without one fails here
+#   rather than being given a version nobody reviewed. It cuts an annotated tag
+#   for every version that does not have one yet, dependency-first, and '--push'
+#   pushes the commit and those tags.
 
 name: sous release
 
@@ -340,6 +354,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The whole history, so the tags a version is checked against are
+          # visible.
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -351,7 +369,7 @@ jobs:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
-      # Needed to push the regenerated index and the new tags.
+      # Needed to push the release commit and the new tags.
       contents: write
     steps:
       - uses: actions/checkout@v4
@@ -362,19 +380,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Tag every new version and push the tags
-        run: npx --yes @sous-io/sous repo release --tag --push
-      - name: Commit the index, when tagging changed it
+      - name: Identify the committer, in case the index has to be rewritten
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet -- sous.index.json; then
-            echo "The index already recorded every published version."
-          else
-            git add sous.index.json
-            git commit -m "Record the newly tagged recipe versions in the index"
-            git push
-          fi
+      - name: Publish every new version
+        run: npx --yes @sous-io/sous repo release --ci --push
 `;
 }
 

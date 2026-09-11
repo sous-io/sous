@@ -154,6 +154,54 @@ export async function isCommittedAndUnchanged(
 }
 
 /**
+ * Stages exactly the given paths and commits them.
+ *
+ * This is the one place sous commits on an author's behalf, and it is
+ * deliberately narrow: a release writes version bumps and an index, and those
+ * are the only paths it stages. Anything else in the working tree is left
+ * exactly as it was.
+ *
+ * @param rootDir - The repository's root directory.
+ * @param paths - The paths to stage, relative to the repository root.
+ * @param message - The commit message.
+ * @param options - The command runner to use.
+ */
+export async function commitPaths(
+  rootDir: string,
+  paths: ReadonlyArray<string>,
+  message: string,
+  options: RunOptions = {}
+): Promise<void> {
+  if (paths.length === 0) return;
+  await runGit(["add", "--", ...paths], { cwd: rootDir, run: options.run });
+  await runGit(["commit", "--message", message, "--", ...paths], {
+    cwd: rootDir,
+    run: options.run,
+  });
+}
+
+/**
+ * True when any of the given paths differs from what HEAD holds, so a release
+ * knows whether it has anything to commit.
+ *
+ * @param rootDir - The repository's root directory.
+ * @param paths - The paths to check, relative to the repository root.
+ * @param options - The command runner to use.
+ */
+export async function anythingToCommit(
+  rootDir: string,
+  paths: ReadonlyArray<string>,
+  options: RunOptions = {}
+): Promise<boolean> {
+  if (paths.length === 0) return false;
+  const changed = await runGit(["status", "--porcelain", "--", ...paths], {
+    cwd: rootDir,
+    run: options.run,
+  });
+  return changed.length > 0;
+}
+
+/**
  * Creates a branch at HEAD and checks it out.
  *
  * @param rootDir - The repository's root directory.

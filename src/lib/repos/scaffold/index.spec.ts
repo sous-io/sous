@@ -116,7 +116,7 @@ describe("scaffoldRepo()", () => {
    * The release workflow should run the check on pull requests and the tagging
    * release on pushes to main, and should explain what each flag does.
    */
-  it("should write a release workflow that checks and tags", () => {
+  it("should write a release workflow that checks pull requests and publishes merges", () => {
     scaffoldRepo({ directory: target, sousVersion: SOUS_VERSION });
 
     const workflow = fs.readFileSync(
@@ -125,7 +125,7 @@ describe("scaffoldRepo()", () => {
     );
 
     expect(workflow).toContain("npx --yes @sous-io/sous repo release --check");
-    expect(workflow).toContain("npx --yes @sous-io/sous repo release --tag");
+    expect(workflow).toContain("npx --yes @sous-io/sous repo release --ci --push");
     expect(workflow).toContain("pull_request");
     expect(workflow).toContain("- main");
     // It parses as YAML, so GitHub can actually run it.
