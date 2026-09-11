@@ -256,9 +256,10 @@ describe("the repositories consumer surface", () => {
   );
 
   /**
-   * `sous repo list` shows the trusted repository with what its cached index
-   * says it publishes, and `sous repo search` finds a recipe by its
-   * description. Both read only what is already on disk.
+   * `sous repo list` shows the trusted repository and where it came from, and
+   * `--verbose` adds the namespaces its cached index says it publishes.
+   * `sous repo search` finds a recipe by its description. All of it reads only
+   * what is already on disk.
    */
   it(
     "should list and search the trusted repositories",
@@ -266,7 +267,10 @@ describe("the repositories consumer surface", () => {
       const list = sous(projectRoot, "repo", "list");
       expect(list.status).toBe(0);
       expect(list.stdout).toContain("fixtures");
-      expect(list.stdout).toContain("workflow");
+
+      const verbose = sous(projectRoot, "repo", "list", "--verbose");
+      expect(verbose.status).toBe(0);
+      expect(verbose.stdout).toMatch(/Namespaces: .*workflow/);
 
       const search = sous(projectRoot, "repo", "search", "task file per branch");
       expect(search.status).toBe(0);

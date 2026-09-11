@@ -184,8 +184,9 @@ interface FitResult {
  * Decides how wide every column is, and which columns do not fit at all.
  *
  * Each column starts at its natural width (the widest cell it holds, and its
- * heading when one is shown). If the total is too wide, columns give width back
- * in proportion to how far each sits above its own minimum. If the minimums
+ * heading when one is shown). If the total is too wide, the least important
+ * columns give width back first, in proportion to how far each sits above its
+ * own minimum, and the more important ones only once those run out. If the minimums
  * alone still do not fit, the least important column is hidden and the whole
  * pass runs again. When nothing may be hidden and the minimums still do not fit,
  * every column is squeezed toward a single character rather than letting the
@@ -208,12 +209,13 @@ function fitColumns<Row extends Record<string, unknown>>(
       Math.max(naturalWidth(column, rows, input.showHeader), floors[index]!)
     );
     const flexes = visible.map((column) => Math.max(0, column.flex ?? 0));
+    const ranks = visible.map((column) => PRIORITY_RANK[column.priority ?? "high"]);
     const cellBudget = Math.max(
       visible.length,
       input.budget - input.gap * (visible.length - 1)
     );
 
-    const fitted = distribute(targets, floors, flexes, cellBudget);
+    const fitted = distribute(targets, floors, flexes, ranks, cellBudget);
     if (fitted.shortBy === 0) {
       return {
         widths: fitted.widths,
@@ -226,7 +228,13 @@ function fitColumns<Row extends Record<string, unknown>>(
     if (!input.mayHide || victim === undefined) {
       // Nothing may step aside, so everything is squeezed instead: a cramped
       // table still reads, a table wider than the window does not.
-      const squeezed = distribute(targets, targets.map(() => 1), flexes, cellBudget);
+      const squeezed = distribute(
+        targets,
+        targets.map(() => 1),
+        flexes,
+        ranks,
+        cellBudget
+      );
       return {
         widths: squeezed.widths,
         visible,
@@ -241,12 +249,16 @@ function fitColumns<Row extends Record<string, unknown>>(
 
 /**
  * Shares the width budget out among the columns: slack goes to the columns that
- * asked to flex, and a shortfall is taken from every column in proportion to
- * how far it sits above its own floor.
+ * asked to flex, and a shortfall is taken from the columns that matter least
+ * first, spread among them in proportion to how far each sits above its own
+ * floor. A high column only gives width up once every less important column has
+ * given all of its own, which is what keeps an identifier from being cut in
+ * half while a sentence beside it keeps its full width.
  *
  * @param targets - The width each column would like, its minimum included.
  * @param floors - The narrowest each column may become.
  * @param flexes - Each column's share of any leftover width.
+ * @param ranks - Each column's importance, lowest first.
  * @param budget - The columns' share of the window, gaps already taken out.
  * @returns The widths, and how much width could not be found (zero when it fit).
  */
@@ -254,6 +266,7 @@ function distribute(
   targets: number[],
   floors: number[],
   flexes: number[],
+  ranks: number[],
   budget: number
 ): { widths: number[]; shortBy: number } {
   const widths = [...targets];
@@ -265,35 +278,66 @@ function distribute(
   }
 
   let deficit = total - budget;
-  const room = widths.map((width, index) => width - floors[index]!);
-  const totalRoom = sum(room);
 
-  if (totalRoom > 0) {
-    for (let index = 0; index < widths.length; index += 1) {
-      const cut = Math.min(room[index]!, Math.floor((deficit * room[index]!) / totalRoom));
-      widths[index] = widths[index]! - cut;
-    }
-    deficit = sum(widths) - budget;
-
-    // Rounding always leaves a little to find; take it one column at a time from
-    // whichever still has the most room above its floor.
-    while (deficit > 0) {
-      let best = -1;
-      let bestRoom = 0;
-      for (let index = 0; index < widths.length; index += 1) {
-        const left = widths[index]! - floors[index]!;
-        if (left >= bestRoom && left > 0) {
-          best = index;
-          bestRoom = left;
-        }
-      }
-      if (best < 0) break;
-      widths[best] = widths[best]! - 1;
-      deficit -= 1;
-    }
+  for (const band of [PRIORITY_RANK.low, PRIORITY_RANK.medium, PRIORITY_RANK.high]) {
+    if (deficit <= 0) break;
+    const members: number[] = [];
+    ranks.forEach((rank, index) => {
+      if (rank === band) members.push(index);
+    });
+    deficit -= takeFrom(widths, floors, members, deficit);
   }
 
-  return { widths, shortBy: Math.max(0, sum(widths) - budget) };
+  return { widths, shortBy: Math.max(0, deficit) };
+}
+
+/**
+ * Takes width off one band of columns, spread in proportion to how much room
+ * each has above its floor, and never below that floor.
+ *
+ * @param widths - The widths so far, changed in place.
+ * @param floors - The narrowest each column may become.
+ * @param members - Which columns this band holds.
+ * @param wanted - How much width to find.
+ * @returns How much was actually found.
+ */
+function takeFrom(
+  widths: number[],
+  floors: number[],
+  members: number[],
+  wanted: number
+): number {
+  const room = members.map((index) => widths[index]! - floors[index]!);
+  const totalRoom = sum(room);
+  if (totalRoom <= 0 || wanted <= 0) return 0;
+
+  const target = Math.min(wanted, totalRoom);
+  let taken = 0;
+
+  members.forEach((index, slot) => {
+    const cut = Math.min(room[slot]!, Math.floor((target * room[slot]!) / totalRoom));
+    widths[index] = widths[index]! - cut;
+    taken += cut;
+  });
+
+  // Rounding always leaves a little to find; take it one column at a time from
+  // whichever still has the most room above its floor.
+  while (taken < target) {
+    let best = -1;
+    let bestRoom = 0;
+    for (const index of members) {
+      const left = widths[index]! - floors[index]!;
+      if (left >= bestRoom && left > 0) {
+        best = index;
+        bestRoom = left;
+      }
+    }
+    if (best < 0) break;
+    widths[best] = widths[best]! - 1;
+    taken += 1;
+  }
+
+  return taken;
 }
 
 /**

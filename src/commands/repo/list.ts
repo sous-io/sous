@@ -8,11 +8,13 @@
  * download, so the command is safe to run offline.
  */
 
+import { Flags } from "@oclif/core";
+import { color } from "@oclif/color";
 import { BaseCommand } from "../../base-command.js";
 import { subscriptionServiceFor } from "../../lib/repos/subscription-service.js";
 import { readEffectiveLinks } from "../../lib/repos/links.js";
 import { BUILT_IN_ADDED_BY } from "../../lib/repos/defaults.js";
-import { renderTable } from "../../lib/vars/display.js";
+import { renderTable, type TableColumn } from "../../utils/table.js";
 import {
   blankLine,
   footer,
@@ -21,6 +23,33 @@ import {
   log,
   showCommandVars,
 } from "../../utils/formatting.js";
+
+/** How far every line of this command's output is indented. */
+const INDENT = 2;
+
+/**
+ * The columns the listing shows, widest-mattering first. The URL is the column
+ * that steps aside on a narrow terminal: it is the longest and the least often
+ * read, and its middle is what a cut gives up, so the host and the repository
+ * name both survive.
+ */
+const COLUMNS: TableColumn[] = [
+  { key: "name", header: "Repository", minWidth: 8 },
+  { key: "provider", header: "Provider", priority: "medium" },
+  { key: "origin", header: "Origin" },
+  { key: "linked", header: "Linked", priority: "medium" },
+  { key: "recipes", header: "Recipes", kind: "number", priority: "low" },
+  {
+    key: "url",
+    header: "URL",
+    kind: "url",
+    overflow: "truncate",
+    truncate: "middle",
+    priority: "low",
+    flex: 1,
+    minWidth: 12,
+  },
+];
 
 export default class RepoList extends BaseCommand {
   static description = "List the recipe repositories this project trusts";
@@ -31,12 +60,21 @@ export default class RepoList extends BaseCommand {
    */
   static aliases = ["repos:list"];
 
-  static examples = ["<%= config.bin %> repo list"];
+  static examples = [
+    "<%= config.bin %> repo list",
+    "<%= config.bin %> repo list --verbose",
+  ];
 
-  static flags = { ...BaseCommand.baseFlags };
+  static flags = {
+    ...BaseCommand.baseFlags,
+    verbose: Flags.boolean({
+      description: "Show the namespaces each repository publishes, under its row",
+      default: false,
+    }),
+  };
 
   async run(): Promise<void> {
-    await this.parse(RepoList);
+    const { flags } = await this.parse(RepoList);
 
     showCommandVars({
       Project: this.projectLabel,
@@ -76,31 +114,40 @@ export default class RepoList extends BaseCommand {
       const namespaces =
         index === undefined ? "not fetched yet" : Object.keys(index.namespaces).sort().join(", ");
       const recipes = index === undefined ? "unknown" : String(Object.keys(index.recipes).length);
-      return [
+      return {
         name,
-        entry.url,
-        entry.provider ?? "detected from the URL",
-        describeOrigin(entry.addedBy),
-        namespaces.length > 0 ? namespaces : "none",
+        url: entry.url,
+        provider: entry.provider ?? "detected from the URL",
+        origin: describeOrigin(entry.addedBy),
+        namespaces: namespaces.length > 0 ? namespaces : "none",
         recipes,
-        links[name] === undefined ? "no" : `yes: ${links[name]!.path}`,
-      ];
+        linked: links[name] === undefined ? "no" : `yes: ${links[name]!.path}`,
+      };
     });
 
-    for (const line of renderTable(
-      ["Repository", "Location", "Provider", "Origin", "Namespaces", "Recipes", "Linked"],
-      rows
-    )) {
-      log(indent(line));
+    for (const line of renderTable(COLUMNS, rows, {
+      indent: INDENT,
+      rowNote: flags.verbose
+        ? (row) => color.gray(indent(`Namespaces: ${row.namespaces}`, INDENT))
+        : undefined,
+    })) {
+      log(indent(line, INDENT));
     }
 
     blankLine();
     log(
       indent(
-        "A repository whose index has not been fetched yet reports its namespaces and " +
-          "recipe count as unknown. Run 'sous repo add <url>' again to refresh it."
+        "A repository whose index has not been fetched yet reports its recipe count as " +
+          "unknown. Run 'sous repo add <url>' again to refresh it."
       )
     );
+    if (!flags.verbose) {
+      log(
+        indent(
+          "Run 'sous repo list --verbose' to see the namespaces each repository publishes."
+        )
+      );
+    }
     log(
       indent(
         "A repository whose origin is 'built in' is one sous provides itself. To stop " +
@@ -120,6 +167,6 @@ export default class RepoList extends BaseCommand {
  */
 function describeOrigin(addedBy: string | undefined): string {
   if (addedBy === BUILT_IN_ADDED_BY) return "built in";
-  if (addedBy === undefined || addedBy === "user") return "you added it";
+  if (addedBy === undefined || addedBy === "user") return "user";
   return `required by ${addedBy}`;
 }

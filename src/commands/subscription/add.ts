@@ -21,7 +21,7 @@ import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../base-command.js";
 import { subscriptionServiceFor } from "../../lib/repos/subscription-service.js";
 import { formatAskReport } from "../../lib/vars/ask.js";
-import { renderTable } from "../../lib/vars/display.js";
+import { renderTable, type TableColumn } from "../../utils/table.js";
 import {
   blankLine,
   dryRunNotice,
@@ -34,6 +34,21 @@ import {
   warning,
 } from "../../utils/formatting.js";
 import { confirmationFlag } from "../../utils/flags.js";
+
+/** How far every line of this command's output is indented. */
+const INDENT = 2;
+
+/**
+ * The columns the installation report shows: what was installed, at what
+ * version, and why it is there. The reason wraps rather than being cut, because
+ * it is the answer to the question a reader is most likely to have.
+ */
+const INSTALLED_COLUMNS: TableColumn[] = [
+  { key: "key", header: "Recipe", minWidth: 12 },
+  { key: "version", header: "Version" },
+  { key: "repo", header: "Repository", priority: "medium" },
+  { key: "why", header: "Why", overflow: "wrap", flex: 1, minWidth: 16 },
+];
 
 export default class SubscriptionAdd extends BaseCommand {
   static description =
@@ -125,20 +140,19 @@ export default class SubscriptionAdd extends BaseCommand {
     subheading(dryRun ? "What would be installed" : "What was installed");
     blankLine();
 
-    for (const line of renderTable(
-      ["Recipe", "Version", "Repository", "Why"],
-      outcome.resolved.map((recipe) => [
-        recipe.key,
-        recipe.version,
-        recipe.repo,
-        recipe.requestedBy.includes("project")
-          ? "you subscribed to it"
-          : recipe.kind === "subscribes"
-            ? `co-subscribed by ${recipe.requestedBy.join(", ")}`
-            : `needed by ${recipe.requestedBy.join(", ")}`,
-      ])
-    )) {
-      log(indent(line));
+    const rows = outcome.resolved.map((recipe) => ({
+      key: recipe.key,
+      version: recipe.version,
+      repo: recipe.repo,
+      why: recipe.requestedBy.includes("project")
+        ? "you subscribed to it"
+        : recipe.kind === "subscribes"
+          ? `co-subscribed by ${recipe.requestedBy.join(", ")}`
+          : `needed by ${recipe.requestedBy.join(", ")}`,
+    }));
+
+    for (const line of renderTable(INSTALLED_COLUMNS, rows, { indent: INDENT })) {
+      log(indent(line, INDENT));
     }
 
     if (outcome.trusted.length > 0) {

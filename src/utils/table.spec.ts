@@ -60,6 +60,27 @@ describe("renderTable()", () => {
   });
 
   /**
+   * A shortfall comes out of the columns that matter least before it touches
+   * the ones that matter, so an identifier is not cut in half while a sentence
+   * beside it keeps every character.
+   *
+   * Two twenty-wide columns in an eighteen-wide budget, one of them low: the
+   * low one alone gives up the whole twenty-two columns it can spare.
+   */
+  it("should take the shortfall out of the least important columns first", () => {
+    const lines = render(
+      [
+        { key: "key", header: "K", overflow: "truncate" },
+        { key: "note", header: "N", overflow: "truncate", priority: "low" },
+      ],
+      [{ key: "k".repeat(20), note: "n".repeat(20) }],
+      { width: 30 }
+    );
+
+    expect(lines[1]).toBe(`${"-".repeat(20)}  ${"-".repeat(8)}`);
+  });
+
+  /**
    * A wrapping cell breaks at its column's edge and makes the whole row taller;
    * the other cells in that row are padded with blank space underneath, so the
    * columns stay lined up.

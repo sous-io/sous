@@ -16,7 +16,7 @@ import { BaseCommand } from "../../base-command.js";
 import { subscriptionServiceFor } from "../../lib/repos/subscription-service.js";
 import { resolveStoreSettings } from "../../lib/repos/store/settings.js";
 import type { StoreKey } from "../../lib/repos/store/contract.js";
-import { renderTable } from "../../lib/vars/display.js";
+import { renderTable, type TableColumn } from "../../utils/table.js";
 import {
   blankLine,
   dryRunNotice,
@@ -27,6 +27,22 @@ import {
   showCommandVars,
   showVars,
 } from "../../utils/formatting.js";
+
+/** How far every line of this command's output is indented. */
+const INDENT = 2;
+
+/**
+ * The columns the eviction report shows: what was removed, and how much room it
+ * was taking. Which repository it came from and when it was last read are the
+ * details that step aside on a narrow terminal.
+ */
+const EVICTED_COLUMNS: TableColumn[] = [
+  { key: "recipe", header: "Recipe", minWidth: 12 },
+  { key: "version", header: "Version" },
+  { key: "size", header: "Size", kind: "number" },
+  { key: "repo", header: "Repository", priority: "medium" },
+  { key: "lastUsed", header: "Last used", priority: "low", flex: 1 },
+];
 
 /** Renders a byte count the way a person reads one. */
 function describeSize(bytes: number): string {
@@ -120,17 +136,16 @@ export default class RepoGc extends BaseCommand {
 
     if (report.evicted.length > 0) {
       blankLine();
-      for (const line of renderTable(
-        ["Repository", "Recipe", "Version", "Size", "Last used"],
-        report.evicted.map((entry) => [
-          entry.repo,
-          `${entry.namespace}/${entry.name}`,
-          entry.version,
-          describeSize(entry.sizeBytes),
-          entry.lastAccessAt,
-        ])
-      )) {
-        log(indent(line));
+      const rows = report.evicted.map((entry) => ({
+        repo: entry.repo,
+        recipe: `${entry.namespace}/${entry.name}`,
+        version: entry.version,
+        size: describeSize(entry.sizeBytes),
+        lastUsed: entry.lastAccessAt,
+      }));
+
+      for (const line of renderTable(EVICTED_COLUMNS, rows, { indent: INDENT })) {
+        log(indent(line, INDENT));
       }
     }
 

@@ -13,7 +13,7 @@
 import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../base-command.js";
 import { subscriptionServiceFor } from "../../lib/repos/subscription-service.js";
-import { renderTable } from "../../lib/vars/display.js";
+import { renderTable, type TableColumn } from "../../utils/table.js";
 import {
   blankLine,
   dryRunNotice,
@@ -24,6 +24,15 @@ import {
   showCommandVars,
   subheading,
 } from "../../utils/formatting.js";
+
+/** How far every line of this command's output is indented. */
+const INDENT = 2;
+
+/** The columns the report of what stayed behind shows. */
+const STAYED_COLUMNS: TableColumn[] = [
+  { key: "key", header: "Recipe", minWidth: 12 },
+  { key: "heldBy", header: "Still held by", overflow: "wrap", flex: 1, minWidth: 16 },
+];
 
 export default class SubscriptionRemove extends BaseCommand {
   static description = "Remove a subscription, and everything only it brought in";
@@ -94,11 +103,13 @@ export default class SubscriptionRemove extends BaseCommand {
       blankLine();
       subheading("What stayed, and why");
       blankLine();
-      for (const line of renderTable(
-        ["Recipe", "Still held by"],
-        outcome.stayed.map((entry) => [entry.key, entry.heldBy.join(", ")])
-      )) {
-        log(indent(line));
+      const rows = outcome.stayed.map((entry) => ({
+        key: entry.key,
+        heldBy: entry.heldBy.join(", "),
+      }));
+
+      for (const line of renderTable(STAYED_COLUMNS, rows, { indent: INDENT })) {
+        log(indent(line, INDENT));
       }
     }
 

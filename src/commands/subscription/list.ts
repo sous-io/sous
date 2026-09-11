@@ -15,7 +15,7 @@ import { BaseCommand } from "../../base-command.js";
 import { subscriptionServiceFor } from "../../lib/repos/subscription-service.js";
 import { BUILT_IN_ADDED_BY } from "../../lib/repos/defaults.js";
 import { USER_ADDED_BY } from "../../lib/repos/trust.js";
-import { renderTable } from "../../lib/vars/display.js";
+import { renderTable, type TableColumn } from "../../utils/table.js";
 import {
   blankLine,
   footer,
@@ -24,6 +24,23 @@ import {
   log,
   showCommandVars,
 } from "../../utils/formatting.js";
+
+/** How far every line of this command's output is indented. */
+const INDENT = 2;
+
+/**
+ * The columns the listing shows. What a project subscribed to, the range it
+ * asked for and the versions it actually holds are the whole point of the
+ * command, so all three stay whatever the terminal's width; where a
+ * subscription came from and whether it is switched on give way first.
+ */
+const COLUMNS: TableColumn[] = [
+  { key: "key", header: "Subscription", minWidth: 12 },
+  { key: "range", header: "Range", minWidth: 7 },
+  { key: "pinned", header: "Pinned version", flex: 1, minWidth: 14 },
+  { key: "origin", header: "Origin", priority: "medium" },
+  { key: "enabled", header: "Enabled", priority: "medium" },
+];
 
 export default class SubscriptionList extends BaseCommand {
   static description = "List the recipes and namespaces this project subscribes to";
@@ -64,19 +81,16 @@ export default class SubscriptionList extends BaseCommand {
       return;
     }
 
-    const rows = listings.map((entry) => [
-      entry.key,
-      entry.range ?? "any version",
-      describePinned(entry.pinned),
-      describeOrigin(entry.addedBy),
-      entry.enabled ? "yes" : "no",
-    ]);
+    const rows = listings.map((entry) => ({
+      key: entry.key,
+      range: entry.range ?? "any version",
+      pinned: describePinned(entry.pinned),
+      origin: describeOrigin(entry.addedBy),
+      enabled: entry.enabled ? "yes" : "no",
+    }));
 
-    for (const line of renderTable(
-      ["Subscription", "Range", "Pinned version", "Origin", "Enabled"],
-      rows
-    )) {
-      log(indent(line));
+    for (const line of renderTable(COLUMNS, rows, { indent: INDENT })) {
+      log(indent(line, INDENT));
     }
 
     footer();

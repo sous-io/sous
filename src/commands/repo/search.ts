@@ -11,7 +11,7 @@
 import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../base-command.js";
 import { subscriptionServiceFor } from "../../lib/repos/subscription-service.js";
-import { renderTable } from "../../lib/vars/display.js";
+import { renderTable, type TableColumn } from "../../utils/table.js";
 import {
   blankLine,
   footer,
@@ -20,6 +20,29 @@ import {
   log,
   showCommandVars,
 } from "../../utils/formatting.js";
+
+/** How far every line of this command's output is indented. */
+const INDENT = 2;
+
+/**
+ * The columns the results show. The recipe and its versions are why anybody ran
+ * the search, so they stay however narrow the terminal is; the description takes
+ * whatever room is left and wraps rather than being cut, because half a sentence
+ * helps nobody.
+ */
+const COLUMNS: TableColumn[] = [
+  { key: "key", header: "Recipe", minWidth: 12 },
+  { key: "versions", header: "Versions", minWidth: 7 },
+  { key: "repo", header: "Repository", priority: "medium" },
+  {
+    key: "description",
+    header: "What it is",
+    overflow: "wrap",
+    flex: 1,
+    priority: "low",
+    minWidth: 16,
+  },
+];
 
 /** One recipe that matched, ready to be shown. */
 type Match = {
@@ -128,16 +151,16 @@ export default class RepoSearch extends BaseCommand {
       );
     } else {
       const shown = matches.slice(0, flags.limit);
-      for (const line of renderTable(
-        ["Recipe", "Repository", "Versions", "What it is"],
-        shown.map((match) => [
-          match.key,
-          match.repo,
-          match.versions.join(", "),
+      const rows = shown.map((match) => ({
+        key: match.key,
+        repo: match.repo,
+        versions: match.versions.join(", "),
+        description:
           match.description.length > 0 ? match.description : "no description published",
-        ])
-      )) {
-        log(indent(line));
+      }));
+
+      for (const line of renderTable(COLUMNS, rows, { indent: INDENT })) {
+        log(indent(line, INDENT));
       }
 
       if (matches.length > shown.length) {

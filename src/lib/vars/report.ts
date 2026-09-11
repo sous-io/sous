@@ -18,10 +18,9 @@ import {
   displayValue,
   documentationRows,
   renderFacts,
-  renderTable,
-  truncate,
   variableFacts,
 } from "./display.js";
+import { renderTable, type TableColumn } from "../../utils/table.js";
 import {
   diagnoseVariable,
   RUNG_LABELS,
@@ -40,6 +39,44 @@ import {
   subheading,
   terminalColumns,
 } from "../../utils/formatting.js";
+
+/** How far every line of these reports is indented. */
+const INDENT = 2;
+
+/**
+ * The columns the listing shows. The variable and the value answering it are
+ * what the reader came for, so they stay however narrow the terminal is. An
+ * environment variable name is cut at the front, because the tail of
+ * `SOUS_VAR_LOCAL_QUESTIONS_API_URL` is the part that identifies it.
+ */
+const LIST_COLUMNS: TableColumn[] = [
+  { key: "name", header: "Variable", minWidth: 8 },
+  { key: "recipe", header: "Recipe", priority: "medium", minWidth: 8 },
+  {
+    key: "envName",
+    header: "Answered by",
+    overflow: "truncate",
+    truncate: "start",
+    priority: "medium",
+    minWidth: 11,
+  },
+  {
+    key: "value",
+    header: "Value",
+    overflow: "truncate",
+    truncate: "end",
+    flex: 1,
+    minWidth: 10,
+  },
+  { key: "source", header: "Source", priority: "low" },
+];
+
+/** The columns the detail report's resolution ladder shows. */
+const LADDER_COLUMNS: TableColumn[] = [
+  { key: "envName", header: "Environment variable", overflow: "truncate", truncate: "start" },
+  { key: "rung", header: "Rung", priority: "medium" },
+  { key: "status", header: "Status", flex: 1, priority: "medium" },
+];
 
 /**
  * Prints the table of every variable in play, sorted by recipe then name.
@@ -75,21 +112,18 @@ export function printVariableList(
           : `${RUNG_LABELS[resolved.source.rung]}, ${
               SOURCE_LABELS[resolved.source.file] ?? resolved.source.file
             }`;
-      return [
-        entry.definition.name,
-        definingRecipeKey(entry.recipe),
-        resolved?.source.envName ?? "",
-        truncate(value),
+      return {
+        name: entry.definition.name,
+        recipe: definingRecipeKey(entry.recipe),
+        envName: resolved?.source.envName ?? "",
+        value,
         source,
-      ];
+      };
     });
 
   blankLine();
-  for (const line of renderTable(
-    ["Variable", "Recipe", "Answered by", "Value", "Source"],
-    rows
-  )) {
-    log(indent(line));
+  for (const line of renderTable(LIST_COLUMNS, rows, { indent: INDENT })) {
+    log(indent(line, INDENT));
   }
 }
 
@@ -167,15 +201,16 @@ export function printVariableDetail(
     subheading("Environment variables sous looks at, most specific first");
     blankLine();
 
-    const rows = candidates.map((candidate) => [
-      candidate.envName,
-      RUNG_LABELS[candidate.rung],
-      candidate.envName === resolved?.source.envName
-        ? `answered it, from ${SOURCE_LABELS[resolved.source.file] ?? resolved.source.file}`
-        : "not set",
-    ]);
-    for (const line of renderTable(["Environment variable", "Rung", "Status"], rows)) {
-      log(indent(line));
+    const rows = candidates.map((candidate) => ({
+      envName: candidate.envName,
+      rung: RUNG_LABELS[candidate.rung],
+      status:
+        candidate.envName === resolved?.source.envName
+          ? `answered it, from ${SOURCE_LABELS[resolved.source.file] ?? resolved.source.file}`
+          : "not set",
+    }));
+    for (const line of renderTable(LADDER_COLUMNS, rows, { indent: INDENT })) {
+      log(indent(line, INDENT));
     }
   }
 }
