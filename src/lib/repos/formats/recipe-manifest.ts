@@ -14,6 +14,14 @@
  *   the project to the target too, with full semantics: its questions run and
  *   its files DO enter the output. A curated bundle is simply a recipe made
  *   mostly of `subscribes` entries.
+ *
+ * Both lists name their targets BY LOCATION, in one of two spellings:
+ *
+ *     workflow/sat                                  a sibling in this repository
+ *     github://sous-io/sous-recipes/workflow/sat    a recipe in another one
+ *
+ * A short name such as `sous-recipes:` is a consuming project's own label, so
+ * it never appears in a published manifest; see `parseDependencyRef`.
  */
 
 import { z } from "zod";
@@ -28,18 +36,20 @@ import {
   semverVersionSchema,
   variableNameSchema,
 } from "./common.js";
-import { parseRef } from "../ref.js";
+import { parseDependencyRef } from "../ref.js";
 
 // --- Dependency refs ----------------------------------------------------------------------------
 
 /**
- * A ref string in `depends` or `subscribes`. Parsed with the real ref parser so
- * a manifest and the command line never disagree about what a ref means; the
- * parser's message is carried through as the zod issue message.
+ * A dependency in `depends` or `subscribes`, in either of the two spellings a
+ * manifest may use: a bare ref naming a recipe in this same repository, or a
+ * locator URL naming one in another repository. Parsed with the real parser so
+ * a manifest and the rest of sous never disagree about what a dependency means;
+ * the parser's message is carried through as the zod issue message.
  */
 const dependencyRefSchema = z.string().superRefine((value, ctx) => {
   try {
-    parseRef(value);
+    parseDependencyRef(value);
   } catch (error) {
     ctx.addIssue({ code: "custom", message: (error as Error).message });
   }
@@ -291,7 +301,11 @@ export const recipeManifestSchema = extensibleObject({
   version: semverVersionSchema,
   /** One-paragraph summary, shown by `sous repo search` and `sous repo list`. */
   description: z.string().optional(),
-  /** Build dependencies: fetched and addressable here, but not added to the project. */
+  /**
+   * Build dependencies: fetched and addressable here, but not added to the
+   * project. Each entry is a bare ref naming a sibling recipe in this same
+   * repository, or a locator URL naming a recipe in another one.
+   */
   depends: refListSchema("'depends'").optional(),
   /** Co-subscriptions: subscribing here subscribes the project to these too. */
   subscribes: refListSchema("'subscribes'").optional(),

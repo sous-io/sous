@@ -317,16 +317,29 @@ function escapesRecipe(
 
 /**
  * Strip the decorations a written reference may carry so it can be compared to
- * a plain `<namespace>/<recipe>` ref: a leading repository qualifier
- * (`sous-public:misc/stuff`) and a trailing version range (`misc/stuff@^1.2`).
+ * a plain `<namespace>/<recipe>` ref: a repository qualifier (a subscription's
+ * `sous-public:misc/stuff`, or a manifest's
+ * `github://owner/repo/misc/stuff` locator) and a trailing version range
+ * (`misc/stuff@^1.2`).
  *
  * @param ref - A reference as written in a manifest or subscription entry.
  * @returns The bare `<namespace>` or `<namespace>/<recipe>` form.
  */
 export function normalizeRef(ref: string): string {
-  const withoutQualifier = ref.includes(":") ? ref.slice(ref.indexOf(":") + 1) : ref;
-  const at = withoutQualifier.lastIndexOf("@");
-  return (at > 0 ? withoutQualifier.slice(0, at) : withoutQualifier).trim();
+  const trimmed = ref.trim();
+
+  // A locator URL names the repository first and the recipe last, so the two
+  // trailing segments are the ref; everything before them is where it lives.
+  const scheme = trimmed.indexOf("://");
+  const body =
+    scheme === -1
+      ? trimmed.includes(":")
+        ? trimmed.slice(trimmed.indexOf(":") + 1)
+        : trimmed
+      : trimmed.slice(scheme + 3).split("/").slice(-2).join("/");
+
+  const at = body.lastIndexOf("@");
+  return (at > 0 ? body.slice(0, at) : body).trim();
 }
 
 /**

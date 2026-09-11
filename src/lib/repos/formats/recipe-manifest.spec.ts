@@ -71,7 +71,7 @@ describe("parseRecipeManifest()", () => {
     const manifest = {
       ...validManifest(),
       depends: ["core/sous-skills@^1.0.0", "communication/control-flow"],
-      subscribes: ["sous-recipes:quality/reviews@~2.1"],
+      subscribes: ["github://sous-io/sous-recipes/quality/reviews@~2.1"],
       contents: [
         { kind: "skills", include: ["skills/**/*.md"], exclude: ["skills/**/draft-*.md"] },
         { kind: "memories", include: ["memories/*.md"] },
@@ -178,9 +178,38 @@ describe("recipe manifest dependency lists", () => {
     const manifest = {
       ...validManifest(),
       depends: ["workflow", "workflow/task-files", "workflow/task-files@^1.0.0"],
-      subscribes: ["sous-recipes:core/sous-skills@>=1.0.0 <2.0.0"],
+      subscribes: [
+        "github://sous-io/sous-recipes/core/sous-skills@>=1.0.0 <2.0.0",
+        "gitlab://gitlab.example.com/group/subgroup/project/quality/reviews",
+      ],
     };
     expect(parseRecipeManifest(manifest, SOURCE).depends).toHaveLength(3);
+    expect(parseRecipeManifest(manifest, SOURCE).subscribes).toHaveLength(2);
+  });
+
+  /**
+   * A short name is a consuming project's own label for a repository, so it
+   * cannot name anything in a published manifest.
+   */
+  it("should reject the consumer-side repo qualifier", () => {
+    const message = expectRejectMessage({
+      ...validManifest(),
+      depends: ["sous-recipes:workflow/task-files"],
+    });
+    expect(message).toContain("depends[0]:");
+    expect(message).toContain("short name");
+  });
+
+  /**
+   * A local path is a convenience on one machine, never a location a published
+   * recipe can point at.
+   */
+  it("should reject a local locator", () => {
+    const message = expectRejectMessage({
+      ...validManifest(),
+      depends: ["local://var/recipes/workflow/task-files"],
+    });
+    expect(message).toContain("not a published location");
   });
 
   /**
