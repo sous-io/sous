@@ -10,6 +10,8 @@ import {
   looksLikeLocalPath,
   resolveRepoArgument,
 } from "./local.js";
+import { GithubProvider } from "./github.js";
+import { supportsSubmit } from "./provider.js";
 import { builtInProviders, detectProvider, requireProvider } from "./index.js";
 import type { CommandResult, CommandRunner } from "./git.js";
 
@@ -351,5 +353,46 @@ describe("requireProvider() with an explicit provider", () => {
     expect(() => requireProvider("https://git.mycorp.example/group/repo")).toThrow(
       /--provider <provider>/
     );
+  });
+});
+
+describe("LocalProvider write path", () => {
+  /**
+   * The local provider reads and nothing else, so it declares no `submit`
+   * feature and has no command line tool to drive.
+   *
+   * supportsSubmit(new LocalProvider());  // -> false
+   */
+  it("should declare no submit feature and no command line tool", () => {
+    const provider = new LocalProvider();
+    expect(provider.features).toEqual(["fetch"]);
+    expect(provider.cli).toBeUndefined();
+    expect(supportsSubmit(provider)).toBe(false);
+    expect(supportsSubmit(new GithubProvider())).toBe(true);
+  });
+
+  /**
+   * Every write-path call it inherits refuses, naming the provider and the
+   * feature, so a caller that skipped the feature check gets a sentence rather
+   * than a TypeError.
+   *
+   * provider.fork(repo);  // throws "The 'local' provider does not support the 'submit' feature"
+   */
+  it("should refuse every write-path call, naming the provider and the feature", async () => {
+    const provider = new LocalProvider();
+    const repo = provider.canonicalize(repoDir);
+    const unsupported = /The 'local' provider does not support the 'submit' feature/;
+
+    await expect(provider.authStatus()).rejects.toThrow(unsupported);
+    await expect(provider.canPush(repo)).rejects.toThrow(unsupported);
+    await expect(provider.fork(repo)).rejects.toThrow(unsupported);
+    await expect(
+      provider.proposeChange(repo, {
+        branch: "work",
+        title: "Tidy up",
+        body: "",
+        draft: false,
+      })
+    ).rejects.toThrow(unsupported);
   });
 });
