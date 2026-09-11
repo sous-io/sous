@@ -113,14 +113,18 @@ export default class RepoGc extends BaseCommand {
     // pin things too, and their entries are re-fetchable, so this pass may evict
     // them; that is what makes the store disposable.
     const lock = service.lockService.read();
-    const keep: StoreKey[] = Object.entries(lock.recipes).map(([key, entry]) => {
+    const keep: StoreKey[] = Object.entries(lock.recipes).flatMap(([key, entry]) => {
+      const identity = lock.repos[entry.repo]?.identity;
+      if (identity === undefined) return [];
       const namespace = key.slice(0, key.indexOf("/"));
-      return {
-        repo: entry.repo,
-        namespace,
-        name: key.slice(namespace.length + 1),
-        version: entry.version,
-      };
+      return [
+        {
+          identity,
+          namespace,
+          name: key.slice(namespace.length + 1),
+          version: entry.version,
+        },
+      ];
     });
 
     const report = await service.store.gc({ maxBytes, keep, dryRun });

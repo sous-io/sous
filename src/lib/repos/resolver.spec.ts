@@ -45,7 +45,13 @@ function makeContext(options: {
   const repos: Record<string, ResolverRepo> =
     options.repos ??
     Object.fromEntries(
-      [...indexes.keys()].map((name) => [name, { url: `https://github.com/sous-io/${name}` }])
+      [...indexes.keys()].map((name) => [
+        name,
+        {
+          url: `https://github.com/sous-io/${name}`,
+          identity: `github.com/sous-io/${name}`,
+        },
+      ])
     );
   const loadManifest: RecipeManifestLoader = (recipe) =>
     options.manifests?.[`${recipe.key}@${recipe.version}`] ?? options.manifests?.[recipe.key];
@@ -408,7 +414,7 @@ describe("resolveRefs()", () => {
       },
       manifests: {
         "workflow/task-files": manifest("workflow/task-files", "1.0.0", {
-          depends: ["vendor-recipes:core/partials"],
+          depends: ["github://vendor/vendor-recipes/core/partials"],
         }),
       },
     });
@@ -418,12 +424,86 @@ describe("resolveRefs()", () => {
     expect(result.missingRepos).toEqual([
       {
         name: "vendor-recipes",
+        url: "https://github.com/vendor/vendor-recipes",
+        identity: "github.com/vendor/vendor-recipes",
+        provider: "github",
         requiredBy: [
-          { ref: "vendor-recipes:core/partials", requestedBy: "workflow/task-files" },
+          {
+            ref: "github://vendor/vendor-recipes/core/partials",
+            requestedBy: "workflow/task-files",
+          },
         ],
       },
     ]);
     expect(result.resolved.map((recipe) => recipe.key)).toEqual(["workflow/task-files"]);
+  });
+
+  /**
+   * A dependency naming another repository BY LOCATION resolves against
+   * whatever short name the project gave that repository, because the location
+   * is the identity and the short name is only a label.
+   */
+  it("should match a remote dependency to an added repository by identity", async () => {
+    const context = makeContext({
+      indexes: {
+        "sous-recipes": makeIndexFile("sous-recipes", { "workflow/task-files": ["1.0.0"] }),
+        "our-mirror": makeIndexFile("our-mirror", { "core/partials": ["1.0.0", "1.1.0"] }),
+      },
+      repos: {
+        "sous-recipes": {
+          url: "https://github.com/sous-io/sous-recipes",
+          identity: "github.com/sous-io/sous-recipes",
+        },
+        "our-mirror": {
+          url: "https://github.com/vendor/vendor-recipes",
+          identity: "github.com/vendor/vendor-recipes",
+        },
+      },
+      manifests: {
+        "workflow/task-files": manifest("workflow/task-files", "1.0.0", {
+          depends: ["github://vendor/vendor-recipes/core/partials@^1.0.0"],
+        }),
+      },
+    });
+
+    const result = await resolveRefs([ask("workflow/task-files")], context);
+
+    expect(result.missingRepos).toEqual([]);
+    expect(
+      result.resolved.map((recipe) => `${recipe.repo}:${recipe.key}@${recipe.version}`)
+    ).toEqual([
+      "our-mirror:core/partials@1.1.0",
+      "sous-recipes:workflow/task-files@1.0.0",
+    ]);
+  });
+
+  /**
+   * When the index records what a version was released against, that exact
+   * version is installed, whatever the manifest's range would reach today.
+   */
+  it("should install the version the index resolved a dependency to", async () => {
+    const context = makeContext({
+      indexes: {
+        "sous-recipes": makeIndexFile("sous-recipes", {
+          "workflow/task-files": {
+            versions: ["1.0.0"],
+            dependencies: { "1.0.0": { "core/partials": { version: "1.0.0" } } },
+          },
+          "core/partials": ["1.0.0", "1.1.0"],
+        }),
+      },
+      manifests: {
+        "workflow/task-files": manifest("workflow/task-files", "1.0.0", {
+          depends: ["core/partials@^1.0.0"],
+        }),
+      },
+    });
+
+    const result = await resolveRefs([ask("workflow/task-files")], context);
+
+    expect(result.resolved.find((recipe) => recipe.key === "core/partials")!.version).toBe(
+      "1.0.0"
+    );
   });
 
   /**

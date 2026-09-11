@@ -72,6 +72,13 @@ export const LOCKFILE_FILENAME = "sous.lock.json";
 /** File name of the marker written beside every store entry. */
 export const STORE_ENTRY_FILENAME = ".sous.entry.json";
 
+/**
+ * Directory, inside the store root, that cached repository indexes live in. It
+ * is named here rather than in the index cache so the store can skip it while
+ * walking its own entries without depending on the provider layer.
+ */
+export const INDEX_CACHE_DIRNAME = "_indexes";
+
 /** File name of the links map, in a project's `.sous/` directory or in `$SOUS_HOME`. */
 export const LINKS_FILENAME = "sous.links.json";
 

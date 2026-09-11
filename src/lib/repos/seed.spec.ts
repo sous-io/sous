@@ -3,7 +3,11 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { makeTmpDir, type TmpDir } from "../../test/utils/tmp.js";
 import { SOUS_VERSION } from "../settings.js";
-import { CORE_RECIPE_KEY, OFFICIAL_REPO_NAME } from "./core-recipe.js";
+import {
+  CORE_RECIPE_KEY,
+  OFFICIAL_REPO_IDENTITY,
+  OFFICIAL_REPO_NAME,
+} from "./core-recipe.js";
 import { parseIndexFile } from "./formats/index-file.js";
 import { INDEX_CACHE_DIRNAME, INDEX_SIDECAR_SUFFIX } from "./providers/index-cache.js";
 import { RecipeStore } from "./store/recipe-store.js";
@@ -26,7 +30,9 @@ function makeStore(): { store: RecipeStore; root: string } {
 
 /** Where the cached index for the official repository is written. */
 function indexPath(root: string): string {
-  return path.join(root, INDEX_CACHE_DIRNAME, `${OFFICIAL_REPO_NAME}.json`);
+  const segments = OFFICIAL_REPO_IDENTITY.split("/");
+  const last = segments.pop()!;
+  return path.join(root, INDEX_CACHE_DIRNAME, ...segments, `${last}.json`);
 }
 
 /** Reads and validates whatever index is cached for the official repository. */
@@ -56,7 +62,7 @@ describe("seedCoreRecipe()", () => {
     expect(report.skippedBecause).toBeUndefined();
 
     const entryDir = store.entryDir({
-      repo: OFFICIAL_REPO_NAME,
+      identity: OFFICIAL_REPO_IDENTITY,
       namespace: "core",
       name: "sous-skills",
       version: SOUS_VERSION,
@@ -97,7 +103,7 @@ describe("seedCoreRecipe()", () => {
     const report = await seedCoreRecipe({ store, sousVersion: SOUS_VERSION });
 
     const hit = await store.get({
-      repo: OFFICIAL_REPO_NAME,
+      identity: OFFICIAL_REPO_IDENTITY,
       namespace: "core",
       name: "sous-skills",
       version: SOUS_VERSION,
@@ -148,7 +154,7 @@ describe("seedCoreRecipe()", () => {
         },
       },
     };
-    fs.mkdirSync(path.join(root, INDEX_CACHE_DIRNAME), { recursive: true });
+    fs.mkdirSync(path.dirname(indexPath(root)), { recursive: true });
     fs.writeFileSync(indexPath(root), JSON.stringify(real), "utf8");
 
     const report = await seedCoreRecipe({ store, sousVersion: SOUS_VERSION });
@@ -186,11 +192,7 @@ describe("seedCoreRecipe()", () => {
    */
   it("writes no sidecar, so the stand-in is never treated as fresh", async () => {
     const { store, root } = makeStore();
-    const sidecar = path.join(
-      root,
-      INDEX_CACHE_DIRNAME,
-      `${OFFICIAL_REPO_NAME}${INDEX_SIDECAR_SUFFIX}`
-    );
+    const sidecar = `${indexPath(root).slice(0, -".json".length)}${INDEX_SIDECAR_SUFFIX}`;
     fs.mkdirSync(path.dirname(sidecar), { recursive: true });
     fs.writeFileSync(sidecar, JSON.stringify({ fetchedAt: new Date().toISOString() }));
 

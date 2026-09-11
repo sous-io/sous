@@ -26,7 +26,17 @@ import { ConfigError } from "../errors.js";
 import type { IndexFile } from "./formats/index-file.js";
 import type { LockKind } from "./formats/lockfile.js";
 import type { RecipeManifest } from "./formats/recipe-manifest.js";
-import { formatRef, parseRef, refKey, type ParsedRef } from "./ref.js";
+import {
+  dependencyRefKey,
+  dependencyRepoUrl,
+  formatRef,
+  parseDependencyRef,
+  refKey,
+  type DependencyRef,
+  type ParsedRef,
+} from "./ref.js";
+import { shortNameFromIdentity } from "./identity.js";
+import type { IndexDependency } from "./formats/index-file.js";
 
 /** The `requestedBy` holder meaning "the project asked for this directly". */
 export const PROJECT_REQUESTER = "project";
@@ -53,6 +63,13 @@ export type RefRequest = {
 export type ResolverRepo = {
   /** Where the repository lives. */
   url: string;
+  /**
+   * The repository's canonical identity, `<host>/<owner path>/<name>`. A
+   * dependency that names another repository names it by location, so this is
+   * what decides whether the project has already added it, whatever short name
+   * the project gave it.
+   */
+  identity: string;
   /** The provider it names, when it names one. */
   provider?: string;
   /** Whether it prefers a newer in-range version over the locked one. */
@@ -86,8 +103,10 @@ export type ResolvedRecipe = {
   key: string;
   namespace: string;
   name: string;
-  /** The short name of the repository it resolves in. */
+  /** The short name of the repository it resolves in, as this project calls it. */
   repo: string;
+  /** That repository's canonical identity, which the machine-wide store is keyed by. */
+  identity: string;
   /** The exact version chosen. */
   version: string;
   /** The content hash the index publishes for that version. */
@@ -104,14 +123,28 @@ export type ResolvedRecipe = {
   ranges: Array<{ range: string; requestedBy: string }>;
   /** Whether prereleases took part in the match. */
   prerelease: boolean;
+  /**
+   * What the repository's index says this exact version depends on, when the
+   * index records it. These are the versions the release resolved, so a
+   * dependency of an indexed recipe is installed at the version it was
+   * published against rather than at whatever its range would reach today.
+   */
+  dependencies?: Record<string, IndexDependency>;
 };
 
 /** A repository something needs that the project has not added. */
 export type MissingRepo = {
-  /** The repository's short name, as the ref qualified it. */
+  /**
+   * The short name to record it under: the one a ref qualified it with, or one
+   * derived from its location when a dependency named it by URL.
+   */
   name: string;
-  /** Its URL, when anything knew it. Nothing in a manifest carries one today. */
+  /** Its URL, which a dependency's locator carries. */
   url?: string;
+  /** Its canonical identity, when the dependency named a location. */
+  identity?: string;
+  /** The provider its locator named, when it named one. */
+  provider?: string;
   /** Every ref that needs it, and who asked for that ref. */
   requiredBy: Array<{ ref: string; requestedBy: string }>;
 };
@@ -129,7 +162,113 @@ export type ResolveResult = {
 };
 
 /** A pending piece of work: one ref to resolve on behalf of one holder. */
-type WorkItem = RefRequest & { kind: LockKind };
+type WorkItem = RefRequest & {
+  kind: LockKind;
+  /**
+   * Where the ref said the recipe lives, when a manifest named another
+   * repository by location. The project may already have added that repository
+   * under any short name at all, so it is matched by identity.
+   */
+  remote?: {
+    /** The repository's canonical identity. */
+    identity: string;
+    /** Its HTTPS location, which is what adding it would be handed. */
+    url: string;
+    /** The provider the locator named. */
+    provider?: string;
+    /** The dependency exactly as the manifest wrote it, for messages. */
+    written: string;
+  };
+};
+
+/**
+ * Turns one entry of a manifest's `depends` or `subscribes` into a piece of
+ * work.
+ *
+ * Two things are decided here. A SIBLING ref resolves inside the declaring
+ * recipe's own repository, never across the others, because that is what
+ * writing it without a location means. And when the repository's index records
+ * what this exact version of the parent was released against, that exact
+ * version is what gets asked for, rather than whatever the declared range would
+ * reach today.
+ *
+ * @param written - The dependency as the manifest wrote it.
+ * @param parent - The recipe whose manifest declared it.
+ * @param kind - Whether it was declared as a dependency or a co-subscription.
+ */
+function dependencyRequest(
+  written: string,
+  parent: ResolvedRecipe,
+  kind: LockKind
+): WorkItem {
+  const parsed = parseDependencyRef(written);
+  const pinned = parent.dependencies?.[dependencyRefKey(parsed)];
+
+  const ref: ParsedRef = { namespace: parsed.namespace };
+  if (parsed.recipe !== undefined) {
+    ref.recipe = parsed.recipe;
+    const range = pinned?.version ?? parsed.range ?? pinned?.range;
+    if (range !== undefined) ref.range = range;
+  }
+
+  const base = {
+    requestedBy: parent.key,
+    kind,
+    ...(parent.prerelease ? { prerelease: true } : {}),
+  };
+
+  if (parsed.kind === "sibling") {
+    return { ref: { ...ref, repo: parent.repo }, ...base };
+  }
+
+  return {
+    ref,
+    ...base,
+    remote: {
+      identity: pinned?.repo ?? parsed.canonicalRepo!,
+      url: dependencyRepoUrl(parsed)!,
+      ...(parsed.provider === undefined ? {} : { provider: parsed.provider }),
+      written: written.trim(),
+    },
+  };
+}
+
+/**
+ * The short name of the added repository with this identity, or undefined when
+ * the project has added none. Short names are a project's own labels, so the
+ * identity is what a dependency is matched on.
+ *
+ * @param repos - The repositories the project has added.
+ * @param identity - The canonical identity to look for.
+ */
+function repoNamedByIdentity(
+  repos: Record<string, ResolverRepo>,
+  identity: string
+): string | undefined {
+  for (const [name, entry] of Object.entries(repos)) {
+    if (entry.identity === identity) return name;
+  }
+  return undefined;
+}
+
+/**
+ * A short name for a repository the project has not added yet, derived from its
+ * location and made unique against the names already in use.
+ *
+ * @param repos - The repositories the project has added.
+ * @param identity - The canonical identity of the repository being named.
+ */
+function proposeRepoName(
+  repos: Record<string, ResolverRepo>,
+  identity: string
+): string {
+  const base = shortNameFromIdentity(identity);
+  if (!Object.hasOwn(repos, base)) return base;
+  for (let suffix = 2; ; suffix++) {
+    const candidate = `${base}-${suffix}`;
+    if (!Object.hasOwn(repos, candidate)) return candidate;
+  }
+}
 
 /**
  * Resolves a set of refs and the whole dependency closure beneath them.
@@ -170,6 +309,25 @@ export async function resolveRefs(
       continue;
     }
 
+    // A dependency that named another repository by location is matched on that
+    // location, so a project that already added it under some other short name
+    // resolves against the copy it has. One it has not added carries its URL and
+    // its provider, which is everything the trust round needs to offer to add it.
+    if (item.remote !== undefined) {
+      const added = repoNamedByIdentity(context.repos, item.remote.identity);
+      if (added === undefined) {
+        recordMissingRepo(missingRepos, {
+          name: proposeRepoName(context.repos, item.remote.identity),
+          url: item.remote.url,
+          identity: item.remote.identity,
+          ...(item.remote.provider === undefined ? {} : { provider: item.remote.provider }),
+          requiredBy: [{ ref: item.remote.written, requestedBy: item.requestedBy }],
+        });
+        continue;
+      }
+      item.ref = { ...item.ref, repo: added };
+    }
+
     if (item.ref.recipe === undefined) {
       queue.push(...expandNamespace(item, context));
       continue;
@@ -203,12 +361,7 @@ export async function resolveRefs(
       ["subscribes", manifest.subscribes ?? []],
     ] as Array<[LockKind, string[]]>) {
       for (const written of refs) {
-        queue.push({
-          ref: parseRef(written),
-          requestedBy: recipe.key,
-          kind,
-          ...(recipe.prerelease ? { prerelease: true } : {}),
-        });
+        queue.push(dependencyRequest(written, recipe, kind));
       }
     }
   }
@@ -312,9 +465,9 @@ async function keepOnlyReachable(
       ["subscribes", manifest.subscribes ?? []],
     ] as Array<[LockKind, string[]]>) {
       for (const written of refs) {
-        let parsed: ParsedRef;
+        let parsed: DependencyRef;
         try {
-          parsed = parseRef(written);
+          parsed = parseDependencyRef(written);
         } catch {
           continue;
         }
@@ -324,7 +477,7 @@ async function keepOnlyReachable(
             ? [...resolved.keys()].filter((entry) =>
                 entry.startsWith(`${parsed.namespace}/`)
               )
-            : [refKey(parsed)];
+            : [dependencyRefKey(parsed)];
         for (const target of targets) {
           if (!resolved.has(target)) continue;
           if (declare(key, target, kind)) queue.push(target);
@@ -467,10 +620,14 @@ function resolveRecipeRef(
     namespace,
     name: key.slice(namespace.length + 1),
     repo: chosen.repo,
+    identity: context.repos[chosen.repo]?.identity ?? chosen.repo,
     version,
     hash: versionEntry.hash,
     tag: versionEntry.tag,
     path: entry.path,
+    ...(versionEntry.dependencies === undefined
+      ? {}
+      : { dependencies: versionEntry.dependencies }),
     // A recipe held as a co-subscription by anyone is a co-subscription; a
     // build dependency only stays one while nothing subscribes to it.
     kind: previous?.kind === "subscribes" || item.kind === "subscribes" ? "subscribes" : "depends",
@@ -545,7 +702,7 @@ function unknownRefError(
   context: ResolveContext,
   what: "namespace" | "recipe"
 ): ConfigError {
-  const written = formatRef(item.ref);
+  const written = item.remote?.written ?? formatRef(item.ref);
   const searched = [...context.indexes.keys()];
   const where =
     searched.length === 0
@@ -556,9 +713,23 @@ function unknownRefError(
       ? ""
       : `\n  It was required by the recipe '${item.requestedBy}'.`;
 
+  // When the ref said WHICH repository, the useful answer is what that
+  // repository does publish: a dependency that names something it has never
+  // heard of is almost always a typo or a recipe that was renamed.
+  const named = item.ref.repo;
+  const index = named === undefined ? undefined : context.indexes.get(named);
+  const publishes =
+    index === undefined
+      ? ""
+      : `\n  The repository '${named}' publishes: ${
+          Object.keys(index.recipes).length === 0
+            ? "nothing yet"
+            : Object.keys(index.recipes).sort().join(", ")
+        }.`;
+
   return new ConfigError(
     `No added repository publishes the ${what} '${written}'.\n` +
-      `${where}${asker}\n` +
+      `${where}${asker}${publishes}\n` +
       `  Add the repository that publishes it with 'sous repo add <url>', then try again.`
   );
 }

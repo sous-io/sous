@@ -22,6 +22,7 @@ function validLockfile() {
     repos: {
       "sous-recipes": {
         url: "https://github.com/sous-io/sous-recipes",
+        identity: "github.com/sous-io/sous-recipes",
         indexHash: HASH,
       },
     },

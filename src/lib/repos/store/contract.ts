@@ -5,10 +5,18 @@
  */
 import type { StoreEntry } from "../formats/store-entry.js";
 
-/** Identifies one recipe version inside one repo. */
+/**
+ * Identifies one recipe version inside one repository.
+ *
+ * The store is MACHINE-WIDE, so it is keyed by the repository's canonical
+ * identity rather than by a project's short name for it: two projects that call
+ * the same repository different things still share one cached copy, and two
+ * projects that use the same short name for different repositories never
+ * collide.
+ */
 export interface StoreKey {
-  /** The repo's configured short name (the `repos:` map key). */
-  repo: string;
+  /** The repository's canonical identity, such as `github.com/sous-io/sous-recipes`. */
+  identity: string;
   namespace: string;
   name: string;
   version: string;

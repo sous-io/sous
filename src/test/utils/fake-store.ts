@@ -35,7 +35,7 @@ export const FAKE_HASH = `sha256-${"0".repeat(64)}`;
 
 /** The key an entry is filed under, matching the on-disk store's layout. */
 function keyOf(key: StoreKey): string {
-  return `${key.repo}/${key.namespace}/${key.name}/${key.version}`;
+  return `${key.identity}/${key.namespace}/${key.name}/${key.version}`;
 }
 
 /** A fixed timestamp, so entries never differ between runs. */
@@ -64,14 +64,20 @@ export class FakeRecipeStore implements RecipeStoreLike {
   }
 
   entryDir(key: StoreKey): string {
-    return path.join(this.root, key.repo, key.namespace, key.name, key.version);
+    return path.join(
+      this.root,
+      ...key.identity.split("/"),
+      key.namespace,
+      key.name,
+      key.version
+    );
   }
 
   async put(key: StoreKey, sourceDir: string, expectedHash?: string): Promise<StoreEntry> {
     this.puts.push({ key, sourceDir, ...(expectedHash === undefined ? {} : { expectedHash }) });
     const entry: StoreEntry = {
       formatVersion: 1,
-      repo: key.repo,
+      repo: key.identity,
       namespace: key.namespace,
       name: key.name,
       version: key.version,
@@ -119,7 +125,7 @@ export class FakeRecipeStore implements RecipeStoreLike {
   seed(key: StoreKey, hash: string = this.defaultHash): StoreEntry {
     const entry: StoreEntry = {
       formatVersion: 1,
-      repo: key.repo,
+      repo: key.identity,
       namespace: key.namespace,
       name: key.name,
       version: key.version,

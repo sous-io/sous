@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { isConfigError } from "../../errors.js";
 import { makeTmpDir, type TmpDir } from "../../../test/utils/tmp.js";
 import { hashDirectory } from "./hash.js";
-import { RecipeStore, formatStoreKey } from "./recipe-store.js";
+import { RecipeStore, formatStoreKey, storeKeyOf } from "./recipe-store.js";
 import type { StoreKey } from "./contract.js";
 
 const tmpDirs: TmpDir[] = [];
@@ -40,7 +40,7 @@ function makeStore(): { store: RecipeStore; warnings: string[]; root: string } {
 }
 
 const key: StoreKey = {
-  repo: "sous-recipes",
+  identity: "github.com/sous-io/sous-recipes",
   namespace: "workflow",
   name: "task-files",
   version: "1.2.0",
@@ -54,15 +54,36 @@ describe("RecipeStore", () => {
   describe("entryDir()", () => {
     /**
      * entryDir should lay an entry out as
-     * `<root>/<repo>/<namespace>/<name>/<version>`, whether or not it exists.
+     * `<root>/<repository identity>/<namespace>/<name>/<version>`, whether or
+     * not it exists. The identity is several segments, so it becomes several
+     * directories.
      *
-     * store.entryDir({ repo: "r", namespace: "n", name: "x", version: "1.0.0" });
-     * // -> "<root>/r/n/x/1.0.0"
+     * store.entryDir({ identity: "h/o/r", namespace: "n", name: "x", version: "1.0.0" });
+     * // -> "<root>/h/o/r/n/x/1.0.0"
      */
-    it("should return the decision 11 layout", () => {
+    it("should return the decision 11 layout, keyed by identity", () => {
       const { store, root } = makeStore();
       expect(store.entryDir(key)).toBe(
-        path.join(root, "sous-recipes", "workflow", "task-files", "1.2.0")
+        path.join(
+          root,
+          "github.com",
+          "sous-io",
+          "sous-recipes",
+          "workflow",
+          "task-files",
+          "1.2.0"
+        )
+      );
+    });
+
+    /**
+     * A repository identity is a host and a path, so anything shorter is not
+     * one and cannot key an entry.
+     */
+    it("should reject a key whose identity is not a location", () => {
+      const { store } = makeStore();
+      expect(() => store.entryDir({ ...key, identity: "sous-recipes" })).toThrow(
+        /not a repository identity/
       );
     });
 
@@ -93,7 +114,7 @@ describe("RecipeStore", () => {
       expect(fs.readFileSync(path.join(dir, "SKILL.md"), "utf8")).toBe("alpha");
       expect(fs.readFileSync(path.join(dir, "references/detail.md"), "utf8")).toBe("detail");
       expect(entry.hash).toBe(await hashDirectory(dir));
-      expect(entry.repo).toBe(key.repo);
+      expect(entry.repo).toBe(key.identity);
       expect(entry.version).toBe("1.2.0");
 
       const marker = JSON.parse(
@@ -354,10 +375,10 @@ describe("RecipeStore", () => {
       await store.put({ ...key, namespace: "tool-usage", name: "browsers" }, makeSource("c"));
 
       const listed = await store.list();
-      expect(listed.map(formatStoreKey).sort()).toEqual([
-        "sous-recipes:tool-usage/browsers@1.2.0",
-        "sous-recipes:workflow/task-files@1.2.0",
-        "sous-recipes:workflow/task-files@1.3.0",
+      expect(listed.map((entry) => formatStoreKey(storeKeyOf(entry))).sort()).toEqual([
+        "github.com/sous-io/sous-recipes:tool-usage/browsers@1.2.0",
+        "github.com/sous-io/sous-recipes:workflow/task-files@1.2.0",
+        "github.com/sous-io/sous-recipes:workflow/task-files@1.3.0",
       ]);
     });
 

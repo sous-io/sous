@@ -20,10 +20,45 @@ import {
   parseFormat,
   recipeKeySchema,
   relativePathSchema,
+  repoIdentitySchema,
   repoNameSchema,
+  semverRangeSchema,
   semverVersionSchema,
   stableJsonStringify,
 } from "./common.js";
+
+/**
+ * One dependency of one published version, as the release resolved it.
+ *
+ * A SIBLING (a recipe in this same repository) always resolves to an exact
+ * version, because the release that wrote this entry cut that sibling's tag or
+ * found it already cut. A CROSS-REPOSITORY dependency carries the identity of
+ * the repository it lives in, which is what a consumer needs in order to add
+ * that repository and find the recipe in the store; the version it resolves to
+ * belongs to that repository's own index, so this entry carries the range the
+ * manifest declared instead.
+ */
+export const indexDependencySchema = z
+  .strictObject({
+    /** The exact version this dependency resolved to, when the release could resolve one. */
+    version: semverVersionSchema.optional(),
+    /** The range the manifest declared, recorded when no exact version could be resolved. */
+    range: semverRangeSchema.optional(),
+    /**
+     * The canonical identity of the repository publishing it
+     * (`github.com/sous-io/sous-recipes`). Omitted for a sibling, which lives in
+     * this same repository.
+     */
+    repo: repoIdentitySchema.optional(),
+  })
+  .refine(
+    (entry) => entry.version !== undefined || entry.range !== undefined,
+    {
+      message:
+        "must record either the exact version this dependency resolved to or the range " +
+        "the recipe declared",
+    }
+  );
 
 /** One published version of one recipe. */
 export const indexVersionSchema = z.strictObject({
@@ -39,6 +74,16 @@ export const indexVersionSchema = z.strictObject({
   prerelease: z.boolean(),
   /** When the version was released. */
   releasedAt: isoTimestampSchema.optional(),
+  /**
+   * What this exact version depends on, resolved at release time and keyed
+   * `namespace/recipe`. A consumer installing this version installs these
+   * versions rather than re-resolving the ranges its manifest declared, so a
+   * published version means one thing forever.
+   *
+   * The field is additive: an index written before it existed still parses, and
+   * a consumer that finds no entry falls back to the manifest's ranges.
+   */
+  dependencies: z.record(recipeKeySchema, indexDependencySchema).optional(),
 });
 
 /** One recipe, with every version the repo publishes of it. */
@@ -130,6 +175,9 @@ export type IndexRecipe = z.infer<typeof indexRecipeSchema>;
 
 /** One published version entry in a repo index. */
 export type IndexVersion = z.infer<typeof indexVersionSchema>;
+
+/** One resolved dependency of one published version. */
+export type IndexDependency = z.infer<typeof indexDependencySchema>;
 
 /** One namespace entry in a repo index. */
 export type IndexNamespace = z.infer<typeof indexNamespaceSchema>;

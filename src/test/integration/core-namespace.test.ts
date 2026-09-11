@@ -137,9 +137,13 @@ describe("the core namespace with no network", () => {
   it(
     "should seed the store from the package",
     () => {
+      // The store is machine-wide, so it files an entry under the repository's
+      // canonical identity rather than under any one project's short name.
       const entry = path.join(
         sousHome,
         "cache",
+        "github.com",
+        "sous-io",
         "sous-recipes",
         "core",
         "sous-skills",
@@ -188,7 +192,14 @@ describe("the core namespace with no network", () => {
     () => {
       const index = JSON.parse(
         fs.readFileSync(
-          path.join(sousHome, "cache", "_indexes", "sous-recipes.json"),
+          path.join(
+            sousHome,
+            "cache",
+            "_indexes",
+            "github.com",
+            "sous-io",
+            "sous-recipes.json"
+          ),
           "utf8"
         )
       ) as { $comment?: string; recipes: Record<string, { versions: Record<string, unknown> }> };

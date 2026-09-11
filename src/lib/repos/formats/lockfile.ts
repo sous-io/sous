@@ -7,6 +7,10 @@
  * trust it is the supply-chain defense: nothing new enters a project except
  * through an explicit, visible change to these files.
  *
+ * A repository appears twice over: the project's own short name is the key of
+ * the `repos` map and is what every recipe entry and every message names, while
+ * the entry's `identity` is what the machine-wide store is keyed by.
+ *
  * `requestedBy` is what makes removal safe. Every entry lists who holds it, the
  * literal string `project` for something the project subscribed to directly and
  * a recipe key for something pulled in as a dependency. Unsubscribing removes
@@ -19,6 +23,7 @@ import {
   formatVersionSchema,
   parseFormat,
   recipeKeySchema,
+  repoIdentitySchema,
   repoNameSchema,
   repoUrlSchema,
   semverVersionSchema,
@@ -38,6 +43,14 @@ export const lockedRepoSchema = z.strictObject({
    * path for a repository on this machine read through the `local` provider.
    */
   url: repoUrlSchema,
+  /**
+   * The repository's canonical identity, derived from that URL. The keys of
+   * `repos` are the project's own short names, which no other project has to
+   * agree with; this is what the machine-wide store and the index cache file
+   * the repository under, so a restore finds the same cached copy every other
+   * project uses.
+   */
+  identity: repoIdentitySchema,
   /** Content hash of the index this lock was resolved against, when known. */
   indexHash: contentHashSchema.optional(),
 });

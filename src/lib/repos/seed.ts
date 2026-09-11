@@ -31,6 +31,7 @@ import {
   type IndexFile,
 } from "./formats/index-file.js";
 import { INDEX_CACHE_DIRNAME, INDEX_SIDECAR_SUFFIX } from "./providers/index-cache.js";
+import { identitySegments } from "./identity.js";
 import { ensureIndexCacheDirectory } from "../../utils/sous-directory.js";
 import type { RecipeStoreLike, StoreKey } from "./store/contract.js";
 import {
@@ -38,6 +39,7 @@ import {
   CORE_RECIPE_KEY,
   CORE_RECIPE_NAME,
   CORE_RECIPE_PATH,
+  OFFICIAL_REPO_IDENTITY,
   OFFICIAL_REPO_NAME,
   packagedCoreRecipeDir,
   readPackagedCoreManifest,
@@ -107,7 +109,7 @@ export async function seedCoreRecipe(
   const storeRoot = options.storeRoot ?? options.store.root;
 
   const key: StoreKey = {
-    repo: OFFICIAL_REPO_NAME,
+    identity: OFFICIAL_REPO_IDENTITY,
     namespace: CORE_NAMESPACE,
     name: CORE_RECIPE_NAME,
     version,
@@ -167,12 +169,15 @@ function writeSeedIndex(input: {
   now: Date;
   packageRoot?: string;
 }): boolean {
-  const directory = path.join(input.storeRoot, INDEX_CACHE_DIRNAME);
-  const indexPath = path.join(directory, `${OFFICIAL_REPO_NAME}.json`);
-  const sidecarPath = path.join(
-    directory,
-    `${OFFICIAL_REPO_NAME}${INDEX_SIDECAR_SUFFIX}`
-  );
+  // The cache files an index under the repository's identity, which is several
+  // directories deep; the seed writes to exactly the same place a real fetch
+  // would, so the first successful fetch replaces this copy rather than
+  // sitting beside it.
+  const segments = identitySegments(OFFICIAL_REPO_IDENTITY);
+  const last = segments.pop()!;
+  const directory = path.join(input.storeRoot, INDEX_CACHE_DIRNAME, ...segments);
+  const indexPath = path.join(directory, `${last}.json`);
+  const sidecarPath = path.join(directory, `${last}${INDEX_SIDECAR_SUFFIX}`);
 
   if (!isReplaceableIndex(indexPath, input.version)) return false;
 
@@ -215,7 +220,8 @@ function writeSeedIndex(input: {
   // same last-good behavior every other repository gets.
   //
   // Any sidecar left over from an earlier fetch is removed for the same reason.
-  ensureIndexCacheDirectory(directory);
+  ensureIndexCacheDirectory(path.join(input.storeRoot, INDEX_CACHE_DIRNAME));
+  fs.mkdirSync(directory, { recursive: true });
   fs.writeFileSync(indexPath, stringifyIndexFile(index), "utf8");
   fs.rmSync(sidecarPath, { force: true });
   return true;

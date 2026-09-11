@@ -113,11 +113,10 @@ export default class RepoList extends BaseCommand {
     }
 
     const links = readEffectiveLinks(this.configContext.sousDir);
-    const cache = service.indexes;
 
     const rows = names.map((name) => {
       const entry = repos[name]!;
-      const index = cache.readCached(name);
+      const index = service.cachedIndex(name);
       const namespaces =
         index === undefined ? "not fetched yet" : Object.keys(index.namespaces).sort().join(", ");
       const recipes = index === undefined ? "unknown" : String(Object.keys(index.recipes).length);

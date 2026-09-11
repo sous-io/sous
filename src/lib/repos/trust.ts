@@ -275,6 +275,9 @@ export class TrustService {
       this.addRepo({
         name: repo.name,
         url: repo.url,
+        // A dependency's locator names the provider in its scheme, which is the
+        // one thing a URL alone cannot say for a self-hosted host.
+        ...(repo.provider === undefined ? {} : { provider: repo.provider as ProviderId }),
         addedBy: requesters.length > 0 ? requesters.join(", ") : USER_ADDED_BY,
       });
       added.push(repo.name);
@@ -303,8 +306,11 @@ export class TrustService {
     for (const repo of missing) {
       lines.push(`  ${color.bold(repo.name)}`);
       lines.push(
-        `    Location:  ${repo.url ?? "not known to sous; a recipe named it by its short name only"}`
+        `    Location:  ${repo.url ?? "not known to sous; a ref named it by its short name only"}`
       );
+      if (repo.identity !== undefined) {
+        lines.push(`    Identity:  ${repo.identity}`);
+      }
       for (const entry of repo.requiredBy) {
         const who = entry.requestedBy === "project" ? "this project" : `'${entry.requestedBy}'`;
         lines.push(`    Required:  ${entry.ref}, by ${who}`);

@@ -61,7 +61,12 @@ function writeLock(
     JSON.stringify(
       {
         formatVersion: 1,
-        repos: { [repo]: { url: "https://example.com/owner/fixtures" } },
+        repos: {
+          [repo]: {
+            url: "https://example.com/owner/fixtures",
+            identity: "example.com/owner/fixtures",
+          },
+        },
         recipes,
       },
       null,
@@ -106,11 +111,11 @@ describe("listLockedRecipes()", () => {
    * directory is actually there yet.
    *
    * listLockedRecipes({ sousDir, storeRoot });
-   * // -> [{ key: "workflow/task-files", dir: "<store>/fixtures/workflow/task-files/1.0.0", present: true }]
+   * // -> [{ key: "workflow/task-files", dir: "<store>/example.com/owner/fixtures/workflow/task-files/1.0.0" }]
    */
   it("should locate a locked recipe in the store at its pinned version", () => {
     writeLock([{ key: "workflow/task-files" }]);
-    const recipeDir = path.join(storeRoot, "fixtures", "workflow", "task-files", "1.0.0");
+    const recipeDir = path.join(storeRoot, "example.com", "owner", "fixtures", "workflow", "task-files", "1.0.0");
     writeRecipe(recipeDir, { namespace: "workflow", name: "task-files" });
 
     const located = listLockedRecipes({ sousDir, storeRoot });
@@ -147,7 +152,7 @@ describe("listLockedRecipes()", () => {
     writeLock([{ key: "workflow/task-files" }]);
     // The store copy exists too, so this proves the link wins rather than
     // merely filling a gap.
-    writeRecipe(path.join(storeRoot, "fixtures", "workflow", "task-files", "1.0.0"), {
+    writeRecipe(path.join(storeRoot, "example.com", "owner", "fixtures", "workflow", "task-files", "1.0.0"), {
       namespace: "workflow",
       name: "task-files",
     });
@@ -302,7 +307,7 @@ describe("createProjectNamespaceResolver()", () => {
    */
   it("should resolve a subscribed recipe from a project template", () => {
     writeLock([{ key: "workflow/task-files" }]);
-    const recipeDir = path.join(storeRoot, "fixtures", "workflow", "task-files", "1.0.0");
+    const recipeDir = path.join(storeRoot, "example.com", "owner", "fixtures", "workflow", "task-files", "1.0.0");
     writeRecipe(recipeDir, { namespace: "workflow", name: "task-files" });
 
     const resolver = createProjectNamespaceResolver({
@@ -333,9 +338,9 @@ describe("createProjectNamespaceResolver()", () => {
    */
   it("should refuse a recipe the including recipe does not declare", () => {
     writeLock([{ key: "workflow/task-files" }, { key: "workflow/other" }]);
-    const taskFiles = path.join(storeRoot, "fixtures", "workflow", "task-files", "1.0.0");
+    const taskFiles = path.join(storeRoot, "example.com", "owner", "fixtures", "workflow", "task-files", "1.0.0");
     writeRecipe(taskFiles, { namespace: "workflow", name: "task-files" });
-    writeRecipe(path.join(storeRoot, "fixtures", "workflow", "other", "1.0.0"), {
+    writeRecipe(path.join(storeRoot, "example.com", "owner", "fixtures", "workflow", "other", "1.0.0"), {
       namespace: "workflow",
       name: "other",
     });
@@ -368,13 +373,13 @@ describe("createProjectNamespaceResolver()", () => {
    */
   it("should allow a recipe the including recipe declares", () => {
     writeLock([{ key: "workflow/task-files" }, { key: "workflow/other" }]);
-    const taskFiles = path.join(storeRoot, "fixtures", "workflow", "task-files", "1.0.0");
+    const taskFiles = path.join(storeRoot, "example.com", "owner", "fixtures", "workflow", "task-files", "1.0.0");
     writeRecipe(taskFiles, {
       namespace: "workflow",
       name: "task-files",
       depends: ["workflow/other"],
     });
-    const other = path.join(storeRoot, "fixtures", "workflow", "other", "1.0.0");
+    const other = path.join(storeRoot, "example.com", "owner", "fixtures", "workflow", "other", "1.0.0");
     writeRecipe(other, { namespace: "workflow", name: "other" });
 
     const resolver = createProjectNamespaceResolver({

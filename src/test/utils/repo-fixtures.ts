@@ -7,7 +7,10 @@
  * matters: which recipes exist, and at which versions.
  */
 
-import type { IndexFile } from "../../lib/repos/formats/index-file.js";
+import type {
+  IndexDependency,
+  IndexFile,
+} from "../../lib/repos/formats/index-file.js";
 
 /** A valid but obviously fake content hash, keyed by a seed so entries differ. */
 export function fakeHash(seed: string): string {
@@ -26,6 +29,12 @@ export type RecipeSpec = {
   path?: string;
   /** One-paragraph summary. */
   description?: string;
+  /**
+   * What each version was released against, keyed by version and then by the
+   * recipe key it depends on. Left out entirely by default, which is what an
+   * index written before resolved dependencies existed looks like.
+   */
+  dependencies?: Record<string, Record<string, IndexDependency>>;
 };
 
 /**
@@ -53,10 +62,12 @@ export function makeIndexFile(
 
     const versions: Record<string, IndexFile["recipes"][string]["versions"][string]> = {};
     for (const version of spec.versions) {
+      const dependencies = spec.dependencies?.[version];
       versions[version] = {
         hash: fakeHash(`${name}/${key}@${version}`),
         tag: `${key}@${version}`,
         prerelease: version.includes("-"),
+        ...(dependencies === undefined ? {} : { dependencies }),
       };
     }
 

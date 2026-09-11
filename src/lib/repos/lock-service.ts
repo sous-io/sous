@@ -33,12 +33,21 @@ import type { IndexFile } from "./formats/index-file.js";
 import type { ResolvedRecipe } from "./resolver.js";
 import type { RecipeStoreLike, StoreKey } from "./store/contract.js";
 import { builtInProviders, requireProvider } from "./providers/index.js";
+import { repoIdentity } from "./identity.js";
 import type { ProviderOptions, RepoProvider } from "./providers/provider.js";
 
 /** What the lockfile needs to know about a repository. */
 export type LockRepoInput = {
   /** Where the repository lives. */
   url: string;
+  /**
+   * The repository's canonical identity. When it is left out the lockfile
+   * derives one from the URL through the provider that handles it, so a caller
+   * that has already canonicalized the repository need not do it twice.
+   */
+  identity?: string;
+  /** The provider the repository entry names, when it names one. */
+  provider?: string;
   /** Content hash of the index the resolution was made against, when known. */
   indexHash?: string;
 };
@@ -211,7 +220,20 @@ export class LockService {
         );
       }
       const indexHash = known?.indexHash ?? previous?.indexHash;
-      lockedRepos[name] = { url, ...(indexHash === undefined ? {} : { indexHash }) };
+      // The identity is what the machine-wide store is keyed by, so it is
+      // recorded beside the short name rather than recomputed at restore time
+      // from a URL the project may since have repointed.
+      const identity =
+        known?.identity ??
+        previous?.identity ??
+        repoIdentity(
+          requireProvider(url, known?.provider, builtInProviders()).canonicalize(url)
+        );
+      lockedRepos[name] = {
+        url,
+        identity,
+        ...(indexHash === undefined ? {} : { indexHash }),
+      };
     }
 
     return { formatVersion: 1, repos: lockedRepos, recipes: sortRecipes(recipes) };
@@ -362,7 +384,7 @@ export class LockService {
     for (const [key, entry] of Object.entries(lock.recipes)) {
       const namespace = key.slice(0, key.indexOf("/"));
       const storeKey: StoreKey = {
-        repo: entry.repo,
+        identity: lock.repos[entry.repo]!.identity,
         namespace,
         name: key.slice(namespace.length + 1),
         version: entry.version,

@@ -18,7 +18,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { parseIndexFile, type IndexFile } from "../formats/index-file.js";
-import { stableJsonStringify } from "../formats/common.js";
+import { INDEX_CACHE_DIRNAME, stableJsonStringify } from "../formats/common.js";
+import { identitySegments } from "../identity.js";
 import { ConfigError, isConfigError } from "../../errors.js";
 import { warning } from "../../../utils/formatting.js";
 // The freshness window has one definition, and it lives with the rest of the
@@ -28,8 +29,7 @@ import { DEFAULT_FRESHNESS_SECONDS } from "../store/settings.js";
 import type { ProviderOptions, RepoProvider } from "./provider.js";
 import { ensureIndexCacheDirectory } from "../../../utils/sous-directory.js";
 
-/** The directory, under the store root, that cached indexes live in. */
-export const INDEX_CACHE_DIRNAME = "_indexes";
+export { INDEX_CACHE_DIRNAME };
 
 /** The suffix of the sidecar written beside each cached index. */
 export const INDEX_SIDECAR_SUFFIX = ".meta.json";
@@ -73,6 +73,12 @@ export type GetIndexOptions = {
   maxAgeSeconds?: number;
   /** When true, refetch regardless of how fresh the cached copy is. */
   force?: boolean;
+  /**
+   * What to call the repository in a message. A project's short name for it is
+   * what the person reading wrote in their own config, so that is what they are
+   * shown; the identity is used when nothing supplies one.
+   */
+  label?: string;
 };
 
 /** How the cache is built. */
@@ -119,21 +125,27 @@ export class IndexCache {
   }
 
   /**
-   * Where a repository's cached index is written.
+   * Where a repository's cached index is written. The identity is several
+   * segments, so it becomes several directories, exactly as it does in the
+   * store: `_indexes/github.com/sous-io/sous-recipes.json`.
    *
-   * @param repoName - The repository's configured short name.
+   * @param identity - The repository's canonical identity.
    */
-  indexPath(repoName: string): string {
-    return path.join(this.directory, `${repoName}.json`);
+  indexPath(identity: string): string {
+    const segments = identitySegments(identity);
+    const last = segments.pop() ?? identity;
+    return path.join(this.directory, ...segments, `${last}.json`);
   }
 
   /**
-   * Where a repository's index sidecar is written.
+   * Where a repository's index sidecar is written, beside its index.
    *
-   * @param repoName - The repository's configured short name.
+   * @param identity - The repository's canonical identity.
    */
-  sidecarPath(repoName: string): string {
-    return path.join(this.directory, `${repoName}${INDEX_SIDECAR_SUFFIX}`);
+  sidecarPath(identity: string): string {
+    const segments = identitySegments(identity);
+    const last = segments.pop() ?? identity;
+    return path.join(this.directory, ...segments, `${last}${INDEX_SIDECAR_SUFFIX}`);
   }
 
   /**
@@ -141,11 +153,11 @@ export class IndexCache {
    * there is no sidecar or it cannot be read; the sidecar is a convenience, and
    * losing it only costs a refetch.
    *
-   * @param repoName - The repository's configured short name.
+   * @param identity - The repository's canonical identity.
    */
-  readMeta(repoName: string): IndexMeta | undefined {
+  readMeta(identity: string): IndexMeta | undefined {
     try {
-      const raw = JSON.parse(fs.readFileSync(this.sidecarPath(repoName), "utf8")) as IndexMeta;
+      const raw = JSON.parse(fs.readFileSync(this.sidecarPath(identity), "utf8")) as IndexMeta;
       if (typeof raw?.fetchedAt !== "string") return undefined;
       return raw;
     } catch {
@@ -156,12 +168,24 @@ export class IndexCache {
   /**
    * Writes what sous remembers about a cached index.
    *
-   * @param repoName - The repository's configured short name.
+   * @param identity - The repository's canonical identity.
    * @param meta - What to record.
    */
-  writeMeta(repoName: string, meta: IndexMeta): void {
+  writeMeta(identity: string, meta: IndexMeta): void {
+    const file = this.sidecarPath(identity);
+    this.prepareDirectoryFor(file);
+    fs.writeFileSync(file, stableJsonStringify(meta), "utf8");
+  }
+
+  /**
+   * Makes sure the cache directory exists and explains itself, and that the
+   * subdirectories an identity turns into are there too.
+   *
+   * @param filePath - The file about to be written.
+   */
+  private prepareDirectoryFor(filePath: string): void {
     ensureIndexCacheDirectory(this.directory);
-    fs.writeFileSync(this.sidecarPath(repoName), stableJsonStringify(meta), "utf8");
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
   }
 
   /**
@@ -169,10 +193,10 @@ export class IndexCache {
    * cached file that no longer parses is treated as absent, since it is only a
    * copy of something upstream still has.
    *
-   * @param repoName - The repository's configured short name.
+   * @param identity - The repository's canonical identity.
    */
-  readCached(repoName: string): IndexFile | undefined {
-    const file = this.indexPath(repoName);
+  readCached(identity: string): IndexFile | undefined {
+    const file = this.indexPath(identity);
     let text: string;
     try {
       text = fs.readFileSync(file, "utf8");
@@ -206,30 +230,30 @@ export class IndexCache {
    * exists, the cached copy is returned and the failure is warned about; when
    * there is no cached copy, the failure is raised.
    *
-   * @param repoName - The repository's configured short name.
+   * @param identity - The repository's canonical identity.
    * @param options - The repository URL, its provider, and the freshness window.
    */
-  async getIndex(repoName: string, options: GetIndexOptions): Promise<IndexLookup> {
+  async getIndex(identity: string, options: GetIndexOptions): Promise<IndexLookup> {
     const maxAgeSeconds = options.maxAgeSeconds ?? DEFAULT_FRESHNESS_SECONDS;
-    const meta = this.readMeta(repoName);
+    const meta = this.readMeta(identity);
 
     if (options.force !== true && this.isFresh(meta, maxAgeSeconds)) {
-      const cached = this.readCached(repoName);
+      const cached = this.readCached(identity);
       if (cached !== undefined) return { index: cached, source: "cache", meta: meta! };
     }
 
     try {
-      return await this.refresh(repoName, options);
+      return await this.refresh(identity, options);
     } catch (error) {
-      const cached = this.readCached(repoName);
+      const cached = this.readCached(identity);
       if (cached === undefined) throw error;
 
       const reason = isConfigError(error)
         ? (error as ConfigError).message
         : (error as Error).message;
       this.warn(
-        `Sous could not check the repository '${repoName}' for updates, so it is using ` +
-          `the copy of its index that it already had.\n${reason}`
+        `Sous could not check the repository '${options.label ?? identity}' for updates, ` +
+          `so it is using the copy of its index that it already had.\n${reason}`
       );
       const stale: IndexMeta = meta ?? { fetchedAt: new Date(0).toISOString() };
       return { index: cached, source: "stale", meta: stale };
@@ -241,10 +265,10 @@ export class IndexCache {
    * both the index and its sidecar. Raises rather than falling back; `getIndex`
    * is where the last-good behavior lives.
    *
-   * @param repoName - The repository's configured short name.
+   * @param identity - The repository's canonical identity.
    * @param options - The repository URL and its provider.
    */
-  async refresh(repoName: string, options: GetIndexOptions): Promise<IndexLookup> {
+  async refresh(identity: string, options: GetIndexOptions): Promise<IndexLookup> {
     const provider = this.resolveProvider(options.url, options.provider);
     const repo = provider.canonicalize(options.url);
     const fetched = await provider.fetchIndex(repo, this.providerOptions);
@@ -270,9 +294,10 @@ export class IndexCache {
       ...(fetched.etag === undefined ? {} : { etag: fetched.etag }),
     };
 
-    ensureIndexCacheDirectory(this.directory);
-    fs.writeFileSync(this.indexPath(repoName), stableJsonStringify(index), "utf8");
-    this.writeMeta(repoName, meta);
+    const file = this.indexPath(identity);
+    this.prepareDirectoryFor(file);
+    fs.writeFileSync(file, stableJsonStringify(index), "utf8");
+    this.writeMeta(identity, meta);
 
     return { index, source: "network", meta };
   }
@@ -281,10 +306,10 @@ export class IndexCache {
    * Forgets a repository's cached index and sidecar, which is what removing a
    * repository from a project does.
    *
-   * @param repoName - The repository's configured short name.
+   * @param identity - The repository's canonical identity.
    */
-  forget(repoName: string): void {
-    fs.rmSync(this.indexPath(repoName), { force: true });
-    fs.rmSync(this.sidecarPath(repoName), { force: true });
+  forget(identity: string): void {
+    fs.rmSync(this.indexPath(identity), { force: true });
+    fs.rmSync(this.sidecarPath(identity), { force: true });
   }
 }

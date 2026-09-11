@@ -78,7 +78,15 @@ describe("loadProjectDefinitions()", () => {
   it("should read the variables of every locked recipe", async () => {
     const sousDir = path.join(tmp.path, ".sous");
     const storeRoot = path.join(tmp.path, "home", "cache");
-    const recipeDir = path.join(storeRoot, "fixtures", "workflow", "task-files", "1.0.0");
+    const recipeDir = path.join(
+      storeRoot,
+      "example.com",
+      "owner",
+      "fixtures",
+      "workflow",
+      "task-files",
+      "1.0.0"
+    );
 
     fs.mkdirSync(sousDir, { recursive: true });
     fs.mkdirSync(recipeDir, { recursive: true });
@@ -86,7 +94,12 @@ describe("loadProjectDefinitions()", () => {
       path.join(sousDir, "sous.lock.json"),
       JSON.stringify({
         formatVersion: 1,
-        repos: { fixtures: { url: "https://example.com/owner/fixtures" } },
+        repos: {
+          fixtures: {
+            url: "https://example.com/owner/fixtures",
+            identity: "example.com/owner/fixtures",
+          },
+        },
         recipes: {
           "workflow/task-files": {
             repo: "fixtures",

@@ -89,6 +89,38 @@ function readJsonc(filePath: string): Record<string, unknown> {
   return parseJsonc(fs.readFileSync(filePath, "utf8")) as Record<string, unknown>;
 }
 
+/**
+ * The path segments of the canonical identity the `local` provider gives a
+ * repository on this machine. The store and the index cache are machine-wide,
+ * so they file everything under this rather than under a project's short name.
+ */
+function identitySegments(repoPath: string): string[] {
+  return [
+    "localhost",
+    ...repoPath
+      .split(path.sep)
+      .filter((segment) => segment.length > 0)
+      .map((segment) => segment.toLowerCase()),
+  ];
+}
+
+/** The store directory holding one recipe version of a fixture repository. */
+function storeEntryDir(repoPath: string, key: string, version: string): string {
+  return path.join(storeRoot, ...identitySegments(repoPath), ...key.split("/"), version);
+}
+
+/** The store directory holding everything fetched from a fixture repository. */
+function storeRepoDir(repoPath: string): string {
+  return path.join(storeRoot, ...identitySegments(repoPath));
+}
+
+/** Where the index cache keeps a fixture repository's index. */
+function cachedIndexPath(repoPath: string): string {
+  const segments = identitySegments(repoPath);
+  const last = segments.pop()!;
+  return path.join(storeRoot, "_indexes", ...segments, `${last}.json`);
+}
+
 
 /**
  * Drives the whole consumer surface end to end through the real CLI: adding a
@@ -138,13 +170,33 @@ describe("the repositories consumer surface", () => {
           },
         ],
       },
+      // A dependency on a recipe in this same repository, written as a bare
+      // sibling ref, which is how almost every dependency is written.
+      {
+        namespace: "support",
+        name: "partials",
+        version: "1.0.0",
+        description: "Partials other recipes build on",
+        files: { "partials/extra.md": "An extra partial.\n" },
+      },
       {
         namespace: "workflow",
-        name: "needs-extras",
+        name: "needs-partials",
         version: "1.0.0",
-        description: "Depends on a recipe from another repository",
-        depends: ["extras:tooling/formatter"],
-        files: { "skills/needs-extras/SKILL.md": "# Needs extras\n" },
+        description: "Depends on a sibling recipe in this same repository",
+        depends: ["support/partials"],
+        files: { "skills/needs-partials/SKILL.md": "# Needs partials\n" },
+      },
+      // A dependency on a recipe in ANOTHER repository, named by its location.
+      // Nothing has added that repository, so installing this one stops at the
+      // trust question.
+      {
+        namespace: "workflow",
+        name: "needs-vendor",
+        version: "1.0.0",
+        description: "Depends on a recipe in a repository nothing has added",
+        depends: ["github://sous-io/vendor-recipes/tooling/formatter"],
+        files: { "skills/needs-vendor/SKILL.md": "# Needs vendor\n" },
       },
       // A recipe whose question nothing in the project answers, so every run
       // that installs it either answers it up front or fails saying so.
@@ -269,8 +321,8 @@ describe("the repositories consumer surface", () => {
       expect(repos.fixtures!.addedBy).toBe("user");
 
       // The index is cached, and nothing else has been downloaded.
-      expect(fs.existsSync(path.join(storeRoot, "_indexes", "fixtures.json"))).toBe(true);
-      expect(fs.existsSync(path.join(storeRoot, "fixtures"))).toBe(false);
+      expect(fs.existsSync(cachedIndexPath(mainRepo))).toBe(true);
+      expect(fs.existsSync(storeRepoDir(mainRepo))).toBe(false);
 
       // Every directory sous created for itself explains itself: the layer
       // directory, the store root and the index cache each carry a README with
@@ -330,21 +382,46 @@ describe("the repositories consumer surface", () => {
 
   /**
    * A dependency on a recipe in a repository the project has not added stops the
-   * install and names the repository, rather than fetching from somewhere the
-   * project never agreed to trust.
+   * install and asks about that repository by name, rather than fetching from
+   * somewhere the project never agreed to trust. The dependency names it by
+   * LOCATION, so the question can show where it lives and what it is; declining
+   * writes nothing at all.
    *
-   * sous subscribe workflow/needs-extras --yes   // -> exits non-zero, names 'extras'
+   * The trust question needs a terminal, which a spawned process does not have,
+   * so this drives the service in process with the answers injected.
    */
   it(
-    "should refuse a dependency on an untrusted repository",
-    () => {
-      // '--yes' answers both questions this command can ask; '--trust' is only
-      // another spelling of it, so passing one of them is passing both.
-      const result = sous(projectRoot, "subscribe", "workflow/needs-extras", "--yes");
+    "should ask about an untrusted repository a dependency needs, by its location",
+    async () => {
+      const discovered = discoverConfig(projectRoot);
+      expect(discovered).not.toBeNull();
+      const settings = await loadSettings(discovered!);
 
-      expect(result.status).not.toBe(0);
-      expect(result.stdout + result.stderr).toContain("extras");
+      const printed: string[] = [];
+      const service = new SubscriptionService({
+        sousDir,
+        settings,
+        env: { ...process.env, SOUS_HOME: sousHome },
+        interactive: true,
+        write: (line) => printed.push(line),
+        // The plan is accepted; the repository is not.
+        ask: async (message) => message === "Proceed?",
+      });
+
+      await expect(service.subscribe({ ref: "workflow/needs-vendor" })).rejects.toThrow(
+        /trust was declined/
+      );
+
+      const notice = printed.join("\n");
+      expect(notice).toContain("vendor-recipes");
+      expect(notice).toContain("https://github.com/sous-io/vendor-recipes");
+      expect(notice).toContain("github.com/sous-io/vendor-recipes");
+      expect(notice).toContain("workflow/needs-vendor");
+
       expect(fs.existsSync(path.join(sousDir, "sous.lock.json"))).toBe(false);
+      const repos = readJsonc(path.join(sousDir, "conf.d", "500-repos.jsonc"))
+        .repos as Record<string, unknown>;
+      expect(Object.keys(repos)).not.toContain("vendor-recipes");
     },
     CLI_TIMEOUT
   );
@@ -355,21 +432,28 @@ describe("the repositories consumer surface", () => {
    * it declares, each pinned at an exact version.
    */
   it(
-    "should install a dependency closure once its repository is trusted",
+    "should install a dependency closure",
     () => {
+      // The second repository is added here because the tests below need two of
+      // them; nothing in this one depends on it.
       expect(sous(projectRoot, "repo", "add", extrasRepo, "--trust").status).toBe(0);
 
-      const result = sous(projectRoot, "subscribe", "workflow/needs-extras", "--yes");
-      expect(result.status).toBe(0);
+      const result = sous(projectRoot, "subscribe", "workflow/needs-partials", "--yes");
+      expect(result.status, result.stdout + result.stderr).toBe(0);
 
       const lock = readJson(path.join(sousDir, "sous.lock.json"));
       const recipes = lock.recipes as Record<string, { repo: string; kind: string }>;
       expect(Object.keys(recipes).sort()).toEqual([
-        "tooling/formatter",
-        "workflow/needs-extras",
+        "support/partials",
+        "workflow/needs-partials",
       ]);
-      expect(recipes["tooling/formatter"]!.kind).toBe("depends");
-      expect(recipes["workflow/needs-extras"]!.kind).toBe("subscribes");
+      expect(recipes["support/partials"]!.kind).toBe("depends");
+      expect(recipes["workflow/needs-partials"]!.kind).toBe("subscribes");
+
+      // The lockfile records both the project's short name for the repository
+      // and the canonical identity the machine-wide store files it under.
+      const repos = lock.repos as Record<string, { url: string; identity: string }>;
+      expect(repos.fixtures!.identity).toBe(identitySegments(mainRepo).join("/"));
     },
     CLI_TIMEOUT
   );
@@ -399,13 +483,7 @@ describe("the repositories consumer surface", () => {
       ).subscriptions as Record<string, { addedBy: string }>;
       expect(subscriptions["workflow/task-files"]!.addedBy).toBe("user");
 
-      const entryDir = path.join(
-        storeRoot,
-        "fixtures",
-        "workflow",
-        "task-files",
-        "1.0.0"
-      );
+      const entryDir = storeEntryDir(mainRepo, "workflow/task-files", "1.0.0");
       expect(fs.existsSync(path.join(entryDir, "skills", "task-files", "SKILL.md"))).toBe(
         true
       );
@@ -729,11 +807,7 @@ describe("the repositories consumer surface", () => {
         "unpushed work"
       );
       const storeFile = path.join(
-        storeRoot,
-        "fixtures",
-        "workflow",
-        "task-files",
-        "1.0.0",
+        storeEntryDir(mainRepo, "workflow/task-files", "1.0.0"),
         "skills",
         "task-files",
         "SKILL.md"
@@ -785,7 +859,7 @@ describe("the repositories consumer surface", () => {
       expect(fs.readFileSync(skill, "utf8")).toContain("A skill from the fixture repo.");
       expect(
         fs.existsSync(
-          path.join(storeRoot, "fixtures", "workflow", "task-files", "1.0.0")
+          storeEntryDir(mainRepo, "workflow/task-files", "1.0.0")
         )
       ).toBe(true);
     },
@@ -800,7 +874,7 @@ describe("the repositories consumer surface", () => {
   it(
     "should unsubscribe with refcounting",
     () => {
-      const result = sous(projectRoot, "unsubscribe", "workflow/needs-extras");
+      const result = sous(projectRoot, "unsubscribe", "workflow/needs-partials");
       expect(result.status).toBe(0);
 
       const lock = readJson(path.join(sousDir, "sous.lock.json"));
@@ -815,7 +889,7 @@ describe("the repositories consumer surface", () => {
       // What it used to write is pruned on the next build.
       expect(sous(projectRoot, "build").status).toBe(0);
       expect(
-        fs.existsSync(path.join(projectRoot, ".claude", "skills", "needs-extras"))
+        fs.existsSync(path.join(projectRoot, ".claude", "skills", "needs-partials"))
       ).toBe(false);
       expect(
         fs.existsSync(path.join(projectRoot, ".claude", "skills", "task-files"))
@@ -830,8 +904,8 @@ describe("the repositories consumer surface", () => {
    * subscribe confirmation is answered with '--yes', because these runs have no
    * terminal to be asked on.
    *
-   * sous subscription add workflow/needs-extras --yes
-   * sous subscription remove workflow/needs-extras
+   * sous subscription add workflow/needs-partials --yes
+   * sous subscription remove workflow/needs-partials
    */
   it(
     "should add and remove a subscription under its canonical commands",
@@ -840,23 +914,23 @@ describe("the repositories consumer surface", () => {
         projectRoot,
         "subscription",
         "add",
-        "workflow/needs-extras",
+        "workflow/needs-partials",
         "--yes"
       );
       expect(added.status, added.stdout + added.stderr).toBe(0);
 
       const withIt = readJson(path.join(sousDir, "sous.lock.json"));
       expect(Object.keys(withIt.recipes as Record<string, unknown>).sort()).toEqual([
-        "tooling/formatter",
-        "workflow/needs-extras",
+        "support/partials",
+        "workflow/needs-partials",
         "workflow/task-files",
       ]);
 
       const listed = sous(projectRoot, "subscription", "list");
       expect(listed.status).toBe(0);
-      expect(listed.stdout).toContain("workflow/needs-extras");
+      expect(listed.stdout).toContain("workflow/needs-partials");
 
-      const removed = sous(projectRoot, "subscription", "remove", "workflow/needs-extras");
+      const removed = sous(projectRoot, "subscription", "remove", "workflow/needs-partials");
       expect(removed.status).toBe(0);
 
       const without = readJson(path.join(sousDir, "sous.lock.json"));
@@ -878,7 +952,7 @@ describe("the repositories consumer surface", () => {
       expect(dry.status).toBe(0);
       expect(
         fs.existsSync(
-          path.join(storeRoot, "fixtures", "workflow", "task-files", "1.0.0")
+          storeEntryDir(mainRepo, "workflow/task-files", "1.0.0")
         )
       ).toBe(true);
 
@@ -888,12 +962,12 @@ describe("the repositories consumer surface", () => {
       // Still pinned, so still there, however small the cap.
       expect(
         fs.existsSync(
-          path.join(storeRoot, "fixtures", "workflow", "task-files", "1.0.0")
+          storeEntryDir(mainRepo, "workflow/task-files", "1.0.0")
         )
       ).toBe(true);
       // No longer pinned by anything, so collected.
       expect(
-        fs.existsSync(path.join(storeRoot, "extras", "tooling", "formatter", "1.0.0"))
+        fs.existsSync(storeEntryDir(mainRepo, "support/partials", "1.0.0"))
       ).toBe(false);
     },
     CLI_TIMEOUT
@@ -1048,7 +1122,7 @@ describe("the repositories consumer surface", () => {
       const subscriptionsBefore = fs.readFileSync(subscriptionsPath, "utf8");
 
       await expect(
-        service.subscribe({ ref: "workflow/needs-extras" })
+        service.subscribe({ ref: "workflow/needs-partials" })
       ).rejects.toThrow(/declined/);
 
       expect(asked).toEqual(["Proceed?"]);

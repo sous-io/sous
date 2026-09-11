@@ -38,6 +38,12 @@ export const OFFICIAL_REPO_NAME = "sous-recipes";
 /** Where the official repository lives. */
 export const OFFICIAL_REPO_URL = "https://github.com/sous-io/sous-recipes";
 
+/**
+ * The official repository's canonical identity: what the machine-wide store and
+ * the index cache file it under, whatever a project happens to call it.
+ */
+export const OFFICIAL_REPO_IDENTITY = "github.com/sous-io/sous-recipes";
+
 /** The provider that handles the official repository. */
 export const OFFICIAL_REPO_PROVIDER = "github";
 

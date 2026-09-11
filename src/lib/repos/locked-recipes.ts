@@ -33,6 +33,7 @@ import {
   loadManifestFile,
 } from "./load-manifest.js";
 import { readEffectiveLinks } from "./links.js";
+import { identitySegments } from "./identity.js";
 import { enabledSubscriptions } from "./defaults.js";
 import { PROJECT_HOLDER } from "./formats/lockfile.js";
 
@@ -181,7 +182,13 @@ export function listLockedRecipes(
     }
 
     if (dir === undefined) {
-      dir = path.join(storeRoot, entry.repo, namespace, name, entry.version);
+      // The store is machine-wide, so it files an entry under the repository's
+      // canonical identity rather than under this project's short name for it.
+      const identity = lock.repos[entry.repo]?.identity;
+      dir =
+        identity === undefined
+          ? undefined
+          : path.join(storeRoot, ...identitySegments(identity), namespace, name, entry.version);
     }
 
     located.push({
@@ -193,9 +200,9 @@ export function listLockedRecipes(
       hash: entry.hash,
       kind: entry.kind,
       requestedBy: [...entry.requestedBy],
-      dir,
+      dir: dir ?? "",
       linked,
-      present: fs.existsSync(dir),
+      present: dir !== undefined && fs.existsSync(dir),
     });
   }
 

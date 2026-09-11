@@ -106,7 +106,7 @@ export default class RepoSearch extends BaseCommand {
     const notFetched: string[] = [];
 
     for (const repo of repos) {
-      const index = service.indexes.readCached(repo);
+      const index = service.cachedIndex(repo);
       if (index === undefined) {
         notFetched.push(repo);
         continue;

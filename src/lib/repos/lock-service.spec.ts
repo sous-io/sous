@@ -26,6 +26,7 @@ function resolvedRecipe(
     namespace,
     name: key.slice(namespace.length + 1),
     repo: "sous-recipes",
+    identity: "github.com/sous-io/sous-recipes",
     version,
     hash: fakeHash(`sous-recipes/${key}@${version}`),
     tag: `${key}@${version}`,
@@ -38,7 +39,12 @@ function resolvedRecipe(
   };
 }
 
-const REPOS = { "sous-recipes": { url: "https://github.com/sous-io/sous-recipes" } };
+const REPOS = {
+  "sous-recipes": {
+    url: "https://github.com/sous-io/sous-recipes",
+    identity: "github.com/sous-io/sous-recipes",
+  },
+};
 
 describe("LockService", () => {
   let tmp: TmpDir;
@@ -130,6 +136,7 @@ describe("LockService", () => {
     });
     expect(lock.repos["sous-recipes"]).toEqual({
       url: "https://github.com/sous-io/sous-recipes",
+      identity: "github.com/sous-io/sous-recipes",
     });
   });
 
@@ -377,7 +384,12 @@ describe("LockService", () => {
       );
       const store = new FakeRecipeStore({ root: path.join(tmp.path, "store") });
       store.seed(
-        { repo: "sous-recipes", namespace: "workflow", name: "task-files", version: "1.0.0" },
+        {
+          identity: "github.com/sous-io/sous-recipes",
+          namespace: "workflow",
+          name: "task-files",
+          version: "1.0.0",
+        },
         lock.recipes["workflow/task-files"]!.hash
       );
       const fetched: string[] = [];

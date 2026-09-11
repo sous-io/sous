@@ -2,9 +2,12 @@
  * The machine-wide recipe store: one immutable directory per recipe version,
  * verified against its content hash.
  *
- * Layout (decision 11), rooted at `$SOUS_HOME/cache`:
+ * Layout (decision 11), rooted at `$SOUS_HOME/cache`. The first part is the
+ * repository's CANONICAL IDENTITY (`github.com/sous-io/sous-recipes`), which is
+ * several directories deep, because the store is shared by every project on the
+ * machine and a project's short name for a repository is its own private label:
  *
- *     <root>/<repo>/<namespace>/<name>/<version>/
+ *     <root>/<repository identity>/<namespace>/<name>/<version>/
  *         .sous.entry.json     the marker describing this entry
  *         ...                  the recipe's files, exactly as fetched
  *
@@ -24,7 +27,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { ConfigError } from "../../errors.js";
-import { STORE_ENTRY_FILENAME } from "../formats/common.js";
+import { INDEX_CACHE_DIRNAME, STORE_ENTRY_FILENAME } from "../formats/common.js";
 import {
   parseStoreEntry,
   stringifyStoreEntry,
@@ -33,6 +36,7 @@ import {
 import { resolveStoreRoot, type EnvLike } from "../../sous-home.js";
 import { ensureStoreRootDirectory } from "../../../utils/sous-directory.js";
 import { hashDirectory, hashesEqual } from "./hash.js";
+import { identitySegments } from "../identity.js";
 import type {
   RecipeStoreLike,
   StoreGcOptions,
@@ -46,6 +50,14 @@ const TEMP_PREFIX = ".sous-tmp-";
 
 /** Directory name never copied into the store. */
 const GIT_DIR_NAME = ".git";
+
+/**
+ * How far below the store root a listing walk will look for an entry marker. A
+ * hosted repository's entry sits six levels down (host, owner, name, namespace,
+ * recipe, version) and a nested group path adds a few more; this is the guard
+ * that stops a walk rather than a limit anyone is meant to reach.
+ */
+const MAX_STORE_DEPTH = 12;
 
 /** Options accepted when constructing a store. */
 export type RecipeStoreOptions = {
@@ -62,12 +74,27 @@ export type RecipeStoreOptions = {
 
 /**
  * Renders a store key the way error and warning messages name it:
- * `repo:namespace/name@version`.
+ * `<identity>:namespace/name@version`.
  *
  * @param key - The key to describe.
  */
 export function formatStoreKey(key: StoreKey): string {
-  return `${key.repo}:${key.namespace}/${key.name}@${key.version}`;
+  return `${key.identity}:${key.namespace}/${key.name}@${key.version}`;
+}
+
+/**
+ * The key an entry is filed under, read back out of its own marker. The marker
+ * records the repository's identity under `repo`, because that is what it is.
+ *
+ * @param entry - A validated store entry marker.
+ */
+export function storeKeyOf(entry: StoreEntry): StoreKey {
+  return {
+    identity: entry.repo,
+    namespace: entry.namespace,
+    name: entry.name,
+    version: entry.version,
+  };
 }
 
 /**
@@ -89,8 +116,8 @@ function assertSafeSegment(value: string, label: string): void {
   ) {
     throw new ConfigError(
       `Invalid store key: the ${label} '${value}' is not a usable directory name.\n` +
-        `  A store key's repo, namespace, name and version must each be a single path ` +
-        `segment.`
+        `  Every part of a store key (the repository identity's segments, the namespace, ` +
+        `the recipe name and the version) must be a single usable path segment.`
     );
   }
 }
@@ -98,6 +125,30 @@ function assertSafeSegment(value: string, label: string): void {
 /** True when a directory entry is one of the store's own temporary directories. */
 function isTempName(name: string): boolean {
   return name.startsWith(TEMP_PREFIX);
+}
+
+/**
+ * Reads one marker file. Returns the validated entry, `undefined` when there is
+ * no marker there at all, and the literal `"unreadable"` when there is one that
+ * does not parse, which a caller reports rather than silently ignoring.
+ *
+ * @param markerPath - Absolute path of the marker file.
+ */
+async function readMarkerFile(
+  markerPath: string
+): Promise<StoreEntry | "unreadable" | undefined> {
+  let raw: string;
+  try {
+    raw = await fs.readFile(markerPath, "utf8");
+  } catch {
+    return undefined;
+  }
+
+  try {
+    return parseStoreEntry(JSON.parse(raw), markerPath);
+  } catch {
+    return "unreadable";
+  }
 }
 
 /** An ISO 8601 timestamp with an offset, the shape every marker field uses. */
@@ -199,11 +250,19 @@ export class RecipeStore implements RecipeStoreLike {
    * @param key - The recipe version to locate.
    */
   entryDir(key: StoreKey): string {
-    assertSafeSegment(key.repo, "repo name");
+    const identity = identitySegments(key.identity);
+    if (identity.length < 2) {
+      throw new ConfigError(
+        `Invalid store key: '${key.identity}' is not a repository identity.\n` +
+          `  An identity is the repository's host followed by the path it lives at, as in ` +
+          `'github.com/sous-io/sous-recipes'.`
+      );
+    }
+    for (const segment of identity) assertSafeSegment(segment, "repository identity");
     assertSafeSegment(key.namespace, "namespace");
     assertSafeSegment(key.name, "recipe name");
     assertSafeSegment(key.version, "version");
-    return path.join(this.root, key.repo, key.namespace, key.name, key.version);
+    return path.join(this.root, ...identity, key.namespace, key.name, key.version);
   }
 
   /** The marker path for an entry. */
@@ -265,7 +324,7 @@ export class RecipeStore implements RecipeStoreLike {
 
       const entry: StoreEntry = {
         formatVersion: 1,
-        repo: key.repo,
+        repo: key.identity,
         namespace: key.namespace,
         name: key.name,
         version: key.version,
@@ -329,22 +388,16 @@ export class RecipeStore implements RecipeStoreLike {
    */
   private async readMarker(key: StoreKey): Promise<StoreEntry | undefined> {
     const markerPath = this.markerPath(key);
-    let raw: string;
-    try {
-      raw = await fs.readFile(markerPath, "utf8");
-    } catch {
-      return undefined;
-    }
+    const marker = await readMarkerFile(markerPath);
 
-    try {
-      return parseStoreEntry(JSON.parse(raw), markerPath);
-    } catch {
+    if (marker === "unreadable") {
       this.onWarning(
         `The store entry marker at ${markerPath} could not be read, so the cached copy of ` +
           `${formatStoreKey(key)} was ignored. It will be fetched again.`
       );
       return undefined;
     }
+    return marker;
   }
 
   /**
@@ -437,22 +490,49 @@ export class RecipeStore implements RecipeStoreLike {
    */
   async list(): Promise<StoreEntry[]> {
     const entries: StoreEntry[] = [];
-
-    for (const repo of await this.childDirectories(this.root)) {
-      const repoDir = path.join(this.root, repo);
-      for (const namespace of await this.childDirectories(repoDir)) {
-        const namespaceDir = path.join(repoDir, namespace);
-        for (const name of await this.childDirectories(namespaceDir)) {
-          const nameDir = path.join(namespaceDir, name);
-          for (const version of await this.childDirectories(nameDir)) {
-            const entry = await this.readMarker({ repo, namespace, name, version });
-            if (entry !== undefined) entries.push(entry);
-          }
-        }
-      }
-    }
-
+    await this.collectEntries(this.root, 0, entries);
     return entries;
+  }
+
+  /**
+   * Walks the store looking for entry markers. A repository identity is several
+   * directories deep and a self-hosted group path may be deeper still, so the
+   * depth is not fixed: any directory holding a readable marker IS an entry, and
+   * nothing below it is walked.
+   *
+   * @param dir - The directory to look in.
+   * @param depth - How far below the store root that directory is.
+   * @param into - The entries found so far, added to in place.
+   */
+  private async collectEntries(
+    dir: string,
+    depth: number,
+    into: StoreEntry[]
+  ): Promise<void> {
+    // Nothing sensible is ever this deep, and a loop through a symlinked
+    // directory would otherwise never end.
+    if (depth > MAX_STORE_DEPTH) return;
+
+    for (const child of await this.childDirectories(dir)) {
+      // The index cache is a sibling of the entries, inside the same root.
+      if (depth === 0 && child === INDEX_CACHE_DIRNAME) continue;
+
+      const childDir = path.join(dir, child);
+      const marker = await readMarkerFile(path.join(childDir, STORE_ENTRY_FILENAME));
+      if (marker === "unreadable") {
+        this.onWarning(
+          `The store entry marker at ${path.join(childDir, STORE_ENTRY_FILENAME)} could ` +
+            `not be read, so that cached copy was left out of the listing. It will be ` +
+            `fetched again when something needs it.`
+        );
+        continue;
+      }
+      if (marker !== undefined) {
+        into.push(marker);
+        continue;
+      }
+      await this.collectEntries(childDir, depth + 1, into);
+    }
   }
 
   /**
@@ -494,7 +574,7 @@ export class RecipeStore implements RecipeStoreLike {
       if (a.lastAccessAt !== b.lastAccessAt) {
         return a.lastAccessAt < b.lastAccessAt ? -1 : 1;
       }
-      return formatStoreKey(a) < formatStoreKey(b) ? -1 : 1;
+      return formatStoreKey(storeKeyOf(a)) < formatStoreKey(storeKeyOf(b)) ? -1 : 1;
     });
 
     const evicted: StoreEntry[] = [];
@@ -502,11 +582,14 @@ export class RecipeStore implements RecipeStoreLike {
     let bytesAfter = bytesBefore;
 
     for (const entry of candidates) {
-      if (bytesAfter <= options.maxBytes || protectedKeys.has(formatStoreKey(entry))) {
+      if (
+        bytesAfter <= options.maxBytes ||
+        protectedKeys.has(formatStoreKey(storeKeyOf(entry)))
+      ) {
         kept.push(entry);
         continue;
       }
-      if (options.dryRun !== true) await this.remove(entry);
+      if (options.dryRun !== true) await this.remove(storeKeyOf(entry));
       evicted.push(entry);
       bytesAfter -= entry.sizeBytes;
     }

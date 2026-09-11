@@ -1,7 +1,7 @@
 /**
  * The store entry marker: `.sous.entry.json`, written beside every cached
  * recipe version in the machine-wide store
- * (`$SOUS_HOME/cache/<repo>/<namespace>/<recipe>/<version>/`).
+ * (`$SOUS_HOME/cache/<repository identity>/<namespace>/<recipe>/<version>/`).
  *
  * The marker is MACHINE-WRITTEN and makes an entry self-describing, so the
  * store can be swept without consulting any project: `hash` is checked against
@@ -21,7 +21,7 @@ import {
   namespaceNameSchema,
   parseFormat,
   recipeNameSchema,
-  repoNameSchema,
+  repoIdentitySchema,
   semverVersionSchema,
   stableJsonStringify,
 } from "./common.js";
@@ -29,8 +29,12 @@ import {
 /** The store entry marker schema. */
 export const storeEntrySchema = z.strictObject({
   formatVersion: formatVersionSchema,
-  /** Short name of the repo the recipe came from. */
-  repo: repoNameSchema,
+  /**
+   * The canonical identity of the repository the recipe came from, such as
+   * `github.com/sous-io/sous-recipes`. The store is machine-wide, so it records
+   * where a recipe really came from rather than what one project calls it.
+   */
+  repo: repoIdentitySchema,
   /** The recipe's namespace. */
   namespace: namespaceNameSchema,
   /** The recipe's name. */

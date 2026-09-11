@@ -64,7 +64,12 @@ import {
   type ResolvedRecipe,
   type ResolverRepo,
 } from "./resolver.js";
-import { LockService, type LockDiff, type RestoreReport } from "./lock-service.js";
+import {
+  LockService,
+  type LockDiff,
+  type LockRepoInput,
+  type RestoreReport,
+} from "./lock-service.js";
 import { TrustService, USER_ADDED_BY, type TrustedRepo } from "./trust.js";
 import {
   SUBSCRIPTIONS_LAYER_FILENAME,
@@ -107,7 +112,13 @@ import {
 import { resolveStoreRoot } from "../sous-home.js";
 import { seedCoreRecipe, type SeedCoreRecipeReport } from "./seed.js";
 import { enabledRepos, enabledSubscriptions, isBuiltInEntry } from "./defaults.js";
-import { CORE_RECIPE_KEY, OFFICIAL_REPO_NAME, packagedCoreRecipeDir } from "./core-recipe.js";
+import {
+  CORE_RECIPE_KEY,
+  OFFICIAL_REPO_IDENTITY,
+  OFFICIAL_REPO_NAME,
+  packagedCoreRecipeDir,
+} from "./core-recipe.js";
+import { repoIdentity, shortNameFromIdentity } from "./identity.js";
 import { hashDirectory } from "./store/hash.js";
 
 // --- Options and reports ------------------------------------------------------------------------
@@ -349,6 +360,12 @@ export class SubscriptionService {
   private readonly lock: LockService;
 
   /**
+   * Canonical identities already worked out, keyed by the provider and URL they
+   * came from. Canonicalizing is pure, so it is worth doing once per run.
+   */
+  private readonly identityCache = new Map<string, string>();
+
+  /**
    * What seeding the packaged core recipe did, once it has been done. Seeding is
    * idempotent but not free (it verifies the store entry against its content
    * hash), so one service instance does it at most once.
@@ -417,6 +434,10 @@ export class SubscriptionService {
         confDir: this.confDir,
         settings: this.settings,
         interactive: this.interactive,
+        // The trust question is one of this service's questions, so it is asked
+        // and printed through the same seams as the rest of them.
+        ask: this.ask,
+        write: this.write,
         now: this.now,
       });
     this.lock = options.lock ?? new LockService(this.sousDir);
@@ -435,6 +456,58 @@ export class SubscriptionService {
   /** The index cache, for a command that wants to read a cached index without fetching. */
   get indexes(): IndexCache {
     return this.indexCache;
+  }
+
+  /**
+   * The cached index of one added repository, or undefined when nothing has
+   * been fetched from it yet. Nothing is downloaded. Callers name the
+   * repository the way the project does, by its short name; the cache itself is
+   * keyed by identity, and this is what translates between the two.
+   *
+   * @param name - The repository's short name.
+   */
+  cachedIndex(name: string): IndexFile | undefined {
+    const identity = this.identityForRepo(name);
+    return identity === undefined ? undefined : this.indexCache.readCached(identity);
+  }
+
+  // --- Repository identity ----------------------------------------------------------------------
+
+  /**
+   * The canonical identity of a repository at a URL: what the machine-wide
+   * store and the index cache file it under. Canonicalizing runs a provider's
+   * URL parser, so the answers are remembered for the life of the service.
+   *
+   * @param url - Where the repository lives.
+   * @param providerId - The provider the repository entry names, when it names one.
+   */
+  private identityOf(url: string, providerId?: string): string {
+    const cacheKey = `${providerId ?? ""}|${url}`;
+    const known = this.identityCache.get(cacheKey);
+    if (known !== undefined) return known;
+
+    const provider = requireProvider(url, providerId, this.providers);
+    const identity = repoIdentity(provider.canonicalize(url));
+    this.identityCache.set(cacheKey, identity);
+    return identity;
+  }
+
+  /**
+   * The canonical identity of an added repository, by the short name this
+   * project calls it. The lockfile is consulted second, so a repository that
+   * has been removed from the config can still be located while its recipes are
+   * being cleaned up.
+   *
+   * @param name - The repository's short name.
+   * @param lock - The lockfile, when the caller has already read it.
+   */
+  identityForRepo(name: string, lock?: Lockfile): string | undefined {
+    const entry = this.currentRepos()[name];
+    if (entry?.url !== undefined) return this.identityOf(entry.url, entry.provider);
+
+    const locked = (lock ?? this.lock.read()).repos[name];
+    if (locked === undefined) return undefined;
+    return locked.identity;
   }
 
   // --- Adding a repository ----------------------------------------------------------------------
@@ -525,8 +598,9 @@ export class SubscriptionService {
       addedBy: USER_ADDED_BY,
     });
 
-    const lookup = await this.indexCache.getIndex(name, {
+    const lookup = await this.indexCache.getIndex(this.identityOf(url, provider.id), {
       url,
+      label: name,
       ...(options.provider === undefined ? {} : { provider: options.provider }),
       force: true,
     });
@@ -1390,7 +1464,10 @@ export class SubscriptionService {
     for (const repoName of Object.keys(lock.repos).sort()) {
       if (!this.prefersNewer(repoName, repos[repoName], lock, subscriptions)) continue;
 
-      const meta = this.indexCache.readMeta(repoName);
+      const identity = this.identityForRepo(repoName, lock);
+      if (identity === undefined) continue;
+
+      const meta = this.indexCache.readMeta(identity);
       const due = shouldCheckUpstream({
         ...(meta?.lastCheckedAt === undefined ? {} : { lastCheckedAt: meta.lastCheckedAt }),
         freshnessSeconds,
@@ -1407,8 +1484,9 @@ export class SubscriptionService {
         const url = repos[repoName]?.url ?? lock.repos[repoName]!.url;
         const providerId = repos[repoName]?.provider;
         index = (
-          await this.indexCache.getIndex(repoName, {
+          await this.indexCache.getIndex(identity, {
             url,
+            label: repoName,
             ...(providerId === undefined ? {} : { provider: providerId }),
             force: true,
           })
@@ -1417,11 +1495,11 @@ export class SubscriptionService {
         report.failed.push({ repo: repoName, reason: describeError(error) });
         // Recorded even though it failed, so an unreachable host is not retried
         // on every single build.
-        recordUpstreamCheck(this.indexCache, repoName, this.now());
+        recordUpstreamCheck(this.indexCache, identity, this.now());
         continue;
       }
 
-      recordUpstreamCheck(this.indexCache, repoName, this.now());
+      recordUpstreamCheck(this.indexCache, identity, this.now());
 
       for (const [key, entry] of Object.entries(recipes)) {
         if (entry.repo !== repoName) continue;
@@ -1448,7 +1526,7 @@ export class SubscriptionService {
         const published = index.recipes[key]!.versions[newer.to]!;
         try {
           await this.fetchIntoStore({
-            repo: repoName,
+            identity,
             key,
             version: newer.to,
             hash: published.hash,
@@ -1569,6 +1647,7 @@ export class SubscriptionService {
     for (const [name, entry] of Object.entries(this.currentRepos())) {
       repos[name] = {
         url: entry.url,
+        identity: this.identityOf(entry.url, entry.provider),
         ...(entry.provider === undefined ? {} : { provider: entry.provider }),
         ...(entry.alwaysPull === undefined ? {} : { alwaysPull: entry.alwaysPull }),
       };
@@ -1577,10 +1656,14 @@ export class SubscriptionService {
   }
 
   /** The repository records the lockfile writes, keyed by short name. */
-  private lockRepoInputs(): Record<string, { url: string }> {
-    const inputs: Record<string, { url: string }> = {};
+  private lockRepoInputs(): Record<string, LockRepoInput> {
+    const inputs: Record<string, LockRepoInput> = {};
     for (const [name, entry] of Object.entries(this.currentRepos())) {
-      inputs[name] = { url: entry.url };
+      inputs[name] = {
+        url: entry.url,
+        identity: this.identityOf(entry.url, entry.provider),
+        ...(entry.provider === undefined ? {} : { provider: entry.provider }),
+      };
     }
     return inputs;
   }
@@ -1606,8 +1689,12 @@ export class SubscriptionService {
       if (url === undefined) continue;
 
       try {
-        const lookup = await this.indexCache.getIndex(name, {
+        const identity =
+          this.identityForRepo(name, options.lock) ??
+          this.identityOf(url, repos[name]?.provider);
+        const lookup = await this.indexCache.getIndex(identity, {
           url,
+          label: name,
           ...(repos[name]?.provider === undefined
             ? {}
             : { provider: repos[name]!.provider! }),
@@ -1679,7 +1766,7 @@ export class SubscriptionService {
     }
 
     await this.fetchIntoStore({
-      repo: recipe.repo,
+      identity: recipe.identity,
       key: recipe.key,
       version: recipe.version,
       hash: recipe.hash,
@@ -1703,7 +1790,7 @@ export class SubscriptionService {
    * @param storedHash - The hash the entry currently holds.
    */
   private async isSeededCoreEntry(key: StoreKey, storedHash: string): Promise<boolean> {
-    if (key.repo !== OFFICIAL_REPO_NAME) return false;
+    if (key.identity !== OFFICIAL_REPO_IDENTITY) return false;
     if (`${key.namespace}/${key.name}` !== CORE_RECIPE_KEY) return false;
 
     try {
@@ -1722,7 +1809,7 @@ export class SubscriptionService {
    * @param request - Which version to fetch, from where, and at which tag.
    */
   private async fetchIntoStore(request: {
-    repo: string;
+    identity: string;
     key: string;
     version: string;
     hash: string;
@@ -1736,7 +1823,7 @@ export class SubscriptionService {
 
     const namespace = request.key.slice(0, request.key.indexOf("/"));
     const key: StoreKey = {
-      repo: request.repo,
+      identity: request.identity,
       namespace,
       name: request.key.slice(namespace.length + 1),
       version: request.version,
@@ -2174,7 +2261,7 @@ function mergeHolders(left: ResolvedRecipe, right: ResolvedRecipe): ResolvedReci
 /** The store key a resolved recipe is filed under. */
 function storeKeyFor(recipe: ResolvedRecipe): StoreKey {
   return {
-    repo: recipe.repo,
+    identity: recipe.identity,
     namespace: recipe.namespace,
     name: recipe.name,
     version: recipe.version,

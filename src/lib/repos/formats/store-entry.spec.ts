@@ -12,14 +12,15 @@ import { isConfigError } from "../../errors.js";
  * cached recipe version self-describing for verification and collection.
  */
 
-const SOURCE = "/home/me/.sous/cache/sous-recipes/workflow/task-files/1.2.0/.sous.entry.json";
+const SOURCE =
+  "/home/me/.sous/cache/github.com/sous-io/sous-recipes/workflow/task-files/1.2.0/.sous.entry.json";
 const HASH = `sha256-${"c".repeat(64)}`;
 
 /** A valid marker, used as the base for rejection cases. */
 function validEntry() {
   return {
     formatVersion: 1,
-    repo: "sous-recipes",
+    repo: "github.com/sous-io/sous-recipes",
     namespace: "workflow",
     name: "task-files",
     version: "1.2.0",

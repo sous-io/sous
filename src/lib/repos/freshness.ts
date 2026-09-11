@@ -79,22 +79,22 @@ export function shouldCheckUpstream(input: FreshnessInput): boolean {
  * host from being retried on every single build.
  *
  * @param record - The index cache, or anything with its sidecar methods.
- * @param repoName - The repository's short name.
+ * @param identity - The repository's canonical identity, which the cache is keyed by.
  * @param when - The moment to record. Defaults to now.
  */
 export function recordUpstreamCheck(
   record: UpstreamCheckRecord,
-  repoName: string,
+  identity: string,
   when: Date = new Date()
 ): IndexMeta {
-  const existing = record.readMeta(repoName);
+  const existing = record.readMeta(identity);
   const meta: IndexMeta = {
     fetchedAt: existing?.fetchedAt ?? when.toISOString(),
     ...(existing?.etag === undefined ? {} : { etag: existing.etag }),
     ...(existing?.ref === undefined ? {} : { ref: existing.ref }),
     lastCheckedAt: when.toISOString(),
   };
-  record.writeMeta(repoName, meta);
+  record.writeMeta(identity, meta);
   return meta;
 }
 
