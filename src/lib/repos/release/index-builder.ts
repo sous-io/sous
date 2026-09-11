@@ -584,7 +584,7 @@ async function checkTaggedMetadata(
         message:
           `the tag '${tag}' carries a manifest declaring version ${taggedVersion}, not ` +
           `${version}. Recipe metadata is the source of truth for versions, so the tag is ` +
-          `wrong; delete it and let 'sous repo release --tag' cut it again.`,
+          `wrong; delete it and let 'sous repo release' cut it again.`,
       },
     ];
   }

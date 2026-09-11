@@ -992,32 +992,47 @@ the catalog subscribers read. The three are kept in step by three rules:
 
 - **A published version never changes.** Its hash is carried forward exactly as published, and a
   disagreement is an error telling you to bump the version rather than republish it.
-- **A version is published when its tag exists.** A version whose tag has not been cut yet is left
-  out of the index and reported as pending instead, because every index entry names its tag.
+- **A version is published when its tag exists.** The one moment an index records a version
+  without a tag is the release commit itself: the index is committed and the tag is cut on that
+  commit. Any older version missing its tag is an error.
 - **The tags are the backstop.** A tagged version missing from the index is rebuilt from its tag,
   so deleting `sous.index.json` and regenerating it restores the same catalog.
 
-!> Sous writes files and creates tags; it never commits for you. Every command here stops and
-tells you what to commit instead, so nothing enters a repository's history without you asking.
+!> A release commits the version bumps and the index it writes, and nothing else. It refuses to
+run while anything else is uncommitted, because a tag names one commit and the index records
+what each recipe folder holds right now.
 
 ### `sous repo release`
 
+One run plans, asks once, and then publishes. Within its scope it releases only recipes whose
+files changed since the tag that last published them, bumping any whose version still equals
+that tag.
+
 | Invocation | What it does |
 |------------|--------------|
-| `sous repo release` | Validates, regenerates `sous.index.json`, and prints what a release would publish. Nothing is committed or tagged. |
-| `sous repo release --check` | Reads only. Exits non-zero when anything is wrong or the committed index is out of date, naming what is stale. This is what a pull request runs. |
-| `sous repo release --bump <level>` | Raises a recipe's version in place (`patch`, `minor`, `major` or `prerelease`), then regenerates the index. Name the recipe with `--recipe namespace/name` when the repository publishes more than one. |
-| `sous repo release --tag` | Creates the annotated tag for every version that has none, after confirming the working tree is clean and the committed index is current. Then it rewrites the index to record the new versions, for you to commit. |
-| `sous repo release --tag --push` | The same, and pushes exactly those tags to `origin`. Nothing else is pushed. |
+| `sous repo release` | Plan, ask once, then bump, regenerate the index, commit and tag. |
+| `sous repo release --dry-run` | Print the plan and stop. |
+| `sous repo release --yes` | Skip the question; everything else is the same. |
+| `sous repo release --namespace <ns>` | Release only that namespace. Repeatable. |
+| `sous repo release --recipe <ns/name>` | Release only that recipe. Repeatable. |
+| `sous repo release --bump <level>` | `patch` (the default), `minor`, `major` or `prerelease`. |
+| `sous repo release --no-bump` | Raise nothing; a changed recipe nobody raised is an error. |
+| `sous repo release --include-unchanged` | Release everything in scope, changed or not. |
+| `sous repo release --tag` | Cut the tags even on a branch other than the default one. |
+| `sous repo release --push` | Push the commit, and the tags this run created, to `origin`. |
+| `sous repo release --check` | Read only: validate, and fail when the committed index is out of date. This is what a pull request runs. |
+| `sous repo release --ci` | The merge preset: never bump, never ask, fail on anything unbumped. |
 
-`--dry-run` works with all of them and changes nothing.
+Tags are cut dependency-first, and each version's resolved dependencies are written into the
+index. On a branch other than the default one a release bumps and commits but cuts no tags,
+because tags are cut on the default branch by the merge; `--tag` overrides that.
 
 A version bump edits the manifest in place, so its comments, its field order and its layout
 survive. Two small normalizations happen in a YAML manifest: a folded block of prose may be
 re-wrapped, and the spacing before a trailing comment is collapsed to one space.
 
-The workflow `sous repo init` scaffolds runs `--check` on every pull request and
-`--tag --push` on a merge, with a step of its own that commits the regenerated index.
+The workflow `sous repo init` scaffolds runs `--check` on every pull request and `--ci --push`
+on a merge.
 
 ### `sous repo submit`
 

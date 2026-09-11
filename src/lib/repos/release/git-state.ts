@@ -1,11 +1,13 @@
 /**
  * What git says about the working tree a release or a submission is standing in.
  *
- * Both `sous repo release --tag` and `sous repo submit` need the same handful of
+ * Both `sous repo release` and `sous repo submit` need the same handful of
  * facts before they are allowed to do anything: is anything uncommitted, which
  * branch is checked out, which branch is the default one, and where does
- * `origin` point. Sous never commits on the author's behalf, so these are read
- * to refuse politely, not to fix anything.
+ * `origin` point. A release makes exactly one commit of its own (its version
+ * bumps and its index, through `commitPaths`) and refuses while anything else
+ * is uncommitted; everything else here is read to refuse politely rather than
+ * to fix anything.
  *
  * Every function takes the injectable command runner, so tests never spawn git
  * unless they mean to.
@@ -127,9 +129,9 @@ export async function remoteUrl(
 }
 
 /**
- * True when a path is tracked by git and identical to what HEAD holds. This is
- * how `--tag` confirms the index that is about to be published is the index that
- * was actually committed.
+ * True when a path is tracked by git and identical to what HEAD holds. It is how
+ * a caller confirms that a file it is about to act on is the one the repository
+ * actually committed.
  *
  * @param rootDir - The repository's root directory.
  * @param relativePath - The path to check, relative to the repository root.
