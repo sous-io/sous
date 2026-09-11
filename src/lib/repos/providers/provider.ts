@@ -10,6 +10,15 @@
  * small: hand back a repo's index file, and fetch one recipe's subtree at one
  * tag. Anything larger (a full clone) belongs to the authoring workflow, not to
  * installing recipes.
+ *
+ * The write path is just as small, and it is the ONLY place a host's own
+ * mechanics are allowed to live. Everything host-specific (which command line
+ * tool is driven, how a fork is made, what a proposal is called, how one is
+ * opened) belongs to a provider; the services above it ask in order and report
+ * what came back. A provider declares `submit` in its features once it answers
+ * the write side; one that does not may leave those methods out entirely, and
+ * `ProviderBase` answers them with a clear refusal naming the provider and the
+ * feature.
  */
 
 import { ConfigError } from "../../errors.js";
@@ -46,6 +55,12 @@ export type CanonicalRepo = {
 
 /** Options every provider call accepts, all of them for testing seams. */
 export type ProviderOptions = {
+  /**
+   * The directory subprocesses run in. A write-path call is made from inside
+   * the contributor's checkout, so the host's own command line tool reads the
+   * repository the contributor is standing in.
+   */
+  cwd?: string;
   /** The environment to read tokens from. Defaults to `process.env`. */
   env?: NodeJS.ProcessEnv;
   /** The fetch implementation to use. Defaults to the global `fetch`. */
@@ -62,6 +77,67 @@ export type FetchedIndex = {
   ref: string;
   /** The entity tag the host sent, when it sent one. */
   etag?: string;
+};
+
+/** What a provider's command line tool is called, and where to get it. */
+export type ProviderCli = {
+  /** The executable, spelled the way it is typed. */
+  command: string;
+  /** The plain-language name used in messages, such as `the GitHub CLI`. */
+  label: string;
+  /** Where the tool is installed from, for the message that says it is missing. */
+  install: string;
+};
+
+/** What an authentication check found. */
+export type AuthStatus = {
+  /** True when sous can act on the contributor's behalf here. */
+  ok: boolean;
+  /**
+   * One plain-language explanation, ready to print: what is signed in when the
+   * check passed, and what to install or run when it did not.
+   */
+  detail: string;
+};
+
+/** Where a fork of a repository ended up. */
+export type ForkedRepo = {
+  /** The account the fork lives under. */
+  owner: string;
+  /** The fork's repository name. */
+  name: string;
+  /** The fork's HTTPS clone URL. */
+  httpsUrl: string;
+  /** The fork's SSH clone URL. */
+  sshUrl: string;
+};
+
+/** One change, described the way every provider needs to hear about it. */
+export type ChangeProposal = {
+  /** The branch the change is on. */
+  branch: string;
+  /** The branch the proposal targets, when the caller knows it. */
+  base?: string;
+  /** The proposal's title. */
+  title: string;
+  /** The proposal's body. */
+  body: string;
+  /** True when the proposal should be opened as a draft. */
+  draft: boolean;
+  /**
+   * The account the branch was pushed to, when that is not the repository
+   * itself. Only a provider knows how a cross-repository proposal is spelled,
+   * so it is handed the owner and composes the rest.
+   */
+  head?: { owner: string };
+};
+
+/** What proposing a change produced. */
+export type ProposedChange = {
+  /** The proposal's address, when the provider gave one. */
+  url?: string;
+  /** One plain-language line about what happened, ready to print. */
+  detail: string;
 };
 
 /** One repository host sous knows how to read from. */
@@ -93,6 +169,56 @@ export interface RepoProvider {
     destDir: string,
     options?: ProviderOptions
   ): Promise<void>;
+
+  // --- The write path, answered by a provider that declares `submit` --------
+
+  /** The command line tool this provider drives, when it has one. */
+  readonly cli?: ProviderCli;
+  /**
+   * What this provider calls a proposal, such as `pull request` or `merge
+   * request`. It is what the submission prints as it goes.
+   */
+  readonly proposalNoun?: string;
+  /** Whether sous can act on the contributor's behalf here, and why not. */
+  authStatus?(options?: ProviderOptions): Promise<AuthStatus>;
+  /**
+   * Whether the contributor may push to the repository itself. Undefined means
+   * the provider genuinely cannot tell, which is not the same as `false`.
+   */
+  canPush?(repo: CanonicalRepo, options?: ProviderOptions): Promise<boolean | undefined>;
+  /** Forks the repository onto the contributor's own account. */
+  fork?(repo: CanonicalRepo, options?: ProviderOptions): Promise<ForkedRepo>;
+  /** Opens a proposal for a branch that has already been pushed. */
+  proposeChange?(
+    repo: CanonicalRepo,
+    proposal: ChangeProposal,
+    options?: ProviderOptions
+  ): Promise<ProposedChange>;
+}
+
+/**
+ * A provider that answers the whole write path. This is what declaring the
+ * `submit` feature promises, and `supportsSubmit` is how a caller gets from the
+ * one to the other without ever naming a provider.
+ */
+export type SubmitCapableProvider = RepoProvider &
+  Required<Pick<RepoProvider, "authStatus" | "canPush" | "fork" | "proposeChange">>;
+
+/**
+ * True when a provider declares the `submit` feature and really does answer
+ * every write-path call. It narrows the type, so a caller that has asked once
+ * never has to test a method for existence again.
+ *
+ * @param provider - The provider to test.
+ */
+export function supportsSubmit(provider: RepoProvider): provider is SubmitCapableProvider {
+  return (
+    provider.features.includes("submit") &&
+    typeof provider.authStatus === "function" &&
+    typeof provider.canPush === "function" &&
+    typeof provider.fork === "function" &&
+    typeof provider.proposeChange === "function"
+  );
 }
 
 /**

@@ -272,6 +272,14 @@ const MANAGED_LAYER_EXPORTS = [
   "updateManagedLayer",
 ];
 
+/**
+ * The names the provider write path added: the base class every provider
+ * extends (and which refuses what a provider never promised), the helper that
+ * reads an address out of a host tool's output, and the narrowing check that
+ * asks a provider whether it really can propose a change.
+ */
+const PROVIDER_WRITE_EXPORTS = ["ProviderBase", "firstUrlIn", "supportsSubmit"];
+
 describe("the repos barrel", () => {
   /**
    * The barrel exposes exactly the documented surface: nothing missing, and
@@ -286,6 +294,7 @@ describe("the repos barrel", () => {
       ...PHASE_3_EXPORTS,
       ...PHASE_7_EXPORTS,
       ...MANAGED_LAYER_EXPORTS,
+      ...PROVIDER_WRITE_EXPORTS,
     ].sort();
     expect(Object.keys(repos).sort()).toEqual(expected);
   });

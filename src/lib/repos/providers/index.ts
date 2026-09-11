@@ -4,6 +4,11 @@
  * Import providers from here. This module is the one place that knows which
  * concrete providers sous ships, so `provider.ts` stays free of them and the
  * built-in list has exactly one definition.
+ *
+ * A new provider is one file: a class extending `ProviderBase` that implements
+ * the read path, declares the features it really answers, and overrides the
+ * write-path calls it supports. Adding it to `builtInProviders()` below is the
+ * only other change; nothing above the provider layer learns its name.
  */
 
 import { LocalProvider } from "./local.js";
@@ -23,6 +28,7 @@ export { spawnCommand, tryCommand, fetchSubtree } from "./git.js";
 export type { CommandResult, CommandRunner, RunOptions } from "./git.js";
 export * from "./http.js";
 export * from "./provider.js";
+export * from "./base.js";
 export * from "./github.js";
 export * from "./gitlab.js";
 export * from "./local.js";

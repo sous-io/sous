@@ -45,13 +45,13 @@ import {
   REPO_MANIFEST_BASENAME,
 } from "../formats/common.js";
 import { findRepoManifest } from "../load-manifest.js";
+import { ProviderBase } from "./base.js";
 import { fetchSubtree, runGit, tryCommand, type CommandRunner } from "./git.js";
 import type {
   CanonicalRepo,
   FetchedIndex,
   ProviderFeature,
   ProviderOptions,
-  RepoProvider,
 } from "./provider.js";
 
 /** The identifier a repository entry uses to name this provider explicitly. */
@@ -253,10 +253,15 @@ function repoDirectory(repo: CanonicalRepo): string {
 }
 
 /** A repository on this machine, read as though it were a hosted one. */
-export class LocalProvider implements RepoProvider {
+export class LocalProvider extends ProviderBase {
   readonly id = LOCAL_PROVIDER_ID;
 
-  /** Proposing a change to a directory on your own disk is just editing it. */
+  /**
+   * Proposing a change to a directory on your own disk is just editing it, so
+   * this provider declares no `submit` feature and has no command line tool.
+   * The write-path calls it inherits from ProviderBase all refuse, naming the
+   * provider and the feature.
+   */
   readonly features: ProviderFeature[] = ["fetch"];
 
   matches(url: string): boolean {
