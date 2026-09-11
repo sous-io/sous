@@ -317,4 +317,113 @@ describe("the core namespace with no network", () => {
     },
     CLI_TIMEOUT
   );
+
+  /**
+   * The listing reports the built-in subscription as a subscription like any
+   * other: the range sous pinned it to, the version the lockfile holds, and the
+   * fact that sous provided it rather than a person.
+   *
+   * sous subscription list
+   */
+  it(
+    "should list the built-in core subscription",
+    () => {
+      const result = sousOffline(projectRoot, "subscription", "list");
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("core");
+      expect(result.stdout).toContain(SOUS_VERSION);
+      expect(result.stdout).toContain(`core/sous-skills ${SOUS_VERSION}`);
+      expect(result.stdout).toContain("built in");
+    },
+    CLI_TIMEOUT
+  );
+
+  /** The plural spelling of the topic reaches the same command. */
+  it(
+    "should accept the plural spelling of the subscription topic",
+    () => {
+      const result = sousOffline(projectRoot, "subscriptions", "list");
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("core");
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * Removing a subscription sous provides itself cannot delete an entry, because
+   * there is no entry to delete: the default comes back on the next run. So it
+   * records the opt-out instead, in the same managed layer a hand-written one
+   * would go in, and the repository stays trusted.
+   *
+   * sous subscription remove core
+   * sous subscription add core
+   */
+  it(
+    "should record an opt-out when the built-in core subscription is removed",
+    () => {
+      const dropped = path.join(tmp.path, "dropped-core");
+      write(
+        path.join(dropped, ".sous", "sous.config.json"),
+        `${JSON.stringify({ name: "A Project That Drops Core" }, null, 2)}\n`
+      );
+
+      // A first build locks core, so there is something real to remove.
+      expect(sousOffline(dropped, "build").status).toBe(0);
+
+      const removed = sousOffline(dropped, "subscription", "remove", "core");
+      expect(removed.status).toBe(0);
+      expect(removed.stdout).toContain("enabled: false");
+
+      const layerPath = path.join(dropped, ".sous", "conf.d", "510-subscriptions.json");
+      const layer = JSON.parse(fs.readFileSync(layerPath, "utf8")) as {
+        subscriptions: Record<string, { enabled?: boolean }>;
+      };
+      expect(layer.subscriptions["core"]).toEqual({ enabled: false });
+
+      // The lockfile no longer pins the core recipe, and a build leaves it out.
+      const lock = JSON.parse(
+        fs.readFileSync(path.join(dropped, ".sous", "sous.lock.json"), "utf8")
+      ) as { recipes: Record<string, unknown> };
+      expect(Object.keys(lock.recipes)).toEqual([]);
+
+      expect(sousOffline(dropped, "build").status).toBe(0);
+      expect(
+        fs.existsSync(path.join(dropped, ".claude", "skills", "about-sous", "SKILL.md"))
+      ).toBe(false);
+
+      // The repository sous provides is untouched by any of that.
+      const repos = sousOffline(dropped, "repo", "list");
+      expect(repos.status).toBe(0);
+      expect(repos.stdout).toContain("sous-recipes");
+      expect(repos.stdout).toContain("built in");
+
+      // The listing reports the opt-out rather than hiding it.
+      const listed = sousOffline(dropped, "subscription", "list");
+      expect(listed.status).toBe(0);
+      expect(listed.stdout).toMatch(/core\b[\s\S]*\bno\b/);
+
+      // Adding it back clears the override, and the skills come back. The
+      // answer to the one variable core publishes is put where sous looks for
+      // it, because subscribing asks and this run has no terminal to ask on.
+      write(
+        path.join(dropped, ".sous", ".env"),
+        "SOUS_VAR_SKILLS_ROOT=prompts/skills\n"
+      );
+
+      const addedBack = sousOffline(dropped, "subscription", "add", "core");
+      expect(addedBack.status).toBe(0);
+      const after = JSON.parse(fs.readFileSync(layerPath, "utf8")) as {
+        subscriptions: Record<string, { enabled?: boolean }>;
+      };
+      expect(after.subscriptions["core"]!.enabled).toBeUndefined();
+
+      expect(sousOffline(dropped, "build").status).toBe(0);
+      expect(
+        fs.existsSync(path.join(dropped, ".claude", "skills", "about-sous", "SKILL.md"))
+      ).toBe(true);
+    },
+    CLI_TIMEOUT
+  );
 });

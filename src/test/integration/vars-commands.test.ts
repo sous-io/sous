@@ -138,6 +138,35 @@ describe("sous vars commands", () => {
   );
 
   /**
+   * The canonical spellings print the same two reports and take the same
+   * `--file` flag. Bare `sous vars` and `sous vars <name>` above are the
+   * shorthands for them.
+   *
+   * sous vars list --file questions.yaml
+   * sous vars show apiUrl --file questions.yaml
+   */
+  it(
+    "should list and show under the canonical commands",
+    () => {
+      const listed = runSous(root, ["vars", "list", "--file", "questions.yaml"]);
+      expect(listed.status).toBe(0);
+      expect(listed.stdout).toContain("Variables in play");
+      expect(listed.stdout).toContain("apiUrl");
+
+      const shown = runSous(root, ["vars", "show", "apiUrl", "--file", "questions.yaml"]);
+      expect(shown.status).toBe(0);
+      expect(shown.stdout).toContain("Which API should sous talk to?");
+      expect(shown.stdout).toContain("SOUS_VAR_LOCAL_QUESTIONS_API_URL");
+
+      // The singular spelling of the topic reaches the same commands.
+      const singular = runSous(root, ["var", "show", "apiUrl", "--file", "questions.yaml"]);
+      expect(singular.status).toBe(0);
+      expect(singular.stdout).toContain("Which API should sous talk to?");
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
    * A secret's value should never reach the terminal, even when it IS answered.
    */
   it(

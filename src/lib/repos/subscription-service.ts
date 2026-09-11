@@ -1064,12 +1064,24 @@ export class SubscriptionService {
     };
   }
 
-  /** Every subscription, from the config and from the managed layer. */
+  /**
+   * Every subscription in force, from the config and from the managed layer.
+   *
+   * The managed layer is re-read rather than taken from the loaded config,
+   * because a command in this same process may have just written to it; an entry
+   * it switches off is dropped here, so removing a subscription sous provides
+   * itself really does stop it being locked and built.
+   */
   allSubscriptions(): Record<string, SubscriptionEntry> {
-    return {
+    const merged: Record<string, SubscriptionEntry> = {
       ...(enabledSubscriptions(this.settings) as Record<string, SubscriptionEntry>),
       ...this.readSubscriptionEntries(),
     };
+
+    for (const [key, entry] of Object.entries(merged)) {
+      if (entry?.enabled === false) delete merged[key];
+    }
+    return merged;
   }
 
   /**

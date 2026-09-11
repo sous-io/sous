@@ -350,6 +350,77 @@ describe("the repositories consumer surface", () => {
   );
 
   /**
+   * The canonical spellings of the same two reports, and the singular spelling
+   * of the topic. Bare `sous vars` above is the shorthand for the first of them.
+   *
+   * sous vars list
+   * sous vars show apiUrl
+   * sous var list
+   */
+  it(
+    "should list and show variables under their canonical commands",
+    () => {
+      const listed = sous(projectRoot, "vars", "list");
+      expect(listed.status).toBe(0);
+      expect(listed.stdout).toContain("apiUrl");
+      expect(listed.stdout).toContain("SOUS_VAR_API_URL");
+
+      const shown = sous(projectRoot, "vars", "show", "apiUrl");
+      expect(shown.status).toBe(0);
+      expect(shown.stdout).toContain("Where does the API live?");
+      expect(shown.stdout).toContain("SOUS_VAR_WORKFLOW_TASK_FILES_API_URL");
+
+      // The singular spelling of the topic reaches the same command.
+      const singular = sous(projectRoot, "var", "list");
+      expect(singular.status).toBe(0);
+      expect(singular.stdout).toContain("apiUrl");
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * The listing reports what the project subscribes to, the range it resolves
+   * within, and the version the lockfile pins for it.
+   *
+   * sous subscription list
+   * sous subscriptions list
+   */
+  it(
+    "should list the project's subscriptions",
+    () => {
+      const result = sous(projectRoot, "subscription", "list");
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("workflow/task-files");
+      expect(result.stdout).toContain("workflow/task-files 1.0.0");
+      expect(result.stdout).toContain("user");
+
+      // The plural spelling of the topic reaches the same command.
+      const plural = sous(projectRoot, "subscriptions", "list");
+      expect(plural.status).toBe(0);
+      expect(plural.stdout).toContain("workflow/task-files");
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * Searching is reachable both under its topic and as a top-level command,
+   * because it is how a person finds anything to subscribe to.
+   *
+   * sous search task
+   */
+  it(
+    "should search from the top level",
+    () => {
+      const result = sous(projectRoot, "search", "task");
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("workflow/task-files");
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
    * A build compiles what the subscribed recipes contribute into the project's
    * skills directory, alongside the project's own targets, and resolves a
    * `@~namespace/recipe/file.md` include against the pinned recipe.
@@ -485,6 +556,41 @@ describe("the repositories consumer surface", () => {
       expect(
         fs.existsSync(path.join(projectRoot, ".claude", "skills", "task-files"))
       ).toBe(true);
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * The canonical spellings of the same two commands, there and back again, so
+   * the project ends exactly where the alias-driven test above left it.
+   *
+   * sous subscription add workflow/needs-extras
+   * sous subscription remove workflow/needs-extras
+   */
+  it(
+    "should add and remove a subscription under its canonical commands",
+    () => {
+      const added = sous(projectRoot, "subscription", "add", "workflow/needs-extras");
+      expect(added.status).toBe(0);
+
+      const withIt = readJson(path.join(sousDir, "sous.lock.json"));
+      expect(Object.keys(withIt.recipes as Record<string, unknown>).sort()).toEqual([
+        "tooling/formatter",
+        "workflow/needs-extras",
+        "workflow/task-files",
+      ]);
+
+      const listed = sous(projectRoot, "subscription", "list");
+      expect(listed.status).toBe(0);
+      expect(listed.stdout).toContain("workflow/needs-extras");
+
+      const removed = sous(projectRoot, "subscription", "remove", "workflow/needs-extras");
+      expect(removed.status).toBe(0);
+
+      const without = readJson(path.join(sousDir, "sous.lock.json"));
+      expect(Object.keys(without.recipes as Record<string, unknown>).sort()).toEqual([
+        "workflow/task-files",
+      ]);
     },
     CLI_TIMEOUT
   );
