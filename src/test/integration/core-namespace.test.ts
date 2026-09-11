@@ -25,6 +25,10 @@ import { spawnSync } from "node:child_process";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { makeTmpDir, type TmpDir } from "../utils/tmp.js";
 import { SOUS_VERSION } from "../../lib/package-info.js";
+import {
+  readManagedLayer,
+  SUBSCRIPTIONS_LAYER_FILENAME,
+} from "../../lib/repos/managed-layer.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const binPath = path.join(repoRoot, "bin", "run.js");
@@ -376,11 +380,17 @@ describe("the core namespace with no network", () => {
       expect(removed.status).toBe(0);
       expect(removed.stdout).toContain("enabled: false");
 
-      const layerPath = path.join(dropped, ".sous", "conf.d", "510-subscriptions.json");
-      const layer = JSON.parse(fs.readFileSync(layerPath, "utf8")) as {
-        subscriptions: Record<string, { enabled?: boolean }>;
+      // The layer sous writes is `.jsonc`, and it is read back the same way sous
+      // reads it, so the test never needs to know which name it is under.
+      const droppedSousDir = path.join(dropped, ".sous");
+      const readSubscriptions = (): Record<string, { enabled?: boolean }> => {
+        const layer = readManagedLayer(droppedSousDir, SUBSCRIPTIONS_LAYER_FILENAME) as {
+          subscriptions?: Record<string, { enabled?: boolean }>;
+        };
+        return layer.subscriptions ?? {};
       };
-      expect(layer.subscriptions["core"]).toEqual({ enabled: false });
+
+      expect(readSubscriptions()["core"]).toEqual({ enabled: false });
 
       // The lockfile no longer pins the core recipe, and a build leaves it out.
       const lock = JSON.parse(
@@ -404,20 +414,18 @@ describe("the core namespace with no network", () => {
       expect(listed.status).toBe(0);
       expect(listed.stdout).toMatch(/core\b[\s\S]*\bno\b/);
 
-      // Adding it back clears the override, and the skills come back. The
-      // answer to the one variable core publishes is put where sous looks for
-      // it, because subscribing asks and this run has no terminal to ask on.
+      // Adding it back clears the override, and the skills come back. This run
+      // has no terminal to be asked on, so both questions subscribing asks are
+      // answered ahead of time: the answer to the one variable core publishes is
+      // put where sous looks for it, and '--yes' accepts the subscribe plan.
       write(
         path.join(dropped, ".sous", ".env"),
         "SOUS_VAR_SKILLS_ROOT=prompts/skills\n"
       );
 
-      const addedBack = sousOffline(dropped, "subscription", "add", "core");
+      const addedBack = sousOffline(dropped, "subscription", "add", "core", "--yes");
       expect(addedBack.status).toBe(0);
-      const after = JSON.parse(fs.readFileSync(layerPath, "utf8")) as {
-        subscriptions: Record<string, { enabled?: boolean }>;
-      };
-      expect(after.subscriptions["core"]!.enabled).toBeUndefined();
+      expect(readSubscriptions()["core"]!.enabled).toBeUndefined();
 
       expect(sousOffline(dropped, "build").status).toBe(0);
       expect(
