@@ -8,10 +8,11 @@ import { nonInteractiveFlag } from "../../utils/flags.js";
 import {
   displayErrorBlock,
   dryRunNotice,
+  blankLine,
   footer,
   header,
-  heading,
   log,
+  section,
   showCommandVars,
   showVars,
 } from "../../utils/formatting.js";
@@ -86,7 +87,7 @@ export default class RepoInit extends Command {
       "Dry Run": flags["dry-run"],
     });
 
-    heading("Creating a recipe repository");
+    section("Creating a recipe repository");
 
     const result = scaffoldRepo({
       directory,
@@ -102,7 +103,7 @@ export default class RepoInit extends Command {
       else log(`  wrote ${file}`);
     }
 
-    heading("What to do next");
+    section("What to do next");
     showVars({
       Repository: result.name,
       Namespace: result.namespace,
@@ -114,7 +115,7 @@ export default class RepoInit extends Command {
       ),
     });
 
-    log("");
+    blankLine();
     log("  Edit the example recipe, or copy its folder to start another one.");
     log("  Every recipe folder must also be listed under 'recipes' in sous.repo.yaml.");
     log("  Commit the repository and push it, then add it to a project with");

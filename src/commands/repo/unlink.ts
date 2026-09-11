@@ -8,10 +8,11 @@ import {
   writeProjectLinks,
 } from "../../lib/repos/links.js";
 import {
+  blankLine,
   dryRunNotice,
   footer,
-  heading,
   log,
+  section,
   showCommandVars,
   showVars,
 } from "../../utils/formatting.js";
@@ -74,7 +75,7 @@ export default class RepoUnlink extends BaseCommand {
       "Dry Run": flags["dry-run"],
     });
 
-    heading("Unlinking a repository");
+    section("Unlinking a repository");
 
     const map = isGlobal ? readGlobalLinks() : readProjectLinks(sousDir);
     const entry = map.links[name];
@@ -99,7 +100,7 @@ export default class RepoUnlink extends BaseCommand {
       "Updated": linksPath,
     });
 
-    log("");
+    blankLine();
     log(`  '${name}' now resolves to its published versions again.`);
     log(
       entry.origin === "clone"

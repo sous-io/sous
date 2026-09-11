@@ -21,9 +21,9 @@ import {
   blankLine,
   dryRunNotice,
   footer,
-  heading,
   indent,
   log,
+  section,
   showCommandVars,
   showVars,
 } from "../../utils/formatting.js";
@@ -105,9 +105,12 @@ export default class RepoGc extends BaseCommand {
       "Dry Run": dryRun,
     });
 
-    heading("Collecting the recipe store");
+    section("Collecting the recipe store");
 
-    if (dryRun) dryRunNotice("Nothing will be removed.");
+    if (dryRun) {
+      dryRunNotice("Nothing will be removed.");
+      blankLine();
+    }
 
     // Everything this project pins is protected. Other projects on this machine
     // pin things too, and their entries are re-fetchable, so this pass may evict
@@ -129,7 +132,6 @@ export default class RepoGc extends BaseCommand {
 
     const report = await service.store.gc({ maxBytes, keep, dryRun });
 
-    blankLine();
     showVars({
       "Entries before": String(report.evicted.length + report.kept.length),
       "Entries kept": String(report.kept.length),

@@ -44,8 +44,8 @@ import {
   dryRunNotice,
   footer,
   header,
-  heading,
   log,
+  section,
   showCommandVars,
   showVars,
   warning,
@@ -175,7 +175,7 @@ export default class RepoRelease extends Command {
 
     // --- Validate ---------------------------------------------------------
 
-    heading("Checking the repository");
+    section("Checking the repository");
     let validation = validateRepo(rootDir);
     const scoping = scopeProblems(validation, scope);
     reportProblems([...validation.problems, ...scoping]);
@@ -233,7 +233,7 @@ export default class RepoRelease extends Command {
       blankLine();
       const accepted = await askYesNo("Publish these versions?");
       if (!accepted) {
-        log("");
+        blankLine();
         log("  Nothing was written.");
         footer();
         return;
@@ -244,7 +244,7 @@ export default class RepoRelease extends Command {
 
     await this.assertNothingUncommitted(rootDir);
 
-    heading("Publishing");
+    section("Publishing");
 
     const changedPaths: string[] = [];
     for (const release of plan.releases) {
@@ -307,7 +307,7 @@ export default class RepoRelease extends Command {
         log(`  Created the tag ${release.tag}.`);
       }
     } else {
-      log("");
+      blankLine();
       log(`  No tags were cut: this is the branch '${branch}', and tags are cut on the`);
       log(`  default branch '${mainBranch}'. Continuous integration does that after the`);
       log("  merge, or pass '--tag' to cut them here.");
@@ -333,7 +333,7 @@ export default class RepoRelease extends Command {
         log(`  Pushed ${describeCount(created.length, "tag")} to ${RELEASE_REMOTE}.`);
       }
     } else {
-      heading("What to do next");
+      section("What to do next");
       log(`  Push the commit with 'git push ${RELEASE_REMOTE} ${branch ?? "<branch>"}'.`);
       if (created.length > 0) {
         log(`  Push the tags with 'git push ${RELEASE_REMOTE} --tags'.`);
@@ -358,7 +358,7 @@ export default class RepoRelease extends Command {
     rootDir: string,
     validation: RepoValidation
   ): Promise<void> {
-    heading("Checking the index");
+    section("Checking the index");
 
     const existing = readExistingIndex(rootDir);
     const result = await buildIndex({ validation, existing, sousVersion: SOUS_VERSION });
@@ -402,7 +402,7 @@ export default class RepoRelease extends Command {
       push: boolean;
     }
   ): void {
-    heading("The release this would make");
+    section("The release this would make");
 
     if (plan.releases.length === 0) {
       log("  Nothing in scope has changed since the tag that last published it.");
@@ -410,7 +410,7 @@ export default class RepoRelease extends Command {
         blankLine();
         for (const entry of plan.skipped) log(`  ${entry.key}: ${entry.reason}`);
       }
-      log("");
+      blankLine();
       log("  Pass '--include-unchanged' to release everything in scope anyway.");
       return;
     }

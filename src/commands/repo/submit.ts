@@ -10,8 +10,8 @@ import {
   dryRunNotice,
   footer,
   header,
-  heading,
   log,
+  section,
   showCommandVars,
   showVars,
 } from "../../utils/formatting.js";
@@ -84,7 +84,7 @@ export default class RepoSubmit extends Command {
       "Dry Run": dryRun,
     });
 
-    heading("Proposing a change");
+    section("Proposing a change");
 
     const result = await submitRepo({
       rootDir,
@@ -97,7 +97,7 @@ export default class RepoSubmit extends Command {
       onNotice: (message) => (dryRun ? dryRunNotice(message) : log(`  ${message}`)),
     });
 
-    heading(dryRun ? "What would be proposed" : "What was proposed");
+    section(dryRun ? "What would be proposed" : "What was proposed");
     showVars({
       Provider: result.provider,
       Repository: `${result.repo.owner}/${result.repo.name}`,

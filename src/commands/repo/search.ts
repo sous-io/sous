@@ -15,9 +15,9 @@ import { renderTable, type TableColumn } from "../../utils/table.js";
 import {
   blankLine,
   footer,
-  heading,
   indent,
   log,
+  section,
   showCommandVars,
 } from "../../utils/formatting.js";
 
@@ -93,7 +93,7 @@ export default class RepoSearch extends BaseCommand {
       Searching: args.text,
     });
 
-    heading("Recipes matching your search");
+    section("Recipes matching your search");
 
     const service = subscriptionServiceFor({
       configContext: this.configContext,
@@ -138,7 +138,9 @@ export default class RepoSearch extends BaseCommand {
         : left.key.localeCompare(right.key)
     );
 
-    blankLine();
+    // Whatever the results themselves could not say goes into one closing
+    // summary, rather than a stack of separate notes under the table.
+    const summary: string[] = [];
 
     if (matches.length === 0) {
       log(
@@ -164,24 +166,23 @@ export default class RepoSearch extends BaseCommand {
       }
 
       if (matches.length > shown.length) {
-        blankLine();
-        log(
-          indent(
-            `${matches.length - shown.length} more matches are not shown. Raise the ` +
-              `number with '--limit'.`
-          )
+        summary.push(
+          `${matches.length - shown.length} more matches are not shown. Raise the ` +
+            `number with '--limit'.`
         );
       }
     }
 
     if (notFetched.length > 0) {
-      blankLine();
-      log(
-        indent(
-          `These repositories were not searched, because their indexes have not been ` +
-            `fetched yet: ${notFetched.join(", ")}.`
-        )
+      summary.push(
+        `Nothing has been fetched from these repositories yet, so they were not ` +
+          `searched: ${notFetched.join(", ")}.`
       );
+    }
+
+    if (summary.length > 0) {
+      blankLine();
+      for (const line of summary) log(indent(line));
     }
 
     footer();
