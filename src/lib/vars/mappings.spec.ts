@@ -3,6 +3,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeTmpDir, type TmpDir } from "../../test/utils/tmp.js";
 import { ConfigError } from "../errors.js";
+import { AGENT_POINTER_FILENAMES, README_FILENAME } from "../../utils/sous-directory.js";
 import type { DefinedVariable } from "./definition-source.js";
 import {
   formatMappingTarget,
@@ -24,6 +25,19 @@ beforeEach(() => {
 afterEach(() => {
   tmp.cleanup();
 });
+
+/**
+ * Lists the config layers in a `conf.d/` directory, leaving out the
+ * self-describing documentation files sous writes when it creates the
+ * directory, so an assertion about layers is not disturbed by them.
+ */
+function layerFilesIn(confDir: string): string[] {
+  const docs = new Set<string>([README_FILENAME, ...AGENT_POINTER_FILENAMES]);
+  return fs
+    .readdirSync(confDir)
+    .filter((entry) => !docs.has(entry))
+    .sort();
+}
 
 /** Builds a defined variable for match tests. */
 function defined(overrides: Partial<DefinedVariable["recipe"]> = {}): DefinedVariable {
@@ -200,7 +214,7 @@ describe("writeMappingRecord()", () => {
     writeMappingRecord(confDir, "SECOND_NAME", "misc/other/apiUrl");
 
     expect(fs.existsSync(legacy)).toBe(false);
-    expect(fs.readdirSync(confDir)).toEqual([VAR_MAPPINGS_LAYER_FILENAME]);
+    expect(layerFilesIn(confDir)).toEqual([VAR_MAPPINGS_LAYER_FILENAME]);
     expect(readMappingRecords(path.join(confDir, VAR_MAPPINGS_LAYER_FILENAME))).toEqual({
       FIRST_NAME: "misc/stuff/apiUrl",
       SECOND_NAME: "misc/other/apiUrl",
@@ -251,7 +265,7 @@ describe("writeMappingRecord()", () => {
 
     expect(fs.readFileSync(filePath, "utf8")).toBe(before);
     expect(readMappingRecords(filePath)).toEqual({ FIRST_NAME: "misc/stuff/apiUrl" });
-    expect(fs.readdirSync(confDir)).toEqual([VAR_MAPPINGS_LAYER_FILENAME]);
+    expect(layerFilesIn(confDir)).toEqual([VAR_MAPPINGS_LAYER_FILENAME]);
   });
 
   /**
