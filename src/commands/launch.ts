@@ -7,7 +7,8 @@ import { resolveRootScope, resolveTools } from "../lib/settings.js";
 import { displayError, footer, heading, showCommandVars } from "../utils/formatting.js";
 
 export default class Launch extends BaseCommand {
-  static description = "Build and launch a coding agent for a project";
+  static description =
+    "Build this project's outputs, then start a coding agent configured in its config";
 
   static examples = [
     "<%= config.bin %> launch claude",

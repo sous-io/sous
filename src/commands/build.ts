@@ -23,7 +23,8 @@ import {
 } from "../utils/formatting.js";
 
 export default class Build extends BaseCommand {
-  static description = "Compile outputs and prune stale files (compile + prune)";
+  static description =
+    "Compile this project's outputs and remove the ones its config no longer produces";
 
   static examples = [
     "<%= config.bin %> build",
