@@ -614,7 +614,7 @@ describe("answering variables ahead of the questions", () => {
     );
 
     const planned = planQuestions([defined(), taskFileRoot()], context(), { sousDir });
-    const lines = formatQuestionPlan(planned, 100)
+    const lines = formatQuestionPlan(planned, { width: 100 })
       .join("\n")
       .replace(/\x1b\[[0-9;]*m/g, "");
 
@@ -624,5 +624,38 @@ describe("answering variables ahead of the questions", () => {
     expect(lines).toContain("--answer apiUrl=<value>");
     expect(lines).toContain("no, and this recipe requires an answer");
     expect(lines).toContain("yes, from the shared scope name SOUS_VAR_TASK_FILE_ROOT");
+  });
+
+  /**
+   * A dry run downloads nothing, so a recipe whose files are not on this
+   * machine has no manifest to read. The plan should still describe every
+   * recipe it could read, and name the rest in one honest line rather than
+   * claiming the closure asks nothing.
+   */
+  it("should name the recipes whose questions it could not read", () => {
+    const planned = planQuestions([defined()], context(), { sousDir });
+
+    const partial = formatQuestionPlan(planned, {
+      width: 100,
+      unreadable: ["misc/elsewhere"],
+    })
+      .join("\n")
+      .replace(/\x1b\[[0-9;]*m/g, "");
+
+    expect(partial).toContain("The recipes sous could read ask 1 question");
+    expect(partial).toContain("misc/stuff asks 1 question:");
+    expect(partial).toContain(
+      "Not on this machine yet, so their questions cannot be listed: misc/elsewhere."
+    );
+
+    const nothingReadable = formatQuestionPlan([], {
+      width: 100,
+      unreadable: ["misc/elsewhere"],
+    }).join("\n");
+
+    expect(nothingReadable).toContain(
+      "Not on this machine yet, so their questions cannot be listed: misc/elsewhere."
+    );
+    expect(nothingReadable).not.toContain("None of these recipes ask any questions");
   });
 });

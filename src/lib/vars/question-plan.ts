@@ -116,28 +116,66 @@ export function plannedVariableFacts(planned: PlannedVariable): LabeledFact[] {
   ];
 }
 
+/** What `formatQuestionPlan` needs beyond the questions themselves. */
+export interface QuestionPlanFormatOptions {
+  /** The column to wrap descriptions at. */
+  width?: number;
+  /**
+   * Recipes in the closure whose files are not on this machine, so their
+   * manifests could not be read. They are named in the plan rather than
+   * silently left out of it.
+   */
+  unreadable?: string[];
+}
+
+/**
+ * The one line that names the recipes a dry run could not read. A dry run
+ * downloads nothing, so a recipe this machine does not hold yet has no manifest
+ * to read; saying so by name is more useful than leaving it out of the plan.
+ *
+ * @param unreadable - The recipe keys whose manifests could not be read.
+ */
+function unreadableLine(unreadable: string[]): string {
+  return (
+    `Not on this machine yet, so their questions cannot be listed: ` +
+    `${unreadable.join(", ")}. A dry run downloads nothing; run this command ` +
+    `again without '--dry-run' to install them and be asked.`
+  );
+}
+
 /**
  * The whole plan as lines to print: one block per recipe, one labeled fact
- * sheet per variable, and a closing sentence naming how to answer them all
- * ahead of time.
+ * sheet per variable, a line naming any recipe that could not be read, and a
+ * closing sentence naming how to answer them all ahead of time.
  *
  * @param planned - Every question the closure would ask.
- * @param width - The column to wrap descriptions at.
+ * @param options - The wrap column, and any recipes that could not be read.
  * @returns The lines to print, without indentation.
  */
-export function formatQuestionPlan(planned: PlannedVariable[], width?: number): string[] {
+export function formatQuestionPlan(
+  planned: PlannedVariable[],
+  options: QuestionPlanFormatOptions = {}
+): string[] {
+  const unreadable = options.unreadable ?? [];
+
   if (planned.length === 0) {
-    return ["None of these recipes ask any questions, so nothing needs answering."];
+    return unreadable.length === 0
+      ? ["None of these recipes ask any questions, so nothing needs answering."]
+      : [unreadableLine(unreadable)];
   }
 
-  const columns = width ?? terminalColumns();
+  const columns = options.width ?? terminalColumns();
   const unanswered = planned.filter((entry) => !entry.answered).length;
+  // When part of the closure could not be read, the count below describes only
+  // the part that could, and the sentence says so rather than overstating it.
+  const subject =
+    unreadable.length === 0 ? "These recipes ask" : "The recipes sous could read ask";
 
   const lines: string[] = [
     unanswered === 0
-      ? `These recipes ask ${questionCount(planned.length)}, and everything they ask ` +
+      ? `${subject} ${questionCount(planned.length)}, and everything they ask ` +
         `is already answered.`
-      : `These recipes ask ${questionCount(planned.length)}, ` +
+      : `${subject} ${questionCount(planned.length)}, ` +
         `${unanswered} of which nothing answers yet.`,
   ];
 
@@ -155,6 +193,10 @@ export function formatQuestionPlan(planned: PlannedVariable[], width?: number): 
         lines.push(`    ${fact}`);
       }
     }
+  }
+
+  if (unreadable.length > 0) {
+    lines.push("", unreadableLine(unreadable));
   }
 
   if (unanswered > 0) {

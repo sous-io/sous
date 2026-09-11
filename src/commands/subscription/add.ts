@@ -213,19 +213,12 @@ export default class SubscriptionAdd extends BaseCommand {
       blankLine();
       subheading("Questions these recipes ask");
       blankLine();
-      for (const line of formatQuestionPlan(outcome.questions)) {
+      // Recipes this machine does not hold yet are named inside the plan, so a
+      // closure that is only partly readable still lists everything it can.
+      for (const line of formatQuestionPlan(outcome.questions, {
+        ...(outcome.unreadable === undefined ? {} : { unreadable: outcome.unreadable }),
+      })) {
         log(line === "" ? "" : indent(line));
-      }
-
-      if (outcome.unreadable !== undefined) {
-        blankLine();
-        log(
-          indent(
-            `These recipes are not on this machine yet, and a dry run downloads ` +
-              `nothing, so sous cannot say what they ask until they are installed: ` +
-              `${outcome.unreadable.join(", ")}.`
-          )
-        );
       }
     }
 

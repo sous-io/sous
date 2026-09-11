@@ -641,10 +641,7 @@ export class SubscriptionService {
     // the project, in plain sentences, and a question.
     await this.confirmSubscription(parsed, options);
 
-    const { resolved, trusted, cycles, unreadable } = await this.resolveClosure(
-      parsed,
-      options
-    );
+    const { resolved, trusted, cycles } = await this.resolveClosure(parsed, options);
 
     const before = this.lock.read();
     const after = this.lock.applyResolution(before, resolved, this.lockRepoInputs());
@@ -657,7 +654,13 @@ export class SubscriptionService {
       // The questions are planned even here, so `--dry-run` is the command an
       // agent runs to find out what a subscription will want to know. Answers
       // supplied with it are validated and reported, and nothing is written.
+      //
+      // What can be described is settled from the files actually on this
+      // machine, not from what the resolver happened to reach: a recipe already
+      // in the store, or read from a linked checkout, has its questions listed
+      // even when something else in the closure is still missing.
       const defined = this.definedVariables(resolved);
+      const unreadable = this.unreadableRecipes(resolved);
       const context = this.ladderContext();
       const supplied = applyProvidedAnswers(defined, options.answers ?? [], context, {
         sousDir: this.sousDir,
@@ -2127,6 +2130,21 @@ export class SubscriptionService {
     }
 
     return defined;
+  }
+
+  /**
+   * The recipes in a resolution whose manifests cannot be read from this
+   * machine, because neither the store nor a linked checkout holds their files
+   * yet. A dry run downloads nothing, so this is exactly the set whose
+   * questions it cannot describe; everything else is described in full.
+   *
+   * @param resolved - The recipe versions the resolution settled on.
+   */
+  private unreadableRecipes(resolved: ResolvedRecipe[]): string[] {
+    return resolved
+      .filter((recipe) => readRecipeManifestIn(this.recipeDirectory(recipe)) === undefined)
+      .map((recipe) => recipe.key)
+      .sort();
   }
 
   /** The environment layers and mapping records this project resolves against. */

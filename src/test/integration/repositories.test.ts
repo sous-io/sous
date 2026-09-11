@@ -644,6 +644,49 @@ describe("the repositories consumer surface", () => {
   );
 
   /**
+   * A recipe whose files are already in the store is described in full by a dry
+   * run: its questions are grouped under the recipe that publishes them, with
+   * the environment variable and the env file each answer would use, and
+   * whether something already answers it. Nothing is downloaded to do it.
+   *
+   * sous subscription add workflow/task-files --dry-run --non-interactive
+   */
+  it(
+    "should list an installed recipe's questions on a dry run",
+    () => {
+      const entryDir = storeEntryDir(mainRepo, "workflow/task-files", "1.0.0");
+      expect(fs.existsSync(entryDir), "the recipe should already be in the store").toBe(
+        true
+      );
+
+      const result = sous(
+        projectRoot,
+        "subscription",
+        "add",
+        "workflow/task-files",
+        "--dry-run",
+        "--non-interactive"
+      );
+
+      expect(result.status, result.stdout + result.stderr).toBe(0);
+      expect(result.stdout).toContain("workflow/task-files asks 2 questions:");
+      expect(result.stdout).toContain("apiUrl");
+      expect(result.stdout).toContain("taskFileRoot");
+      expect(result.stdout).toContain("SOUS_VAR_TASK_FILE_ROOT");
+      expect(result.stdout).toContain(path.join(sousDir, ".env"));
+
+      // The required question already has an answer in scope, so the plan says
+      // so rather than asking for it again.
+      expect(result.stdout).toContain("yes, from");
+      expect(result.stdout).not.toContain(
+        "Not on this machine yet, so their questions cannot be listed"
+      );
+      expect(result.stdout).not.toContain("None of these recipes ask any questions");
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
    * A dry run downloads nothing, so a recipe this machine does not hold yet has
    * no manifest to read. The run still succeeds and says which recipes it could
    * not describe, rather than failing on a file it refused to fetch.
@@ -663,8 +706,14 @@ describe("the repositories consumer surface", () => {
       );
 
       expect(result.status, result.stdout + result.stderr).toBe(0);
-      expect(result.stdout).toContain("not on this machine yet");
+      expect(result.stdout).toContain(
+        "Not on this machine yet, so their questions cannot be listed"
+      );
       expect(result.stdout).toContain("formatter/daily");
+
+      // The plan must not claim the closure asks nothing when the truth is that
+      // sous could not read any of it.
+      expect(result.stdout).not.toContain("None of these recipes ask any questions");
 
       const subscriptions = readJsonc(
         path.join(sousDir, "conf.d", "510-subscriptions.jsonc")
