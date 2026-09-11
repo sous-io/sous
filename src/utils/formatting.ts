@@ -214,10 +214,16 @@ export function showVars(vars: Record<string, any>): void {
 
 /**
  * Displays a heading labelled "Command Variables" followed by a variable list.
+ *
+ * The "Dry Run" entry is a special case: it is noise when dry-run mode is off, so it
+ * is only shown when its value is `true`. Every other entry is always shown.
  */
 export function showCommandVars(vars: Record<string, any>): void {
+  const filtered = Object.fromEntries(
+    Object.entries(vars).filter(([name, value]) => name !== "Dry Run" || value === true),
+  );
   subheading("Command Variables", "$");
-  showVars(vars);
+  showVars(filtered);
 }
 
 /**

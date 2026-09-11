@@ -566,6 +566,34 @@ describe("showCommandVars()", () => {
     expect(joined).toContain("Port");
     expect(joined).toContain("3000");
   });
+
+  /**
+   * showCommandVars() should omit the "Dry Run" line entirely when dry-run mode
+   * is off, since a "false" value there is just noise.
+   *
+   * showCommandVars({ Env: "production", "Dry Run": false });
+   * // output does not contain "Dry Run"
+   */
+  it("should omit the 'Dry Run' line when its value is false", () => {
+    const joined = captureLog(() =>
+      showCommandVars({ Env: "production", "Dry Run": false })
+    ).join("\n");
+    expect(joined).toContain("Env");
+    expect(joined).not.toContain("Dry Run");
+  });
+
+  /**
+   * showCommandVars() should include the "Dry Run" line when dry-run mode is on.
+   *
+   * showCommandVars({ Env: "production", "Dry Run": true });
+   * // output contains "Dry Run"
+   */
+  it("should include the 'Dry Run' line when its value is true", () => {
+    const joined = captureLog(() =>
+      showCommandVars({ Env: "production", "Dry Run": true })
+    ).join("\n");
+    expect(joined).toContain("Dry Run");
+  });
 });
 
 // ---- scanStatus -----------------------------------------------------------------------------
