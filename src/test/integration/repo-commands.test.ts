@@ -66,6 +66,8 @@ describe("sous repo init / link / unlink", () => {
   let tmp: TmpDir;
   let root: string;
   let sourceRepo: string;
+  let localRepo: string;
+  let untrustedRepo: string;
   let bareRepo: string;
   let bareRepoUrl: string;
   let projectRoot: string;
@@ -77,6 +79,10 @@ describe("sous repo init / link / unlink", () => {
     tmp = makeTmpDir("sous-repo-cmd-");
     root = tmp.path;
     sourceRepo = path.join(root, "source-repo");
+    // Two more repositories on disk, neither of them in the project's config:
+    // one for the in-place link, one for the trust gate that guards it.
+    localRepo = path.join(root, "local-recipes");
+    untrustedRepo = path.join(root, "untrusted-recipes");
     bareRepo = path.join(root, "origin.git");
     // A file:// URL, because the config schema's `url` field is a real URL and a
     // bare filesystem path is not one. git clones it exactly like any remote.
@@ -103,6 +109,16 @@ describe("sous repo init / link / unlink", () => {
     git(sourceRepo, "commit", "-qm", "the scaffold");
     git(root, "init", "-q", "--bare", "-b", "main", bareRepo);
     git(sourceRepo, "push", "-q", bareRepo, "main");
+
+    for (const [directory, name] of [
+      [localRepo, "local-recipes"],
+      [untrustedRepo, "untrusted-recipes"],
+    ] as const) {
+      const scaffold = runSous(root, env, "repo", "init", directory, "--name", name);
+      if (scaffold.status !== 0) {
+        throw new Error(`repo init failed: ${scaffold.stdout}${scaffold.stderr}`);
+      }
+    }
 
     // The project links the repository by the short name its config records.
     fs.writeFileSync(
@@ -311,26 +327,95 @@ describe("sous repo init / link / unlink", () => {
 
   /**
    * A linked repository's recipes are read straight from a checkout, with no
-   * version, no lockfile and no hash check. Taking a bare URL for a repository
-   * the project never added would therefore download and read an untrusted
-   * repository, which is the one thing adding a repository exists to gate. It
-   * must be refused, nothing may be cloned, and the message must not offer a way
-   * around the gate.
+   * version, no lockfile and no hash check. Linking a repository the project
+   * never added would therefore read an untrusted repository, which is the one
+   * thing adding a repository exists to gate. With no terminal to ask on and no
+   * confirmation flag it must be refused, nothing may be linked, and the message
+   * must not offer a way around the gate.
    *
    * sous repo link /path/to/some-repo   // -> exits non-zero, names 'sous repo add'
    */
   it(
-    "should refuse to link a URL for a repository this project has not added",
+    "should refuse to link a repository this project has not trusted",
     () => {
-      const result = runSous(projectRoot, env, "repo", "link", sourceRepo);
+      const result = runSous(projectRoot, env, "repo", "link", untrustedRepo);
 
       expect(result.status).not.toBe(0);
       const output = result.stdout + result.stderr;
       expect(output).toContain("sous repo add");
       expect(output).not.toContain("without adding it");
-      expect(
-        fs.existsSync(path.join(sousDir, "repos", "source-repo"))
-      ).toBe(false);
+      expect(readProjectLinksMap().links["untrusted-recipes"]).toBeUndefined();
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * `sous repo link <path>` with nothing else means "link the checkout that is
+   * already here". The repository is added and trusted first, because linking
+   * one is at least as consequential as adding one, and then the checkout is
+   * linked exactly where it is: the short name comes from its own manifest, the
+   * link records the absolute path with the origin "path", and nothing is
+   * cloned into `.sous/repos`.
+   *
+   * sous repo link ../local-recipes --trust   // -> links /tmp/.../local-recipes
+   */
+  it(
+    "should link a local checkout in place, without cloning it",
+    () => {
+      const reposDir = path.join(sousDir, "repos");
+      const before = fs.readdirSync(reposDir).sort();
+
+      const result = runSous(
+        projectRoot,
+        env,
+        "repo",
+        "link",
+        "../local-recipes",
+        "--trust"
+      );
+      expect(result.status).toBe(0);
+
+      // The short name is the one the checkout's own manifest suggests, not the
+      // slug a clone would have been filed under.
+      expect(readProjectLinksMap().links["local-recipes"]).toMatchObject({
+        path: localRepo,
+        origin: "path",
+      });
+
+      // Nothing was cloned: the repository entry points at the checkout, and the
+      // directory clones land in is exactly as it was.
+      const layer = readManagedLayer(sousDir, REPOS_LAYER_FILENAME) as {
+        repos?: Record<string, { url: string }>;
+      };
+      expect(layer.repos?.["local-recipes"]?.url).toBe(localRepo);
+      expect(fs.readdirSync(reposDir).sort()).toEqual(before);
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * A path in both slots contradicts itself: the first already says which
+   * checkout to link. The message should name the two written forms rather than
+   * picking one of them.
+   *
+   * sous repo link ../local-recipes ../local-recipes   // -> exits non-zero
+   */
+  it(
+    "should refuse a path in both argument slots",
+    () => {
+      const result = runSous(
+        projectRoot,
+        env,
+        "repo",
+        "link",
+        "../local-recipes",
+        localRepo
+      );
+      expect(result.status).not.toBe(0);
+
+      const output = result.stdout + result.stderr;
+      expect(output).toContain("sous repo link ../local-recipes");
+      expect(output).toContain("sous repo link <name-or-url>");
     },
     CLI_TIMEOUT
   );
