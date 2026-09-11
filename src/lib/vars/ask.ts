@@ -31,6 +31,8 @@ import {
   warning,
   wrapText,
 } from "../../utils/formatting.js";
+import { choicePrompt } from "../../utils/choice-prompt.js";
+import { confirmPrompt } from "../../utils/confirm-prompt.js";
 import { valuePrompt } from "../../utils/value-prompt.js";
 import { ENV_VAR_NAME_PATTERN } from "../repos/formats/patterns.js";
 import type { VariableDefinition } from "../repos/formats/recipe-manifest.js";
@@ -331,15 +333,35 @@ export function basicViewLines(input: BasicViewInput): string[] {
   );
 
   lines.push("");
-  lines.push(
-    color.gray(
-      input.suggestion === undefined || input.suggestion === ""
-        ? "[TAB for advanced info and options]"
-        : "[ENTER to accept the default; TAB for advanced info and options]"
-    )
-  );
+  lines.push(color.gray(questionHint(definition, input.suggestion)));
 
   return lines;
+}
+
+/**
+ * The one line naming the keys that do anything at a question. Tab always opens
+ * the advanced view; what Enter does depends on the kind of question, so a
+ * question that is picked from a list says so rather than talking about typing
+ * a default.
+ *
+ * @param definition - The variable being asked about.
+ * @param suggestion - The value Enter alone would accept, when there is one.
+ * @returns The hint line, without colour.
+ *
+ * @example
+ * questionHint({ type: "enum", ... });
+ * // -> "[ENTER to choose; TAB for advanced info and options]"
+ */
+export function questionHint(
+  definition: VariableDefinition,
+  suggestion?: string
+): string {
+  if (definition.type === "enum" || definition.type === "boolean") {
+    return "[ENTER to choose; TAB for advanced info and options]";
+  }
+  return suggestion === undefined || suggestion === ""
+    ? "[TAB for advanced info and options]"
+    : "[ENTER to accept the default; TAB for advanced info and options]";
 }
 
 /**
@@ -535,6 +557,55 @@ async function runAdvancedView(
   }
 }
 
+/** The words a stored boolean may be written with that all mean yes. */
+const TRUE_WORDS = ["true", "yes", "y", "on", "1"];
+
+/**
+ * Asks the one question the variable's type calls for: a list to pick from for
+ * an enum, a yes or no for a boolean, and typing for everything else. All three
+ * prompts answer the same way, so Tab reaches the advanced view from every kind
+ * of question and the caller has one return path to handle.
+ *
+ * @param definition - The variable being asked about.
+ * @param suggestion - The value Enter alone would accept, when there is one.
+ * @param validate - Checks a typed answer; the other two kinds cannot be wrong.
+ * @returns The answer as text, or a request for the advanced view.
+ */
+async function askByType(
+  definition: VariableDefinition,
+  suggestion: string | undefined,
+  validate: (value: string) => true | string
+): Promise<{ kind: "value"; value: string } | { kind: "advanced" }> {
+  if (definition.type === "enum") {
+    const enumOptions = definition.validate?.enum ?? [];
+    return choicePrompt({
+      message: definition.prompt,
+      choices: enumOptions.map((option) => ({ name: option, value: option })),
+      ...(suggestion !== undefined && enumOptions.includes(suggestion)
+        ? { default: suggestion }
+        : {}),
+    });
+  }
+
+  if (definition.type === "boolean") {
+    const current = suggestion ?? String(definition.default ?? "");
+    const answered = await confirmPrompt({
+      message: definition.prompt,
+      default: TRUE_WORDS.includes(current.toLowerCase()),
+    });
+    return answered.kind === "advanced"
+      ? answered
+      : { kind: "value", value: String(answered.value) };
+  }
+
+  return valuePrompt({
+    message: definition.prompt,
+    validate,
+    ...(suggestion === undefined ? {} : { default: suggestion }),
+    ...(definition.secret ? { mask: true } : {}),
+  });
+}
+
 /**
  * Asks one question and hands back the answer together with where it should be
  * stored. Tab opens the advanced view; returning from it prints the basic view
@@ -576,33 +647,9 @@ async function askOneQuestion(
 
     printBlock(basicViewLines(view));
 
-    if (definition.type === "enum") {
-      const enumOptions = definition.validate?.enum ?? [];
-      const picked = await select({
-        message: definition.prompt,
-        choices: enumOptions.map((option) => ({ name: option, value: option })),
-        ...(question.suggestion !== undefined && enumOptions.includes(question.suggestion)
-          ? { default: question.suggestion }
-          : {}),
-      });
-      return { answer: picked, plan };
-    }
-
-    if (definition.type === "boolean") {
-      const current = question.suggestion ?? String(definition.default ?? "");
-      const answered = await confirm({
-        message: definition.prompt,
-        default: ["true", "yes", "y", "on", "1"].includes(current.toLowerCase()),
-      });
-      return { answer: String(answered), plan };
-    }
-
-    const result = await valuePrompt({
-      message: definition.prompt,
-      validate,
-      ...(question.suggestion === undefined ? {} : { default: question.suggestion }),
-      ...(definition.secret ? { mask: true } : {}),
-    });
+    // Every kind of question ends the same way: an answer, or a request for the
+    // advanced view, which is shown and then hands back here to ask again.
+    const result = await askByType(definition, question.suggestion, validate);
 
     if (result.kind === "value") return { answer: result.value, plan };
 

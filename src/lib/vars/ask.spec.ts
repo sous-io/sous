@@ -131,6 +131,30 @@ describe("basicViewLines()", () => {
     expect(lines.join("\n")).not.toContain("@default");
     expect(lines[lines.length - 1]).toBe("[TAB for advanced info and options]");
   });
+
+  /**
+   * A question answered from a list is chosen rather than typed, so the hint
+   * says so; Tab means the same thing at every kind of question.
+   */
+  it("should say the answer is chosen for an enum and a boolean question", () => {
+    for (const definition of [
+      { type: "enum" as const, validate: { enum: ["red", "blue"] } },
+      { type: "boolean" as const },
+    ]) {
+      const lines = basicViewLines({
+        defined: defined(definition),
+        index: 1,
+        total: 1,
+        plan: { file: ".env", envName: "SOUS_VAR_TASK_FILE_ROOT" },
+        suggestion: "red",
+        width: 80,
+      }).map(strip);
+
+      expect(lines[lines.length - 1]).toBe(
+        "[ENTER to choose; TAB for advanced info and options]"
+      );
+    }
+  });
 });
 
 /** The pick lists the advanced view offers. */

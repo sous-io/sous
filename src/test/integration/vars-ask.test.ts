@@ -40,6 +40,22 @@ vi.mock("../../utils/value-prompt.js", () => ({
   }),
 }));
 
+// The pick-one and yes-or-no questions are sous's own prompts too, and they
+// answer the same way, so the same queue and the same TAB sentinel drive them.
+vi.mock("../../utils/choice-prompt.js", () => ({
+  choicePrompt: vi.fn(async () => {
+    const next = answers.shift() ?? "";
+    return next === TAB ? { kind: "advanced" } : { kind: "value", value: next };
+  }),
+}));
+
+vi.mock("../../utils/confirm-prompt.js", () => ({
+  confirmPrompt: vi.fn(async () => {
+    const next = answers.shift() ?? "";
+    return next === TAB ? { kind: "advanced" } : { kind: "value", value: next === "true" };
+  }),
+}));
+
 let tmp: TmpDir;
 let sousDir: string;
 let confDir: string;
@@ -382,6 +398,52 @@ describe("the advanced view of a question", () => {
 
     expect(report.answered[0]!.file).toBe(".env.local");
     expect(readEnv(".env")).toBe("");
+  });
+
+  /**
+   * A question picked from a list reaches the advanced view the same way a
+   * typed one does: Tab opens it, the menu changes where the answer is stored,
+   * saving returns to the question, and the list is offered again.
+   */
+  it("should open the advanced view from a pick-one question and ask again", async () => {
+    answers.push(TAB, "blue");
+    choices.push("name", "SOUS_VAR_MISC_STUFF_THEME", "save");
+
+    const report = await askForMissing(
+      [
+        defined({
+          name: "theme",
+          type: "enum",
+          validate: { enum: ["red", "blue"] },
+          example: "red",
+        }),
+      ],
+      context(),
+      { sousDir, confDir, interactive: true }
+    );
+
+    expect(report.answered[0]!.envName).toBe("SOUS_VAR_MISC_STUFF_THEME");
+    expect(report.answered[0]!.value).toBe("blue");
+    expect(parseEnvLocal(readEnv(".env")).SOUS_VAR_MISC_STUFF_THEME).toBe("blue");
+  });
+
+  /**
+   * A yes-or-no question behaves the same: Tab opens the advanced view, and the
+   * answer given after it is stored as the word true or false.
+   */
+  it("should open the advanced view from a yes-or-no question and ask again", async () => {
+    answers.push(TAB, "true");
+    choices.push("name", "SOUS_VAR_MISC_STUFF_VERBOSE", "save");
+
+    const report = await askForMissing(
+      [defined({ name: "verbose", type: "boolean", example: "true" })],
+      context(),
+      { sousDir, confDir, interactive: true }
+    );
+
+    expect(report.answered[0]!.envName).toBe("SOUS_VAR_MISC_STUFF_VERBOSE");
+    expect(report.answered[0]!.value).toBe("true");
+    expect(parseEnvLocal(readEnv(".env")).SOUS_VAR_MISC_STUFF_VERBOSE).toBe("true");
   });
 });
 
