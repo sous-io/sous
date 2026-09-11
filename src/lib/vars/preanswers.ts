@@ -286,6 +286,49 @@ export function preAnswerPlan(
   };
 }
 
+/** One supplied answer, matched to a definition and coerced to its stored form. */
+export interface ApplicableAnswer {
+  /** The answer as it was supplied. */
+  answer: ProvidedAnswer;
+  /** The definition it answers. */
+  target: DefinedVariable;
+  /** The validated answer, in the form an env file holds. */
+  value: string;
+}
+
+/**
+ * Matches every supplied answer to the definitions it answers and checks it
+ * against each of them, without writing anything.
+ *
+ * A command calls this early, before it installs or writes anything at all, so
+ * a bad answer fails the run cleanly rather than halfway through it. One name
+ * can answer more than one definition, because two recipes may declare the same
+ * variable; every one of them has to accept the value.
+ *
+ * @param defined - Every variable definition in play.
+ * @param provided - The answers supplied ahead of the questions.
+ * @returns One entry per definition each answer applies to.
+ */
+export function validateProvidedAnswers(
+  defined: DefinedVariable[],
+  provided: ProvidedAnswer[]
+): ApplicableAnswer[] {
+  const applicable: ApplicableAnswer[] = [];
+
+  for (const answer of provided) {
+    const targets = defined.filter((entry) => matchesName(entry, answer.name));
+    if (targets.length === 0) throw unknownAnswerError(answer, defined);
+
+    for (const target of targets) {
+      const validated = validateAnswer(target.definition, answer.value);
+      if (!validated.ok) throw invalidAnswerError(answer, target, validated.message);
+      applicable.push({ answer, target, value: String(validated.value) });
+    }
+  }
+
+  return applicable;
+}
+
 /**
  * Validates every supplied answer, then stores them all.
  *
@@ -307,19 +350,7 @@ export function applyProvidedAnswers(
   context: LadderContext,
   options: AskOptions
 ): AppliedAnswers {
-  const applicable: Array<{ answer: ProvidedAnswer; target: DefinedVariable; value: string }> =
-    [];
-
-  for (const answer of provided) {
-    const targets = defined.filter((entry) => matchesName(entry, answer.name));
-    if (targets.length === 0) throw unknownAnswerError(answer, defined);
-
-    for (const target of targets) {
-      const validated = validateAnswer(target.definition, answer.value);
-      if (!validated.ok) throw invalidAnswerError(answer, target, validated.message);
-      applicable.push({ answer, target, value: String(validated.value) });
-    }
-  }
+  const applicable = validateProvidedAnswers(defined, provided);
 
   const stored: AnsweredVariable[] = [];
   const keys: string[] = [];

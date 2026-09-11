@@ -146,6 +146,26 @@ describe("the repositories consumer surface", () => {
         depends: ["extras:tooling/formatter"],
         files: { "skills/needs-extras/SKILL.md": "# Needs extras\n" },
       },
+      // A recipe whose question nothing in the project answers, so every run
+      // that installs it either answers it up front or fails saying so.
+      {
+        namespace: "workflow",
+        name: "answers",
+        version: "1.0.0",
+        description: "Asks a question that has to be answered before it is usable",
+        files: { "skills/answers/SKILL.md": "# Answers\n" },
+        variables: [
+          {
+            name: "deployUrl",
+            type: "url",
+            prompt: "Where is this project deployed?",
+            description: "The deployment every command this recipe generates targets.",
+            example: "https://deploy.example.com",
+            required: true,
+            validate: { pattern: "^https://" },
+          },
+        ],
+      },
       // The namespace 'formatter' shares its name with the recipe
       // 'tooling/formatter' in the other repository, which is what makes the
       // one-word ref 'formatter' ambiguous. Its recipe, 'daily', has a name
@@ -370,6 +390,184 @@ describe("the repositories consumer surface", () => {
       // The required variable already had an answer in scope, so it was
       // inherited and reported rather than asked for.
       expect(result.stdout).toContain("apiUrl");
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * A recipe that asks a question nothing answers cannot be installed by a run
+   * with no terminal. The failure names the variable and every environment
+   * variable that would answer it, most specific first.
+   *
+   * sous subscribe workflow/answers --yes   // -> exits non-zero, names deployUrl
+   */
+  it(
+    "should refuse to install a recipe whose question nothing answers",
+    () => {
+      const result = sous(projectRoot, "subscribe", "workflow/answers", "--yes");
+      const output = result.stdout + result.stderr;
+
+      expect(result.status).not.toBe(0);
+      expect(output).toContain("deployUrl");
+      expect(output).toContain("SOUS_VAR_WORKFLOW_ANSWERS_DEPLOY_URL");
+
+      // The recipe was installed before its question was asked, so the project
+      // is put back the way it was before the next case runs.
+      expect(sous(projectRoot, "unsubscribe", "workflow/answers").status).toBe(0);
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * A supplied answer that does not fit its definition fails the run before
+   * anything is installed, naming the constraint it violated and the
+   * publisher's own example of a real answer.
+   *
+   * sous subscribe workflow/answers --yes --answer deployUrl=http://insecure.test
+   */
+  it(
+    "should refuse a supplied answer that does not fit its definition",
+    () => {
+      const result = sous(
+        projectRoot,
+        "subscribe",
+        "workflow/answers",
+        "--yes",
+        "--answer",
+        "deployUrl=http://insecure.test"
+      );
+      const output = result.stdout + result.stderr;
+
+      expect(result.status).not.toBe(0);
+      expect(output).toContain("deployUrl must match the pattern ^https://");
+      expect(output).toContain("https://deploy.example.com");
+
+      const lock = readJson(path.join(sousDir, "sous.lock.json"));
+      expect(Object.keys(lock.recipes as Record<string, unknown>)).not.toContain(
+        "workflow/answers"
+      );
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * A name no recipe declares is a typo until proven otherwise: the run fails
+   * and lists every variable that IS in play, grouped by the recipe that
+   * declares it, rather than storing an answer nothing would ever read.
+   */
+  it(
+    "should refuse a supplied answer whose name nothing declares",
+    () => {
+      const result = sous(
+        projectRoot,
+        "subscribe",
+        "workflow/answers",
+        "--yes",
+        "--answer",
+        "deployURL=https://deploy.test"
+      );
+      const output = result.stdout + result.stderr;
+
+      expect(result.status).not.toBe(0);
+      expect(output).toContain("deployURL");
+      expect(output).toContain("workflow/answers");
+      expect(output).toContain("deployUrl");
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * With every question answered on the command line, a run with no terminal
+   * installs the recipe and writes the answer into the project's env file.
+   *
+   * sous subscribe workflow/answers --yes --answer deployUrl=https://deploy.test
+   */
+  it(
+    "should install a recipe with every answer supplied up front",
+    () => {
+      const result = sous(
+        projectRoot,
+        "subscribe",
+        "workflow/answers",
+        "--yes",
+        "--answer",
+        "deployUrl=https://deploy.test/?region=eu"
+      );
+
+      expect(result.status, result.stdout + result.stderr).toBe(0);
+      expect(result.stdout).toContain("deployUrl");
+
+      const env = fs.readFileSync(path.join(sousDir, ".env"), "utf8");
+      expect(env).toContain("SOUS_VAR_DEPLOY_URL=https://deploy.test/?region=eu");
+
+      const lock = readJson(path.join(sousDir, "sous.lock.json"));
+      expect(Object.keys(lock.recipes as Record<string, unknown>)).toContain(
+        "workflow/answers"
+      );
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * A dry run prints the questions the closure would ask before it asks any of
+   * them: what each variable is for, where its answer would be stored, whether
+   * anything answers it already, and the flag that answers it ahead of time.
+   * That report is how a caller with no terminal plans the real run.
+   *
+   * sous subscription add workflow/answers --dry-run --non-interactive
+   */
+  it(
+    "should print the questions a subscription would ask on a dry run",
+    () => {
+      const result = sous(
+        projectRoot,
+        "subscription",
+        "add",
+        "workflow/answers",
+        "--dry-run",
+        "--non-interactive"
+      );
+
+      expect(result.status, result.stdout + result.stderr).toBe(0);
+      expect(result.stdout).toContain("Questions these recipes ask");
+      expect(result.stdout).toContain("workflow/answers asks 1 question:");
+      expect(result.stdout).toContain("deployUrl");
+      expect(result.stdout).toContain("SOUS_VAR_DEPLOY_URL");
+      expect(result.stdout).toContain("--answer deployUrl=<value>");
+
+      // Nothing at all was written by the dry run.
+      expect(sous(projectRoot, "unsubscribe", "workflow/answers").status).toBe(0);
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * A dry run downloads nothing, so a recipe this machine does not hold yet has
+   * no manifest to read. The run still succeeds and says which recipes it could
+   * not describe, rather than failing on a file it refused to fetch.
+   *
+   * sous subscription add daily --dry-run --non-interactive
+   */
+  it(
+    "should say which recipes a dry run could not describe",
+    () => {
+      const result = sous(
+        projectRoot,
+        "subscription",
+        "add",
+        "daily",
+        "--dry-run",
+        "--non-interactive"
+      );
+
+      expect(result.status, result.stdout + result.stderr).toBe(0);
+      expect(result.stdout).toContain("not on this machine yet");
+      expect(result.stdout).toContain("formatter/daily");
+
+      const subscriptions = readJsonc(
+        path.join(sousDir, "conf.d", "510-subscriptions.jsonc")
+      ).subscriptions as Record<string, unknown>;
+      expect(Object.keys(subscriptions)).not.toContain("formatter/daily");
     },
     CLI_TIMEOUT
   );

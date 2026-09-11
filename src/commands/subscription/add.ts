@@ -216,6 +216,17 @@ export default class SubscriptionAdd extends BaseCommand {
       for (const line of formatQuestionPlan(outcome.questions)) {
         log(line === "" ? "" : indent(line));
       }
+
+      if (outcome.unreadable !== undefined) {
+        blankLine();
+        log(
+          indent(
+            `These recipes are not on this machine yet, and a dry run downloads ` +
+              `nothing, so sous cannot say what they ask until they are installed: ` +
+              `${outcome.unreadable.join(", ")}.`
+          )
+        );
+      }
     }
 
     if (outcome.cycles.length > 0) {

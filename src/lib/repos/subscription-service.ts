@@ -33,6 +33,7 @@ import {
   askForMissing,
   loadLadderContext,
   planQuestions,
+  validateProvidedAnswers,
   type AskReport,
   type DefinedVariable,
   type DefiningRecipe,
@@ -231,6 +232,12 @@ export type SubscribeOutcome = {
    * what to supply with `--answer`.
    */
   questions?: PlannedVariable[];
+  /**
+   * Recipes a dry run could not describe, because their files are not on this
+   * machine and a dry run downloads nothing. Their questions are unknown until
+   * they are installed.
+   */
+  unreadable?: string[];
   /** Dependency cycles the resolver noticed, reported rather than treated as fatal. */
   cycles: string[][];
   /** True when nothing was written, because this was a dry run. */
@@ -559,7 +566,10 @@ export class SubscriptionService {
     // the project, in plain sentences, and a question.
     await this.confirmSubscription(parsed, options);
 
-    const { resolved, trusted, cycles } = await this.resolveClosure(parsed, options);
+    const { resolved, trusted, cycles, unreadable } = await this.resolveClosure(
+      parsed,
+      options
+    );
 
     const before = this.lock.read();
     const after = this.lock.applyResolution(before, resolved, this.lockRepoInputs());
@@ -590,12 +600,18 @@ export class SubscriptionService {
         diff,
         cycles,
         questions: planQuestions(defined, context, { sousDir: this.sousDir }),
+        ...(unreadable.length === 0 ? {} : { unreadable }),
         ...(supplied.stored.length === 0
           ? {}
           : { answers: { answered: supplied.stored, inherited: [], skipped: [] } }),
         dryRun: true,
       };
     }
+
+    // Supplied answers are checked before anything is written, so an answer
+    // that does not fit, or a name nothing declares, fails the run rather than
+    // leaving a subscription behind with its questions unanswered.
+    validateProvidedAnswers(this.definedVariables(resolved), options.answers ?? []);
 
     for (const recipe of resolved) await this.ensureStored(recipe);
 
@@ -931,7 +947,12 @@ export class SubscriptionService {
   private async resolveClosure(
     parsed: ParsedRef,
     options: SubscribeOptions
-  ): Promise<{ resolved: ResolvedRecipe[]; trusted: string[]; cycles: string[][] }> {
+  ): Promise<{
+    resolved: ResolvedRecipe[];
+    trusted: string[];
+    cycles: string[][];
+    unreadable: string[];
+  }> {
     const trusted: string[] = [];
 
     for (;;) {
@@ -956,7 +977,10 @@ export class SubscriptionService {
       );
 
       if (result.missingRepos.length === 0) {
-        if (result.missingManifests.length > 0) {
+        // A dry run refuses to download, so a recipe this machine does not hold
+        // yet has no manifest to read. That is not a failure here: the plan
+        // describes everything it could read and names what it could not.
+        if (result.missingManifests.length > 0 && options.dryRun !== true) {
           throw new ConfigError(
             `Sous could not read the manifest of ` +
               `${result.missingManifests.map((entry) => `'${entry}'`).join(", ")}.\n` +
@@ -964,7 +988,12 @@ export class SubscriptionService {
               `or could not be downloaded. Nothing was written.`
           );
         }
-        return { resolved: result.resolved, trusted, cycles: result.cycles };
+        return {
+          resolved: result.resolved,
+          trusted,
+          cycles: result.cycles,
+          unreadable: result.missingManifests,
+        };
       }
 
       const outcome = await this.trust.confirmTrust(result.missingRepos, {
