@@ -79,23 +79,23 @@ describe("the built-in provider list", () => {
   /**
    * builtInProviders should return the two hosted providers version one ships,
    * each declaring the read path and the propose-a-change path (delegated to
-   * their command line tools), plus the local file provider, which can only
-   * fetch. The file provider comes last, and matches only a local path, so it
+   * their command line tools), plus the local provider, which can only
+   * fetch. The local provider comes last, and matches only a local path, so it
    * can never intercept a hosted repository's URL.
    *
    * builtInProviders().map((provider) => provider.id);
-   * // -> ["github", "gitlab", "file"]
+   * // -> ["github", "gitlab", "local"]
    */
   it("should ship GitHub, GitLab and file, with submit only on the hosted two", () => {
     const providers = builtInProviders();
     expect(providers.map((provider) => provider.id)).toEqual([
       "github",
       "gitlab",
-      "file",
+      "local",
     ]);
     for (const provider of providers) {
       expect(provider.features).toEqual(
-        provider.id === "file" ? ["fetch"] : ["fetch", "submit"],
+        provider.id === "local" ? ["fetch"] : ["fetch", "submit"],
       );
     }
   });

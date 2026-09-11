@@ -725,14 +725,18 @@ project trusts, what else it subscribes to, or which programs `sous launch` runs
 yours. Sous reads the layer itself and applies this filter before the config kernel merges
 anything, so the kernel never opens a recipe's layer file at all.
 
-### The `file` provider: repositories on this machine
+### The `local` provider: repositories on this machine
 
-A repository does not have to be hosted. Name one by an absolute path, or by the same path in
-`file:///...` form, and sous reads it through the built-in `file` provider:
+A repository does not have to be hosted. Name one by a path, relative or absolute, or by the
+same path in `file:///...` form, and sous reads it through the built-in `local` provider:
 
 ```bash
 sous repo add /home/me/Projects/my-recipes --name my-recipes
+sous repo add ../my-recipes --name my-recipes
 ```
+
+A relative path is resolved against the working directory and stored in its absolute form, since
+a repository on this machine is machine-specific anyway.
 
 It is meant for local development and for tests: authoring a repository, trying a recipe before
 publishing it, or running a whole workflow with no network at all. The index is read from the

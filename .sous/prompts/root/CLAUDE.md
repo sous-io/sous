@@ -158,7 +158,7 @@ src/
       managed-layer.ts     # reads/writes the machine-written conf.d/5xx layers
       lock-service.ts      # LockService; read/write/apply/diff the lock, restore the store
       freshness.ts         # when to look upstream; always-pull's in-range lookup
-      providers/           # GitHub, GitLab and file, read path only, plus the index cache
+      providers/           # GitHub, GitLab and local, read path only, plus the index cache
   templating/
     init-liquid-engine.ts  # LiquidJS engine factory (createLiquidEngine)
     tags/                  # custom Liquid tags: showVars, exportScalarVarsJs, getFiles, listFiles
@@ -326,11 +326,17 @@ fails hard without a terminal unless `--trust` was passed, writing accepted repo
 and restores the store to exactly what the lock pins without prompting or changing a version;
 `freshness.ts` decides when sous looks upstream at all.
 
-`providers/file.ts` is the third built-in provider: a repository that lives on this machine,
-named by an absolute path or the same path in `file:///...` form. It exists for local
+`providers/local.ts` is the third built-in provider, id `local`: a repository that lives on
+this machine, named by a path or by the same path in `file:///...` form. It exists for local
 development and for tests, and its trust semantics are IDENTICAL to a hosted one; a local
 path is added, and therefore trusted, through the same ceremony, because the recipes in it
-still run here. It reads the index from the working tree when there is one (so an index
+still run here. A relative path typed at `sous repo add` or `sous repo link` is expanded
+(`~` included) and resolved against the working directory by `resolveRepoArgument` BEFORE
+provider detection, and the absolute form is what is stored; a path that does not exist, or
+holds no repo manifest, gets an error about the path itself rather than about providers.
+An explicit `--provider` that contradicts the URL (naming `github` for a path, say) is
+refused whenever a different provider does recognize it, while an unrecognized host with a
+named provider is still honored, which is what a self-hosted instance needs. It reads the index from the working tree when there is one (so an index
 being authored is picked up) and from `git show HEAD:sous.index.json` otherwise, and fetches
 a recipe by cloning the local path at the version's tag, falling back to a copy for a
 directory that is not a git repository. It is what makes an end-to-end CLI test possible

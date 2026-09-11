@@ -24,11 +24,11 @@ import type { FetchLike } from "./http.js";
 export type ProviderFeature = "fetch" | "submit";
 
 /**
- * The identifier a repo entry uses to name its provider explicitly. `file` is a
+ * The identifier a repo entry uses to name its provider explicitly. `local` is a
  * repository on this machine, for local development and for tests; its trust
  * semantics are identical to a hosted one.
  */
-export type ProviderId = "github" | "gitlab" | "file";
+export type ProviderId = "github" | "gitlab" | "local";
 
 /** A repository URL, taken apart into the pieces every provider needs. */
 export type CanonicalRepo = {

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { makeTmpDir, type TmpDir } from "../../../test/utils/tmp.js";
-import { FileProvider, localRepoPath } from "./file.js";
+import { LocalProvider, localRepoPath } from "./local.js";
 import { builtInProviders, detectProvider, requireProvider } from "./index.js";
 import type { CommandResult, CommandRunner } from "./git.js";
 
@@ -55,30 +55,30 @@ describe("localRepoPath()", () => {
   });
 });
 
-describe("FileProvider", () => {
+describe("LocalProvider", () => {
   /**
    * The provider should claim a local path and nothing else, so adding it to
    * the built-in list can never intercept a hosted repository's URL.
    *
-   * detectProvider("/home/me/recipes")?.id;             // -> "file"
+   * detectProvider("/home/me/recipes")?.id;             // -> "local"
    * detectProvider("https://github.com/o/r")?.id;       // -> "github"
    */
   it("should claim local paths only", () => {
-    expect(detectProvider("/home/me/recipes")?.id).toBe("file");
-    expect(detectProvider("file:///home/me/recipes")?.id).toBe("file");
+    expect(detectProvider("/home/me/recipes")?.id).toBe("local");
+    expect(detectProvider("file:///home/me/recipes")?.id).toBe("local");
     expect(detectProvider("https://github.com/owner/repo")?.id).toBe("github");
     expect(detectProvider("https://gitlab.com/group/repo")?.id).toBe("gitlab");
   });
 
   /**
    * The provider should be one of the built-ins, and reachable by name, so a
-   * repository entry may say `provider: file` outright.
+   * repository entry may say `provider: local` outright.
    *
-   * requireProvider("/home/me/recipes", "file").id; // -> "file"
+   * requireProvider("/home/me/recipes", "local").id; // -> "local"
    */
   it("should be a built-in reachable by name", () => {
-    expect(builtInProviders().map((provider) => provider.id)).toContain("file");
-    expect(requireProvider("/home/me/recipes", "file").id).toBe("file");
+    expect(builtInProviders().map((provider) => provider.id)).toContain("local");
+    expect(requireProvider("/home/me/recipes", "local").id).toBe("local");
   });
 
   /**
@@ -90,7 +90,7 @@ describe("FileProvider", () => {
    * // -> { httpsUrl: "/home/me/recipes", sshUrl: "file:///home/me/recipes", ... }
    */
   it("should canonicalize a local path into its directory and file URL", () => {
-    const repo = new FileProvider().canonicalize("/home/me/recipes");
+    const repo = new LocalProvider().canonicalize("/home/me/recipes");
     expect(repo.httpsUrl).toBe("/home/me/recipes");
     expect(repo.sshUrl).toBe("file:///home/me/recipes");
     expect(repo.name).toBe("recipes");
@@ -104,7 +104,7 @@ describe("FileProvider", () => {
    * canonicalize("./recipes"); // throws
    */
   it("should refuse a value that is not a local path", () => {
-    expect(() => new FileProvider().canonicalize("./recipes")).toThrow(
+    expect(() => new LocalProvider().canonicalize("./recipes")).toThrow(
       /not a local repository path/
     );
   });
@@ -117,7 +117,7 @@ describe("FileProvider", () => {
    */
   it("should read the index from the working tree", async () => {
     fs.writeFileSync(path.join(repoDir, "sous.index.json"), '{"formatVersion":1}', "utf8");
-    const provider = new FileProvider();
+    const provider = new LocalProvider();
 
     const fetched = await provider.fetchIndex(provider.canonicalize(repoDir), {
       run: notAGitRepo,
@@ -134,7 +134,7 @@ describe("FileProvider", () => {
    * fetchIndex(repo); // throws "publishes no sous index"
    */
   it("should explain a directory that publishes no index", async () => {
-    const provider = new FileProvider();
+    const provider = new LocalProvider();
     await expect(
       provider.fetchIndex(provider.canonicalize(repoDir), { run: notAGitRepo })
     ).rejects.toThrow(/publishes no sous index/);
@@ -153,7 +153,7 @@ describe("FileProvider", () => {
     fs.mkdirSync(source, { recursive: true });
     fs.writeFileSync(path.join(source, "SKILL.md"), "# a skill", "utf8");
 
-    const provider = new FileProvider();
+    const provider = new LocalProvider();
     const dest = path.join(tmp.path, "fetched");
 
     await provider.fetchRecipeTree(
@@ -174,7 +174,7 @@ describe("FileProvider", () => {
    * fetchRecipeTree(repo, "recipes/missing", tag, dest); // throws
    */
   it("should name a recipe folder that is not there", async () => {
-    const provider = new FileProvider();
+    const provider = new LocalProvider();
     await expect(
       provider.fetchRecipeTree(
         provider.canonicalize(repoDir),

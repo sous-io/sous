@@ -6,7 +6,7 @@
  * built-in list has exactly one definition.
  */
 
-import { FileProvider } from "./file.js";
+import { LocalProvider } from "./local.js";
 import { GithubProvider } from "./github.js";
 import { GitlabProvider } from "./gitlab.js";
 import { IndexCache, type IndexCacheOptions } from "./index-cache.js";
@@ -25,7 +25,7 @@ export * from "./http.js";
 export * from "./provider.js";
 export * from "./github.js";
 export * from "./gitlab.js";
-export * from "./file.js";
+export * from "./local.js";
 export * from "./index-cache.js";
 
 /**
@@ -33,9 +33,9 @@ export * from "./index-cache.js";
  * call, so a caller may add to it without affecting anyone else.
  */
 export function builtInProviders(): RepoProvider[] {
-  // The file provider is last, and matches only a local absolute path or a
+  // The local provider is last, and matches only a local absolute path or a
   // `file://` URL, so it can never intercept a hosted repository's URL.
-  return [new GithubProvider(), new GitlabProvider(), new FileProvider()];
+  return [new GithubProvider(), new GitlabProvider(), new LocalProvider()];
 }
 
 /**

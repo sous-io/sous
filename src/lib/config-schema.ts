@@ -90,7 +90,7 @@ const repoEntrySchema = z
   .object({
     /**
      * Where the repository lives. A hosted repository is named by its URL; a
-     * repository on this machine, which the `file` provider reads, is named by
+     * repository on this machine, which the `local` provider reads, is named by
      * an absolute path or the same path in `file:///...` form.
      */
     url: repoUrlSchema,
@@ -104,10 +104,10 @@ const repoEntrySchema = z
     /**
      * Which provider handles it. Inferred from the URL when omitted; set it
      * explicitly for a self-hosted instance the URL does not give away.
-     * `file` is a repository on this machine, for local development and tests;
+     * `local` is a repository on this machine, for local development and tests;
      * its trust semantics are identical to a hosted one.
      */
-    provider: z.enum(["github", "gitlab", "file"]).optional(),
+    provider: z.enum(["github", "gitlab", "local"]).optional(),
     /**
      * When true, sous installs a newer in-range version whenever one exists
      * rather than holding the locked one. The flag never widens the range a

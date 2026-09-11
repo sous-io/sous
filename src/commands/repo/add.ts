@@ -54,7 +54,7 @@ export default class RepoAdd extends BaseCommand {
     provider: Flags.string({
       description:
         "The provider that handles it, for a host the URL does not give away",
-      options: ["github", "gitlab", "file"],
+      options: ["github", "gitlab", "local"],
     }),
     trust: Flags.boolean({
       description:

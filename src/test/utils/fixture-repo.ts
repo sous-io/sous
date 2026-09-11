@@ -3,7 +3,7 @@
  *
  * The result is a git repository with a repo manifest, one recipe manifest per
  * recipe, a generated index carrying the real content hash of every recipe
- * folder, and one tag per published version. That is exactly what the `file`
+ * folder, and one tag per published version. That is exactly what the `local`
  * provider reads, so a test drives the whole system end to end with no network.
  */
 

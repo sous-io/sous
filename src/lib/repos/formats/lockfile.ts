@@ -35,7 +35,7 @@ export const LOCK_KINDS = ["subscribes", "depends"] as const;
 export const lockedRepoSchema = z.strictObject({
   /**
    * Where the repo lives, as recorded when it was added: a URL, or an absolute
-   * path for a repository on this machine read through the `file` provider.
+   * path for a repository on this machine read through the `local` provider.
    */
   url: repoUrlSchema,
   /** Content hash of the index this lock was resolved against, when known. */

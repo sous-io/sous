@@ -1,5 +1,5 @@
 /**
- * The file provider: a repository that lives on this machine.
+ * The local provider: a repository that lives on this machine.
  *
  * It exists for local development and for tests. A recipe repository under
  * development, or a fixture repository built by a test, is an ordinary
@@ -42,7 +42,7 @@ import type {
 } from "./provider.js";
 
 /** The identifier a repository entry uses to name this provider explicitly. */
-export const FILE_PROVIDER_ID = "file" as const;
+export const LOCAL_PROVIDER_ID = "local" as const;
 
 /**
  * The absolute directory a repository URL names, or undefined when the URL is
@@ -95,14 +95,14 @@ async function hasTag(
   return found !== undefined;
 }
 
-/** The repository that a file provider call is reading. */
+/** The repository that a local provider call is reading. */
 function repoDirectory(repo: CanonicalRepo): string {
   return repo.httpsUrl;
 }
 
 /** A repository on this machine, read as though it were a hosted one. */
-export class FileProvider implements RepoProvider {
-  readonly id = FILE_PROVIDER_ID;
+export class LocalProvider implements RepoProvider {
+  readonly id = LOCAL_PROVIDER_ID;
 
   /** Proposing a change to a directory on your own disk is just editing it. */
   readonly features: ProviderFeature[] = ["fetch"];

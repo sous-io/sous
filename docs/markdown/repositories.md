@@ -77,7 +77,7 @@ nothing new enters a project except through an explicit, visible change to files
 control.
 
 !> Trust semantics do not soften for a repository that is already on your disk. A local path
-added through the `file` provider goes through the same ceremony, because its recipes still run
+added through the `local` provider goes through the same ceremony, because its recipes still run
 on this machine.
 
 ## The official repository, and `core`

@@ -26,7 +26,7 @@ repository costs one small request and installs nothing.
 | Flag | What it does |
 |------|--------------|
 | `--name <name>` | The short name refs will use. Defaults to the last segment of the URL |
-| `--provider github\|gitlab\|file` | The provider that handles it, for a host the URL does not give away |
+| `--provider github\|gitlab\|local` | The provider that handles it, for a host the URL does not give away |
 | `--trust` | Accept trust without being asked, for a run with no terminal |
 | `--dry-run` | Print what would change without trusting or fetching anything |
 
@@ -265,12 +265,17 @@ generated files.
 
 ## Use a repository on this machine
 
-A repository does not have to be hosted. Give `sous repo add` an absolute path, or the same path
-in `file:///` form, and sous reads it through the built-in `file` provider:
+A repository does not have to be hosted. Give `sous repo add` a path, relative or absolute, or
+the same path in `file:///` form, and sous reads it through the built-in `local` provider:
 
 ```bash
 sous repo add /home/me/Projects/my-recipes --name my-recipes --trust
+sous repo add ../my-recipes --name my-recipes --trust
 ```
+
+A relative path is resolved against the working directory before anything else happens, and the
+absolute form is what lands in the config; a repository on this machine is machine-specific
+either way.
 
 It is meant for local development and for tests: authoring a repository, trying a recipe before
 publishing it, or running a whole workflow with no network at all. The index is read from the

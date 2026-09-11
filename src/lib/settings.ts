@@ -94,10 +94,10 @@ export type RepoEntry = {
    */
   enabled?: boolean;
   /**
-   * Which provider handles it. Inferred from the URL when omitted. `file` is a
+   * Which provider handles it. Inferred from the URL when omitted. `local` is a
    * repository on this machine, for local development and tests.
    */
-  provider?: "github" | "gitlab" | "file";
+  provider?: "github" | "gitlab" | "local";
   /** Install a newer in-range version whenever one exists, rather than holding the lock. */
   alwaysPull?: boolean;
   /** When the repo was added. */

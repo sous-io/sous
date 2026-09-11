@@ -63,7 +63,7 @@ function readJson(filePath: string): Record<string, unknown> {
  * addressing it from a project template, listing its variables, unsubscribing,
  * restoring a fresh clone and collecting the store.
  *
- * Everything runs against local fixture repositories read through the `file`
+ * Everything runs against local fixture repositories read through the `local`
  * provider, so no test here touches the network.
  */
 describe("the repositories consumer surface", () => {

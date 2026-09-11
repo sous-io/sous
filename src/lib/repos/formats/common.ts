@@ -180,7 +180,7 @@ export const byteCountSchema = z
 
 /**
  * Where a repository lives. A hosted repository is named by a URL; a repository
- * on this machine, which the `file` provider reads, is named by an absolute
+ * on this machine, which the `local` provider reads, is named by an absolute
  * path or by the same path in `file:///...` form (which is already a URL).
  */
 export const repoUrlSchema = z.union([
