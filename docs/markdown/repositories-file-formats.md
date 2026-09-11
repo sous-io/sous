@@ -22,8 +22,9 @@ could execute would break that guarantee.
 
 ## Refs: how anything is named
 
-A **ref** names a namespace or a recipe. The same grammar works on the command line, in a
-project's subscriptions and in a recipe's dependency lists.
+A **ref** names a namespace or a recipe. The same grammar works on the command line and in a
+project's subscriptions. A recipe manifest names its dependencies by LOCATION instead, which is
+a small variation on the same grammar; see [dependencies](#dependencies-named-by-location).
 
 ```
 ref := [ repo ":" ] namespace [ "/" recipe [ "@" range ] ]
@@ -40,10 +41,11 @@ The rules behind the grammar:
 
 - **No prefix.** A ref is written bare. `@` introduces a version range and nothing else; `~` is
   the template include sigil and never appears in a ref.
-- **The repo qualifier is optional.** Refs resolve across the cached indexes of every added
-  repository. You only need `repo:` when the same ref genuinely resolves in more than one, and in
-  that case sous reports the conflict and asks for the qualified form rather than picking a
-  winner.
+- **The repo qualifier is optional, and is yours.** Refs resolve across the cached indexes of
+  every added repository. You only need `repo:` when the same ref genuinely resolves in more than
+  one, and in that case sous reports the conflict and asks for the qualified form rather than
+  picking a winner. The short name is your project's own label for a repository, so it means
+  nothing in a published manifest and is refused there.
 - **A version range applies to a recipe.** Namespaces are not versioned, so `workflow@^1.0.0` is
   an error.
 - **Ranges follow npm's rules.** `^1.2.0`, `~2.1`, `>=1.0.0 <2.0.0`, `1.x` and `*` all behave
@@ -110,14 +112,16 @@ description: Per-branch task files, with skills for starting and resuming work.
 
 # Build dependencies. Fetched, pinned and trust-gated, and addressable from this
 # recipe's own files, but their files do NOT enter a subscriber's output.
+# A bare ref names a recipe in this same repository.
 depends:
-  - core/sous-skills@^1.0.0
+  - workflow/sat
 
 # Co-subscriptions. Subscribing to this recipe subscribes the project to these too,
 # with full semantics: their questions run and their files DO enter the output.
-# A curated bundle is simply a recipe made mostly of these.
+# A curated bundle is simply a recipe made mostly of these. A locator URL names a
+# recipe in another repository.
 subscribes:
-  - communication/control-flow@^2.0.0
+  - github://sous-io/sous-recipes/communication/control-flow@^2.0.0
 
 # The files this recipe contributes. Patterns are relative to the recipe folder.
 contents:
@@ -169,14 +173,62 @@ variables:
 | `name` | yes | kebab-case string | Unique within its namespace |
 | `version` | yes | exact semantic version | Never a range; `1.2.0`, or `2.0.0-beta.1` for a prerelease |
 | `description` | no | string | Shown by `sous repo search` and `sous repo list` |
-| `depends` | no | list of refs | Build dependencies |
-| `subscribes` | no | list of refs | Co-subscriptions |
+| `depends` | no | list of dependencies | Build dependencies, named by location |
+| `subscribes` | no | list of dependencies | Co-subscriptions, named by location |
 | `contents` | no | list of content groups | Defaults to an empty list, which is what a curated bundle wants |
 | `variables` | no | list of variable definitions | Published specifications |
 
 Recipe metadata is the source of truth for versions. A git tag shaped
 `namespace/recipe@1.2.3` is a convenience ref that `sous repo release` keeps consistent with the
 `version` field; a missing or wrong tag is reported rather than silently hiding a version.
+
+### Dependencies named by location
+
+`depends` and `subscribes` hold plain strings, and a manifest names its targets by WHERE THEY
+LIVE. There are two spellings.
+
+**A sibling**, in this same repository, is a bare ref:
+
+```yaml
+depends:
+  - workflow/sat            # the sibling as released alongside me
+  - workflow/sat@^1.1       # supported, and uncommon
+```
+
+With no range, a sibling means "the version released alongside me": `sous repo release` cuts both
+tags in one run and records the exact version in the index, so the pairing is fixed forever.
+
+**Another repository** is a locator URL whose scheme is the provider's identifier:
+
+```yaml
+subscribes:
+  - github://sous-io/sous-recipes/workflow/sat@^1.1
+  - gitlab://gitlab.example.com/group/subgroup/project/workflow/sat
+```
+
+The parsing rule is worth stating exactly, because it never guesses:
+
+- The **last two path segments are always the namespace and the recipe**. That is the recipe's
+  published identity, never a path on disk: a recipe stored at `recipes/shared/sat/` and
+  published as `workflow/sat` is written `github://owner/repo/workflow/sat`. The repository's own
+  index maps that identity to the directory.
+- **Everything before them is the repository.** A first segment carrying a dot is the host
+  (`gitlab.example.com`); otherwise the provider's own public host is used (`github.com`,
+  `gitlab.com`). Everything after the host is the repository's path, so GitLab subgroups work
+  without any extra syntax.
+- The **range after `@` is optional**, and follows npm's rules like every other range.
+
+Two things a manifest may not write:
+
+- **`local://` is refused.** A local repository is a consumer's convenience for working on
+  recipes, not a published location; publish the recipe and depend on it where it lives.
+- **`repo:` short names are refused.** A short name is the label one project chose when it added
+  a repository, and no other project has to agree with it.
+
+A consumer matches a locator against the repositories it has added by their canonical identity
+(`github.com/sous-io/sous-recipes`), so a project that added the same repository under a
+different short name resolves against the copy it already has. One it has not added goes through
+the ordinary trust round, which can show the URL the dependency named.
 
 ### Content groups
 
@@ -285,7 +337,14 @@ subscribes to something inside it.
           "hash": "sha256-3b1f...c9",
           "tag": "workflow/task-files@1.0.0",
           "prerelease": false,
-          "releasedAt": "2026-08-01T09:00:00.000Z"
+          "releasedAt": "2026-08-01T09:00:00.000Z",
+          "dependencies": {
+            "workflow/sat": { "version": "1.4.0" },
+            "communication/control-flow": {
+              "repo": "github.com/sous-io/sous-recipes",
+              "range": "^2.0.0"
+            }
+          }
         },
         "1.1.0-beta.1": {
           "hash": "sha256-77ad...20",
@@ -309,8 +368,24 @@ subscribes to something inside it.
 | `$comment` | no | string | A note about where this copy came from. JSON has no comment syntax, and an index is machine-written, so this is the one place a writer can say something to whoever opens the file. Sous ignores it, with one exception: the seed index below |
 
 A recipe entry holds `path`, an optional `description`, and `versions`: a map from an exact
-version to `{ hash, tag, prerelease, releasedAt? }`. Every recipe needs at least one version,
-and its namespace must be one the index declares.
+version to `{ hash, tag, prerelease, releasedAt?, dependencies? }`. Every recipe needs at least
+one version, and its namespace must be one the index declares.
+
+### Resolved dependencies
+
+`dependencies` records what one exact version was released against, keyed `namespace/recipe`. It
+is why a published version means one thing forever: a consumer installing `1.0.0` installs the
+versions `1.0.0` was published with, rather than re-resolving its ranges months later.
+
+| Field | When | Notes |
+|-------|------|-------|
+| `version` | a sibling | The exact version, settled when both tags were cut |
+| `repo` | another repository | That repository's canonical identity, `<host>/<owner path>/<name>` |
+| `range` | another repository | The range the manifest declared; its exact version lives in that repository's own index |
+
+The field is additive: an index written before it existed still parses, and a consumer that
+finds no entry falls back to the ranges the recipe's manifest declares. `formatVersion` stays
+`1`.
 
 A version's `tag` must be exactly `<namespace>/<recipe>@<version>` for the entry it sits under,
 and an index that says otherwise is refused when it is read. The tag is what the provider
@@ -351,6 +426,7 @@ change to these files.
   "repos": {
     "sous-recipes": {
       "url": "https://github.com/sous-io/sous-recipes",
+      "identity": "github.com/sous-io/sous-recipes",
       "indexHash": "sha256-91cc...4e"
     }
   },
@@ -376,11 +452,17 @@ change to these files.
 | Field | Required | Type | Notes |
 |-------|----------|------|-------|
 | `formatVersion` | yes | `1` | The on-disk format version |
-| `repos` | yes | map of short name to `{ url, indexHash? }` | Every repository the locked recipes came from |
+| `repos` | yes | map of short name to `{ url, identity, indexHash? }` | Every repository the locked recipes came from |
 | `recipes` | yes | map of `namespace/recipe` to a locked entry | Everything currently in use |
 
 A locked entry holds `repo` (which must appear under `repos`), the exact `version` resolved, its
 `hash`, a `requestedBy` list and a `kind` of `subscribes` or `depends`.
+
+A repository appears twice over, and the two are for different readers. The KEY is your
+project's short name, which is what every message and every recipe entry names. The `identity`
+is the canonical location it was derived from, and it is what the machine-wide store and the
+index cache file that repository under, so two projects that call the same repository different
+things still share one cached copy.
 
 `requestedBy` is what makes removal safe. Every entry lists who holds it: the literal string
 `project` for something the project subscribed to directly, or a recipe key for something pulled
@@ -393,13 +475,14 @@ does.
 ## `.sous.entry.json`: the store entry marker
 
 The machine-wide store lives under the user-level sous directory, one folder per recipe version:
-`$SOUS_HOME/cache/<repo>/<namespace>/<recipe>/<version>/`. A marker beside each one makes the
-entry self-describing, so the store can be verified and swept without consulting any project.
+`$SOUS_HOME/cache/<repository identity>/<namespace>/<recipe>/<version>/`. A marker beside each
+one makes the entry self-describing, so the store can be verified and swept without consulting
+any project.
 
 ```json
 {
   "formatVersion": 1,
-  "repo": "sous-recipes",
+  "repo": "github.com/sous-io/sous-recipes",
   "namespace": "workflow",
   "name": "task-files",
   "version": "1.2.0",
@@ -410,9 +493,10 @@ entry self-describing, so the store can be verified and swept without consulting
 }
 ```
 
-Every field is required. `hash` is checked against the lockfile before the entry is used;
-`sizeBytes` and `lastAccessAt` drive the size-capped, least-recently-used collection that
-`sous repo gc` performs.
+Every field is required. `repo` is the repository's canonical identity, because the store is
+shared by every project on the machine and a short name is one project's private label. `hash`
+is checked against the lockfile before the entry is used; `sizeBytes` and `lastAccessAt` drive
+the size-capped, least-recently-used collection that `sous repo gc` performs.
 
 The store is disposable by design: everything in it is re-fetchable from the pins in a project's
 lockfile. Builds read inputs from the store and render or copy outputs into the project; sous
@@ -429,12 +513,20 @@ decide which project is active, so it may be set in an env file (`.sous/.env.loc
 ```text
 $SOUS_HOME/
   cache/                                   the store root
-    <repo>/<namespace>/<recipe>/<version>/
+    _indexes/<identity>.json               one cached index per repository
+    <identity>/<namespace>/<recipe>/<version>/
       .sous.entry.json                     the marker for this entry
       ...                                  the recipe's files, exactly as fetched
   repos/<owner>/<repo>/                    checkouts linked with --global
   sous.links.json                          the machine-wide links map
 ```
+
+`<identity>` is the repository's canonical location, which is several directories deep:
+`github.com/sous-io/sous-recipes/workflow/task-files/1.2.0/`. Keying by location rather than by
+a short name is what lets two projects that call a repository different things share one cached
+copy, and stops two projects that use the same short name for different repositories from
+colliding. Nothing migrates a store keyed another way: entries sous cannot find are simply
+fetched again, which costs a download and nothing else.
 
 An entry is written atomically: sous copies the fetched files into a temporary directory
 beside the entry's final home, hashes them, checks the hash against the pin it was given,

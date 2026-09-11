@@ -170,11 +170,13 @@ These three run inside a recipe repository and take none of the config-locating 
 | Command | Arguments | Own flags |
 |---------|-----------|-----------|
 | `sous repo init` | `[DIRECTORY]` | `--name <name>`, `--namespace <name>`, `--force`, `--dry-run` |
-| `sous repo release` | none | `--check`, `--bump patch\|minor\|major\|prerelease`, `--recipe <ns/name>`, `--tag`, `--push`, `--dry-run` |
+| `sous repo release` | none | `--namespace <ns>`, `--recipe <ns/name>`, `--bump patch\|minor\|major\|prerelease`, `--no-bump`, `--include-unchanged`, `--tag`, `--push`, `--yes`, `--check`, `--ci`, `--dry-run` |
 | `sous repo submit` | none | `--title <text>`, `--body <text>`, `--draft`, `--dry-run` |
 
-`--check` cannot be combined with `--tag` or `--bump`, and `--push` only has an effect alongside
-`--tag`. See [Authoring a repository](repositories-authoring.md).
+`sous repo release` plans first, asks once, and then bumps, regenerates the index, commits and
+tags in one run. `--namespace` and `--recipe` are repeatable and narrow the run; `--check` reads
+only and cannot be combined with `--bump`, `--tag` or `--push`; `--ci` is the merge preset and
+implies `--no-bump`. See [Authoring a repository](repositories-authoring.md).
 
 ## Variables
 

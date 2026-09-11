@@ -134,6 +134,16 @@ subscribes your project to the listed targets with full semantics, so their ques
 their files land in your output. A curated bundle is simply a recipe made mostly of `subscribes`
 entries; there is no special bundle type.
 
+Both name their targets by LOCATION. A recipe in the same repository is a bare ref
+(`workflow/sat`); a recipe in another repository is a locator URL whose scheme is the provider
+(`github://sous-io/sous-recipes/workflow/sat@^1.1`), whose last two path segments are always the
+namespace and the recipe. A project's own short name for a repository never appears in a
+published manifest, because it is a label that project chose. The full grammar is in
+[Repository file formats](repositories-file-formats.md#dependencies-named-by-location).
+
+A release records what each version was published against, so installing a version installs the
+versions it was released with rather than whatever its ranges reach today.
+
 Both are declarative, and that is load-bearing rather than stylistic. Because the entire
 dependency closure is readable from manifests alone, sous can show you every repository an
 install would reach before it fetches any of them. Configuration that could subscribe by running

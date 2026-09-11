@@ -218,65 +218,123 @@ scope holds it and which flag removes it.
 
 ## Release
 
-`sous repo release` validates the repository, regenerates `sous.index.json`, and cuts the git
-tags that publish new versions. Run it from inside the repository.
+`sous repo release` publishes new versions of this repository's recipes. One run does the whole
+job: it raises versions, regenerates `sous.index.json`, commits both, and cuts the tags that
+publish them. Run it from inside the repository, with your recipe changes already committed.
+
+```term
+$ sous repo release
+  The release this would make:
+    workflow/task-files : 1.1.0 becomes 1.1.1  (a patch step; the tag would be workflow/task-files@1.1.1)
+
+  Left alone:
+    workflow/sat: its files have not changed since workflow/sat@1.4.0.
+
+  This run would:
+    Raise the versions listed above, in the manifests that declare them.
+    Regenerate sous.index.json, with each version's dependencies resolved.
+    Commit the manifests and the index together.
+    Cut one annotated tag per version, dependency-first.
+    Push nothing; pass '--push' to push what it makes.
+
+Publish these versions? yes
+  workflow/task-files: 1.1.0 becomes 1.1.1.
+  Wrote sous.index.json.
+  Committed: Release workflow/task-files@1.1.1
+  Created the tag workflow/task-files@1.1.1.
+```
+
+The plan is always printed first, and a run asks once before it changes anything. `--yes` answers
+that question ahead of time, and `--dry-run` prints the plan and stops.
+
+### What a run decides
+
+Three facts about each recipe decide everything, and nothing else does:
+
+1. **Is it in scope?** Every recipe is, unless `--namespace` or `--recipe` narrows the run.
+2. **Have its files changed since the tag that last published it?** A recipe nobody touched is
+   not re-released; a published version that says the same thing as the one before it is noise.
+   `--include-unchanged` releases everything in scope anyway.
+3. **Has its version already been raised past that tag?** If so, the bump has been done and this
+   run only publishes it. That is what a merge looks like to the continuous integration run.
+
+### The flags
 
 | Invocation | What it does |
 |------------|--------------|
-| `sous repo release` | Validates, regenerates the index, and prints what a release would publish. Nothing is committed or tagged |
-| `sous repo release --check` | Reads only. Exits non-zero when anything is wrong or the committed index is out of date. This is what a pull request runs |
-| `sous repo release --bump <level>` | Raises a recipe's version in place: `patch`, `minor`, `major` or `prerelease` |
-| `sous repo release --recipe <ns/name>` | Which recipe `--bump` applies to. Required when the repository publishes more than one |
-| `sous repo release --tag` | Creates the annotated tag for every version that has none, then rewrites the index to record them |
-| `sous repo release --tag --push` | The same, and pushes exactly those tags to `origin`. Nothing else is pushed |
-| `sous repo release --dry-run` | Works with all of the above and changes nothing |
+| `sous repo release` | Plan, ask once, then bump, regenerate, commit and tag |
+| `sous repo release --dry-run` | Print the plan and stop |
+| `sous repo release --yes` | Skip the question; everything else is the same |
+| `sous repo release --namespace <ns>` | Release only that namespace. Repeatable |
+| `sous repo release --recipe <ns/name>` | Release only that recipe. Repeatable |
+| `sous repo release --bump <level>` | `patch` (the default), `minor`, `major` or `prerelease` |
+| `sous repo release --no-bump` | Raise nothing; a changed recipe nobody raised is an error |
+| `sous repo release --include-unchanged` | Release everything in scope, changed or not |
+| `sous repo release --tag` | Cut the tags even on a branch other than the default one |
+| `sous repo release --push` | Push the commit, and the tags this run created, to `origin` |
+| `sous repo release --check` | Read only: validate, and fail when the committed index is out of date |
+| `sous repo release --ci` | The merge preset: never bump, never ask, fail on anything unbumped |
 
-`--check` cannot be combined with `--tag` or `--bump`, and `--push` only has an effect alongside
-`--tag`; sous says so rather than guessing which one you meant.
+### The branch rule
 
-A normal release looks like this:
+On a branch other than the default one, a release bumps and commits but cuts no tags, and says
+why: tags are cut on the default branch, by continuous integration after the merge. Pass `--tag`
+to cut them anyway, which is what a repository with no automation wants.
+
+### Dependencies and the sibling rule
+
+Tags are cut **dependency-first**, so a recipe is never published before something it depends on.
+Everything a released recipe depends on inside this repository has to be a version that exists
+once the run's own tags are counted, and there are exactly two ways that fails:
+
+- The sibling has **never been published**. Nothing can depend on it, so the run stops and names
+  the tag that has to be cut.
+- The sibling has been published, has changed since, and sits **outside this release's scope**.
+  That is fine: the release goes ahead depending on the last published version, and warns with
+  facts you can check.
 
 ```term
-$ sous repo release --bump minor --recipe workflow/task-files
-  workflow/task-files: 1.1.0 becomes 1.2.0
-  Wrote sous.index.json.
-$ git commit -am "Release task-files 1.2.0"
-$ sous repo release --tag --push
-  Created the tag workflow/task-files@1.2.0.
-  Pushed 1 tag to origin.
+  recipes/workflow/task-files/sous.recipe.yaml:
+  'workflow/sat' has changes since 'workflow/sat@1.4.0' that are outside this release's scope;
+  'workflow/task-files@1.1.1' will depend on 'workflow/sat@1.4.0'.
 ```
 
-Three rules keep metadata, tags and the index in step:
+Each version's resolved dependencies are written into the index, so a consumer installing that
+version installs what it was published with rather than re-resolving its ranges months later.
+
+### Three rules that keep metadata, tags and the index in step
 
 - **A published version never changes.** Its content hash is carried forward exactly as
   published, and a disagreement is an error telling you to bump the version rather than
   republish it.
-- **A version is published when its tag exists.** A version whose tag has not been cut yet is
-  left out of the index and reported as **pending** instead, because every index entry names its
-  tag. Merging the manifest is not publishing; tagging is.
+- **A version is published when its tag exists.** The one moment an index records a version
+  without a tag is the release commit itself: the index is committed and the tag is cut on that
+  commit. Any older version missing its tag is an error.
 - **The tags are the backstop.** A tagged version missing from the index is rebuilt from its tag,
   so deleting `sous.index.json` and regenerating it restores the same catalog.
 
-!> Sous writes files and creates tags; it never commits for you. `--tag` refuses to run while the
-working tree has uncommitted changes or while the committed index is out of date, and every
-command tells you what to commit instead.
+!> A release commits the version bumps and the index, and nothing else. It refuses to run while
+anything else is uncommitted, because a tag names one commit and the index it writes records
+what each recipe folder holds right now.
 
-A `--bump` edits the manifest in place, so its comments, its field order and its layout all
-survive. Two small normalizations happen in a YAML manifest: a folded block of prose may be
-re-wrapped, and the spacing before a trailing comment is collapsed to one space.
+A bump edits the manifest in place, so its comments, its field order and its layout all survive.
+Two small normalizations happen in a YAML manifest: a folded block of prose may be re-wrapped,
+and the spacing before a trailing comment is collapsed to one space.
 
 ### The scaffolded workflow
 
-`sous repo init` writes `.github/workflows/sous-release.yml`, which runs the same two commands
-you would run by hand. It calls the sous CLI straight from npm, so nothing has to be installed
-into the repository:
+`sous repo init` writes `.github/workflows/sous-release.yml`, which runs the same command in its
+two presets. It calls the sous CLI straight from npm, so nothing has to be installed into the
+repository:
 
 - On a **pull request**, `sous repo release --check`. It only reads, so it is safe on an
   untrusted branch, and it fails the pull request when a manifest is wrong or the committed index
-  is stale.
-- On a **push to `main`**, `sous repo release --tag --push`, followed by a step that commits the
-  regenerated index when tagging changed it. The checkout uses `fetch-depth: 0` so existing tags
-  are visible and a published version is never cut a second time.
+  (including the dependencies it records) is stale.
+- On a **push to the default branch**, `sous repo release --ci --push`. `--ci` raises no versions
+  and asks no questions: the version bump belongs in the change being merged, so a recipe that
+  changed without one fails here rather than being given a version nobody reviewed. Both
+  checkouts use `fetch-depth: 0`, so existing tags are visible and a published version is never
+  cut a second time.
 
 ## Contribute to someone else's repository
 

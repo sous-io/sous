@@ -130,6 +130,7 @@ src/
     watch-loop.ts          # shared build/compile --watch reload loop (config + template edits)
     pid-service.ts         # PidService; single-instance watcher enforcement via PID files
     repos/                 # the Repositories layer: on-disk formats, loaders, ref parser
+      identity.ts          # canonical repository identity; keys everything machine-wide
       index.ts             # barrel; import the whole layer from here
       ref.ts               # parses/formats refs (repo qualifier, namespace/recipe, @range)
       load-manifest.ts     # YAML + permissive-JSON manifest reading; exactly-one discovery
@@ -147,6 +148,7 @@ src/
         tags.ts            # release tag naming, listing, reading and creating
         git-state.ts       # what git says about the working tree, branches and remotes
         index-builder.ts   # buildIndex: regenerates sous.index.json from manifests + tags
+        plan.ts            # buildReleasePlan: scope, what changed, bumps, tag order
         bump.ts            # raises a recipe version in place, keeping comments
         submit-service.ts  # the whole submit flow, behind the injectable command runner
       ref-search.ts        # what a one-word ref means: namespace first, then recipe names
@@ -228,15 +230,28 @@ per format, each exporting its zod schema, the inferred TypeScript type and a `p
 sourceLabel)` helper that throws a `ConfigError` naming the file and the path of every bad
 field. `formats/patterns.ts` holds the shared regular expressions and imports nothing, so
 `config-schema.ts` can reuse them; `formats/common.ts` composes them into the primitives the
-formats share. `ref.ts` parses the ref grammar, `load-manifest.ts` reads manifests off disk
+formats share. `ref.ts` parses BOTH grammars, `identity.ts` derives canonical repository
+identity, `load-manifest.ts` reads manifests off disk
 (YAML, or JSON with comments and trailing commas; never JavaScript, because repo trust rests
 on reading a repository without running its code), and `index.ts` is the barrel every later
 phase imports from. Hand-written formats reject unknown keys except a reserved `x-` extension
 namespace; machine-written formats reject them outright and serialize with sorted keys.
 
+**Two ways of naming a repository, and they are not interchangeable.** A SHORT NAME
+(`sous-recipes`) is one project's own label: it keys `repos:` in a config and in a lockfile, and
+it is what sous prints. A CANONICAL IDENTITY (`github.com/sous-io/sous-recipes`, from
+`repoIdentity()` in `identity.ts`) keys everything shared between projects on a machine: the
+store layout, the store entry marker's `repo` field, the index cache, and each lockfile
+`repos:` entry's `identity`. Anything machine-wide that a short name keys is a bug; nothing
+migrates an old store, it is simply re-fetched. `ref.ts` also holds `parseDependencyRef`, the
+manifest-side grammar: a bare sibling ref, or a locator URL whose scheme is the provider id and
+whose last two path segments are ALWAYS the namespace and recipe (a first segment with a dot is
+the host, otherwise the provider's default). `local://` and `repo:` are both refused there.
+
 `store/` holds the machine-wide recipe store: one immutable directory per recipe version at
-`<storeRoot>/<repo>/<namespace>/<recipe>/<version>/`, with the `.sous.entry.json` marker
-INSIDE it. `RecipeStore` (`store/recipe-store.ts`) stages a write in a temporary sibling
+`<storeRoot>/<identity>/<namespace>/<recipe>/<version>/`, with the `.sous.entry.json` marker
+INSIDE it. The identity is several segments, so `list()` walks for markers rather than counting
+directory levels. `RecipeStore` (`store/recipe-store.ts`) stages a write in a temporary sibling
 directory, hashes it, verifies it against the caller's expected hash and renames it into
 place, so a crash leaves either the old entry or the new one; `get()` re-verifies the hash on
 every call, removes an entry that no longer matches and reports it as absent through the
@@ -373,11 +388,16 @@ whole write path. A new provider is ONE file: a class extending `ProviderBase`
 every write call a provider did not override with a ConfigError naming the provider and the
 feature, plus a line in `builtInProviders()`. No service above `providers/` may name a host,
 spawn a host tool, or build its arguments.
-`providers/index-cache.ts` keeps one index per repo under the store root's `_indexes/`
-directory and falls back to the copy it already holds when a check fails. `resolver.ts` looks a
-ref up across every added repo at once and refuses an ambiguous one instead of picking a
-winner; a ref naming a repo the project has not added is returned as a `MissingRepo` with its
-provenance rather than fetched. Because the walk resolves refs in the order it meets them, a
+`providers/index-cache.ts` keeps one index per repository under the store root's `_indexes/`
+directory, filed by canonical identity (so the path is nested), and falls back to the copy it
+already holds when a check fails; its messages take a `label` so a person still reads their own
+short name. `resolver.ts` looks a bare ref up across every added repo at once and refuses an
+ambiguous one instead of picking a winner. A manifest's dependency is different: a SIBLING
+resolves inside the declaring recipe's own repository, and a LOCATOR matches an added repository
+by identity whatever short name it has there. A dependency naming a repository the project has
+not added is returned as a `MissingRepo` carrying its URL, identity and provider, so the trust
+round can offer to add it; when the parent's index records resolved dependencies, those exact
+versions are asked for instead of the declared ranges. Because the walk resolves refs in the order it meets them, a
 recipe can be walked at one version and again at a lower one once a second holder narrows it;
 `keepOnlyReachable` then re-walks the settled closure and drops whatever only the replaced
 version reached, trimming each survivor's `requestedBy`, `ranges` and `kind` to what still
@@ -923,7 +943,7 @@ This enables `sous prune` (remove stale outputs) and `sous clear` (delete all ou
 | `sous repo init [dir]` | Scaffold a new recipe repository (`--name`, `--namespace`, `--force`) |
 | `sous repo link <repo> [path]` | Read a repository from a working copy: clone it, or link a checkout already on disk (`--global`, `--yes` / `-y` / `--trust`) |
 | `sous repo unlink <repo>` | Drop the link and go back to published versions; the checkout stays (`--global`) |
-| `sous repo release` | Validate a recipe repository, regenerate its index, and propose the release (`--check`, `--bump`, `--recipe`, `--tag`, `--push`, `--dry-run`) |
+| `sous repo release` | Publish new versions of a recipe repository: plan, ask once, then bump, regenerate the index, commit and tag (`--namespace`, `--recipe`, `--bump`, `--no-bump`, `--include-unchanged`, `--tag`, `--push`, `--yes`, `--check`, `--ci`, `--dry-run`) |
 | `sous repo submit` | Propose this repository's committed changes to its maintainers (`--title`, `--body`, `--draft`, `--dry-run`) |
 | `sous vars list` | List every recipe variable in play: its answer, the env var that supplied it, and the source |
 | `sous vars show <name>` | Show one variable in full, with every candidate env var name and the rung that answered |
@@ -968,13 +988,17 @@ control. Prune and clear only ever touch paths recorded in the state file, so no
 `.sous/repos/` is at risk from them.
 
 `repo release` and `repo submit` do not extend `BaseCommand` either, and for the same reason
-as `repo init`: they run INSIDE a recipe repository. A default `repo release` validates,
-regenerates the index and proposes the release; `--check` is the read-only form a pull request
-runs and exits non-zero when the committed index is stale; `--bump` raises a version in place;
-`--tag` cuts the annotated tags, refusing while anything is uncommitted or the index is out of
-date, and `--push` sends exactly those tags. Sous writes files and tags and NEVER commits for
-the author, which is why the workflow `repo init` scaffolds commits the regenerated index in a
-step of its own. `repo submit` is validate-then-propose: it checks the tooling and the working
+as `repo init`: they run INSIDE a recipe repository. `repo release` is ONE plan-then-execute
+flow (`release/plan.ts` decides, `src/commands/repo/release.ts` carries it out): within the
+scope (`--namespace` / `--recipe`, repeatable; the whole repository by default) it releases only
+recipes whose content changed since their last tag, patch-bumping any whose version still equals
+that tag, regenerating the index with each version's dependencies resolved, committing the
+manifests and the index together, then cutting annotated tags dependency-first. It prints the
+plan and asks once (`--yes` skips, `--dry-run` stops), and pushes only with `--push`. This is
+the ONE place sous commits for an author, and it stages nothing but its own bumps and index;
+it refuses while anything else is uncommitted. `--check` is the read-only pull-request form,
+`--ci` is the merge preset (implies `--no-bump`, never asks, does NOT imply `--push`), and on a
+branch other than the default one tagging is skipped unless `--tag` says otherwise. `repo submit` is validate-then-propose: it checks the tooling and the working
 tree, then the recipes and the index, and only then pushes and proposes. `submit-service.ts`
 is a SEQUENCER and nothing more: it names no provider, spawns no host tool, and builds no
 command arguments; every host-specific answer comes from the provider interface as plain data.
