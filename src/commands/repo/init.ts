@@ -25,6 +25,12 @@ import {
 export default class RepoInit extends Command {
   static description = "Create a new sous recipe repository in a directory";
 
+  /**
+   * The other spelling of the topic. It lives under a hidden topic, so it is
+   * typable everywhere without ever reaching the top-level listing.
+   */
+  static aliases = ["repos:init"];
+
   static examples = [
     "<%= config.bin %> repo init",
     "<%= config.bin %> repo init ./my-recipes",

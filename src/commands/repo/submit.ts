@@ -31,6 +31,12 @@ export default class RepoSubmit extends Command {
   static description =
     "Propose this recipe repository's committed changes to its maintainers";
 
+  /**
+   * The other spelling of the topic. It lives under a hidden topic, so it is
+   * typable everywhere without ever reaching the top-level listing.
+   */
+  static aliases = ["repos:submit"];
+
   static examples = [
     "<%= config.bin %> repo submit",
     '<%= config.bin %> repo submit --title "Add a linting recipe"',

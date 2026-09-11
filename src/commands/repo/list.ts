@@ -25,6 +25,12 @@ import {
 export default class RepoList extends BaseCommand {
   static description = "List the recipe repositories this project trusts";
 
+  /**
+   * The other spelling of the topic. It lives under a hidden topic, so it is
+   * typable everywhere without ever reaching the top-level listing.
+   */
+  static aliases = ["repos:list"];
+
   static examples = ["<%= config.bin %> repo list"];
 
   static flags = { ...BaseCommand.baseFlags };

@@ -31,6 +31,12 @@ export default class RepoAdd extends BaseCommand {
   static description =
     "Add a recipe repository to this project, which is also how you trust it";
 
+  /**
+   * The other spelling of the topic. It lives under a hidden topic, so it is
+   * typable everywhere without ever reaching the top-level listing.
+   */
+  static aliases = ["repos:add"];
+
   static examples = [
     "<%= config.bin %> repo add https://github.com/sous-io/sous-recipes",
     "<%= config.bin %> repo add https://github.com/sous-io/sous-recipes --name recipes",

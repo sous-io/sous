@@ -91,7 +91,7 @@ import {
 } from "./locked-recipes.js";
 import { resolveStoreRoot } from "../sous-home.js";
 import { seedCoreRecipe, type SeedCoreRecipeReport } from "./seed.js";
-import { enabledRepos, enabledSubscriptions } from "./defaults.js";
+import { enabledRepos, enabledSubscriptions, isBuiltInEntry } from "./defaults.js";
 import { CORE_RECIPE_KEY, OFFICIAL_REPO_NAME, packagedCoreRecipeDir } from "./core-recipe.js";
 import { hashDirectory } from "./store/hash.js";
 
@@ -214,8 +214,28 @@ export type UnsubscribeOutcome = {
   diff: LockDiff;
   /** Recipes that stayed because something else still holds them, with who holds them. */
   stayed: Array<{ key: string; heldBy: string[] }>;
+  /**
+   * True when the subscription was one sous provides itself, so it was switched
+   * off with an `enabled: false` entry rather than deleted. The entry sous
+   * provides comes back on every run; only a recorded opt-out outlives it.
+   */
+  optedOut: boolean;
   /** True when nothing was written, because this was a dry run. */
   dryRun: boolean;
+};
+
+/** One row of the subscription listing: what a project subscribes to, and why. */
+export type SubscriptionListing = {
+  /** The ref key: a bare namespace, or `namespace/recipe`. */
+  key: string;
+  /** The version range the subscription resolves within, when one was written. */
+  range: string | undefined;
+  /** False when the entry is switched off with `enabled: false`. */
+  enabled: boolean;
+  /** What the entry recorded about who wanted it, when it recorded anything. */
+  addedBy: string | undefined;
+  /** Every recipe the lockfile pins because of this subscription, sorted by key. */
+  pinned: Array<{ key: string; version: string }>;
 };
 
 /** What bringing the lockfile in line with the declared subscriptions produced. */
@@ -582,8 +602,24 @@ export class SubscriptionService {
     const before = this.lock.read();
     const held = this.keysHeldBySubscription(before, key);
 
-    if (!Object.hasOwn(managed, key) && !Object.hasOwn(configured, key) && held.length === 0) {
-      const known = [...new Set([...Object.keys(managed), ...Object.keys(configured)])].sort();
+    // An entry the managed layer already switched off is not a subscription any
+    // more, so removing it again is the "you do not subscribe to this" case
+    // rather than a deletion that would quietly switch it back on.
+    const alreadyOff = managed[key]?.enabled === false;
+    const removable = Object.hasOwn(managed, key) && !alreadyOff;
+    // Sous provides the `core` subscription itself, so there is no entry to
+    // delete. Removing it means recording an opt-out that outlives the default.
+    const builtIn = !removable && isBuiltInEntry(configured[key]);
+
+    if (!removable && !builtIn && !Object.hasOwn(configured, key) && held.length === 0) {
+      const known = [
+        ...new Set([
+          ...Object.entries(managed)
+            .filter(([, entry]) => entry?.enabled !== false)
+            .map(([entryKey]) => entryKey),
+          ...Object.keys(configured),
+        ]),
+      ].sort();
       throw new ConfigError(
         `This project does not subscribe to '${key}'.\n` +
           (known.length > 0
@@ -592,7 +628,7 @@ export class SubscriptionService {
       );
     }
 
-    if (!Object.hasOwn(managed, key) && Object.hasOwn(configured, key)) {
+    if (!removable && !builtIn && Object.hasOwn(configured, key)) {
       throw new ConfigError(
         `The subscription to '${key}' is written in this project's own config, not in the ` +
           `layer sous manages.\n` +
@@ -616,7 +652,9 @@ export class SubscriptionService {
       this.lock.write(after);
 
       const remaining = { ...managed };
-      delete remaining[key];
+      if (builtIn) remaining[key] = { enabled: false };
+      else delete remaining[key];
+
       if (Object.keys(remaining).length === 0) {
         removeManagedLayer(this.sousDir, SUBSCRIPTIONS_LAYER_FILENAME, {
           confDir: this.confDir,
@@ -631,7 +669,7 @@ export class SubscriptionService {
       }
     }
 
-    return { key, diff, stayed, dryRun };
+    return { key, diff, stayed, optedOut: builtIn, dryRun };
   }
 
   // --- Restoring and upstream checks -------------------------------------------------------------
@@ -1032,6 +1070,39 @@ export class SubscriptionService {
       ...(enabledSubscriptions(this.settings) as Record<string, SubscriptionEntry>),
       ...this.readSubscriptionEntries(),
     };
+  }
+
+  /**
+   * Every subscription this project declares, switched-off ones included, with
+   * the versions the lockfile pins because of each. Switched-off entries are
+   * kept because an opt-out is part of what a project subscribes to, and hiding
+   * it would make `sous subscription list` disagree with the config.
+   *
+   * Reads only what is already on disk, so the listing is safe offline.
+   */
+  listSubscriptions(): SubscriptionListing[] {
+    const entries: Record<string, SubscriptionEntry> = {
+      ...((this.settings.subscriptions ?? {}) as Record<string, SubscriptionEntry>),
+      ...this.readSubscriptionEntries(),
+    };
+
+    const lock = this.lock.read();
+
+    return Object.keys(entries)
+      .sort()
+      .map((key) => {
+        const entry = entries[key]!;
+        return {
+          key,
+          range: entry.range,
+          enabled: entry.enabled !== false,
+          addedBy: entry.addedBy,
+          pinned: keysHeldBySubscription(lock, key).map((heldKey) => ({
+            key: heldKey,
+            version: lock.recipes[heldKey]!.version,
+          })),
+        };
+      });
   }
 
   /** The trusted repositories in the shape the resolver reads. */
@@ -1520,6 +1591,12 @@ export function subscriptionServiceFor(options: {
 
 /** One subscription entry, as it is written into the managed layer. */
 export type SubscriptionEntry = {
+  /**
+   * Whether the subscription takes part in anything. Defaults to true. Sous
+   * writes `false` when a subscription it provides itself is removed, because
+   * the default comes back on every run and only a recorded opt-out outlives it.
+   */
+  enabled?: boolean;
   /** The semantic version range to resolve within. */
   range?: string;
   /** Whether prerelease versions take part in range matching. */

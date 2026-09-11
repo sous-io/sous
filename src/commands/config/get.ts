@@ -15,6 +15,12 @@ export default class ConfigGet extends ConfigCommand {
   static description =
     "Print one value from the merged config by dot-path (e.g. compilation.targets[0].entryPoint)";
 
+  /**
+   * The other spelling of the topic. It lives under a hidden topic, so it is
+   * typable everywhere without ever reaching the top-level listing.
+   */
+  static aliases = ["configs:get"];
+
   static examples = [
     "<%= config.bin %> config get name",
     "<%= config.bin %> config get compilation.targets[0].entryPoint",

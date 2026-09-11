@@ -45,6 +45,12 @@ export default class RepoGc extends BaseCommand {
   static description =
     "Collect the machine-wide recipe store back down to its size cap";
 
+  /**
+   * The other spelling of the topic. It lives under a hidden topic, so it is
+   * typable everywhere without ever reaching the top-level listing.
+   */
+  static aliases = ["repos:gc"];
+
   static examples = [
     "<%= config.bin %> repo gc",
     "<%= config.bin %> repo gc --dry-run",

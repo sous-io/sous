@@ -33,6 +33,13 @@ export default class RepoSearch extends BaseCommand {
   static description =
     "Search the recipes every trusted repository publishes, by name or description";
 
+  /**
+   * Searching is the way into every other repository command, so it is also a
+   * top-level `sous search` and is listed as one. `repos:search` is the plural
+   * spelling of the topic.
+   */
+  static aliases = ["search", "repos:search"];
+
   static examples = [
     "<%= config.bin %> repo search task",
     "<%= config.bin %> repo search browser --limit 50",

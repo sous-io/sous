@@ -62,6 +62,12 @@ export default class RepoLink extends BaseCommand {
   static description =
     "Point a repository at a working copy on this machine instead of a published version";
 
+  /**
+   * The other spelling of the topic. It lives under a hidden topic, so it is
+   * typable everywhere without ever reaching the top-level listing.
+   */
+  static aliases = ["repos:link"];
+
   static examples = [
     "<%= config.bin %> repo link sous-recipes",
     "<%= config.bin %> repo link sous-recipes ~/Projects/sous-recipes",

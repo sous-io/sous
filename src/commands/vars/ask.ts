@@ -44,6 +44,12 @@ export default class VarsAsk extends BaseCommand {
   static description =
     "Answer the variables this project's recipes define, storing the answers in the .sous env files";
 
+  /**
+   * The other spelling of the topic. It lives under a hidden topic, so it is
+   * typable everywhere without ever reaching the top-level listing.
+   */
+  static aliases = ["var:ask"];
+
   static examples = [
     "<%= config.bin %> vars ask",
     "<%= config.bin %> vars ask apiUrl",

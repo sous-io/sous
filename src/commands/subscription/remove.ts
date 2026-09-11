@@ -1,7 +1,7 @@
 /**
- * `sous unsubscribe <ref>`.
+ * `sous subscription remove <ref>`, also reachable as `sous unsubscribe <ref>`.
  *
- * The exact reverse of `sous subscribe`, and refcounted: removing a subscription
+ * The exact reverse of adding a subscription, and refcounted: removing a subscription
  * removes what it alone brought in, and leaves alone anything another
  * subscription or another recipe still needs. Whatever stays is reported, with
  * who is holding it, so a removal that appears to do nothing explains itself.
@@ -11,9 +11,9 @@
  */
 
 import { Args, Flags } from "@oclif/core";
-import { BaseCommand } from "../base-command.js";
-import { subscriptionServiceFor } from "../lib/repos/subscription-service.js";
-import { renderTable } from "../lib/vars/display.js";
+import { BaseCommand } from "../../base-command.js";
+import { subscriptionServiceFor } from "../../lib/repos/subscription-service.js";
+import { renderTable } from "../../lib/vars/display.js";
 import {
   blankLine,
   dryRunNotice,
@@ -23,15 +23,24 @@ import {
   log,
   showCommandVars,
   subheading,
-} from "../utils/formatting.js";
+} from "../../utils/formatting.js";
 
-export default class Unsubscribe extends BaseCommand {
+export default class SubscriptionRemove extends BaseCommand {
   static description = "Remove a subscription, and everything only it brought in";
 
+  /**
+   * `subscriptions:remove` is the plural spelling of the topic. `unsubscribe` is
+   * the original spelling of this command and still works; it is hidden so the
+   * top-level listing names the command once, under its topic.
+   */
+  static aliases = ["subscriptions:remove"];
+
+  static hiddenAliases = ["unsubscribe"];
+
   static examples = [
-    "<%= config.bin %> unsubscribe workflow/task-files",
-    "<%= config.bin %> unsubscribe core",
-    "<%= config.bin %> unsubscribe workflow/task-files --dry-run",
+    "<%= config.bin %> subscription remove workflow/task-files",
+    "<%= config.bin %> subscription remove core",
+    "<%= config.bin %> subscription remove workflow/task-files --dry-run",
   ];
 
   static args = {
@@ -50,7 +59,7 @@ export default class Unsubscribe extends BaseCommand {
   };
 
   async run(): Promise<void> {
-    const { args, flags } = await this.parse(Unsubscribe);
+    const { args, flags } = await this.parse(SubscriptionRemove);
     const dryRun = flags["dry-run"];
 
     showCommandVars({
@@ -98,7 +107,12 @@ export default class Unsubscribe extends BaseCommand {
       indent(
         dryRun
           ? "Nothing was written. Run the same command without '--dry-run' to remove it."
-          : `The subscription to '${outcome.key}' is gone. The repositories it came ` +
+          : outcome.optedOut
+            ? `The subscription to '${outcome.key}' is one sous provides itself, so it ` +
+              `was switched off rather than deleted: this project's config now records ` +
+              `'${outcome.key}: { enabled: false }'. The repository it came from is still ` +
+              `trusted. Run 'sous build' to prune what it used to write.`
+            : `The subscription to '${outcome.key}' is gone. The repositories it came ` +
               `from are still trusted; remove one of those deliberately if you want ` +
               `to withdraw that too. Run 'sous build' to prune what it used to write.`
       )

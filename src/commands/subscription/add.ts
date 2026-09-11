@@ -1,14 +1,14 @@
 /**
- * `sous subscribe <ref>`.
+ * `sous subscription add <ref>`, also reachable as `sous subscribe <ref>`.
  *
  * Subscribing is how a recipe enters a project. The ref names a namespace (every
  * recipe in it, including ones published later) or one recipe, with an optional
  * version range:
  *
- *     sous subscribe workflow/task-files
- *     sous subscribe workflow/task-files@^1.2.0
- *     sous subscribe core
- *     sous subscribe my-recipes:workflow/task-files
+ *     sous subscription add workflow/task-files
+ *     sous subscription add workflow/task-files@^1.2.0
+ *     sous subscription add core
+ *     sous subscription add my-recipes:workflow/task-files
  *
  * The whole dependency closure is resolved before anything is downloaded. If it
  * reaches a repository this project has not added, sous stops and asks about it
@@ -18,10 +18,10 @@
  */
 
 import { Args, Flags } from "@oclif/core";
-import { BaseCommand } from "../base-command.js";
-import { subscriptionServiceFor } from "../lib/repos/subscription-service.js";
-import { formatAskReport } from "../lib/vars/ask.js";
-import { renderTable } from "../lib/vars/display.js";
+import { BaseCommand } from "../../base-command.js";
+import { subscriptionServiceFor } from "../../lib/repos/subscription-service.js";
+import { formatAskReport } from "../../lib/vars/ask.js";
+import { renderTable } from "../../lib/vars/display.js";
 import {
   blankLine,
   dryRunNotice,
@@ -32,17 +32,26 @@ import {
   showCommandVars,
   subheading,
   warning,
-} from "../utils/formatting.js";
+} from "../../utils/formatting.js";
 
-export default class Subscribe extends BaseCommand {
+export default class SubscriptionAdd extends BaseCommand {
   static description =
     "Subscribe this project to a recipe, or to a whole namespace of them";
 
+  /**
+   * `subscriptions:add` is the plural spelling of the topic. `subscribe` is the
+   * original spelling of this command and still works; it is hidden so the
+   * top-level listing names the command once, under its topic.
+   */
+  static aliases = ["subscriptions:add"];
+
+  static hiddenAliases = ["subscribe"];
+
   static examples = [
-    "<%= config.bin %> subscribe workflow/task-files",
-    "<%= config.bin %> subscribe workflow/task-files@^1.2.0",
-    "<%= config.bin %> subscribe core",
-    "<%= config.bin %> subscribe workflow/task-files --always-pull",
+    "<%= config.bin %> subscription add workflow/task-files",
+    "<%= config.bin %> subscription add workflow/task-files@^1.2.0",
+    "<%= config.bin %> subscription add core",
+    "<%= config.bin %> subscription add workflow/task-files --always-pull",
   ];
 
   static args = {
@@ -76,7 +85,7 @@ export default class Subscribe extends BaseCommand {
   };
 
   async run(): Promise<void> {
-    const { args, flags } = await this.parse(Subscribe);
+    const { args, flags } = await this.parse(SubscriptionAdd);
     const dryRun = flags["dry-run"];
 
     showCommandVars({

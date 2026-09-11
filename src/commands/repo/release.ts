@@ -58,6 +58,12 @@ export default class RepoRelease extends Command {
   static description =
     "Validate a recipe repository, regenerate its index, and tag new recipe versions";
 
+  /**
+   * The other spelling of the topic. It lives under a hidden topic, so it is
+   * typable everywhere without ever reaching the top-level listing.
+   */
+  static aliases = ["repos:release"];
+
   static examples = [
     "<%= config.bin %> repo release",
     "<%= config.bin %> repo release --check",

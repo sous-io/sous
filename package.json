@@ -81,6 +81,36 @@
     "commands": {
       "strategy": "pattern",
       "target": "./src/commands"
+    },
+    "topics": {
+      "config": {
+        "description": "Inspect the merged configuration"
+      },
+      "configs": {
+        "description": "Inspect the merged configuration",
+        "hidden": true
+      },
+      "repo": {
+        "description": "Manage the recipe repositories this project trusts"
+      },
+      "repos": {
+        "description": "Manage the recipe repositories this project trusts",
+        "hidden": true
+      },
+      "subscription": {
+        "description": "Manage which recipes this project subscribes to"
+      },
+      "subscriptions": {
+        "description": "Manage which recipes this project subscribes to",
+        "hidden": true
+      },
+      "vars": {
+        "description": "Recipe variables and their answers"
+      },
+      "var": {
+        "description": "Recipe variables and their answers",
+        "hidden": true
+      }
     }
   },
   "engines": {

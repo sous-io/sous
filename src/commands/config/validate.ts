@@ -11,6 +11,12 @@ export default class ConfigValidate extends BaseCommand {
   static description =
     "Validate the merged config: schema, then full variable resolution (fixpoint + substitution)";
 
+  /**
+   * The other spelling of the topic. It lives under a hidden topic, so it is
+   * typable everywhere without ever reaching the top-level listing.
+   */
+  static aliases = ["configs:validate"];
+
   static examples = ["<%= config.bin %> config validate"];
 
   static flags = {

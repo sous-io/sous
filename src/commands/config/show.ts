@@ -5,6 +5,12 @@ export default class ConfigShow extends ConfigCommand {
   static description =
     "Print the merged config (all conf.d layers merged, before variable resolution) as JSON";
 
+  /**
+   * The other spelling of the topic. It lives under a hidden topic, so it is
+   * typable everywhere without ever reaching the top-level listing.
+   */
+  static aliases = ["configs:show"];
+
   static examples = [
     "<%= config.bin %> config show",
     "<%= config.bin %> config show | jq .compilation",

@@ -30,6 +30,12 @@ export default class RepoUnlink extends BaseCommand {
   static description =
     "Stop reading a repository from a working copy and go back to published versions";
 
+  /**
+   * The other spelling of the topic. It lives under a hidden topic, so it is
+   * typable everywhere without ever reaching the top-level listing.
+   */
+  static aliases = ["repos:unlink"];
+
   static examples = [
     "<%= config.bin %> repo unlink sous-recipes",
     "<%= config.bin %> repo unlink sous-recipes --global",
