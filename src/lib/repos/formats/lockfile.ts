@@ -18,6 +18,8 @@
  */
 
 import { z } from "zod";
+import { repoIdentity } from "../identity.js";
+import { requireProvider } from "../providers/index.js";
 import {
   contentHashSchema,
   formatVersionSchema,
@@ -37,23 +39,50 @@ export const PROJECT_HOLDER = "project";
 export const LOCK_KINDS = ["subscribes", "depends"] as const;
 
 /** One repo the project resolves against. */
-export const lockedRepoSchema = z.strictObject({
-  /**
-   * Where the repo lives, as recorded when it was added: a URL, or an absolute
-   * path for a repository on this machine read through the `local` provider.
-   */
-  url: repoUrlSchema,
-  /**
-   * The repository's canonical identity, derived from that URL. The keys of
-   * `repos` are the project's own short names, which no other project has to
-   * agree with; this is what the machine-wide store and the index cache file
-   * the repository under, so a restore finds the same cached copy every other
-   * project uses.
-   */
-  identity: repoIdentitySchema,
-  /** Content hash of the index this lock was resolved against, when known. */
-  indexHash: contentHashSchema.optional(),
-});
+export const lockedRepoSchema = z
+  .strictObject({
+    /**
+     * Where the repo lives, as recorded when it was added: a URL, or an absolute
+     * path for a repository on this machine read through the `local` provider.
+     */
+    url: repoUrlSchema,
+    /**
+     * The repository's canonical identity, derived from that URL. The keys of
+     * `repos` are the project's own short names, which no other project has to
+     * agree with; this is what the machine-wide store and the index cache file
+     * the repository under, so a restore finds the same cached copy every other
+     * project uses.
+     *
+     * Optional ON READ only, for lockfiles written before the store was keyed by
+     * identity: an entry without one has its identity derived from `url` below,
+     * exactly as the writer would have derived it. Every lockfile sous writes
+     * carries it, so the field fills itself in on the next write.
+     */
+    identity: repoIdentitySchema.optional(),
+    /** Content hash of the index this lock was resolved against, when known. */
+    indexHash: contentHashSchema.optional(),
+  })
+  .transform((entry, ctx) => {
+    if (entry.identity !== undefined) return { ...entry, identity: entry.identity };
+
+    // An older lockfile recorded only the URL. Deriving the identity through the
+    // provider that handles that URL is what the writer itself does, so the
+    // answer is the one the entry would have carried had it been written today.
+    try {
+      const identity = repoIdentity(requireProvider(entry.url).canonicalize(entry.url));
+      return { ...entry, identity };
+    } catch {
+      ctx.addIssue({
+        code: "custom",
+        path: ["identity"],
+        message:
+          `is missing, and sous could not work one out from the url '${entry.url}' ` +
+          `because no provider recognizes it. Add an 'identity' to this entry, or ` +
+          `remove the lockfile and subscribe again to have sous rebuild it.`,
+      });
+      return z.NEVER;
+    }
+  });
 
 /** One locked recipe. */
 export const lockedRecipeSchema = z.strictObject({

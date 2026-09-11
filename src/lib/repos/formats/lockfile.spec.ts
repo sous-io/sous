@@ -78,6 +78,38 @@ describe("parseLockfile()", () => {
   });
 
   /**
+   * A lockfile written before the store was keyed by identity records only the
+   * URL of each repository. It must still load, with the identity worked out
+   * from that URL through the provider that handles it; the next write fills the
+   * field in for good.
+   */
+  it("should derive a missing identity from a hosted repository url", () => {
+    const lock = validLockfile();
+    delete (lock.repos["sous-recipes"] as { identity?: string }).identity;
+
+    const parsed = parseLockfile(lock, SOURCE);
+
+    expect(parsed.repos["sous-recipes"]!.identity).toBe("github.com/sous-io/sous-recipes");
+  });
+
+  /**
+   * The same migration for a repository read off this machine: the local
+   * provider's identity is `localhost` followed by the absolute path, lowercased.
+   */
+  it("should derive a missing identity from a local path", () => {
+    const parsed = parseLockfile(
+      {
+        formatVersion: 1,
+        repos: { local: { url: "/srv/Team/My-Recipes" } },
+        recipes: {},
+      },
+      SOURCE
+    );
+
+    expect(parsed.repos["local"]!.identity).toBe("localhost/srv/team/my-recipes");
+  });
+
+  /**
    * The lockfile is machine-written, so an unknown key is a bug rather than an
    * extension.
    */
