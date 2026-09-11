@@ -285,12 +285,14 @@ describe("the repositories consumer surface", () => {
    * install and names the repository, rather than fetching from somewhere the
    * project never agreed to trust.
    *
-   * sous subscribe workflow/needs-extras   // -> exits non-zero, names 'extras'
+   * sous subscribe workflow/needs-extras --yes   // -> exits non-zero, names 'extras'
    */
   it(
     "should refuse a dependency on an untrusted repository",
     () => {
-      const result = sous(projectRoot, "subscribe", "workflow/needs-extras", "--trust", "--yes");
+      // '--yes' answers both questions this command can ask; '--trust' is only
+      // another spelling of it, so passing one of them is passing both.
+      const result = sous(projectRoot, "subscribe", "workflow/needs-extras", "--yes");
 
       expect(result.status).not.toBe(0);
       expect(result.stdout + result.stderr).toContain("extras");
@@ -598,16 +600,24 @@ describe("the repositories consumer surface", () => {
 
   /**
    * The canonical spellings of the same two commands, there and back again, so
-   * the project ends exactly where the alias-driven test above left it.
+   * the project ends exactly where the alias-driven test above left it. The
+   * subscribe confirmation is answered with '--yes', because these runs have no
+   * terminal to be asked on.
    *
-   * sous subscription add workflow/needs-extras
+   * sous subscription add workflow/needs-extras --yes
    * sous subscription remove workflow/needs-extras
    */
   it(
     "should add and remove a subscription under its canonical commands",
     () => {
-      const added = sous(projectRoot, "subscription", "add", "workflow/needs-extras");
-      expect(added.status).toBe(0);
+      const added = sous(
+        projectRoot,
+        "subscription",
+        "add",
+        "workflow/needs-extras",
+        "--yes"
+      );
+      expect(added.status, added.stdout + added.stderr).toBe(0);
 
       const withIt = readJson(path.join(sousDir, "sous.lock.json"));
       expect(Object.keys(withIt.recipes as Record<string, unknown>).sort()).toEqual([
