@@ -5,9 +5,13 @@ import { parse as parseJsonc } from "jsonc-parser";
 import { makeTmpDir, type TmpDir } from "../utils/tmp.js";
 import { parseEnvLocal } from "../../lib/env-local.js";
 import {
+  applyProvidedAnswers,
   askForMissing,
+  collectProvidedAnswers,
   formatAskReport,
+  formatQuestionPlan,
   loadLadderContext,
+  planQuestions,
   VAR_MAPPINGS_LAYER_FILENAME,
   type DefinedVariable,
 } from "../../lib/vars/index.js";
@@ -408,5 +412,130 @@ describe("questions grouped by recipe", () => {
 
     expect(lines.join("\n")).not.toContain("which it depends on");
     expect(lines.join("\n")).toContain("misc/stuff needs 1 answer before it can be used.");
+  });
+});
+
+/**
+ * Answering the questions before they are asked: what `--answer` and
+ * `--answers-file` do once the command layer has collected them.
+ */
+describe("answering variables ahead of the questions", () => {
+  /** An optional second variable, published by the same recipe. */
+  function taskFileRoot(): DefinedVariable {
+    return defined({
+      name: "taskFileRoot",
+      type: "path",
+      prompt: "Where do task files live?",
+      example: ".sous/tasks",
+      required: false,
+    });
+  }
+
+  /**
+   * A supplied answer should be stored in the project's env file and should
+   * then settle the question, so a run with no terminal succeeds where it would
+   * otherwise have failed.
+   *
+   * applyProvidedAnswers, then askForMissing({ skip })
+   * // -> .sous/.env holds both answers, and nothing is asked
+   */
+  it("should store every supplied answer and ask nothing else", async () => {
+    const entries = [defined(), taskFileRoot()];
+    const ladder = context();
+    const options = { sousDir, confDir, interactive: false };
+
+    const supplied = applyProvidedAnswers(
+      entries,
+      collectProvidedAnswers({
+        answer: ["apiUrl=https://supplied.example.com", "taskFileRoot=.sous/tasks"],
+      }),
+      ladder,
+      options
+    );
+
+    const report = await askForMissing(entries, ladder, {
+      ...options,
+      skip: supplied.keys,
+    });
+    report.answered.unshift(...supplied.stored);
+
+    expect(report.answered).toHaveLength(2);
+    expect(report.inherited).toHaveLength(0);
+
+    const stored = parseEnvLocal(readEnv(".env"));
+    expect(stored["SOUS_VAR_API_URL"]).toBe("https://supplied.example.com");
+    expect(stored["SOUS_VAR_TASK_FILE_ROOT"]).toBe(".sous/tasks");
+
+    const lines = formatAskReport(report).join("\n");
+    expect(lines).toContain("Answers stored:");
+    expect(lines).toContain("apiUrl = https://supplied.example.com");
+  });
+
+  /**
+   * A required variable no supplied answer covers should still fail a run with
+   * no terminal, naming the environment variables that would answer it.
+   */
+  it("should still fail on a variable no supplied answer covers", async () => {
+    const entries = [defined(), defined({ name: "apiToken", type: "string" })];
+    const ladder = context();
+    const options = { sousDir, confDir, interactive: false };
+
+    const supplied = applyProvidedAnswers(
+      entries,
+      collectProvidedAnswers({ answer: ["apiUrl=https://supplied.example.com"] }),
+      ladder,
+      options
+    );
+
+    await expect(
+      askForMissing(entries, ladder, { ...options, skip: supplied.keys })
+    ).rejects.toThrow(/apiToken[\s\S]*SOUS_VAR_MISC_STUFF_API_TOKEN/);
+  });
+
+  /**
+   * An answer that does not fit its definition should fail the run, naming the
+   * constraint it violated and the publisher's example, and nothing at all
+   * should be written.
+   */
+  it("should fail on an answer that does not fit, writing nothing", () => {
+    const entries = [defined(), taskFileRoot()];
+
+    expect(() =>
+      applyProvidedAnswers(
+        entries,
+        collectProvidedAnswers({
+          answer: ["taskFileRoot=.sous/tasks", "apiUrl=example.com"],
+        }),
+        context(),
+        { sousDir, confDir, interactive: false }
+      )
+    ).toThrow(/apiUrl must be a URL[\s\S]*For example: https:\/\/api\.example\.com/);
+
+    expect(fs.readdirSync(sousDir)).toEqual([]);
+  });
+
+  /**
+   * The question plan should describe every variable in play: what it is for,
+   * where its answer would be stored, whether anything answers it already, and
+   * the flag that answers it ahead of time.
+   */
+  it("should describe every question in the plan", () => {
+    fs.writeFileSync(
+      path.join(sousDir, ".env"),
+      "SOUS_VAR_TASK_FILE_ROOT=.sous/tasks\n",
+      "utf8"
+    );
+
+    const planned = planQuestions([defined(), taskFileRoot()], context(), { sousDir });
+    const lines = formatQuestionPlan(planned, 100)
+      .join("\n")
+      .replace(/\x1b\[[0-9;]*m/g, "");
+
+    expect(lines).toContain("These recipes ask 2 questions, 1 of which nothing answers yet.");
+    expect(lines).toContain("misc/stuff asks 2 questions:");
+    expect(lines).toContain("SOUS_VAR_API_URL");
+    expect(lines).toContain("--answer apiUrl=<value>");
+    expect(lines).toContain("no, and this recipe requires an answer");
+    expect(lines).toContain("yes, from the shared scope name SOUS_VAR_TASK_FILE_ROOT");
   });
 });
