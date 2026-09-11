@@ -101,6 +101,13 @@
         "description": "Manage the recipe repositories this project trusts",
         "hidden": true
       },
+      "lock": {
+        "description": "Inspect and repair this project's lockfile"
+      },
+      "locks": {
+        "description": "Inspect and repair this project's lockfile",
+        "hidden": true
+      },
       "namespace": {
         "description": "Browse the namespaces the trusted repositories publish"
       },

@@ -80,7 +80,7 @@ export function catalogContextFor(options: CatalogInputsOptions): CatalogContext
     lock: service.lockService.read(),
     subscriptions: Object.keys(service.allSubscriptions()).sort(),
     readManifest: (recipe) => {
-      const directory = recipeDirectory({
+      const directory = recipeFilesDirectory({
         service,
         sousDir: options.sousDir,
         env,
@@ -108,24 +108,36 @@ export function catalogContextFor(options: CatalogInputsOptions): CatalogContext
   return { inputs, notFetched };
 }
 
+/** Which recipe, at which version, in which of this project's repositories. */
+export type RecipeFilesQuery = {
+  /** The subscription service, which knows the store and the repository identities. */
+  service: SubscriptionService;
+  /** The project's `.sous/` directory, which holds the links map. */
+  sousDir: string;
+  /** The environment to read; decides where the store is. Defaults to `process.env`. */
+  env?: NodeJS.ProcessEnv;
+  /** The short name of the repository publishing it. */
+  repo: string;
+  /** The recipe key, `namespace/recipe`. */
+  key: string;
+  namespace: string;
+  name: string;
+  /** The exact version wanted. */
+  version: string;
+};
+
 /**
  * The directory one published recipe's files are read from: a linked working
  * copy when the repository is linked, and the store entry for that exact
  * version otherwise. Undefined when neither is on this machine.
  *
+ * Nothing is fetched, and the directory is not checked for existence: the
+ * caller reads what is there, and an absent manifest is an ordinary answer.
+ *
  * @param input - The recipe's identity, and where this project keeps its state.
  */
-function recipeDirectory(input: {
-  service: SubscriptionService;
-  sousDir: string;
-  env: NodeJS.ProcessEnv;
-  repo: string;
-  key: string;
-  namespace: string;
-  name: string;
-  version: string;
-}): string | undefined {
-  const checkout = linkedPathFor(input.repo, input.sousDir, input.env);
+export function recipeFilesDirectory(input: RecipeFilesQuery): string | undefined {
+  const checkout = linkedPathFor(input.repo, input.sousDir, input.env ?? process.env);
   if (checkout !== undefined) {
     const linked = mapLinkedRecipes(checkout)[input.key];
     if (linked !== undefined) return linked;
