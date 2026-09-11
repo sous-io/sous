@@ -30,7 +30,7 @@ const INDENT = 2;
 
 /** The columns the report of what stayed behind shows. */
 const STAYED_COLUMNS: TableColumn[] = [
-  { key: "key", header: "Recipe", minWidth: 12 },
+  { key: "key", header: "Recipe", kind: "path", overflow: "truncate", minWidth: 12 },
   { key: "heldBy", header: "Still held by", overflow: "wrap", flex: 1, minWidth: 16 },
 ];
 

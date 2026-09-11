@@ -34,10 +34,17 @@ const INDENT = 2;
  * name both survive.
  */
 const COLUMNS: TableColumn[] = [
-  { key: "name", header: "Repository", minWidth: 8 },
+  { key: "name", header: "Repository", overflow: "truncate", minWidth: 8 },
   { key: "provider", header: "Provider", priority: "medium" },
   { key: "origin", header: "Origin" },
-  { key: "linked", header: "Linked", priority: "medium" },
+  {
+    key: "linked",
+    header: "Linked",
+    kind: "path",
+    overflow: "truncate",
+    priority: "medium",
+    minWidth: 6,
+  },
   { key: "recipes", header: "Recipes", kind: "number", priority: "low" },
   {
     key: "url",

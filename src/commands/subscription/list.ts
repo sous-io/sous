@@ -35,8 +35,8 @@ const INDENT = 2;
  * subscription came from and whether it is switched on give way first.
  */
 const COLUMNS: TableColumn[] = [
-  { key: "key", header: "Subscription", minWidth: 12 },
-  { key: "range", header: "Range", minWidth: 7 },
+  { key: "key", header: "Subscription", kind: "path", overflow: "truncate", minWidth: 12 },
+  { key: "range", header: "Range", overflow: "truncate", minWidth: 7 },
   { key: "pinned", header: "Pinned version", flex: 1, minWidth: 14 },
   { key: "origin", header: "Origin", priority: "medium" },
   { key: "enabled", header: "Enabled", priority: "medium" },

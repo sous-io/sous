@@ -44,9 +44,9 @@ const INDENT = 2;
  * it is the answer to the question a reader is most likely to have.
  */
 const INSTALLED_COLUMNS: TableColumn[] = [
-  { key: "key", header: "Recipe", minWidth: 12 },
-  { key: "version", header: "Version" },
-  { key: "repo", header: "Repository", priority: "medium" },
+  { key: "key", header: "Recipe", kind: "path", overflow: "truncate", minWidth: 12 },
+  { key: "version", header: "Version", overflow: "truncate" },
+  { key: "repo", header: "Repository", overflow: "truncate", priority: "medium" },
   { key: "why", header: "Why", overflow: "wrap", flex: 1, minWidth: 16 },
 ];
 

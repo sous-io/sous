@@ -50,8 +50,15 @@ const INDENT = 2;
  * `SOUS_VAR_LOCAL_QUESTIONS_API_URL` is the part that identifies it.
  */
 const LIST_COLUMNS: TableColumn[] = [
-  { key: "name", header: "Variable", minWidth: 8 },
-  { key: "recipe", header: "Recipe", priority: "medium", minWidth: 8 },
+  { key: "name", header: "Variable", overflow: "truncate", minWidth: 8 },
+  {
+    key: "recipe",
+    header: "Recipe",
+    kind: "path",
+    overflow: "truncate",
+    priority: "medium",
+    minWidth: 8,
+  },
   {
     key: "envName",
     header: "Answered by",

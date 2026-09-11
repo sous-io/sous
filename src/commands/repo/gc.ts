@@ -37,10 +37,10 @@ const INDENT = 2;
  * details that step aside on a narrow terminal.
  */
 const EVICTED_COLUMNS: TableColumn[] = [
-  { key: "recipe", header: "Recipe", minWidth: 12 },
-  { key: "version", header: "Version" },
+  { key: "recipe", header: "Recipe", kind: "path", overflow: "truncate", minWidth: 12 },
+  { key: "version", header: "Version", overflow: "truncate" },
   { key: "size", header: "Size", kind: "number" },
-  { key: "repo", header: "Repository", priority: "medium" },
+  { key: "repo", header: "Repository", overflow: "truncate", priority: "medium" },
   { key: "lastUsed", header: "Last used", priority: "low", flex: 1 },
 ];
 

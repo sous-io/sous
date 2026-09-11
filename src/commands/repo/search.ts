@@ -31,9 +31,9 @@ const INDENT = 2;
  * helps nobody.
  */
 const COLUMNS: TableColumn[] = [
-  { key: "key", header: "Recipe", minWidth: 12 },
-  { key: "versions", header: "Versions", minWidth: 7 },
-  { key: "repo", header: "Repository", priority: "medium" },
+  { key: "key", header: "Recipe", kind: "path", overflow: "truncate", minWidth: 12 },
+  { key: "versions", header: "Versions", overflow: "truncate", minWidth: 7 },
+  { key: "repo", header: "Repository", overflow: "truncate", priority: "medium" },
   {
     key: "description",
     header: "What it is",
