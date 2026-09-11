@@ -20,6 +20,7 @@ import {
   RECIPE_KEY_PATTERN,
   RECIPE_NAME_PATTERN,
   REF_KEY_PATTERN,
+  REPO_IDENTITY_PATTERN,
   REPO_NAME_PATTERN,
   VARIABLE_NAME_PATTERN,
 } from "./patterns.js";
@@ -33,6 +34,7 @@ export {
   RECIPE_KEY_PATTERN,
   RECIPE_NAME_PATTERN,
   REF_KEY_PATTERN,
+  REPO_IDENTITY_PATTERN,
   REPO_NAME_PATTERN,
   VARIABLE_NAME_PATTERN,
 };
@@ -95,6 +97,20 @@ function kebabName(label: string, example: string) {
 
 /** A repo's short name, as used by the `repo:` qualifier on a ref. */
 export const repoNameSchema = kebabName("repo name", "sous-recipes");
+
+/**
+ * A repository's canonical identity, `<host>/<owner path>/<name>`. Everything
+ * shared between projects (the machine-wide store, the index cache, a
+ * lockfile's record of where a recipe came from) keys by this rather than by a
+ * short name, because a short name is one project's private label.
+ */
+export const repoIdentitySchema = z
+  .string()
+  .regex(
+    REPO_IDENTITY_PATTERN,
+    "a repository identity must be its host followed by the path it lives at, all " +
+      "lowercase (for example 'github.com/sous-io/sous-recipes')"
+  );
 
 /** A namespace name. */
 export const namespaceNameSchema = kebabName("namespace name", "tool-usage");

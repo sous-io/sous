@@ -32,6 +32,14 @@ export const REF_KEY_PATTERN = /^[a-z][a-z0-9-]*(\/[a-z][a-z0-9-]*)?$/;
 /** A recipe key, which always has both segments (`workflow/task-files`). */
 export const RECIPE_KEY_PATTERN = /^[a-z][a-z0-9-]*\/[a-z][a-z0-9-]*$/;
 
+/**
+ * A repository's canonical identity: the host, then the path it lives at, all
+ * lowercase (`github.com/sous-io/sous-recipes`). It is what every machine-wide
+ * key uses, because a project's short name for a repository is its own label
+ * and no other project has to agree with it.
+ */
+export const REPO_IDENTITY_PATTERN = /^[^\s/]+(\/[^\s/]+)+$/;
+
 /** A content hash, written as the algorithm name followed by lowercase hex. */
 export const CONTENT_HASH_PATTERN = /^sha256-[0-9a-f]{64}$/;
 

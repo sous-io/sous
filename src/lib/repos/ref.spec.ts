@@ -1,8 +1,12 @@
 import { describe, it, expect } from "vitest";
 import {
+  dependencyRefKey,
+  dependencyRepoUrl,
+  formatDependencyRef,
   formatRef,
   isNamespaceRef,
   isValidRef,
+  parseDependencyRef,
   parseRef,
   refKey,
   tryParseRef,
@@ -325,5 +329,183 @@ describe("isNamespaceRef()", () => {
   it("should be true only when no recipe is named", () => {
     expect(isNamespaceRef(parseRef("workflow"))).toBe(true);
     expect(isNamespaceRef(parseRef("workflow/task-files"))).toBe(false);
+  });
+});
+
+/** Runs parseDependencyRef and returns the ConfigError message, or fails the test. */
+function expectDependencyRejection(input: string): string {
+  try {
+    parseDependencyRef(input);
+  } catch (error) {
+    expect(isConfigError(error)).toBe(true);
+    return (error as Error).message;
+  }
+  throw new Error(
+    `expected parseDependencyRef(${JSON.stringify(input)}) to throw, but it returned`
+  );
+}
+
+describe("parseDependencyRef()", () => {
+  /**
+   * The common spelling: a recipe in the same repository, named by nothing but
+   * its published identity.
+   */
+  it("should parse a bare sibling ref", () => {
+    expect(parseDependencyRef("workflow/sat")).toEqual({
+      kind: "sibling",
+      namespace: "workflow",
+      recipe: "sat",
+    });
+  });
+
+  /** A sibling may carry a range, which is supported and uncommon. */
+  it("should parse a sibling ref with a range", () => {
+    expect(parseDependencyRef("workflow/sat@^1.1")).toEqual({
+      kind: "sibling",
+      namespace: "workflow",
+      recipe: "sat",
+      range: "^1.1",
+    });
+  });
+
+  /** A sibling ref may name a whole namespace, exactly as a subscription may. */
+  it("should parse a sibling namespace ref", () => {
+    expect(parseDependencyRef("workflow")).toEqual({
+      kind: "sibling",
+      namespace: "workflow",
+    });
+  });
+
+  /**
+   * The locator form: the scheme is the provider, the last two segments are
+   * always the namespace and the recipe, and the host is the provider's own
+   * when the path does not start with one.
+   */
+  it("should parse a locator URL with an implied host", () => {
+    expect(parseDependencyRef("github://sous-io/sous-recipes/workflow/sat@^1.1")).toEqual({
+      kind: "remote",
+      provider: "github",
+      host: "github.com",
+      repoPath: "sous-io/sous-recipes",
+      canonicalRepo: "github.com/sous-io/sous-recipes",
+      namespace: "workflow",
+      recipe: "sat",
+      range: "^1.1",
+    });
+  });
+
+  /** A first segment carrying a dot is the host, which is how self-hosting works. */
+  it("should parse a locator URL with an explicit host and nested groups", () => {
+    expect(
+      parseDependencyRef("gitlab://gitlab.example.com/group/subgroup/project/workflow/sat")
+    ).toEqual({
+      kind: "remote",
+      provider: "gitlab",
+      host: "gitlab.example.com",
+      repoPath: "group/subgroup/project",
+      canonicalRepo: "gitlab.example.com/group/subgroup/project",
+      namespace: "workflow",
+      recipe: "sat",
+    });
+  });
+
+  /** The default host for the other shipped provider. */
+  it("should use gitlab.com when a gitlab locator names no host", () => {
+    const parsed = parseDependencyRef("gitlab://group/project/workflow/sat");
+    expect(parsed.host).toBe("gitlab.com");
+    expect(parsed.canonicalRepo).toBe("gitlab.com/group/project");
+  });
+
+  /** A `.git` suffix is what people paste; it is not part of the identity. */
+  it("should drop a .git suffix from the repository path", () => {
+    expect(parseDependencyRef("github://owner/thing.git/workflow/sat").canonicalRepo).toBe(
+      "github.com/owner/thing"
+    );
+  });
+
+  /** Identities are compared, so they are lowercased on the way in. */
+  it("should lowercase the identity", () => {
+    expect(parseDependencyRef("github://Sous-IO/Sous-Recipes/workflow/sat").canonicalRepo).toBe(
+      "github.com/sous-io/sous-recipes"
+    );
+  });
+
+  /** A local path is a consumer's convenience, never a published location. */
+  it("should reject a local locator with a reason", () => {
+    const message = expectDependencyRejection("local:///home/me/recipes/workflow/sat");
+    expect(message).toContain("consumer");
+    expect(message).toContain("published");
+  });
+
+  /** The short-name qualifier means nothing outside the project that chose it. */
+  it("should reject the consumer-side repo qualifier", () => {
+    const message = expectDependencyRejection("sous-recipes:workflow/sat");
+    expect(message).toContain("short name");
+    expect(message).toContain("github://owner/repository/namespace/recipe");
+  });
+
+  /** An unknown scheme names a provider sous does not have. */
+  it("should reject an unknown provider scheme", () => {
+    const message = expectDependencyRejection("bitbucket://owner/repo/workflow/sat");
+    expect(message).toContain("'bitbucket' is not a provider");
+    expect(message).toContain("github, gitlab");
+  });
+
+  /** A locator that names no repository cannot be fetched from. */
+  it("should reject a locator with too few segments", () => {
+    const message = expectDependencyRejection("github://sous-recipes/workflow/sat");
+    expect(message).toContain("owner");
+  });
+
+  /** The same, once an explicit host has eaten one of the segments. */
+  it("should reject a locator whose host is followed by too little", () => {
+    const message = expectDependencyRejection("gitlab://gitlab.example.com/project/workflow/sat");
+    expect(message).toContain("gitlab.example.com");
+  });
+
+  /** The recipe's identity is kebab-case, exactly as everywhere else. */
+  it("should reject a badly spelled namespace or recipe", () => {
+    expect(expectDependencyRejection("github://owner/repo/Workflow/sat")).toContain(
+      "kebab-case"
+    );
+    expect(expectDependencyRejection("github://owner/repo/workflow/Sat")).toContain(
+      "kebab-case"
+    );
+  });
+
+  /** Ranges follow npm's rules here too. */
+  it("should reject a range that is not a range", () => {
+    expect(expectDependencyRejection("github://owner/repo/workflow/sat@not-a-range")).toContain(
+      "npm's rules"
+    );
+  });
+});
+
+describe("dependencyRefKey() and formatDependencyRef()", () => {
+  /** The key is what the index, the lockfile and the store file a recipe under. */
+  it("should reduce either spelling to the recipe key", () => {
+    expect(dependencyRefKey(parseDependencyRef("workflow/sat@^1.1"))).toBe("workflow/sat");
+    expect(
+      dependencyRefKey(parseDependencyRef("github://owner/repo/workflow/sat"))
+    ).toBe("workflow/sat");
+    expect(dependencyRefKey(parseDependencyRef("workflow"))).toBe("workflow");
+  });
+
+  /** Rendering round-trips, with the host written out. */
+  it("should render a dependency back to its written form", () => {
+    expect(formatDependencyRef(parseDependencyRef("workflow/sat@^1.1"))).toBe(
+      "workflow/sat@^1.1"
+    );
+    expect(
+      formatDependencyRef(parseDependencyRef("github://sous-io/sous-recipes/workflow/sat"))
+    ).toBe("github://github.com/sous-io/sous-recipes/workflow/sat");
+  });
+
+  /** The HTTPS location is what `sous repo add` would be handed for it. */
+  it("should give the repository URL of a remote dependency", () => {
+    expect(dependencyRepoUrl(parseDependencyRef("github://sous-io/sous-recipes/workflow/sat"))).toBe(
+      "https://github.com/sous-io/sous-recipes"
+    );
+    expect(dependencyRepoUrl(parseDependencyRef("workflow/sat"))).toBeUndefined();
   });
 });
