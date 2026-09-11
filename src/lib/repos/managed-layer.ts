@@ -23,7 +23,14 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { applyEdits, modify, parse as parseJsonc, type ParseError } from "jsonc-parser";
+import {
+  applyEdits,
+  findNodeAtLocation,
+  modify,
+  parse as parseJsonc,
+  parseTree,
+  type ParseError,
+} from "jsonc-parser";
 import { CONFD_DIR_NAME } from "../config-discovery.js";
 import { ConfigError } from "../errors.js";
 import { stableJsonStringify } from "./formats/common.js";
@@ -303,6 +310,19 @@ export function writeManagedLayer(
   return writeLayerText(sousDir, fileName, header + stableJsonStringify(content), options);
 }
 
+/**
+ * True when the layer's text actually holds something at a key path. Used to
+ * tell a removal that has work to do from one that does not.
+ *
+ * @param text - The layer's text.
+ * @param keyPath - The key path to look for.
+ */
+function hasNodeAt(text: string, keyPath: (string | number)[]): boolean {
+  const root = parseTree(text);
+  if (root === undefined) return false;
+  return findNodeAtLocation(root, keyPath) !== undefined;
+}
+
 /** One key-path edit to a managed layer. `undefined` removes the key. */
 export type ManagedLayerEdit = {
   /** The key path to change, such as `["repos", "team-recipes"]`. */
@@ -357,6 +377,11 @@ export function updateManagedLayer(
   }
 
   for (const edit of edits) {
+    // Removing a key that is not there is already done. Asking `modify` to do it
+    // anyway throws, because there is no parent object to remove it from, and a
+    // layer somebody has hand-edited is exactly where that happens.
+    if (edit.value === undefined && !hasNodeAt(text, edit.path)) continue;
+
     const last = edit.path[edit.path.length - 1];
     const changes = modify(text, edit.path, edit.value, {
       formattingOptions: { tabSize: 2, insertSpaces: true, eol: "\n" },

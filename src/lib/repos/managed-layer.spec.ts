@@ -162,6 +162,37 @@ describe("the managed config layers", () => {
   });
 
   /**
+   * Removing a key from a layer that has never been written is already done,
+   * and has to stay quiet: a removal is how a command reverses itself, and the
+   * layer is absent whenever nothing has been added to it yet.
+   */
+  it("should treat removing a key from a layer that does not exist as done", () => {
+    expect(() =>
+      updateManagedLayer(sousDir, REPOS_LAYER_FILENAME, [
+        { path: ["repos", "one"], value: undefined },
+      ])
+    ).not.toThrow();
+
+    expect(readManagedLayer(sousDir, REPOS_LAYER_FILENAME)).toEqual({});
+  });
+
+  /**
+   * The same when the layer is there but the block the key lives in is not,
+   * which is the state a hand-edited layer is left in.
+   */
+  it("should treat removing a key with no containing block as done", () => {
+    seed(REPOS_LAYER_FILENAME, `${managedLayerHeader(REPOS_LAYER_FILENAME)}{}\n`);
+
+    expect(() =>
+      updateManagedLayer(sousDir, REPOS_LAYER_FILENAME, [
+        { path: ["repos", "one"], value: undefined },
+      ])
+    ).not.toThrow();
+
+    expect(readManagedLayer(sousDir, REPOS_LAYER_FILENAME)).toEqual({});
+  });
+
+  /**
    * New keys go in sorted, so a layer only sous has ever written stays in a
    * stable order and its diffs stay small.
    */
