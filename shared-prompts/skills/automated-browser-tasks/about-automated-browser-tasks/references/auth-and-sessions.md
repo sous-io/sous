@@ -20,6 +20,29 @@ closing or controlling the user's running Chrome.
 This is all local. Nothing leaves the machine. No Python; pure JS via
 `dbus-next`, `better-sqlite3`, and Node's `crypto`.
 
+## !important Only COOKIES cross over — app-side draft state does NOT
+
+The harness injects a `storageState` built from cookies into a **fresh** headless context. It
+does not clone the user's tab, its memory, or any server-side per-session scratch space. Two
+consequences that shape how multi-step work has to be designed:
+
+**1. Every run starts with an empty app-side edit buffer.** An editor that accumulates uncommitted
+changes (Foundry's Ontology Manager is the reference case) will be **clean** at the start of each
+run, and any buffer a run leaves uncommitted **dies with the session**. So:
+
+- A "make one edit, save, retry, repeat" loop over separate runs **cannot terminate** when the
+  server validates the whole document and rejects it for an unrelated reason. Each run's lone edit
+  is rejected, then discarded.
+- A multi-edit repair needs **ONE task that composes the others inside a single session**. The
+  pattern: delegate each edit to the existing single-edit task with `save=false` via
+  `ctx.runChild`, assert the buffer grew by exactly one per step, then delegate one commit to the
+  save task. The composing task should click nothing itself.
+- `save=false` is therefore **not a dry run you can inspect afterwards** — it throws the work away.
+
+**2. A "buffer is clean" check is scoped to a fresh session.** It cannot see uncommitted work
+sitting in the user's own open tab. Say so when reporting it; "clean" means "nothing uncommitted
+visible to a new session", not "the user has no unsaved work".
+
 ## Choosing the profile
 
 The Chrome profile defaults to `Default`. Override per run with
@@ -29,9 +52,14 @@ The Chrome profile defaults to `Default`. Override per run with
 ## Detecting auth failures
 
 Cookies expire; SSO sessions lapse. After each navigation a script should call
-`await ctx.checkAuth()`. It inspects the current URL for login indicators
-(`/login`, `/sso`, `multipass`, `accounts.google.com`, etc.) and throws an
-`AuthError` if found.
+`await ctx.checkAuth()`. It throws an `AuthError` when the current URL is a login
+screen. The check is **path-aware, not substring-based**: identity providers are
+matched by host (`accounts.google.com`, `login.microsoftonline.com`), and login
+routes by pathname, either exactly or as a `/`-delimited prefix (`/multipass/login`
+for Foundry, plus `/login`, `/signin`, `/sso`). It deliberately does NOT match a
+bare `multipass` (that would hit every `ri.multipass..organization.<uuid>` RID in a
+Control Panel URL) or a bare `/auth/` (`/auth/callback` is where an OAuth sign-in
+SUCCEEDS).
 
 The harness catches `AuthError` and returns:
 

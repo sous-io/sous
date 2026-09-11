@@ -12,6 +12,70 @@ import { createUtils } from './utils.mjs';
 import { createDebug } from './debug.mjs';
 import { resolveParams, ParamError } from './params.mjs';
 
+// Login-redirect detection is PATH-AWARE on purpose. It used to be a bare
+// `currentUrl.includes(indicator)` over the whole URL, which produced two real
+// false positives that aborted working tasks with a bogus authentication error:
+//   * `multipass` matched EVERY Foundry Control Panel organization URL, because
+//     those carry a `ri.multipass..organization.<uuid>` RID in the path. A resource
+//     identifier is not a login screen. The Foundry login route is `/multipass/login`.
+//   * `/auth/` matched `/auth/callback`, which is where an OAuth/PKCE sign-in
+//     SUCCEEDS. Reporting a completed callback as a login failure is backwards, so
+//     `/auth/` is no longer an indicator at all.
+// So: identity providers are matched by HOST, login routes by PATHNAME (exact, or a
+// `/`-delimited prefix). Do not put bare substrings back in these lists.
+
+/** Hosts that ARE an identity-provider sign-in screen (host match, incl. subdomains). */
+const LOGIN_HOSTS = [
+  'accounts.google.com',
+  'login.microsoftonline.com',
+];
+
+/** Pathnames that ARE a login screen: matched exactly, or as a `<path>/...` prefix. */
+const LOGIN_PATHS = [
+  '/multipass/login', // Foundry (Palantir Multipass) sign-in
+  '/login',
+  '/signin',
+  '/sso',
+];
+
+/**
+ * Decide whether a URL is a login / identity-provider screen.
+ *
+ * Exported for testing; `ctx.checkAuth()` is the caller that matters.
+ *
+ * @param {string} url - The URL to classify (typically `page.url()`).
+ * @returns {string|null} The matched indicator (host or path) or null if this is not a login screen.
+ */
+export function isLoginRedirect(url) {
+  const raw = String(url || '');
+
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    // Not a parseable absolute URL (e.g. 'about:blank', a bare path). Fall back to
+    // the same path rules applied to the raw string, so a genuine login redirect is
+    // still caught, while a RID embedded elsewhere still is not.
+    for (const path of LOGIN_PATHS) {
+      if (new RegExp(`${path}(?:[/?#]|$)`, 'i').test(raw)) return path;
+    }
+    return null;
+  }
+
+  const host = parsed.hostname.toLowerCase();
+  for (const loginHost of LOGIN_HOSTS) {
+    if (host === loginHost || host.endsWith(`.${loginHost}`)) return loginHost;
+  }
+
+  // Normalise a trailing slash so '/login/' matches '/login'.
+  const pathname = parsed.pathname.toLowerCase().replace(/\/+$/, '') || '/';
+  for (const path of LOGIN_PATHS) {
+    if (pathname === path || pathname.startsWith(`${path}/`)) return path;
+  }
+
+  return null;
+}
+
 export class AuthError extends Error {
   constructor(message, { url, indicators } = {}) {
     super(message);
@@ -92,21 +156,16 @@ export async function runScript(script, params = {}, options = {}) {
 
       async checkAuth() {
         const currentUrl = page.url();
-        const authIndicators = [
-          '/login', '/auth/', '/sso', 'signin', 'multipass',
-          'accounts.google.com', 'login.microsoftonline.com',
-        ];
+        const indicator = isLoginRedirect(currentUrl);
 
-        for (const indicator of authIndicators) {
-          if (currentUrl.includes(indicator)) {
-            throw new AuthError(
-              `Authentication required. The browser was redirected to a login page.\n` +
-              `Current URL: ${currentUrl}\n\n` +
-              `Action needed: Log in to the target site in your Chrome browser ` +
-              `(profile: "${profileName}"), then retry this script.`,
-              { url: currentUrl, indicators: [indicator] }
-            );
-          }
+        if (indicator) {
+          throw new AuthError(
+            `Authentication required. The browser was redirected to a login page.\n` +
+            `Current URL: ${currentUrl}\n\n` +
+            `Action needed: Log in to the target site in your Chrome browser ` +
+            `(profile: "${profileName}"), then retry this script.`,
+            { url: currentUrl, indicators: [indicator] }
+          );
         }
       },
 
