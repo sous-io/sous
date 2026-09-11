@@ -122,18 +122,22 @@ contents:
 # and no valid answer is already in scope.
 #
 # Every definition must carry a 'description' and an 'example'. The description
-# is the paragraph shown above the question and by 'sous vars <name>'; the
+# is the paragraph shown above the question and by 'sous vars show <name>'; it
+# says, in full sentences, what the setting is for, what the default does, and
+# what else is acceptable. The prompt is one plain question, nothing more. The
 # example is a realistic sample answer, shown with the question so nobody has to
-# guess what a good one looks like. An example is documentation only and is
-# never stored; use 'default' for a value a project should actually start with.
+# guess what a good one looks like; it is documentation only and is never
+# stored, so use 'default' for a value a project should actually start with.
 #
 # variables:
 #   - name: apiBaseUrl
 #     type: url
-#     prompt: Which API base URL should this project use?
+#     prompt: Which API should this project talk to?
 #     description: >-
-#       The root URL every request this recipe generates is sent to. Point it at
-#       your own deployment; the staging and production hosts each have their own.
+#       Every request this recipe generates is sent to one deployment of the API,
+#       and this setting says which one. The default points at the public
+#       production host, but any deployment you can reach works, including a
+#       staging host or a service running on your own machine.
 #     example: https://api.example.com
 #     default: https://api.example.com
 #     required: true
@@ -143,10 +147,13 @@ contents:
 #     # Name an environment variable explicitly to reuse a value the environment
 #     # already carries. When omitted, 'sous repo release' derives one.
 #     env: SERVICE_TOKEN
-#     prompt: What is the service token for this project?
+#     prompt: What is this project's service token?
 #     description: >-
-#       The token this recipe authenticates with. Create one under Settings, then
-#       Tokens, and give it read access to the project you are configuring.
+#       This recipe authenticates every call it makes with a service token, which
+#       is issued per project and is not shared between them. Create one under
+#       Settings, then Tokens, and give it read access to the project you are
+#       configuring. There is no default; a token is always specific to you, and
+#       it is stored in the gitignored env file so it never reaches git.
 #     example: svc_0123456789abcdef0123
 #     # A secret is always written to the gitignored '.sous/.env.local'.
 #     secret: true

@@ -27,11 +27,15 @@ contents:
 variables:
   - name: skillsRoot
     type: path
-    prompt: Where do this project's own skill sources live?
+    prompt: Where should this project's own skills be kept?
     description: >-
-      The directory holding the skill sources this project writes and maintains,
-      not the compiled output directory. The create-skill skill writes new skills
-      here, and about-sous and about-agent-skills point agents at it.
+      This recipe teaches agents to write skills of their own, and a skill's
+      source is not the compiled copy sous builds into the agent directories.
+      This setting says where those sources are kept: the create-skill skill
+      writes new skills there, and the about-sous and about-agent-skills skills
+      point agents at it when they go looking. The default keeps them in a
+      prompts directory at the project root, but any path works, either relative
+      to the project root or absolute.
     example: prompts/skills
     default: prompts/skills
     required: true

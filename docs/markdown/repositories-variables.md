@@ -122,26 +122,36 @@ project asks questions no recipe publishes yet.
 ## `sous vars show <name>`
 
 Shows one variable in full: its question, the publisher's description and example, the recipe and
-version that published it, its constraints, which env file an answer would be stored in, the value
-in scope, and whether that value fits the definition. Then it prints every name on the ladder and
-says which rung actually answered.
+version that published it, the value in scope and whether it fits, then the same labeled facts the
+advanced view of a question prints, and finally every name on the ladder with the rung that
+actually answered.
 
 ```term
 $ sous vars show apiUrl
-Question:     Where does the API live?
-About:        The service every request this recipe generates is sent to. Point
-              it at your own deployment; staging and production each have one.
+Question:     Which API should sous talk to?
+About:        Every request this recipe generates is sent to one deployment of
+              the API, and this setting says which one. The default points at
+              the public production host, but any deployment you can reach works.
 For example:  https://api.example.com
 Recipe:       workflow/task-files version 1.2.0 from sous-recipes
-Constraints:  must be a URL
 Stored in:    .env
 Value:        https://api.example.com
+
+@example       https://api.example.com
+@required-by   workflow/task-files (https://example.com/owner/recipes/workflow/task-files)
+@defined-by    workflow/task-files (https://example.com/owner/recipes/workflow/task-files)
+@storage-path  /home/you/project/.sous/.env
+@stored-as     SOUS_VAR_API_URL
+@constraints   - must be a url value (type: url)
 
 Environment variable                     Rung             Status
 SOUS_VAR_WORKFLOW_TASK_FILES_API_URL     recipe scope     not set
 SOUS_VAR_WORKFLOW_API_URL                namespace scope  not set
 SOUS_VAR_API_URL                         shared scope     answered it, from the .env file
 ```
+
+`@required-by` and `@defined-by` are the same links the advanced view of a question shows, so the
+two views say the same thing in the same words.
 
 The name may be the bare variable name or its full `namespace/recipe.name` key, which is what you
 use when two recipes publish the same name.
@@ -161,21 +171,100 @@ Asks the questions the project's definitions imply and stores the answers.
 | `sous vars ask --file <path>` | Reads definitions from a standalone definitions file |
 | `sous vars ask --dry-run` | Reports what would be asked and written, without writing anything |
 
-Every question is introduced by a block that says who is asking and what is being asked for, so
-nobody has to guess what a one-line question means. A publisher must supply the description and
-the example, so both are always there:
+### How the questions run
+
+Every trust decision is settled first. A subscribe resolves the whole dependency closure and runs
+the trust ceremony for each new repository before the first question is printed, so a question is
+never interleaved with a decision about who you are trusting.
+
+Questions then run one recipe at a time: the recipe you subscribed to first, then each recipe it
+depends on, each opening with how many answers it needs. When the closure covers more than one
+recipe, a single lead-in says so before anything is asked:
 
 ```term
-Recipe asking : workflow/task-files
-Variable      : apiUrl
-About         : The service every request this recipe generates is sent to. Point
-                it at your own deployment; staging and production each have one.
-For example   : https://api.example.com
-Constraints   : type: url
-Stored in     : .env, as SOUS_VAR_API_URL
-
-? Where does the API live? (workflow/task-files) [type: url]
+workflow/task-files needs 4 answers, and workflow/sub-agent-delegation, which it depends on, needs 2.
 ```
+
+Each question then prints its own view: the header, the publisher's description wrapped to your
+terminal, the default and the example, one muted line saying exactly where the answer will be
+stored, and a hint naming the two keys that do anything here.
+
+```term
+workflow/task-files needs 4 answers before it can be used.
+
+Question 1 of 4: taskFileRoot
+
+This recipe mandates the creation of task files that are stored locally and, in
+general, should not be committed. This setting dictates the path in which agents
+will store and search for your task files. The default value stores task files in
+the project's .sous directory, but you can specify any local path, either relative
+to the project root or absolute.
+
+  @default  .sous/tasks
+  @example  ~/my-task-files
+  Stored as SOUS_VAR_TASK_FILE_ROOT in .sous/.env
+
+[ENTER to accept the default; TAB for advanced info and options]
+? Where should task files be stored? (.sous/tasks):
+```
+
+Enter accepts what is typed, or the default when nothing is. Once an answer is stored, two lines
+say what was stored and where:
+
+```term
+  SOUS_VAR_TASK_FILE_ROOT=.sous/tasks
+  Saved to /home/you/project/.sous/.env
+```
+
+An answer that was already in scope is never asked about again; it is reported with its scope and
+its source instead.
+
+### The advanced view
+
+Tab opens the advanced view of the same question: every fact about the variable, laid out by the
+same renderer `sous vars show` uses, and a menu for changing where the answer goes.
+
+```term
+[Advanced Variable Settings]
+
+Question 1 of 4: taskFileRoot
+
+This recipe mandates the creation of task files that are stored locally and, in
+general, should not be committed. This setting dictates the path in which agents
+will store and search for your task files. The default value stores task files in
+the project's .sous directory, but you can specify any local path, either relative
+to the project root or absolute.
+
+@default       .sous/tasks
+@example       ~/my-task-files
+@required-by   workflow/task-files (https://example.com/owner/recipes/workflow/task-files)
+@defined-by    workflow/task-files (https://example.com/owner/recipes/workflow/task-files)
+@storage-path  /home/you/project/.sous/.env
+@stored-as     SOUS_VAR_TASK_FILE_ROOT
+@constraints   - must be a path value (type: path)
+               - must be at least 1 character long (minLength: 1)
+
+? What would you like to do?
+  Return to value entry
+  Change the storage file
+  Change the stored variable name
+```
+
+`@required-by` names the recipe you subscribed to whose closure pulled this variable in, and spells
+out the chain when it arrived through a dependency; `@defined-by` names the recipe that declares
+the definition. Both are shown as links: a repository URL with the recipe's folder for a hosted
+repository, and a filesystem path for one read from this machine.
+
+Changing the stored name offers every rung the ladder looks up, with the one sous would use
+already selected, plus a name of your own; a name the ladder would never look at is bound with a
+mapping record, so resolution still finds it. Changing the storage file offers the committed
+`.sous/.env` and the gitignored `.sous/.env.local`. Once anything has changed, the first menu item
+becomes "Save changes and return to value entry" and a "Discard changes" item joins it.
+
+A secret, or a variable the publisher declared machine-specific, may still be pointed at the
+committed file. Sous does not prevent it; it says plainly that the value would enter your git
+history and asks you to confirm, which is informed consent rather than a locked door. Returning to
+the value question prints its view again, with the updated "Stored as" line.
 
 Every run ends with the same three-part report: what was inherited from an answer already in
 scope, what was stored and under which name in which file, and what was left unanswered and why.

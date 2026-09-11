@@ -99,11 +99,14 @@ variable and no valid answer is already in scope.
 variables:
   - name: taskFileRoot
     type: path
-    prompt: Where should task files live?
+    prompt: Where should task files be stored?
     description: >-
-      One markdown file per git branch is written here. Most projects keep these
-      as local working notes and gitignore the directory.
-    example: .sous/tasks
+      This recipe mandates the creation of task files that are stored locally
+      and, in general, should not be committed. This setting dictates the path in
+      which agents will store and search for your task files. The default value
+      stores task files in the project's .sous directory, but you can specify any
+      local path, either relative to the project root or absolute.
+    example: ~/my-task-files
     default: .sous/tasks
     required: true
     scope: shared
@@ -111,10 +114,13 @@ variables:
   - name: serviceToken
     type: string
     env: SERVICE_TOKEN
-    prompt: What is the service token for this project?
+    prompt: What is this project's service token?
     description: >-
-      The token this recipe authenticates with. Create one under Settings, then
-      Tokens, and give it read access to the project you are configuring.
+      This recipe authenticates every call it makes with a service token, which
+      is issued per project and is not shared between them. Create one under
+      Settings, then Tokens, and give it read access to the project you are
+      configuring. There is no default; a token is always specific to you, and it
+      is stored in the gitignored env file so it never reaches git.
     example: svc_0123456789abcdef0123
     secret: true
     scope: local
@@ -127,8 +133,17 @@ The rules worth knowing while you write one:
 - **`name` is camelCase**, and it is how templates refer to the variable.
 - **`description` and `example` are both required.** The one-line `prompt` is rarely enough on its
   own, and the person answering it cannot read your mind. The description is the paragraph shown
-  above the question and by `sous vars <name>`: say what the variable is for and what changes when
-  it is set. The example is a realistic sample answer, shown with the question.
+  above the question and by `sous vars show <name>`; the example is a realistic sample answer,
+  shown with the question.
+- **A description explains, a prompt asks.** Write the description in full sentences, and cover
+  three things: what the setting is for, what the default does, and what else is acceptable. Write
+  the prompt as one plain question and nothing else. The pair above is the model:
+  "This recipe mandates the creation of task files that are stored locally and, in general, should
+  not be committed. This setting dictates the path in which agents will store and search for your
+  task files. The default value stores task files in the project's .sous directory, but you can
+  specify any local path, either relative to the project root or absolute." asked as
+  "Where should task files be stored?". A description that only restates the prompt, or a prompt
+  that tries to carry the explanation, both make the question harder to answer.
 - **An example is documentation, a default is a value.** Sous never stores an example and never
   offers it as the answer; it only ever shows it. Use `default` for a value a project should
   actually start with. The same text may appear in both when the sample answer really is the right
