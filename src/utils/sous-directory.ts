@@ -26,6 +26,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { resolveSousHome } from "../lib/sous-home.js";
 
 /** The three files written into every sous-created directory. */
 export const README_FILENAME = "README.md";
@@ -167,12 +168,26 @@ export function ensureSousHomeDirectory(directory: string): string {
 }
 
 /**
+ * Explains the parent directory too, but ONLY when it really is the user-level
+ * sous directory. A store rooted somewhere else (a test fixture, a root somebody
+ * pointed at by hand) must never leave explanatory files in a directory sous
+ * does not own, such as the system temporary directory.
+ *
+ * @param directory - The child directory whose parent is being considered.
+ */
+function ensureParentWhenSousHome(directory: string): void {
+  const parent = path.resolve(path.dirname(directory));
+  if (parent !== path.resolve(resolveSousHome())) return;
+  ensureSousHomeDirectory(parent);
+}
+
+/**
  * Ensures the machine-wide recipe store root, `$SOUS_HOME/cache/`.
  *
  * @param directory - Absolute path to the store root.
  */
 export function ensureStoreRootDirectory(directory: string): string {
-  ensureSousHomeDirectory(path.dirname(directory));
+  ensureParentWhenSousHome(directory);
   return ensureSousDirectory(directory, {
     title: "cache: the machine-wide recipe store",
     body: [
@@ -195,7 +210,7 @@ export function ensureStoreRootDirectory(directory: string): string {
  * @param directory - Absolute path to the global repos directory.
  */
 export function ensureGlobalReposDirectory(directory: string): string {
-  ensureSousHomeDirectory(path.dirname(directory));
+  ensureParentWhenSousHome(directory);
   return ensureSousDirectory(directory, {
     title: "repos: globally linked repository checkouts",
     body: [

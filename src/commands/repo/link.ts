@@ -42,6 +42,10 @@ import {
   warning,
 } from "../../utils/formatting.js";
 import { confirmationFlag } from "../../utils/flags.js";
+import {
+  ensureGlobalReposDirectory,
+  ensureProjectReposDirectory,
+} from "../../utils/sous-directory.js";
 
 /**
  * `sous repo link` points this project (or this machine) at a working copy of a
@@ -329,6 +333,11 @@ export default class RepoLink extends BaseCommand {
         notes: [`Would clone ${url} into ${directory}.`],
       };
     }
+
+    // The directory holding the checkouts gets its README before the clone puts
+    // anything in it, whichever scope the link is for.
+    if (isGlobal) ensureGlobalReposDirectory(base);
+    else ensureProjectReposDirectory(base);
 
     log(`  Cloning ${url} into ${directory} ...`);
     const clone = cloneRepo(url, directory);

@@ -31,6 +31,7 @@ import {
   type StoreEntry,
 } from "../formats/store-entry.js";
 import { resolveStoreRoot, type EnvLike } from "../../sous-home.js";
+import { ensureStoreRootDirectory } from "../../../utils/sous-directory.js";
 import { hashDirectory, hashesEqual } from "./hash.js";
 import type {
   RecipeStoreLike,
@@ -228,6 +229,8 @@ export class RecipeStore implements RecipeStoreLike {
   async put(key: StoreKey, sourceDir: string, expectedHash?: string): Promise<StoreEntry> {
     const target = this.entryDir(key);
     const parent = path.dirname(target);
+    // The store root explains itself the first time anything is written into it.
+    ensureStoreRootDirectory(this.root);
     await fs.mkdir(parent, { recursive: true });
 
     const stagingDir = path.join(

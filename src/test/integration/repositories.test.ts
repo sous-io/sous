@@ -271,6 +271,30 @@ describe("the repositories consumer surface", () => {
       // The index is cached, and nothing else has been downloaded.
       expect(fs.existsSync(path.join(storeRoot, "_indexes", "fixtures.json"))).toBe(true);
       expect(fs.existsSync(path.join(storeRoot, "fixtures"))).toBe(false);
+
+      // Every directory sous created for itself explains itself: the layer
+      // directory, the store root and the index cache each carry a README with
+      // two one-line pointers to it.
+      for (const directory of [
+        path.join(sousDir, "conf.d"),
+        sousHome,
+        storeRoot,
+        path.join(storeRoot, "_indexes"),
+      ]) {
+        for (const name of ["README.md", "AGENTS.md", "CLAUDE.md"]) {
+          expect(fs.existsSync(path.join(directory, name))).toBe(true);
+        }
+        expect(fs.readFileSync(path.join(directory, "AGENTS.md"), "utf8")).toBe(
+          "Read `./README.md` for information about this directory.\n"
+        );
+      }
+
+      expect(fs.readFileSync(path.join(sousDir, "conf.d", "README.md"), "utf8")).toContain(
+        "drop-in configuration layers"
+      );
+      expect(fs.readFileSync(path.join(storeRoot, "README.md"), "utf8")).toContain(
+        "machine-wide recipe store"
+      );
     },
     CLI_TIMEOUT
   );

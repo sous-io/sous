@@ -26,6 +26,7 @@ import { warning } from "../../../utils/formatting.js";
 // in a circle at run time.
 import { DEFAULT_FRESHNESS_SECONDS } from "../store/settings.js";
 import type { ProviderOptions, RepoProvider } from "./provider.js";
+import { ensureIndexCacheDirectory } from "../../../utils/sous-directory.js";
 
 /** The directory, under the store root, that cached indexes live in. */
 export const INDEX_CACHE_DIRNAME = "_indexes";
@@ -159,7 +160,7 @@ export class IndexCache {
    * @param meta - What to record.
    */
   writeMeta(repoName: string, meta: IndexMeta): void {
-    fs.mkdirSync(this.directory, { recursive: true });
+    ensureIndexCacheDirectory(this.directory);
     fs.writeFileSync(this.sidecarPath(repoName), stableJsonStringify(meta), "utf8");
   }
 
@@ -269,7 +270,7 @@ export class IndexCache {
       ...(fetched.etag === undefined ? {} : { etag: fetched.etag }),
     };
 
-    fs.mkdirSync(this.directory, { recursive: true });
+    ensureIndexCacheDirectory(this.directory);
     fs.writeFileSync(this.indexPath(repoName), stableJsonStringify(index), "utf8");
     this.writeMeta(repoName, meta);
 

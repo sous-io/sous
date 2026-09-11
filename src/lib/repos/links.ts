@@ -24,6 +24,10 @@ import { ConfigError } from "../errors.js";
 import { resolveSousHome, resolveStoreRoot } from "../sous-home.js";
 import { LINKS_FILENAME } from "./formats/common.js";
 import {
+  ensureProjectReposDirectory,
+  ensureSousHomeDirectory,
+} from "../../utils/sous-directory.js";
+import {
   createEmptyLinksMap,
   mergeLinksMaps,
   parseLinksMap,
@@ -224,6 +228,9 @@ export function writeGlobalLinks(
   map: LinksMap,
   env: NodeJS.ProcessEnv = process.env
 ): string {
+  // The machine-wide map is the first thing many users ever put in `$SOUS_HOME`,
+  // so this is where that directory usually gets its own explanation.
+  ensureSousHomeDirectory(resolveSousHomeDir(env));
   return writeLinksFile(globalLinksPath(env), map);
 }
 
@@ -280,8 +287,7 @@ export function describeLinkedRepos(
  * @param sousDir - The project's discovered `.sous/` directory.
  */
 export function ensureReposIgnoreFiles(sousDir: string): void {
-  const reposDir = projectReposDir(sousDir);
-  fs.mkdirSync(reposDir, { recursive: true });
+  const reposDir = ensureProjectReposDirectory(projectReposDir(sousDir));
   writeIfChanged(path.join(reposDir, ".gitignore"), "*\n");
 
   const gitignorePath = path.join(sousDir, ".gitignore");

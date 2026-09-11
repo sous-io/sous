@@ -31,6 +31,7 @@ import {
   type IndexFile,
 } from "./formats/index-file.js";
 import { INDEX_CACHE_DIRNAME, INDEX_SIDECAR_SUFFIX } from "./providers/index-cache.js";
+import { ensureIndexCacheDirectory } from "../../utils/sous-directory.js";
 import type { RecipeStoreLike, StoreKey } from "./store/contract.js";
 import {
   CORE_NAMESPACE,
@@ -214,7 +215,7 @@ function writeSeedIndex(input: {
   // same last-good behavior every other repository gets.
   //
   // Any sidecar left over from an earlier fetch is removed for the same reason.
-  fs.mkdirSync(directory, { recursive: true });
+  ensureIndexCacheDirectory(directory);
   fs.writeFileSync(indexPath, stringifyIndexFile(index), "utf8");
   fs.rmSync(sidecarPath, { force: true });
   return true;

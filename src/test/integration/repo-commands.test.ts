@@ -203,10 +203,25 @@ describe("sous repo init / link / unlink", () => {
         origin: "path",
       });
 
-      // Nothing was cloned, so the repos directory holds only its ignore file.
+      // Nothing was cloned, so the repos directory holds only its ignore file
+      // and the three files every sous-created directory explains itself with.
       const reposDir = path.join(sousDir, "repos");
-      expect(fs.readdirSync(reposDir)).toEqual([".gitignore"]);
+      expect(fs.readdirSync(reposDir).sort()).toEqual([
+        ".gitignore",
+        "AGENTS.md",
+        "CLAUDE.md",
+        "README.md",
+      ]);
       expect(fs.readFileSync(path.join(reposDir, ".gitignore"), "utf8")).toBe("*\n");
+      expect(fs.readFileSync(path.join(reposDir, "README.md"), "utf8")).toContain(
+        "linked repository checkouts"
+      );
+      expect(fs.readFileSync(path.join(reposDir, "AGENTS.md"), "utf8")).toContain(
+        "README.md"
+      );
+      expect(fs.readFileSync(path.join(reposDir, "CLAUDE.md"), "utf8")).toContain(
+        "README.md"
+      );
     },
     CLI_TIMEOUT
   );

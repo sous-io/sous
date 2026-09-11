@@ -27,6 +27,7 @@ import { SOUS_VERSION, type ConfigContext, type Settings } from "../settings.js"
 import { CONFD_DIR_NAME } from "../config-discovery.js";
 import { indent, log, warning } from "../../utils/formatting.js";
 import { askChoice, askYesNo } from "../../utils/prompts.js";
+import { ensureStoreRootDirectory } from "../../utils/sous-directory.js";
 import { isInteractive, nonInteractiveError } from "../interactive.js";
 import {
   applyProvidedAnswers,
@@ -1741,7 +1742,7 @@ export class SubscriptionService {
       version: request.version,
     };
 
-    await fsp.mkdir(this.storeInstance.root, { recursive: true });
+    ensureStoreRootDirectory(this.storeInstance.root);
     const workDir = await fsp.mkdtemp(path.join(this.storeInstance.root, ".sous-fetch-"));
     const fetchDir = path.join(workDir, key.name);
     try {

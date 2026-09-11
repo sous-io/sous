@@ -34,6 +34,7 @@ import {
 import { CONFD_DIR_NAME } from "../config-discovery.js";
 import { ConfigError } from "../errors.js";
 import { stableJsonStringify } from "./formats/common.js";
+import { ensureConfdDirectory } from "../../utils/sous-directory.js";
 
 /** The machine-written layer holding the repositories a project trusts. */
 export const REPOS_LAYER_FILENAME = "500-repos.jsonc";
@@ -268,7 +269,9 @@ function writeLayerText(
   const directory = managedLayerDir(sousDir, options);
   const filePath = path.join(directory, fileName);
 
-  fs.mkdirSync(directory, { recursive: true });
+  // Created with its README, so somebody who finds a machine-written layer can
+  // read what the directory is for without leaving it.
+  ensureConfdDirectory(directory);
 
   const temporary = path.join(directory, `.${fileName}.tmp-${process.pid}`);
   try {

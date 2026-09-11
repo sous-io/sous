@@ -37,6 +37,18 @@ describe("the managed config layers", () => {
     return fs.readFileSync(path.join(sousDir, "conf.d", fileName), "utf8");
   }
 
+  /**
+   * The layer files in `conf.d/`, without the README and the two agent pointer
+   * files that every sous-created directory carries.
+   */
+  function layerFiles(): string[] {
+    const explanatory = new Set(["README.md", "AGENTS.md", "CLAUDE.md"]);
+    return fs
+      .readdirSync(path.join(sousDir, "conf.d"))
+      .filter((name) => !explanatory.has(name))
+      .sort();
+  }
+
   /** Writes a layer file directly, bypassing the writers under test. */
   function seed(fileName: string, text: string): string {
     const confDir = path.join(sousDir, "conf.d");
@@ -228,7 +240,7 @@ describe("the managed config layers", () => {
     ]);
 
     expect(fs.existsSync(legacy)).toBe(false);
-    expect(fs.readdirSync(path.join(sousDir, "conf.d"))).toEqual([REPOS_LAYER_FILENAME]);
+    expect(layerFiles()).toEqual([REPOS_LAYER_FILENAME]);
     expect(readManagedLayer(sousDir, REPOS_LAYER_FILENAME)).toEqual({
       repos: {
         one: { url: "https://github.com/a/one" },
@@ -260,7 +272,7 @@ describe("the managed config layers", () => {
    */
   it("should leave no temporary file behind", () => {
     writeManagedLayer(sousDir, REPOS_LAYER_FILENAME, { repos: {} });
-    expect(fs.readdirSync(path.join(sousDir, "conf.d"))).toEqual([REPOS_LAYER_FILENAME]);
+    expect(layerFiles()).toEqual([REPOS_LAYER_FILENAME]);
   });
 
   /**
@@ -325,7 +337,7 @@ describe("the managed config layers", () => {
     removeManagedLayer(sousDir, REPOS_LAYER_FILENAME);
     removeManagedLayer(sousDir, REPOS_LAYER_FILENAME);
 
-    expect(fs.readdirSync(path.join(sousDir, "conf.d"))).toEqual([]);
+    expect(layerFiles()).toEqual([]);
     expect(readManagedLayer(sousDir, REPOS_LAYER_FILENAME)).toEqual({});
   });
 });

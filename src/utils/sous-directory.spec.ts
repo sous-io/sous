@@ -174,8 +174,15 @@ describe("the named sous directory helpers", () => {
    */
   it("should prepare the parent directory of a nested sous directory", () => {
     const home = path.join(tmp.path, "sous-home");
+    const previous = process.env.SOUS_HOME;
+    process.env.SOUS_HOME = home;
 
-    ensureIndexCacheDirectory(path.join(home, "cache", "_indexes"));
+    try {
+      ensureIndexCacheDirectory(path.join(home, "cache", "_indexes"));
+    } finally {
+      if (previous === undefined) delete process.env.SOUS_HOME;
+      else process.env.SOUS_HOME = previous;
+    }
 
     expect(fs.readFileSync(path.join(home, "README.md"), "utf8")).toContain(
       "Your user-level sous directory"
@@ -183,5 +190,27 @@ describe("the named sous directory helpers", () => {
     expect(fs.readFileSync(path.join(home, "cache", "README.md"), "utf8")).toContain(
       "machine-wide recipe store"
     );
+  });
+
+  /**
+   * A store root somewhere other than `$SOUS_HOME/cache` should leave its parent
+   * alone; sous must never drop explanatory files into a directory it does not
+   * own, such as the system temporary directory.
+   */
+  it("should not explain a parent that is not the user-level sous directory", () => {
+    const previous = process.env.SOUS_HOME;
+    process.env.SOUS_HOME = path.join(tmp.path, "elsewhere");
+
+    try {
+      ensureStoreRootDirectory(path.join(tmp.path, "detached-store"));
+    } finally {
+      if (previous === undefined) delete process.env.SOUS_HOME;
+      else process.env.SOUS_HOME = previous;
+    }
+
+    expect(fs.existsSync(path.join(tmp.path, "README.md"))).toBe(false);
+    expect(
+      fs.existsSync(path.join(tmp.path, "detached-store", "README.md"))
+    ).toBe(true);
   });
 });
