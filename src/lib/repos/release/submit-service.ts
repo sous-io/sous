@@ -2,27 +2,40 @@
  * Proposing a change to a recipe repository: validate first, then delegate.
  *
  * `submit` universally means "propose a change for maintainers to review". It
- * never publishes and never writes to a repository directly; the fork, branch
- * and pull request mechanics are handed to the provider's own CLI (`gh` or
- * `glab`), which already holds the contributor's credentials.
+ * never publishes and never writes to a repository directly; the fork and
+ * proposal mechanics belong to the provider, which knows its own host and
+ * already has the contributor's credentials through that host's command line
+ * tool.
+ *
+ * This module is a SEQUENCER and nothing more. It knows the order the steps go
+ * in, what each one is called, and what to say when one fails; it does not know
+ * that GitHub exists, which tool proposes a change, or how a fork is spelled.
+ * Every host-specific fact is asked of the provider interface and comes back as
+ * plain data, which is what keeps a third provider a single new file.
  *
  * Two rules shape everything here:
  *
  * - Nothing is sent until the repository validates and its index is current. A
  *   proposal that fails the maintainer's own checks wastes their review.
  * - Every step announces itself BEFORE it runs, and a failure says exactly which
- *   steps completed. A half-finished submission (a branch pushed, no pull
- *   request opened) is a normal outcome of a network failure, and the
- *   contributor has to be told the truth about it.
+ *   steps completed. A half-finished submission (a branch pushed, no proposal
+ *   opened) is a normal outcome of a network failure, and the contributor has to
+ *   be told the truth about it.
  *
  * Every subprocess goes through the injectable runner, so no test here reaches
  * a network.
  */
 
 import { ConfigError } from "../../errors.js";
-import { spawnCommand, type CommandRunner } from "../providers/git.js";
+import { runGit, type CommandRunner } from "../providers/git.js";
 import { detectProvider } from "../providers/index.js";
-import type { CanonicalRepo, RepoProvider } from "../providers/provider.js";
+import {
+  supportsSubmit,
+  type CanonicalRepo,
+  type ProviderOptions,
+  type RepoProvider,
+  type SubmitCapableProvider,
+} from "../providers/provider.js";
 import {
   buildIndex,
   describeIndexDrift,
@@ -53,21 +66,8 @@ const UPSTREAM_REMOTE = "origin";
 /** The remote name sous gives a fork it created. */
 const FORK_REMOTE = "fork";
 
-/** What one provider's command line tool is called and how it is driven. */
-type ProviderCli = {
-  /** The executable. */
-  command: string;
-  /** Plain-language name, for messages. */
-  label: string;
-  /** Where to get it, for the message that says it is missing. */
-  install: string;
-};
-
-/** The command line tool each provider delegates its write path to. */
-const PROVIDER_CLIS: Record<string, ProviderCli> = {
-  github: { command: "gh", label: "the GitHub CLI", install: "https://cli.github.com" },
-  gitlab: { command: "glab", label: "the GitLab CLI", install: "https://gitlab.com/gitlab-org/cli" },
-};
+/** What a proposal is called when the provider does not name it. */
+const DEFAULT_PROPOSAL_NOUN = "proposal";
 
 /** What `submitRepo` needs to know. */
 export type SubmitOptions = {
@@ -111,7 +111,7 @@ export type SubmitResult = {
   pushedTo: string;
   /** The proposal's title. */
   title: string;
-  /** The proposal's URL, when the provider's CLI printed one. */
+  /** The proposal's URL, when the provider reported one. */
   url?: string;
   /** Every step that completed, in order. */
   completed: string[];
@@ -131,7 +131,7 @@ export async function submitRepo(options: SubmitOptions): Promise<SubmitResult> 
     draft = false,
     dryRun = false,
     now = new Date(),
-    run = spawnCommand,
+    run,
   } = options;
   const step = options.onStep ?? (() => {});
   const notice = options.onNotice ?? (() => {});
@@ -171,19 +171,18 @@ export async function submitRepo(options: SubmitOptions): Promise<SubmitResult> 
   completed.push("Looked up where this repository was cloned from");
 
   const provider = requireSubmitProvider(upstreamUrl, validation, options.providers);
-  const cli = PROVIDER_CLIS[provider.id]!;
   const repo = provider.canonicalize(upstreamUrl);
 
-  step(`Checking that ${cli.label} is installed and signed in`);
-  if (!(await commandSucceeds(run, cli.command, ["auth", "status"]))) {
-    throw new ConfigError(
-      `Sous proposes a change through ${cli.label} ('${cli.command}'), and it is either not ` +
-        `installed or not signed in.\n` +
-        `  Install it from ${cli.install}, then run '${cli.command} auth login'.\n` +
-        contributePointer(validation)
-    );
+  // Everything the provider runs, it runs inside the contributor's checkout.
+  const providerOptions: ProviderOptions = { cwd: rootDir, run };
+
+  const signInLabel = provider.cli?.label ?? "the repository host's command line tool";
+  step(`Checking that ${signInLabel} is installed and signed in`);
+  const auth = await provider.authStatus(providerOptions);
+  if (!auth.ok) {
+    throw new ConfigError(`${auth.detail}\n` + contributePointer(validation));
   }
-  completed.push(`Checked that ${cli.label} is installed and signed in`);
+  completed.push(`Checked that ${signInLabel} is installed and signed in`);
 
   step("Checking that everything is committed");
   const changed = await uncommittedChanges(rootDir, { run });
@@ -240,29 +239,34 @@ export async function submitRepo(options: SubmitOptions): Promise<SubmitResult> 
 
   let usedFork = false;
   let pushRemote = UPSTREAM_REMOTE;
-  let head = branch!;
+  let forkOwner: string | undefined;
 
-  if (provider.id === "github") {
-    step("Checking whether you can push to the repository itself");
-    const canPush = await capturedOutput(run, "gh", [
-      "api",
-      `repos/${repo.owner}/${repo.name}`,
-      "--jq",
-      ".permissions.push",
-    ]);
-    completed.push("Checked whether you can push to the repository itself");
+  step("Checking whether you can push to the repository itself");
+  const canPush = await provider.canPush(repo, providerOptions);
+  completed.push("Checked whether you can push to the repository itself");
 
-    if (canPush?.trim() !== "true") {
-      usedFork = true;
-      pushRemote = FORK_REMOTE;
-      if (dryRun) {
-        notice(
-          `You cannot push to ${repo.owner}/${repo.name}, so the change would go through ` +
-            `a fork on your own account.`
-        );
-      } else {
-        head = await prepareFork(rootDir, repo, branch!, run, doStep);
-      }
+  if (canPush === undefined) {
+    notice(
+      `Sous could not tell whether you can push to ${repo.owner}/${repo.name}, so the change ` +
+        `goes to '${UPSTREAM_REMOTE}' as it stands.`
+    );
+  } else if (!canPush) {
+    usedFork = true;
+    pushRemote = FORK_REMOTE;
+    if (dryRun) {
+      notice(
+        `You cannot push to ${repo.owner}/${repo.name}, so the change would go through ` +
+          `a fork on your own account.`
+      );
+    } else {
+      forkOwner = await prepareFork(
+        rootDir,
+        repo,
+        provider,
+        providerOptions,
+        run,
+        doStep
+      );
     }
   }
 
@@ -285,24 +289,22 @@ export async function submitRepo(options: SubmitOptions): Promise<SubmitResult> 
     pushBranch(rootDir, pushRemote, branch!, { run })
   );
 
-  const url = await doStep(
-    provider.id === "gitlab"
-      ? "Opening a merge request for review"
-      : "Opening a pull request for review",
-    async () => {
-      const args =
-        provider.id === "gitlab"
-          ? gitlabArgs(branch!, baseBranch, title, body, draft)
-          : githubArgs(repo, head, baseBranch, title, body, draft);
-      const output = await capturedOutput(run, cli.command, args, rootDir);
-      if (output === undefined) {
-        throw new ConfigError(
-          `'${cli.command} ${args[0]} ${args[1]}' did not succeed, so no proposal was opened.`
-        );
-      }
-      return firstUrlIn(output);
-    }
+  const proposalNoun = provider.proposalNoun ?? DEFAULT_PROPOSAL_NOUN;
+  const proposed = await doStep(`Opening a ${proposalNoun} for review`, () =>
+    provider.proposeChange(
+      repo,
+      {
+        branch: branch!,
+        base: baseBranch,
+        title,
+        body,
+        draft,
+        ...(forkOwner === undefined ? {} : { head: { owner: forkOwner } }),
+      },
+      providerOptions
+    )
   );
+  if (proposed.url === undefined) notice(proposed.detail);
 
   return {
     provider: provider.id,
@@ -312,7 +314,7 @@ export async function submitRepo(options: SubmitOptions): Promise<SubmitResult> 
     usedFork,
     pushedTo: pushRemote,
     title,
-    url,
+    ...(proposed.url === undefined ? {} : { url: proposed.url }),
     completed,
     dryRun: false,
   };
@@ -365,13 +367,15 @@ function renderProblems(problems: ReadonlyArray<ValidationProblem>): string {
 
 /**
  * The provider that will carry the proposal, or a ConfigError pointing the
- * contributor at whatever route the repository documents instead.
+ * contributor at whatever route the repository documents instead. The feature
+ * list is the only thing consulted: a provider that does not promise `submit`
+ * is not asked to, whatever host it serves.
  */
 function requireSubmitProvider(
   upstreamUrl: string,
   validation: RepoValidation,
   providers?: RepoProvider[]
-): RepoProvider {
+): SubmitCapableProvider {
   const provider =
     providers === undefined ? detectProvider(upstreamUrl) : detectProvider(upstreamUrl, providers);
 
@@ -381,7 +385,7 @@ function requireSubmitProvider(
         contributePointer(validation)
     );
   }
-  if (!provider.features.includes("submit") || PROVIDER_CLIS[provider.id] === undefined) {
+  if (!supportsSubmit(provider)) {
     throw new ConfigError(
       `The '${provider.id}' provider cannot propose a change on your behalf.\n` +
         contributePointer(validation)
@@ -405,110 +409,40 @@ function contributePointer(validation: RepoValidation): string {
 // --- Delegation helpers -------------------------------------------------------------------------
 
 /**
- * Forks the repository onto the contributor's own account, makes sure a remote
- * points at the fork, and returns the `owner:branch` reference a pull request
- * needs for a cross-repository head.
+ * Asks the provider to fork the repository onto the contributor's own account,
+ * then makes sure a git remote points at whatever came back. The fork itself is
+ * the provider's business; the remote is git's, and therefore sous's.
+ *
+ * Returns the account the fork lives under, which is what a cross-repository
+ * proposal needs.
  */
 async function prepareFork(
   rootDir: string,
   repo: CanonicalRepo,
-  branch: string,
-  run: CommandRunner,
+  provider: SubmitCapableProvider,
+  providerOptions: ProviderOptions,
+  run: CommandRunner | undefined,
   doStep: <T>(message: string, action: () => Promise<T>) => Promise<T>
 ): Promise<string> {
-  const login = await doStep(
-    `Forking ${repo.owner}/${repo.name} onto your own account`,
-    async () => {
-      const forked = await run(
-        "gh",
-        ["repo", "fork", `${repo.owner}/${repo.name}`, "--remote=false"],
-        { cwd: rootDir }
-      );
-      if (forked.code !== 0) {
-        throw new ConfigError(
-          `'gh repo fork' did not succeed.\n  ${forked.stderr.trim() || forked.stdout.trim()}`
-        );
-      }
-      const who = await capturedOutput(run, "gh", ["api", "user", "--jq", ".login"], rootDir);
-      if (who === undefined) {
-        throw new ConfigError(
-          "The fork was requested, but sous could not read your GitHub login from " +
-            "'gh api user', so it does not know where the fork lives."
-        );
-      }
-      return who.trim();
-    }
+  const fork = await doStep(`Forking ${repo.owner}/${repo.name} onto your own account`, () =>
+    provider.fork(repo, providerOptions)
   );
 
-  const forkUrl = `https://${repo.host}/${login}/${repo.name}.git`;
   const existing = await remoteUrl(rootDir, FORK_REMOTE, { run });
-
   if (existing === undefined) {
-    await doStep(`Adding the remote '${FORK_REMOTE}' for ${login}/${repo.name}`, async () => {
-      const added = await run("git", ["remote", "add", FORK_REMOTE, forkUrl], {
-        cwd: rootDir,
-      });
-      if (added.code !== 0) {
+    await doStep(`Adding the remote '${FORK_REMOTE}' for ${fork.owner}/${fork.name}`, async () => {
+      try {
+        await runGit(["remote", "add", FORK_REMOTE, fork.httpsUrl], { cwd: rootDir, run });
+      } catch (error) {
         throw new ConfigError(
-          `Could not add the remote '${FORK_REMOTE}'.\n  ${added.stderr.trim()}`
+          `Could not add the remote '${FORK_REMOTE}'.\n  ` +
+            `${error instanceof Error ? error.message : String(error)}`
         );
       }
     });
   }
 
-  return `${login}:${branch}`;
-}
-
-/** The `gh pr create` arguments for one proposal. */
-function githubArgs(
-  repo: CanonicalRepo,
-  head: string,
-  base: string,
-  title: string,
-  body: string,
-  draft: boolean
-): string[] {
-  const args = [
-    "pr",
-    "create",
-    "--repo",
-    `${repo.owner}/${repo.name}`,
-    "--base",
-    base,
-    "--head",
-    head,
-    "--title",
-    title,
-    "--body",
-    body,
-  ];
-  if (draft) args.push("--draft");
-  return args;
-}
-
-/** The `glab mr create` arguments for one proposal. */
-function gitlabArgs(
-  branch: string,
-  base: string,
-  title: string,
-  body: string,
-  draft: boolean
-): string[] {
-  const args = [
-    "mr",
-    "create",
-    "--source-branch",
-    branch,
-    "--target-branch",
-    base,
-    "--title",
-    title,
-    "--description",
-    body,
-    "--yes",
-  ];
-  if (draft) args.push("--draft");
-  return args;
+  return fork.owner;
 }
 
 /** The title used when there is no commit subject to borrow. */
@@ -536,47 +470,10 @@ function defaultBody(built: IndexBuildResult, validation: RepoValidation): strin
   return lines.join("\n");
 }
 
-/** True when a command ran and exited successfully, whatever it printed. */
-async function commandSucceeds(
-  run: CommandRunner,
-  command: string,
-  args: string[],
-  cwd?: string
-): Promise<boolean> {
-  try {
-    const result = await run(command, args, { cwd });
-    return result.code === 0;
-  } catch {
-    return false;
-  }
-}
-
-/** A command's standard output, or undefined when it did not succeed. */
-async function capturedOutput(
-  run: CommandRunner,
-  command: string,
-  args: string[],
-  cwd?: string
-): Promise<string | undefined> {
-  try {
-    const result = await run(command, args, { cwd });
-    if (result.code !== 0) return undefined;
-    return result.stdout;
-  } catch {
-    return undefined;
-  }
-}
-
-/** The first URL in a command's output, which is where its result lives. */
-function firstUrlIn(output: string): string | undefined {
-  const match = /https?:\/\/\S+/.exec(output);
-  return match === null ? undefined : match[0];
-}
-
 /**
  * Turns a mid-flight failure into an error that says what already happened.
- * A pushed branch with no pull request behind it is a state the contributor
- * has to know about; silence would leave them guessing.
+ * A pushed branch with no proposal behind it is a state the contributor has to
+ * know about; silence would leave them guessing.
  */
 function partialStateError(
   failedStep: string,
