@@ -13,8 +13,10 @@ holds the mechanism, use it rather than building a second one beside it.
   with `-y` is the primary spelling, `--force` and `-f` are aliases of it, and `--trust` is
   added where trust is the question. Aliases render as a suffix on the primary's help line;
   never declare a second flag.
-- **`--bump` is the author's permission for sous to edit version numbers.** Without it sous
-  edits no version anywhere.
+- **Only `sous repo release` edits a version number, and only in the repository it is run in.**
+  It raises a changed recipe whose version still equals its last tag; `--bump` chooses how far
+  (a patch step by default) and `--no-bump`, which `--ci` implies, makes an unraised change an
+  error instead. The rule lives in `buildReleasePlan` (`src/lib/repos/release/plan.ts`).
 - **Never prompt when the terminal is not ours**: `--non-interactive`, a truthy `CI`, or no TTY
   (`src/lib/interactive.ts`). Fail instead, naming both the question that could not be asked and
   the flag that would have answered it, and print the command's help under the error. All of it

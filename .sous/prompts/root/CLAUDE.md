@@ -343,11 +343,14 @@ the rest, stores each through `src/lib/env-file.ts`, and fails a run with no ter
 naming the env vars that would answer. It decides everything BEFORE printing anything, so it
 can open with how many answers each recipe needs; questions then run per recipe, the
 subscribed one first (a subscribe calls it only after the closure resolved and every new
-repository was trusted, never interleaved). Each question prints a basic view and then the
-custom value prompt in `src/utils/value-prompt.ts` (built on `createPrompt` from
-`@inquirer/core`, a DIRECT dependency for exactly this): Enter answers, Tab resolves with
-`{ kind: "advanced" }` and opens the advanced view, whose menu changes the storage file or the
-stored env var name and can save or discard. A secret may still be pointed at the committed
+repository was trusted, never interleaved). Each question prints a basic view (whose last line
+is the hint from `questionHint`, which says what Enter does for THIS kind of question) and then
+one of the three custom prompts, all built on `createPrompt` from `@inquirer/core`, a DIRECT
+dependency for exactly this: `value-prompt.ts` for a typed answer, `choice-prompt.ts` for an
+enum, `confirm-prompt.ts` for a boolean or a confirmation. All three answer the same way, so
+Enter answers and Tab resolves with `{ kind: "advanced" }` from EVERY kind of question, opening
+the advanced view, whose menu changes the storage file or the stored env var name and can save
+or discard. A secret may still be pointed at the committed
 file, after a warning and a confirmation; informed consent, not prevention. The labeled facts
 block (`@default`, `@example`, `@required-by`, `@defined-by`, `@storage-path`, `@stored-as`,
 `@constraints`) is ONE renderer in `display.ts`, used by the advanced view and by
@@ -369,7 +372,7 @@ renderer. A dry run downloads nothing, so a recipe the store does not hold yet h
 to read; that is reported (`SubscribeOutcome.unreadable`) rather than being fatal.
 
 The ladder, the env files, the mapping records and the `sous vars` commands are documented
-in `docs/markdown/repositories-file-formats.md`.
+in `docs/markdown/repositories-variables.md`.
 
 Above the formats sit the read-path services. `providers/` holds the internal provider
 interface plus the GitHub and GitLab built-ins: an index is one raw HTTPS GET (with a bearer
@@ -973,8 +976,8 @@ it is, exactly one file is fetched (`sous.index.json`). `repo list` and `repo se
 only what is already cached, so both work offline; a repository whose index has never been
 fetched is named rather than silently left out. `repo gc` protects everything this project's
 lockfile pins, whatever that does to the total, since a cache that is too large is a
-nuisance while evicting a pinned entry breaks a build. `repo init` is the ONE command that
-does not extend `BaseCommand`: it creates a repository, which is not a sous project and usually has no
+nuisance while evicting a pinned entry breaks a build. `repo init` does not extend
+`BaseCommand`: it creates a repository, which is not a sous project and usually has no
 `.sous/` above it, so config discovery would only get in its way. `repo link` clones into
 `.sous/repos/<owner>/<name>` (or `$SOUS_HOME/repos/...` with `--global`), reuses a checkout of
 the same remote rather than re-cloning, and refuses a checkout of a different one; `repo
@@ -1020,7 +1023,9 @@ via `z.toJSONSchema`. Re-run it whenever the schema changes; it ships in the pac
 Common config-locating flags on every command: `--config <path>` / `-c` (alias
 `--sous-config`), plus `--sous-dir` and `--sous-confd` (env equivalents `SOUS_CONFIG`,
 `SOUS_DIR`, `SOUS_CONFD`). There is no `--project` / `-p` flag; one config describes one
-project. Every command also carries `--non-interactive`. Also: `--rebuild`, `--dry-run`,
+project. Every command that carries those flags also carries `--non-interactive`; the three
+that run inside a recipe repository carry neither, because they extend `Command` rather than
+`BaseCommand`. Also: `--rebuild`, `--dry-run`,
 `--strict`, `--watch` / `-w` (build/compile), `--no-prune` / `--no-compile` (build),
 `--no-build` / `--continuous` (launch), `--accept-first` (subscribe).
 
@@ -1065,8 +1070,10 @@ flags even in non-strict mode otherwise) and splits argv at the first `--` itsel
 
 ## Important Patterns
 
-- All commands extend `BaseCommand`, which discovers the config, loads `.env.local`, and
-  loads settings on every run. Discovery is required; there is no opt-out.
+- Every command that works on a PROJECT extends `BaseCommand`, which discovers the config,
+  loads `.env.local`, and loads settings on every run. Discovery is required for those; there
+  is no opt-out. The exceptions extend `Command` directly and are listed with their reasons
+  under Key Commands: the three that run inside a recipe repository, and `help`.
 - `CompilationService` (alias `MarkdownCompiler`) is the core compiler class
 - `BuildService` orchestrates `CompilationService` + prune in one step
 - Watch mode uses `WatchService` (chokidar + debounce, 300ms); ignores `*.sous.state.json` files

@@ -13,5 +13,6 @@
 - **NEVER store memories in machine-only stores** (e.g. a user-level MEMORY.md or any
   per-machine memory directory) unless explicitly told to. Machine-local memories do not
   travel with the project and silently fork agent behavior across machines. Durable rules,
-  preferences, and project knowledge belong in tracked sources: these CLAUDE.md partials,
-  skills, or the docs; put them there instead, in the same change that surfaced them.
+  preferences, and project knowledge belong in tracked sources: the memories under
+  `.sous/prompts/memories/`, skills, or the docs; put them there instead, in the same change
+  that surfaced them.
