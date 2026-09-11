@@ -162,9 +162,9 @@ can read in review.
 | Location | Holds | Committed |
 |----------|-------|-----------|
 | `.sous/sous.lock.json` | the exact versions and hashes in use | yes |
-| `.sous/conf.d/500-repos.json` | the repositories the project trusts | yes |
-| `.sous/conf.d/510-subscriptions.json` | what the project subscribes to | yes |
-| `.sous/conf.d/520-var-mappings.json` | environment variable mapping records | yes |
+| `.sous/conf.d/500-repos.jsonc` | the repositories the project trusts | yes |
+| `.sous/conf.d/510-subscriptions.jsonc` | what the project subscribes to | yes |
+| `.sous/conf.d/520-var-mappings.jsonc` | environment variable mapping records | yes |
 | `.sous/sous.links.json` | this project's linked working copies | no |
 | `.sous/repos/` | working copies cloned by `sous repo link` | no |
 | `~/.sous/cache/` | the machine-wide recipe store | not in a project at all |

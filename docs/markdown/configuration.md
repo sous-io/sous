@@ -46,7 +46,7 @@ are resolved at different stages and never mix.
 
 ## Composition
 
-The primary config is optionally extended by drop-in layers: every `*.js|mjs|json|yaml` file
+The primary config is optionally extended by drop-in layers: every `*.js|mjs|json|jsonc|yaml` file
 directly inside `.sous/conf.d/` is loaded after the primary config and deep-merged over it. A
 `.js`/`.mjs` config or layer can also compose programmatically through a `configure()` function.
 [Layers and merging](config-layers.md) covers the full semantics.

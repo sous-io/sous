@@ -150,12 +150,12 @@ src/
       definition-source.ts # where definitions come from; the one wiring seam
       names.ts             # generates the candidate env var names (never parses one)
       ladder.ts            # walks the five rungs and says which name answered
-      mappings.ts          # mapping records; writes conf.d/520-var-mappings.json
+      mappings.ts          # mapping records; writes conf.d/520-var-mappings.jsonc
       validate.ts          # the JSON constraint vocabulary, checked with zod
       ask.ts               # asks what is missing and stores the answers
       resolver.ts          # apt-style ref lookup across every added repo; dependency closure
       trust.ts             # TrustService; added equals trusted, one consolidated question
-      managed-layer.ts     # reads/writes the machine-written conf.d/5xx layers
+      managed-layer.ts     # the machine-written conf.d/5xx .jsonc layers; key-path edits
       lock-service.ts      # LockService; read/write/apply/diff the lock, restore the store
       freshness.ts         # when to look upstream; always-pull's in-range lookup
       providers/           # GitHub, GitLab and local, read path only, plus the index cache
@@ -295,8 +295,8 @@ environment beats `.sous/.env.local` beats `.sous/.env`. That is why `BaseComman
 `process.env` into `this.shellEnv` BEFORE `loadEnvFiles` injects the files: afterwards the
 layers are indistinguishable. `mappings.ts` binds an arbitrary env var name to one fully
 qualified variable under the top-level `varMappings` config key, writing sous's own records
-into the managed `conf.d/520-var-mappings.json` layer (replaced wholesale, since layer
-objects merge key-wise). `ask.ts` keeps and reports the answers already in scope, asks for
+into the managed `conf.d/520-var-mappings.jsonc` layer (one key-path edit per record, through
+`updateManagedLayer`). `ask.ts` keeps and reports the answers already in scope, asks for
 the rest through `@inquirer/prompts`, stores each through `src/lib/env-file.ts`, and fails a
 run with no terminal by naming the env vars that would answer. `env-file.ts` is the write
 half of `env-local.ts`: it parses a line model, rewrites exactly one value line or appends
@@ -426,10 +426,11 @@ messages name the source the user actually set (`--sous-dir`, `SOUS_CONFIG`, etc
 always `--config`.
 
 **One primary config, exactly one.** A `.sous/` may hold exactly one of
-`sous.config.js`, `sous.config.mjs`, `sous.config.json`, `sous.config.yaml`. Two or more
+`sous.config.js`, `sous.config.mjs`, `sous.config.json`, `sous.config.jsonc`,
+`sous.config.yaml`. Two or more
 is a hard `ConfigError` (`findConfigInSousDir`); sous never silently first-match-wins.
 
-**The `conf.d/` layer directory.** Every `*.{js,mjs,json,yaml}` file directly inside
+**The `conf.d/` layer directory.** Every `*.{js,mjs,json,jsonc,yaml}` file directly inside
 `<sousDir>/conf.d/` (non-recursive) is a config layer, loaded AFTER the primary config and
 deep-merged over it. Layers are ordered by a bytewise (locale-independent, per-machine
 stable) filename sort, NOT numeric: `10-x.json` sorts BEFORE `2-x.json`, so zero-pad
@@ -437,15 +438,21 @@ numeric prefixes (`02-`, `10-`) if ordering matters. Override the directory with
 `--sous-confd <path>` or `SOUS_CONFD` (flag > env > `<sousDir>/conf.d`); an empty value is
 unset. Every loaded layer (the primary config plus all `conf.d/` layers) must have a
 unique baseName once its FINAL extension is stripped: `500-repos.json` and
-`500-repos.yaml` collide and are a `ConfigError` (`assertUniqueLayerBaseNames`), since
-their merge order would otherwise hinge on extension.
+`500-repos.jsonc` collide and are a `ConfigError` (`assertUniqueLayerBaseNames`), since
+their merge order would otherwise hinge on extension; that rule is also what keeps a layer
+mid-migration to `.jsonc` from loading twice.
+
+**`.jsonc` is accepted everywhere `.json` is**: a primary `sous.config.jsonc`, any
+`conf.d/` layer, a config layer a recipe contributes, and a repo or recipe manifest. It is
+JSON plus line comments, block comments and trailing commas, parsed with `jsonc-parser`
+(the kernel imports it directly, being plain `.mjs`). `.json` itself stays strict.
 
 **Config layers from recipes.** A subscribed recipe may contribute `config` content, and
 those files are config layers too. They load AFTER the primary config and BEFORE the
 `conf.d/` layers, so a recipe supplies defaults and the project always wins over them.
 `listRecipeConfigLayers` (`repos/recipe-config-layers.ts`) enumerates them from the
 lockfile, the links map and the store alone, because this has to work before the settings
-exist. Only `.json`, `.yaml` and `.yml` are accepted from a recipe: the kernel would happily
+exist. Only `.json`, `.jsonc`, `.yaml` and `.yml` are accepted from a recipe: the kernel would happily
 import a `.js` layer, and the whole trust story rests on sous reading what a repository
 publishes without running any of it, so an executable layer from a recipe is refused with a
 warning.
@@ -500,15 +507,12 @@ order, JSON-forces it, and deep-merges it into one live cumulative config:
 `assertFlatConfig` (rejects the removed `projects:`/`defaultProject` schema with a
 migration message) and then by the zod schema in `config-schema.ts` (`validateSettings`).
 
-One config = one project. The config is flat: `version`, `$schema`, `$comment`, `name`,
-`_env`, `_vars`, `_aliases`, `compilation`, `runtimeContext`, `tools`, `repos`,
-`subscriptions`, `store`, `recipeOutputs` and `varMappings` all live at the top level. The
-last five belong to the Repositories system; see
-`docs/markdown/repositories-file-formats.md` for their shape. A top-level `$comment` string is accepted and ignored alongside `$schema`, which is
-how the machine-written `conf.d/500-repos.json`, `conf.d/510-subscriptions.json` and
-`conf.d/520-var-mappings.json` layers say in the file itself that sous wrote them (JSON has
-no comment syntax); `repos/managed-layer.ts` and `vars/mappings.ts` write them and always
-replace the whole file, since the kernel concatenates arrays rather than merging them by key.
+One config = one project. The config is flat: `version`, `$schema`, `name`, `_env`,
+`_vars`, `_aliases`, `compilation`, `runtimeContext`, `tools`, `repos`, `subscriptions`,
+`store`, `recipeOutputs` and `varMappings` all live at the top level. The last five belong
+to the Repositories system; see `docs/markdown/repositories-file-formats.md` for their
+shape. There is no `$comment` key: the machine-written layers are `.jsonc` and carry a real
+header comment instead (`repos/managed-layer.ts`, `vars/mappings.ts`).
 
 **The entries sous provides itself.** Two config entries are laid UNDER whatever the layers
 produced, after the kernel merges and before the schema validates (`applyRepoDefaults` in
@@ -634,11 +638,17 @@ and named.
 ### Managed 5xx layer convention
 
 `conf.d/500-*` through `conf.d/599-*` is a band reserved for layers the sous CLI writes
-for you (`sous repo add` writes `conf.d/500-repos.json`, `sous subscribe` writes
-`conf.d/510-subscriptions.json`, and `sous vars ask` writes `conf.d/520-var-mappings.json`).
-Machine-written layers are stable, pretty-printed JSON with sorted keys (minimal VCS diffs),
-each replaced wholesale rather than appended to, and sous never edits a user's hand-written
-primary config or non-5xx layers.
+for you (`sous repo add` writes `conf.d/500-repos.jsonc`, `sous subscribe` writes
+`conf.d/510-subscriptions.jsonc`, and `sous vars ask` writes
+`conf.d/520-var-mappings.jsonc`). They are `.jsonc`, each opening with a header comment
+stating the policy: sous edits these files by key; you may edit them too. Writes go through
+`updateManagedLayer` (`repos/managed-layer.ts`), which applies key-path edits with
+`jsonc-parser`'s `modify` + `applyEdits`, so a user's comments, key order and formatting
+survive; new keys are inserted sorted, and the write is atomic (staged, then renamed). A
+layer still under its old `.json` name is read as a fallback and migrated (the `.jsonc` is
+written, the `.json` removed) by the first write. Sous never edits a user's hand-written
+primary config or non-5xx layers. Where a comment property is ever unavoidable in a strict
+JSON file, the convention is a `//` key, ignored everywhere; nothing writes one today.
 
 ## Variable Scoping
 

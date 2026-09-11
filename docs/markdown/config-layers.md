@@ -7,10 +7,14 @@ plain JSON.
 ## Load order
 
 1. The primary `sous.config.*` file.
-2. Every `*.js|mjs|json|yaml` file directly inside `conf.d/` (non-recursive), sorted BYTEWISE by
-   filename. The sort is locale-independent and per-machine stable, but it is not numeric:
+2. Every `*.js|mjs|json|jsonc|yaml` file directly inside `conf.d/` (non-recursive), sorted BYTEWISE
+   by filename. The sort is locale-independent and per-machine stable, but it is not numeric:
    `10-a.json` sorts before `2-b.json` because the character `1` precedes `2`. Zero-pad numeric
    prefixes (`02-`, `10-`) when ordering matters.
+
+A `.jsonc` layer is JSON with comments: line comments, block comments and trailing commas are all
+allowed in it, and it merges exactly like a `.json` one. The layers sous manages for you are
+written that way, so each can say in the file itself what it holds.
 
 ## JSON forcing
 
@@ -76,7 +80,13 @@ is no warn-and-skip; a broken layer never silently drops out of the merge.
 ## The managed 5xx layer band
 
 `conf.d/500-*` through `conf.d/599-*` is reserved for layers the sous CLI writes on your behalf.
-Machine-written layers are stable, pretty-printed JSON so repeated edits produce minimal
-version-control diffs. Sous never edits a hand-written primary config or a layer outside the 5xx
-band, and you should not hand-edit files inside it. To override a managed value, add a
+They are `.jsonc`, and each one opens with a header comment saying what it holds.
+
+**Sous edits these files by key; you may edit them too.** A write rewrites only the bytes of the
+entry that changes, so your comments, your key order and your formatting survive it, and repeated
+edits produce minimal version-control diffs. Sous never edits a hand-written primary config or a
+layer outside the 5xx band. To override a managed value rather than change it in place, add a
 higher-sorting layer (for example `conf.d/600-overrides.json`).
+
+Where a comment is impossible because a format really is strict JSON, the convention is a `//`
+key, which sous ignores wherever it appears.

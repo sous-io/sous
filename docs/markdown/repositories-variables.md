@@ -84,9 +84,9 @@ name, or a name that already means something else in your environment.
 
 A target is written `namespace/recipe/variableName`, optionally qualified as
 `repo:namespace/recipe/variableName`. Records live under the top-level `varMappings` config key.
-Sous writes the ones it creates into `.sous/conf.d/520-var-mappings.json`, replacing that file
-in full so each name has exactly one record, and you may hand-write `varMappings` in your primary
-config too; the two merge like any other config layer.
+Sous writes the ones it creates into `.sous/conf.d/520-var-mappings.jsonc`, editing one record at
+a time so each name has exactly one, and you may hand-write `varMappings` in your primary config
+too; the two merge like any other config layer.
 
 You rarely write one yourself, because sous offers one at the moment the conflict appears. When
 the name an answer would use already holds a value that does not fit the definition, you are

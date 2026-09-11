@@ -14,6 +14,10 @@ Precedence, highest first. Flags beat env vars; both beat walk-up discovery:
 5. Walk UP from the working directory to the filesystem root, taking the first `.sous/`
    directory that holds a primary config. A `.sous/` without one does not stop the walk.
 
+A primary config is named `sous.config.js`, `sous.config.mjs`, `sous.config.json`,
+`sous.config.jsonc` or `sous.config.yaml`. The `.jsonc` form is JSON with comments: line comments,
+block comments and trailing commas are all allowed in it.
+
 Every flag or env value resolves with the same rules. It may point at:
 
 - a config file directly,
@@ -55,11 +59,12 @@ All are hard `ConfigError`s; sous never guesses:
 
 - **No config found**: the error lists every directory checked during the walk and shows a
   minimal starter config.
-- **Multiple primary configs**: two or more of `sous.config.js|mjs|json|yaml` in the same
+- **Multiple primary configs**: two or more of `sous.config.js|mjs|json|jsonc|yaml` in the same
   `.sous/` is an error naming every candidate.
 - **Duplicate layer baseNames**: any two loaded files (primary or conf.d) whose names differ
   only by extension is an error naming both files, because their merge order would otherwise
-  depend on extension.
+  depend on extension. `500-repos.json` and `500-repos.jsonc` collide for the same reason, which
+  is what keeps a layer sous is migrating to `.jsonc` from being loaded twice.
 
 ## Interaction with `sous launch` pass-through
 

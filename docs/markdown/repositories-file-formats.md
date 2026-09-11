@@ -630,42 +630,61 @@ check that fails never breaks a build; the last good answer stands.
 
 ## Managed config layers
 
-Sous writes two of those keys itself, into the `conf.d/` band reserved for machine-written
+Sous writes three of those keys itself, into the `conf.d/` band reserved for machine-written
 layers:
 
 | File | Holds | Written by |
 |------|-------|------------|
-| `conf.d/500-repos.json` | the `repos:` map | `sous repo add`, `sous repo remove` |
-| `conf.d/510-subscriptions.json` | the `subscriptions:` map | `sous subscribe`, `sous unsubscribe` |
+| `conf.d/500-repos.jsonc` | the `repos:` map | `sous repo add`, `sous repo remove` |
+| `conf.d/510-subscriptions.jsonc` | the `subscriptions:` map | `sous subscribe`, `sous unsubscribe` |
+| `conf.d/520-var-mappings.jsonc` | the `varMappings:` map | `sous vars ask` |
 
-Both are ordinary config layers: they load in filename order after your primary config and merge
-into it, so a repository you hand-write in your own config and one sous added are the same thing
-by the time anything reads them. Sous never edits your primary config, and never edits a layer
-outside the `500` through `599` band.
+All three are ordinary config layers: they load in filename order after your primary config and
+merge into it, so a repository you hand-write in your own config and one sous added are the same
+thing by the time anything reads them. Sous never edits your primary config, and never edits a
+layer outside the `500` through `599` band.
 
-Each file is replaced **in full** every time it changes. Config layers deep-merge, and the merge
-concatenates arrays rather than matching their entries up, so a managed layer only ever holds
-maps keyed by name, and rewriting the whole file is the only way a removal actually removes
-something. Keys are sorted and the JSON is pretty-printed, so a change to one repository shows up
-as a change to one repository in your version control history.
+**Sous edits these files by key; you may edit them too.** An edit rewrites only the bytes of the
+entry that changes, through a JSON-with-comments editor, so your comments, your key order and your
+formatting all survive it. New entries are inserted in sorted order, so a change to one repository
+shows up as a change to one repository in your version control history.
 
-JSON has no comment syntax, so each file says what it is in a `$comment` key instead:
+They are `.jsonc`, not `.json`, which is why each one can open with a header comment saying what it
+holds:
 
-```json
+```jsonc
+// This file is managed by sous. Sous edits these files by key; you may edit
+// them too, and your comments, key order and formatting are kept.
+//
+// It records the repositories this project trusts. The 'sous repo add' and
+// 'sous repo remove' commands write the entries under 'repos'.
+//
+// It is JSON with comments (.jsonc): line comments, block comments and trailing
+// commas are all allowed here.
 {
-  "$comment": "This file is written by sous. It is replaced in full whenever it changes, so hand-written edits are lost. Repositories and subscriptions can be changed with the 'sous repo' and 'sous subscribe' commands, or written by hand in your primary config, which sous never edits.",
   "repos": {
     "sous-recipes": {
       "url": "https://github.com/sous-io/sous-recipes",
       "addedAt": "2026-09-09T14:03:11.482Z",
+      // ours; the whole team reads from it
       "addedBy": "user"
     }
   }
 }
 ```
 
-Sous accepts and ignores `$comment` at the top level of any config file, exactly as it does
-`$schema`.
+Sous reads `.jsonc` anywhere it reads `.json`: a primary `sous.config.jsonc`, any `conf.d/` layer, a
+repo or recipe manifest, and a config layer a recipe contributes. A layer still named
+`500-repos.json` from an older sous is read as a fallback, and the next write moves it to `.jsonc`
+and removes the old file. Only one of the two names may exist at a time; two layers whose names
+differ only by extension are a hard error.
+
+Where a comment is impossible because the format really is strict JSON, the convention is a `//`
+key, which sous ignores wherever it appears. Nothing sous writes uses one today.
+
+The machine-written files that are NOT config layers stay strict JSON, because they carry no prose
+and other tooling parses them: the lockfile, the repo index, the links map and the marker beside a
+store entry.
 
 ## Consuming recipes
 
@@ -809,9 +828,10 @@ A mapping record binds one environment variable, of any name, to one fully quali
 It is the top rung of the ladder and the universal conflict resolver: two recipes wanting the
 same name, or a name already meaning something else in your environment.
 
-```json
+```jsonc
+// This file is managed by sous. Sous edits these files by key; you may edit
+// them too, and your comments, key order and formatting are kept.
 {
-  "$comment": "Written by sous. Each entry binds an environment variable to one recipe variable.",
   "varMappings": {
     "TEAM_API_URL": "sous-recipes:misc/stuff/apiUrl"
   }
@@ -820,9 +840,9 @@ same name, or a name already meaning something else in your environment.
 
 A target is written `namespace/recipe/variableName`, optionally qualified as
 `repo:namespace/recipe/variableName`. Records live under the top-level `varMappings` config key;
-sous writes the ones it creates into the machine-managed `conf.d/520-var-mappings.json` layer,
-replacing that file wholesale so each name has exactly one record, and you may hand-write
-`varMappings` in the primary config too.
+sous writes the ones it creates into the machine-managed `conf.d/520-var-mappings.jsonc` layer,
+editing one record at a time so each name has exactly one, and you may hand-write `varMappings` in
+the primary config too.
 
 ### The commands
 

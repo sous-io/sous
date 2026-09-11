@@ -30,8 +30,9 @@ repository costs one small request and installs nothing.
 | `--trust` | Accept trust without being asked, for a run with no terminal |
 | `--dry-run` | Print what would change without trusting or fetching anything |
 
-The entry lands in `.sous/conf.d/500-repos.json`, which is committed, so your colleagues inherit
-both the repository and the trust decision.
+The entry lands in `.sous/conf.d/500-repos.jsonc`, which is committed, so your colleagues inherit
+both the repository and the trust decision. Sous edits that file by key, so anything you write in
+it yourself, comments included, stays where you put it.
 
 ## Subscribe to a recipe
 
@@ -50,7 +51,7 @@ are whole or not at all.
 | `--trust` | Accept trust for every repository this command adds, without being asked |
 | `--dry-run` | Print what would be installed without writing or downloading anything |
 
-Three files change: `.sous/conf.d/510-subscriptions.json` records the subscription,
+Three files change: `.sous/conf.d/510-subscriptions.jsonc` records the subscription,
 `.sous/sous.lock.json` records the exact versions and hashes, and the machine-wide store under
 `~/.sous/cache` gains the recipe's files. All three, apart from the store, are committed.
 
