@@ -36,6 +36,7 @@ import {
   writeProjectLinks,
 } from "../../lib/repos/links.js";
 import {
+  blankLine,
   dryRunNotice,
   footer,
   heading,
@@ -161,6 +162,9 @@ export default class RepoLink extends BaseCommand {
       "Dry Run": dryRun,
     });
 
+    // The heading is not followed by a blank line here: the block that comes
+    // next opens with one of its own, and the trust ceremony this may run
+    // prints in between.
     heading("Linking a repository");
 
     // Both written forms that name a checkout link it exactly where it is; only
@@ -172,6 +176,7 @@ export default class RepoLink extends BaseCommand {
         : this.planClone(name, url, isGlobal, dryRun);
 
     if (dryRun) {
+      blankLine();
       dryRunNotice(`would link '${name}' to ${plan.directory}`);
       dryRunNotice(
         `would record it in ${isGlobal ? "the machine-wide" : "this project's"} links map`
@@ -195,7 +200,9 @@ export default class RepoLink extends BaseCommand {
     // out of version control whichever scope the link was recorded in.
     ensureReposIgnoreFiles(sousDir);
 
+    blankLine();
     for (const line of plan.notes) log(`  ${line}`);
+    if (plan.notes.length > 0) blankLine();
 
     showVars({
       Repository: name,
@@ -204,7 +211,7 @@ export default class RepoLink extends BaseCommand {
     });
 
     if (previous !== undefined && previous.path !== plan.directory) {
-      log("");
+      blankLine();
       log(`  This replaces an earlier link to ${previous.path}, which is untouched.`);
     }
 

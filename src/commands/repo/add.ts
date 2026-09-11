@@ -20,8 +20,8 @@ import {
   blankLine,
   dryRunNotice,
   footer,
-  heading,
   indent,
+  heading,
   log,
   showCommandVars,
   showVars,
@@ -85,9 +85,15 @@ export default class RepoAdd extends BaseCommand {
       "Dry Run": dryRun,
     });
 
+    // The heading is not followed by a blank line here: the block that comes
+    // next opens with one of its own, and the trust ceremony in the middle may
+    // print before either of them.
     heading("Adding a repository");
 
-    if (dryRun) dryRunNotice("Nothing will be trusted, written or downloaded.");
+    if (dryRun) {
+      dryRunNotice("Nothing will be trusted, written or downloaded.");
+      blankLine();
+    }
 
     const service = subscriptionServiceFor({
       configContext: this.configContext,
