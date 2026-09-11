@@ -160,6 +160,9 @@ The rules worth knowing while you write one:
 - **`scope`** picks the file the answer is written to: `shared` for the committed `.sous/.env`,
   `local` for the gitignored `.sous/.env.local`. A secret declared as `shared` is rejected,
   because that combination would commit the secret.
+- **`validate.pattern` runs under a time budget.** Sous runs a published pattern on a worker and
+  stops waiting after a fixed budget, so a pattern that backtracks forever cannot hang the person
+  answering; it fails validation instead, and the message names your pattern. Keep patterns simple.
 - **`x-intentional: true`** silences the release warning about claiming a well-known environment
   variable name. `PATH`, `HOME`, `USER`, `SHELL`, `GITHUB_TOKEN`, `GITLAB_TOKEN`, `NPM_TOKEN` and
   anything starting `AWS_` or `SOUS_` draw that warning; binding an existing token is legitimate,

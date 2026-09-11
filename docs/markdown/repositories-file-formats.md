@@ -224,6 +224,10 @@ Constraints under `validate`:
 | `min`, `max` | numbers | Numeric answers |
 | `enum` | list of strings | Required when `type` is `enum` |
 
+A `pattern` runs under a time budget, on a worker rather than on the thread waiting for the
+answer; a pattern that exceeds the budget fails validation, and the failure names the pattern
+rather than blaming the answer.
+
 !> A schema may only LOOSEN within a major version. Tightening a constraint is a major bump,
 and an upgrade re-validates stored answers, re-prompting only where an old answer no longer
 fits.
