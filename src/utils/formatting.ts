@@ -373,6 +373,42 @@ function findLongestKeyLength(vars: Record<string, any>): number {
   return Math.max(...Object.keys(vars).map(key => key.length));
 }
 
+// --- ANSI-Safe Measurement -----------------------------------------------------------------------
+
+/**
+ * Matches the SGR (Select Graphic Rendition) escape sequences the coloring
+ * helpers emit, which is every escape sequence sous writes into a string.
+ */
+const SGR_PATTERN = /\u001B\[[0-9;]*m/g;
+
+/**
+ * Removes the color escape sequences from a string, leaving the characters a
+ * reader actually sees.
+ *
+ * @param text - The text to strip.
+ * @returns The same text, without any color escape sequence.
+ */
+export function stripAnsi(text: string): string {
+  return String(text ?? "").replace(SGR_PATTERN, "");
+}
+
+/**
+ * How many terminal columns a string occupies once its color codes are taken
+ * out. Every alignment decision measures with this, because a colored cell is
+ * longer than it looks.
+ *
+ * East Asian wide characters and emoji are out of scope: this counts one column
+ * per code unit, so a cell holding them aligns a little short. Everything sous
+ * lays out in a table is an identifier, a path, a URL or English prose, so the
+ * simple measure holds; widening it later means changing this one function.
+ *
+ * @param text - The text to measure.
+ * @returns The visible width, in columns.
+ */
+export function displayWidth(text: string): number {
+  return stripAnsi(text).length;
+}
+
 // --- Width-Aware Wrapping ------------------------------------------------------------------------
 
 /**
