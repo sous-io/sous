@@ -293,14 +293,29 @@ It runs in three stages, printing each step before it runs:
    command line tool (`gh` or `glab`) is installed and signed in, and everything is committed.
 2. **Validation.** The repository validates and the committed index is current, so a proposal
    never fails the maintainer's own checks and wastes their review.
-3. **Delegation.** The fork, branch and pull request mechanics go to the provider's own CLI,
-   which already holds your credentials. On GitHub, sous asks whether you can push to the
-   repository itself and forks it onto your account if you cannot. A change sitting on the
-   default branch is moved to a branch named `sous/submit-<date>-<time>` first.
+3. **Delegation.** Sous asks the provider whether you can push to the repository itself, forks
+   it onto your account when you cannot, pushes the branch, and asks the provider to open the
+   proposal. Every one of those is the provider's own business; sous only sequences them and
+   reports what came back. A change sitting on the default branch is moved to a branch named
+   `sous/submit-<date>-<time>` first.
 
 `--title` defaults to your last commit's subject and `--body` to a summary sous writes. A failure
 partway through says exactly which steps completed: a pushed branch with no proposal behind it is
 a normal outcome of a network failure, and you are told about it rather than left guessing.
+
+### What each provider supports
+
+Providers differ, and sous says so rather than pretending otherwise:
+
+| Provider | Command line tool | Push permission | Forking | Proposal |
+|---|---|---|---|---|
+| GitHub | `gh` | Read from GitHub, so a contributor without it is forked automatically | `gh repo fork`, with a `fork` remote added for you | Pull request |
+| GitLab | `glab` | Sous cannot tell, so it pushes to `origin` and says so | Not done for you; fork the project yourself and push your branch there | Merge request |
+| Local | none | Not applicable | Not applicable | Not applicable; a repository on your own disk is edited directly |
+
+When a provider cannot carry out a step, it says what to do by hand instead of stopping halfway
+through. A local repository never submits at all: it declares no submit support, so sous points
+you at the repository's `contribute` field instead.
 
 ?> When a repository's provider cannot open a proposal for you, sous prints the `contribute`
 pointer from its `sous.repo.yaml` instead, so you are never left without a route. Set that field

@@ -165,7 +165,7 @@ src/
       managed-layer.ts     # the machine-written conf.d/5xx .jsonc layers; key-path edits
       lock-service.ts      # LockService; read/write/apply/diff the lock, restore the store
       freshness.ts         # when to look upstream; always-pull's in-range lookup
-      providers/           # GitHub, GitLab and local, read path only, plus the index cache
+      providers/           # GitHub, GitLab and local: read and write paths, plus the index cache
   templating/
     init-liquid-engine.ts  # LiquidJS engine factory (createLiquidEngine)
     tags/                  # custom Liquid tags: showVars, exportScalarVarsJs, getFiles, listFiles
@@ -330,6 +330,18 @@ interface plus the GitHub and GitLab built-ins: an index is one raw HTTPS GET (w
 token from the environment, or from `gh` / `glab` when either is installed and signed in), and
 a recipe is a shallow, blobless, sparse checkout of its own folder, never a whole repository.
 Every network and subprocess seam is injectable, so no test in this layer touches either.
+
+The interface has two sides, and BOTH are the only place a host-specific fact may live.
+Read: `matches`, `canonicalize`, `fetchIndex`, `fetchRecipeTree`. Write: the optional `cli`
+descriptor and `proposalNoun`, plus `authStatus`, `canPush` (undefined means unknowable, which
+is not `false`), `fork` and `proposeChange`; each returns plain data and takes the injectable
+runner through `ProviderOptions` (which also carries `cwd`). `features` is what callers
+consult, never a provider id; `supportsSubmit()` narrows a provider to one that answers the
+whole write path. A new provider is ONE file: a class extending `ProviderBase`
+(`providers/base.ts`), which owns the shared subprocess, token and URL helpers and answers
+every write call a provider did not override with a ConfigError naming the provider and the
+feature, plus a line in `builtInProviders()`. No service above `providers/` may name a host,
+spawn a host tool, or build its arguments.
 `providers/index-cache.ts` keeps one index per repo under the store root's `_indexes/`
 directory and falls back to the copy it already holds when a check fails. `resolver.ts` looks a
 ref up across every added repo at once and refuses an ambiguous one instead of picking a
@@ -927,10 +939,12 @@ runs and exits non-zero when the committed index is stale; `--bump` raises a ver
 date, and `--push` sends exactly those tags. Sous writes files and tags and NEVER commits for
 the author, which is why the workflow `repo init` scaffolds commits the regenerated index in a
 step of its own. `repo submit` is validate-then-propose: it checks the tooling and the working
-tree, then the recipes and the index, and only then hands the fork, branch and pull request to
-`gh` or `glab`; every step prints before it runs, and a failure names the steps that already
-completed. A provider that does not advertise the `submit` feature prints the repo manifest's
-own `contribute` pointer instead.
+tree, then the recipes and the index, and only then pushes and proposes. `submit-service.ts`
+is a SEQUENCER and nothing more: it names no provider, spawns no host tool, and builds no
+command arguments; every host-specific answer comes from the provider interface as plain data.
+Every step prints before it runs, and a failure names the steps that already completed. A
+provider that does not advertise the `submit` feature prints the repo manifest's own
+`contribute` pointer instead.
 
 This `config` namespace is a fresh design, distinct from the old `configure` /
 `config *` commands and the `~/.sous` profile layer that were removed when walk-up

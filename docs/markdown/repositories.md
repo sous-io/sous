@@ -164,6 +164,33 @@ Restore decides nothing. It never resolves a range, never picks a newer version,
 prompts. Anything that would change what is installed changes the lockfile first, as a diff you
 can read in review.
 
+## Providers
+
+A provider is everything sous knows about one kind of repository host, and it is the only place
+a host-specific fact is allowed to live. Sous ships three: `github`, `gitlab` and `local`.
+
+A provider has two sides:
+
+- **The read side**, which every provider answers: recognize a repository URL, take it apart into
+  host, owner and name, hand back the repository's `sous.index.json`, and fetch one recipe's
+  subtree at one tag. Nothing here clones a whole repository.
+- **The write side**, which only a provider that can propose a change answers: report whether its
+  command line tool is installed and signed in, say whether you can push to the repository
+  itself, fork it onto your account, and open the proposal. Each call answers with plain data, so
+  the command driving it never learns what tool ran.
+
+Each provider declares the features it really has, `fetch` and `submit`, and sous consults that
+list rather than a provider's name. `local` declares `fetch` only: a repository on your own disk
+is edited directly, so asking sous to propose a change to it is refused with a message naming the
+provider and the feature. A provider that supports a feature only partly says so plainly rather
+than guessing; GitLab, for instance, reports that it cannot tell whether you may push instead of
+sending you down a fork path it cannot finish.
+
+?> Adding a provider is one file. A class extending `ProviderBase` inherits the subprocess, token
+and refusal plumbing, implements the read path, declares its features, and overrides the write
+calls it supports; adding it to the built-in list is the only other change. The interface is
+internal for now, not a published plugin API.
+
 ## Where everything lives
 
 | Location | Holds | Committed |
