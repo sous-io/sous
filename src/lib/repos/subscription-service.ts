@@ -29,11 +29,16 @@ import { indent, log, warning } from "../../utils/formatting.js";
 import { askChoice, askYesNo } from "../../utils/prompts.js";
 import { isInteractive, nonInteractiveError } from "../interactive.js";
 import {
+  applyProvidedAnswers,
   askForMissing,
   loadLadderContext,
+  planQuestions,
   type AskReport,
   type DefinedVariable,
   type DefiningRecipe,
+  type LadderContext,
+  type PlannedVariable,
+  type ProvidedAnswer,
 } from "../vars/index.js";
 import type { IndexFile } from "./formats/index-file.js";
 import {
@@ -195,6 +200,11 @@ export type SubscribeOptions = {
   yes?: boolean;
   /** Take the first candidate when a one-word ref matched several things. */
   acceptFirst?: boolean;
+  /**
+   * Answers supplied ahead of the questions, which are validated and stored
+   * before anything is asked. See `lib/vars/preanswers.ts`.
+   */
+  answers?: ProvidedAnswer[];
   /** Work out what would happen and report it, writing and fetching nothing. */
   dryRun?: boolean;
 };
@@ -215,6 +225,12 @@ export type SubscribeOutcome = {
   diff: LockDiff;
   /** What the variable questions produced, when they were asked. */
   answers?: AskReport;
+  /**
+   * Every question these recipes would ask, and where each answer would go.
+   * Reported by a dry run, which is how a caller with no terminal finds out
+   * what to supply with `--answer`.
+   */
+  questions?: PlannedVariable[];
   /** Dependency cycles the resolver noticed, reported rather than treated as fatal. */
   cycles: string[][];
   /** True when nothing was written, because this was a dry run. */
@@ -553,6 +569,18 @@ export class SubscriptionService {
       formatRef(written) === formatRef(parsed) ? {} : { resolvedFrom: formatRef(written) };
 
     if (dryRun) {
+      // The questions are planned even here, so `--dry-run` is the command an
+      // agent runs to find out what a subscription will want to know. Answers
+      // supplied with it are validated and reported, and nothing is written.
+      const defined = this.definedVariables(resolved);
+      const context = this.ladderContext();
+      const supplied = applyProvidedAnswers(defined, options.answers ?? [], context, {
+        sousDir: this.sousDir,
+        confDir: this.confDir,
+        interactive: this.interactive,
+        dryRun: true,
+      });
+
       return {
         ref: formatRef(parsed),
         ...resolvedFrom,
@@ -561,6 +589,10 @@ export class SubscriptionService {
         trusted,
         diff,
         cycles,
+        questions: planQuestions(defined, context, { sousDir: this.sousDir }),
+        ...(supplied.stored.length === 0
+          ? {}
+          : { answers: { answered: supplied.stored, inherited: [], skipped: [] } }),
         dryRun: true,
       };
     }
@@ -570,7 +602,7 @@ export class SubscriptionService {
     this.lock.write(after);
     this.writeSubscriptionEntry(key, parsed, options);
 
-    const answers = await this.askVariables(resolved);
+    const answers = await this.askVariables(resolved, options.answers ?? []);
 
     return {
       ref: formatRef(parsed),
@@ -1912,14 +1944,16 @@ export class SubscriptionService {
   // --- Variables ----------------------------------------------------------------------------------
 
   /**
-   * Asks for the variables the newly resolved recipes publish, keeping and
-   * reporting whatever answers were already in scope. A run with no terminal
-   * fails naming the exact environment variables that would answer each
-   * question, which is what the variables layer does everywhere.
+   * Every variable definition the resolved closure publishes, attributed to the
+   * recipe that declared it and to the chain that pulled it in.
+   *
+   * A recipe whose files are not on this machine contributes nothing rather
+   * than failing, which is what lets a dry run describe as much of the closure
+   * as it can without downloading any of it.
    *
    * @param resolved - The recipe versions the resolution settled on.
    */
-  private async askVariables(resolved: ResolvedRecipe[]): Promise<AskReport | undefined> {
+  private definedVariables(resolved: ResolvedRecipe[]): DefinedVariable[] {
     const defined: DefinedVariable[] = [];
     const byKey = new Map(resolved.map((recipe) => [recipe.key, recipe]));
     const repos = this.currentRepos();
@@ -1975,21 +2009,53 @@ export class SubscriptionService {
       }
     }
 
-    if (defined.length === 0) return undefined;
+    return defined;
+  }
 
-    return askForMissing(
-      defined,
-      loadLadderContext({
-        sousDir: this.sousDir,
-        settings: this.settings,
-        shellEnv: this.shellEnv,
-      }),
-      {
-        sousDir: this.sousDir,
-        confDir: this.confDir,
-        interactive: this.interactive,
-      }
-    );
+  /** The environment layers and mapping records this project resolves against. */
+  private ladderContext(): LadderContext {
+    return loadLadderContext({
+      sousDir: this.sousDir,
+      settings: this.settings,
+      shellEnv: this.shellEnv,
+    });
+  }
+
+  /**
+   * Asks for the variables the newly resolved recipes publish, keeping and
+   * reporting whatever answers were already in scope. Answers supplied ahead of
+   * the questions are validated and stored first, so only what is left over is
+   * asked for. A run with no terminal fails naming the exact environment
+   * variables that would answer each remaining question, which is what the
+   * variables layer does everywhere.
+   *
+   * @param resolved - The recipe versions the resolution settled on.
+   * @param provided - Answers supplied ahead of the questions.
+   */
+  private async askVariables(
+    resolved: ResolvedRecipe[],
+    provided: ProvidedAnswer[]
+  ): Promise<AskReport | undefined> {
+    const defined = this.definedVariables(resolved);
+    if (defined.length === 0 && provided.length === 0) return undefined;
+
+    const context = this.ladderContext();
+    const options = {
+      sousDir: this.sousDir,
+      confDir: this.confDir,
+      interactive: this.interactive,
+    };
+
+    // A supplied answer naming a variable nothing declares fails here, before
+    // any question is asked and before anything is stored.
+    const supplied = applyProvidedAnswers(defined, provided, context, options);
+
+    const report = await askForMissing(defined, context, {
+      ...options,
+      skip: supplied.keys,
+    });
+    report.answered.unshift(...supplied.stored);
+    return report;
   }
 }
 

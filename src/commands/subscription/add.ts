@@ -10,6 +10,11 @@
  *     sous subscription add core
  *     sous subscription add my-recipes:workflow/task-files
  *
+ * A dry run prints the whole plan, including every question these recipes ask
+ * and where each answer would be stored. Those answers can be supplied on the
+ * command line with `--answer name=value` (or `--answers-file <path>`), which
+ * is how a run with no terminal subscribes to a recipe that asks questions.
+ *
  * The whole dependency closure is resolved before anything is downloaded. If it
  * reaches a repository this project has not added, sous stops and asks about it
  * by name, showing which recipe requires it; a run with no terminal fails
@@ -23,6 +28,10 @@ import { subscriptionServiceFor } from "../../lib/repos/subscription-service.js"
 import { formatAskReport } from "../../lib/vars/ask.js";
 import { renderTable, type TableColumn } from "../../utils/table.js";
 import {
+  collectProvidedAnswers,
+  formatQuestionPlan,
+} from "../../lib/vars/index.js";
+import {
   blankLine,
   dryRunNotice,
   footer,
@@ -33,7 +42,7 @@ import {
   subheading,
   warning,
 } from "../../utils/formatting.js";
-import { confirmationFlag } from "../../utils/flags.js";
+import { answerFlags, confirmationFlag } from "../../utils/flags.js";
 
 /** How far every line of this command's output is indented. */
 const INDENT = 2;
@@ -68,6 +77,8 @@ export default class SubscriptionAdd extends BaseCommand {
     "<%= config.bin %> subscription add workflow/task-files@^1.2.0",
     "<%= config.bin %> subscription add core",
     "<%= config.bin %> subscription add workflow/task-files --always-pull",
+    "<%= config.bin %> subscription add workflow/task-files --dry-run",
+    "<%= config.bin %> subscription add workflow/task-files --yes --answer apiUrl=https://api.example.com",
   ];
 
   static args = {
@@ -103,6 +114,7 @@ export default class SubscriptionAdd extends BaseCommand {
       description: "Print what would be installed without writing or downloading anything",
       default: false,
     }),
+    ...answerFlags(),
   };
 
   async run(): Promise<void> {
@@ -126,8 +138,19 @@ export default class SubscriptionAdd extends BaseCommand {
       shellEnv: this.shellEnv,
     });
 
+    // Answers supplied ahead of the questions. They are validated before
+    // anything is installed, so a typo fails the run rather than being stored
+    // under a name nothing reads.
+    const provided = collectProvidedAnswers({
+      ...(flags.answer === undefined ? {} : { answer: flags.answer }),
+      ...(flags["answers-file"] === undefined
+        ? {}
+        : { answersFile: flags["answers-file"] }),
+    });
+
     const outcome = await service.subscribe({
       ref: args.ref,
+      answers: provided,
       prerelease: flags.prerelease,
       alwaysPull: flags["always-pull"],
       trust: flags.yes,
@@ -179,6 +202,18 @@ export default class SubscriptionAdd extends BaseCommand {
       blankLine();
       subheading("Variables");
       for (const line of formatAskReport(outcome.answers, dryRun)) {
+        log(line === "" ? "" : indent(line));
+      }
+    }
+
+    // The question plan, printed only by a dry run: it is how a caller with no
+    // terminal learns what this subscription will want to know, so that the
+    // real run can answer everything with '--answer'.
+    if (outcome.questions !== undefined) {
+      blankLine();
+      subheading("Questions these recipes ask");
+      blankLine();
+      for (const line of formatQuestionPlan(outcome.questions)) {
         log(line === "" ? "" : indent(line));
       }
     }

@@ -8,6 +8,10 @@
  * instead of the project's recipes, which is how a project asks questions no
  * recipe publishes yet.
  *
+ * Answers can be supplied ahead of the questions with `--answer name=value` or
+ * `--answers-file <path>`; whatever they answer is stored before anything is
+ * asked, and only what is left over is asked for.
+ *
  * Without a terminal the command never hangs waiting on a prompt: it fails and
  * names the exact environment variables that would answer each question.
  */
@@ -17,12 +21,15 @@ import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../base-command.js";
 import { ConfigError } from "../../lib/errors.js";
 import {
+  applyProvidedAnswers,
   askForMissing,
+  collectProvidedAnswers,
   definedVariableKey,
   FileDefinitionSource,
   formatAskReport,
   loadLadderContext,
   loadProjectDefinitions,
+  unknownAnswerError,
   type DefinedVariable,
 } from "../../lib/vars/index.js";
 import {
@@ -34,6 +41,7 @@ import {
   log,
   showCommandVars,
 } from "../../utils/formatting.js";
+import { answerFlags } from "../../utils/flags.js";
 
 /** True when a name (bare, or the full namespace/recipe.name key) names this variable. */
 function matchesName(defined: DefinedVariable, name: string): boolean {
@@ -55,6 +63,8 @@ export default class VarsAsk extends BaseCommand {
     "<%= config.bin %> vars ask apiUrl",
     "<%= config.bin %> vars ask --all",
     "<%= config.bin %> vars ask --file ./questions.yaml",
+    "<%= config.bin %> vars ask --answer apiUrl=https://api.example.com",
+    "<%= config.bin %> vars ask --answers-file ./answers.yaml",
   ];
 
   static args = {
@@ -78,6 +88,7 @@ export default class VarsAsk extends BaseCommand {
       description: "Report what would be asked and written, without writing anything",
       default: false,
     }),
+    ...answerFlags(),
   };
 
   async run(): Promise<void> {
@@ -93,6 +104,13 @@ export default class VarsAsk extends BaseCommand {
 
     if (dryRun) dryRunNotice("No answers will be written.");
 
+    const provided = collectProvidedAnswers({
+      ...(flags.answer === undefined ? {} : { answer: flags.answer }),
+      ...(flags["answers-file"] === undefined
+        ? {}
+        : { answersFile: flags["answers-file"] }),
+    });
+
     const source =
       flags.file === undefined
         ? loadProjectDefinitions(this.settings, this.configContext.sousDir)
@@ -103,6 +121,10 @@ export default class VarsAsk extends BaseCommand {
     blankLine();
 
     if (defined.length === 0) {
+      // A supplied answer names a variable nothing declares, which is a typo
+      // until proven otherwise; it fails rather than passing unnoticed.
+      if (provided[0] !== undefined) throw unknownAnswerError(provided[0], defined);
+
       log(
         indent(
           "No recipe in this project defines any variables yet, so there is nothing " +
@@ -127,17 +149,27 @@ export default class VarsAsk extends BaseCommand {
       shellEnv: this.shellEnv,
     });
 
-    const report = await askForMissing(defined, context, {
+    const askOptions = {
       sousDir: this.configContext.sousDir,
       // A project whose conf.d directory has never existed still gets one when
       // a mapping record needs writing; the writer creates it.
       confDir:
         this.configContext.confDir ?? path.join(this.configContext.sousDir, "conf.d"),
       interactive: this.interactive,
-      ...(args.name === undefined ? {} : { only: [args.name] }),
-      reask: flags.all,
       dryRun,
+    };
+
+    // Answers supplied on the command line are validated and stored before any
+    // question is asked, so what is left is exactly what nobody answered.
+    const supplied = applyProvidedAnswers(defined, provided, context, askOptions);
+
+    const report = await askForMissing(defined, context, {
+      ...askOptions,
+      ...(args.name === undefined ? {} : { only: [args.name] }),
+      skip: supplied.keys,
+      reask: flags.all,
     });
+    report.answered.unshift(...supplied.stored);
 
     blankLine();
     for (const line of formatAskReport(report, dryRun)) {

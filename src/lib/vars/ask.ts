@@ -84,6 +84,18 @@ export interface AnsweredVariable {
   outcome: "updated" | "appended" | "not written";
   /** The mapping record written alongside the answer, when one was needed. */
   mapping?: { envName: string; target: string; filePath: string };
+  /**
+   * The answer this one replaced, when there was a different one already in
+   * scope. Only a supplied answer (`--answer`) replaces anything without being
+   * asked first, so the report says plainly when one did.
+   */
+  replaced?: string;
+  /**
+   * An environment variable in the real shell environment that answers this
+   * variable and therefore outranks the file this answer was written to. The
+   * report names it, because the stored answer does nothing until it is unset.
+   */
+  shadowedBy?: string;
 }
 
 /** One variable that already had a valid answer. */
@@ -122,6 +134,12 @@ export interface AskOptions {
   interactive: boolean;
   /** Limit the run to these variable names (or `namespace/recipe.name` keys). */
   only?: string[];
+  /**
+   * Variables an answer was supplied for ahead of the run, by
+   * `namespace/recipe.name` key. They are neither asked about nor reported
+   * here; the caller that stored them reports them itself.
+   */
+  skip?: string[];
   /** Ask again even when a valid answer is already in scope. */
   reask?: boolean;
   /** Work out what would happen and report it, without writing anything. */
@@ -648,6 +666,7 @@ export async function askForMissing(
 
   for (const entry of defined) {
     if (options.only !== undefined && !isNamed(entry, options.only)) continue;
+    if (options.skip?.includes(definedVariableKey(entry)) === true) continue;
 
     const { definition } = entry;
     const named = options.only !== undefined;
@@ -934,6 +953,20 @@ export function formatAskReport(report: AskReport, dryRun = false): string[] {
       lines.push(`    ${entry.envName} in ${entry.file}`);
       if (entry.mapping !== undefined) {
         lines.push(`    mapped to ${entry.mapping.target} in the conf.d layer`);
+      }
+      if (entry.replaced !== undefined) {
+        const previous = displayValue(entry.replaced, entry.defined.definition.secret);
+        lines.push(
+          dryRun
+            ? `    replacing the answer already there: ${previous}`
+            : `    replaced the answer already there: ${previous}`
+        );
+      }
+      if (entry.shadowedBy !== undefined) {
+        lines.push(
+          `    ${entry.shadowedBy} is set in your shell environment and answers this ` +
+            `variable first; unset it for the stored answer to take effect`
+        );
       }
     }
     lines.push("");

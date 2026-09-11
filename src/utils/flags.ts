@@ -102,3 +102,27 @@ export function confirmationFlag(options: ConfirmationFlagOptions = {}) {
     default: false,
   });
 }
+
+/**
+ * The two flags that answer a recipe's questions ahead of time, on every
+ * command that can ask one.
+ *
+ * They exist for callers with no terminal: a script, a continuous integration
+ * job, or an agent that read the question plan out of a dry run and knows every
+ * answer already. Both spellings are defined here so the commands that take
+ * them cannot describe them differently. The semantics live in
+ * `lib/vars/preanswers.ts`.
+ */
+export function answerFlags() {
+  return {
+    answer: Flags.string({
+      description:
+        "Answer one of the questions ahead of time, written as '<name>=<value>'. Repeat it for each answer",
+      multiple: true,
+    }),
+    "answers-file": Flags.string({
+      description:
+        "Read answers from a YAML or JSON file of '<name>: <value>' pairs. An '--answer' wins over the file",
+    }),
+  };
+}
