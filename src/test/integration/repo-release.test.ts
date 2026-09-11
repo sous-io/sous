@@ -164,6 +164,31 @@ describe("sous repo release and sous repo submit", () => {
   );
 
   /**
+   * `--non-interactive` is a global flag, and the authoring commands carry it
+   * too even though they discover no project config. It is accepted rather than
+   * rejected as unknown, the run fails naming the flag that would have answered
+   * the confirmation, and the command's own help is printed underneath.
+   *
+   * sous repo release --non-interactive   // -> non-zero, names --yes
+   */
+  it(
+    "should accept --non-interactive and refuse to publish, naming --yes",
+    () => {
+      const result = runSous("repo", "release", "--non-interactive");
+      const output = result.stdout + result.stderr;
+
+      expect(result.status).toBe(1);
+      expect(output).not.toContain("Nonexistent flag");
+      expect(output).toContain("--non-interactive");
+      expect(output).toContain("--yes");
+      // The command's own help, printed underneath the error.
+      expect(result.stderr).toContain("USAGE");
+      expect(git(recipeRepo, "tag", "--list")).toBe("");
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
    * The default developer run does the whole job: it regenerates the index,
    * commits it, and tags that commit. The recipe has never been tagged, so
    * nothing is bumped; its declared version is the one being published.

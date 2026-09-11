@@ -181,6 +181,7 @@ src/
   utils/
     formatting.ts          # console output helpers (heading, showVar, wrapText, displayWidth, etc.)
     table.ts               # renderTable: the responsive table every listing prints through
+    command-help.ts        # printCommandHelpToStderr: a command's own help under an error
     prompts.ts
     sous-directory.ts      # ensureSousDirectory: creates a directory sous owns and writes its
                            #   README.md + AGENTS.md/CLAUDE.md pointers, never overwriting them;
@@ -243,7 +244,10 @@ it is what sous prints. A CANONICAL IDENTITY (`github.com/sous-io/sous-recipes`,
 `repoIdentity()` in `identity.ts`) keys everything shared between projects on a machine: the
 store layout, the store entry marker's `repo` field, the index cache, and each lockfile
 `repos:` entry's `identity`. Anything machine-wide that a short name keys is a bug; nothing
-migrates an old store, it is simply re-fetched. `ref.ts` also holds `parseDependencyRef`, the
+migrates an old store, it is simply re-fetched. That lockfile `identity` is OPTIONAL ON READ
+and required on the written shape: `lockedRepoSchema` in `formats/lockfile.ts` derives a missing
+one from the entry's `url` through `requireProvider(url).canonicalize(url)`, so a lockfile
+written before the store was re-keyed still loads and fills the field in on its next write. `ref.ts` also holds `parseDependencyRef`, the
 manifest-side grammar: a bare sibling ref, or a locator URL whose scheme is the provider id and
 whose last two path segments are ALWAYS the namespace and recipe (a first segment with a dot is
 the host, otherwise the provider's default). `local://` and `repo:` are both refused there.
@@ -1053,10 +1057,15 @@ at a bare `--`), when `CI` is set to anything but `0`/`false`/`no`/`off`, or whe
 stdout is not a TTY; every input is injectable for tests. A prompt that cannot be shown
 throws a `NonInteractiveError` (a `ConfigError` carrying `showHelp`), whose message names
 the question, why sous could not ask it, and the flag or env vars that would have answered
-it; `BaseCommand.catch` then prints the command's own help underneath, through oclif's
-`loadHelpClass` (sous does not install the help plugin, so there is no `help` COMMAND to
-run) with `process.stdout.write` pointed at stderr for the duration, so a piped stdout
-stays machine-readable.
+it; `BaseCommand.catch` then prints the command's own help underneath, through
+`printCommandHelpToStderr` in `utils/command-help.ts`, which uses oclif's `loadHelpClass`
+(sous does not install the help plugin, so there is no `help` COMMAND to run) with
+`process.stdout.write` pointed at stderr for the duration, so a piped stdout stays
+machine-readable. The flag itself is defined once as `nonInteractiveFlag()` in
+`utils/flags.ts`: `BaseCommand.baseFlags` takes it, and so do the three authoring commands
+(`repo init`, `repo release`, `repo submit`), which extend oclif `Command` rather than
+`BaseCommand` and would otherwise reject it as unknown; their `catch` handlers call
+`printCommandHelpToStderr` themselves for the same reason.
 
 **Launch pass-through:** any argument `launch` does not recognize is forwarded to the
 tool, after the config-defined `tools.<name>.args` and before the `promptFile` content

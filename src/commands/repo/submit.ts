@@ -1,6 +1,9 @@
 import { Command, Flags } from "@oclif/core";
 import { ConfigError, isConfigError, SOUS_VERSION } from "../../lib/settings.js";
 import { findRepoRoot, submitRepo } from "../../lib/repos/release/index.js";
+import { wantsHelp } from "../../lib/interactive.js";
+import { printCommandHelpToStderr } from "../../utils/command-help.js";
+import { nonInteractiveFlag } from "../../utils/flags.js";
 import {
   blankLine,
   displayErrorBlock,
@@ -59,6 +62,9 @@ export default class RepoSubmit extends Command {
       description: "Check everything and print the plan without sending anything",
       default: false,
     }),
+    // This command does not extend BaseCommand, so it declares the global
+    // non-interactive flag itself; the rule is the same everywhere.
+    "non-interactive": nonInteractiveFlag(),
   };
 
   async init(): Promise<void> {
@@ -118,10 +124,13 @@ export default class RepoSubmit extends Command {
   /**
    * Renders a configuration error as a plain, readable message rather than an
    * oclif stack trace, matching what BaseCommand does for every other command.
+   * An error raised because a question could not be asked also gets this
+   * command's own help underneath it.
    */
   protected async catch(error: Error & { exitCode?: number }): Promise<unknown> {
     if (isConfigError(error)) {
       displayErrorBlock((error as ConfigError).message);
+      if (wantsHelp(error)) await printCommandHelpToStderr(this);
       return this.exit(1);
     }
     return super.catch(error);

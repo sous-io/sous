@@ -2,9 +2,10 @@ import fs from "node:fs";
 import { Command, Flags } from "@oclif/core";
 import { ConfigError, isConfigError, SOUS_VERSION } from "../../lib/settings.js";
 import { INDEX_FILENAME } from "../../lib/repos/formats/common.js";
-import { isInteractive, nonInteractiveError } from "../../lib/interactive.js";
+import { isInteractive, nonInteractiveError, wantsHelp } from "../../lib/interactive.js";
 import { askYesNo } from "../../utils/prompts.js";
-import { confirmationFlag } from "../../utils/flags.js";
+import { printCommandHelpToStderr } from "../../utils/command-help.js";
+import { confirmationFlag, nonInteractiveFlag } from "../../utils/flags.js";
 import {
   BUMP_LEVELS,
   anythingToCommit,
@@ -140,6 +141,9 @@ export default class RepoRelease extends Command {
       description: "Print the plan and stop, changing nothing",
       default: false,
     }),
+    // This command does not extend BaseCommand, so it declares the global
+    // non-interactive flag itself; the rule is the same everywhere.
+    "non-interactive": nonInteractiveFlag(),
   };
 
   async init(): Promise<void> {
@@ -485,10 +489,14 @@ export default class RepoRelease extends Command {
   /**
    * Renders a configuration error as a plain, readable message rather than an
    * oclif stack trace, matching what BaseCommand does for every other command.
+   * An error raised because a question could not be asked also gets this
+   * command's own help underneath it, so every flag that would have answered it
+   * is visible without going looking.
    */
   protected async catch(error: Error & { exitCode?: number }): Promise<unknown> {
     if (isConfigError(error)) {
       displayErrorBlock((error as ConfigError).message);
+      if (wantsHelp(error)) await printCommandHelpToStderr(this);
       return this.exit(1);
     }
     return super.catch(error);

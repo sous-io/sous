@@ -1,5 +1,5 @@
 import path from "node:path";
-import { Command, Flags, loadHelpClass } from "@oclif/core";
+import { Command, Flags } from "@oclif/core";
 import {
   discoverConfig,
   expandHome,
@@ -17,6 +17,8 @@ import {
 } from "./lib/settings.js";
 import { isInteractive, wantsHelp } from "./lib/interactive.js";
 import { displayError, displayErrorBlock, header, log, warning } from "./utils/formatting.js";
+import { nonInteractiveFlag } from "./utils/flags.js";
+import { printCommandHelpToStderr } from "./utils/command-help.js";
 
 /**
  * Base class for all CLI commands.
@@ -60,11 +62,7 @@ export abstract class BaseCommand extends Command {
     "sous-confd": Flags.string({
       description: "Path to the conf.d drop-in layer directory (overrides <sousDir>/conf.d)",
     }),
-    "non-interactive": Flags.boolean({
-      description:
-        "Never ask a question; fail instead, naming the flag that would have answered it",
-      default: false,
-    }),
+    "non-interactive": nonInteractiveFlag(),
   };
 
   protected settings!: Settings;
@@ -233,26 +231,12 @@ export abstract class BaseCommand extends Command {
    * spliced into its stream. oclif's help writes to stdout, so stdout is pointed
    * at stderr for the duration and put back afterwards. The help class is the
    * one oclif itself uses for `--help`, `-h` and the `help` command, so all
-   * four routes draw exactly the same screen.
+   * four routes draw exactly the same screen. The mechanism itself lives in
+   * `utils/command-help.ts`, so the repository authoring commands (which do not
+   * extend this class) print the same screen the same way.
    */
   protected async showHelpWithError(): Promise<void> {
-    const writeToStdout = process.stdout.write.bind(process.stdout);
-    process.stdout.write = ((chunk: string | Uint8Array, ...rest: unknown[]) =>
-      (process.stderr.write as (...args: unknown[]) => boolean)(
-        chunk,
-        ...rest
-      )) as typeof process.stdout.write;
-
-    try {
-      const HelpClass = await loadHelpClass(this.config);
-      const help = new HelpClass(this.config);
-      await help.showHelp([this.id ?? ""]);
-    } catch {
-      // The help screen is a courtesy. A failure to draw it must never replace
-      // the error that is actually being reported.
-    } finally {
-      process.stdout.write = writeToStdout;
-    }
+    await printCommandHelpToStderr(this);
   }
 
   /**

@@ -126,3 +126,28 @@ export function answerFlags() {
     }),
   };
 }
+
+/** What `--non-interactive` says it does, on every command that carries it. */
+export const NON_INTERACTIVE_DESCRIPTION =
+  "Never ask a question; fail instead, naming the flag that would have answered it";
+
+/**
+ * The global flag that turns every prompt into an error, defined once.
+ *
+ * `BaseCommand` puts it in `baseFlags`, so every command that discovers a
+ * config carries it without asking. The three repository authoring commands
+ * (`repo init`, `repo release`, `repo submit`) do not extend `BaseCommand`,
+ * because they run inside a recipe repository rather than a sous project; they
+ * add this flag themselves, so the rule reads the same everywhere.
+ *
+ * The flag's effect is not in its parsed value: `lib/interactive.ts` reads the
+ * raw command line, so a prompt is already blocked by the time a command looks
+ * at its flags. Declaring it here is what stops oclif rejecting it as unknown,
+ * and what puts it on the help screen.
+ */
+export function nonInteractiveFlag() {
+  return Flags.boolean({
+    description: NON_INTERACTIVE_DESCRIPTION,
+    default: false,
+  });
+}
