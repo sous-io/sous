@@ -15,6 +15,7 @@ import {
   type ConfigContext,
   type Settings,
 } from "./lib/settings.js";
+import { isInteractive, wantsHelp } from "./lib/interactive.js";
 import { displayError, displayErrorBlock, header, log, warning } from "./utils/formatting.js";
 
 /**
@@ -34,6 +35,13 @@ import { displayError, displayErrorBlock, header, log, warning } from "./utils/f
  *      deep-merge them. Variable resolution happens later, per command.
  *
  * There is no user-level config: nothing is read from `~/.sous`.
+ *
+ * Every command also carries `--non-interactive`, which tells sous never to ask
+ * a question: a run that would have prompted fails instead, naming the prompt
+ * and the flag (or environment variables) that would have answered it, and this
+ * class prints the command's own help underneath that error. The rule itself
+ * lives in `lib/interactive.ts`, which also treats a truthy `CI` and a
+ * non-terminal stdin or stdout the same way.
  */
 export abstract class BaseCommand extends Command {
   static baseFlags = {
@@ -51,6 +59,11 @@ export abstract class BaseCommand extends Command {
     }),
     "sous-confd": Flags.string({
       description: "Path to the conf.d drop-in layer directory (overrides <sousDir>/conf.d)",
+    }),
+    "non-interactive": Flags.boolean({
+      description:
+        "Never ask a question; fail instead, naming the flag that would have answered it",
+      default: false,
     }),
   };
 
@@ -86,6 +99,14 @@ export abstract class BaseCommand extends Command {
    * config never corrupts a piped stdout stream (e.g. `sous config show | jq`).
    */
   protected errorSink: (line: string) => void = log;
+
+  /**
+   * Whether this run may ask the user a question. One rule, shared by every
+   * prompt in sous: see `lib/interactive.ts`.
+   */
+  protected get interactive(): boolean {
+    return isInteractive();
+  }
 
   async init(): Promise<void> {
     await super.init();
@@ -196,9 +217,38 @@ export abstract class BaseCommand extends Command {
   protected async catch(error: Error & { exitCode?: number }): Promise<unknown> {
     if (isConfigError(error)) {
       displayErrorBlock(error.message, this.errorSink);
+      if (wantsHelp(error)) await this.showHelpWithError();
       return this.exit(1);
     }
     return super.catch(error);
+  }
+
+  /**
+   * Prints this command's own help underneath an error, so someone whose run
+   * failed because a question could not be asked can see every flag that would
+   * have answered it without going looking.
+   *
+   * The help goes to stderr, always: an error is not output, and a command whose
+   * stdout is being piped (`sous config show | jq`) must not have a help screen
+   * spliced into its stream. oclif's help writes to stdout, so stdout is pointed
+   * at stderr for the duration and put back afterwards.
+   */
+  protected async showHelpWithError(): Promise<void> {
+    const writeToStdout = process.stdout.write.bind(process.stdout);
+    process.stdout.write = ((chunk: string | Uint8Array, ...rest: unknown[]) =>
+      (process.stderr.write as (...args: unknown[]) => boolean)(
+        chunk,
+        ...rest
+      )) as typeof process.stdout.write;
+
+    try {
+      await this.config.runCommand("help", [this.id ?? ""]);
+    } catch {
+      // The help screen is a courtesy. A failure to draw it must never replace
+      // the error that is actually being reported.
+    } finally {
+      process.stdout.write = writeToStdout;
+    }
   }
 
   /**

@@ -21,7 +21,12 @@ import { color } from "@oclif/color";
 import { ConfigError } from "../errors.js";
 import type { Settings } from "../settings.js";
 import { blankLine, log as writeLine } from "../../utils/formatting.js";
-import { askYesNo, isInteractive } from "../../utils/prompts.js";
+import { askYesNo } from "../../utils/prompts.js";
+import {
+  isInteractive,
+  nonInteractiveReason,
+  NonInteractiveError,
+} from "../interactive.js";
 import {
   REPOS_LAYER_FILENAME,
   readManagedLayer,
@@ -233,7 +238,7 @@ export class TrustService {
     const trustFlag = options.trustFlag ?? false;
 
     if (!trustFlag && !interactive) {
-      throw new ConfigError(this.nonInteractiveMessage(missing));
+      throw new NonInteractiveError(this.nonInteractiveMessage(missing));
     }
 
     if (!trustFlag) {
@@ -327,6 +332,7 @@ export class TrustService {
           "running where it can ask."
         : `${missing.length} repositories have to be trusted before this can continue, ` +
           `and sous is not running where it can ask.`,
+      `  Why: ${nonInteractiveReason() ?? "there is no terminal to ask on"}.`,
       "",
     ];
 

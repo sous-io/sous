@@ -1,4 +1,4 @@
-import { confirm as inquire } from "@inquirer/prompts";
+import { confirm as inquire, select } from "@inquirer/prompts";
 import { color } from "@oclif/color";
 
 import { blankLine, blankLines, log } from "./formatting.js";
@@ -18,12 +18,23 @@ export async function askYesNo(prompt: string, defaultAnswer = false): Promise<b
 }
 
 /**
- * True when sous is attached to a terminal in both directions, which is what it
- * takes to ask a question. A piped or scripted run has to be told what to do
- * with a flag instead.
+ * Ask the user to pick one of several choices, handing back the value behind
+ * the one they picked. The caller decides the order the choices are shown in;
+ * this only draws them.
+ *
+ * Whether a question may be asked at all is not decided here: that is
+ * `isInteractive` in `src/lib/interactive.ts`, the one rule every prompt in
+ * sous is gated by.
+ *
+ * @param prompt - The question to ask.
+ * @param choices - The options, in the order they should be listed.
  */
-export function isInteractive(): boolean {
-  return process.stdin.isTTY === true && process.stdout.isTTY === true;
+export async function askChoice<T>(
+  prompt: string,
+  choices: Array<{ name: string; value: T }>
+): Promise<T> {
+  blankLine();
+  return select({ message: prompt, choices });
 }
 
 /**

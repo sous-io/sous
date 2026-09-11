@@ -133,7 +133,7 @@ export default class VarsAsk extends BaseCommand {
       // a mapping record needs writing; the writer creates it.
       confDir:
         this.configContext.confDir ?? path.join(this.configContext.sousDir, "conf.d"),
-      interactive: Boolean(process.stdin.isTTY),
+      interactive: this.interactive,
       ...(args.name === undefined ? {} : { only: [args.name] }),
       reask: flags.all,
       dryRun,
