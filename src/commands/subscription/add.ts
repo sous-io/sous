@@ -78,6 +78,16 @@ export default class SubscriptionAdd extends BaseCommand {
         "Accept trust for every repository this command adds, without being asked",
       default: false,
     }),
+    yes: Flags.boolean({
+      char: "y",
+      description: "Accept the confirmation and subscribe without being asked",
+      default: false,
+    }),
+    "accept-first": Flags.boolean({
+      description:
+        "When a one-word ref matches several things, take the first one listed",
+      default: false,
+    }),
     "dry-run": Flags.boolean({
       description: "Print what would be installed without writing or downloading anything",
       default: false,
@@ -110,6 +120,8 @@ export default class SubscriptionAdd extends BaseCommand {
       prerelease: flags.prerelease,
       alwaysPull: flags["always-pull"],
       trust: flags.trust,
+      yes: flags.yes,
+      acceptFirst: flags["accept-first"],
       dryRun,
     });
 

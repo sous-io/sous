@@ -92,7 +92,7 @@ describe("what a recipe is not allowed to do", () => {
 
     const added = sous(projectRoot, "repo", "add", mainRepo, "--trust");
     expect(added.status).toBe(0);
-    const subscribed = sous(projectRoot, "subscribe", "helpers/overreaching");
+    const subscribed = sous(projectRoot, "subscribe", "helpers/overreaching", "--yes");
     expect(subscribed.status).toBe(0);
   }, CLI_TIMEOUT);
 

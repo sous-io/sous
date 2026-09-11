@@ -1,5 +1,5 @@
 import path from "node:path";
-import { Command, Flags } from "@oclif/core";
+import { Command, Flags, loadHelpClass } from "@oclif/core";
 import {
   discoverConfig,
   expandHome,
@@ -231,7 +231,9 @@ export abstract class BaseCommand extends Command {
    * The help goes to stderr, always: an error is not output, and a command whose
    * stdout is being piped (`sous config show | jq`) must not have a help screen
    * spliced into its stream. oclif's help writes to stdout, so stdout is pointed
-   * at stderr for the duration and put back afterwards.
+   * at stderr for the duration and put back afterwards. The help class is the
+   * one oclif itself uses for `--help`; there is no `help` command to run, since
+   * sous does not install the help plugin.
    */
   protected async showHelpWithError(): Promise<void> {
     const writeToStdout = process.stdout.write.bind(process.stdout);
@@ -242,7 +244,9 @@ export abstract class BaseCommand extends Command {
       )) as typeof process.stdout.write;
 
     try {
-      await this.config.runCommand("help", [this.id ?? ""]);
+      const HelpClass = await loadHelpClass(this.config);
+      const help = new HelpClass(this.config);
+      await help.showHelp([this.id ?? ""]);
     } catch {
       // The help screen is a courtesy. A failure to draw it must never replace
       // the error that is actually being reported.

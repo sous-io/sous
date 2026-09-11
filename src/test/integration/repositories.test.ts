@@ -6,6 +6,9 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { parse as parseJsonc } from "jsonc-parser";
 import { makeTmpDir, type TmpDir } from "../utils/tmp.js";
 import { buildFixtureRepo } from "../utils/fixture-repo.js";
+import { discoverConfig } from "../../lib/config-discovery.js";
+import { loadSettings } from "../../lib/settings.js";
+import { SubscriptionService } from "../../lib/repos/subscription-service.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const binPath = path.join(repoRoot, "bin", "run.js");
@@ -34,6 +37,28 @@ let extrasRepo: string;
  */
 function sous(cwd: string, ...args: string[]): RunResult {
   const env = { ...process.env, SOUS_HOME: sousHome };
+  delete env.SOUS_CONFIG;
+  delete env.SOUS_DIR;
+  delete env.SOUS_CONFD;
+  const result = spawnSync(process.execPath, [binPath, ...args], {
+    cwd,
+    encoding: "utf8",
+    env,
+  });
+  return { stdout: result.stdout, stderr: result.stderr, status: result.status };
+}
+
+/**
+ * Runs `sous <args...>` exactly as `sous` does, with extra environment
+ * variables layered on top. Used for the cases that are about the environment
+ * itself, such as `CI`.
+ */
+function sousWithEnv(
+  cwd: string,
+  extra: NodeJS.ProcessEnv,
+  ...args: string[]
+): RunResult {
+  const env = { ...process.env, ...extra, SOUS_HOME: sousHome };
   delete env.SOUS_CONFIG;
   delete env.SOUS_DIR;
   delete env.SOUS_CONFD;
@@ -120,6 +145,17 @@ describe("the repositories consumer surface", () => {
         description: "Depends on a recipe from another repository",
         depends: ["extras:tooling/formatter"],
         files: { "skills/needs-extras/SKILL.md": "# Needs extras\n" },
+      },
+      // The namespace 'formatter' shares its name with the recipe
+      // 'tooling/formatter' in the other repository, which is what makes the
+      // one-word ref 'formatter' ambiguous. Its recipe, 'daily', has a name
+      // nothing else uses, so 'daily' on its own is not.
+      {
+        namespace: "formatter",
+        name: "daily",
+        version: "1.0.0",
+        description: "Formats something once a day",
+        files: { "skills/daily/SKILL.md": "# Daily\n" },
       },
     ]);
 
@@ -254,7 +290,7 @@ describe("the repositories consumer surface", () => {
   it(
     "should refuse a dependency on an untrusted repository",
     () => {
-      const result = sous(projectRoot, "subscribe", "workflow/needs-extras", "--trust");
+      const result = sous(projectRoot, "subscribe", "workflow/needs-extras", "--trust", "--yes");
 
       expect(result.status).not.toBe(0);
       expect(result.stdout + result.stderr).toContain("extras");
@@ -273,7 +309,7 @@ describe("the repositories consumer surface", () => {
     () => {
       expect(sous(projectRoot, "repo", "add", extrasRepo, "--trust").status).toBe(0);
 
-      const result = sous(projectRoot, "subscribe", "workflow/needs-extras");
+      const result = sous(projectRoot, "subscribe", "workflow/needs-extras", "--yes");
       expect(result.status).toBe(0);
 
       const lock = readJson(path.join(sousDir, "sous.lock.json"));
@@ -298,7 +334,7 @@ describe("the repositories consumer surface", () => {
   it(
     "should subscribe to a recipe and record it everywhere",
     () => {
-      const result = sous(projectRoot, "subscribe", "workflow/task-files");
+      const result = sous(projectRoot, "subscribe", "workflow/task-files", "--yes");
 
       expect(result.status).toBe(0);
       expect(result.stdout).toContain("workflow/task-files");
@@ -623,6 +659,182 @@ describe("the repositories consumer surface", () => {
       expect(
         fs.existsSync(path.join(storeRoot, "extras", "tooling", "formatter", "1.0.0"))
       ).toBe(false);
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * A ref with one segment is a guess at a name. A name only one thing carries
+   * resolves on its own, and the run says what it resolved to.
+   *
+   * sous subscribe daily --yes   // -> fixtures:formatter/daily
+   */
+  it(
+    "should subscribe to a recipe named by a bare name",
+    () => {
+      const result = sous(projectRoot, "subscribe", "daily", "--yes");
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("fixtures:formatter/daily");
+
+      const lock = readJson(path.join(sousDir, "sous.lock.json"));
+      const recipes = lock.recipes as Record<string, { repo: string }>;
+      expect(recipes["formatter/daily"]!.repo).toBe("fixtures");
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * A name that is both a namespace in one repository and a recipe in another
+   * cannot be resolved without asking, and a run with no terminal cannot ask.
+   * It fails naming the flag that decides, and prints the command's own help so
+   * every other flag is visible too.
+   *
+   * sous subscribe formatter --yes   // -> exits non-zero, names --accept-first
+   */
+  it(
+    "should fail on an ambiguous bare name with no terminal, naming --accept-first",
+    () => {
+      const result = sous(projectRoot, "subscribe", "formatter", "--yes");
+      const output = result.stdout + result.stderr;
+
+      expect(result.status).not.toBe(0);
+      expect(output).toContain("--accept-first");
+      expect(output).toContain("fixtures:formatter");
+      expect(output).toContain("extras:tooling/formatter");
+      // The command's own help, printed underneath the error.
+      expect(result.stderr).toContain("USAGE");
+      expect(result.stderr).toContain("--non-interactive");
+
+      const lock = readJson(path.join(sousDir, "sous.lock.json"));
+      expect(Object.keys(lock.recipes as Record<string, unknown>)).not.toContain(
+        "tooling/formatter"
+      );
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * `--accept-first` takes the first candidate in the documented order:
+   * repositories in the order the project added them, so the namespace in
+   * 'fixtures' beats the recipe of the same name in 'extras'.
+   *
+   * sous subscribe formatter --accept-first --yes
+   */
+  it(
+    "should take the first candidate with --accept-first",
+    () => {
+      const result = sous(
+        projectRoot,
+        "subscribe",
+        "formatter",
+        "--accept-first",
+        "--yes"
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("fixtures:formatter");
+
+      const subscriptions = readJsonc(
+        path.join(sousDir, "conf.d", "510-subscriptions.jsonc")
+      ).subscriptions as Record<string, unknown>;
+      expect(Object.keys(subscriptions)).toContain("formatter");
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * The confirmation is a real gate: without an answer, and without `--yes`,
+   * nothing is written at all. A run with no terminal cannot answer it, so it
+   * fails naming the flag that would have.
+   *
+   * sous subscribe workflow/task-files   // -> exits non-zero, names --yes
+   */
+  it(
+    "should refuse to subscribe with no terminal and no --yes",
+    () => {
+      const result = sous(projectRoot, "unsubscribe", "formatter");
+      expect(result.status).toBe(0);
+
+      const attempt = sous(projectRoot, "subscribe", "formatter", "--accept-first");
+      const output = attempt.stdout + attempt.stderr;
+
+      expect(attempt.status).not.toBe(0);
+      expect(output).toContain("--yes");
+      // The plan is printed before the question, so the reader knows what they
+      // are being asked about.
+      expect(output).toContain("compiled into this project");
+
+      const subscriptions = readJsonc(
+        path.join(sousDir, "conf.d", "510-subscriptions.jsonc")
+      ).subscriptions as Record<string, unknown>;
+      expect(Object.keys(subscriptions)).not.toContain("formatter");
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * Declining the confirmation writes nothing at all: no lockfile entry, no
+   * subscription record, nothing downloaded.
+   *
+   * The question needs a terminal, which a spawned process does not have, so
+   * this one drives the service in process with the answer injected. The plan
+   * it printed and the question it asked are the same ones the command shows.
+   */
+  it(
+    "should write nothing when the confirmation is declined",
+    async () => {
+      const discovered = discoverConfig(projectRoot);
+      expect(discovered).not.toBeNull();
+      const settings = await loadSettings(discovered!);
+
+      const asked: string[] = [];
+      const printed: string[] = [];
+      const service = new SubscriptionService({
+        sousDir,
+        settings,
+        env: { ...process.env, SOUS_HOME: sousHome },
+        interactive: true,
+        write: (line) => printed.push(line),
+        ask: async (message) => {
+          asked.push(message);
+          return false;
+        },
+      });
+
+      const lockPath = path.join(sousDir, "sous.lock.json");
+      const lockBefore = fs.readFileSync(lockPath, "utf8");
+      const subscriptionsPath = path.join(
+        sousDir,
+        "conf.d",
+        "510-subscriptions.jsonc"
+      );
+      const subscriptionsBefore = fs.readFileSync(subscriptionsPath, "utf8");
+
+      await expect(
+        service.subscribe({ ref: "workflow/needs-extras" })
+      ).rejects.toThrow(/declined/);
+
+      expect(asked).toEqual(["Proceed?"]);
+      expect(printed.join("\n")).toContain("compiled into this project");
+      expect(fs.readFileSync(lockPath, "utf8")).toBe(lockBefore);
+      expect(fs.readFileSync(subscriptionsPath, "utf8")).toBe(subscriptionsBefore);
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * `CI` alone makes a run non-interactive, even where stdin and stdout are
+   * terminals: a continuous integration job has nobody to answer a question.
+   */
+  it(
+    "should treat a truthy CI variable as non-interactive",
+    () => {
+      const result = sousWithEnv(projectRoot, { CI: "true" }, "subscribe", "daily");
+
+      expect(result.status).not.toBe(0);
+      expect(result.stdout + result.stderr).toContain("CI");
+      expect(result.stdout + result.stderr).toContain("--yes");
     },
     CLI_TIMEOUT
   );

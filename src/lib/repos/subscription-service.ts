@@ -25,8 +25,9 @@ import semver from "semver";
 import { ConfigError, isConfigError } from "../errors.js";
 import { SOUS_VERSION, type ConfigContext, type Settings } from "../settings.js";
 import { CONFD_DIR_NAME } from "../config-discovery.js";
-import { warning } from "../../utils/formatting.js";
-import { isInteractive } from "../../utils/prompts.js";
+import { indent, log, warning } from "../../utils/formatting.js";
+import { askChoice, askYesNo } from "../../utils/prompts.js";
+import { isInteractive, nonInteractiveError } from "../interactive.js";
 import {
   askForMissing,
   loadLadderContext,
@@ -42,6 +43,13 @@ import {
 } from "./formats/lockfile.js";
 import type { RecipeManifest } from "./formats/recipe-manifest.js";
 import { formatRef, parseRef, refKey, type ParsedRef } from "./ref.js";
+import {
+  candidateToRef,
+  describeCandidate,
+  describeSearch,
+  searchBareName,
+  type RefCandidate,
+} from "./ref-search.js";
 import {
   PROJECT_REQUESTER,
   resolveRefs,
@@ -128,6 +136,15 @@ export type SubscriptionServiceOptions = {
   providerOptions?: ProviderOptions;
   /** Where warnings go. Defaults to the console warning banner. */
   warn?: (message: string) => void;
+  /** Where the plan and the resolution notices go. Defaults to the console. */
+  write?: (message: string) => void;
+  /** How a yes or no question is asked. Injected in tests. */
+  ask?: (message: string) => Promise<boolean>;
+  /** How a choice between candidate refs is asked. Injected in tests. */
+  choose?: (
+    message: string,
+    candidates: RefCandidate[]
+  ) => Promise<RefCandidate>;
   /** The clock, so a recorded timestamp is predictable in tests. */
   now?: () => Date;
 };
@@ -174,14 +191,20 @@ export type SubscribeOptions = {
   alwaysPull?: boolean;
   /** Acknowledge trust for every repository this command adds, without being asked. */
   trust?: boolean;
+  /** Accept the subscribe confirmation without being asked. */
+  yes?: boolean;
+  /** Take the first candidate when a one-word ref matched several things. */
+  acceptFirst?: boolean;
   /** Work out what would happen and report it, writing and fetching nothing. */
   dryRun?: boolean;
 };
 
 /** What `subscribe` did. */
 export type SubscribeOutcome = {
-  /** The ref, in its canonical written form. */
+  /** The ref that was installed, fully qualified, in its canonical written form. */
   ref: string;
+  /** The ref as it was written, when a one-word ref had to be resolved first. */
+  resolvedFrom?: string;
   /** The key the subscription was recorded under. */
   key: string;
   /** Every recipe version the resolution settled on. */
@@ -282,6 +305,15 @@ export class SubscriptionService {
 
   private readonly warn: (message: string) => void;
 
+  private readonly write: (message: string) => void;
+
+  private readonly ask: (message: string) => Promise<boolean>;
+
+  private readonly choose: (
+    message: string,
+    candidates: RefCandidate[]
+  ) => Promise<RefCandidate>;
+
   private readonly now: () => Date;
 
   private readonly storeInstance: RecipeStoreLike;
@@ -308,6 +340,13 @@ export class SubscriptionService {
   private lockedDirectories: Record<string, string> | undefined;
 
   /**
+   * Every trusted repository's index, once it has been loaded. Working out what
+   * a one-word ref meant and describing what a subscription will do both read
+   * it, within one command, and an index does not change mid-command.
+   */
+  private indexesSnapshot: Map<string, IndexFile> | undefined;
+
+  /**
    * @param options - The project's directories, its config, and any collaborator to override.
    */
   constructor(options: SubscriptionServiceOptions) {
@@ -320,6 +359,18 @@ export class SubscriptionService {
     this.providers = options.providers ?? builtInProviders();
     this.providerOptions = options.providerOptions ?? {};
     this.warn = options.warn ?? warning;
+    this.write = options.write ?? ((message: string) => log(message));
+    this.ask = options.ask ?? ((message: string) => askYesNo(message));
+    this.choose =
+      options.choose ??
+      ((message, candidates) =>
+        askChoice(
+          message,
+          candidates.map((candidate) => ({
+            name: describeCandidate(candidate),
+            value: candidate,
+          }))
+        ));
     this.now = options.now ?? (() => new Date());
 
     this.storeInstance =
@@ -479,9 +530,18 @@ export class SubscriptionService {
    * @param options - The ref, the prerelease and always-pull flags, and the trust flag.
    */
   async subscribe(options: SubscribeOptions): Promise<SubscribeOutcome> {
-    const parsed = parseRef(options.ref);
-    const key = refKey(parsed);
+    const written = parseRef(options.ref);
     const dryRun = options.dryRun === true;
+
+    // A one-word ref is a guess at a name, and the guess is settled here, from
+    // the cached indexes alone. Everything after this point works with a fully
+    // qualified ref, so what is confirmed is exactly what is installed.
+    const parsed = await this.resolveBareRef(written, options);
+    const key = refKey(parsed);
+
+    // The last gate before anything is fetched or written: what this will do to
+    // the project, in plain sentences, and a question.
+    await this.confirmSubscription(parsed, options);
 
     const { resolved, trusted, cycles } = await this.resolveClosure(parsed, options);
 
@@ -489,8 +549,20 @@ export class SubscriptionService {
     const after = this.lock.applyResolution(before, resolved, this.lockRepoInputs());
     const diff = this.lock.diff(before, after);
 
+    const resolvedFrom =
+      formatRef(written) === formatRef(parsed) ? {} : { resolvedFrom: formatRef(written) };
+
     if (dryRun) {
-      return { ref: formatRef(parsed), key, resolved, trusted, diff, cycles, dryRun: true };
+      return {
+        ref: formatRef(parsed),
+        ...resolvedFrom,
+        key,
+        resolved,
+        trusted,
+        diff,
+        cycles,
+        dryRun: true,
+      };
     }
 
     for (const recipe of resolved) await this.ensureStored(recipe);
@@ -500,7 +572,310 @@ export class SubscriptionService {
 
     const answers = await this.askVariables(resolved);
 
-    return { ref: formatRef(parsed), key, resolved, trusted, diff, answers, cycles, dryRun: false };
+    return {
+      ref: formatRef(parsed),
+      ...resolvedFrom,
+      key,
+      resolved,
+      trusted,
+      diff,
+      answers,
+      cycles,
+      dryRun: false,
+    };
+  }
+
+  // --- Working out what a one-word ref meant -----------------------------------------------------
+
+  /**
+   * Settles what a ref names, reading nothing but the cached indexes.
+   *
+   * A ref with two segments already says what it names and is handed back
+   * untouched. A ref with one segment is searched for as a namespace first and
+   * as a recipe name second (`ref-search.ts` holds the rule and the order):
+   * nothing found is an error naming what was searched, one candidate is used
+   * and reported, and several are chosen between. `--accept-first` takes the
+   * first candidate in the documented order; a run that cannot ask fails and
+   * says so.
+   *
+   * @param written - The ref exactly as the user wrote it.
+   * @param options - The accept-first flag.
+   */
+  private async resolveBareRef(
+    written: ParsedRef,
+    options: SubscribeOptions
+  ): Promise<ParsedRef> {
+    if (written.recipe !== undefined) return written;
+
+    const repoOrder = this.repoSearchOrder(written.repo);
+    const indexes = await this.loadIndexes(repoOrder);
+    if (written.repo === undefined) this.indexesSnapshot = indexes;
+    const inputs = { name: written.namespace, repoOrder, indexes };
+    const candidates = searchBareName(inputs);
+
+    if (candidates.length === 0) {
+      throw new ConfigError(
+        [
+          `Nothing called '${written.namespace}' was found: no namespace has that name, ` +
+            `and no recipe does either.`,
+          ...describeSearch(inputs),
+          `  Run 'sous repo search ${written.namespace}' to look for something like it, or ` +
+            `'sous repo add <url>' to add the repository that publishes it.`,
+        ].join("\n")
+      );
+    }
+
+    if (candidates.length === 1) {
+      return this.acceptCandidate(candidates[0]!, written);
+    }
+
+    if (options.acceptFirst === true) {
+      this.write(
+        indent(
+          `'${written.namespace}' matched ${candidates.length} things; taking the first, ` +
+            `because '--accept-first' was passed.`
+        )
+      );
+      return this.acceptCandidate(candidates[0]!, written);
+    }
+
+    if (!this.interactive) {
+      throw nonInteractiveError({
+        prompt: `which '${written.namespace}' you meant`,
+        remedy:
+          `write the full ref (for example 'sous subscribe ${candidates[0]!.ref}'), or pass ` +
+          `'--accept-first' to take the first candidate listed above.`,
+        details: [
+          `'${written.namespace}' matched ${candidates.length} things:`,
+          ...candidates.map((candidate) => `  ${describeCandidate(candidate)}`),
+        ],
+      });
+    }
+
+    const chosen = await this.choose(
+      `Which '${written.namespace}' did you mean?`,
+      candidates
+    );
+    return candidateToRef(chosen, written);
+  }
+
+  /**
+   * Reports what a one-word ref resolved to, and hands back the qualified ref.
+   *
+   * @param candidate - The candidate that won.
+   * @param written - The ref exactly as the user wrote it.
+   */
+  private acceptCandidate(candidate: RefCandidate, written: ParsedRef): ParsedRef {
+    this.write(indent(`'${written.namespace}' resolves to ${describeCandidate(candidate)}.`));
+    return candidateToRef(candidate, written);
+  }
+
+  /**
+   * The repositories a one-word ref is searched in, in the order their
+   * candidates are listed: the built-in repository first, then the ones the
+   * config names, in the order the config names them.
+   *
+   * @param only - A repository qualifier from the ref, which narrows the search to it.
+   */
+  private repoSearchOrder(only?: string): string[] {
+    const repos = this.currentRepos();
+    const names = Object.keys(repos);
+
+    if (only !== undefined) {
+      if (!Object.hasOwn(repos, only)) {
+        throw new ConfigError(
+          `This project does not trust a repository called '${only}'.\n` +
+            (names.length > 0
+              ? `  It trusts: ${names.join(", ")}.`
+              : `  It trusts none yet.`) +
+            `\n  Add it with 'sous repo add <url> --name ${only}'.`
+        );
+      }
+      return [only];
+    }
+
+    const builtIn = names.filter((name) => isBuiltInEntry(repos[name]));
+    return [...builtIn, ...names.filter((name) => !builtIn.includes(name))];
+  }
+
+  /**
+   * Every trusted repository's index, loaded once per command. Whatever a
+   * one-word ref already loaded is reused, so confirming a subscription costs
+   * no extra lookups.
+   */
+  private async indexSnapshot(): Promise<Map<string, IndexFile>> {
+    if (this.indexesSnapshot === undefined) {
+      this.indexesSnapshot = await this.loadIndexes(this.repoSearchOrder());
+    }
+    return this.indexesSnapshot;
+  }
+
+  // --- The subscribe confirmation ----------------------------------------------------------------
+
+  /**
+   * Says what subscribing will do to this project, and asks whether to go on.
+   *
+   * This runs before anything is fetched or written, so a "no" costs nothing:
+   * the only thing read to get here is the cached index of each trusted
+   * repository. `--yes` skips the question, and a dry run states the plan and
+   * never asks, because a dry run has nothing to decline.
+   *
+   * @param parsed - The fully qualified ref being subscribed to.
+   * @param options - The yes and dry-run flags.
+   */
+  private async confirmSubscription(
+    parsed: ParsedRef,
+    options: SubscribeOptions
+  ): Promise<void> {
+    const indexes = await this.indexSnapshot();
+    const plan = await this.subscriptionPlan(parsed, options, indexes);
+    for (const line of plan) this.write(line === "" ? "" : indent(line));
+
+    if (options.dryRun === true || options.yes === true) return;
+
+    if (!this.interactive) {
+      throw nonInteractiveError({
+        prompt: `whether to go ahead with subscribing to '${formatRef(parsed)}'`,
+        remedy: "pass '--yes' to accept the plan above without being asked.",
+      });
+    }
+
+    const proceed = await this.ask("Proceed?");
+    if (!proceed) {
+      throw new ConfigError(
+        `Nothing was written: the subscription to '${formatRef(parsed)}' was declined.\n` +
+          `  Nothing was downloaded, no lockfile entry was made, and this project's ` +
+          `config is exactly as it was.`
+      );
+    }
+  }
+
+  /**
+   * The plan itself: what will be compiled, what can run, what will be asked,
+   * and what will be fetched, in plain sentences.
+   *
+   * @param parsed - The fully qualified ref being subscribed to.
+   * @param options - The prerelease flag, for the dependency peek.
+   */
+  private async subscriptionPlan(
+    parsed: ParsedRef,
+    options: SubscribeOptions,
+    indexes: Map<string, IndexFile>
+  ): Promise<string[]> {
+    const target = formatRef(parsed);
+    const lines: string[] = [""];
+
+    if (parsed.recipe === undefined) {
+      const published = this.namespaceRecipes(parsed, indexes);
+      lines.push(
+        `Subscribing to '${target}' subscribes this project to the whole namespace ` +
+          `'${parsed.namespace}', which means every recipe in it, including ones ` +
+          `published later.`
+      );
+      if (published.length > 0) {
+        lines.push(`It publishes ${published.length} today: ${published.join(", ")}.`);
+      }
+    } else {
+      lines.push(
+        `Subscribing to '${target}' installs the recipe '${parsed.recipe}' from the ` +
+          `namespace '${parsed.namespace}'.`
+      );
+    }
+
+    lines.push("");
+    lines.push("Here is what that does:");
+    lines.push("");
+    lines.push(
+      `  The files it ships are compiled into this project on the next build, which ` +
+        `writes them into this project's agent directories.`
+    );
+    lines.push(
+      `  Any scripts it ships can be run on this machine when an agent uses them. ` +
+        `Sous does not run them itself, and it cannot vouch for what they do.`
+    );
+    lines.push(
+      `  The variables it publishes are asked about at the end of this command, and ` +
+        `the answers are written into this project's env files.`
+    );
+    lines.push(
+      `  Its dependencies are fetched and pinned in this project's lockfile, at the ` +
+        `exact versions resolved now.`
+    );
+
+    const untrusted = await this.knownUntrustedDependencyRepos(parsed, options, indexes);
+    if (untrusted.length > 0) {
+      lines.push(
+        `  Some of what it needs lives in repositories this project does not trust ` +
+          `yet: ${untrusted.join(", ")}. You are asked about each one by name before ` +
+          `anything is fetched from it.`
+      );
+    } else {
+      lines.push(
+        `  If a dependency turns out to live in a repository this project does not ` +
+          `trust, sous stops and asks about that repository by name before fetching ` +
+          `anything from it.`
+      );
+    }
+
+    lines.push("");
+    return lines;
+  }
+
+  /**
+   * The recipes a namespace publishes today, as `namespace/recipe` keys.
+   *
+   * @param parsed - The fully qualified namespace ref.
+   */
+  private namespaceRecipes(parsed: ParsedRef, indexes: Map<string, IndexFile>): string[] {
+    const index = parsed.repo === undefined ? undefined : indexes.get(parsed.repo);
+    if (index === undefined) return [];
+    return Object.keys(index.recipes)
+      .filter((key) => key.startsWith(`${parsed.namespace}/`))
+      .sort();
+  }
+
+  /**
+   * Repositories a dependency needs that this project does not trust, as far as
+   * anything already on disk knows.
+   *
+   * A manifest is the only thing that names a dependency, and a manifest that
+   * has never been fetched cannot be read without fetching, which is exactly
+   * what the confirmation exists to gate. So this reads what the store already
+   * holds, and says nothing when it holds nothing; the trust ceremony during
+   * resolution is still where the real answer comes from.
+   *
+   * @param parsed - The fully qualified ref being subscribed to.
+   * @param options - The prerelease flag.
+   */
+  private async knownUntrustedDependencyRepos(
+    parsed: ParsedRef,
+    options: SubscribeOptions,
+    indexes: Map<string, IndexFile>
+  ): Promise<string[]> {
+    try {
+      const result = await resolveRefs(
+        [
+          {
+            ref: parsed,
+            requestedBy: PROJECT_REQUESTER,
+            kind: "subscribes",
+            ...(options.prerelease === true ? { prerelease: true } : {}),
+          },
+        ],
+        {
+          indexes,
+          repos: this.resolverRepos(),
+          // Reads only what is already on disk: the confirmation must not fetch.
+          loadManifest: (recipe) => this.loadRecipeManifest(recipe, true),
+          ...(options.prerelease === true ? { prerelease: true } : {}),
+        }
+      );
+      return result.missingRepos.map((missing) => `'${missing.name}'`).sort();
+    } catch {
+      // The plan is a courtesy; a peek that fails must never stop a subscription
+      // that resolution itself would have completed.
+      return [];
+    }
   }
 
   /**
