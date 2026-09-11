@@ -131,6 +131,29 @@ export function heading(text: string, prefixSymbol = "▶"): void {
 }
 
 /**
+ * Writes a section heading followed by a blank line, which is how a command
+ * opens a section of its output.
+ *
+ * `heading` on its own leaves the first line of content pressed right up under
+ * the heading, which reads as one crowded block. Every command that lays out
+ * sections of prose, tables or variable lists uses this instead, so the spacing
+ * is decided in one place rather than by a `blankLine()` call remembered at
+ * each site.
+ *
+ * @param text - The heading text; a colon is appended unless it ends in a period.
+ * @param prefixSymbol - The marker drawn before the text.
+ *
+ * @example
+ * section("Adding a repository");
+ * // ▶ Adding a repository:
+ * // (blank line)
+ */
+export function section(text: string, prefixSymbol = "▶"): void {
+  heading(text, prefixSymbol);
+  blankLine();
+}
+
+/**
  * Writes a subheading to the console.
  *
  * @example

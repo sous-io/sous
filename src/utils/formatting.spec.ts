@@ -8,6 +8,7 @@ import {
   footer,
   dump,
   heading,
+  section,
   subheading,
   showVar,
   showVars,
@@ -279,6 +280,38 @@ describe("heading()", () => {
   it("should include the prefix symbol", () => {
     const lines = captureLog(() => heading("Test", "▶"));
     expect(lines.join("\n")).toContain("▶");
+  });
+});
+
+// ---- section --------------------------------------------------------------------------------
+
+describe("section()", () => {
+  /**
+   * section() should write the same heading line heading() does, so switching a
+   * command over to it changes the spacing and nothing else.
+   *
+   * section("Adding a repository");
+   * // output contains "▶ Adding a repository:"
+   */
+  it("should write the heading line", () => {
+    const joined = captureLog(() => section("Adding a repository")).join("\n");
+    expect(joined).toContain("▶");
+    expect(joined).toContain("Adding a repository:");
+  });
+
+  /**
+   * section() should leave a blank line under the heading, which is the whole
+   * point of it: the content below a heading never sits pressed against it.
+   *
+   * section("Adding a repository");
+   * // last line is blank
+   */
+  it("should leave a blank line under the heading", () => {
+    const headingLines = captureLog(() => heading("Adding a repository"));
+    const sectionLines = captureLog(() => section("Adding a repository"));
+
+    expect(sectionLines).toHaveLength(headingLines.length + 1);
+    expect(sectionLines.at(-1)?.trim()).toBe("");
   });
 });
 
