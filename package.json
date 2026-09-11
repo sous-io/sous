@@ -101,6 +101,20 @@
         "description": "Manage the recipe repositories this project trusts",
         "hidden": true
       },
+      "namespace": {
+        "description": "Browse the namespaces the trusted repositories publish"
+      },
+      "namespaces": {
+        "description": "Browse the namespaces the trusted repositories publish",
+        "hidden": true
+      },
+      "recipe": {
+        "description": "Browse the recipes the trusted repositories publish"
+      },
+      "recipes": {
+        "description": "Browse the recipes the trusted repositories publish",
+        "hidden": true
+      },
       "subscription": {
         "description": "Manage which recipes this project subscribes to"
       },
