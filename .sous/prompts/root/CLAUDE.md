@@ -948,7 +948,7 @@ This enables `sous prune` (remove stale outputs) and `sous clear` (delete all ou
 | `sous subscription add <ref>` | Subscribe to a namespace or a recipe, install the whole closure, and answer the variables it publishes (`--yes` / `-y` / `--trust`, `--accept-first`, `--prerelease`, `--always-pull`, `--answer <name>=<value>`, `--answers-file <path>`, `--dry-run`, which also prints every question the closure would ask); also `sous subscribe` |
 | `sous subscription remove <ref>` | Remove a subscription and everything only it brought in, refcounted (`--dry-run`); also `sous unsubscribe` |
 | `sous repo init [dir]` | Scaffold a new recipe repository (`--name`, `--namespace`, `--force`) |
-| `sous repo link <repo> [path]` | Read a repository from a working copy: clone it, or link a checkout already on disk (`--global`, `--yes` / `-y` / `--trust`) |
+| `sous repo link <repo\|path> [path]` | Read a repository from a working copy: link the checkout a path names in place, clone a repository named on its own, or link the checkout a second argument names (`--global`, `--yes` / `-y` / `--trust`) |
 | `sous repo unlink <repo>` | Drop the link and go back to published versions; the checkout stays (`--global`) |
 | `sous repo release` | Publish new versions of a recipe repository: plan, ask once, then bump, regenerate the index, commit and tag (`--namespace`, `--recipe`, `--bump`, `--no-bump`, `--include-unchanged`, `--tag`, `--push`, `--yes`, `--check`, `--ci`, `--dry-run`) |
 | `sous repo submit` | Propose this repository's committed changes to its maintainers (`--title`, `--body`, `--draft`, `--dry-run`) |
@@ -982,14 +982,19 @@ fetched is named rather than silently left out. `repo gc` protects everything th
 lockfile pins, whatever that does to the total, since a cache that is too large is a
 nuisance while evicting a pinned entry breaks a build. `repo init` does not extend
 `BaseCommand`: it creates a repository, which is not a sous project and usually has no
-`.sous/` above it, so config discovery would only get in its way. `repo link` clones into
+`.sous/` above it, so config discovery would only get in its way. `repo link` is written three
+ways, and only one of them clones. A configured short name on its own clones into
 `.sous/repos/<owner>/<name>` (or `$SOUS_HOME/repos/...` with `--global`), reuses a checkout of
-the same remote rather than re-cloning, and refuses a checkout of a different one; `repo
-unlink` removes the map entry and never touches the checkout. A `repo link` argument that is a
-URL rather than a configured short name goes through `SubscriptionService.addRepo`, so it runs
+the same remote rather than re-cloning, and refuses a checkout of a different one. A local
+directory path in the REPO slot (`checkoutInRepoSlot` in `link.ts`) links that checkout where
+it is, with `origin: "path"` and the short name its repo manifest suggests; a configured short
+name always wins over a directory of the same name in the working directory, and a path in both
+argument slots is refused. A second argument links the checkout it names. `repo unlink` removes
+the map entry and never touches the checkout. A `repo link` argument that is a URL or a path
+rather than a configured short name goes through `SubscriptionService.addRepo`, so it runs
 the SAME trust ceremony `repo add` runs (and gets `addRepo`'s short-name collision check) before
-anything is cloned; linking reads recipes with no version, lockfile or hash check, so there is
-no path by which sous reads a repository the project has not trusted. Both maintain the managed
+anything is linked or cloned; linking reads recipes with no version, lockfile or hash check, so
+there is no path by which sous reads a repository the project has not trusted. Both maintain the managed
 `.gitignore` block described above, so `.sous/repos/` and the links map stay out of version
 control. Prune and clear only ever touch paths recorded in the state file, so nothing in
 `.sous/repos/` is at risk from them.
