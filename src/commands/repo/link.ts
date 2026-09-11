@@ -20,9 +20,12 @@ import {
   sameRemote,
 } from "../../lib/repos/git-clone.js";
 import {
+  assertLocalRepoDirectory,
   expandHomePath,
   looksLikeLocalPath,
+  resolveRepoArgument,
 } from "../../lib/repos/providers/local.js";
+import { readRepoManifestIn } from "../../lib/repos/locked-recipes.js";
 import {
   ensureReposIgnoreFiles,
   globalReposDir,
@@ -52,10 +55,12 @@ import {
  * repository instead of at a published version, which is how a maintainer edits
  * recipes: edits happen in a checkout, never in the store.
  *
- * With no path, the repository is cloned into `.sous/repos/<owner>/<name>`, or
- * into `$SOUS_HOME/repos/<owner>/<name>` with --global, where two projects can
- * share one checkout. With a path, an existing checkout is linked in place and
- * nothing is cloned.
+ * The command is written three ways. A path on its own links the checkout that
+ * is already at that path, in place. A repository name (or URL) on its own
+ * clones the repository into `.sous/repos/<owner>/<name>`, or into
+ * `$SOUS_HOME/repos/<owner>/<name>` with --global, where two projects can share
+ * one checkout. A name (or URL) followed by a path links the checkout at that
+ * path to that repository, and clones nothing.
  *
  * A linked repository's recipes are read from the checkout with no version, no
  * lockfile and no hash check, so linking one is at least as consequential as
@@ -64,8 +69,16 @@ import {
  * way to read from a repository this project does not trust.
  */
 export default class RepoLink extends BaseCommand {
-  static description =
-    "Point a repository at a working copy on this machine instead of a published version";
+  static description = [
+    "Point a repository at a working copy on this machine instead of a published version",
+    "",
+    "'sous repo link <path>' links the checkout already at that path, where it is, " +
+      "adding the repository to this project first if it has not been added yet.",
+    "'sous repo link <name-or-url>' clones the repository into .sous/repos and links " +
+      "that clone.",
+    "'sous repo link <name-or-url> <path>' links the checkout at that path to that " +
+      "repository, and clones nothing.",
+  ].join("\n");
 
   /**
    * The other spelling of the topic. It lives under a hidden topic, so it is
@@ -74,6 +87,7 @@ export default class RepoLink extends BaseCommand {
   static aliases = ["repos:link"];
 
   static examples = [
+    "<%= config.bin %> repo link ../sous-recipes",
     "<%= config.bin %> repo link sous-recipes",
     "<%= config.bin %> repo link sous-recipes ~/Projects/sous-recipes",
     "<%= config.bin %> repo link https://github.com/sous-io/sous-recipes",
@@ -83,7 +97,8 @@ export default class RepoLink extends BaseCommand {
   static args = {
     repo: Args.string({
       description:
-        "The repository's short name from this project's config, or its full URL",
+        "The repository's short name from this project's config, its full URL, or the " +
+        "path of a checkout to link in place",
       required: true,
     }),
     path: Args.string({
@@ -116,21 +131,44 @@ export default class RepoLink extends BaseCommand {
     const isGlobal = flags.global;
     const dryRun = flags["dry-run"];
 
-    const { name, url } = await this.resolveRepo(args.repo, flags.yes, dryRun);
+    // A path in the REPO slot means "link the checkout that is already here",
+    // so it settles both what is being linked and where it lives; a second path
+    // would have to contradict one of the two.
+    const checkout = this.checkoutInRepoSlot(args.repo);
+    if (checkout !== undefined && args.path !== undefined) {
+      throw new ConfigError(
+        `'${args.repo}' is the path of a checkout on this machine, so it already says ` +
+          `which checkout to link, and a second path cannot say it again.\n` +
+          `  Link a checkout where it already is:  sous repo link ${args.repo}\n` +
+          `  Link a checkout to a named repository: sous repo link <name-or-url> ` +
+          `${args.path}\n` +
+          `  Drop whichever of the two paths you did not mean.`
+      );
+    }
+
+    const { name, url } = await this.resolveRepo(
+      args.repo,
+      flags.yes,
+      dryRun,
+      checkout
+    );
 
     showCommandVars({
       Project: this.projectLabel,
       Repository: name,
-      URL: url ?? "(not needed; an existing checkout was given)",
+      Location: url ?? "(not needed; an existing checkout was given)",
       Scope: isGlobal ? "this machine" : "this project",
       "Dry Run": dryRun,
     });
 
     heading("Linking a repository");
 
+    // Both written forms that name a checkout link it exactly where it is; only
+    // a repository named on its own is cloned.
+    const existingCheckout = checkout ?? args.path;
     const plan =
-      args.path !== undefined
-        ? this.planLinkToPath(args.path)
+      existingCheckout !== undefined
+        ? this.planLinkToPath(existingCheckout)
         : this.planClone(name, url, isGlobal, dryRun);
 
     if (dryRun) {
@@ -183,40 +221,71 @@ export default class RepoLink extends BaseCommand {
   }
 
   /**
+   * The checkout a REPO argument names outright, as an absolute path, or
+   * undefined when the argument is a short name or a URL instead.
+   *
+   * A repository this project has already added wins, because a short name is
+   * what a person types most often and a directory of the same name sitting in
+   * the working directory must not quietly take its place. Anything else that
+   * reads as a path is checked here rather than later: the directory has to
+   * exist and hold a repo manifest, and the message explains the path itself
+   * when it does not.
+   *
+   * @param input - The repo argument as the user typed it.
+   */
+  private checkoutInRepoSlot(input: string): string | undefined {
+    if (enabledRepos(this.settings)[input] !== undefined) return undefined;
+    if (!looksLikeLocalPath(input)) return undefined;
+
+    const resolved = resolveRepoArgument(input);
+    assertLocalRepoDirectory(input, resolved);
+    return resolved;
+  }
+
+  /**
    * Works out which repository is being linked and where it lives. A short name
    * is looked up in the project's `repos:` config, which is where `sous repo
    * add` records a trusted repository.
    *
-   * A URL is NOT taken on its own. Linking reads recipes straight out of a
-   * checkout, so a URL for a repository this project has not added goes through
-   * `addRepo`, which is the trust ceremony: it asks (or requires `--trust`),
-   * writes the repository into the managed layer, and refuses outright when the
-   * short name it derives already belongs to a different repository. Only then
-   * is anything cloned.
+   * Neither a URL nor a path is taken on its own. Linking reads recipes straight
+   * out of a checkout, so either one, for a repository this project has not
+   * added, goes through `addRepo`, which is the trust ceremony: it asks (or
+   * requires `--trust`), writes the repository into the managed layer, and
+   * refuses outright when the short name it derives already belongs to a
+   * different repository. Only then is anything linked or cloned.
    *
    * @param input - The repo argument as the user typed it.
    * @param trustFlag - The `--trust` flag, passed through to the ceremony.
    * @param dryRun - When true, nothing is trusted, written or downloaded.
+   * @param checkout - The checkout the repo argument named, when it named one.
    */
   private async resolveRepo(
     input: string,
     trustFlag: boolean,
-    dryRun: boolean
+    dryRun: boolean,
+    checkout?: string
   ): Promise<{ name: string; url?: string }> {
     const configured = enabledRepos(this.settings)[input];
     if (configured !== undefined) {
       return { name: input, url: configured.url };
     }
 
-    // A path counts as well as a URL: `sous repo link ../my-recipes` is the
-    // same intent, and `addRepo` resolves it to an absolute path itself.
-    if (looksLikeRepoUrl(input) || looksLikeLocalPath(input)) {
-      const service = subscriptionServiceFor({
-        configContext: this.configContext,
-        settings: this.settings,
-        shellEnv: this.shellEnv,
-      });
-      const outcome = await service.addRepo({ url: input, trust: trustFlag, dryRun });
+    // A checkout named in the REPO slot is registered from where it already is;
+    // its own manifest suggests the short name, falling back to the directory's
+    // name, which is what `addRepo` uses when it is given none.
+    if (checkout !== undefined) {
+      const suggested = suggestedShortName(checkout);
+      const outcome = await this.addThroughCeremony(
+        checkout,
+        trustFlag,
+        dryRun,
+        suggested === undefined ? {} : { name: suggested }
+      );
+      return { name: outcome.name, url: outcome.url };
+    }
+
+    if (looksLikeRepoUrl(input)) {
+      const outcome = await this.addThroughCeremony(input, trustFlag, dryRun, {});
       return { name: outcome.name, url: outcome.url };
     }
 
@@ -227,11 +296,44 @@ export default class RepoLink extends BaseCommand {
         : "  This project has no repositories configured yet.\n";
 
     throw new ConfigError(
-      `'${input}' is not a repository this project knows about, and it is not a URL.\n` +
+      `'${input}' is not a repository this project knows about, and it is neither a URL ` +
+        `nor the path of a checkout on this machine.\n` +
         knownList +
         `  Add the repository first with 'sous repo add <url>', then link it by its ` +
         `short name.`
     );
+  }
+
+  /**
+   * Runs the trust ceremony for a repository this project has not added, and
+   * reports the name and location it was recorded under. Nothing is trusted,
+   * written or downloaded on a dry run.
+   *
+   * @param location - The repository's URL, or the absolute path of one on this machine.
+   * @param trustFlag - The `--trust` flag, passed through to the ceremony.
+   * @param dryRun - When true, work out what would happen and write nothing.
+   * @param naming - The short name to record it under, when one has been worked out.
+   */
+  private async addThroughCeremony(
+    location: string,
+    trustFlag: boolean,
+    dryRun: boolean,
+    naming: { name?: string }
+  ): Promise<{ name: string; url: string }> {
+    const service = subscriptionServiceFor({
+      configContext: this.configContext,
+      settings: this.settings,
+      shellEnv: this.shellEnv,
+    });
+
+    const outcome = await service.addRepo({
+      url: location,
+      ...naming,
+      trust: trustFlag,
+      dryRun,
+    });
+
+    return { name: outcome.name, url: outcome.url };
   }
 
   /**
@@ -360,6 +462,23 @@ export default class RepoLink extends BaseCommand {
     }
 
     return { directory, origin: "clone", notes };
+  }
+}
+
+/**
+ * The short name a checkout suggests for itself: the `name` its repo manifest
+ * declares. Undefined when the manifest cannot be read or validated, which
+ * leaves the caller with the directory's own name; a working copy is edited by
+ * hand and is allowed to be mid-change, so an unreadable manifest is not a
+ * reason to refuse the link.
+ *
+ * @param directory - The checkout's root directory.
+ */
+function suggestedShortName(directory: string): string | undefined {
+  try {
+    return readRepoManifestIn(directory)?.name;
+  } catch {
+    return undefined;
   }
 }
 
