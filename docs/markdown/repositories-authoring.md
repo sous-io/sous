@@ -182,18 +182,32 @@ Edits happen in a real working copy, never in the machine-wide store. `sous repo
 inside a project, points that project's resolution of one repository at a checkout:
 
 ```bash
+sous repo link ~/Projects/my-recipes             # link the checkout that is already there
 sous repo link my-recipes                        # clone it into .sous/repos/<owner>/<name>
 sous repo link my-recipes ~/Projects/my-recipes  # link a checkout that already exists
 sous repo link my-recipes --global               # one checkout shared by every project
 sous repo unlink my-recipes
 ```
 
-With no path, sous clones the repository for you, into `.sous/repos/<owner>/<name>` or into
+The command is written three ways.
+
+A **path on its own** links the checkout that is already at that path, where it is. Relative
+paths and `~` work, because that is what people type. The repository is added to the project
+first if it has not been added yet, which is the same trust ceremony `sous repo add` runs; its
+short name is the one the checkout's own repo manifest suggests, falling back to the directory's
+name. Nothing is cloned.
+
+A **repository on its own** is cloned for you, into `.sous/repos/<owner>/<name>` or into
 `$SOUS_HOME/repos/<owner>/<name>` with `--global`. A directory that is already a checkout of the
 same remote is reused rather than cloned again, so running the command twice is harmless; one
 holding a different remote is an error, because reading the wrong recipes silently would be
-worse than stopping. With a path, an existing checkout is linked in place and nothing is cloned;
-that path must hold a repo manifest at its root.
+worse than stopping.
+
+A **repository followed by a path** links the checkout at that path to that repository, and
+clones nothing.
+
+In every form the path must hold a repo manifest at its root, and a path in both slots is an
+error: the first one already says which checkout to link.
 
 Linking also maintains the two ignore files that keep machine-local sous files out of your
 project's history: a `.sous/repos/.gitignore` holding a single `*`, and a delimited managed block

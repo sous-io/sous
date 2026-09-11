@@ -115,7 +115,7 @@ See [Inspecting and validating](config-inspection.md).
 | `sous repo list` | none | `--verbose` |
 | `sous repo search` | `TEXT` | `--limit <n>` (default 25) |
 | `sous repo gc` | none | `--max-bytes <n>`, `--dry-run` |
-| `sous repo link` | `REPO` `[PATH]` | `--global`, `-y, --yes` (also `--trust`), `--dry-run` |
+| `sous repo link` | `REPO` (a short name, a URL or a path) `[PATH]` | `--global`, `-y, --yes` (also `--trust`), `--dry-run` |
 | `sous repo unlink` | `REPO` | `--global`, `--dry-run` |
 
 `repo add` is the trust ceremony; it asks inline, and the confirmation flag is how a run with no
@@ -158,13 +158,15 @@ managed subscriptions layer rather than deleting an entry, because the default w
 come back on the next run. Adding it back clears the opt-out. Either way the `sous-recipes`
 repository stays trusted and keeps appearing in `repo list` as built in.
 
-`repo link` with no `PATH` clones the repository into `.sous/repos/<owner>/<name>`, or into
-`$SOUS_HOME/repos/<owner>/<name>` with `--global`; with a `PATH` it links an existing checkout
-and clones nothing. `REPO` is normally the short name of a repository this project has already
-added. Naming one by URL instead runs the same trust ceremony `repo add` runs, since a linked
-repository's recipes are read with no version, lockfile or hash check; it asks inline, and
-`--trust` (or any other spelling of the confirmation flag) acknowledges instead for a run with no
-terminal.
+`repo link` is written three ways. `REPO` on its own, as the short name of a repository this
+project has already added, clones it into `.sous/repos/<owner>/<name>`, or into
+`$SOUS_HOME/repos/<owner>/<name>` with `--global`. `REPO` followed by a `PATH` links the checkout
+at that path to that repository and clones nothing. A path in the `REPO` slot, on its own, links
+the checkout already at that path where it is, under the short name its repo manifest suggests.
+Naming a repository this project has not added, by URL or by path, runs the same trust ceremony
+`repo add` runs, since a linked repository's recipes are read with no version, lockfile or hash
+check; it asks inline, and `--trust` (or any other spelling of the confirmation flag)
+acknowledges instead for a run with no terminal.
 
 ## Authoring a repository
 
