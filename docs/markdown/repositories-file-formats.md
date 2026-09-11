@@ -521,8 +521,9 @@ $SOUS_HOME/
   sous.links.json                          the machine-wide links map
 ```
 
-`<identity>` is the repository's canonical location, which is several directories deep:
-`github.com/sous-io/sous-recipes/workflow/task-files/1.2.0/`. Keying by location rather than by
+`<identity>` is the repository's canonical location, `<host>/<owner path>/<name>`, so it is
+several directories deep on its own: `github.com/sous-io/sous-recipes/`, with the namespace, the
+recipe and the version following it. Keying by location rather than by
 a short name is what lets two projects that call a repository different things share one cached
 copy, and stops two projects that use the same short name for different repositories from
 colliding. Nothing migrates a store keyed another way: entries sous cannot find are simply
@@ -731,7 +732,7 @@ layers:
 
 | File | Holds | Written by |
 |------|-------|------------|
-| `conf.d/500-repos.jsonc` | the `repos:` map | `sous repo add`, `sous repo remove` |
+| `conf.d/500-repos.jsonc` | the `repos:` map | `sous repo add` |
 | `conf.d/510-subscriptions.jsonc` | the `subscriptions:` map | `sous subscription add`, `sous subscription remove` |
 | `conf.d/520-var-mappings.jsonc` | the `varMappings:` map | `sous vars ask` |
 
@@ -752,8 +753,8 @@ holds:
 // This file is managed by sous. Sous edits these files by key; you may edit
 // them too, and your comments, key order and formatting are kept.
 //
-// It records the repositories this project trusts. The 'sous repo add' and
-// 'sous repo remove' commands write the entries under 'repos'.
+// It records the repositories this project trusts. The 'sous repo add'
+// command writes the entries under 'repos'.
 //
 // It is JSON with comments (.jsonc): line comments, block comments and trailing
 // commas are all allowed here.

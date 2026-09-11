@@ -21,7 +21,10 @@ beats the matching variable, and both beat walk-up discovery.
 
 ?> Three commands take none of these, because they run inside a recipe repository rather than
 inside a project: `sous repo init`, `sous repo release` and `sous repo submit`. A recipe
-repository has no `.sous/` directory to discover.
+repository has no `.sous/` directory to discover. They take no `--non-interactive` either.
+`repo init` and `repo submit` never ask anything, and `repo release` reads the terminal and the
+`CI` environment variable to decide whether it may ask, with `--ci` or `--yes` settling it
+outright.
 
 ## Flags common to many commands
 
@@ -108,7 +111,7 @@ See [Inspecting and validating](config-inspection.md).
 
 | Command | Arguments | Own flags |
 |---------|-----------|-----------|
-| `sous repo add` | `URL` | `--name <name>`, `--provider github\|gitlab\|file`, `-y, --yes` (also `--trust`), `--dry-run` |
+| `sous repo add` | `URL` | `--name <name>`, `--provider github\|gitlab\|local`, `-y, --yes` (also `--trust`), `--dry-run` |
 | `sous repo list` | none | `--verbose` |
 | `sous repo search` | `TEXT` | `--limit <n>` (default 25) |
 | `sous repo gc` | none | `--max-bytes <n>`, `--dry-run` |
