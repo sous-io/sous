@@ -24,6 +24,8 @@
 
 import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../base-command.js";
+import { buildProjectOutputs } from "../../lib/build-service.js";
+import { ConfigError } from "../../lib/errors.js";
 import { subscriptionServiceFor } from "../../lib/repos/subscription-service.js";
 import { formatAskReport } from "../../lib/vars/ask.js";
 import { renderTable, type TableColumn } from "../../utils/table.js";
@@ -112,6 +114,10 @@ export default class SubscriptionAdd extends BaseCommand {
     }),
     "dry-run": Flags.boolean({
       description: "Print what would be installed without writing or downloading anything",
+      default: false,
+    }),
+    "no-build": Flags.boolean({
+      description: "Change the subscription without rebuilding the project",
       default: false,
     }),
     ...answerFlags(),
@@ -230,17 +236,55 @@ export default class SubscriptionAdd extends BaseCommand {
       );
     }
 
+    const rebuilding = !dryRun && !flags["no-build"];
+
     blankLine();
     log(
       indent(
         dryRun
           ? `Nothing was written. Run the same command without '--dry-run' to install it.`
           : `The subscription to '${outcome.key}' is recorded in this project's config, ` +
-              `and the exact versions above are recorded in its lockfile. Run ` +
-              `'sous build' to compile what they contribute.`
+              `and the exact versions above are recorded in its lockfile.` +
+              (rebuilding
+                ? ``
+                : ` Run 'sous build' to compile what they contribute.`)
       )
     );
 
     footer();
+
+    if (rebuilding) await this.rebuildProject(outcome.key);
+  }
+
+  /**
+   * Rebuilds the project now that the subscription has been written, so the
+   * files the new recipes contribute are on disk when this command returns.
+   *
+   * The subscription lives in a managed `conf.d/` layer, so the settings loaded
+   * when this command started no longer describe the project; they are reloaded
+   * before the build, or it would compile the old subscription set. A build that
+   * fails leaves the subscription in place, because it is already written and
+   * locked; the message says so and names the command to run once the cause is
+   * fixed.
+   *
+   * @param key - The subscription that was just added, for the failure message.
+   */
+  private async rebuildProject(key: string): Promise<void> {
+    await this.reloadDiscoveredConfig();
+
+    heading("Building the project");
+
+    const succeeded = await buildProjectOutputs(this.settings, this.configContext);
+
+    footer();
+
+    if (!succeeded) {
+      throw new ConfigError(
+        `The subscription to '${key}' was saved, but the build that followed it ` +
+          `failed, so this project's outputs may be incomplete. The subscription ` +
+          `itself is recorded and locked; fix what the build reported above and run ` +
+          `'sous build' again.`
+      );
+    }
   }
 }

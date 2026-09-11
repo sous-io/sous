@@ -388,3 +388,23 @@ export class BuildService {
     await stateService.save(stateFilePath, state);
   }
 }
+
+/**
+ * Compiles and prunes a project exactly the way `sous build` does with no flags.
+ *
+ * Shared by the subscription commands, which rebuild the project the moment they
+ * have changed what it subscribes to: a newly subscribed recipe's files appear,
+ * and a removed one's files are pruned, without anyone having to remember a
+ * second command. Every option is left at its default on purpose, because the
+ * point is to run the ordinary build and nothing else.
+ *
+ * @param settings - The merged project config, reloaded after the change.
+ * @param configContext - Where the active config was discovered.
+ * @returns True when compile and prune both succeeded.
+ */
+export async function buildProjectOutputs(
+  settings: Settings,
+  configContext: ConfigContext
+): Promise<boolean> {
+  return new BuildService().build(settings, { configContext });
+}
