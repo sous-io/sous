@@ -140,6 +140,9 @@ export function loadProjectDefinitions(
  * manifest carries, in a file of its own. `sous vars ask --file` reads one of
  * these, which is how a project asks questions that are not published by any
  * recipe yet.
+ *
+ * It is the same schema, so the same rules apply: every definition must carry a
+ * description and an example, and both are shown when the question is asked.
  */
 export const definitionsFileSchema = z.object({
   /** The definitions to ask, in the recipe manifest's own shape. */

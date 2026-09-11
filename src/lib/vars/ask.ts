@@ -22,13 +22,14 @@ import { confirm, input, password, select } from "@inquirer/prompts";
 import { ENV_DEFAULTS_NAME, ENV_LOCAL_NAME } from "../config-discovery.js";
 import { updateEnvFile } from "../env-file.js";
 import { ConfigError } from "../errors.js";
+import { blankLine, indent, log } from "../../utils/formatting.js";
 import type { VariableDefinition } from "../repos/formats/recipe-manifest.js";
 import {
   definedVariableKey,
   definingRecipeKey,
   type DefinedVariable,
 } from "./definition-source.js";
-import { displayValue } from "./display.js";
+import { displayValue, documentationRows } from "./display.js";
 import {
   describeSource,
   diagnoseVariable,
@@ -127,12 +128,11 @@ function isNamed(defined: DefinedVariable, only: string[] | undefined): boolean 
 /** The generated header comment written above a newly stored answer. */
 export function answerHeader(defined: DefinedVariable): string[] {
   const recipe = definingRecipeKey(defined.recipe);
-  const lines = [`Set by sous for ${recipe}: ${defined.definition.prompt}`];
-  if (defined.definition.description !== undefined) {
-    lines.push(defined.definition.description);
-  }
-  lines.push("Edit freely; sous only rewrites the value line.");
-  return lines;
+  return [
+    `Set by sous for ${recipe}: ${defined.definition.prompt}`,
+    defined.definition.description,
+    "Edit freely; sous only rewrites the value line.",
+  ];
 }
 
 /**
@@ -171,6 +171,37 @@ function buildNonInteractiveError(
   return new ConfigError(lines.join("\n"));
 }
 
+/**
+ * The explanatory block printed above a question: which recipe is asking, what
+ * the variable is called, the publisher's description and example, the
+ * constraints an answer has to meet, and exactly where the answer will be
+ * stored. Every published definition carries a description and an example, so
+ * the person answering never has to guess what the one-line question means.
+ *
+ * @param defined - The variable being asked about, and the recipe that published it.
+ * @returns The lines to print, without indentation or trailing blank line.
+ */
+export function questionBlock(defined: DefinedVariable): string[] {
+  const { definition } = defined;
+  const rows: Record<string, string> = {
+    "Recipe asking": definingRecipeKey(defined.recipe),
+    Variable: definition.name,
+    ...documentationRows(definition),
+    Constraints: constraintHints(definition).join("; "),
+    "Stored in": `${answerFileFor(definition)}, as ${bareName(definition)}`,
+  };
+
+  const width = Math.max(...Object.keys(rows).map((label) => label.length)) + 1;
+  return Object.entries(rows).map(([label, value]) => `${label.padEnd(width)}: ${value}`);
+}
+
+/** Prints the explanatory block for one question, followed by a blank line. */
+function showQuestionBlock(defined: DefinedVariable): void {
+  blankLine();
+  for (const line of questionBlock(defined)) log(indent(line));
+  blankLine();
+}
+
 /** Asks one question, re-asking until the answer fits the definition. */
 async function promptForAnswer(
   defined: DefinedVariable,
@@ -179,6 +210,8 @@ async function promptForAnswer(
   const { definition } = defined;
   const message = `${definition.prompt} (${definingRecipeKey(defined.recipe)})`;
   const hints = constraintHints(definition).join("; ");
+
+  showQuestionBlock(defined);
 
   const validate = (value: string): true | string => {
     const result = validateAnswer(definition, value);

@@ -32,6 +32,7 @@ variables:
       The directory holding the skill sources this project writes and maintains,
       not the compiled output directory. The create-skill skill writes new skills
       here, and about-sous and about-agent-skills point agents at it.
+    example: prompts/skills
     default: prompts/skills
     required: true
     scope: shared

@@ -121,12 +121,20 @@ contents:
 # value: sous asks the question only when a subscribed recipe needs the variable
 # and no valid answer is already in scope.
 #
+# Every definition must carry a 'description' and an 'example'. The description
+# is the paragraph shown above the question and by 'sous vars <name>'; the
+# example is a realistic sample answer, shown with the question so nobody has to
+# guess what a good one looks like. An example is documentation only and is
+# never stored; use 'default' for a value a project should actually start with.
+#
 # variables:
 #   - name: apiBaseUrl
 #     type: url
 #     prompt: Which API base URL should this project use?
 #     description: >-
-#       Shown alongside the question and by 'sous vars'.
+#       The root URL every request this recipe generates is sent to. Point it at
+#       your own deployment; the staging and production hosts each have their own.
+#     example: https://api.example.com
 #     default: https://api.example.com
 #     required: true
 #
@@ -136,6 +144,10 @@ contents:
 #     # already carries. When omitted, 'sous repo release' derives one.
 #     env: SERVICE_TOKEN
 #     prompt: What is the service token for this project?
+#     description: >-
+#       The token this recipe authenticates with. Create one under Settings, then
+#       Tokens, and give it read access to the project you are configuring.
+#     example: svc_0123456789abcdef0123
 #     # A secret is always written to the gitignored '.sous/.env.local'.
 #     secret: true
 #     scope: local

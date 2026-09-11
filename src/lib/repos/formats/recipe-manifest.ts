@@ -145,10 +145,34 @@ export const variableDefinitionSchema = extensibleObject({
   env: envVarNameSchema.optional(),
   /** The answer's type, which decides how it is validated and prompted for. */
   type: z.enum(VARIABLE_TYPES),
-  /** The question text shown when the variable is asked. */
+  /** The one-line question shown when the variable is asked. */
   prompt: z.string().min(1, "must not be empty"),
-  /** Longer explanation, shown alongside the question and by `sous vars`. */
-  description: z.string().optional(),
+  /**
+   * The paragraph that explains the variable: what it is for, what a good
+   * answer looks like, and what changes when it is set. Shown above the
+   * question when sous asks, and by `sous vars <name>`. Required, because a
+   * consumer reading the question has no other way to learn what a publisher
+   * meant by it.
+   */
+  description: z
+    .string({
+      error:
+        "is required: every published variable must explain itself in a sentence or " +
+        "two. The description is shown above the question when sous asks, and by " +
+        "'sous vars <name>'",
+    })
+    .min(1, "must not be empty"),
+  /**
+   * A realistic sample answer. It is documentation and prompt copy only; sous
+   * never stores it, never offers it as the answer, and never falls back to it.
+   * Use `default` for a value a project should actually start with.
+   */
+  example: z.union([z.string(), z.number(), z.boolean()], {
+    error:
+      "is required: every published variable must show what a real answer looks like. " +
+      "The example is shown with the question and by 'sous vars <name>'; it is " +
+      "documentation only and is never stored as the answer (use 'default' for that)",
+  }),
   /** The value offered when the question is asked with nothing else in scope. */
   default: z.union([z.string(), z.number(), z.boolean()]).optional(),
   /** Whether an answer is needed for a build to run. Defaults to true. */
@@ -209,14 +233,31 @@ export const variableDefinitionSchema = extensibleObject({
       });
     }
 
-    if (definition.default !== undefined) {
-      const value = definition.default;
+    // `default` and `example` are both literal values written by the publisher,
+    // so both have to fit the variable they describe; an example that could
+    // never be a valid answer is worse than no example at all.
+    checkDeclaredValue(definition.default, "default");
+    checkDeclaredValue(definition.example, "example");
+
+    /**
+     * Checks one publisher-written literal against the declared type and the
+     * 'validate.enum' options.
+     *
+     * @param value - The literal to check, or undefined when it was omitted.
+     * @param field - The field name, used as the issue path.
+     */
+    function checkDeclaredValue(
+      value: string | number | boolean | undefined,
+      field: "default" | "example"
+    ): void {
+      if (value === undefined) return;
+
       const expected =
         type === "boolean" ? "boolean" : type === "number" ? "number" : "string";
       if (typeof value !== expected) {
         ctx.addIssue({
           code: "custom",
-          path: ["default"],
+          path: [field],
           message: `must be a ${expected}, to match the declared type '${type}'`,
         });
       } else if (
@@ -226,7 +267,7 @@ export const variableDefinitionSchema = extensibleObject({
       ) {
         ctx.addIssue({
           code: "custom",
-          path: ["default"],
+          path: [field],
           message: "must be one of the options listed under 'validate.enum'",
         });
       }

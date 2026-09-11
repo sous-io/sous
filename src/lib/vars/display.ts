@@ -4,6 +4,7 @@
  */
 
 import { color } from "@oclif/color";
+import type { VariableDefinition } from "../repos/formats/recipe-manifest.js";
 
 /** What the value column shows for a secret whose answer is known. */
 export const HIDDEN_VALUE = "(hidden)";
@@ -22,6 +23,24 @@ export function displayValue(value: string | undefined, secret: boolean): string
   if (value === undefined) return UNANSWERED_VALUE;
   if (secret) return HIDDEN_VALUE;
   return value;
+}
+
+/**
+ * The two documentation rows every command shows for a variable: the
+ * publisher's description, and the sample answer that makes the one-line
+ * question concrete. A published definition must carry both, so every caller
+ * can show them without checking first.
+ *
+ * @param definition - The variable definition to document.
+ * @returns Label-to-text rows, ready for `showVars` or an aligned label block.
+ */
+export function documentationRows(
+  definition: VariableDefinition
+): Record<string, string> {
+  return {
+    About: definition.description,
+    "For example": String(definition.example),
+  };
 }
 
 /**

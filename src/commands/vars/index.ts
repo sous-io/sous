@@ -26,6 +26,7 @@ import {
   definingRecipeKey,
   displayValue,
   diagnoseVariable,
+  documentationRows,
   FileDefinitionSource,
   loadLadderContext,
   loadProjectDefinitions,
@@ -173,7 +174,7 @@ export default class Vars extends BaseCommand {
       blankLine();
       showVars({
         Question: definition.prompt,
-        ...(definition.description === undefined ? {} : { About: definition.description }),
+        ...documentationRows(definition),
         Recipe: `${definingRecipeKey(entry.recipe)} version ${entry.recipe.version} from ${entry.recipe.repo}`,
         Constraints: constraintHints(definition).join("; "),
         "Stored in": definition.secret || definition.scope === "local" ? ".env.local" : ".env",
