@@ -191,3 +191,58 @@ export function constraintHints(definition: VariableDefinition): string[] {
 
   return hints;
 }
+
+/**
+ * A character count with the noun in the right number.
+ *
+ * @param count - How many characters.
+ */
+function characters(count: number): string {
+  return count === 1 ? "1 character" : `${count} characters`;
+}
+
+/**
+ * One sentence per constraint, in plain words with the raw form the manifest
+ * declared in parentheses, so a reader can both understand the rule and find it
+ * in the recipe that published it. This is what the advanced view and
+ * `sous vars show` list under `@constraints`.
+ *
+ * @param definition - The variable definition.
+ * @returns One sentence per constraint, type first.
+ *
+ * @example
+ * constraintBullets(definition);
+ * // -> ["must be a url value (type: url)", "must match the pattern /^https/ (pattern: ^https)"]
+ */
+export function constraintBullets(definition: VariableDefinition): string[] {
+  const rules = definition.validate;
+  const bullets: string[] = [`must be a ${definition.type} value (type: ${definition.type})`];
+
+  if (rules?.enum !== undefined) {
+    bullets.push(
+      `must be one of ${rules.enum.join(", ")} (enum: ${rules.enum.join(", ")})`
+    );
+  }
+  if (rules?.minLength !== undefined) {
+    bullets.push(
+      `must be at least ${characters(rules.minLength)} long (minLength: ${rules.minLength})`
+    );
+  }
+  if (rules?.maxLength !== undefined) {
+    bullets.push(
+      `must be at most ${characters(rules.maxLength)} long (maxLength: ${rules.maxLength})`
+    );
+  }
+  if (rules?.min !== undefined) {
+    bullets.push(`must be no less than ${rules.min} (min: ${rules.min})`);
+  }
+  if (rules?.max !== undefined) {
+    bullets.push(`must be no more than ${rules.max} (max: ${rules.max})`);
+  }
+  if (rules?.pattern !== undefined) {
+    bullets.push(`must match the pattern /${rules.pattern}/ (pattern: ${rules.pattern})`);
+  }
+  if (!definition.required) bullets.push("an answer is optional");
+
+  return bullets;
+}

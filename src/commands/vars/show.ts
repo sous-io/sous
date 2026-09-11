@@ -68,7 +68,8 @@ export default class VarsShow extends BaseCommand {
         settings: this.settings,
         shellEnv: this.shellEnv,
       }),
-      args.name
+      args.name,
+      { sousDir: this.configContext.sousDir }
     );
 
     footer();

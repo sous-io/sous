@@ -20,6 +20,7 @@ import {
 import { loadManifestFile } from "../repos/load-manifest.js";
 import {
   listLockedRecipes,
+  readProjectLockfile,
   readRecipeManifestIn,
 } from "../repos/locked-recipes.js";
 import type { Settings } from "../settings.js";
@@ -34,6 +35,16 @@ export interface DefiningRecipe {
   name: string;
   /** The exact version of the recipe in play. */
   version: string;
+  /**
+   * Where the repository lives: a URL for a hosted repository, or an absolute
+   * path for one read through the `local` provider. Used to show a recipe as a
+   * link rather than as a bare name.
+   */
+  url?: string;
+  /** The recipe's folder inside the repository, when it is known. */
+  path?: string;
+  /** The recipe's directory on this machine, when it is present. */
+  dir?: string;
 }
 
 /** One variable definition together with the recipe that published it. */
@@ -42,6 +53,14 @@ export interface DefinedVariable {
   definition: VariableDefinition;
   /** The recipe the definition came from. */
   recipe: DefiningRecipe;
+  /**
+   * How this variable came to be in play: the subscribed recipe first, then
+   * each recipe it depends on, ending with the recipe that declares the
+   * definition. A direct subscription has one entry; an indirect one shows the
+   * whole chain. Absent when nothing recorded it, in which case the defining
+   * recipe stands for itself.
+   */
+  requiredBy?: DefiningRecipe[];
 }
 
 /** Anything that can produce the variable definitions in play for a project. */
@@ -95,6 +114,7 @@ export class ProjectDefinitionSource implements VariableDefinitionSource {
     void this.settings;
 
     const defined: DefinedVariable[] = [];
+    const lock = readProjectLockfile(this.sousDir);
 
     for (const located of listLockedRecipes({ sousDir: this.sousDir, env: this.env })) {
       if (!located.present) continue;
@@ -102,11 +122,14 @@ export class ProjectDefinitionSource implements VariableDefinitionSource {
       const manifest = readRecipeManifestIn(located.dir);
       if (manifest === undefined) continue;
 
+      const url = lock.repos[located.repo]?.url;
       const recipe: DefiningRecipe = {
         repo: located.repo,
         namespace: located.namespace,
         name: located.name,
         version: located.version,
+        dir: located.dir,
+        ...(url === undefined ? {} : { url }),
       };
       for (const definition of manifest.variables ?? []) {
         defined.push({ definition, recipe });
@@ -194,6 +217,7 @@ export function loadDefinitionsFile(filePath: string): DefinedVariable[] {
     namespace: LOCAL_FILE_NAMESPACE,
     name: pseudoRecipeName(filePath),
     version: "0.0.0",
+    dir: filePath,
   };
   return parsed.variables.map((definition) => ({ definition, recipe }));
 }

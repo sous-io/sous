@@ -7,20 +7,30 @@
  * to call.
  */
 
+import path from "node:path";
 import { ConfigError } from "../errors.js";
 import {
   definedVariableKey,
   definingRecipeKey,
   type DefinedVariable,
 } from "./definition-source.js";
-import { displayValue, documentationRows, renderTable, truncate } from "./display.js";
+import {
+  displayValue,
+  documentationRows,
+  renderFacts,
+  renderTable,
+  truncate,
+  variableFacts,
+} from "./display.js";
 import {
   diagnoseVariable,
   RUNG_LABELS,
   SOURCE_LABELS,
   type LadderContext,
 } from "./ladder.js";
-import { constraintHints, validateAnswer } from "./validate.js";
+import { validateAnswer } from "./validate.js";
+import { answerFileFor } from "./ask.js";
+import { bareName } from "./names.js";
 import {
   blankLine,
   heading,
@@ -28,6 +38,7 @@ import {
   log,
   showVars,
   subheading,
+  terminalColumns,
 } from "../../utils/formatting.js";
 
 /**
@@ -82,18 +93,31 @@ export function printVariableList(
   }
 }
 
+/** What the detail report needs beyond the definitions themselves. */
+export interface VariableDetailOptions {
+  /**
+   * The project's `.sous/` directory, so the storage path can be shown in full.
+   * Without it only the env file's name is shown.
+   */
+  sousDir?: string;
+}
+
 /**
- * Prints everything about one variable, including every environment variable
- * name on its resolution ladder and which rung actually answered.
+ * Prints everything about one variable: the question, the documentation, the
+ * labeled facts (the same block the advanced view of a question prints, from
+ * the same renderer), every environment variable name on its resolution ladder,
+ * and which rung actually answered.
  *
  * @param defined - Every variable the project's recipes (or a file) define.
  * @param context - The resolution ladder to read answers from.
  * @param name - The variable's name, or its `namespace/recipe.name` key.
+ * @param options - Where the project's `.sous/` directory is.
  */
 export function printVariableDetail(
   defined: DefinedVariable[],
   context: LadderContext,
-  name: string
+  name: string,
+  options: VariableDetailOptions = {}
 ): void {
   const matches = defined.filter(
     (entry) => entry.definition.name === name || definedVariableKey(entry) === name
@@ -112,14 +136,15 @@ export function printVariableDetail(
     const validity =
       resolved === undefined ? undefined : validateAnswer(definition, resolved.value);
 
+    const file = answerFileFor(definition);
+
     heading(`${definition.name} (${definingRecipeKey(entry.recipe)})`);
     blankLine();
     showVars({
       Question: definition.prompt,
       ...documentationRows(definition),
       Recipe: `${definingRecipeKey(entry.recipe)} version ${entry.recipe.version} from ${entry.recipe.repo}`,
-      Constraints: constraintHints(definition).join("; "),
-      "Stored in": definition.secret || definition.scope === "local" ? ".env.local" : ".env",
+      "Stored in": file,
       Value: displayValue(resolved?.value, definition.secret),
       Answer:
         resolved === undefined
@@ -128,6 +153,15 @@ export function printVariableDetail(
             ? "the value in scope fits this definition"
             : `the value in scope does not fit: ${validity?.ok === false ? validity.message : ""}`,
     });
+
+    blankLine();
+    const facts = variableFacts({
+      defined: entry,
+      storagePath:
+        options.sousDir === undefined ? file : path.join(options.sousDir, file),
+      storedAs: resolved?.source.envName ?? bareName(definition),
+    });
+    for (const line of renderFacts(facts, terminalColumns() - 2)) log(indent(line));
 
     blankLine();
     subheading("Environment variables sous looks at, most specific first");

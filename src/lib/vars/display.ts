@@ -3,8 +3,16 @@
  * laying out the aligned table both the listing and the ask report use.
  */
 
+import path from "node:path";
 import { color } from "@oclif/color";
 import type { VariableDefinition } from "../repos/formats/recipe-manifest.js";
+import { wrapText } from "../../utils/formatting.js";
+import {
+  definingRecipeKey,
+  type DefinedVariable,
+  type DefiningRecipe,
+} from "./definition-source.js";
+import { constraintBullets } from "./validate.js";
 
 /** What the value column shows for a secret whose answer is known. */
 export const HIDDEN_VALUE = "(hidden)";
@@ -78,5 +86,117 @@ export function renderTable(headers: string[], rows: string[][]): string[] {
   const lines = [color.cyan(pad(headers))];
   lines.push(color.gray(pad(widths.map((width) => "-".repeat(width)))));
   for (const row of rows) lines.push(pad(row));
+  return lines;
+}
+
+// --- The labeled facts about one variable --------------------------------------------------------
+
+/** One labeled fact: the label, and the lines shown beside it. */
+export interface LabeledFact {
+  /** The label, written in the `@name` form the recipe manifests use. */
+  label: string;
+  /** The text shown beside the label, one entry per line. */
+  lines: string[];
+}
+
+/** True when a repository location is a URL rather than a path on this machine. */
+function isHostedUrl(location: string): boolean {
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(location) || location.startsWith("git@");
+}
+
+/**
+ * A recipe written as a link: its key, and where its source lives. A hosted
+ * repository shows its URL with the recipe's folder appended; a repository read
+ * from this machine shows the filesystem path instead. A recipe whose location
+ * nothing recorded shows its key alone.
+ *
+ * @param recipe - The recipe to link to.
+ */
+export function recipeLink(recipe: DefiningRecipe): string {
+  const key = definingRecipeKey(recipe);
+
+  if (recipe.url !== undefined && isHostedUrl(recipe.url)) {
+    const base = recipe.url.replace(/\/+$/, "");
+    return `${key} (${recipe.path === undefined ? base : `${base}/${recipe.path}`})`;
+  }
+
+  const local =
+    recipe.url !== undefined
+      ? recipe.path === undefined
+        ? recipe.url
+        : path.join(recipe.url, recipe.path)
+      : recipe.dir;
+
+  return local === undefined ? key : `${key} (${local})`;
+}
+
+/** Everything the facts renderer needs that the definition itself does not carry. */
+export interface VariableFactsInput {
+  /** The variable and the recipe that published it. */
+  defined: DefinedVariable;
+  /** Absolute path of the env file the answer is stored in. */
+  storagePath: string;
+  /** The environment variable name the answer is stored under. */
+  storedAs: string;
+}
+
+/**
+ * The labeled facts about one variable, in the order both the advanced view and
+ * `sous vars show` print them. One function builds them so the two never drift
+ * apart in wording or in order.
+ *
+ * @param input - The variable, where its answer is stored, and under what name.
+ * @returns The facts, ready for `renderFacts`.
+ */
+export function variableFacts(input: VariableFactsInput): LabeledFact[] {
+  const { defined, storagePath, storedAs } = input;
+  const { definition } = defined;
+  const facts: LabeledFact[] = [];
+
+  if (definition.default !== undefined) {
+    facts.push({ label: "@default", lines: [String(definition.default)] });
+  }
+  facts.push({ label: "@example", lines: [String(definition.example)] });
+
+  const chain = defined.requiredBy ?? [defined.recipe];
+  const requiredBy = [recipeLink(chain[0] ?? defined.recipe)];
+  if (chain.length > 1) {
+    requiredBy.push(
+      `pulled in through ${chain.map((recipe) => definingRecipeKey(recipe)).join(" then ")}`
+    );
+  }
+  facts.push({ label: "@required-by", lines: requiredBy });
+  facts.push({ label: "@defined-by", lines: [recipeLink(defined.recipe)] });
+  facts.push({ label: "@storage-path", lines: [storagePath] });
+  facts.push({ label: "@stored-as", lines: [storedAs] });
+  facts.push({
+    label: "@constraints",
+    lines: constraintBullets(definition).map((bullet) => `- ${bullet}`),
+  });
+
+  return facts;
+}
+
+/**
+ * Lays the labeled facts out with the labels aligned and every continuation
+ * line hanging under the first, wrapping the text to the width it was given.
+ *
+ * @param facts - The facts to render.
+ * @param width - The column to wrap at.
+ * @returns The rendered lines, colored for a terminal, without indentation.
+ */
+export function renderFacts(facts: LabeledFact[], width = 100): string[] {
+  const labelWidth = Math.max(...facts.map((fact) => fact.label.length)) + 2;
+  const textWidth = Math.max(20, width - labelWidth);
+  const lines: string[] = [];
+
+  for (const fact of facts) {
+    const wrapped = fact.lines.flatMap((line) => wrapText(line, textWidth));
+    wrapped.forEach((text, index) => {
+      const label = index === 0 ? fact.label.padEnd(labelWidth) : " ".repeat(labelWidth);
+      lines.push(`${color.cyan(label)}${text}`);
+    });
+  }
+
   return lines;
 }
