@@ -109,7 +109,7 @@ See [Inspecting and validating](config-inspection.md).
 | Command | Arguments | Own flags |
 |---------|-----------|-----------|
 | `sous repo add` | `URL` | `--name <name>`, `--provider github\|gitlab\|file`, `-y, --yes` (also `--trust`), `--dry-run` |
-| `sous repo list` | none | none |
+| `sous repo list` | none | `--verbose` |
 | `sous repo search` | `TEXT` | `--limit <n>` (default 25) |
 | `sous repo gc` | none | `--max-bytes <n>`, `--dry-run` |
 | `sous repo link` | `REPO` `[PATH]` | `--global`, `-y, --yes` (also `--trust`), `--dry-run` |
@@ -188,6 +188,19 @@ variable whose name is also a subcommand name (`list`, `show` or `ask`) has to b
 long way, as `sous vars show list`.
 
 See [Recipe variables](repositories-variables.md).
+
+## Tables and terminal width
+
+Every listing sous prints fits itself to the terminal it is running in. Columns shrink toward
+their minimums, a long description wraps onto more lines, and a path or a URL is cut in the
+middle so the host and the last segment both survive. On a terminal too narrow to hold
+everything, the columns that matter least step aside, and one line under the table names them:
+`Hidden at this width: URL. Widen the terminal to see it.` Nothing is hidden when the output is
+not a terminal (a pipe, a file, a CI log), which is laid out at a fixed width instead, so a
+recorded run always shows every column.
+
+`sous repo list --verbose` adds the namespaces each repository publishes, on a dim line under
+that repository's row.
 
 ## Exit behavior
 

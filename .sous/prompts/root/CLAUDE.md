@@ -172,7 +172,8 @@ src/
     filters/               # custom Liquid filters: bulletList
     lib/                   # shared tag helpers: glob-files.ts, tag-args.ts
   utils/
-    formatting.ts          # console output helpers (heading, showVar, wrapText, etc.)
+    formatting.ts          # console output helpers (heading, showVar, wrapText, displayWidth, etc.)
+    table.ts               # renderTable: the responsive table every listing prints through
     prompts.ts
     value-prompt.ts        # the Tab-aware value question used by `sous vars ask`
 recipes/                   # the recipes that SHIP INSIDE the package; see "Skills System"
@@ -1021,6 +1022,13 @@ flags even in non-strict mode otherwise) and splits argv at the first `--` itsel
   `resolveAliases(settings, scope)`
 - LiquidJS engine is built by `createLiquidEngine()` in `src/templating/init-liquid-engine.ts`;
   custom tags/filters self-register via the arrays in `tags/index.ts` and `filters/index.ts`
+- Every command that prints a table calls `renderTable(columns, rows, options)` in
+  `src/utils/table.ts` and never pads columns by hand. A column spec says what it holds
+  (`kind`), whether a long cell wraps or is cut (`overflow`, `truncate`), how much slack it
+  takes (`flex`), how narrow it may get (`minWidth`) and how willingly it is hidden
+  (`priority`). Widths are measured with `displayWidth()` (ANSI-safe) from `formatting.ts`.
+  Columns are hidden only when the output is a real terminal too narrow to hold them; piped
+  output is laid out at `DEFAULT_WRAP_COLUMNS` and keeps every column
 
 ## Custom Liquid Tags & Filters
 
