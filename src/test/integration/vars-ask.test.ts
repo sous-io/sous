@@ -47,6 +47,8 @@ function defined(overrides: Partial<DefinedVariable["definition"]> = {}): Define
       name: "apiUrl",
       type: "url",
       prompt: "Which API should sous talk to?",
+      description: "The service every request this recipe generates is sent to.",
+      example: "https://api.example.com",
       required: true,
       secret: false,
       scope: "shared",

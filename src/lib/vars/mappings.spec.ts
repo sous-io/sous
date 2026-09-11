@@ -32,6 +32,8 @@ function defined(overrides: Partial<DefinedVariable["recipe"]> = {}): DefinedVar
       name: "apiUrl",
       type: "string",
       prompt: "Which API?",
+      description: "The service every request this recipe generates is sent to.",
+      example: "https://api.example.com",
       required: true,
       secret: false,
       scope: "shared",

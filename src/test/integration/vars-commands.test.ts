@@ -67,9 +67,13 @@ describe("sous vars commands", () => {
         "  - name: apiUrl",
         "    type: url",
         "    prompt: Which API should sous talk to?",
+        "    description: The service every request this recipe generates is sent to.",
+        "    example: https://api.example.com",
         "  - name: apiToken",
         "    type: string",
         "    prompt: What is the API token?",
+        "    description: The token sous authenticates to the API with.",
+        "    example: tok_0123456789abcdef",
         "    secret: true",
         "    scope: local",
         "",
@@ -110,8 +114,9 @@ describe("sous vars commands", () => {
   );
 
   /**
-   * `sous vars <name>` should show one variable in full, including every
-   * environment variable name on the ladder and which rung answered.
+   * `sous vars <name>` should show one variable in full, including the
+   * publisher's description and example, every environment variable name on the
+   * ladder, and which rung answered.
    */
   it(
     "should show one variable with every candidate name",
@@ -120,6 +125,11 @@ describe("sous vars commands", () => {
 
       expect(result.status).toBe(0);
       expect(result.stdout).toContain("Which API should sous talk to?");
+      expect(result.stdout).toContain(
+        "The service every request this recipe generates is sent to."
+      );
+      expect(result.stdout).toContain("For example");
+      expect(result.stdout).toContain("https://api.example.com");
       expect(result.stdout).toContain("SOUS_VAR_LOCAL_QUESTIONS_API_URL");
       expect(result.stdout).toContain("SOUS_VAR_LOCAL_API_URL");
       expect(result.stdout).toContain("answered it, from the .env file");
@@ -196,6 +206,32 @@ describe("sous vars commands", () => {
       expect(result.stdout).toContain("Invalid variable definitions file");
       expect(result.stdout).toContain("variables[0]");
       expect(result.stdout).not.toContain("at Object.");
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * A definitions file is held to the same rule a published recipe is: every
+   * variable explains itself, and the refusal says why rather than reporting a
+   * missing key.
+   */
+  it(
+    "should refuse a definition with no description and no example",
+    () => {
+      const badPath = path.join(root, "undocumented.yaml");
+      fs.writeFileSync(
+        badPath,
+        "variables:\n  - name: apiUrl\n    type: url\n    prompt: Which API?\n",
+        "utf8"
+      );
+
+      const result = runSous(root, ["vars", "--file", "undocumented.yaml"]);
+
+      expect(result.status).toBe(1);
+      expect(result.stdout).toContain("every published variable must explain itself");
+      expect(result.stdout).toContain(
+        "every published variable must show what a real answer looks like"
+      );
     },
     CLI_TIMEOUT
   );

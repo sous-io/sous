@@ -16,6 +16,8 @@ function definition(overrides: Partial<VariableDefinition> = {}): VariableDefini
     name: "apiUrl",
     type: "string",
     prompt: "Which API should sous talk to?",
+    description: "The service every request this recipe generates is sent to.",
+    example: "https://api.example.com",
     required: true,
     secret: false,
     scope: "shared",

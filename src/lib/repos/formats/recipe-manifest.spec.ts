@@ -36,9 +36,30 @@ function expectRejectMessage(value: unknown): string {
   throw new Error("expected parseRecipeManifest to throw, but it returned");
 }
 
+/**
+ * Fills in the two documentation fields every definition must carry, so a test
+ * about some other field does not have to restate them.
+ */
+function variable(fields: Record<string, unknown>) {
+  const options = (fields.validate as { enum?: string[] } | undefined)?.enum;
+  const example =
+    fields.type === "number"
+      ? 1
+      : fields.type === "boolean"
+        ? true
+        : fields.type === "enum"
+          ? (options?.[0] ?? "fast")
+          : "sample-answer";
+  return {
+    description: "What this variable is for, in a sentence.",
+    example,
+    ...fields,
+  };
+}
+
 /** Builds a manifest carrying exactly one variable definition. */
-function withVariable(variable: Record<string, unknown>) {
-  return { ...validManifest(), variables: [variable] };
+function withVariable(fields: Record<string, unknown>) {
+  return { ...validManifest(), variables: [variable(fields)] };
 }
 
 describe("parseRecipeManifest()", () => {
@@ -63,6 +84,7 @@ describe("parseRecipeManifest()", () => {
           type: "path",
           prompt: "Where should task files live?",
           description: "One file per git branch is written here.",
+          example: ".sous/tasks",
           default: ".sous/tasks",
           required: true,
           secret: false,
@@ -73,6 +95,8 @@ describe("parseRecipeManifest()", () => {
           name: "ticketSystem",
           type: "enum",
           prompt: "Which ticket system do you use?",
+          description: "Decides which ticket identifiers the skills expect.",
+          example: "github",
           default: "github",
           validate: { enum: ["github", "jira", "linear"] },
         },
@@ -288,6 +312,58 @@ describe("recipe manifest variable definitions", () => {
   });
 
   /**
+   * A published variable has to explain itself, so a consumer who is asked the
+   * one-line question can tell what it means and what a real answer looks like.
+   * Both messages say why the field is required rather than reporting a type.
+   */
+  it("should reject a variable with no description and no example", () => {
+    const message = expectRejectMessage({
+      ...validManifest(),
+      variables: [{ name: "apiUrl", type: "url", prompt: "API base URL?" }],
+    });
+    expect(message).toContain(
+      "variables[0].description: is required: every published variable must explain itself"
+    );
+    expect(message).toContain(
+      "variables[0].example: is required: every published variable must show what a real answer looks like"
+    );
+  });
+
+  /**
+   * An empty description is the same omission written differently.
+   */
+  it("should reject an empty description", () => {
+    expect(
+      expectRejectMessage(
+        withVariable({ name: "apiUrl", type: "url", prompt: "?", description: "" })
+      )
+    ).toContain("variables[0].description: must not be empty");
+  });
+
+  /**
+   * An example is checked exactly as a default is: it must match the declared
+   * type, and for an enum it must be one of the listed options.
+   */
+  it("should reject an example that contradicts the type or the options", () => {
+    expect(
+      expectRejectMessage(
+        withVariable({ name: "retries", type: "number", prompt: "?", example: "three" })
+      )
+    ).toContain("variables[0].example: must be a number");
+    expect(
+      expectRejectMessage(
+        withVariable({
+          name: "mode",
+          type: "enum",
+          prompt: "?",
+          example: "turbo",
+          validate: { enum: ["fast", "slow"] },
+        })
+      )
+    ).toContain("variables[0].example: must be one of the options");
+  });
+
+  /**
    * A default must match the declared type, and for an enum it must be one of
    * the listed options.
    */
@@ -391,8 +467,8 @@ describe("recipe manifest variable definitions", () => {
     const duplicateName = expectRejectMessage({
       ...validManifest(),
       variables: [
-        { name: "apiUrl", type: "string", prompt: "?" },
-        { name: "apiUrl", type: "url", prompt: "?" },
+        variable({ name: "apiUrl", type: "string", prompt: "?" }),
+        variable({ name: "apiUrl", type: "url", prompt: "?" }),
       ],
     });
     expect(duplicateName).toContain("variables[1].name: the variable 'apiUrl' is defined more than once");
@@ -400,8 +476,8 @@ describe("recipe manifest variable definitions", () => {
     const duplicateEnv = expectRejectMessage({
       ...validManifest(),
       variables: [
-        { name: "apiUrl", env: "SHARED_NAME", type: "string", prompt: "?" },
-        { name: "apiKey", env: "SHARED_NAME", type: "string", prompt: "?" },
+        variable({ name: "apiUrl", env: "SHARED_NAME", type: "string", prompt: "?" }),
+        variable({ name: "apiKey", env: "SHARED_NAME", type: "string", prompt: "?" }),
       ],
     });
     expect(duplicateEnv).toContain("variables[1].env: the environment variable 'SHARED_NAME'");

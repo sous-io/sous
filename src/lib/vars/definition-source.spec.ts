@@ -42,6 +42,8 @@ describe("StaticDefinitionSource", () => {
           name: "apiUrl",
           type: "string",
           prompt: "Which API?",
+          description: "The service every request this recipe generates is sent to.",
+          example: "https://api.example.com",
           required: true,
           secret: false,
           scope: "shared",
@@ -105,7 +107,15 @@ describe("loadProjectDefinitions()", () => {
         name: "task-files",
         version: "1.0.0",
         contents: [],
-        variables: [{ name: "apiUrl", type: "url", prompt: "Where does the API live?" }],
+        variables: [
+          {
+            name: "apiUrl",
+            type: "url",
+            prompt: "Where does the API live?",
+            description: "The service every request this recipe generates is sent to.",
+            example: "https://api.example.com",
+          },
+        ],
       }),
       "utf8"
     );
@@ -164,9 +174,13 @@ describe("loadDefinitionsFile()", () => {
         "  - name: apiUrl",
         "    type: url",
         "    prompt: Which API should sous talk to?",
+        "    description: The service every request is sent to.",
+        "    example: https://api.example.com",
         "  - name: apiToken",
         "    type: string",
         "    prompt: What is the API token?",
+        "    description: The token sous authenticates to the API with.",
+        "    example: tok_0123456789abcdef",
         "    secret: true",
         "    scope: local",
         "",
@@ -189,7 +203,17 @@ describe("loadDefinitionsFile()", () => {
   it("should report an invalid definition with the file and the field", () => {
     const filePath = writeDefinitions(
       "bad.json",
-      JSON.stringify({ variables: [{ name: "apiUrl", type: "nonsense", prompt: "?" }] })
+      JSON.stringify({
+        variables: [
+          {
+            name: "apiUrl",
+            type: "nonsense",
+            prompt: "?",
+            description: "The service every request is sent to.",
+            example: "https://api.example.com",
+          },
+        ],
+      })
     );
 
     expect(() => loadDefinitionsFile(filePath)).toThrow(/variables\[0\]\.type/);

@@ -223,14 +223,16 @@ describe("validateRepo()", () => {
       "recipes/a",
       "core",
       "first",
-      "variables:\n  - name: apiUrl\n    type: url\n    prompt: Which URL?\n"
+      "variables:\n  - name: apiUrl\n    type: url\n    prompt: Which URL?\n" +
+        "    description: What this variable is for.\n    example: https://api.example.com\n"
     );
     writeRecipe(
       "recipes/b",
       "core",
       "second",
       "variables:\n  - name: endpoint\n    type: url\n    env: SOUS_VAR_API_URL\n" +
-        "    prompt: Which endpoint?\n"
+        "    prompt: Which endpoint?\n" +
+        "    description: What this variable is for.\n    example: https://api.example.com\n"
     );
 
     const result = validateRepo(tmp.path);
@@ -246,7 +248,9 @@ describe("validateRepo()", () => {
    */
   it("should accept the same variable name declared by two recipes", () => {
     writeRepoManifest(["core"], ["recipes/a", "recipes/b"]);
-    const block = "variables:\n  - name: apiUrl\n    type: url\n    prompt: Which URL?\n";
+    const block =
+      "variables:\n  - name: apiUrl\n    type: url\n    prompt: Which URL?\n" +
+      "    description: What this variable is for.\n    example: https://api.example.com\n";
     writeRecipe("recipes/a", "core", "first", block);
     writeRecipe("recipes/b", "core", "second", block);
 
@@ -267,7 +271,8 @@ describe("validateRepo()", () => {
       "core",
       "first",
       "variables:\n  - name: token\n    type: string\n    env: GITHUB_TOKEN\n" +
-        "    secret: true\n    scope: local\n    prompt: Which token?\n"
+        "    secret: true\n    scope: local\n    prompt: Which token?\n" +
+        "    description: The token sous authenticates with.\n    example: tok_0123\n"
     );
 
     const result = validateRepo(tmp.path);
@@ -289,7 +294,8 @@ describe("validateRepo()", () => {
       "core",
       "first",
       "variables:\n  - name: token\n    type: string\n    env: GITHUB_TOKEN\n" +
-        "    x-intentional: true\n    secret: true\n    scope: local\n    prompt: Which token?\n"
+        "    x-intentional: true\n    secret: true\n    scope: local\n    prompt: Which token?\n" +
+        "    description: The token sous authenticates with.\n    example: tok_0123\n"
     );
 
     const result = validateRepo(tmp.path);
@@ -307,14 +313,16 @@ describe("validateRepo()", () => {
       "recipes/a",
       "core",
       "first",
-      "variables:\n  - name: apiUrl\n    type: url\n    prompt: Which URL?\n"
+      "variables:\n  - name: apiUrl\n    type: url\n    prompt: Which URL?\n" +
+        "    description: What this variable is for.\n    example: https://api.example.com\n"
     );
     writeRecipe(
       "recipes/b",
       "core",
       "second",
       "variables:\n  - name: apiUrl\n    type: url\n    env: OTHER_API_URL\n" +
-        "    prompt: Which URL?\n"
+        "    prompt: Which URL?\n" +
+        "    description: What this variable is for.\n    example: https://api.example.com\n"
     );
 
     const result = validateRepo(tmp.path);
