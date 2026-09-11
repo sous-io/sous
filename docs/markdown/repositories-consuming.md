@@ -55,6 +55,14 @@ are whole or not at all.
 | `--prerelease` | Let prerelease versions take part in version range matching |
 | `--always-pull` | Install a newer in-range version whenever one exists, rather than holding the locked one |
 | `--dry-run` | Print what would be installed without writing or downloading anything |
+| `--no-build` | Change the subscription without rebuilding the project |
+
+Subscribing changes what this project compiles, so the command finishes by building it: the same
+compile and prune `sous build` runs, which means the new recipe's skills, memories and prompts are
+already on disk when the command returns. `--no-build` records the subscription and leaves the
+outputs alone, for when you would rather build later. If the build itself fails, the subscription
+stays; it is already written and locked, and the message says so and names the command to run once
+you have fixed the cause.
 
 ### One-word refs
 
@@ -378,6 +386,7 @@ $ CI=true sous subscription add workflow/task-files
 ```bash
 sous subscription remove workflow/task-files
 sous subscription remove workflow/task-files --dry-run
+sous subscription remove workflow/task-files --no-build
 ```
 
 Removal is refcounted. Every lockfile entry records who holds it, so unsubscribing removes what
@@ -392,7 +401,12 @@ tooling/formatter  workflow/needs-extras
 ```
 
 The repositories those recipes came from stay trusted; withdrawing trust is a separate,
-deliberate act. Run `sous build` afterwards to prune the files the subscription used to write.
+deliberate act.
+
+Like adding one, removing a subscription finishes by building the project, so the files it used to
+write are pruned before the command returns. `--no-build` leaves them where they are until the next
+`sous build`. A build that fails does not put the subscription back; it is already gone from the
+config and the lockfile, and the message says so.
 
 ## Restore a fresh clone
 

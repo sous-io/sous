@@ -947,8 +947,8 @@ This enables `sous prune` (remove stale outputs) and `sous clear` (delete all ou
 | `sous repo search <text>` | Search the cached indexes by namespace, recipe name and description (`--limit`); also the top-level `sous search <text>` |
 | `sous repo gc` | Collect the machine-wide store back to its size cap, protecting everything the lockfile pins (`--max-bytes`, `--dry-run`) |
 | `sous subscription list` | List what the project subscribes to: range, the versions the lockfile pins, origin, and whether it is on |
-| `sous subscription add <ref>` | Subscribe to a namespace or a recipe, install the whole closure, and answer the variables it publishes (`--yes` / `-y` / `--trust`, `--accept-first`, `--prerelease`, `--always-pull`, `--answer <name>=<value>`, `--answers-file <path>`, `--dry-run`, which also prints every question the closure would ask); also `sous subscribe` |
-| `sous subscription remove <ref>` | Remove a subscription and everything only it brought in, refcounted (`--dry-run`); also `sous unsubscribe` |
+| `sous subscription add <ref>` | Subscribe to a namespace or a recipe, install the whole closure, answer the variables it publishes, then build the project (`--yes` / `-y` / `--trust`, `--accept-first`, `--prerelease`, `--always-pull`, `--answer <name>=<value>`, `--answers-file <path>`, `--dry-run`, which also prints every question the closure would ask, `--no-build`); also `sous subscribe` |
+| `sous subscription remove <ref>` | Remove a subscription and everything only it brought in, refcounted, then build the project so its files are pruned (`--dry-run`, `--no-build`); also `sous unsubscribe` |
 | `sous repo init [dir]` | Scaffold a new recipe repository (`--name`, `--namespace`, `--force`) |
 | `sous repo link <repo\|path> [path]` | Read a repository from a working copy: link the checkout a path names in place, clone a repository named on its own, or link the checkout a second argument names (`--global`, `--yes` / `-y` / `--trust`) |
 | `sous repo unlink <repo>` | Drop the link and go back to published versions; the checkout stays (`--global`) |
@@ -967,6 +967,14 @@ that block is also where each topic's one-sentence description lives. `subscribe
 `hiddenAliases` is registered visible first and never hidden, so each alternate name goes in
 exactly one of the two lists. Bare `sous vars` is a hidden command carrying the optional
 name argument, so the top-level listing names `vars` once, as a topic.
+
+`subscription add` and `subscription remove` end by rebuilding the project, because changing
+what it subscribes to changes what it compiles. Both reload the discovered config first (the
+subscription lives in a managed `conf.d/` layer written moments earlier) and then call
+`buildProjectOutputs` in `build-service.ts`, which runs `BuildService.build` with every option
+at its default: the same compile and prune `sous build` does, recipe targets and namespace
+resolver included. `--no-build` skips it, a dry run never reaches it, and a failed build leaves
+the subscription change in place (it is already written and locked) and says so.
 
 The `sous config` namespace inspects the merged config. `show` and `get` emit machine-
 readable stdout (`config show | jq` works): they extend `ConfigCommand`, which routes the

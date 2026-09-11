@@ -132,11 +132,17 @@ subscribe to before you know what any of it is called.
 | Command | Arguments | Own flags |
 |---------|-----------|-----------|
 | `sous subscription list` | none | none |
-| `sous subscription add` | `REF` | `--prerelease`, `--always-pull`, `-y, --yes` (also `--trust`), `--accept-first`, `--answer <name>=<value>`, `--answers-file <path>`, `--dry-run` |
-| `sous subscription remove` | `REF` | `--dry-run` |
+| `sous subscription add` | `REF` | `--prerelease`, `--always-pull`, `-y, --yes` (also `--trust`), `--accept-first`, `--answer <name>=<value>`, `--answers-file <path>`, `--dry-run`, `--no-build` |
+| `sous subscription remove` | `REF` | `--dry-run`, `--no-build` |
 
 `sous subscribe` and `sous unsubscribe` are the original spellings of `subscription add` and
 `subscription remove`, and both still work.
+
+Adding or removing a subscription changes what the project compiles, so both commands finish by
+building it: the same compile and prune `sous build` runs, so a newly subscribed recipe's files
+are on disk when the command returns and a removed one's files are gone. `--no-build` changes the
+subscription and leaves the outputs alone. A build that fails leaves the subscription change in
+place, since it is already written and locked, and says so.
 
 `REF` is a ref: `namespace`, `namespace/recipe`, either with an `@<range>`, and optionally
 qualified with `repo:`. See

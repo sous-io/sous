@@ -1197,4 +1197,104 @@ describe("the repositories consumer surface", () => {
     },
     CLI_TIMEOUT
   );
+
+  /**
+   * Changing what a project subscribes to changes what it compiles, so both
+   * commands finish by building it: the new recipe's skill is on disk when
+   * `subscription add` returns, and it is pruned when `subscription remove`
+   * returns. Neither half runs `sous build` itself.
+   *
+   * sous subscription add workflow/needs-partials --yes
+   * sous subscription remove workflow/needs-partials
+   */
+  it(
+    "should build the project as part of adding and removing a subscription",
+    () => {
+      const skill = path.join(
+        projectRoot,
+        ".claude",
+        "skills",
+        "needs-partials",
+        "SKILL.md"
+      );
+      expect(fs.existsSync(skill)).toBe(false);
+
+      const added = sous(
+        projectRoot,
+        "subscription",
+        "add",
+        "workflow/needs-partials",
+        "--yes"
+      );
+      expect(added.status, added.stdout + added.stderr).toBe(0);
+      expect(added.stdout).toContain("Building the project");
+      expect(fs.existsSync(skill)).toBe(true);
+
+      const removed = sous(
+        projectRoot,
+        "subscription",
+        "remove",
+        "workflow/needs-partials"
+      );
+      expect(removed.status, removed.stdout + removed.stderr).toBe(0);
+      expect(removed.stdout).toContain("Building the project");
+      expect(fs.existsSync(skill)).toBe(false);
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * `--no-build` changes the subscription and leaves the project's outputs
+   * exactly as they were, in both directions: nothing is compiled when the
+   * subscription is added, and nothing is pruned when it is removed.
+   *
+   * sous subscription add workflow/needs-partials --yes --no-build
+   * sous subscription remove workflow/needs-partials --no-build
+   */
+  it(
+    "should leave the outputs untouched with --no-build",
+    () => {
+      const skill = path.join(
+        projectRoot,
+        ".claude",
+        "skills",
+        "needs-partials",
+        "SKILL.md"
+      );
+      expect(fs.existsSync(skill)).toBe(false);
+
+      const added = sous(
+        projectRoot,
+        "subscription",
+        "add",
+        "workflow/needs-partials",
+        "--yes",
+        "--no-build"
+      );
+      expect(added.status, added.stdout + added.stderr).toBe(0);
+      expect(added.stdout).not.toContain("Building the project");
+      expect(fs.existsSync(skill)).toBe(false);
+
+      // A build of its own still writes it, which is what gives the removal
+      // below something it could have pruned.
+      expect(sous(projectRoot, "build").status).toBe(0);
+      expect(fs.existsSync(skill)).toBe(true);
+
+      const removed = sous(
+        projectRoot,
+        "subscription",
+        "remove",
+        "workflow/needs-partials",
+        "--no-build"
+      );
+      expect(removed.status, removed.stdout + removed.stderr).toBe(0);
+      expect(removed.stdout).not.toContain("Building the project");
+      expect(fs.existsSync(skill)).toBe(true);
+
+      // And the ordinary build the message pointed at prunes it.
+      expect(sous(projectRoot, "build").status).toBe(0);
+      expect(fs.existsSync(skill)).toBe(false);
+    },
+    CLI_TIMEOUT
+  );
 });
