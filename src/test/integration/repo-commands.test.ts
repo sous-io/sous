@@ -423,3 +423,125 @@ describe("sous repo init / link / unlink", () => {
     CLI_TIMEOUT
   );
 });
+
+/**
+ * `sous repo add` with a repository on this machine. A path is what people
+ * actually type, and they type it relative to where they are standing, so the
+ * relative form has to work; what gets stored is the absolute form, because a
+ * repository on this machine is machine-specific either way.
+ *
+ * Everything here stays inside a temp directory and no network is involved:
+ * the repository is scaffolded by `sous repo init` and read straight off disk.
+ */
+describe("sous repo add with a local path", () => {
+  let tmp: TmpDir;
+  let root: string;
+  let recipesRepo: string;
+  let projectRoot: string;
+  let sousDir: string;
+  let env: NodeJS.ProcessEnv;
+
+  beforeAll(() => {
+    tmp = makeTmpDir("sous-repo-add-local-");
+    root = fs.realpathSync(tmp.path);
+    recipesRepo = path.join(root, "my-recipes");
+    projectRoot = path.join(root, "project");
+    sousDir = path.join(projectRoot, ".sous");
+    env = { SOUS_HOME: path.join(root, "sous-home") };
+
+    fs.mkdirSync(sousDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(sousDir, "sous.config.json"),
+      JSON.stringify({ name: "local-path-project" }, null, 2),
+      "utf8"
+    );
+
+    const init = runSous(root, env, "repo", "init", recipesRepo, "--name", "my-recipes");
+    if (init.status !== 0) {
+      throw new Error(`repo init failed: ${init.stdout}${init.stderr}`);
+    }
+  });
+
+  afterAll(() => {
+    tmp.cleanup();
+  });
+
+  /** Reads the managed repositories layer sous writes when a repository is added. */
+  function readReposLayer(): Record<string, { url: string; provider?: string }> {
+    const file = path.join(sousDir, "conf.d", "500-repos.json");
+    const layer = JSON.parse(fs.readFileSync(file, "utf8")) as {
+      repos?: Record<string, { url: string; provider?: string }>;
+    };
+    return layer.repos ?? {};
+  }
+
+  /**
+   * A relative path should be accepted and stored absolute, so the entry means
+   * the same thing from any working directory the project is built from.
+   *
+   * sous repo add ../my-recipes --trust   // -> url: "/tmp/.../my-recipes"
+   */
+  it(
+    "should accept a relative path and store the absolute one",
+    () => {
+      const result = runSous(projectRoot, env, "repo", "add", "../my-recipes", "--trust");
+      expect(result.stdout + result.stderr).toContain("my-recipes");
+      expect(result.status).toBe(0);
+
+      const repos = readReposLayer();
+      expect(repos["my-recipes"]?.url).toBe(recipesRepo);
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * A path that is not there is a path mistake, so the message should name the
+   * path as typed, the absolute path sous tried, and what it expected to find.
+   * Suggesting a provider would send the reader somewhere irrelevant.
+   *
+   * sous repo add ../not-there   // -> exits non-zero, no mention of --provider
+   */
+  it(
+    "should explain a path that is not there without mentioning providers",
+    () => {
+      const result = runSous(projectRoot, env, "repo", "add", "../not-there", "--trust");
+      expect(result.status).not.toBe(0);
+
+      const output = result.stdout + result.stderr;
+      expect(output).toContain("../not-there");
+      expect(output).toContain(path.join(root, "not-there"));
+      expect(output).toContain("sous.repo.yaml");
+      expect(output).not.toContain("--provider");
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * Naming a provider that plainly does not own the argument is a
+   * contradiction, not a hint, so it should be refused and the provider that
+   * does own it named.
+   *
+   * sous repo add ../my-recipes --provider github   // -> exits non-zero
+   */
+  it(
+    "should refuse a provider that contradicts a path",
+    () => {
+      const result = runSous(
+        projectRoot,
+        env,
+        "repo",
+        "add",
+        "../my-recipes",
+        "--provider",
+        "github",
+        "--trust"
+      );
+      expect(result.status).not.toBe(0);
+
+      const output = result.stdout + result.stderr;
+      expect(output).toContain("The github provider does not handle");
+      expect(output).toContain("the local provider handles");
+    },
+    CLI_TIMEOUT
+  );
+});
