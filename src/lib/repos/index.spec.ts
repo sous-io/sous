@@ -263,6 +263,7 @@ const PHASE_7_EXPORTS = [
   "applyRepoDefaults",
   "builtInCoreSubscription",
   "builtInRepoEntry",
+  "coreIndexOverlay",
   "coreRecipeVersion",
   "enabledRepos",
   "enabledSubscriptions",
