@@ -1,15 +1,15 @@
 # Repositories Quickstart
 
-Ten minutes, twelve commands, from an empty directory to a project whose agent skills come from
-the official repository and from a repository you wrote yourself, with a lockfile a colleague can
-restore from.
+Twelve steps take you from an empty directory to a project whose agent skills come from the
+official repository and from a repository you wrote yourself, with a lockfile a colleague can
+restore from. Budget about ten minutes.
 
 This page is the guided tour; [Repositories](repositories.md) explains the model behind it, and
 [Consuming recipes](repositories-consuming.md) and
 [Authoring a repository](repositories-authoring.md) are the reference guides for each half. You
 need sous on your path (`npm install -g @sous-io/sous`), git, and a network connection for the two
 steps that reach GitHub. Output below is trimmed: sous prints absolute paths and a banner that are
-left out here.
+left out here, and a line reading `...` marks rows removed for length.
 
 ## 1. Create a project
 
@@ -17,13 +17,15 @@ A sous project is a directory with a `.sous/` directory in it holding one config
 a valid config:
 
 ```bash
+export SOUS_HOME=~/tmp/sous-quickstart
 mkdir -p ~/projects/my-project/.sous
 cd ~/projects/my-project
 echo 'name: my-project' > .sous/sous.config.yaml
 ```
 
 Everything else has a default: skills compile into `<project root>/.claude/skills`, and the
-lockfile, the state file and the config layers sous writes land under `.sous/`. See
+lockfile, the state file and the config layers sous writes land under `.sous/`. `SOUS_HOME` puts
+the machine-wide store somewhere throwaway, so this walkthrough leaves your real one alone. See
 [The config file](configuration.md) for the keys you will want later.
 
 ## 2. Build once
@@ -36,7 +38,10 @@ $ sous build
     gets exactly these versions.
 ▶ Building:
   ✓ .claude/skills/about-sous/SKILL.md (~782 tokens)
+  ✓ .claude/skills/about-sous-configuration/SKILL.md (~1,204 tokens)
   ✓ .claude/skills/about-agent-skills/SKILL.md (~1,937 tokens)
+  ✓ .claude/skills/about-liquid-templates/SKILL.md (~1,486 tokens)
+  ✓ .claude/skills/create-skill/SKILL.md (~655 tokens)
 ✓ Done.
 ```
 
@@ -56,10 +61,11 @@ sous recipe list
 
 ```text
   Recipe                      Repository    Latest  Pinned  Subscribed  What it is
-  --------------------------  ------------  ------  ------  ----------  ------------------
-  communication/control-flow  sous-recipes  1.0.0           no          Generic interaction
-  core/sous-skills            sous-recipes  0.2.0   0.2.0   yes         The skills that
-  workflow/task-files         sous-recipes  1.0.2           no          Per-branch task
+  --------------------------  ------------  ------  ------  ----------  ------------------------------
+  communication/control-flow  sous-recipes  1.0.0           no          Generic interaction skills
+  core/sous-skills            sous-recipes  0.2.0   0.2.0   yes         What sous is, and how it works
+  workflow/task-files         sous-recipes  1.0.2           no          Per-branch task files
+  ...
 ```
 
 This reads the cached index of every repository the project trusts, so it works offline and
@@ -75,16 +81,15 @@ sous recipe show workflow/task-files
     Repository     : sous-recipes
     Latest version : 1.0.2
     Subscribed     : no
-
-➔ What it asks you:
-  Variable         Type    Environment variable  Required  What it asks
-  ---------------  ------  --------------------  --------  --------------------------------
-  taskFileRoot     path    TASK_FILE_ROOT        yes       Where should task files be stored?
-  ticketIdExample  string  TICKET_ID_EXAMPLE     yes       What does one of your ticket IDs
+  ...
+  The recipe's own files are not on this machine, so the questions it asks and
+    the files it publishes are not known here. Subscribing to it fetches them.
 ```
 
-The full output also lists every published version and every dependency, each declared range shown
-beside the exact version the index resolved it to.
+On a machine that has never fetched the recipe, sous shows what the index knows: every published
+version, and every dependency with each declared range beside the exact version the index resolved
+it to. The questions it asks are not known until it is fetched; run the same command after
+subscribing and it adds a table of the variables the recipe publishes.
 
 ## 4. Subscribe to a recipe
 
@@ -129,10 +134,11 @@ now lists the five `core` skills plus the seven this recipe ships, among them `a
 `start-task` and `resume-task`. The build dependency contributes nothing: a recipe held through
 `depends` is fetched and pinned, and its files stay out of your output.
 
-Recipe files compile the way your own targets do, including the
-[`.tpl.` convention](configuration.md), and are tracked like every other file sous writes, so
-`sous prune` removes them when you unsubscribe. Where each kind lands is your project's decision,
-under [`recipeOutputs`](repositories-file-formats.md#recipeoutputs-where-the-files-land).
+Recipe files compile the way your own targets do: a file with `.tpl.` in its name is rendered
+through LiquidJS and loses that segment (`SKILL.tpl.md` becomes `SKILL.md`), and any other file is
+copied verbatim. They are tracked like every file sous writes, so `sous prune` removes them when
+you unsubscribe. Where each kind lands is your project's decision, under
+[`recipeOutputs`](repositories-file-formats.md#configuration-keys).
 
 ## 6. Start a repository of your own
 
@@ -191,7 +197,12 @@ git init -b main . && git add -A && git commit -m "First recipe"
 sous repo release
 ```
 
+Releasing commits and tags on your behalf, so `git config user.name` and `git config user.email`
+have to be set in this repository first. Sous then prints the versions it would publish and what
+the run would do, and asks once.
+
 ```text
+  ...
 ▶ Publishing:
   workflow/example: publishing version 0.1.0.
   Wrote sous.index.json.
@@ -199,15 +210,16 @@ sous repo release
   Created the tag workflow/example@0.1.0.
 ```
 
-Add `--push` to push the commit and the tags in the same run. Never edit `sous.index.json` by
+Add `--push` to push the commit and the tags in the same run, and `--yes` to accept the plan
+without being asked, which is what the scaffolded workflow does. Never edit `sous.index.json` by
 hand; the recipe manifests are the source of truth for versions, and this command regenerates the
-catalog from them. `sous repo release --check` validates without publishing, which is what the
-scaffolded GitHub Actions workflow runs on a pull request.
+catalog from them. `sous repo release --check` validates without publishing, and runs on a pull
+request.
 
 ## 9. Add your repository to the project
 
-Adding a repository is how you trust it, so this is the step that asks a question. A path works
-as well as a URL; sous reads a path through the built-in `local` provider:
+Adding a repository is how you trust it, so sous asks before recording it. A path works as well as
+a URL; sous reads a path through the built-in `local` provider:
 
 ```term
 $ cd ~/projects/my-project
@@ -266,7 +278,7 @@ sous subscription list
   workflow/task-files  any version  workflow/task-files 1.0.2  user      yes
 ```
 
-Five files carry all of that, and all five are committed:
+Everything sous needs to rebuild this project is under `.sous/`, and it is all committed:
 
 | File | Holds |
 |------|-------|
@@ -275,9 +287,10 @@ Five files carry all of that, and all five are committed:
 | `.sous/conf.d/500-repos.jsonc` | the repositories the project trusts |
 | `.sous/conf.d/510-subscriptions.jsonc` | what the project subscribes to |
 | `.sous/.env` | the answers to the recipes' questions, minus the secret ones |
+| the rest of `.sous/conf.d/` | the README sous writes there, and the agent pointers beside it |
 
-Gitignore the rest: `.claude/` and any other compiled output, `.sous/sous.state.json`, and the
-secrets file `.sous/.env.local`. The store on your machine is not in the project at all.
+Gitignore compiled output (`.claude/`), the state file `.sous/sous.state.json`, and the secrets
+file `.sous/.env.local`. The store on your machine is not in the project at all.
 
 ```bash
 git add .sous && git commit -m "Subscribe to task-files and my own example recipe"
@@ -308,9 +321,11 @@ Restore decides nothing: it never resolves a range, never picks a newer version 
 Anything that would change what is installed changes the lockfile first, as a diff you can read in
 review.
 
-?> The store those recipes were restored into, `~/.sous/cache`, is machine-wide and disposable;
-everything in it is re-fetchable from a lockfile pin. `SOUS_HOME` moves it, which is how a
-throwaway walkthrough like this one keeps its own.
+?> The store those recipes were restored into, `$SOUS_HOME/cache`, is machine-wide and disposable;
+everything in it is re-fetchable from a lockfile pin. `SOUS_HOME` moves it, and is what step 1 set
+so this walkthrough keeps its own; unset, the store is `~/.sous/cache`. To undo everything above,
+`rm -rf ~/projects/my-project ~/projects/my-recipes ~/tmp/sous-quickstart`; on a store you mean to
+keep, `sous repo gc` reclaims what no lockfile pins instead.
 
 ## Where to go next
 
@@ -318,3 +333,5 @@ throwaway walkthrough like this one keeps its own.
 - [Authoring a repository](repositories-authoring.md): variables, editing in place, contributing
 - [Recipe variables](repositories-variables.md): the resolution ladder and the `sous vars` commands
 - [Repositories](repositories.md): trust, providers, freshness, and what lives where
+- [Command reference](commands.md): every command and flag
+- [Troubleshooting](repositories-troubleshooting.md): what the errors mean and how to clear them
