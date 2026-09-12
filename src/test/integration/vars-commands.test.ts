@@ -311,7 +311,9 @@ describe("sous vars commands", () => {
         "--file",
         "questions.yaml",
       ]);
-      expect(accepted.stdout).toContain("taking the first");
+      expect(accepted.stdout).toContain(
+        "'local' named 2 things, and '--accept-first' was passed"
+      );
       expect(accepted.stdout).toContain("2 variables still need answers");
     },
     CLI_TIMEOUT

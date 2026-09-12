@@ -3,6 +3,9 @@ import { pickReference } from "./pick.js";
 import { Qualification, type ReferenceMatch } from "./find.js";
 import { SousScope } from "./scopes.js";
 
+/** Strips ANSI escape codes so assertions are not brittle against color changes. */
+const strip = (text: string): string => text.replace(/\x1b\[[0-9;]*m/g, "");
+
 /**
  * Unit tests for choosing between the things a reference could have meant.
  * Every command resolves a reference through this, so the four outcomes (one
@@ -25,13 +28,14 @@ function recipeMatch(repo: string, namespace: string, recipe: string): Reference
 
 describe("pickReference()", () => {
   /**
-   * One match is the answer, and is reported so the reader sees what the word
-   * they typed actually meant.
+   * One match is the answer, and is reported the way every set of facts in the
+   * CLI is: an aligned key and value list, then one sentence saying why that
+   * candidate won.
    *
    * pickReference([one], { search: "task-files", interactive: true })
-   * // -> the match, having written "'task-files' resolves to ..."
+   * // -> the match, having written the "Resolved to: ..." block
    */
-  it("should take the only match and say what it resolved to", async () => {
+  it("should take the only match and report the facts about it", async () => {
     const written: string[] = [];
     const only = recipeMatch("fixtures", "workflow", "task-files");
 
@@ -41,9 +45,17 @@ describe("pickReference()", () => {
       write: (message) => written.push(message),
     });
 
+    const report = strip(written.join("\n"));
+
     expect(chosen).toBe(only);
-    expect(written.join("\n")).toContain("resolves to");
-    expect(written.join("\n")).toContain("fixtures:workflow/task-files");
+    expect(report).toContain("Resolved to: fixtures:workflow/task-files");
+    expect(report).toContain("Recipe     : task-files");
+    expect(report).toContain("Namespace  : workflow");
+    expect(report).toContain("Repository : fixtures");
+    expect(report).toContain(
+      "'task-files' named one recipe, and nothing else, so that is what is being used."
+    );
+    expect(report).not.toContain("resolves to");
   });
 
   /**
@@ -108,9 +120,39 @@ describe("pickReference()", () => {
       choose,
     });
 
+    const report = strip(written.join("\n"));
+
     expect(chosen).toBe(first);
     expect(choose).not.toHaveBeenCalled();
-    expect(written.join("\n")).toContain("--accept-first");
+    expect(report).toContain("Resolved to: fixtures:workflow/formatter");
+    expect(report).toContain("'formatter' named 2 things, and '--accept-first' was passed");
+  });
+
+  /**
+   * A caller that reports the resolution itself is still told that the word was
+   * ambiguous, because `--accept-first` made a choice on its behalf.
+   *
+   * pickReference([a, b], { search: "formatter", acceptFirst: true, announce: false })
+   * // -> a, having written the one sentence and none of the facts
+   */
+  it("should still say --accept-first chose, with announcing turned off", async () => {
+    const written: string[] = [];
+    const first = recipeMatch("fixtures", "workflow", "formatter");
+    const second = recipeMatch("extras", "tooling", "formatter");
+
+    const chosen = await pickReference([first, second], {
+      search: "formatter",
+      interactive: true,
+      acceptFirst: true,
+      announce: false,
+      write: (message) => written.push(message),
+    });
+
+    const report = strip(written.join("\n"));
+
+    expect(chosen).toBe(first);
+    expect(report).toContain("--accept-first");
+    expect(report).not.toContain("Resolved to");
   });
 
   /**

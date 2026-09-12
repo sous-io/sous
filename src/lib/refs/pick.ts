@@ -7,7 +7,9 @@
  * takes a reference goes through it, so a word that means two things behaves
  * the same everywhere:
  *
- *   - one match proceeds, and is reported so the reader sees what was chosen;
+ *   - one match proceeds, and what it resolved to is written as the facts about
+ *     it followed by one sentence (`formatResolvedReference`), so the reader
+ *     sees what the word they typed actually meant;
  *   - several matches are offered as a list to choose from;
  *   - `--accept-first` takes the first one in the documented listing order;
  *   - a run with no terminal fails, naming the question it could not ask and
@@ -17,8 +19,12 @@
 
 import { ConfigError } from "../errors.js";
 import { nonInteractiveError } from "../interactive.js";
-import { indent, log } from "../../utils/formatting.js";
+import { formatParagraph, log } from "../../utils/formatting.js";
 import { askChoice } from "../../utils/prompts.js";
+import {
+  formatResolvedReference,
+  resolvedReferenceFacts,
+} from "../repos/reference-report.js";
 import { describeReference, type ReferenceMatch } from "./find.js";
 
 /** The flag that answers "which one did you mean?" ahead of time. */
@@ -34,7 +40,11 @@ export type PickReferenceOptions = {
   acceptFirst?: boolean;
   /** The question to ask when there is more than one match. */
   prompt?: string;
-  /** Say what a single match resolved to. On by default. */
+  /**
+   * Write the facts about what the reference resolved to. On by default; a
+   * caller that reports the resolution itself turns it off, and is still told
+   * when `--accept-first` settled an ambiguous word.
+   */
   announce?: boolean;
   /** Extra lines for the error a reference that matched nothing raises. */
   details?: string[];
@@ -66,21 +76,21 @@ export async function pickReference(
   const first = matches[0]!;
 
   if (matches.length === 1) {
-    if (options.announce !== false) {
-      write(indent(`'${options.search}' resolves to ${describeReference(first)}.`));
-    }
+    if (options.announce !== false) announce(write, first, options.search);
     return first;
   }
 
   if (options.acceptFirst === true) {
-    write(
-      indent(
-        `'${options.search}' matched ${matches.length} things; taking the first, ` +
-          `because '${ACCEPT_FIRST_FLAG}' was passed.`
-      )
-    );
-    if (options.announce !== false) {
-      write(indent(`'${options.search}' resolves to ${describeReference(first)}.`));
+    const reason =
+      `'${options.search}' named ${matches.length} things, and ` +
+      `'${ACCEPT_FIRST_FLAG}' was passed, so the first one listed is being used.`;
+
+    // A caller that reports the resolution itself still has to be told that the
+    // word was ambiguous, so the sentence is written even when the facts are not.
+    if (options.announce === false) {
+      for (const line of formatParagraph(reason)) write(line);
+    } else {
+      announce(write, first, options.search, reason);
     }
     return first;
   }
@@ -113,4 +123,25 @@ export async function pickReference(
       ));
 
   return choose(options.prompt ?? `Which '${options.search}' did you mean?`, matches);
+}
+
+/**
+ * Writes what a reference resolved to, as the key and value list every other
+ * set of facts in the CLI is written as, followed by one sentence saying why
+ * that candidate won.
+ *
+ * @param write - Where the report goes.
+ * @param match - The match the run proceeds with.
+ * @param search - The reference exactly as it was written.
+ * @param reason - The closing sentence, when it was not simply the only match.
+ */
+function announce(
+  write: (message: string) => void,
+  match: ReferenceMatch,
+  search: string,
+  reason?: string
+): void {
+  for (const line of formatResolvedReference(resolvedReferenceFacts(match, search, reason))) {
+    write(line);
+  }
 }

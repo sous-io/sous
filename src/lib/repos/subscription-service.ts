@@ -34,7 +34,6 @@ import {
   wrapColumns,
   wrapText,
 } from "../../utils/formatting.js";
-import { formatResolvedReference } from "./reference-report.js";
 import { askChoice, askYesNo } from "../../utils/prompts.js";
 import { ensureStoreRootDirectory } from "../../utils/sous-directory.js";
 import { isInteractive, nonInteractiveError } from "../interactive.js";
@@ -132,10 +131,9 @@ import { enabledRepos, enabledSubscriptions, isBuiltInEntry } from "./defaults.j
 import {
   CORE_RECIPE_KEY,
   OFFICIAL_REPO_IDENTITY,
-  OFFICIAL_REPO_NAME,
   packagedCoreRecipeDir,
 } from "./core-recipe.js";
-import { repoIdentity, shortNameFromIdentity } from "./identity.js";
+import { repoIdentity } from "./identity.js";
 import { buildRecipeTargets } from "./recipe-targets.js";
 import { resolveOutputPath } from "../markdown-compiler.js";
 import { hashDirectory } from "./store/hash.js";

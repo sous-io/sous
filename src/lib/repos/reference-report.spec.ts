@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { formatResolvedReference } from "./reference-report.js";
+import { formatResolvedReference, resolvedReferenceFacts } from "./reference-report.js";
+import { Qualification, type ReferenceMatch } from "../refs/find.js";
+import { SousScope } from "../refs/scopes.js";
 
 /** Strips ANSI escape codes so assertions are not brittle against color changes. */
 const strip = (text: string): string => text.replace(/\x1b\[[0-9;]*m/g, "");
@@ -58,5 +60,72 @@ describe("formatResolvedReference()", () => {
     expect(lines).not.toContain("Recipe");
     expect(lines).not.toContain("Namespace");
     expect(lines).not.toContain("Description");
+  });
+});
+
+/** What one match contributes to the report. */
+describe("resolvedReferenceFacts()", () => {
+  /** A recipe carries its whole identity, and its summary is a description. */
+  it("should take the identity and the summary from a recipe match", () => {
+    const match: ReferenceMatch = {
+      scope: SousScope.Recipe,
+      key: "sous-recipes:workflow/task-files",
+      label: "task-files",
+      repo: "sous-recipes",
+      namespace: "workflow",
+      recipe: "task-files",
+      detail: "keeps one task file per branch",
+      qualification: Qualification.Bare,
+    };
+
+    expect(resolvedReferenceFacts(match, "task-files")).toEqual({
+      search: "task-files",
+      resolvedTo: "sous-recipes:workflow/task-files",
+      kind: "recipe",
+      recipe: "task-files",
+      namespace: "workflow",
+      repository: "sous-recipes",
+      description: "keeps one task file per branch",
+    });
+  });
+
+  /**
+   * A repository's detail is where it lives rather than a summary of it, and its
+   * name is already the resolved spelling, so it is not repeated.
+   */
+  it("should report a repository's detail as where it lives", () => {
+    const match: ReferenceMatch = {
+      scope: SousScope.Repository,
+      key: "sous-recipes",
+      label: "sous-recipes",
+      repo: "sous-recipes",
+      detail: "https://example.invalid/sous-recipes.git",
+      qualification: Qualification.Full,
+    };
+
+    expect(resolvedReferenceFacts(match, "sous-recipes")).toEqual({
+      search: "sous-recipes",
+      resolvedTo: "sous-recipes",
+      kind: "repository",
+      location: "https://example.invalid/sous-recipes.git",
+    });
+  });
+
+  /** A caller that settled the reference some other way supplies its own sentence. */
+  it("should carry a caller's own closing sentence", () => {
+    const match: ReferenceMatch = {
+      scope: SousScope.Namespace,
+      key: "sous-recipes:workflow",
+      label: "workflow",
+      repo: "sous-recipes",
+      namespace: "workflow",
+      qualification: Qualification.Bare,
+    };
+
+    const lines = formatResolvedReference(
+      resolvedReferenceFacts(match, "workflow", "Two things matched, and the first won.")
+    ).map(strip);
+
+    expect(lines[lines.length - 1]).toBe("  Two things matched, and the first won.");
   });
 });
