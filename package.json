@@ -44,6 +44,7 @@
     "claude": "./bin/sous launch claude",
     "clean": "rm -rf dist",
     "schema:build": "tsx scripts/build-schema.mts",
+    "version:sync": "tsx scripts/sync-core-version.mts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
