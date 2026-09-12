@@ -125,7 +125,7 @@ describe("scaffoldRepo()", () => {
     );
 
     expect(workflow).toContain("npx --yes @sous-io/sous repo release --check");
-    expect(workflow).toContain("npx --yes @sous-io/sous repo release --ci --push");
+    expect(workflow).toContain("npx --yes @sous-io/sous repo release --ci --push --yes");
     expect(workflow).toContain("pull_request");
     expect(workflow).toContain("- main");
     // It parses as YAML, so GitHub can actually run it.

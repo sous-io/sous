@@ -114,7 +114,7 @@ The `recipes` job in `publish.yml` keeps the published copy in step. It runs onl
 npm publish it `needs`, re-checks version parity, copies the packaged recipe over the
 repository's copy and COMMITS that copy (a release refuses to run against a dirty tree),
 waits for the new version to be installable, then runs
-`npx @sous-io/sous@<version> repo release --ci --push` inside the checkout, which
+`npx @sous-io/sous@<version> repo release --ci --push --yes` inside the checkout, which
 regenerates the index, commits it, tags each version and pushes. The job holds
 `contents: read` and no `id-token`, so the recipe repository's write key and the npm
 publishing token never sit in the same job. It needs one repository secret, installed BY
