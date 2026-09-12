@@ -329,7 +329,9 @@ version installs what it was published with rather than re-resolving its ranges 
 
 !> A release commits the version bumps and the index, and nothing else. It refuses to run while
 anything else is uncommitted, because a tag names one commit and the index it writes records
-what each recipe folder holds right now.
+what each recipe folder holds right now. It also refuses, before writing anything, when git has
+no author identity to commit under; set `user.name` and `user.email` in the repository, which the
+scaffolded workflow does for you.
 
 A bump edits the manifest in place, so its comments, its field order and its layout all survive.
 Two small normalizations happen in a YAML manifest: a folded block of prose may be re-wrapped,
