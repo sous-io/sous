@@ -77,7 +77,8 @@ const RELEASE_REMOTE = "origin";
  *
  * Two presets sit on top of it. `--check` is read-only and is what a pull
  * request runs; `--ci` is the non-interactive form a merge runs, which bumps
- * nothing because the version was raised in the change being merged.
+ * nothing because the version was raised in the change being merged, and which
+ * accepts the plan it prints because there is nobody there to accept it.
  */
 export default class RepoRelease extends Command {
   static description =
@@ -106,7 +107,8 @@ export default class RepoRelease extends Command {
     }),
     ci: Flags.boolean({
       description:
-        "Run the way a merge does: never bump, never ask, and fail on anything unbumped",
+        "Run the way a merge does: never bump, accept the plan, never ask, and fail on " +
+        "anything unbumped",
       default: false,
     }),
     namespace: Flags.string({
@@ -156,10 +158,14 @@ export default class RepoRelease extends Command {
     const { flags } = await this.parse(RepoRelease);
     const dryRun = flags["dry-run"];
     const ci = flags.ci;
-    // The CI preset is exactly two settings: never raise a version, and never
-    // ask. It deliberately does NOT imply --push; the workflow passes that
-    // itself, so what gets pushed is visible in the workflow file.
+    // The CI preset is exactly three settings: never raise a version, accept
+    // the plan it prints, and never ask. Accepting the plan is part of the
+    // preset because there is nobody to ask: a run that only refused to ask
+    // would fail on the very confirmation the preset exists to answer. It
+    // deliberately does NOT imply --push; the workflow passes that itself, so
+    // what gets pushed is visible in the workflow file.
     const noBump = flags["no-bump"] || ci;
+    const accepted = flags.yes || ci;
     const interactive = ci ? false : isInteractive();
 
     assertFlagsAgree({ ...flags, noBump });
@@ -222,7 +228,7 @@ export default class RepoRelease extends Command {
 
     // --- Confirm ----------------------------------------------------------
 
-    if (!flags.yes) {
+    if (!accepted) {
       if (!interactive) {
         throw nonInteractiveError({
           prompt: "whether to publish the versions listed above",
@@ -232,8 +238,8 @@ export default class RepoRelease extends Command {
         });
       }
       blankLine();
-      const accepted = await askYesNo("Publish these versions?");
-      if (!accepted) {
+      const answer = await askYesNo("Publish these versions?");
+      if (!answer) {
         blankLine();
         log("  Nothing was written.");
         footer();

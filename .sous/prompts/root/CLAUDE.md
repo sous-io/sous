@@ -114,7 +114,7 @@ The `recipes` job in `publish.yml` keeps the published copy in step. It runs onl
 npm publish it `needs`, re-checks version parity, copies the packaged recipe over the
 repository's copy and COMMITS that copy (a release refuses to run against a dirty tree),
 waits for the new version to be installable, then runs
-`npx @sous-io/sous@<version> repo release --ci --push` inside the checkout, which
+`npx @sous-io/sous@<version> repo release --ci --push --yes` inside the checkout, which
 regenerates the index, commits it, tags each version and pushes. The job holds
 `contents: read` and no `id-token`, so the recipe repository's write key and the npm
 publishing token never sit in the same job. It needs one repository secret, installed BY
@@ -1106,7 +1106,8 @@ it refuses while anything else is uncommitted, and it refuses before writing any
 cannot work out who is committing (`hasCommitIdentity` in `release/git-state.ts`), naming
 `git config user.name` rather than leaving git's own "empty ident name" to surface halfway
 through. `--check` is the read-only pull-request form,
-`--ci` is the merge preset (implies `--no-bump`, never asks, does NOT imply `--push`), and on a
+`--ci` is the merge preset (implies `--no-bump` AND `--yes`, so it accepts the plan it prints
+rather than failing on the confirmation it cannot ask; it does NOT imply `--push`), and on a
 branch other than the default one tagging is skipped unless `--tag` says otherwise. `repo submit` is validate-then-propose: it checks the tooling and the working
 tree, then the recipes and the index, and only then pushes and proposes. `submit-service.ts`
 is a SEQUENCER and nothing more: it names no provider, spawns no host tool, and builds no

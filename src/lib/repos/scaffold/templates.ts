@@ -332,12 +332,14 @@ export function buildReleaseWorkflow(): string {
 #   declare. It only reads; it never writes, commits or tags. That makes it the
 #   right thing to run on a pull request.
 #
-#   'sous repo release --ci --push' does the same validation and then publishes.
-#   '--ci' raises no versions and asks no questions: the version bump belongs in
-#   the change being merged, so a recipe that changed without one fails here
-#   rather than being given a version nobody reviewed. It cuts an annotated tag
-#   for every version that does not have one yet, dependency-first, and '--push'
-#   pushes the commit and those tags.
+#   'sous repo release --ci --push --yes' does the same validation and then
+#   publishes. '--ci' raises no versions, accepts the plan it prints, and asks
+#   no questions: the version bump belongs in the change being merged, so a
+#   recipe that changed without one fails here rather than being given a version
+#   nobody reviewed. It cuts an annotated tag for every version that does not
+#   have one yet, dependency-first, and '--push' pushes the commit and those
+#   tags. '--ci' implies '--yes'; passing it as well keeps this workflow working
+#   with a sous old enough that it did not.
 
 name: sous release
 
@@ -385,7 +387,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
       - name: Publish every new version
-        run: npx --yes @sous-io/sous repo release --ci --push
+        run: npx --yes @sous-io/sous repo release --ci --push --yes
 `;
 }
 
