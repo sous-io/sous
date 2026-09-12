@@ -37,7 +37,15 @@ let fixtureRepo: string;
  * variables are stripped so the child discovers its config by walking up.
  */
 function sous(cwd: string, ...args: string[]): RunResult {
-  const env = { ...process.env, SOUS_HOME: sousHome };
+  return sousWithEnv(cwd, {}, ...args);
+}
+
+/**
+ * The same run, with extra environment variables layered on top. Used to ask
+ * for the stack traces `SOUS_DEBUG` turns back on.
+ */
+function sousWithEnv(cwd: string, extraEnv: NodeJS.ProcessEnv, ...args: string[]): RunResult {
+  const env = { ...process.env, SOUS_HOME: sousHome, ...extraEnv };
   delete env.SOUS_CONFIG;
   delete env.SOUS_DIR;
   delete env.SOUS_CONFD;
@@ -48,6 +56,13 @@ function sous(cwd: string, ...args: string[]): RunResult {
   });
   return { stdout: result.stdout, stderr: result.stderr, status: result.status };
 }
+
+/**
+ * The shape of a stack frame, which no expected failure may print. A frame is
+ * an indented "at ..." line ending in a line and column number, which is what
+ * separates it from ordinary prose that happens to start with "at".
+ */
+const STACK_FRAME = /^\s+at\s.*:\d+:\d+/m;
 
 /** Writes a file, creating its parent directories. */
 function write(filePath: string, contents: string): void {
@@ -255,6 +270,91 @@ describe("help in every form, and one confirmation flag", () => {
         expect(result.status, `${spelling} on ${ref}: ${output}`).toBe(0);
         expect(output).toContain(ref);
       }
+    },
+    CLI_TIMEOUT
+  );
+
+  // --- Errors people can read ------------------------------------------------------------------
+
+  /**
+   * Forgetting an argument is an ordinary mistake, so what comes back is the
+   * sentence naming the missing argument and the command's own help; a stack
+   * trace pointing into oclif's parser would say nothing about the mistake.
+   *
+   * sous subscription add   // -> "Missing 1 required arg", then USAGE
+   */
+  it(
+    "should report a missing argument with the command's help and no stack trace",
+    () => {
+      const result = sous(projectRoot, "subscription", "add");
+      const output = strip(result.stdout + result.stderr);
+
+      expect(result.status).not.toBe(0);
+      expect(output).toContain("Error: Missing 1 required arg");
+      expect(output).toContain("USAGE");
+      expect(strip(result.stderr)).not.toMatch(STACK_FRAME);
+      expect(output).not.toMatch(STACK_FRAME);
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * A misspelled flag reads the same way: the flag that does not exist, and the
+   * list of the ones that do.
+   *
+   * sous repo add --nope   // -> "Nonexistent flag: --nope", then USAGE
+   */
+  it(
+    "should report an unknown flag with the command's help and no stack trace",
+    () => {
+      const result = sous(projectRoot, "repo", "add", "--nope");
+      const output = strip(result.stdout + result.stderr);
+
+      expect(result.status).not.toBe(0);
+      expect(output).toContain("Error: Nonexistent flag: --nope");
+      expect(output).toContain("USAGE");
+      expect(strip(result.stderr)).not.toMatch(STACK_FRAME);
+      expect(output).not.toMatch(STACK_FRAME);
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * A configuration failure is not a usage mistake, so it prints the
+   * explanation on its own: no help screen, and no stack trace either.
+   *
+   * sous build   // from a directory with no .sous/ anywhere above it
+   */
+  it(
+    "should report a missing config as a plain message with no stack trace",
+    () => {
+      const noConfig = path.join(tmp.path, "no-config-here");
+      fs.mkdirSync(noConfig, { recursive: true });
+
+      const result = sous(noConfig, "build");
+      const output = strip(result.stdout + result.stderr);
+
+      expect(result.status).not.toBe(0);
+      expect(output).toContain("Error: No sous config found.");
+      expect(strip(result.stderr)).not.toMatch(STACK_FRAME);
+      expect(output).not.toMatch(STACK_FRAME);
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * The trace is one environment variable away: with SOUS_DEBUG set, the same
+   * failure prints its frames to stderr for whoever is debugging sous itself.
+   *
+   * SOUS_DEBUG=1 sous subscription add   // -> the message, then the frames
+   */
+  it(
+    "should print stack frames when SOUS_DEBUG is set",
+    () => {
+      const result = sousWithEnv(projectRoot, { SOUS_DEBUG: "1" }, "subscription", "add");
+
+      expect(result.status).not.toBe(0);
+      expect(strip(result.stderr)).toMatch(STACK_FRAME);
     },
     CLI_TIMEOUT
   );

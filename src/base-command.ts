@@ -9,16 +9,11 @@ import {
   type DiscoveredConfig,
 } from "./lib/config-discovery.js";
 import { loadEnvFiles } from "./lib/env-local.js";
-import {
-  isConfigError,
-  loadSettings,
-  type ConfigContext,
-  type Settings,
-} from "./lib/settings.js";
-import { isInteractive, wantsHelp } from "./lib/interactive.js";
+import { loadSettings, type ConfigContext, type Settings } from "./lib/settings.js";
+import { isInteractive } from "./lib/interactive.js";
 import { displayError, displayErrorBlock, header, log, warning } from "./utils/formatting.js";
 import { nonInteractiveFlag } from "./utils/flags.js";
-import { printCommandHelpToStderr } from "./utils/command-help.js";
+import { reportCommandError } from "./utils/command-errors.js";
 
 /**
  * Base class for all CLI commands.
@@ -205,38 +200,20 @@ export abstract class BaseCommand extends Command {
   }
 
   /**
-   * Renders a configuration error as a plain, readable message instead of an
-   * oclif stack trace. The stack for a ConfigError points at Sous internals and
-   * tells the user nothing about the config mistake they need to fix.
+   * Renders any failure as a plain, readable message instead of an oclif stack
+   * trace: a config mistake, a mistyped command line, or a question sous could
+   * not ask. A stack pointing into oclif's parser or into sous's internals
+   * tells the user nothing about the mistake they need to fix, so it is printed
+   * only when `SOUS_DEBUG` asks for it. The rules live in
+   * `utils/command-errors.ts`, so every command in sous fails the same way.
    *
-   * Anything that is not a ConfigError falls through to oclif's normal handling,
-   * where a stack trace IS useful (it is a bug in Sous).
+   * A clean `this.exit()` and a command rendering JSON still belong to oclif,
+   * and fall through to its handling untouched.
    */
   protected async catch(error: Error & { exitCode?: number }): Promise<unknown> {
-    if (isConfigError(error)) {
-      displayErrorBlock(error.message, this.errorSink);
-      if (wantsHelp(error)) await this.showHelpWithError();
-      return this.exit(1);
-    }
-    return super.catch(error);
-  }
-
-  /**
-   * Prints this command's own help underneath an error, so someone whose run
-   * failed because a question could not be asked can see every flag that would
-   * have answered it without going looking.
-   *
-   * The help goes to stderr, always: an error is not output, and a command whose
-   * stdout is being piped (`sous config show | jq`) must not have a help screen
-   * spliced into its stream. oclif's help writes to stdout, so stdout is pointed
-   * at stderr for the duration and put back afterwards. The help class is the
-   * one oclif itself uses for `--help`, `-h` and the `help` command, so all
-   * four routes draw exactly the same screen. The mechanism itself lives in
-   * `utils/command-help.ts`, so the repository authoring commands (which do not
-   * extend this class) print the same screen the same way.
-   */
-  protected async showHelpWithError(): Promise<void> {
-    await printCommandHelpToStderr(this);
+    const exitCode = await reportCommandError(this, error, { write: this.errorSink });
+    if (exitCode === undefined) return super.catch(error);
+    return this.exit(exitCode);
   }
 
   /**
@@ -315,7 +292,7 @@ export function blankToUndefined(value: string | undefined): string | undefined 
 /**
  * Pulls the value of a long-only flag (`--<flagName> VALUE` or
  * `--<flagName>=VALUE`) out of a raw argv array. Used for the `--sous-config`,
- * `--sous-dir` and `--sous-confd` aliases, which — like `--config` — must be
+ * `--sous-dir` and `--sous-confd` aliases, which (like `--config`) must be
  * read before oclif's parse() so the config is located before env files load.
  *
  * Scanning stops at a bare `--` for the same reason as `readConfigFlagFromArgv`:

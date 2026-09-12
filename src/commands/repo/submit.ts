@@ -1,12 +1,10 @@
 import { Command, Flags } from "@oclif/core";
-import { ConfigError, isConfigError, SOUS_VERSION } from "../../lib/settings.js";
+import { SOUS_VERSION } from "../../lib/settings.js";
 import { findRepoRoot, submitRepo } from "../../lib/repos/release/index.js";
-import { wantsHelp } from "../../lib/interactive.js";
-import { printCommandHelpToStderr } from "../../utils/command-help.js";
+import { reportCommandError } from "../../utils/command-errors.js";
 import { nonInteractiveFlag } from "../../utils/flags.js";
 import {
   blankLine,
-  displayErrorBlock,
   dryRunNotice,
   footer,
   header,
@@ -128,11 +126,8 @@ export default class RepoSubmit extends Command {
    * command's own help underneath it.
    */
   protected async catch(error: Error & { exitCode?: number }): Promise<unknown> {
-    if (isConfigError(error)) {
-      displayErrorBlock((error as ConfigError).message);
-      if (wantsHelp(error)) await printCommandHelpToStderr(this);
-      return this.exit(1);
-    }
-    return super.catch(error);
+    const exitCode = await reportCommandError(this, error);
+    if (exitCode === undefined) return super.catch(error);
+    return this.exit(exitCode);
   }
 }

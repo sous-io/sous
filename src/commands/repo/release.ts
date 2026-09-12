@@ -2,9 +2,9 @@ import fs from "node:fs";
 import { Command, Flags } from "@oclif/core";
 import { ConfigError, isConfigError, SOUS_VERSION } from "../../lib/settings.js";
 import { INDEX_FILENAME } from "../../lib/repos/formats/common.js";
-import { isInteractive, nonInteractiveError, wantsHelp } from "../../lib/interactive.js";
+import { isInteractive, nonInteractiveError } from "../../lib/interactive.js";
 import { askYesNo } from "../../utils/prompts.js";
-import { printCommandHelpToStderr } from "../../utils/command-help.js";
+import { reportCommandError } from "../../utils/command-errors.js";
 import { confirmationFlag, nonInteractiveFlag } from "../../utils/flags.js";
 import {
   BUMP_LEVELS,
@@ -487,19 +487,16 @@ export default class RepoRelease extends Command {
   }
 
   /**
-   * Renders a configuration error as a plain, readable message rather than an
-   * oclif stack trace, matching what BaseCommand does for every other command.
-   * An error raised because a question could not be asked also gets this
-   * command's own help underneath it, so every flag that would have answered it
-   * is visible without going looking.
+   * Reports a failure the way every other sous command reports one: the message
+   * on its own, this command's help underneath it when the command line was the
+   * problem or a question could not be asked (so every flag that would have
+   * answered it is visible without going looking), and a stack trace only when
+   * `SOUS_DEBUG` asks for one. The rules live in `utils/command-errors.ts`.
    */
   protected async catch(error: Error & { exitCode?: number }): Promise<unknown> {
-    if (isConfigError(error)) {
-      displayErrorBlock((error as ConfigError).message);
-      if (wantsHelp(error)) await printCommandHelpToStderr(this);
-      return this.exit(1);
-    }
-    return super.catch(error);
+    const exitCode = await reportCommandError(this, error);
+    if (exitCode === undefined) return super.catch(error);
+    return this.exit(exitCode);
   }
 }
 

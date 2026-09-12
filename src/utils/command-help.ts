@@ -3,10 +3,10 @@
  *
  * A run that failed because a question could not be asked should show the
  * caller every flag that would have answered it, without sending them off to
- * `sous help <command>`. `BaseCommand` does this for every command that
- * discovers a config; the repository authoring commands (`repo init`,
- * `repo release`, `repo submit`) do not extend it, so the mechanism lives here
- * and both callers draw exactly the same screen.
+ * `sous help <command>`. The same goes for a run that failed because the
+ * command line itself was wrong. `utils/command-errors.ts` decides when a
+ * failure earns a help screen; this module draws it, so every command in sous
+ * draws exactly the same one.
  */
 
 import { loadHelpClass, type Command } from "@oclif/core";
