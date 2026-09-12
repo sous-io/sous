@@ -128,21 +128,21 @@ actually answered.
 
 ```term
 $ sous vars show apiUrl
-Question:     Which API should sous talk to?
-About:        Every request this recipe generates is sent to one deployment of
-              the API, and this setting says which one. The default points at
-              the public production host, but any deployment you can reach works.
-For example:  https://api.example.com
-Recipe:       workflow/task-files version 1.2.0 from sous-recipes
-Stored in:    .env
-Value:        https://api.example.com
+    Question   : Which API should sous talk to?
+    About      : Every request this recipe generates is sent to one deployment of
+                 the API, and this setting says which one. The default points at
+                 the public production host, but any deployment you can reach works.
+    For example: https://api.example.com
+    Recipe     : workflow/task-files version 1.2.0 from sous-recipes
+    Stored in  : .env
+    Value      : https://api.example.com
 
-@example       https://api.example.com
-@required-by   workflow/task-files (https://example.com/owner/recipes/workflow/task-files)
-@defined-by    workflow/task-files (https://example.com/owner/recipes/workflow/task-files)
-@storage-path  /home/you/project/.sous/.env
-@stored-as     SOUS_VAR_API_URL
-@constraints   - must be a value of the type url (type: url)
+    example     : https://api.example.com
+    required-by : workflow/task-files https://example.com/owner/recipes/workflow/task-files
+    defined-by  : workflow/task-files https://example.com/owner/recipes/workflow/task-files
+    storage-path: /home/you/project/.sous/.env
+    stored-as   : SOUS_VAR_API_URL
+    constraints : • must be a value of the type url (type: url)
 
 Environment variable                     Rung             Status
 SOUS_VAR_WORKFLOW_TASK_FILES_API_URL     recipe scope     not set
@@ -150,7 +150,7 @@ SOUS_VAR_WORKFLOW_API_URL                namespace scope  not set
 SOUS_VAR_API_URL                         shared scope     answered it, from the .env file
 ```
 
-`@required-by` and `@defined-by` are the same links the advanced view of a question shows, so the
+`required-by` and `defined-by` are the same links the advanced view of a question shows, so the
 two views say the same thing in the same words.
 
 The name may be the bare variable name or its full `namespace/recipe.name` key, which is what you
@@ -229,10 +229,10 @@ workflow/task-files needs 4 answers, and workflow/sub-agent-delegation, which it
 ```
 
 Each question then prints its own view: the header, the publisher's description wrapped to your
-terminal, four labeled facts (the default, the example, and exactly where the answer will be
-stored and under what name), and a hint naming the two keys that do anything here. Those facts are
-drawn by the renderer the advanced view uses, so the same label means the same thing and lines up
-the same way on both.
+terminal, and four labeled facts (the default, the example, and exactly where the answer will be
+stored and under what name). The keys that do anything are named by the legend the question draws
+under its own input line, in the style the stock prompts use. Those facts are drawn by the renderer
+the advanced view uses, so the same label means the same thing and lines up the same way on both.
 
 ```term
 workflow/task-files needs 4 answers before it can be used.
@@ -245,26 +245,26 @@ will store and search for your task files. The default value stores task files i
 the project's .sous directory, but you can specify any local path, either relative
 to the project root or absolute.
 
-  @default       .sous/tasks
-  @example       ~/my-task-files
-  @stored-as     SOUS_VAR_TASK_FILE_ROOT
-  @storage-path  /home/you/project/.sous/.env
+    default     : .sous/tasks
+    example     : ~/my-task-files
+    stored-as   : SOUS_VAR_TASK_FILE_ROOT
+    storage-path: /home/you/project/.sous/.env
 
-[ENTER to accept the default; TAB for advanced info and options]
 ? Where should task files be stored? (.sous/tasks):
+⏎ accept default • ⇥ advanced
 ```
 
 Enter accepts what is typed, or the default when nothing is. A question with no default drops
-the Enter half of the hint, since there is nothing for Enter alone to accept, and prints
-`[TAB for advanced info and options]`. A question answered from a list rather than typed says so
+the Enter half of the legend, since there is nothing for Enter alone to accept, and shows
+`⇥ advanced` alone. A question answered from a list rather than typed names the arrow keys
 instead:
 
 ```term
-[ENTER to choose; TAB for advanced info and options]
 ? Which ticket system do you use?
 > github
   jira
   linear
+↑↓ navigate • ⏎ select • ⇥ advanced
 ```
 
 Tab opens the advanced view from every kind of question: a typed one, a pick-one list, and a
@@ -272,8 +272,8 @@ yes-or-no confirmation alike. The word is always "Advanced". Once an answer is s
 say what was stored and where:
 
 ```term
-  SOUS_VAR_TASK_FILE_ROOT=.sous/tasks
-  Saved to /home/you/project/.sous/.env
+    Answer  : SOUS_VAR_TASK_FILE_ROOT=.sous/tasks
+    Saved to: /home/you/project/.sous/.env
 ```
 
 An answer that was already in scope is never asked about again; it is reported with its scope and
@@ -295,14 +295,14 @@ will store and search for your task files. The default value stores task files i
 the project's .sous directory, but you can specify any local path, either relative
 to the project root or absolute.
 
-  @default       .sous/tasks
-  @example       ~/my-task-files
-  @required-by   workflow/task-files (https://example.com/owner/recipes/workflow/task-files)
-  @defined-by    workflow/task-files (https://example.com/owner/recipes/workflow/task-files)
-  @storage-path  /home/you/project/.sous/.env
-  @stored-as     SOUS_VAR_TASK_FILE_ROOT
-  @constraints   - must be a value of the type path (type: path)
-                 - must be at least 1 character long (minLength: 1)
+    default     : .sous/tasks
+    example     : ~/my-task-files
+    required-by : workflow/task-files https://example.com/owner/recipes/workflow/task-files
+    defined-by  : workflow/task-files https://example.com/owner/recipes/workflow/task-files
+    storage-path: /home/you/project/.sous/.env
+    stored-as   : SOUS_VAR_TASK_FILE_ROOT
+    constraints : • must be a value of the type path (type: path)
+                  • must be at least 1 character long (minLength: 1)
 
 ? What would you like to do?
   Return to value entry
@@ -310,10 +310,10 @@ to the project root or absolute.
   Change the stored variable name
 ```
 
-`@required-by` names the recipe you subscribed to whose closure pulled this variable in, and spells
-out the chain when it arrived through a dependency; `@defined-by` names the recipe that declares
-the definition. Both are shown as links: a repository URL with the recipe's folder for a hosted
-repository, and a filesystem path for one read from this machine.
+`required-by` names the recipe you subscribed to whose closure pulled this variable in, and spells
+out the chain when it arrived through a dependency; `defined-by` names the recipe that declares
+the definition. Both carry the location beside the recipe key, in muted grey: a repository URL with
+the recipe's folder for a hosted repository, and a filesystem path for one read from this machine.
 
 Changing the stored name offers every rung the ladder looks up, with the one sous would use
 already selected, plus a name of your own; a name the ladder would never look at is bound with a
@@ -324,7 +324,7 @@ becomes "Save changes and return to value entry" and a "Discard changes" item jo
 A secret, or a variable the publisher declared machine-specific, may still be pointed at the
 committed file. Sous does not prevent it; it says plainly that the value would enter your git
 history and asks you to confirm, which is informed consent rather than a locked door. Returning to
-the value question prints its view again, with the updated `@stored-as` and `@storage-path`
+the value question prints its view again, with the updated `stored-as` and `storage-path`
 facts.
 
 Every run ends with the same three-part report: what was inherited from an answer already in

@@ -12,11 +12,13 @@ Adding a repository is how you trust it, so this is the one step that asks you a
 ```term
 $ sous repo add https://github.com/sous-io/sous-recipes
 // the trust question, then one small download
-Repository:  sous-recipes
-Location:    https://github.com/sous-io/sous-recipes
-Provider:    github
-Namespaces:  communication, core, tool-usage, workflow
-Recipes:     6
+    Repository: sous-recipes
+    Location  : https://github.com/sous-io/sous-recipes
+    Provider  : github
+    Namespaces: communication, core, tool-usage, workflow
+    Recipes   : 6
+
+  This project now trusts 'sous-recipes'. Nothing from it has been installed.
 ```
 
 Exactly one file is fetched: the repository's `sous.index.json`. That is everything sous needs
@@ -107,8 +109,13 @@ the project trusts:
 
 ```term
 $ sous subscription add task-files
-  'task-files' resolves to sous-recipes:workflow/task-files  (the recipe 'task-files' in the
-  namespace 'workflow' of the repository 'sous-recipes': keeps one task file per branch).
+    Resolved to: sous-recipes:workflow/task-files
+    Recipe     : task-files
+    Namespace  : workflow
+    Repository : sous-recipes
+    Description: keeps one task file per branch
+
+  'task-files' named one recipe, and nothing else, so that is what is being subscribed to.
 ```
 
 When the word means more than one thing, including the case where it is a namespace in one
@@ -137,21 +144,21 @@ of it. Nothing is downloaded and nothing is written until the question is answer
 ```term
 $ sous subscription add workflow/task-files
 
-  Subscribing to 'sous-recipes:workflow/task-files' installs the recipe 'task-files' from the
-  namespace 'workflow'.
+  Subscribing to 'sous-recipes:workflow/task-files' installs the recipe 'task-files' from
+    the namespace 'workflow'.
 
   Here is what that does:
 
-    The files it ships are compiled into this project on the next build, which writes them into
-    this project's agent directories.
-    Any scripts it ships can be run on this machine when an agent uses them. Sous does not run
-    them itself, and it cannot vouch for what they do.
-    The variables it publishes are asked about at the end of this command, and the answers are
-    written into this project's env files.
-    Its dependencies are fetched and pinned in this project's lockfile, at the exact versions
-    resolved now.
-    If a dependency turns out to live in a repository this project does not trust, sous stops and
-    asks about that repository by name before fetching anything from it.
+  • The files it ships are compiled into this project on the next build, which writes them
+    into this project's agent directories.
+  • Any scripts it ships can be run on this machine when an agent uses them. Sous does not
+    run them itself, and it cannot vouch for what they do.
+  • The variables it publishes are asked about at the end of this command, and the answers
+    are written into this project's env files.
+  • Its dependencies are fetched and pinned in this project's lockfile, at the exact
+    versions resolved now.
+  • If a dependency turns out to live in a repository this project does not trust, sous
+    stops and asks about that repository by name before fetching anything from it.
 
 ? Proceed? (y/N)
 ```
@@ -173,9 +180,10 @@ showing which recipe requires it. Declining aborts the whole install:
 $ sous subscription add workflow/needs-extras
 // resolution reaches a repository this project has not added
 One repository has to be trusted before this can continue.
+
   extras
-    Location:  https://github.com/some-team/extras
-    Required:  tooling/formatter, by 'workflow/needs-extras'
+    Location: https://github.com/some-team/extras
+    Required: tooling/formatter required by 'workflow/needs-extras'
 ```
 
 ?> A subscription entry holds the range; the ref you type may carry one (`@^1.2.0`), and the
@@ -257,12 +265,11 @@ something that already fits:
 Variables
 
 Answers already in scope:
-  apiUrl = https://api.example.com
-    from the shared scope name SOUS_VAR_API_URL, from the .env file
+    apiUrl      : https://api.example.com from the shared scope name SOUS_VAR_API_URL, from
+                  the .env file
 
 Answers stored:
-  taskFileRoot = .sous/tasks
-    SOUS_VAR_TASK_FILE_ROOT in .env
+    taskFileRoot: .sous/tasks SOUS_VAR_TASK_FILE_ROOT in .env
 ```
 
 In continuous integration there is no terminal, so an unanswered variable fails the run rather
@@ -307,20 +314,20 @@ These recipes ask 2 questions, 1 of which nothing answers yet.
 workflow/task-files asks 2 questions:
 
   taskFileRoot
-    @about         The directory holding one task file per git branch.
-    @example       .sous/tasks
-    @stored-as     SOUS_VAR_TASK_FILE_ROOT
-    @storage-path  /home/you/project/.sous/.env
-    @answered      no, and this recipe requires an answer
-    @answer-with   --answer taskFileRoot=<value>
+    about       : The directory holding one task file per git branch.
+    example     : .sous/tasks
+    stored-as   : SOUS_VAR_TASK_FILE_ROOT
+    storage-path: /home/you/project/.sous/.env
+    answered    : no, and this recipe requires an answer
+    answer-with : --answer taskFileRoot=<value>
 
   apiUrl
-    @about         The service every request this recipe generates is sent to.
-    @example       https://api.example.com
-    @stored-as     SOUS_VAR_API_URL
-    @storage-path  /home/you/project/.sous/.env
-    @answered      yes, from the shared scope name SOUS_VAR_API_URL, from the .env file
-    @answer-with   --answer apiUrl=<value>
+    about       : The service every request this recipe generates is sent to.
+    example     : https://api.example.com
+    stored-as   : SOUS_VAR_API_URL
+    storage-path: /home/you/project/.sous/.env
+    answered    : yes, from the shared scope name SOUS_VAR_API_URL, from the .env file
+    answer-with : --answer apiUrl=<value>
 ```
 
 Then do the whole thing in one command, with an answer for each question and `--yes` for the
