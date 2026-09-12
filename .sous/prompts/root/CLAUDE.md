@@ -97,6 +97,19 @@ project's implicit `core` subscription asks for exactly the running sous version
 already at the package version is not rewritten, so a hand-written manifest is never
 reflowed.
 
+**The packaged version is always resolvable.** Parity means the implicit `core` subscription
+asks for a version the repository has not published yet for as long as it takes the release
+pipeline to run, and on a machine holding the repository's REAL index that would resolve to
+nothing and silently drop the core skills on every upgrade. So `seedCoreRecipe` (`repos/seed.ts`)
+does two things, not one: it writes the stand-in index when nothing real has ever been fetched,
+AND it installs an overlay on the index cache (`coreIndexOverlay`, applied by
+`IndexCache.setOverlay` in `repos/providers/index-cache.ts`). The overlay adds the packaged
+version to the official repository's index IN MEMORY when that index lacks it, carrying the hash
+of the entry just seeded and marked `seeded: true`. Nothing is written to disk, so a cached
+index stays an honest record of what upstream served; a version upstream does publish always
+wins, with one warning if its hash disagrees with the packaged copy. The overlay is a general
+seam on the cache, applied in `readCached` and after `refresh` has written the file.
+
 The `recipes` job in `publish.yml` keeps the published copy in step. It runs only after the
 npm publish it `needs`, re-checks version parity, copies the packaged recipe over the
 repository's copy and COMMITS that copy (a release refuses to run against a dirty tree),

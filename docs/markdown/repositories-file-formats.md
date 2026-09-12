@@ -368,8 +368,10 @@ subscribes to something inside it.
 | `$comment` | no | string | A note about where this copy came from. JSON has no comment syntax, and an index is machine-written, so this is the one place a writer can say something to whoever opens the file. Sous ignores it, with one exception: the seed index below |
 
 A recipe entry holds `path`, an optional `description`, and `versions`: a map from an exact
-version to `{ hash, tag, prerelease, releasedAt?, dependencies? }`. Every recipe needs at least
-one version, and its namespace must be one the index declares.
+version to `{ hash, tag, prerelease, releasedAt?, dependencies?, seeded? }`. Every recipe needs
+at least one version, and its namespace must be one the index declares. `seeded` is never
+written by `sous repo release`; it marks the packaged core version sous folds in itself, and is
+described under the seed index below.
 
 ### Resolved dependencies
 
@@ -411,6 +413,21 @@ freshness sidecar is written beside it, so the very first command that does have
 fetches the real index rather than waiting out a window the stand-in never earned. When there is
 still no network, sous reports that it could not check and uses the stand-in, which is the same
 last-good behavior every repository gets.
+
+### The packaged core version
+
+The stand-in covers a machine that has never fetched anything. A machine that has been using
+sous for a while holds the repository's real index instead, and that index publishes whatever
+core versions the release pipeline has cut so far. Upgrade sous and the version the built-in
+`core` subscription asks for is, for a while, not among them.
+
+So sous folds the packaged version into that index IN MEMORY whenever the index does not carry
+it: one more entry under `core/sous-skills`, at the running sous version, with the hash of the
+copy just seeded out of the package, `prerelease` set from the version itself, and `seeded` set
+to `true`. Nothing is written to disk; the cached file stays exactly what the repository served,
+so the next real fetch is compared against the truth. The moment the repository does publish
+that version, its own entry is what gets used, and if the two disagree about the content hash
+sous says so once and prefers the published one.
 
 ## `sous.lock.json`: the project lockfile
 
