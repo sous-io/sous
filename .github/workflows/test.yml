@@ -14,22 +14,16 @@ permissions:
 
 jobs:
   test:
-    name: Node ${{ matrix.node-version }}
+    name: Node 22
     runs-on: ubuntu-latest
-    strategy:
-      # One failing version should not cancel the other; both results are
-      # useful when a failure is version specific.
-      fail-fast: false
-      matrix:
-        node-version:
-          - 20
-          - 22
     steps:
       - uses: actions/checkout@v4
 
+      # The package's engines field requires Node 22 or newer, so that is the
+      # only version the suite runs on.
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 22
           # Caches the npm download directory, keyed on package-lock.json.
           cache: npm
 
