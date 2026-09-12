@@ -23,7 +23,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import semver from "semver";
 import { ConfigError, isConfigError } from "../errors.js";
-import { SOUS_VERSION, type ConfigContext, type Settings } from "../settings.js";
+import { SOUS_VERSION, type ConfigContext, type Settings, type VarScope } from "../settings.js";
 import { CONFD_DIR_NAME } from "../config-discovery.js";
 import { indent, log, warning } from "../../utils/formatting.js";
 import { askChoice, askYesNo } from "../../utils/prompts.js";
@@ -102,7 +102,12 @@ import {
   shouldCheckUpstream,
 } from "./freshness.js";
 import { REPO_NAME_PATTERN } from "./formats/patterns.js";
-import { linkedPathFor } from "./links.js";
+import {
+  linkedPathFor,
+  readGlobalLinks,
+  readProjectLinks,
+  writeProjectLinks,
+} from "./links.js";
 import {
   keysHeldBySubscription,
   listLockedRecipes,
@@ -119,6 +124,8 @@ import {
   packagedCoreRecipeDir,
 } from "./core-recipe.js";
 import { repoIdentity, shortNameFromIdentity } from "./identity.js";
+import { buildRecipeTargets } from "./recipe-targets.js";
+import { resolveOutputPath } from "../markdown-compiler.js";
 import { hashDirectory } from "./store/hash.js";
 
 // --- Options and reports ------------------------------------------------------------------------
@@ -278,6 +285,61 @@ export type UnsubscribeOutcome = {
    * provides comes back on every run; only a recorded opt-out outlives it.
    */
   optedOut: boolean;
+  /** True when nothing was written, because this was a dry run. */
+  dryRun: boolean;
+};
+
+/** What `removeRepo` is asked to do. */
+export type RemoveRepoOptions = {
+  /** The repository's short name, as the project records it. */
+  name: string;
+  /** Accept the removal without being asked. */
+  yes?: boolean;
+  /** Work out what would happen and report it, writing nothing. */
+  dryRun?: boolean;
+  /**
+   * The resolved settings scope, used to work out which output files the
+   * removed recipes wrote. Without it a `recipeOutputs` destination holding a
+   * `${var}` cannot be resolved, and the file list is left out of the report.
+   */
+  scope?: VarScope;
+};
+
+/** What `removeRepo` did, or would do on a dry run. */
+export type RemoveRepoOutcome = {
+  /** The repository's short name. */
+  name: string;
+  /** Where it lives, as the entry recorded it. */
+  url: string;
+  /**
+   * True when the repository is one sous provides itself, so it was switched
+   * off with an `enabled: false` entry rather than deleted. The entry sous
+   * provides comes back on every run; only a recorded opt-out outlives it.
+   */
+  optedOut: boolean;
+  /** The subscriptions that were removed because they resolve into it. */
+  subscriptions: string[];
+  /**
+   * Subscriptions that resolve into it but are written in the project's own
+   * config, which sous never edits. They stay, and are named so the person
+   * removing the repository knows to deal with them.
+   */
+  keptSubscriptions: string[];
+  /** The locked recipes that were released, because nothing else held them. */
+  removedRecipes: string[];
+  /** Recipes that stayed because something else still holds them, with who holds them. */
+  stayed: Array<{ key: string; heldBy: string[] }>;
+  /** The output files the removed recipes compiled, which the next build prunes. */
+  outputs: string[];
+  /** What changed in the lockfile. */
+  diff: LockDiff;
+  /** The linked checkout that pointed at the repository, when there was one. */
+  linkedPath?: string;
+  /**
+   * True when that link is the machine-wide one, which other projects on this
+   * machine share, so it was left exactly as it was.
+   */
+  linkIsGlobal: boolean;
   /** True when nothing was written, because this was a dry run. */
   dryRun: boolean;
 };
@@ -1193,6 +1255,309 @@ export class SubscriptionService {
     }
 
     return { key, diff, stayed, optedOut: builtIn, dryRun };
+  }
+
+  // --- Withdrawing trust from a repository -------------------------------------------------------
+
+  /**
+   * Stops trusting a repository: every subscription that resolves into it is
+   * removed through the same refcounted path `unsubscribe` uses, the link that
+   * pointed at it is dropped, and its entry leaves the managed repositories
+   * layer.
+   *
+   * Informed consent, never prevention: everything that will go is printed
+   * first, in plain sentences, and then one question is asked. `--yes` skips the
+   * question and a dry run never asks, because a dry run has nothing to decline.
+   *
+   * The repository sous provides itself has no entry to delete, so removing it
+   * records `enabled: false` instead; the default comes back on every run and
+   * only a recorded opt-out outlives it.
+   *
+   * @param options - The repository's short name, and the yes and dry-run flags.
+   */
+  async removeRepo(options: RemoveRepoOptions): Promise<RemoveRepoOutcome> {
+    const name = options.name;
+    const dryRun = options.dryRun === true;
+
+    const trusted = this.trust.listTrusted();
+    const entry = trusted[name];
+    if (entry === undefined) {
+      const known = Object.keys(trusted).sort();
+      throw new ConfigError(
+        `This project does not trust a repository called '${name}'.\n` +
+          (known.length > 0
+            ? `  It trusts: ${known.join(", ")}.`
+            : `  It trusts no repositories yet.`)
+      );
+    }
+
+    const managed = this.trust.listManaged();
+    const builtIn = !Object.hasOwn(managed, name) && isBuiltInEntry(entry);
+    if (!Object.hasOwn(managed, name) && !builtIn) {
+      throw new ConfigError(
+        `The repository '${name}' is written in this project's own config, not in the ` +
+          `layer sous manages.\n` +
+          `  Remove its entry from the 'repos' block of your config file; sous never ` +
+          `edits a config file you wrote.`
+      );
+    }
+
+    const before = this.lock.read();
+    const { removable, kept } = this.subscriptionsInto(name, before);
+
+    // What the removal would leave behind, worked out before anything is
+    // written, so the plan below describes exactly what is about to happen.
+    let after = before;
+    const held: string[] = [];
+    for (const key of removable) {
+      for (const heldKey of keysHeldBySubscription(before, key)) {
+        held.push(heldKey);
+        after = this.dropProjectHold(after, heldKey);
+      }
+    }
+    const diff = this.lock.diff(before, after);
+    const removedRecipes = diff.removed.map((change) => change.key);
+    const stayed = [...new Set(held)]
+      .filter((heldKey) => Object.hasOwn(after.recipes, heldKey))
+      .sort()
+      .map((heldKey) => ({ key: heldKey, heldBy: [...after.recipes[heldKey]!.requestedBy] }));
+
+    const outputs = this.outputsOf(removedRecipes, options.scope);
+    const projectLink = readProjectLinks(this.sousDir).links[name];
+    const globalLink = readGlobalLinks(this.env).links[name];
+    const link = projectLink ?? globalLink;
+
+    const outcome: RemoveRepoOutcome = {
+      name,
+      url: entry.url,
+      optedOut: builtIn,
+      subscriptions: removable,
+      keptSubscriptions: kept,
+      removedRecipes,
+      stayed,
+      outputs,
+      diff,
+      ...(link === undefined ? {} : { linkedPath: link.path }),
+      linkIsGlobal: projectLink === undefined && globalLink !== undefined,
+      dryRun,
+    };
+
+    for (const line of this.removalPlan(outcome)) {
+      this.write(line === "" ? "" : indent(line));
+    }
+
+    if (!dryRun && options.yes !== true) {
+      if (!this.interactive) {
+        throw nonInteractiveError({
+          prompt: `whether to stop trusting the repository '${name}'`,
+          remedy:
+            "pass '--yes' (spelled '-y', '--force' or '-f' if you prefer) to accept the " +
+            "plan above without being asked.",
+        });
+      }
+
+      const proceed = await this.ask("Stop trusting it?");
+      if (!proceed) {
+        throw new ConfigError(
+          `Nothing was written: the repository '${name}' is still trusted.\n` +
+            `  No subscription was removed, no lockfile entry was changed, and this ` +
+            `project's config is exactly as it was.`
+        );
+      }
+    }
+
+    if (dryRun) return outcome;
+
+    // Each subscription goes through the ordinary refcounted removal, so a
+    // recipe another subscription still holds is kept exactly as it would be
+    // had the subscription been removed on its own.
+    for (const key of removable) await this.unsubscribe({ ref: key });
+
+    if (projectLink !== undefined) {
+      const map = readProjectLinks(this.sousDir);
+      delete map.links[name];
+      writeProjectLinks(this.sousDir, map);
+    }
+
+    if (builtIn) this.trust.disableRepo(name);
+    else this.trust.removeRepo(name);
+
+    return outcome;
+  }
+
+  /**
+   * The subscriptions that resolve into one repository, split by whether sous
+   * may remove them. A subscription counts when the lockfile pins one of its
+   * recipes to that repository, or when its ref names the repository outright
+   * with a `repo:` qualifier.
+   *
+   * @param name - The repository's short name.
+   * @param lock - The lockfile as it stands.
+   */
+  private subscriptionsInto(
+    name: string,
+    lock: Lockfile
+  ): { removable: string[]; kept: string[] } {
+    const fromRepo = new Set(
+      Object.entries(lock.recipes)
+        .filter(([, recipe]) => recipe.repo === name)
+        .map(([key]) => key)
+    );
+
+    const subscriptions = this.allSubscriptions();
+    const managed = this.readSubscriptionEntries();
+    const removable: string[] = [];
+    const kept: string[] = [];
+
+    for (const key of Object.keys(subscriptions).sort()) {
+      let qualifier: string | undefined;
+      try {
+        qualifier = parseRef(key).repo;
+      } catch {
+        // A ref that does not parse cannot name this repository, and reporting
+        // it here would bury the removal under an unrelated complaint.
+        continue;
+      }
+
+      const touches =
+        qualifier === name ||
+        keysHeldBySubscription(lock, key).some((heldKey) => fromRepo.has(heldKey));
+      if (!touches) continue;
+
+      const sousMayRemove =
+        Object.hasOwn(managed, key) || isBuiltInEntry(subscriptions[key]);
+      if (sousMayRemove) removable.push(key);
+      else kept.push(key);
+    }
+
+    return { removable, kept };
+  }
+
+  /**
+   * The output files a set of locked recipes compiled, which the next build
+   * prunes once they are gone.
+   *
+   * Worked out from the recipes' own compile targets rather than from the build
+   * state file, because the state file records what sous wrote without
+   * recording which recipe wrote it. A destination that cannot be resolved
+   * (a `${var}` with no value in the scope given) leaves the list empty rather
+   * than stopping a removal; the build itself reports that properly.
+   *
+   * @param keys - The recipe keys that are going away.
+   * @param scope - The resolved settings scope, for `${var}` in destinations.
+   */
+  private outputsOf(keys: string[], scope?: VarScope): string[] {
+    if (keys.length === 0) return [];
+
+    const going = new Set(keys);
+    const locked = listLockedRecipes({ sousDir: this.sousDir, env: this.env }).filter(
+      (recipe) => going.has(recipe.key)
+    );
+    if (locked.length === 0) return [];
+
+    try {
+      const { targets } = buildRecipeTargets({
+        sousDir: this.sousDir,
+        settings: this.settings,
+        ...(scope === undefined ? {} : { scope }),
+        env: this.env,
+        locked,
+      });
+
+      const files = new Set<string>();
+      for (const target of targets) {
+        for (const output of target.outputs) {
+          const resolved = resolveOutputPath(target, output);
+          if (resolved !== undefined) files.add(resolved);
+        }
+      }
+      return [...files].sort();
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * What stopping trusting a repository will do to this project, in plain
+   * sentences: the entry itself, the subscriptions that go with it, the recipes
+   * they hold, the files the next build prunes, and the link that points at it.
+   *
+   * @param outcome - Everything the removal worked out.
+   */
+  private removalPlan(outcome: RemoveRepoOutcome): string[] {
+    const lines: string[] = [""];
+
+    lines.push(
+      outcome.optedOut
+        ? `The repository '${outcome.name}' at ${outcome.url} is one sous provides ` +
+            `itself, so it cannot be deleted: it is switched off instead, by recording ` +
+            `'${outcome.name}: { enabled: false }' in this project's repositories layer.`
+        : `The entry for '${outcome.name}' at ${outcome.url} is removed from this ` +
+            `project's repositories layer, so sous stops reading anything from it.`
+    );
+
+    lines.push("");
+    lines.push("Here is what goes with it:");
+    lines.push("");
+
+    if (outcome.subscriptions.length > 0) {
+      lines.push(
+        outcome.subscriptions.length === 1
+          ? `  One subscription resolves into it and is removed: ` +
+              `${outcome.subscriptions[0]}.`
+          : `  ${outcome.subscriptions.length} subscriptions resolve into it and are ` +
+              `removed: ${outcome.subscriptions.join(", ")}.`
+      );
+    } else {
+      lines.push("  Nothing this project subscribes to resolves into it.");
+    }
+
+    if (outcome.removedRecipes.length > 0) {
+      lines.push(
+        `  ${outcome.removedRecipes.length === 1 ? "One locked recipe is" : `${outcome.removedRecipes.length} locked recipes are`} ` +
+          `held only through those subscriptions, and ${
+            outcome.removedRecipes.length === 1 ? "it leaves" : "they leave"
+          } the lockfile: ${outcome.removedRecipes.join(", ")}.`
+      );
+    }
+
+    for (const stayed of outcome.stayed) {
+      lines.push(
+        `  The recipe '${stayed.key}' stays, because ${stayed.heldBy.join(", ")} still ` +
+          `holds it.`
+      );
+    }
+
+    if (outcome.outputs.length > 0) {
+      lines.push(
+        `  ${outcome.outputs.length === 1 ? "One file those recipes compiled is" : `${outcome.outputs.length} files those recipes compiled are`} ` +
+          `pruned by the build that follows:`
+      );
+      for (const file of outcome.outputs) lines.push(`    ${file}`);
+    }
+
+    if (outcome.linkedPath !== undefined) {
+      lines.push(
+        outcome.linkIsGlobal
+          ? `  A machine-wide link points this repository at the checkout at ` +
+              `${outcome.linkedPath}. That map is shared by every project on this ` +
+              `machine, so it is left exactly as it is, and the checkout stays on disk.`
+          : `  This project links the repository to the checkout at ` +
+              `${outcome.linkedPath}. The link is removed, and the checkout stays on ` +
+              `disk exactly as it is.`
+      );
+    }
+
+    for (const key of outcome.keptSubscriptions) {
+      lines.push(
+        `  The subscription to '${key}' resolves into it and is written in this ` +
+          `project's own config, which sous never edits, so it stays. It resolves ` +
+          `against nothing once the repository is gone.`
+      );
+    }
+
+    lines.push("");
+    return lines;
   }
 
   // --- Restoring and upstream checks -------------------------------------------------------------

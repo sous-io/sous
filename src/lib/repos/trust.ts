@@ -225,6 +225,23 @@ export class TrustService {
   }
 
   /**
+   * Switches a repository off without deleting an entry, which is how trust is
+   * withdrawn from the repository sous provides itself. That entry is recreated
+   * from the installed package on every run, so only a recorded `enabled: false`
+   * outlives it; the shape is the same one a person writes by hand to opt out.
+   *
+   * @param name - The repository's short name.
+   */
+  disableRepo(name: string): void {
+    updateManagedLayer(
+      this.sousDir,
+      REPOS_LAYER_FILENAME,
+      [{ path: ["repos", name], value: { enabled: false } }],
+      this.layerOptions
+    );
+  }
+
+  /**
    * Asks about every repository a round of resolution turned up that the
    * project has not added, in ONE consolidated question. Any refusal aborts,
    * because a half-trusted install is not something sous will produce.
