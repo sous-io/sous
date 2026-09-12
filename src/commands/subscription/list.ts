@@ -109,7 +109,7 @@ export default class SubscriptionList extends BaseCommand {
  * @param pinned - The locked recipes the subscription holds.
  * @param enabled - Whether the subscription is switched on.
  */
-function describePinned(
+export function describePinned(
   pinned: Array<{ key: string; version: string }>,
   enabled: boolean
 ): string {
