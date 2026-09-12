@@ -1,5 +1,5 @@
 /**
- * Raising the version in a recipe manifest.
+ * Raising, or setting, the version in a recipe manifest.
  *
  * A recipe manifest is HAND-WRITTEN, and the scaffold sous writes is mostly
  * comments, so a version bump must give the file back to its author looking the
@@ -59,17 +59,58 @@ export function nextVersion(current: string, level: BumpLevel): string {
  * @param level - How far to raise the version.
  */
 export function bumpRecipeVersion(manifestPath: string, level: BumpLevel): BumpResult {
+  return rewriteVersion(manifestPath, (current) => nextVersion(current, level));
+}
+
+/**
+ * Writes an exact version into a recipe manifest, preserving the rest of the
+ * file as written.
+ *
+ * This is what the release pipeline uses to hold the packaged core recipe at
+ * the sous package's own version (see `scripts/sync-core-version.mts`), where
+ * the new version is dictated rather than stepped. A manifest that already
+ * declares this version is left untouched, byte for byte, so running the sync
+ * twice cannot reformat a hand-written file.
+ *
+ * @param manifestPath - Absolute path to the recipe manifest.
+ * @param version - The exact semantic version the manifest should declare.
+ */
+export function setRecipeVersion(manifestPath: string, version: string): BumpResult {
+  if (semver.valid(version) === null) {
+    throw new ConfigError(
+      `Cannot set the recipe version to '${version}'.\n` +
+        `  A recipe version is an exact semantic version, such as '1.4.0' or '2.0.0-beta.1'.`
+    );
+  }
+  return rewriteVersion(manifestPath, () => version);
+}
+
+/**
+ * The one writer both callers share: read the version the manifest declares,
+ * work out what it becomes, and rewrite that value alone.
+ *
+ * @param manifestPath - Absolute path to the recipe manifest.
+ * @param nextFrom - Given the declared version, the version to write.
+ */
+function rewriteVersion(
+  manifestPath: string,
+  nextFrom: (current: string) => string
+): BumpResult {
   const text = fs.readFileSync(manifestPath, "utf8");
   const extension = path.extname(manifestPath).toLowerCase();
 
   if (extension === ".json" || extension === ".jsonc") {
-    return bumpJson(manifestPath, text, level);
+    return rewriteJson(manifestPath, text, nextFrom);
   }
-  return bumpYaml(manifestPath, text, level);
+  return rewriteYaml(manifestPath, text, nextFrom);
 }
 
 /** Rewrites the version in a YAML manifest, keeping its comments and layout. */
-function bumpYaml(manifestPath: string, text: string, level: BumpLevel): BumpResult {
+function rewriteYaml(
+  manifestPath: string,
+  text: string,
+  nextFrom: (current: string) => string
+): BumpResult {
   const document = YAML.parseDocument(text);
   const node = document.get("version", true);
 
@@ -78,7 +119,9 @@ function bumpYaml(manifestPath: string, text: string, level: BumpLevel): BumpRes
   }
 
   const from = node.value;
-  const to = nextVersion(from, level);
+  const to = nextFrom(from);
+  if (to === from) return { manifestPath, from, to };
+
   node.value = to;
   fs.writeFileSync(manifestPath, document.toString(), "utf8");
 
@@ -86,7 +129,11 @@ function bumpYaml(manifestPath: string, text: string, level: BumpLevel): BumpRes
 }
 
 /** Rewrites the version in a JSON or JSONC manifest, editing only that value's bytes. */
-function bumpJson(manifestPath: string, text: string, level: BumpLevel): BumpResult {
+function rewriteJson(
+  manifestPath: string,
+  text: string,
+  nextFrom: (current: string) => string
+): BumpResult {
   // The manifest dialect allows comments and trailing commas, so it is read
   // through the loader's own permissive parser rather than JSON.parse.
   const parsed = parseJsoncText(text, manifestPath);
@@ -96,7 +143,9 @@ function bumpJson(manifestPath: string, text: string, level: BumpLevel): BumpRes
       : undefined;
   if (typeof from !== "string") throw missingVersion(manifestPath);
 
-  const to = nextVersion(from, level);
+  const to = nextFrom(from);
+  if (to === from) return { manifestPath, from, to };
+
   const edits = modify(text, ["version"], to, {});
   fs.writeFileSync(manifestPath, applyEdits(text, edits), "utf8");
 
@@ -106,7 +155,7 @@ function bumpJson(manifestPath: string, text: string, level: BumpLevel): BumpRes
 /** The error for a manifest with no usable `version` field. */
 function missingVersion(manifestPath: string): ConfigError {
   return new ConfigError(
-    `The recipe manifest at ${manifestPath} has no 'version' field to raise.\n` +
-      `  Every recipe declares an exact semantic version; add one, then bump it.`
+    `The recipe manifest at ${manifestPath} has no 'version' field to write.\n` +
+      `  Every recipe declares an exact semantic version; add one, then try again.`
   );
 }

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { makeTmpDir, type TmpDir } from "../../../test/utils/tmp.js";
-import { bumpRecipeVersion, nextVersion } from "./bump.js";
+import { bumpRecipeVersion, nextVersion, setRecipeVersion } from "./bump.js";
 
 let tmp: TmpDir;
 
@@ -101,7 +101,57 @@ describe("bumpRecipeVersion()", () => {
     const manifest = write("sous.recipe.yaml", "formatVersion: 1\nname: example\n");
 
     expect(() => bumpRecipeVersion(manifest, "patch")).toThrow(
-      /has no 'version' field to raise/
+      /has no 'version' field to write/
     );
+  });
+});
+
+describe("setRecipeVersion()", () => {
+  /**
+   * The release pipeline dictates the core recipe's version rather than
+   * stepping it, and the manifest still comes back looking hand-written.
+   *
+   * setRecipeVersion("sous.recipe.yaml", "2.3.4");
+   * // -> { from: "0.1.0", to: "2.3.4" }, file otherwise unchanged
+   */
+  it("should write the exact version it is given and keep the comments", () => {
+    const manifest = write(
+      "sous.recipe.yaml",
+      "# The packaged core recipe.\nformatVersion: 1\n\n" +
+        "namespace: core\nname: sous-skills\nversion: 0.1.0\n"
+    );
+
+    const result = setRecipeVersion(manifest, "2.3.4");
+    const after = fs.readFileSync(manifest, "utf8");
+
+    expect(result).toEqual({ manifestPath: manifest, from: "0.1.0", to: "2.3.4" });
+    expect(after).toContain("version: 2.3.4");
+    expect(after).toContain("# The packaged core recipe.");
+  });
+
+  /**
+   * Syncing a manifest that is already at the wanted version must not rewrite
+   * it, because a YAML round trip can reflow a file nobody asked to change.
+   */
+  it("should leave a manifest that already declares that version untouched", () => {
+    const before =
+      "formatVersion: 1\nnamespace: core\nname: sous-skills\nversion: 1.2.3\n\n" +
+      "description: >-\n  Written by hand,\n  across two lines.\n";
+    const manifest = write("sous.recipe.yaml", before);
+
+    const result = setRecipeVersion(manifest, "1.2.3");
+
+    expect(result).toEqual({ manifestPath: manifest, from: "1.2.3", to: "1.2.3" });
+    expect(fs.readFileSync(manifest, "utf8")).toBe(before);
+  });
+
+  /** A version that is not a semantic version is refused before anything is written. */
+  it("should refuse a version that is not a semantic version", () => {
+    const manifest = write("sous.recipe.yaml", "version: 1.0.0\n");
+
+    expect(() => setRecipeVersion(manifest, "latest")).toThrow(
+      /exact semantic version/
+    );
+    expect(fs.readFileSync(manifest, "utf8")).toBe("version: 1.0.0\n");
   });
 });
