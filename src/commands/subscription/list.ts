@@ -85,7 +85,7 @@ export default class SubscriptionList extends BaseCommand {
     const rows = listings.map((entry) => ({
       key: entry.key,
       range: entry.range ?? "any version",
-      pinned: describePinned(entry.pinned),
+      pinned: describePinned(entry.pinned, entry.enabled),
       origin: describeOrigin(entry.addedBy),
       enabled: entry.enabled ? "yes" : "no",
     }));
@@ -102,11 +102,19 @@ export default class SubscriptionList extends BaseCommand {
  * The versions the lockfile pins for one subscription. A namespace subscription
  * holds several recipes, so each is named with the version beside it.
  *
+ * A subscription with nothing pinned has simply not been built yet, which is
+ * what the cell says; the one exception is a subscription switched off, which
+ * no build will pin.
+ *
  * @param pinned - The locked recipes the subscription holds.
+ * @param enabled - Whether the subscription is switched on.
  */
-function describePinned(pinned: Array<{ key: string; version: string }>): string {
-  if (pinned.length === 0) return "nothing locked yet";
-  return pinned.map((entry) => `${entry.key} ${entry.version}`).join(", ");
+function describePinned(
+  pinned: Array<{ key: string; version: string }>,
+  enabled: boolean
+): string {
+  if (pinned.length > 0) return pinned.map((entry) => `${entry.key} ${entry.version}`).join(", ");
+  return enabled ? "pinned on first build" : "not pinned";
 }
 
 /**
