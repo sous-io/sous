@@ -220,6 +220,7 @@ scripts/
   build-schema.mts         # emits sous.config.schema.json from the zod schema (npm run schema:build)
 sous.config.schema.json    # committed JSON Schema artifact; shipped in the npm files allowlist
 .github/workflows/
+  test.yml                 # install, type-check and run the suite on Node 20 and 22
   publish.yml              # npm trusted publishing on a v* tag (OIDC, tokenless)
   publish-recipes.yml      # pushes the core recipe to sous-io/sous-recipes after that succeeds
 docs/                      # the GitHub Pages site (sous-io.github.io/sous)
