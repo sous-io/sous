@@ -174,6 +174,25 @@ function captureStdout(fn: () => void): string[] {
 }
 ```
 
+## Self-Contained Tests
+
+A test never reads anything outside this repository, and never skips itself because
+something is missing. Every fixture is either built by the test as it runs (see
+`src/test/utils/fixture-repo.ts`) or shipped in the repository under `src/test/fixtures/`,
+so a fresh clone and a continuous integration runner behave exactly like a developer's
+machine.
+
+Two rules follow from that:
+
+- **No conditional skips for a missing dependency.** `describe.skipIf(...)` around an
+  absent directory, tool or fixture hides a failure everywhere but the one machine that
+  has it. If a test needs something, ship it; if it cannot be shipped, the test does not
+  belong in `npm test`.
+- **Nothing reaches the user's home directory.** A test that boots the real CLI copies
+  what it needs into a temp directory and sets `SOUS_HOME` to a directory inside it, so
+  the machine-wide store and index cache the CLI writes stay in the temp tree. A spec that
+  only computes a path from `os.homedir()` is fine; reading or writing there is not.
+
 ## Hard-Won Gotchas
 
 - Watch tests that assert on `chokidar.watch` call counts must call

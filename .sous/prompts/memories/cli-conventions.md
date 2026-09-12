@@ -68,3 +68,13 @@ holds the mechanism, use it rather than building a second one beside it.
   a prompt answers to are named by a legend under the input line, built with `keysHelpTip`, in the
   style `@inquirer/select` uses (`↑↓ navigate • ⏎ select • ⇥ advanced`); never a bracketed hint
   above it.
+
+## Tests
+
+A test never reads anything outside this repository, and never skips itself because
+something is missing. A fixture is either built by the test as it runs or shipped in the
+repository under `src/test/fixtures/`; a test that would otherwise reach a directory beside
+the checkout, a machine-wide store or the user's home directory copies what it needs into a
+temporary directory first, and points `SOUS_HOME` at that directory for anything the CLI
+writes for itself. A conditional skip hides a failure on every machine but one, so the whole
+suite runs the same way on a fresh clone and in continuous integration.
