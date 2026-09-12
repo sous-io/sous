@@ -14,23 +14,21 @@ import {
   type DiscoveredConfig,
 } from "./config-discovery.js";
 import { ConfigError } from "./errors.js";
+import { resolveSousHome } from "./sous-home.js";
 import { validateSettings } from "./config-schema.js";
+import { applyRepoDefaults } from "./repos/defaults.js";
+import type { RecipeConfigLayer } from "./repos/recipe-config-layers.js";
 import { warning } from "../utils/formatting.js";
 
 // Re-exported for backwards compatibility: ConfigError moved to ./errors.ts so
 // config-discovery.ts can throw it without importing this module (cycle).
 export { ConfigError, isConfigError } from "./errors.js";
 
-const __filename = fileURLToPath(import.meta.url);
-
-/** Resolved path to the cli/ package root (two levels up from src/lib/) */
-export const CLI_ROOT = path.resolve(path.dirname(__filename), "../..");
-
-/** Version string read from package.json at module load time. */
-const _pkgJson = JSON.parse(
-  fs.readFileSync(path.join(CLI_ROOT, "package.json"), "utf8")
-) as { version: string };
-export const SOUS_VERSION: string = _pkgJson.version;
+// CLI_ROOT and SOUS_VERSION live in their own module so that modules this one
+// imports can read them without importing this one back. Re-exported here under
+// the names everything already uses.
+import { CLI_ROOT, SOUS_VERSION } from "./package-info.js";
+export { CLI_ROOT, SOUS_VERSION };
 
 // --- Variable scope ------------------------------------------------------------------------------
 
@@ -82,6 +80,88 @@ type RawProjectCompilation = {
   targets: RawTarget[];
 };
 
+/**
+ * One trusted repository, keyed in `Settings.repos` by the short name refs use
+ * in their `repo:` qualifier. Adding a repo is what trusts it.
+ */
+export type RepoEntry = {
+  /** Where the repository lives. */
+  url: string;
+  /**
+   * Whether the repository takes part in anything. Defaults to true; setting it
+   * to false is how a project opts out of a repository sous provides itself,
+   * without deleting an entry it does not own.
+   */
+  enabled?: boolean;
+  /**
+   * Which provider handles it. Inferred from the URL when omitted. `local` is a
+   * repository on this machine, for local development and tests.
+   */
+  provider?: "github" | "gitlab" | "local";
+  /** Install a newer in-range version whenever one exists, rather than holding the lock. */
+  alwaysPull?: boolean;
+  /** When the repo was added. */
+  addedAt?: string;
+  /** Who required it: "user", or the ref of the recipe whose dependency pulled it in. */
+  addedBy?: string;
+};
+
+/**
+ * One subscription, keyed in `Settings.subscriptions` by a ref key: a bare
+ * namespace, or `namespace/recipe`.
+ */
+export type SubscriptionEntry = {
+  /**
+   * Whether the subscription takes part in anything. Defaults to true; setting
+   * it to false is how a project opts out of the `core` namespace sous
+   * subscribes it to.
+   */
+  enabled?: boolean;
+  /** The semantic version range to resolve within. Defaults to "*". */
+  range?: string;
+  /** Let prerelease versions take part in range matching. */
+  prerelease?: boolean;
+  /** Per-subscription form of the repo-level always-pull flag. */
+  alwaysPull?: boolean;
+  /** When the subscription was added. */
+  addedAt?: string;
+  /** Who required it: "user", or the ref of the recipe that co-subscribed it. */
+  addedBy?: string;
+};
+
+/**
+ * Knobs for the machine-wide recipe store. Defaults are applied by the store
+ * itself, not here; see config-schema.ts for the values sous ships.
+ */
+type StoreConfig = {
+  /** Size cap, past which least-recently-used entries are collected. */
+  maxBytes?: number;
+  /** How long a fetched index stays fresh before sous re-checks upstream. */
+  freshnessSeconds?: number;
+  /** How often watch mode polls upstream. */
+  watchPollSeconds?: number;
+};
+
+/**
+ * Where the files a subscribed recipe contributes are written, one list of
+ * destination directories per content kind. Each destination is `${var}`
+ * substituted like any other config path, and a kind may name several so the
+ * same recipe feeds more than one agent directory.
+ *
+ * Only `skills` has a default (`<project root>/.claude/skills`, the project root
+ * being the parent of `.sous/`). A kind with no destination is skipped, with one
+ * warning naming this config key, because sous cannot guess where a project
+ * wants its memories or its prompts.
+ */
+type RecipeOutputs = {
+  /** Where recipe skill bundles are written. */
+  skills?: string[];
+  /** Where recipe memory files are written. */
+  memories?: string[];
+  /** Where recipe prompt files are written. */
+  prompts?: string[];
+};
+
 /** Configuration for a launchable tool (e.g. claude, codex). */
 type ToolConfig = {
   /** The executable command to run. */
@@ -112,6 +192,22 @@ export type Settings = {
   compilation?: RawProjectCompilation;
   runtimeContext?: RawRuntimeContext;
   tools?: Record<string, ToolConfig>;
+  /** Trusted repositories, keyed by the short name refs use. */
+  repos?: Record<string, RepoEntry>;
+  /** Subscriptions, keyed by ref key (`namespace` or `namespace/recipe`). */
+  subscriptions?: Record<string, SubscriptionEntry>;
+  /** Knobs for the machine-wide recipe store. */
+  store?: StoreConfig;
+  /**
+   * Where the files subscribed recipes contribute are written, per content kind.
+   */
+  recipeOutputs?: RecipeOutputs;
+  /**
+   * Variable mapping records, keyed by environment variable name, each bound to
+   * one recipe variable written as `namespace/recipe/variableName` with an
+   * optional `repo:` qualifier. The top rung of the answer resolution ladder.
+   */
+  varMappings?: Record<string, string>;
 };
 
 // --- Loader -------------------------------------------------------------------------------------
@@ -172,22 +268,36 @@ export async function loadSettingsWithLayers(
   let sousDir: string;
   let confDir: string;
   let layerPaths: string[];
+  let recipeLayers: RecipeConfigLayer[];
 
   if (typeof source === "string") {
     configPath = path.resolve(source);
     sousDir = path.dirname(configPath);
     confDir = path.join(sousDir, CONFD_DIR_NAME);
     layerPaths = [configPath];
+    recipeLayers = [];
   } else {
     ({ configPath, sousDir, confDir, layerPaths } = source);
+    recipeLayers = source.recipeLayers ?? [];
   }
 
   if (!fs.existsSync(configPath)) {
     throw new Error(`Settings file not found: ${configPath}`);
   }
 
+  // A recipe layer is handed to the kernel as content, not as a path, because
+  // it has already been read and filtered down to the keys a recipe may set
+  // (see `repos/recipe-config-layers.ts`). The kernel never opens the file, so
+  // there is no second, unfiltered reading of it.
+  const recipeLayerByPath = new Map(recipeLayers.map((layer) => [layer.path, layer]));
+  const sources = layerPaths.map((layerPath) => {
+    const recipeLayer = recipeLayerByPath.get(layerPath);
+    if (recipeLayer === undefined) return layerPath;
+    return { path: recipeLayer.path, config: recipeLayer.config };
+  });
+
   const kernelInput = JSON.stringify({
-    sources: layerPaths,
+    sources,
     context: {
       sousDir,
       confDir,
@@ -236,8 +346,13 @@ export async function loadSettingsWithLayers(
       // actionable than a generic unknown-key error. validateSettings then checks
       // the MERGED config against the zod schema (version, strict keys, shapes).
       const flat = assertFlatConfig(parsed.config, configPath);
+      // The built-in repository and the implicit `core` subscription are added
+      // UNDER whatever the layers produced, and BEFORE validation, so that the
+      // shortest opt-out a project can write (`{ enabled: false }`) is a
+      // complete, valid entry once the built-in fields are underneath it. See
+      // `repos/defaults.ts`.
       return {
-        settings: validateSettings(flat, configPath),
+        settings: validateSettings(applyRepoDefaults(flat), configPath),
         layers: parsed.layers ?? [],
       };
     }
@@ -580,6 +695,10 @@ export type ConfigContext = {
  * and injected first, before _env and _vars.
  * The 'sous*' namespace is reserved — warns if user defines a var starting with 'sous'.
  *
+ * `sousHome` is resolved from `process.env` on every call rather than captured
+ * once, because `SOUS_HOME` is file-settable: `.sous/.env.local` and
+ * `.sous/.env` are loaded into `process.env` before settings resolve.
+ *
  * @param context - The discovered config location. When supplied, adds
  *   `sousDir` and `sousConfigPath` (plus `sousConfDir` when known) so configs
  *   can build paths relative to their own `.sous/` directory.
@@ -588,6 +707,7 @@ export function buildAutoVars(context?: ConfigContext): VarScope {
   return {
     sousRootPath: CLI_ROOT,
     sousVersion: SOUS_VERSION,
+    sousHome: resolveSousHome(),
     ...(context !== undefined && {
       sousDir: context.sousDir,
       sousConfigPath: context.configPath,
@@ -654,17 +774,19 @@ export function resolveRootScope(settings: Settings, context?: ConfigContext): V
 /**
  * Built-in `@include` aliases, always available and reserved (their names begin
  * with `~` so user `_aliases` can never shadow them). Add new entries here as
- * needed — keep names kebab-case.
+ * needed; keep names kebab-case.
  *
- * - `~sous-shared` → the Sous CLI's `shared-prompts` directory (the only dir
- *   downstream projects consume; path into it, e.g. `@~sous-shared/skills/...`).
- * - `~project`     → the consuming project's root (`projectRoot`).
+ * - `~project` → the consuming project's root (`projectRoot`).
+ *
+ * There is exactly one, on purpose. Files that used to be reached through a
+ * built-in alias pointing inside the sous package are published as recipes now,
+ * and a recipe's files are addressed by its namespace (`@~workflow/task-files/
+ * _partials/resume-task.md`), resolved against what the project has pinned. A
+ * `~namespace` reference is NOT an alias: it is resolved separately, after the
+ * alias map has been tried; see `locked-namespace-resolver.ts`.
  */
 export function buildBuiltInAliases(scope: VarScope): AliasMap {
-  const sousRoot = scope.sousRootPath ?? CLI_ROOT;
-  const builtIns: AliasMap = {
-    "~sous-shared": [path.join(sousRoot, "shared-prompts")],
-  };
+  const builtIns: AliasMap = {};
   if (scope.projectRoot) builtIns["~project"] = [scope.projectRoot];
   return builtIns;
 }
@@ -832,7 +954,7 @@ export function resolveCompilation(
 
       /* c8 ignore start */
       // Glob target: expand pattern into one CompilationTarget per matched file, skipping dirs.
-      // A leading alias (`~sous-shared/skills/**`) expands to one candidate pattern per alias
+      // A leading alias (`~project/skills/**`) expands to one candidate pattern per alias
       // base; the first base that matches any files wins, mirroring the first-existing-wins
       // rule of @include resolution.
       const rawPattern = substituteVarsStrict(target.entryGlob!, targetScope, `${where}.entryGlob`);

@@ -1,8 +1,9 @@
 import path from "node:path";
+import type { NamespaceResolution, NamespaceResolver } from "./repos/namespace-resolver.js";
 
 /**
- * @include path resolution: aliases, variable substitution, and the ordered
- * candidate search.
+ * @include path resolution: aliases, recipe namespaces, variable substitution,
+ * and the ordered candidate search.
  *
  * An include path (the part after `@`) is resolved to an ordered list of
  * candidate absolute paths. The caller tries each in order and uses the first
@@ -14,10 +15,18 @@ import path from "node:path";
  *   2. Split the first segment (up to the first `/` or `:`) as the alias key,
  *      the remainder as `rest`. If the key is a registered alias, push
  *      join(base, rest) for EACH base in the alias's ordered array.
- *   3. Always push the relative candidate: join(baseDir, P) — the FULL path
+ *   3. If the key begins with `~` and a namespace resolver was supplied, ask it
+ *      for the recipe namespace named by the key (minus the `~`) and push its
+ *      candidates. Aliases are consulted first, so `~project` keeps meaning
+ *      the built-in alias even if a namespace of that name exists.
+ *   4. Always push the relative candidate: join(baseDir, P) — the FULL path
  *      including the alias segment. This lets an alias augment a real relative
  *      directory of the same name (e.g. `@stuff/x` tries the alias bases, then
  *      `./stuff/x`).
+ *
+ * A key WITHOUT the `~` sigil never reaches the namespace resolver: a bare
+ * `@path` is always a relative path or a declared alias, so include lines never
+ * masquerade as filesystem paths.
  *
  * Aliases whose names begin with `~` are reserved for built-ins; user aliases
  * may not use that prefix. The primary separator is `/` (TS-style,
@@ -52,29 +61,69 @@ export function splitAliasKey(p: string): { key: string; rest: string } {
   return { key: m[1], rest: m[2] };
 }
 
+/** Options shared by {@link resolveInclude} and {@link resolveIncludeCandidates}. */
+export type IncludeResolveOptions = {
+  /** The resolved alias map (name → ordered base dirs). */
+  aliases?: AliasMap;
+  /** Variable scope for ${var} substitution. */
+  scope?: Record<string, string>;
+  /** Directory of the including file (for the relative candidate). */
+  baseDir: string;
+  /** Resolver consulted for a `~namespace` first segment; omitted means namespaces are unavailable. */
+  namespaceResolver?: NamespaceResolver;
+  /**
+   * Absolute path of the including file, handed to the namespace resolver so it
+   * can tell whether the include comes from inside a recipe. Defaults to
+   * `baseDir` for callers that only know the directory.
+   */
+  fromFile?: string;
+};
+
+/** A namespace lookup that produced no usable candidates, kept for error reporting. */
+export type NamespaceIssue = {
+  /** The namespace that was asked for, without its `~` sigil. */
+  namespace: string;
+  /** The remainder of the reference (recipe name plus the path inside it). */
+  rest: string;
+  /** The file (or directory) that performed the include. */
+  fromFile: string;
+  /** What the resolver returned. */
+  resolution: NamespaceResolution;
+};
+
+/** The full result of resolving one include path. */
+export type IncludeResolution = {
+  /** Ordered, de-duplicated absolute candidate paths. */
+  candidates: string[];
+  /**
+   * Present when the first segment named a `~namespace` that the resolver could
+   * not satisfy. The candidate list is still usable (it holds the alias and
+   * relative fallbacks); this only explains what went wrong with the namespace.
+   */
+  namespaceIssue?: NamespaceIssue;
+};
+
 /**
- * Compute the ordered list of candidate absolute paths for an include.
+ * Resolve an include path to its ordered candidates plus any namespace
+ * diagnostic. Use this when the caller wants to report WHY a `~namespace`
+ * reference failed; {@link resolveIncludeCandidates} is the plain-list form.
  *
  * @param rawPath - The include path with the leading `@` already stripped.
- * @param opts.aliases - The resolved alias map (name → ordered base dirs).
- * @param opts.scope - Variable scope for ${var} substitution.
- * @param opts.baseDir - Directory of the including file (for the relative candidate).
- * @returns Ordered, de-duplicated absolute candidate paths.
+ * @param opts - Aliases, variable scope, including directory and optional namespace resolver.
+ * @returns The candidate list and, when a namespace lookup failed, the reason.
  */
-export function resolveIncludeCandidates(
-  rawPath: string,
-  opts: { aliases?: AliasMap; scope?: Record<string, string>; baseDir: string }
-): string[] {
+export function resolveInclude(rawPath: string, opts: IncludeResolveOptions): IncludeResolution {
   const aliases = opts.aliases ?? {};
   const scope = opts.scope ?? {};
   const substituted = substituteVars(rawPath, scope);
 
   // 1. Substituted to an absolute path → that is the only candidate.
   if (path.isAbsolute(substituted)) {
-    return [path.normalize(substituted)];
+    return { candidates: [path.normalize(substituted)] };
   }
 
   const candidates: string[] = [];
+  let namespaceIssue: NamespaceIssue | undefined;
 
   // 2. Alias bases (ordered), if the first segment is a registered alias.
   const { key, rest } = splitAliasKey(substituted);
@@ -84,11 +133,37 @@ export function resolveIncludeCandidates(
     }
   }
 
-  // 3. Relative fallback: the FULL substituted path under the including dir.
+  // 3. Recipe namespace, only for a `~`-sigil key naming something after it.
+  //    Aliases above already had their turn, so a built-in or user alias of the
+  //    same name is always preferred.
+  if (opts.namespaceResolver && key.startsWith("~") && key.length > 1 && rest.length > 0) {
+    const namespace = key.slice(1);
+    const fromFile = opts.fromFile ?? opts.baseDir;
+    const resolution = opts.namespaceResolver.resolve({ namespace, rest, fromFile });
+
+    if (resolution.kind === "candidates" && resolution.candidates.length > 0) {
+      candidates.push(...resolution.candidates.map((c) => path.normalize(c)));
+    } else {
+      namespaceIssue = { namespace, rest, fromFile, resolution };
+    }
+  }
+
+  // 4. Relative fallback: the FULL substituted path under the including dir.
   candidates.push(path.resolve(opts.baseDir, substituted));
 
   // De-dupe, preserving order.
-  return [...new Set(candidates)];
+  return { candidates: [...new Set(candidates)], namespaceIssue };
+}
+
+/**
+ * Compute the ordered list of candidate absolute paths for an include.
+ *
+ * @param rawPath - The include path with the leading `@` already stripped.
+ * @param opts - Aliases, variable scope, including directory and optional namespace resolver.
+ * @returns Ordered, de-duplicated absolute candidate paths.
+ */
+export function resolveIncludeCandidates(rawPath: string, opts: IncludeResolveOptions): string[] {
+  return resolveInclude(rawPath, opts).candidates;
 }
 
 /**

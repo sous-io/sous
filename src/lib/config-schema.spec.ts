@@ -185,6 +185,118 @@ describe("validateSettings", () => {
     });
   });
 
+  describe("Repositories keys", () => {
+    /**
+     * A config carrying trusted repos, subscriptions and store knobs validates,
+     * whether the entries were hand-written or written into a conf.d layer by
+     * `sous repo add` and `sous subscribe`.
+     */
+    it("accepts repos, subscriptions and store together", () => {
+      const raw = {
+        repos: {
+          "sous-recipes": {
+            url: "https://github.com/sous-io/sous-recipes",
+            provider: "github",
+            alwaysPull: false,
+            addedAt: "2026-09-09T14:03:11.482Z",
+            addedBy: "user",
+          },
+        },
+        subscriptions: {
+          core: { range: "*", prerelease: false },
+          "workflow/task-files": {
+            range: "^1.2.0",
+            prerelease: true,
+            alwaysPull: true,
+            addedAt: "2026-09-09T14:03:11.482Z",
+            addedBy: "user",
+          },
+        },
+        store: { maxBytes: 1073741824, freshnessSeconds: 300, watchPollSeconds: 300 },
+      };
+      expect(validateSettings(raw, CONFIG_PATH)).toEqual(raw);
+    });
+
+    /**
+     * All three keys are optional; a project that uses no repositories is a
+     * perfectly valid config.
+     */
+    it("accepts a config with none of them", () => {
+      expect(validateSettings({ name: "No repos here" }, CONFIG_PATH)).toEqual({
+        name: "No repos here",
+      });
+    });
+
+    /** A repo entry needs somewhere to fetch from. */
+    it("requires a url on a repo entry", () => {
+      expect(expectRejectMessage({ repos: { "sous-recipes": {} } })).toContain(
+        "repos.sous-recipes.url"
+      );
+      expect(
+        expectRejectMessage({ repos: { "sous-recipes": { url: "sous-io/sous-recipes" } } })
+      ).toContain("repos.sous-recipes.url");
+    });
+
+    /**
+     * Repo keys are the short names refs use in their `repo:` qualifier, so a
+     * key that could never appear in a ref is rejected in plain language.
+     */
+    it("rejects a repo key that is not a usable short name", () => {
+      const message = expectRejectMessage({
+        repos: { "Sous Recipes": { url: "https://example.com/x" } },
+      });
+      expect(message).toContain("invalid key; a repo name must be lowercase kebab-case");
+      expect(message).not.toContain("Invalid key in record");
+    });
+
+    /**
+     * A subscription key is a ref key: a namespace, or a namespace and recipe.
+     * A repo qualifier or a version range in the key is a mistake, since the
+     * range belongs in the entry.
+     */
+    it("rejects a subscription key carrying a qualifier or a range", () => {
+      expect(
+        expectRejectMessage({ subscriptions: { "sous-recipes:workflow": {} } })
+      ).toContain("a subscription key must be a namespace");
+      expect(
+        expectRejectMessage({ subscriptions: { "workflow/task-files@^1.0.0": {} } })
+      ).toContain("a subscription key must be a namespace");
+    });
+
+    /** The range is a semantic version range, checked with npm's own rules. */
+    it("rejects a subscription range that is not a range", () => {
+      expect(
+        expectRejectMessage({ subscriptions: { "workflow/task-files": { range: "latest" } } })
+      ).toContain("subscriptions.workflow/task-files.range");
+    });
+
+    /** Store knobs are whole numbers, and a zero-byte cap is not a cap. */
+    it("rejects nonsense store knobs", () => {
+      expect(expectRejectMessage({ store: { maxBytes: 0 } })).toContain("store.maxBytes");
+      expect(expectRejectMessage({ store: { freshnessSeconds: -1 } })).toContain(
+        "store.freshnessSeconds"
+      );
+      expect(expectRejectMessage({ store: { watchPollSeconds: 1.5 } })).toContain(
+        "store.watchPollSeconds"
+      );
+    });
+
+    /** Unknown keys inside these sections are typos, like everywhere else. */
+    it("rejects unknown keys inside a repo, subscription or store entry", () => {
+      expect(
+        expectRejectMessage({
+          repos: { "sous-recipes": { url: "https://example.com/x", trusted: true } },
+        })
+      ).toContain("unknown key(s) 'trusted'");
+      expect(
+        expectRejectMessage({ subscriptions: { workflow: { pinned: "1.0.0" } } })
+      ).toContain("unknown key(s) 'pinned'");
+      expect(expectRejectMessage({ store: { maxSize: 10 } })).toContain(
+        "unknown key(s) 'maxSize'"
+      );
+    });
+  });
+
   it("exposes the zod schema object for the schema:build artifact", () => {
     // settingsSchema must be a parseable zod schema (used by scripts/build-schema.mts).
     expect(settingsSchema.safeParse({}).success).toBe(true);

@@ -2,7 +2,7 @@ import { styleText } from "node:util";
 import { ConfigError } from "./errors.js";
 
 /**
- * Shared helpers for the `xcv config *` inspection commands: dot-path lookup
+ * Shared helpers for the `sous config *` inspection commands: dot-path lookup
  * with `[n]` array indexing, colorized pretty-JSON rendering, and value
  * truncation for the `--layers` provenance view.
  */

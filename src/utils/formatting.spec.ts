@@ -8,9 +8,13 @@ import {
   footer,
   dump,
   heading,
+  section,
   subheading,
-  showVar,
-  showVars,
+  showVariable,
+  showVariables,
+  formatVariable,
+  withErrorPrefix,
+  keysHelpTip,
   showCount,
   showCommandVars,
   scanStatus,
@@ -18,6 +22,9 @@ import {
   displayError,
   dryRunNotice,
   warning,
+  wrapText,
+  terminalColumns,
+  DEFAULT_WRAP_COLUMNS,
 } from "./formatting.js";
 
 // Strip ANSI escape codes so we can assert on plain text
@@ -279,6 +286,38 @@ describe("heading()", () => {
   });
 });
 
+// ---- section --------------------------------------------------------------------------------
+
+describe("section()", () => {
+  /**
+   * section() should write the same heading line heading() does, so switching a
+   * command over to it changes the spacing and nothing else.
+   *
+   * section("Adding a repository");
+   * // output contains "▶ Adding a repository:"
+   */
+  it("should write the heading line", () => {
+    const joined = captureLog(() => section("Adding a repository")).join("\n");
+    expect(joined).toContain("▶");
+    expect(joined).toContain("Adding a repository:");
+  });
+
+  /**
+   * section() should leave a blank line under the heading, which is the whole
+   * point of it: the content below a heading never sits pressed against it.
+   *
+   * section("Adding a repository");
+   * // last line is blank
+   */
+  it("should leave a blank line under the heading", () => {
+    const headingLines = captureLog(() => heading("Adding a repository"));
+    const sectionLines = captureLog(() => section("Adding a repository"));
+
+    expect(sectionLines).toHaveLength(headingLines.length + 1);
+    expect(sectionLines.at(-1)?.trim()).toBe("");
+  });
+});
+
 // ---- subheading -----------------------------------------------------------------------------
 
 describe("subheading()", () => {
@@ -321,42 +360,42 @@ describe("subheading()", () => {
 
 // ---- showVar --------------------------------------------------------------------------------
 
-describe("showVar()", () => {
+describe("showVariable()", () => {
   /**
-   * showVar() should print both the variable name and its value to the console.
+   * showVariable() should print both the variable name and its value to the console.
    *
-   * showVar("Config", "./my-config.js");
+   * showVariable("Config", "./my-config.js");
    * // output contains "Config" and "./my-config.js"
    */
   it("should include both the name and value in output", () => {
-    const joined = captureLog(() => showVar("Config", "./my-config.js")).join("\n");
+    const joined = captureLog(() => showVariable("Config", "./my-config.js")).join("\n");
     expect(joined).toContain("Config");
     expect(joined).toContain("./my-config.js");
   });
 
   /**
-   * showVar() should separate the name and value with a colon.
+   * showVariable() should separate the name and value with a colon.
    *
-   * showVar("Strict", "false");
+   * showVariable("Strict", "false");
    * // output matches /Strict\s*:\s*false/
    */
   it("should separate name and value with a colon", () => {
-    const lines = captureLog(() => showVar("Strict", "false"));
+    const lines = captureLog(() => showVariable("Strict", "false"));
     expect(lines.join("\n")).toMatch(/Strict\s*:\s*false/);
   });
 });
 
-// ---- showVars -------------------------------------------------------------------------------
+// ---- showVariables -------------------------------------------------------------------------------
 
-describe("showVars()", () => {
+describe("showVariables()", () => {
   /**
-   * showVars() should print every key-value pair in the provided object.
+   * showVariables() should print every key-value pair in the provided object.
    *
-   * showVars({ Config: "./cfg.js", Strict: "true" });
+   * showVariables({ Config: "./cfg.js", Strict: "true" });
    * // output contains "Config", "./cfg.js", "Strict", "true"
    */
   it("should output all keys and values", () => {
-    const joined = captureLog(() => showVars({ Config: "./cfg.js", Strict: "true" })).join("\n");
+    const joined = captureLog(() => showVariables({ Config: "./cfg.js", Strict: "true" })).join("\n");
     expect(joined).toContain("Config");
     expect(joined).toContain("./cfg.js");
     expect(joined).toContain("Strict");
@@ -566,6 +605,34 @@ describe("showCommandVars()", () => {
     expect(joined).toContain("Port");
     expect(joined).toContain("3000");
   });
+
+  /**
+   * showCommandVars() should omit the "Dry Run" line entirely when dry-run mode
+   * is off, since a "false" value there is just noise.
+   *
+   * showCommandVars({ Env: "production", "Dry Run": false });
+   * // output does not contain "Dry Run"
+   */
+  it("should omit the 'Dry Run' line when its value is false", () => {
+    const joined = captureLog(() =>
+      showCommandVars({ Env: "production", "Dry Run": false })
+    ).join("\n");
+    expect(joined).toContain("Env");
+    expect(joined).not.toContain("Dry Run");
+  });
+
+  /**
+   * showCommandVars() should include the "Dry Run" line when dry-run mode is on.
+   *
+   * showCommandVars({ Env: "production", "Dry Run": true });
+   * // output contains "Dry Run"
+   */
+  it("should include the 'Dry Run' line when its value is true", () => {
+    const joined = captureLog(() =>
+      showCommandVars({ Env: "production", "Dry Run": true })
+    ).join("\n");
+    expect(joined).toContain("Dry Run");
+  });
 });
 
 // ---- scanStatus -----------------------------------------------------------------------------
@@ -599,5 +666,179 @@ describe("deleteStatus()", () => {
     const joined = captureStdout(() => deleteStatus(7, 20)).join("");
     expect(joined).toContain("7");
     expect(joined).toContain("20");
+  });
+});
+
+// ---- wrapText -------------------------------------------------------------------------------
+
+describe("wrapText()", () => {
+  /**
+   * wrapText() should break a paragraph on spaces at the given width, never
+   * inside a word, and never leave a line longer than the width unless one word
+   * is longer than the width on its own.
+   *
+   * wrapText("one two three", 7, { hangingIndent: 0 });
+   * // -> ["one two", "three"]
+   */
+  it("should wrap a paragraph on spaces at the given width", () => {
+    expect(wrapText("one two three", 7, { hangingIndent: 0 })).toEqual(["one two", "three"]);
+  });
+
+  /**
+   * A continuation line should hang two spaces past the line it continues, so a
+   * wrapped sentence reads as one paragraph rather than as several.
+   *
+   * wrapText("one two three", 7);
+   * // -> ["one two", "  three"]
+   */
+  it("should hang continuation lines two spaces by default", () => {
+    expect(wrapText("one two three", 7)).toEqual(["one two", "  three"]);
+  });
+
+  /**
+   * A line that arrives already indented should keep its indentation, and its
+   * continuation lines should hang inside it rather than at the left margin.
+   *
+   * wrapText("    one two three", 11);
+   * // -> ["    one two", "      three"]
+   */
+  it("should keep the indentation a line arrived with", () => {
+    expect(wrapText("    one two three", 11)).toEqual(["    one two", "      three"]);
+  });
+
+  /**
+   * A word longer than the width should be left whole on its own line, since
+   * half a URL is less useful than a long line.
+   *
+   * wrapText("see https://example.com/a/very/long/path now", 10, { hangingIndent: 0 });
+   * // -> ["see", "https://example.com/a/very/long/path", "now"]
+   */
+  it("should leave a word longer than the width whole", () => {
+    const lines = wrapText("see https://example.com/a/very/long/path now", 10, {
+      hangingIndent: 0,
+    });
+    expect(lines).toEqual(["see", "https://example.com/a/very/long/path", "now"]);
+  });
+
+  /**
+   * Newlines already in the text should be honored: each line wraps on its own,
+   * so a deliberate paragraph break survives.
+   *
+   * wrapText("a b\nc d", 3);
+   * // -> ["a b", "c d"]
+   */
+  it("should wrap each existing line on its own", () => {
+    expect(wrapText("a b\nc d", 3)).toEqual(["a b", "c d"]);
+  });
+
+  /**
+   * Width should be measured with the color codes taken out, so a colored word
+   * is counted by what a reader sees rather than by what the escapes add.
+   */
+  it("should measure width without the color escapes", () => {
+    const colored = `[36mone[39m two`;
+    expect(wrapText(colored, 7, { hangingIndent: 0 })).toEqual([colored]);
+  });
+});
+
+// ---- formatVariable -------------------------------------------------------------------------
+
+describe("formatVariable()", () => {
+  /**
+   * formatVariable() should indent by four, pad the label to the given width and
+   * put the colon after it, so every key and value block lines up the same way.
+   *
+   * formatVariable({ label: "Repo", value: "qa" }, { labelWidth: 8 });
+   * // -> ["    Repo    : qa"]
+   */
+  it("should indent by four and align the colon", () => {
+    const lines = formatVariable({ label: "Repo", value: "qa" }, { labelWidth: 8 }).map(strip);
+    expect(lines).toEqual(["    Repo    : qa"]);
+  });
+
+  /**
+   * A trailing detail should follow the value rather than being wrapped in
+   * parentheses, so the value stays the thing the eye lands on.
+   */
+  it("should write a detail after the value", () => {
+    const lines = formatVariable(
+      { label: "required-by", value: "core/sous-skills", detail: "https://example.com/x" },
+      { labelWidth: 11 },
+    ).map(strip);
+    expect(lines).toEqual(["    required-by: core/sous-skills https://example.com/x"]);
+  });
+
+  /**
+   * A value too long for the line should wrap under the value column, never
+   * under the label.
+   */
+  it("should hang a wrapped value under the value column", () => {
+    const lines = formatVariable(
+      { label: "About", value: "one two three four five six" },
+      { labelWidth: 5, width: 30 },
+    ).map(strip);
+    expect(lines[0]).toBe("    About: one two three four");
+    expect(lines[1]).toBe("           five six");
+  });
+
+  /**
+   * An empty label means "the same label as the line above, continued": the
+   * label column and its colon are left blank.
+   */
+  it("should leave the label column blank for a continuation", () => {
+    const lines = formatVariable({ label: "", value: "second" }, { labelWidth: 5 }).map(strip);
+    expect(lines).toEqual(["           second"]);
+  });
+});
+
+// ---- withErrorPrefix ------------------------------------------------------------------------
+
+describe("withErrorPrefix()", () => {
+  /**
+   * withErrorPrefix() should add the literal "Error: " so an error is findable
+   * when the output has no color at all.
+   */
+  it("should add the prefix to a plain message", () => {
+    expect(withErrorPrefix("Something broke.")).toBe("Error: Something broke.");
+  });
+
+  /**
+   * A message that already says it is an error should not be made to say it
+   * twice.
+   */
+  it("should not double an existing prefix", () => {
+    expect(withErrorPrefix("Error: Something broke.")).toBe("Error: Something broke.");
+  });
+});
+
+// ---- keysHelpTip ----------------------------------------------------------------------------
+
+describe("keysHelpTip()", () => {
+  /**
+   * keysHelpTip() should render the key and action pairs in the style the stock
+   * select prompt uses: the key, its action beside it, pairs joined by a bullet.
+   */
+  it("should join the key and action pairs with a bullet", () => {
+    expect(strip(keysHelpTip([["↑↓", "navigate"], ["⏎", "select"]]))).toBe(
+      "↑↓ navigate • ⏎ select",
+    );
+  });
+});
+
+// ---- terminalColumns ------------------------------------------------------------------------
+
+describe("terminalColumns()", () => {
+  /**
+   * terminalColumns() should report the stream's own width when it has one, and
+   * fall back to the documented default when it does not, so a piped run always
+   * wraps the same way.
+   *
+   * terminalColumns({ columns: 60 });  // -> 60
+   * terminalColumns({});               // -> 100
+   */
+  it("should use the stream width when there is one and the default otherwise", () => {
+    expect(terminalColumns({ columns: 60 })).toBe(60);
+    expect(terminalColumns({})).toBe(DEFAULT_WRAP_COLUMNS);
+    expect(terminalColumns({ columns: 0 })).toBe(DEFAULT_WRAP_COLUMNS);
   });
 });

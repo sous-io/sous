@@ -1,23 +1,207 @@
-name: Publish to npm
+name: Release
 
-# Publishing a version = pushing a v* tag (`git tag v0.1.2 && git push origin
-# v0.1.2`). Creating a GitHub Release with a NEW tag also works (that creates
-# and pushes the tag); a Release on an existing tag re-publishes nothing.
+# WHAT THIS IS
+#
+# One workflow, three jobs, run in order: work out the version, publish it to
+# npm, then publish the matching core recipe to the recipe repository.
+#
+# Every merge to main releases. There is no separate "cut a release" step and
+# nothing to remember: the version job raises the patch number, writes it into
+# package.json, package-lock.json and the packaged core recipe, commits that as
+# "chore: release v<version> [skip ci]", and creates the annotated tag
+# v<version>. The tag is a RECORD of what was published. Nothing triggers on it.
+#
+# A minor or a major release is a version edit inside an ordinary pull request:
+# set package.json to the version you want, and merge. See the "already
+# versioned" rule in the version job below.
+#
+# THE FILE NAME IS LOAD-BEARING
+#
+# npm's trusted publishing binds this repository's publishing rights to the
+# workflow FILE `publish.yml` (configured on npmjs.com under the package's
+# Settings, then Trusted publishing: org `sous-io`, repo `sous`, workflow
+# `publish.yml`). Renaming this file breaks publishing until someone updates
+# that setting by hand. The display name above is free to change; the file name
+# is not.
+#
+# WHAT YOU HAVE TO SET UP BY HAND
+#
+# One repository secret, `SOUS_RECIPES_DEPLOY_KEY`: the PRIVATE half of an SSH
+# key pair whose public half is installed on `sous-io/sous-recipes` as a deploy
+# key WITH write access. Nothing here can create that for you.
+
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
+  # A manual re-run. With a tag, the version job is skipped and the publish and
+  # recipes jobs run again for a version that was already committed and tagged,
+  # which is how a run that failed after tagging is finished off. With no tag,
+  # this releases whatever main holds now, exactly as a merge would.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "An existing tag (v1.2.3) to publish again. Leave empty to release main."
+        required: false
+        type: string
+
+# Two releases must never interleave: they would race for the patch number and
+# for the tag. A second run waits for the first to finish rather than being
+# cancelled, because cancelling one halfway leaves a tag with no published
+# package behind it.
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
+  version:
+    name: Work out the version and tag it
+    runs-on: ubuntu-latest
+
+    # THE LOOP GUARD. This workflow pushes a commit to main, and that push would
+    # start this workflow again, forever. The release commit carries both
+    # "[skip ci]" and "chore: release" in its message, and a run whose head
+    # commit says either of those stops here. GitHub's own "[skip ci]" handling
+    # is not relied on alone, because it does not cover every trigger.
+    #
+    # The `inputs.tag == ''` test is the other half: a manual re-run FOR AN
+    # EXISTING TAG must not invent a new version, so it skips straight to
+    # publishing. On a push, `inputs.tag` is null, which compares equal to ''.
+    if: >-
+      inputs.tag == '' &&
+      !contains(github.event.head_commit.message, '[skip ci]') &&
+      !contains(github.event.head_commit.message, 'chore: release')
+
+    permissions:
+      # The release commit and its tag are pushed back to main.
+      contents: write
+
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      tag: ${{ steps.resolve.outputs.tag }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Every tag, so "has this version been released already?" can be
+          # answered locally.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # tsx, and the modules the version-sync script imports.
+      - run: npm ci
+
+      # THE "ALREADY VERSIONED" RULE. If package.json names a version that has
+      # no tag yet, somebody set it deliberately in the pull request being
+      # merged, and that is the version this release publishes, untouched. That
+      # is how a minor or a major release is cut. Otherwise the version in
+      # package.json is one that already shipped, so this merge is an ordinary
+      # change and gets the next patch.
+      - name: Work out the version this release publishes
+        id: resolve
+        run: |
+          set -euo pipefail
+          current="$(node -p "require('./package.json').version")"
+
+          if git rev-parse -q --verify "refs/tags/v$current" > /dev/null; then
+            echo "Version $current has already been released; taking the next patch."
+            npm version --no-git-tag-version patch > /dev/null
+            version="$(node -p "require('./package.json').version")"
+          else
+            echo "Version $current was set by hand and has never been released; publishing it as it is."
+            version="$current"
+          fi
+
+          if git rev-parse -q --verify "refs/tags/v$version" > /dev/null; then
+            echo "The tag v$version already exists, so this release has nothing new to publish."
+            echo "Re-run this workflow with that tag as its input to publish it again."
+            exit 1
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "This release publishes sous $version, tagged v$version."
+
+      # Version parity: the packaged core recipe's version is always exactly the
+      # package's version, because every project's implicit `core` subscription
+      # asks for exactly the running sous version. Bumping one without the other
+      # is a hard test failure (src/lib/repos/core-recipe.spec.ts), so the two
+      # are bumped in the same commit, here.
+      - name: Put the packaged core recipe at the same version
+        run: npm run version:sync
+
+      - name: Commit the release and cut its tag
+        env:
+          VERSION: ${{ steps.resolve.outputs.version }}
+          TAG: ${{ steps.resolve.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name "sous release"
+          git config user.email "sous-release@users.noreply.github.com"
+
+          git add package.json package-lock.json recipes/core/sous-skills/sous.recipe.yaml
+
+          if git diff --cached --quiet; then
+            echo "Nothing changed; this version was already written into the tree."
+          else
+            git commit -m "chore: release v$VERSION [skip ci]"
+            echo "Committed the release of v$VERSION."
+          fi
+
+          git tag -a "$TAG" -m "sous $VERSION"
+          git push origin HEAD:main
+          git push origin "$TAG"
+          echo "Pushed the release commit and the tag $TAG."
+
   publish:
+    name: Publish to npm
+    needs: version
+    # Runs for a fresh version the job above just tagged, or for the tag a
+    # manual re-run named. `always()` is what lets it run when the version job
+    # was SKIPPED (the re-run case) while still standing down when that job
+    # actually failed.
+    if: >-
+      always() &&
+      needs.version.result != 'failure' &&
+      needs.version.result != 'cancelled' &&
+      (needs.version.outputs.tag != '' || inputs.tag != '')
+
     # Trusted publishing requires a GitHub-hosted runner.
     runs-on: ubuntu-latest
+
     permissions:
       # Lets the job mint the OIDC token that npm exchanges for publish access.
       id-token: write
       contents: read
+
+    outputs:
+      version: ${{ steps.target.outputs.version }}
+      tag: ${{ steps.target.outputs.tag }}
+
     steps:
+      - name: Work out which tag this run publishes
+        id: target
+        env:
+          # The manual input wins; otherwise it is the tag the version job cut.
+          TAG: ${{ inputs.tag || needs.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          case "$TAG" in
+            v*) ;;
+            *) echo "'$TAG' is not a release tag; a release tag looks like v1.2.3."; exit 1 ;;
+          esac
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "Publishing the tag $TAG."
+
+      # The tag, not the branch, so what is published is exactly what was
+      # tagged even if main has moved on.
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.target.outputs.tag }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -27,3 +211,153 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm publish
+
+  recipes:
+    name: Publish the core recipe
+    needs: publish
+    runs-on: ubuntu-latest
+
+    # This job only reads its own repository; everything it writes goes to the
+    # other repository over SSH, using the deploy key. It never needs an OIDC
+    # token, and it must not have one: the recipe repository's write key and the
+    # npm publishing token stay in separate jobs.
+    permissions:
+      contents: read
+
+    env:
+      TAG: ${{ needs.publish.outputs.tag }}
+      VERSION: ${{ needs.publish.outputs.version }}
+
+    steps:
+      # THE RULE THIS JOB EXISTS FOR
+      #
+      # The `core` namespace lives in two places, and they must never disagree.
+      #
+      #   1. Inside this package, at `recipes/core/sous-skills/`. That copy is
+      #      the source of truth, and it seeds a machine's store so a fresh,
+      #      offline install still has the core skills.
+      #   2. In `sous-io/sous-recipes`, which is machine-written distribution
+      #      output, and what an online project resolves and pins like any other
+      #      recipe.
+      #
+      # The core recipe's version is always exactly the version of the sous
+      # package that ships it, and every project's implicit `core` subscription
+      # asks for exactly the running sous version. So the moment a version of
+      # sous reaches npm, the same version of the core recipe has to appear in
+      # the recipe repository, or a project on the new sous has nothing to
+      # resolve.
+      - name: Check out sous at the published tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.publish.outputs.tag }}
+          path: sous
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # Version parity is a hard rule, and this is the last place it can be
+      # caught. A mismatch means the package was released without its core
+      # recipe being bumped alongside it, which would leave every project on the
+      # new sous unable to resolve the core namespace. Fail loudly rather than
+      # publishing something wrong.
+      - name: Check that the core recipe matches the published version
+        run: |
+          set -euo pipefail
+          manifest="sous/recipes/core/sous-skills/sous.recipe.yaml"
+          # The `xargs` with no command is the usual shell way to trim spaces and
+          # strip any surrounding quotes from a single value.
+          recipe_version="$(sed -n 's/^version:[[:space:]]*//p' "$manifest" | head -1 | xargs)"
+          if [ "$recipe_version" != "$VERSION" ]; then
+            echo "The core recipe says version $recipe_version, but sous $VERSION was published."
+            echo "These two versions have to match exactly. Run 'npm run version:sync' and"
+            echo "commit what it writes."
+            exit 1
+          fi
+          echo "The core recipe is at $recipe_version, which matches."
+
+      # The deploy key is written to a file rather than loaded into an ssh-agent,
+      # because an agent's environment does not survive from one step to the
+      # next; GIT_SSH_COMMAND does. The host key is pinned by scanning it once,
+      # so git never has to be told to trust an unknown host.
+      - name: Give git the deploy key for the recipe repository
+        env:
+          DEPLOY_KEY: ${{ secrets.SOUS_RECIPES_DEPLOY_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DEPLOY_KEY:-}" ]; then
+            echo "The secret SOUS_RECIPES_DEPLOY_KEY is not set on this repository."
+            echo "It must hold the private half of an SSH key whose public half is installed"
+            echo "on sous-io/sous-recipes as a deploy key with write access."
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/sous_recipes_deploy_key
+          chmod 600 ~/.ssh/sous_recipes_deploy_key
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+          echo "GIT_SSH_COMMAND=ssh -i ~/.ssh/sous_recipes_deploy_key -o IdentitiesOnly=yes" >> "$GITHUB_ENV"
+
+      - name: Check out the recipe repository
+        run: |
+          set -euo pipefail
+          git clone --branch main git@github.com:sous-io/sous-recipes.git recipes
+          cd recipes
+          git config user.name "sous release"
+          git config user.email "sous-release@users.noreply.github.com"
+
+      # The packaged copy wins outright. Anything that was in the repository's
+      # copy and is not in the package's is distribution output that no longer
+      # belongs there, so the folder is replaced rather than merged.
+      #
+      # The copy is committed HERE, before the release runs, because a release
+      # refuses to run against a dirty working tree: a tag names one commit, so
+      # everything it publishes has to be in one. When the recipe is unchanged
+      # this is a re-run of a release that already happened, and there is simply
+      # nothing to commit.
+      - name: Copy the packaged core recipe over the published one and commit it
+        working-directory: recipes
+        run: |
+          set -euo pipefail
+          rm -rf recipes/core/sous-skills
+          mkdir -p recipes/core
+          cp -R ../sous/recipes/core/sous-skills recipes/core/sous-skills
+          git add recipes/core/sous-skills
+          if git diff --cached --quiet; then
+            echo "The repository already holds this version of the core recipe."
+          else
+            git commit -m "Publish core/sous-skills $VERSION
+
+          Machine-written by the sous release pipeline, from the copy inside
+          @sous-io/sous@$VERSION."
+            echo "Committed the new version of the core recipe."
+          fi
+
+      # npm can take a moment to serve a version it has just accepted, and the
+      # next step installs exactly that version on purpose: the index has to be
+      # regenerated by the sous that shipped the recipe, so the generator field
+      # it records is true.
+      - name: Wait for the published version to be installable
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if npm view "@sous-io/sous@$VERSION" version > /dev/null 2>&1; then
+              echo "@sous-io/sous@$VERSION is available on npm."
+              exit 0
+            fi
+            echo "Attempt $attempt: @sous-io/sous@$VERSION is not on npm yet; waiting 30 seconds."
+            sleep 30
+          done
+          echo "@sous-io/sous@$VERSION never became available on npm."
+          exit 1
+
+      # `--ci` is the form a merge runs: it never bumps a version, never asks a
+      # question, and fails on a recipe that changed without being raised. The
+      # copy above already carries the new version, so there is nothing to bump.
+      # It regenerates the index, commits it, cuts one annotated tag per version,
+      # and `--push` sends the commit and those tags to the repository. Running
+      # it twice is safe: a version that is already tagged is reported and
+      # skipped.
+      - name: Release the core recipe in the recipe repository
+        working-directory: recipes
+        run: npx --yes "@sous-io/sous@$VERSION" repo release --ci --push

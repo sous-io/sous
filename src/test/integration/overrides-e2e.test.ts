@@ -17,7 +17,7 @@ const CLI_TIMEOUT = 30_000;
  * runs: raw-argv flag prescan, SOUS_* env reads from the REAL environment, then
  * discovery / resolveConfigFlag, conf.d layering and env-file loading.
  *
- * The observable is `xcv config get name`: it prints the merged config's `name`
+ * The observable is `sous config get name`: it prints the merged config's `name`
  * scalar (post-merge, pre-variable-resolution) to stdout, so a conf.d layer that
  * overrides `name` tells us exactly which config + which layer directory won.
  *
@@ -55,7 +55,12 @@ describe("config-locating overrides (env vars + flag aliases)", () => {
     args: string[],
     opts: { cwd: string; env?: Record<string, string | undefined> } = { cwd: bareCwd }
   ): { stdout: string; stderr: string; status: number | null } {
-    const env: Record<string, string | undefined> = { ...process.env };
+    const env: Record<string, string | undefined> = {
+      ...process.env,
+      // The machine-wide sous home goes in the temp tree, so nothing here
+      // reads or writes the home directory of whoever runs the suite.
+      SOUS_HOME: path.join(tmp.path, "sous-home"),
+    };
     delete env.SOUS_CONFIG;
     delete env.SOUS_DIR;
     delete env.SOUS_CONFD;
@@ -72,7 +77,7 @@ describe("config-locating overrides (env vars + flag aliases)", () => {
     return { stdout: result.stdout ?? "", stderr: result.stderr ?? "", status: result.status };
   }
 
-  /** `xcv config get name`, returning the trimmed stdout scalar. */
+  /** `sous config get name`, returning the trimmed stdout scalar. */
   function getName(opts: { cwd: string; env?: Record<string, string | undefined>; flags?: string[] }): {
     name: string;
     status: number | null;
@@ -345,7 +350,7 @@ describe("config-locating overrides (env vars + flag aliases)", () => {
 
   // --- launch pass-through of the alias flags --------------------------------
 
-  /** Runs `xcv launch dump ...` and returns the argv the tool received. */
+  /** Runs `sous launch dump ...` and returns the argv the tool received. */
   function launch(...argv: string[]): { toolArgv: string[] | null; status: number | null } {
     fs.rmSync(launchDumpFile, { force: true });
     const env: Record<string, string | undefined> = { ...process.env, DUMP_FILE: launchDumpFile };

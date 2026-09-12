@@ -9,13 +9,11 @@ import {
   type DiscoveredConfig,
 } from "./lib/config-discovery.js";
 import { loadEnvFiles } from "./lib/env-local.js";
-import {
-  isConfigError,
-  loadSettings,
-  type ConfigContext,
-  type Settings,
-} from "./lib/settings.js";
-import { displayError, displayErrorBlock, header, log } from "./utils/formatting.js";
+import { loadSettings, type ConfigContext, type Settings } from "./lib/settings.js";
+import { isInteractive } from "./lib/interactive.js";
+import { displayError, displayErrorBlock, header, log, warning } from "./utils/formatting.js";
+import { nonInteractiveFlag } from "./utils/flags.js";
+import { reportCommandError } from "./utils/command-errors.js";
 
 /**
  * Base class for all CLI commands.
@@ -34,6 +32,13 @@ import { displayError, displayErrorBlock, header, log } from "./utils/formatting
  *      deep-merge them. Variable resolution happens later, per command.
  *
  * There is no user-level config: nothing is read from `~/.sous`.
+ *
+ * Every command also carries `--non-interactive`, which tells sous never to ask
+ * a question: a run that would have prompted fails instead, naming the prompt
+ * and the flag (or environment variables) that would have answered it, and this
+ * class prints the command's own help underneath that error. The rule itself
+ * lives in `lib/interactive.ts`, which also treats a truthy `CI` and a
+ * non-terminal stdin or stdout the same way.
  */
 export abstract class BaseCommand extends Command {
   static baseFlags = {
@@ -52,6 +57,7 @@ export abstract class BaseCommand extends Command {
     "sous-confd": Flags.string({
       description: "Path to the conf.d drop-in layer directory (overrides <sousDir>/conf.d)",
     }),
+    "non-interactive": nonInteractiveFlag(),
   };
 
   protected settings!: Settings;
@@ -63,8 +69,16 @@ export abstract class BaseCommand extends Command {
   protected discovered!: DiscoveredConfig;
 
   /**
+   * The real shell environment, snapshotted BEFORE the `.sous/` env files are
+   * injected into `process.env`. The variables layer needs it to tell a value
+   * the shell supplied from one an env file supplied; after injection the two
+   * are indistinguishable.
+   */
+  protected shellEnv: NodeJS.ProcessEnv = {};
+
+  /**
    * Emits the decorative CLI header during init(). The default writes it to
-   * stdout. Commands whose stdout must stay machine-readable (the `xcv config *`
+   * stdout. Commands whose stdout must stay machine-readable (the `sous config *`
    * JSON commands) override this to route the banner to stderr.
    */
   protected emitHeader(): void {
@@ -73,11 +87,19 @@ export abstract class BaseCommand extends Command {
 
   /**
    * Line sink for error rendering during init()/catch(). Defaults to stdout (via
-   * `log`). Commands whose stdout must stay machine-readable (the `xcv config *`
+   * `log`). Commands whose stdout must stay machine-readable (the `sous config *`
    * JSON commands) override this to route error text to stderr, so a broken
-   * config never corrupts a piped stdout stream (e.g. `xcv config show | jq`).
+   * config never corrupts a piped stdout stream (e.g. `sous config show | jq`).
    */
   protected errorSink: (line: string) => void = log;
+
+  /**
+   * Whether this run may ask the user a question. One rule, shared by every
+   * prompt in sous: see `lib/interactive.ts`.
+   */
+  protected get interactive(): boolean {
+    return isInteractive();
+  }
 
   async init(): Promise<void> {
     await super.init();
@@ -140,6 +162,23 @@ export abstract class BaseCommand extends Command {
       return this.exit(1);
     }
 
+    // Inject .sous/.env.local and .sous/.env before anything resolves variables,
+    // keeping a copy of what the shell itself set so the variables layer can
+    // still tell the two apart.
+    this.shellEnv = { ...process.env };
+    loadEnvFiles(discovered.sousDir);
+
+    // Enumerated a second time now that the env files are loaded: `SOUS_HOME` is
+    // file-settable, and it decides where the store holding a subscribed
+    // recipe's config layers is. A first pass already ran during discovery, when
+    // only the real environment was known.
+    try {
+      discovered = refreshDiscoveredConfig(discovered);
+    } catch (error) {
+      displayErrorBlock(error instanceof Error ? error.message : String(error), this.errorSink);
+      return this.exit(1);
+    }
+
     this.discovered = discovered;
     this.configContext = {
       sousDir: discovered.sousDir,
@@ -148,8 +187,9 @@ export abstract class BaseCommand extends Command {
       layerPaths: discovered.layerPaths,
     };
 
-    // Inject .sous/.env.local and .sous/.env before anything resolves variables.
-    loadEnvFiles(discovered.sousDir);
+    // Routed through the command's error sink, not stdout: a recipe layer
+    // warning must not land in the middle of `sous config show | jq`.
+    for (const notice of discovered.recipeLayerWarnings) warning(notice, this.errorSink);
 
     try {
       this.settings = await loadSettings(discovered);
@@ -160,19 +200,20 @@ export abstract class BaseCommand extends Command {
   }
 
   /**
-   * Renders a configuration error as a plain, readable message instead of an
-   * oclif stack trace. The stack for a ConfigError points at Sous internals and
-   * tells the user nothing about the config mistake they need to fix.
+   * Renders any failure as a plain, readable message instead of an oclif stack
+   * trace: a config mistake, a mistyped command line, or a question sous could
+   * not ask. A stack pointing into oclif's parser or into sous's internals
+   * tells the user nothing about the mistake they need to fix, so it is printed
+   * only when `SOUS_DEBUG` asks for it. The rules live in
+   * `utils/command-errors.ts`, so every command in sous fails the same way.
    *
-   * Anything that is not a ConfigError falls through to oclif's normal handling,
-   * where a stack trace IS useful (it is a bug in Sous).
+   * A clean `this.exit()` and a command rendering JSON still belong to oclif,
+   * and fall through to its handling untouched.
    */
   protected async catch(error: Error & { exitCode?: number }): Promise<unknown> {
-    if (isConfigError(error)) {
-      displayErrorBlock(error.message, this.errorSink);
-      return this.exit(1);
-    }
-    return super.catch(error);
+    const exitCode = await reportCommandError(this, error, { write: this.errorSink });
+    if (exitCode === undefined) return super.catch(error);
+    return this.exit(exitCode);
   }
 
   /**
@@ -251,7 +292,7 @@ export function blankToUndefined(value: string | undefined): string | undefined 
 /**
  * Pulls the value of a long-only flag (`--<flagName> VALUE` or
  * `--<flagName>=VALUE`) out of a raw argv array. Used for the `--sous-config`,
- * `--sous-dir` and `--sous-confd` aliases, which — like `--config` — must be
+ * `--sous-dir` and `--sous-confd` aliases, which (like `--config`) must be
  * read before oclif's parse() so the config is located before env files load.
  *
  * Scanning stops at a bare `--` for the same reason as `readConfigFlagFromArgv`:

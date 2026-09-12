@@ -78,25 +78,24 @@ describe("entryGlob alias resolution", () => {
   });
 
   /**
-   * The built-in ~sous-shared alias works as an entryGlob prefix.
+   * The built-in ~project alias works as an entryGlob prefix.
    *
-   * ~sous-shared points at <sousRootPath>/shared-prompts; the test overrides
-   * sousRootPath via root _vars (later-wins over the auto-injected CLI_ROOT)
-   * so the alias resolves into a tmp tree instead of the real install.
+   * ~project points at whatever the projectRoot variable resolves to, so the
+   * test sets it to a tmp tree.
    */
-  it("should expand the built-in ~sous-shared alias via sousRootPath", async () => {
-    const fakeRoot = path.join(tmp.path, "fake-sous-root");
-    const sharedDir = path.join(fakeRoot, "shared-prompts", "skills", "demo");
+  it("should expand the built-in ~project alias via projectRoot", async () => {
+    const fakeProject = path.join(tmp.path, "fake-project-root");
+    const sharedDir = path.join(fakeProject, "skills", "demo");
     fs.mkdirSync(sharedDir, { recursive: true });
     fs.writeFileSync(path.join(sharedDir, "SKILL.md"), "# Shared skill\n", "utf8");
 
     const settings: Settings = {
-      _vars: { sousRootPath: fakeRoot },
+      _vars: { projectRoot: fakeProject },
       name: "Test Project",
       compilation: {
         targets: [
           {
-            entryGlob: "~sous-shared/skills/**/*",
+            entryGlob: "~project/skills/**/*",
             outputs: [{ destinationDir: outDir }],
           },
         ],

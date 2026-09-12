@@ -15,6 +15,12 @@ export default class ConfigGet extends ConfigCommand {
   static description =
     "Print one value from the merged config by dot-path (e.g. compilation.targets[0].entryPoint)";
 
+  /**
+   * The other spelling of the topic. It lives under a hidden topic, so it is
+   * typable everywhere without ever reaching the top-level listing.
+   */
+  static aliases = ["configs:get"];
+
   static examples = [
     "<%= config.bin %> config get name",
     "<%= config.bin %> config get compilation.targets[0].entryPoint",
@@ -50,7 +56,7 @@ export default class ConfigGet extends ConfigCommand {
       throw new ConfigError(
         `No value at config path '${args.path}'.\n` +
           `  It is not present in the merged config (${this.configContext.configPath}).\n` +
-          `  Run 'xcv config show' to see the whole config.`
+          `  Run 'sous config show' to see the whole config.`
       );
     }
 
@@ -97,7 +103,7 @@ export default class ConfigGet extends ConfigCommand {
     if (!printedAny) {
       throw new ConfigError(
         `No value at config path '${pathStr}' in any config layer.\n` +
-          `  Run 'xcv config show' to see the whole merged config.`
+          `  Run 'sous config show' to see the whole merged config.`
       );
     }
   }

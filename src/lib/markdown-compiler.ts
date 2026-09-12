@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { get_encoding, type Tiktoken } from "tiktoken";
-import { displayError, log, showVar, subheading, warning } from "../utils/formatting.js";
+import { displayError, log, showVariable, subheading, warning } from "../utils/formatting.js";
 import { createLiquidEngine } from "../templating/init-liquid-engine.js";
 import {
   StateService,
@@ -11,7 +11,11 @@ import {
   hashContent,
   recordDirCreation,
 } from "./state.js";
-import { resolveIncludeCandidates, type AliasMap } from "./include-resolver.js";
+import { resolveInclude, type AliasMap } from "./include-resolver.js";
+import {
+  formatNamespaceProblem,
+  type NamespaceResolver,
+} from "./repos/namespace-resolver.js";
 
 export type ResolvedOutput = {
   destinationFile?: string;
@@ -62,6 +66,13 @@ export type CompilationServiceOptions = {
   strict?: boolean;
   rebuild?: boolean;
   dryRun?: boolean;
+  /**
+   * Resolves `@~<namespace>/<recipe>/<path>` includes and the matching
+   * `{% render %}` paths against recipe namespaces. Omit it and the `~` sigil
+   * only ever means an alias, which is the behavior for projects that use no
+   * repositories.
+   */
+  namespaceResolver?: NamespaceResolver;
 };
 
 /**
@@ -73,6 +84,36 @@ export type CompilationServiceOptions = {
  *   "/foo/bar/*\/baz.md" → "/foo/bar"
  *   "/**\/*"             → "/"
  */
+/**
+ * The file one output of one target writes, or undefined when the output names
+ * neither a destination file nor a destination directory.
+ *
+ * A `destinationFile` is used as it stands. A `destinationDir` mirrors the
+ * source tree underneath it, relative to the target's `globBase`, with `.tpl.`
+ * stripped from the name.
+ *
+ * Exported because prune needs the same answer without compiling: a group of
+ * targets that share one destination directory (every subscribed recipe writing
+ * into `.claude/skills`, say) can only be pruned precisely if the exact set of
+ * files they write is known.
+ *
+ * @param target - The compilation target.
+ * @param output - One of its outputs.
+ */
+export function resolveOutputPath(
+  target: Pick<CompilationTarget, "rootInputPath" | "globBase">,
+  output: ResolvedOutput
+): string | undefined {
+  if (output.destinationFile) return output.destinationFile;
+  if (!output.destinationDir) return undefined;
+
+  const sourceRelative = target.globBase
+    ? path.relative(target.globBase, target.rootInputPath)
+    : path.basename(target.rootInputPath);
+
+  return path.join(output.destinationDir, sourceRelative.replace(/\.tpl\./, "."));
+}
+
 export function inferGlobBase(pattern: string): string {
   const parts = pattern.split("/");
   const staticParts: string[] = [];
@@ -101,6 +142,7 @@ export class CompilationService {
   private numberFormatter: Intl.NumberFormat;
   private aliases: AliasMap;
   private includeScope: Record<string, string>;
+  private namespaceResolver?: NamespaceResolver;
   /**
    * `.tpl.` outputs that were written without a variable scope, so LiquidJS never
    * ran and the template shipped with its tags intact. Reported at the end of the
@@ -121,6 +163,7 @@ export class CompilationService {
     this.numberFormatter = new Intl.NumberFormat("en-US");
     this.aliases = {};
     this.includeScope = {};
+    this.namespaceResolver = options.namespaceResolver;
     this.unrenderedTemplates = [];
   }
 
@@ -146,17 +189,32 @@ export class CompilationService {
    * Matches an `@`-prefixed `.md` path on its own line. The path may be:
    *   - relative to the including file (`@sections/intro.md`),
    *   - a `${var}`-substituted path (`@${sousRootPath}/x.md`),
-   *   - or an alias path (`@~sous-shared/memories/x.md`, `@docs/x.md`), where the
-   *     first segment (up to `/` or `:`) names a registered alias.
+   *   - an alias path (`@~project/memories/x.md`, `@docs/x.md`), where the
+   *     first segment (up to `/` or `:`) names a registered alias,
+   *   - or a recipe namespace path (`@~workflow/task-files/_partials/x.md`),
+   *     where the `~` sigil names a namespace and the rest names a recipe and a
+   *     file inside it. Namespaces are only consulted when a namespace resolver
+   *     was supplied, and always after aliases.
    *
    * Lines inside fenced code blocks (``` or ~~~, per CommonMark) are left
    * verbatim, so include syntax can be documented without being executed.
    *
    * Resolution produces an ordered candidate list (see include-resolver); the
    * first candidate that exists on disk is used. If none exist, it errors,
-   * listing every path tried.
+   * naming the including file and listing every path tried, plus what went
+   * wrong with the namespace lookup when one was attempted.
+   *
+   * @param content - The file's raw text.
+   * @param baseDir - Directory the relative candidate resolves against.
+   * @param projectRoot - Root used to render source comments as relative paths.
+   * @param fromFile - Absolute path of the file being processed; defaults to `baseDir`.
    */
-  private processIncludes(content: string, baseDir: string, projectRoot: string): string {
+  private processIncludes(
+    content: string,
+    baseDir: string,
+    projectRoot: string,
+    fromFile?: string
+  ): string {
     // First segment allows ~ and . (so ./ and ../ work), then path chars;
     // separators / and :; allows ${...}.
     const includePattern = /^@([~a-zA-Z0-9_.${}][a-zA-Z0-9_\-/.:${}]*\.md)$/;
@@ -193,16 +251,23 @@ export class CompilationService {
       }
 
       const includePath = match[1].trim();
-      const candidates = resolveIncludeCandidates(includePath, {
+      const { candidates, namespaceIssue } = resolveInclude(includePath, {
         aliases: this.aliases,
         scope: this.includeScope,
         baseDir,
+        namespaceResolver: this.namespaceResolver,
+        fromFile: fromFile ?? baseDir,
       });
       const fullPath = candidates.find((c) => fs.existsSync(c));
 
       if (!fullPath) {
+        const explanation = namespaceIssue
+          ? `\n${formatNamespaceProblem(namespaceIssue)}`
+          : `\n  in file: ${fromFile ?? baseDir}`;
         this.handleError(
-          `Include not found: @${includePath}\n  tried:\n${candidates.map((c) => `    - ${c}`).join("\n")}`
+          `Include not found: @${includePath}${explanation}\n  tried:\n${candidates
+            .map((c) => `    - ${c}`)
+            .join("\n")}`
         );
         out.push("");
         continue;
@@ -247,7 +312,7 @@ export class CompilationService {
     try {
       const content = fs.readFileSync(filePath, "utf8");
       const baseDir = path.dirname(filePath);
-      const processedContent = this.processIncludes(content, baseDir, projectRoot);
+      const processedContent = this.processIncludes(content, baseDir, projectRoot, filePath);
       this.visited.add(filePath);
       return processedContent;
     } catch (error) {
@@ -259,11 +324,25 @@ export class CompilationService {
     }
   }
 
-  /** Render template content using LiquidJS with the given variable scope. */
-  private async renderContent(content: string, vars: Record<string, string>, roots: string[]): Promise<string> {
+  /**
+   * Render template content using LiquidJS with the given variable scope.
+   *
+   * @param content - The template text.
+   * @param vars - Variable scope handed to LiquidJS and to `${var}` path substitution.
+   * @param roots - Filesystem roots searched by `{% render %}`.
+   * @param fromFile - Absolute path of the template, so `~namespace` render paths are scoped correctly.
+   */
+  private async renderContent(
+    content: string,
+    vars: Record<string, string>,
+    roots: string[],
+    fromFile?: string
+  ): Promise<string> {
     const engine = createLiquidEngine(roots, {
       aliases: this.aliases,
       scope: { ...this.includeScope, ...vars },
+      namespaceResolver: this.namespaceResolver,
+      fromFile,
     });
     try {
       return await engine.parseAndRender(content, vars);
@@ -344,7 +423,7 @@ ${taskFileContents}
     stateFileEntries: StateFileEntry[]
   ): Promise<boolean> {
     subheading(path.basename(target.rootInputPath), "▷");
-    showVar("Entry Point", target.rootInputPath);
+    showVariable("Entry Point", target.rootInputPath);
 
     this.initializeEncoder();
 
@@ -378,22 +457,10 @@ ${taskFileContents}
       // Resolve destination path: prefer destinationFile, fall back to destinationDir mirroring
       let destFile: string;
 
-      if (output.destinationFile) {
-        destFile = output.destinationFile;
-      } else if (output.destinationDir) {
-        // Mirror source path structure under destinationDir
-        const sourceRelative = target.globBase
-          ? path.relative(target.globBase, target.rootInputPath)
-          : path.basename(target.rootInputPath);
-
-        // Strip .tpl. from the output filename (e.g. foo.tpl.md -> foo.md)
-        const outputRelative = sourceRelative.replace(/\.tpl\./, ".");
-
-        destFile = path.join(output.destinationDir, outputRelative);
-      } else {
-        // Neither set — skip
-        continue;
-      }
+      const resolvedDest = resolveOutputPath(target, output);
+      // Neither destinationFile nor destinationDir set — skip
+      if (resolvedDest === undefined) continue;
+      destFile = resolvedDest;
 
       // Skip if content is unchanged and file already exists (unless --rebuild)
       const existingEntry = state.files.find(f => f.dest === destFile);
@@ -425,11 +492,16 @@ ${taskFileContents}
       }
 
       const resolvedContent = (isTpl && output.vars)
-        ? await this.renderContent(content, {
-            ...output.vars,
-            sousTemplatePath: target.rootInputPath,
-            sousTemplateDir: promptsRoot,
-          }, [promptsRoot])
+        ? await this.renderContent(
+            content,
+            {
+              ...output.vars,
+              sousTemplatePath: target.rootInputPath,
+              sousTemplateDir: promptsRoot,
+            },
+            [promptsRoot],
+            target.rootInputPath
+          )
         : content;
       const fileContent = resolvedContent;
       const outputDir = path.dirname(destFile);

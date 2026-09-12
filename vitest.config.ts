@@ -2,7 +2,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    include: ["src/**/*.spec.ts", "src/test/**/*.test.ts", "shared-prompts/**/*.spec.mjs"],
+    include: ["src/**/*.spec.ts", "src/test/**/*.test.ts"],
     exclude: ["src/test/e2e/**"],
     environment: "node",
     coverage: {

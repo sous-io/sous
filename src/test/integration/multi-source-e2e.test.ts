@@ -20,7 +20,7 @@ const CLI_TIMEOUT = 30_000;
  *   3. conf.d/20-configure.js      — a JS `configure(config)` layer that mutates the live
  *                                    cumulative config to push a third target
  *
- * `xcv build --dry-run` runs the whole real pipeline: discovery enumerates the
+ * `sous build --dry-run` runs the whole real pipeline: discovery enumerates the
  * conf.d layers, the config kernel subprocess parses/imports and deep-merges all
  * three (arrays concatenate, so every layer's target survives), then the build
  * reports each destination it WOULD write. Seeing all three destinations proves
@@ -30,12 +30,18 @@ describe("multi-source config (YAML primary + conf.d JSON + conf.d configure JS)
   let tmp: TmpDir;
   let sousDir: string;
 
-  /** Runs `xcv build --dry-run --config <sousDir>` and returns combined output. */
+  /** Runs `sous build --dry-run --config <sousDir>` and returns combined output. */
   function build(...extraArgs: string[]): { status: number | null; output: string } {
     const result = spawnSync(
       process.execPath,
       [binPath, "build", "--dry-run", "--config", sousDir, ...extraArgs],
-      { cwd: tmp.path, encoding: "utf8" }
+      {
+        cwd: tmp.path,
+        encoding: "utf8",
+        // The machine-wide sous home goes in the temp tree, so nothing here
+        // reads or writes the home directory of whoever runs the suite.
+        env: { ...process.env, SOUS_HOME: path.join(tmp.path, "sous-home") },
+      }
     );
     return { status: result.status, output: `${result.stdout}\n${result.stderr}` };
   }

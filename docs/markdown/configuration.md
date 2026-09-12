@@ -7,8 +7,8 @@ user-level config (nothing is read from `~/.sous`) and no multi-project map.
 ## The config file
 
 Exactly one primary config lives inside `.sous/`: `sous.config.js`, `sous.config.mjs`,
-`sous.config.json`, or `sous.config.yaml`. Two or more candidates is an error, never a silent
-first-match. A typical config:
+`sous.config.json`, `sous.config.jsonc`, or `sous.config.yaml`. Two or more candidates is an
+error, never a silent first-match. A typical config:
 
 ```js
 export const config = {
@@ -46,7 +46,7 @@ are resolved at different stages and never mix.
 
 ## Composition
 
-The primary config is optionally extended by drop-in layers: every `*.js|mjs|json|yaml` file
+The primary config is optionally extended by drop-in layers: every `*.js|mjs|json|jsonc|yaml` file
 directly inside `.sous/conf.d/` is loaded after the primary config and deep-merged over it. A
 `.js`/`.mjs` config or layer can also compose programmatically through a `configure()` function.
 [Layers and merging](config-layers.md) covers the full semantics.
@@ -58,13 +58,14 @@ directly inside `.sous/conf.d/` is loaded after the primary config and deep-merg
 - [Layers and merging](config-layers.md): `conf.d/` ordering, merge semantics, the JS
   `configure()` contract
 - [Variables](config-variables.md): the `${var}` scope chain, auto-vars, fixpoint resolution
-- [Inspecting and validating](config-inspection.md): the `xcv config` commands and the
+- [Inspecting and validating](config-inspection.md): the `sous config` commands and the
   validation pipeline
 
 ## Rules of the road
 
 - Hand-written config belongs in the primary file or your own `conf.d/` layers. The
-  `conf.d/500-*` through `conf.d/599-*` band is reserved for layers the sous CLI itself writes;
-  do not hand-edit files in that band.
+  `conf.d/500-*` through `conf.d/599-*` band is reserved for layers the sous CLI itself writes.
+  Sous edits those by key, so you may edit them too and your comments, key order and formatting
+  survive; put a layer of your own outside the band.
 - Any config problem halts sous with a `ConfigError` naming the offending file; there is no
   warn-and-continue.

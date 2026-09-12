@@ -19,7 +19,7 @@ This skill covers AUTHORING documentation pages. For the shell itself (the
 docsify page, its stylesheet, the terminal-demo plugin), read `docs/CLAUDE.md`
 before changing anything; it holds the site's rules and pitfalls.
 
-@${sousDir}/prompts/_partials/docs-authoring.md
+@${sousDir}/prompts/memories/docs-authoring.md
 
 ## Copy rules (site-wide, no exceptions)
 

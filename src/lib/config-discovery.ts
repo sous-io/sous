@@ -1,6 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { ConfigError } from "./errors.js";
+import {
+  listRecipeConfigLayers,
+  type RecipeConfigLayer,
+} from "./repos/recipe-config-layers.js";
 
 /**
  * The directory name sous looks for when walking up from the working directory.
@@ -16,18 +20,24 @@ export const CONFIG_FILE_NAMES = [
   "sous.config.js",
   "sous.config.mjs",
   "sous.config.json",
+  "sous.config.jsonc",
   "sous.config.yaml",
 ] as const;
 
 /**
  * The drop-in config layer directory inside `.sous/`. Every
- * `conf.d/*.{js,mjs,json,yaml}` file (non-recursive) is loaded after the
+ * `conf.d/*.{js,mjs,json,jsonc,yaml}` file (non-recursive) is loaded after the
  * primary config and deep-merged in bytewise filename order.
  */
 export const CONFD_DIR_NAME = "conf.d";
 
-/** File extensions recognised as config layers inside `conf.d/`. */
-export const LAYER_EXTENSIONS = [".js", ".mjs", ".json", ".yaml"] as const;
+/**
+ * File extensions recognised as config layers inside `conf.d/`. A `.jsonc`
+ * layer is JSON with comments: line comments, block comments and trailing
+ * commas are all allowed in it, which is why the layers sous manages for a
+ * project are written that way.
+ */
+export const LAYER_EXTENSIONS = [".js", ".mjs", ".json", ".jsonc", ".yaml"] as const;
 
 /**
  * The name of the optional shared-defaults env file inside `.sous/`. This file
@@ -52,9 +62,26 @@ export type DiscoveredConfig = {
   confDir: string;
   /**
    * Ordered absolute paths of every config layer: the primary config first,
-   * then the `conf.d/` layers in bytewise filename order.
+   * then any config layers subscribed recipes contribute, then the `conf.d/`
+   * layers in bytewise filename order. Recipes sit in the middle so a recipe can
+   * supply defaults and the project always wins over them.
    */
   layerPaths: string[];
+  /** The subset of `layerPaths` that came from subscribed recipes. */
+  recipeLayerPaths: string[];
+  /**
+   * The recipe layers themselves, already read and already filtered down to the
+   * keys a recipe is allowed to set. Sous reads these instead of handing their
+   * paths to the config kernel, so a recipe cannot set a key that would change
+   * what sous trusts or what sous runs. See `repos/recipe-config-layers.ts`.
+   */
+  recipeLayers: RecipeConfigLayer[];
+  /**
+   * Complete, plain-language sentences about anything a recipe contributed that
+   * sous declined to load. Printed by the command, since discovery runs before
+   * there is anywhere good to print.
+   */
+  recipeLayerWarnings: string[];
   /** How the config was located. */
   source: "flag" | "walk-up";
 };
@@ -115,7 +142,7 @@ function bytewiseCompare(a: string, b: string): number {
 
 /**
  * Lists the config layer files inside a `conf.d/` directory: every
- * `*.{js,mjs,json,yaml}` file directly inside it (non-recursive), sorted
+ * `*.{js,mjs,json,jsonc,yaml}` file directly inside it (non-recursive), sorted
  * bytewise by filename. A missing directory yields an empty list.
  */
 export function listConfDirLayers(confDir: string): string[] {
@@ -135,9 +162,11 @@ export function listConfDirLayers(confDir: string): string[] {
 
 /**
  * Asserts that every loaded config file (primary + conf.d layers) has a unique
- * baseName — the filename minus its FINAL extension. Two layers named
- * `500-repos.json` and `500-repos.yaml` would otherwise merge in an order that
- * depends on their extensions, which is never what the author meant.
+ * baseName; the filename minus its FINAL extension. Two layers named
+ * `500-repos.json` and `500-repos.jsonc` would otherwise merge in an order that
+ * depends on their extensions, which is never what the author meant. It is also
+ * what stops a managed layer from existing under both its old `.json` name and
+ * its `.jsonc` one.
  *
  * @throws ConfigError naming both conflicting files.
  */
@@ -161,7 +190,14 @@ export function assertUniqueLayerBaseNames(layerPaths: string[]): void {
 
 /**
  * Builds a full DiscoveredConfig from a located primary config: computes the
- * conf.d directory, enumerates its layers, and runs the duplicate-baseName check.
+ * conf.d directory, enumerates its layers and the layers subscribed recipes
+ * contribute, and runs the duplicate-baseName check.
+ *
+ * Recipe layers load after the primary config and before the `conf.d/` layers,
+ * so a recipe supplies defaults and the project always wins over them. They are
+ * left out of the duplicate-baseName check deliberately: that check exists so a
+ * person never has to guess which of two files they wrote merges last, and a
+ * recipe's file names are not theirs to rename.
  *
  * @param confDirOverride - Absolute path to use as the conf.d directory instead
  *   of `<sousDir>/conf.d`. Set from the `--sous-confd` flag or `SOUS_CONFD` env
@@ -174,15 +210,36 @@ function buildDiscoveredConfig(
   confDirOverride?: string
 ): DiscoveredConfig {
   const confDir = confDirOverride ?? path.join(sousDir, CONFD_DIR_NAME);
-  const layerPaths = [configPath, ...listConfDirLayers(confDir)];
-  assertUniqueLayerBaseNames(layerPaths);
-  return { configPath, sousDir, confDir, layerPaths, source };
+  const projectLayers = [configPath, ...listConfDirLayers(confDir)];
+  assertUniqueLayerBaseNames(projectLayers);
+
+  const recipes = listRecipeConfigLayers(sousDir);
+  const layerPaths = [
+    configPath,
+    ...recipes.paths,
+    ...projectLayers.slice(1),
+  ];
+
+  return {
+    configPath,
+    sousDir,
+    confDir,
+    layerPaths,
+    recipeLayerPaths: recipes.paths,
+    recipeLayers: recipes.layers,
+    recipeLayerWarnings: recipes.warnings,
+    source,
+  };
 }
 
 /**
- * Re-runs the conf.d enumeration and duplicate-baseName check for an existing
- * discovery. Used by watch mode: layer files can appear or disappear while
- * watching, so the layer list must be rebuilt before every settings reload.
+ * Re-runs the conf.d enumeration, the recipe layer enumeration and the
+ * duplicate-baseName check for an existing discovery.
+ *
+ * Two callers need it. Watch mode calls it because layer files can appear or
+ * disappear while watching. `BaseCommand.init()` calls it once after the
+ * `.sous/` env files are loaded, because `SOUS_HOME` is file-settable and it
+ * decides where the store holding the recipe layers is.
  *
  * The existing `confDir` is preserved (not recomputed from `sousDir`), so a
  * `SOUS_CONFD` / `--sous-confd` override survives across watch reloads.
@@ -315,7 +372,7 @@ export function formatNotFoundMessage(startDir: string = process.cwd()): string 
     "",
     "  To fix this, either:",
     `    1. Create ${SOUS_DIR_NAME}/${CONFIG_FILE_NAMES[0]} in your project root, or`,
-    "    2. Pass the config explicitly: xcv <command> --config <path>",
+    "    2. Pass the config explicitly: sous <command> --config <path>",
     "",
     `  A minimal ${CONFIG_FILE_NAMES[0]}:`,
     "",

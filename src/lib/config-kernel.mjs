@@ -11,7 +11,13 @@
  * --------
  * stdin (one JSON document):
  *   {
- *     sources: string[],            // ordered absolute layer paths, primary first
+ *     sources: (string | { path, config })[],  // ordered layers, primary first.
+ *                                   // A string is an absolute layer path the
+ *                                   // kernel reads itself. An object is a layer
+ *                                   // the parent already read and filtered (a
+ *                                   // subscribed recipe's config layer); the
+ *                                   // kernel merges `config` as-is and never
+ *                                   // opens `path`.
  *     context: { sousDir, confDir, sousRootPath, sousVersion, configPath },
  *     trace: boolean
  *   }
@@ -29,6 +35,8 @@
  * Layer contract
  * --------------
  * - .json  → JSON.parse of the file text.
+ * - .jsonc → JSON with comments: line comments, block comments and trailing
+ *            commas are allowed. The layers sous manages are written this way.
  * - .yaml  → parsed with the 'yaml' package.
  * - .js/.mjs → dynamic import. The module may export:
  *     * an object: `config`, else `default` when it is a non-function object;
@@ -53,12 +61,36 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { parse as parseYaml } from "yaml";
 import { globSync } from "glob";
+import { parse as parseJsonc, printParseErrorCode } from "jsonc-parser";
 
 // --- small utilities -----------------------------------------------------------------------------
 
 /** True for a plain object (not null, not an array). */
 function isPlainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+/**
+ * Parses a `.jsonc` layer: JSON plus line comments, block comments and trailing
+ * commas. The error names the layer file and the line the parser stopped on.
+ */
+function parseJsoncLayer(text, filePath) {
+  const errors = [];
+  const value = parseJsonc(text, errors, { allowTrailingComma: true, disallowComments: false });
+
+  if (errors.length > 0) {
+    const first = errors[0];
+    const before = text.slice(0, first.offset);
+    const line = before.split("\n").length;
+    const column = first.offset - before.lastIndexOf("\n");
+    throw new Error(
+      `Config layer ${filePath} is not valid JSON with comments: ` +
+        `${printParseErrorCode(first.error)} at line ${line}, column ${column}.\n` +
+        `  Comments and trailing commas are allowed; anything else must be valid JSON.`
+    );
+  }
+
+  return value;
 }
 
 /** Forces a value through a JSON round-trip. */
@@ -251,6 +283,8 @@ async function main() {
 
       if (ext === ".json") {
         mergeLayerObject(JSON.parse(fs.readFileSync(resolved, "utf8")), resolved);
+      } else if (ext === ".jsonc") {
+        mergeLayerObject(parseJsoncLayer(fs.readFileSync(resolved, "utf8"), resolved), resolved);
       } else if (ext === ".yaml") {
         mergeLayerObject(parseYaml(fs.readFileSync(resolved, "utf8")), resolved);
       } else if (ext === ".js" || ext === ".mjs") {
@@ -296,7 +330,7 @@ async function main() {
       } else {
         throw new Error(
           `Config layer ${resolved} has an unsupported extension '${ext}'. ` +
-            `Supported: .js, .mjs, .json, .yaml`
+            `Supported: .js, .mjs, .json, .jsonc, .yaml`
         );
       }
     } catch (error) {
@@ -311,9 +345,26 @@ async function main() {
   }
 
   for (const source of sources) {
-    await loadLayer(source);
+    // An inline source is a layer the PARENT already read and already filtered
+    // (a subscribed recipe's config layer; see repos/recipe-config-layers.ts).
+    // The kernel merges the content it was handed and never opens the file, so
+    // the filtering cannot be sidestepped by re-reading it here.
+    if (isPlainObject(source)) {
+      const previousFile = currentFile;
+      currentFile = source.path;
+      try {
+        mergeLayerObject(source.config, source.path);
+      } finally {
+        currentFile = previousFile;
+      }
+    } else {
+      await loadLayer(source);
+    }
     if (trace) {
-      layers.push({ path: source, config: jsonRoundTrip(currentConfig) });
+      layers.push({
+        path: isPlainObject(source) ? source.path : source,
+        config: jsonRoundTrip(currentConfig),
+      });
     }
   }
 

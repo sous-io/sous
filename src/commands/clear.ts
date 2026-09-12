@@ -1,9 +1,10 @@
-import { Flags } from "@oclif/core";
 import { confirm } from "@inquirer/prompts";
 import fs from "node:fs";
 import { BaseCommand } from "../base-command.js";
 import { resolveStateFilePath } from "../lib/build-service.js";
-import { StateService } from "../lib/state.js";
+import { isProtectedPath, StateService } from "../lib/state.js";
+import { protectedRepoPaths } from "../lib/repos/links.js";
+import { confirmationFlag } from "../utils/flags.js";
 import { displayError, footer, heading, log, showCommandVars } from "../utils/formatting.js";
 
 export default class Clear extends BaseCommand {
@@ -12,15 +13,15 @@ export default class Clear extends BaseCommand {
   static examples = [
     "<%= config.bin %> clear",
     "<%= config.bin %> clear --force",
+    "<%= config.bin %> clear -y",
   ];
 
   static flags = {
     ...BaseCommand.baseFlags,
-    force: Flags.boolean({
-      char: "f",
-      description: "Skip confirmation prompt",
-      default: false,
-    }),
+    // `--force` is this command's original spelling, so it stays the primary
+    // one; `--yes` and `-y` are aliases of it, and the confirmation therefore
+    // answers the same way here as it does on every other command.
+    force: confirmationFlag({ primary: "force" }),
   };
 
   async run(): Promise<void> {
@@ -33,14 +34,22 @@ export default class Clear extends BaseCommand {
 
     if (!state) {
       displayError(
-        `No state file found at ${stateFilePath}. Run 'xcv build' first, then 'xcv clear' to recover.`
+        `No state file found at ${stateFilePath}. Run 'sous build' first, then 'sous clear' to recover.`
       );
       this.exit(1);
     }
 
     showCommandVars({ Project: this.projectLabel, Config: this.configContext.configPath });
 
-    const fileCount = state!.files.length;
+    // A linked checkout holds somebody's unpushed edits and the recipe store is
+    // shared by every project on this machine, so neither is ever clearable,
+    // whatever a stale state entry claims.
+    const protectedPaths = protectedRepoPaths(this.configContext.sousDir);
+    const clearable = state!.files.filter(
+      (entry) => !isProtectedPath(entry.dest, protectedPaths)
+    );
+
+    const fileCount = clearable.length;
     const dirCount = state!.dirs.length;
 
     if (!flags.force) {
@@ -56,8 +65,8 @@ export default class Clear extends BaseCommand {
 
     heading("Clearing");
 
-    stateService.deleteTrackedFiles(state!.files, state!.dirs);
-    for (const entry of state!.files) log(`  ✗ ${entry.dest}`);
+    stateService.deleteTrackedFiles(clearable, state!.dirs, protectedPaths);
+    for (const entry of clearable) log(`  ✗ ${entry.dest}`);
 
     // Delete state file itself
     if (fs.existsSync(stateFilePath)) {

@@ -478,15 +478,31 @@ describe("buildAutoVars()", () => {
   });
 
   /**
-   * buildAutoVars() should return exactly the two reserved auto-vars
-   * (sousRootPath and sousVersion) so callers know what to expect.
+   * buildAutoVars() should return exactly the three context-free reserved
+   * auto-vars (sousRootPath, sousVersion and sousHome) so callers know what to
+   * expect.
    *
    * Object.keys(buildAutoVars());
-   * // -> ["sousRootPath", "sousVersion"]
+   * // -> ["sousHome", "sousRootPath", "sousVersion"]
    */
-  it("should return an object with exactly sousRootPath and sousVersion keys", () => {
+  it("should return an object with exactly sousRootPath, sousVersion and sousHome keys", () => {
     const vars = buildAutoVars();
-    expect(Object.keys(vars).sort()).toEqual(["sousRootPath", "sousVersion"].sort());
+    expect(Object.keys(vars).sort()).toEqual(
+      ["sousHome", "sousRootPath", "sousVersion"].sort()
+    );
+  });
+
+  /**
+   * buildAutoVars() should return an absolute path for the 'sousHome' key: the
+   * user-level sous directory that holds the machine-wide recipe store.
+   *
+   * buildAutoVars().sousHome;
+   * // -> "/home/me/.sous"
+   */
+  it("should return an absolute sousHome path", () => {
+    const vars = buildAutoVars();
+    expect(typeof vars.sousHome).toBe("string");
+    expect(path.isAbsolute(vars.sousHome)).toBe(true);
   });
 
   /**

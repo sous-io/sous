@@ -5,11 +5,17 @@ import {
   resolveTools,
   resolveWatchConfig,
 } from "../../lib/settings.js";
-import { footer, heading, showVars } from "../../utils/formatting.js";
+import { footer, heading, showVariables } from "../../utils/formatting.js";
 
 export default class ConfigValidate extends BaseCommand {
   static description =
     "Validate the merged config: schema, then full variable resolution (fixpoint + substitution)";
+
+  /**
+   * The other spelling of the topic. It lives under a hidden topic, so it is
+   * typable everywhere without ever reaching the top-level listing.
+   */
+  static aliases = ["configs:validate"];
 
   static examples = ["<%= config.bin %> config validate"];
 
@@ -35,7 +41,7 @@ export default class ConfigValidate extends BaseCommand {
     const toolNames = Object.keys(tools);
 
     heading("Config is valid");
-    showVars({
+    showVariables({
       "Config File": this.configContext.configPath,
       Layers: layerCount,
       Targets: targetCount,

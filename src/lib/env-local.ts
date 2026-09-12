@@ -83,6 +83,23 @@ function findClosingQuote(value: string, quote: string): number {
   return -1;
 }
 
+/**
+ * Reads one env file and returns its variables as a flat map, WITHOUT touching
+ * `process.env`. Returns an empty map when the file does not exist.
+ *
+ * The variables layer needs each env file on its own: by the time a command
+ * runs, `loadEnvFiles` has already merged both files into the process
+ * environment, so reading them separately is the only way to say which layer
+ * supplied an answer.
+ *
+ * @param filePath - Absolute path to the env file.
+ * @returns The parsed variables, or an empty map when there is no such file.
+ */
+export function readEnvFileMap(filePath: string): Record<string, string> {
+  if (!fs.existsSync(filePath)) return {};
+  return parseEnvLocal(fs.readFileSync(filePath, "utf8"));
+}
+
 /** The outcome of an attempted env file load. */
 export type EnvLocalLoadResult = {
   /** Absolute path checked. */
@@ -155,7 +172,7 @@ export function loadEnvDefaults(
  * `process.env`, if it exists.
  *
  * Existing environment values always win: a variable already set in the real
- * environment is never overwritten, so `FOO=bar xcv build` behaves as expected.
+ * environment is never overwritten, so `FOO=bar sous build` behaves as expected.
  *
  * @param sousDir - The discovered `.sous/` directory.
  * @param env - The environment object to mutate (injectable for tests).

@@ -1,0 +1,12 @@
+{
+  "formatVersion": 1,
+  "generatedAt": "2026-09-11T06:36:22.344Z",
+  "generator": "0.1.1",
+  "name": "qa-recipes",
+  "namespaces": {
+    "workflow": {
+      "description": "What the recipes in this namespace have in common."
+    }
+  },
+  "recipes": {}
+}

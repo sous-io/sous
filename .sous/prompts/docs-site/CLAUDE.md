@@ -1,6 +1,6 @@
 # The Sous Website (`/docs`)
 
-> **GENERATED FILE — DO NOT EDIT `docs/CLAUDE.md` DIRECTLY.**
+> **GENERATED FILE. DO NOT EDIT `docs/CLAUDE.md` DIRECTLY.**
 > This file is compiled by sous (`npm run sous:build`) from
 > `.sous/prompts/docs-site/CLAUDE.md`. Edit that source, then rebuild.
 > The compiled copy is gitignored; the source is tracked.
@@ -159,7 +159,7 @@ highlight.js because it ships the router, sidebar, and client-side search we
 would otherwise own. All CDN pins and `$docsify` config live in
 `docs/markdown/index.html`.
 
-@${sousDir}/prompts/_partials/docs-authoring.md
+@${sousDir}/prompts/memories/docs-authoring.md
 
 ### Shell engineering notes
 
@@ -193,4 +193,4 @@ would otherwise own. All CDN pins and `$docsify` config live in
   website. Both are sous-generated from tracked sources under
   `.sous/prompts/`.
 
-@${sousDir}/prompts/_partials/sources-of-truth.md
+@${sousDir}/prompts/memories/sources-of-truth.md

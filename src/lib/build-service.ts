@@ -1,12 +1,17 @@
 import path from "node:path";
 import fs from "node:fs";
 import type { ConfigContext, Settings } from "./settings.js";
-import { resolveCompilation, resolveRootScope } from "./settings.js";
+import { resolveAliases, resolveCompilation, resolveRootScope } from "./settings.js";
 import { resolveIncludeCandidates } from "./include-resolver.js";
-import { CompilationService } from "./markdown-compiler.js";
+import type { NamespaceResolver } from "./repos/namespace-resolver.js";
+import { createProjectNamespaceResolver } from "./repos/locked-namespace-resolver.js";
+import { buildRecipeTargets, type RecipeTargets } from "./repos/recipe-targets.js";
+import { CompilationService, resolveOutputPath } from "./markdown-compiler.js";
 import type { CompilationConfig, CompilationTarget } from "./markdown-compiler.js";
 import { StateService } from "./state.js";
-import { log } from "../utils/formatting.js";
+import { isProtectedPath } from "./state.js";
+import { protectedRepoPaths } from "./repos/links.js";
+import { log, warning } from "../utils/formatting.js";
 
 export type BuildOptions = {
   strict?: boolean;
@@ -25,7 +30,107 @@ export type BuildOptions = {
    * `${sousDir}` resolves and so state/PID paths default into `.sous/`.
    */
   configContext?: ConfigContext;
+  /**
+   * Resolves `~namespace` include and render paths against recipe namespaces.
+   * Passed straight through to the compiler and to the include-graph walk, so a
+   * partial rebuild follows namespace includes too.
+   *
+   * When it is omitted and `configContext` is given, the build builds the
+   * project's own resolver from its lockfile, links map and store. Pass one
+   * explicitly to override that, which is what tests do.
+   */
+  namespaceResolver?: NamespaceResolver;
 };
+
+/** An empty recipe-target result, for a build with no config context. */
+const NO_RECIPE_TARGETS: RecipeTargets = {
+  targets: [],
+  destinations: [],
+  watchDirs: [],
+  warnings: [],
+};
+
+/**
+ * The compile targets a project's subscribed recipes contribute, for the project
+ * the options describe. Empty when the caller gave no config context, which is
+ * the case only in tests that build a settings object by hand.
+ *
+ * @param settings - The merged project config.
+ * @param rootScope - The resolved settings scope, for `${var}` in destinations.
+ * @param configContext - Where the active config was discovered.
+ */
+export function resolveRecipeTargets(
+  settings: Settings,
+  rootScope: Record<string, string>,
+  configContext?: ConfigContext
+): RecipeTargets {
+  if (configContext === undefined) return NO_RECIPE_TARGETS;
+  return buildRecipeTargets({
+    sousDir: configContext.sousDir,
+    settings,
+    scope: rootScope,
+  });
+}
+
+/**
+ * Adds the recipe targets to a project's own compilation config. A project with
+ * no compilation block of its own still compiles its recipes, so the config is
+ * created when there is none and there is something to compile.
+ *
+ * @param config - The project's own compilation config, or null when it has none.
+ * @param recipes - The targets the subscribed recipes contribute.
+ * @param settings - The merged project config, for its aliases.
+ * @param rootScope - The resolved settings scope.
+ */
+export function withRecipeTargets(
+  config: CompilationConfig | null,
+  recipes: RecipeTargets,
+  settings: Settings,
+  rootScope: Record<string, string>
+): CompilationConfig | null {
+  if (recipes.targets.length === 0) return config;
+  if (config === null) {
+    return {
+      targets: recipes.targets,
+      aliases: resolveAliases(settings, rootScope),
+      includeScope: rootScope,
+    };
+  }
+  return { ...config, targets: [...config.targets, ...recipes.targets] };
+}
+
+/**
+ * The directories a build's deletions must never reach into, for the project the
+ * options describe. Empty when the caller gave no config context, which is the
+ * case only in tests that build a settings object by hand.
+ *
+ * @param options - The build options, for the config context.
+ */
+function protectedPathsFor(options: BuildOptions): string[] {
+  if (options.configContext === undefined) return [];
+  return protectedRepoPaths(options.configContext.sousDir);
+}
+
+/**
+ * The namespace resolver a build should use: the one the caller supplied, or the
+ * project's own, built from its lockfile. A project that locks no recipes gets
+ * undefined, which leaves `~` in an include line meaning an alias and nothing
+ * else.
+ *
+ * @param settings - The merged project config.
+ * @param options - The build options, for the config context and any override.
+ */
+function resolveNamespaceResolver(
+  settings: Settings,
+  options: BuildOptions
+): NamespaceResolver | undefined {
+  if (options.namespaceResolver !== undefined) return options.namespaceResolver;
+  if (options.configContext === undefined) return undefined;
+  return createProjectNamespaceResolver({
+    sousDir: options.configContext.sousDir,
+    settings,
+  });
+}
 
 /**
  * Recursively collects all file paths reachable from `filePath` via @include chains.
@@ -37,7 +142,11 @@ export type BuildOptions = {
  */
 function collectIncludeGraph(
   filePath: string,
-  resolveOpts: { aliases?: Record<string, string[]>; scope?: Record<string, string> } = {},
+  resolveOpts: {
+    aliases?: Record<string, string[]>;
+    scope?: Record<string, string>;
+    namespaceResolver?: NamespaceResolver;
+  } = {},
   visited: Set<string> = new Set()
 ): Set<string> {
   if (visited.has(filePath)) return visited;
@@ -62,6 +171,8 @@ function collectIncludeGraph(
       aliases: resolveOpts.aliases,
       scope: resolveOpts.scope,
       baseDir,
+      namespaceResolver: resolveOpts.namespaceResolver,
+      fromFile: filePath,
     });
     const fullPath = candidates.find((c) => fs.existsSync(c)) ?? candidates[0];
     collectIncludeGraph(fullPath, resolveOpts, visited);
@@ -77,15 +188,21 @@ function collectIncludeGraph(
  *
  * Uses a simple recursive file scan — reads each .md file and checks for
  * @<path> include lines. Does not compile; just walks the include graph.
+ *
+ * @param filePath - The changed file.
+ * @param config - The resolved compilation config.
+ * @param namespaceResolver - Optional resolver so `~namespace` includes are followed too.
  */
 export function findAffectedTargets(
   filePath: string,
-  config: CompilationConfig
+  config: CompilationConfig,
+  namespaceResolver?: NamespaceResolver
 ): CompilationTarget[] {
   return config.targets.filter(target => {
     const graph = collectIncludeGraph(target.rootInputPath, {
       aliases: config.aliases,
       scope: config.includeScope,
+      namespaceResolver,
     });
     return graph.has(filePath);
   });
@@ -116,6 +233,8 @@ export class BuildService {
    */
   async build(settings: Settings, options: BuildOptions = {}): Promise<boolean> {
     const rootScope = resolveRootScope(settings, options.configContext);
+    const namespaceResolver = resolveNamespaceResolver(settings, options);
+    const protectedPaths = protectedPathsFor(options);
 
     const stateService = new StateService();
     const stateFilePath = resolveStateFilePath(settings, options.configContext);
@@ -129,18 +248,37 @@ export class BuildService {
     if (options.rebuild && !options.dryRun && !options.noCompile) {
       const existingState = await stateService.load(stateFilePath);
       if (existingState?.files.length) {
-        stateService.deleteTrackedFiles(existingState.files, existingState.dirs);
+        stateService.deleteTrackedFiles(
+          existingState.files,
+          existingState.dirs,
+          protectedPaths
+        );
       }
     }
 
-    // Compile step
+    // Compile step. The recipes this project subscribes to contribute compile
+    // targets alongside its own, so a recipe's files are compiled by exactly the
+    // same machinery as everything else, and are pruned and cleared by it too.
     if (!options.noCompile) {
-      const config = resolveCompilation(settings, rootScope);
+      const recipes = resolveRecipeTargets(settings, rootScope, options.configContext);
+      for (const notice of recipes.warnings) warning(notice);
+
+      const config = withRecipeTargets(
+        resolveCompilation(settings, rootScope),
+        recipes,
+        settings,
+        rootScope
+      );
+
       if (config) {
         let effectiveConfig: CompilationConfig = config;
 
         if (options.changedFile) {
-          const affectedTargets = findAffectedTargets(options.changedFile, config);
+          const affectedTargets = findAffectedTargets(
+            options.changedFile,
+            config,
+            namespaceResolver
+          );
           if (affectedTargets.length === 0) {
             log(`  ⊘ No targets affected by change to ${options.changedFile} — skipping compilation`);
           } else {
@@ -149,6 +287,7 @@ export class BuildService {
               strict: options.strict,
               rebuild: options.rebuild,
               dryRun: options.dryRun,
+              namespaceResolver,
             });
             const compileOk = await compiler.compile(effectiveConfig, stateFilePath);
             if (!compileOk) success = false;
@@ -158,6 +297,7 @@ export class BuildService {
             strict: options.strict,
             rebuild: options.rebuild,
             dryRun: options.dryRun,
+            namespaceResolver,
           });
           const compileOk = await compiler.compile(effectiveConfig, stateFilePath);
           if (!compileOk) success = false;
@@ -187,7 +327,9 @@ export class BuildService {
     const state = await stateService.load(stateFilePath);
     if (!state || state.files.length === 0) return;
 
+    const protectedPaths = configContext ? protectedRepoPaths(configContext.sousDir) : [];
     const rootScope = resolveRootScope(settings, configContext);
+    const recipes = resolveRecipeTargets(settings, rootScope, configContext);
     const config = resolveCompilation(settings, rootScope);
 
     // Collect the current output set: explicit files and active destinationDir prefixes
@@ -202,6 +344,17 @@ export class BuildService {
       }
     }
 
+    // Recipe targets are counted file by file rather than by their destination
+    // directory. Every subscribed recipe writes into the same directory, so a
+    // directory prefix would make everything ever written there look current and
+    // an unsubscribed recipe's files would stay forever.
+    for (const target of recipes.targets) {
+      for (const output of target.outputs) {
+        const dest = resolveOutputPath(target, output);
+        if (dest !== undefined) currentOutputFiles.add(dest);
+      }
+    }
+
     // A state entry is current if it matches an explicit destinationFile, or if its dest
     // path falls under an active destinationDir (glob target output).
     function isCurrentOutput(dest: string): boolean {
@@ -212,8 +365,11 @@ export class BuildService {
       return false;
     }
 
-    // Find files to prune
-    const toDelete = state.files.filter(f => !isCurrentOutput(f.dest));
+    // Find files to prune. Anything inside a linked checkout or the shared
+    // recipe store is never a prune candidate, whatever the state file says.
+    const toDelete = state.files.filter(
+      f => !isCurrentOutput(f.dest) && !isProtectedPath(f.dest, protectedPaths)
+    );
 
     if (dryRun) {
       for (const entry of toDelete) {
@@ -222,12 +378,33 @@ export class BuildService {
       return;
     }
 
-    stateService.deleteTrackedFiles(toDelete, state.dirs);
+    stateService.deleteTrackedFiles(toDelete, state.dirs, protectedPaths);
     for (const entry of toDelete) console.log(`  ✗ pruned: ${entry.dest}`);
 
     // Update state: remove pruned entries and any dirs that no longer exist
-    state.files = state.files.filter(f => isCurrentOutput(f.dest));
+    const deleted = new Set(toDelete.map(entry => entry.dest));
+    state.files = state.files.filter(f => !deleted.has(f.dest));
     state.dirs = state.dirs.filter(d => fs.existsSync(d));
     await stateService.save(stateFilePath, state);
   }
+}
+
+/**
+ * Compiles and prunes a project exactly the way `sous build` does with no flags.
+ *
+ * Shared by the subscription commands, which rebuild the project the moment they
+ * have changed what it subscribes to: a newly subscribed recipe's files appear,
+ * and a removed one's files are pruned, without anyone having to remember a
+ * second command. Every option is left at its default on purpose, because the
+ * point is to run the ordinary build and nothing else.
+ *
+ * @param settings - The merged project config, reloaded after the change.
+ * @param configContext - Where the active config was discovered.
+ * @returns True when compile and prune both succeeded.
+ */
+export async function buildProjectOutputs(
+  settings: Settings,
+  configContext: ConfigContext
+): Promise<boolean> {
+  return new BuildService().build(settings, { configContext });
 }

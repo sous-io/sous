@@ -17,13 +17,18 @@ const ANSI_RE = /\[/;
 
 type RunResult = { stdout: string; stderr: string; status: number | null };
 
+/** The machine-wide sous home for this file, inside its temp directory. */
+let sousHome = "";
+
 /**
- * Runs `xcv <args...>` through the real published bin, from `cwd`. SOUS_* env
+ * Runs `sous <args...>` through the real published bin, from `cwd`. SOUS_* env
  * vars are stripped so the child resolves its config purely by walk-up discovery
  * from `cwd` (an ambient SOUS_CONFIG in the runner's env must not leak in).
+ * SOUS_HOME points into the temp tree, so nothing reaches the home directory
+ * of whoever runs the suite.
  */
 function runXcv(cwd: string, ...args: string[]): RunResult {
-  const env = { ...process.env };
+  const env = { ...process.env, SOUS_HOME: sousHome };
   delete env.SOUS_CONFIG;
   delete env.SOUS_DIR;
   delete env.SOUS_CONFD;
@@ -44,7 +49,7 @@ function writeSous(sousDir: string, rel: string, content: string): string {
 }
 
 /**
- * These tests exercise the `xcv config *` inspection commands (show / get /
+ * These tests exercise the `sous config *` inspection commands (show / get /
  * validate) end to end through the real CLI, against temp configs that use
  * conf.d layers: a primary config plus two drop-in layers, one overriding a
  * scalar and one appending a compilation target.
@@ -52,7 +57,7 @@ function writeSous(sousDir: string, rel: string, content: string): string {
  * `${...}` refs in fixtures are ordinary quoted strings (never template
  * literals) so they reach the child verbatim instead of interpolating here.
  */
-describe("xcv config commands", () => {
+describe("sous config commands", () => {
   let tmp: TmpDir;
   let root: string;
   let sousDir: string;
@@ -60,6 +65,7 @@ describe("xcv config commands", () => {
   beforeAll(() => {
     tmp = makeTmpDir("sous-config-cmd-");
     root = tmp.path;
+    sousHome = path.join(root, "sous-home");
     sousDir = path.join(root, ".sous");
 
     // Primary config: name + one target + one tool.
@@ -250,7 +256,7 @@ describe("xcv config commands", () => {
  * not affect the others. `config validate` must exit non-zero and name the
  * specific problem.
  */
-describe("xcv config validate failures", () => {
+describe("sous config validate failures", () => {
   const tmps: TmpDir[] = [];
 
   /** Makes a fresh temp project whose `.sous/sous.config.json` is `config`. */

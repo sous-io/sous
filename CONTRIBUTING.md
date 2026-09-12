@@ -19,11 +19,11 @@ as you edit, and `npm run test:coverage` adds a coverage report.
 separate because they spawn real processes and watch real files: run them with
 `npm run test:e2e`.
 
-Run the CLI from a clone without installing it globally with `./bin/xcv <command>`, or run
-`npm link` once to get `xcv` on your PATH.
+Run the CLI from a clone without installing it globally with `./bin/sous <command>`, or run
+`npm link` once to get `sous` on your PATH.
 
 This repo configures its own agent skills with sous, from `.sous/sous.config.js`. Running
-`./bin/xcv build` compiles them into `.claude/skills/`, which is gitignored build output.
+`./bin/sous build` compiles them into `.claude/skills/`, which is gitignored build output.
 That is optional for contributing, but it is the fastest way to confirm a change to the
 compiler or the shared prompts does what you expect.
 

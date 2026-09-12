@@ -250,7 +250,7 @@ describe("BuildService", () => {
     /**
      * A PLAIN build (compile + prune, no flags) removes a file dropped from the config.
      *
-     * This is the everyday workflow — edit the config, run `xcv build` — with no
+     * This is the everyday workflow — edit the config, run `sous build` — with no
      * noCompile workaround. It regresses the orphaning bug where compile replaced
      * state.files wholesale with only the current pass's outputs, so by the time
      * prune ran the dropped file was already gone from state and survived on disk
