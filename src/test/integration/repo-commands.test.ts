@@ -12,7 +12,9 @@ import { parseLinksMap, type LinksMap } from "../../lib/repos/formats/links-map.
 import {
   readManagedLayer,
   REPOS_LAYER_FILENAME,
+  SUBSCRIPTIONS_LAYER_FILENAME,
 } from "../../lib/repos/managed-layer.js";
+import { buildFixtureRepo } from "../utils/fixture-repo.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const binPath = path.join(repoRoot, "bin", "run.js");
@@ -648,6 +650,234 @@ describe("sous repo add with a local path", () => {
       const output = result.stdout + result.stderr;
       expect(output).toContain("The github provider does not handle");
       expect(output).toContain("the local provider handles");
+    },
+    CLI_TIMEOUT
+  );
+});
+
+/**
+ * `sous repo remove`: withdrawing trust from a repository, and everything that
+ * goes with it.
+ *
+ * The repository is a local fixture read through the `local` provider, so
+ * nothing here touches the network. The project subscribes to one of its
+ * recipes first, so the removal has a subscription, a lockfile entry and a
+ * compiled skill to take away.
+ */
+describe("sous repo remove", () => {
+  let tmp: TmpDir;
+  let root: string;
+  let recipesRepo: string;
+  let projectRoot: string;
+  let sousDir: string;
+  /** A second project, used for the built-in repository sous provides itself. */
+  let defaultsProject: string;
+  let defaultsSousDir: string;
+  let env: NodeJS.ProcessEnv;
+
+  beforeAll(async () => {
+    tmp = makeTmpDir("sous-repo-remove-");
+    root = fs.realpathSync(tmp.path);
+    recipesRepo = path.join(root, "fixtures");
+    projectRoot = path.join(root, "project");
+    sousDir = path.join(projectRoot, ".sous");
+    defaultsProject = path.join(root, "defaults-project");
+    defaultsSousDir = path.join(defaultsProject, ".sous");
+    env = { SOUS_HOME: path.join(root, "sous-home") };
+
+    await buildFixtureRepo(recipesRepo, "fixtures", [
+      {
+        namespace: "workflow",
+        name: "task-files",
+        version: "1.0.0",
+        description: "Keeps one task file per branch",
+        files: { "skills/task-files/SKILL.md": "# Task files\n\nFrom the fixture repo.\n" },
+      },
+    ]);
+
+    // The project runs against the fixture repository and nothing else: the
+    // repository sous provides itself is switched off, so no test here needs a
+    // network and no fixture name can collide with a published one.
+    fs.mkdirSync(sousDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(sousDir, "sous.config.json"),
+      JSON.stringify(
+        { name: "repo-remove-project", repos: { "sous-recipes": { enabled: false } } },
+        null,
+        2
+      ),
+      "utf8"
+    );
+
+    // The second project takes the defaults exactly as sous provides them.
+    fs.mkdirSync(defaultsSousDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(defaultsSousDir, "sous.config.json"),
+      JSON.stringify({ name: "defaults-project" }, null, 2),
+      "utf8"
+    );
+
+    const added = runSous(projectRoot, env, "repo", "add", recipesRepo, "--trust");
+    if (added.status !== 0) {
+      throw new Error(`repo add failed: ${added.stdout}${added.stderr}`);
+    }
+
+    const subscribed = runSous(
+      projectRoot,
+      env,
+      "subscribe",
+      "workflow/task-files",
+      "--yes"
+    );
+    if (subscribed.status !== 0) {
+      throw new Error(`subscribe failed: ${subscribed.stdout}${subscribed.stderr}`);
+    }
+  }, 120_000);
+
+  afterAll(() => {
+    tmp.cleanup();
+  });
+
+  /** The repositories the managed layer records, keyed by short name. */
+  function reposLayer(dir = sousDir): Record<string, { enabled?: boolean }> {
+    const layer = readManagedLayer(dir, REPOS_LAYER_FILENAME) as {
+      repos?: Record<string, { enabled?: boolean }>;
+    };
+    return layer.repos ?? {};
+  }
+
+  /** The subscriptions the managed layer records, keyed by ref. */
+  function subscriptionsLayer(dir = sousDir): Record<string, unknown> {
+    const layer = readManagedLayer(dir, SUBSCRIPTIONS_LAYER_FILENAME) as {
+      subscriptions?: Record<string, unknown>;
+    };
+    return layer.subscriptions ?? {};
+  }
+
+  /** The lockfile as it stands right now. */
+  function lockfile(): { repos: Record<string, unknown>; recipes: Record<string, unknown> } {
+    const file = path.join(sousDir, "sous.lock.json");
+    return JSON.parse(fs.readFileSync(file, "utf8")) as {
+      repos: Record<string, unknown>;
+      recipes: Record<string, unknown>;
+    };
+  }
+
+  /** The skill file the subscribed recipe compiles into the project. */
+  function compiledSkill(): string {
+    return path.join(projectRoot, ".claude", "skills", "task-files", "SKILL.md");
+  }
+
+  /**
+   * The setup itself is the first assertion: the repository is trusted, the
+   * subscription is locked, and the recipe's skill is on disk. Everything below
+   * is about taking those three things away.
+   */
+  it(
+    "should start from a trusted repository with a compiled subscription",
+    () => {
+      expect(reposLayer()["fixtures"]).toBeDefined();
+      expect(Object.keys(subscriptionsLayer())).toEqual(["workflow/task-files"]);
+      expect(Object.keys(lockfile().recipes)).toEqual(["workflow/task-files"]);
+      expect(fs.existsSync(compiledSkill())).toBe(true);
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * A dry run says what would go, in full, and writes nothing at all.
+   *
+   * sous repo remove fixtures --dry-run
+   */
+  it(
+    "should report what would go and write nothing on a dry run",
+    () => {
+      const result = runSous(projectRoot, env, "repo", "remove", "fixtures", "--dry-run");
+      expect(result.status, result.stdout + result.stderr).toBe(0);
+
+      // The plan names the subscription that goes, the recipe that leaves the
+      // lockfile, and the file the next build would prune.
+      expect(result.stdout).toContain("workflow/task-files");
+      expect(result.stdout).toContain(compiledSkill());
+
+      expect(reposLayer()["fixtures"]).toBeDefined();
+      expect(Object.keys(subscriptionsLayer())).toEqual(["workflow/task-files"]);
+      expect(Object.keys(lockfile().recipes)).toEqual(["workflow/task-files"]);
+      expect(fs.existsSync(compiledSkill())).toBe(true);
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * A name the project does not trust is a mistake worth naming: the message
+   * says so and lists the repositories it does trust.
+   *
+   * sous repo remove nowhere-recipes   // -> exits non-zero, names 'fixtures'
+   */
+  it(
+    "should refuse a name this project does not trust",
+    () => {
+      const result = runSous(projectRoot, env, "repo", "remove", "nowhere-recipes");
+      expect(result.status).not.toBe(0);
+
+      const output = result.stdout + result.stderr;
+      expect(output).toContain("nowhere-recipes");
+      expect(output).toContain("fixtures");
+      expect(reposLayer()["fixtures"]).toBeDefined();
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * The removal itself: the entry leaves the repositories layer, the
+   * subscription that resolved into it goes, the lockfile lets the recipe go,
+   * and the build that follows prunes what it used to write.
+   *
+   * sous repo remove fixtures --yes
+   */
+  it(
+    "should remove the repository, its subscription and its outputs",
+    () => {
+      const result = runSous(projectRoot, env, "repo", "remove", "fixtures", "--yes");
+      expect(result.status, result.stdout + result.stderr).toBe(0);
+
+      expect(reposLayer()["fixtures"]).toBeUndefined();
+      expect(subscriptionsLayer()["workflow/task-files"]).toBeUndefined();
+
+      const lock = lockfile();
+      expect(Object.keys(lock.recipes)).toEqual([]);
+      expect(Object.keys(lock.repos)).toEqual([]);
+
+      // The build the command ends with prunes the skill the recipe wrote.
+      expect(fs.existsSync(compiledSkill())).toBe(false);
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * Removing the repository sous provides itself cannot delete an entry,
+   * because the entry comes back from the installed package on every run. It
+   * records the opt-out instead, in the shape a person writes by hand, and says
+   * so.
+   *
+   * sous repo remove sous-recipes --yes --no-build
+   */
+  it(
+    "should switch the built-in repository off rather than delete it",
+    () => {
+      const result = runSous(
+        defaultsProject,
+        env,
+        "repo",
+        "remove",
+        "sous-recipes",
+        "--yes",
+        "--no-build"
+      );
+      expect(result.status, result.stdout + result.stderr).toBe(0);
+      expect(result.stdout).toContain("enabled: false");
+
+      expect(reposLayer(defaultsSousDir)["sous-recipes"]).toEqual({ enabled: false });
     },
     CLI_TIMEOUT
   );
