@@ -11,22 +11,22 @@
       "version": "1.0.0"
     },
     "core/sous-skills": {
-      "hash": "sha256-ec4b67b0a6fef452e3b69fa13c17688e7019930b2bbbba36e9c8e772f21c7d05",
+      "hash": "sha256-b42969a093dbe5b7485a05636ea3b92366194e43cd1ee849dd9db07a2b2b40c2",
       "kind": "subscribes",
       "repo": "sous-recipes",
       "requestedBy": [
         "project"
       ],
-      "version": "0.1.1"
+      "version": "0.2.0"
     },
     "workflow/github-projects": {
-      "hash": "sha256-2bf24c9d3c64ab6a761dab7d07616dad50e909d76bc193eed432ad461302c525",
+      "hash": "sha256-8cff152d6ec30b242a35f1e2c4c98a8ca730728de61630cec4b6bcf7dee45615",
       "kind": "subscribes",
       "repo": "sous-recipes",
       "requestedBy": [
         "project"
       ],
-      "version": "1.0.1"
+      "version": "1.0.2"
     },
     "workflow/sub-agent-delegation": {
       "hash": "sha256-6841b6f61a9a62d84152bc0fcfe246af35b7f75001527d6addf55e51068f8387",
@@ -40,13 +40,13 @@
       "version": "1.0.0"
     },
     "workflow/task-files": {
-      "hash": "sha256-1240ce2e3404e22aca2f41f5a04ad5cecb1e3884621a5e3d07a5c62ac64891b3",
+      "hash": "sha256-cbdb330aafe322839017c404beaaefae3140553436962b1949065512e7c156c5",
       "kind": "subscribes",
       "repo": "sous-recipes",
       "requestedBy": [
         "project"
       ],
-      "version": "1.0.1"
+      "version": "1.0.2"
     }
   },
   "repos": {
