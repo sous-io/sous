@@ -11,7 +11,7 @@ formatVersion: 1
 
 namespace: core
 name: sous-skills
-version: 0.2.1
+version: 0.2.2
 
 description: >-
   The skills that teach an agent what sous is and how it works: which files sous

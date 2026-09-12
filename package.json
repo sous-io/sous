@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/sous",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Compiles AI coding agent configuration (CLAUDE.md, skills, memories) from LiquidJS templates",
   "type": "module",
   "license": "Apache-2.0",
