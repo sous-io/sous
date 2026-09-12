@@ -7,6 +7,7 @@
 import path from "node:path";
 import type { VariableDefinition } from "../repos/formats/recipe-manifest.js";
 import {
+  BULLET,
   formatVariable,
   VARIABLE_INDENT,
   wrapColumns,
@@ -199,9 +200,6 @@ export function selectFacts(facts: LabeledFact[], labels: string[]): LabeledFact
  * as a different kind of list.
  */
 export const FACTS_INDENT = VARIABLE_INDENT;
-
-/** The character every bulleted line in the CLI is drawn with. */
-export const BULLET = "•";
 
 /**
  * Lays the labeled facts out through the one key and value renderer, so a fact

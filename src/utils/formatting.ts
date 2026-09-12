@@ -799,6 +799,12 @@ export function keysHelpTip(keys: Array<[key: string, action: string]>): string 
     .join(color.dim(" • "));
 }
 
+/**
+ * The character every bulleted line in the CLI is drawn with, so a list of
+ * points always looks like a list of points.
+ */
+export const BULLET = "•";
+
 /** How many blank lines a question keeps under itself while it is waiting. */
 export const PROMPT_BOTTOM_PADDING = 2;
 

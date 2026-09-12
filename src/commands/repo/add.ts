@@ -20,9 +20,8 @@ import {
   blankLine,
   dryRunNotice,
   footer,
-  indent,
   heading,
-  log,
+  note,
   showCommandVars,
   showVariables,
 } from "../../utils/formatting.js";
@@ -114,11 +113,9 @@ export default class RepoAdd extends BaseCommand {
     blankLine();
 
     if (outcome.dryRun) {
-      log(
-        indent(
-          `The repository would be added as '${outcome.name}', read through the ` +
-            `${outcome.provider} provider, and its index would be fetched.`
-        )
+      note(
+        `The repository would be added as '${outcome.name}', read through the ` +
+          `${outcome.provider} provider, and its index would be fetched.`
       );
       footer();
       return;
@@ -136,15 +133,11 @@ export default class RepoAdd extends BaseCommand {
     });
 
     blankLine();
-    log(
-      indent(
-        outcome.alreadyTrusted
-          ? `This project already trusted '${outcome.name}', so only its index was ` +
-              `refreshed.`
-          : `This project now trusts '${outcome.name}'. Nothing from it has been ` +
-              `installed; subscribe to something in it with 'sous subscribe ` +
-              `<namespace>/<recipe>'.`
-      )
+    note(
+      outcome.alreadyTrusted
+        ? `This project already trusted '${outcome.name}', so only its index was ` +
+            `refreshed.`
+        : `This project now trusts '${outcome.name}'. Nothing from it has been installed.`
     );
 
     footer();

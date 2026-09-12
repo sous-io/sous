@@ -25,7 +25,17 @@ import semver from "semver";
 import { ConfigError, isConfigError } from "../errors.js";
 import { SOUS_VERSION, type ConfigContext, type Settings, type VarScope } from "../settings.js";
 import { CONFD_DIR_NAME } from "../config-discovery.js";
-import { indent, log, warning } from "../../utils/formatting.js";
+import {
+  BULLET,
+  formatVariable,
+  indent,
+  log,
+  palette,
+  warning,
+  wrapColumns,
+  wrapText,
+  type VariableEntry,
+} from "../../utils/formatting.js";
 import { askChoice, askYesNo } from "../../utils/prompts.js";
 import { ensureStoreRootDirectory } from "../../utils/sous-directory.js";
 import { isInteractive, nonInteractiveError } from "../interactive.js";
@@ -926,57 +936,90 @@ export class SubscriptionService {
     indexes: Map<string, IndexFile>
   ): Promise<string[]> {
     const target = formatRef(parsed);
+    const width = wrapColumns() - 4;
     const lines: string[] = [""];
+
+    /** One sentence of the plan, wrapped and in the warning color. */
+    const sentence = (text: string): string[] =>
+      wrapText(text, width).map((line) => palette.warning(line));
+
+    /** One bullet of the plan, wrapped so its continuation hangs under the text. */
+    const bullet = (text: string): string[] =>
+      wrapText(`${BULLET} ${text}`, width, { hangingIndent: 2 }).map((line) =>
+        palette.warning(line)
+      );
 
     if (parsed.recipe === undefined) {
       const published = this.namespaceRecipes(parsed, indexes);
       lines.push(
-        `Subscribing to '${target}' subscribes this project to the whole namespace ` +
-          `'${parsed.namespace}', which means every recipe in it, including ones ` +
-          `published later.`
+        ...sentence(
+          `Subscribing to '${target}' subscribes this project to the whole ` +
+            `namespace '${parsed.namespace}', which means ${palette.highlight(
+              "every recipe in it, including ones published later"
+            )}.`
+        )
       );
       if (published.length > 0) {
-        lines.push(`It publishes ${published.length} today: ${published.join(", ")}.`);
+        lines.push(
+          ...sentence(`It publishes ${published.length} today: ${published.join(", ")}.`)
+        );
       }
     } else {
       lines.push(
-        `Subscribing to '${target}' installs the recipe '${parsed.recipe}' from the ` +
-          `namespace '${parsed.namespace}'.`
+        ...sentence(
+          `Subscribing to '${target}' installs the recipe '${parsed.recipe}' from ` +
+            `the namespace '${parsed.namespace}'.`
+        )
       );
     }
 
     lines.push("");
-    lines.push("Here is what that does:");
+    lines.push(...sentence("Here is what that does:"));
     lines.push("");
     lines.push(
-      `  The files it ships are compiled into this project on the next build, which ` +
-        `writes them into this project's agent directories.`
+      ...bullet(
+        `The files it ships are compiled into this project on the next build, ` +
+          `which writes them into this project's agent directories.`
+      )
     );
     lines.push(
-      `  Any scripts it ships can be run on this machine when an agent uses them. ` +
-        `Sous does not run them itself, and it cannot vouch for what they do.`
+      ...bullet(
+        `Any scripts it ships ${palette.highlight(
+          "can be run on this machine"
+        )} when an agent uses them. Sous does not run them itself, and it cannot ` +
+          `vouch for what they do.`
+      )
     );
     lines.push(
-      `  The variables it publishes are asked about at the end of this command, and ` +
-        `the answers are written into this project's env files.`
+      ...bullet(
+        `The variables it publishes are asked about at the end of this command, ` +
+          `and the answers are written into this project's env files.`
+      )
     );
     lines.push(
-      `  Its dependencies are fetched and pinned in this project's lockfile, at the ` +
-        `exact versions resolved now.`
+      ...bullet(
+        `Its dependencies are fetched and pinned in this project's lockfile, at ` +
+          `the exact versions resolved now.`
+      )
     );
 
     const untrusted = await this.knownUntrustedDependencyRepos(parsed, options, indexes);
     if (untrusted.length > 0) {
       lines.push(
-        `  Some of what it needs lives in repositories this project does not trust ` +
-          `yet: ${untrusted.join(", ")}. You are asked about each one by name before ` +
-          `anything is fetched from it.`
+        ...bullet(
+          `Some of what it needs lives in repositories this project ${palette.highlight(
+            "does not trust yet"
+          )}: ${untrusted.join(", ")}. You are asked about each one by name before ` +
+            `anything is fetched from it.`
+        )
       );
     } else {
       lines.push(
-        `  If a dependency turns out to live in a repository this project does not ` +
-          `trust, sous stops and asks about that repository by name before fetching ` +
-          `anything from it.`
+        ...bullet(
+          `If a dependency turns out to live in a repository this project does ` +
+            `not trust, sous stops and asks about that repository by name before ` +
+            `fetching anything from it.`
+        )
       );
     }
 
