@@ -10,9 +10,10 @@
   - [Inspecting and validating](config-inspection.md)
 - **Repositories**
   - [Overview](repositories.md)
+  - [Quickstart](repositories-quickstart.md)
   - [Consuming recipes](repositories-consuming.md)
-  - [Recipe variables](repositories-variables.md)
   - [Authoring a repository](repositories-authoring.md)
+  - [Recipe variables](repositories-variables.md)
   - [Providers](repositories-providers.md)
   - [File formats](repositories-file-formats.md)
   - [Troubleshooting](repositories-troubleshooting.md)
