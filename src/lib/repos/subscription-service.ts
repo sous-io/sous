@@ -1587,10 +1587,12 @@ export class SubscriptionService {
   }
 
   /**
-   * Puts the core recipe that ships inside the sous package into the store, and
+   * Puts the core recipe that ships inside the sous package into the store,
    * writes a stand-in index for the official repository when nothing real has
-   * ever been fetched. This runs before anything else a build does, because it
-   * is what lets a project with no network resolve the `core` namespace at all.
+   * ever been fetched, and tells the index cache about the packaged version so
+   * it resolves even against a real index that has not published it yet. This
+   * runs before anything else a build does, because it is what lets a project
+   * resolve the `core` namespace at all, with or without a network.
    *
    * Idempotent, offline, and never fatal: a failure comes back in the report as
    * a sentence to warn about.
@@ -1601,6 +1603,11 @@ export class SubscriptionService {
       store: this.storeInstance,
       sousVersion: SOUS_VERSION,
       now: this.now,
+      // Teaching the index cache what the package holds is what lets the seeded
+      // version resolve on a machine whose cached index is the real one and does
+      // not publish that version yet.
+      indexCache: this.indexCache,
+      warn: this.warn,
     });
     return this.seedReport;
   }

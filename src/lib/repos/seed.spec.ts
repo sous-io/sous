@@ -11,7 +11,8 @@ import {
 import { parseIndexFile } from "./formats/index-file.js";
 import { INDEX_CACHE_DIRNAME, INDEX_SIDECAR_SUFFIX } from "./providers/index-cache.js";
 import { RecipeStore } from "./store/recipe-store.js";
-import { SEED_INDEX_COMMENT, seedCoreRecipe } from "./seed.js";
+import type { IndexOverlay } from "./providers/index-cache.js";
+import { SEED_INDEX_COMMENT, coreIndexOverlay, seedCoreRecipe } from "./seed.js";
 
 const tmpDirs: TmpDir[] = [];
 
@@ -220,5 +221,221 @@ describe("seedCoreRecipe()", () => {
 
     expect(report.seeded).toBe(false);
     expect(report.skippedBecause).toContain("the store is read only");
+  });
+});
+
+describe("coreIndexOverlay()", () => {
+  const HASH = `sha256-${"b".repeat(64)}`;
+
+  /** A real index for the official repository, publishing the versions given. */
+  function realIndex(versions: string[]) {
+    return parseIndexFile(
+      {
+        formatVersion: 1,
+        name: OFFICIAL_REPO_NAME,
+        generatedAt: "2026-01-01T00:00:00.000Z",
+        generator: "0.1.1",
+        namespaces: { core: { description: "The core skills." } },
+        recipes: {
+          [CORE_RECIPE_KEY]: {
+            path: "recipes/core/sous-skills",
+            description: "What the repository says about it.",
+            versions: Object.fromEntries(
+              versions.map((version) => [
+                version,
+                {
+                  hash: `sha256-${"a".repeat(64)}`,
+                  tag: `${CORE_RECIPE_KEY}@${version}`,
+                  prerelease: false,
+                },
+              ])
+            ),
+          },
+        },
+      },
+      "test"
+    );
+  }
+
+  /**
+   * The bug this exists for: a machine that has already fetched the real index
+   * upgrades sous, and the repository has not published the new version yet.
+   * Without the overlay nothing satisfies the built-in subscription's range and
+   * the project quietly loses its core skills.
+   */
+  it("adds the packaged version when the published index lacks it", () => {
+    const overlay = coreIndexOverlay({ version: "9.9.9", hash: HASH });
+
+    const result = overlay(OFFICIAL_REPO_IDENTITY, realIndex(["0.1.1"]));
+
+    const versions = result.recipes[CORE_RECIPE_KEY]!.versions;
+    expect(Object.keys(versions).sort()).toEqual(["0.1.1", "9.9.9"]);
+    expect(versions["9.9.9"]).toEqual({
+      hash: HASH,
+      tag: `${CORE_RECIPE_KEY}@9.9.9`,
+      prerelease: false,
+      seeded: true,
+    });
+
+    // What the repository published is untouched, and so is the index it was
+    // read from.
+    expect(versions["0.1.1"]!.seeded).toBeUndefined();
+    expect(
+      Object.keys(realIndex(["0.1.1"]).recipes[CORE_RECIPE_KEY]!.versions)
+    ).toEqual(["0.1.1"]);
+  });
+
+  /** The result has to be something the index schema still accepts. */
+  it("produces an index that still validates", () => {
+    const overlay = coreIndexOverlay({ version: "9.9.9", hash: HASH });
+
+    const result = overlay(OFFICIAL_REPO_IDENTITY, realIndex(["0.1.1"]));
+
+    expect(() => parseIndexFile(result, "overlaid")).not.toThrow();
+  });
+
+  /** A prerelease version of sous seeds a prerelease of the recipe. */
+  it("marks a prerelease version as one", () => {
+    const overlay = coreIndexOverlay({ version: "9.9.9-rc.1", hash: HASH });
+
+    const result = overlay(OFFICIAL_REPO_IDENTITY, realIndex(["0.1.1"]));
+
+    expect(result.recipes[CORE_RECIPE_KEY]!.versions["9.9.9-rc.1"]!.prerelease).toBe(true);
+  });
+
+  /** Once the repository publishes the version, its own entry is what is used. */
+  it("leaves a published version of its own alone", () => {
+    const warnings: string[] = [];
+    const overlay = coreIndexOverlay({
+      version: "0.1.1",
+      hash: `sha256-${"a".repeat(64)}`,
+      warn: (message) => warnings.push(message),
+    });
+
+    const index = realIndex(["0.1.1"]);
+    expect(overlay(OFFICIAL_REPO_IDENTITY, index)).toBe(index);
+    expect(warnings).toEqual([]);
+  });
+
+  /**
+   * Same version, different bytes. That should not happen, since both are built
+   * from the same source; when it does, the published one wins and sous says so
+   * exactly once.
+   */
+  it("prefers the published version and warns once when the hashes differ", () => {
+    const warnings: string[] = [];
+    const overlay = coreIndexOverlay({
+      version: "0.1.1",
+      hash: HASH,
+      warn: (message) => warnings.push(message),
+    });
+
+    const first = overlay(OFFICIAL_REPO_IDENTITY, realIndex(["0.1.1"]));
+    overlay(OFFICIAL_REPO_IDENTITY, realIndex(["0.1.1"]));
+
+    expect(first.recipes[CORE_RECIPE_KEY]!.versions["0.1.1"]!.hash).toBe(
+      `sha256-${"a".repeat(64)}`
+    );
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("different contents");
+  });
+
+  /** The overlay is about one repository, and says nothing about any other. */
+  it("leaves every other repository's index alone", () => {
+    const overlay = coreIndexOverlay({ version: "9.9.9", hash: HASH });
+    const index = realIndex(["0.1.1"]);
+
+    expect(overlay("github.com/someone/else", index)).toBe(index);
+  });
+
+  /**
+   * A machine that has never fetched anything reads sous's own stand-in, which
+   * already names the packaged version; there is nothing left to add.
+   */
+  it("adds nothing to the stand-in index the seed writes", async () => {
+    const { store, root } = makeStore();
+    const report = await seedCoreRecipe({ store, sousVersion: SOUS_VERSION });
+    const overlay = coreIndexOverlay({ version: SOUS_VERSION, hash: report.hash! });
+
+    const cached = readIndex(root);
+    expect(overlay(OFFICIAL_REPO_IDENTITY, cached)).toBe(cached);
+  });
+});
+
+describe("seedCoreRecipe() and the index cache", () => {
+  /**
+   * Seeding is where the packaged hash becomes known, so it is where the cache
+   * is taught about it.
+   */
+  it("installs an overlay carrying the hash it seeded", async () => {
+    const { store, root } = makeStore();
+    let installed: IndexOverlay | undefined;
+
+    const report = await seedCoreRecipe({
+      store,
+      sousVersion: SOUS_VERSION,
+      indexCache: {
+        setOverlay: (overlay) => {
+          installed = overlay;
+        },
+      },
+    });
+
+    expect(installed).toBeDefined();
+
+    const published = parseIndexFile(
+      {
+        formatVersion: 1,
+        name: OFFICIAL_REPO_NAME,
+        generatedAt: "2026-01-01T00:00:00.000Z",
+        generator: "0.1.1",
+        namespaces: { core: {} },
+        recipes: {
+          [CORE_RECIPE_KEY]: {
+            path: "recipes/core/sous-skills",
+            versions: {
+              "0.0.1": {
+                hash: `sha256-${"a".repeat(64)}`,
+                tag: `${CORE_RECIPE_KEY}@0.0.1`,
+                prerelease: false,
+              },
+            },
+          },
+        },
+      },
+      "test"
+    );
+
+    const overlaid = installed!(OFFICIAL_REPO_IDENTITY, published);
+    expect(overlaid.recipes[CORE_RECIPE_KEY]!.versions[SOUS_VERSION]!.hash).toBe(
+      report.hash
+    );
+    expect(root).toBe(store.root);
+  });
+
+  /** A store that cannot be written teaches the cache nothing. */
+  it("installs no overlay when it could not seed", async () => {
+    const { store } = makeStore();
+    const broken = {
+      ...store,
+      root: store.root,
+      get: async () => undefined,
+      put: async () => {
+        throw new Error("the store is read only");
+      },
+    } as unknown as RecipeStore;
+    let installed = false;
+
+    await seedCoreRecipe({
+      store: broken,
+      sousVersion: SOUS_VERSION,
+      indexCache: {
+        setOverlay: () => {
+          installed = true;
+        },
+      },
+    });
+
+    expect(installed).toBe(false);
   });
 });

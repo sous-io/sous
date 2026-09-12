@@ -191,4 +191,58 @@ describe("IndexCache", () => {
     expect(cache.readCached("sous-recipes")).toBeUndefined();
     expect(cache.readMeta("sous-recipes")).toBeUndefined();
   });
+
+  /**
+   * An overlay is how sous adds what it knows about a repository, and the whole
+   * point is that the cached file stays exactly what the repository served.
+   */
+  it("should fold an overlay into a fetched index without writing it to disk", async () => {
+    const provider = new StubProvider(() => ({ text: INDEX_TEXT, ref: "main" }));
+    const cache = makeCache(provider);
+    cache.setOverlay((identity, index) => ({
+      ...index,
+      generator: `overlaid-for-${identity}`,
+    }));
+
+    const lookup = await cache.getIndex("github.com/sous-io/sous-recipes", {
+      url: REPO_URL,
+    });
+
+    expect(lookup.index.generator).toBe("overlaid-for-github.com/sous-io/sous-recipes");
+
+    const onDisk = JSON.parse(
+      fs.readFileSync(cache.indexPath("github.com/sous-io/sous-recipes"), "utf8")
+    ) as { generator: string };
+    expect(onDisk.generator).toBe("1.0.0");
+  });
+
+  /** The cached copy gets the same treatment, so every reader sees one answer. */
+  it("should fold an overlay into a cached index too", async () => {
+    const provider = new StubProvider(() => ({ text: INDEX_TEXT, ref: "main" }));
+    const cache = makeCache(provider);
+    await cache.getIndex("github.com/sous-io/sous-recipes", { url: REPO_URL });
+
+    cache.setOverlay((_identity, index) => ({ ...index, generator: "2.0.0" }));
+
+    expect(cache.readCached("github.com/sous-io/sous-recipes")!.generator).toBe("2.0.0");
+  });
+
+  /**
+   * An overlay adds a convenience. Losing it is worth a warning, never the index
+   * the repository actually published.
+   */
+  it("should warn and use the published index when an overlay throws", async () => {
+    const provider = new StubProvider(() => ({ text: INDEX_TEXT, ref: "main" }));
+    const cache = makeCache(provider);
+    cache.setOverlay(() => {
+      throw new Error("the overlay is broken");
+    });
+
+    const lookup = await cache.getIndex("github.com/sous-io/sous-recipes", {
+      url: REPO_URL,
+    });
+
+    expect(lookup.index.generator).toBe("1.0.0");
+    expect(warnings.join("\n")).toContain("the overlay is broken");
+  });
 });

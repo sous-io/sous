@@ -11,6 +11,13 @@
  * upstream check never breaks a build. When a refetch fails and a cached copy
  * exists, the cached copy is used and the failure is reported as a warning.
  *
+ * One thing the cache can do beyond storing and serving: an OVERLAY. Sous ships
+ * a copy of the core recipe inside its own package, and that copy has to be
+ * resolvable even when the repository publishing it has not published that
+ * version yet. An overlay folds such a fact into every copy of an index the
+ * cache hands out, and never into the file on disk, so the cached copy stays an
+ * honest record of what the repository actually served.
+ *
  * The cache takes the store's root directory as a plain string, so it does not
  * depend on the store implementation at all.
  */
@@ -63,6 +70,17 @@ export type IndexLookup = {
   meta: IndexMeta;
 };
 
+/**
+ * A fact sous knows about a repository that its published index does not carry,
+ * folded into every copy of that index the cache returns.
+ *
+ * An overlay must be pure: it is handed an index and returns one, and it never
+ * touches the cache's files. It is called for every repository, so it decides
+ * for itself which identity it applies to and returns the index unchanged for
+ * all the others.
+ */
+export type IndexOverlay = (identity: string, index: IndexFile) => IndexFile;
+
 /** Which repository to fetch, and how fresh the answer has to be. */
 export type GetIndexOptions = {
   /** The repository URL, used when a fetch is needed. */
@@ -97,6 +115,11 @@ export type IndexCacheOptions = {
   now?: () => Date;
   /** Where warnings go. Defaults to the console warning banner. */
   warn?: (message: string) => void;
+  /**
+   * A fact to fold into every index this cache returns, without ever writing it
+   * to disk. See `IndexOverlay`; `setOverlay` installs one later.
+   */
+  overlay?: IndexOverlay;
 };
 
 /** One cached repository index, plus the machinery to keep it current. */
@@ -111,12 +134,53 @@ export class IndexCache {
 
   private readonly warn: (message: string) => void;
 
+  /**
+   * What sous itself knows about a repository, over and above what the
+   * repository published. Not readonly: the packaged core recipe's hash is only
+   * known once the store has been seeded, which happens after the cache exists.
+   */
+  private overlay: IndexOverlay | undefined;
+
   constructor(options: IndexCacheOptions) {
     this.storeRoot = options.storeRoot;
     this.resolveProvider = options.resolveProvider;
     this.providerOptions = options.providerOptions ?? {};
     this.now = options.now ?? (() => new Date());
     this.warn = options.warn ?? warning;
+    this.overlay = options.overlay;
+  }
+
+  /**
+   * Installs the overlay folded into every index this cache returns from now
+   * on. Nothing already written to disk changes, and nothing written later
+   * carries it.
+   *
+   * @param overlay - The overlay to apply, or undefined to apply none.
+   */
+  setOverlay(overlay: IndexOverlay | undefined): void {
+    this.overlay = overlay;
+  }
+
+  /**
+   * Folds the installed overlay, if there is one, into an index on its way out.
+   * An overlay that throws is ignored and warned about: a fact sous was trying
+   * to add is never worth losing the index the repository really published.
+   *
+   * @param identity - The repository's canonical identity.
+   * @param index - The index as it was read or fetched.
+   */
+  private applyOverlay(identity: string, index: IndexFile): IndexFile {
+    if (this.overlay === undefined) return index;
+    try {
+      return this.overlay(identity, index);
+    } catch (error) {
+      this.warn(
+        `Sous could not add what it knows about the repository '${identity}' to that ` +
+          `repository's index, so only what the repository published is available.\n` +
+          `${error instanceof Error ? error.message : String(error)}`
+      );
+      return index;
+    }
   }
 
   /** The directory cached indexes live in. */
@@ -191,7 +255,8 @@ export class IndexCache {
   /**
    * Reads and validates the cached index, or undefined when there is none. A
    * cached file that no longer parses is treated as absent, since it is only a
-   * copy of something upstream still has.
+   * copy of something upstream still has. Any installed overlay is folded into
+   * the answer; the file itself is left exactly as it was cached.
    *
    * @param identity - The repository's canonical identity.
    */
@@ -204,7 +269,7 @@ export class IndexCache {
       return undefined;
     }
     try {
-      return parseIndexFile(JSON.parse(text), file);
+      return this.applyOverlay(identity, parseIndexFile(JSON.parse(text), file));
     } catch {
       return undefined;
     }
@@ -299,7 +364,9 @@ export class IndexCache {
     fs.writeFileSync(file, stableJsonStringify(index), "utf8");
     this.writeMeta(identity, meta);
 
-    return { index, source: "network", meta };
+    // Written first, overlaid second: the file is what the repository served,
+    // and the overlay exists only in the copy handed back to the caller.
+    return { index: this.applyOverlay(identity, index), source: "network", meta };
   }
 
   /**

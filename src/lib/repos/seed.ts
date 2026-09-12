@@ -20,6 +20,18 @@
  *     real index for the official repository. It carries a note saying sous
  *     wrote it, so a later run recognizes its own placeholder and is willing to
  *     replace it; the first successful fetch overwrites it with the real thing.
+ *
+ * The stand-in alone is not enough, and that is what `coreIndexOverlay` is for.
+ * A machine that has already fetched the real index keeps it, quite rightly, and
+ * that index publishes whatever versions of the core recipe the repository has
+ * released. Upgrade sous and the version it asks for is, for a while, one the
+ * repository has not published yet: the real index wins over the stand-in, the
+ * resolver finds nothing satisfying the range, and the project silently loses
+ * its core skills until the release pipeline catches up. So the packaged version
+ * is folded into the index IN MEMORY whenever it is missing, carrying the hash
+ * of the entry that was just seeded. The cached file is never touched, so it
+ * stays an honest record of what upstream served, and the moment upstream does
+ * publish that version its own entry is what gets used.
  */
 
 import fs from "node:fs";
@@ -30,7 +42,12 @@ import {
   stringifyIndexFile,
   type IndexFile,
 } from "./formats/index-file.js";
-import { INDEX_CACHE_DIRNAME, INDEX_SIDECAR_SUFFIX } from "./providers/index-cache.js";
+import {
+  INDEX_CACHE_DIRNAME,
+  INDEX_SIDECAR_SUFFIX,
+  type IndexOverlay,
+} from "./providers/index-cache.js";
+import { warning } from "../../utils/formatting.js";
 import { identitySegments } from "./identity.js";
 import { ensureIndexCacheDirectory } from "../../utils/sous-directory.js";
 import type { RecipeStoreLike, StoreKey } from "./store/contract.js";
@@ -73,6 +90,23 @@ export type SeedCoreRecipeOptions = {
   packageRoot?: string;
   /** The clock, so a written timestamp is predictable in tests. */
   now?: () => Date;
+  /**
+   * The index cache to teach about the packaged version, once the seed knows
+   * its hash. Without this the seeded recipe is resolvable only on a machine
+   * whose cached index is sous's own stand-in.
+   */
+  indexCache?: IndexOverlayTarget;
+  /** Where warnings go. Defaults to the console warning banner. */
+  warn?: (message: string) => void;
+};
+
+/**
+ * The part of the index cache the seed uses: somewhere to install what it has
+ * learned. Named as a small structural type so the seed does not depend on the
+ * cache's implementation.
+ */
+export type IndexOverlayTarget = {
+  setOverlay(overlay: IndexOverlay | undefined): void;
 };
 
 /** What the seed did. */
@@ -135,6 +169,18 @@ export async function seedCoreRecipe(
       report.hash = entry.hash;
     }
 
+    // The cache is taught before the stand-in is considered, because the two
+    // answer different halves of the same problem: the stand-in covers a machine
+    // that has never fetched anything, and the overlay covers one that has.
+    options.indexCache?.setOverlay(
+      coreIndexOverlay({
+        version,
+        hash: report.hash!,
+        ...(options.packageRoot === undefined ? {} : { packageRoot: options.packageRoot }),
+        ...(options.warn === undefined ? {} : { warn: options.warn }),
+      })
+    );
+
     report.wroteIndex = writeSeedIndex({
       storeRoot,
       version,
@@ -152,6 +198,109 @@ export async function seedCoreRecipe(
   }
 
   return report;
+}
+
+/** What the overlay needs to know about the version sous ships. */
+export type CoreIndexOverlayOptions = {
+  /** The packaged version, which is by rule the running sous version. */
+  version: string;
+  /** The content hash of the entry the seed put in the store. */
+  hash: string;
+  /** The installed package's root directory. Defaults to the running CLI's own. */
+  packageRoot?: string;
+  /** Where the one warning this can produce goes. Defaults to the console banner. */
+  warn?: (message: string) => void;
+};
+
+/**
+ * Builds the overlay that makes the packaged core recipe resolvable whatever
+ * the official repository has published so far.
+ *
+ * Three cases, and the order matters:
+ *
+ *   - The index already publishes this version with this hash: nothing to add,
+ *     and the index is returned untouched. This is the ordinary case once the
+ *     release pipeline has caught up.
+ *   - The index publishes this version with a DIFFERENT hash: upstream wins, and
+ *     sous says so once. The two are built from the same bytes, so this should
+ *     not happen; when it does, the version a repository published is the one a
+ *     lockfile should be able to pin on any machine, seeded or not.
+ *   - The index does not publish this version at all: it is added, carrying the
+ *     hash of the entry the seed just wrote and marked `seeded` so a listing can
+ *     say it came packaged with sous.
+ *
+ * Nothing here writes anything. The returned index is a copy; the one passed in
+ * is left exactly as it was read.
+ *
+ * @param options - The packaged version, its hash, and where a warning goes.
+ */
+export function coreIndexOverlay(options: CoreIndexOverlayOptions): IndexOverlay {
+  let warned = false;
+
+  return (identity: string, index: IndexFile): IndexFile => {
+    if (identity !== OFFICIAL_REPO_IDENTITY) return index;
+
+    const published = index.recipes[CORE_RECIPE_KEY]?.versions[options.version];
+
+    if (published !== undefined) {
+      if (published.hash !== options.hash && !warned) {
+        warned = true;
+        (options.warn ?? warning)(
+          `The repository '${OFFICIAL_REPO_NAME}' publishes version ${options.version} of ` +
+            `'${CORE_RECIPE_KEY}' with different contents from the copy inside this ` +
+            `installation of sous, so sous is using the published one.\n` +
+            `  Published: ${published.hash}\n` +
+            `  Packaged:  ${options.hash}\n` +
+            `  Reinstalling sous will bring the two back into line.`
+        );
+      }
+      return index;
+    }
+
+    const recipe = index.recipes[CORE_RECIPE_KEY];
+    const description = recipe?.description ?? packagedCoreDescription(options.packageRoot);
+
+    return {
+      ...index,
+      namespaces: {
+        ...index.namespaces,
+        [CORE_NAMESPACE]: index.namespaces[CORE_NAMESPACE] ?? {
+          description: CORE_NAMESPACE_DESCRIPTION,
+        },
+      },
+      recipes: {
+        ...index.recipes,
+        [CORE_RECIPE_KEY]: {
+          path: recipe?.path ?? CORE_RECIPE_PATH,
+          ...(description === undefined ? {} : { description }),
+          versions: {
+            ...recipe?.versions,
+            [options.version]: {
+              hash: options.hash,
+              tag: `${CORE_RECIPE_KEY}@${options.version}`,
+              prerelease: semver.prerelease(options.version) !== null,
+              seeded: true,
+            },
+          },
+        },
+      },
+    };
+  };
+}
+
+/**
+ * The packaged recipe's one-paragraph summary, or undefined when the manifest
+ * cannot be read. A description is decoration; losing it must not cost a project
+ * its core skills.
+ *
+ * @param packageRoot - The installed package's root directory.
+ */
+function packagedCoreDescription(packageRoot?: string): string | undefined {
+  try {
+    return readPackagedCoreManifest(packageRoot).description;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -205,6 +354,7 @@ function writeSeedIndex(input: {
             tag: `${CORE_RECIPE_KEY}@${input.version}`,
             prerelease: semver.prerelease(input.version) !== null,
             releasedAt: timestamp,
+            seeded: true,
           },
         },
       },

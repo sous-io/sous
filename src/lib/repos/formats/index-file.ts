@@ -72,6 +72,17 @@ export const indexVersionSchema = z.strictObject({
   tag: z.string().min(1, "must not be empty"),
   /** True when the version is a prerelease, which ranges skip unless opted in. */
   prerelease: z.boolean(),
+  /**
+   * True when this version is not one the repository published, but the copy of
+   * the recipe that ships inside the installed sous package, folded into the
+   * index in memory so it can be resolved like anything else.
+   *
+   * Sous never writes this onto a copy of an index it fetched; a cached index
+   * stays exactly what upstream served. The field exists so that a listing can
+   * say the version came packaged with sous rather than from the repository, and
+   * so a reader of the stand-in index sous writes for itself can tell.
+   */
+  seeded: z.boolean().optional(),
   /** When the version was released. */
   releasedAt: isoTimestampSchema.optional(),
   /**
