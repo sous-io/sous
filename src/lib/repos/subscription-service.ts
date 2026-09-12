@@ -51,12 +51,15 @@ import {
 import type { RecipeManifest } from "./formats/recipe-manifest.js";
 import { formatRef, parseRef, refKey, type ParsedRef } from "./ref.js";
 import {
-  candidateToRef,
-  describeCandidate,
-  describeSearch,
-  searchBareName,
-  type RefCandidate,
-} from "./ref-search.js";
+  SousScope,
+  describeReference,
+  findReference,
+  pickReference,
+  referenceReposFromIndexes,
+  referenceToRef,
+  type ReferenceMatch,
+} from "../refs/index.js";
+import { describeIndexSearch } from "./ref-search.js";
 import {
   PROJECT_REQUESTER,
   resolveRefs,
@@ -168,8 +171,8 @@ export type SubscriptionServiceOptions = {
   /** How a choice between candidate refs is asked. Injected in tests. */
   choose?: (
     message: string,
-    candidates: RefCandidate[]
-  ) => Promise<RefCandidate>;
+    candidates: ReferenceMatch[]
+  ) => Promise<ReferenceMatch>;
   /** The clock, so a recorded timestamp is predictable in tests. */
   now?: () => Date;
 };
@@ -408,8 +411,8 @@ export class SubscriptionService {
 
   private readonly choose: (
     message: string,
-    candidates: RefCandidate[]
-  ) => Promise<RefCandidate>;
+    candidates: ReferenceMatch[]
+  ) => Promise<ReferenceMatch>;
 
   private readonly now: () => Date;
 
@@ -470,7 +473,7 @@ export class SubscriptionService {
         askChoice(
           message,
           candidates.map((candidate) => ({
-            name: describeCandidate(candidate),
+            name: describeReference(candidate),
             value: candidate,
           }))
         ));
@@ -779,12 +782,11 @@ export class SubscriptionService {
    * Settles what a ref names, reading nothing but the cached indexes.
    *
    * A ref with two segments already says what it names and is handed back
-   * untouched. A ref with one segment is searched for as a namespace first and
-   * as a recipe name second (`ref-search.ts` holds the rule and the order):
-   * nothing found is an error naming what was searched, one candidate is used
-   * and reported, and several are chosen between. `--accept-first` takes the
-   * first candidate in the documented order; a run that cannot ask fails and
-   * says so.
+   * untouched. A ref with one segment is resolved through the shared reference
+   * module (`src/lib/refs/`), over the namespace and recipe scopes only:
+   * nothing found is an error naming what was searched, one match is used and
+   * reported, and several are chosen between. `--accept-first` takes the first
+   * match in the documented order; a run that cannot ask fails and says so.
    *
    * @param written - The ref exactly as the user wrote it.
    * @param options - The accept-first flag.
@@ -798,64 +800,35 @@ export class SubscriptionService {
     const repoOrder = this.repoSearchOrder(written.repo);
     const indexes = await this.loadIndexes(repoOrder);
     if (written.repo === undefined) this.indexesSnapshot = indexes;
-    const inputs = { name: written.namespace, repoOrder, indexes };
-    const candidates = searchBareName(inputs);
 
-    if (candidates.length === 0) {
+    const context = { repos: referenceReposFromIndexes(repoOrder, indexes) };
+    const matches = findReference(
+      written.namespace,
+      [SousScope.Namespace, SousScope.Recipe],
+      context
+    );
+
+    if (matches.length === 0) {
       throw new ConfigError(
         [
           `Nothing called '${written.namespace}' was found: no namespace has that name, ` +
             `and no recipe does either.`,
-          ...describeSearch(inputs),
+          ...describeIndexSearch({ name: written.namespace, repoOrder, indexes }),
           `  Run 'sous repo search ${written.namespace}' to look for something like it, or ` +
             `'sous repo add <url>' to add the repository that publishes it.`,
         ].join("\n")
       );
     }
 
-    if (candidates.length === 1) {
-      return this.acceptCandidate(candidates[0]!, written);
-    }
+    const chosen = await pickReference(matches, {
+      search: written.namespace,
+      interactive: this.interactive,
+      ...(options.acceptFirst === undefined ? {} : { acceptFirst: options.acceptFirst }),
+      write: (message: string) => this.write(message),
+      choose: (message, offered) => this.choose(message, offered),
+    });
 
-    if (options.acceptFirst === true) {
-      this.write(
-        indent(
-          `'${written.namespace}' matched ${candidates.length} things; taking the first, ` +
-            `because '--accept-first' was passed.`
-        )
-      );
-      return this.acceptCandidate(candidates[0]!, written);
-    }
-
-    if (!this.interactive) {
-      throw nonInteractiveError({
-        prompt: `which '${written.namespace}' you meant`,
-        remedy:
-          `write the full ref (for example 'sous subscribe ${candidates[0]!.ref}'), or pass ` +
-          `'--accept-first' to take the first candidate listed above.`,
-        details: [
-          `'${written.namespace}' matched ${candidates.length} things:`,
-          ...candidates.map((candidate) => `  ${describeCandidate(candidate)}`),
-        ],
-      });
-    }
-
-    const chosen = await this.choose(
-      `Which '${written.namespace}' did you mean?`,
-      candidates
-    );
-    return candidateToRef(chosen, written);
-  }
-
-  /**
-   * Reports what a one-word ref resolved to, and hands back the qualified ref.
-   *
-   * @param candidate - The candidate that won.
-   * @param written - The ref exactly as the user wrote it.
-   */
-  private acceptCandidate(candidate: RefCandidate, written: ParsedRef): ParsedRef {
-    this.write(indent(`'${written.namespace}' resolves to ${describeCandidate(candidate)}.`));
-    return candidateToRef(candidate, written);
+    return referenceToRef(chosen, written);
   }
 
   /**

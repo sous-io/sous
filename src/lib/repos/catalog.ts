@@ -31,7 +31,14 @@ import type {
 } from "./formats/recipe-manifest.js";
 import { dependencyRefKey, parseDependencyRef, parseRef } from "./ref.js";
 import { bareName } from "../vars/names.js";
-import { describeCandidate, searchBareName, type RefCandidate } from "./ref-search.js";
+import {
+  Qualification,
+  SousScope,
+  describeReference,
+  findReference,
+  referenceReposFromIndexes,
+  type ReferenceMatch,
+} from "../refs/index.js";
 
 // --- What the catalog reads ---------------------------------------------------------------------
 
@@ -399,10 +406,12 @@ export function resolveNamespaceRef(inputs: CatalogInputs, ref: string): Resolve
       ref,
       "namespace",
       matches.map((repo) => ({
+        scope: SousScope.Namespace,
+        key: `${repo.name}:${parsed.namespace}`,
+        label: parsed.namespace,
         repo: repo.name,
         namespace: parsed.namespace,
-        ref: `${repo.name}:${parsed.namespace}`,
-        kind: "namespace" as const,
+        qualification: Qualification.Bare,
       }))
     );
   }
@@ -413,7 +422,7 @@ export function resolveNamespaceRef(inputs: CatalogInputs, ref: string): Resolve
       `No repository this project trusts publishes a namespace called ` +
         `'${parsed.namespace}'.\n` +
         `  It is the name of a recipe:\n` +
-        asRecipe.map((candidate) => `    ${describeCandidate(candidate)}`).join("\n")
+        asRecipe.map((candidate) => `    ${describeReference(candidate)}`).join("\n")
     );
   }
 
@@ -451,11 +460,13 @@ export function resolveRecipeRef(inputs: CatalogInputs, ref: string): ResolvedRe
         ref,
         "recipe",
         matches.map((repo) => ({
+          scope: SousScope.Recipe,
+          key: `${repo.name}:${key}`,
+          label: parsed.recipe!,
           repo: repo.name,
           namespace: parsed.namespace,
           recipe: parsed.recipe!,
-          ref: `${repo.name}:${key}`,
-          kind: "recipe" as const,
+          qualification: Qualification.Partial,
         }))
       );
     }
@@ -473,7 +484,7 @@ export function resolveRecipeRef(inputs: CatalogInputs, ref: string): ResolvedRe
     return {
       repo,
       key: `${candidate.namespace}/${candidate.recipe}`,
-      namespace: candidate.namespace,
+      namespace: candidate.namespace!,
       name: candidate.recipe!,
     };
   }
@@ -488,7 +499,7 @@ export function resolveRecipeRef(inputs: CatalogInputs, ref: string): ResolvedRe
       `No repository this project trusts publishes a recipe called ` +
         `'${parsed.namespace}'.\n` +
         `  It is the name of a namespace:\n` +
-        asNamespace.map((candidate) => `    ${describeCandidate(candidate)}`).join("\n")
+        asNamespace.map((candidate) => `    ${describeReference(candidate)}`).join("\n")
     );
   }
 
@@ -688,24 +699,25 @@ function candidatesOfKind(
   inputs: CatalogInputs,
   name: string,
   kind: "namespace" | "recipe"
-): RefCandidate[] {
-  const candidates = searchBareName({
-    name,
-    repoOrder: inputs.repos.map((repo) => repo.name),
-    indexes: new Map(inputs.repos.map((repo) => [repo.name, repo.index])),
+): ReferenceMatch[] {
+  const scope = kind === "namespace" ? SousScope.Namespace : SousScope.Recipe;
+  return findReference(name, [scope], {
+    repos: referenceReposFromIndexes(
+      inputs.repos.map((repo) => repo.name),
+      new Map(inputs.repos.map((repo) => [repo.name, repo.index]))
+    ),
   });
-  return candidates.filter((candidate) => candidate.kind === kind);
 }
 
 /** The error a ref that could have meant several things raises. */
 function ambiguousError(
   ref: string,
   what: "namespace" | "recipe",
-  candidates: RefCandidate[]
+  candidates: ReferenceMatch[]
 ): ConfigError {
   return new ConfigError(
     `'${ref}' names a ${what} in more than one repository this project trusts:\n` +
-      candidates.map((candidate) => `    ${describeCandidate(candidate)}`).join("\n") +
+      candidates.map((candidate) => `    ${describeReference(candidate)}`).join("\n") +
       `\n  Name the repository as well, as 'repository:${ref}', to say which one you mean.`
   );
 }
