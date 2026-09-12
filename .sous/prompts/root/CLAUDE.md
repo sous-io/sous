@@ -198,7 +198,7 @@ src/
     filters/               # custom Liquid filters: bulletList
     lib/                   # shared tag helpers: glob-files.ts, tag-args.ts
   utils/
-    formatting.ts          # console output helpers (heading, showVar, wrapText, displayWidth, etc.)
+    formatting.ts          # console output helpers (palette, showVariables, paragraph, wrapText, etc.)
     table.ts               # renderTable: the responsive table every listing prints through
     command-help.ts        # printCommandHelpToStderr: a command's own help under an error
     prompts.ts
