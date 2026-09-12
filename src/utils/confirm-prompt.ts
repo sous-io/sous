@@ -25,7 +25,7 @@ export interface ConfirmPromptConfig {
   message: string;
   /** The answer Enter alone accepts. Defaults to yes. */
   default?: boolean;
-  /** A line under the question, such as the Tab hint. */
+  /** A line under the question: the key legend, in the stock prompts' style. */
   hint?: string;
 }
 
@@ -42,7 +42,7 @@ export interface ConfirmPromptView {
   default?: boolean;
   /** The answer given, once there is one. */
   answer?: boolean;
-  /** A line under the question, such as the Tab hint. */
+  /** A line under the question: the key legend, in the stock prompts' style. */
   hint?: string;
 }
 

@@ -26,7 +26,7 @@ export interface ValuePromptConfig {
   message: string;
   /** The value Enter alone accepts. */
   default?: string;
-  /** A line under the question, such as the Tab hint. */
+  /** A line under the question: the key legend, in the stock prompts' style. */
   hint?: string;
   /** Whether to hide what is typed, for a secret. */
   mask?: boolean;

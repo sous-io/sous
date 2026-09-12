@@ -328,10 +328,10 @@ export interface BasicViewInput {
 
 /**
  * The basic view of one question: the header, the publisher's description
- * wrapped to the terminal, the facts a person needs before typing an answer,
- * and the hint naming the two keys that do anything here. The facts are the
- * same labeled block the advanced view draws, narrowed to four labels, so the
- * two views always read and line up the same way.
+ * wrapped to the terminal, and the facts a person needs before typing an
+ * answer. The facts are the same labeled block the advanced view draws,
+ * narrowed to four labels, so the two views always read and line up the same
+ * way. The keys are named by the legend the prompt itself draws underneath.
  *
  * @param input - The question, its place in the run, and where the answer is going.
  * @param storagePath - The absolute path of the env file the answer goes into.

@@ -38,7 +38,7 @@ export interface ChoicePromptConfig {
   choices: PromptChoice[];
   /** The value that starts out highlighted, so Enter alone accepts it. */
   default?: string;
-  /** A line under the list, such as the Tab hint. */
+  /** A line under the list: the key legend, in the stock prompts' style. */
   hint?: string;
 }
 
@@ -55,7 +55,7 @@ export interface ChoicePromptView {
   choices: PromptChoice[];
   /** Which choice is highlighted, counting from zero. */
   active: number;
-  /** A line under the list, such as the Tab hint. */
+  /** A line under the list: the key legend, in the stock prompts' style. */
   hint?: string;
   /** Whether the question has been answered, which replaces the list with the answer. */
   answered?: boolean;
