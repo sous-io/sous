@@ -188,9 +188,13 @@ and its questions cannot be listed; the run still succeeds and names them.
 $ sous subscription list
   Subscription           Range        Pinned version                               Origin    Enabled
   ---------------------  -----------  -------------------------------------------  --------  -------
-  core                   0.2.0        pinned on first build                        built in  yes
+  core                   0.2.0        core/sous-skills 0.2.0                       built in  yes
   workflow/qa-variables  any version  workflow/qa-variables 0.1.0                  user      yes
 ```
+
+A namespace subscription names every recipe it holds, each with the version the lockfile pins. A
+subscription that has never been built has nothing pinned yet, and its cell reads `pinned on first
+build` instead.
 
 `sous repo list` shows each trusted repository with its provider, origin, whether it is linked, its
 recipe count and its URL; `--verbose` adds a `Namespaces:` line under each row. `sous lock show`
