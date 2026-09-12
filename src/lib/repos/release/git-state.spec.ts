@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { makeTmpDir, type TmpDir } from "../../../test/utils/tmp.js";
 import { commitAll, git, initRepo, writeFile } from "../../../test/utils/git-repo.js";
+import type { CommandRunner } from "../providers/git.js";
 import {
   createBranch,
   currentBranch,
+  hasCommitIdentity,
   isCommittedAndUnchanged,
   remoteUrl,
   submitBranchName,
@@ -96,6 +98,29 @@ describe("isCommittedAndUnchanged()", () => {
 
     writeFile(repo, "sous.index.json", '{"formatVersion":1}\n');
     expect(await isCommittedAndUnchanged(repo, "sous.index.json")).toBe(false);
+  });
+});
+
+describe("hasCommitIdentity()", () => {
+  /**
+   * A repository with `user.name` and `user.email` set can commit; one where
+   * git refuses to work out an identity (an automation runner with no global
+   * config, which is how the first automated release of sous failed) cannot,
+   * and has to be caught before a release starts writing.
+   *
+   * hasCommitIdentity(repo); // -> true
+   */
+  it("should be true when git can name the author and false when it refuses to", async () => {
+    expect(await hasCommitIdentity(repo)).toBe(true);
+
+    // Exactly what git writes when the runner has no identity at all.
+    const refusing: CommandRunner = async () => ({
+      code: 128,
+      stdout: "",
+      stderr: "fatal: empty ident name (for <runner@fv-az.local>) not allowed",
+    });
+
+    expect(await hasCommitIdentity(repo, { run: refusing })).toBe(false);
   });
 });
 

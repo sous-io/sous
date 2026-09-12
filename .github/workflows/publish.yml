@@ -209,7 +209,16 @@ jobs:
       # Trusted publishing needs npm >= 11.5.1; the bundled npm can lag.
       - run: npm install -g npm@latest
       - run: npm ci
+      # Several integration tests make commits in temporary git repositories.
+      # They configure an identity inside each repository themselves, and these
+      # variables are a second layer of the same thing (the same pair test.yml
+      # sets), so a runner with no global git identity cannot fail a commit.
       - run: npm test
+        env:
+          GIT_AUTHOR_NAME: Sous Test
+          GIT_AUTHOR_EMAIL: test@example.invalid
+          GIT_COMMITTER_NAME: Sous Test
+          GIT_COMMITTER_EMAIL: test@example.invalid
       - run: npm publish
 
   recipes:

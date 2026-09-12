@@ -166,6 +166,13 @@ describe("the browsing commands", () => {
     // publishes a real index with real tags and content hashes.
     copyFixtureDir(FIXTURE_RECIPE_REPO, recipeRepo);
     git(recipeRepo, "init", "-q", "-b", "main");
+    // `sous repo release` below commits in a child process of its own, so the
+    // identity has to live in the repository rather than in the environment of
+    // the calls right here.
+    git(recipeRepo, "config", "user.name", "Sous Test");
+    git(recipeRepo, "config", "user.email", "test@example.invalid");
+    git(recipeRepo, "config", "commit.gpgsign", "false");
+    git(recipeRepo, "config", "tag.gpgsign", "false");
     git(recipeRepo, "add", "-A");
     git(recipeRepo, "commit", "-qm", "the fixture repository");
 

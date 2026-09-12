@@ -20,6 +20,7 @@ import {
   describeScope,
   errorsIn,
   findRepoRoot,
+  hasCommitIdentity,
   hasErrors,
   indexFilePath,
   pushBranch,
@@ -243,6 +244,7 @@ export default class RepoRelease extends Command {
     // --- Carry it out -----------------------------------------------------
 
     await this.assertNothingUncommitted(rootDir);
+    await this.assertCommitIdentity(rootDir);
 
     section("Publishing");
 
@@ -483,6 +485,35 @@ export default class RepoRelease extends Command {
         "first.\n" +
         "  Commit these, then run the command again; sous commits the version bumps and " +
         "the index itself."
+    );
+  }
+
+  /**
+   * Refuses to release from a repository where git does not know who is
+   * committing, before anything has been written.
+   *
+   * A release makes a commit and annotated tags, and both need an identity. Git
+   * would fail partway through with its own "empty ident name" message, which
+   * says nothing about sous or about which repository is the problem; that is
+   * exactly how the first automated release of sous itself failed. This says
+   * what to set instead.
+   *
+   * @param rootDir - The repository's root directory.
+   */
+  private async assertCommitIdentity(rootDir: string): Promise<void> {
+    if (await hasCommitIdentity(rootDir)) return;
+
+    throw new ConfigError(
+      "Cannot release: git does not know who is making the commit.\n\n" +
+        "  A release commits the version bumps and the index, and cuts an annotated tag " +
+        "for every version it publishes; git refuses to do either without an author " +
+        "identity.\n" +
+        "  Set one in this repository and run the command again:\n\n" +
+        '    git config user.name "Your Name"\n' +
+        '    git config user.email "you@example.com"\n\n' +
+        "  In a continuous integration job, configure the identity of the account the " +
+        "release runs as before this command; the workflow 'sous repo init' scaffolds " +
+        "already does."
     );
   }
 

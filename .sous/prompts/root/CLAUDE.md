@@ -1102,7 +1102,10 @@ that tag, regenerating the index with each version's dependencies resolved, comm
 manifests and the index together, then cutting annotated tags dependency-first. It prints the
 plan and asks once (`--yes` skips, `--dry-run` stops), and pushes only with `--push`. This is
 the ONE place sous commits for an author, and it stages nothing but its own bumps and index;
-it refuses while anything else is uncommitted. `--check` is the read-only pull-request form,
+it refuses while anything else is uncommitted, and it refuses before writing anything when git
+cannot work out who is committing (`hasCommitIdentity` in `release/git-state.ts`), naming
+`git config user.name` rather than leaving git's own "empty ident name" to surface halfway
+through. `--check` is the read-only pull-request form,
 `--ci` is the merge preset (implies `--no-bump`, never asks, does NOT imply `--push`), and on a
 branch other than the default one tagging is skipped unless `--tag` says otherwise. `repo submit` is validate-then-propose: it checks the tooling and the working
 tree, then the recipes and the index, and only then pushes and proposes. `submit-service.ts`

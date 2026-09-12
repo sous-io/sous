@@ -156,6 +156,35 @@ export async function isCommittedAndUnchanged(
 }
 
 /**
+ * True when git can work out who is committing, which is what it needs before
+ * it will make a commit or an annotated tag.
+ *
+ * `git var GIT_AUTHOR_IDENT` answers the exact question git asks itself: it
+ * honours the `user.name` and `user.email` settings, the `GIT_AUTHOR_*` and
+ * `GIT_COMMITTER_*` environment variables, and the strict rules that reject a
+ * guessed identity. It fails with the same "empty ident name" or "unable to
+ * auto-detect email address" that a commit would have failed with, which is
+ * why the check is made ahead of time rather than left to the commit.
+ *
+ * @param rootDir - The repository's root directory.
+ * @param options - The command runner to use.
+ */
+export async function hasCommitIdentity(
+  rootDir: string,
+  options: RunOptions = {}
+): Promise<boolean> {
+  for (const name of ["GIT_AUTHOR_IDENT", "GIT_COMMITTER_IDENT"]) {
+    try {
+      const ident = await runGit(["var", name], { cwd: rootDir, run: options.run });
+      if (ident.length === 0) return false;
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
  * Stages exactly the given paths and commits them.
  *
  * This is the one place sous commits on an author's behalf, and it is
