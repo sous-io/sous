@@ -3,6 +3,13 @@ import { Args, Command } from "@oclif/core";
 import { Config } from "@oclif/core";
 import { aliasSuffix, confirmationFlag, CONFIRMATION_DESCRIPTION } from "./flags.js";
 
+/**
+ * How long a test that parses through a real oclif config may take. Loading
+ * the config reads the package manifest from disk, which is well past the
+ * default limit when the whole suite is running at once.
+ */
+const PARSE_TIMEOUT = 30_000;
+
 /** Strips ANSI escape codes, so assertions do not depend on whether color is on. */
 const strip = (text: string): string => text.replace(/\x1b\[[0-9;]*m/g, "");
 
@@ -125,7 +132,7 @@ describe("confirmationFlag()", () => {
 
     const none = await parseFlags(flags, []);
     expect(none.yes).toBe(false);
-  });
+  }, PARSE_TIMEOUT);
 
   /**
    * `clear` spells the flag `--force`, and `--yes`/`-y` must land on that same
@@ -140,5 +147,5 @@ describe("confirmationFlag()", () => {
       const parsed = await parseFlags(flags, [spelling]);
       expect(parsed.force, `${spelling} should set force`).toBe(true);
     }
-  });
+  }, PARSE_TIMEOUT);
 });

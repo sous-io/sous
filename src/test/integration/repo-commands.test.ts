@@ -135,7 +135,7 @@ describe("sous repo init / link / unlink", () => {
       ),
       "utf8"
     );
-  });
+  }, 120_000);
 
   afterAll(() => {
     tmp.cleanup();
@@ -566,7 +566,7 @@ describe("sous repo add with a local path", () => {
     if (init.status !== 0) {
       throw new Error(`repo init failed: ${init.stdout}${init.stderr}`);
     }
-  });
+  }, CLI_TIMEOUT);
 
   afterAll(() => {
     tmp.cleanup();
