@@ -59,9 +59,8 @@ const MANAGED_LAYER_FORMAT_NOTE = [
 /** What each managed layer holds, and which commands write it. */
 const MANAGED_LAYER_DESCRIPTIONS: Record<string, string[]> = {
   [REPOS_LAYER_FILENAME]: [
-    "It records the repositories this project trusts. The 'sous repo add' command",
-    "writes the entries under 'repos'; to drop one, delete the entry by hand or",
-    "with a future command.",
+    "It records the repositories this project trusts. The 'sous repo add' and",
+    "'sous repo remove' commands write the entries under 'repos'.",
   ],
   [SUBSCRIPTIONS_LAYER_FILENAME]: [
     "It records what this project subscribes to. The 'sous subscription add' and",

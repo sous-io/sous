@@ -81,14 +81,13 @@ describe("the managed config layers", () => {
 
   /**
    * A header tells the reader which command to run next, so it may only name
-   * commands sous actually has. Removal has no command yet, and the canonical
-   * subscription commands are the `sous subscription` pair, not their aliases.
+   * commands sous actually has. The canonical commands are the `sous repo` and
+   * `sous subscription` pairs, not their aliases.
    */
   it("should name only commands sous really has", () => {
     const repos = managedLayerHeader(REPOS_LAYER_FILENAME);
     expect(repos).toContain("'sous repo add'");
-    expect(repos).toContain("delete the entry by hand or");
-    expect(repos).not.toContain("sous repo remove");
+    expect(repos).toContain("'sous repo remove'");
 
     const subscriptions = managedLayerHeader(SUBSCRIPTIONS_LAYER_FILENAME);
     expect(subscriptions).toContain("'sous subscription add'");
