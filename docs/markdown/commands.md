@@ -17,7 +17,9 @@ They are listed once here rather than repeated in every table below.
 
 The environment variables `SOUS_CONFIG`, `SOUS_DIR` and `SOUS_CONFD` do the same jobs; a flag
 beats the matching variable, and both beat walk-up discovery.
-[Discovery and overrides](config-discovery.md) covers the precedence in full.
+[Discovery and overrides](config-discovery.md) covers the precedence in full. One more variable,
+`SOUS_DEBUG`, is read by every command: it turns stack traces back on when something fails
+(see [Exit behavior](#exit-behavior)).
 
 ?> Three commands take none of these, because they run inside a recipe repository rather than
 inside a project: `sous repo init`, `sous repo release` and `sous repo submit`. A recipe
@@ -291,3 +293,16 @@ that repository's row.
 Every command exits non-zero on a configuration problem and prints a plain-language error block
 naming the file at fault. There is no warn-and-continue: a broken config halts sous rather than
 producing output built on a guess.
+
+What a failure prints is the message and nothing else. Forget an argument, misspell a flag, or
+pass a value a flag does not accept, and sous prints the sentence describing the mistake and
+then that command's own help, so the flag you wanted is on the screen already. No expected
+failure prints a stack trace.
+
+Set the `SOUS_DEBUG` environment variable to anything but `0`, `false`, `no` or `off` and every
+failure prints its stack trace to standard error underneath the message. It is there for
+debugging sous itself; nothing else changes when it is set.
+
+```bash
+SOUS_DEBUG=1 sous build
+```

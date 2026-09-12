@@ -235,6 +235,7 @@ src/
     formatting.ts          # console output helpers (palette, showVariables, paragraph, wrapText, etc.)
     table.ts               # renderTable: the responsive table every listing prints through
     command-help.ts        # printCommandHelpToStderr: a command's own help under an error
+    command-errors.ts      # reportCommandError: every failure as a message, traces behind SOUS_DEBUG
     prompts.ts
     sous-directory.ts      # ensureSousDirectory: creates a directory sous owns and writes its
                            #   README.md + AGENTS.md/CLAUDE.md pointers, never overwriting them;
@@ -1110,7 +1111,9 @@ via `z.toJSONSchema`. Re-run it whenever the schema changes; it ships in the pac
 
 Common config-locating flags on every command: `--config <path>` / `-c` (alias
 `--sous-config`), plus `--sous-dir` and `--sous-confd` (env equivalents `SOUS_CONFIG`,
-`SOUS_DIR`, `SOUS_CONFD`). There is no `--project` / `-p` flag; one config describes one
+`SOUS_DIR`, `SOUS_CONFD`). `SOUS_DEBUG` is the other environment variable every command
+reads: set it to anything but `0`/`false`/`no`/`off` and a failed run prints its stack
+trace to stderr (and puts oclif itself back in debug mode). There is no `--project` / `-p` flag; one config describes one
 project. Every command that carries those flags also carries `--non-interactive`; the three
 that run inside a recipe repository carry neither, because they extend `Command` rather than
 `BaseCommand`. Also: `--rebuild`, `--dry-run`,
@@ -1141,15 +1144,28 @@ at a bare `--`), when `CI` is set to anything but `0`/`false`/`no`/`off`, or whe
 stdout is not a TTY; every input is injectable for tests. A prompt that cannot be shown
 throws a `NonInteractiveError` (a `ConfigError` carrying `showHelp`), whose message names
 the question, why sous could not ask it, and the flag or env vars that would have answered
-it; `BaseCommand.catch` then prints the command's own help underneath, through
-`printCommandHelpToStderr` in `utils/command-help.ts`, which uses oclif's `loadHelpClass`
-(sous does not install the help plugin, so there is no `help` COMMAND to run) with
-`process.stdout.write` pointed at stderr for the duration, so a piped stdout stays
-machine-readable. The flag itself is defined once as `nonInteractiveFlag()` in
-`utils/flags.ts`: `BaseCommand.baseFlags` takes it, and so do the three authoring commands
-(`repo init`, `repo release`, `repo submit`), which extend oclif `Command` rather than
-`BaseCommand` and would otherwise reject it as unknown; their `catch` handlers call
-`printCommandHelpToStderr` themselves for the same reason.
+it; the error reporter (below) then prints the command's own help underneath. The flag
+itself is defined once as `nonInteractiveFlag()` in `utils/flags.ts`:
+`BaseCommand.baseFlags` takes it, and so do the three authoring commands (`repo init`,
+`repo release`, `repo submit`), which extend oclif `Command` rather than `BaseCommand` and
+would otherwise reject it as unknown.
+
+**One way to report an error.** `reportCommandError` in `utils/command-errors.ts` renders
+every command failure, and `BaseCommand.catch` plus the three authoring commands' own
+`catch` handlers are its only callers. Expected failures print their message and nothing
+else: a `ConfigError`, an oclif parse error (missing argument, unknown flag, value outside
+a flag's options), a blocked prompt. Usage mistakes and blocked prompts also get the
+command's own help underneath, drawn by `printCommandHelpToStderr` in
+`utils/command-help.ts` through oclif's `loadHelpClass` (sous does not install the help
+plugin, so there is no `help` COMMAND to run) with `process.stdout.write` pointed at
+stderr for the duration, so a piped stdout stays machine-readable. An error sous did not
+expect keeps its message and gains one sentence naming `SOUS_DEBUG`. Nothing prints a
+stack trace unless `SOUS_DEBUG` asks for one, which is also why `bin/run.js` passes
+oclif's `development` mode (it sets oclif's own `debug` setting, which turns every error
+oclif prints into a raw stack) only when that variable is set. An oclif exit code survives
+(a parse error still exits 2); `this.exit()` and a JSON-rendering command fall through to
+oclif untouched. Guarded by `src/utils/command-errors.spec.ts` and the error cases in
+`src/test/integration/help-and-flags.test.ts`.
 
 **Launch pass-through:** any argument `launch` does not recognize is forwarded to the
 tool, after the config-defined `tools.<name>.args` and before the `promptFile` content
