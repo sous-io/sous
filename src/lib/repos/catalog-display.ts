@@ -10,7 +10,7 @@
  */
 
 import { renderFacts, type LabeledFact } from "../vars/display.js";
-import { indent, log, terminalColumns } from "../../utils/formatting.js";
+import { log, wrapColumns } from "../../utils/formatting.js";
 import type { TableColumn } from "../../utils/table.js";
 import type {
   NamespaceCoverage,
@@ -94,15 +94,14 @@ export function describeVersionStatus(status: VersionStatus): string {
 }
 
 /**
- * Prints a labeled facts block, wrapped to the terminal and indented like every
- * other line these commands write.
+ * Prints a labeled facts block, wrapped to the terminal. The renderer indents
+ * the block itself, so every facts block in the CLI sits at the same depth
+ * whichever command printed it.
  *
  * @param facts - The facts to print.
  */
 export function printFacts(facts: LabeledFact[]): void {
-  for (const line of renderFacts(facts, terminalColumns() - INDENT * 2)) {
-    log(indent(line, INDENT));
-  }
+  for (const line of renderFacts(facts, wrapColumns())) log(line);
 }
 
 /**
