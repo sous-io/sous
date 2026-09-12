@@ -13,6 +13,7 @@
   - [Consuming recipes](repositories-consuming.md)
   - [Recipe variables](repositories-variables.md)
   - [Authoring a repository](repositories-authoring.md)
+  - [Providers](repositories-providers.md)
   - [File formats](repositories-file-formats.md)
 - **ADRs**
   - [0001: Repositories](adrs/0001-repositories.md)
