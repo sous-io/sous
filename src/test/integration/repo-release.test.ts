@@ -27,8 +27,21 @@ let fakeBin: string;
  * is redirected into the temp tree.
  */
 function runSous(...args: string[]): RunResult {
+  return runSousWith({}, ...args);
+}
+
+/**
+ * The same run, with extra environment variables layered on top, so a test can
+ * describe a continuous integration runner (`CI=true`) rather than the terminal
+ * the suite happens to be started from.
+ *
+ * @param extraEnv - Variables to add to the child's environment.
+ * @param args - The command line to run.
+ */
+function runSousWith(extraEnv: Record<string, string>, ...args: string[]): RunResult {
   const childEnv = {
     ...process.env,
+    ...extraEnv,
     PATH: `${fakeBin}${path.delimiter}${process.env.PATH}`,
     // The machine-wide sous home goes in the temp tree, so nothing here
     // reads or writes the home directory of whoever runs the suite.
@@ -319,6 +332,46 @@ describe("sous repo release and sous repo submit", () => {
 
       // Put the recipe back where the last release left it.
       git(recipeRepo, "revert", "--no-edit", "HEAD");
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * `--ci` accepts the plan it prints. A merge runs with `CI` set and no
+   * terminal, so a preset that only refused to ask would fail on the very
+   * confirmation it exists to answer; the first automated release of sous
+   * itself failed exactly there.
+   *
+   * CI=true sous repo release --ci   // -> publishes, with no question asked
+   */
+  it(
+    "should publish a pending version under --ci without asking",
+    () => {
+      writeFile(
+        recipeRepo,
+        "recipes/core/ci-ready/sous.recipe.yaml",
+        "formatVersion: 1\nnamespace: core\nname: ci-ready\nversion: 1.0.0\n" +
+          "description: A recipe whose version was raised before the merge.\n" +
+          "contents:\n  - kind: skills\n    include:\n      - skills/**/*.md\n"
+      );
+      writeFile(recipeRepo, "recipes/core/ci-ready/skills/ci-ready.md", "ready\n");
+      addRecipeToRepoManifest("recipes/core/ci-ready");
+      commitAll(recipeRepo, "add a recipe whose version is already raised");
+
+      const result = runSousWith(
+        { CI: "true" },
+        "repo",
+        "release",
+        "--ci",
+        "--recipe",
+        "core/ci-ready"
+      );
+
+      expect(result.status, result.stdout + result.stderr).toBe(0);
+      expect(result.stdout + result.stderr).not.toContain("not running where it can ask");
+      expect(result.stdout).not.toContain("Publish these versions?");
+      expect(result.stdout).toContain("Created the tag core/ci-ready@1.0.0");
+      expect(git(recipeRepo, "tag", "--list")).toContain("core/ci-ready@1.0.0");
     },
     CLI_TIMEOUT
   );

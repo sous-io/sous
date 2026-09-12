@@ -287,7 +287,7 @@ Three facts about each recipe decide everything, and nothing else does:
 | `sous repo release --tag` | Cut the tags even on a branch other than the default one |
 | `sous repo release --push` | Push the commit, and the tags this run created, to `origin` |
 | `sous repo release --check` | Read only: validate, and fail when the committed index is out of date |
-| `sous repo release --ci` | The merge preset: never bump, never ask, fail on anything unbumped |
+| `sous repo release --ci` | The merge preset: never bump, accept the plan, never ask, fail on anything unbumped |
 
 ### The branch rule
 
@@ -346,11 +346,12 @@ repository:
 - On a **pull request**, `sous repo release --check`. It only reads, so it is safe on an
   untrusted branch, and it fails the pull request when a manifest is wrong or the committed index
   (including the dependencies it records) is stale.
-- On a **push to the default branch**, `sous repo release --ci --push`. `--ci` raises no versions
-  and asks no questions: the version bump belongs in the change being merged, so a recipe that
-  changed without one fails here rather than being given a version nobody reviewed. Both
-  checkouts use `fetch-depth: 0`, so existing tags are visible and a published version is never
-  cut a second time.
+- On a **push to the default branch**, `sous repo release --ci --push --yes`. `--ci` raises no
+  versions, accepts the plan it prints, and asks no questions: the version bump belongs in the
+  change being merged, so a recipe that changed without one fails here rather than being given a
+  version nobody reviewed. `--ci` implies `--yes`; the workflow passes it as well so the same
+  file works with an older sous. Both checkouts use `fetch-depth: 0`, so existing tags are
+  visible and a published version is never cut a second time.
 
 ## Contribute to someone else's repository
 
