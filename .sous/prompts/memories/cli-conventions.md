@@ -48,3 +48,23 @@ holds the mechanism, use it rather than building a second one beside it.
 - **Dependencies are declared by location**: a bare sibling ref, or a provider-scheme locator
   URL. The last two path segments are always the recipe identity (namespace and name), never a
   filesystem path. The ref grammar lives in `src/lib/repos/ref.ts`.
+- **One way to show a key and its value**: `showVariable` and `showVariables` in
+  `src/utils/formatting.ts`, four spaces in, labels padded so every colon lines up, values in the
+  value color, and anything secondary (a location, a provenance) trailing in muted grey rather
+  than in parentheses. Never build a second aligner beside them; a labeled block anywhere (the
+  facts about a variable, a command's opening block, a result, a notice) goes through them.
+- **One palette, in `palette`** (same file): label, value, muted, warning, highlight, note, error.
+  A warning is bright yellow with its sharpest words in orange; a note (an explanation that is
+  neither warning nor error) is bright teal; an error is bright red and is always preceded by the
+  literal `Error: `, so it stays findable with color off.
+- **One wrap, `wrapText`**, and every paragraph goes through `paragraph` or `note` before it is
+  printed. Wrapping stops short of the right edge, never breaks a word or a URL, keeps whatever
+  indentation a line arrived with, and hangs continuation lines two spaces.
+- **Prefer a list over a paragraph.** Facts belong in a key and value list with one short sentence
+  after it, not in a sentence with the facts buried inside it. A list of points uses the real
+  `BULLET` character.
+- **A question has room around it**: two blank lines above the "Question N of M" header, and two
+  blank lines under the input line, so a question never sits on the terminal's last row. The keys
+  a prompt answers to are named by a legend under the input line, built with `keysHelpTip`, in the
+  style `@inquirer/select` uses (`↑↓ navigate • ⏎ select • ⇥ advanced`); never a bracketed hint
+  above it.
