@@ -448,6 +448,35 @@ write are pruned before the command returns. `--no-build` leaves them where they
 `sous build`. A build that fails does not put the subscription back; it is already gone from the
 config and the lockfile, and the message says so.
 
+## Stop trusting a repository
+
+```bash
+sous repo remove my-recipes
+sous repo remove my-recipes --dry-run
+sous repo remove my-recipes --yes
+```
+
+Removing a repository withdraws the trust that adding it granted, and everything the project held
+through it goes at the same time. Before anything is written the command says exactly what that
+means here: the entry it takes out of the managed repositories layer, every subscription that
+resolves into the repository, every locked recipe those subscriptions alone held, the output files
+the next build prunes, and the checkout a link points at, if there is one. Then it asks once, and
+`--yes` (also `-y`, `--force` and `-f`) answers ahead of time for a run with no terminal.
+
+Each subscription is removed through the same refcounted path `sous subscription remove` uses, so a
+recipe another subscription or another recipe still needs stays, and is reported with whoever is
+holding it. A link to the repository is removed with it; the checkout itself stays on disk, because
+it is a working copy sous did not necessarily put there. Like the subscription commands, this one
+finishes by building the project, so the files those recipes wrote are pruned before it returns;
+`--no-build` leaves them until the next `sous build`.
+
+A subscription written in your own config file, rather than in the managed layer sous writes, is
+named and left alone: sous never edits a config file you wrote.
+
+Removing the built-in `sous-recipes` repository records `sous-recipes: { enabled: false }` in the
+managed repositories layer instead of deleting an entry, for the same reason the `core` opt-out
+below is recorded rather than deleted: the entry sous provides comes back on the next run.
+
 ## Restore a fresh clone
 
 A clone has the lockfile and the subscriptions, and no store. `sous build` restores exactly what

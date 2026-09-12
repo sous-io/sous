@@ -113,6 +113,7 @@ See [Inspecting and validating](config-inspection.md).
 | Command | Arguments | Own flags |
 |---------|-----------|-----------|
 | `sous repo add` | `URL` | `--name <name>`, `--provider github\|gitlab\|local`, `-y, --yes` (also `--trust`), `--dry-run` |
+| `sous repo remove` | `REPO` | `-y, --yes` (also `-f, --force`), `--dry-run`, `--no-build` |
 | `sous repo list` | none | `--verbose` |
 | `sous repo search` | `TEXT` | `--limit <n>` (default 25) |
 | `sous repo gc` | none | `--max-bytes <n>`, `--dry-run` |
@@ -124,6 +125,17 @@ terminal acknowledges instead. `--trust` is the spelling the ceremony reads best
 the same flag as `-y`, `--yes`, `-f` and `--force`. `URL` may be an address or an absolute path to a repository on this
 machine. `list` and `search` read only what is already cached, so both work offline and neither
 downloads anything.
+
+`repo remove` is the reverse of `repo add`: it stops trusting a repository. Before it writes
+anything it prints what goes with it, so the decision is made on facts: the entry itself, every
+subscription that resolves into the repository, every locked recipe those subscriptions alone held,
+the output files the next build prunes, and the linked checkout, if one points at it. Then it asks
+once, and the confirmation flag answers ahead of time. The link entry is removed with the
+repository; the checkout itself stays on disk. The command finishes by building the project, the
+same way the subscription commands do, so the files those recipes wrote are gone when it returns;
+`--no-build` leaves the outputs alone. Removing the built-in `sous-recipes` repository records
+`sous-recipes: { enabled: false }` in the managed repositories layer rather than deleting an entry,
+because the entry sous provides comes back on every run.
 
 `repo search` is also a top-level `sous search`, because searching is how you find something to
 subscribe to before you know what any of it is called.

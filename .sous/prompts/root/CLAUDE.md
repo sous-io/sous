@@ -101,6 +101,7 @@ src/
       remove.ts            # remove a subscription and whatever only it brought in
     repo/
       add.ts               # add (and thereby trust) a repository; fetches only its index
+      remove.ts            # stop trusting a repository, and remove everything it brought in
       list.ts              # list the trusted repositories and what they publish
       search.ts            # search the cached indexes by name and description
       gc.ts                # collect the machine-wide store, protecting locked entries
@@ -955,6 +956,7 @@ This enables `sous prune` (remove stale outputs) and `sous clear` (delete all ou
 | `sous config get <path>` | Print one value by dot-path (e.g. `compilation.targets[0].entryPoint`); `--layers` shows per-layer provenance |
 | `sous config validate` | Validate the merged config: schema, then full variable resolution |
 | `sous repo add <url>` | Add a repository, which is also how you trust it, then fetch only its index (`--name`, `--provider`, `--yes` / `-y` / `--trust`, `--dry-run`) |
+| `sous repo remove <name>` | Stop trusting a repository: print the entry, the subscriptions that resolve into it, the recipes they alone hold, the outputs the build will prune and any link, ask once, then remove all of it and build (`--yes` / `-y` / `--force`, `--dry-run`, `--no-build`) |
 | `sous repo list` | List the trusted repositories: name, location, provider, namespaces, recipe count, and whether it is linked |
 | `sous repo search <text>` | Search the cached indexes by namespace, recipe name and description (`--limit`); also the top-level `sous search <text>` |
 | `sous repo gc` | Collect the machine-wide store back to its size cap, protecting everything the lockfile pins (`--max-bytes`, `--dry-run`) |
@@ -1005,7 +1007,16 @@ schema validation alone cannot, surfacing cycles and undefined `${vars}`.
 
 The `repo` namespace manages repositories. `repo add` is the trust ceremony, and adding IS
 trusting: nothing is downloaded from a repository before the question is answered, and once
-it is, exactly one file is fetched (`sous.index.json`). `repo list` and `repo search` read
+it is, exactly one file is fetched (`sous.index.json`). `repo remove` is its reverse and lives in
+`SubscriptionService.removeRepo`: it states every consequence first (the layer entry, the
+subscriptions that resolve into the repository, the recipes those alone hold, the output files the
+build will prune, and any link), asks once, then removes each subscription through the ordinary
+refcounted `unsubscribe` path, drops the project's link entry, and writes the repositories layer.
+A machine-wide link is left alone, since other projects share it; the checkout is never deleted.
+The built-in `sous-recipes` entry cannot be deleted (it is recreated from the package every run),
+so removing it records `enabled: false` through `TrustService.disableRepo`, the same shape the
+`core` subscription opt-out uses. A repository written in the user's own config is refused, because
+sous never edits a config file a person wrote. `repo list` and `repo search` read
 only what is already cached, so both work offline; a repository whose index has never been
 fetched is named rather than silently left out. `repo gc` protects everything this project's
 lockfile pins, whatever that does to the total, since a cache that is too large is a
