@@ -134,6 +134,14 @@ export async function buildFixtureRepo(
   );
 
   gitIn(directory, "init", "--quiet", "--initial-branch", "main");
+  // The identity is written into the repository itself, not just into the
+  // environment of the commands above: anything else that commits here later
+  // (a `sous repo release` run in a child process, for one) has to find an
+  // identity too, and a continuous integration runner has no global one.
+  gitIn(directory, "config", "user.name", "Sous Test");
+  gitIn(directory, "config", "user.email", "test@example.invalid");
+  gitIn(directory, "config", "commit.gpgsign", "false");
+  gitIn(directory, "config", "tag.gpgsign", "false");
   gitIn(directory, "add", "-A");
   gitIn(directory, "commit", "--quiet", "-m", "Publish the fixture recipes");
   for (const recipe of recipes) {
