@@ -167,12 +167,52 @@ Asks the questions the project's definitions imply and stores the answers.
 | Invocation | What it does |
 |------------|--------------|
 | `sous vars ask` | Asks only what is unanswered, or what no longer fits its definition |
-| `sous vars ask <name>` | Asks just that one variable, by name or by full key |
+| `sous vars ask <name>` | Asks everything the name covers; see the forms below |
+| `sous vars ask --repo <name>` | Asks every variable one repository publishes |
+| `sous vars ask --namespace <name>` | Asks every variable one namespace publishes |
+| `sous vars ask --var <name>` | Asks one variable; repeat it for each variable |
+| `sous vars ask --accept-first` | When the name matches several things, takes the first one listed |
 | `sous vars ask --all` | Asks every variable again, including the ones already answered |
 | `sous vars ask --file <path>` | Reads definitions from a standalone definitions file |
 | `sous vars ask --answer <name>=<value>` | Answers one question ahead of time; repeat it for each answer |
 | `sous vars ask --answers-file <path>` | Reads answers from a YAML or JSON file of `name: value` pairs |
 | `sous vars ask --dry-run` | Reports what would be asked and written, without writing anything |
+
+### What the name may be
+
+The name is a reference, resolved the way every sous command resolves one. It may name a
+variable, an environment variable that answers one, a recipe, a namespace or a repository, and
+anything larger than a variable asks every question it publishes:
+
+```term
+$ sous vars ask taskFileRoot
+// one variable, by the name its recipe gave it
+$ sous vars ask SOUS_VAR_TASK_FILE_ROOT
+// the same variable, by an environment variable in use that answers it
+$ sous vars ask workflow/task-files.taskFileRoot
+// the same variable again, spelled out
+$ sous vars ask task-files
+// every question that one recipe asks
+$ sous vars ask workflow
+// every question every recipe in that namespace asks
+$ sous vars ask sous-recipes
+// every question that repository's recipes ask
+```
+
+Every reference may be written at any level of qualification, up to the fully qualified
+`repository:namespace/recipe.variable`, and matching is case-sensitive. An environment variable
+name resolves when the definition declares it (a recipe may bind an existing variable such as
+`GITHUB_TOKEN`) or when it is one of the generated ladder names that `.sous/.env` or
+`.sous/.env.local` actually sets.
+
+`--repo`, `--namespace` and `--var` say outright which kind of thing is meant, and narrow the
+same way. Each one resolves against what the one before it left, so
+`sous vars ask --namespace workflow apiUrl` asks about that namespace's `apiUrl` even when
+another namespace publishes one too.
+
+When a name matches more than one thing, sous lists what it could have meant and asks which one
+you meant. `--accept-first` takes the first one listed, and a run with no terminal fails naming
+that flag rather than guessing.
 
 ### How the questions run
 

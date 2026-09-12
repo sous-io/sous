@@ -17,6 +17,14 @@ holds the mechanism, use it rather than building a second one beside it.
   It raises a changed recipe whose version still equals its last tag; `--bump` chooses how far
   (a patch step by default) and `--no-bump`, which `--ci` implies, makes an unraised change an
   error instead. The rule lives in `buildReleasePlan` (`src/lib/repos/release/plan.ts`).
+- **Every command that takes a reference resolves it through `src/lib/refs/`.** One module
+  decides what a word on the command line names (`findReference` over the `SousScope` list a
+  command accepts, plus the tighter `findRepository`, `findNamespace`, `findRecipe` and
+  `findVariable`), and one settles which meaning a run proceeds with (`pickReference`: one
+  match, a question, `--accept-first`, or the shared non-interactive failure). Any level of
+  qualification is accepted up to the fully qualified name, matching is case-sensitive, and
+  the listing order is the contract. Never resolve a name by walking an index or a definition
+  list in a command.
 - **Never prompt when the terminal is not ours**: `--non-interactive`, a truthy `CI`, or no TTY
   (`src/lib/interactive.ts`). Fail instead, naming both the question that could not be asked and
   the flag that would have answered it, and print the command's help under the error. All of it

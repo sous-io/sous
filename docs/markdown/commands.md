@@ -252,12 +252,18 @@ implies `--no-bump`. See [Authoring a repository](repositories-authoring.md).
 |---------|-----------|-----------|
 | `sous vars list` | none | `--file <path>` |
 | `sous vars show` | `NAME` | `--file <path>` |
-| `sous vars ask` | `[NAME]` | `--all`, `--file <path>`, `--answer <name>=<value>`, `--answers-file <path>`, `--dry-run` |
+| `sous vars ask` | `[NAME]` | `--repo <name>`, `--namespace <name>`, `--var <name>`, `--accept-first`, `--all`, `--file <path>`, `--answer <name>=<value>`, `--answers-file <path>`, `--dry-run` |
 
 `vars list` prints every variable in play, with the environment variable that answered each one
 and where the value came from. `vars show` prints one variable in full, including every
 environment variable on the resolution ladder and which rung answered. `NAME` is a bare variable
-name or a full `namespace/recipe.name` key. `--file` reads definitions from a standalone
+name or a full `namespace/recipe.name` key.
+
+On `vars ask`, `NAME` is a reference like any other: a variable, an environment variable that
+answers one, a recipe, a namespace or a repository, at any level of qualification, and anything
+larger than a variable asks every question it publishes. `--repo`, `--namespace` and `--var`
+(repeatable) narrow the same way, and `--accept-first` takes the first candidate when the name
+means more than one thing. `--file` reads definitions from a standalone
 definitions file instead of the project's subscribed recipes. `--answer` and `--answers-file`
 answer questions ahead of time, exactly as they do on `subscription add`.
 

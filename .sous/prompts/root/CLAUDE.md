@@ -161,7 +161,7 @@ src/
         plan.ts            # buildReleasePlan: scope, what changed, bumps, tag order
         bump.ts            # raises a recipe version in place, keeping comments
         submit-service.ts  # the whole submit flow, behind the injectable command runner
-      ref-search.ts        # what a one-word ref means: namespace first, then recipe names
+      ref-search.ts        # which repositories a ref search covered, for the not-found error
       catalog.ts           # pure reads over the cached indexes, the lockfile and the subs
       catalog-inputs.ts    # wires a running command to the catalog; also locates recipe files
       catalog-display.ts   # the shared wording and recipe table the browsing commands print
@@ -170,6 +170,12 @@ src/
       locked-namespace-resolver.ts # the real NamespaceResolver, built from the lockfile
       recipe-targets.ts    # subscribed recipe contents -> compile targets; recipeOutputs
       recipe-config-layers.ts  # a recipe's `config` contents, as config layers
+    refs/                  # what a word on the command line names; every command resolves
+                           #   a reference through this one module
+      scopes.ts            # SousScope: repository, namespace, recipe, variable, env var name
+      find.ts              # findReference + the per-scope wrappers; the matching and ordering rules
+      pick.ts              # pickReference: one match, a question, --accept-first, or the
+                           #   shared non-interactive failure
     vars/                  # recipe variable definitions, answers and the resolution ladder
       index.ts             # barrel; import the whole layer from here
       definition-source.ts # where definitions come from; the one wiring seam
@@ -456,10 +462,8 @@ configContext, settings, shellEnv })` builds one from what a running command alr
 Its methods are `addRepo`, `subscribe`, `unsubscribe`, `listSubscriptions`, `restore`,
 `checkUpstream`, `needsRestore` and `prepareForBuild`. Two steps run inside `subscribe` BEFORE anything is
 fetched or written, on the cached indexes alone: a one-word ref is resolved to a fully
-qualified one (`ref-search.ts`: exact namespace matches first, then exact recipe-name
-matches, ordered by repository as given, then namespace, then recipe name, with the
-whole-namespace candidate ahead of its recipes; several matches ask, `--accept-first`
-takes the first), and then the plan is printed and confirmed (the confirmation flag skips the question,
+qualified one through `src/lib/refs/` (over the namespace and recipe scopes; several
+matches ask, `--accept-first` takes the first), and then the plan is printed and confirmed (the confirmation flag skips the question,
 a dry run states the plan and never asks, declining aborts with nothing written). Keep
 that order: the confirmation is worthless once a manifest has been fetched to read it,
 which is why the plan names untrusted dependency repositories only as far as what is
@@ -976,7 +980,7 @@ This enables `sous prune` (remove stale outputs) and `sous clear` (delete all ou
 | `sous repo submit` | Propose this repository's committed changes to its maintainers (`--title`, `--body`, `--draft`, `--dry-run`) |
 | `sous vars list` | List every recipe variable in play: its answer, the env var that supplied it, and the source |
 | `sous vars show <name>` | Show one variable in full, with every candidate env var name and the rung that answered |
-| `sous vars ask [name]` | Answer what is unanswered (or one variable, or everything with `--all`); `--file` reads a standalone definitions file, `--answer <name>=<value>` and `--answers-file <path>` answer ahead of the questions, `--dry-run` writes nothing |
+| `sous vars ask [name]` | Answer what is unanswered, or everything the name covers: a variable, an environment variable name in use that answers one, a recipe, a namespace or a repository, resolved through `src/lib/refs/` (`--repo`, `--namespace`, `--var` narrow the same way, `--accept-first` settles an ambiguous name, `--all` re-asks everything); `--file` reads a standalone definitions file, `--answer <name>=<value>` and `--answers-file <path>` answer ahead of the questions, `--dry-run` writes nothing |
 
 Every topic answers to both spellings of its name (`repo`/`repos`, `subscription`/
 `subscriptions`, `namespace`/`namespaces`, `recipe`/`recipes`, `lock`/`locks`, `var`/`vars`,
