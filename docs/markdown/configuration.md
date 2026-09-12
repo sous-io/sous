@@ -44,6 +44,13 @@ sous for editor autocompletion; sous accepts and ignores the key.
 ?> Configs use `${var}` syntax. Template files use LiquidJS double-brace syntax instead; the two
 are resolved at different stages and never mix.
 
+## Templates and the `.tpl.` convention
+
+A file's name decides whether sous renders it. A file with `.tpl.` in its name is rendered through
+LiquidJS and lands with that segment stripped, so `SKILL.tpl.md` compiles to `SKILL.md`; a file
+without it is copied verbatim, however much it looks like a template. The convention applies to
+`entryPoint` and `entryGlob` targets alike, and to the files a recipe brings into your project.
+
 ## Composition
 
 The primary config is optionally extended by drop-in layers: every `*.js|mjs|json|jsonc|yaml` file

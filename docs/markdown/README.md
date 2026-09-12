@@ -21,7 +21,11 @@ far; more will follow.
 
 - Watch the [animated introduction](../) for the full pitch
 - Learn [how sous is configured](configuration.md)
+- Get a project subscribed to shared recipes in ten minutes with the
+  [repositories quickstart](repositories-quickstart.md)
 - Share configuration between projects with [repositories](repositories.md)
+- See how each hosting provider behaves in the [provider reference](repositories-providers.md)
 - Look up a command in the [command reference](commands.md)
+- Work out what an error is telling you in [repositories troubleshooting](repositories-troubleshooting.md)
 - Read the [design principles](design-principles.md) that constrain every feature
 - Read the [source on GitHub](https://github.com/sous-io/sous)

@@ -1,205 +1,286 @@
 # Repositories
 
 A **repository** publishes shared agent configuration that any project can subscribe to. It is
-an ordinary git repository holding a few manifest files and some markdown, and sous reads it
-the way a package manager reads a registry: an index says what exists, a project says what it
-wants, and a lockfile records exactly what it got.
+an ordinary git repository holding a few manifest files and some markdown, and sous reads it the
+way a package manager reads a registry: an index says what exists, a project says what it wants,
+and a lockfile records exactly what it got.
 
-This page explains the model and the guarantees. The task-oriented guides are
-[Consuming recipes](repositories-consuming.md) and
-[Authoring a repository](repositories-authoring.md), and every file schema lives in
-[Repository file formats](repositories-file-formats.md).
+This page is the map: the vocabulary the system is built from, the official repository every
+project starts with, how a single build fits them together, and where every file lands on disk.
+The task-oriented guides are listed at the bottom.
 
-## Repositories, namespaces, recipes
+## The vocabulary
 
-Three nouns carry the whole system.
+### Repositories
 
-- A **repository** is the unit of trust and the unit of distribution. You add one to a project,
-  which is also how you trust it, and everything else flows from that.
-- A **namespace** groups related recipes inside a repository. It is a plain name, it is not
-  versioned, and a project can subscribe to a whole namespace at once.
-- A **recipe** is the unit you subscribe to and the unit that carries a version. It may hold
-  skills, memories, prompts, config layers, variable definitions, or any mixture of them.
-  Subscribing to a recipe gets everything in it.
+A repository is the unit of distribution and the unit of trust; you add one to a project, and
+everything else flows from that. Its root holds `sous.repo.yaml`, which names the repository,
+describes its namespaces and lists where its recipes live.
 
-```text
-repository            github.com/sous-io/sous-recipes
-  namespace           workflow
-    recipe            task-files          1.2.0
-    recipe            github-projects     1.0.0
-  namespace           communication
-    recipe            control-flow        1.0.0
+```yaml
+# sous.repo.yaml
+formatVersion: 1
+name: agent-recipes
+namespaces:
+  workflow:
+    description: Recipes about how work moves through a project.
+recipes:
+  - recipes/workflow/task-files
+```
+
+### Namespaces
+
+A namespace groups related recipes inside one repository. It is a plain name, it is never
+versioned, and a project can subscribe to a whole namespace in one command.
+
+```term
+$ sous namespace list
+▶ Namespaces in the repositories this project trusts:
+
+  Namespace   Repository  Recipes  Subscribed  What it is
+  ----------  ----------  -------  ----------  ------------------------------------------
+  quality     qa                2  no          Recipes that exercise the edges.
+  workflow    qa                2  no          Recipes about how work moves.
+```
+
+### Recipes
+
+A recipe is the unit you subscribe to and the only thing that carries a version. It may hold
+skills, memories, prompts, config layers and variable definitions in any mixture, and
+subscribing to it gets all of them.
+
+```yaml
+# recipes/workflow/task-files/sous.recipe.yaml
+formatVersion: 1
+namespace: workflow
+name: task-files
+version: 1.0.2
+contents:
+  - kind: skills
+    include:
+      - skills/**/*.md
 ```
 
 A recipe is named by a **ref**: `workflow` for a whole namespace, `workflow/task-files` for one
 recipe, `workflow/task-files@^1.2.0` to constrain the version, and
-`sous-recipes:workflow/task-files` when two added repositories publish the same ref and sous
-needs to be told which one you meant. Refs resolve across the cached indexes of every repository
-the project has added; a genuine conflict is an error asking for the qualified form, never a
-silent first match. The full grammar is in
-[Refs: how anything is named](repositories-file-formats.md#refs-how-anything-is-named).
+`sous-recipes:workflow/task-files` when two trusted repositories publish the same ref and sous
+needs to be told which one you meant. A one-word ref is a guess at a name, and sous works it out:
+a namespace first, a recipe second, across every repository the project trusts. The full grammar
+is in [Refs: how anything is named](repositories-file-formats.md#refs-how-anything-is-named).
 
-A ref of one word is a guess at a name, and sous works out what it meant: it looks for a
-namespace with that name first, and for a recipe with that name second, across every repository
-the project trusts. One match is used and reported by its full ref; several are a question. See
-[Subscribe to a recipe](repositories-consuming.md#subscribe-to-a-recipe).
+### Subscriptions
 
-## Trust
+A subscription is your project saying it wants a recipe or a namespace. It is recorded in a
+config layer sous writes, `.sous/conf.d/510-subscriptions.jsonc`, so it is committed and travels
+with the project.
 
-Adding a repository **is** trusting it. There is no separate trust command, no trusted-but-not-
-added state, and no way to look inside a repository before deciding: until a repository is added,
-sous downloads nothing from it, not even its index. That is deliberate. A trust decision made
-by browsing content sous fetched from an untrusted source is not really a trust decision; the
-decision rests on the URL and on who publishes it, and both of those are things you inspect
-outside sous. Trusting a repository trusts every namespace and every recipe in it, including
-recipes published later. Trusting alone executes nothing, but subscribing to something inside a
-trusted repository can and probably will run scripts on your machine, so the trust question is
-the last gate before that happens. Sous cannot tell you whether a repository deserves trust,
-and it says so rather than implying otherwise.
+```jsonc
+{
+  "subscriptions": {
+    "workflow/task-files": {
+      "addedAt": "2026-09-12T07:01:30.123Z",
+      "addedBy": "user"
+    }
+  }
+}
+```
 
-`sous repo add` asks that question inline, with that wording. Resolution can also turn up a
-repository a recipe depends on that your project has not added; those are asked about in one
-consolidated question per round, each shown with its URL and the recipe that requires it. Any
-refusal aborts the whole install, because sous installs a dependency closure whole or not at all.
+### Dependencies
+
+A recipe manifest can declare two relationships to other recipes, and they differ in exactly one
+respect: whose files end up in your project. `depends` fetches, pins and trust-gates the target
+and makes it addressable while rendering, but keeps its files out of your output; `subscribes`
+does all of that and lands the target's files in your project too, along with the variable
+questions it publishes (see [Recipe variables](repositories-variables.md)).
+
+```yaml
+depends:
+  - workflow/qa-helper                                       # a sibling in this repository
+  - github://sous-io/sous-recipes/workflow/task-files@^1.0   # one in another repository
+subscribes:
+  - quality/code-review
+```
+
+Both name their targets by location, written as a **locator URL**
+([the grammar](repositories-file-formats.md#dependencies-named-by-location)) when the target lives
+in another repository, never by a short name a consuming project chose; a curated bundle is simply
+a recipe made mostly of `subscribes` entries. Because both lists are
+declarative YAML rather than code, sous can read the whole dependency closure before fetching any
+of it, which is what makes the trust decision answerable up front.
+
+### The lockfile
+
+`.sous/sous.lock.json` records the exact version, content hash and holder of everything the
+project uses. It is committed, and a fresh clone rebuilds precisely what it describes.
+
+```json
+{
+  "formatVersion": 1,
+  "recipes": {
+    "workflow/qa-helper": {
+      "hash": "sha256-78660ab9889e707a38befd193ad565f7d76fbf017e049f1ae87372bb2c69698d",
+      "kind": "subscribes",
+      "repo": "qa",
+      "requestedBy": ["project"],
+      "version": "0.1.0"
+    }
+  },
+  "repos": {
+    "qa": { "identity": "localhost/home/me/projects/qa", "url": "/home/me/Projects/qa" }
+  }
+}
+```
+
+Restore decides nothing: it never resolves a range, never picks a newer version and never
+prompts. Anything that would change what is installed changes the lockfile first, as a diff you
+can read in review.
+
+### The store
+
+The store is one machine-wide cache of fetched recipes, at `~/.sous/cache`, keyed by the
+repository's identity rather than by the short name any one project gave it. It is disposable:
+every entry is re-fetchable from the pins in some project's lockfile, so deleting it costs a
+download and nothing else.
+
+```text
+~/.sous/cache/github.com/sous-io/sous-recipes/core/sous-skills/0.2.0/
+~/.sous/cache/_indexes/github.com/sous-io/sous-recipes.json
+```
+
+`sous repo gc` collects the store back to a size cap, least recently used first, never evicting
+an entry the lockfile of the project you run it in still pins; entries another project pins may
+go, because they are re-fetchable from that project's lockfile.
+
+### Trust
+
+Adding a repository **is** trusting it. There is no separate trust command and no
+trusted-but-not-added state: until a repository is added, sous downloads nothing from it, not
+even its index.
 
 ```term
-$ sous repo add https://github.com/sous-io/sous-recipes
+$ sous repo add https://github.com/my-team/agent-recipes
 // sous prints the repository, its location and what trusting it means
 Do you trust this repository? (y/N)
 ```
 
-Where there is no terminal to ask on, such as continuous integration, the run fails and names
-both the repositories and the exact command that grants the trust. `--trust` acknowledges
-without being asked, and is the flag a script uses; it is one spelling of the shared
-confirmation flag, alongside `-y`, `--yes`, `-f` and `--force`:
+Trusting a repository trusts every namespace and recipe in it, including recipes published later,
+and it is the last gate before a recipe can run scripts on your machine; sous cannot tell you
+whether one deserves that, and says so rather than implying otherwise. Where there is no terminal
+to ask on, the run fails and names the repositories and the exact command that grants the trust:
 
-```bash
-sous repo add https://github.com/sous-io/sous-recipes --trust
+```text
+Error: One repository has to be trusted before this can continue, and sous is not
+  running where it can ask.
+  Why: the '--non-interactive' flag was passed.
+
+  agent-recipes: https://github.com/my-team/agent-recipes
+    agent-recipes (required by project)
+
+  Trusting a repository trusts every namespace and recipe in it, and
+  subscribing to something inside it can run scripts on this machine.
+  Add each repository deliberately, with its URL:
+
+    sous repo add https://github.com/my-team/agent-recipes --name agent-recipes --trust
 ```
 
-Trust is project-level and lives in your project's config, so a colleague who clones the project
-inherits it along with everything else. Trust plus the lockfile is the supply-chain defense:
-nothing new enters a project except through an explicit, visible change to files under version
-control.
+!> Trust semantics do not soften for a repository already on your disk. A local path added
+through the `local` provider goes through the same ceremony, because its recipes still run on
+this machine.
 
-!> Trust semantics do not soften for a repository that is already on your disk. A local path
-added through the `local` provider goes through the same ceremony, because its recipes still run
-on this machine.
-
-## The official repository, and `core`
+## The official repository, and the built-in core
 
 Sous publishes one official repository, [`sous-io/sous-recipes`](https://github.com/sous-io/sous-recipes).
 Its namespaces are drawn from the canonical [skill categories](skill-categories.md), plus one
 extra namespace called `core`.
 
-`core` is the exception to everything else on this page. It holds the skills that teach an agent
-what sous is, why generated files must not be edited by hand, and where the source of a managed
-file lives; without them an agent will cheerfully edit a compiled `CLAUDE.md` and wonder why the
-change keeps disappearing. So `core` is auto-subscribed in every project, at the version that
-matches the sous CLI you are running, and its source ships inside the sous package itself and
-seeds the machine-wide store on first run. A fresh install therefore works with no network at
-all, and the release pipeline pushes the same content to the official repository under the same
-version number, so the built-in copy and the published copy are the same bytes.
-
-Both wirings are ordinary config entries, and both can be switched off:
-
-```yaml
-subscriptions:
-  core:
-    enabled: false
-```
-
-Everything else in the official repository is opt-in, one `sous subscription add` at a time, and
-`sous subscription remove core` records that opt-out for you.
-
-?> Namespace subscriptions are a first-class feature and are worth reaching for on other
-repositories, especially a team repository whose namespace is genuinely one coherent set. In the
-official repository they are not what you want: any arrangement of its content yields either
-one-recipe namespaces or a namespace of unrelated recipes, so subscribe to official recipes one
-at a time. `core` is the deliberate exception.
-
-## `depends` versus `subscribes`
-
-A recipe manifest can declare two different relationships to other recipes, and the difference
-is exactly one thing: whose files end up in your project.
-
-| Relationship | Fetched and pinned | Trust-gated | Addressable from the declaring recipe | Files enter your project |
-|--------------|--------------------|-------------|---------------------------------------|--------------------------|
-| `depends` | yes | yes | yes | no |
-| `subscribes` | yes | yes | yes | yes |
-
-`depends` is a build dependency: shared partials, shared variable definitions, anything a recipe
-reads while rendering its own files. `subscribes` is a co-subscription: subscribing to the recipe
-subscribes your project to the listed targets with full semantics, so their questions run and
-their files land in your output. A curated bundle is simply a recipe made mostly of `subscribes`
-entries; there is no special bundle type.
-
-Both name their targets by LOCATION. A recipe in the same repository is a bare ref
-(`workflow/sat`); a recipe in another repository is a locator URL whose scheme is the provider
-(`github://sous-io/sous-recipes/workflow/sat@^1.1`), whose last two path segments are always the
-namespace and the recipe. A project's own short name for a repository never appears in a
-published manifest, because it is a label that project chose. The full grammar is in
-[Repository file formats](repositories-file-formats.md#dependencies-named-by-location).
-
-A release records what each version was published against, so installing a version installs the
-versions it was released with rather than whatever its ranges reach today.
-
-Both are declarative, and that is load-bearing rather than stylistic. Because the entire
-dependency closure is readable from manifests alone, sous can show you every repository an
-install would reach before it fetches any of them. Configuration that could subscribe by running
-code would break that, which is why manifests are YAML or JSON and never JavaScript.
-
-Removal is refcounted. Unsubscribing removes what that subscription alone brought in and leaves
-anything another subscription or another recipe still holds, and says which of those holders
-kept it.
-
-## The lockfile
-
-`.sous/sous.lock.json` records the exact version and content hash of everything the project uses,
-along with who holds each entry. It is committed. A fresh clone with no store on the machine
-rebuilds precisely what the lockfile describes, fetching those versions and no others, and asking
-nothing:
+`core` is the exception. It holds the skills that teach an agent what sous is, why generated files
+must not be hand-edited and where the source of a managed file lives; without them an agent will
+cheerfully edit a compiled `CLAUDE.md`. So the official repository is added and `core` is
+subscribed in every project, pinned to the sous CLI version you are running, and its source ships
+inside the package and seeds the store on first run, so a fresh install needs no network at all.
 
 ```term
-$ git clone git@github.com:my-team/my-project.git
->> 100%
-$ sous build
-Restoring recipes
-  This project's lockfile pins recipes that are not in the store on this machine,
-  so they are being fetched at exactly the versions it records.
-  restored: workflow/task-files
+$ sous subscription list
+▶ Subscriptions:
+
+  Subscription        Range        Pinned version            Origin    Enabled
+  ------------------  -----------  ------------------------  --------  -------
+  core                0.2.0        core/sous-skills 0.2.0    built in  yes
+  workflow/qa-helper  any version  workflow/qa-helper 0.1.0  user      yes
 ```
 
-Restore decides nothing. It never resolves a range, never picks a newer version, and never
-prompts. Anything that would change what is installed changes the lockfile first, as a diff you
-can read in review.
+Both wirings are ordinary config entries a person could have written by hand, and either can be
+switched off: `sous subscription remove core` writes `subscriptions.core.enabled: false` for you,
+and `sous subscription add core` clears it again. See
+[Opt out of `core`](repositories-consuming.md#opt-out-of-core) for what you give up.
 
-## Providers
+?> Subscribe to a whole namespace when it is one coherent set your team owns end to end. In the
+official repository, prefer subscribing to recipes one at a time, so a recipe published later
+does not arrive in your project unasked. `core` is the deliberate exception.
 
-A provider is everything sous knows about one kind of repository host, and it is the only place
-a host-specific fact is allowed to live. Sous ships three: `github`, `gitlab` and `local`.
+## One build, end to end
 
-A provider has two sides:
+Four steps take a team repository from nothing to compiled skills.
 
-- **The read side**, which every provider answers: recognize a repository URL, take it apart into
-  host, owner and name, hand back the repository's `sous.index.json`, and fetch one recipe's
-  subtree at one tag. Nothing here clones a whole repository.
-- **The write side**, which only a provider that can propose a change answers: report whether its
-  command line tool is installed and signed in, say whether you can push to the repository
-  itself, fork it onto your account, and open the proposal. Each call answers with plain data, so
-  the command driving it never learns what tool ran.
+**Add the repository**, which asks you to trust it and fetches its index, nothing more:
 
-Each provider declares the features it really has, `fetch` and `submit`, and sous consults that
-list rather than a provider's name. `local` declares `fetch` only: a repository on your own disk
-is edited directly, so asking sous to propose a change to it is refused with a message naming the
-provider and the feature. A provider that supports a feature only partly says so plainly rather
-than guessing; GitLab, for instance, reports that it cannot tell whether you may push instead of
-sending you down a fork path it cannot finish.
+```term
+$ sous repo add https://github.com/my-team/agent-recipes
+▶ Adding a repository:
+    Repository: agent-recipes
+    Location  : https://github.com/my-team/agent-recipes
+    Provider  : github
+    Namespaces: quality, workflow
+    Recipes   : 4
+  This project now trusts 'agent-recipes'. Nothing from it has been installed.
+```
 
-?> Adding a provider is one file. A class extending `ProviderBase` inherits the subprocess, token
-and refusal plumbing, implements the read path, declares its features, and overrides the write
-calls it supports; adding it to the built-in list is the only other change. The interface is
-internal for now, not a published plugin API.
+**Subscribe to a recipe.** Sous resolves the dependency closure, shows what it will install,
+asks about any repository a dependency needs that you have not trusted, records the subscription
+and the pins, then builds:
+
+```term
+$ sous subscription add workflow/task-files
+➔ What was installed:
+  Recipe               Version  Repository     Why
+  -------------------  -------  -------------  ----------------------
+  workflow/task-files  1.0.2    agent-recipes  you subscribed to it
+➔ Lockfile:
+  Adding workflow/task-files version 1.0.2
+```
+
+**Answer the questions** the recipe publishes. A question is asked only when a subscribed recipe
+needs a variable and no valid answer is already in scope, and the answers land in this project's
+env files. See [Recipe variables](repositories-variables.md).
+
+**Build.** Every later build reads the pins, restores anything missing from the store, then
+compiles the recipe's files into your project's agent directories alongside your own templates:
+
+```term
+$ sous build
+▶ Restoring recipes:
+  This project's lockfile pins recipes that are not in the store on this machine,
+    so they are being fetched at exactly the versions it records.
+    restored: workflow/task-files
+▶ Building:
+▷ SKILL.tpl.md:
+    Entry Point: ~/.sous/cache/github.com/my-team/agent-recipes/workflow/task-files/1.0.2/skills/start-task/SKILL.tpl.md
+  ✓ /home/me/my-project/.claude/skills/start-task/SKILL.md (~1,996 tokens)
+```
+
+Skills default to `<project root>/.claude/skills`; every other content kind needs a destination in
+the [`recipeOutputs`](repositories-file-formats.md#recipeoutputs-where-the-files-land) block.
+
+By default a build uses what the lockfile pins and does not talk to the network. Two things
+change that: **always-pull**, which installs a newer in-range version whenever one exists, and
+the **freshness window** (`store.freshnessSeconds`, five minutes by default), which decides how
+often sous looks upstream at all. A failed check never breaks a build; the last good index stands
+and the build says so. See
+[Control freshness and the store](repositories-consuming.md#control-freshness-and-the-store).
+A **linked** repository sits outside all of it: `sous repo link` points one repository's
+resolution at a working copy on your machine, bypassing versions, the lockfile and freshness
+checks, so every build announces it loudly. See
+[Edit a repository in place](repositories-authoring.md#edit-a-repository-in-place).
 
 ## Where everything lives
 
@@ -216,88 +297,41 @@ internal for now, not a published plugin API.
 | `~/.sous/sous.links.json` | the machine-wide links map | not in a project at all |
 
 The user-level directory is `~/.sous`, and `SOUS_HOME` moves it. Unlike `SOUS_CONFIG` and
-`SOUS_DIR`, `SOUS_HOME` does not decide which project is active, so it may be set in
-`.sous/.env.local` or `.sous/.env` as well as in the shell.
+`SOUS_DIR`, it does not decide which project is active, so it may be set in `.sous/.env.local` or
+`.sous/.env` as well as in the shell.
 
-The three files in the `500` to `599` band are written by sous, and the band exists precisely so
-that machine-written layers never collide with the config you wrote. Sous edits them by key, so
-your comments, your key order and your formatting survive a write, and you may edit them
-yourself. Sous never edits your primary config. You may
-hand-write `repos:`, `subscriptions:` and `varMappings:` there yourself, and by the time anything
-reads them the two are one merged map. See
+The three files in the `500` to `599` band are written by sous, by key, so your comments and
+formatting survive a write; you may edit them, and you may hand-write `repos:`, `subscriptions:`
+and `varMappings:` in your primary config instead, which sous never touches. See
 [Managed config layers](repositories-file-formats.md#managed-config-layers).
 
-Every directory sous creates for its own bookkeeping explains itself. The first time sous
-creates one (`.sous/conf.d/`, `.sous/repos/`, `~/.sous` and everything under it), it writes a
-short `README.md` there saying what the directory is, who writes to it, whether you may edit or
-delete what is inside, and whether it is committed, plus an `AGENTS.md` and a `CLAUDE.md` holding
-one line each pointing at that README. None of the three is ever overwritten, so anything you
-write in them stays. Directories that hold rendered output are deliberately left alone: what
-lands there is yours.
-
-The store is disposable by design. Every entry in it is re-fetchable from the pins in some
-project's lockfile, so deleting `~/.sous/cache` costs a download and nothing else. `sous repo gc`
-collects it back to a size cap, least recently used first, and never evicts an entry this
-project's lockfile still pins.
+Every directory sous creates for its own bookkeeping explains itself: the first time it creates
+one it writes a short `README.md` saying what the directory is, who writes to it, whether you may
+edit it and whether it is committed, plus an `AGENTS.md` and a `CLAUDE.md` pointing at that
+README. None is ever overwritten, and directories holding rendered output are left alone.
 
 ## Including recipe files in your own templates
 
-A recipe's files are addressable from a template through the reserved `~` include sigil:
-
-```markdown
-@~workflow/task-files/_partials/shared.md
-```
-
-The `~` is required. A bare `@path` in an include is always a relative path or a declared alias,
-with no namespace fallback, so an include line can never quietly stop meaning a file on disk and
-start meaning a recipe. Inside a recipe's own files, `~<namespace>` resolves against that
-recipe's declared dependencies at their pinned versions; in your project's templates it resolves
-against your project's subscriptions.
-
-A `~namespace` reference addresses a recipe's own files and nothing else, so the path after the
-recipe name may not contain `.` or `..` segments and may not be absolute. One that tries to leave
-the recipe directory is refused with an error saying so, exactly as every other path sous reads
-refuses `..`.
-
-## Freshness, always-pull, and links
-
-By default a build uses what the lockfile pins and does not talk to the network. Two things
-change that.
-
-**Always-pull** installs a newer in-range version whenever one exists, rather than holding the
-locked one. It is set per repository or per subscription, or asked for once with
-`sous subscription add --always-pull`. It never widens the range a subscription or a dependency
-declared; it re-resolves within it. The lockfile is still regenerated every time, so it always
-records what the last build actually used, and a project using always-pull simply accepts
-routine lockfile diffs as the record of what changed.
-
-**The freshness window** decides how often sous bothers to look upstream at all: five minutes by
-default, configurable as `store.freshnessSeconds`, with `store.watchPollSeconds` doing the same
-job for watch mode. A check that fails never breaks a build. The last good index stands, the
-build says what happened, and it carries on.
-
-A **linked** repository sits outside all of this. `sous repo link` points one repository's
-resolution at a working copy on your machine, which is how a maintainer edits recipes; edits
-happen in a checkout, never in the store. A link bypasses versions, the lockfile and freshness
-checks, and those bypasses belong to one person's machine rather than to the team, so every
-build announces a linked repository loudly:
+A template may pull in a file from a recipe through the reserved `~` sigil, naming the recipe's
+published identity and then the path inside it, on a line of its own:
 
 ```text
-One repository is LINKED to a working copy on this machine.
-Their recipes are read from those checkouts, so versions, the lockfile and
-freshness checks do not apply to them.
+@~workflow/qa-helper/_partials/review-steps.md
 ```
+
+The `~` is required. A bare `@path` is always a relative path or a declared alias, so an include
+line can never quietly stop meaning a file on disk. Inside a recipe, `~<namespace>` resolves only
+against that recipe's own `depends` and `subscribes` at the versions the lockfile pins, and the
+path after the recipe name may not be absolute or hold a `.` or `..` segment.
 
 ## Where to go next
 
-- [Consuming recipes](repositories-consuming.md): adding, subscribing, building, and what lands
-  where
-- [Authoring a repository](repositories-authoring.md): `sous repo init`, writing recipes,
-  releasing, and contributing
-- [Recipe variables](repositories-variables.md): the resolution ladder, answers, and the
-  `sous vars` commands
-- [Repository file formats](repositories-file-formats.md): every manifest, index and lockfile
-  schema
-- [Skill categories](skill-categories.md): the canonical category list the official repository
-  uses as namespaces
+- [Quickstart](repositories-quickstart.md): an empty project to a compiled skill, in order
+- [Consuming recipes](repositories-consuming.md): adding, subscribing, building, removing
+- [Authoring a repository](repositories-authoring.md): writing recipes, releasing, contributing
+- [Recipe variables](repositories-variables.md): the resolution ladder and the question flow
+- [Providers](repositories-providers.md): `github`, `gitlab` and `local`, and what each one can do
+- [Repository file formats](repositories-file-formats.md): every manifest, index and schema
 - [Command reference](commands.md): every command and flag
+- [Troubleshooting](repositories-troubleshooting.md): what the errors mean and how to clear them
+- [Skill categories](skill-categories.md): the category list the official repository uses

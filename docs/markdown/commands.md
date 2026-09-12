@@ -1,308 +1,327 @@
 # Command Reference
 
-Every command the `sous` CLI ships, with its arguments and its own flags. Run any of them with
-`--help` for the same information in your terminal.
+Every command the `sous` CLI ships, with its arguments, its own flags and one example. The same text is in your
+terminal: `sous <command> --help`, or `sous help <command>`. Flags that mean the same thing everywhere are
+explained once, below, and only named under the commands that take them.
 
-## The flags every project command shares
-
-These four locate the configuration and are accepted by every command that works on a project.
-They are listed once here rather than repeated in every table below.
+## Flags that locate the configuration
 
 | Flag | What it does |
 |------|--------------|
-| `-c, --config <path>` | Path to a sous config file, or to a directory holding one. Overrides `.sous/` discovery |
+| `-c, --config <path>` | A sous config file, or a directory holding one. Overrides `.sous/` discovery |
 | `--sous-config <path>` | Alias of `--config` |
-| `--sous-dir <path>` | Path to the `.sous` directory to use, overriding walk-up discovery |
-| `--sous-confd <path>` | Path to the `conf.d/` drop-in layer directory, overriding `<sousDir>/conf.d` |
+| `--sous-dir <path>` | The `.sous` directory to use, overriding walk-up discovery |
+| `--sous-confd <path>` | The `conf.d/` drop-in layer directory, overriding `<sousDir>/conf.d` |
 
-The environment variables `SOUS_CONFIG`, `SOUS_DIR` and `SOUS_CONFD` do the same jobs; a flag
-beats the matching variable, and both beat walk-up discovery.
-[Discovery and overrides](config-discovery.md) covers the precedence in full. One more variable,
-`SOUS_DEBUG`, is read by every command: it turns stack traces back on when something fails
-(see [Exit behavior](#exit-behavior)).
+Every command that works on a project takes these four. `SOUS_CONFIG`, `SOUS_DIR` and `SOUS_CONFD` do the same;
+a flag beats its variable, and both beat walk-up discovery. See [Discovery and overrides](config-discovery.md).
 
-?> Three commands take none of these, because they run inside a recipe repository rather than
-inside a project: `sous repo init`, `sous repo release` and `sous repo submit`. A recipe
-repository has no `.sous/` directory to discover. All three do take `--non-interactive`:
-`repo init` and `repo submit` accept it without ever having a question to suppress, and
-`repo release` reads the flag, the terminal and the `CI` environment variable to decide whether
-it may ask, with `--ci` or `--yes` settling it outright.
+?> `repo init`, `repo release` and `repo submit` take none of these. They run inside a recipe repository, which
+has no `.sous/` directory to discover. All three still take `--non-interactive`.
 
-## Flags common to many commands
-
-A few flags mean the same thing wherever they appear, so the tables below name them without
-explaining them again.
+## Flags that answer questions
 
 | Flag | What it does |
 |------|--------------|
-| `-y, --yes` | Answers yes to every confirmation the command would ask. `--force` and `-f` are the same flag; so is `--trust` on the commands that trust a repository |
-| `--non-interactive` | The opposite instruction: never ask anything. A run that would have prompted fails instead, naming the question and the flag that would have answered it |
-| `--dry-run` | Prints what the command would do and writes, downloads and asks nothing |
-| `-h, --help` | Prints the command's own help and exits |
+| `-y, --yes` | Answer yes to every confirmation the command would ask. `-f` and `--force` are the same flag, and so is `--trust` on the commands that trust a repository |
+| `--non-interactive` | Never ask anything. A run that would have prompted fails instead, naming the question and the flag that would have answered it |
+| `--dry-run` | Print what the command would do, and write, download and ask nothing |
+| `-h, --help` | Print this command's help and exit |
 
-`sous clear` is the one command whose primary spelling is `--force` rather than `--yes`, because
-that is the spelling it has always had; `-y` and `--yes` are aliases of it there and behave
-identically. `sous repo init --force` is a different flag with a different meaning (overwrite an
-existing repository), and it is not a confirmation.
+`sous clear` spells its confirmation `-f, --force` first, with `-y` and `--yes` as aliases of it, and is the one
+exception to the rule above: without `-f` it asks even under `--non-interactive` or `CI`, so pass `-f` whenever
+you script it. `sous repo init --force` is not a confirmation; it overwrites a repository that already exists.
 
-Help is available in four forms, all of which draw the same screen:
+Sous asks a question only when it can; piping output, redirecting it to a file and running in CI therefore do
+what `--non-interactive` does, and a run that needs an answer fails saying why. The exact conditions are listed
+under [When sous cannot ask](repositories-consuming.md#when-sous-cannot-ask).
 
-```bash
-sous --help
-sous repo add --help
-sous repo add -h
-sous help repo add
+Help has four spellings. `sous --help` prints the root screen; `sous repo add --help`, `sous repo add -h` and
+`sous help repo add` all print that one command's. `sous help` alone lists the topics and commands, and
+`sous --version` prints the version, platform and Node build.
+
+Every topic answers to both spellings of its name: `repo` and `repos`, `subscription` and `subscriptions`,
+`namespace` and `namespaces`, `recipe` and `recipes`, `lock` and `locks`, `vars` and `var`, `config` and
+`configs`. Three commands also answer to one word: `sous search`, `sous subscribe` and `sous unsubscribe`.
+
+## Top-level commands
+
+### `sous build`
+Compiles this project's outputs, then removes the ones its config no longer produces. It is compile plus prune,
+and the command you want almost always. Takes `--dry-run`.
+
+- `--no-prune`, `--no-compile`: skip one half of the run.
+- `--rebuild`: ignore cached hashes and reprocess every output.
+- `--strict`: fail on any compilation error rather than reporting it and continuing.
+- `-w, --watch`: rebuild on every change to a source file, a config layer or a linked checkout.
+
+Example: `sous build --rebuild`
+
+### `sous compile`
+Compiles markdown templates into output files, and prunes nothing. Takes `--rebuild`, `--strict`, `--dry-run`
+and `-w, --watch`, each meaning what it means on `build`. Example: `sous compile --strict`
+
+### `sous prune`
+Removes output files no longer in the current config. Takes `--dry-run` only. Example: `sous prune --dry-run`
+
+### `sous clear`
+Deletes every file and directory sous has written for the project, and asks first; `-f, --force` answers that
+confirmation ahead of time. Example: `sous clear --force`
+
+### `sous launch TOOL...`
+Builds this project's outputs, then starts a coding agent configured under `tools` in its config. `--no-build`
+launches without building; `--continuous` restarts the agent whenever it exits.
+
+Any argument `launch` does not recognize is forwarded to the tool; a flag that collides with one of sous's own
+goes after a bare `--`: `sous launch claude --resume`, `sous launch claude -- -c`.
+
+Example: `sous launch claude --continuous`
+
+### `sous search TEXT`
+Searches the recipes every trusted repository publishes, by name or description; reads the cached indexes only,
+so it works offline. `--limit <n>` sets how many matches to show, defaulting to 25. Also spelled
+`sous repo search`. Example: `sous search task --limit 50`
+
+### `sous help [COMMAND]`
+Prints the help for sous, or for one command or topic. Works from any directory, including one with no config
+above it. Example: `sous help repo add`
+
+## config
+
+Inspects the merged configuration. `show` and `get` write machine-readable output to standard out and route the
+header and any error block to standard error, so a pipeline survives a broken config. See
+[Inspecting and validating](config-inspection.md).
+
+### `sous config show`
+Prints the merged config (every `conf.d` layer merged, before variable resolution) as JSON.
+Example: `sous config show | jq .compilation`
+
+### `sous config get PATH`
+Prints one value by dot-path, with `[n]` for array indices; a scalar prints raw, and an object or array prints
+as pretty JSON. `--layers` adds one `old -> new` line per config layer that changed the value.
+Example: `sous config get compilation.targets[0].entryPoint --layers`
+
+### `sous config validate`
+Validates the merged config: the schema first, then full variable resolution, which is what surfaces reference
+cycles and undefined `${var}` references. Example: `sous config validate`
+
+## repo
+
+Manages the recipe repositories this project trusts; see [Repositories](repositories.md) for the model and
+[Consuming recipes](repositories-consuming.md) for the workflow.
+
+### `sous repo add URL`
+Adds a repository to this project, which is also how you trust it, and fetches its index so its recipes are
+listable. `URL` is the repository's address, or the path of one on this machine. Takes `--dry-run`.
+
+- `--name <name>`: set the short name refs will use. Defaults to the URL's last segment. (`sous repo link` on
+  a path instead takes the name that checkout's own manifest suggests.)
+- `--provider github|gitlab|local`: name the provider, for a host the URL does not give away; each provider's
+  behaviour is in the [provider reference](repositories-providers.md).
+- `-y, --yes`: answer the trust question ahead of time (also `-f`, `--force`, `--trust`).
+
+Example: `sous repo add https://github.com/sous-io/sous-recipes --name recipes`
+
+### `sous repo remove REPO`
+Stops trusting a repository, named by the short name this project records, and removes everything it brought in.
+It first prints what goes with it: the entry, the subscriptions that resolve into it, the recipes those alone
+held, the files the next build prunes, and the linked checkout if one points at it. Takes `-y, --yes`,
+`--dry-run` and `--no-build` (remove without rebuilding). Example: `sous repo remove my-recipes --dry-run`
+
+### `sous repo list`
+Lists the repositories this project trusts, with the provider, where the entry came from, whether it is linked,
+how many recipes it publishes (`not fetched` until its index has been downloaded) and its URL. `--verbose` adds
+the namespaces each one publishes, on a line under its row.
+
+```term
+$ sous repo list
+  Repository    Provider  Origin    Linked      Recipes  URL
+  ------------  --------  --------  ------  -----------  ---------------------------------------
+  sous-recipes  github    built in  no      not fetched  https://github.com/sous-io/sous-recipes
 ```
 
-`sous help` on its own lists the topics and commands, and `sous help <topic>` lists one topic's
-commands.
+### `sous repo search TEXT`
+Same command as `sous search`, under its own topic; takes `--limit <n>`. Example: `sous repo search browser`
 
-## Singular and plural
+### `sous repo gc`
+Collects the machine-wide recipe store down to its size cap. `--max-bytes <n>` collects to that cap instead of
+the one the config sets; `--dry-run` prints what it would evict. Example: `sous repo gc --max-bytes 268435456`
 
-Every topic answers to both spellings of its name, so nothing hinges on remembering which one
-sous prefers: `repo` and `repos`, `subscription` and `subscriptions`, `namespace` and
-`namespaces`, `recipe` and `recipes`, `lock` and `locks`, `var` and `vars`, `config`
-and `configs`. The tables below print the spelling `sous --help` shows; the other one runs
-exactly the same command.
+### `sous repo link REPO [PATH]`
+Points a repository at a working copy on this machine instead of a published version; see
+[Edit a repository in place](repositories-authoring.md#edit-a-repository-in-place). A name or URL on its own
+clones it into `.sous/repos` and links the clone; a name or URL with a `PATH` links the checkout at that path; a
+path alone links that checkout where it is, adding the repository first if needed. Takes `--dry-run`.
 
-## Building
+- `--global`: link for every project on this machine, sharing one checkout.
+- `-y, --yes`: answer the trust question a not-yet-added repository raises (also `--trust`).
 
-| Command | Arguments | Own flags |
-|---------|-----------|-----------|
-| `sous build` | none | `--no-prune`, `--no-compile`, `--rebuild`, `--dry-run`, `--strict`, `-w, --watch` |
-| `sous compile` | none | `--strict`, `--rebuild`, `--dry-run`, `-w, --watch` |
-| `sous prune` | none | `--dry-run` |
-| `sous clear` | none | `-f, --force` (also `-y, --yes`) |
-| `sous launch` | `TOOL...` | `--no-build`, `--continuous` |
+Example: `sous repo link sous-recipes ~/Projects/sous-recipes`
 
-`build` is compile plus prune, and is the command you want almost always. `--rebuild` ignores
-cached hashes and reprocesses every output; `--strict` fails on the first compilation error
-rather than reporting and continuing; `--watch` rebuilds on every change to a source file, a
-config layer, or a linked recipe checkout.
+### `sous repo unlink REPO`
+Stops reading a repository from a working copy and goes back to published versions; `REPO` is the short name as
+it appears in `sous.links.json` (see [File formats](repositories-file-formats.md)). `--global` removes the
+machine-wide link, not this project's; `--dry-run` prints what changes. Example: `sous repo unlink sous-recipes`
 
-`clear` deletes every file and directory sous has written for the project, and asks first unless
-you pass `--force` (or `-y`, or `--yes`). Neither `prune` nor `clear` ever reaches into a linked checkout or the
-machine-wide recipe store.
+### `sous repo init [DIRECTORY]`
+Creates a new recipe repository in a directory, defaulting to the current one; `--dry-run` prints the files it
+would write. See [Authoring a repository](repositories-authoring.md).
 
-`launch` builds and then spawns a coding agent configured under `tools` in your config. Any
-argument it does not recognize is forwarded to the tool. A flag that collides with one of sous's
-own goes after a bare `--`, which forwards everything following it verbatim:
+- `--name <name>`: set the short name for the repository. Defaults to the directory's own name.
+- `--namespace <name>`: name the one namespace to declare. Defaults to the repository's name.
+- `--force`: write the scaffold over a repository that already exists.
 
-```bash
-sous launch claude --resume
-sous launch claude -- -c
-```
+Example: `sous repo init ./my-recipes --name team-recipes --namespace workflow`
 
-## Inspecting the configuration
+### `sous repo release`
+Publishes new versions of this repository's recipes: bump, regenerate the index, commit and tag. It plans first
+and asks once, and it refuses to run until git has a commit identity in the repository (`git config user.name`
+and `git config user.email`), because it commits and cuts annotated tags. Takes `-y, --yes` and `--dry-run`.
 
-| Command | Arguments | Own flags |
-|---------|-----------|-----------|
-| `sous config show` | none | none |
-| `sous config get` | `PATH` | `--layers` |
-| `sous config validate` | none | none |
+- `--namespace <ns>`, `--recipe <ns/name>`: narrow the run. Both repeat.
+- `--bump patch|minor|major|prerelease`: how far to raise a changed version. Defaults to a patch step.
+- `--no-bump`: raise nothing; a changed recipe that was never raised is then an error.
+- `--include-unchanged`: release every recipe in scope, changed or not.
+- `--tag`, `--push`: tag even on a non-default branch, and push the commit and this run's tags.
+- `--check`: only validate, and fail when the committed index is out of date.
+- `--ci`: the merge preset. Never bump, never ask, and fail on anything unbumped. It still needs `--yes` to
+  accept the plan it prints, so a merge job runs `sous repo release --ci --yes --push`.
 
-`show` and `get` write machine-readable output to standard output, with the decorative header and
-any error block routed to standard error, so `sous config show | jq` works even when the config is
-broken. `PATH` is a dot-path with `[n]` for array indices, such as
-`compilation.targets[0].entryPoint`, and `--layers` prints one `old -> new` line per config layer
-that changed the value. `validate` runs the resolvers that schema validation alone cannot,
-surfacing reference cycles and undefined `${var}` references.
+Example: `sous repo release --recipe workflow/task-files --bump minor --push`
 
-See [Inspecting and validating](config-inspection.md).
+### `sous repo submit`
+Proposes this repository's committed changes to its maintainers. `--title <text>` defaults to the last commit's
+subject and `--body <text>` to a summary sous writes; `--draft` opens the proposal as a draft, and `--dry-run`
+prints the plan without sending anything. Example: `sous repo submit --title "Add a linting recipe" --draft`
 
-## Repositories
+## subscription
 
-| Command | Arguments | Own flags |
-|---------|-----------|-----------|
-| `sous repo add` | `URL` | `--name <name>`, `--provider github\|gitlab\|local`, `-y, --yes` (also `--trust`), `--dry-run` |
-| `sous repo remove` | `REPO` | `-y, --yes` (also `-f, --force`), `--dry-run`, `--no-build` |
-| `sous repo list` | none | `--verbose` |
-| `sous repo search` | `TEXT` | `--limit <n>` (default 25) |
-| `sous repo gc` | none | `--max-bytes <n>`, `--dry-run` |
-| `sous repo link` | `REPO` (a short name, a URL or a path) `[PATH]` | `--global`, `-y, --yes` (also `--trust`), `--dry-run` |
-| `sous repo unlink` | `REPO` | `--global`, `--dry-run` |
+Manages which recipes this project subscribes to. `REF` is `namespace` or `namespace/recipe`, either of them
+optionally carrying an `@<range>` and a `repo:` qualifier; see
+[Refs](repositories-file-formats.md#refs-how-anything-is-named).
 
-`repo add` is the trust ceremony; it asks inline, and the confirmation flag is how a run with no
-terminal acknowledges instead. `--trust` is the spelling the ceremony reads best with, and it is
-the same flag as `-y`, `--yes`, `-f` and `--force`. `URL` may be an address or an absolute path to a repository on this
-machine. `list` and `search` read only what is already cached, so both work offline and neither
-downloads anything.
+### `sous subscription add REF`
+Subscribes this project to a recipe, or to a whole namespace of them, then builds the project so the recipe's
+files are on disk when the command returns. Also spelled `sous subscribe`. Takes `-y, --yes`, `--no-build`, and
+`--dry-run`, which also prints the questions of every recipe this machine already holds; a recipe not held here
+yet is named instead, because a dry run downloads nothing.
 
-`repo remove` is the reverse of `repo add`: it stops trusting a repository. Before it writes
-anything it prints what goes with it, so the decision is made on facts: the entry itself, every
-subscription that resolves into the repository, every locked recipe those subscriptions alone held,
-the output files the next build prunes, and the linked checkout, if one points at it. Then it asks
-once, and the confirmation flag answers ahead of time. The link entry is removed with the
-repository; the checkout itself stays on disk. The command finishes by building the project, the
-same way the subscription commands do, so the files those recipes wrote are gone when it returns;
-`--no-build` leaves the outputs alone. Removing the built-in `sous-recipes` repository records
-`sous-recipes: { enabled: false }` in the managed repositories layer rather than deleting an entry,
-because the entry sous provides comes back on every run.
+- `--prerelease`: let prerelease versions take part in range matching.
+- `--always-pull`: install a newer in-range version whenever one exists, rather than holding the lock.
+- `--accept-first`: when a one-word ref matches several things, take the first one listed.
+- `--answer <name>=<value>`: answer one question ahead of time. Repeat it for each answer.
+- `--answers-file <path>`: read the same pairs from a YAML or JSON file. An `--answer` wins over the file.
 
-`repo search` is also a top-level `sous search`, because searching is how you find something to
-subscribe to before you know what any of it is called.
+Example: `sous subscription add workflow/task-files@^1.2.0 --answer apiUrl=https://api.example.com`
 
-## Browsing what a project trusts
+### `sous subscription remove REF`
+Removes a subscription and everything only it brought in, then rebuilds so those files are gone. Also spelled
+`sous unsubscribe`. Takes `--dry-run` and `--no-build`. Example: `sous subscription remove workflow/task-files`
 
-| Command | Arguments | Own flags |
-|---------|-----------|-----------|
-| `sous namespace list` | none | none |
-| `sous namespace show` | `REF` (a namespace, optionally `repo:namespace`) | none |
-| `sous recipe list` | none | none |
-| `sous recipe show` | `REF` (a recipe, a recipe name on its own, or either with a `repo:` qualifier) | none |
+### `sous subscription list`
+Lists the subscriptions this project declares, switched-off ones included, with the range each resolves within,
+the versions the lockfile pins, where it came from and whether it is on. Reads the config and the lockfile only.
+Example: `sous subscription list`
 
-All four read the cached repository indexes and the lockfile, so they work offline and download
-nothing. A trusted repository whose index has never been fetched is named at the end of a listing
-rather than left out of it.
+## namespace
 
-`namespace list` shows every namespace, how many recipes it holds, and how much of it this project
-subscribes to: the whole namespace, some recipes, or none. `namespace show` adds every recipe in
-one namespace, with the latest published version, the version this project pins, and whether it is
-subscribed.
+`namespace` reads the cached indexes and the lockfile, so it works offline. A trusted repository whose index has
+never been fetched is named at the end of a listing, not left out.
 
-`recipe list` shows the same per-recipe columns across every namespace. `recipe show` describes one
-recipe completely: the repository and its location, every published version labeled as the latest
-one, the pinned one or an earlier one, what the version depends on (both as the recipe's manifest
-declares it and as its repository's index resolved it at release time), the questions it asks with
-the environment variable each answer is stored under, and the directories its files are written
-into. The questions and the file list come from the recipe's own manifest, so a recipe this machine
-does not hold yet is described from its index alone and says so.
+### `sous namespace list`
+Lists every namespace the trusted repositories publish, how many recipes each holds, and how much of it this
+project subscribes to: all of it, some recipes, or none. Example: `sous namespace list`
 
-## The lockfile
+### `sous namespace show REF`
+Shows one namespace and every recipe in it, with the latest published version, the version this project pins,
+and whether it is subscribed. `REF` is a namespace, optionally written as `repository:namespace`.
+Example: `sous namespace show sous-recipes:core`
 
-| Command | Arguments | Own flags |
-|---------|-----------|-----------|
-| `sous lock show` | none | none |
-| `sous lock rebuild` | none | `--dry-run` |
+## recipe
 
-`lock show` prints what `.sous/sous.lock.json` pins: the recipe, the version, the repository it came
-from, and who holds it (this project, or the recipes that require it).
+Browses the recipes the trusted repositories publish; like `namespace`, it works offline.
 
-`lock rebuild` recomputes the whole file from the subscriptions the config declares and the cached
-indexes, then writes it. It starts from an empty lockfile, so an entry nothing holds any more is
-dropped rather than carried through; that makes it the repair for a file that has drifted from the
-config through a hand edit or a bad merge. It asks nothing and grants no trust: a subscription whose
-closure reaches a repository this project has not added fails, naming the repository. It downloads
-nothing, so a recipe whose files are not on this machine has its own dependencies left out, and is
-named when that happens. `--dry-run` prints the same summary and writes nothing.
+### `sous recipe list`
+Lists the recipes the trusted repositories publish, across every namespace, with the same per-recipe columns
+`namespace show` prints. Example: `sous recipe list`
 
-## Subscriptions
+### `sous recipe show REF`
+Describes one recipe completely: its repository and location, every published version, its dependencies as
+declared and as resolved at release time, the questions it asks with the environment variable each answer is
+stored under, and the directories its files are written into. `REF` is `namespace/recipe`, a recipe name alone,
+or either with a `repository:` qualifier. Example: `sous recipe show sous-recipes:core/about-sous`
 
-| Command | Arguments | Own flags |
-|---------|-----------|-----------|
-| `sous subscription list` | none | none |
-| `sous subscription add` | `REF` | `--prerelease`, `--always-pull`, `-y, --yes` (also `--trust`), `--accept-first`, `--answer <name>=<value>`, `--answers-file <path>`, `--dry-run`, `--no-build` |
-| `sous subscription remove` | `REF` | `--dry-run`, `--no-build` |
+## lock
 
-`sous subscribe` and `sous unsubscribe` are the original spellings of `subscription add` and
-`subscription remove`, and both still work.
+Inspects and repairs this project's lockfile; both commands work from what is on disk and fetch nothing.
 
-Adding or removing a subscription changes what the project compiles, so both commands finish by
-building it: the same compile and prune `sous build` runs, so a newly subscribed recipe's files
-are on disk when the command returns and a removed one's files are gone. `--no-build` changes the
-subscription and leaves the outputs alone. A build that fails leaves the subscription change in
-place, since it is already written and locked, and says so.
+### `sous lock show`
+Prints what `.sous/sous.lock.json` pins: the recipe, the version, the repository it came from, and who holds it
+(this project, or the recipes that require it). Example: `sous lock show`
 
-`REF` is a ref: `namespace`, `namespace/recipe`, either with an `@<range>`, and optionally
-qualified with `repo:`. See
-[Refs: how anything is named](repositories-file-formats.md#refs-how-anything-is-named).
+### `sous lock rebuild`
+Recomputes the whole lockfile from the subscriptions the config declares and the cached indexes, starting from
+empty, so an entry nothing holds any more is dropped rather than carried through: the repair for a file that
+drifted through a hand edit or a bad merge. It asks nothing, grants no trust and downloads nothing. Takes
+`--dry-run`. Example: `sous lock rebuild --dry-run`
 
-`subscription add --dry-run` installs nothing and, after the plan, prints every question the
-recipes would ask: what each variable is for, where its answer would be stored, and whether
-anything answers it already. `--answer <name>=<value>`, repeated, answers those questions ahead of
-time, and `--answers-file <path>` reads the same pairs from a YAML or JSON file; together they are
-how a run with no terminal subscribes to a recipe that asks questions. See
-[Answering questions ahead of time](repositories-consuming.md#answering-questions-ahead-of-time).
+## vars
 
-`subscription list` reads the config and the lockfile only, so it works offline. It reports every
-subscription the project declares, switched-off ones included, with the range it resolves within,
-the versions the lockfile pins for it, where it came from, and whether it is on.
-
-Removing the `core` subscription sous provides itself records `core: { enabled: false }` in the
-managed subscriptions layer rather than deleting an entry, because the default would otherwise
-come back on the next run. Adding it back clears the opt-out. Either way the `sous-recipes`
-repository stays trusted and keeps appearing in `repo list` as built in.
-
-`repo link` is written three ways. `REPO` on its own, as the short name of a repository this
-project has already added, clones it into `.sous/repos/<owner>/<name>`, or into
-`$SOUS_HOME/repos/<owner>/<name>` with `--global`. `REPO` followed by a `PATH` links the checkout
-at that path to that repository and clones nothing. A path in the `REPO` slot, on its own, links
-the checkout already at that path where it is, under the short name its repo manifest suggests.
-Naming a repository this project has not added, by URL or by path, runs the same trust ceremony
-`repo add` runs, since a linked repository's recipes are read with no version, lockfile or hash
-check; it asks inline, and `--trust` (or any other spelling of the confirmation flag)
-acknowledges instead for a run with no terminal.
-
-## Authoring a repository
-
-These three run inside a recipe repository and take none of the config-locating flags.
-
-| Command | Arguments | Own flags |
-|---------|-----------|-----------|
-| `sous repo init` | `[DIRECTORY]` | `--name <name>`, `--namespace <name>`, `--force`, `--dry-run` |
-| `sous repo release` | none | `--namespace <ns>`, `--recipe <ns/name>`, `--bump patch\|minor\|major\|prerelease`, `--no-bump`, `--include-unchanged`, `--tag`, `--push`, `--yes`, `--check`, `--ci`, `--dry-run` |
-| `sous repo submit` | none | `--title <text>`, `--body <text>`, `--draft`, `--dry-run` |
-
-`sous repo release` plans first, asks once, and then bumps, regenerates the index, commits and
-tags in one run. `--namespace` and `--recipe` are repeatable and narrow the run; `--check` reads
-only and cannot be combined with `--bump`, `--tag` or `--push`; `--ci` is the merge preset and
-implies both `--no-bump` and `--yes`, so it prints the plan and carries it out without asking. See [Authoring a repository](repositories-authoring.md).
-
-## Variables
-
-| Command | Arguments | Own flags |
-|---------|-----------|-----------|
-| `sous vars list` | none | `--file <path>` |
-| `sous vars show` | `NAME` | `--file <path>` |
-| `sous vars ask` | `[NAME]` | `--repo <name>`, `--namespace <name>`, `--var <name>`, `--accept-first`, `--all`, `--file <path>`, `--answer <name>=<value>`, `--answers-file <path>`, `--dry-run` |
-
-`vars list` prints every variable in play, with the environment variable that answered each one
-and where the value came from. `vars show` prints one variable in full, including every
-environment variable on the resolution ladder and which rung answered. `NAME` is a bare variable
-name or a full `namespace/recipe.name` key.
-
-On `vars ask`, `NAME` is a reference like any other: a variable, an environment variable that
-answers one, a recipe, a namespace or a repository, at any level of qualification, and anything
-larger than a variable asks every question it publishes. `--repo`, `--namespace` and `--var`
-(repeatable) narrow the same way, and `--accept-first` takes the first candidate when the name
-means more than one thing. `--file` reads definitions from a standalone
-definitions file instead of the project's subscribed recipes. `--answer` and `--answers-file`
-answer questions ahead of time, exactly as they do on `subscription add`.
-
-Bare `sous vars` is shorthand for `vars list`, and `sous vars <name>` for `vars show <name>`. A
-variable whose name is also a subcommand name (`list`, `show` or `ask`) has to be reached the
-long way, as `sous vars show list`.
-
+Inspects the variables this project's recipes define, and the answers they hold. `NAME` is a bare variable name
+or a full `namespace/recipe.name` key. Bare `sous vars` is shorthand for `vars list` and `sous vars <name>` for
+`vars show <name>`; a variable named `list`, `show` or `ask` is reached the long way, as `sous vars show list`.
 See [Recipe variables](repositories-variables.md).
 
-## Tables and terminal width
+### `sous vars list`
+Lists every variable this project's recipes define, with the environment variable that answered each one and
+where the value came from. `--file <path>` reads the definitions from a standalone definitions file instead.
+Example: `sous vars list --file ./questions.yaml`
 
-Every listing sous prints fits itself to the terminal it is running in. Columns shrink toward
-their minimums, a long description wraps onto more lines, and a path or a URL is cut in the
-middle so the host and the last segment both survive. On a terminal too narrow to hold
-everything, the columns that matter least step aside, and one line under the table names them:
-`Hidden at this width: URL. Widen the terminal to see it.` Nothing is hidden when the output is
-not a terminal (a pipe, a file, a CI log), which is laid out at a fixed width instead, so a
-recorded run always shows every column.
+### `sous vars show NAME`
+Shows everything about one variable, including every environment variable on the resolution ladder and which
+rung answered; takes `--file <path>`. Example: `sous vars show workflow/task-files.apiUrl`
 
-`sous repo list --verbose` adds the namespaces each repository publishes, on a dim line under
-that repository's row.
+### `sous vars ask [NAME]`
+Asks the variables this project's recipes define and stores the answers in the `.sous` env files. `NAME` is a
+variable, an environment variable name, a recipe, a namespace or a repository; anything larger than a variable
+asks every question it publishes. Takes `--file <path>` and `--dry-run`.
 
-## Exit behavior
+- `--repo <name>`, `--namespace <name>`, `--var <name>`: narrow the run. `--var` repeats.
+- `--all`: ask every variable again, including the ones already answered.
+- `--accept-first`: take the first candidate when a name means more than one thing.
+- `--answer <name>=<value>`, `--answers-file <path>`: as on `subscription add`.
 
-Every command exits non-zero on a configuration problem and prints a plain-language error block
-naming the file at fault. There is no warn-and-continue: a broken config halts sous rather than
-producing output built on a guess.
+Example: `sous vars ask --namespace workflow --var apiUrl`
 
-What a failure prints is the message and nothing else. Forget an argument, misspell a flag, or
-pass a value a flag does not accept, and sous prints the sentence describing the mistake and
-then that command's own help, so the flag you wanted is on the screen already. No expected
-failure prints a stack trace.
+## Exit behavior and error shape
 
-Set the `SOUS_DEBUG` environment variable to anything but `0`, `false`, `no` or `off` and every
-failure prints its stack trace to standard error underneath the message. It is there for
-debugging sous itself; nothing else changes when it is set.
+A command that succeeds exits `0`. A command line sous could not parse (a missing argument, an unknown flag, a
+value outside a flag's options) exits `2`. Every other failure exits `1`. A broken config halts sous rather than
+producing output built on a guess. Compilation is the one place sous reports a failure and carries on;
+`--strict` on `build` and `compile` turns those reports into a failed run.
 
-```bash
-SOUS_DEBUG=1 sous build
+A failure prints one error block, in plain language, and nothing else; a usage mistake gets the command's own
+help under it, on standard error. An error sous raises names the cause and the cure:
+
+```term
+$ sous subscription add workflow --non-interactive
+  Error: Sous has to ask which 'workflow' you meant, and it is not running where it can ask.
+    Why: the '--non-interactive' flag was passed.
+    'workflow' matched 2 things:
+      sous-recipes:workflow (the whole namespace 'workflow' in the repository 'sous-recipes')
+      qa:workflow (the whole namespace 'workflow' in the repository 'qa')
+    Answer it ahead of time: write the full reference (for example 'sous-recipes:workflow'), or
+      pass '--accept-first' to take the first candidate listed above.
 ```
+
+No expected failure prints a stack trace. A failure sous did not expect prints the message and one more sentence
+asking you to set `SOUS_DEBUG=1` and run the command again. Set `SOUS_DEBUG` to anything but `0`, `false`, `no`
+or `off` and every reported failure prints its stack to standard error underneath the message:
+`SOUS_DEBUG=1 sous build`. Nothing else changes when it is set.
+
+Every listing fits itself to the terminal it runs in: columns shrink, descriptions wrap, and a path or URL is
+cut in the middle so the host and the last segment both survive. On a terminal too narrow, the least important
+columns step aside and a line under the table names them; nothing is hidden when the output is not a terminal.
+
+For what a particular repository error is telling you, and how to clear it, see
+[Repositories troubleshooting](repositories-troubleshooting.md).

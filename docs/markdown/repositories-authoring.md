@@ -1,18 +1,18 @@
 # Authoring a Repository
 
-This is the guide to publishing recipes of your own: creating a repository, writing a recipe,
-editing one that is already published, cutting a release, and proposing a change to someone
-else's repository. [Repository file formats](repositories-file-formats.md) holds every schema
-these commands read and write; this page is about the workflow.
+The guide to publishing recipes of your own: creating a repository, writing a recipe, declaring the variables it
+needs, cutting a release, editing a published repository in place, and proposing a change to somebody else's.
+[Repository file formats](repositories-file-formats.md) holds the schemas; this page is the workflow.
 
-?> A recipe repository is not a sous project. It has no `.sous/` directory, and `sous repo init`,
-`sous repo release` and `sous repo submit` do not look for one. Run them from inside the
-repository itself.
+?> A recipe repository is not a sous project. It has no `.sous/` directory, and `sous repo init`, `sous repo
+release` and `sous repo submit` do not look for one. Run them from inside the repository itself.
 
 ## Create a repository
 
 ```term
 $ sous repo init ./my-recipes --name my-recipes --namespace workflow
+▶ Creating a recipe repository:
+
   wrote sous.repo.yaml
   wrote sous.index.json
   wrote recipes/workflow/example/sous.recipe.yaml
@@ -22,52 +22,26 @@ $ sous repo init ./my-recipes --name my-recipes --namespace workflow
   wrote .gitignore
 ```
 
-| Flag | What it does |
-|------|--------------|
-| `--name <name>` | Short name for the repository. Defaults to the directory's own name |
-| `--namespace <name>` | The one namespace to declare. Defaults to the repository's name |
-| `--force` | Write the scaffold over a repository that already exists |
-| `--dry-run` | Print the files that would be written without writing them |
+`--name` is the repository's short name (default: the directory's own name), `--namespace` the one namespace to
+declare (default: the repository's name), `--force` overwrites a repository that already exists, and `--dry-run`
+lists the files without writing them. The command asks nothing, and names are lowercase kebab-case, so `My-Recipes`
+yields `my-recipes`. Every file is read back through the schemas sous uses on published repositories, so the
+scaffold validates. The scaffold is files only: run `git init`, commit it, and add the remote you publish from
+before releasing, since `sous repo release` reads and writes tags and fails in a directory git does not track.
 
-Names are lowercase kebab-case, and a name given in any other case is lowercased for you, so a
-directory called `My-Recipes` yields `my-recipes`. `repo init` refuses to write over a directory
-that already holds a repo manifest unless you pass `--force`, and it reads every manifest back
-after writing it, so the scaffold it leaves behind is one that validates.
+?> `repo init --force` means overwrite, not "answer yes". It is unrelated to the confirmation flag other
+commands spell `--yes`, `-y`, `--force` or `--trust`.
 
-?> `repo init --force` means overwrite, not "answer yes". It is unrelated to the shared
-confirmation flag other commands spell `--yes`, `-y`, `--force` or `--trust`, and `repo init`
-does not accept those other spellings.
-
-## The layout
-
-```text
-my-recipes/
-  sous.repo.yaml                 what this repository publishes
-  sous.index.json                the catalog, written by 'sous repo release'
-  recipes/
-    workflow/
-      example/
-        sous.recipe.yaml         one recipe, with its own version
-        skills/
-          example-skill/
-            SKILL.md
-  .github/workflows/sous-release.yml
-  .gitignore
-  README.md
-```
-
-Nothing in that tree is fixed except the two manifest filenames and the index at the root.
-Recipe folders may live anywhere; what makes a folder a recipe is that `sous.repo.yaml` lists its
-path under `recipes`, and that the folder holds exactly one recipe manifest.
-
-Both hand-written manifests are YAML or JSON and never JavaScript. A repository's whole trust
-story rests on being readable without running any of its code, and a manifest that could execute
-would break that guarantee.
+`sous.repo.yaml` says what the repository publishes, `sous.index.json` is the catalog that `sous repo release`
+writes, and each recipe folder carries one `sous.recipe.yaml` beside the files it contributes. Nothing else is
+fixed: recipe folders may live anywhere, and what makes a folder a recipe is that `sous.repo.yaml` lists its
+path under `recipes`. Both hand-written manifests are YAML or JSON and never JavaScript, because a repository's
+trust story rests on being readable without running any of its code.
 
 ## Write a recipe
 
-Copy the example folder, edit its manifest, and add the new path to the `recipes` list in
-`sous.repo.yaml`. A minimal recipe:
+Copy the example folder, edit its manifest, and add its path to the `recipes` list in `sous.repo.yaml`, which is a
+plain list of folder paths (`recipes:`, then `- recipes/workflow/task-files` under it):
 
 ```yaml
 formatVersion: 1
@@ -76,173 +50,125 @@ name: task-files
 version: 0.1.0
 description: >-
   Per-branch task files, with skills for starting and resuming work.
-
 contents:
   - kind: skills
     include:
       - skills/**/*.md
 ```
 
-`contents` groups are what a subscriber's project actually receives, one group per kind
-(`skills`, `memories`, `prompts` or `config`), each with `include` glob patterns relative to the
-recipe folder. Two more optional lists say what else the recipe needs: `depends` for build
-dependencies whose files stay out of a subscriber's output, and `subscribes` for co-subscriptions
-whose files go in. Full field tables are in
-[`sous.recipe.yaml`](repositories-file-formats.md#sousrecipeyaml-the-recipe-manifest).
+`contents` groups are what a subscribing project receives, one group per kind, each with `include` glob patterns
+relative to the recipe folder (and optional `exclude` patterns). The four kinds are `skills`, `memories`,
+`prompts` and `config`; the kind decides where files land, which the subscriber maps with
+[`recipeOutputs`](repositories-file-formats.md#recipeoutputs-where-the-files-land). Field tables are in the
+[recipe manifest](repositories-file-formats.md#sousrecipeyaml-the-recipe-manifest) reference, and recipe
+metadata is the source of truth for the version: never edit `sous.index.json` by hand.
 
-Recipe metadata is the source of truth for the version. Never edit `sous.index.json` by hand;
-`sous repo release` regenerates it.
+A recipe's files compile exactly the way a project's own `entryGlob` target does, so the
+[`.tpl.` convention](configuration.md#templates-and-the-tpl-convention) applies unchanged inside a recipe. A
+template may include a file from a recipe this one depends on through the reserved `~` sigil, resolved against
+this recipe's own `depends` and `subscribes` at their pinned versions; see
+[Including recipe files in your own templates](repositories.md#including-recipe-files-in-your-own-templates).
 
 ## Declare the variables a recipe needs
 
-A recipe that needs a value from the project asks for it through a **definition**: a published
-specification, never a value. Sous asks the question only when a subscribed recipe needs the
-variable and no valid answer is already in scope.
+A recipe that needs a value from the project asks through a **definition**: a published specification, never a
+value. Sous asks the question only when a subscribed recipe needs the variable and no valid answer is in scope.
 
 ```yaml
 variables:
-  - name: taskFileRoot
+  - name: qaTaskRoot
     type: path
-    prompt: Where should task files be stored?
+    prompt: Where should the review notes be stored?
     description: >-
-      This recipe mandates the creation of task files that are stored locally
-      and, in general, should not be committed. This setting dictates the path in
-      which agents will store and search for your task files. The default value
-      stores task files in the project's .sous directory, but you can specify any
-      local path, either relative to the project root or absolute.
-    example: ~/my-task-files
-    default: .sous/tasks
+      This recipe writes one review note per branch, and this setting is the
+      directory those notes are read from and written to. The default keeps them
+      inside the project's .sous directory, which git already partly ignores.
+      Any local path works, relative to the project root or absolute.
+    example: ~/qa-notes
+    default: .sous/qa-notes
     required: true
     scope: shared
 
-  - name: serviceToken
+  - name: qaServiceToken
     type: string
-    env: SERVICE_TOKEN
-    prompt: What is this project's service token?
+    env: QA_SERVICE_TOKEN
+    prompt: What is this project's review service token?
     description: >-
-      This recipe authenticates every call it makes with a service token, which
-      is issued per project and is not shared between them. Create one under
-      Settings, then Tokens, and give it read access to the project you are
-      configuring. There is no default; a token is always specific to you, and it
-      is stored in the gitignored env file so it never reaches git.
-    example: svc_0123456789abcdef0123
+      The review service is called once per run and authenticates with a token
+      issued per project. There is no default, because a token belongs to one
+      person on one machine; create one under Settings, then Tokens.
+    example: qa_0123456789abcdef0123
     secret: true
     scope: local
     validate:
       minLength: 20
 ```
 
-The rules worth knowing while you write one:
+- **`name` is camelCase**, and it is how templates refer to the variable. `type` is `string`, `number`,
+  `boolean`, `enum`, `path` or `url`. `required` defaults to true.
+- **A description explains, a prompt asks.** Both `description` and `example` are required, and a manifest missing
+  either is refused. Write the description in full sentences: what the setting is for, what the default does, and
+  what else is acceptable; write the prompt as one plain question. It is also what `sous vars show <name>` prints.
+- **An example is documentation, a default is a value.** Sous never stores an example and never offers it as
+  the answer; it only shows it beside the question. Use `default` for a value a project should actually start
+  with, and put the same text in both only when the sample answer is the right starting value.
+- **`env` is the environment variable** an answer binds to. Omit it and the answer binds to the shared rung of
+  the resolution ladder, derived from the name: `apiUrl` becomes `SOUS_VAR_API_URL`. Name it explicitly to reuse
+  a value the environment already carries, such as `GITHUB_TOKEN`; `x-intentional: true` then silences the
+  release warning about claiming a well-known name (`PATH`, `HOME`, `USER`, `SHELL`, `GITHUB_TOKEN`,
+  `GITLAB_TOKEN`, `NPM_TOKEN`, or anything starting `AWS_` or `SOUS_`, except the `SOUS_VAR_` names sous
+  derives itself). Two definitions of the same name may share one variable; two of **different** names
+  claiming the same one is an error.
+- **`secret: true`** hides the value everywhere sous prints it, and **`scope`** picks the file the answer is
+  written to: `shared` for the committed `.sous/.env`, `local` for the gitignored `.sous/.env.local`. A secret
+  is always stored locally, so a secret declared `shared` is rejected.
+- **`validate`** carries `pattern`, `minLength`, `maxLength`, `min`, `max` and `enum`. A published `pattern` runs on
+  a worker under a time budget, so one that backtracks forever fails validation rather than hanging the person
+  answering, and the message names your pattern. Within a major version a schema may only LOOSEN: tightening a
+  constraint is a major bump, and an upgrade re-validates stored answers, re-prompting only where an old one no
+  longer fits.
+- **Further reading:** [Recipe variables](repositories-variables.md) covers how an answer is found at build
+  time; [Variable definitions](repositories-file-formats.md#variable-definitions) is the full field table.
 
-- **`name` is camelCase**, and it is how templates refer to the variable.
-- **`description` and `example` are both required.** The one-line `prompt` is rarely enough on its
-  own, and the person answering it cannot read your mind. The description is the paragraph shown
-  above the question and by `sous vars show <name>`; the example is a realistic sample answer,
-  shown with the question.
-- **A description explains, a prompt asks.** Write the description in full sentences, and cover
-  three things: what the setting is for, what the default does, and what else is acceptable. Write
-  the prompt as one plain question and nothing else. The pair above is the model:
-  "This recipe mandates the creation of task files that are stored locally and, in general, should
-  not be committed. This setting dictates the path in which agents will store and search for your
-  task files. The default value stores task files in the project's .sous directory, but you can
-  specify any local path, either relative to the project root or absolute." asked as
-  "Where should task files be stored?". A description that only restates the prompt, or a prompt
-  that tries to carry the explanation, both make the question harder to answer.
-- **An example is documentation, a default is a value.** Sous never stores an example and never
-  offers it as the answer; it only ever shows it. Use `default` for a value a project should
-  actually start with. The same text may appear in both when the sample answer really is the right
-  starting value.
-- **`env` names the environment variable** an answer binds to. Omit it and `sous repo release`
-  derives one from the name: `apiUrl` becomes `SOUS_VAR_API_URL`. Naming it explicitly is how a
-  recipe reuses a value the environment already carries, such as `GITHUB_TOKEN`.
-- **`secret: true`** stores the answer in the gitignored `.sous/.env.local` and hides the value
-  everywhere sous prints it.
-- **`scope`** picks the file the answer is written to: `shared` for the committed `.sous/.env`,
-  `local` for the gitignored `.sous/.env.local`. A secret declared as `shared` is rejected,
-  because that combination would commit the secret.
-- **`validate.pattern` runs under a time budget.** Sous runs a published pattern on a worker and
-  stops waiting after a fixed budget, so a pattern that backtracks forever cannot hang the person
-  answering; it fails validation instead, and the message names your pattern. Keep patterns simple.
-- **`x-intentional: true`** silences the release warning about claiming a well-known environment
-  variable name. `PATH`, `HOME`, `USER`, `SHELL`, `GITHUB_TOKEN`, `GITLAB_TOKEN`, `NPM_TOKEN` and
-  anything starting `AWS_` or `SOUS_` draw that warning; binding an existing token is legitimate,
-  it just deserves saying out loud.
+## Declare dependencies and co-subscriptions
 
-Two definitions of the same name may share one environment variable, because that is exactly
-what the shared rung of the resolution ladder is for. Two definitions of **different** names
-claiming the same environment variable is an error. See
-[Recipe variables](repositories-variables.md) for how an answer is found at build time.
+`depends` fetches and pins a recipe whose files stay OUT of a subscriber's output but are addressable from your
+own templates. `subscribes` is a co-subscription: its questions run and its files DO enter the output, which is
+how a curated bundle is built. Both hold plain strings naming their target by where it lives.
 
-!> Within a major version a schema may only LOOSEN. Tightening a constraint is a major bump, and
-an upgrade re-validates stored answers, re-prompting only where an old answer no longer fits.
-
-## Edit a repository in place
-
-Edits happen in a real working copy, never in the machine-wide store. `sous repo link`, run
-inside a project, points that project's resolution of one repository at a checkout:
-
-```bash
-sous repo link ~/Projects/my-recipes             # link the checkout that is already there
-sous repo link my-recipes                        # clone it into .sous/repos/<owner>/<name>
-sous repo link my-recipes ~/Projects/my-recipes  # link a checkout that already exists
-sous repo link my-recipes --global               # one checkout shared by every project
-sous repo unlink my-recipes
+```yaml
+depends:
+  - workflow/qa-helper                                       # a sibling, released alongside me
+  - workflow/qa-helper@^1.1                                  # a sibling with a range; uncommon
+  - github://sous-io/sous-recipes/workflow/sat@^1.0          # another repository
+  - gitlab://gitlab.example.com/group/subgroup/proj/qa/lint  # a self-hosted host, with subgroups
+subscribes:
+  - quality/code-review                                      # co-subscribed: its files land too
 ```
 
-The command is written three ways.
+A **bare ref** is a sibling in this repository; with no range it means "the version released alongside me", since
+one run cuts both tags and records the exact version in the index. A locator URL names another repository,
+and its last two segments are always the namespace and the recipe, which is the recipe's published **identity and
+never a path on disk**: a recipe stored at `recipes/shared/sat/` and published as `workflow/sat` is written
+`github://owner/repo/workflow/sat`. Everything before them is the repository, a dotted first segment naming the
+host. The optional range after `@` follows npm's rules. `local://` locators and `repo:` short names are refused:
+a local repository is a consumer's convenience, and a short name is one project's private label. See
+[Dependencies named by location](repositories-file-formats.md#dependencies-named-by-location).
 
-A **path on its own** links the checkout that is already at that path, where it is. Relative
-paths and `~` work, because that is what people type. The repository is added to the project
-first if it has not been added yet, which is the same trust ceremony `sous repo add` runs; its
-short name is the one the checkout's own repo manifest suggests, falling back to the directory's
-name. Nothing is cloned.
+## Cut a release
 
-A **repository on its own** is cloned for you, into `.sous/repos/<owner>/<name>` or into
-`$SOUS_HOME/repos/<owner>/<name>` with `--global`. A directory that is already a checkout of the
-same remote is reused rather than cloned again, so running the command twice is harmless; one
-holding a different remote is an error, because reading the wrong recipes silently would be
-worse than stopping.
-
-A **repository followed by a path** links the checkout at that path to that repository, and
-clones nothing.
-
-In every form the path must hold a repo manifest at its root, and a path in both slots is an
-error: the first one already says which checkout to link.
-
-Linking also maintains the two ignore files that keep machine-local sous files out of your
-project's history: a `.sous/repos/.gitignore` holding a single `*`, and a delimited managed block
-inside `.sous/.gitignore`. Only the lines between the markers are ever rewritten, and both files
-are written only when their contents would change. `sous prune` and `sous clear` never reach
-into `.sous/repos/`.
-
-Because a link bypasses versions, the lockfile and freshness checks, and because those bypasses
-belong to one person's machine rather than to the team, both the link command and every
-subsequent build say so loudly:
-
-```text
-The repository 'my-recipes' is now LINKED.
-Its recipes are read from the checkout above, so versions, the lockfile
-and freshness checks no longer apply to it. Builds say so every time.
-```
-
-`sous repo unlink` removes the map entry and nothing else. The checkout stays exactly where it
-is, and its path is printed so you can delete it yourself if you want to. Getting the scope wrong
-is the easy mistake here, so unlinking a name that is linked in the other scope tells you which
-scope holds it and which flag removes it.
-
-## Release
-
-`sous repo release` publishes new versions of this repository's recipes. One run does the whole
-job: it raises versions, regenerates `sous.index.json`, commits both, and cuts the tags that
-publish them. Run it from inside the repository, with your recipe changes already committed.
+`sous repo release` publishes new versions: one run raises versions, regenerates `sous.index.json`, commits both,
+and cuts the tags. Run it inside the repository, with your recipe changes committed.
 
 ```term
 $ sous repo release
-  The release this would make:
-    workflow/task-files : 1.1.0 becomes 1.1.1  (a patch step; the tag would be workflow/task-files@1.1.1)
+▶ The release this would make:
+
+    workflow/qa-helper: 0.1.0 becomes 0.1.1 (a patch step; the tag would be
+                        workflow/qa-helper@0.1.1)
 
   Left alone:
-    workflow/sat: its files have not changed since workflow/sat@1.4.0.
+    workflow/qa-variables: its files have not changed since workflow/qa-variables@0.1.0.
 
   This run would:
     Raise the versions listed above, in the manifests that declare them.
@@ -252,158 +178,140 @@ $ sous repo release
     Push nothing; pass '--push' to push what it makes.
 
 Publish these versions? yes
-  workflow/task-files: 1.1.0 becomes 1.1.1.
+
+▶ Publishing:
+
+  workflow/qa-helper: 0.1.0 becomes 0.1.1.
   Wrote sous.index.json.
-  Committed: Release workflow/task-files@1.1.1
-  Created the tag workflow/task-files@1.1.1.
+  Committed: Release workflow/qa-helper@0.1.1
+  Created the tag workflow/qa-helper@0.1.1.
 ```
 
-The plan is always printed first, and a run asks once before it changes anything. `--yes` answers
-that question ahead of time, and `--dry-run` prints the plan and stops.
+That run leaves out the banner and the checking step, and prints how to push once it finishes. The plan comes first
+and a run asks once before changing anything; `--yes` answers ahead of time and `--dry-run` prints the plan and
+stops. Three facts about each recipe decide that plan and nothing else does: whether it is in scope, whether its
+files changed since the tag that last published it, and whether its version was already raised past that tag. The
+third case is what a merge looks like to continuous integration: the bump is done, so the run only publishes it.
 
-### What a run decides
+`--namespace <ns>` and `--recipe <ns/name>` narrow the run and both repeat; `--bump <level>` is `patch` (the
+default), `minor`, `major` or `prerelease`; `--no-bump` raises nothing; `--include-unchanged` releases every
+recipe in scope, changed or not; `--check` only reads, validating and failing when the committed index is stale;
+and `--ci` is the merge preset: never bump, accept the plan, never ask, fail on anything unbumped. Every flag
+this command takes, `--tag`, `--push` and `--non-interactive` among them, is in the
+[command reference](commands.md#sous-repo-release).
 
-Three facts about each recipe decide everything, and nothing else does:
-
-1. **Is it in scope?** Every recipe is, unless `--namespace` or `--recipe` narrows the run.
-2. **Have its files changed since the tag that last published it?** A recipe nobody touched is
-   not re-released; a published version that says the same thing as the one before it is noise.
-   `--include-unchanged` releases everything in scope anyway.
-3. **Has its version already been raised past that tag?** If so, the bump has been done and this
-   run only publishes it. That is what a merge looks like to the continuous integration run.
-
-### The flags
-
-| Invocation | What it does |
-|------------|--------------|
-| `sous repo release` | Plan, ask once, then bump, regenerate, commit and tag |
-| `sous repo release --dry-run` | Print the plan and stop |
-| `sous repo release --yes` | Skip the question; everything else is the same |
-| `sous repo release --namespace <ns>` | Release only that namespace. Repeatable |
-| `sous repo release --recipe <ns/name>` | Release only that recipe. Repeatable |
-| `sous repo release --bump <level>` | `patch` (the default), `minor`, `major` or `prerelease` |
-| `sous repo release --no-bump` | Raise nothing; a changed recipe nobody raised is an error |
-| `sous repo release --include-unchanged` | Release everything in scope, changed or not |
-| `sous repo release --tag` | Cut the tags even on a branch other than the default one |
-| `sous repo release --push` | Push the commit, and the tags this run created, to `origin` |
-| `sous repo release --check` | Read only: validate, and fail when the committed index is out of date |
-| `sous repo release --ci` | The merge preset: never bump, accept the plan, never ask, fail on anything unbumped |
+`--bump` and `--no-bump` contradict each other, and so do `--check` and `--ci`; sous refuses the combination and
+says which one to keep. `--ci` implies `--no-bump` and `--yes`, accepting the plan it prints rather than asking,
+but it deliberately does not imply `--push`, so what a workflow pushes stays visible in the workflow file. Under
+either, a recipe whose files changed without a bump is an error naming its manifest and the colliding tag.
 
 ### The branch rule
 
-On a branch other than the default one, a release bumps and commits but cuts no tags, and says
-why: tags are cut on the default branch, by continuous integration after the merge. Pass `--tag`
-to cut them anyway, which is what a repository with no automation wants.
+The default branch is whatever `origin/HEAD` points at. On any other branch a release bumps and commits but cuts
+no tags, and says why: tags are cut on the default branch, by continuous integration after the merge. Pass
+`--tag` to cut them anyway, which is what a repository with no automation wants; a clone that was never told its
+default branch (one with no remote) treats every branch as the default.
 
-### Dependencies and the sibling rule
+### The sibling rule
 
-Tags are cut **dependency-first**, so a recipe is never published before something it depends on.
-Everything a released recipe depends on inside this repository has to be a version that exists
-once the run's own tags are counted, and there are exactly two ways that fails:
+Tags are cut **dependency-first**, so a recipe is never published before something it depends on, and every
+sibling it depends on must be a version that exists once the run's own tags are counted. A sibling **never
+published** stops the run, naming the tag to cut. One that was published, has changed since, and sits **outside
+this release's scope** is fine: the release depends on the last published version, and warns.
 
-- The sibling has **never been published**. Nothing can depend on it, so the run stops and names
-  the tag that has to be cut.
-- The sibling has been published, has changed since, and sits **outside this release's scope**.
-  That is fine: the release goes ahead depending on the last published version, and warns with
-  facts you can check.
-
-```term
-  recipes/workflow/task-files/sous.recipe.yaml:
-  'workflow/sat' has changes since 'workflow/sat@1.4.0' that are outside this release's scope;
-  'workflow/task-files@1.1.1' will depend on 'workflow/sat@1.4.0'.
+```text
+   WARNING:
+  recipes/workflow/qa-variables/sous.recipe.yaml:
+  'workflow/qa-helper' has changes since 'workflow/qa-helper@0.1.0' that are outside this
+    release's scope; 'workflow/qa-variables@0.1.1' will depend on 'workflow/qa-helper@0.1.0'.
 ```
 
-Each version's resolved dependencies are written into the index, so a consumer installing that
-version installs what it was published with rather than re-resolving its ranges months later.
+Each version's resolved dependencies are written into the index, so a consumer installing that version gets what
+it was published with rather than ranges re-resolved months later. A published version never changes: its content
+hash is carried forward exactly as published, and a disagreement is an error telling you to bump rather than
+republish. A version counts as published once its tag exists, and the tags are the backstop, so a tagged version
+missing from the index is rebuilt from it whenever the index is regenerated, which only happens on a run that
+publishes something. A bump edits the manifest in place, so comments, field order and layout survive; a folded
+block of YAML prose may be re-wrapped and the space before a trailing comment collapsed to one.
 
-### Three rules that keep metadata, tags and the index in step
-
-- **A published version never changes.** Its content hash is carried forward exactly as
-  published, and a disagreement is an error telling you to bump the version rather than
-  republish it.
-- **A version is published when its tag exists.** The one moment an index records a version
-  without a tag is the release commit itself: the index is committed and the tag is cut on that
-  commit. Any older version missing its tag is an error.
-- **The tags are the backstop.** A tagged version missing from the index is rebuilt from its tag,
-  so deleting `sous.index.json` and regenerating it restores the same catalog.
-
-!> A release commits the version bumps and the index, and nothing else. It refuses to run while
-anything else is uncommitted, because a tag names one commit and the index it writes records
-what each recipe folder holds right now. It also refuses, before writing anything, when git has
-no author identity to commit under; set `user.name` and `user.email` in the repository, which the
-scaffolded workflow does for you.
-
-A bump edits the manifest in place, so its comments, its field order and its layout all survive.
-Two small normalizations happen in a YAML manifest: a folded block of prose may be re-wrapped,
-and the spacing before a trailing comment is collapsed to one space.
+!> A release commits the version bumps and the index, and nothing else. It refuses to run while anything else is
+uncommitted, because a tag names one commit and the index records what each recipe folder holds right now. It also
+refuses when git does not know who is committing: set `git config user.name` and `git config user.email` first, or
+give that identity to the account a continuous integration job runs as (the scaffolded workflow already does).
 
 ### The scaffolded workflow
 
-`sous repo init` writes `.github/workflows/sous-release.yml`, which runs the same command in its
-two presets. It calls the sous CLI straight from npm, so nothing has to be installed into the
-repository:
+`sous repo init` writes `.github/workflows/sous-release.yml`, which runs the same command in its two presets,
+calling the CLI from npm so nothing is installed into the repository. On a **pull request** it runs
+`npx --yes @sous-io/sous repo release --check`, which only reads, so it is safe on an untrusted branch and
+fails the pull request when a manifest is wrong or the committed index is stale. On a **push to `main`** it
+runs `npx --yes @sous-io/sous repo release --ci --push --yes`; edit the workflow's `branches` list if your
+default branch has another name. `--ci` accepts the plan on its own, the redundant `--yes` keeping the file
+working with an older published sous. Both jobs check out with `fetch-depth: 0`, so existing tags are visible
+and no version is cut twice; the release job also takes `contents: write` and sets a git identity for the commit.
 
-- On a **pull request**, `sous repo release --check`. It only reads, so it is safe on an
-  untrusted branch, and it fails the pull request when a manifest is wrong or the committed index
-  (including the dependencies it records) is stale.
-- On a **push to the default branch**, `sous repo release --ci --push --yes`. `--ci` raises no
-  versions, accepts the plan it prints, and asks no questions: the version bump belongs in the
-  change being merged, so a recipe that changed without one fails here rather than being given a
-  version nobody reviewed. `--ci` implies `--yes`; the workflow passes it as well so the same
-  file works with an older sous. Both checkouts use `fetch-depth: 0`, so existing tags are
-  visible and a published version is never cut a second time.
+## Edit a repository in place
+
+This is also how a recipe you have not released yet is run: link the checkout into a project and build. Edits
+happen in a real working copy, never in the machine-wide store. `sous repo link`, run inside a **project**,
+points that project's resolution of one repository at a checkout:
+
+```bash
+sous repo link ~/Projects/my-recipes             # link the checkout that is already there
+sous repo link my-recipes                        # clone it into .sous/repos/<owner>/<name>
+sous repo link my-recipes ~/Projects/my-recipes  # link a checkout that already exists
+sous repo link my-recipes --global               # one checkout shared by every project
+```
+
+A **path on its own** links the checkout already at that path; relative paths and `~` work, nothing is cloned, and
+the repository is added to the project first if it has not been added yet, under the short name its own manifest
+suggests. A **repository on its own** is cloned for you, into `.sous/repos/<owner>/<name>` or
+`$SOUS_HOME/repos/<owner>/<name>` with `--global`; a directory already holding a checkout of the same remote is
+reused, so running it twice is harmless, and one holding a different remote is an error. A **repository followed by
+a path** links the checkout there and clones nothing; in every form the path must hold a repo manifest at its root,
+and a path in both slots is an error.
+
+Linking also maintains the ignore files that keep machine-local sous files out of your project's history: a
+`.sous/repos/.gitignore` holding a single `*`, and a managed block inside `.sous/.gitignore` whose marked lines
+are the only ones ever rewritten. A link bypasses versions, the lockfile and freshness checks, and those bypasses
+belong to one machine rather than the team, so link and every later build say so loudly:
+
+```text
+The repository 'my-recipes' is now LINKED.
+Its recipes are read from the checkout above, so versions, the lockfile
+and freshness checks no longer apply to it. Builds say so every time.
+
+Run 'sous repo unlink my-recipes' to go back to published versions.
+```
+
+`sous repo unlink` removes the map entry and nothing else: the checkout stays where it is, and its path is
+printed so you can delete it. Unlinking a name linked in the other scope says which scope holds it.
 
 ## Contribute to someone else's repository
 
-`sous repo submit` proposes your committed changes to a repository's maintainers. It never
-publishes and never writes to a repository directly.
+`sous repo submit` proposes your committed changes to a repository's maintainers; it never publishes and never
+writes to a repository directly. It takes `--title`, `--body`, `--draft` and `--dry-run`, and runs three stages,
+printing each step:
 
-```bash
-sous repo submit
-sous repo submit --title "Add a linting recipe"
-sous repo submit --draft
-sous repo submit --dry-run
-```
+1. **Preflight.** An `origin` remote exists, sous recognizes its provider, that provider's command line tool
+   (`gh` or `glab`) is installed and signed in, and everything is committed.
+2. **Validation.** The repository validates and the committed index is current, so a proposal never fails the
+   maintainer's own checks and wastes their review.
+3. **Delegation.** Sous asks the provider whether you can push to the repository itself, forks it onto your
+   account when you cannot, pushes the branch, and asks the provider to open the proposal. A change sitting on
+   the default branch is moved to `sous/submit-<YYYYMMDD>-<HHMM>`.
 
-It runs in three stages, printing each step before it runs:
-
-1. **Preflight.** An `origin` remote exists, sous recognizes its provider, that provider's
-   command line tool (`gh` or `glab`) is installed and signed in, and everything is committed.
-2. **Validation.** The repository validates and the committed index is current, so a proposal
-   never fails the maintainer's own checks and wastes their review.
-3. **Delegation.** Sous asks the provider whether you can push to the repository itself, forks
-   it onto your account when you cannot, pushes the branch, and asks the provider to open the
-   proposal. Every one of those is the provider's own business; sous only sequences them and
-   reports what came back. A change sitting on the default branch is moved to a branch named
-   `sous/submit-<date>-<time>` first.
-
-`--title` defaults to your last commit's subject and `--body` to a summary sous writes. A failure
-partway through says exactly which steps completed: a pushed branch with no proposal behind it is
-a normal outcome of a network failure, and you are told about it rather than left guessing.
-
-### What each provider supports
-
-Providers differ, and sous says so rather than pretending otherwise:
-
-| Provider | Command line tool | Push permission | Forking | Proposal |
-|---|---|---|---|---|
-| GitHub | `gh` | Read from GitHub, so a contributor without it is forked automatically | `gh repo fork`, with a `fork` remote added for you | Pull request |
-| GitLab | `glab` | Sous cannot tell, so it pushes to `origin` and says so | Not done for you; fork the project yourself and push your branch there | Merge request |
-| Local | none | Not applicable | Not applicable | Not applicable; a repository on your own disk is edited directly |
-
-When a provider cannot carry out a step, it says what to do by hand instead of stopping halfway
-through. A local repository never submits at all: it declares no submit support, so sous points
-you at the repository's `contribute` field instead.
-
-?> When a repository's provider cannot open a proposal for you, sous prints the `contribute`
-pointer from its `sous.repo.yaml` instead, so you are never left without a route. Set that field
-in your own repository for the same reason.
+Each step is the provider's own business, and what each one can do depends on the host; see
+[Providers](repositories-providers.md#proposing-a-change). Sous sequences the steps and reports what came back. A
+failure partway through says which steps completed, so a pushed branch with no proposal behind it is reported
+rather than left for you to guess at, and a provider that cannot carry out a step says what to do by hand. When it
+cannot open a proposal at all, sous prints the `contribute` pointer from the repository's `sous.repo.yaml`; set
+that field in your own repository so a contributor is never left without a route.
 
 ## Where to go next
 
 - [Repository file formats](repositories-file-formats.md): every manifest and index schema
-- [Recipe variables](repositories-variables.md): what a definition turns into on a subscriber's
-  machine
-- [Skill categories](skill-categories.md): the canonical categories, and how the official
-  repository uses them as namespaces
+- [Consuming recipes](repositories-consuming.md): the other side, from `repo add` to `build`
 - [Command reference](commands.md): every command and flag
+- [Providers](repositories-providers.md): what `gh` and `glab` can each do for a release and a submission
+- [Recipe variables](repositories-variables.md): how the definitions declared here are answered at build time
