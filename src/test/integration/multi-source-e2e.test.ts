@@ -35,7 +35,13 @@ describe("multi-source config (YAML primary + conf.d JSON + conf.d configure JS)
     const result = spawnSync(
       process.execPath,
       [binPath, "build", "--dry-run", "--config", sousDir, ...extraArgs],
-      { cwd: tmp.path, encoding: "utf8" }
+      {
+        cwd: tmp.path,
+        encoding: "utf8",
+        // The machine-wide sous home goes in the temp tree, so nothing here
+        // reads or writes the home directory of whoever runs the suite.
+        env: { ...process.env, SOUS_HOME: path.join(tmp.path, "sous-home") },
+      }
     );
     return { status: result.status, output: `${result.stdout}\n${result.stderr}` };
   }

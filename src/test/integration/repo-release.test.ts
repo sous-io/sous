@@ -23,10 +23,17 @@ let fakeBin: string;
  * Runs `sous <args...>` through the real published bin, from the recipe
  * repository. Ambient SOUS_* variables are stripped so nothing in the runner's
  * own environment can decide what the child does, and the directory holding the
- * fake provider CLI is put at the front of PATH.
+ * fake provider CLI is put at the front of PATH. The machine-wide sous home
+ * is redirected into the temp tree.
  */
 function runSous(...args: string[]): RunResult {
-  const childEnv = { ...process.env, PATH: `${fakeBin}${path.delimiter}${process.env.PATH}` };
+  const childEnv = {
+    ...process.env,
+    PATH: `${fakeBin}${path.delimiter}${process.env.PATH}`,
+    // The machine-wide sous home goes in the temp tree, so nothing here
+    // reads or writes the home directory of whoever runs the suite.
+    SOUS_HOME: path.join(tmp.path, "sous-home"),
+  };
   delete childEnv.SOUS_CONFIG;
   delete childEnv.SOUS_DIR;
   delete childEnv.SOUS_CONFD;

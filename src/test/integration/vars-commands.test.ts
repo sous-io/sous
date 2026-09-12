@@ -13,13 +13,18 @@ const CLI_TIMEOUT = 30_000;
 
 type RunResult = { stdout: string; stderr: string; status: number | null };
 
+/** The machine-wide sous home for this file, inside its temp directory. */
+let sousHome = "";
+
 /**
  * Runs `sous <args...>` through the real published bin, from `cwd`, with the
  * child's stdin closed so the CLI sees no terminal. SOUS_* variables are
- * stripped so config discovery is a clean walk up from `cwd`.
+ * stripped so config discovery is a clean walk up from `cwd`, and SOUS_HOME
+ * points into the temp tree so nothing reaches the home directory of whoever
+ * runs the suite.
  */
 function runSous(cwd: string, args: string[], extraEnv: Record<string, string> = {}): RunResult {
-  const env = { ...process.env, ...extraEnv };
+  const env = { ...process.env, ...extraEnv, SOUS_HOME: sousHome };
   delete env.SOUS_CONFIG;
   delete env.SOUS_DIR;
   delete env.SOUS_CONFD;
@@ -50,6 +55,7 @@ describe("sous vars commands", () => {
   beforeAll(() => {
     tmp = makeTmpDir("sous-vars-cli-");
     root = tmp.path;
+    sousHome = path.join(root, "sous-home");
     const sousDir = path.join(root, ".sous");
     fs.mkdirSync(sousDir, { recursive: true });
 

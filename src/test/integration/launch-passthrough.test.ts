@@ -28,7 +28,13 @@ describe("launch pass-through args", () => {
     const result = spawnSync(process.execPath, [binPath, "launch", ...argv], {
       cwd: tmp.path,
       encoding: "utf8",
-      env: { ...process.env, DUMP_FILE: dumpFile },
+      env: {
+        ...process.env,
+        DUMP_FILE: dumpFile,
+        // The machine-wide sous home goes in the temp tree, so nothing here
+        // reads or writes the home directory of whoever runs the suite.
+        SOUS_HOME: path.join(tmp.path, "sous-home"),
+      },
     });
     const toolArgv = fs.existsSync(dumpFile)
       ? (JSON.parse(fs.readFileSync(dumpFile, "utf8")) as string[])

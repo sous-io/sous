@@ -55,7 +55,12 @@ describe("config-locating overrides (env vars + flag aliases)", () => {
     args: string[],
     opts: { cwd: string; env?: Record<string, string | undefined> } = { cwd: bareCwd }
   ): { stdout: string; stderr: string; status: number | null } {
-    const env: Record<string, string | undefined> = { ...process.env };
+    const env: Record<string, string | undefined> = {
+      ...process.env,
+      // The machine-wide sous home goes in the temp tree, so nothing here
+      // reads or writes the home directory of whoever runs the suite.
+      SOUS_HOME: path.join(tmp.path, "sous-home"),
+    };
     delete env.SOUS_CONFIG;
     delete env.SOUS_DIR;
     delete env.SOUS_CONFD;

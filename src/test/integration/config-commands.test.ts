@@ -17,13 +17,18 @@ const ANSI_RE = /\[/;
 
 type RunResult = { stdout: string; stderr: string; status: number | null };
 
+/** The machine-wide sous home for this file, inside its temp directory. */
+let sousHome = "";
+
 /**
  * Runs `sous <args...>` through the real published bin, from `cwd`. SOUS_* env
  * vars are stripped so the child resolves its config purely by walk-up discovery
  * from `cwd` (an ambient SOUS_CONFIG in the runner's env must not leak in).
+ * SOUS_HOME points into the temp tree, so nothing reaches the home directory
+ * of whoever runs the suite.
  */
 function runXcv(cwd: string, ...args: string[]): RunResult {
-  const env = { ...process.env };
+  const env = { ...process.env, SOUS_HOME: sousHome };
   delete env.SOUS_CONFIG;
   delete env.SOUS_DIR;
   delete env.SOUS_CONFD;
@@ -60,6 +65,7 @@ describe("sous config commands", () => {
   beforeAll(() => {
     tmp = makeTmpDir("sous-config-cmd-");
     root = tmp.path;
+    sousHome = path.join(root, "sous-home");
     sousDir = path.join(root, ".sous");
 
     // Primary config: name + one target + one tool.
