@@ -220,6 +220,152 @@ describe("sous vars commands", () => {
   );
 
   /**
+   * `sous vars ask <name>` resolves its argument through the shared reference
+   * module, so a variable can be named by its own name, by the environment
+   * variable that answers it, by the recipe that declares it or by the
+   * namespace the recipe lives in. Naming one variable asks one question;
+   * naming the recipe asks both of its questions.
+   *
+   * sous vars ask apiUrl --file questions.yaml
+   * sous vars ask SOUS_VAR_API_URL --file questions.yaml
+   * sous vars ask questions --file questions.yaml
+   */
+  it(
+    "should resolve the name it is asked about at every scope",
+    () => {
+      const byVariable = runSous(root, ["vars", "ask", "apiUrl", "--file", "questions.yaml"]);
+      expect(byVariable.status).toBe(1);
+      expect(byVariable.stdout).toContain("One variable still needs an answer");
+      expect(byVariable.stdout).toContain("SOUS_VAR_LOCAL_QUESTIONS_API_URL");
+      expect(byVariable.stdout).not.toContain("SOUS_VAR_LOCAL_QUESTIONS_API_TOKEN");
+
+      // The '.env' file sets this generated name, so it names the variable it
+      // answers.
+      const byEnvName = runSous(root, [
+        "vars",
+        "ask",
+        "SOUS_VAR_API_URL",
+        "--file",
+        "questions.yaml",
+      ]);
+      expect(byEnvName.status).toBe(1);
+      expect(byEnvName.stdout).toContain("SOUS_VAR_LOCAL_QUESTIONS_API_URL");
+      expect(byEnvName.stdout).not.toContain("SOUS_VAR_LOCAL_QUESTIONS_API_TOKEN");
+
+      // The definitions file is attributed to a recipe named after the file, so
+      // naming it asks everything the file declares.
+      const byRecipe = runSous(root, ["vars", "ask", "questions", "--file", "questions.yaml"]);
+      expect(byRecipe.status).toBe(1);
+      expect(byRecipe.stdout).toContain("2 variables still need answers");
+
+      // The same definitions sit in a namespace of their own, reached the same way.
+      const byNamespace = runSous(root, [
+        "vars",
+        "ask",
+        "--namespace",
+        "local",
+        "--file",
+        "questions.yaml",
+      ]);
+      expect(byNamespace.status).toBe(1);
+      expect(byNamespace.stdout).toContain("2 variables still need answers");
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * A name that means more than one thing is a question, and a run with no
+   * terminal cannot ask it: it fails naming every candidate and the flag that
+   * decides. With `--accept-first` the same run takes the first candidate and
+   * says so.
+   *
+   * sous vars ask local --file questions.yaml                  // -> exits non-zero
+   * sous vars ask local --accept-first --file questions.yaml   // -> takes the first
+   */
+  it(
+    "should fail on an ambiguous name and take the first with --accept-first",
+    () => {
+      // 'local' is both the repository a definitions file is attributed to and
+      // the namespace inside it.
+      const ambiguous = runSous(root, ["vars", "ask", "local", "--file", "questions.yaml"]);
+      const output = ambiguous.stdout + ambiguous.stderr;
+
+      expect(ambiguous.status).not.toBe(0);
+      expect(output).toContain("which 'local' you meant");
+      expect(output).toContain("matched 2 things");
+      expect(output).toContain("--accept-first");
+      // The command's own help, printed underneath the error.
+      expect(ambiguous.stderr).toContain("USAGE");
+
+      const accepted = runSous(root, [
+        "vars",
+        "ask",
+        "local",
+        "--accept-first",
+        "--file",
+        "questions.yaml",
+      ]);
+      expect(accepted.stdout).toContain("taking the first");
+      expect(accepted.stdout).toContain("2 variables still need answers");
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * `--repo`, `--namespace` and `--var` say outright which kind of thing is
+   * meant, and narrow to the same set the argument would.
+   *
+   * sous vars ask --namespace local --var apiToken --file questions.yaml
+   */
+  it(
+    "should narrow by repository, namespace and variable flags",
+    () => {
+      const result = runSous(root, [
+        "vars",
+        "ask",
+        "--repo",
+        "local",
+        "--namespace",
+        "local",
+        "--var",
+        "apiToken",
+        "--file",
+        "questions.yaml",
+      ]);
+
+      expect(result.status).toBe(1);
+      expect(result.stdout).toContain("One variable still needs an answer");
+      expect(result.stdout).toContain("SOUS_VAR_LOCAL_QUESTIONS_API_TOKEN");
+      expect(result.stdout).not.toContain("SOUS_VAR_LOCAL_QUESTIONS_API_URL");
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * A name nothing declares is refused, quoting what was typed rather than
+   * asking every question as though no name had been given.
+   *
+   * sous vars ask nothingLikeThis --file questions.yaml   // -> exits non-zero
+   */
+  it(
+    "should refuse a name that matches nothing",
+    () => {
+      const result = runSous(root, [
+        "vars",
+        "ask",
+        "nothingLikeThis",
+        "--file",
+        "questions.yaml",
+      ]);
+
+      expect(result.status).toBe(1);
+      expect(result.stdout).toContain("Nothing called 'nothingLikeThis' was found");
+      expect(result.stdout).toContain("sous vars");
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
    * A definitions file that does not fit the schema should be refused with a
    * readable message naming the file and the field, not a stack trace.
    */

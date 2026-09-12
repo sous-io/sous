@@ -35,6 +35,7 @@ import { choicePrompt } from "../../utils/choice-prompt.js";
 import { confirmPrompt } from "../../utils/confirm-prompt.js";
 import { valuePrompt } from "../../utils/value-prompt.js";
 import { ENV_VAR_NAME_PATTERN } from "../repos/formats/patterns.js";
+import { variableReferenceKey } from "../refs/find.js";
 import type { VariableDefinition } from "../repos/formats/recipe-manifest.js";
 import {
   definedVariableKey,
@@ -140,7 +141,13 @@ export interface AskOptions {
   confDir: string;
   /** Whether questions may be asked. A non-interactive run fails instead. */
   interactive: boolean;
-  /** Limit the run to these variable names (or `namespace/recipe.name` keys). */
+  /**
+   * Limit the run to these variables. Each entry is a variable's bare name, its
+   * `namespace/recipe.name` key, or its fully qualified
+   * `repository:namespace/recipe.name` reference. A command that resolved a
+   * reference through `src/lib/refs/` passes the fully qualified form, which is
+   * the only spelling that cannot mean two variables at once.
+   */
   only?: string[];
   /**
    * Variables an answer was supplied for ahead of the run, by
@@ -161,11 +168,17 @@ export function answerFileFor(definition: VariableDefinition): AnswerFile {
     : ENV_DEFAULTS_NAME;
 }
 
-/** True when `only` names this variable, by bare name or by full key. */
+/**
+ * True when `only` names this variable, by bare name, by its
+ * `namespace/recipe.name` key, or by its fully qualified reference.
+ */
 function isNamed(defined: DefinedVariable, only: string[] | undefined): boolean {
   if (only === undefined) return false;
   const key = definedVariableKey(defined);
-  return only.some((name) => name === defined.definition.name || name === key);
+  const qualified = variableReferenceKey(defined);
+  return only.some(
+    (name) => name === defined.definition.name || name === key || name === qualified
+  );
 }
 
 /** The generated header comment written above a newly stored answer. */

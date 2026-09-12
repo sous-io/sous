@@ -86,10 +86,16 @@ export async function pickReference(
   }
 
   if (!options.interactive) {
+    // The example is a spelling that says more than what was typed, so a
+    // reference that is already its own fully qualified name is not offered
+    // back unchanged.
+    const example =
+      matches.find((match) => match.key !== options.search)?.key ?? first.key;
+
     throw nonInteractiveError({
       prompt: `which '${options.search}' you meant`,
       remedy:
-        `write the full reference (for example '${first.key}'), or pass ` +
+        `write the full reference (for example '${example}'), or pass ` +
         `'${ACCEPT_FIRST_FLAG}' to take the first candidate listed above.`,
       details: [
         `'${options.search}' matched ${matches.length} things:`,
