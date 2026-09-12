@@ -15,5 +15,6 @@
   - [Authoring a repository](repositories-authoring.md)
   - [Providers](repositories-providers.md)
   - [File formats](repositories-file-formats.md)
+  - [Troubleshooting](repositories-troubleshooting.md)
 - **ADRs**
   - [0001: Repositories](adrs/0001-repositories.md)
