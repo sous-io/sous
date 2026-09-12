@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { get_encoding, type Tiktoken } from "tiktoken";
-import { displayError, log, showVar, subheading, warning } from "../utils/formatting.js";
+import { displayError, log, showVariable, subheading, warning } from "../utils/formatting.js";
 import { createLiquidEngine } from "../templating/init-liquid-engine.js";
 import {
   StateService,
@@ -423,7 +423,7 @@ ${taskFileContents}
     stateFileEntries: StateFileEntry[]
   ): Promise<boolean> {
     subheading(path.basename(target.rootInputPath), "▷");
-    showVar("Entry Point", target.rootInputPath);
+    showVariable("Entry Point", target.rootInputPath);
 
     this.initializeEncoder();
 

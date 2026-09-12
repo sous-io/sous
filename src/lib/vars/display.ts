@@ -5,9 +5,13 @@
  */
 
 import path from "node:path";
-import { color } from "@oclif/color";
 import type { VariableDefinition } from "../repos/formats/recipe-manifest.js";
-import { wrapText } from "../../utils/formatting.js";
+import {
+  formatVariable,
+  VARIABLE_INDENT,
+  wrapColumns,
+  type VariableEntry,
+} from "../../utils/formatting.js";
 import {
   definingRecipeKey,
   type DefinedVariable,
@@ -41,7 +45,7 @@ export function displayValue(value: string | undefined, secret: boolean): string
  * can show them without checking first.
  *
  * @param definition - The variable definition to document.
- * @returns Label-to-text rows, ready for `showVars` or an aligned label block.
+ * @returns Label-to-text rows, ready for `showVariables` or an aligned label block.
  */
 export function documentationRows(
   definition: VariableDefinition
@@ -54,12 +58,27 @@ export function documentationRows(
 
 // --- The labeled facts about one variable --------------------------------------------------------
 
+/**
+ * One line of a fact: the text, and any secondary detail shown after it in
+ * muted grey (a repository location, for instance) rather than in parentheses.
+ */
+export interface FactLine {
+  /** The text shown beside the label. */
+  text: string;
+  /** The secondary detail that follows it, muted. */
+  detail?: string;
+}
+
 /** One labeled fact: the label, and the lines shown beside it. */
 export interface LabeledFact {
-  /** The label, written in the `@name` form the recipe manifests use. */
+  /**
+   * The label, in the plain-word form every key and value display uses
+   * (`default`, `required-by`); the `@` the recipe manifests write is not part
+   * of it.
+   */
   label: string;
   /** The text shown beside the label, one entry per line. */
-  lines: string[];
+  lines: Array<string | FactLine>;
 }
 
 /** True when a repository location is a URL rather than a path on this machine. */
@@ -68,29 +87,36 @@ function isHostedUrl(location: string): boolean {
 }
 
 /**
- * A recipe written as a link: its key, and where its source lives. A hosted
- * repository shows its URL with the recipe's folder appended; a repository read
- * from this machine shows the filesystem path instead. A recipe whose location
- * nothing recorded shows its key alone.
+ * Where a recipe's source lives: the repository URL with the recipe's folder
+ * appended for a hosted repository, the filesystem path for one read from this
+ * machine, and nothing at all when neither was recorded.
+ *
+ * @param recipe - The recipe to locate.
+ */
+export function recipeLocation(recipe: DefiningRecipe): string | undefined {
+  if (recipe.url !== undefined && isHostedUrl(recipe.url)) {
+    const base = recipe.url.replace(/\/+$/, "");
+    return recipe.path === undefined ? base : `${base}/${recipe.path}`;
+  }
+
+  return recipe.url !== undefined
+    ? recipe.path === undefined
+      ? recipe.url
+      : path.join(recipe.url, recipe.path)
+    : recipe.dir;
+}
+
+/**
+ * A recipe written as a fact line: its key, with its location following it in
+ * muted grey. The location is a trailing detail rather than a parenthetical, so
+ * the recipe key stays the thing the eye lands on.
  *
  * @param recipe - The recipe to link to.
  */
-export function recipeLink(recipe: DefiningRecipe): string {
+export function recipeLink(recipe: DefiningRecipe): FactLine {
   const key = definingRecipeKey(recipe);
-
-  if (recipe.url !== undefined && isHostedUrl(recipe.url)) {
-    const base = recipe.url.replace(/\/+$/, "");
-    return `${key} (${recipe.path === undefined ? base : `${base}/${recipe.path}`})`;
-  }
-
-  const local =
-    recipe.url !== undefined
-      ? recipe.path === undefined
-        ? recipe.url
-        : path.join(recipe.url, recipe.path)
-      : recipe.dir;
-
-  return local === undefined ? key : `${key} (${local})`;
+  const location = recipeLocation(recipe);
+  return location === undefined ? { text: key } : { text: key, detail: location };
 }
 
 /** Everything the facts renderer needs that the definition itself does not carry. */
@@ -117,24 +143,24 @@ export function variableFacts(input: VariableFactsInput): LabeledFact[] {
   const facts: LabeledFact[] = [];
 
   if (definition.default !== undefined) {
-    facts.push({ label: "@default", lines: [String(definition.default)] });
+    facts.push({ label: "default", lines: [String(definition.default)] });
   }
-  facts.push({ label: "@example", lines: [String(definition.example)] });
+  facts.push({ label: "example", lines: [String(definition.example)] });
 
   const chain = defined.requiredBy ?? [defined.recipe];
-  const requiredBy = [recipeLink(chain[0] ?? defined.recipe)];
+  const requiredBy: Array<string | FactLine> = [recipeLink(chain[0] ?? defined.recipe)];
   if (chain.length > 1) {
     requiredBy.push(
       `pulled in through ${chain.map((recipe) => definingRecipeKey(recipe)).join(" then ")}`
     );
   }
-  facts.push({ label: "@required-by", lines: requiredBy });
-  facts.push({ label: "@defined-by", lines: [recipeLink(defined.recipe)] });
-  facts.push({ label: "@storage-path", lines: [storagePath] });
-  facts.push({ label: "@stored-as", lines: [storedAs] });
+  facts.push({ label: "required-by", lines: requiredBy });
+  facts.push({ label: "defined-by", lines: [recipeLink(defined.recipe)] });
+  facts.push({ label: "storage-path", lines: [storagePath] });
+  facts.push({ label: "stored-as", lines: [storedAs] });
   facts.push({
-    label: "@constraints",
-    lines: constraintBullets(definition).map((bullet) => `- ${bullet}`),
+    label: "constraints",
+    lines: constraintBullets(definition).map((bullet) => `${BULLET} ${bullet}`),
   });
 
   return facts;
@@ -146,16 +172,16 @@ export function variableFacts(input: VariableFactsInput): LabeledFact[] {
  * the two views can never word a fact differently or lay it out differently.
  */
 export const BASIC_FACT_LABELS = [
-  "@default",
-  "@example",
-  "@stored-as",
-  "@storage-path",
+  "default",
+  "example",
+  "stored-as",
+  "storage-path",
 ];
 
 /**
  * Picks the named facts out of a fact list, in the order the labels were given
  * and skipping any the variable does not have (a variable with no default has
- * no `@default` fact).
+ * no `default` fact).
  *
  * @param facts - Every fact about the variable.
  * @param labels - The labels to keep, in the order they should be shown.
@@ -168,31 +194,40 @@ export function selectFacts(facts: LabeledFact[], labels: string[]): LabeledFact
 }
 
 /**
- * How far a rendered facts block is indented under the text above it. Every
- * caller gets it from the renderer, so a facts block is indented the same
- * amount wherever it appears.
+ * How far a rendered facts block is indented under the text above it. It is the
+ * same depth as every other key and value block, so a facts block never reads
+ * as a different kind of list.
  */
-export const FACTS_INDENT = 2;
+export const FACTS_INDENT = VARIABLE_INDENT;
+
+/** The character every bulleted line in the CLI is drawn with. */
+export const BULLET = "•";
 
 /**
- * Lays the labeled facts out with the labels aligned and every continuation
- * line hanging under the first, wrapping the text to the width it was given.
+ * Lays the labeled facts out through the one key and value renderer, so a fact
+ * about a variable looks exactly like every other key and value sous prints:
+ * labels aligned, colons lined up, values in the value color, and a location
+ * trailing in muted grey.
  *
  * @param facts - The facts to render.
  * @param width - The column to wrap at, indentation included.
  * @returns The rendered lines, colored for a terminal, indented by `FACTS_INDENT`.
  */
-export function renderFacts(facts: LabeledFact[], width = 100): string[] {
-  const pad = " ".repeat(FACTS_INDENT);
-  const labelWidth = Math.max(...facts.map((fact) => fact.label.length)) + 2;
-  const textWidth = Math.max(20, width - labelWidth - FACTS_INDENT);
+export function renderFacts(facts: LabeledFact[], width = wrapColumns()): string[] {
+  const labelWidth = Math.max(...facts.map((fact) => fact.label.length));
   const lines: string[] = [];
 
   for (const fact of facts) {
-    const wrapped = fact.lines.flatMap((line) => wrapText(line, textWidth));
-    wrapped.forEach((text, index) => {
-      const label = index === 0 ? fact.label.padEnd(labelWidth) : " ".repeat(labelWidth);
-      lines.push(`${pad}${color.cyan(label)}${text}`);
+    fact.lines.forEach((raw, index) => {
+      const line: FactLine = typeof raw === "string" ? { text: raw } : raw;
+      const entry: VariableEntry = {
+        // A fact needing more than one line labels only the first of them; the
+        // rest continue underneath it.
+        label: index === 0 ? fact.label : "",
+        value: line.text,
+        ...(line.detail === undefined ? {} : { detail: line.detail }),
+      };
+      lines.push(...formatVariable(entry, { indent: FACTS_INDENT, labelWidth, width }));
     });
   }
 

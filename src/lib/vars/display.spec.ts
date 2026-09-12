@@ -58,25 +58,25 @@ describe("variableFacts()", () => {
     });
 
     expect(facts.map((fact: LabeledFact) => fact.label)).toEqual([
-      "@default",
-      "@example",
-      "@required-by",
-      "@defined-by",
-      "@storage-path",
-      "@stored-as",
-      "@constraints",
+      "default",
+      "example",
+      "required-by",
+      "defined-by",
+      "storage-path",
+      "stored-as",
+      "constraints",
     ]);
-    expect(facts.find((fact) => fact.label === "@storage-path")?.lines).toEqual([
+    expect(facts.find((fact) => fact.label === "storage-path")?.lines).toEqual([
       "/home/me/project/.sous/.env",
     ]);
-    expect(facts.find((fact) => fact.label === "@constraints")?.lines).toEqual([
-      "- must be a value of the type path (type: path)",
-      "- must be at least 1 character long (minLength: 1)",
+    expect(facts.find((fact) => fact.label === "constraints")?.lines).toEqual([
+      "\u2022 must be a value of the type path (type: path)",
+      "\u2022 must be at least 1 character long (minLength: 1)",
     ]);
   });
 
   /**
-   * A variable with no default should not print a `@default` line at all, since
+   * A variable with no default should not print a `default` line at all, since
    * an empty label reads as though the default were blank.
    */
   it("should leave out the default when the definition has none", () => {
@@ -87,11 +87,11 @@ describe("variableFacts()", () => {
       storagePath: "/tmp/.env",
       storedAs: "SOUS_VAR_TASK_FILE_ROOT",
     }).map((fact) => fact.label);
-    expect(labels).not.toContain("@default");
+    expect(labels).not.toContain("default");
   });
 
   /**
-   * When a dependency pulled the variable in, `@required-by` should name the
+   * When a dependency pulled the variable in, `required-by` should name the
    * subscribed recipe and then spell out the chain that reached the definition.
    */
   it("should show the chain when the variable arrived indirectly", () => {
@@ -101,10 +101,10 @@ describe("variableFacts()", () => {
     });
     const lines =
       variableFacts({ defined: entry, storagePath: "/tmp/.env", storedAs: "X" }).find(
-        (fact) => fact.label === "@required-by"
+        (fact) => fact.label === "required-by"
       )?.lines ?? [];
 
-    expect(lines[0]).toContain("workflow/task-files");
+    expect(lines[0]).toEqual({ text: "workflow/task-files" });
     expect(lines[1]).toBe(
       "pulled in through workflow/task-files then workflow/sub-agent-delegation"
     );
@@ -114,53 +114,70 @@ describe("variableFacts()", () => {
 /** How a recipe is written as a link. */
 describe("recipeLink()", () => {
   /**
-   * A hosted repository should show its URL with the recipe's folder appended.
+   * A hosted repository should carry its URL with the recipe's folder appended
+   * as the muted detail beside the key, never in parentheses.
    *
    * recipeLink({ url: "https://example.com/repo", path: "recipes/x" });
-   * // -> "workflow/task-files (https://example.com/repo/recipes/x)"
+   * // -> { text: "workflow/task-files", detail: "https://example.com/repo/recipes/x" }
    */
   it("should append the recipe path to a hosted repository URL", () => {
     const link = recipeLink(
       recipe({ url: "https://example.com/repo/", path: "recipes/workflow/task-files" })
     );
-    expect(link).toBe(
-      "workflow/task-files (https://example.com/repo/recipes/workflow/task-files)"
-    );
+    expect(link).toEqual({
+      text: "workflow/task-files",
+      detail: "https://example.com/repo/recipes/workflow/task-files",
+    });
   });
 
   /**
-   * A repository read from this machine should show a filesystem path, and a
-   * recipe with no location at all should show its key alone.
+   * A repository read from this machine should carry a filesystem path, and a
+   * recipe with no location at all should carry its key alone.
    */
   it("should show a filesystem path for a local repository", () => {
-    expect(recipeLink(recipe({ url: "/srv/recipes", path: "workflow/task-files" }))).toBe(
-      "workflow/task-files (/srv/recipes/workflow/task-files)"
-    );
-    expect(recipeLink(recipe({ dir: "/store/workflow/task-files/1.2.0" }))).toBe(
-      "workflow/task-files (/store/workflow/task-files/1.2.0)"
-    );
-    expect(recipeLink(recipe())).toBe("workflow/task-files");
+    expect(recipeLink(recipe({ url: "/srv/recipes", path: "workflow/task-files" }))).toEqual({
+      text: "workflow/task-files",
+      detail: "/srv/recipes/workflow/task-files",
+    });
+    expect(recipeLink(recipe({ dir: "/store/workflow/task-files/1.2.0" }))).toEqual({
+      text: "workflow/task-files",
+      detail: "/store/workflow/task-files/1.2.0",
+    });
+    expect(recipeLink(recipe())).toEqual({ text: "workflow/task-files" });
   });
 });
 
 /** The layout of the facts block. */
 describe("renderFacts()", () => {
   /**
-   * renderFacts should align every label, hang continuation lines under the
-   * first, and wrap text to the width it was given.
+   * renderFacts should align every label, line the colons up, hang continuation
+   * lines under the value column, and wrap text to the width it was given.
    */
   it("should align the labels and hang continuation lines", () => {
     const lines = renderFacts(
       [
-        { label: "@default", lines: [".sous/tasks"] },
-        { label: "@constraints", lines: ["- one", "- two"] },
+        { label: "default", lines: [".sous/tasks"] },
+        { label: "constraints", lines: ["• one", "• two"] },
       ],
       40
     ).map(strip);
 
-    expect(lines[0]).toBe("  @default      .sous/tasks");
-    expect(lines[1]).toBe("  @constraints  - one");
-    expect(lines[2]).toBe("                - two");
+    expect(lines[0]).toBe("    default    : .sous/tasks");
+    expect(lines[1]).toBe("    constraints: • one");
+    expect(lines[2]).toBe("                 • two");
+  });
+
+  /**
+   * A fact line carrying a detail should write it after the value rather than
+   * in parentheses.
+   */
+  it("should write a fact's detail after its value", () => {
+    const lines = renderFacts(
+      [{ label: "defined-by", lines: [{ text: "core/sous-skills", detail: "/srv/recipes" }] }],
+      60
+    ).map(strip);
+
+    expect(lines[0]).toBe("    defined-by: core/sous-skills /srv/recipes");
   });
 
   /**
@@ -168,8 +185,8 @@ describe("renderFacts()", () => {
    * same depth without each caller remembering to.
    */
   it("should indent every line it renders", () => {
-    const lines = renderFacts([{ label: "@example", lines: ["~/tasks"] }], 40).map(strip);
-    for (const line of lines) expect(line.startsWith("  ")).toBe(true);
+    const lines = renderFacts([{ label: "example", lines: ["~/tasks"] }], 40).map(strip);
+    for (const line of lines) expect(line.startsWith("    ")).toBe(true);
   });
 });
 
@@ -187,11 +204,11 @@ describe("selectFacts()", () => {
     });
 
     expect(selectFacts(facts, BASIC_FACT_LABELS).map((fact) => fact.label)).toEqual([
-      "@default",
-      "@example",
-      "@stored-as",
-      "@storage-path",
+      "default",
+      "example",
+      "stored-as",
+      "storage-path",
     ]);
-    expect(selectFacts(facts, ["@nothing-defines-this"])).toEqual([]);
+    expect(selectFacts(facts, ["nothing-defines-this"])).toEqual([]);
   });
 });

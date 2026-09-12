@@ -46,17 +46,17 @@ describe("createLiquidEngine()", () => {
   });
 
   /**
-   * createLiquidEngine() should register the `showVars` tag so that rendering
-   * `{% showVars %}` with variables in scope outputs a fenced ```json block
+   * createLiquidEngine() should register the `showVariables` tag so that rendering
+   * `{% showVariables %}` with variables in scope outputs a fenced ```json block
    * containing those variables serialised as JSON.
    *
    * const engine = createLiquidEngine([]);
-   * await engine.parseAndRender('{% showVars %}', { name: "sous" });
+   * await engine.parseAndRender('{% showVariables %}', { name: "sous" });
    * // -> "```json\n{...}\n```"  (block contains "name": "sous")
    */
-  it("should register the showVars tag that outputs a fenced json block of scope variables", async () => {
+  it("should register the showVariables tag that outputs a fenced json block of scope variables", async () => {
     const engine = createLiquidEngine([]);
-    const result = await engine.parseAndRender("{% showVars %}", { name: "sous" });
+    const result = await engine.parseAndRender("{% showVariables %}", { name: "sous" });
     expect(result).toMatch(/^# Sous Debug: Variable Dump\n```json\n/);
     expect(result).toMatch(/\n```$/);
     expect(result).toContain('"name"');

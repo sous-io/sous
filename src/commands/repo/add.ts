@@ -24,7 +24,7 @@ import {
   heading,
   log,
   showCommandVars,
-  showVars,
+  showVariables,
 } from "../../utils/formatting.js";
 import { confirmationFlag } from "../../utils/flags.js";
 
@@ -124,7 +124,7 @@ export default class RepoAdd extends BaseCommand {
       return;
     }
 
-    showVars({
+    showVariables({
       Repository: outcome.name,
       Location: outcome.url,
       Provider: outcome.provider,

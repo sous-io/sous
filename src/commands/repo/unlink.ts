@@ -14,7 +14,7 @@ import {
   log,
   section,
   showCommandVars,
-  showVars,
+  showVariables,
 } from "../../utils/formatting.js";
 
 /**
@@ -94,7 +94,7 @@ export default class RepoUnlink extends BaseCommand {
     delete map.links[name];
     const linksPath = isGlobal ? writeGlobalLinks(map) : writeProjectLinks(sousDir, map);
 
-    showVars({
+    showVariables({
       Repository: name,
       "Checkout left at": entry.path,
       "Updated": linksPath,

@@ -13,7 +13,7 @@ import {
   log,
   section,
   showCommandVars,
-  showVars,
+  showVariables,
 } from "../../utils/formatting.js";
 
 /**
@@ -98,7 +98,7 @@ export default class RepoSubmit extends Command {
     });
 
     section(dryRun ? "What would be proposed" : "What was proposed");
-    showVars({
+    showVariables({
       Provider: result.provider,
       Repository: `${result.repo.owner}/${result.repo.name}`,
       Branch: result.branch,

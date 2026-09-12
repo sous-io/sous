@@ -14,7 +14,7 @@ import {
   log,
   section,
   showCommandVars,
-  showVars,
+  showVariables,
 } from "../../utils/formatting.js";
 
 /**
@@ -104,7 +104,7 @@ export default class RepoInit extends Command {
     }
 
     section("What to do next");
-    showVars({
+    showVariables({
       Repository: result.name,
       Namespace: result.namespace,
       "Example recipe": path.join(

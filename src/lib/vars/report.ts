@@ -35,7 +35,7 @@ import {
   heading,
   indent,
   log,
-  showVars,
+  showVariables,
   subheading,
   terminalColumns,
 } from "../../utils/formatting.js";
@@ -185,7 +185,7 @@ export function printVariableDetail(
 
     heading(`${definition.name} (${definingRecipeKey(entry.recipe)})`);
     blankLine();
-    showVars({
+    showVariables({
       Question: definition.prompt,
       ...documentationRows(definition),
       Recipe: `${definingRecipeKey(entry.recipe)} version ${entry.recipe.version} from ${entry.recipe.repo}`,

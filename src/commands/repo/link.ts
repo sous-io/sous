@@ -42,7 +42,7 @@ import {
   heading,
   log,
   showCommandVars,
-  showVars,
+  showVariables,
   warning,
 } from "../../utils/formatting.js";
 import { confirmationFlag } from "../../utils/flags.js";
@@ -204,7 +204,7 @@ export default class RepoLink extends BaseCommand {
     for (const line of plan.notes) log(`  ${line}`);
     if (plan.notes.length > 0) blankLine();
 
-    showVars({
+    showVariables({
       Repository: name,
       Checkout: plan.directory,
       "Recorded in": linksPath,

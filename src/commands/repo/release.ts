@@ -47,7 +47,7 @@ import {
   log,
   section,
   showCommandVars,
-  showVars,
+  showVariables,
   warning,
 } from "../../utils/formatting.js";
 
@@ -422,7 +422,7 @@ export default class RepoRelease extends Command {
           ? `${release.to}  (already raised; the tag would be ${release.tag})`
           : `${release.from} becomes ${release.to}  (a ${release.bump} step; the tag would be ${release.tag})`;
     }
-    showVars(rows);
+    showVariables(rows);
 
     if (plan.skipped.length > 0) {
       blankLine();
@@ -579,7 +579,7 @@ function reportPending(result: IndexBuildResult, headline: string): void {
   for (const entry of result.pending) {
     pending[entry.key] = `${entry.version}  (the tag would be ${entry.tag})`;
   }
-  showVars(pending);
+  showVariables(pending);
 }
 
 /** Renders a count with its noun, singular or plural, in words a person reads. */

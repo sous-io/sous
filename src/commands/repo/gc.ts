@@ -25,7 +25,7 @@ import {
   log,
   section,
   showCommandVars,
-  showVars,
+  showVariables,
 } from "../../utils/formatting.js";
 
 /** How far every line of this command's output is indented. */
@@ -132,7 +132,7 @@ export default class RepoGc extends BaseCommand {
 
     const report = await service.store.gc({ maxBytes, keep, dryRun });
 
-    showVars({
+    showVariables({
       "Entries before": String(report.evicted.length + report.kept.length),
       "Entries kept": String(report.kept.length),
       "Entries evicted": String(report.evicted.length),

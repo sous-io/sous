@@ -5,7 +5,7 @@ import {
   resolveTools,
   resolveWatchConfig,
 } from "../../lib/settings.js";
-import { footer, heading, showVars } from "../../utils/formatting.js";
+import { footer, heading, showVariables } from "../../utils/formatting.js";
 
 export default class ConfigValidate extends BaseCommand {
   static description =
@@ -41,7 +41,7 @@ export default class ConfigValidate extends BaseCommand {
     const toolNames = Object.keys(tools);
 
     heading("Config is valid");
-    showVars({
+    showVariables({
       "Config File": this.configContext.configPath,
       Layers: layerCount,
       Targets: targetCount,
