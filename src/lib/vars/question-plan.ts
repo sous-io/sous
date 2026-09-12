@@ -14,7 +14,7 @@
 
 import path from "node:path";
 import { color } from "@oclif/color";
-import { terminalColumns } from "../../utils/formatting.js";
+import { palette, wrapColumns, wrapText } from "../../utils/formatting.js";
 import { answerFileFor, type AnswerFile } from "./ask.js";
 import { definingRecipeKey, type DefinedVariable } from "./definition-source.js";
 import { renderFacts, type LabeledFact } from "./display.js";
@@ -98,12 +98,12 @@ export function plannedVariableFacts(planned: PlannedVariable): LabeledFact[] {
   const { definition } = planned.defined;
 
   return [
-    { label: "@about", lines: [firstSentence(definition.description)] },
-    { label: "@example", lines: [String(definition.example)] },
-    { label: "@stored-as", lines: [planned.storedAs] },
-    { label: "@storage-path", lines: [planned.filePath] },
+    { label: "about", lines: [firstSentence(definition.description)] },
+    { label: "example", lines: [String(definition.example)] },
+    { label: "stored-as", lines: [planned.storedAs] },
+    { label: "storage-path", lines: [planned.filePath] },
     {
-      label: "@answered",
+      label: "answered",
       lines: [
         planned.answered
           ? `yes, from ${planned.answeredFrom}`
@@ -112,7 +112,7 @@ export function plannedVariableFacts(planned: PlannedVariable): LabeledFact[] {
             : "no, and an answer is optional",
       ],
     },
-    { label: "@answer-with", lines: [`--answer ${definition.name}=<value>`] },
+    { label: "answer-with", lines: [`--answer ${definition.name}=<value>`] },
   ];
 }
 
@@ -158,26 +158,30 @@ export function formatQuestionPlan(
 ): string[] {
   const unreadable = options.unreadable ?? [];
 
+  const columns = options.width ?? wrapColumns();
+  /** Wraps one sentence to the width the caller's indentation leaves for it. */
+  const sentence = (text: string, paint = (line: string): string => line): string[] =>
+    wrapText(text, columns - 2).map(paint);
+
   if (planned.length === 0) {
     return unreadable.length === 0
-      ? ["None of these recipes ask any questions, so nothing needs answering."]
-      : [unreadableLine(unreadable)];
+      ? sentence("None of these recipes ask any questions, so nothing needs answering.")
+      : sentence(unreadableLine(unreadable), palette.note);
   }
 
-  const columns = options.width ?? terminalColumns();
   const unanswered = planned.filter((entry) => !entry.answered).length;
   // When part of the closure could not be read, the count below describes only
   // the part that could, and the sentence says so rather than overstating it.
   const subject =
     unreadable.length === 0 ? "These recipes ask" : "The recipes sous could read ask";
 
-  const lines: string[] = [
+  const lines: string[] = sentence(
     unanswered === 0
       ? `${subject} ${questionCount(planned.length)}, and everything they ask ` +
         `is already answered.`
       : `${subject} ${questionCount(planned.length)}, ` +
-        `${unanswered} of which nothing answers yet.`,
-  ];
+        `${unanswered} of which nothing answers yet.`
+  );
 
   const groups = new Map<string, PlannedVariable[]>();
   for (const entry of planned) {
@@ -189,22 +193,24 @@ export function formatQuestionPlan(
     lines.push("", `${key} asks ${questionCount(entries.length)}:`);
     for (const entry of entries) {
       lines.push("", `  ${color.cyan(entry.defined.definition.name)}`);
-      for (const fact of renderFacts(plannedVariableFacts(entry), columns - 4)) {
-        lines.push(`    ${fact}`);
-      }
+      // The facts block indents itself, so the plan adds nothing on top of it.
+      lines.push(...renderFacts(plannedVariableFacts(entry), columns - 2));
     }
   }
 
   if (unreadable.length > 0) {
-    lines.push("", unreadableLine(unreadable));
+    lines.push("", ...sentence(unreadableLine(unreadable), palette.note));
   }
 
   if (unanswered > 0) {
     lines.push(
       "",
-      "Answer them all ahead of time by running this command again without " +
-        "'--dry-run', with one '--answer <name>=<value>' for each, or with " +
-        "'--answers-file <path>'."
+      ...sentence(
+        "Answer them all ahead of time by running this command again without " +
+          "'--dry-run', with one '--answer <name>=<value>' for each, or with " +
+          "'--answers-file <path>'.",
+        palette.note
+      )
     );
   }
 

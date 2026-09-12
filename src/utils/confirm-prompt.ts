@@ -17,6 +17,7 @@ import {
   useState,
   type Status,
 } from "@inquirer/core";
+import { promptBottom } from "./formatting.js";
 
 /** What the yes-or-no question needs in order to ask itself. */
 export interface ConfirmPromptConfig {
@@ -58,7 +59,10 @@ export function renderConfirmPrompt(view: ConfirmPromptView): [string, string] {
   const fallback = view.default ?? true;
   const keys = fallback ? "(Y/n)" : "(y/N)";
   const tail = view.answer === undefined ? keys : view.answer ? "yes" : "no";
-  return [`${view.prefix} ${view.message} ${tail}`.trimEnd(), view.hint ?? ""];
+  const line = `${view.prefix} ${view.message} ${tail}`.trimEnd();
+
+  if (view.answer !== undefined) return [line, ""];
+  return [line, promptBottom(view.hint ?? "")];
 }
 
 /** Asks one yes-or-no question, with Tab bound to the advanced view. */

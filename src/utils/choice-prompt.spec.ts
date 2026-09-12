@@ -1,6 +1,7 @@
 import { PassThrough } from "node:stream";
 import { describe, expect, it } from "vitest";
 import { choicePrompt, renderChoicePrompt } from "./choice-prompt.js";
+import { promptBottom } from "./formatting.js";
 
 /** The two lines a bare pick-one question is built from, for reuse in the tests. */
 const CHOICES = [
@@ -8,8 +9,8 @@ const CHOICES = [
   { name: "zsh", value: "zsh" },
 ];
 
-/** The hint every sous question carries, in the wording a pick-one question uses. */
-const HINT = "[ENTER to choose; TAB for advanced info and options]";
+/** The key legend every sous question carries, in a pick-one question's wording. */
+const HINT = "↑↓ navigate • ⏎ select • ⇥ advanced";
 
 /**
  * The pure renderer behind the pick-one question. Everything the prompt draws
@@ -31,7 +32,7 @@ describe("renderChoicePrompt()", () => {
       active: 0,
     });
     expect(line).toBe("? Which shell?");
-    expect(below).toBe("> bash\n  zsh");
+    expect(below).toBe(promptBottom("> bash\n  zsh"));
   });
 
   /**
@@ -45,7 +46,7 @@ describe("renderChoicePrompt()", () => {
       choices: CHOICES,
       active: 1,
     });
-    expect(below).toBe("  bash\n> zsh");
+    expect(below).toBe(promptBottom("  bash\n> zsh"));
   });
 
   /**
@@ -60,7 +61,7 @@ describe("renderChoicePrompt()", () => {
       active: 0,
       hint: HINT,
     });
-    expect(below.split("\n").at(-1)).toBe(HINT);
+    expect(below.split("\n").at(-3)).toBe(HINT);
   });
 
   /**

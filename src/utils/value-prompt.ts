@@ -18,6 +18,7 @@ import {
   useState,
   type Status,
 } from "@inquirer/core";
+import { promptBottom } from "./formatting.js";
 
 /** What the value question needs in order to ask itself. */
 export interface ValuePromptConfig {
@@ -44,20 +45,26 @@ export interface ValuePromptView extends Omit<ValuePromptConfig, "validate"> {
   value: string;
   /** The validation message, when the last answer was refused. */
   error?: string;
+  /** Whether the question has been answered, which drops the legend and the padding. */
+  answered?: boolean;
 }
 
 /**
  * Draws the question: prefix, message, the default in parentheses and what has
- * been typed, plus one line underneath carrying the validation message when
- * there is one and the hint otherwise.
+ * been typed, plus the block underneath carrying the validation message when
+ * there is one and the key legend otherwise, and the padding that keeps the
+ * question off the terminal's last row.
  *
  * @param view - The prompt's state.
- * @returns The question line and the line under it.
+ * @returns The question line and the block under it.
  */
 export function renderValuePrompt(view: ValuePromptView): [string, string] {
   const shown = view.mask === true ? "*".repeat(view.value.length) : view.value;
   const suffix = view.default !== undefined && view.default !== "" ? ` (${view.default})` : "";
-  return [`${view.prefix} ${view.message}${suffix}: ${shown}`.trimEnd(), view.error ?? view.hint ?? ""];
+  const line = `${view.prefix} ${view.message}${suffix}: ${shown}`.trimEnd();
+
+  if (view.answered === true) return [line, ""];
+  return [line, promptBottom(view.error ?? view.hint ?? "")];
 }
 
 /** Asks for one value, with Tab bound to the advanced view. */
@@ -103,6 +110,7 @@ export const valuePrompt = createPrompt<ValuePromptResult, ValuePromptConfig>((c
     prefix,
     message: config.message,
     value,
+    ...(status === "done" ? { answered: true } : {}),
     ...(config.default === undefined ? {} : { default: config.default }),
     ...(config.hint === undefined ? {} : { hint: config.hint }),
     ...(config.mask === undefined ? {} : { mask: config.mask }),

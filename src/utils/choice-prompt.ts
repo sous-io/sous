@@ -20,6 +20,7 @@ import {
   useState,
   type Status,
 } from "@inquirer/core";
+import { promptBottom } from "./formatting.js";
 
 /** One value the question offers, and how it is written on screen. */
 export interface PromptChoice {
@@ -84,7 +85,7 @@ export function renderChoicePrompt(view: ChoicePromptView): [string, string] {
   );
   if (view.hint !== undefined && view.hint !== "") lines.push(view.hint);
 
-  return [`${view.prefix} ${view.message}`.trimEnd(), lines.join("\n")];
+  return [`${view.prefix} ${view.message}`.trimEnd(), promptBottom(lines.join("\n"))];
 }
 
 /** Asks one pick-one question, with Tab bound to the advanced view. */

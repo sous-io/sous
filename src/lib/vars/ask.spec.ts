@@ -7,6 +7,7 @@ import {
   committedFileWarning,
   fileChoices,
   nameChoices,
+  questionHint,
   recipeOpeningLine,
 } from "./ask.js";
 import type { DefinedVariable } from "./definition-source.js";
@@ -110,13 +111,13 @@ describe("basicViewLines()", () => {
 
     expect(lines[0]).toBe("Question 1 of 4: taskFileRoot");
     expect(lines).toContain("This recipe stores task files locally.");
-    expect(lines).toContain("  @default       .sous/tasks");
-    expect(lines).toContain("  @example       ~/my-task-files");
-    expect(lines).toContain("  @stored-as     SOUS_VAR_TASK_FILE_ROOT");
-    expect(lines).toContain("  @storage-path  /home/me/project/.sous/.env");
-    expect(lines[lines.length - 1]).toBe(
-      "[ENTER to accept the default; TAB for advanced info and options]"
-    );
+    expect(lines).toContain("    default     : .sous/tasks");
+    expect(lines).toContain("    example     : ~/my-task-files");
+    expect(lines).toContain("    stored-as   : SOUS_VAR_TASK_FILE_ROOT");
+    expect(lines).toContain("    storage-path: /home/me/project/.sous/.env");
+    // The keys are named by the legend the prompt draws under its input line,
+    // so the view itself ends with the facts.
+    expect(lines.join("\n")).not.toContain("TAB for advanced");
   });
 
   /**
@@ -156,14 +157,14 @@ describe("basicViewLines()", () => {
     const basic = basicViewLines(input, storagePath).map(strip);
     const advanced = advancedViewLines(input, storagePath).map(strip);
 
-    for (const line of basic.filter((text) => text.startsWith("  @"))) {
+    for (const line of basic.filter((text) => /^ {4}[a-z-]+ *:/.test(text))) {
       expect(advanced).toContain(line);
     }
   });
 
   /**
-   * Without a default there is nothing for Enter alone to accept, so the hint
-   * mentions Tab only and no `@default` line is drawn.
+   * Without a default there is nothing for Enter alone to accept, so the legend
+   * names Tab only and no `default` line is drawn.
    */
   it("should drop the Enter half of the hint when there is no default", () => {
     const entry = defined();
@@ -179,35 +180,26 @@ describe("basicViewLines()", () => {
       "/home/me/project/.sous/.env.local"
     ).map(strip);
 
-    expect(lines.join("\n")).not.toContain("@default");
-    expect(lines[lines.length - 1]).toBe("[TAB for advanced info and options]");
+    expect(lines.join("\n")).not.toContain("default     :");
+    expect(strip(questionHint(entry.definition))).toBe("\u21e5 advanced");
   });
 
   /**
-   * A question answered from a list is chosen rather than typed, so the hint
-   * says so; Tab means the same thing at every kind of question.
+   * A question answered from a list names the arrow keys, and a yes-or-no
+   * question names the two letters; Tab means the same thing at every kind of
+   * question, and every legend is written in the style the stock prompts use.
    */
   it("should say the answer is chosen for an enum and a boolean question", () => {
-    for (const definition of [
-      { type: "enum" as const, validate: { enum: ["red", "blue"] } },
-      { type: "boolean" as const },
-    ]) {
-      const lines = basicViewLines(
-        {
-          defined: defined(definition),
-          index: 1,
-          total: 1,
-          plan: { file: ".env", envName: "SOUS_VAR_TASK_FILE_ROOT" },
-          suggestion: "red",
-          width: 80,
-        },
-        "/home/me/project/.sous/.env"
-      ).map(strip);
+    const enumHint = questionHint(
+      defined({ type: "enum" as const, validate: { enum: ["red", "blue"] } }).definition,
+      "red"
+    );
+    const booleanHint = questionHint(defined({ type: "boolean" as const }).definition, "red");
 
-      expect(lines[lines.length - 1]).toBe(
-        "[ENTER to choose; TAB for advanced info and options]"
-      );
-    }
+    expect(strip(enumHint)).toBe("\u2191\u2193 navigate \u2022 \u23ce select \u2022 \u21e5 advanced");
+    expect(strip(booleanHint)).toBe(
+      "y/n answer \u2022 \u23ce accept default \u2022 \u21e5 advanced"
+    );
   });
 });
 

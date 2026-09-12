@@ -494,7 +494,9 @@ function joinCells(cells: string[], gap: number): string {
  */
 function wrapCell(text: string, width: number): string[] {
   const lines: string[] = [];
-  for (const line of wrapText(text, width)) {
+  // A table cell hangs nothing: the column itself is the indentation, so a
+  // wrapped cell starts at the column's own left edge.
+  for (const line of wrapText(text, width, { hangingIndent: 0 })) {
     if (displayWidth(line) <= width) {
       lines.push(line);
       continue;

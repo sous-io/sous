@@ -25,9 +25,14 @@ import { updateEnvFile } from "../env-file.js";
 import { ConfigError } from "../errors.js";
 import {
   blankLine,
+  blankLines,
   indent,
+  keysHelpTip,
   log,
-  terminalColumns,
+  palette,
+  paragraph,
+  showVariables,
+  wrapColumns,
   warning,
   wrapText,
 } from "../../utils/formatting.js";
@@ -333,48 +338,54 @@ export interface BasicViewInput {
 export function basicViewLines(input: BasicViewInput, storagePath: string): string[] {
   const { defined, index, total, plan } = input;
   const { definition } = defined;
-  const width = input.width ?? terminalColumns();
+  const width = input.width ?? wrapColumns();
 
   const facts = selectFacts(
     variableFacts({ defined, storagePath, storedAs: plan.envName }),
     BASIC_FACT_LABELS
   );
 
+  // The keys are named by the legend the question itself draws underneath the
+  // input line, in the style the stock prompts use, so nothing is repeated here.
   return [
     color.bold(`Question ${index} of ${total}: ${color.cyan(definition.name)}`),
     "",
-    ...wrapText(definition.description, width),
+    ...wrapText(definition.description, width - 2),
     "",
     ...renderFacts(facts, width),
-    "",
-    color.gray(questionHint(definition, input.suggestion)),
   ];
 }
 
 /**
- * The one line naming the keys that do anything at a question. Tab always opens
- * the advanced view; what Enter does depends on the kind of question, so a
- * question that is picked from a list says so rather than talking about typing
- * a default.
+ * The key legend one question draws under its input line, written the way the
+ * stock `@inquirer/select` prompt writes its own: the key, what it does beside
+ * it, pairs separated by a bullet. Tab always opens the advanced view; what the
+ * other keys do depends on the kind of question, so a question picked from a
+ * list names the arrow keys rather than talking about typing a default.
  *
  * @param definition - The variable being asked about.
  * @param suggestion - The value Enter alone would accept, when there is one.
- * @returns The hint line, without colour.
+ * @returns The legend line, colored.
  *
  * @example
  * questionHint({ type: "enum", ... });
- * // -> "[ENTER to choose; TAB for advanced info and options]"
+ * // -> "↑↓ navigate • ⏎ select • ⇥ advanced"
  */
 export function questionHint(
   definition: VariableDefinition,
   suggestion?: string
 ): string {
-  if (definition.type === "enum" || definition.type === "boolean") {
-    return "[ENTER to choose; TAB for advanced info and options]";
+  const advanced: [string, string] = ["⇥", "advanced"];
+
+  if (definition.type === "enum") {
+    return keysHelpTip([["↑↓", "navigate"], ["⏎", "select"], advanced]);
+  }
+  if (definition.type === "boolean") {
+    return keysHelpTip([["y/n", "answer"], ["⏎", "accept default"], advanced]);
   }
   return suggestion === undefined || suggestion === ""
-    ? "[TAB for advanced info and options]"
-    : "[ENTER to accept the default; TAB for advanced info and options]";
+    ? keysHelpTip([advanced])
+    : keysHelpTip([["⏎", "accept default"], advanced]);
 }
 
 /**
@@ -388,14 +399,14 @@ export function questionHint(
  */
 export function advancedViewLines(input: BasicViewInput, storagePath: string): string[] {
   const { defined, index, total } = input;
-  const width = input.width ?? terminalColumns();
+  const width = input.width ?? wrapColumns();
 
   return [
-    color.bold("[Advanced Variable Settings]"),
+    color.bold(palette.warning("[Advanced Variable Settings]")),
     "",
     color.bold(`Question ${index} of ${total}: ${color.cyan(defined.definition.name)}`),
     "",
-    ...wrapText(defined.definition.description, width),
+    ...wrapText(defined.definition.description, width - 2),
     "",
     ...renderFacts(
       variableFacts({ defined, storagePath, storedAs: input.plan.envName }),
@@ -404,9 +415,13 @@ export function advancedViewLines(input: BasicViewInput, storagePath: string): s
   ];
 }
 
-/** Prints a block of lines indented under the question, followed by a blank line. */
+/**
+ * Prints a block of lines indented under the question. Two blank lines open it,
+ * so a question header always has room above it and never reads as the tail of
+ * whatever was printed before, and one closes it.
+ */
 function printBlock(lines: string[]): void {
-  blankLine();
+  blankLines(2);
   for (const line of lines) log(line === "" ? " " : indent(line));
   blankLine();
 }
@@ -499,6 +514,17 @@ async function runAdvancedView(
   input: BasicViewInput,
   options: AskOptions
 ): Promise<StoragePlan> {
+  /**
+   * The stock `select` prompt draws its own legend and cannot be given padding
+   * underneath, so the padding every sous question keeps is written after it
+   * answers instead.
+   */
+  const padded = async <T>(answer: Promise<T>): Promise<T> => {
+    const value = await answer;
+    blankLine();
+    return value;
+  };
+
   const original = input.plan;
   let working: StoragePlan = { ...original };
 
@@ -522,24 +548,30 @@ async function runAdvancedView(
       { name: "Change the stored variable name", value: "name" },
     ];
 
-    const action = await select({ message: "What would you like to do?", choices });
+    const action = await padded(
+      select({ message: "What would you like to do?", choices })
+    );
 
     if (action === "return" || action === "save") return working;
     if (action === "discard") return original;
 
     if (action === "file") {
-      const file = await select({
-        message: "Which file should this answer be stored in?",
-        choices: fileChoices(),
-        default: working.file,
-      });
+      const file = await padded(
+        select({
+          message: "Which file should this answer be stored in?",
+          choices: fileChoices(),
+          default: working.file,
+        })
+      );
 
       if (file === ENV_DEFAULTS_NAME && answerFileFor(input.defined.definition) === ENV_LOCAL_NAME) {
         warning(committedFileWarning(input.defined));
-        const accepted = await confirm({
-          message: `Store this answer in ${ENV_DEFAULTS_NAME} anyway?`,
-          default: false,
-        });
+        const accepted = await padded(
+          confirm({
+            message: `Store this answer in ${ENV_DEFAULTS_NAME} anyway?`,
+            default: false,
+          })
+        );
         if (!accepted) continue;
       }
 
@@ -547,25 +579,29 @@ async function runAdvancedView(
       continue;
     }
 
-    const picked = await select({
-      message: "Which environment variable should hold this answer?",
-      choices: nameChoices(input.defined),
-      default: working.envName,
-    });
+    const picked = await padded(
+      select({
+        message: "Which environment variable should hold this answer?",
+        choices: nameChoices(input.defined),
+        default: working.envName,
+      })
+    );
 
     if (picked !== ANOTHER_NAME) {
       working = { ...working, envName: picked };
       continue;
     }
 
-    const typed = await input_({
-      message: "What should the environment variable be called?",
-      default: working.envName,
-      validate: (value: string) =>
-        ENV_VAR_NAME_PATTERN.test(value.trim())
-          ? true
-          : "An environment variable name is upper snake case: a letter or underscore, then letters, digits or underscores.",
-    });
+    const typed = await padded(
+      input_({
+        message: "What should the environment variable be called?",
+        default: working.envName,
+        validate: (value: string) =>
+          ENV_VAR_NAME_PATTERN.test(value.trim())
+            ? true
+            : "An environment variable name is upper snake case: a letter or underscore, then letters, digits or underscores.",
+      })
+    );
     working = { ...working, envName: typed.trim() };
   }
 }
@@ -589,11 +625,15 @@ async function askByType(
   suggestion: string | undefined,
   validate: (value: string) => true | string
 ): Promise<{ kind: "value"; value: string } | { kind: "advanced" }> {
+  // The legend goes under the input line, where the stock prompts draw theirs.
+  const hint = questionHint(definition, suggestion);
+
   if (definition.type === "enum") {
     const enumOptions = definition.validate?.enum ?? [];
     return choicePrompt({
       message: definition.prompt,
       choices: enumOptions.map((option) => ({ name: option, value: option })),
+      hint,
       ...(suggestion !== undefined && enumOptions.includes(suggestion)
         ? { default: suggestion }
         : {}),
@@ -604,6 +644,7 @@ async function askByType(
     const current = suggestion ?? String(definition.default ?? "");
     const answered = await confirmPrompt({
       message: definition.prompt,
+      hint,
       default: TRUE_WORDS.includes(current.toLowerCase()),
     });
     return answered.kind === "advanced"
@@ -614,6 +655,7 @@ async function askByType(
   return valuePrompt({
     message: definition.prompt,
     validate,
+    hint,
     ...(suggestion === undefined ? {} : { default: suggestion }),
     ...(definition.secret ? { mask: true } : {}),
   });
@@ -803,12 +845,14 @@ export async function askForMissing(
   );
   if (leadIn !== undefined) {
     blankLine();
-    log(indent(leadIn));
+    paragraph(leadIn, { color: palette.warning });
   }
 
   for (const group of groups) {
     blankLine();
-    log(indent(recipeOpeningLine(group.key, group.questions.length)));
+    paragraph(recipeOpeningLine(group.key, group.questions.length), {
+      color: palette.warning,
+    });
 
     for (const [position, question] of group.questions.entries()) {
       await runQuestion(
@@ -838,7 +882,9 @@ export async function askForMissing(
     }
 
     blankLine();
-    log(indent(recipeOpeningLine(definingRecipeKey(entry.recipe), 1)));
+    paragraph(recipeOpeningLine(definingRecipeKey(entry.recipe), 1), {
+      color: palette.warning,
+    });
     await runQuestion(
       { defined: entry },
       { index: 1, total: 1 },
@@ -888,19 +934,19 @@ async function runQuestion(
   report.answered.push(stored);
 
   blankLine();
-  log(
-    indent(
-      `  ${color.cyan(stored.envName)}=${displayValue(
+  showVariables([
+    {
+      label: "Answer",
+      value: `${stored.envName}=${displayValue(
         stored.value,
         question.defined.definition.secret
-      )}`
-    )
-  );
-  log(
-    indent(
-      `  ${options.dryRun === true ? "Would be saved to" : "Saved to"} ${stored.filePath}`
-    )
-  );
+      )}`,
+    },
+    {
+      label: options.dryRun === true ? "Would be saved to" : "Saved to",
+      value: stored.filePath,
+    },
+  ]);
 }
 
 /**

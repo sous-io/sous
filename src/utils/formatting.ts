@@ -798,3 +798,20 @@ export function keysHelpTip(keys: Array<[key: string, action: string]>): string 
     .map(([key, action]) => `${color.bold(key)} ${color.dim(action)}`)
     .join(color.dim(" • "));
 }
+
+/** How many blank lines a question keeps under itself while it is waiting. */
+export const PROMPT_BOTTOM_PADDING = 2;
+
+/**
+ * The block a prompt draws under its input line: whatever it has to say
+ * (a validation message, the key legend), then two blank lines, so a question
+ * never sits on the terminal's very last row with its legend scrolled away.
+ *
+ * @param content - The line under the prompt, or an empty string for none.
+ * @returns The bottom block, ready to hand back from a prompt's renderer.
+ */
+export function promptBottom(content: string): string {
+  const lines = content === "" ? [] : [content];
+  for (let index = 0; index < PROMPT_BOTTOM_PADDING; index++) lines.push(" ");
+  return lines.join("\n");
+}

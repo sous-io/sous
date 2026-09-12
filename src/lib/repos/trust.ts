@@ -20,7 +20,15 @@
 import { color } from "@oclif/color";
 import { ConfigError } from "../errors.js";
 import type { Settings } from "../settings.js";
-import { blankLine, log as writeLine } from "../../utils/formatting.js";
+import {
+  blankLine,
+  formatVariable,
+  log as writeLine,
+  palette,
+  wrapColumns,
+  wrapText,
+  type VariableEntry,
+} from "../../utils/formatting.js";
 import { askYesNo } from "../../utils/prompts.js";
 import {
   isInteractive,
@@ -314,9 +322,10 @@ export class TrustService {
    * @param missing - The repositories being asked about.
    */
   trustNotice(missing: MissingRepo[]): string {
+    const width = wrapColumns() - 2;
     const lines: string[] = [];
     lines.push(
-      color.yellowBright(
+      palette.warning(
         missing.length === 1
           ? "One repository has to be trusted before this can continue."
           : `${missing.length} repositories have to be trusted before this can continue.`
@@ -324,44 +333,58 @@ export class TrustService {
     );
     lines.push(" ");
 
+    // Every repository is written as the same key and value block the rest of
+    // the CLI uses, so the facts under a repository name are read the same way
+    // as the facts anywhere else.
     for (const repo of missing) {
       lines.push(`  ${color.bold(repo.name)}`);
-      // The location is the one thing a person actually weighs when deciding,
-      // so it carries the accent color the rest of the CLI uses for values.
-      lines.push(
-        `    Location:  ${
-          repo.url === undefined
-            ? "not known to sous; a ref named it by its short name only"
-            : color.cyan(repo.url)
-        }`
-      );
-      if (repo.identity !== undefined) {
-        lines.push(`    Identity:  ${repo.identity}`);
-      }
-      for (const entry of repo.requiredBy) {
-        const who = entry.requestedBy === "project" ? "this project" : `'${entry.requestedBy}'`;
-        lines.push(`    Required:  ${entry.ref}, by ${who}`);
+
+      const entries: VariableEntry[] = [
+        {
+          label: "Location",
+          value:
+            repo.url === undefined
+              ? "not known to sous; a ref named it by its short name only"
+              : repo.url,
+        },
+        ...(repo.identity === undefined
+          ? []
+          : [{ label: "Identity", value: repo.identity }]),
+        ...repo.requiredBy.map((entry) => ({
+          label: "Required",
+          value: entry.ref,
+          detail: `required by ${
+            entry.requestedBy === "project" ? "this project" : `'${entry.requestedBy}'`
+          }`,
+        })),
+      ];
+      const labelWidth = Math.max(...entries.map((entry) => entry.label.length));
+      for (const entry of entries) {
+        lines.push(...formatVariable(entry, { labelWidth, width }));
       }
       lines.push(" ");
     }
 
-    // The two phrases that carry the actual risk are highlighted, so a reader
-    // skimming the block still takes in the part that matters.
-    lines.push(
-      `  Trusting a repository trusts ${color.yellowBright(
+    // The two phrases that carry the actual risk are highlighted in orange
+    // inside the yellow, so a reader skimming the block still takes in the part
+    // that matters.
+    const body = [
+      `Trusting a repository trusts ${palette.highlight(
         "every namespace and every recipe"
-      )} in it,`
-    );
-    lines.push("  including ones published later. Trusting on its own executes nothing;");
-    lines.push(
-      `  subscribing to something inside it ${color.yellowBright(
-        "can, and probably will,"
-      )} run scripts`
-    );
-    lines.push("  on this machine. This question is the last gate before that happens.");
-    lines.push(" ");
-    lines.push("  Sous cannot tell you whether a repository deserves trust. Look at the");
-    lines.push("  location above, and at who publishes it, before answering.");
+      )} in it, including ones published later. Trusting on its own executes ` +
+        `nothing; subscribing to something inside it ${palette.highlight(
+          "can, and probably will,"
+        )} run scripts on this machine. This question is the last gate before ` +
+        `that happens.`,
+      "",
+      "Sous cannot tell you whether a repository deserves trust. Look at the " +
+        "location above, and at who publishes it, before answering.",
+    ].join("\n");
+
+    for (const line of wrapText(body, width - 2)) {
+      lines.push(line === "" ? " " : `  ${palette.warning(line)}`);
+    }
+
     // The block closes on a blank line, so the question that follows it stands
     // on its own rather than reading as the last line of the notice.
     lines.push(" ");

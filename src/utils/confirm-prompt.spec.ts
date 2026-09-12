@@ -1,9 +1,10 @@
 import { PassThrough } from "node:stream";
 import { describe, expect, it } from "vitest";
 import { confirmPrompt, renderConfirmPrompt } from "./confirm-prompt.js";
+import { promptBottom } from "./formatting.js";
 
-/** The hint every sous question carries, in the wording a pick-one question uses. */
-const HINT = "[ENTER to choose; TAB for advanced info and options]";
+/** The key legend every sous question carries, in a yes-or-no question's wording. */
+const HINT = "y/n answer • ⏎ accept default • ⇥ advanced";
 
 /**
  * The pure renderer behind the yes-or-no question. Everything the prompt draws
@@ -34,8 +35,8 @@ describe("renderConfirmPrompt()", () => {
   });
 
   /**
-   * The hint occupies the line under the question, exactly as it does under the
-   * value question.
+   * The legend occupies the line under the question, exactly as it does under
+   * the value question, with the padding following it.
    */
   it("should put the hint on the line underneath", () => {
     const [, below] = renderConfirmPrompt({
@@ -43,7 +44,18 @@ describe("renderConfirmPrompt()", () => {
       message: "Enable it?",
       hint: HINT,
     });
-    expect(below).toBe(HINT);
+    expect(below).toBe(promptBottom(HINT));
+  });
+
+  /** Once the question is answered the legend and the padding go away. */
+  it("should drop the legend and the padding once answered", () => {
+    const [, below] = renderConfirmPrompt({
+      prefix: "V",
+      message: "Enable it?",
+      hint: HINT,
+      answer: true,
+    });
+    expect(below).toBe("");
   });
 
   /**

@@ -125,7 +125,9 @@ describe("TrustService", () => {
     const notice = written.join("\n");
     expect(notice).toContain("vendor-recipes");
     expect(notice).toContain("https://github.com/vendor/recipes");
-    expect(notice).toContain("vendor-recipes:core/partials, by 'workflow/task-files'");
+    expect(notice).toContain(
+      "vendor-recipes:core/partials required by 'workflow/task-files'"
+    );
     expect(notice).toContain("trusts every namespace and every recipe in it");
     expect(asked).toHaveLength(1);
   });
