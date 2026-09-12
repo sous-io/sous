@@ -16,8 +16,8 @@ import {
   blankLine,
   footer,
   heading,
-  indent,
   log,
+  paragraph,
   showCommandVars,
   warning,
 } from "../utils/formatting.js";
@@ -163,7 +163,7 @@ export default class Build extends BaseCommand {
             .then(async (report) => {
               if (report.updated.length === 0) return;
               for (const change of report.updated) {
-                log(indent(`  ${change.key} moved from ${change.from} to ${change.to}.`));
+                paragraph(`  ${change.key} moved from ${change.from} to ${change.to}.`);
               }
               await triggerFullRebuild("A newer recipe version arrived upstream.");
             })
@@ -213,11 +213,9 @@ export default class Build extends BaseCommand {
     if (needsRestore) {
       heading("Restoring recipes");
       blankLine();
-      log(
-        indent(
-          "This project's lockfile pins recipes that are not in the store on this " +
-            "machine, so they are being fetched at exactly the versions it records."
-        )
+      paragraph(
+        "This project's lockfile pins recipes that are not in the store on this " +
+          "machine, so they are being fetched at exactly the versions it records."
       );
     }
 
@@ -234,21 +232,15 @@ export default class Build extends BaseCommand {
       heading("Locking subscribed recipes");
       blankLine();
       for (const entry of subscriptions.added) {
-        log(indent(`  pinned: ${entry.key} at version ${entry.version}.`));
+        paragraph(`  pinned: ${entry.key} at version ${entry.version}.`);
       }
       for (const change of subscriptions.moved) {
-        log(
-          indent(
-            `  ${change.key} moved from version ${change.from} to version ${change.to}.`
-          )
-        );
+        paragraph(`  ${change.key} moved from version ${change.from} to version ${change.to}.`);
       }
       blankLine();
-      log(
-        indent(
-          "The lockfile has been updated. Commit it, so everyone building this project " +
-            "gets exactly these versions."
-        )
+      paragraph(
+        "The lockfile has been updated. Commit it, so everyone building this project " +
+          "gets exactly these versions."
       );
       footer();
     }
@@ -262,11 +254,11 @@ export default class Build extends BaseCommand {
 
     if (restored !== undefined && restored.restored.length > 0) {
       blankLine();
-      for (const key of restored.restored) log(indent(`  restored: ${key}`));
+      for (const key of restored.restored) paragraph(`  restored: ${key}`);
     }
 
     for (const change of upstream.updated) {
-      log(indent(`  ${change.key} moved from ${change.from} to ${change.to}.`));
+      paragraph(`  ${change.key} moved from ${change.from} to ${change.to}.`);
     }
 
     for (const failure of upstream.failed) {

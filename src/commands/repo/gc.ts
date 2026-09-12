@@ -23,6 +23,7 @@ import {
   footer,
   indent,
   log,
+  paragraph,
   section,
   showCommandVars,
   showVariables,
@@ -156,16 +157,14 @@ export default class RepoGc extends BaseCommand {
     }
 
     blankLine();
-    log(
-      indent(
-        report.evicted.length === 0
-          ? "The store is already inside its size cap, so nothing was removed."
-          : dryRun
-            ? "Nothing was removed. Everything listed above is re-fetchable from the " +
-              "lockfile that pins it."
-            : "Everything removed is re-fetchable from the lockfile that pins it; the " +
-              "next build that needs one will download it again."
-      )
+    paragraph(
+      report.evicted.length === 0
+        ? "The store is already inside its size cap, so nothing was removed."
+        : dryRun
+          ? "Nothing was removed. Everything listed above is re-fetchable from the " +
+            "lockfile that pins it."
+          : "Everything removed is re-fetchable from the lockfile that pins it; the " +
+            "next build that needs one will download it again."
     );
 
     footer();

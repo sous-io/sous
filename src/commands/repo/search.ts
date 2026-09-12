@@ -17,6 +17,7 @@ import {
   footer,
   indent,
   log,
+  paragraph,
   section,
   showCommandVars,
 } from "../../utils/formatting.js";
@@ -143,13 +144,11 @@ export default class RepoSearch extends BaseCommand {
     const summary: string[] = [];
 
     if (matches.length === 0) {
-      log(
-        indent(
-          repos.length === 0
-            ? "This project trusts no repositories yet, so there is nothing to search. " +
-                "Add one with 'sous repo add <url>'."
-            : `Nothing in the repositories this project trusts matches '${args.text}'.`
-        )
+      paragraph(
+        repos.length === 0
+          ? "This project trusts no repositories yet, so there is nothing to search. " +
+            "Add one with 'sous repo add <url>'."
+          : `Nothing in the repositories this project trusts matches '${args.text}'.`
       );
     } else {
       const shown = matches.slice(0, flags.limit);

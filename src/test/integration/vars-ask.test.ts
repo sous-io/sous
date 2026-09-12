@@ -553,9 +553,14 @@ describe("answering variables ahead of the questions", () => {
     expect(stored["SOUS_VAR_API_URL"]).toBe("https://supplied.example.com");
     expect(stored["SOUS_VAR_TASK_FILE_ROOT"]).toBe(".sous/tasks");
 
-    const lines = formatAskReport(report).join("\n");
+    const lines = formatAskReport(report)
+      .join("\n")
+      .replace(/\[[0-9;]*m/g, "");
     expect(lines).toContain("Answers stored:");
-    expect(lines).toContain("apiUrl = https://supplied.example.com");
+    // The report is a key and value list, like every other set of facts sous
+    // prints, with the environment variable trailing as muted detail.
+    expect(lines).toContain("apiUrl      : https://supplied.example.com");
+    expect(lines).toContain("SOUS_VAR_API_URL in .env");
   });
 
   /**

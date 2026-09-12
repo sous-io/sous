@@ -40,6 +40,7 @@ import {
   heading,
   indent,
   log,
+  paragraph,
   showCommandVars,
   subheading,
   warning,
@@ -186,12 +187,10 @@ export default class SubscriptionAdd extends BaseCommand {
 
     if (outcome.trusted.length > 0) {
       blankLine();
-      log(
-        indent(
-          `Repositories trusted along the way: ${outcome.trusted.join(", ")}. ` +
-            `They are now recorded in this project's config, and your colleagues ` +
-            `inherit them.`
-        )
+      paragraph(
+        `Repositories trusted along the way: ${outcome.trusted.join(", ")}. ` +
+          `They are now recorded in this project's config, and your colleagues ` +
+          `inherit them.`
       );
     }
 
@@ -199,7 +198,7 @@ export default class SubscriptionAdd extends BaseCommand {
     subheading("Lockfile");
     blankLine();
     if (outcome.diff.unchanged) {
-      log(indent("Nothing changed; everything asked for was already locked."));
+      paragraph("Nothing changed; everything asked for was already locked.");
     } else {
       for (const line of outcome.diff.lines) log(indent(line));
     }
@@ -239,16 +238,12 @@ export default class SubscriptionAdd extends BaseCommand {
     const rebuilding = !dryRun && !flags["no-build"];
 
     blankLine();
-    log(
-      indent(
-        dryRun
-          ? `Nothing was written. Run the same command without '--dry-run' to install it.`
-          : `The subscription to '${outcome.key}' is recorded in this project's config, ` +
-              `and the exact versions above are recorded in its lockfile.` +
-              (rebuilding
-                ? ``
-                : ` Run 'sous build' to compile what they contribute.`)
-      )
+    paragraph(
+      dryRun
+        ? `Nothing was written. Run the same command without '--dry-run' to install it.`
+        : `The subscription to '${outcome.key}' is recorded in this project's config, ` +
+          `and the exact versions above are recorded in its lockfile.` +
+          (rebuilding ? `` : ` Run 'sous build' to compile what they contribute.`)
     );
 
     footer();

@@ -23,6 +23,7 @@ import {
   heading,
   indent,
   log,
+  paragraph,
   showCommandVars,
   subheading,
 } from "../../utils/formatting.js";
@@ -100,7 +101,7 @@ export default class SubscriptionRemove extends BaseCommand {
     subheading("Lockfile");
     blankLine();
     if (outcome.diff.unchanged) {
-      log(indent("Nothing changed; nothing was locked because of this subscription."));
+      paragraph("Nothing changed; nothing was locked because of this subscription.");
     } else {
       for (const line of outcome.diff.lines) log(indent(line));
     }
@@ -128,19 +129,17 @@ export default class SubscriptionRemove extends BaseCommand {
       : ` Run 'sous build' to prune what it used to write.`;
 
     blankLine();
-    log(
-      indent(
-        dryRun
-          ? "Nothing was written. Run the same command without '--dry-run' to remove it."
-          : outcome.optedOut
-            ? `The subscription to '${outcome.key}' is one sous provides itself, so it ` +
-              `was switched off rather than deleted: this project's config now records ` +
-              `'${outcome.key}: { enabled: false }'. The repository it came from is still ` +
-              `trusted.${pruneHint}`
-            : `The subscription to '${outcome.key}' is gone. The repositories it came ` +
-              `from are still trusted; remove one of those deliberately if you want ` +
-              `to withdraw that too.${pruneHint}`
-      )
+    paragraph(
+      dryRun
+        ? "Nothing was written. Run the same command without '--dry-run' to remove it."
+        : outcome.optedOut
+          ? `The subscription to '${outcome.key}' is one sous provides itself, so it ` +
+            `was switched off rather than deleted: this project's config now records ` +
+            `'${outcome.key}: { enabled: false }'. The repository it came from is ` +
+            `still trusted.${pruneHint}`
+          : `The subscription to '${outcome.key}' is gone. The repositories it came ` +
+            `from are still trusted; remove one of those deliberately if you want ` +
+            `to withdraw that too.${pruneHint}`
     );
 
     footer();

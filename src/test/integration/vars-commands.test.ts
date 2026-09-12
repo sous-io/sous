@@ -403,10 +403,10 @@ describe("sous vars commands", () => {
       const result = runSous(root, ["vars", "--file", "undocumented.yaml"]);
 
       expect(result.status).toBe(1);
-      expect(result.stdout).toContain("every published variable must explain itself");
-      expect(result.stdout).toContain(
-        "every published variable must show what a real answer looks like"
-      );
+      // The message is wrapped to the terminal, so it is matched a phrase at a
+      // time rather than as one long line.
+      expect(result.stdout).toContain("every published variable must explain");
+      expect(result.stdout).toContain("every published variable must show what a real");
     },
     CLI_TIMEOUT
   );

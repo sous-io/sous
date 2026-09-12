@@ -22,6 +22,7 @@ import {
   heading,
   indent,
   log,
+  paragraph,
   showCommandVars,
 } from "../../utils/formatting.js";
 
@@ -76,7 +77,7 @@ export default class SubscriptionList extends BaseCommand {
     blankLine();
 
     if (listings.length === 0) {
-      log(indent("This project subscribes to nothing yet."));
+      paragraph("This project subscribes to nothing yet.");
       footer();
       return;
     }

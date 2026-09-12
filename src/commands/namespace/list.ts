@@ -20,6 +20,7 @@ import {
   heading,
   indent,
   log,
+  paragraph,
   showCommandVars,
 } from "../../utils/formatting.js";
 
@@ -83,13 +84,11 @@ export default class NamespaceList extends BaseCommand {
     blankLine();
 
     if (listings.length === 0) {
-      log(
-        indent(
-          inputs.repos.length === 0
-            ? "Sous has read no repository index for this project, so there are no " +
-                "namespaces to show."
-            : "The repositories this project trusts publish no namespaces."
-        )
+      paragraph(
+        inputs.repos.length === 0
+          ? "Sous has read no repository index for this project, so there are no " +
+            "namespaces to show."
+          : "The repositories this project trusts publish no namespaces."
       );
     } else {
       const rows = listings.map((entry) => ({
@@ -107,11 +106,9 @@ export default class NamespaceList extends BaseCommand {
 
     if (notFetched.length > 0) {
       blankLine();
-      log(
-        indent(
-          `These repositories are trusted and their index has not been fetched yet, so ` +
-            `nothing in them is listed: ${notFetched.join(", ")}.`
-        )
+      paragraph(
+        `These repositories are trusted and their index has not been fetched yet, so ` +
+          `nothing in them is listed: ${notFetched.join(", ")}.`
       );
     }
 

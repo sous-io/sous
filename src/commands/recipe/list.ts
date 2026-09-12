@@ -24,6 +24,7 @@ import {
   heading,
   indent,
   log,
+  paragraph,
   showCommandVars,
 } from "../../utils/formatting.js";
 
@@ -67,13 +68,11 @@ export default class RecipeList extends BaseCommand {
     blankLine();
 
     if (listings.length === 0) {
-      log(
-        indent(
-          inputs.repos.length === 0
-            ? "Sous has read no repository index for this project, so there are no " +
-                "recipes to show."
-            : "The repositories this project trusts publish no recipes."
-        )
+      paragraph(
+        inputs.repos.length === 0
+          ? "Sous has read no repository index for this project, so there are no " +
+            "recipes to show."
+          : "The repositories this project trusts publish no recipes."
       );
     } else {
       for (const line of renderTable(RECIPE_COLUMNS, recipeRows(listings), {
@@ -85,11 +84,9 @@ export default class RecipeList extends BaseCommand {
 
     if (notFetched.length > 0) {
       blankLine();
-      log(
-        indent(
-          `These repositories are trusted and their index has not been fetched yet, so ` +
-            `nothing in them is listed: ${notFetched.join(", ")}.`
-        )
+      paragraph(
+        `These repositories are trusted and their index has not been fetched yet, so ` +
+          `nothing in them is listed: ${notFetched.join(", ")}.`
       );
     }
 

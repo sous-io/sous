@@ -35,6 +35,7 @@ import {
   heading,
   indent,
   log,
+  paragraph,
   showVariables,
   subheading,
   terminalColumns,
@@ -99,11 +100,9 @@ export function printVariableList(
 
   if (defined.length === 0) {
     blankLine();
-    log(
-      indent(
-        "No recipe in this project defines any variables yet. Subscribe to a recipe " +
-          "that publishes some, or read a definitions file with --file."
-      )
+    paragraph(
+      "No recipe in this project defines any variables yet. Subscribe to a recipe " +
+        "that publishes some, or read a definitions file with --file."
     );
     return;
   }

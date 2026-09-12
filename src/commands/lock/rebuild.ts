@@ -39,6 +39,7 @@ import {
   heading,
   indent,
   log,
+  paragraph,
   showCommandVars,
 } from "../../utils/formatting.js";
 
@@ -198,28 +199,24 @@ export default class LockRebuild extends BaseCommand {
 
     if (notFetched.length > 0) {
       blankLine();
-      log(
-        indent(
-          `These repositories are trusted and their index has not been fetched yet, so ` +
-            `nothing in them could be resolved: ${notFetched.join(", ")}.`
-        )
+      paragraph(
+        `These repositories are trusted and their index has not been fetched yet, so ` +
+          `nothing in them could be resolved: ${notFetched.join(", ")}.`
       );
     }
 
     if (result.missingManifests.length > 0) {
       blankLine();
-      log(
-        indent(
-          `The files of these recipes are not on this machine, so their own ` +
-            `dependencies could not be read and are not in the rebuilt lockfile: ` +
-            `${result.missingManifests.join(", ")}.`
-        )
+      paragraph(
+        `The files of these recipes are not on this machine, so their own ` +
+          `dependencies could not be read and are not in the rebuilt lockfile: ` +
+          `${result.missingManifests.join(", ")}.`
       );
     }
 
     for (const cycle of result.cycles) {
       blankLine();
-      log(indent(`These recipes depend on each other in a circle: ${cycle.join(" -> ")}.`));
+      paragraph(`These recipes depend on each other in a circle: ${cycle.join(" -> ")}.`);
     }
 
     blankLine();
@@ -231,14 +228,12 @@ export default class LockRebuild extends BaseCommand {
     }
 
     const written = service.lockService.write(after);
-    log(
-      indent(
-        `The lockfile was rebuilt from ${requests.length} ${
-          requests.length === 1 ? "subscription" : "subscriptions"
-        } and now pins ${Object.keys(after.recipes).length} ${
-          Object.keys(after.recipes).length === 1 ? "recipe" : "recipes"
-        }: ${written}.`
-      )
+    paragraph(
+      `The lockfile was rebuilt from ${requests.length} ${
+        requests.length === 1 ? "subscription" : "subscriptions"
+      } and now pins ${Object.keys(after.recipes).length} ${
+        Object.keys(after.recipes).length === 1 ? "recipe" : "recipes"
+      }: ${written}.`
     );
 
     footer();

@@ -16,7 +16,14 @@ import { readEffectiveLinks } from "../../lib/repos/links.js";
 import { BUILT_IN_ADDED_BY } from "../../lib/repos/defaults.js";
 import { requireProvider } from "../../lib/repos/providers/index.js";
 import { renderTable, type TableColumn } from "../../utils/table.js";
-import { footer, indent, log, section, showCommandVars } from "../../utils/formatting.js";
+import {
+  footer,
+  indent,
+  log,
+  paragraph,
+  section,
+  showCommandVars,
+} from "../../utils/formatting.js";
 
 /** How far every line of this command's output is indented. */
 const INDENT = 2;
@@ -94,11 +101,9 @@ export default class RepoList extends BaseCommand {
     const names = Object.keys(repos).sort();
 
     if (names.length === 0) {
-      log(
-        indent(
-          "This project trusts no repositories yet. Add one with " +
-            "'sous repo add <url>'; adding a repository is how you trust it."
-        )
+      paragraph(
+        "This project trusts no repositories yet. Add one with " +
+          "'sous repo add <url>'; adding a repository is how you trust it."
       );
       footer();
       return;

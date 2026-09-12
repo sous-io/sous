@@ -27,6 +27,7 @@ import {
   heading,
   indent,
   log,
+  paragraph,
   showCommandVars,
   subheading,
 } from "../../utils/formatting.js";
@@ -93,7 +94,7 @@ export default class NamespaceShow extends BaseCommand {
     blankLine();
 
     if (detail.recipes.length === 0) {
-      log(indent(`The repository ${detail.repo} publishes no recipes in this namespace.`));
+      paragraph(`The repository ${detail.repo} publishes no recipes in this namespace.`);
       footer();
       return;
     }

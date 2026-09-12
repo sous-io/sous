@@ -16,6 +16,7 @@ import {
   heading,
   indent,
   log,
+  paragraph,
   showCommandVars,
 } from "../../utils/formatting.js";
 
@@ -75,7 +76,9 @@ export default class LockShow extends BaseCommand {
     blankLine();
 
     if (keys.length === 0) {
-      log(indent(`This project pins nothing yet. Its lockfile is ${service.lockService.filePath}.`));
+      paragraph(
+        `This project pins nothing yet. Its lockfile is ${service.lockService.filePath}.`
+      );
       footer();
       return;
     }
@@ -95,7 +98,7 @@ export default class LockShow extends BaseCommand {
     }
 
     blankLine();
-    log(indent(`This project's lockfile is ${service.lockService.filePath}.`));
+    paragraph(`This project's lockfile is ${service.lockService.filePath}.`);
 
     footer();
   }

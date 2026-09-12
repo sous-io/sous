@@ -33,6 +33,7 @@ import {
   heading,
   indent,
   log,
+  paragraph,
   showCommandVars,
   subheading,
 } from "../../utils/formatting.js";
@@ -146,11 +147,9 @@ export default class RecipeShow extends BaseCommand {
 
     if (!detail.manifestRead) {
       blankLine();
-      log(
-        indent(
-          "The recipe's own files are not on this machine, so the questions it asks and " +
-            "the files it publishes are not known here. Subscribing to it fetches them."
-        )
+      paragraph(
+        "The recipe's own files are not on this machine, so the questions it asks and " +
+          "the files it publishes are not known here. Subscribing to it fetches them."
       );
       footer();
       return;
@@ -202,12 +201,10 @@ export default class RecipeShow extends BaseCommand {
     blankLine();
 
     if (dependencies.length === 0) {
-      log(
-        indent(
-          manifestRead
-            ? "This recipe depends on nothing else."
-            : "The repository's index records no dependencies for this version."
-        )
+      paragraph(
+        manifestRead
+          ? "This recipe depends on nothing else."
+          : "The repository's index records no dependencies for this version."
       );
       return;
     }
@@ -241,7 +238,7 @@ export default class RecipeShow extends BaseCommand {
     blankLine();
 
     if (variables.length === 0) {
-      log(indent("This recipe asks no questions."));
+      paragraph("This recipe asks no questions.");
       return;
     }
 
@@ -271,7 +268,7 @@ export default class RecipeShow extends BaseCommand {
     blankLine();
 
     if (contents.length === 0) {
-      log(indent("This recipe publishes no files."));
+      paragraph("This recipe publishes no files.");
       return;
     }
 

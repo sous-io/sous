@@ -26,14 +26,16 @@ import { ConfigError } from "../errors.js";
 import {
   blankLine,
   blankLines,
+  formatVariable,
   indent,
   keysHelpTip,
   log,
   palette,
   paragraph,
   showVariables,
-  wrapColumns,
+  VARIABLE_INDENT,
   warning,
+  wrapColumns,
   wrapText,
 } from "../../utils/formatting.js";
 import { choicePrompt } from "../../utils/choice-prompt.js";
@@ -1051,13 +1053,44 @@ async function storeAnswer(
  */
 export function formatAskReport(report: AskReport, dryRun = false): string[] {
   const lines: string[] = [];
+  const width = wrapColumns() - 2;
+
+  /** The variable name every entry in this report is labeled with. */
+  const labelWidth = Math.max(
+    0,
+    ...[...report.inherited, ...report.answered, ...report.skipped].map(
+      (entry) => entry.defined.definition.name.length
+    )
+  );
+
+  /** One entry of the report, laid out by the shared key and value renderer. */
+  const entryLines = (
+    label: string,
+    value: string,
+    detail?: string
+  ): string[] =>
+    formatVariable(
+      { label, value, ...(detail === undefined ? {} : { detail }) },
+      { labelWidth, width }
+    );
+
+  /** A note about the entry above it, hanging under the value column. */
+  const noteLines = (text: string): string[] =>
+    wrapText(text, width - VARIABLE_INDENT - labelWidth - 2).map(
+      (line) => `${" ".repeat(VARIABLE_INDENT + labelWidth + 2)}${palette.muted(line)}`
+    );
 
   if (report.inherited.length > 0) {
     lines.push("Answers already in scope:");
     for (const entry of report.inherited) {
       const shown = displayValue(entry.resolved.value, entry.defined.definition.secret);
-      lines.push(`  ${entry.defined.definition.name} = ${shown}`);
-      lines.push(`    from ${describeSource(entry.resolved.source)}`);
+      lines.push(
+        ...entryLines(
+          entry.defined.definition.name,
+          shown,
+          `from ${describeSource(entry.resolved.source)}`
+        )
+      );
     }
     lines.push("");
   }
@@ -1066,23 +1099,32 @@ export function formatAskReport(report: AskReport, dryRun = false): string[] {
     lines.push(dryRun ? "Answers that would be stored:" : "Answers stored:");
     for (const entry of report.answered) {
       const shown = displayValue(entry.value, entry.defined.definition.secret);
-      lines.push(`  ${entry.defined.definition.name} = ${shown}`);
-      lines.push(`    ${entry.envName} in ${entry.file}`);
+      lines.push(
+        ...entryLines(
+          entry.defined.definition.name,
+          shown,
+          `${entry.envName} in ${entry.file}`
+        )
+      );
       if (entry.mapping !== undefined) {
-        lines.push(`    mapped to ${entry.mapping.target} in the conf.d layer`);
+        lines.push(...noteLines(`mapped to ${entry.mapping.target} in the conf.d layer`));
       }
       if (entry.replaced !== undefined) {
         const previous = displayValue(entry.replaced, entry.defined.definition.secret);
         lines.push(
-          dryRun
-            ? `    replacing the answer already there: ${previous}`
-            : `    replaced the answer already there: ${previous}`
+          ...noteLines(
+            dryRun
+              ? `replacing the answer already there: ${previous}`
+              : `replaced the answer already there: ${previous}`
+          )
         );
       }
       if (entry.shadowedBy !== undefined) {
         lines.push(
-          `    ${entry.shadowedBy} is set in your shell environment and answers this ` +
-            `variable first; unset it for the stored answer to take effect`
+          ...noteLines(
+            `${entry.shadowedBy} is set in your shell environment and answers this ` +
+              `variable first; unset it for the stored answer to take effect`
+          )
         );
       }
     }
@@ -1092,13 +1134,18 @@ export function formatAskReport(report: AskReport, dryRun = false): string[] {
   if (report.skipped.length > 0) {
     lines.push("Left unanswered:");
     for (const entry of report.skipped) {
-      lines.push(`  ${entry.defined.definition.name}: ${entry.reason}`);
+      lines.push(...entryLines(entry.defined.definition.name, entry.reason));
     }
     lines.push("");
   }
 
   if (lines.length === 0) {
-    lines.push("Every variable in play already has an answer that fits its definition.");
+    lines.push(
+      ...wrapText(
+        "Every variable in play already has an answer that fits its definition.",
+        width
+      )
+    );
   }
 
   return lines;
