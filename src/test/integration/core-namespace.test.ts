@@ -51,6 +51,18 @@ function write(filePath: string, contents: string): string {
   return filePath;
 }
 
+/** Where the cached index for the official repository lives in the test's store. */
+function cachedIndexPath(): string {
+  return path.join(
+    sousHome,
+    "cache",
+    "_indexes",
+    "github.com",
+    "sous-io",
+    "sous-recipes.json"
+  );
+}
+
 /**
  * Runs `sous <args...>` through the real published bin, from `cwd`, on a machine
  * that has no network.
@@ -469,6 +481,106 @@ describe("the core namespace with no network", () => {
       expect(
         fs.existsSync(path.join(dropped, ".claude", "skills", "about-sous", "SKILL.md"))
       ).toBe(true);
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * The upgrade case, which is the one that bites on a real machine.
+   *
+   * A machine that has used sous for a while has fetched the official
+   * repository's real index, and that index publishes only the core versions the
+   * release pipeline has cut so far. Upgrade sous and the version the built-in
+   * subscription asks for is, for a while, not among them. Sous keeps the real
+   * index (it is the truth about that repository) and folds the packaged version
+   * into the copy it resolves against, so core still builds, still locks, and
+   * still lands in .claude/skills.
+   */
+  it(
+    "should build against a real cached index that has never published this version",
+    () => {
+      const upgraded = path.join(tmp.path, "upgraded-sous");
+      write(
+        path.join(upgraded, ".sous", "sous.config.json"),
+        `${JSON.stringify({ name: "A Project On A Well Used Machine" }, null, 2)}\n`
+      );
+
+      // What a real fetch would have left behind: an index with no note saying
+      // sous wrote it, publishing core at an older version only, and a sidecar
+      // saying it was fetched just now so nothing is due for a refetch.
+      const oldVersion = "0.0.1";
+      const published = {
+        formatVersion: 1,
+        name: "sous-recipes",
+        generatedAt: "2026-01-01T00:00:00.000Z",
+        generator: oldVersion,
+        namespaces: { core: { description: "The skills that teach an agent about sous." } },
+        recipes: {
+          "core/sous-skills": {
+            path: "recipes/core/sous-skills",
+            description: "What the repository published.",
+            versions: {
+              [oldVersion]: {
+                hash: `sha256-${"a".repeat(64)}`,
+                tag: `core/sous-skills@${oldVersion}`,
+                prerelease: false,
+              },
+            },
+          },
+        },
+      };
+      write(cachedIndexPath(), `${JSON.stringify(published, null, 2)}\n`);
+      write(
+        `${cachedIndexPath().slice(0, -".json".length)}.meta.json`,
+        `${JSON.stringify({ fetchedAt: new Date().toISOString() }, null, 2)}\n`
+      );
+
+      const result = sousOffline(upgraded, "build");
+      expect(result.status).toBe(0);
+
+      // Core resolved, at the version this installation of sous ships.
+      const lock = JSON.parse(
+        fs.readFileSync(path.join(upgraded, ".sous", "sous.lock.json"), "utf8")
+      ) as { recipes: Record<string, { version: string; hash: string }> };
+      expect(Object.keys(lock.recipes)).toEqual(["core/sous-skills"]);
+      expect(lock.recipes["core/sous-skills"]!.version).toBe(SOUS_VERSION);
+
+      // And it pinned the hash of the entry the seed put in the store, which is
+      // what makes the pin restorable on any other machine.
+      const marker = JSON.parse(
+        fs.readFileSync(
+          path.join(
+            sousHome,
+            "cache",
+            "github.com",
+            "sous-io",
+            "sous-recipes",
+            "core",
+            "sous-skills",
+            SOUS_VERSION,
+            ".sous.entry.json"
+          ),
+          "utf8"
+        )
+      ) as { hash: string };
+      expect(lock.recipes["core/sous-skills"]!.hash).toBe(marker.hash);
+
+      // The skills landed.
+      expect(
+        fs.existsSync(path.join(upgraded, ".claude", "skills", "about-sous", "SKILL.md"))
+      ).toBe(true);
+
+      // The cached index is still exactly what the repository served. Sous adds
+      // what it knows in memory and never writes it down, so the next real fetch
+      // is compared against the truth rather than against something sous made up.
+      const stillCached = JSON.parse(fs.readFileSync(cachedIndexPath(), "utf8")) as {
+        $comment?: string;
+        recipes: Record<string, { versions: Record<string, unknown> }>;
+      };
+      expect(stillCached.$comment).toBeUndefined();
+      expect(Object.keys(stillCached.recipes["core/sous-skills"]!.versions)).toEqual([
+        oldVersion,
+      ]);
     },
     CLI_TIMEOUT
   );
