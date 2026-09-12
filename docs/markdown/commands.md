@@ -23,10 +23,10 @@ beats the matching variable, and both beat walk-up discovery.
 
 ?> Three commands take none of these, because they run inside a recipe repository rather than
 inside a project: `sous repo init`, `sous repo release` and `sous repo submit`. A recipe
-repository has no `.sous/` directory to discover. They take no `--non-interactive` either.
-`repo init` and `repo submit` never ask anything, and `repo release` reads the terminal and the
-`CI` environment variable to decide whether it may ask, with `--ci` or `--yes` settling it
-outright.
+repository has no `.sous/` directory to discover. All three do take `--non-interactive`:
+`repo init` and `repo submit` accept it without ever having a question to suppress, and
+`repo release` reads the flag, the terminal and the `CI` environment variable to decide whether
+it may ask, with `--ci` or `--yes` settling it outright.
 
 ## Flags common to many commands
 
