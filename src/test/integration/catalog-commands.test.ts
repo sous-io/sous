@@ -12,47 +12,19 @@ const binPath = path.join(repoRoot, "bin", "run.js");
 const CLI_TIMEOUT = 90_000;
 
 /**
- * The hand-maintained fixtures these tests read, which live beside the sous
- * checkout rather than inside it: a recipe repository exercising every corner of
- * a manifest, and the smallest project sous supports. They are copied into a
- * temp directory and never written to where they live.
- *
- * A machine without them skips this file rather than failing it, since they are
- * a quality-assurance aid rather than part of the package.
+ * The recipe repository these tests read: a fixture shipped inside this
+ * repository, exercising every corner of a manifest. It is copied into a temp
+ * directory and never written to where it lives, and because it travels with
+ * the source there is nothing to detect and nothing to skip.
  */
-const FIXTURE_ROOT = findFixtureRoot();
 const FIXTURE_RECIPE_REPO = path.join(
-  FIXTURE_ROOT ?? "",
-  "example-recipe-repos",
+  repoRoot,
+  "src",
+  "test",
+  "fixtures",
+  "recipe-repos",
   "qa-recipes"
 );
-const FIXTURE_PROJECT = path.join(
-  FIXTURE_ROOT ?? "",
-  "example-project-scaffolds",
-  "basic"
-);
-
-const fixturesPresent =
-  FIXTURE_ROOT !== undefined &&
-  fs.existsSync(FIXTURE_RECIPE_REPO) &&
-  fs.existsSync(FIXTURE_PROJECT);
-
-/**
- * Where the quality-assurance fixtures are: `SOUS_TEST_FIXTURES` when it is
- * set, and otherwise a `sous-testing` directory beside the sous checkout. The
- * second candidate is the same directory seen from a git worktree, which sits
- * three levels further down.
- */
-function findFixtureRoot(): string | undefined {
-  const candidates = [
-    process.env.SOUS_TEST_FIXTURES,
-    path.resolve(repoRoot, "../sous-testing"),
-    path.resolve(repoRoot, "../../../../sous-testing"),
-  ];
-  return candidates.find(
-    (candidate) => candidate !== undefined && candidate.length > 0 && fs.existsSync(candidate)
-  );
-}
 
 type RunResult = { stdout: string; stderr: string; status: number | null };
 
@@ -129,14 +101,45 @@ function copyFixtureDir(from: string, to: string): void {
 }
 
 /**
- * Sets up a project from the smallest scaffold sous ships with, with the
- * built-in repository switched off so nothing in the file reaches the network.
+ * Writes the smallest project sous supports: a config that names the project
+ * and compiles one instruction file, plus that file's tracked source. The
+ * built-in repository is switched off, so nothing in this file reaches the
+ * network.
  */
 function makeProject(directory: string): void {
-  copyFixtureDir(FIXTURE_PROJECT, directory);
-  fs.mkdirSync(path.join(directory, ".sous", "conf.d"), { recursive: true });
+  const sousDir = path.join(directory, ".sous");
+  fs.mkdirSync(path.join(sousDir, "prompts"), { recursive: true });
   fs.writeFileSync(
-    path.join(directory, ".sous", "conf.d", "100-offline.json"),
+    path.join(sousDir, "sous.config.js"),
+    [
+      "// The smallest sous config a test project needs: a name, the project",
+      "// root worked out from the sousDir auto-variable, and one instruction",
+      "// file to compile.",
+      "export const config = {",
+      "  version: 1,",
+      '  name: "basic",',
+      '  _vars: { projectRoot: "${sousDir}/.." },',
+      "  compilation: {",
+      "    targets: [",
+      "      {",
+      '        entryPoint: "${projectRoot}/.sous/prompts/CLAUDE.md",',
+      '        outputs: [{ destinationFile: "${projectRoot}/CLAUDE.md" }],',
+      "      },",
+      "    ],",
+      "  },",
+      "};",
+      "",
+    ].join("\n"),
+    "utf8"
+  );
+  fs.writeFileSync(
+    path.join(sousDir, "prompts", "CLAUDE.md"),
+    "# basic\n\nThe instruction file a test project compiles.\n",
+    "utf8"
+  );
+  fs.mkdirSync(path.join(sousDir, "conf.d"), { recursive: true });
+  fs.writeFileSync(
+    path.join(sousDir, "conf.d", "100-offline.json"),
     JSON.stringify({ repos: { "sous-recipes": { enabled: false } } }, null, 2),
     "utf8"
   );
@@ -151,7 +154,7 @@ function makeProject(directory: string): void {
  * repository, released by `sous repo release` into the temp tree and read
  * through the `local` provider, so nothing here touches the network.
  */
-describe.skipIf(!fixturesPresent)("the browsing commands", () => {
+describe("the browsing commands", () => {
   beforeAll(() => {
     tmp = makeTmpDir("sous-catalog-");
     sousHome = path.join(tmp.path, "sous-home");
@@ -162,7 +165,6 @@ describe.skipIf(!fixturesPresent)("the browsing commands", () => {
     // The repository: a copy of the fixture, committed and then released, so it
     // publishes a real index with real tags and content hashes.
     copyFixtureDir(FIXTURE_RECIPE_REPO, recipeRepo);
-    fs.rmSync(path.join(recipeRepo, ".git"), { recursive: true, force: true });
     git(recipeRepo, "init", "-q", "-b", "main");
     git(recipeRepo, "add", "-A");
     git(recipeRepo, "commit", "-qm", "the fixture repository");

@@ -1,0 +1,37 @@
+# One recipe, one question, one deliberately terrible regular expression.
+#
+# The pattern below backtracks exponentially on an answer that nearly matches,
+# so answering the question the way its description says takes longer than the
+# time budget sous gives a published pattern. The failure should name the
+# pattern and this recipe, and should not read as the answerer's fault.
+
+formatVersion: 1
+
+namespace: quality
+name: qa-pattern
+version: 0.1.0
+
+description: >-
+  A single question whose published pattern runs too long on purpose, so the
+  timeout message can be judged.
+
+contents:
+  - kind: skills
+    include:
+      - skills/**/*.md
+
+variables:
+  - name: qaPatternProbe
+    type: string
+    prompt: What is the run label for this review?
+    description: >-
+      The label is checked against a pattern this recipe publishes, and that
+      pattern is deliberately a bad one. To see what happens when a published
+      pattern runs too long, answer with forty a characters followed by a single
+      b; forty plain a characters match instantly and prove nothing. Any answer
+      of only a characters is otherwise accepted.
+    example: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab
+    required: true
+    scope: shared
+    validate:
+      pattern: ^(a+)+$

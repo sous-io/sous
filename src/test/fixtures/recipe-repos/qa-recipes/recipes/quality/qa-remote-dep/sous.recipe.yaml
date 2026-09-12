@@ -1,0 +1,24 @@
+# The two spellings of a dependency, side by side.
+#
+# A sibling in this repository is a bare ref. Anything in another repository is
+# a locator URL whose scheme is the provider. A path such as '../qa-helper' is
+# refused, because a dependency names an identity and never a location on disk.
+
+formatVersion: 1
+
+namespace: quality
+name: qa-remote-dep
+version: 0.1.0
+
+description: >-
+  A recipe that exists to show how a dependency in another repository is
+  written, next to one in this repository.
+
+depends:
+  - workflow/qa-helper
+  - github://sous-io/sous-recipes/workflow/sub-agent-delegation@^1.0
+
+contents:
+  - kind: skills
+    include:
+      - skills/**/*.md
