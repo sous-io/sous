@@ -1039,7 +1039,7 @@ that tag.
 | `sous repo release --tag` | Cut the tags even on a branch other than the default one. |
 | `sous repo release --push` | Push the commit, and the tags this run created, to `origin`. |
 | `sous repo release --check` | Read only: validate, and fail when the committed index is out of date. This is what a pull request runs. |
-| `sous repo release --ci` | The merge preset: never bump, never ask, fail on anything unbumped. |
+| `sous repo release --ci` | The merge preset: never bump, accept the plan, never ask, fail on anything unbumped. |
 
 Tags are cut dependency-first, and each version's resolved dependencies are written into the
 index. On a branch other than the default one a release bumps and commits but cuts no tags,

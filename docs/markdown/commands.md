@@ -246,7 +246,7 @@ These three run inside a recipe repository and take none of the config-locating 
 `sous repo release` plans first, asks once, and then bumps, regenerates the index, commits and
 tags in one run. `--namespace` and `--recipe` are repeatable and narrow the run; `--check` reads
 only and cannot be combined with `--bump`, `--tag` or `--push`; `--ci` is the merge preset and
-implies `--no-bump`. See [Authoring a repository](repositories-authoring.md).
+implies both `--no-bump` and `--yes`, so it prints the plan and carries it out without asking. See [Authoring a repository](repositories-authoring.md).
 
 ## Variables
 
