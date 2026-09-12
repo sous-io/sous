@@ -27,15 +27,14 @@ import { SOUS_VERSION, type ConfigContext, type Settings, type VarScope } from "
 import { CONFD_DIR_NAME } from "../config-discovery.js";
 import {
   BULLET,
-  formatVariable,
   indent,
   log,
   palette,
   warning,
   wrapColumns,
   wrapText,
-  type VariableEntry,
 } from "../../utils/formatting.js";
+import { formatResolvedReference } from "./reference-report.js";
 import { askChoice, askYesNo } from "../../utils/prompts.js";
 import { ensureStoreRootDirectory } from "../../utils/sous-directory.js";
 import { isInteractive, nonInteractiveError } from "../interactive.js";
