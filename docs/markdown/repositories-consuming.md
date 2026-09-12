@@ -115,7 +115,7 @@ $ sous subscription add task-files
     Repository : sous-recipes
     Description: keeps one task file per branch
 
-  'task-files' named one recipe, and nothing else, so that is what is being subscribed to.
+  'task-files' named one recipe, and nothing else, so that is what is being used.
 ```
 
 When the word means more than one thing, including the case where it is a namespace in one

@@ -209,7 +209,8 @@ src/
       scopes.ts            # SousScope: repository, namespace, recipe, variable, env var name
       find.ts              # findReference + the per-scope wrappers; the matching and ordering rules
       pick.ts              # pickReference: one match, a question, --accept-first, or the
-                           #   shared non-interactive failure
+                           #   shared non-interactive failure; reports what a reference
+                           #   resolved to via repos/reference-report.ts
     vars/                  # recipe variable definitions, answers and the resolution ladder
       index.ts             # barrel; import the whole layer from here
       definition-source.ts # where definitions come from; the one wiring seam

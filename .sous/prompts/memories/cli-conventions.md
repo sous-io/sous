@@ -23,8 +23,10 @@ holds the mechanism, use it rather than building a second one beside it.
   `findVariable`), and one settles which meaning a run proceeds with (`pickReference`: one
   match, a question, `--accept-first`, or the shared non-interactive failure). Any level of
   qualification is accepted up to the fully qualified name, matching is case-sensitive, and
-  the listing order is the contract. Never resolve a name by walking an index or a definition
-  list in a command.
+  the listing order is the contract. What a reference resolved to is reported by
+  `formatResolvedReference` (`src/lib/repos/reference-report.ts`), which `pickReference` calls:
+  the facts as a key and value list, then one sentence saying why that candidate won. Never
+  resolve a name by walking an index or a definition list in a command.
 - **Never prompt when the terminal is not ours**: `--non-interactive`, a truthy `CI`, or no TTY
   (`src/lib/interactive.ts`). Fail instead, naming both the question that could not be asked and
   the flag that would have answered it, and print the command's help under the error. All of it
