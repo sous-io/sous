@@ -29,14 +29,14 @@ import type {
   RecipeManifest,
   VariableDefinition,
 } from "./formats/recipe-manifest.js";
-import { dependencyRefKey, parseDependencyRef, parseRef } from "./ref.js";
+import { dependencyRefKey, parseDependencyRef, parseRef, type ParsedRef } from "./ref.js";
 import { bareName } from "../vars/names.js";
 import {
-  Qualification,
-  SousScope,
   describeReference,
-  findReference,
+  findNamespace,
+  findRecipe,
   referenceReposFromIndexes,
+  type ReferenceContext,
   type ReferenceMatch,
 } from "../refs/index.js";
 
@@ -393,30 +393,15 @@ export function resolveNamespaceRef(inputs: CatalogInputs, ref: string): Resolve
     );
   }
 
-  const matches = reposFor(inputs, parsed.repo).filter((repo) =>
-    Object.hasOwn(repo.index.namespaces, parsed.namespace)
-  );
+  const matches = findNamespace(refSearchString(parsed), referenceContext(inputs));
 
   if (matches.length === 1) {
-    return { repo: matches[0]!, namespace: parsed.namespace };
+    return { repo: repoNamed(inputs, matches[0]!.repo!), namespace: matches[0]!.namespace! };
   }
 
-  if (matches.length > 1) {
-    throw ambiguousError(
-      ref,
-      "namespace",
-      matches.map((repo) => ({
-        scope: SousScope.Namespace,
-        key: `${repo.name}:${parsed.namespace}`,
-        label: parsed.namespace,
-        repo: repo.name,
-        namespace: parsed.namespace,
-        qualification: Qualification.Bare,
-      }))
-    );
-  }
+  if (matches.length > 1) throw ambiguousError(ref, "namespace", matches);
 
-  const asRecipe = candidatesOfKind(inputs, parsed.namespace, "recipe");
+  const asRecipe = findRecipe(refSearchString(parsed), referenceContext(inputs));
   if (parsed.repo === undefined && asRecipe.length > 0) {
     throw new ConfigError(
       `No repository this project trusts publishes a namespace called ` +
@@ -439,61 +424,24 @@ export function resolveNamespaceRef(inputs: CatalogInputs, ref: string): Resolve
  */
 export function resolveRecipeRef(inputs: CatalogInputs, ref: string): ResolvedRecipeRef {
   const parsed = parseRef(ref);
+  const search = refSearchString(parsed);
+  const context = referenceContext(inputs);
 
-  if (parsed.recipe !== undefined) {
-    const key = `${parsed.namespace}/${parsed.recipe}`;
-    const matches = reposFor(inputs, parsed.repo).filter((repo) =>
-      Object.hasOwn(repo.index.recipes, key)
-    );
+  const matches = findRecipe(search, context);
 
-    if (matches.length === 1) {
-      return {
-        repo: matches[0]!,
-        key,
-        namespace: parsed.namespace,
-        name: parsed.recipe,
-      };
-    }
-
-    if (matches.length > 1) {
-      throw ambiguousError(
-        ref,
-        "recipe",
-        matches.map((repo) => ({
-          scope: SousScope.Recipe,
-          key: `${repo.name}:${key}`,
-          label: parsed.recipe!,
-          repo: repo.name,
-          namespace: parsed.namespace,
-          recipe: parsed.recipe!,
-          qualification: Qualification.Partial,
-        }))
-      );
-    }
-
-    throw unknownError(inputs, ref, "recipe", parsed.repo);
-  }
-
-  const candidates = candidatesOfKind(inputs, parsed.namespace, "recipe").filter(
-    (candidate) => parsed.repo === undefined || candidate.repo === parsed.repo
-  );
-
-  if (candidates.length === 1) {
-    const candidate = candidates[0]!;
-    const repo = inputs.repos.find((entry) => entry.name === candidate.repo)!;
+  if (matches.length === 1) {
+    const match = matches[0]!;
     return {
-      repo,
-      key: `${candidate.namespace}/${candidate.recipe}`,
-      namespace: candidate.namespace!,
-      name: candidate.recipe!,
+      repo: repoNamed(inputs, match.repo!),
+      key: `${match.namespace}/${match.recipe}`,
+      namespace: match.namespace!,
+      name: match.recipe!,
     };
   }
 
-  if (candidates.length > 1) throw ambiguousError(ref, "recipe", candidates);
+  if (matches.length > 1) throw ambiguousError(ref, "recipe", matches);
 
-  const asNamespace = candidatesOfKind(inputs, parsed.namespace, "namespace").filter(
-    (candidate) => parsed.repo === undefined || candidate.repo === parsed.repo
-  );
+  const asNamespace = findNamespace(search, context);
   if (asNamespace.length > 0) {
     throw new ConfigError(
       `No repository this project trusts publishes a recipe called ` +
@@ -688,25 +636,37 @@ function variableListing(definition: VariableDefinition): RecipeVariableListing 
   };
 }
 
-/** The repositories a ref may resolve in: all of them, or the one it qualified. */
-function reposFor(inputs: CatalogInputs, qualifier: string | undefined): CatalogRepo[] {
-  if (qualifier === undefined) return inputs.repos;
-  return inputs.repos.filter((repo) => repo.name === qualifier);
+/**
+ * The repository a match named. Every match comes from this catalog's own
+ * repositories, so the lookup always finds one.
+ *
+ * @param inputs - The cached indexes.
+ * @param name - The repository's short name.
+ */
+function repoNamed(inputs: CatalogInputs, name: string): CatalogRepo {
+  return inputs.repos.find((repo) => repo.name === name)!;
 }
 
-/** Every meaning of a one-word name, of one kind. */
-function candidatesOfKind(
-  inputs: CatalogInputs,
-  name: string,
-  kind: "namespace" | "recipe"
-): ReferenceMatch[] {
-  const scope = kind === "namespace" ? SousScope.Namespace : SousScope.Recipe;
-  return findReference(name, [scope], {
+/** This catalog's repositories, in the shape a reference searches. */
+function referenceContext(inputs: CatalogInputs): ReferenceContext {
+  return {
     repos: referenceReposFromIndexes(
       inputs.repos.map((repo) => repo.name),
-      new Map(inputs.repos.map((repo) => [repo.name, repo.index]))
+      new Map(inputs.repos.map((repo) => [repo.name, repo.index])),
+      Object.fromEntries(inputs.repos.map((repo) => [repo.name, repo.url]))
     ),
-  });
+  };
+}
+
+/**
+ * A parsed ref written back out as a reference, without its version range: the
+ * range says which version to use, never which thing is meant.
+ *
+ * @param parsed - The parsed ref.
+ */
+function refSearchString(parsed: ParsedRef): string {
+  const path = parsed.recipe === undefined ? parsed.namespace : `${parsed.namespace}/${parsed.recipe}`;
+  return parsed.repo === undefined ? path : `${parsed.repo}:${path}`;
 }
 
 /** The error a ref that could have meant several things raises. */
