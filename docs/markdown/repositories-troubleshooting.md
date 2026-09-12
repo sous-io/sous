@@ -80,7 +80,8 @@ Error: Sous has to ask whether to go ahead with subscribing to 'workflow/task-fi
 ```
 
 The `Why:` line says which of the three non-interactive conditions applied; they are listed under
-[In CI, and for agents](repositories-consuming.md#in-ci-and-for-agents). Answer ahead of time:
+[Run sous in CI, or from an agent](repositories-consuming.md#run-sous-in-ci-or-from-an-agent).
+Answer ahead of time:
 
 | Question | Answer it ahead of time with |
 |----------|------------------------------|
@@ -178,7 +179,7 @@ integration job, configure the identity of the account the release runs as, whic
 
 Sous re-checks a repository's index only once its freshness window has lapsed; the window and its
 default are described under
-[Freshness, always-pull, and the store](repositories-consuming.md#freshness-always-pull-and-the-store).
+[Control freshness and the store](repositories-consuming.md#control-freshness-and-the-store).
 A check is due when the repository has never been checked, when the window has lapsed, or when the
 last recorded check time is in the future (a clock moved under sous). Re-adding an already-trusted
 repository forces one; it refreshes the index and changes nothing else:
@@ -215,7 +216,7 @@ build points at the machine: a filesystem that reorders writes, or two accounts 
 
 To reclaim space rather than repair, run `sous repo gc --dry-run` to see what would go, then
 `sous repo gc`; what it evicts, and what it protects, is described under
-[Freshness, always-pull, and the store](repositories-consuming.md#freshness-always-pull-and-the-store).
+[Control freshness and the store](repositories-consuming.md#control-freshness-and-the-store).
 
 ## A lockfile written by an older sous
 
@@ -315,7 +316,7 @@ pins), and machine-wide links nobody on that project created all point at one ca
 sharing a `SOUS_HOME`.
 
 `$SOUS_HOME` defaults to `~/.sous`, and what it holds is laid out under
-[`.sous.entry.json` and the store](repositories-file-formats.md#sousentryjson-and-the-store). It is
+[The store on disk](repositories-file-formats.md#the-store-on-disk). It is
 per-user state, and nothing in it is locked against two people writing at once. It is also the one
 `SOUS_*` variable that may be set in an env file, because it does not decide which project is
 active, so a project needing its own store can say `SOUS_HOME=~/caches/sous-home` in

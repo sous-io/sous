@@ -274,7 +274,7 @@ change that: **always-pull**, which installs a newer in-range version whenever o
 the **freshness window** (`store.freshnessSeconds`, five minutes by default), which decides how
 often sous looks upstream at all. A failed check never breaks a build; the last good index stands
 and the build says so. See
-[Freshness, always-pull, and the store](repositories-consuming.md#freshness-always-pull-and-the-store).
+[Control freshness and the store](repositories-consuming.md#control-freshness-and-the-store).
 A **linked** repository sits outside all of it: `sous repo link` points one repository's
 resolution at a working copy on your machine, bypassing versions, the lockfile and freshness
 checks, so every build announces it loudly. See

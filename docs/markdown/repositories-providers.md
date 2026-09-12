@@ -118,7 +118,7 @@ every machine-wide thing keys by:
 A repository's **short name** (`sous-recipes`) is something your project chose, and it keys
 nothing shared: two projects may call one repository different things, and two may use one name
 for different repositories. Keying by identity is what lets them share one cached copy without
-colliding. See [The store on disk](repositories-file-formats.md#sousentryjson-and-the-store).
+colliding. See [The store on disk](repositories-file-formats.md#the-store-on-disk).
 
 Canonicalizing also produces the two clone URLs sous hands to git, `https://<host>/<owner>/<name>.git`
 and `git@<host>:<owner>/<name>.git`. For the `local` provider the HTTPS slot carries the
@@ -209,7 +209,7 @@ That second line is the `contribute` field from the repository's `sous.repo.yaml
 whenever a provider cannot carry the proposal, so a contributor is never left without a route. A
 manifest that sets none gets "This repository's manifest does not say where to send a change, so
 send it the way its maintainers prefer." Set the field in your own repository for the same reason;
-see [the repository manifest](repositories-file-formats.md#sousrepoyaml).
+see [the repository manifest](repositories-file-formats.md#sousrepoyaml-the-repository-manifest).
 
 ## Self-hosted GitLab
 

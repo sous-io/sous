@@ -60,8 +60,8 @@ contents:
 relative to the recipe folder (and optional `exclude` patterns). The four kinds are `skills`, `memories`,
 `prompts` and `config`; the kind decides where files land, which the subscriber maps with
 [`recipeOutputs`](repositories-file-formats.md#configuration-keys). Field tables are in the
-[recipe manifest](repositories-file-formats.md#sousrecipeyaml) reference, and recipe metadata is the source of
-truth for the version: never edit `sous.index.json` by hand.
+[recipe manifest](repositories-file-formats.md#sousrecipeyaml-the-recipe-manifest) reference, and recipe
+metadata is the source of truth for the version: never edit `sous.index.json` by hand.
 
 A recipe's files compile exactly the way a project's own `entryGlob` target does, so the `.tpl.` convention applies
 unchanged inside a recipe: `note.tpl.md` is rendered through LiquidJS and lands as `note.md`, and a file without

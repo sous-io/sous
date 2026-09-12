@@ -277,8 +277,8 @@ one is written where that answer lives, and a value the shell supplies is never 
 ## Answer without a terminal
 
 Sous never hangs waiting on a prompt it cannot show; what counts as "no terminal" is listed under
-[In CI, and for agents](repositories-consuming.md#in-ci-and-for-agents). Such a run fails on the unanswered
-required variables, naming every environment variable that would satisfy each one:
+[Run sous in CI, or from an agent](repositories-consuming.md#run-sous-in-ci-or-from-an-agent). Such a run
+fails on the unanswered required variables, naming every environment variable that would satisfy each one:
 
 ```text
   Error: 1 variable still needs an answer, and there is no terminal to ask on.
