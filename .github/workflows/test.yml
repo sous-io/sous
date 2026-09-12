@@ -1,0 +1,55 @@
+name: Tests
+
+# Every pull request is tested, whatever branch it targets, and so is every
+# push to main, so a merge that lands without a pull request is still covered.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+# Nothing in this workflow writes anything back to the repository.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Node ${{ matrix.node-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      # One failing version should not cancel the other; both results are
+      # useful when a failure is version specific.
+      fail-fast: false
+      matrix:
+        node-version:
+          - 20
+          - 22
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          # Caches the npm download directory, keyed on package-lock.json.
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The build is the type check; sous itself always runs from TypeScript
+      # source, so nothing here depends on the compiled output.
+      - name: Type check
+        run: npm run build
+
+      # Several integration tests make commits in temporary git repositories.
+      # They configure an identity themselves, and these variables are a second
+      # layer of the same thing, so a runner with no global git identity cannot
+      # fail a commit.
+      - name: Test
+        run: npm test
+        timeout-minutes: 15
+        env:
+          GIT_AUTHOR_NAME: Sous Test
+          GIT_AUTHOR_EMAIL: test@example.invalid
+          GIT_COMMITTER_NAME: Sous Test
+          GIT_COMMITTER_EMAIL: test@example.invalid
