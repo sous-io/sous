@@ -101,8 +101,10 @@ subscribes:
   - quality/code-review
 ```
 
-Both name their targets by **location**, never by a short name a consuming project chose, and a
-curated bundle is simply a recipe made mostly of `subscribes` entries. Because both lists are
+Both name their targets by location, written as a **locator URL**
+([the grammar](repositories-file-formats.md#dependencies-named-by-location)) when the target lives
+in another repository, never by a short name a consuming project chose; a curated bundle is simply
+a recipe made mostly of `subscribes` entries. Because both lists are
 declarative YAML rather than code, sous can read the whole dependency closure before fetching any
 of it, which is what makes the trust decision answerable up front.
 

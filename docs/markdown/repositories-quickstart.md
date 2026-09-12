@@ -244,7 +244,7 @@ in `.sous/conf.d/500-repos.jsonc`, which is committed, so a colleague inherits t
 the trust decision together.
 
 !> A repository on your own disk goes through the same question as a hosted one; its recipes still
-run on this machine. A local path is machine-specific, so a colleague cloning your project needs
+run on this machine, and [Trust](repositories.md#trust) says what the decision covers. A local path is machine-specific, so a colleague cloning your project needs
 that path to exist, or needs the repository pushed somewhere they can reach. To edit a repository
 your project already subscribes to, use
 [`sous repo link`](repositories-authoring.md#edit-a-repository-in-place) instead.
@@ -319,9 +319,8 @@ $ sous build
 ✓ Done.
 ```
 
-Restore decides nothing: it never resolves a range, never picks a newer version and never prompts.
-Anything that would change what is installed changes the lockfile first, as a diff you can read in
-review.
+Nothing was resolved and nothing was asked, because the lockfile already said what to fetch; see
+[The lockfile](repositories.md#the-lockfile) for why restore decides nothing.
 
 ?> The store those recipes were restored into, `$SOUS_HOME/cache`, is machine-wide and disposable;
 everything in it is re-fetchable from a lockfile pin. `SOUS_HOME` moves it, and is what step 1 set

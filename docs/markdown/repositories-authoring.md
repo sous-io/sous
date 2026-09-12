@@ -150,7 +150,7 @@ subscribes:
 ```
 
 A **bare ref** is a sibling in this repository; with no range it means "the version released alongside me", since
-one run cuts both tags and records the exact version in the index. A **locator URL** names another repository,
+one run cuts both tags and records the exact version in the index. A locator URL names another repository,
 and its last two segments are always the namespace and the recipe, which is the recipe's published **identity and
 never a path on disk**: a recipe stored at `recipes/shared/sat/` and published as `workflow/sat` is written
 `github://owner/repo/workflow/sat`. Everything before them is the repository, a dotted first segment naming the

@@ -5,8 +5,9 @@ and [Repository file formats](repositories-file-formats.md) holds every schema.
 
 ## Add a repository
 
-Adding a repository is how you trust it, so it is the one step that asks a question. Exactly one
-file is fetched, its `sous.index.json`, which is all sous needs to resolve refs and list versions:
+Adding a repository is how you trust it, so it is the one step that asks a question, and what that
+decision covers is [Trust](repositories.md#trust). Exactly one file is fetched, its
+`sous.index.json`, which is all sous needs to resolve refs and list versions:
 
 ```term
 $ sous repo add https://github.com/sous-io/sous-recipes
@@ -36,8 +37,9 @@ through the built-in `local` provider, which resolves it against your working di
 the absolute form; [The local provider](repositories-providers.md#the-local-provider) covers how it
 reads the working tree and honors a version's tag.
 
-!> A local path goes through the same trust question as a hosted one. To edit a repository you
-already subscribe to, use [`sous repo link`](repositories-authoring.md#edit-a-repository-in-place).
+!> A local path goes through the same trust question as a hosted one; see
+[Trust](repositories.md#trust). To edit a repository you already subscribe to, use
+[`sous repo link`](repositories-authoring.md#edit-a-repository-in-place).
 
 ## Find a recipe
 

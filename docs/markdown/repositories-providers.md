@@ -124,7 +124,7 @@ Canonicalizing also produces the two clone URLs sous hands to git, `https://<hos
 and `git@<host>:<owner>/<name>.git`. For the `local` provider the HTTPS slot carries the
 absolute directory, because that is what git is given when a recipe is fetched.
 
-?> A published manifest names a dependency in another repository by a **locator URL** whose
+?> A published manifest names a dependency in another repository by a locator URL whose
 scheme is the provider's identifier: `github://sous-io/sous-recipes/workflow/sat@^1.1`. A first
 segment containing a dot is read as the host, so `gitlab://gitlab.example.com/group/project/ns/recipe`
 addresses a self-hosted instance; without one, the provider's public host is assumed. `local://`
