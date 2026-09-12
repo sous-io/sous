@@ -140,10 +140,11 @@ like `workflow/qa-helper` above, is fetched and pinned but stays out of your out
 
 ## Choose where the files land
 
-Recipe files compile the way one of your own `entryGlob` targets does: a file with `.tpl.` in its
+Recipe files compile the way one of your own `entryGlob` targets does, under the
+[`.tpl.` convention](configuration.md#templates-and-the-tpl-convention): a file with `.tpl.` in its
 name is rendered through LiquidJS and loses `.tpl.` on the way out, and anything else is copied
 verbatim. Where each content kind lands is your project's decision, under the
-[`recipeOutputs`](repositories-file-formats.md#configuration-keys) config key, which takes a list of
+[`recipeOutputs`](repositories-file-formats.md#recipeoutputs-where-the-files-land) config key, which takes a list of
 directories for each of `skills`, `memories` and `prompts`; for example
 `recipeOutputs: { skills: ["${projectRoot}/.claude/skills", "${projectRoot}/.codex/skills"] }`.
 Only `skills` has a default, `<project root>/.claude/skills`, because that is where every agent

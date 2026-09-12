@@ -134,11 +134,13 @@ now lists the five `core` skills plus the seven this recipe ships, among them `a
 `start-task` and `resume-task`. The build dependency contributes nothing: a recipe held through
 `depends` is fetched and pinned, and its files stay out of your output.
 
-Recipe files compile the way your own targets do: a file with `.tpl.` in its name is rendered
-through LiquidJS and loses that segment (`SKILL.tpl.md` becomes `SKILL.md`), and any other file is
-copied verbatim. They are tracked like every file sous writes, so `sous prune` removes them when
-you unsubscribe. Where each kind lands is your project's decision, under
-[`recipeOutputs`](repositories-file-formats.md#configuration-keys).
+Recipe files compile the way your own targets do, under the
+[`.tpl.` convention](configuration.md#templates-and-the-tpl-convention): a file with `.tpl.` in
+its name is rendered through LiquidJS and loses that segment (`SKILL.tpl.md` becomes `SKILL.md`),
+and any other file is copied verbatim. They are tracked like every file sous writes, so
+`sous prune` removes them when you unsubscribe. Where each kind lands is your project's decision,
+under
+[`recipeOutputs`](repositories-file-formats.md#recipeoutputs-where-the-files-land).
 
 ## 6. Start a repository of your own
 

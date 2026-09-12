@@ -269,7 +269,7 @@ $ sous build
 ```
 
 Skills default to `<project root>/.claude/skills`; every other content kind needs a destination in
-the [`recipeOutputs`](repositories-file-formats.md#configuration-keys) block.
+the [`recipeOutputs`](repositories-file-formats.md#recipeoutputs-where-the-files-land) block.
 
 By default a build uses what the lockfile pins and does not talk to the network. Two things
 change that: **always-pull**, which installs a newer in-range version whenever one exists, and
@@ -309,6 +309,20 @@ Every directory sous creates for its own bookkeeping explains itself: the first 
 one it writes a short `README.md` saying what the directory is, who writes to it, whether you may
 edit it and whether it is committed, plus an `AGENTS.md` and a `CLAUDE.md` pointing at that
 README. None is ever overwritten, and directories holding rendered output are left alone.
+
+## Including recipe files in your own templates
+
+A template may pull in a file from a recipe through the reserved `~` sigil, naming the recipe's
+published identity and then the path inside it, on a line of its own:
+
+```text
+@~workflow/qa-helper/_partials/review-steps.md
+```
+
+The `~` is required. A bare `@path` is always a relative path or a declared alias, so an include
+line can never quietly stop meaning a file on disk. Inside a recipe, `~<namespace>` resolves only
+against that recipe's own `depends` and `subscribes` at the versions the lockfile pins, and the
+path after the recipe name may not be absolute or hold a `.` or `..` segment.
 
 ## Where to go next
 

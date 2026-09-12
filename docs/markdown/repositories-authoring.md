@@ -59,18 +59,15 @@ contents:
 `contents` groups are what a subscribing project receives, one group per kind, each with `include` glob patterns
 relative to the recipe folder (and optional `exclude` patterns). The four kinds are `skills`, `memories`,
 `prompts` and `config`; the kind decides where files land, which the subscriber maps with
-[`recipeOutputs`](repositories-file-formats.md#configuration-keys). Field tables are in the
+[`recipeOutputs`](repositories-file-formats.md#recipeoutputs-where-the-files-land). Field tables are in the
 [recipe manifest](repositories-file-formats.md#sousrecipeyaml-the-recipe-manifest) reference, and recipe
 metadata is the source of truth for the version: never edit `sous.index.json` by hand.
 
-A recipe's files compile exactly the way a project's own `entryGlob` target does, so the `.tpl.` convention applies
-unchanged inside a recipe: `note.tpl.md` is rendered through LiquidJS and lands as `note.md`, and a file without
-`.tpl.` in its name is copied verbatim. A template may include a file from a recipe it depends on through the
-reserved `~` sigil, naming the dependency's published identity then the path inside it, as in
-`@~workflow/qa-helper/_partials/review-steps.md` on a line of its own. The `~` is required: a bare `@path` is
-always a relative path or a declared alias, so an include line can never quietly stop meaning a file on disk.
-Inside a recipe, `~<namespace>` resolves only against that recipe's own `depends` and `subscribes` at their pinned
-versions, and the path after the recipe name may not be absolute or contain `.` or `..` segments.
+A recipe's files compile exactly the way a project's own `entryGlob` target does, so the
+[`.tpl.` convention](configuration.md#templates-and-the-tpl-convention) applies unchanged inside a recipe. A
+template may include a file from a recipe this one depends on through the reserved `~` sigil, resolved against
+this recipe's own `depends` and `subscribes` at their pinned versions; see
+[Including recipe files in your own templates](repositories.md#including-recipe-files-in-your-own-templates).
 
 ## Declare the variables a recipe needs
 
