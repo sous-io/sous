@@ -21,9 +21,9 @@ Nothing there clones a whole repository. A provider that can also carry a contri
 the **write path**: report whether its command line tool is installed and signed in, say whether
 you may push to the repository itself, fork it onto your account, and open the proposal.
 
-Each provider declares the features it really has, `fetch` and `submit`, and sous consults that
-list rather than a provider's name. Asking a provider for something outside its features is
-refused with a sentence naming the provider and the feature, never a crash.
+Each provider declares which of the two features, `fetch` and `submit`, it genuinely answers, and
+sous consults that declaration rather than a provider's name. Asking for something outside a
+provider's features is refused with a sentence naming it and what it cannot do, never a crash.
 
 ## How a URL is matched
 
@@ -51,7 +51,10 @@ a GitLab group path of any depth (`group/subgroup/project`) is carried whole.
 `local` is tried last and matches only a path, so it can never intercept a hosted URL. A path
 you type relative (`../my-recipes`, `~/recipes`, `.`) is expanded and resolved against your
 working directory before any provider sees it, and the absolute form is what gets stored; a
-repository on this machine is machine-specific either way.
+repository on this machine is machine-specific either way. In a config file that same relative path
+is refused outright, because an entry is read from a file that several working directories may run
+against; see
+[A local repository named by a relative path](repositories-troubleshooting.md#a-local-repository-named-by-a-relative-path).
 
 ### Naming a provider explicitly
 
@@ -71,8 +74,7 @@ Error: The gitlab provider does not handle https://github.com/sous-io/sous-recip
   Drop '--provider' and let sous work it out, or name 'github'.
 ```
 
-With no provider named and no provider recognizing the host, sous says so and points at the flag
-that resolves it:
+With no provider named and nothing recognizing the host, sous says so and points at the flag:
 
 ```text
 Error: Sous does not recognize the host in the repository URL
@@ -99,13 +101,12 @@ lowercased and with any `.git` suffix gone:
 ```text
 github.com/sous-io/sous-recipes
 gitlab.example.com/group/subgroup/project
-localhost/home/me/Projects/my-recipes
+localhost/home/me/projects/my-recipes
 ```
 
 A local repository's identity uses the host `localhost` and the directory's parent path as its
-owner, so a path on disk keys exactly the way a hosted repository does.
-
-Identity is what every machine-wide thing keys by:
+owner, so a path on disk keys exactly the way a hosted repository does. Identity is then what
+every machine-wide thing keys by:
 
 | Keyed by identity | Looks like |
 |---|---|
@@ -115,10 +116,9 @@ Identity is what every machine-wide thing keys by:
 | the lockfile's `identity` field | `github.com/sous-io/sous-recipes` |
 
 A repository's **short name** (`sous-recipes`) is something your project chose, and it keys
-nothing shared: two projects may call the same repository different things, and two projects may
-use the same name for different repositories. Keying by identity is what lets those projects
-share one cached copy without colliding. See
-[The store on disk](repositories-file-formats.md#the-store-on-disk).
+nothing shared: two projects may call one repository different things, and two may use one name
+for different repositories. Keying by identity is what lets them share one cached copy without
+colliding. See [The store on disk](repositories-file-formats.md#sousentryjson-and-the-store).
 
 Canonicalizing also produces the two clone URLs sous hands to git, `https://<host>/<owner>/<name>.git`
 and `git@<host>:<owner>/<name>.git`. For the `local` provider the HTTPS slot carries the
@@ -159,8 +159,14 @@ Sous could not fetch the repo index from https://raw.githubusercontent.com/acme/
   not exist.
 ```
 
-A 401 or 403 says the repository is private or the request was not authorized, and names the two
-token sources.
+A 401 or 403 says the repository is private or was not authorized, and points at the two sources:
+
+```text
+Sous could not fetch the repo index from https://raw.githubusercontent.com/acme/recipes/HEAD/sous.index.json.
+  The server answered 403 Forbidden.
+  The repository is private or the request was not authorized. Sous uses a token from the
+  environment, or from the provider's command line tool when one is installed and signed in.
+```
 
 **A recipe's files** come from git itself: a shallow, blobless, sparse clone at the version's
 tag, fetching only the blobs inside that one recipe folder. That means git's own credentials
@@ -168,10 +174,9 @@ apply, exactly as they would for a manual clone: credential helpers, the SSH age
 `insteadOf` rewrites are all inherited from your git configuration, and sous adds nothing of its
 own. Cloning a working copy with `sous repo link` works the same way.
 
-?> The practical consequence: for a private repository, make sure both halves work. `gh auth
-login` (or `GITHUB_TOKEN`) covers the index, and a git credential helper or an SSH key covers
-the recipe files. A build that finds the index but cannot clone has only the second half
-missing.
+?> For a private repository, make sure both halves work. `gh auth login` (or `GITHUB_TOKEN`)
+covers the index, and a git credential helper or an SSH key covers the recipe files. A build that
+finds the index but cannot clone has only the second half missing.
 
 ## Proposing a change
 
@@ -185,31 +190,26 @@ remote. Providers differ, and sous says so rather than pretending otherwise:
 | `gitlab` | `glab` | sous cannot tell, so it pushes to `origin` and says so | not done for you | merge request |
 | `local` | none | not applicable | not applicable | not applicable |
 
-Two of those rows are worth reading carefully.
-
 **GitLab reports "cannot tell" rather than guessing.** Sous has no cheap, reliable way to ask
 whether you may push, and a wrong guess would send you down a fork path this provider cannot
-finish. So the submission announces that it could not tell, pushes to `origin` as it stands, and
-`sous repo submit` asks you to fork the project and push there yourself if that push is refused.
+finish. So the submission announces that it could not tell and pushes to `origin` as it stands. If
+that push is refused, the command stops at the push step and reports git's own error alongside
+everything it had already done; forking the project and pushing there is then a manual route.
 
-**A local repository never submits.** It declares `fetch` only, so the write path is refused by
-name:
+**A local repository never submits.** It declares `fetch` only, so `sous repo submit` stops before
+anything is written and prints the repository's own contribution route instead:
 
 ```text
-Error: The 'local' provider does not support the 'submit' feature, so sous cannot propose a
-  change to it.
-  A provider answers only what its features promise; this one promises 'fetch'.
+Error: The 'local' provider cannot propose a change on your behalf.
+  This repository asks that changes be sent this way:
+    https://github.com/sous-io/sous-recipes/blob/main/CONTRIBUTING.md
 ```
 
-Whenever a provider cannot carry the proposal, sous prints the `contribute` pointer from the
-repository's `sous.repo.yaml`, so a contributor is never left without a route:
-
-```yaml
-contribute: https://github.com/sous-io/sous-recipes/blob/main/CONTRIBUTING.md
-```
-
-Set that field in your own repository for the same reason; see
-[the repository manifest](repositories-file-formats.md#sousrepoyaml-the-repository-manifest).
+That second line is the `contribute` field from the repository's `sous.repo.yaml`; sous prints it
+whenever a provider cannot carry the proposal, so a contributor is never left without a route. A
+manifest that sets none gets "This repository's manifest does not say where to send a change, so
+send it the way its maintainers prefer." Set the field in your own repository for the same reason;
+see [the repository manifest](repositories-file-formats.md#sousrepoyaml).
 
 ## Self-hosted GitLab
 
@@ -228,10 +228,18 @@ provider once, on the repository entry:
 }
 ```
 
+That block goes at the top level of your primary config or of a `conf.d/` layer of your own; sous
+writes its own entries to the `conf.d/500-repos.jsonc` layer it manages. Every key is listed under
+[configuration keys](repositories-file-formats.md#configuration-keys).
+
 Everything downstream then works normally: the index is read from that host's own raw endpoint,
-`GITLAB_TOKEN` or `glab` supplies the token, the identity is `git.example.com/platform/recipes`,
-and `sous repo submit` opens a merge request there. Group paths of any depth are preserved, so
+`GITLAB_TOKEN` or `glab` supplies the token, and the identity is
+`git.example.com/platform/recipes`. Group paths of any depth are preserved, so
 `group/subgroup/project` stays one repository rather than being mistaken for a namespace.
+
+`sous repo submit` is the exception: it runs inside the repository checkout and never reads a
+project's config, so it picks the provider from the `origin` remote URL alone. A host that does not
+begin with `gitlab.` goes unrecognized there, and sous prints the repository's `contribute` pointer.
 
 ## The local provider
 
@@ -242,6 +250,7 @@ the `local` provider:
 $ sous repo add ../my-recipes --name my-recipes --trust
 // sous resolves the path, reads the index and records the absolute form
 Repository: my-recipes
+Location  : /home/me/Projects/my-recipes
 Provider  : local
 ```
 
@@ -249,17 +258,15 @@ It exists for local development and for tests: authoring a repository, trying a 
 publishing it, or running a whole workflow with no network at all. Two details make it behave
 like a host rather than like a shortcut.
 
-- The index is read from the **working tree** when `sous.index.json` is there, so an index you
-  are still writing is picked up without a commit, and from `git show HEAD:sous.index.json`
-  otherwise.
+- The index is read from the **working tree** when `sous.index.json` is there, so an index you are
+  still writing is picked up without a commit, and from `git show HEAD:sous.index.json` otherwise.
 - A recipe's files come from a clone of the local repository at the version's **tag**, exactly as
   a hosted repository would be fetched, so a version really is the version its tag points at. A
   directory that is not a git repository, or one missing that tag, has no versions to honor, so
   its working tree is copied instead.
 
-!> Trust semantics are identical to a hosted repository. A local path is added, and therefore
-trusted, through the same ceremony, because the recipes in it still run on this machine. "It is
-already on my disk" is not a reason to skip the question. See [Trust](repositories.md#trust).
+!> A local path is added, and therefore trusted, through the same ceremony as a hosted
+repository, because its recipes still run on this machine. See [Trust](repositories.md#trust).
 
 A path that is not a repository is explained as a path mistake rather than as a provider
 failure, naming what you typed, what sous resolved it to, and what it expected to find:
@@ -278,19 +285,12 @@ one repository's resolution at a working copy without changing what your project
 ## Adding a provider
 
 Adding a provider is one file plus one line. The interface is internal for now, not a published
-plugin API, so it can still change shape; what follows is what a new provider writes today.
-
-A provider class extends `ProviderBase` (`src/lib/repos/providers/base.ts`), which carries the
-plumbing no provider should repeat:
-
-| Inherited member | What it does |
-|---|---|
-| `runCommand(command, args, options)` | runs a subprocess through the injectable runner and returns its code, stdout and stderr; a command that cannot start comes back as exit code 127 |
-| `commandSucceeds(command, args, options)` | true when the command exited zero, for checks whose answer is the exit code (`auth status`) |
-| `capturedOutput(command, args, options)` | the command's trimmed stdout, or undefined when it failed or is not installed |
-| `findToken(envName, args, options)` | the environment variable first, then the provider's own tool; undefined is a normal answer |
-| `authStatus`, `canPush`, `fork`, `proposeChange` | default to a refusal naming the provider and the `submit` feature, so a caller that skips the feature check gets a sentence rather than a type error |
-| `unsupported(feature, what)` | builds that refusal, listing what the provider does promise |
+plugin API, so it can still change shape; what follows is what a new provider writes today. A
+provider class extends `ProviderBase`, which carries the plumbing no provider should repeat:
+running a subprocess through the injectable runner, checking whether a tool exited cleanly,
+capturing its output, finding a host token, and refusing every write-path call by name until a
+subclass overrides it. Each member is documented where it lives, in
+`src/lib/repos/providers/base.ts`.
 
 The subclass supplies the rest:
 
@@ -316,4 +316,5 @@ layer touches the network. The last change is adding the class to the built-in p
 - [Authoring a repository](repositories-authoring.md): releasing and contributing
 - [Repository file formats](repositories-file-formats.md): every manifest, index and lockfile
   schema
+- [Troubleshooting](repositories-troubleshooting.md): what the errors mean and how to clear them
 - [Command reference](commands.md): every command and flag
