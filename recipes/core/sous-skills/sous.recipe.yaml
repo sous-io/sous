@@ -26,6 +26,7 @@ contents:
 
 variables:
   - name: skillsRoot
+    env: SKILLS_ROOT
     type: path
     prompt: Where should this project's own skills be kept?
     description: >-
