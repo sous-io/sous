@@ -249,9 +249,11 @@ the `local` provider:
 ```term
 $ sous repo add ../my-recipes --name my-recipes --trust
 // sous resolves the path, reads the index and records the absolute form
-Repository: my-recipes
-Location  : /home/me/Projects/my-recipes
-Provider  : local
+▶ Adding a repository:
+    Repository: my-recipes
+    Location  : /home/me/Projects/my-recipes
+    Provider  : local
+// the namespace and recipe rows are left out here
 ```
 
 It exists for local development and for tests: authoring a repository, trying a recipe before

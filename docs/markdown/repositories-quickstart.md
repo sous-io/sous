@@ -230,7 +230,9 @@ One repository has to be trusted before this can continue.
     Required: my-recipes (required by this project)
 // then what trusting means, and the question
 ? Do you trust this repository? (y/N) y
+▶ Adding a repository:
     Repository: my-recipes
+    Location  : /home/you/projects/my-recipes
     Provider  : local
     Namespaces: workflow
     Recipes   : 1

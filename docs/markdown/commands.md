@@ -32,9 +32,9 @@ has no `.sous/` directory to discover. All three still take `--non-interactive`.
 exception to the rule above: without `-f` it asks even under `--non-interactive` or `CI`, so pass `-f` whenever
 you script it. `sous repo init --force` is not a confirmation; it overwrites a repository that already exists.
 
-Sous asks only when it is attached to a terminal in both directions, was not passed `--non-interactive`, and is
-not under a `CI` variable set to anything but `0`, `false`, `no` or `off`. Piping output, redirecting it to a
-file and running in CI therefore do what the flag does: a run that needs an answer fails, saying why.
+Sous asks a question only when it can; piping output, redirecting it to a file and running in CI therefore do
+what `--non-interactive` does, and a run that needs an answer fails saying why. The exact conditions are listed
+under [When sous cannot ask](repositories-consuming.md#when-sous-cannot-ask).
 
 Help has four spellings. `sous --help` prints the root screen; `sous repo add --help`, `sous repo add -h` and
 `sous help repo add` all print that one command's. `sous help` alone lists the topics and commands, and
@@ -107,14 +107,17 @@ cycles and undefined `${var}` references. Example: `sous config validate`
 
 ## repo
 
-Manages the recipe repositories this project trusts; see [Consuming recipes](repositories-consuming.md).
+Manages the recipe repositories this project trusts; see [Repositories](repositories.md) for the model and
+[Consuming recipes](repositories-consuming.md) for the workflow.
 
 ### `sous repo add URL`
 Adds a repository to this project, which is also how you trust it, and fetches its index so its recipes are
 listable. `URL` is the repository's address, or the path of one on this machine. Takes `--dry-run`.
 
-- `--name <name>`: set the short name refs will use. Defaults to the URL's last segment.
-- `--provider github|gitlab|local`: name the provider, for a host the URL does not give away.
+- `--name <name>`: set the short name refs will use. Defaults to the URL's last segment. (`sous repo link` on
+  a path instead takes the name that checkout's own manifest suggests.)
+- `--provider github|gitlab|local`: name the provider, for a host the URL does not give away; each provider's
+  behaviour is in the [provider reference](repositories-providers.md).
 - `-y, --yes`: answer the trust question ahead of time (also `-f`, `--force`, `--trust`).
 
 Example: `sous repo add https://github.com/sous-io/sous-recipes --name recipes`
@@ -145,7 +148,8 @@ Collects the machine-wide recipe store down to its size cap. `--max-bytes <n>` c
 the one the config sets; `--dry-run` prints what it would evict. Example: `sous repo gc --max-bytes 268435456`
 
 ### `sous repo link REPO [PATH]`
-Points a repository at a working copy on this machine instead of a published version. A name or URL on its own
+Points a repository at a working copy on this machine instead of a published version; see
+[Edit a repository in place](repositories-authoring.md#edit-a-repository-in-place). A name or URL on its own
 clones it into `.sous/repos` and links the clone; a name or URL with a `PATH` links the checkout at that path; a
 path alone links that checkout where it is, adding the repository first if needed. Takes `--dry-run`.
 
@@ -318,3 +322,6 @@ or `off` and every reported failure prints its stack to standard error underneat
 Every listing fits itself to the terminal it runs in: columns shrink, descriptions wrap, and a path or URL is
 cut in the middle so the host and the last segment both survive. On a terminal too narrow, the least important
 columns step aside and a line under the table names them; nothing is hidden when the output is not a terminal.
+
+For what a particular repository error is telling you, and how to clear it, see
+[Repositories troubleshooting](repositories-troubleshooting.md).

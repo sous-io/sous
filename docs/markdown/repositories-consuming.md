@@ -11,6 +11,7 @@ file is fetched, its `sous.index.json`, which is all sous needs to resolve refs 
 ```term
 $ sous repo add https://github.com/sous-io/sous-recipes
 // the trust question, then one small download
+▶ Adding a repository:
     Repository: sous-recipes
     Location  : https://github.com/sous-io/sous-recipes
     Provider  : github
@@ -19,7 +20,10 @@ $ sous repo add https://github.com/sous-io/sous-recipes
   This project now trusts 'sous-recipes'. Nothing from it has been installed.
 ```
 
-`--name` sets the short name refs will use (it defaults to the last segment of the URL), and
+`--name` sets the short name refs will use (it defaults to the last segment of the URL; `sous repo
+link` on a path instead takes the name that checkout's own manifest suggests, so see
+[Edit a repository in place](repositories-authoring.md#edit-a-repository-in-place) before you name
+the same repository twice), and
 `--provider github|gitlab|local` names the [provider](repositories-providers.md#how-a-url-is-matched)
 for a host the URL does not give away. `--dry-run` prints what would change without trusting or
 fetching anything, and `-y` accepts trust without being asked; its other spellings are under
