@@ -49,30 +49,64 @@ See the `files` allowlist in `package.json` (an allowlist, so there is no `.npmi
 `bin/sous` and everything else stays out by default). `repository.url` must keep matching the
 GitHub repo exactly; npm's trusted publishing validates it at publish time.
 
-Releases go through trusted publishing (OIDC, tokenless): pushing a `v*` tag triggers
-`.github/workflows/publish.yml`, which needs `id-token: write` and npm >= 11.5.1. The
-trusted publisher is configured on npmjs.com (package Settings, then Trusted publishing:
-org `sous-io`, repo `sous`, workflow `publish.yml`). To release: bump `version` in
-`package.json`, bump `recipes/core/sous-skills/sous.recipe.yaml` to the SAME version (see
-below), sync the lockfile (`npm install --package-lock-only`), commit, push, then
-`git tag v<version> && git push origin v<version>`. No local `npm publish`, and no GitHub
-Releases required (the `gh` CLI is not assumed to exist).
+**Every merge to main publishes.** There is no release ritual and nothing to remember.
+`.github/workflows/publish.yml` runs on every push to `main` and on `workflow_dispatch`,
+as three jobs in sequence:
+
+1. `version` works out the version, writes it, commits and tags it.
+2. `publish` checks out that tag and publishes to npm.
+3. `recipes` pushes the matching core recipe to `sous-io/sous-recipes`.
+
+The version job follows the **already versioned** rule: if `package.json` names a version
+that has no `v<version>` tag yet, somebody set it deliberately in the merged pull request
+and it is published as it stands; otherwise that version already shipped, so the merge
+takes the next PATCH. So a minor or a major release is a version edit inside an ordinary
+pull request, and everything else is a patch. The job applies the version to
+`package.json`, `package-lock.json` and `recipes/core/sous-skills/sous.recipe.yaml`
+(`npm run version:sync`), commits it as `chore: release v<version> [skip ci]` under a bot
+identity, and creates the annotated tag. **The tag is a record of what was published;
+nothing triggers on it.** The job needs `contents: write` to push the commit and the tag.
+
+The **loop guard** is that release commit's own message: this workflow pushes to `main`,
+so the version job stands down when the head commit message contains `[skip ci]` or
+`chore: release`. Never write either phrase into an ordinary commit to main, or that merge
+will not release.
+
+Publishing goes through trusted publishing (OIDC, tokenless), so the `publish` job needs
+`id-token: write` and npm >= 11.5.1, and there is no local `npm publish` and no GitHub
+Release to cut (the `gh` CLI is not assumed to exist). The trusted publisher is configured
+on npmjs.com (package Settings, then Trusted publishing: org `sous-io`, repo `sous`,
+workflow `publish.yml`), and it is bound to that **workflow file name**: renaming
+`publish.yml` breaks publishing until the npm setting is changed by hand. The `name:` field
+inside the file is free.
+
+`workflow_dispatch` takes an optional `tag` input. Given a tag, the version job is skipped
+and `publish` and `recipes` run again for that existing tag, which is how a run that failed
+after tagging is finished off. Left empty, it releases whatever `main` holds, exactly as a
+merge would. A `concurrency` group serializes releases so two merges cannot race for the
+patch number.
 
 **Core recipe parity.** The `core` namespace exists in two places and they must never
 disagree: `recipes/core/sous-skills/` inside this package (the source of truth, and the
 offline seed) and `core/sous-skills` in `sous-io/sous-recipes` (machine-written distribution
 output). The packaged recipe's version is always exactly the package's version, because every
 project's implicit `core` subscription asks for exactly the running sous version.
-`src/lib/repos/core-recipe.spec.ts` fails the build when the two version numbers drift.
+`src/lib/repos/core-recipe.spec.ts` fails the build when the two version numbers drift, and
+`npm run version:sync` (`scripts/sync-core-version.mts`, built on `setRecipeVersion` in
+`src/lib/repos/release/bump.ts`) is what puts them back in step. It is idempotent: a recipe
+already at the package version is not rewritten, so a hand-written manifest is never
+reflowed.
 
-`.github/workflows/publish-recipes.yml` keeps the published copy in step. It runs on
-`workflow_run` after `publish.yml` succeeds (a separate workflow, so publish.yml and its OIDC
-permissions are never edited for this, and the recipe repository's write key never shares a run
-with the npm publishing token), verifies the packaged version matches the tag, copies the
-recipe over the published one, regenerates the index with the sous version just published, and
-commits and pushes the release tag. It needs one repository secret, installed BY HAND:
-`SOUS_RECIPES_DEPLOY_KEY`, the private half of an SSH key whose public half is a write-enabled
-deploy key on `sous-io/sous-recipes`.
+The `recipes` job in `publish.yml` keeps the published copy in step. It runs only after the
+npm publish it `needs`, re-checks version parity, copies the packaged recipe over the
+repository's copy and COMMITS that copy (a release refuses to run against a dirty tree),
+waits for the new version to be installable, then runs
+`npx @sous-io/sous@<version> repo release --ci --push` inside the checkout, which
+regenerates the index, commits it, tags each version and pushes. The job holds
+`contents: read` and no `id-token`, so the recipe repository's write key and the npm
+publishing token never sit in the same job. It needs one repository secret, installed BY
+HAND: `SOUS_RECIPES_DEPLOY_KEY`, the private half of an SSH key whose public half is a
+write-enabled deploy key on `sous-io/sous-recipes`.
 
 ## Project Structure
 
@@ -221,8 +255,8 @@ scripts/
 sous.config.schema.json    # committed JSON Schema artifact; shipped in the npm files allowlist
 .github/workflows/
   test.yml                 # install, type-check and run the suite on Node 20 and 22
-  publish.yml              # npm trusted publishing on a v* tag (OIDC, tokenless)
-  publish-recipes.yml      # pushes the core recipe to sous-io/sous-recipes after that succeeds
+  publish.yml              # the whole release: version, npm publish (OIDC), core recipe
+                           #   (the file name is bound to npm's trusted publisher)
 docs/                      # the GitHub Pages site (sous-io.github.io/sous)
   index.html               # the animated GSAP presentation page
   markdown/                # the documentation shell (docsify, client-side markdown render)

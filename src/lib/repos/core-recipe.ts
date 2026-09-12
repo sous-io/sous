@@ -12,9 +12,10 @@
  *     version of the sous package shipping it, and the implicit `core`
  *     subscription's range is exactly the running sous version. Core therefore
  *     always matches the CLI, and upgrading sous upgrades core with it.
- *     `core-recipe.spec.ts` enforces the first half of that rule; the release
- *     pipeline (`.github/workflows/publish-recipes.yml`) enforces it again at
- *     publish time.
+ *     `core-recipe.spec.ts` enforces the first half of that rule, and
+ *     `scripts/sync-core-version.mts` is what satisfies it; the release
+ *     pipeline (`.github/workflows/publish.yml`) enforces it again at publish
+ *     time.
  *   - NO DEPENDENCIES. The packaged copy is the offline seed, so nothing in it
  *     may point at a recipe that has to be fetched.
  *
