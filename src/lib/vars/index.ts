@@ -6,6 +6,7 @@
  * later phases have one place to look for what this layer offers.
  */
 
+export * from "./answers.js";
 export * from "./definition-source.js";
 export * from "./display.js";
 export * from "./ladder.js";

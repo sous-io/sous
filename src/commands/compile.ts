@@ -3,6 +3,7 @@ import { BaseCommand } from "../base-command.js";
 import { CompilationService } from "../lib/markdown-compiler.js";
 import { resolveCompilation, resolveRootScope } from "../lib/settings.js";
 import {
+  resolveProjectAnswers,
   resolveRecipeTargets,
   resolveStateFilePath,
   withRecipeTargets,
@@ -57,8 +58,9 @@ export default class Compile extends BaseCommand {
     // The recipes this project subscribes to contribute compile targets
     // alongside its own; both go through the same compiler.
     const withRecipes = () => {
-      const scope = resolveRootScope(this.settings, this.configContext);
-      const recipes = resolveRecipeTargets(this.settings, scope, this.configContext);
+      const answers = resolveProjectAnswers(this.settings, this.configContext);
+      const scope = resolveRootScope(this.settings, this.configContext, { answers });
+      const recipes = resolveRecipeTargets(this.settings, scope, this.configContext, answers);
       for (const notice of recipes.warnings) warning(notice);
       return withRecipeTargets(
         resolveCompilation(this.settings, scope),

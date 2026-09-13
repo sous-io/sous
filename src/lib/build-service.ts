@@ -11,6 +11,12 @@ import type { CompilationConfig, CompilationTarget } from "./markdown-compiler.j
 import { StateService } from "./state.js";
 import { isProtectedPath } from "./state.js";
 import { protectedRepoPaths } from "./repos/links.js";
+import {
+  noRecipeAnswers,
+  resolveRecipeAnswers,
+  unansweredWarning,
+  type RecipeAnswers,
+} from "./vars/answers.js";
 import { log, warning } from "../utils/formatting.js";
 
 export type BuildOptions = {
@@ -51,25 +57,64 @@ const NO_RECIPE_TARGETS: RecipeTargets = {
 };
 
 /**
+ * The answers to every recipe variable in play for the project the context
+ * describes, resolved once so a build can render with them, hand them to every
+ * scope it builds, and report what is still unanswered. Empty when the caller
+ * gave no config context.
+ *
+ * @param settings - The merged project config.
+ * @param configContext - Where the active config was discovered.
+ */
+export function resolveProjectAnswers(
+  settings: Settings,
+  configContext?: ConfigContext
+): RecipeAnswers {
+  if (configContext === undefined) return noRecipeAnswers();
+  return resolveRecipeAnswers({ settings, sousDir: configContext.sousDir });
+}
+
+/**
  * The compile targets a project's subscribed recipes contribute, for the project
  * the options describe. Empty when the caller gave no config context, which is
  * the case only in tests that build a settings object by hand.
  *
+ * Each recipe's files render with that recipe's own view of the answers, and a
+ * required variable nothing answered is reported through `warnings`, so every
+ * caller that prints those tells the user what the build could not fill in.
+ *
  * @param settings - The merged project config.
  * @param rootScope - The resolved settings scope, for `${var}` in destinations.
  * @param configContext - Where the active config was discovered.
+ * @param answers - The project's recipe answers, when the caller resolved them
+ *   already; resolved here otherwise.
  */
 export function resolveRecipeTargets(
   settings: Settings,
   rootScope: Record<string, string>,
-  configContext?: ConfigContext
+  configContext?: ConfigContext,
+  answers?: RecipeAnswers
 ): RecipeTargets {
   if (configContext === undefined) return NO_RECIPE_TARGETS;
-  return buildRecipeTargets({
+  const resolved = answers ?? resolveProjectAnswers(settings, configContext);
+  const scopes = new Map<string, Record<string, string>>();
+
+  const recipes = buildRecipeTargets({
     sousDir: configContext.sousDir,
     settings,
     scope: rootScope,
+    scopeFor: (recipe) => {
+      let scope = scopes.get(recipe.key);
+      if (scope === undefined) {
+        scope = resolveRootScope(settings, configContext, { answers: resolved, recipe: recipe.key });
+        scopes.set(recipe.key, scope);
+      }
+      return scope;
+    },
   });
+
+  const missing = unansweredWarning(resolved, rootScope);
+  if (missing !== undefined) recipes.warnings.push(missing);
+  return recipes;
 }
 
 /**
@@ -232,7 +277,10 @@ export class BuildService {
    * Returns true if all steps succeeded.
    */
   async build(settings: Settings, options: BuildOptions = {}): Promise<boolean> {
-    const rootScope = resolveRootScope(settings, options.configContext);
+    // The recipe answers are resolved once here and handed to every scope the
+    // build assembles, so the lockfile and the manifests are read one time.
+    const answers = resolveProjectAnswers(settings, options.configContext);
+    const rootScope = resolveRootScope(settings, options.configContext, { answers });
     const namespaceResolver = resolveNamespaceResolver(settings, options);
     const protectedPaths = protectedPathsFor(options);
 
@@ -260,7 +308,7 @@ export class BuildService {
     // targets alongside its own, so a recipe's files are compiled by exactly the
     // same machinery as everything else, and are pruned and cleared by it too.
     if (!options.noCompile) {
-      const recipes = resolveRecipeTargets(settings, rootScope, options.configContext);
+      const recipes = resolveRecipeTargets(settings, rootScope, options.configContext, answers);
       for (const notice of recipes.warnings) warning(notice);
 
       const config = withRecipeTargets(
