@@ -229,6 +229,8 @@ src/
       definition-source.ts # where definitions come from; the one wiring seam
       names.ts             # generates the candidate env var names (never parses one)
       ladder.ts            # walks the five rungs and says which name answered
+      answers.ts           # the answers a build renders with: merged view, per-recipe view,
+                           #   what is unanswered; laid into the scope by resolveRootScope
       mappings.ts          # mapping records; writes conf.d/520-var-mappings.jsonc
       validate.ts          # the JSON constraint vocabulary, checked with zod
       ask.ts               # asks what is missing and stores the answers
@@ -446,8 +448,28 @@ every variable the closure declares, grouped by recipe, through the same `render
 renderer. A dry run downloads nothing, so a recipe the store does not hold yet has no manifest
 to read; that is reported (`SubscribeOutcome.unreadable`) rather than being fatal.
 
-The ladder, the env files, the mapping records and the `sous vars` commands are documented
-in `docs/markdown/repositories-variables.md`.
+**What a build does with the answers.** `answers.ts` is the one place that turns definitions
+plus the ladder into a render scope: `resolveRecipeAnswers` walks every definition the lockfile
+pins and returns a MERGED view (one value per name; the first definition in lockfile order wins,
+because two recipes may publish the same name), a PER-RECIPE view (each recipe's own answers,
+which the recipe-scoped rung can make different), and the required definitions nothing answered.
+A definition's `default` is the answer of last resort; values are laid in as stored, with no path
+resolution and no coercion. `resolveRootScope` lays the merged view under `_env` and `_vars`
+whenever it is given a config context, and takes `{ answers, recipe }` so a build resolves the
+answers once and asks for a recipe's own view when it builds that recipe's targets
+(`scopeFor` in `recipe-targets.ts`, wired by `resolveRecipeTargets` in `build-service.ts`).
+The unanswered list becomes ONE warning in `recipes.warnings`, checked against the scope the
+templates render with (a `_vars` value is not missing), naming `sous vars ask`; the build carries
+on and the value renders empty. The ladder's shell layer at build time is `process.env` at call
+time, which is correct for VALUES because the env files load first-writer-wins in precedence
+order; the pre-injection snapshot only matters for attributing an answer to a layer, which `sous
+vars` does and a build does not. Because a rendered output now depends on its variables, a `.tpl.`
+output's source hash in `markdown-compiler.ts` covers its variable scope (`stableVarsFingerprint`)
+as well as the assembled source, so a changed answer re-renders without `--rebuild`.
+
+The ladder, the env files, the mapping records, the `sous vars` commands and how an answer
+reaches a template are documented in `docs/markdown/repositories-variables.md`; the decision
+record is ADR 0002.
 
 Above the formats sit the read-path services. `providers/` holds the internal provider
 interface plus the GitHub and GitLab built-ins: an index is one raw HTTPS GET (with a bearer
@@ -721,6 +743,12 @@ the COMMITTED `.sous/sous.lock.json`. Three sources feed `.claude/skills/`:
 `tool-usage/automated-browser-tasks` is deliberately NOT subscribed to: it needs
 `browserAutomationScriptsDir` pointing at a real script directory, and sous has none.
 
+The answers to those recipes' variables live in the env files, the way any project's do:
+`.sous/.env` (shared scope, committed) and `.sous/.env.local` (local scope, gitignored;
+`.sous/.env.local.example` documents the three personal answers). `sous vars list` shows every
+one, and the config's `_vars` holds only what no recipe asks about. Path answers are stored
+relative to the project root, so the compiled skills name `.sous/tasks` and `.sous/skills`.
+
 The config also generates two instruction files from tracked sources under `.sous/prompts/`:
 
 - `.sous/prompts/root/CLAUDE.md` -> `/CLAUDE.md` (this file)
@@ -740,8 +768,8 @@ the "Sous" GitHub Projects v2 board (https://github.com/orgs/sous-io/projects/1,
 Backlog → Ready → In Progress → In Review → Done). Ticket IDs are written `gh-<number>`
 (issue `#47` → ticket `gh-47`, branch `lc/gh-47-short-desc`); the `gh-` prefix keeps them
 greppable in branch names. Per-branch task files live in `.sous/tasks/` (gitignored). The
-board, Status field and option IDs are recorded as `github*` vars in `.sous/sous.config.js`
-and compiled into the skills.
+board, Status field and option IDs are answers to the `workflow/github-projects` recipe's
+variables, stored in the committed `.sous/.env` and compiled into the skills.
 
 Both compiled CLAUDE.md files are gitignored OUTPUTS (`/CLAUDE.md` and `/docs/CLAUDE.md`
 in `.gitignore`); only the sources in `.sous/prompts/` are tracked. Never edit the
@@ -878,12 +906,14 @@ came from, and what is still unanswered. `sous vars show <name>` shows one in fu
 
 Two systems meet in a template, and it is worth knowing which is which. A recipe's variable
 DEFINITIONS are answered in the project's env files and resolved through the five-rung ladder
-in `src/lib/vars/`; a project's own `_vars` and `_env` are the zero-ceremony system, and they
-are what a `{{ variable }}` in a template renders from. The engine runs with
-`strictVariables: false`, so an undefined variable renders as an empty string: nothing fails,
-the output just silently loses the value (a path becomes `/[branch-name].md`). So define, in
-`_vars`, every variable the recipes you subscribe to name; `sous vars list` is how you find out
-which those are.
+in `src/lib/vars/`; a project's own `_vars` and `_env` are the zero-ceremony system. Both feed
+the scope a `{{ variable }}` renders from: `resolveRootScope` lays the recipe answers in
+(`vars/answers.ts`, whenever a config context says which project this is) UNDER `_env` and
+`_vars`, so an explicit config value wins and a stored answer needs no mapping. A definition's
+`default` is the answer of last resort. The engine runs with `strictVariables: false`, so a
+variable nothing answers renders as an empty string; the build warns about each required one
+before it compiles, naming `sous vars ask`, and carries on. Answer a recipe's variables in the env
+files (`sous vars ask` writes them), not in `_vars`; `_vars` is for what no recipe asks about.
 
 ## The `.tpl.` Convention
 

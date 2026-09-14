@@ -19,3 +19,4 @@
   - [Troubleshooting](repositories-troubleshooting.md)
 - **ADRs**
   - [0001: Repositories](adrs/0001-repositories.md)
+  - [0002: Recipe answers in the template scope](adrs/0002-recipe-answers-in-templates.md)

@@ -129,6 +129,17 @@ export function inferGlobBase(pattern: string): string {
   return joined || "/";
 }
 
+/**
+ * A stable text form of an output's variable scope, for the source hash of a
+ * rendered output. Keys are sorted so two scopes holding the same values hash
+ * the same whatever order they were assembled in.
+ *
+ * @param vars - The variable scope an output renders with.
+ */
+export function stableVarsFingerprint(vars: Record<string, string>): string {
+  return JSON.stringify(Object.keys(vars).sort().map((key) => [key, vars[key]]));
+}
+
 export class CompilationService {
   private strict: boolean;
   private rebuild: boolean;
@@ -447,7 +458,7 @@ ${taskFileContents}
     }
 
     // Compute source hash once per target from the assembled content
-    const srcHash = hashContent(content);
+    const contentHash = hashContent(content);
 
     let allSucceeded = true;
 
@@ -461,6 +472,14 @@ ${taskFileContents}
       // Neither destinationFile nor destinationDir set — skip
       if (resolvedDest === undefined) continue;
       destFile = resolvedDest;
+
+      // A rendered output depends on its variables as much as on its source: a
+      // changed answer or `_vars` value with the same template must re-render,
+      // so the variable scope is part of a `.tpl.` output's source hash. A
+      // verbatim copy hashes its content alone.
+      const srcHash = isTpl && output.vars
+        ? hashContent(`${content}\n${stableVarsFingerprint(output.vars)}`)
+        : contentHash;
 
       // Skip if content is unchanged and file already exists (unless --rebuild)
       const existingEntry = state.files.find(f => f.dest === destFile);

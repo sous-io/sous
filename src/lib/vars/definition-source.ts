@@ -111,6 +111,15 @@ export class ProjectDefinitionSource implements VariableDefinitionSource {
 
   /** Every variable published by every recipe this project's lockfile pins. */
   async load(): Promise<DefinedVariable[]> {
+    return this.loadSync();
+  }
+
+  /**
+   * The same list, read synchronously. The lockfile and the manifests are
+   * ordinary files, and the settings scope a build renders with is assembled
+   * synchronously, so the build path needs this form.
+   */
+  loadSync(): DefinedVariable[] {
     void this.settings;
 
     const defined: DefinedVariable[] = [];

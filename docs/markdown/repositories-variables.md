@@ -297,20 +297,39 @@ nothing about it sensitive, committing it to `.sous/.env` is simpler: a fresh cl
 
 ## How a template reads an answer
 
-Answers are environment variables, and a template renders config variables. The bridge is one `_env` entry
-in your config, naming the variable the answer is stored under (`sous vars show` prints it as `stored-as`):
+A build lays the answers into the template scope itself. For every variable a subscribed recipe publishes,
+the build walks the ladder above, takes the first value it finds, and adds it to the scope under the
+variable's own name. So once `taskFileRoot` is answered, `{{ taskFileRoot }}` renders in the recipe's own
+skills and in any template this project compiles, and `${taskFileRoot}` works in `_vars` and every other
+config value. Nothing has to be mapped by hand.
 
-```json
-{ "_env": { "taskFileRoot": "SOUS_VAR_TASK_FILE_ROOT" } }
-```
+The answers sit under your config, not over it. The scope a template renders with is assembled in this
+order, each layer overriding the one before:
 
-With that line `{{ taskFileRoot }}` renders in any template this project compiles, and `${taskFileRoot}`
-works in `_vars` and every other config value.
+1. The auto-injected `sous*` variables.
+2. The recipe answers, found through the ladder.
+3. Your `_env` block.
+4. Your `_vars` block.
 
-!> Answers are not injected into the template scope on their own, and `_env` names one exact environment
-variable rather than walking the ladder. A recipe's own templates read the project's `_vars` and the
-auto-injected `sous*` variables; they do not see the answers to their own questions unless your config maps
-them in.
+So a project that already carries an answer in `_vars`, or maps one through `_env`, keeps rendering exactly
+what it did; the answer in the env files is simply shadowed, and `sous vars list` still reports it.
+
+When no rung answers, the definition's own `default` is what renders, because the description a publisher
+writes promises what the default does. A required variable with no answer and no default renders as an
+empty string, and the build says so before it compiles, naming each such variable, the recipe that asks for
+it, and `sous vars ask` as the way to answer. The build still succeeds; an unanswered question is
+something to tell you about, not a reason to refuse the rest of the project.
+
+?> Two recipes may ask the same question. Their shared answer renders in both, and in your own templates.
+When the recipe-scoped name gives one of them a different answer, that recipe's own files render its own
+answer while everything else, your templates included, renders the first definition's; `sous vars show`
+tells you which names are in play.
+
+An answer is laid in exactly as it is stored: a path stays the string you typed, relative or absolute, and a
+number stays text. A template that needs an absolute path from a relative answer composes one under another
+name in `_vars`, for instance `taskFileDir: "${sousDir}/../${taskFileRoot}"`.
+
+The `_env` block is still the way to reach any environment variable no recipe asks about.
 
 ## Where to go next
 

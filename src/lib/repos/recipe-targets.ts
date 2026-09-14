@@ -52,6 +52,12 @@ export type RecipeTargetOptions = {
   settings: Settings;
   /** The resolved settings scope, used to substitute `${var}` in destinations. */
   scope?: VarScope;
+  /**
+   * The scope one recipe's own files render with. A recipe's answers to its own
+   * questions are laid over the project scope there, so a recipe sees its own
+   * answer even when another recipe asks the same name. Defaults to `scope`.
+   */
+  scopeFor?: (recipe: LockedRecipeLocation) => VarScope;
   /** The environment to read; decides where the store is. */
   env?: NodeJS.ProcessEnv;
   /** The locked recipes, when the caller has already located them. */
@@ -167,6 +173,8 @@ export function buildRecipeTargets(options: RecipeTargetOptions): RecipeTargets 
       for (const destination of kindDestinations) destinations.add(destination);
       if (recipe.linked) watchDirs.add(recipe.dir);
 
+      const recipeScope = options.scopeFor?.(recipe) ?? options.scope ?? {};
+
       const ignore = (content.exclude ?? []).map((pattern) =>
         path.join(recipe.dir, pattern)
       );
@@ -182,7 +190,7 @@ export function buildRecipeTargets(options: RecipeTargetOptions): RecipeTargets 
             globBase,
             outputs: kindDestinations.map((destination) => ({
               destinationDir: destination,
-              vars: options.scope ?? {},
+              vars: recipeScope,
             })),
           });
         }

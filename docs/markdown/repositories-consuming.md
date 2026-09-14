@@ -264,7 +264,9 @@ $ sous build
 ```
 
 A variable with no answer in the committed `.sous/.env` and none in the environment renders empty
-rather than stopping the build; run `sous vars ask` from a terminal to fill it in.
+rather than stopping the build, and the build prints a warning naming it before it compiles; run
+`sous vars ask` from a terminal to fill it in. How an answer reaches a template is described in
+[How a template reads an answer](repositories-variables.md#how-a-template-reads-an-answer).
 
 ## Control freshness and the store
 

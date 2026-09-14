@@ -18,6 +18,11 @@ import { resolveSousHome } from "./sous-home.js";
 import { validateSettings } from "./config-schema.js";
 import { applyRepoDefaults } from "./repos/defaults.js";
 import type { RecipeConfigLayer } from "./repos/recipe-config-layers.js";
+import {
+  answersForRecipe,
+  resolveRecipeAnswers,
+  type RecipeAnswers,
+} from "./vars/answers.js";
 import { warning } from "../utils/formatting.js";
 
 // Re-exported for backwards compatibility: ConfigError moved to ./errors.ts so
@@ -757,18 +762,61 @@ export function resolveEnvScope(settings: Settings, context?: ConfigContext): Va
   return scope;
 }
 
+/** What else a root scope may be built from; see resolveRootScope. */
+export type RootScopeOptions = {
+  /**
+   * The recipe answers already resolved for this project. When omitted and a
+   * config context is given, they are resolved here; pass them when a caller
+   * has them already, so the lockfile and the manifests are read once.
+   */
+  answers?: RecipeAnswers;
+  /**
+   * The recipe whose own files this scope renders, as `namespace/recipe`. Its
+   * own answers are laid over the merged view, so a recipe sees the answer to
+   * its own question even when another recipe asks the same name.
+   */
+  recipe?: string;
+};
+
 /**
  * Resolves the root-level _vars from a Settings object into a scope.
- * Chains: auto-vars → env scope → root _vars.
+ * Chains: auto-vars → recipe answers → env scope → root _vars.
+ *
+ * The recipe answers are the values the project's env files and shell hold for
+ * every variable its subscribed recipes publish, found through the ladder in
+ * `vars/ladder.ts`. They sit under `_env` and `_vars`, so an explicit config
+ * value always wins, and they are present only when a config context says which
+ * project this is; a settings object built by hand in a test has none.
  *
  * @param settings - The root settings object.
  * @param context - The discovered config location (optional in tests).
+ * @param options - Answers already resolved, or the recipe the scope is for.
  */
-export function resolveRootScope(settings: Settings, context?: ConfigContext): VarScope {
+export function resolveRootScope(
+  settings: Settings,
+  context?: ConfigContext,
+  options: RootScopeOptions = {}
+): VarScope {
   const autoVars = buildAutoVars(context);
+  const answers = resolveAnswerLayer(settings, context, options);
   const envScope = resolveEnvScope(settings, context);
-  const baseScope = { ...autoVars, ...envScope };
+  const baseScope = { ...autoVars, ...answers, ...envScope };
   return resolveScope(settings._vars ?? {}, baseScope);
+}
+
+/**
+ * The recipe-answer layer of a root scope: the merged view, or a recipe's own
+ * view of it. Empty without a config context.
+ */
+function resolveAnswerLayer(
+  settings: Settings,
+  context: ConfigContext | undefined,
+  options: RootScopeOptions
+): VarScope {
+  if (context === undefined) return {};
+  const answers =
+    options.answers ?? resolveRecipeAnswers({ settings, sousDir: context.sousDir });
+  return options.recipe === undefined ? answers.merged : answersForRecipe(answers, options.recipe);
 }
 
 /**

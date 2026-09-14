@@ -43,7 +43,7 @@ const projectSkills = {
 
 // [ROOT] The repo-root CLAUDE.md: instructions for agents working ON sous.
 // The source is tracked; the compiled /CLAUDE.md is gitignored output. Plain
-// markdown (no .tpl.) — @-includes work if the doc is ever split into sections.
+// markdown (no .tpl.); @-includes work if the doc is ever split into sections.
 const rootClaude = {
   entryPoint: "${sousDir}/prompts/root/CLAUDE.md",
   outputs: [{ destinationFile: "${projectRoot}/CLAUDE.md" }],
@@ -89,49 +89,26 @@ export const config = {
     skills: ["${claudeSkillsDir}"],
   },
 
+  // WHERE THE RECIPE ANSWERS LIVE. Every variable the subscribed recipes ask
+  // about (the task file root, the ticket prefix, the GitHub board and its
+  // field IDs, your login and name, and so on) is answered in the env files,
+  // not here: `.sous/.env` holds the shared answers and is committed, and
+  // `.sous/.env.local` holds the personal ones and is gitignored. `sous vars
+  // list` shows every answer and where it came from, and `sous vars ask`
+  // answers what is missing. A build lays those answers into the template
+  // scope on its own, so nothing below has to name them; `_vars` is only for
+  // what this config needs that no recipe asks about.
   _vars: {
     projectRoot: repoRoot,
 
-    // Where this repository's own skill sources live. `about-sous`,
-    // `about-agent-skills` and `create-skill` render this path to tell an agent
-    // where to write a new skill. For sous itself that is `.sous/skills/`: a
-    // skill about developing sous belongs to this repository, while a skill
-    // worth sharing belongs in a recipe in sous-io/sous-recipes.
-    skillsRoot: "${sousDir}/skills",
-
-    // The same directory, named again for the projectSkills target above, so
-    // the target reads as a target rather than as a reference to skillsRoot.
+    // Where this repository's own skill sources live, for the projectSkills
+    // target above. The recipes learn the same path from the `skillsRoot`
+    // answer in `.sous/.env`; this entry is the target's, so the target reads
+    // as a target rather than as a reference to a recipe variable.
     projectSkillsDir: "${sousDir}/skills",
 
     // Compiled skill destination. Gitignored build output.
     claudeSkillsDir: "${projectRoot}/.claude/skills",
-
-    // --- workflow/task-files ---
-    // Per-branch task files, gitignored local working notes.
-    taskFileRoot: "${sousDir}/tasks",
-    // Ticket IDs are GitHub issue numbers written `gh-<number>` so they stay
-    // greppable in branch names (a bare number is too ambiguous).
-    ticketPrefix: "gh-",
-    ticketIdExample: "gh-123",
-    featureBranchPrefix: "lc/",
-
-    // --- workflow/github-projects ---
-    userFullName: "Luke Chavers",
-    githubUserLogin: "vmadman",
-    githubRepo: "sous-io/sous",
-    // The "Sous" Projects v2 board: https://github.com/orgs/sous-io/projects/1
-    githubProjectOwner: "sous-io",
-    githubProjectNumber: "1",
-    githubProjectId: "PVT_kwDOEB_-as4BhYAc",
-    // Single-select "Status" field and its option IDs. Stable for the life of
-    // the field; re-discover with `gh project field-list 1 --owner sous-io`
-    // if item-edit ever rejects them.
-    githubStatusFieldId: "PVTSSF_lADOEB_-as4BhYAczhgT-M8",
-    githubStatusBacklogId: "e3a82f26",
-    githubStatusReadyId: "c4edfe80",
-    githubStatusInProgressId: "f11d9dfc",
-    githubStatusInReviewId: "6f473a66",
-    githubStatusDoneId: "4c16e1a4",
   },
   compilation: {
     includeSourceComments: false,
