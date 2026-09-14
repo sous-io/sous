@@ -39,8 +39,11 @@ carried every recipe answer in `_vars` for the same reason.
 - A definition's `default` is the answer of last resort. The description a publisher writes says
   what the default does, and a template rendering an empty string instead would break that promise.
 - Answers are laid in as stored. No path is resolved and no number is coerced at this point; the
-  value is the string the user stored, the same string an `_env` mapping delivers. Changing the
-  meaning of an answer by its declared type is a separate decision, not taken here.
+  value is the string the user stored, the same string an `_env` mapping delivers. A relative
+  `path` answer should resolve against the project root, but sous has no formal project root
+  yet: the parent of `.sous/` is an assumption the config location flags can break, and
+  `projectRoot` is only a convention in `_vars`. Resolving path answers waits on a project root
+  that is declared once and read everywhere, which is separate work.
 
 ### Two views of the answers
 
