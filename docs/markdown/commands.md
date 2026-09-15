@@ -338,7 +338,12 @@ $ sous subscription add workflow --non-interactive
 No expected failure prints a stack trace. A failure sous did not expect prints the message and one more sentence
 asking you to set `SOUS_DEBUG=1` and run the command again. Set `SOUS_DEBUG` to anything but `0`, `false`, `no`
 or `off` and every reported failure prints its stack to standard error underneath the message:
-`SOUS_DEBUG=1 sous build`. Nothing else changes when it is set.
+`SOUS_DEBUG=1 sous build`. The one other thing it changes is that every hand-off to a project's own install
+announces itself, not only one between different versions.
+
+`SOUS_NO_DELEGATE` is the other environment variable every command reads. Set it the same way and the copy of
+sous you invoked runs the command, even inside a project that installs its own `@sous-io/sous`; see
+[Installing](README.md#installing) for the hand-off it switches off.
 
 Every listing fits itself to the terminal it runs in: columns shrink, descriptions wrap, and a path or URL is
 cut in the middle so the host and the last segment both survive. On a terminal too narrow, the least important

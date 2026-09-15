@@ -21,3 +21,4 @@
   - [0001: Repositories](adrs/0001-repositories.md)
   - [0002: Recipe answers in the template scope](adrs/0002-recipe-answers-in-templates.md)
   - [0003: Project setup with sous init](adrs/0003-project-init.md)
+  - [0004: A global sous defers to the project's install](adrs/0004-project-install-handoff.md)
