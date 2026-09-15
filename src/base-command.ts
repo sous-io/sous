@@ -40,6 +40,23 @@ import { reportCommandError } from "./utils/command-errors.js";
  * lives in `lib/interactive.ts`, which also treats a truthy `CI` and a
  * non-terminal stdin or stdout the same way.
  */
+/**
+ * What the config-locating flags and environment said on this run, resolved to
+ * absolute paths but not yet turned into a config.
+ */
+export type ConfigLocator = {
+  /** The working directory discovery started from. */
+  cwd: string;
+  /**
+   * The explicit config location, when one was given: the resolved path and
+   * the flag or environment variable that supplied it (`--config`,
+   * `--sous-config`, `SOUS_CONFIG`, `--sous-dir` or `SOUS_DIR`).
+   */
+  primary?: { value: string; source: string };
+  /** The conf.d directory override, when `--sous-confd` or `SOUS_CONFD` gave one. */
+  confDirOverride?: string;
+};
+
 export abstract class BaseCommand extends Command {
   static baseFlags = {
     config: Flags.string({
@@ -60,10 +77,28 @@ export abstract class BaseCommand extends Command {
     "non-interactive": nonInteractiveFlag(),
   };
 
+  /**
+   * Whether a run of this command needs a project config to exist. Every
+   * command that works on a project leaves this true, and a run that finds no
+   * config fails before `run()` with the "No sous config found" block. The one
+   * command whose job is to CREATE the config sets it false: discovery still
+   * runs, so the config-locating flags still say where the project is, but
+   * finding nothing is the expected case rather than an error, and `settings`
+   * stays unset until `adoptConfig` is given the config that was written.
+   */
+  static requiresConfig = true;
+
   protected settings!: Settings;
 
   /** Where the active config was found. */
   protected configContext!: ConfigContext;
+
+  /**
+   * What the config-locating flags and environment said, before discovery
+   * turned it into a config. A command that runs without a config reads the
+   * project's location from here.
+   */
+  protected configLocator!: ConfigLocator;
 
   /** The full discovery result, including how the config was located. */
   protected discovered!: DiscoveredConfig;
@@ -142,6 +177,16 @@ export abstract class BaseCommand extends Command {
       [sousDirEnv, "SOUS_DIR"],
     ];
     const primary = primaryCandidates.find(([value]) => value !== undefined);
+    const requiresConfig = (this.constructor as typeof BaseCommand).requiresConfig;
+
+    this.configLocator = {
+      cwd,
+      primary:
+        primary !== undefined
+          ? { value: path.resolve(cwd, expandHome(primary[0] as string)), source: primary[1] }
+          : undefined,
+      confDirOverride,
+    };
 
     let discovered: DiscoveredConfig | null;
 
@@ -150,6 +195,9 @@ export abstract class BaseCommand extends Command {
       try {
         discovered = resolveConfigFlag(primarySource, cwd, confDirOverride, sourceLabel);
       } catch (error) {
+        // A command that creates the config is pointed at a place with none in
+        // it by design; the flag still says where, so this is not a failure.
+        if (!requiresConfig) return;
         displayError(error instanceof Error ? error.message : String(error), this.errorSink);
         return this.exit(1);
       }
@@ -158,10 +206,29 @@ export abstract class BaseCommand extends Command {
     }
 
     if (!discovered) {
+      if (!requiresConfig) return;
       displayErrorBlock(formatNotFoundMessage(), this.errorSink);
       return this.exit(1);
     }
 
+    await this.adoptConfig(discovered);
+  }
+
+  /** True once a config has been discovered or adopted and its settings loaded. */
+  protected get hasConfig(): boolean {
+    return this.discovered !== undefined;
+  }
+
+  /**
+   * Makes a discovered config THE config for the rest of the run: loads its
+   * env files, enumerates its layers again now that `SOUS_HOME` may have
+   * changed, and loads the settings. `init()` calls it for the config discovery
+   * found; a command that creates a config calls it for the one it wrote, so
+   * both go through the same steps in the same order.
+   *
+   * @param discovered - The config to adopt.
+   */
+  protected async adoptConfig(discovered: DiscoveredConfig): Promise<void> {
     // Inject .sous/.env.local and .sous/.env before anything resolves variables,
     // keeping a copy of what the shell itself set so the variables layer can
     // still tell the two apart.
@@ -172,27 +239,28 @@ export abstract class BaseCommand extends Command {
     // file-settable, and it decides where the store holding a subscribed
     // recipe's config layers is. A first pass already ran during discovery, when
     // only the real environment was known.
+    let refreshed: DiscoveredConfig;
     try {
-      discovered = refreshDiscoveredConfig(discovered);
+      refreshed = refreshDiscoveredConfig(discovered);
     } catch (error) {
       displayErrorBlock(error instanceof Error ? error.message : String(error), this.errorSink);
       return this.exit(1);
     }
 
-    this.discovered = discovered;
+    this.discovered = refreshed;
     this.configContext = {
-      sousDir: discovered.sousDir,
-      configPath: discovered.configPath,
-      confDir: discovered.confDir,
-      layerPaths: discovered.layerPaths,
+      sousDir: refreshed.sousDir,
+      configPath: refreshed.configPath,
+      confDir: refreshed.confDir,
+      layerPaths: refreshed.layerPaths,
     };
 
     // Routed through the command's error sink, not stdout: a recipe layer
     // warning must not land in the middle of `sous config show | jq`.
-    for (const notice of discovered.recipeLayerWarnings) warning(notice, this.errorSink);
+    for (const notice of refreshed.recipeLayerWarnings) warning(notice, this.errorSink);
 
     try {
-      this.settings = await loadSettings(discovered);
+      this.settings = await loadSettings(refreshed);
     } catch (error) {
       displayErrorBlock(error instanceof Error ? error.message : String(error), this.errorSink);
       return this.exit(1);

@@ -41,16 +41,22 @@ npm install
 npm link
 ```
 
-Then set up a project. A project needs a `.sous/` directory holding a config file, named
-`sous.config.js`, `sous.config.mjs`, `sous.config.json`, or `sous.config.yaml`:
+Then set up a project:
 
 ```bash
 cd /path/to/your/project
-mkdir .sous
-$EDITOR .sous/sous.config.js
+sous init
 ```
 
-A config that compiles one file:
+`sous init` writes the project's `.sous/` directory and runs the first build. It creates a
+commented `sous.config.js` (pass `--format json` for a JSON config bound to the shipped
+schema), a starter prompt at `.sous/prompts/AGENTS.md` that the config compiles to `AGENTS.md`
+at the project root, the two env files described below, and a `.sous/.gitignore` covering the
+files sous keeps local to one machine. The first build compiles the starter prompt and the
+`core` skills every project gets, and pins them in `.sous/sous.lock.json`. A project that
+already holds a config is left untouched.
+
+The config it writes compiles one file:
 
 ```js
 export const config = {
@@ -59,17 +65,19 @@ export const config = {
   compilation: {
     targets: [
       {
-        entryPoint: "${sousDir}/AGENTS.md",
-        outputs: [{ destinationFile: "${projectRoot}/CLAUDE.md" }],
+        entryPoint: "${sousDir}/prompts/AGENTS.md",
+        outputs: [{ destinationFile: "${projectRoot}/AGENTS.md" }],
       },
     ],
   },
+  recipeOutputs: { skills: ["${projectRoot}/.claude/skills"] },
 };
 ```
 
 `${sousDir}` is the `.sous/` directory sous found, so a config can name paths relative to
-itself without hardcoding anything machine-specific. One config describes one project. Then
-build:
+itself without hardcoding anything machine-specific. One config describes one project. A
+`.sous/` may hold one config file, named `sous.config.js`, `sous.config.mjs`,
+`sous.config.json`, `sous.config.jsonc` or `sous.config.yaml`. After editing, build:
 
 ```bash
 sous build
@@ -95,6 +103,7 @@ Useful commands:
 
 | Command | What it does |
 |---|---|
+| `sous init` | Set a project up: write `.sous/`, then run the first build |
 | `sous build` | Compile, then prune stale outputs |
 | `sous build --watch` | Rebuild on source changes |
 | `sous compile` | Compile only |

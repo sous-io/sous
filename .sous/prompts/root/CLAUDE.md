@@ -128,6 +128,7 @@ src/
   base-command.ts          # oclif BaseCommand; discovers config, loads env files + settings
   config-command.ts        # BaseCommand subclass for `config *`; routes header/errors to stderr
   commands/
+    init.ts                # set a project up: scaffold .sous/, then run the first build
     build.ts               # compile + prune (main workflow command)
     compile.ts             # compile only
     prune.ts               # remove stale output files
@@ -182,6 +183,9 @@ src/
     markdown-compiler.ts   # CompilationService; @-include, LiquidJS rendering
     include-resolver.ts    # @-include alias/${var}/relative path resolution
     build-service.ts       # orchestrates compile + prune; BuildService
+    build-preparation.ts   # the step before a compile (seed core, lock, restore, check
+                           #   upstream) and what it reports; shared by build and init
+    project-scaffold/      # what `sous init` writes: string builders + scaffoldProject()
     state.ts               # StateService; tracks written files/dirs per project
     watch-service.ts       # chokidar watcher with debounce; WatchService
     watch-loop.ts          # shared build/compile --watch reload loop (config + template edits)
@@ -383,10 +387,13 @@ bytes would not survive that. Every git call in this directory takes the runner 
 **Ignore hygiene.** `ensureReposIgnoreFiles(sousDir)` writes `.sous/repos/.gitignore` holding a
 single `*` (which covers the ignore file itself, so the directory contributes nothing to the
 project's repository) and maintains a delimited managed block inside `.sous/.gitignore` listing
-`sous.links.json`, `sous.state.json`, `sous.pid` and `repos/`. Only the lines between the
+the machine-local files under `.sous/` (the links map, the state file, the PID file, the local
+answers file and `repos/`). Only the lines between the
 markers are ever rewritten; anything above or below them is left alone, and an opening marker
 with no closing partner is a hard `ConfigError` rather than a guess. Both files are written
-only when their contents would change, so linking repeatedly never produces a diff.
+only when their contents would change, so linking repeatedly never produces a diff. The
+entries themselves are `IGNORE_BLOCK_ENTRIES` in `links.ts`; `sous init` applies the same
+block through `applyManagedIgnoreBlock`, so the block is one list wherever it is written.
 
 **Self-describing directories.** Every directory sous creates for its OWN bookkeeping is created
 through `ensureSousDirectory(dir, readme)` in `src/utils/sous-directory.ts`, which writes a
@@ -583,9 +590,12 @@ forever). `resolveOutputPath` in `markdown-compiler.ts` is the one definition of
 target's output lands, shared by the compiler and prune.
 
 **What a build does with all this.** `sous build` announces every linked repository loudly
-before it compiles (`describeLinkedRepos`), restores whatever the store is missing, and asks
-upstream for the repositories that prefer a newer in-range version; a failed check is warned
-about and the last good answer stands. Watch mode watches every linked checkout (they are in
+before it compiles (`describeLinkedRepos`), then runs `prepareRepositoriesForBuild`
+(`src/lib/build-preparation.ts`): seed the packaged core recipe, lock any subscription the
+lockfile does not pin yet, restore whatever the store is missing, and ask upstream for the
+repositories that prefer a newer in-range version; a failed check is warned about and the last
+good answer stands. That step and its reporting live in their own module because `sous init`
+runs the same step for a project's first build, and the two must say the same things. Watch mode watches every linked checkout (they are in
 `fullRebuildPaths`) and polls upstream on `store.watchPollSeconds`. Prune and clear never
 reach into a linked checkout or the store: `protectedRepoPaths` names the three roots and
 `StateService.deleteTrackedFiles` refuses to touch anything under them, whatever the state
@@ -597,6 +607,32 @@ There is no user-level config LAYER; no configuration is read from the user-leve
 directory (`~/.sous`, or `$SOUS_HOME`), which holds only machine-wide state such as the
 recipe store. Every command locates its config the same way, in `BaseCommand.init()` (see
 `config-discovery.ts`).
+
+**The one command that runs before a config exists.** `BaseCommand` carries a static
+`requiresConfig`, true everywhere but on `sous init`, which creates the config. Discovery still
+runs for it, and what the config-locating flags and environment said is kept in
+`configLocator`, which is how `--sous-dir` and `SOUS_DIR` decide where init writes; but finding
+nothing returns from `init()` instead of failing, and `settings` stays unset. The steps that
+follow discovery (env files, the second layer enumeration, `loadSettings`) live in
+`adoptConfig(discovered)`, which `init()` calls for the config it found and `sous init` calls
+for the config it has just written, so both go through one path. When discovery finds nothing
+and the command needs a config, the `formatNotFoundMessage` block names `sous init` as the
+first fix and `--config` as the second; it no longer prints a config to copy, because init
+writes one and an inlined sample would only be a second copy to keep in step.
+
+What init writes is decided by `scaffoldProject` in `src/lib/project-scaffold/`, built the way
+`repos/scaffold/` is: plain string builders in `templates.ts` (the comments in the generated
+config are the point, so no template engine stands in between), and a planner that works out
+every file in memory, refuses a `.sous/` that already holds a primary config or any other file
+it would write (so a refused run has changed nothing), merges rather than replaces
+`.sous/.gitignore`, writes, and then loads the written config back through `loadSettings` so a
+scaffold sous cannot read is never reported as a success. The JSON variant carries `$schema`
+pointing at the schema artifact for the running version on GitHub (`configSchemaUrl`); the
+top-level config schema is strict and has no comment key, so that is the one thing the JSON
+config says that the JS config says in comments. `init` itself extends `BaseCommand`; a
+directory argument wins over the config-locating flags, which win over the working directory,
+and a target inside a project that is already set up is a question (`--yes` answers it), not a
+refusal, because a subproject with its own instructions is a legitimate choice.
 
 **Locating the primary config.** Precedence, highest first (flag beats env; both beat
 walk-up):
@@ -1030,6 +1066,7 @@ This enables `sous prune` (remove stale outputs) and `sous clear` (delete all ou
 
 | Command | Description |
 |---------|-------------|
+| `sous init [dir]` | Set a project up: write `.sous/` (a commented config in `js` or `json`, the starter prompt, `.env`, `.env.local.example`, the managed ignore block), then run the first build, which seeds and pins `core` (`--format`, `--name`, `--no-build`, `--dry-run`, `--yes` / `-y` to nest inside another project); refuses to touch a project that already holds a config |
 | `sous build` | Compile + prune (main workflow) |
 | `sous compile` | Compile only |
 | `sous prune` | Remove output files no longer in config |
@@ -1228,9 +1265,11 @@ flags even in non-strict mode otherwise) and splits argv at the first `--` itsel
 ## Important Patterns
 
 - Every command that works on a PROJECT extends `BaseCommand`, which discovers the config,
-  loads `.env.local`, and loads settings on every run. Discovery is required for those; there
-  is no opt-out. The exceptions extend `Command` directly and are listed with their reasons
-  under Key Commands: the three that run inside a recipe repository, and `help`.
+  loads `.env.local`, and loads settings on every run. Discovery is required for those; the
+  one opt-out is `static requiresConfig = false`, which only `sous init` sets, because it
+  creates the config (see Config Discovery). The exceptions extend `Command` directly and are
+  listed with their reasons under Key Commands: the three that run inside a recipe
+  repository, and `help`.
 - `CompilationService` (alias `MarkdownCompiler`) is the core compiler class
 - `BuildService` orchestrates `CompilationService` + prune in one step
 - Watch mode uses `WatchService` (chokidar + debounce, 300ms); ignores `*.sous.state.json` files

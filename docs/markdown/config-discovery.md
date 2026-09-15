@@ -57,8 +57,9 @@ first, so setting a location var inside `.env.local` has no effect on discovery.
 
 All are hard `ConfigError`s; sous never guesses:
 
-- **No config found**: the error lists every directory checked during the walk and shows a
-  minimal starter config.
+- **No config found**: the error lists every directory checked during the walk and names the two
+  fixes: run `sous init` in the project's root directory, which writes the config and everything
+  else a first build needs, or pass `--config <path>`.
 - **Multiple primary configs**: two or more of `sous.config.js|mjs|json|jsonc|yaml` in the same
   `.sous/` is an error naming every candidate.
 - **Duplicate layer baseNames**: any two loaded files (primary or conf.d) whose names differ

@@ -49,12 +49,14 @@ export const IGNORE_BLOCK_END = "# <<< sous managed";
 /**
  * The entries sous keeps inside its managed block in `.sous/.gitignore`. All of
  * them are machine-local: the links map, the build state file, the watcher's
- * PID file, and the directory linked checkouts are cloned into.
+ * PID file, the local answers file, and the directory linked checkouts are
+ * cloned into.
  */
 export const IGNORE_BLOCK_ENTRIES = [
   LINKS_FILENAME,
   "sous.state.json",
   "sous.pid",
+  ".env.local",
   `${REPOS_DIRNAME}/`,
 ] as const;
 
