@@ -39,7 +39,8 @@ export const config = {
 ```
 
 A JSON config may set `"$schema"` to bind the `sous.config.schema.json` artifact shipped with
-sous for editor autocompletion; sous accepts and ignores the key.
+sous for editor autocompletion; sous accepts and ignores the key. `sous init --format json`
+writes one already bound to the copy of that artifact published for the running version.
 
 ?> Configs use `${var}` syntax. Template files use LiquidJS double-brace syntax instead; the two
 are resolved at different stages and never mix.

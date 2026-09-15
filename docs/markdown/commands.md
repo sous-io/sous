@@ -46,6 +46,27 @@ Every topic answers to both spellings of its name: `repo` and `repos`, `subscrip
 
 ## Top-level commands
 
+### `sous init [DIRECTORY]`
+Sets a project up for sous: writes its `.sous/` directory, then runs the first build. It is the one command that
+runs before a config exists, and the starting point for a project that has never used sous. It writes a commented
+primary config, a starter prompt at `.sous/prompts/AGENTS.md` that the config compiles to `AGENTS.md` at the
+project root, `.sous/.env` and `.sous/.env.local.example`, and the sous-managed block in `.sous/.gitignore`. The
+first build compiles the starter prompt and the `core` skills, and pins them in `.sous/sous.lock.json`.
+
+A project whose `.sous/` already holds a primary config is refused, and nothing is written. Setting up a directory
+inside a project that is already set up is a question rather than an error, since a subproject may want its own
+instructions; `-y, --yes` answers it ahead of time, and a run with no terminal fails naming that flag.
+
+- `DIRECTORY`: the project directory to set up; the current one by default. `--sous-dir` and `SOUS_DIR` also say
+  where, when no directory is given.
+- `--format <js|json>`: which config to write, `js` by default. The JSON config carries `$schema`, bound to the
+  schema artifact published for the running sous version.
+- `--name <name>`: the display name written into the config; the directory's own name by default.
+- `--no-build`: write the setup without running the first build.
+- `--dry-run`: print the files that would be written without writing them.
+
+Example: `sous init --format json`
+
 ### `sous build`
 Compiles this project's outputs, then removes the ones its config no longer produces. It is compile plus prune,
 and the command you want almost always. Takes `--dry-run`.

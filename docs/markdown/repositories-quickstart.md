@@ -24,7 +24,10 @@ echo 'name: my-project' > .sous/sous.config.yaml
 ```
 
 Everything else has a default: skills compile into `<project root>/.claude/skills`, and the
-lockfile, the state file and the config layers sous writes land under `.sous/`. `SOUS_HOME` puts
+lockfile, the state file and the config layers sous writes land under `.sous/`. Outside a
+walkthrough, `sous init` writes a fuller starting point (a commented config, a starter prompt,
+the env files and the ignore block) and runs the first build for you; the one-line config is
+used here so that each step shows one thing. `SOUS_HOME` puts
 the machine-wide store somewhere throwaway, so this walkthrough leaves your real one alone. See
 [The config file](configuration.md) for the keys you will want later.
 
