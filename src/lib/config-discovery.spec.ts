@@ -525,15 +525,16 @@ describe("config-discovery", () => {
   describe("formatNotFoundMessage()", () => {
     /**
      * formatNotFoundMessage() should name the directories that were checked and
-     * explain both fixes (create .sous/ or pass --config).
+     * explain both fixes: run `sous init`, or pass --config.
      *
      * formatNotFoundMessage("/a/b");
-     * // -> text containing "/a/b/.sous/", "sous.config.js", and "--config"
+     * // -> text containing "/a/b/.sous/", "sous init", "sous.config.js" and "--config"
      */
     it("should name the checked directories and both fixes", () => {
       const message = formatNotFoundMessage("/a/b");
       expect(message).toContain("No sous config found");
       expect(message).toContain(path.join("/a/b", ".sous"));
+      expect(message).toContain("1. Set the project up: run 'sous init'");
       expect(message).toContain("sous.config.js");
       expect(message).toContain("--config");
     });
@@ -549,17 +550,17 @@ describe("config-discovery", () => {
     });
 
     /**
-     * The embedded sample config must show the flat single-project shape: fields
-     * like `name` and `compilation` at the top level, with no `projects` map or
-     * `defaultProject` key.
+     * The message should not carry a config for the reader to copy: `sous init`
+     * writes one, so an inlined sample would only be a second copy to keep in
+     * step. Nothing about the removed multi-project schema appears either.
      *
      * formatNotFoundMessage("/a/b");
-     * // -> sample contains 'name: "My Project"' but no "projects"/"defaultProject"
+     * // -> no "export const config", no "projects", no "defaultProject"
      */
-    it("should show a flat sample config with no projects map or defaultProject", () => {
+    it("should point at sous init instead of showing a sample config", () => {
       const message = formatNotFoundMessage("/a/b");
-      expect(message).toContain('name: "My Project"');
-      expect(message).toContain("compilation:");
+      expect(message).not.toContain("export const config");
+      expect(message).not.toContain("compilation:");
       expect(message).not.toContain("projects");
       expect(message).not.toContain("defaultProject");
     });
