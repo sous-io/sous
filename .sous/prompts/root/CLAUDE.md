@@ -31,10 +31,16 @@ from its `package.json` `bin` field, is imported into the same process and this 
 loads nothing else. Otherwise `run.js` registers tsx via `tsx/esm/api` and hands off to
 oclif. The hand-off module is plain ESM like the config kernel, because it runs before tsx
 exists; `SOUS_NO_DELEGATE` switches it off, the notice it prints goes to stderr only when
-the two versions differ (`SOUS_DEBUG` prints it on every hand-off), and anything unreadable
-means "run the invoked copy". `src/lib/project-install.spec.ts` covers the rules and
+the two versions differ (`SOUS_DEBUG` prints it on every hand-off), it is one line naming
+the version handed off to unless `--verbose` is on the command line (then it adds both
+install paths and the escape hatch), and anything unreadable means "run the invoked copy".
+`src/lib/project-install.spec.ts` covers the rules and
 `src/test/integration/project-install-e2e.test.ts` proves the hand-off against a packed
-tarball, offline. `bin/sous` is a thin bash wrapper over `run.js` for the repo's npm scripts. tsx is
+tarball, offline. `sous --version` is answered in `run.js` too, after tsx is registered and
+before oclif loads, by `src/lib/version-report.ts`: the version alone as `v1.2.3`, and with
+`--verbose` the package, install path, platform and Node build under it through
+`showVariables`; oclif's own user-agent answer is never printed. `bin/sous` is a thin bash
+wrapper over `run.js` for the repo's npm scripts. tsx is
 resolved by module resolution (never a hardcoded `node_modules` path) so hoisted installs
 (`npx`, local deps) work; same trick in `loadSettings` (`settings.ts`) for the config
 subprocess. `run.js` sets oclif `settings.enableAutoTranspile = false`; tsx already
@@ -197,6 +203,8 @@ src/
     env-file.ts            # line-preserving WRITER for those same two files
     project-install.mjs    # the hand-off from the invoked sous to a project's own install;
                            #   plain ESM because bin/run.js calls it before tsx is registered
+    version-report.ts      # what `sous --version` prints: the version alone, or the facts
+                           #   under it with --verbose
     settings.ts            # config loader (spawns the kernel), var resolution, scope chain
     markdown-compiler.ts   # CompilationService; @-include, LiquidJS rendering
     include-resolver.ts    # @-include alias/${var}/relative path resolution

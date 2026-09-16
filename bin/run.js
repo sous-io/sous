@@ -20,6 +20,19 @@ if (!handedOff) {
   const { register } = await import("tsx/esm/api");
   register();
 
+  // `sous --version` is answered here rather than by oclif, whose answer is
+  // its user agent string. Plain, it is the version alone; `--verbose` adds
+  // the package, where it is installed, the platform and the Node build.
+  const argv = process.argv.slice(2);
+  const { isVersionRequest, printVersion } = await import("../src/lib/version-report.ts");
+  if (isVersionRequest(argv)) {
+    printVersion(argv, ownRoot);
+  } else {
+    await runCommand();
+  }
+}
+
+async function runCommand() {
   const { execute, settings } = await import("@oclif/core");
 
   // tsx (above) already makes .ts imports work, so oclif's own auto-transpile

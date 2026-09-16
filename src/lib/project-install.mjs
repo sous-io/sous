@@ -28,7 +28,10 @@
  *     A hand-off is a convenience; a refusal to run is not.
  *   - `SOUS_NO_DELEGATE` (anything but 0/false/no/off) runs the invoked copy.
  *   - The notice goes to stderr, so piped stdout stays clean, and only when
- *     the two versions differ; `SOUS_DEBUG` prints it on every hand-off.
+ *     the two versions differ; `SOUS_DEBUG` prints it on every hand-off. It is
+ *     one line naming the version handed off to; `--verbose` anywhere on the
+ *     command line (or `SOUS_DEBUG`) adds where both installs are and how to
+ *     keep the invoked one running.
  */
 
 import fs from "node:fs";
@@ -43,6 +46,9 @@ export const NO_DELEGATE_ENV = "SOUS_NO_DELEGATE";
 
 /** The environment variable that makes every hand-off announce itself. */
 export const DEBUG_ENV = "SOUS_DEBUG";
+
+/** The flag that makes the notice say where both installs are. */
+export const VERBOSE_FLAG = "--verbose";
 
 /**
  * Whether an on/off environment variable is on: set to anything but an empty
@@ -130,28 +136,47 @@ function describeInstall(candidate, ownRoot) {
 }
 
 /**
+ * The lines the notice is made of: one line naming the version handed off to,
+ * and, when verbose, where both installs are and how to keep the invoked one
+ * running. Plain text, because this prints before tsx exists; the block
+ * mirrors the shape `showVariables` gives a key and value list.
+ */
+export function formatHandoffNotice({ install, ownVersion, ownRoot, verbose }) {
+  const lines = [`Handing off to the project-level Sous install: v${install.version}`];
+  if (verbose) {
+    lines.push(
+      `    Project install: ${install.root}`,
+      `    Invoked install: v${ownVersion} at ${ownRoot}`,
+      `Set ${NO_DELEGATE_ENV}=1 to run the invoked install instead.`
+    );
+  }
+  return lines;
+}
+
+/**
  * Decides what the invoked install should do, without doing it.
  *
  * Returns `{ kind: "run-self" }` when the invoked copy runs the command, or
  * `{ kind: "hand-off", install, notice }` naming the project copy to import
- * and the sentence to print on stderr first (undefined when nothing is said).
+ * and the lines to print on stderr first (an empty list when nothing is said).
  */
-export function planHandoff({ cwd, ownRoot, env }) {
+export function planHandoff({ cwd, ownRoot, env, argv = [] }) {
   if (isEnvFlagOn(env[NO_DELEGATE_ENV])) return { kind: "run-self" };
   const install = findProjectInstall(cwd, ownRoot);
   if (!install || install.same) return { kind: "run-self" };
 
   const ownPkg = readPackageJson(ownRoot);
   const ownVersion = typeof ownPkg?.version === "string" ? ownPkg.version : "unknown";
-  const differ = ownVersion !== install.version;
-  let notice;
-  if (differ) {
-    notice =
-      `Running the project's own sous ${install.version} from ${install.root} instead of the ` +
-      `sous ${ownVersion} you invoked; set ${NO_DELEGATE_ENV}=1 to run the one you invoked.`;
-  } else if (isEnvFlagOn(env[DEBUG_ENV])) {
-    notice = `Running the project's own sous ${install.version} from ${install.root}.`;
-  }
+  const debug = isEnvFlagOn(env[DEBUG_ENV]);
+  const announce = ownVersion !== install.version || debug;
+  const notice = announce
+    ? formatHandoffNotice({
+        install,
+        ownVersion,
+        ownRoot: realpathOr(ownRoot),
+        verbose: debug || argv.includes(VERBOSE_FLAG),
+      })
+    : [];
   return { kind: "hand-off", install, notice };
 }
 
@@ -165,11 +190,12 @@ export async function handOffToProjectInstall({
   ownRoot,
   cwd = process.cwd(),
   env = process.env,
+  argv = process.argv.slice(2),
   stderr = process.stderr,
 }) {
-  const plan = planHandoff({ cwd, ownRoot, env });
+  const plan = planHandoff({ cwd, ownRoot, env, argv });
   if (plan.kind !== "hand-off") return false;
-  if (plan.notice) stderr.write(`${plan.notice}\n`);
+  for (const line of plan.notice) stderr.write(`${line}\n`);
   await import(pathToFileURL(plan.install.bin).href);
   return true;
 }
