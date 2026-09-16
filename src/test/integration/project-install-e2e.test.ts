@@ -64,18 +64,26 @@ describe("hand-off to the project's own install", () => {
   beforeAll(() => {
     tmp = makeTmpDir("sous-project-install-e2e-");
 
-    // Pack the repository as npm would publish it.
+    // Pack the repository as npm would publish it. The tarball is found by
+    // listing the destination rather than by parsing npm's output: the shape
+    // of `npm pack --json` differs between npm major versions (an array in
+    // npm 10, an object keyed by package name in npm 12), and the release job
+    // runs the suite under the latest npm while the test job runs the bundled one.
     const packDir = path.join(tmp.path, "pack");
     fs.mkdirSync(packDir);
     const pack = spawnSync(
       process.platform === "win32" ? "npm.cmd" : "npm",
-      ["pack", "--json", "--pack-destination", packDir],
+      ["pack", "--pack-destination", packDir],
       { cwd: repoRoot, encoding: "utf8" }
     );
     if (pack.status !== 0) {
       throw new Error(`npm pack failed:\n${pack.stderr}`);
     }
-    const [{ filename }] = JSON.parse(pack.stdout) as { filename: string }[];
+    const tarballs = fs.readdirSync(packDir).filter((name) => name.endsWith(".tgz"));
+    if (tarballs.length !== 1) {
+      throw new Error(`npm pack wrote ${tarballs.length} tarballs into ${packDir}; expected one.`);
+    }
+    const [filename] = tarballs as [string];
 
     // Extract it where a devDependency install would put it.
     projectRoot = path.join(tmp.path, "project");
