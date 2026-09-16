@@ -63,6 +63,18 @@ way. Which shell someone typed in decided what a build produced.
   wrapper every other line of sous output goes through, and prints its one sentence plain. That
   is accepted as the cost of loading nothing before the decision is made.
 
+### The release commit keeps sous's own lockfile in step
+
+- The hand-off cannot protect the sous repository itself, which builds with its own checkout
+  rather than a project install, and its lockfile drifted for a different reason: every merge
+  to main publishes a patch, and the release commit moved `package.json` without moving the
+  committed lockfile's `core/sous-skills` pin, so the next build on anyone's machine rewrote
+  the lockfile to the version the release had set. `npm run version:sync`, which the release
+  job already runs to hold the packaged recipe at the package version, now moves that lockfile
+  entry too, with the hash of the packaged recipe as it stands after the bump, and the release
+  commit carries the lockfile. The parity spec fails when the pin drifts, so a version set by
+  hand in a pull request runs the same script.
+
 ## Consequences
 
 - A team that installs sous in the project gets one build output however sous is invoked, and

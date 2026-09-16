@@ -72,7 +72,8 @@ that has no `v<version>` tag yet, somebody set it deliberately in the merged pul
 and it is published as it stands; otherwise that version already shipped, so the merge
 takes the next PATCH. So a minor or a major release is a version edit inside an ordinary
 pull request, and everything else is a patch. The job applies the version to
-`package.json`, `package-lock.json` and `recipes/core/sous-skills/sous.recipe.yaml`
+`package.json`, `package-lock.json`, `recipes/core/sous-skills/sous.recipe.yaml` and the
+`core/sous-skills` entry of this repository's own `.sous/sous.lock.json`
 (`npm run version:sync`), commits it as `chore: release v<version> [skip ci]` under a bot
 identity, and creates the annotated tag. **The tag is a record of what was published;
 nothing triggers on it.** The job needs `contents: write` to push the commit and the tag.
@@ -105,7 +106,12 @@ project's implicit `core` subscription asks for exactly the running sous version
 `npm run version:sync` (`scripts/sync-core-version.mts`, built on `setRecipeVersion` in
 `src/lib/repos/release/bump.ts`) is what puts them back in step. It is idempotent: a recipe
 already at the package version is not rewritten, so a hand-written manifest is never
-reflowed.
+reflowed. The same script moves the `core/sous-skills` entry of THIS repository's committed
+lockfile to the package version, with the hash of the packaged recipe as it stands after the
+bump (the hash a fresh seed computes), because sous builds itself with its own checkout and a
+lockfile left one version behind `package.json` is rewritten by the next build on whoever's
+machine runs it. The same spec fails when the lockfile's pin drifts from the package version,
+so a pull request that sets a version by hand runs `npm run version:sync` too.
 
 **The packaged version is always resolvable.** Parity means the implicit `core` subscription
 asks for a version the repository has not published yet for as long as it takes the release

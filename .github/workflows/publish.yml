@@ -7,7 +7,8 @@ name: Release
 #
 # Every merge to main releases. There is no separate "cut a release" step and
 # nothing to remember: the version job raises the patch number, writes it into
-# package.json, package-lock.json and the packaged core recipe, commits that as
+# package.json, package-lock.json, the packaged core recipe and the core entry
+# of this repository's own lockfile, commits that as
 # "chore: release v<version> [skip ci]", and creates the annotated tag
 # v<version>. The tag is a RECORD of what was published. Nothing triggers on it.
 #
@@ -129,8 +130,11 @@ jobs:
       # package's version, because every project's implicit `core` subscription
       # asks for exactly the running sous version. Bumping one without the other
       # is a hard test failure (src/lib/repos/core-recipe.spec.ts), so the two
-      # are bumped in the same commit, here.
-      - name: Put the packaged core recipe at the same version
+      # are bumped in the same commit, here. The same script moves the core
+      # entry of this repository's own lockfile, because sous builds itself with
+      # its own checkout: left behind, the next build on anyone's machine would
+      # rewrite the lockfile to the version this commit sets.
+      - name: Put the packaged core recipe and the lockfile at the same version
         run: npm run version:sync
 
       - name: Commit the release and cut its tag
@@ -142,7 +146,7 @@ jobs:
           git config user.name "sous release"
           git config user.email "sous-release@users.noreply.github.com"
 
-          git add package.json package-lock.json recipes/core/sous-skills/sous.recipe.yaml
+          git add package.json package-lock.json recipes/core/sous-skills/sous.recipe.yaml .sous/sous.lock.json
 
           if git diff --cached --quiet; then
             echo "Nothing changed; this version was already written into the tree."
