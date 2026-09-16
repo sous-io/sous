@@ -6,6 +6,7 @@ import {
   resolveIncludeCandidates,
   resolveAliasPrefix,
   buildAliasMap,
+  templateTwin,
 } from "./include-resolver.js";
 import type {
   NamespaceRequest,
@@ -55,6 +56,32 @@ describe("substituteVars()", () => {
   });
 });
 
+/**
+ * Every expected candidate followed by its `.tpl.` twin, which is the order
+ * the resolver promises: the literal spelling, then the twin, per candidate.
+ */
+function withTwins(paths: string[]): string[] {
+  return paths.flatMap((p) => [
+    p,
+    p.endsWith(".tpl.md") ? p.replace(/\.tpl\.md$/, ".md") : p.replace(/\.md$/, ".tpl.md"),
+  ]);
+}
+
+describe("templateTwin()", () => {
+  /**
+   * A plain file's twin carries `.tpl` before its extension, a template's twin
+   * drops it, and a file with no extension has none.
+   * Example: "/a/x.md" -> "/a/x.tpl.md"; "/a/x.tpl.md" -> "/a/x.md".
+   */
+  it("should swap a path between its plain and .tpl. spellings", () => {
+    expect(templateTwin("/a/x.md")).toBe("/a/x.tpl.md");
+    expect(templateTwin("/a/x.tpl.md")).toBe("/a/x.md");
+    expect(templateTwin("/a/settings.tpl.mjs")).toBe("/a/settings.mjs");
+    expect(templateTwin("/a/README")).toBeUndefined();
+    expect(templateTwin("/a/.env")).toBeUndefined();
+  });
+});
+
 describe("splitAliasKey()", () => {
   it("splits on the first slash", () => {
     expect(splitAliasKey("sous/memories/x.md")).toEqual({ key: "sous", rest: "memories/x.md" });
@@ -78,7 +105,7 @@ describe("resolveIncludeCandidates()", () => {
       scope: { sousRootPath: "/opt/sous" },
       baseDir,
     });
-    expect(out).toEqual(["/opt/sous/shared/x.md"]);
+    expect(out).toEqual(withTwins(["/opt/sous/shared/x.md"]));
   });
 
   it("resolves an alias to its base, then the relative fallback", () => {
@@ -86,10 +113,10 @@ describe("resolveIncludeCandidates()", () => {
       aliases: { "~project": ["/proj-root"] },
       baseDir,
     });
-    expect(out).toEqual([
+    expect(out).toEqual(withTwins([
       "/proj-root/memories/x.md",
       "/proj/memories/tools/~project/memories/x.md",
-    ]);
+    ]));
   });
 
   it("tries multiple alias bases in order, then relative", () => {
@@ -97,11 +124,11 @@ describe("resolveIncludeCandidates()", () => {
       aliases: { stuff: ["/etc/stuff", "/var/stuff"] },
       baseDir,
     });
-    expect(out).toEqual([
+    expect(out).toEqual(withTwins([
       "/etc/stuff/one.md",
       "/var/stuff/one.md",
       "/proj/memories/tools/stuff/one.md",
-    ]);
+    ]));
   });
 
   it("augment case: alias miss falls through to a real relative dir of the same name", () => {
@@ -110,7 +137,7 @@ describe("resolveIncludeCandidates()", () => {
       aliases: { stuff: ["/etc/stuff"] },
       baseDir: "/proj",
     });
-    expect(out).toEqual(["/etc/stuff/one.md", "/proj/stuff/one.md"]);
+    expect(out).toEqual(withTwins(["/etc/stuff/one.md", "/proj/stuff/one.md"]));
   });
 
   it("accepts the colon separator for aliases", () => {
@@ -121,9 +148,33 @@ describe("resolveIncludeCandidates()", () => {
     expect(out[0]).toBe("/proj-root/memories/x.md");
   });
 
+  /**
+   * A leading `~/` is the home directory, not an alias: `@~/notes/x.md` resolves
+   * to the one absolute path under $HOME and nothing else is tried.
+   */
+  it("should expand a leading ~/ to the home directory as the sole candidate", () => {
+    const home = process.env.HOME;
+    process.env.HOME = "/home/someone";
+    try {
+      const out = resolveIncludeCandidates("~/notes/x.md", { aliases: {}, baseDir });
+      expect(out).toEqual(withTwins(["/home/someone/notes/x.md"]));
+    } finally {
+      process.env.HOME = home;
+    }
+  });
+
+  /** The sigil followed by a name is still an alias or a namespace, never the home directory. */
+  it("should leave a ~name first segment to the alias and namespace rules", () => {
+    const out = resolveIncludeCandidates("~project/x.md", {
+      aliases: { "~project": ["/proj"] },
+      baseDir,
+    });
+    expect(out).toEqual(withTwins(["/proj/x.md", "/proj/memories/tools/~project/x.md"]));
+  });
+
   it("treats an unregistered first segment as purely relative", () => {
     const out = resolveIncludeCandidates("nope/x.md", { aliases: {}, baseDir });
-    expect(out).toEqual(["/proj/memories/tools/nope/x.md"]);
+    expect(out).toEqual(withTwins(["/proj/memories/tools/nope/x.md"]));
   });
 
   it("substitutes vars before alias splitting", () => {
@@ -132,7 +183,7 @@ describe("resolveIncludeCandidates()", () => {
       aliases: { docs: ["/d"] },
       baseDir,
     });
-    expect(out).toEqual(["/d/x.md", "/proj/memories/tools/docs/x.md"]);
+    expect(out).toEqual(withTwins(["/d/x.md", "/proj/memories/tools/docs/x.md"]));
   });
 
   it("de-duplicates identical candidates", () => {
@@ -141,7 +192,7 @@ describe("resolveIncludeCandidates()", () => {
       aliases: { x: ["/proj/memories/tools/x"] },
       baseDir,
     });
-    expect(out).toEqual(["/proj/memories/tools/x/one.md"]);
+    expect(out).toEqual(withTwins(["/proj/memories/tools/x/one.md"]));
   });
 });
 
@@ -215,7 +266,7 @@ describe("resolveInclude() with a namespace resolver", () => {
       fromFile: "/proj/prompts/AGENTS.md",
     });
 
-    expect(out.candidates).toEqual(["/store/ns/recipe/x.md", "/proj/prompts/~ns/recipe/x.md"]);
+    expect(out.candidates).toEqual(withTwins(["/store/ns/recipe/x.md", "/proj/prompts/~ns/recipe/x.md"]));
     expect(out.namespaceIssue).toBeUndefined();
     expect(calls).toEqual([
       { namespace: "ns", rest: "recipe/x.md", fromFile: "/proj/prompts/AGENTS.md" },
@@ -251,7 +302,7 @@ describe("resolveInclude() with a namespace resolver", () => {
     const out = resolveInclude("shared/x.md", { namespaceResolver: resolver, baseDir });
 
     expect(calls).toEqual([]);
-    expect(out.candidates).toEqual(["/proj/prompts/shared/x.md"]);
+    expect(out.candidates).toEqual(withTwins(["/proj/prompts/shared/x.md"]));
   });
 
   /**
@@ -272,7 +323,7 @@ describe("resolveInclude() with a namespace resolver", () => {
       fromFile: "/proj/prompts/AGENTS.md",
       resolution: { kind: "unknown-namespace", known: ["core"] },
     });
-    expect(out.candidates).toEqual(["/proj/prompts/~ns/recipe/x.md"]);
+    expect(out.candidates).toEqual(withTwins(["/proj/prompts/~ns/recipe/x.md"]));
   });
 
   /**
@@ -281,7 +332,7 @@ describe("resolveInclude() with a namespace resolver", () => {
    */
   it("should behave like a plain alias path when no resolver is supplied", () => {
     const out = resolveInclude("~ns/recipe/x.md", { baseDir });
-    expect(out.candidates).toEqual(["/proj/prompts/~ns/recipe/x.md"]);
+    expect(out.candidates).toEqual(withTwins(["/proj/prompts/~ns/recipe/x.md"]));
     expect(out.namespaceIssue).toBeUndefined();
   });
 

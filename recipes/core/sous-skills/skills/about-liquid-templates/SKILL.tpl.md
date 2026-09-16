@@ -93,8 +93,8 @@ Include another file at render time (path **relative to the template file's dire
 
 `render` resolves paths relative to the template file. For files outside that tree, use
 a recipe reference (`@~<namespace>/<recipe>/...`), a path **alias** (`@~project/...`, or a
-user-defined alias) or a `@`-prefixed `${var}` path; the same resolution as `@include`
-(see below) works in `render` too.
+user-defined alias), a home-relative path (`@~/...`) or a `@`-prefixed `${var}` path; the
+same resolution as `@include` (see below) works in `render` too.
 
 To prevent template sequences from being processed in a code example, wrap the block in
 `raw` / `endraw` tag blocks. These blocks cannot be nested: the first `endraw`
@@ -155,6 +155,13 @@ Built-in **aliases** are reserved, always begin with `~`, and are consulted befo
 namespaces. There is exactly one:
 
 - `@~project/...` → the consuming project's root.
+
+A bare `@~/...` is not an alias: the sigil followed only by a separator is the home
+directory, so `@~/notes/context.md` includes a file from your home directory.
+
+An include finds a file by either spelling. `@shared.md` finds `shared.tpl.md` when that is
+what exists, and `@notes.tpl.md` finds `notes.md`; the spelling written is tried first. So a
+file can be turned into a template, or back, without touching the lines that include it.
 
 Everything else sous once shipped inside its own package is published as a recipe now, so
 a recipe reference is what reaches it.

@@ -130,6 +130,40 @@ describe("CompilationService", () => {
   });
 
   // -------------------------------------------------------------------------
+  // The .tpl. twin of an @include
+  // -------------------------------------------------------------------------
+
+  /**
+   * An include names a file by either spelling: `@shared.md` finds
+   * `shared.tpl.md` when that is what exists, and `@notes.tpl.md` finds
+   * `notes.md`. The literal spelling wins when both exist, so a writer never
+   * has to know whether an included file has been turned into a template.
+   */
+  it("should fall back to the .tpl. twin of an @include, literal spelling first", async () => {
+    tmp = makeTmpDir();
+    fs.writeFileSync(path.join(tmp.path, "shared.tpl.md"), "# Shared Template\n");
+    fs.writeFileSync(path.join(tmp.path, "notes.md"), "# Plain Notes\n");
+    fs.writeFileSync(path.join(tmp.path, "both.md"), "# Both Plain\n");
+    fs.writeFileSync(path.join(tmp.path, "both.tpl.md"), "# Both Template\n");
+    const entryPoint = path.join(tmp.path, "entry.md");
+    fs.writeFileSync(entryPoint, "# Entry\n\n@shared.md\n\n@notes.tpl.md\n\n@both.md\n");
+    const destFile = path.join(tmp.path, "out", "twins.md");
+
+    const compiler = makeCompiler();
+    const result = await compiler.compile({
+      targets: [{ rootInputPath: entryPoint, outputs: [{ destinationFile: destFile }] }],
+    });
+
+    expect(result).toBe(true);
+    const output = fs.readFileSync(destFile, "utf8");
+    expect(output).toContain("# Shared Template");
+    expect(output).toContain("# Plain Notes");
+    expect(output).toContain("# Both Plain");
+    expect(output).not.toContain("# Both Template");
+    expect(output).not.toContain("@shared.md");
+  });
+
+  // -------------------------------------------------------------------------
   // Nested @include (A -> B -> C)
   // -------------------------------------------------------------------------
 
