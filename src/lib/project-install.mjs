@@ -27,11 +27,11 @@
  *   - Anything unreadable or ambiguous means "run the copy that was invoked".
  *     A hand-off is a convenience; a refusal to run is not.
  *   - `SOUS_NO_DELEGATE` (anything but 0/false/no/off) runs the invoked copy.
- *   - The notice goes to stderr, so piped stdout stays clean, and only when
- *     the two versions differ; `SOUS_DEBUG` prints it on every hand-off. It is
- *     one line naming the version handed off to; `--verbose` anywhere on the
- *     command line (or `SOUS_DEBUG`) adds where both installs are and how to
- *     keep the invoked one running.
+ *   - The notice goes to stderr, so piped stdout stays clean. It prints when
+ *     the two versions differ, and on every hand-off under `SOUS_DEBUG` or
+ *     with `--verbose` anywhere on the command line. Plain, it is one line
+ *     naming the version handed off to; verbose (`--verbose` or `SOUS_DEBUG`)
+ *     it adds where both installs are and how to keep the invoked one running.
  */
 
 import fs from "node:fs";
@@ -167,15 +167,10 @@ export function planHandoff({ cwd, ownRoot, env, argv = [] }) {
 
   const ownPkg = readPackageJson(ownRoot);
   const ownVersion = typeof ownPkg?.version === "string" ? ownPkg.version : "unknown";
-  const debug = isEnvFlagOn(env[DEBUG_ENV]);
-  const announce = ownVersion !== install.version || debug;
+  const verbose = isEnvFlagOn(env[DEBUG_ENV]) || argv.includes(VERBOSE_FLAG);
+  const announce = ownVersion !== install.version || verbose;
   const notice = announce
-    ? formatHandoffNotice({
-        install,
-        ownVersion,
-        ownRoot: realpathOr(ownRoot),
-        verbose: debug || argv.includes(VERBOSE_FLAG),
-      })
+    ? formatHandoffNotice({ install, ownVersion, ownRoot: realpathOr(ownRoot), verbose })
     : [];
   return { kind: "hand-off", install, notice };
 }

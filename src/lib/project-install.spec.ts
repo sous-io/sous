@@ -209,21 +209,27 @@ describe("project-install", () => {
 
     /**
      * The same version installed in the project hands off silently, unless
-     * SOUS_DEBUG asks for every hand-off to be announced.
+     * SOUS_DEBUG or --verbose asks for every hand-off to be announced, in
+     * which case the full form is printed.
      * Example: global 2.0.0 in a project holding 2.0.0 hands off with no notice.
      */
-    it("should hand off silently for the same version, and announce it under SOUS_DEBUG", () => {
+    it("should hand off silently for the same version, and announce it in full under SOUS_DEBUG or --verbose", () => {
       const project = path.join(tmp.path, "project");
       writePackage(copyPathIn(project), { version: "2.0.0" });
 
       const quiet = planHandoff({ cwd: project, ownRoot, env: {} });
       expect(quiet).toMatchObject({ kind: "hand-off", notice: [] });
 
-      const loud = planHandoff({ cwd: project, ownRoot, env: { [DEBUG_ENV]: "1" } });
-      expect(loud.kind).toBe("hand-off");
-      if (loud.kind !== "hand-off") return;
-      expect(loud.notice[0]).toBe("Handing off to the project-level Sous install: v2.0.0");
-      expect(loud.notice).toHaveLength(4);
+      for (const input of [
+        { env: { [DEBUG_ENV]: "1" }, argv: [] },
+        { env: {}, argv: ["--version", "--verbose"] },
+      ]) {
+        const loud = planHandoff({ cwd: project, ownRoot, ...input });
+        expect(loud.kind).toBe("hand-off");
+        if (loud.kind !== "hand-off") return;
+        expect(loud.notice[0]).toBe("Handing off to the project-level Sous install: v2.0.0");
+        expect(loud.notice).toHaveLength(4);
+      }
     });
 
     /**

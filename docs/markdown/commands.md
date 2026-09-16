@@ -50,9 +50,11 @@ Every topic answers to both spellings of its name: `repo` and `repos`, `subscrip
 ### `sous init [DIRECTORY]`
 Sets a project up for sous: writes its `.sous/` directory, then runs the first build. It is the one command that
 runs before a config exists, and the starting point for a project that has never used sous. It writes a commented
-primary config, a starter prompt at `.sous/prompts/AGENTS.md` that the config compiles to `AGENTS.md` at the
-project root, `.sous/.env` and `.sous/.env.local.example`, and the sous-managed block in `.sous/.gitignore`. The
-first build compiles the starter prompt and the `core` skills, and pins them in `.sous/sous.lock.json`.
+primary config, a starter prompt at `.sous/memories/AGENTS.md` that the config compiles to `AGENTS.md` at the
+project root, `.sous/.env` and `.sous/.env.local.example`, and the sous-managed block in `.sous/.gitignore`. A
+project that has a `package.json` also gains `@sous-io/sous` in its `devDependencies`, at exactly the running
+version, unless it already depends on it; nothing is installed, so run your package manager's install afterwards.
+The first build compiles the starter prompt and the `core` skills, and pins them in `.sous/sous.lock.json`.
 
 A project whose `.sous/` already holds a primary config is refused, and nothing is written. Setting up a directory
 inside a project that is already set up is a question rather than an error, since a subproject may want its own
@@ -340,7 +342,7 @@ No expected failure prints a stack trace. A failure sous did not expect prints t
 asking you to set `SOUS_DEBUG=1` and run the command again. Set `SOUS_DEBUG` to anything but `0`, `false`, `no`
 or `off` and every reported failure prints its stack to standard error underneath the message:
 `SOUS_DEBUG=1 sous build`. The one other thing it changes is that every hand-off to a project's own install
-announces itself, not only one between different versions.
+announces itself in full, not only one between different versions; `--verbose` does the same.
 
 `SOUS_NO_DELEGATE` is the other environment variable every command reads. Set it the same way and the copy of
 sous you invoked runs the command, even inside a project that installs its own `@sous-io/sous`; see
