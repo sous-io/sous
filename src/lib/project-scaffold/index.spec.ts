@@ -6,6 +6,7 @@ import {
   configSchemaUrl,
   scaffoldProject,
   sousDirFor,
+  SOUS_PACKAGE_NAME,
   STARTER_PROMPT_RELATIVE_PATH,
 } from "./index.js";
 import { IGNORE_BLOCK_END, IGNORE_BLOCK_START } from "../repos/links.js";
@@ -53,7 +54,7 @@ describe("scaffoldProject()", () => {
    * and report them, relative to the project root, in the order written.
    *
    * await scaffoldProject({ sousDir: "/tmp/my-app/.sous", sousVersion: "0.1.1" });
-   * // -> writes sous.config.js, prompts/AGENTS.md, .env, .env.local.example
+   * // -> writes sous.config.js, memories/AGENTS.md, .env, .env.local.example
    * //    and .gitignore inside .sous/
    */
   it("should write every file a new project needs", async () => {
@@ -229,5 +230,89 @@ describe("scaffoldProject()", () => {
     expect(written.split("\n").filter((line) => line === IGNORE_BLOCK_END)).toHaveLength(1);
     expect(written).toContain("sous.state.json");
     expect(written).toContain(".env.local");
+  });
+  /**
+   * A project with a package.json gains `@sous-io/sous` as a devDependency at
+   * exactly the scaffolding version, keeping the file's indentation, its other
+   * fields and its trailing newline, with devDependencies sorted as npm keeps
+   * them.
+   *
+   * // package.json: { "name": "my-app", "devDependencies": { "zod": "^4" } }
+   * // -> devDependencies: { "@sous-io/sous": "0.1.1", "zod": "^4" }
+   */
+  it("should add @sous-io/sous to an existing package.json as an exact devDependency", async () => {
+    const packageJsonPath = path.join(projectRoot, "package.json");
+    fs.writeFileSync(
+      packageJsonPath,
+      '{\n    "name": "my-app",\n    "scripts": { "test": "vitest" },\n    "devDependencies": { "zod": "^4.0.0" }\n}\n'
+    );
+
+    const result = await scaffoldProject({ sousDir, sousVersion: SOUS_VERSION });
+
+    expect(result.packageJson).toEqual({
+      kind: "added",
+      path: packageJsonPath,
+      range: SOUS_VERSION,
+    });
+    expect(result.files).toContain("package.json");
+    const written = fs.readFileSync(packageJsonPath, "utf8");
+    expect(JSON.parse(written)).toEqual({
+      name: "my-app",
+      scripts: { test: "vitest" },
+      devDependencies: { [SOUS_PACKAGE_NAME]: SOUS_VERSION, zod: "^4.0.0" },
+    });
+    expect(Object.keys(JSON.parse(written).devDependencies)).toEqual([SOUS_PACKAGE_NAME, "zod"]);
+    expect(written.startsWith('{\n    "name"')).toBe(true);
+    expect(written.endsWith("}\n")).toBe(true);
+  });
+
+  /**
+   * A package.json that already depends on sous, in either section, is left
+   * byte for byte as it was, and the result says where the dependency is.
+   */
+  it("should leave a package.json that already depends on sous untouched", async () => {
+    const packageJsonPath = path.join(projectRoot, "package.json");
+    const before = '{\n  "name": "my-app",\n  "dependencies": { "@sous-io/sous": "^0.1.0" }\n}\n';
+    fs.writeFileSync(packageJsonPath, before);
+
+    const result = await scaffoldProject({ sousDir, sousVersion: SOUS_VERSION });
+
+    expect(result.packageJson).toEqual({
+      kind: "present",
+      path: packageJsonPath,
+      range: "^0.1.0",
+      section: "dependencies",
+    });
+    expect(result.files).not.toContain("package.json");
+    expect(fs.readFileSync(packageJsonPath, "utf8")).toBe(before);
+  });
+
+  /** A project with no package.json gets none written for it, and the result says so. */
+  it("should not create a package.json where there is none", async () => {
+    const result = await scaffoldProject({ sousDir, sousVersion: SOUS_VERSION });
+    expect(result.packageJson).toEqual({ kind: "absent" });
+    expect(fs.existsSync(path.join(projectRoot, "package.json"))).toBe(false);
+  });
+
+  /** A package.json that is not JSON is refused by name, and nothing is written. */
+  it("should refuse a package.json it cannot read as JSON, before writing anything", async () => {
+    fs.writeFileSync(path.join(projectRoot, "package.json"), "{ not json");
+
+    await expect(scaffoldProject({ sousDir, sousVersion: SOUS_VERSION })).rejects.toSatisfy(
+      (error: unknown) => isConfigError(error) && /package\.json.*as JSON/s.test((error as Error).message)
+    );
+    expect(fs.existsSync(sousDir)).toBe(false);
+  });
+
+  /** A dry run reports the package.json edit without making it. */
+  it("should report the package.json edit on a dry run without writing it", async () => {
+    const packageJsonPath = path.join(projectRoot, "package.json");
+    const before = '{ "name": "my-app" }\n';
+    fs.writeFileSync(packageJsonPath, before);
+
+    const result = await scaffoldProject({ sousDir, sousVersion: SOUS_VERSION, dryRun: true });
+
+    expect(result.packageJson.kind).toBe("added");
+    expect(fs.readFileSync(packageJsonPath, "utf8")).toBe(before);
   });
 });

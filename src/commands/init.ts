@@ -31,10 +31,12 @@ import { nonInteractiveError } from "../lib/interactive.js";
 import { subscriptionServiceFor } from "../lib/repos/subscription-service.js";
 import {
   PROJECT_CONFIG_FORMATS,
+  SOUS_PACKAGE_NAME,
   STARTER_OUTPUT_NAME,
   STARTER_PROMPT_RELATIVE_PATH,
   scaffoldProject,
   sousDirFor,
+  type PackageJsonOutcome,
   type ProjectConfigFormat,
 } from "../lib/project-scaffold/index.js";
 import { SOUS_VERSION } from "../lib/settings.js";
@@ -50,7 +52,27 @@ import {
   showCommandVars,
   showVariables,
   warning,
+  type VariableEntry,
 } from "../utils/formatting.js";
+
+/**
+ * The "Dependency" row of the summary: where sous now sits in the project's
+ * package.json, or nothing when the project has no package.json.
+ */
+function dependencyRow(outcome: PackageJsonOutcome): VariableEntry[] {
+  if (outcome.kind === "absent") return [];
+  const value = `${SOUS_PACKAGE_NAME} ${outcome.range}`;
+  if (outcome.kind === "present") {
+    return [{ label: "Dependency", value, detail: `already in ${outcome.section} in package.json` }];
+  }
+  return [
+    {
+      label: "Dependency",
+      value,
+      detail: "added to devDependencies in package.json; run your package manager's install to fetch it",
+    },
+  ];
+}
 
 export default class Init extends BaseCommand {
   static description =
@@ -129,6 +151,11 @@ export default class Init extends BaseCommand {
       if (result.dryRun) dryRunNotice(`would write ${file}`);
       else log(`  wrote ${file}`);
     }
+    if (result.packageJson.kind === "added") {
+      const what = `${SOUS_PACKAGE_NAME} ${result.packageJson.range} to devDependencies in package.json`;
+      if (result.dryRun) dryRunNotice(`would add ${what}`);
+      else log(`  added ${what}`);
+    }
 
     if (result.dryRun) {
       blankLine();
@@ -147,6 +174,7 @@ export default class Init extends BaseCommand {
       { label: "Prompt source", value: path.join(sousDir, STARTER_PROMPT_RELATIVE_PATH) },
       { label: "Compiled to", value: path.join(projectRoot, STARTER_OUTPUT_NAME) },
       { label: "Skills", value: path.join(projectRoot, ".claude", "skills") },
+      ...dependencyRow(result.packageJson),
       { label: "Shared answers", value: path.join(sousDir, ".env"), detail: "committed" },
       {
         label: "Local answers",

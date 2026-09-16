@@ -134,7 +134,7 @@ describe("sous init in a directory that has never seen sous", () => {
 
       for (const relative of [
         ".sous/sous.config.js",
-        ".sous/prompts/AGENTS.md",
+        ".sous/memories/AGENTS.md",
         ".sous/.env",
         ".sous/.env.local.example",
         ".sous/.gitignore",
@@ -146,6 +146,7 @@ describe("sous init in a directory that has never seen sous", () => {
       }
 
       expect(init.stdout).toContain("wrote .sous/sous.config.js");
+      expect(init.stdout).not.toContain("package.json");
       expect(init.stdout).toContain(`pinned: core/sous-skills at version ${SOUS_VERSION}`);
 
       const lock = JSON.parse(
@@ -165,6 +166,33 @@ describe("sous init in a directory that has never seen sous", () => {
    * held the block plus lines of its own should keep those lines and gain
    * nothing twice.
    */
+  /**
+   * A project that has a package.json gains sous as an exact devDependency, so
+   * the version the templates were written against travels with the project
+   * and a global sous hands off to it. Nothing is installed.
+   */
+  it(
+    "should add sous to an existing package.json as a devDependency",
+    () => {
+      const project = freshProject("with-package-json");
+      const packageJsonPath = path.join(project, "package.json");
+      fs.writeFileSync(packageJsonPath, '{\n  "name": "with-package-json",\n  "private": true\n}\n');
+
+      const init = sous(project, ["init", "--no-build"]);
+      expect(init.status, init.stdout + init.stderr).toBe(0);
+
+      expect(init.stdout).toContain(`added @sous-io/sous ${SOUS_VERSION} to devDependencies in package.json`);
+      const pkg = JSON.parse(fs.readFileSync(packageJsonPath, "utf8")) as {
+        private: boolean;
+        devDependencies: Record<string, string>;
+      };
+      expect(pkg.private).toBe(true);
+      expect(pkg.devDependencies).toEqual({ "@sous-io/sous": SOUS_VERSION });
+      expect(fs.existsSync(path.join(project, "node_modules"))).toBe(false);
+    },
+    CLI_TIMEOUT
+  );
+
   it(
     "should write the managed ignore block once, keeping what was there",
     () => {
