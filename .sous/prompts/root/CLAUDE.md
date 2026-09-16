@@ -23,8 +23,18 @@ npm run clean    # rm -rf dist/
 ```
 
 The CLI always runs from TypeScript source via tsx, in the repo AND in the published
-package. `bin/run.js` (the published bin) registers tsx via `tsx/esm/api` then hands off
-to oclif; `bin/sous` is a thin bash wrapper over it for the repo's npm scripts. tsx is
+package. `bin/run.js` (the published bin) first asks `src/lib/project-install.mjs` whether
+the project the command runs in installs its own `@sous-io/sous` (walking up from the
+working directory for `node_modules/@sous-io/sous`, the way Node resolves a package); if it
+does and that copy is not this install (compared by real path), the copy's own bin, read
+from its `package.json` `bin` field, is imported into the same process and this install
+loads nothing else. Otherwise `run.js` registers tsx via `tsx/esm/api` and hands off to
+oclif. The hand-off module is plain ESM like the config kernel, because it runs before tsx
+exists; `SOUS_NO_DELEGATE` switches it off, the notice it prints goes to stderr only when
+the two versions differ (`SOUS_DEBUG` prints it on every hand-off), and anything unreadable
+means "run the invoked copy". `src/lib/project-install.spec.ts` covers the rules and
+`src/test/integration/project-install-e2e.test.ts` proves the hand-off against a packed
+tarball, offline. `bin/sous` is a thin bash wrapper over `run.js` for the repo's npm scripts. tsx is
 resolved by module resolution (never a hardcoded `node_modules` path) so hoisted installs
 (`npx`, local deps) work; same trick in `loadSettings` (`settings.ts`) for the config
 subprocess. `run.js` sets oclif `settings.enableAutoTranspile = false`; tsx already
@@ -62,7 +72,8 @@ that has no `v<version>` tag yet, somebody set it deliberately in the merged pul
 and it is published as it stands; otherwise that version already shipped, so the merge
 takes the next PATCH. So a minor or a major release is a version edit inside an ordinary
 pull request, and everything else is a patch. The job applies the version to
-`package.json`, `package-lock.json` and `recipes/core/sous-skills/sous.recipe.yaml`
+`package.json`, `package-lock.json`, `recipes/core/sous-skills/sous.recipe.yaml` and the
+`core/sous-skills` entry of this repository's own `.sous/sous.lock.json`
 (`npm run version:sync`), commits it as `chore: release v<version> [skip ci]` under a bot
 identity, and creates the annotated tag. **The tag is a record of what was published;
 nothing triggers on it.** The job needs `contents: write` to push the commit and the tag.
@@ -95,7 +106,12 @@ project's implicit `core` subscription asks for exactly the running sous version
 `npm run version:sync` (`scripts/sync-core-version.mts`, built on `setRecipeVersion` in
 `src/lib/repos/release/bump.ts`) is what puts them back in step. It is idempotent: a recipe
 already at the package version is not rewritten, so a hand-written manifest is never
-reflowed.
+reflowed. The same script moves the `core/sous-skills` entry of THIS repository's committed
+lockfile to the package version, with the hash of the packaged recipe as it stands after the
+bump (the hash a fresh seed computes), because sous builds itself with its own checkout and a
+lockfile left one version behind `package.json` is rewritten by the next build on whoever's
+machine runs it. The same spec fails when the lockfile's pin drifts from the package version,
+so a pull request that sets a version by hand runs `npm run version:sync` too.
 
 **The packaged version is always resolvable.** Parity means the implicit `core` subscription
 asks for a version the repository has not published yet for as long as it takes the release
@@ -179,6 +195,8 @@ src/
     env-local.ts           # parses .sous/.env.local and .sous/.env into process.env
     sous-home.ts           # the user-level sous dir (~/.sous or $SOUS_HOME) and its subpaths
     env-file.ts            # line-preserving WRITER for those same two files
+    project-install.mjs    # the hand-off from the invoked sous to a project's own install;
+                           #   plain ESM because bin/run.js calls it before tsx is registered
     settings.ts            # config loader (spawns the kernel), var resolution, scope chain
     markdown-compiler.ts   # CompilationService; @-include, LiquidJS rendering
     include-resolver.ts    # @-include alias/${var}/relative path resolution
@@ -269,7 +287,8 @@ recipes/                   # the recipes that SHIP INSIDE the package; see "Skil
       skills/              # about-sous, about-sous-configuration, about-agent-skills,
                            #   about-liquid-templates, create-skill
 bin/
-  run.js                   # published bin (`sous`): registers tsx, hands off to oclif
+  run.js                   # published bin (`sous`): hands off to a project's own install,
+                           #   else registers tsx and hands off to oclif
   sous                     # bash dev wrapper over run.js, used by the repo's npm scripts
 scripts/
   build-schema.mts         # emits sous.config.schema.json from the zod schema (npm run schema:build)
@@ -1247,7 +1266,8 @@ stderr for the duration, so a piped stdout stays machine-readable. An error sous
 expect keeps its message and gains one sentence naming `SOUS_DEBUG`. Nothing prints a
 stack trace unless `SOUS_DEBUG` asks for one, which is also why `bin/run.js` passes
 oclif's `development` mode (it sets oclif's own `debug` setting, which turns every error
-oclif prints into a raw stack) only when that variable is set. An oclif exit code survives
+oclif prints into a raw stack) only when that variable is set, and why `SOUS_NO_DELEGATE`
+is the only other environment variable `run.js` reads. An oclif exit code survives
 (a parse error still exits 2); `this.exit()` and a JSON-rendering command fall through to
 oclif untouched. Guarded by `src/utils/command-errors.spec.ts` and the error cases in
 `src/test/integration/help-and-flags.test.ts`.

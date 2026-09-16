@@ -26,11 +26,18 @@ formats agents actually read: `.claude/` plus `CLAUDE.md` for Claude Code, `.cod
 
 ## Quickstart
 
-Install the CLI:
+Install the CLI globally, or add it to a project, or both:
 
 ```bash
-npm install -g @sous-io/sous
+npm install -g @sous-io/sous     # one sous for every project on the machine
+npm install -D @sous-io/sous     # the version this project's templates were written against
 ```
+
+A project install pins the sous version a project builds with, and it always does the
+building: a global `sous` run anywhere inside a project that holds `node_modules/@sous-io/sous`
+hands the command to that copy, so `sous`, `npx sous` and a package script all produce the same
+output. When the two versions differ, one line on standard error says which copy ran. Set
+`SOUS_NO_DELEGATE=1` to run the copy you invoked instead.
 
 Or run it from a clone (useful when developing sous itself):
 

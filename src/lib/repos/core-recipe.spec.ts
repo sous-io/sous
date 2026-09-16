@@ -13,6 +13,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { CLI_ROOT } from "../settings.js";
+import { LockService } from "./lock-service.js";
 import {
   CORE_NAMESPACE,
   CORE_RECIPE_KEY,
@@ -32,6 +33,14 @@ describe("the packaged core recipe", () => {
   it("ships at exactly the version of the sous package", () => {
     const manifest = readPackagedCoreManifest();
     expect(manifest.version).toBe(packageVersion());
+  });
+
+  it("is pinned at exactly the version of the sous package by this repository's own lockfile", () => {
+    // Sous builds itself with its own checkout, so the committed lockfile has
+    // to ask for the version the checkout runs; otherwise the next build
+    // rewrites it. `npm run version:sync` is what puts the two back in step.
+    const lockfile = new LockService(path.join(CLI_ROOT, ".sous")).read();
+    expect(lockfile.recipes[CORE_RECIPE_KEY]?.version).toBe(packageVersion());
   });
 
   it("is the recipe the rest of sous expects it to be", () => {
