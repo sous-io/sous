@@ -124,17 +124,38 @@ describe("hand-off to the project's own install", () => {
   /**
    * The repository's own bin, standing in for a global install, hands off to
    * the project copy from anywhere inside the project, and says so on stderr
-   * because the versions differ.
-   * Example: `sous --version` in <project>/packages/app reports 0.0.0-project.
+   * because the versions differ. The version itself is one plain line.
+   * Example: `sous --version` in <project>/packages/app prints "v0.0.0-project".
    */
   it(
     "should run the project's copy from inside the project and say so on stderr",
     () => {
       const result = runCli(["--version"], { cwd: nestedDir });
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain(`@sous-io/sous/${PROJECT_VERSION}`);
-      expect(result.stderr).toContain(`sous ${PROJECT_VERSION}`);
-      expect(result.stderr).toContain(`sous ${ownVersion} you invoked`);
+      expect(result.stdout).toBe(`v${PROJECT_VERSION}\n`);
+      expect(result.stderr).toBe(
+        `Handing off to the project-level Sous install: v${PROJECT_VERSION}\n`
+      );
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * `--verbose` makes both the hand-off notice and the version report say
+   * where things are: the notice names both installs and the escape hatch,
+   * and the report lists the package, install path, platform and Node build.
+   * Example: `sous --version --verbose` prints an "Install:" line naming the project copy.
+   */
+  it(
+    "should say where both installs are with --verbose",
+    () => {
+      const result = runCli(["--version", "--verbose"], { cwd: nestedDir });
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain(`v${PROJECT_VERSION}`);
+      expect(result.stdout).toContain(fs.realpathSync(projectCopy));
+      expect(result.stdout).toContain(process.version);
+      expect(result.stderr).toContain(`Handing off to the project-level Sous install: v${PROJECT_VERSION}`);
+      expect(result.stderr).toContain(`Invoked install: v${ownVersion} at ${fs.realpathSync(repoRoot)}`);
       expect(result.stderr).toContain("SOUS_NO_DELEGATE=1");
     },
     CLI_TIMEOUT
@@ -151,7 +172,7 @@ describe("hand-off to the project's own install", () => {
       const result = runCli(["config", "get", "name"], { cwd: nestedDir });
       expect(result.status).toBe(0);
       expect(result.stdout.trim()).toBe("Nested App");
-      expect(result.stderr).toContain(`sous ${PROJECT_VERSION}`);
+      expect(result.stderr).toContain(`Handing off to the project-level Sous install: v${PROJECT_VERSION}`);
     },
     CLI_TIMEOUT
   );
@@ -165,7 +186,7 @@ describe("hand-off to the project's own install", () => {
     () => {
       const result = runCli(["--version"], { cwd: outsideDir });
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain(`@sous-io/sous/${ownVersion}`);
+      expect(result.stdout).toBe(`v${ownVersion}\n`);
       expect(result.stderr).toBe("");
     },
     CLI_TIMEOUT
@@ -180,7 +201,7 @@ describe("hand-off to the project's own install", () => {
     () => {
       const result = runCli(["--version"], { cwd: nestedDir, env: { SOUS_NO_DELEGATE: "1" } });
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain(`@sous-io/sous/${ownVersion}`);
+      expect(result.stdout).toBe(`v${ownVersion}\n`);
       expect(result.stderr).toBe("");
     },
     CLI_TIMEOUT
@@ -199,7 +220,7 @@ describe("hand-off to the project's own install", () => {
         bin: path.join(projectCopy, "bin", "run.js"),
       });
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain(`@sous-io/sous/${PROJECT_VERSION}`);
+      expect(result.stdout).toBe(`v${PROJECT_VERSION}\n`);
       expect(result.stderr).toBe("");
     },
     CLI_TIMEOUT

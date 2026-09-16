@@ -38,7 +38,8 @@ under [When sous cannot ask](repositories-consuming.md#when-sous-cannot-ask).
 
 Help has four spellings. `sous --help` prints the root screen; `sous repo add --help`, `sous repo add -h` and
 `sous help repo add` all print that one command's. `sous help` alone lists the topics and commands, and
-`sous --version` prints the version, platform and Node build.
+`sous --version` prints the version alone, as `v1.2.3`; `sous --version --verbose` adds the package name, where
+it is installed, the platform and the Node build under it.
 
 Every topic answers to both spellings of its name: `repo` and `repos`, `subscription` and `subscriptions`,
 `namespace` and `namespaces`, `recipe` and `recipes`, `lock` and `locks`, `vars` and `var`, `config` and

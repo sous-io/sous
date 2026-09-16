@@ -184,9 +184,27 @@ describe("project-install", () => {
       expect(plan.kind).toBe("hand-off");
       if (plan.kind !== "hand-off") return;
       expect(plan.install.version).toBe("1.2.3");
-      expect(plan.notice).toContain("sous 1.2.3");
-      expect(plan.notice).toContain("sous 2.0.0 you invoked");
-      expect(plan.notice).toContain(`${NO_DELEGATE_ENV}=1`);
+      expect(plan.notice).toEqual(["Handing off to the project-level Sous install: v1.2.3"]);
+    });
+
+    /**
+     * `--verbose` anywhere on the command line makes the notice say where both
+     * installs are and how to keep the invoked one running.
+     * Example: ["build", "--verbose"] adds the install paths and the escape hatch.
+     */
+    it("should add both install locations and the escape hatch when --verbose is on the line", () => {
+      const project = path.join(tmp.path, "project");
+      writePackage(copyPathIn(project), { version: "1.2.3" });
+
+      const plan = planHandoff({ cwd: project, ownRoot, env: {}, argv: ["build", "--verbose"] });
+      expect(plan.kind).toBe("hand-off");
+      if (plan.kind !== "hand-off") return;
+      expect(plan.notice).toEqual([
+        "Handing off to the project-level Sous install: v1.2.3",
+        `    Project install: ${fs.realpathSync(copyPathIn(project))}`,
+        `    Invoked install: v2.0.0 at ${fs.realpathSync(ownRoot)}`,
+        `Set ${NO_DELEGATE_ENV}=1 to run the invoked install instead.`,
+      ]);
     });
 
     /**
@@ -199,12 +217,13 @@ describe("project-install", () => {
       writePackage(copyPathIn(project), { version: "2.0.0" });
 
       const quiet = planHandoff({ cwd: project, ownRoot, env: {} });
-      expect(quiet).toMatchObject({ kind: "hand-off", notice: undefined });
+      expect(quiet).toMatchObject({ kind: "hand-off", notice: [] });
 
       const loud = planHandoff({ cwd: project, ownRoot, env: { [DEBUG_ENV]: "1" } });
       expect(loud.kind).toBe("hand-off");
       if (loud.kind !== "hand-off") return;
-      expect(loud.notice).toContain("sous 2.0.0 from");
+      expect(loud.notice[0]).toBe("Handing off to the project-level Sous install: v2.0.0");
+      expect(loud.notice).toHaveLength(4);
     });
 
     /**
@@ -255,7 +274,7 @@ describe("project-install", () => {
 
       expect(handed).toBe(true);
       expect((globalThis as { __sousHandoffMarker?: string }).__sousHandoffMarker).toBe("ran");
-      expect(written.join("")).toContain("sous 1.2.3");
+      expect(written.join("")).toBe("Handing off to the project-level Sous install: v1.2.3\n");
       delete (globalThis as { __sousHandoffMarker?: string }).__sousHandoffMarker;
     });
 

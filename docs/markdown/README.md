@@ -34,18 +34,29 @@ Sous installs three ways, and they work together:
   directory the way Node resolves a package, so a copy hoisted to a monorepo root is found from
   any package inside it.
 
-When the two versions differ, one sentence on standard error names the copy that ran and the
-one you invoked; standard output is untouched, so a piped command prints exactly what it always
-did. Set `SOUS_DEBUG` and the sentence prints on every hand-off. Set `SOUS_NO_DELEGATE` to
-anything but `0`, `false`, `no` or `off` to run the copy you invoked instead, for debugging a
-broken project install or for deliberately using the global one:
+When the two versions differ, one line on standard error names the version handed off to;
+standard output is untouched, so a piped command prints exactly what it always did. Add
+`--verbose` to any command and the notice also says where both installs are and how to keep
+the invoked one running; set `SOUS_DEBUG` and the notice prints on every hand-off. Set
+`SOUS_NO_DELEGATE` to anything but `0`, `false`, `no` or `off` to run the copy you invoked
+instead, for debugging a broken project install or for deliberately using the global one:
 
 ```term
 $ sous --version
-Running the project's own sous 0.2.4 from /work/app/node_modules/@sous-io/sous instead of the sous 0.3.0 you invoked; set SOUS_NO_DELEGATE=1 to run the one you invoked.
-@sous-io/sous/0.2.4 linux-x64 node-v22.21.0
+Handing off to the project-level Sous install: v0.2.4
+v0.2.4
+$ sous --version --verbose
+Handing off to the project-level Sous install: v0.2.4
+    Project install: /work/app/node_modules/@sous-io/sous
+    Invoked install: v0.3.0 at /usr/lib/node_modules/@sous-io/sous
+Set SOUS_NO_DELEGATE=1 to run the invoked install instead.
+v0.2.4
+    Package : @sous-io/sous
+    Install : /work/app/node_modules/@sous-io/sous
+    Platform: linux-x64
+    Node    : v22.21.0
 $ SOUS_NO_DELEGATE=1 sous --version
-@sous-io/sous/0.3.0 linux-x64 node-v22.21.0
+v0.3.0
 ```
 
 ## Where to look

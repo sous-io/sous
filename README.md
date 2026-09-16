@@ -36,8 +36,9 @@ npm install -D @sous-io/sous     # the version this project's templates were wri
 A project install pins the sous version a project builds with, and it always does the
 building: a global `sous` run anywhere inside a project that holds `node_modules/@sous-io/sous`
 hands the command to that copy, so `sous`, `npx sous` and a package script all produce the same
-output. When the two versions differ, one line on standard error says which copy ran. Set
-`SOUS_NO_DELEGATE=1` to run the copy you invoked instead.
+output. When the two versions differ, one line on standard error names the version handed off
+to (`--verbose` adds where both installs are). Set `SOUS_NO_DELEGATE=1` to run the copy you
+invoked instead.
 
 Or run it from a clone (useful when developing sous itself):
 
