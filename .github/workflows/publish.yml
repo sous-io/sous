@@ -240,6 +240,11 @@ jobs:
   recipes:
     name: Publish the core recipe
     needs: publish
+    # On a manual re-run for an existing tag the version job is skipped, and
+    # GitHub's default condition treats a skipped job anywhere up the chain as
+    # a reason to skip this one too. `always()` opts out of that, and the
+    # explicit check keeps the job from running after a failed publish.
+    if: always() && needs.publish.result == 'success'
     runs-on: ubuntu-latest
 
     # This job only reads its own repository; everything it writes goes to the

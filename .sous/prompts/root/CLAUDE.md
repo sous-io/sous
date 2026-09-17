@@ -101,7 +101,9 @@ inside the file is free.
 `workflow_dispatch` takes an optional `tag` input. Given a tag, the version job is skipped
 and `publish` and `recipes` run again for that existing tag, which is how a run that failed
 after tagging is finished off; the publish step stands down when the version is already on
-npm, so a re-run passes through it to the recipe job. Left empty, it releases whatever `main`
+npm, and the recipe job runs under `always()` with an explicit check on the publish result,
+because GitHub otherwise skips a job whose chain holds the skipped version job. Left empty, it
+releases whatever `main`
 holds, exactly as a merge would. A `concurrency` group serializes releases so two merges
 cannot race for the patch number.
 
