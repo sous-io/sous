@@ -100,9 +100,10 @@ inside the file is free.
 
 `workflow_dispatch` takes an optional `tag` input. Given a tag, the version job is skipped
 and `publish` and `recipes` run again for that existing tag, which is how a run that failed
-after tagging is finished off. Left empty, it releases whatever `main` holds, exactly as a
-merge would. A `concurrency` group serializes releases so two merges cannot race for the
-patch number.
+after tagging is finished off; the publish step stands down when the version is already on
+npm, so a re-run passes through it to the recipe job. Left empty, it releases whatever `main`
+holds, exactly as a merge would. A `concurrency` group serializes releases so two merges
+cannot race for the patch number.
 
 **Core recipe parity.** The `core` namespace exists in two places and they must never
 disagree: `recipes/core/sous-skills/` inside this package (the source of truth, and the
@@ -136,7 +137,9 @@ seam on the cache, applied in `readCached` and after `refresh` has written the f
 The `recipes` job in `publish.yml` keeps the published copy in step. It runs only after the
 npm publish it `needs`, re-checks version parity, copies the packaged recipe over the
 repository's copy and COMMITS that copy (a release refuses to run against a dirty tree),
-waits for the new version to be installable, then runs
+waits for the new version to be installable (the check is an `npx --prefer-online` install of
+that exact version, not `npm view`: the registry can answer a metadata query with a version
+the package listing an install fetches does not carry yet), then runs
 `npx @sous-io/sous@<version> repo release --ci --push --yes` inside the checkout, which
 regenerates the index, commits it, tags each version and pushes. The job holds
 `contents: read` and no `id-token`, so the recipe repository's write key and the npm
