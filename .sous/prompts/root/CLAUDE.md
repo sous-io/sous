@@ -66,6 +66,8 @@ See the `files` allowlist in `package.json` (an allowlist, so there is no `.npmi
 `bin/sous` and everything else stays out by default). `repository.url` must keep matching the
 GitHub repo exactly; npm's trusted publishing validates it at publish time.
 
+@${sousDir}/prompts/memories/release-posture.md
+
 **Every merge to main publishes.** There is no release ritual and nothing to remember.
 `.github/workflows/publish.yml` runs on every push to `main` and on `workflow_dispatch`,
 as three jobs in sequence:
