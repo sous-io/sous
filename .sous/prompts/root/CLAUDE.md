@@ -30,10 +30,11 @@ does and that copy is not this install (compared by real path), the copy's own b
 from its `package.json` `bin` field, is imported into the same process and this install
 loads nothing else. Otherwise `run.js` registers tsx via `tsx/esm/api` and hands off to
 oclif. The hand-off module is plain ESM like the config kernel, because it runs before tsx
-exists; `SOUS_NO_DELEGATE` switches it off, the notice it prints goes to stderr only when
-the two versions differ (`SOUS_DEBUG` prints it on every hand-off), it is one line naming
-the version handed off to unless `--verbose` is on the command line (then it adds both
-install paths and the escape hatch), and anything unreadable means "run the invoked copy".
+exists; `SOUS_NO_DELEGATE` switches it off, the notice it prints goes to stderr, only when
+the two versions differ unless `SOUS_DEBUG` is set or `--verbose` is on the command line
+(then every hand-off is announced, in full: both install paths and the escape hatch; the
+plain notice is one line naming the version handed off to), and anything unreadable means
+"run the invoked copy".
 `src/lib/project-install.spec.ts` covers the rules and
 `src/test/integration/project-install-e2e.test.ts` proves the hand-off against a packed
 tarball, offline. `sous --version` is answered in `run.js` too, after tsx is registered and
@@ -652,8 +653,13 @@ What init writes is decided by `scaffoldProject` in `src/lib/project-scaffold/`,
 config are the point, so no template engine stands in between), and a planner that works out
 every file in memory, refuses a `.sous/` that already holds a primary config or any other file
 it would write (so a refused run has changed nothing), merges rather than replaces
-`.sous/.gitignore`, writes, and then loads the written config back through `loadSettings` so a
-scaffold sous cannot read is never reported as a success. The JSON variant carries `$schema`
+`.sous/.gitignore` and the project's `package.json` (which gains `@sous-io/sous` as an exact
+devDependency at the running version unless it already depends on it, keeping its indentation
+and key order; a package.json that is not JSON is refused by name), writes, and then loads the
+written config back through `loadSettings` so a scaffold sous cannot read is never reported as
+a success. The starter prompt goes under `.sous/memories/`, the directory for what a build
+composes into an agent's instruction file; nothing is installed, because sous does not guess a
+project's package manager. The JSON variant carries `$schema`
 pointing at the schema artifact for the running version on GitHub (`configSchemaUrl`); the
 top-level config schema is strict and has no comment key, so that is the one thing the JSON
 config says that the JS config says in comments. `init` itself extends `BaseCommand`; a
@@ -993,6 +999,7 @@ In any source `.md` file, `@path/to/file.md` on its own line includes that file'
 @sections/context.md
 @../shared/intro.md
 @${projectRoot}/prompts/x.md
+@~/notes/private-context.md
 @~project/prompts/intro.md
 @~workflow/task-files/_partials/resume.md
 @myAlias/doc.md
@@ -1008,9 +1015,19 @@ Resolution is handled by `src/lib/include-resolver.ts` (`resolveInclude` /
 namespaces work in both). A `@`-path may be:
 - **relative** to the including file,
 - **`${var}`-substituted** (settings-scope vars; an absolute result is used directly),
+- **home-relative**: a leading `~/` is the home directory (`expandHome` in
+  `config-discovery.ts`, the same expansion the config-locating flags get); the sigil with
+  nothing but a separator after it names no alias or namespace, so this is unambiguous,
 - **aliased**: the first segment (up to `/` or `:`; both separators work) names an alias,
 - **namespaced**: a first segment carrying the reserved `~` sigil names a recipe
   namespace (see below).
+
+Every candidate is followed by its `.tpl.` twin (`templateTwin` in `include-resolver.ts`):
+`@shared.md` finds `shared.tpl.md` when that is what exists, and `@notes.tpl.md` finds
+`notes.md`. The literal spelling is tried first and the twin comes right after it, per
+candidate, so an alias base still beats the relative fallback; a writer never has to know
+whether an included file has been turned into a template. The twin's content is included as
+it is, so Liquid inside it renders only when the entry point itself is a `.tpl.` file.
 
 **Aliases.** There is exactly ONE built-in, reserved and `~`-prefixed: `~project`, the
 project root (see `buildBuiltInAliases` in `settings.ts`). Everything sous once reached
@@ -1093,7 +1110,7 @@ This enables `sous prune` (remove stale outputs) and `sous clear` (delete all ou
 
 | Command | Description |
 |---------|-------------|
-| `sous init [dir]` | Set a project up: write `.sous/` (a commented config in `js` or `json`, the starter prompt, `.env`, `.env.local.example`, the managed ignore block), then run the first build, which seeds and pins `core` (`--format`, `--name`, `--no-build`, `--dry-run`, `--yes` / `-y` to nest inside another project); refuses to touch a project that already holds a config |
+| `sous init [dir]` | Set a project up: write `.sous/` (a commented config in `js` or `json`, the starter prompt under `memories/`, `.env`, `.env.local.example`, the managed ignore block), add `@sous-io/sous` at the running version to `devDependencies` when the project has a `package.json` that does not depend on it yet (nothing is installed), then run the first build, which seeds and pins `core` (`--format`, `--name`, `--no-build`, `--dry-run`, `--yes` / `-y` to nest inside another project); refuses to touch a project that already holds a config |
 | `sous build` | Compile + prune (main workflow) |
 | `sous compile` | Compile only |
 | `sous prune` | Remove output files no longer in config |

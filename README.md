@@ -37,8 +37,8 @@ A project install pins the sous version a project builds with, and it always doe
 building: a global `sous` run anywhere inside a project that holds `node_modules/@sous-io/sous`
 hands the command to that copy, so `sous`, `npx sous` and a package script all produce the same
 output. When the two versions differ, one line on standard error names the version handed off
-to (`--verbose` adds where both installs are). Set `SOUS_NO_DELEGATE=1` to run the copy you
-invoked instead.
+to; `--verbose` announces every hand-off and adds where both installs are. Set
+`SOUS_NO_DELEGATE=1` to run the copy you invoked instead.
 
 Or run it from a clone (useful when developing sous itself):
 
@@ -58,9 +58,11 @@ sous init
 
 `sous init` writes the project's `.sous/` directory and runs the first build. It creates a
 commented `sous.config.js` (pass `--format json` for a JSON config bound to the shipped
-schema), a starter prompt at `.sous/prompts/AGENTS.md` that the config compiles to `AGENTS.md`
+schema), a starter prompt at `.sous/memories/AGENTS.md` that the config compiles to `AGENTS.md`
 at the project root, the two env files described below, and a `.sous/.gitignore` covering the
-files sous keeps local to one machine. The first build compiles the starter prompt and the
+files sous keeps local to one machine. A project with a `package.json` also gains `@sous-io/sous`
+as a devDependency at the running version, so the project pins the sous it builds with; run
+your package manager's install afterwards. The first build compiles the starter prompt and the
 `core` skills every project gets, and pins them in `.sous/sous.lock.json`. A project that
 already holds a config is left untouched.
 
@@ -73,7 +75,7 @@ export const config = {
   compilation: {
     targets: [
       {
-        entryPoint: "${sousDir}/prompts/AGENTS.md",
+        entryPoint: "${sousDir}/memories/AGENTS.md",
         outputs: [{ destinationFile: "${projectRoot}/AGENTS.md" }],
       },
     ],
@@ -165,8 +167,9 @@ A recipe's files are reachable without knowing where anything is installed. An `
 path may name a recipe by its namespace, so
 `@~workflow/task-files/_partials/resume-task.md` composes a block published by the recipe
 `workflow/task-files`, at the version your project has pinned, into your own instruction
-file. `@~project/...` names your project's root, and you can define your own aliases with
-an `_aliases` block.
+file. `@~project/...` names your project's root, `@~/...` names your home directory, and you
+can define your own aliases with an `_aliases` block. Either spelling of a file finds it:
+`@shared.md` also finds `shared.tpl.md`, and the other way round.
 
 Sous records every file and directory it writes in a state file, `.sous/sous.state.json` by
 default, which is what lets `prune` and `clear` clean up precisely instead of guessing.

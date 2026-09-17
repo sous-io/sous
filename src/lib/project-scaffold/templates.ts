@@ -28,10 +28,12 @@ export type ProjectConfigFormat = (typeof PROJECT_CONFIG_FORMATS)[number];
 
 /**
  * The path, relative to `.sous/`, of the starter prompt the scaffolded config
- * compiles. It lives under `prompts/` so the source and its compiled output
- * (`AGENTS.md` at the project root) are never mistaken for one another.
+ * compiles. It lives under `memories/`, the directory for what a build composes
+ * into an agent's always-loaded instruction file, so the source and its
+ * compiled output (`AGENTS.md` at the project root) are never mistaken for one
+ * another.
  */
-export const STARTER_PROMPT_RELATIVE_PATH = "prompts/AGENTS.md";
+export const STARTER_PROMPT_RELATIVE_PATH = "memories/AGENTS.md";
 
 /** The name of the file the starter prompt is compiled into, at the project root. */
 export const STARTER_OUTPUT_NAME = "AGENTS.md";
@@ -152,7 +154,7 @@ source, run \`sous build\`, and the compiled copy follows; never edit the compil
 ## Working in this project
 
 - Describe the project here: what it is, how it is built, and how it is tested.
-- Split long sections into their own files under \`${SOUS_DIR_NAME}/prompts/\` and pull
+- Split long sections into their own files under \`${SOUS_DIR_NAME}/memories/\` and pull
   each one in with a line holding only \`@sections/name.md\`.
 - The skills under \`.claude/skills\` are written by sous from the recipes this
   project subscribes to. \`sous recipe list\` shows what is available.

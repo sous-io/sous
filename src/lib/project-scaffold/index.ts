@@ -8,10 +8,16 @@
  *
  * It refuses to touch a project that is already set up: a `.sous/` directory
  * holding a primary config is left exactly as it is, and so is any file the
- * scaffold would otherwise write. The one file it merges rather than replaces
- * is `.sous/.gitignore`, whose sous-managed block is applied by the same writer
+ * scaffold would otherwise write. Two files are merged rather than replaced:
+ * `.sous/.gitignore`, whose sous-managed block is applied by the same writer
  * `sous repo link` uses, so running the scaffold over an existing ignore file
- * never duplicates an entry.
+ * never duplicates an entry; and the project's `package.json`, when there is
+ * one, which gains `@sous-io/sous` as a devDependency at the running version
+ * unless it already depends on it. A project that installs sous pins the
+ * version its templates were written against, and a global sous hands off to
+ * that copy, so the dependency is what makes every build of the project use
+ * one version. Nothing is installed: the project's own package manager does
+ * that, and sous does not guess which one it is.
  */
 
 import fs from "node:fs";
@@ -40,6 +46,15 @@ import {
 } from "./templates.js";
 
 export * from "./templates.js";
+
+/** The npm package a scaffolded project is made to depend on. */
+export const SOUS_PACKAGE_NAME = "@sous-io/sous";
+
+/** What the scaffold did about the project's package.json. */
+export type PackageJsonOutcome =
+  | { kind: "absent" }
+  | { kind: "present"; path: string; range: string; section: "dependencies" | "devDependencies" }
+  | { kind: "added"; path: string; range: string };
 
 /** What to scaffold, and where. */
 export type ProjectScaffoldOptions = {
@@ -72,6 +87,8 @@ export type ProjectScaffoldResult = {
   name: string;
   /** Paths of every file written, relative to the project root, in the order written. */
   files: string[];
+  /** Whether `@sous-io/sous` was added to the project's package.json, was already there, or there is no package.json. */
+  packageJson: PackageJsonOutcome;
   /** True when nothing was actually written. */
   dryRun: boolean;
 };
@@ -124,6 +141,8 @@ export async function scaffoldProject(
 
   const context: ProjectScaffoldContext = { name, sousVersion: options.sousVersion };
   const files = planFiles(sousDir, projectRoot, format, context);
+  const dependency = planPackageJson(projectRoot, options.sousVersion);
+  if (dependency.file !== undefined) files.push(dependency.file);
 
   assertNothingWouldBeOverwritten(projectRoot, files);
 
@@ -145,7 +164,69 @@ export async function scaffoldProject(
     format,
     name,
     files: files.map((file) => file.relativePath),
+    packageJson: dependency.outcome,
     dryRun,
+  };
+}
+
+/**
+ * Works out the package.json edit: nothing when the project has no
+ * package.json or already depends on sous, otherwise the file rewritten with
+ * `@sous-io/sous` in `devDependencies` at exactly the running version. The
+ * file's own indentation and trailing newline are kept, and `devDependencies`
+ * stays sorted the way npm keeps it. A package.json that is not JSON is
+ * refused by name, before anything is written.
+ */
+function planPackageJson(
+  projectRoot: string,
+  sousVersion: string
+): { file?: PlannedFile; outcome: PackageJsonOutcome } {
+  const packageJsonPath = path.join(projectRoot, "package.json");
+  if (!fs.existsSync(packageJsonPath)) return { outcome: { kind: "absent" } };
+
+  const raw = fs.readFileSync(packageJsonPath, "utf8");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    throw new ConfigError(
+      `'sous init' would add ${SOUS_PACKAGE_NAME} to ${packageJsonPath}, but could not read it as JSON.\n` +
+        `  ${(error as Error).message}\n` +
+        `  Fix the file, or run 'sous init' in a directory without a package.json.`
+    );
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new ConfigError(
+      `'sous init' would add ${SOUS_PACKAGE_NAME} to ${packageJsonPath}, but it does not hold a JSON object.`
+    );
+  }
+  const pkg = parsed as Record<string, unknown>;
+
+  for (const section of ["dependencies", "devDependencies"] as const) {
+    const deps = pkg[section];
+    if (typeof deps === "object" && deps !== null && SOUS_PACKAGE_NAME in deps) {
+      const range = String((deps as Record<string, unknown>)[SOUS_PACKAGE_NAME]);
+      return { outcome: { kind: "present", path: packageJsonPath, range, section } };
+    }
+  }
+
+  const existing =
+    typeof pkg.devDependencies === "object" && pkg.devDependencies !== null
+      ? (pkg.devDependencies as Record<string, unknown>)
+      : {};
+  const devDependencies = Object.fromEntries(
+    Object.entries({ ...existing, [SOUS_PACKAGE_NAME]: sousVersion }).sort(([a], [b]) =>
+      a < b ? -1 : a > b ? 1 : 0
+    )
+  );
+
+  const indent = raw.match(/^(\s+)"/m)?.[1] ?? "  ";
+  const newline = raw.endsWith("\n") ? "\n" : "";
+  const contents = JSON.stringify({ ...pkg, devDependencies }, null, indent) + newline;
+
+  return {
+    file: { relativePath: "package.json", contents, merged: true },
+    outcome: { kind: "added", path: packageJsonPath, range: sousVersion },
   };
 }
 

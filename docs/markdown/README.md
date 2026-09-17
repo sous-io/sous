@@ -36,8 +36,8 @@ Sous installs three ways, and they work together:
 
 When the two versions differ, one line on standard error names the version handed off to;
 standard output is untouched, so a piped command prints exactly what it always did. Add
-`--verbose` to any command and the notice also says where both installs are and how to keep
-the invoked one running; set `SOUS_DEBUG` and the notice prints on every hand-off. Set
+`--verbose` to any command, or set `SOUS_DEBUG`, and every hand-off is announced, with where
+both installs are and how to keep the invoked one running. Set
 `SOUS_NO_DELEGATE` to anything but `0`, `false`, `no` or `off` to run the copy you invoked
 instead, for debugging a broken project install or for deliberately using the global one:
 

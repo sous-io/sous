@@ -1,4 +1,5 @@
 import path from "node:path";
+import { expandHome } from "./config-discovery.js";
 import type { NamespaceResolution, NamespaceResolver } from "./repos/namespace-resolver.js";
 
 /**
@@ -10,8 +11,11 @@ import type { NamespaceResolution, NamespaceResolver } from "./repos/namespace-r
  * that exists on disk; if none exist, it errors listing every candidate tried.
  *
  * Resolution pipeline for a raw path P (with leading `@` already stripped):
- *   1. Substitute ${vars} in P. If the result is absolute, it is the sole
- *      candidate (feature: `@${sousRootPath}/x.md`).
+ *   1. Substitute ${vars} in P, then expand a leading `~/` to the home
+ *      directory (the `~` sigil on its own, with nothing but a separator after
+ *      it, names no alias or namespace, so `@~/notes/x.md` is unambiguous). If
+ *      the result is absolute, it is the sole candidate (feature:
+ *      `@${sousRootPath}/x.md`).
  *   2. Split the first segment (up to the first `/` or `:`) as the alias key,
  *      the remainder as `rest`. If the key is a registered alias, push
  *      join(base, rest) for EACH base in the alias's ordered array.
@@ -19,10 +23,16 @@ import type { NamespaceResolution, NamespaceResolver } from "./repos/namespace-r
  *      for the recipe namespace named by the key (minus the `~`) and push its
  *      candidates. Aliases are consulted first, so `~project` keeps meaning
  *      the built-in alias even if a namespace of that name exists.
- *   4. Always push the relative candidate: join(baseDir, P) — the FULL path
+ *   4. Always push the relative candidate: join(baseDir, P), the FULL path
  *      including the alias segment. This lets an alias augment a real relative
  *      directory of the same name (e.g. `@stuff/x` tries the alias bases, then
  *      `./stuff/x`).
+ *   5. Follow every candidate with its `.tpl.` twin: `x.md` is followed by
+ *      `x.tpl.md`, and `x.tpl.md` by `x.md`. The literal spelling is always
+ *      tried first, and the twin comes right after it (not after every other
+ *      candidate), so an alias base still beats the relative fallback. A
+ *      writer therefore never has to know whether an included file has been
+ *      turned into a template or back.
  *
  * A key WITHOUT the `~` sigil never reaches the namespace resolver: a bare
  * `@path` is always a relative path or a declared alias, so include lines never
@@ -46,6 +56,39 @@ export type AliasMap = Record<string, string[]>;
  */
 export function substituteVars(str: string, scope: Record<string, string>): string {
   return str.replace(/\$\{([^}]+)\}/g, (match, name: string) => scope[name] ?? match);
+}
+
+/** The marker that makes a file a template, always right before the final extension. */
+const TEMPLATE_MARKER = ".tpl";
+
+/**
+ * The `.tpl.` twin of a path: `x.md` gives `x.tpl.md`, `x.tpl.md` gives `x.md`,
+ * and a path with no extension has no twin.
+ *
+ * @param filePath - Any path, absolute or not.
+ * @returns The twin, or undefined when there is none.
+ */
+export function templateTwin(filePath: string): string | undefined {
+  const dir = path.dirname(filePath);
+  const base = path.basename(filePath);
+  const ext = path.extname(base);
+  if (ext === "" || ext === base) return undefined;
+  const stem = base.slice(0, -ext.length);
+  const twin = stem.endsWith(TEMPLATE_MARKER)
+    ? `${stem.slice(0, -TEMPLATE_MARKER.length)}${ext}`
+    : `${stem}${TEMPLATE_MARKER}${ext}`;
+  return path.join(dir, twin);
+}
+
+/** Every candidate followed by its `.tpl.` twin, de-duplicated, order kept. */
+function withTemplateTwins(candidates: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const candidate of candidates) {
+    out.push(candidate);
+    const twin = templateTwin(candidate);
+    if (twin !== undefined) out.push(twin);
+  }
+  return [...new Set(out)];
 }
 
 /**
@@ -115,11 +158,11 @@ export type IncludeResolution = {
 export function resolveInclude(rawPath: string, opts: IncludeResolveOptions): IncludeResolution {
   const aliases = opts.aliases ?? {};
   const scope = opts.scope ?? {};
-  const substituted = substituteVars(rawPath, scope);
+  const substituted = expandHome(substituteVars(rawPath, scope));
 
-  // 1. Substituted to an absolute path → that is the only candidate.
+  // 1. Substituted (or home-expanded) to an absolute path → that, and its twin.
   if (path.isAbsolute(substituted)) {
-    return { candidates: [path.normalize(substituted)] };
+    return { candidates: withTemplateTwins([path.normalize(substituted)]) };
   }
 
   const candidates: string[] = [];
@@ -151,8 +194,8 @@ export function resolveInclude(rawPath: string, opts: IncludeResolveOptions): In
   // 4. Relative fallback: the FULL substituted path under the including dir.
   candidates.push(path.resolve(opts.baseDir, substituted));
 
-  // De-dupe, preserving order.
-  return { candidates: [...new Set(candidates)], namespaceIssue };
+  // 5. Each candidate's `.tpl.` twin right after it; de-duped, order kept.
+  return { candidates: withTemplateTwins(candidates), namespaceIssue };
 }
 
 /**
@@ -169,7 +212,7 @@ export function resolveIncludeCandidates(rawPath: string, opts: IncludeResolveOp
 /**
  * Expand a leading alias segment in a path or glob pattern to one candidate
  * per alias base, in the alias's base order. Used for config entry paths
- * (`entryGlob`/watch patterns), where — unlike @include resolution — there is
+ * (`entryGlob`/watch patterns), where, unlike @include resolution, there is
  * no including file to supply a relative fallback, so a non-alias path is
  * returned unchanged as the sole candidate.
  *
