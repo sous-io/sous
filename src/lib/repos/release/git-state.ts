@@ -106,6 +106,59 @@ export async function defaultBranch(
 }
 
 /**
+ * The commit where this checkout's own work starts: the point HEAD shares with
+ * the remote's copy of a branch. Returns undefined when this checkout holds no
+ * copy of that branch, or when git cannot find a commit the two share.
+ *
+ * A shallow clone answers this as long as HEAD was built on the branch it was
+ * cloned from, which is why a submission can rely on it where it cannot rely on
+ * tags.
+ *
+ * @param rootDir - The repository's root directory.
+ * @param remote - The remote whose branch is compared, normally `origin`.
+ * @param branch - The branch on that remote, normally the default one.
+ * @param options - The command runner to use.
+ */
+export async function forkPoint(
+  rootDir: string,
+  remote: string,
+  branch: string,
+  options: RunOptions = {}
+): Promise<string | undefined> {
+  try {
+    const commit = await runGit(["merge-base", `refs/remotes/${remote}/${branch}`, "HEAD"], {
+      cwd: rootDir,
+      run: options.run,
+    });
+    return commit.length > 0 ? commit : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * True when the commits since `since` changed a path, comparing that commit
+ * with HEAD.
+ *
+ * @param rootDir - The repository's root directory.
+ * @param since - The commit to compare HEAD with.
+ * @param relativePath - The path to check, relative to the repository root.
+ * @param options - The command runner to use.
+ */
+export async function pathChangedSince(
+  rootDir: string,
+  since: string,
+  relativePath: string,
+  options: RunOptions = {}
+): Promise<boolean> {
+  const changed = await runGit(["diff", "--name-only", since, "HEAD", "--", relativePath], {
+    cwd: rootDir,
+    run: options.run,
+  });
+  return changed.length > 0;
+}
+
+/**
  * The URL of a remote, or undefined when the repository has no such remote.
  *
  * @param rootDir - The repository's root directory.

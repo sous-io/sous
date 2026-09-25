@@ -1,5 +1,4 @@
 import { Command, Flags } from "@oclif/core";
-import { SOUS_VERSION } from "../../lib/settings.js";
 import { findRepoRoot, submitRepo } from "../../lib/repos/release/index.js";
 import { reportCommandError } from "../../utils/command-errors.js";
 import { nonInteractiveFlag } from "../../utils/flags.js";
@@ -90,7 +89,6 @@ export default class RepoSubmit extends Command {
       body: flags.body,
       draft: flags.draft,
       dryRun,
-      sousVersion: SOUS_VERSION,
       onStep: (message) => log(`  ${message}`),
       onNotice: (message) => (dryRun ? dryRunNotice(message) : log(`  ${message}`)),
     });

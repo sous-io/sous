@@ -583,14 +583,26 @@ describe("sous repo release and sous repo submit", () => {
   /**
    * `sous repo submit --dry-run` runs the whole preflight (validation, the
    * index check, the provider, its CLI, and the working tree) and sends
-   * nothing.
+   * nothing. The releases above were made here, so the upstream branch is
+   * moved to them first, as a maintainer's push would; the contribution is
+   * one new skill on top.
    */
   it(
     "should run the submission preflight and send nothing on a dry run",
     () => {
+      git(recipeRepo, "update-ref", "refs/remotes/origin/main", "HEAD");
+      fs.writeFileSync(
+        path.join(recipeRepo, "recipes/core/example/skills/contributed.md"),
+        "contributed\n",
+        "utf8"
+      );
+      git(recipeRepo, "add", "--all");
+      git(recipeRepo, "commit", "--quiet", "--message", "contribute a skill");
+
       const result = runSous("repo", "submit", "--dry-run");
 
-      expect(result.status).toBe(0);
+      expect(result.status, result.stdout + result.stderr).toBe(0);
+      expect(result.stdout).toContain("Checking that sous.index.json was left alone");
       expect(result.stdout).toContain("Checking that the GitHub CLI is installed");
       expect(result.stdout).toContain("Nothing was sent");
       expect(result.stdout).toContain("owner/recipes");

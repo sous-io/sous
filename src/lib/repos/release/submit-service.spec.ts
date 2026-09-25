@@ -37,7 +37,7 @@ let tmp: TmpDir;
 let repo: string;
 let calls: Array<{ command: string; args: string[] }>;
 
-/** The sous version recorded when the index is regenerated for the check. */
+/** The sous version the test repository's index records as its generator. */
 const GENERATOR = "1.2.3";
 
 /** What the fake provider should answer on the write path. */
@@ -206,7 +206,6 @@ async function submit(
 ) {
   return submitRepo({
     rootDir: repo,
-    sousVersion: GENERATOR,
     run: makeRunner(),
     providers: [provider],
     now: new Date(2026, 8, 10, 14, 3),
@@ -367,13 +366,82 @@ describe("submitRepo()", () => {
   });
 
   /**
-   * A proposal whose index is out of date would fail the maintainer's own
-   * checks, so it is stopped here with the command that fixes it.
+   * The checkout `sous repo link` makes is shallow and holds almost none of the
+   * tags. Whether the index agrees with the tags is the maintainer's check, so a
+   * published version whose tag this checkout lacks does not stop a proposal.
    */
-  it("should refuse while the committed index is out of date", async () => {
+  it("should submit from a checkout that lacks the release tags", async () => {
     git(repo, "tag", "--annotate", "core/example@1.0.0", "--message", "release");
+    await commitCurrentIndex();
+    git(repo, "tag", "--delete", "core/example@1.0.0");
 
-    await expect(submit(new FakeProvider())).rejects.toThrow(/Run 'sous repo release'/);
+    const result = await submit(new FakeProvider());
+
+    expect(result.url).toBe("https://github.com/owner/recipes/pull/7");
+  });
+
+  /**
+   * The index is written by the repository's own release after a merge, so a
+   * change that edits it is refused, naming the file and how to restore it.
+   *
+   * submit(provider);  // -> "This change edits sous.index.json. ..."
+   */
+  it("should refuse a change that edits the index", async () => {
+    await commitCurrentIndex();
+    git(repo, "update-ref", "refs/remotes/origin/main", "HEAD");
+    writeFile(repo, "sous.index.json", "{}\n");
+    commitAll(repo, "edit the index by hand");
+
+    await expect(submit(new FakeProvider())).rejects.toThrow(/This change edits sous\.index\.json/);
+  });
+
+  /**
+   * A change that leaves the index alone passes the check, even when the
+   * upstream branch it is compared with exists.
+   */
+  it("should accept a change that leaves the index alone", async () => {
+    await commitCurrentIndex();
+    git(repo, "update-ref", "refs/remotes/origin/main", "HEAD");
+    writeFile(repo, "recipes/core/example/skills/two.md", "second\n");
+    commitAll(repo, "add a second skill");
+
+    const result = await submit(new FakeProvider());
+
+    expect(result.title).toBe("add a second skill");
+  });
+
+  /**
+   * With no copy of the upstream branch to compare with, the check cannot be
+   * made, and the contributor is told so rather than left to assume it passed.
+   */
+  it("should say so when there is no upstream branch to compare with", async () => {
+    await commitCurrentIndex();
+    const notices: string[] = [];
+
+    await submit(new FakeProvider(), { onNotice: (message) => notices.push(message) });
+
+    expect(notices.join("\n")).toMatch(/could not check whether sous\.index\.json was changed/);
+  });
+
+  /**
+   * The proposal lists the versions merging would publish, worked out from the
+   * manifests and the committed index, with no tags needed.
+   */
+  it("should list the versions merging would publish", async () => {
+    git(repo, "tag", "--annotate", "core/example@1.0.0", "--message", "release");
+    await commitCurrentIndex();
+    git(repo, "tag", "--delete", "core/example@1.0.0");
+    writeFile(
+      repo,
+      "recipes/core/example/sous.recipe.yaml",
+      "formatVersion: 1\nnamespace: core\nname: example\nversion: 1.1.0\n"
+    );
+    commitAll(repo, "raise the example recipe");
+    const provider = new FakeProvider();
+
+    await submit(provider);
+
+    expect(provider.proposal?.body).toMatch(/would publish[\s\S]*core\/example 1\.1\.0/);
   });
 
   /**

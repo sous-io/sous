@@ -1227,7 +1227,10 @@ through. `--check` is the read-only pull-request form,
 `--ci` is the merge preset (implies `--no-bump` AND `--yes`, so it accepts the plan it prints
 rather than failing on the confirmation it cannot ask; it does NOT imply `--push`), and on a
 branch other than the default one tagging is skipped unless `--tag` says otherwise. `repo submit` is validate-then-propose: it checks the tooling and the working
-tree, then the recipes and the index, and only then pushes and proposes. `submit-service.ts`
+tree, then the recipes and that the change leaves `sous.index.json` alone (compared with the fork point on
+`origin/<default>`, through `forkPoint` in `release/git-state.ts`), and only then pushes and proposes. Whether
+the index agrees with the tags is `release --check`'s job, not submit's, so submit works from the shallow
+checkout `repo link` makes. `submit-service.ts`
 is a SEQUENCER and nothing more: it names no provider, spawns no host tool, and builds no
 command arguments; every host-specific answer comes from the provider interface as plain data.
 Every step prints before it runs, and a failure names the steps that already completed. A
