@@ -295,8 +295,13 @@ printing each step:
 
 1. **Preflight.** An `origin` remote exists, sous recognizes its provider, that provider's command line tool
    (`gh` or `glab`) is installed and signed in, and everything is committed.
-2. **Validation.** The repository validates and the committed index is current, so a proposal never fails the
-   maintainer's own checks and wastes their review.
+2. **Validation.** The repository validates, and your change leaves `sous.index.json` as it found it, so a
+   proposal never fails the maintainer's own checks and wastes their review. The index is written by the
+   repository's own release after a merge; whether it agrees with the release tags is checked there, by
+   `sous repo release --check` on a full clone, not by `submit`. That is what lets `submit` run from the shallow
+   checkout `sous repo link` makes, which holds almost none of the tags. The comparison is made against the
+   copy of the default branch your checkout holds (`origin/main`, for example); when it holds none, `submit`
+   says the check was skipped.
 3. **Delegation.** Sous asks the provider whether you can push to the repository itself, forks it onto your
    account when you cannot, pushes the branch, and asks the provider to open the proposal. A change sitting on
    the default branch is moved to `sous/submit-<YYYYMMDD>-<HHMM>`.

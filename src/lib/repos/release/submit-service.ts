@@ -15,8 +15,12 @@
  *
  * Two rules shape everything here:
  *
- * - Nothing is sent until the repository validates and its index is current. A
- *   proposal that fails the maintainer's own checks wastes their review.
+ * - Nothing is sent until the repository validates and the contributor has left
+ *   its index alone. A proposal that fails the maintainer's own checks wastes
+ *   their review. Whether the index agrees with the tags is the maintainer's
+ *   check, not the contributor's: `sous repo release --check` makes it on a full
+ *   clone, while a contributor usually works in the shallow checkout that
+ *   `sous repo link` makes, which holds almost none of the tags.
  * - Every step announces itself BEFORE it runs, and a failure says exactly which
  *   steps completed. A half-finished submission (a branch pushed, no proposal
  *   opened) is a normal outcome of a network failure, and the contributor has to
@@ -36,17 +40,16 @@ import {
   type RepoProvider,
   type SubmitCapableProvider,
 } from "../providers/provider.js";
-import {
-  buildIndex,
-  describeIndexDrift,
-  readIndexFile,
-  type IndexBuildResult,
-} from "./index-builder.js";
+import { INDEX_FILENAME } from "../formats/common.js";
+import type { IndexFile } from "../formats/index-file.js";
+import { readIndexFile } from "./index-builder.js";
 import {
   currentBranch,
   createBranch,
   defaultBranch,
+  forkPoint,
   lastCommitSubject,
+  pathChangedSince,
   pushBranch,
   remoteUrl,
   submitBranchName,
@@ -81,8 +84,6 @@ export type SubmitOptions = {
   draft?: boolean;
   /** When true, everything is checked and reported and nothing is sent. */
   dryRun?: boolean;
-  /** The version of sous, recorded when the index is regenerated for the check. */
-  sousVersion: string;
   /** When the submission is happening; decides the branch name. Defaults to now. */
   now?: Date;
   /** How subprocesses are run. Defaults to spawning a real process. */
@@ -127,7 +128,6 @@ export type SubmitResult = {
 export async function submitRepo(options: SubmitOptions): Promise<SubmitResult> {
   const {
     rootDir,
-    sousVersion,
     draft = false,
     dryRun = false,
     now = new Date(),
@@ -204,19 +204,27 @@ export async function submitRepo(options: SubmitOptions): Promise<SubmitResult> 
   assertRepoValidates(validation);
   completed.push("Checked that every recipe describes itself correctly");
 
-  step("Confirming the committed index is current");
-  const built = await buildIndex({
-    validation,
-    existing: readIndexFile(rootDir),
-    sousVersion,
-    run,
-  });
-  assertIndexReady(built, readIndexFile(rootDir));
-  completed.push("Confirmed the committed index is current");
+  const baseBranch = (await defaultBranch(rootDir, { run })) ?? "main";
+
+  step(`Checking that ${INDEX_FILENAME} was left alone`);
+  const since = await forkPoint(rootDir, UPSTREAM_REMOTE, baseBranch, { run });
+  if (since === undefined) {
+    notice(
+      `This checkout holds no copy of '${UPSTREAM_REMOTE}/${baseBranch}', so sous could not ` +
+        `check whether ${INDEX_FILENAME} was changed.`
+    );
+  } else if (await pathChangedSince(rootDir, since, INDEX_FILENAME, { run })) {
+    throw new ConfigError(
+      `This change edits ${INDEX_FILENAME}. The index is written by the repository's own ` +
+        `release, after a change is merged, so a proposal leaves it as it found it.\n` +
+        `  Restore it with 'git checkout ${since.slice(0, 12)} -- ${INDEX_FILENAME}', ` +
+        `commit that, then run the command again.`
+    );
+  }
+  completed.push(`Checked that ${INDEX_FILENAME} was left alone`);
 
   // --- The branch the change lives on ---------------------------------------
 
-  const baseBranch = (await defaultBranch(rootDir, { run })) ?? "main";
   const checkedOut = await currentBranch(rootDir, { run });
   let branch = checkedOut;
 
@@ -233,7 +241,7 @@ export async function submitRepo(options: SubmitOptions): Promise<SubmitResult> 
 
   const title =
     options.title ?? (await lastCommitSubject(rootDir, { run })) ?? defaultTitle(validation);
-  const body = options.body ?? defaultBody(built, validation);
+  const body = options.body ?? defaultBody(validation, readIndexFile(rootDir));
 
   // --- Fork, push, propose --------------------------------------------------
 
@@ -332,34 +340,6 @@ function assertRepoValidates(validation: RepoValidation): void {
   );
 }
 
-/** Refuses to submit while the index disagrees with what the repository publishes. */
-function assertIndexReady(
-  built: IndexBuildResult,
-  existing: ReturnType<typeof readIndexFile>
-): void {
-  if (hasErrors(built.problems)) {
-    throw new ConfigError(
-      "This repository's index and its tags do not agree, so there is nothing worth " +
-        "proposing yet:\n\n" +
-        renderProblems(errorsIn(built.problems)) +
-        "\n\n  Fix these, then run the command again."
-    );
-  }
-
-  if (built.stale) {
-    const drift = describeIndexDrift(existing, built.index)
-      .map((line) => `    ${line}`)
-      .join("\n");
-    throw new ConfigError(
-      "The committed index is out of date, and a maintainer's own checks would reject " +
-        "the proposal:\n\n" +
-        `${drift}\n\n` +
-        "  Run 'sous repo release', commit the regenerated index, then run this command " +
-        "again."
-    );
-  }
-}
-
 /** Renders a list of problems as an indented block. */
 function renderProblems(problems: ReadonlyArray<ValidationProblem>): string {
   return problems.map((problem) => `    ${problem.where}: ${problem.message}`).join("\n");
@@ -450,8 +430,22 @@ function defaultTitle(validation: RepoValidation): string {
   return `Update the ${validation.manifest.name} recipes`;
 }
 
+/**
+ * The versions merging this change would publish: every recipe whose manifest
+ * declares a version the committed index does not list yet. Worked out from
+ * the manifests and the index alone, so it needs none of the tags.
+ */
+function versionsToPublish(
+  validation: RepoValidation,
+  index: IndexFile | undefined
+): Array<{ key: string; version: string }> {
+  return validation.recipes
+    .filter((recipe) => index?.recipes[recipe.key]?.versions[recipe.manifest.version] === undefined)
+    .map((recipe) => ({ key: recipe.key, version: recipe.manifest.version }));
+}
+
 /** The body sous writes when the contributor did not supply one. */
-function defaultBody(built: IndexBuildResult, validation: RepoValidation): string {
+function defaultBody(validation: RepoValidation, index: IndexFile | undefined): string {
   const lines = [
     `Proposed with 'sous repo submit' from the ${validation.manifest.name} repository.`,
     "",
@@ -460,10 +454,11 @@ function defaultBody(built: IndexBuildResult, validation: RepoValidation): strin
   for (const recipe of validation.recipes) {
     lines.push(`- ${recipe.key} at version ${recipe.manifest.version}`);
   }
-  if (built.pending.length > 0) {
+  const toPublish = versionsToPublish(validation, index);
+  if (toPublish.length > 0) {
     lines.push("");
     lines.push("Versions this proposal would publish once it is merged and tagged:");
-    for (const entry of built.pending) {
+    for (const entry of toPublish) {
       lines.push(`- ${entry.key} ${entry.version}`);
     }
   }
