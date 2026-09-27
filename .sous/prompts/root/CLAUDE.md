@@ -870,8 +870,8 @@ the COMMITTED `.sous/sous.lock.json`. Three sources feed `.claude/skills/`:
 - `core/sous-skills`, which every project gets without asking. It is not listed in the config
   at all; sous provides that subscription itself, and `recipes/core/sous-skills/` at the root
   of this repository is its source.
-- The subscriptions the config declares: `workflow/task-files`, `workflow/github-projects` and
-  `communication/control-flow`, written into `recipeOutputs.skills`.
+- The subscriptions the config declares: `workflow/task-files`, `workflow/github-projects`,
+  `communication/control-flow` and `cli/command-design`, written into `recipeOutputs.skills`.
 - This repository's own skills in `.sous/skills/`, compiled by the `projectSkills` target.
 
 `tool-usage/automated-browser-tasks` is deliberately NOT subscribed to: it needs

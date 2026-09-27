@@ -81,6 +81,7 @@ export const config = {
     "workflow/task-files": { range: "^1" },
     "workflow/github-projects": { range: "^1" },
     "communication/control-flow": { range: "^1" },
+    "cli/command-design": { range: "^1" },
   },
 
   // Where a subscribed recipe's files are written. Only `skills` is named,
