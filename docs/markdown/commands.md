@@ -177,10 +177,30 @@ Points a repository at a working copy on this machine instead of a published ver
 clones it into `.sous/repos` and links the clone; a name or URL with a `PATH` links the checkout at that path; a
 path alone links that checkout where it is, adding the repository first if needed. Takes `--dry-run`.
 
-- `--global`: link for every project on this machine, sharing one checkout.
-- `-y, --yes`: answer the trust question a not-yet-added repository raises (also `--trust`).
+A checkout that was already on disk is fetched (a fetch changes none of its files or branches) and compared with
+upstream: its branch, whether that branch is merged into the default branch, and how many commits it is behind.
+When upstream cannot be reached within a few seconds, a warning gives git's reason and says since when the
+checkout may have diverged, and the link is still recorded. Nothing else changes the checkout unless a flag
+asks for it; git carries out each step, and a step git refuses stops the command with git's own message.
 
-Example: `sous repo link sous-recipes ~/Projects/sous-recipes`
+- `--global`: link for every project on this machine, sharing one checkout. Changing that checkout's branch
+  says it affects every project that links it.
+- `--branch <name>`: switch to an existing branch, fetching it from upstream first when it is not local.
+- `--create-branch <name>`: create a new branch and switch to it; git refuses a name that already exists.
+- `--generate-branch`: the same, with the generated name `sous/edit-<YYYYMMDD>-<HHMM>`, which is printed.
+- `--from <branch>`: the base of the new branch, fetched first. Defaults to the repository's default branch,
+  not whatever is checked out, and needs `--create-branch` or `--generate-branch`.
+- `--latest`: make the branch being worked from (the `--branch` target, the `--from` base, or else the default
+  branch) match upstream's, leaving every other branch alone. What that would discard (uncommitted changes and
+  local commits upstream lacks) is listed first, with one question; it fails when the fetch fails.
+- `-y, --yes`: answer the trust question a not-yet-added repository raises and the question `--latest` asks
+  (also `-f`, `--force`, `--trust`).
+
+`--branch`, `--create-branch` and `--generate-branch` exclude each other; each flag works on a checkout linked
+by path, too.
+
+Example: `sous repo link sous-recipes ~/Projects/sous-recipes`, or `sous repo link sous-recipes
+--generate-branch --latest --yes`
 
 ### `sous repo unlink REPO`
 Stops reading a repository from a working copy and goes back to published versions; `REPO` is the short name as

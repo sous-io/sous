@@ -293,6 +293,30 @@ const MANAGED_LAYER_EXPORTS = [
  */
 const PROVIDER_WRITE_EXPORTS = ["ProviderBase", "firstUrlIn", "supportsSubmit"];
 
+/**
+ * The names the link branch work added: the upstream check behind the
+ * divergence report, and one git operation per step the branch flags and
+ * `--latest` take.
+ */
+const LINK_BRANCH_EXPORTS = [
+  "UPSTREAM_CHECK_TIMEOUT_MS",
+  "UPSTREAM_REMOTE",
+  "assertBranchName",
+  "compareWithUpstream",
+  "createBranch",
+  "currentBranch",
+  "defaultBranch",
+  "discardableWork",
+  "fetchBranch",
+  "generatedBranchName",
+  "headCommit",
+  "lastFetchedAt",
+  "localBranchExists",
+  "resetBranchToUpstream",
+  "switchBranch",
+  "tryFetchUpstream",
+];
+
 describe("the repos barrel", () => {
   /**
    * The barrel exposes exactly the documented surface: nothing missing, and
@@ -308,6 +332,7 @@ describe("the repos barrel", () => {
       ...PHASE_7_EXPORTS,
       ...MANAGED_LAYER_EXPORTS,
       ...PROVIDER_WRITE_EXPORTS,
+      ...LINK_BRANCH_EXPORTS,
     ].sort();
     expect(Object.keys(repos).sort()).toEqual(expected);
   });

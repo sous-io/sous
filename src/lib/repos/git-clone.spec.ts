@@ -3,6 +3,13 @@ import path from "node:path";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
   cloneRepo,
+  compareWithUpstream,
+  defaultBranch,
+  discardableWork,
+  fetchBranch,
+  generatedBranchName,
+  tryFetchUpstream,
+  UPSTREAM_CHECK_TIMEOUT_MS,
   isGitCheckout,
   looksLikeRepoUrl,
   normalizeRemoteUrl,
@@ -360,5 +367,239 @@ describe("cloneRepo()", () => {
 
     expect(isConfigError(caught)).toBe(true);
     expect((caught as Error).message).toContain("repository 'https://x/y' not found");
+  });
+});
+
+describe("defaultBranch()", () => {
+  /**
+   * defaultBranch should read the `origin/HEAD` record a clone leaves behind,
+   * without asking the network, and return the branch name alone.
+   *
+   * defaultBranch("/a/repo"); // origin/HEAD -> origin/main, so -> "main"
+   */
+  it("should read origin/HEAD first", () => {
+    const runner = fakeRunner({
+      "symbolic-ref --quiet --short refs/remotes/origin/HEAD": {
+        status: 0,
+        stdout: "origin/main",
+      },
+    });
+    expect(defaultBranch("/a/repo", { runner })).toBe("main");
+    expect(runner.calls).toHaveLength(1);
+  });
+
+  /**
+   * defaultBranch should ask upstream with `git ls-remote --symref` when the
+   * checkout has no origin/HEAD record, and return undefined when that fails too.
+   *
+   * defaultBranch("/a/repo"); // ls-remote says refs/heads/trunk -> "trunk"
+   */
+  it("should fall back to asking upstream, and give up quietly when it cannot", () => {
+    const runner = fakeRunner({
+      "ls-remote --symref origin HEAD": {
+        status: 0,
+        stdout: "ref: refs/heads/trunk\tHEAD\nabc123\tHEAD",
+      },
+    });
+    expect(defaultBranch("/a/repo", { runner })).toBe("trunk");
+    expect(defaultBranch("/a/repo", { runner: fakeRunner({}) })).toBeUndefined();
+  });
+});
+
+describe("tryFetchUpstream()", () => {
+  /**
+   * tryFetchUpstream should run a quiet fetch of origin under the tight
+   * timeout, and report success without throwing.
+   *
+   * tryFetchUpstream("/a/repo"); // -> { ok: true }
+   */
+  it("should fetch origin under the upstream check timeout", () => {
+    const calls: { args: string[]; timeoutMs?: number }[] = [];
+    const runner: GitRunner = (args, options) => {
+      calls.push({ args, timeoutMs: options.timeoutMs });
+      return { status: 0, stdout: "", stderr: "" };
+    };
+    expect(tryFetchUpstream("/a/repo", { runner })).toEqual({ ok: true });
+    expect(calls[0]).toEqual({
+      args: ["fetch", "--quiet", "origin"],
+      timeoutMs: UPSTREAM_CHECK_TIMEOUT_MS,
+    });
+  });
+
+  /**
+   * tryFetchUpstream should hand back git's own reason when the fetch fails or
+   * runs out of time, rather than throwing, so the link can still go ahead.
+   *
+   * tryFetchUpstream("/a/repo"); // -> { ok: false, reason: "git did not finish ..." }
+   */
+  it("should return git's reason when the fetch fails", () => {
+    const runner: GitRunner = () => ({
+      status: null,
+      stdout: "",
+      stderr: "git did not finish within 10 seconds and was stopped.",
+    });
+    expect(tryFetchUpstream("/a/repo", { runner })).toEqual({
+      ok: false,
+      reason: "git did not finish within 10 seconds and was stopped.",
+    });
+  });
+});
+
+describe("compareWithUpstream()", () => {
+  /**
+   * compareWithUpstream should report the branch, whether HEAD is already on
+   * the upstream default branch, and how many commits it is behind.
+   *
+   * compareWithUpstream("/a/repo", "main");
+   * // -> { branch: "feature", merged: true, behind: 3, ... }
+   */
+  it("should report the branch, the merged state and the distance behind", () => {
+    const runner = fakeRunner({
+      "merge-base --is-ancestor HEAD origin/main": { status: 0 },
+      "rev-list --count HEAD..origin/main": { status: 0, stdout: "3" },
+      "symbolic-ref --quiet --short HEAD": { status: 0, stdout: "feature" },
+      "rev-parse --short HEAD": { status: 0, stdout: "abc1234" },
+    });
+    expect(compareWithUpstream("/a/repo", "main", { runner })).toEqual({
+      branch: "feature",
+      commit: "abc1234",
+      defaultBranch: "main",
+      merged: true,
+      behind: 3,
+    });
+  });
+
+  /**
+   * compareWithUpstream should call git's exit status 1 "not merged", and
+   * anything else (a missing ref, say) unknown, which is undefined.
+   */
+  it("should tell not merged apart from unknown", () => {
+    const notMerged = fakeRunner({
+      "merge-base --is-ancestor HEAD origin/main": { status: 1 },
+    });
+    expect(compareWithUpstream("/a/repo", "main", { runner: notMerged }).merged).toBe(false);
+
+    const unknown = fakeRunner({
+      "merge-base --is-ancestor HEAD origin/main": { status: 128 },
+    });
+    const result = compareWithUpstream("/a/repo", "main", { runner: unknown });
+    expect(result.merged).toBeUndefined();
+    expect(result.behind).toBeUndefined();
+    expect(result.branch).toBeUndefined();
+  });
+});
+
+describe("fetchBranch()", () => {
+  /**
+   * fetchBranch should fetch the branch by an explicit refspec and then add it
+   * to origin's fetch list, which is what a single-branch clone needs before
+   * `git switch` can see the branch.
+   *
+   * fetchBranch("/a/repo", "feature");
+   * // -> git fetch --quiet origin +refs/heads/feature:refs/remotes/origin/feature
+   * // -> git remote set-branches --add origin feature
+   */
+  it("should add the branch to a single-branch clone's fetch list", () => {
+    const runner = fakeRunner({
+      "fetch --quiet origin +refs/heads/feature:refs/remotes/origin/feature": { status: 0 },
+      "config --get-all remote.origin.fetch": {
+        status: 0,
+        stdout: "+refs/heads/main:refs/remotes/origin/main",
+      },
+      "remote set-branches --add origin feature": { status: 0 },
+    });
+    fetchBranch("/a/repo", "feature", { runner });
+    expect(runner.calls.map((call) => call.args.join(" "))).toContain(
+      "remote set-branches --add origin feature"
+    );
+  });
+
+  /**
+   * fetchBranch should leave the fetch configuration alone when a wildcard
+   * already covers every branch.
+   */
+  it("should leave a wildcard fetch configuration alone", () => {
+    const runner = fakeRunner({
+      "fetch --quiet origin +refs/heads/feature:refs/remotes/origin/feature": { status: 0 },
+      "config --get-all remote.origin.fetch": {
+        status: 0,
+        stdout: "+refs/heads/*:refs/remotes/origin/*",
+      },
+    });
+    fetchBranch("/a/repo", "feature", { runner });
+    expect(runner.calls).toHaveLength(2);
+  });
+
+  /**
+   * fetchBranch should pass git's refusal through under a line naming the step
+   * that failed, when upstream has no such branch.
+   */
+  it("should name the step and carry git's message when the fetch fails", () => {
+    const runner = fakeRunner({
+      "fetch --quiet origin +refs/heads/nope:refs/remotes/origin/nope": {
+        status: 128,
+        stderr: "fatal: couldn't find remote ref refs/heads/nope",
+      },
+    });
+    let caught: unknown;
+    try {
+      fetchBranch("/a/repo", "nope", { runner });
+    } catch (error) {
+      caught = error;
+    }
+    expect(isConfigError(caught)).toBe(true);
+    const message = (caught as Error).message;
+    expect(message.split("\n")[0]).toBe("Fetching the branch 'nope' from origin failed.");
+    expect(message).toContain("couldn't find remote ref refs/heads/nope");
+  });
+});
+
+describe("discardableWork()", () => {
+  /**
+   * discardableWork should list uncommitted changes to tracked files and the
+   * local commits upstream lacks, one line each.
+   *
+   * discardableWork("/a/repo", "main");
+   * // -> { uncommitted: ["M README.md"], localCommits: ["abc1234 mine"] }
+   */
+  it("should list uncommitted changes and local commits", () => {
+    const runner = fakeRunner({
+      "status --porcelain --untracked-files=no": { status: 0, stdout: "M README.md" },
+      "show-ref --verify --quiet refs/heads/main": { status: 0 },
+      "log --oneline --no-decorate refs/remotes/origin/main..refs/heads/main": {
+        status: 0,
+        stdout: "abc1234 mine",
+      },
+    });
+    expect(discardableWork("/a/repo", "main", { runner })).toEqual({
+      uncommitted: ["M README.md"],
+      localCommits: ["abc1234 mine"],
+    });
+  });
+
+  /**
+   * discardableWork should report no local commits when there is no local
+   * branch of that name yet, since nothing on it can be lost.
+   */
+  it("should report no commits when the local branch does not exist", () => {
+    const runner = fakeRunner({
+      "status --porcelain --untracked-files=no": { status: 0, stdout: "" },
+    });
+    expect(discardableWork("/a/repo", "main", { runner })).toEqual({
+      uncommitted: [],
+      localCommits: [],
+    });
+  });
+});
+
+describe("generatedBranchName()", () => {
+  /**
+   * generatedBranchName should name a branch sous/edit-<YYYYMMDD>-<HHMM> in
+   * local time, zero-padded.
+   *
+   * generatedBranchName(new Date(2026, 0, 5, 9, 7)); // -> "sous/edit-20260105-0907"
+   */
+  it("should build the name from the local date and time", () => {
+    expect(generatedBranchName(new Date(2026, 0, 5, 9, 7))).toBe("sous/edit-20260105-0907");
   });
 });

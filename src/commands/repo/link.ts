@@ -12,13 +12,30 @@ import { enabledRepos } from "../../lib/repos/defaults.js";
 import { subscriptionServiceFor } from "../../lib/repos/subscription-service.js";
 import type { LinkOrigin } from "../../lib/repos/formats/links-map.js";
 import {
+  assertBranchName,
   cloneRepo,
+  compareWithUpstream,
+  createBranch,
+  currentBranch,
+  defaultBranch,
+  discardableWork,
+  fetchBranch,
+  generatedBranchName,
   isGitCheckout,
+  lastFetchedAt,
+  localBranchExists,
   looksLikeRepoUrl,
   remoteUrlOf,
   repoSlugFromUrl,
+  resetBranchToUpstream,
   sameRemote,
+  switchBranch,
+  tryFetchUpstream,
+  UPSTREAM_REMOTE,
+  type DiscardableWork,
 } from "../../lib/repos/git-clone.js";
+import { isInteractive, nonInteractiveError } from "../../lib/interactive.js";
+import { askYesNo } from "../../utils/prompts.js";
 import {
   assertLocalRepoDirectory,
   expandHomePath,
@@ -36,12 +53,16 @@ import {
   writeProjectLinks,
 } from "../../lib/repos/links.js";
 import {
+  BULLET,
   blankLine,
   dryRunNotice,
   footer,
   heading,
   log,
+  note,
+  paragraph,
   showCommandVars,
+  showVariable,
   showVariables,
   warning,
 } from "../../utils/formatting.js";
@@ -68,6 +89,15 @@ import {
  * adding one. Naming a repository this project has not added therefore runs the
  * same trust ceremony `sous repo add` runs, rather than skipping it; there is no
  * way to read from a repository this project does not trust.
+ *
+ * A link says nothing about WHY a checkout is being read (authoring, running a
+ * teammate's branch, a local fork, debugging), so the command never changes a
+ * checkout on its own. A checkout that was already on disk is fetched and
+ * compared with upstream, which changes none of its files or branches; every
+ * change to it is an explicit flag (`--branch`, `--create-branch`,
+ * `--generate-branch`, `--latest`), carried out by git, whose refusals are
+ * passed through. `--latest` is the one place sous checks for itself, because
+ * making a branch match upstream discards local work without git warning.
  */
 export default class RepoLink extends BaseCommand {
   static description = [
@@ -79,6 +109,8 @@ export default class RepoLink extends BaseCommand {
       "that clone.",
     "'sous repo link <name-or-url> <path>' links the checkout at that path to that " +
       "repository, and clones nothing.",
+    "A checkout that was already on disk is fetched and compared with upstream; " +
+      "only the branch flags and --latest change it.",
   ].join("\n");
 
   /**
@@ -93,6 +125,9 @@ export default class RepoLink extends BaseCommand {
     "<%= config.bin %> repo link sous-recipes ~/Projects/sous-recipes",
     "<%= config.bin %> repo link https://github.com/sous-io/sous-recipes",
     "<%= config.bin %> repo link sous-recipes --global",
+    "<%= config.bin %> repo link sous-recipes --latest",
+    "<%= config.bin %> repo link sous-recipes --generate-branch",
+    "<%= config.bin %> repo link sous-recipes --branch my-change --latest",
   ];
 
   static args = {
@@ -122,6 +157,33 @@ export default class RepoLink extends BaseCommand {
     yes: confirmationFlag({ extraAliases: ["trust"] }),
     "dry-run": Flags.boolean({
       description: "Print what would change without cloning or writing anything",
+      default: false,
+    }),
+    branch: Flags.string({
+      description: "Switch the checkout to this existing branch, fetching it from upstream first",
+      helpValue: "<name>",
+      exclusive: ["create-branch", "generate-branch"],
+    }),
+    "create-branch": Flags.string({
+      description: "Create this new branch in the checkout and switch to it",
+      helpValue: "<name>",
+      exclusive: ["branch", "generate-branch"],
+    }),
+    "generate-branch": Flags.boolean({
+      description: "Create a new branch named sous/edit-<date>-<time> in the checkout and switch to it",
+      exclusive: ["branch", "create-branch"],
+    }),
+    from: Flags.string({
+      description:
+        "Start the new branch from this branch instead of the repository's default branch",
+      helpValue: "<branch>",
+      // oclif's `dependsOn` wants every listed flag, and these two exclude each
+      // other; `some` is its spelling of "at least one of".
+      relationships: [{ type: "some", flags: ["create-branch", "generate-branch"] }],
+    }),
+    latest: Flags.boolean({
+      description:
+        "Make the branch being worked from match upstream's, after listing any local work that would be discarded",
       default: false,
     }),
   };
@@ -175,14 +237,30 @@ export default class RepoLink extends BaseCommand {
         ? this.planLinkToPath(existingCheckout)
         : this.planClone(name, url, isGlobal, dryRun);
 
+    const request = branchRequestFrom(flags);
+
     if (dryRun) {
       blankLine();
       dryRunNotice(`would link '${name}' to ${plan.directory}`);
+      for (const line of describeBranchRequest(request)) dryRunNotice(line);
       dryRunNotice(
         `would record it in ${isGlobal ? "the machine-wide" : "this project's"} links map`
       );
       footer();
       return;
+    }
+
+    // Branch work happens before the link is recorded, so a step git refuses
+    // leaves no link pointing at a checkout in a state nobody asked for.
+    if (hasBranchWork(request)) {
+      if (isGlobal) {
+        warning(
+          `This checkout is SHARED by every project on this machine that links '${name}' ` +
+            `with --global.\n` +
+            `Changing its branch changes what all of them build from.`
+        );
+      }
+      plan.notes.push(...(await this.applyBranchRequest(plan.directory, request, flags.yes)));
     }
 
     const map = isGlobal ? readGlobalLinks() : readProjectLinks(sousDir);
@@ -204,9 +282,11 @@ export default class RepoLink extends BaseCommand {
     for (const line of plan.notes) log(`  ${line}`);
     if (plan.notes.length > 0) blankLine();
 
+    const branch = isGitCheckout(plan.directory) ? currentBranch(plan.directory) : undefined;
     showVariables({
       Repository: name,
       Checkout: plan.directory,
+      ...(branch === undefined ? {} : { Branch: branch }),
       "Recorded in": linksPath,
     });
 
@@ -214,6 +294,10 @@ export default class RepoLink extends BaseCommand {
       blankLine();
       log(`  This replaces an earlier link to ${previous.path}, which is untouched.`);
     }
+
+    // A checkout sous has just cloned is as current as upstream by definition;
+    // any other one may be days or months old, so say how it compares.
+    if (plan.kind !== "cloned") this.reportUpstream(plan.directory);
 
     warning(
       `The repository '${name}' is now LINKED.\n` +
@@ -225,6 +309,227 @@ export default class RepoLink extends BaseCommand {
     );
 
     footer();
+  }
+
+  /**
+   * Carries out the branch flags on the checkout, in order: `--latest` first
+   * (which switches to the branch being worked from and makes it match
+   * upstream's), then `--branch` when `--latest` did not already switch to it,
+   * then the new branch. Git decides whether each step may happen; the one
+   * thing checked here is what `--latest` would discard, because making a
+   * branch match upstream discards work without git warning about it.
+   *
+   * @param directory - The checkout.
+   * @param request - What the flags asked for.
+   * @param yes - The confirmation flag, which answers the discard question.
+   * @returns Lines describing what was done, for the notes block.
+   */
+  private async applyBranchRequest(
+    directory: string,
+    request: BranchRequest,
+    yes: boolean
+  ): Promise<string[]> {
+    if (!isGitCheckout(directory)) {
+      throw new ConfigError(
+        `${directory} is not a git checkout, so it has no branches to switch or create.\n` +
+          `  Link it without the branch flags, or turn it into a git repository first.`
+      );
+    }
+
+    for (const name of [request.switchTo, request.create, request.from]) {
+      if (name !== undefined) assertBranchName(directory, name);
+    }
+
+    const hasUpstream = remoteUrlOf(directory) !== undefined;
+    const needsDefault =
+      (request.create !== undefined && request.from === undefined) ||
+      (request.latest && request.switchTo === undefined && request.from === undefined);
+    const fallback = needsDefault ? this.requireDefaultBranch(directory) : undefined;
+    const notes: string[] = [];
+
+    if (request.latest) {
+      const target = (request.switchTo ?? request.from ?? fallback)!;
+      if (!hasUpstream) {
+        throw new ConfigError(
+          `--latest makes '${target}' match upstream's, and this checkout has no ` +
+            `'${UPSTREAM_REMOTE}' remote to be upstream.\n` +
+            `  Add one with 'git remote add ${UPSTREAM_REMOTE} <url>' in ${directory}, or ` +
+            `link without --latest.`
+        );
+      }
+      fetchBranch(directory, target);
+      const work = discardableWork(directory, target);
+      await this.confirmDiscard(target, work, yes);
+      resetBranchToUpstream(directory, target);
+      notes.push(`Made the branch '${target}' match ${UPSTREAM_REMOTE}/${target}.`);
+    } else if (request.switchTo !== undefined) {
+      // A branch that exists locally is switched to as it is; one that does not
+      // is fetched first, since a single-branch clone cannot see it otherwise.
+      if (hasUpstream && !localBranchExists(directory, request.switchTo)) {
+        fetchBranch(directory, request.switchTo);
+      }
+      switchBranch(directory, request.switchTo);
+      notes.push(`Switched to the branch '${request.switchTo}'.`);
+    }
+
+    if (request.create !== undefined) {
+      const base = (request.from ?? fallback)!;
+      let startPoint = base;
+      if (hasUpstream) {
+        // With --latest the base was fetched a moment ago.
+        if (!request.latest) fetchBranch(directory, base);
+        startPoint = `${UPSTREAM_REMOTE}/${base}`;
+      }
+      createBranch(directory, request.create, startPoint);
+      notes.push(
+        request.generated
+          ? `Created the branch '${request.create}' (a generated name) from ${startPoint}, ` +
+              `and switched to it.`
+          : `Created the branch '${request.create}' from ${startPoint}, and switched to it.`
+      );
+    }
+
+    return notes;
+  }
+
+  /**
+   * The upstream default branch, or a ConfigError saying it could not be
+   * worked out and which flag names a branch instead.
+   *
+   * @param directory - The checkout.
+   */
+  private requireDefaultBranch(directory: string): string {
+    const found = defaultBranch(directory);
+    if (found !== undefined) return found;
+    throw new ConfigError(
+      `Could not work out the default branch of the repository checked out at ${directory}.\n` +
+        `  git records it as '${UPSTREAM_REMOTE}/HEAD' when it clones, and this checkout ` +
+        `has no such record, nor could '${UPSTREAM_REMOTE}' be asked for it.\n` +
+        `  Name the branch to work from with --from, or with --branch.`
+    );
+  }
+
+  /**
+   * Lists what `--latest` would discard and asks once before going on. Nothing
+   * is asked when there is nothing to discard, and the confirmation flag
+   * answers the question ahead of time.
+   *
+   * @param branch - The branch being made to match upstream's.
+   * @param work - What would be discarded.
+   * @param yes - The confirmation flag.
+   */
+  private async confirmDiscard(
+    branch: string,
+    work: DiscardableWork,
+    yes: boolean
+  ): Promise<void> {
+    if (work.uncommitted.length === 0 && work.localCommits.length === 0) return;
+
+    blankLine();
+    paragraph(
+      `Making '${branch}' match ${UPSTREAM_REMOTE}/${branch} discards the local work below.`,
+      { indent: 2 }
+    );
+    if (work.uncommitted.length > 0) {
+      blankLine();
+      showVariable("Uncommitted changes", work.uncommitted.length);
+      for (const line of work.uncommitted) log(`      ${BULLET} ${line}`);
+    }
+    if (work.localCommits.length > 0) {
+      blankLine();
+      showVariable(`Commits ${UPSTREAM_REMOTE} does not have`, work.localCommits.length);
+      for (const line of work.localCommits) log(`      ${BULLET} ${line}`);
+    }
+
+    if (yes) return;
+
+    if (!isInteractive()) {
+      throw nonInteractiveError({
+        prompt: `whether to discard the local work on '${branch}' listed above`,
+        remedy:
+          "pass '--yes' (spelled '-y', '--force' or '--trust' if you prefer) to discard it " +
+          "without being asked.",
+      });
+    }
+
+    const proceed = await askYesNo("Discard it?");
+    if (!proceed) {
+      throw new ConfigError(
+        `Nothing was changed: the local work on '${branch}' was kept.\n` +
+          `  The checkout is on the branch it was on before, and no link was recorded.`
+      );
+    }
+  }
+
+  /**
+   * Says how a checkout that was already on disk compares with upstream. A
+   * short fetch comes first; it updates only the remote-tracking refs, never
+   * the user's files or branches. When upstream cannot be reached, the link
+   * still stands and the warning says since when the checkout may have
+   * diverged.
+   *
+   * @param directory - The checkout.
+   */
+  private reportUpstream(directory: string): void {
+    if (!isGitCheckout(directory)) return;
+
+    blankLine();
+    if (remoteUrlOf(directory) === undefined) {
+      note(
+        `The checkout has no '${UPSTREAM_REMOTE}' remote, so there is no upstream to ` +
+          `compare it with.`,
+        { indent: 2 }
+      );
+      return;
+    }
+
+    const fetched = tryFetchUpstream(directory);
+    const branch = defaultBranch(directory);
+
+    if (!fetched.ok) {
+      const since = lastFetchedAt(directory, branch);
+      warning(
+        `Could not reach upstream; the checkout may have diverged since ` +
+          (since === undefined
+            ? `it was last fetched, and git has no record of when that was.`
+            : `${formatWhen(since)}, when it was last fetched.`) +
+          `\n\nGit said:\n${fetched.reason}\n\n` +
+          `The link was recorded all the same, and nothing in the checkout was changed.`
+      );
+      return;
+    }
+
+    if (branch === undefined) {
+      note(
+        `Upstream was fetched, but its default branch could not be worked out, so there ` +
+          `is nothing to compare the checkout with.`,
+        { indent: 2 }
+      );
+      return;
+    }
+
+    const comparison = compareWithUpstream(directory, branch);
+    const upstream = `${UPSTREAM_REMOTE}/${branch}`;
+    const yesNo = (value: boolean | undefined) =>
+      value === undefined ? "unknown" : value ? "yes" : "no";
+
+    // The branch is already in the summary above; a detached HEAD has none
+    // there, so it is named here instead.
+    showVariables({
+      ...(comparison.branch === undefined
+        ? { "Checked out": `no branch; HEAD is detached at ${comparison.commit ?? "an unknown commit"}` }
+        : {}),
+      "Compared with": upstream,
+      [`Merged into ${upstream}`]: yesNo(comparison.merged),
+      [`Behind ${upstream}`]:
+        comparison.behind === undefined
+          ? "unknown"
+          : `${comparison.behind} ${comparison.behind === 1 ? "commit" : "commits"}`,
+    });
+    blankLine();
+    note(`Upstream was fetched just now; nothing in the checkout was changed.`, {
+      indent: 2,
+    });
   }
 
   /**
@@ -381,6 +686,7 @@ export default class RepoLink extends BaseCommand {
     return {
       directory,
       origin: "path",
+      kind: "path",
       notes: [`Linked the checkout already at ${directory}.`],
     };
   }
@@ -429,6 +735,7 @@ export default class RepoLink extends BaseCommand {
       return {
         directory,
         origin: "clone",
+        kind: "reused",
         notes: [
           `Reused the checkout already at ${directory}; nothing was cloned.`,
         ],
@@ -439,6 +746,7 @@ export default class RepoLink extends BaseCommand {
       return {
         directory,
         origin: "clone",
+        kind: "cloned",
         notes: [`Would clone ${url} into ${directory}.`],
       };
     }
@@ -468,7 +776,7 @@ export default class RepoLink extends BaseCommand {
       );
     }
 
-    return { directory, origin: "clone", notes };
+    return { directory, origin: "clone", kind: "cloned", notes };
   }
 }
 
@@ -495,6 +803,97 @@ type LinkPlan = {
   directory: string;
   /** Whether sous cloned it or was pointed at it. */
   origin: LinkOrigin;
+  /**
+   * What this run did to get the checkout: cloned it just now, reused a clone
+   * already in place, or was given the path of one.
+   */
+  kind: "cloned" | "reused" | "path";
   /** Lines describing what happened, printed before the summary. */
   notes: string[];
 };
+
+/** What the branch flags asked for, with a generated name already chosen. */
+type BranchRequest = {
+  /** `--branch`: the existing branch to switch to. */
+  switchTo?: string;
+  /** `--create-branch` or `--generate-branch`: the branch to create. */
+  create?: string;
+  /** True when the name to create was generated rather than typed. */
+  generated: boolean;
+  /** `--from`: the base of the new branch; the default branch when unset. */
+  from?: string;
+  /** `--latest`: make the branch being worked from match upstream's. */
+  latest: boolean;
+};
+
+/**
+ * Reads the branch flags into one request. The generated name is chosen here,
+ * once, so the dry run and the real run would print the same thing.
+ *
+ * @param flags - The parsed flags.
+ */
+function branchRequestFrom(flags: {
+  branch?: string;
+  "create-branch"?: string;
+  "generate-branch"?: boolean;
+  from?: string;
+  latest: boolean;
+}): BranchRequest {
+  const generated = flags["generate-branch"] === true;
+  const create = generated ? generatedBranchName() : flags["create-branch"];
+  return {
+    ...(flags.branch === undefined ? {} : { switchTo: flags.branch }),
+    ...(create === undefined ? {} : { create }),
+    generated,
+    ...(flags.from === undefined ? {} : { from: flags.from }),
+    latest: flags.latest,
+  };
+}
+
+/** True when the request asks for anything to be done to the checkout. */
+function hasBranchWork(request: BranchRequest): boolean {
+  return request.switchTo !== undefined || request.create !== undefined || request.latest;
+}
+
+/**
+ * What a dry run says the branch flags would do, one line per step, in the
+ * order the real run takes them.
+ *
+ * @param request - The branch request.
+ */
+function describeBranchRequest(request: BranchRequest): string[] {
+  const lines: string[] = [];
+  const workingFrom = request.switchTo ?? request.from ?? "the default branch";
+  const quoted = (name: string) => (name === "the default branch" ? name : `'${name}'`);
+
+  if (request.latest) {
+    lines.push(
+      `would fetch ${quoted(workingFrom)}, list any local work on it that would be ` +
+        `discarded, and make it match upstream's`
+    );
+  } else if (request.switchTo !== undefined) {
+    lines.push(`would switch the checkout to the branch '${request.switchTo}'`);
+  }
+
+  if (request.create !== undefined) {
+    lines.push(
+      `would create the branch '${request.create}' from upstream's ` +
+        `${quoted(request.from ?? "the default branch")} and switch to it`
+    );
+  }
+  return lines;
+}
+
+/**
+ * Renders a moment as `YYYY-MM-DD HH:MM` in local time, which is what a person
+ * reads a "since when" as.
+ *
+ * @param when - The moment to render.
+ */
+function formatWhen(when: Date): string {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return (
+    `${when.getFullYear()}-${pad(when.getMonth() + 1)}-${pad(when.getDate())} ` +
+    `${pad(when.getHours())}:${pad(when.getMinutes())}`
+  );
+}
