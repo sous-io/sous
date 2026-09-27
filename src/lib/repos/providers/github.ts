@@ -122,6 +122,7 @@ export class GithubProvider extends ProviderBase {
       ...(options.fetchImpl === undefined
         ? {}
         : { fetchImpl: options.fetchImpl as FetchLike }),
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
       label: "repo index",
     });
 

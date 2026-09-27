@@ -70,6 +70,8 @@ export type ProviderOptions = {
   fetchImpl?: FetchLike;
   /** How subprocesses are run. Defaults to spawning a real process. */
   run?: CommandRunner;
+  /** Cancels an index request, for a caller that will not wait past a deadline. */
+  signal?: AbortSignal;
 };
 
 /** What an index fetch returns. */

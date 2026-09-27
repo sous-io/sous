@@ -245,4 +245,85 @@ describe("IndexCache", () => {
     expect(lookup.index.generator).toBe("1.0.0");
     expect(warnings.join("\n")).toContain("the overlay is broken");
   });
+
+  /**
+   * Reading upstream for a browsing command returns what upstream serves and
+   * writes nothing: neither the cached copy nor its sidecar appears or changes.
+   *
+   * fetchUpstream("sous-recipes", { url })
+   * // -> the index; the cache directory is still empty
+   */
+  it("should read upstream without writing the index or its sidecar", async () => {
+    const provider = new StubProvider(() => ({ text: INDEX_TEXT, ref: "HEAD" }));
+    const cache = makeCache(provider);
+
+    const index = await cache.fetchUpstream("sous-recipes", { url: REPO_URL });
+
+    expect(Object.keys(index.recipes)).toEqual(["workflow/task-files"]);
+    expect(provider.calls).toBe(1);
+    expect(fs.existsSync(cache.indexPath("sous-recipes"))).toBe(false);
+    expect(fs.existsSync(cache.sidecarPath("sous-recipes"))).toBe(false);
+  });
+
+  /**
+   * A cached copy is left exactly as it was when upstream serves something
+   * newer to a read-only fetch.
+   *
+   * fetchUpstream(...) after getIndex(...)
+   * // -> upstream's 1.1.0; the cached file still says 1.0.0
+   */
+  it("should leave an existing cached copy untouched", async () => {
+    let text = INDEX_TEXT;
+    const provider = new StubProvider(() => ({ text, ref: "HEAD" }));
+    const cache = makeCache(provider);
+    await cache.getIndex("sous-recipes", { url: REPO_URL });
+    const before = fs.readFileSync(cache.indexPath("sous-recipes"), "utf8");
+    const metaBefore = fs.readFileSync(cache.sidecarPath("sous-recipes"), "utf8");
+
+    text = JSON.stringify(
+      makeIndexFile("sous-recipes", { "workflow/task-files": ["1.0.0", "1.1.0"] })
+    );
+    const index = await cache.fetchUpstream("sous-recipes", { url: REPO_URL });
+
+    expect(Object.keys(index.recipes["workflow/task-files"]!.versions)).toContain("1.1.0");
+    expect(fs.readFileSync(cache.indexPath("sous-recipes"), "utf8")).toBe(before);
+    expect(fs.readFileSync(cache.sidecarPath("sous-recipes"), "utf8")).toBe(metaBefore);
+  });
+
+  /**
+   * A read-only fetch that fails raises, so the caller decides what stands in.
+   *
+   * fetchUpstream(...) // -> rejects with the provider's error
+   */
+  it("should raise when upstream cannot be read", async () => {
+    const provider = new StubProvider(() => {
+      throw new Error("network is unreachable");
+    });
+    const cache = makeCache(provider);
+
+    await expect(cache.fetchUpstream("sous-recipes", { url: REPO_URL })).rejects.toThrow(
+      /network is unreachable/
+    );
+  });
+
+  /**
+   * A cancel signal given to a fetch reaches the provider, alongside the
+   * cache's own provider options.
+   *
+   * refresh("sous-recipes", { url, signal }) // -> the provider sees the signal
+   */
+  it("should hand a cancel signal to the provider", async () => {
+    let seen: AbortSignal | undefined;
+    const provider = new StubProvider(() => ({ text: INDEX_TEXT, ref: "HEAD" }));
+    provider.fetchIndex = async (_repo, options) => {
+      seen = options?.signal;
+      return { text: INDEX_TEXT, ref: "HEAD" };
+    };
+    const cache = makeCache(provider);
+    const controller = new AbortController();
+
+    await cache.refresh("sous-recipes", { url: REPO_URL, signal: controller.signal });
+
+    expect(seen).toBe(controller.signal);
+  });
 });

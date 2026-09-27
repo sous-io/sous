@@ -37,6 +37,7 @@ const EXPECTED_EXPORTS = [
   "MANAGED_LAYER_COMMENT",
   "MANIFEST_EXTENSIONS",
   "NAMESPACE_NAME_PATTERN",
+  "NEWER_VERSION_CHECK_TIMEOUT_MS",
   "OFFICIAL_REPO_IDENTITY",
   "PROJECT_HOLDER",
   "PROJECT_REQUESTER",
@@ -167,6 +168,7 @@ const EXPECTED_EXPORTS = [
   "variableDefinitionSchema",
   "variableNameSchema",
   "variableValidationSchema",
+  "withDeadline",
   "writeManagedLayer",
   "writeTrustNotice",
 ];
@@ -296,6 +298,30 @@ const PROVIDER_WRITE_EXPORTS = ["ProviderBase", "firstUrlIn", "supportsSubmit"];
 /** The submission lifecycle: the `submissions` block and the `proposals` feature. */
 const SUBMIT_LIFECYCLE_EXPORTS = ["submissionsSchema", "supportsProposals"];
 
+/**
+ * The names the link branch work added: the upstream check behind the
+ * divergence report, and one git operation per step the branch flags and
+ * `--latest` take.
+ */
+const LINK_BRANCH_EXPORTS = [
+  "UPSTREAM_CHECK_TIMEOUT_MS",
+  "UPSTREAM_REMOTE",
+  "assertBranchName",
+  "compareWithUpstream",
+  "createBranch",
+  "currentBranch",
+  "defaultBranch",
+  "discardableWork",
+  "fetchBranch",
+  "generatedBranchName",
+  "headCommit",
+  "lastFetchedAt",
+  "localBranchExists",
+  "resetBranchToUpstream",
+  "switchBranch",
+  "tryFetchUpstream",
+];
+
 describe("the repos barrel", () => {
   /**
    * The barrel exposes exactly the documented surface: nothing missing, and
@@ -312,6 +338,7 @@ describe("the repos barrel", () => {
       ...MANAGED_LAYER_EXPORTS,
       ...PROVIDER_WRITE_EXPORTS,
       ...SUBMIT_LIFECYCLE_EXPORTS,
+      ...LINK_BRANCH_EXPORTS,
     ].sort();
     expect(Object.keys(repos).sort()).toEqual(expected);
   });

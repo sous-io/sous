@@ -151,3 +151,27 @@ export function nonInteractiveFlag() {
     default: false,
   });
 }
+
+/**
+ * The two flags every browsing command takes, defined once so they read the
+ * same on each: `--latest` (also `--remote`) reads each repository's index from
+ * upstream rather than the cache, and `--installed` narrows what is shown to
+ * what this project's lockfile pins. They combine. The behavior lives in
+ * `lib/repos/catalog-inputs.ts` and `lib/repos/catalog.ts`.
+ */
+export function browsingFlags() {
+  const latestAliases = ["remote"];
+  return {
+    latest: Flags.boolean({
+      aliases: latestAliases,
+      description:
+        "Read each repository's index from upstream instead of the cache, without " +
+        `saving it${aliasSuffix(latestAliases)}`,
+      default: false,
+    }),
+    installed: Flags.boolean({
+      description: "Show only what this project has installed, at the version its lockfile pins",
+      default: false,
+    }),
+  };
+}
