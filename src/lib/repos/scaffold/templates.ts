@@ -327,10 +327,10 @@ export function buildReleaseWorkflow(): string {
 # installed into this repository:
 #
 #   'sous repo release --check' validates every manifest, confirms each recipe
-#   folder matches what the repo manifest lists, and confirms the committed
-#   index agrees with the versions and dependencies the recipe manifests
-#   declare. It only reads; it never writes, commits or tags. That makes it the
-#   right thing to run on a pull request.
+#   folder matches what the repo manifest lists, and reports how merging would
+#   rewrite the committed index, which the release after a merge regenerates.
+#   It only reads; it never writes, commits or tags. That makes it the right
+#   thing to run on a pull request.
 #
 #   'sous repo release --ci --push --yes' does the same validation and then
 #   publishes. '--ci' raises no versions, accepts the plan it prints, and asks

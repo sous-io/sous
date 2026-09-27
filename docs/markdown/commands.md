@@ -207,7 +207,8 @@ and `git config user.email`), because it commits and cuts annotated tags. Takes 
 - `--no-bump`: raise nothing; a changed recipe that was never raised is then an error.
 - `--include-unchanged`: release every recipe in scope, changed or not.
 - `--tag`, `--push`: tag even on a non-default branch, and push the commit and this run's tags.
-- `--check`: only validate, and fail when the committed index is out of date.
+- `--check`: only validate. It fails on a problem the release would refuse, and reports, without failing, how
+  merging would rewrite the committed index.
 - `--ci`: the merge preset. Never bump, never ask, and fail on anything unbumped. It still needs `--yes` to
   accept the plan it prints, so a merge job runs `sous repo release --ci --yes --push`.
 
