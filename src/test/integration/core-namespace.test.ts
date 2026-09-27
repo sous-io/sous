@@ -584,4 +584,80 @@ describe("the core namespace with no network", () => {
     },
     CLI_TIMEOUT
   );
+
+  /**
+   * The same gap, for the commands that never seed. On a machine whose cached
+   * index is real and does not publish this version, and which has never run a
+   * build on this version, `lock rebuild` still resolves the packaged core
+   * version, and the browsing commands still list it.
+   *
+   * sous lock rebuild
+   * // -> pins core/sous-skills at the running version
+   * sous recipe show core/sous-skills
+   * // -> lists the running version
+   */
+  it(
+    "should resolve and list the packaged core version in commands that never seed",
+    () => {
+      const sharedHome = sousHome;
+      sousHome = path.join(tmp.path, "never-seeded-home");
+      try {
+        const project = path.join(tmp.path, "never-seeded-project");
+        write(
+          path.join(project, ".sous", "sous.config.json"),
+          `${JSON.stringify({ name: "A Project That Never Built" }, null, 2)}\n`
+        );
+
+        const oldVersion = "0.0.1";
+        const published = {
+          formatVersion: 1,
+          name: "sous-recipes",
+          generatedAt: "2026-01-01T00:00:00.000Z",
+          generator: oldVersion,
+          namespaces: { core: { description: "The skills that teach an agent about sous." } },
+          recipes: {
+            "core/sous-skills": {
+              path: "recipes/core/sous-skills",
+              versions: {
+                [oldVersion]: {
+                  hash: `sha256-${"a".repeat(64)}`,
+                  tag: `core/sous-skills@${oldVersion}`,
+                  prerelease: false,
+                },
+              },
+            },
+          },
+        };
+        write(cachedIndexPath(), `${JSON.stringify(published, null, 2)}\n`);
+        write(
+          `${cachedIndexPath().slice(0, -".json".length)}.meta.json`,
+          `${JSON.stringify({ fetchedAt: new Date().toISOString() }, null, 2)}\n`
+        );
+
+        const rebuilt = sousOffline(project, "lock", "rebuild");
+        expect(rebuilt.status, rebuilt.stdout + rebuilt.stderr).toBe(0);
+        const lock = JSON.parse(
+          fs.readFileSync(path.join(project, ".sous", "sous.lock.json"), "utf8")
+        ) as { recipes: Record<string, { version: string }> };
+        expect(lock.recipes["core/sous-skills"]!.version).toBe(SOUS_VERSION);
+
+        const shown = sousOffline(project, "recipe", "show", "core/sous-skills");
+        expect(shown.status, shown.stdout + shown.stderr).toBe(0);
+        expect(shown.stdout).toContain(SOUS_VERSION);
+
+        const listed = sousOffline(project, "namespace", "show", "core");
+        expect(listed.status, listed.stdout + listed.stderr).toBe(0);
+        expect(listed.stdout).toContain(SOUS_VERSION);
+
+        // Reading upstream goes through the same cache and its overlay; offline,
+        // the cached copy answers for it, and still carries the packaged version.
+        const latest = sousOffline(project, "recipe", "show", "core/sous-skills", "--latest");
+        expect(latest.status, latest.stdout + latest.stderr).toBe(0);
+        expect(latest.stdout).toContain(SOUS_VERSION);
+      } finally {
+        sousHome = sharedHome;
+      }
+    },
+    CLI_TIMEOUT
+  );
 });

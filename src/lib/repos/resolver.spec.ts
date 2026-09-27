@@ -546,3 +546,77 @@ describe("resolveRefs()", () => {
     expect(result.cycles).toEqual([["core/one", "core/two", "core/one"]]);
   });
 });
+
+describe("resolveRefs() with held versions", () => {
+  /**
+   * A held version is chosen over a newer one for as long as every range still
+   * allows it; that is how an update moves only the pins it was asked to move.
+   *
+   * resolveRefs([ask("workflow/task-files")], { ...ctx, keep: { "workflow/task-files": "1.0.0" } })
+   * // -> version 1.0.0, although 1.2.0 is published
+   */
+  it("should keep a held version that every range still allows", async () => {
+    const context = makeContext({
+      indexes: {
+        "sous-recipes": makeIndexFile("sous-recipes", {
+          "workflow/task-files": ["1.0.0", "1.2.0"],
+        }),
+      },
+    });
+
+    const result = await resolveRefs([ask("workflow/task-files")], {
+      ...context,
+      keep: { "workflow/task-files": "1.0.0" },
+    });
+
+    expect(result.resolved[0]?.version).toBe("1.0.0");
+  });
+
+  /**
+   * A range that no longer allows the held version wins, and the newest
+   * version it does allow is chosen as usual.
+   *
+   * resolveRefs([ask("workflow/task-files@^2.0.0")], { ...ctx, keep: { "workflow/task-files": "1.0.0" } })
+   * // -> version 2.1.0
+   */
+  it("should move a held version that a range no longer allows", async () => {
+    const context = makeContext({
+      indexes: {
+        "sous-recipes": makeIndexFile("sous-recipes", {
+          "workflow/task-files": ["1.0.0", "2.0.0", "2.1.0"],
+        }),
+      },
+    });
+
+    const result = await resolveRefs([ask("workflow/task-files@^2.0.0")], {
+      ...context,
+      keep: { "workflow/task-files": "1.0.0" },
+    });
+
+    expect(result.resolved[0]?.version).toBe("2.1.0");
+  });
+
+  /**
+   * A held version the index no longer publishes cannot be kept, and the
+   * newest satisfying version is chosen instead.
+   *
+   * resolveRefs([ask("workflow/task-files")], { ...ctx, keep: { "workflow/task-files": "1.0.0" } })
+   * // -> version 1.2.0, when only 1.1.0 and 1.2.0 are published
+   */
+  it("should ignore a held version the index does not publish", async () => {
+    const context = makeContext({
+      indexes: {
+        "sous-recipes": makeIndexFile("sous-recipes", {
+          "workflow/task-files": ["1.1.0", "1.2.0"],
+        }),
+      },
+    });
+
+    const result = await resolveRefs([ask("workflow/task-files")], {
+      ...context,
+      keep: { "workflow/task-files": "1.0.0" },
+    });
+
+    expect(result.resolved[0]?.version).toBe("1.2.0");
+  });
+});

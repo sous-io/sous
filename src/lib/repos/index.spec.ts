@@ -295,6 +295,20 @@ const MANAGED_LAYER_EXPORTS = [
  */
 const PROVIDER_WRITE_EXPORTS = ["ProviderBase", "firstUrlIn", "supportsSubmit"];
 
+/**
+ * The names the update work added: the synchronous hash the packaged core
+ * overlay needs, the overlay every index cache starts with, the check for work
+ * a checkout would lose, the lockfile closure walk, and how long a quick check
+ * for newer versions waits.
+ */
+const UPDATE_EXPORTS = [
+  "hasNoUnsavedWork",
+  "hashDirectorySync",
+  "lockedClosure",
+  "packagedCoreIndexOverlay",
+  "unsavedWork",
+];
+
 /** The submission lifecycle: the `submissions` block and the `proposals` feature. */
 const SUBMIT_LIFECYCLE_EXPORTS = ["submissionsSchema", "supportsProposals"];
 
@@ -337,6 +351,7 @@ describe("the repos barrel", () => {
       ...PHASE_7_EXPORTS,
       ...MANAGED_LAYER_EXPORTS,
       ...PROVIDER_WRITE_EXPORTS,
+      ...UPDATE_EXPORTS,
       ...SUBMIT_LIFECYCLE_EXPORTS,
       ...LINK_BRANCH_EXPORTS,
     ].sort();

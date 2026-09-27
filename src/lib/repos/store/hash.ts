@@ -29,7 +29,8 @@
  * recipe folder containing a link.
  */
 
-import { createHash } from "node:crypto";
+import { createHash, type Hash } from "node:crypto";
+import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { STORE_ENTRY_FILENAME } from "../formats/common.js";
@@ -89,16 +90,75 @@ export async function hashDirectory(dir: string): Promise<string> {
   const hash = createHash("sha256");
 
   for (const relative of files) {
-    const bytes = await fs.readFile(path.join(root, ...relative.split("/")));
-    hash.update(Buffer.from(relative, "utf8"));
-    hash.update(FIELD_SEPARATOR);
-    hash.update(Buffer.from(String(bytes.byteLength), "utf8"));
-    hash.update(FIELD_SEPARATOR);
-    hash.update(bytes);
-    hash.update(FIELD_SEPARATOR);
+    updateWithFile(hash, relative, await fs.readFile(path.join(root, ...relative.split("/"))));
   }
 
   return `sha256-${hash.digest("hex")}`;
+}
+
+/**
+ * The same hash as `hashDirectory`, computed synchronously. It exists for the
+ * one place that needs a hash inside a synchronous read: folding the packaged
+ * core recipe into a cached index as the index is read.
+ *
+ * hashDirectorySync(dir) === (await hashDirectory(dir))
+ * // -> true, for any directory
+ *
+ * @param dir - Absolute path to the directory to hash.
+ */
+export function hashDirectorySync(dir: string): string {
+  const root = path.resolve(dir);
+  const files = collectFilesSync(root).sort(bytewiseCompare);
+  const hash = createHash("sha256");
+
+  for (const relative of files) {
+    updateWithFile(hash, relative, fsSync.readFileSync(path.join(root, ...relative.split("/"))));
+  }
+
+  return `sha256-${hash.digest("hex")}`;
+}
+
+/**
+ * Collects every hashable file under `dir`, synchronously. The rules are exactly
+ * those of `collectFiles`; the two differ only in how they wait.
+ *
+ * @param dir - The directory to walk.
+ * @param prefix - The relative path of `dir` within the tree being hashed.
+ */
+function collectFilesSync(dir: string, prefix = ""): string[] {
+  const entries = fsSync.readdirSync(dir, { withFileTypes: true });
+  const found: string[] = [];
+
+  for (const entry of entries) {
+    if (entry.name === GIT_DIR_NAME) continue;
+    if (entry.name === STORE_ENTRY_FILENAME) continue;
+    if (entry.isSymbolicLink()) continue;
+
+    const relative = prefix.length > 0 ? `${prefix}/${entry.name}` : entry.name;
+    const absolute = path.join(dir, entry.name);
+
+    if (entry.isDirectory()) found.push(...collectFilesSync(absolute, relative));
+    else if (entry.isFile()) found.push(relative);
+  }
+
+  return found;
+}
+
+/**
+ * Feeds one file's canonical record into a hash: its path, its byte length and
+ * its bytes, each followed by the separator.
+ *
+ * @param hash - The hash being built.
+ * @param relative - The file's path relative to the tree root, posix separators.
+ * @param bytes - The file's contents.
+ */
+function updateWithFile(hash: Hash, relative: string, bytes: Buffer): void {
+  hash.update(Buffer.from(relative, "utf8"));
+  hash.update(FIELD_SEPARATOR);
+  hash.update(Buffer.from(String(bytes.byteLength), "utf8"));
+  hash.update(FIELD_SEPARATOR);
+  hash.update(bytes);
+  hash.update(FIELD_SEPARATOR);
 }
 
 /**

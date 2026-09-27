@@ -227,6 +227,77 @@ export function cloneRepo(
   return { depth: 0, fellBackToFullClone: depth > 0 };
 }
 
+/** Work in a checkout that exists nowhere else, and would be lost with it. */
+export type UnsavedWork = {
+  /** Every changed or untracked path, as `git status --porcelain` prints it. */
+  uncommitted: string[];
+  /** Every commit on a local branch that no remote has, one line each. */
+  unpushed: string[];
+  /** Every stash entry, one line each. */
+  stashes: string[];
+  /**
+   * Why git could not be asked, when it could not. Nothing is known about the
+   * checkout then, which a caller must treat as possibly holding work.
+   */
+  unknown?: string;
+};
+
+/**
+ * What in a checkout would be lost if it were deleted: uncommitted changes,
+ * commits no remote has, and stashes.
+ *
+ * unsavedWork("/path/to/checkout")
+ * // -> { uncommitted: ["M README.md"], unpushed: [], stashes: [] }
+ *
+ * @param directory - The checkout to inspect.
+ * @param options - The git runner to use.
+ */
+export function unsavedWork(directory: string, options: GitOptions = {}): UnsavedWork {
+  const runner = options.runner ?? runGit;
+  const lines = (text: string): string[] =>
+    text
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+
+  const status = runner(["status", "--porcelain"], { cwd: directory });
+  if (status.status !== 0) {
+    return {
+      uncommitted: [],
+      unpushed: [],
+      stashes: [],
+      unknown:
+        `git could not read the checkout at ${directory}` +
+        (status.stderr.length > 0 ? `: ${status.stderr}` : "."),
+    };
+  }
+
+  const unpushed = runner(["log", "--branches", "--not", "--remotes", "--oneline"], {
+    cwd: directory,
+  });
+  const stashes = runner(["stash", "list"], { cwd: directory });
+
+  return {
+    uncommitted: lines(status.stdout),
+    unpushed: unpushed.status === 0 ? lines(unpushed.stdout) : [],
+    stashes: stashes.status === 0 ? lines(stashes.stdout) : [],
+  };
+}
+
+/**
+ * True when an inspection found nothing that would be lost.
+ *
+ * @param work - What `unsavedWork` found.
+ */
+export function hasNoUnsavedWork(work: UnsavedWork): boolean {
+  return (
+    work.unknown === undefined &&
+    work.uncommitted.length === 0 &&
+    work.unpushed.length === 0 &&
+    work.stashes.length === 0
+  );
+}
+
 /**
  * True when two remote URLs name the same repository, ignoring the differences
  * that never change what is fetched: a `.git` suffix, a trailing slash, the

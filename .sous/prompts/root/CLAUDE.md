@@ -136,7 +136,12 @@ version to the official repository's index IN MEMORY when that index lacks it, c
 of the entry just seeded and marked `seeded: true`. Nothing is written to disk, so a cached
 index stays an honest record of what upstream served; a version upstream does publish always
 wins, with one warning if its hash disagrees with the packaged copy. The overlay is a general
-seam on the cache, applied in `readCached` and after `refresh` has written the file.
+seam on the cache, applied in `readCached` and after `refresh` has written the file. Seeding is
+not the only way it gets there: every index cache `SubscriptionService` creates starts with
+`packagedCoreIndexOverlay` (`repos/seed.ts`), which hashes the packaged folder itself
+(`hashDirectorySync` in `store/hash.ts`) the first time the official index is read, so a command
+that never seeds (`lock rebuild`, the browsing commands, `subscription update`) resolves and lists
+the packaged version exactly as a build does. Seeding then replaces it with the precise overlay.
 
 The `recipes` job in `publish.yml` keeps the published copy in step. It runs only after the
 npm publish it `needs`, re-checks version parity, copies the packaged recipe over the
@@ -177,6 +182,7 @@ src/
       list.ts              # what the project subscribes to, with ranges, pins and origin
       add.ts               # subscribe to a namespace or recipe; installs the whole closure
       remove.ts            # remove a subscription and whatever only it brought in
+      update.ts            # move pins to the newest versions their ranges allow
     repo/
       add.ts               # add (and thereby trust) a repository; fetches only its index
       remove.ts            # stop trusting a repository, and remove everything it brought in
@@ -185,7 +191,8 @@ src/
       gc.ts                # collect the machine-wide store, protecting locked entries
       init.ts              # scaffold a new recipe repository (no project config needed)
       link.ts              # point a repo at a working copy; clone, or link a given path
-      unlink.ts            # drop the link and leave the checkout on disk
+      unlink.ts            # drop the link and rebuild; --update moves the pins, --remove
+                           #   deletes a checkout sous cloned
       release.ts           # validate a recipe repo, regenerate its index, cut the tags
       submit.ts            # propose a recipe repo's changes and follow the proposal through;
                            #   runs in a recipe repo, or from a project naming a linked one
@@ -256,7 +263,8 @@ src/
       catalog.ts           # pure reads over the cached indexes, the lockfile and the subs
       catalog-inputs.ts    # wires a running command to the catalog; also locates recipe files
       catalog-display.ts   # the shared wording and recipe table the browsing commands print
-      subscription-service.ts  # the workflow: add, subscribe, unsubscribe, restore, check
+      subscription-service.ts  # the workflow: add, subscribe, unsubscribe, update, restore, check
+      update-plan.ts       # an update's scope, and the plan it prints before its one question
       locked-recipes.ts    # where each locked recipe's files are (a link beats the store)
       locked-namespace-resolver.ts # the real NamespaceResolver, built from the lockfile
       recipe-targets.ts    # subscribed recipe contents -> compile targets; recipeOutputs
@@ -584,8 +592,8 @@ round; the store is filled only after a version is settled; and a subscription i
 finished until the variables its recipes publish have been answered. `SubscriptionService`
 takes every collaborator as an injectable option, and `subscriptionServiceFor({
 configContext, settings, shellEnv })` builds one from what a running command already has.
-Its methods are `addRepo`, `subscribe`, `unsubscribe`, `listSubscriptions`, `restore`,
-`checkUpstream`, `needsRestore` and `prepareForBuild`. Two steps run inside `subscribe` BEFORE anything is
+Its methods are `addRepo`, `subscribe`, `unsubscribe`, `update`, `newerPublishedVersions`,
+`listSubscriptions`, `restore`, `checkUpstream`, `needsRestore` and `prepareForBuild`. Two steps run inside `subscribe` BEFORE anything is
 fetched or written, on the cached indexes alone: a one-word ref is resolved to a fully
 qualified one through `src/lib/refs/` (over the namespace and recipe scopes; several
 matches ask, `--accept-first` takes the first), and then the plan is printed and confirmed (the confirmation flag skips the question,
@@ -628,6 +636,21 @@ come from is decided once, by `readTrustedIndexes` in `catalog-inputs.ts` (upstr
 `describeInstalled` looks a ref up among installed recipes only. A pinned recipe of a linked
 repository carries `linkedPath`, rendered by `pinnedCell` in `catalog-display.ts`, which also
 holds the shared notes (`printBrowsingNotes`).
+
+**Update moves pins, and only pins.** `update` (behind `sous subscription update` and `sous repo
+unlink --update`) fetches every trusted index fresh (`refresh`, never the stale fallback, so an
+unreachable repository is reported and its pins held), settles the scope through `src/lib/refs/`
+(repository, namespace or recipe), and re-resolves every subscription that reaches the scope, one
+at a time, with the resolver's `keep` option holding every pin outside the scope at its locked
+version while its ranges allow it. The resolutions are laid over the lockfile with
+`applyResolution`, and then `releaseDroppedHolds` takes away every hold the new closure no longer
+declares (a dependency a newer version dropped), refcounted through `removeHolder`. The built-in
+`core` subscription is never re-resolved. The plan is rendered by `update-plan.ts` and asked once;
+a repository a newer version needs goes through `confirmTrust` AFTER that question, and the plan
+is worked out again once it is trusted. Only the lockfile is written; the subscriptions never are.
+`newerPublishedVersions` is the read-only half plain `repo unlink` reports: one index refreshed
+under `withDeadline` and `NEWER_VERSION_CHECK_TIMEOUT_MS`, compared through `newerInRange`, the
+same helper `checkUpstream`'s newer-version report uses, and moving nothing.
 
 **Where a locked recipe's files are.** `locked-recipes.ts` answers that once, for everyone
 who needs it: a LINKED repository is read from its working copy (a link is a deliberate
@@ -1172,9 +1195,10 @@ This enables `sous prune` (remove stale outputs) and `sous clear` (delete all ou
 | `sous subscription list` | List what the project subscribes to: range, the versions the lockfile pins, the latest version each has published, origin, and whether it is on (`--latest`, `--installed`) |
 | `sous subscription add <ref>` | Subscribe to a namespace or a recipe, install the whole closure, answer the variables it publishes, then build the project (`--yes` / `-y` / `--trust`, `--accept-first`, `--prerelease`, `--always-pull`, `--answer <name>=<value>`, `--answers-file <path>`, `--dry-run`, which also prints every question the closure would ask, `--no-build`); also `sous subscribe` |
 | `sous subscription remove <ref>` | Remove a subscription and everything only it brought in, refcounted, then build the project so its files are pruned (`--dry-run`, `--no-build`); also `sous unsubscribe` |
+| `sous subscription update [ref]` | Move the lockfile's pins to the newest published versions their ranges allow, for everything or for the repository, namespace or recipe named, after fetching fresh indexes; changes only the lockfile, prints the plan and asks once, then builds (`--yes` / `-y` / `--trust`, `--accept-first`, `--answer`, `--answers-file`, `--dry-run`, `--no-build`) |
 | `sous repo init [dir]` | Scaffold a new recipe repository (`--name`, `--namespace`, `--force`) |
 | `sous repo link <repo\|path> [path]` | Read a repository from a working copy: link the checkout a path names in place, clone a repository named on its own, or link the checkout a second argument names (`--global`, `--yes` / `-y` / `--trust`); a checkout already on disk is fetched and compared with upstream, and `--branch`, `--create-branch`, `--generate-branch`, `--from` and `--latest` change its branch |
-| `sous repo unlink <repo>` | Drop the link and go back to published versions; the checkout stays (`--global`) |
+| `sous repo unlink <repo>` | Drop the link, go back to the pinned versions and build; on its own it reports newer published versions in range under a short timeout, `--update` moves the pins through `subscription update`, `--remove` deletes a checkout sous cloned after listing any unsaved work (`--global`, `--yes` / `-y` / `--trust`, `--dry-run`, `--no-build`) |
 | `sous repo release` | Publish new versions of a recipe repository: plan, ask once, then bump, regenerate the index, commit and tag (`--namespace`, `--recipe`, `--bump`, `--no-bump`, `--include-unchanged`, `--tag`, `--push`, `--yes`, `--check`, `--ci`, `--dry-run`) |
 | `sous repo submit [repo]` | Propose a recipe repository's changes and follow the proposal through: open it, update it, report on it, or continue on a new branch once it was merged; from a project, `repo` names a linked repository (`--title`, `--body`, `--branch`, `--status`, `--commit`, `--draft`, `--yes` / `-y`, `--dry-run`) |
 | `sous vars list` | List every recipe variable in play: its answer, the env var that supplied it, and the source |
@@ -1192,13 +1216,14 @@ that block is also where each topic's one-sentence description lives. `subscribe
 exactly one of the two lists. Bare `sous vars` is a hidden command carrying the optional
 name argument, so the top-level listing names `vars` once, as a topic.
 
-`subscription add` and `subscription remove` end by rebuilding the project, because changing
-what it subscribes to changes what it compiles. Both reload the discovered config first (the
-subscription lives in a managed `conf.d/` layer written moments earlier) and then call
+`subscription add`, `subscription remove`, `subscription update` and `repo unlink` end by
+rebuilding the project, because each changes what it compiles (`update` only when the lockfile
+moved). Each reloads the discovered config first (a subscription or a newly trusted
+repository lives in a managed `conf.d/` layer written moments earlier) and then calls
 `buildProjectOutputs` in `build-service.ts`, which runs `BuildService.build` with every option
 at its default: the same compile and prune `sous build` does, recipe targets and namespace
 resolver included. `--no-build` skips it, a dry run never reaches it, and a failed build leaves
-the subscription change in place (it is already written and locked) and says so.
+the change in place (it is already written and locked) and says so.
 
 The `sous config` namespace inspects the merged config. `show` and `get` emit machine-
 readable stdout (`config show | jq` works): they extend `ConfigCommand`, which routes the
@@ -1243,7 +1268,11 @@ three branch flags are oclif-exclusive, and `--from` needs a create flag through
 relationship). A named branch is fetched by explicit refspec and added to `origin`'s fetch list
 first, because the clone is single-branch. `--latest` is the one place sous checks for itself:
 `discardableWork` lists what matching upstream would discard, one question answered by `--yes`.
-`repo unlink` removes the map entry and never touches the checkout. A `repo link` argument that is a URL or a path
+`repo unlink` removes
+the map entry and leaves the checkout, unless `--remove` is passed: then a checkout whose link
+origin is `clone` and which lies under the repos directory sous clones into is deleted, after
+`unsavedWork` (`git-clone.ts`) lists uncommitted changes, unpushed commits and stashes and the
+shared confirmation flag or a question settles it; a `path` checkout is refused with an error. A `repo link` argument that is a URL or a path
 rather than a configured short name goes through `SubscriptionService.addRepo`, so it runs
 the SAME trust ceremony `repo add` runs (and gets `addRepo`'s short-name collision check) before
 anything is linked or cloned; linking reads recipes with no version, lockfile or hash check, so

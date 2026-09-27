@@ -252,7 +252,8 @@ freshness checks; entries are keyed by the repository's configured short name.
 ```
 
 `path` is absolute; `origin` is `clone` when sous cloned the working copy itself and `path` when it was
-pointed at an existing checkout, and unlinking removes the entry while leaving either in place. Both the
+pointed at an existing checkout. Unlinking removes the entry and leaves the checkout in place, unless
+`sous repo unlink --remove` is asked to delete one sous cloned; it never deletes a `path` checkout. Both the
 project's `.sous/sous.links.json` and `$SOUS_HOME/sous.links.json` are read, and the project's entries win.
 
 ## Configuration keys
