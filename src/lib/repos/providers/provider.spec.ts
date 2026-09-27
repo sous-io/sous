@@ -93,10 +93,13 @@ describe("the built-in provider list", () => {
       "gitlab",
       "local",
     ]);
+    const expected: Record<string, string[]> = {
+      github: ["fetch", "submit", "proposals"],
+      gitlab: ["fetch", "submit"],
+      local: ["fetch"],
+    };
     for (const provider of providers) {
-      expect(provider.features).toEqual(
-        provider.id === "local" ? ["fetch"] : ["fetch", "submit"],
-      );
+      expect(provider.features).toEqual(expected[provider.id]);
     }
   });
 

@@ -187,7 +187,8 @@ src/
       link.ts              # point a repo at a working copy; clone, or link a given path
       unlink.ts            # drop the link and leave the checkout on disk
       release.ts           # validate a recipe repo, regenerate its index, cut the tags
-      submit.ts            # propose this recipe repo's committed changes to its maintainers
+      submit.ts            # propose a recipe repo's changes and follow the proposal through;
+                           #   runs in a recipe repo, or from a project naming a linked one
     vars/
       index.ts             # bare `sous vars` and `sous vars <name>`: the hidden shorthand
       list.ts              # `sous vars list`: every variable, its answer and its source
@@ -245,7 +246,11 @@ src/
         index-builder.ts   # buildIndex: regenerates sous.index.json from manifests + tags
         plan.ts            # buildReleasePlan: scope, what changed, bumps, tag order
         bump.ts            # raises a recipe version in place, keeping comments
-        submit-service.ts  # the whole submit flow, behind the injectable command runner
+        submit-service.ts  # the whole submit flow and lifecycle, behind the injectable runner
+        submit-checkout.ts # which checkout a submission runs in (a recipe repo, or a project's link)
+        submit-questions.ts # the questions submit asks, bound to the terminal and --yes
+        changelog.ts       # the changelog a proposal's body and a --commit message carry
+        submissions.ts     # the `submissions` block: who takes proposals, and the --check gate
       ref-search.ts        # which repositories a ref search covered, for the not-found error
       catalog.ts           # pure reads over the cached indexes, the lockfile and the subs
       catalog-inputs.ts    # wires a running command to the catalog; also locates recipe files
@@ -523,9 +528,11 @@ The interface has two sides, and BOTH are the only place a host-specific fact ma
 Read: `matches`, `canonicalize`, `fetchIndex`, `fetchRecipeTree`. Write: the optional `cli`
 descriptor and `proposalNoun`, plus `authStatus`, `canPush` (undefined means unknowable, which
 is not `false`), `fork` and `proposeChange`; each returns plain data and takes the injectable
-runner through `ProviderOptions` (which also carries `cwd`). `features` is what callers
-consult, never a provider id; `supportsSubmit()` narrows a provider to one that answers the
-whole write path. A new provider is ONE file: a class extending `ProviderBase`
+runner through `ProviderOptions` (which also carries `cwd`). Proposals (the `proposals`
+feature, GitHub only so far): `findProposal` (by branch, and by the fork's owner for a fork),
+`proposalStatus` and `updateProposal`, returning host-neutral plain data. `features` is what
+callers consult, never a provider id; `supportsSubmit()` narrows a provider to one that answers
+the whole write path, and `supportsProposals()` to one that answers the proposals calls. A new provider is ONE file: a class extending `ProviderBase`
 (`providers/base.ts`), which owns the shared subprocess, token and URL helpers and answers
 every write call a provider did not override with a ConfigError naming the provider and the
 feature, plus a line in `builtInProviders()`. No service above `providers/` may name a host,
@@ -1145,7 +1152,7 @@ This enables `sous prune` (remove stale outputs) and `sous clear` (delete all ou
 | `sous repo link <repo\|path> [path]` | Read a repository from a working copy: link the checkout a path names in place, clone a repository named on its own, or link the checkout a second argument names (`--global`, `--yes` / `-y` / `--trust`) |
 | `sous repo unlink <repo>` | Drop the link and go back to published versions; the checkout stays (`--global`) |
 | `sous repo release` | Publish new versions of a recipe repository: plan, ask once, then bump, regenerate the index, commit and tag (`--namespace`, `--recipe`, `--bump`, `--no-bump`, `--include-unchanged`, `--tag`, `--push`, `--yes`, `--check`, `--ci`, `--dry-run`) |
-| `sous repo submit` | Propose this repository's committed changes to its maintainers (`--title`, `--body`, `--draft`, `--dry-run`) |
+| `sous repo submit [repo]` | Propose a recipe repository's changes and follow the proposal through: open it, update it, report on it, or continue on a new branch once it was merged; from a project, `repo` names a linked repository (`--title`, `--body`, `--branch`, `--status`, `--commit`, `--draft`, `--yes` / `-y`, `--dry-run`) |
 | `sous vars list` | List every recipe variable in play: its answer, the env var that supplied it, and the source |
 | `sous vars show <name>` | Show one variable in full, with every candidate env var name and the rung that answered |
 | `sous vars ask [name]` | Answer what is unanswered, or everything the name covers: a variable, an environment variable name in use that answers one, a recipe, a namespace or a repository, resolved through `src/lib/refs/` (`--repo`, `--namespace`, `--var` narrow the same way, `--accept-first` settles an ambiguous name, `--all` re-asks everything); `--file` reads a standalone definitions file, `--answer <name>=<value>` and `--answers-file <path>` answer ahead of the questions, `--dry-run` writes nothing |
@@ -1218,24 +1225,45 @@ scope (`--namespace` / `--recipe`, repeatable; the whole repository by default) 
 recipes whose content changed since their last tag, patch-bumping any whose version still equals
 that tag, regenerating the index with each version's dependencies resolved, committing the
 manifests and the index together, then cutting annotated tags dependency-first. It prints the
-plan and asks once (`--yes` skips, `--dry-run` stops), and pushes only with `--push`. This is
-the ONE place sous commits for an author, and it stages nothing but its own bumps and index;
+plan and asks once (`--yes` skips, `--dry-run` stops), and pushes only with `--push`. It is
+one of the TWO places sous commits for an author (the other is `repo submit --commit`), and it
+stages nothing but its own bumps and index;
 it refuses while anything else is uncommitted, and it refuses before writing anything when git
 cannot work out who is committing (`hasCommitIdentity` in `release/git-state.ts`), naming
 `git config user.name` rather than leaving git's own "empty ident name" to surface halfway
 through. `--check` is the read-only pull-request form,
 `--ci` is the merge preset (implies `--no-bump` AND `--yes`, so it accepts the plan it prints
 rather than failing on the confirmation it cannot ask; it does NOT imply `--push`), and on a
-branch other than the default one tagging is skipped unless `--tag` says otherwise. `repo submit` is validate-then-propose: it checks the tooling and the working
-tree, then the recipes and that the change leaves `sous.index.json` alone (compared with the fork point on
-`origin/<default>`, through `forkPoint` in `release/git-state.ts`), and only then pushes and proposes. Whether
-the index agrees with the tags is `release --check`'s job, not submit's, so submit works from the shallow
-checkout `repo link` makes. `submit-service.ts`
+branch other than the default one tagging is skipped unless `--tag` says otherwise.
+`--check` also fails a change to a recipe whose `submissions` block says it takes no proposals
+(`checkSubmissions` in `release/submissions.ts`: compared with the fork point on
+`origin/<default>`, or with each such recipe's last tag when the checkout holds no copy of that
+branch); the release itself is never restricted, which is how the sous pipeline still publishes
+`core`, whose packaged manifest sets `allowed: false`.
+
+`repo submit` is validate-then-propose, over the proposal's whole life. It runs in a recipe
+repository, or from a project: `findSubmitCheckout` (`release/submit-checkout.ts`) resolves the
+optional argument through `src/lib/refs/` to a linked checkout, falls back to a clone sous left
+where `repo link` puts one (with a note), and fails when there is no working copy; with no
+argument inside a project the only link is used and several are a question. It looks for the
+project config itself, optionally (it still extends `Command`). The flow checks the tooling and
+the working tree (`--commit` lifts the uncommitted rule after listing, one confirmation and an
+identity check), then the recipes and that the change leaves `sous.index.json` alone (compared
+with the fork point on `origin/<default>`, through `forkPoint`), warns about recipes that take no
+proposals, then looks the branch's proposal up (`--branch` names another branch) and acts on its
+state: none opens one, open pushes (git's refusal of a non-fast-forward passes through; sous never
+forces) and replaces the title or body when given, merged asks for a new branch (named,
+generated, cancelled; `--yes` generates), closed opens a fresh one. `--status` only reports.
+A new proposal and a `--commit` both need a title and a description from the person
+(`--title`/`--body`, or asked); sous never derives them from commits. The body is the
+description plus the changelog `release/changelog.ts` builds by comparing the manifests with the
+default branch. Every question is asked before anything is written, through `SubmitQuestions`
+(`release/submit-questions.ts` binds them to the terminal and `--yes`). `submit-service.ts`
 is a SEQUENCER and nothing more: it names no provider, spawns no host tool, and builds no
 command arguments; every host-specific answer comes from the provider interface as plain data.
 Every step prints before it runs, and a failure names the steps that already completed. A
 provider that does not advertise the `submit` feature prints the repo manifest's own
-`contribute` pointer instead.
+`contribute` pointer instead, and one without `proposals` opens a proposal on every run.
 
 This `config` namespace is a fresh design, distinct from the old `configure` /
 `config *` commands and the `~/.sous` profile layer that were removed when walk-up

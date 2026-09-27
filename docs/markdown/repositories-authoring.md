@@ -4,8 +4,9 @@ The guide to publishing recipes of your own: creating a repository, writing a re
 needs, cutting a release, editing a published repository in place, and proposing a change to somebody else's.
 [Repository file formats](repositories-file-formats.md) holds the schemas; this page is the workflow.
 
-?> A recipe repository is not a sous project. It has no `.sous/` directory, and `sous repo init`, `sous repo
-release` and `sous repo submit` do not look for one. Run them from inside the repository itself.
+?> A recipe repository is not a sous project. It has no `.sous/` directory, and `sous repo init` and `sous repo
+release` do not look for one. Run them from inside the repository itself. `sous repo submit` runs there too, and
+may also be run from a project that links the repository.
 
 ## Create a repository
 
@@ -196,8 +197,9 @@ third case is what a merge looks like to continuous integration: the bump is don
 `--namespace <ns>` and `--recipe <ns/name>` narrow the run and both repeat; `--bump <level>` is `patch` (the
 default), `minor`, `major` or `prerelease`; `--no-bump` raises nothing; `--include-unchanged` releases every
 recipe in scope, changed or not; `--check` only reads, validating, failing on any problem the release would
-refuse, and reporting how merging would rewrite the committed index without failing on it, since that index is
-the release's output; and `--ci` is the merge preset: never bump, accept the plan, never ask, fail on anything unbumped. Every flag
+refuse and on a change to a recipe whose [`submissions`](repositories-file-formats.md#the-submissions-block)
+block says it takes no proposals, and reporting how merging would rewrite the committed index without failing
+on it, since that index is the release's output; and `--ci` is the merge preset: never bump, accept the plan, never ask, fail on anything unbumped. Every flag
 this command takes, `--tag`, `--push` and `--non-interactive` among them, is in the
 [command reference](commands.md#sous-repo-release).
 
@@ -235,7 +237,8 @@ missing from the index is rebuilt from it whenever the index is regenerated, whi
 publishes something. A bump edits the manifest in place, so comments, field order and layout survive; a folded
 block of YAML prose may be re-wrapped and the space before a trailing comment collapsed to one.
 
-!> A release commits the version bumps and the index, and nothing else. It refuses to run while anything else is
+!> A release commits the version bumps and the index, and nothing else; the only other commit sous ever makes
+for you is `sous repo submit --commit`. It refuses to run while anything else is
 uncommitted, because a tag names one commit and the index records what each recipe folder holds right now. It also
 refuses when git does not know who is committing: set `git config user.name` and `git config user.email` first, or
 give that identity to the account a continuous integration job runs as (the scaffolded workflow already does).
@@ -291,22 +294,60 @@ printed so you can delete it. Unlinking a name linked in the other scope says wh
 
 ## Contribute to someone else's repository
 
-`sous repo submit` proposes your committed changes to a repository's maintainers; it never publishes and never
-writes to a repository directly. It takes `--title`, `--body`, `--draft` and `--dry-run`, and runs three stages,
-printing each step:
+`sous repo submit` proposes a change to a repository's maintainers and follows it through; it never publishes
+and never writes to a repository directly. Run it inside the recipe repository you changed, or from a project
+that links it: `sous repo submit sous-recipes` runs in the linked checkout, and with no argument the project's
+only linked repository is used (several are a question). A repository you have since unlinked is still
+submitted from the checkout sous cloned for it, with a note saying so; with no checkout at all there is no
+working copy to propose from, and `submit` says so.
+
+It prints each step as it runs them:
 
 1. **Preflight.** An `origin` remote exists, sous recognizes its provider, that provider's command line tool
-   (`gh` or `glab`) is installed and signed in, and everything is committed.
+   (`gh` or `glab`) is installed and signed in, and everything is committed. `--commit` lifts that last rule:
+   sous lists what is uncommitted, asks once (`--yes` answers), checks git knows who is committing before
+   writing anything, and commits it all with the proposal's title, description and changelog as the message.
 2. **Validation.** The repository validates, and your change leaves `sous.index.json` as it found it, so a
    proposal never fails the maintainer's own checks and wastes their review. The index is written by the
    repository's own release after a merge; whether it agrees with the release tags is checked there, by
    `sous repo release --check` on a full clone, not by `submit`. That is what lets `submit` run from the shallow
    checkout `sous repo link` makes, which holds almost none of the tags. The comparison is made against the
    copy of the default branch your checkout holds (`origin/main`, for example); when it holds none, `submit`
-   says the check was skipped.
+   says the check was skipped. A change that touches a recipe whose
+   [`submissions`](repositories-file-formats.md#the-submissions-block) block says it takes no proposals is
+   warned about, with where to send it instead, and proposed only if you carry on.
 3. **Delegation.** Sous asks the provider whether you can push to the repository itself, forks it onto your
    account when you cannot, pushes the branch, and asks the provider to open the proposal. A change sitting on
-   the default branch is moved to `sous/submit-<YYYYMMDD>-<HHMM>`.
+   the default branch is moved to `sous/submit-<YYYYMMDD>-<HHMM>`, or to the branch `--branch` names.
+
+**A title and a description are yours to write.** A new proposal needs both: pass `--title` and `--body`, or
+answer the two questions at a terminal (Tab opens your editor for a longer description). Sous never borrows a
+commit message. The body is your description followed by a changelog sous generates by comparing the manifests
+your change carries with the default branch:
+
+- recipes added, and recipes retired (a renamed recipe shows as one of each);
+- version changes;
+- recipes whose files changed without a version raise, which merging will release as the next patch;
+- namespaces added or removed;
+- variables added, removed or changed, with a warning that removing a variable or tightening its validation is
+  usually a major change.
+
+The changelog explains; it never refuses. Only what the repository's own checks would reject stops a submission.
+
+**One command for the proposal's whole life.** Every run looks up the proposal for the current branch (or the
+one `--branch` names), by the fork's owner as well as the branch when you work through a fork, and then:
+
+| The branch's proposal | What `submit` does |
+|-----------------------|--------------------|
+| none | Opens one |
+| open, with new commits | Pushes them, which updates it; a given `--title` or `--body` replaces its own |
+| open, with nothing new | Reports where it stands: review, checks, whether it can merge |
+| merged | Says so, then continues on a new branch: you name one, sous generates one, or you cancel. `--yes` generates one |
+| closed without merging | Says so, and opens a fresh one for the branch |
+
+When the branch on the remote holds commits yours lacks (a maintainer pushed to it), git refuses the push and
+`submit` passes git's own explanation through and stops. It never forces a push. `--status` only reports, and
+`--dry-run` works everything out and writes and sends nothing.
 
 Each step is the provider's own business, and what each one can do depends on the host; see
 [Providers](repositories-providers.md#proposing-a-change). Sous sequences the steps and reports what came back. A

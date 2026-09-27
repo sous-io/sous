@@ -27,10 +27,13 @@ import type { FetchLike } from "./http.js";
 
 /**
  * What a provider can do. `fetch` is the read path every provider implements;
- * `submit` is the propose-a-change path, which arrives in a later phase. A
- * provider declares the feature only once it genuinely supports it.
+ * `submit` is the propose-a-change path; `proposals` is looking a proposal up
+ * again afterwards (finding the one a branch already has, reporting its status,
+ * and replacing its title or body), which is what lets `sous repo submit`
+ * handle a proposal's whole life rather than only its first day. A provider
+ * declares a feature only once it genuinely supports it.
  */
-export type ProviderFeature = "fetch" | "submit";
+export type ProviderFeature = "fetch" | "submit" | "proposals";
 
 /**
  * The identifier a repo entry uses to name its provider explicitly. `local` is a
@@ -140,6 +143,70 @@ export type ProposedChange = {
   detail: string;
 };
 
+/** Where a proposal stands: still open, merged, or closed without merging. */
+export type ProposalState = "open" | "merged" | "closed";
+
+/** One proposal, as plain data every provider can describe. */
+export type ProposalSummary = {
+  /** How the provider identifies it, such as a pull request number. */
+  id: string;
+  /** Its address, when the provider reported one. */
+  url?: string;
+  /** Where it stands. */
+  state: ProposalState;
+  /** Its current title. */
+  title: string;
+  /** True when it is a draft. */
+  draft: boolean;
+  /** The branch it targets, when the provider reported it. */
+  base?: string;
+};
+
+/** Which proposal to look for: the one a branch was pushed for. */
+export type ProposalQuery = {
+  /** The branch the change is on. */
+  branch: string;
+  /**
+   * True when the branch lives on a fork rather than in the repository itself.
+   * A proposal from a fork is found by the fork's owner as well as the branch,
+   * so two contributors' branches of the same name are never confused.
+   */
+  fromFork: boolean;
+  /**
+   * The account the fork lives under, when the caller knows it. Left out, the
+   * provider asks the host which account is signed in.
+   */
+  forkOwner?: string;
+};
+
+/** How a proposal's review is going, in words every host can be mapped onto. */
+export type ProposalReview = "approved" | "changes requested" | "review required";
+
+/** How the automated checks on a proposal stand, counted. */
+export type ProposalChecks = {
+  passed: number;
+  failed: number;
+  pending: number;
+};
+
+/** Everything a status report says about one proposal. */
+export type ProposalStatus = {
+  /** The proposal itself. */
+  proposal: ProposalSummary;
+  /** How its review is going, when the host reports it. */
+  review?: ProposalReview;
+  /** How its checks stand, when it has any. */
+  checks?: ProposalChecks;
+  /** Whether it can be merged as it stands; undefined when the host is still working it out. */
+  mergeable?: boolean;
+};
+
+/** What to replace on an open proposal. A field left out is left as it is. */
+export type ProposalUpdate = {
+  title?: string;
+  body?: string;
+};
+
 /** One repository host sous knows how to read from. */
 export interface RepoProvider {
   /** The provider's stable identifier, as written in a repo config entry. */
@@ -194,6 +261,55 @@ export interface RepoProvider {
     proposal: ChangeProposal,
     options?: ProviderOptions
   ): Promise<ProposedChange>;
+
+  // --- Proposals after the fact, answered by a provider that declares `proposals`
+
+  /**
+   * The proposal a branch was pushed for, or undefined when it has none. When a
+   * branch has had several, the open one wins, and otherwise the newest.
+   */
+  findProposal?(
+    repo: CanonicalRepo,
+    query: ProposalQuery,
+    options?: ProviderOptions
+  ): Promise<ProposalSummary | undefined>;
+  /** Where one proposal stands: its state, its review and its checks. */
+  proposalStatus?(
+    repo: CanonicalRepo,
+    id: string,
+    options?: ProviderOptions
+  ): Promise<ProposalStatus>;
+  /** Replaces an open proposal's title, its body, or both. */
+  updateProposal?(
+    repo: CanonicalRepo,
+    id: string,
+    update: ProposalUpdate,
+    options?: ProviderOptions
+  ): Promise<ProposedChange>;
+}
+
+/**
+ * A provider that can find a proposal again, report on it and change its text.
+ * This is what declaring the `proposals` feature promises.
+ */
+export type ProposalCapableProvider = RepoProvider &
+  Required<Pick<RepoProvider, "findProposal" | "proposalStatus" | "updateProposal">>;
+
+/**
+ * True when a provider declares the `proposals` feature and really does answer
+ * all three calls behind it.
+ *
+ * @param provider - The provider to test.
+ */
+export function supportsProposals(
+  provider: RepoProvider
+): provider is ProposalCapableProvider {
+  return (
+    provider.features.includes("proposals") &&
+    typeof provider.findProposal === "function" &&
+    typeof provider.proposalStatus === "function" &&
+    typeof provider.updateProposal === "function"
+  );
 }
 
 /**

@@ -34,6 +34,7 @@ import {
   recipeNameSchema,
   relativePathSchema,
   semverVersionSchema,
+  submissionsSchema,
   variableNameSchema,
 } from "./common.js";
 import { parseDependencyRef } from "../ref.js";
@@ -301,6 +302,12 @@ export const recipeManifestSchema = extensibleObject({
   version: semverVersionSchema,
   /** One-paragraph summary, shown by `sous repo search` and `sous repo list`. */
   description: z.string().optional(),
+  /**
+   * Whether this recipe takes proposed changes, winning over the repository's
+   * own `submissions` block. A recipe whose files are copied in from somewhere
+   * else sets `allowed: false` and says where to go instead.
+   */
+  submissions: submissionsSchema.optional(),
   /**
    * Build dependencies: fetched and addressable here, but not added to the
    * project. Each entry is a bare ref naming a sibling recipe in this same

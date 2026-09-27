@@ -10,7 +10,8 @@
  * declare the `submit` feature (the local one, for instance) inherits four
  * methods that raise a ConfigError naming the provider and what was asked of
  * it, so a caller that skips the feature check gets a sentence rather than a
- * `TypeError`.
+ * `TypeError`. The three calls behind the `proposals` feature are refused the
+ * same way.
  */
 
 import { ConfigError } from "../../errors.js";
@@ -26,6 +27,10 @@ import type {
   ChangeProposal,
   FetchedIndex,
   ForkedRepo,
+  ProposalQuery,
+  ProposalStatus,
+  ProposalSummary,
+  ProposalUpdate,
   ProposedChange,
   ProviderCli,
   ProviderFeature,
@@ -185,6 +190,33 @@ export abstract class ProviderBase implements RepoProvider {
     _options: ProviderOptions = {}
   ): Promise<ProposedChange> {
     throw this.unsupported("submit", "propose a change to it");
+  }
+
+  // --- Proposals after the fact, refused unless a provider overrides them ----
+
+  async findProposal(
+    _repo: CanonicalRepo,
+    _query: ProposalQuery,
+    _options: ProviderOptions = {}
+  ): Promise<ProposalSummary | undefined> {
+    throw this.unsupported("proposals", "look for a proposal that is already open");
+  }
+
+  async proposalStatus(
+    _repo: CanonicalRepo,
+    _id: string,
+    _options: ProviderOptions = {}
+  ): Promise<ProposalStatus> {
+    throw this.unsupported("proposals", "report where a proposal stands");
+  }
+
+  async updateProposal(
+    _repo: CanonicalRepo,
+    _id: string,
+    _update: ProposalUpdate,
+    _options: ProviderOptions = {}
+  ): Promise<ProposedChange> {
+    throw this.unsupported("proposals", "change a proposal's title or body");
   }
 
   /**

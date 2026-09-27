@@ -293,6 +293,9 @@ const MANAGED_LAYER_EXPORTS = [
  */
 const PROVIDER_WRITE_EXPORTS = ["ProviderBase", "firstUrlIn", "supportsSubmit"];
 
+/** The submission lifecycle: the `submissions` block and the `proposals` feature. */
+const SUBMIT_LIFECYCLE_EXPORTS = ["submissionsSchema", "supportsProposals"];
+
 describe("the repos barrel", () => {
   /**
    * The barrel exposes exactly the documented surface: nothing missing, and
@@ -308,6 +311,7 @@ describe("the repos barrel", () => {
       ...PHASE_7_EXPORTS,
       ...MANAGED_LAYER_EXPORTS,
       ...PROVIDER_WRITE_EXPORTS,
+      ...SUBMIT_LIFECYCLE_EXPORTS,
     ].sort();
     expect(Object.keys(repos).sort()).toEqual(expected);
   });

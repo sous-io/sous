@@ -19,6 +19,13 @@ description: >-
   debugged, the .tpl. template convention and LiquidJS syntax, what an agent
   skill is, and how to create one.
 
+# The copy in sous-io/sous-recipes is overwritten by every sous release, so a
+# change proposed there would be lost, and a version it tagged would collide
+# with the one the release publishes.
+submissions:
+  allowed: false
+  instead: Propose changes in sous-io/sous, under recipes/core/sous-skills/.
+
 contents:
   - kind: skills
     include:
