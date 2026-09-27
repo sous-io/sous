@@ -96,7 +96,7 @@ import {
 const UPSTREAM_REMOTE = "origin";
 
 /** The remote name sous gives a fork it created. */
-const FORK_REMOTE = "fork";
+export const FORK_REMOTE = "fork";
 
 /** What a proposal is called when the provider does not name it. */
 const DEFAULT_PROPOSAL_NOUN = "proposal";

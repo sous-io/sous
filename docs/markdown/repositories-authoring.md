@@ -368,6 +368,10 @@ changing its branch says it affects all of them.
 
 ## Contribute to someone else's repository
 
+?> The whole path a recipe user takes, from starting a change in their own project to picking up the released
+version, is one page: [Contributing a change](repositories-contributing.md). `sous repo contribute` chains the
+commands this section and [Edit a repository in place](#edit-a-repository-in-place) describe.
+
 `sous repo submit` proposes a change to a repository's maintainers and follows it through; it never publishes
 and never writes to a repository directly. Run it inside the recipe repository you changed, or from a project
 that links it: `sous repo submit sous-recipes` runs in the linked checkout, and with no argument the project's
@@ -401,7 +405,8 @@ your change carries with the default branch:
 
 - recipes added, and recipes retired (a renamed recipe shows as one of each);
 - version changes;
-- recipes whose files changed without a version raise, which merging will release as the next patch;
+- recipes whose files changed without a version raise, with a warning that a release run with `--ci` (as the
+  scaffolded workflow runs it after a merge) refuses a changed recipe whose version was not raised;
 - namespaces added or removed;
 - variables added, removed or changed, with a warning that removing a variable or tightening its validation is
   usually a major change.
@@ -434,6 +439,7 @@ that field in your own repository so a contributor is never left without a route
 
 - [Repository file formats](repositories-file-formats.md): every manifest and index schema
 - [Consuming recipes](repositories-consuming.md): the other side, from `repo add` to `build`
+- [Contributing a change](repositories-contributing.md): proposing a change to a recipe you use, start to finish
 - [Command reference](commands.md): every command and flag
 - [Providers](repositories-providers.md): what `gh` and `glab` can each do for a release and a submission
 - [Recipe variables](repositories-variables.md): how the definitions declared here are answered at build time

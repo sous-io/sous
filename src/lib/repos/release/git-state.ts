@@ -330,6 +330,22 @@ export async function pushBranch(
     cwd: rootDir,
     run: options.run,
   });
+
+  // Git records what was pushed in the remote-tracking branch only when the
+  // remote's fetch configuration covers the branch, and a clone `sous repo
+  // link` makes covers only the default branch. Recording it here keeps the
+  // checkout's own answer to "was this pushed?" true, which is what `sous repo
+  // unlink --remove` and `sous repo contribute --finish` read. It is a record,
+  // not a step: a failure to write it changes nothing about the push.
+  try {
+    await runGit(["update-ref", `refs/remotes/${remote}/${branch}`, `refs/heads/${branch}`], {
+      cwd: rootDir,
+      run: options.run,
+    });
+  } catch {
+    // The push succeeded; only the local record of it is missing.
+  }
+
   return pushReportIsUpToDate(report) ? "up-to-date" : "updated";
 }
 

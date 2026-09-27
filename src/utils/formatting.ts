@@ -143,10 +143,36 @@ export function headerTo(write: (line: string) => void): void {
 }
 
 /**
- * Writes the CLI header to stdout.
+ * How many commands are running inside another one right now. While any are,
+ * `header` writes nothing, because the command that started them has already
+ * drawn the banner once.
+ */
+let nestedCommandDepth = 0;
+
+/**
+ * Writes the CLI header to stdout, unless the command asking for it runs
+ * inside another command (see `withoutHeader`).
  */
 export function header(): void {
+  if (nestedCommandDepth > 0) return;
   headerTo(log);
+}
+
+/**
+ * Runs another command in this process without drawing the CLI header a
+ * second time. A command that chains others (`sous repo contribute`) wraps each
+ * one in this, so the output opens with one banner however many run.
+ *
+ * @param run - Runs the nested command.
+ * @returns Whatever `run` resolves to.
+ */
+export async function withoutHeader<T>(run: () => Promise<T>): Promise<T> {
+  nestedCommandDepth += 1;
+  try {
+    return await run();
+  } finally {
+    nestedCommandDepth -= 1;
+  }
 }
 
 /**

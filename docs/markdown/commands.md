@@ -248,6 +248,34 @@ Takes `--dry-run`, `--no-build`, `--answer` and `--answers-file`.
 
 Example: `sous repo unlink sous-recipes --update`
 
+### `sous repo contribute REF`
+Starts a contribution to a recipe repository, or finishes one with `--finish`, by running `sous repo link`,
+`sous repo submit` and `sous repo unlink` in order; see [Contributing a change](repositories-contributing.md).
+`REF` names a repository, or a namespace or recipe, in which case the repository that publishes it is used.
+Each step runs the real command with the flags below passed through, prints as it runs, and a failure names the
+step that failed and the steps that completed. `--dry-run` prints each step and runs none. Also spelled
+`sous repo contrib`.
+
+Starting runs `sous repo link REPO --latest --generate-branch`:
+
+- `--create-branch <name>`: start on a new branch with this name instead of a generated one.
+- `--branch <name>`: work on an existing branch instead of a new one (when finishing, the branch to submit).
+- `--from <branch>`: the base of the new branch; defaults to the repository's default branch.
+- `--global`: the machine-wide link, sharing one checkout (when finishing, too).
+
+Finishing looks for work no proposal carries yet (uncommitted changes, commits never pushed, or pushed commits
+with no open proposal), asks whether to submit it with `sous repo submit REPO`, then runs
+`sous repo unlink REPO --update`. With nothing to submit, the submit step is skipped without asking.
+
+- `--submit`, `--no-submit`: submit without asking, or finish without submitting.
+- `--title <text>`, `--body <text>`, `--draft`, `--commit`: passed through to `sous repo submit`.
+- `--remove`: passed through to `sous repo unlink`, deleting the checkout sous cloned.
+- `-y, --yes`: passed through to every step, and submits without asking (also `-f`, `--force`).
+- `--accept-first`: when `REF` matches several things, take the first one listed.
+
+Example: `sous repo contribute workflow/task-files`, then `sous repo contribute workflow/task-files --finish
+--title "Clarify the resume steps" --body "The resume steps skipped the task file."`
+
 ### `sous repo init [DIRECTORY]`
 Creates a new recipe repository in a directory, defaulting to the current one; `--dry-run` prints the files it
 would write. See [Authoring a repository](repositories-authoring.md).

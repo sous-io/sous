@@ -12,6 +12,7 @@
   - [Overview](repositories.md)
   - [Quickstart](repositories-quickstart.md)
   - [Consuming recipes](repositories-consuming.md)
+  - [Contributing a change](repositories-contributing.md)
   - [Authoring a repository](repositories-authoring.md)
   - [Recipe variables](repositories-variables.md)
   - [Providers](repositories-providers.md)
