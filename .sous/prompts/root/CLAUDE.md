@@ -196,6 +196,9 @@ src/
       release.ts           # validate a recipe repo, regenerate its index, cut the tags
       submit.ts            # propose a recipe repo's changes and follow the proposal through;
                            #   runs in a recipe repo, or from a project naming a linked one
+      contribute.ts        # start a contribution (link --latest on a new branch), or finish
+                           #   one (submit what is unproposed, then unlink --update); chains
+                           #   the three commands in-process
     vars/
       index.ts             # bare `sous vars` and `sous vars <name>`: the hidden shorthand
       list.ts              # `sous vars list`: every variable, its answer and its source
@@ -264,6 +267,7 @@ src/
       catalog-inputs.ts    # wires a running command to the catalog; also locates recipe files
       catalog-display.ts   # the shared wording and recipe table the browsing commands print
       subscription-service.ts  # the workflow: add, subscribe, unsubscribe, update, restore, check
+      contribute.ts        # `repo contribute`'s steps as argv, and what a branch has unproposed
       update-plan.ts       # an update's scope, and the plan it prints before its one question
       locked-recipes.ts    # where each locked recipe's files are (a link beats the store)
       locked-namespace-resolver.ts # the real NamespaceResolver, built from the lockfile
@@ -1199,6 +1203,7 @@ This enables `sous prune` (remove stale outputs) and `sous clear` (delete all ou
 | `sous repo init [dir]` | Scaffold a new recipe repository (`--name`, `--namespace`, `--force`) |
 | `sous repo link <repo\|path> [path]` | Read a repository from a working copy: link the checkout a path names in place, clone a repository named on its own, or link the checkout a second argument names (`--global`, `--yes` / `-y` / `--trust`); a checkout already on disk is fetched and compared with upstream, and `--branch`, `--create-branch`, `--generate-branch`, `--from` and `--latest` change its branch |
 | `sous repo unlink <repo>` | Drop the link, go back to the pinned versions and build; on its own it reports newer published versions in range under a short timeout, `--update` moves the pins through `subscription update`, `--remove` deletes a checkout sous cloned after listing any unsaved work (`--global`, `--yes` / `-y` / `--trust`, `--dry-run`, `--no-build`) |
+| `sous repo contribute <ref>` | Start a contribution: `repo link <repo> --latest` on a new branch (`--generate-branch` unless `--create-branch` or `--branch` names one; `--from`, `--global`). With `--finish`: look for work no proposal carries yet, ask whether to submit it through `repo submit` (`--submit` / `--no-submit`, `--yes`; skipped when there is nothing), then `repo unlink <repo> --update` (`--remove`); `--title`, `--body`, `--draft`, `--commit`, `--branch` pass through to submit. The ref may name a namespace or recipe, resolved to its repository through `src/lib/refs/` (`--accept-first`); `--dry-run` runs no step; also `sous repo contrib` (hidden) |
 | `sous repo release` | Publish new versions of a recipe repository: plan, ask once, then bump, regenerate the index, commit and tag (`--namespace`, `--recipe`, `--bump`, `--no-bump`, `--include-unchanged`, `--tag`, `--push`, `--yes`, `--check`, `--ci`, `--dry-run`) |
 | `sous repo submit [repo]` | Propose a recipe repository's changes and follow the proposal through: open it, update it, report on it, or continue on a new branch once it was merged; from a project, `repo` names a linked repository (`--title`, `--body`, `--branch`, `--status`, `--commit`, `--draft`, `--yes` / `-y`, `--dry-run`) |
 | `sous vars list` | List every recipe variable in play: its answer, the env var that supplied it, and the source |
@@ -1327,6 +1332,18 @@ command arguments; every host-specific answer comes from the provider interface 
 Every step prints before it runs, and a failure names the steps that already completed. A
 provider that does not advertise the `submit` feature prints the repo manifest's own
 `contribute` pointer instead, and one without `proposals` opens a proposal on every run.
+`pushBranch` (`release/git-state.ts`) also writes the remote-tracking ref for what it pushed,
+because a clone `repo link` makes fetches only the default branch and git would otherwise keep
+no local record of the push; `repo unlink --remove` and `repo contribute --finish` read it.
+
+`repo contribute` adds no behavior of its own: it CHAINS `repo link`, `repo submit` and `repo
+unlink` by running each real command in the same process (`this.config.runCommand`, wrapped in
+`withoutHeader` from `utils/formatting.ts` so the banner prints once), with its flags passed
+through as argv built in `lib/repos/contribute.ts`. A step's own failure is reported by that
+step's command; `contribute` then names the failed step and the completed ones and exits with the
+step's code. Finishing judges the branch with `pendingWork` (uncommitted changes, commits beyond
+`origin/<default>`, and which of those no pushed copy under `origin/` or `fork/` holds); a branch
+whose every commit was pushed has its proposal looked up through `submitRepo({ statusOnly })`.
 
 This `config` namespace is a fresh design, distinct from the old `configure` /
 `config *` commands and the `~/.sous` profile layer that were removed when walk-up

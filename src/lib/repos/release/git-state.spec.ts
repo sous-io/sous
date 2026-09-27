@@ -10,6 +10,7 @@ import {
   hasCommitIdentity,
   isCommittedAndUnchanged,
   pathsChangedSince,
+  pushBranch,
   pushReportIsUpToDate,
   remoteUrl,
   submitBranchName,
@@ -209,5 +210,37 @@ describe("commitEverything()", () => {
 
     expect(await uncommittedChanges(repo)).toEqual([]);
     expect(git(repo, "log", "-1", "--format=%B")).toBe("Subject line\n\nThe body.");
+  });
+});
+
+describe("pushBranch()", () => {
+  /**
+   * A push to a remote whose fetch configuration does not cover the branch
+   * (what a single-branch clone looks like) still leaves a remote-tracking
+   * branch behind recording what was pushed, so the checkout can tell later
+   * that its commits exist on the remote.
+   *
+   * await pushBranch(repo, "origin", "change");
+   * // -> refs/remotes/origin/change points at the pushed commit
+   */
+  it("should record what it pushed even when the fetch configuration does not cover the branch", async () => {
+    const remote = makeTmpDir("sous-release-remote-");
+    try {
+      git(remote.path, "init", "--quiet", "--bare", "--initial-branch", "main");
+      git(repo, "remote", "add", "origin", remote.path);
+      git(repo, "config", "remote.origin.fetch", "+refs/heads/main:refs/remotes/origin/main");
+      git(repo, "switch", "--quiet", "-c", "change");
+      writeFile(repo, "change.md", "change\n");
+      commitAll(repo, "a change");
+
+      expect(await pushBranch(repo, "origin", "change")).toBe("updated");
+
+      expect(git(repo, "rev-parse", "refs/remotes/origin/change")).toBe(
+        git(repo, "rev-parse", "HEAD")
+      );
+      expect(await pushBranch(repo, "origin", "change")).toBe("up-to-date");
+    } finally {
+      remote.cleanup();
+    }
   });
 });

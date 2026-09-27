@@ -25,6 +25,7 @@ import {
   wrapText,
   terminalColumns,
   DEFAULT_WRAP_COLUMNS,
+  withoutHeader,
 } from "./formatting.js";
 
 // Strip ANSI escape codes so we can assert on plain text
@@ -537,6 +538,42 @@ describe("header()", () => {
   it("should output the CLI banner to the console", () => {
     const lines = captureLog(() => header());
     expect(lines.join("\n")).toContain("Agent Configuration Manager");
+  });
+});
+
+describe("withoutHeader()", () => {
+  /**
+   * withoutHeader() should run its callback with the banner switched off, hand
+   * back what the callback resolved to, and switch the banner back on
+   * afterwards, even when the callback fails.
+   *
+   * await withoutHeader(async () => { header(); return 1; });
+   * // -> 1, and nothing was printed
+   */
+  it("should suppress the banner only while the callback runs", async () => {
+    const lines: string[] = [];
+    const spy = vi.spyOn(console, "log").mockImplementation((...args) => {
+      lines.push(strip(args.join(" ")));
+    });
+    try {
+      const result = await withoutHeader(async () => {
+        header();
+        return 1;
+      });
+      expect(result).toBe(1);
+      expect(lines).toEqual([]);
+
+      await expect(
+        withoutHeader(async () => {
+          throw new Error("failed");
+        })
+      ).rejects.toThrow("failed");
+
+      header();
+      expect(lines.join("\n")).toContain("Agent Configuration Manager");
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 
