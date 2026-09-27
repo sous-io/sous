@@ -3,8 +3,8 @@
  *
  * A maintainer reviewing a proposal needs to know what merging it does to the
  * people who subscribe to the repository: which recipes appear, disappear or
- * change version, which will be released as a patch because their files
- * changed without a version raise, which namespaces come and go, and which
+ * change version, which changed their files without raising their version
+ * (a release run with `--ci` refuses those), which namespaces come and go, and which
  * variables change. None of that is in a commit message, and all of it can be
  * read from the manifests, so sous reads them: the ones the change carries,
  * compared with the ones on the default branch.
@@ -19,7 +19,6 @@
  */
 
 import path from "node:path";
-import semver from "semver";
 import {
   MANIFEST_EXTENSIONS,
   RECIPE_MANIFEST_BASENAME,
@@ -53,7 +52,7 @@ export type RecipeEntry = { key: string; version: string };
 export type VersionChange = { key: string; from: string; to: string };
 
 /** One recipe whose files changed while its version stayed where it was. */
-export type UnraisedChange = { key: string; version: string; next: string };
+export type UnraisedChange = { key: string; version: string };
 
 /** One variable that was added, removed or changed. */
 export type VariableChange = {
@@ -185,7 +184,7 @@ export function buildChangelog(input: {
     if (from !== to) {
       changelog.versionChanges.push({ key, from, to });
     } else if (pathsInside(entry.path, changedPaths).length > 0) {
-      changelog.unraised.push({ key, version: to, next: semver.inc(to, "patch") ?? to });
+      changelog.unraised.push({ key, version: to });
     }
 
     changelog.variables.push(
@@ -214,6 +213,18 @@ export function changelogIsEmpty(changelog: Changelog): boolean {
     changelog.variables.length === 0
   );
 }
+
+/**
+ * The warning a change to a recipe's files without a version raise carries.
+ * It is a warning and not a refusal: whether the merge's release raises the
+ * version, refuses the change, or runs some other way is the repository's own
+ * business, so the changelog states the fact and leaves the decision there.
+ */
+export const UNRAISED_VERSION_WARNING =
+  "A recipe listed above changed without raising its version. A release run with `--ci`, " +
+  "as the workflow `sous repo init` scaffolds runs it after a merge, refuses a changed " +
+  "recipe whose version was not raised, so its version has to be raised in its manifest " +
+  "before that release can publish it.";
 
 /** The warning a breaking variable change carries. */
 export const BREAKING_VARIABLE_WARNING =
@@ -272,10 +283,12 @@ export function renderChangelog(changelog: Changelog): string {
     "Changed without a version raise",
     changelog.unraised.map(
       (entry) =>
-        `\`${entry.key}\`: its files changed and its version is still ${entry.version}, so ` +
-        `merging releases it as ${entry.next}`
+        `\`${entry.key}\`: its files changed and its version is still ${entry.version}`
     )
   );
+  if (changelog.unraised.length > 0) {
+    lines.push("", `**Warning:** ${UNRAISED_VERSION_WARNING}`);
+  }
   section("Namespaces added", changelog.namespacesAdded.map((name) => `\`${name}\``));
   section("Namespaces removed", changelog.namespacesRemoved.map((name) => `\`${name}\``));
   section("Variables", changelog.variables.map(describeVariableChange));

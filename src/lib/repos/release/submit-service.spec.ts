@@ -736,7 +736,8 @@ describe("submitRepo()", () => {
       expect(result.committed).toEqual(["recipes/core/example/skills/two.md"]);
       const message = git(repo, "log", "-1", "--format=%B");
       expect(message).toMatch(/^Add a skill\n\nIt adds a skill\.\n\n## What merging this changes/);
-      expect(message).toMatch(/core\/example.*merging releases it as 1\.0\.1/);
+      expect(message).toMatch(/core\/example.*its version is still 1\.0\.0/);
+      expect(message).toContain("A release run with `--ci`");
       expect(git(repo, "status", "--porcelain")).toBe("");
     });
 

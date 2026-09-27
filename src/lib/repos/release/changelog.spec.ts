@@ -25,6 +25,7 @@ import {
   readManifestsAt,
   renderChangelog,
   snapshotOf,
+  UNRAISED_VERSION_WARNING,
   type ManifestSnapshot,
 } from "./changelog.js";
 import { validateRepo } from "./validate.js";
@@ -116,7 +117,7 @@ describe("buildChangelog()", () => {
       { key: "old/gone", version: "0.3.0" },
     ]);
     expect(changelog.versionChanges).toEqual([{ key: "core/raised", from: "1.0.0", to: "1.1.0" }]);
-    expect(changelog.unraised).toEqual([{ key: "core/kept", version: "1.0.0", next: "1.0.1" }]);
+    expect(changelog.unraised).toEqual([{ key: "core/kept", version: "1.0.0" }]);
     expect(changelog.namespacesAdded).toEqual(["fresh"]);
     expect(changelog.namespacesRemoved).toEqual(["old"]);
     expect(changelog.variables).toEqual([
@@ -233,6 +234,33 @@ describe("renderChangelog()", () => {
     );
 
     expect(text).toContain("Merging changes no recipe, namespace, version or variable.");
+  });
+
+  /**
+   * A recipe whose files changed while its version stayed put is listed, and
+   * the changelog warns, without refusing anything, that a release run with
+   * `--ci` refuses such a recipe. It never claims what merging will publish.
+   *
+   * renderChangelog(changelog)
+   * // -> "- `core/x`: its files changed and its version is still 1.0.0" plus the warning
+   */
+  it("should list an unraised recipe and warn that a --ci release refuses it", () => {
+    const same = snapshot(["core"], [recipe("core/x", "1.0.0")]);
+
+    const text = renderChangelog(
+      buildChangelog({
+        baseBranch: "main",
+        base: same,
+        head: same,
+        changedPaths: ["recipes/core/x/skills/one.md"],
+      })
+    );
+
+    expect(text).toContain("**Changed without a version raise**");
+    expect(text).toContain("`core/x`: its files changed and its version is still 1.0.0");
+    expect(text).toContain(`**Warning:** ${UNRAISED_VERSION_WARNING}`);
+    expect(UNRAISED_VERSION_WARNING).toContain("`--ci`");
+    expect(text).not.toContain("releases it as");
   });
 });
 

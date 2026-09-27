@@ -122,7 +122,8 @@ contribution guide says its maintainers raise versions themselves, raise the rec
 `sous.recipe.yaml` by hand as part of your change: a patch step for wording and fixes, a minor step for new files
 or a new optional variable, and a major step for anything that breaks an existing subscriber (removing a file,
 renaming a variable, or tightening a variable's validation). The changelog `sous repo submit` generates lists any
-recipe your change touches without a version raise, so a missed one is visible in the proposal. The repository's
+recipe your change touches without a version raise, with a warning that a `--ci` release refuses it, so a missed
+one is visible in the proposal. The repository's
 own guide is named by the `contribute` field of its `sous.repo.yaml`; for `sous-recipes` it is its
 `CONTRIBUTING.md`.
 

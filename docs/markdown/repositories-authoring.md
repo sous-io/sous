@@ -405,7 +405,8 @@ your change carries with the default branch:
 
 - recipes added, and recipes retired (a renamed recipe shows as one of each);
 - version changes;
-- recipes whose files changed without a version raise, which merging will release as the next patch;
+- recipes whose files changed without a version raise, with a warning that a release run with `--ci` (as the
+  scaffolded workflow runs it after a merge) refuses a changed recipe whose version was not raised;
 - namespaces added or removed;
 - variables added, removed or changed, with a warning that removing a variable or tightening its validation is
   usually a major change.
