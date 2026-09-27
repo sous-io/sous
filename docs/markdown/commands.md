@@ -41,6 +41,22 @@ Help has four spellings. `sous --help` prints the root screen; `sous repo add --
 `sous --version` prints the version alone, as `v1.2.3`; `sous --version --verbose` adds the package name, where
 it is installed, the platform and the Node build under it.
 
+## Flags that browse
+
+Every command that shows published versions takes the same two flags: `sous recipe list`, `sous recipe show`,
+`sous namespace list`, `sous namespace show`, `sous repo list`, `sous repo search` (and `sous search`) and
+`sous subscription list`. The flags combine.
+
+| Flag | What it does |
+|------|--------------|
+| `--latest` | Read each repository's index from upstream instead of the cache. `--remote` is the same flag. What it fetches is never written to the cache; a repository that cannot be reached is shown from the cache and named as not checked |
+| `--installed` | Show only what this project has installed, at the version its lockfile pins. A recipe whose repository is linked is marked `linked`, because builds read it from the checkout rather than the pinned version |
+
+Without either flag a browsing command reads only the cached indexes, so it works offline and fast.
+`sous recipe list --installed --latest` is the out-of-date view: each installed recipe with upstream's newest
+version beside the installed one. With `--installed`, `recipe show` and `namespace show` look the reference up
+among installed recipes only, and a reference to something published but not installed is an error saying so.
+
 Every topic answers to both spellings of its name: `repo` and `repos`, `subscription` and `subscriptions`,
 `namespace` and `namespaces`, `recipe` and `recipes`, `lock` and `locks`, `vars` and `var`, `config` and
 `configs`. Three commands also answer to one word: `sous search`, `sous subscribe` and `sous unsubscribe`.
@@ -79,6 +95,12 @@ and the command you want almost always. Takes `--dry-run`.
 - `--strict`: fail on any compilation error rather than reporting it and continuing.
 - `-w, --watch`: rebuild on every change to a source file, a config layer or a linked checkout.
 
+Before it compiles, a build lists each recipe this project uses that has a newer version within the range
+declared for it, beside the version pinned. It moves no pin; only always-pull moves one. The build reads upstream
+for this at most once per freshness window (`store.freshnessSeconds`, five minutes by default), gives a
+repository three seconds to answer, and otherwise answers from the cached index without a word about the
+failed check.
+
 Example: `sous build --rebuild`
 
 ### `sous compile`
@@ -103,8 +125,10 @@ Example: `sous launch claude --continuous`
 
 ### `sous search TEXT`
 Searches the recipes every trusted repository publishes, by name or description; reads the cached indexes only,
-so it works offline. `--limit <n>` sets how many matches to show, defaulting to 25. Also spelled
-`sous repo search`. Example: `sous search task --limit 50`
+so it works offline. `--limit <n>` sets how many matches to show, defaulting to 25. Takes the
+[browsing flags](#flags-that-browse): `--latest` searches the indexes upstream serves, and `--installed` searches
+only installed recipes and adds an Installed column. Also spelled `sous repo search`.
+Example: `sous search task --limit 50`
 
 ### `sous help [COMMAND]`
 Prints the help for sous, or for one command or topic. Works from any directory, including one with no config
@@ -155,7 +179,9 @@ held, the files the next build prunes, and the linked checkout if one points at 
 ### `sous repo list`
 Lists the repositories this project trusts, with the provider, where the entry came from, whether it is linked,
 how many recipes it publishes (`not fetched` until its index has been downloaded) and its URL. `--verbose` adds
-the namespaces each one publishes, on a line under its row.
+the namespaces each one publishes, on a line under its row. Takes the [browsing flags](#flags-that-browse):
+`--installed` keeps only the repositories something is installed from and names each installed recipe and
+version on a line under its row.
 
 ```term
 $ sous repo list
@@ -165,7 +191,8 @@ $ sous repo list
 ```
 
 ### `sous repo search TEXT`
-Same command as `sous search`, under its own topic; takes `--limit <n>`. Example: `sous repo search browser`
+Same command as `sous search`, under its own topic; takes `--limit <n>` and the
+[browsing flags](#flags-that-browse). Example: `sous repo search browser --installed`
 
 ### `sous repo gc`
 Collects the machine-wide recipe store down to its size cap. `--max-bytes <n>` collects to that cap instead of
@@ -265,13 +292,16 @@ Removes a subscription and everything only it brought in, then rebuilds so those
 
 ### `sous subscription list`
 Lists the subscriptions this project declares, switched-off ones included, with the range each resolves within,
-the versions the lockfile pins, where it came from and whether it is on. Reads the config and the lockfile only.
-Example: `sous subscription list`
+the versions the lockfile pins, the latest version each of those recipes has published, where it came from and
+whether it is on. Reads the config, the lockfile and the cached indexes only. Takes the
+[browsing flags](#flags-that-browse): `--latest` reads the latest versions from upstream, and `--installed` keeps
+only the subscriptions that have pinned something. Example: `sous subscription list --latest`
 
 ## namespace
 
 `namespace` reads the cached indexes and the lockfile, so it works offline. A trusted repository whose index has
-never been fetched is named at the end of a listing, not left out.
+never been fetched is named at the end of a listing, not left out. Both commands take the
+[browsing flags](#flags-that-browse); with `--installed` the recipe count is the number installed.
 
 ### `sous namespace list`
 Lists every namespace the trusted repositories publish, how many recipes each holds, and how much of it this
@@ -284,11 +314,12 @@ Example: `sous namespace show sous-recipes:core`
 
 ## recipe
 
-Browses the recipes the trusted repositories publish; like `namespace`, it works offline.
+Browses the recipes the trusted repositories publish; like `namespace`, it works offline, and both commands take
+the [browsing flags](#flags-that-browse).
 
 ### `sous recipe list`
 Lists the recipes the trusted repositories publish, across every namespace, with the same per-recipe columns
-`namespace show` prints. Example: `sous recipe list`
+`namespace show` prints. Example: `sous recipe list --installed --latest`
 
 ### `sous recipe show REF`
 Describes one recipe completely: its repository and location, every published version, its dependencies as

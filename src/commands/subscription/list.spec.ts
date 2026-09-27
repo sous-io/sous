@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { describePinned } from "./list.js";
+import { describeLatest, describePinned } from "./list.js";
 
 describe("describePinned()", () => {
   /**
@@ -50,5 +50,42 @@ describe("describePinned()", () => {
    */
   it("should say a disabled subscription is simply not pinned", () => {
     expect(describePinned([], false)).toBe("not pinned");
+  });
+});
+
+describe("describeLatest()", () => {
+  /**
+   * One held recipe, the usual case, shows its latest version alone.
+   *
+   * describeLatest([{ key: "workflow/task-files", latest: "1.2.0" }]);
+   * // -> "1.2.0"
+   */
+  it("should show the version alone for one held recipe", () => {
+    expect(describeLatest([{ key: "workflow/task-files", latest: "1.2.0" }])).toBe("1.2.0");
+  });
+
+  /**
+   * A namespace subscription holding several recipes names each one with its
+   * latest version, and a recipe no readable index publishes says so.
+   *
+   * describeLatest([{ key: "core/a", latest: "1.0.0" }, { key: "core/b", latest: undefined }]);
+   * // -> "core/a 1.0.0, core/b not in any index sous has read"
+   */
+  it("should name each of several held recipes", () => {
+    expect(
+      describeLatest([
+        { key: "core/a", latest: "1.0.0" },
+        { key: "core/b", latest: undefined },
+      ])
+    ).toBe("core/a 1.0.0, core/b not in any index sous has read");
+  });
+
+  /**
+   * A subscription holding nothing yet has no latest version to show.
+   *
+   * describeLatest([]); // -> ""
+   */
+  it("should leave the cell empty when nothing is held", () => {
+    expect(describeLatest([])).toBe("");
   });
 });

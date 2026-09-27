@@ -206,3 +206,59 @@ export function effectiveRangeForHolders(
   const combined = constraints.join(" ");
   return semver.validRange(combined) === null ? undefined : combined;
 }
+
+/**
+ * How long a build waits for a repository that it is only checking so it can
+ * say whether a newer version exists: three seconds. Past that the check is
+ * abandoned, quietly, and the build goes on with what the cache already knew.
+ */
+export const NEWER_VERSION_CHECK_TIMEOUT_MS = 3000;
+
+/**
+ * Runs a piece of upstream work with a deadline. The work is handed an abort
+ * signal that fires at the deadline, so a request that honors it is cancelled
+ * rather than left to keep the process alive; either way the returned promise
+ * rejects at the deadline, and the timer never holds the process open itself.
+ *
+ * await withDeadline((signal) => fetchSomething(signal), 3000);
+ * // -> the result, or an error saying the repository did not answer in time
+ *
+ * @param work - The work to run, given the signal that cancels it.
+ * @param milliseconds - How long to wait.
+ */
+export async function withDeadline<T>(
+  work: (signal: AbortSignal) => Promise<T>,
+  milliseconds: number
+): Promise<T> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(
+        new Error(
+          `The repository did not answer within ${formatSeconds(milliseconds)}, so sous ` +
+            `stopped waiting for it.`
+        )
+      );
+    }, milliseconds);
+    timer.unref?.();
+  });
+
+  try {
+    return await Promise.race([work(controller.signal), deadline]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+/**
+ * A duration in plain words, such as "3 seconds" or "1 second".
+ *
+ * @param milliseconds - The duration.
+ */
+function formatSeconds(milliseconds: number): string {
+  const seconds = Math.round((milliseconds / 1000) * 10) / 10;
+  return seconds === 1 ? "1 second" : `${seconds} seconds`;
+}

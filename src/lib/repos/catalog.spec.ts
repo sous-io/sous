@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
+  describeInstalled,
   describeNamespace,
   describeRecipe,
   listNamespaces,
+  narrowToInstalled,
   listRecipes,
   resolveNamespaceRef,
   resolveRecipeRef,
@@ -488,5 +490,150 @@ describe("resolveRecipeRef()", () => {
     expect(() => resolveRecipeRef(inputs(), "quality")).toThrow(
       /It is the name of a namespace/
     );
+  });
+});
+
+describe("linked recipes", () => {
+  /**
+   * A recipe the project pins from a linked repository carries the checkout's
+   * path, because builds read it from there rather than from the pinned version.
+   * A recipe the project does not pin carries none, since builds never read it.
+   *
+   * listRecipes({ ...inputs, linked: { "qa-recipes": "/work/qa-recipes" } });
+   * // -> workflow/qa-variables has linkedPath "/work/qa-recipes"; the others none
+   */
+  it("should mark only pinned recipes of a linked repository", () => {
+    const listings = listRecipes(inputs({ linked: { "qa-recipes": "/work/qa-recipes" } }));
+
+    expect(listings.find((entry) => entry.key === "workflow/qa-variables")!.linkedPath).toBe(
+      "/work/qa-recipes"
+    );
+    expect(
+      listings.find((entry) => entry.key === "workflow/qa-helper")!.linkedPath
+    ).toBeUndefined();
+  });
+
+  /**
+   * One recipe in full carries the same mark.
+   *
+   * describeRecipe({ ...inputs, linked }, "workflow/qa-variables").linkedPath
+   * // -> "/work/qa-recipes"
+   */
+  it("should mark a described recipe from a linked repository", () => {
+    const detail = describeRecipe(
+      inputs({ linked: { "qa-recipes": "/work/qa-recipes" } }),
+      "workflow/qa-variables"
+    );
+    expect(detail.linkedPath).toBe("/work/qa-recipes");
+  });
+});
+
+describe("narrowToInstalled()", () => {
+  /**
+   * Narrowed inputs keep only the recipes the lockfile pins from each
+   * repository, and only the namespaces holding one of them. The version history
+   * of a kept recipe stays whole.
+   *
+   * listRecipes(narrowToInstalled(inputs)).map((entry) => entry.key);
+   * // -> ["workflow/qa-variables"]
+   */
+  it("should keep only the pinned recipes and their namespaces", () => {
+    const narrowed = narrowToInstalled(inputs({ repos: [primary, secondary] }));
+
+    expect(listRecipes(narrowed).map((entry) => `${entry.repo}:${entry.key}`)).toEqual([
+      "qa-recipes:workflow/qa-variables",
+    ]);
+    expect(
+      listNamespaces(narrowed).map((entry) => `${entry.repo}:${entry.namespace}`)
+    ).toEqual(["qa-recipes:workflow"]);
+    expect(listNamespaces(narrowed)[0]!.recipeCount).toBe(1);
+    expect(
+      Object.keys(narrowed.repos[0]!.index.recipes["workflow/qa-variables"]!.versions)
+    ).toHaveLength(3);
+  });
+
+  /**
+   * The inputs handed in are not changed.
+   *
+   * narrowToInstalled(original);
+   * // -> original still lists all three recipes
+   */
+  it("should leave the original inputs untouched", () => {
+    const original = inputs();
+    narrowToInstalled(original);
+    expect(Object.keys(original.repos[0]!.index.recipes)).toHaveLength(3);
+  });
+});
+
+describe("describeInstalled()", () => {
+  /**
+   * An installed recipe is described as usual.
+   *
+   * describeInstalled(inputs, "qa-variables", describeRecipe, "recipe").pinned
+   * // -> "0.1.0"
+   */
+  it("should describe an installed recipe", () => {
+    const detail = describeInstalled(inputs(), "qa-variables", describeRecipe, "recipe");
+    expect(detail.pinned).toBe("0.1.0");
+  });
+
+  /**
+   * A key two repositories publish is not ambiguous when only one of them is
+   * installed: the lookup runs over installed recipes only.
+   *
+   * describeInstalled(twoRepos, "workflow/qa-helper", describeRecipe, "recipe").repo
+   * // -> "extras", the repository the lockfile pins it from
+   */
+  it("should settle an ambiguity in favor of the installed recipe", () => {
+    const withPin = {
+      ...lock,
+      recipes: {
+        ...lock.recipes,
+        "workflow/qa-helper": {
+          repo: "extras",
+          version: "2.0.0",
+          hash: "sha256:200",
+          requestedBy: ["project"],
+          kind: "subscribes",
+        },
+      },
+    } as Lockfile;
+
+    const detail = describeInstalled(
+      inputs({ repos: [primary, secondary], lock: withPin }),
+      "workflow/qa-helper",
+      describeRecipe,
+      "recipe"
+    );
+    expect(detail.repo).toBe("extras");
+  });
+
+  /**
+   * A recipe that is published but not installed is an error saying exactly
+   * that, and so is a namespace with nothing installed from it.
+   *
+   * describeInstalled(inputs, "quality/qa-pattern", describeRecipe, "recipe")
+   * // -> throws: this project has not installed the recipe
+   */
+  it("should say when the ref names something that is not installed", () => {
+    expect(() =>
+      describeInstalled(inputs(), "quality/qa-pattern", describeRecipe, "recipe")
+    ).toThrow(/has not installed the recipe 'quality\/qa-pattern'/);
+    expect(() =>
+      describeInstalled(inputs(), "quality", describeNamespace, "namespace")
+    ).toThrow(/installed no recipe from the namespace 'quality'/);
+  });
+
+  /**
+   * A ref that names nothing at all keeps the ordinary error, which explains the
+   * ref better than a note about installation could.
+   *
+   * describeInstalled(inputs, "nothing/here", describeRecipe, "recipe")
+   * // -> throws: no repository this project trusts publishes it
+   */
+  it("should keep the ordinary error for a ref that names nothing", () => {
+    expect(() =>
+      describeInstalled(inputs(), "nothing/here", describeRecipe, "recipe")
+    ).toThrow(/No repository this project trusts publishes/);
   });
 });

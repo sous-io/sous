@@ -6,14 +6,17 @@
  * and where its files land in this project. It reads only what sous already has
  * on disk: the repository's cached index, the project's lockfile, and the
  * recipe's own files when they are in the store or a linked working copy.
+ * `--latest` reads the repository's index from upstream instead, saving
+ * nothing, and `--installed` looks the ref up among installed recipes only.
  */
 
 import { Args } from "@oclif/core";
 import { BaseCommand } from "../../base-command.js";
 import { resolveRootScope } from "../../lib/settings.js";
 import { subscriptionServiceFor } from "../../lib/repos/subscription-service.js";
-import { catalogContextFor } from "../../lib/repos/catalog-inputs.js";
+import { loadCatalogContext } from "../../lib/repos/catalog-inputs.js";
 import {
+  describeInstalled,
   describeRecipe,
   type RecipeContentListing,
   type RecipeDependencyListing,
@@ -22,11 +25,14 @@ import {
 } from "../../lib/repos/catalog.js";
 import {
   INDENT,
+  describeIndexSource,
   describeVersionStatus,
   factIf,
+  printBrowsingNotes,
   printFacts,
 } from "../../lib/repos/catalog-display.js";
 import { renderTable, type TableColumn } from "../../utils/table.js";
+import { browsingFlags } from "../../utils/flags.js";
 import {
   blankLine,
   footer,
@@ -102,15 +108,17 @@ export default class RecipeShow extends BaseCommand {
     }),
   };
 
-  static flags = { ...BaseCommand.baseFlags };
+  static flags = { ...BaseCommand.baseFlags, ...browsingFlags() };
 
   async run(): Promise<void> {
-    const { args } = await this.parse(RecipeShow);
+    const { args, flags } = await this.parse(RecipeShow);
 
     showCommandVars({
       Project: this.projectLabel,
       Config: this.configContext.configPath,
       Recipe: args.ref,
+      Reading: describeIndexSource(flags.latest),
+      ...(flags.installed ? { Showing: "only what this project has installed" } : {}),
     });
 
     const service = subscriptionServiceFor({
@@ -119,14 +127,17 @@ export default class RecipeShow extends BaseCommand {
       shellEnv: this.shellEnv,
     });
 
-    const { inputs } = catalogContextFor({
+    const { inputs, notChecked } = await loadCatalogContext({
       service,
       sousDir: this.configContext.sousDir,
       settings: this.settings,
       scope: resolveRootScope(this.settings, this.configContext),
+      latest: flags.latest,
     });
 
-    const detail = describeRecipe(inputs, args.ref);
+    const detail = flags.installed
+      ? describeInstalled(inputs, args.ref, describeRecipe, "recipe")
+      : describeRecipe(inputs, args.ref);
 
     heading(detail.key);
     blankLine();
@@ -137,10 +148,21 @@ export default class RecipeShow extends BaseCommand {
       ...factIf("About", detail.description),
       { label: "Folder", lines: [detail.path] },
       { label: "Latest version", lines: [detail.latest ?? "none published"] },
-      { label: "Pinned version", lines: [detail.pinned ?? "this project pins none"] },
+      {
+        label: flags.installed ? "Installed version" : "Pinned version",
+        lines: [detail.pinned ?? "this project pins none"],
+      },
+      ...factIf(
+        "Linked",
+        detail.linkedPath === undefined
+          ? undefined
+          : `builds currently read this recipe from the checkout at ${detail.linkedPath}`
+      ),
       { label: "Subscribed", lines: [detail.subscribed ? "yes" : "no"] },
       ...factIf("Described below", detail.describing),
     ]);
+
+    printBrowsingNotes({ notChecked: notChecked.filter((name) => name === detail.repo) });
 
     this.printVersions(detail.versions);
     this.printDependencies(detail.dependencies, detail.manifestRead);

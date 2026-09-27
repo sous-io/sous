@@ -79,6 +79,11 @@ export type CatalogInputs = {
   /** The ref keys the project subscribes to: namespaces, and `namespace/recipe`. */
   subscriptions: string[];
   /**
+   * The repositories read from a linked working copy instead of the store, by
+   * short name, each with the checkout's path.
+   */
+  linked?: Record<string, string>;
+  /**
    * Reads one published recipe's manifest, when its files are on this machine.
    * Returning undefined means "not available", and the recipe is described from
    * its index alone.
@@ -119,6 +124,11 @@ export type RecipeListing = {
   latest?: string;
   /** The version this project's lockfile pins, when it pins one. */
   pinned?: string;
+  /**
+   * The linked checkout builds read this recipe from instead of the pinned
+   * version, when the project pins it and its repository is linked.
+   */
+  linkedPath?: string;
   /** True when the project subscribes to this recipe, or to the whole namespace holding it. */
   subscribed: boolean;
   /** The recipe's one-paragraph summary, when its index carries one. */
@@ -212,6 +222,11 @@ export type RecipeDetail = {
   latest?: string;
   /** The version this project's lockfile pins, when it pins one. */
   pinned?: string;
+  /**
+   * The linked checkout builds read this recipe from instead of the pinned
+   * version, when the project pins it and its repository is linked.
+   */
+  linkedPath?: string;
   /** True when the project subscribes to this recipe, or to the whole namespace holding it. */
   subscribed: boolean;
   /**
@@ -275,7 +290,7 @@ export function listRecipes(inputs: CatalogInputs): RecipeListing[] {
 
   for (const repo of inputs.repos) {
     for (const key of Object.keys(repo.index.recipes)) {
-      listings.push(recipeListing(key, repo, inputs.lock, subscriptions));
+      listings.push(recipeListing(key, repo, inputs, subscriptions));
     }
   }
 
@@ -305,7 +320,7 @@ export function describeNamespace(inputs: CatalogInputs, ref: string): Namespace
     ...(declared.description === undefined ? {} : { description: declared.description }),
     subscribed: coverageOf(found.namespace, found.repo.index, subscriptions),
     recipes: recipeKeysIn(found.repo.index, found.namespace).map((key) =>
-      recipeListing(key, found.repo, inputs.lock, subscriptions)
+      recipeListing(key, found.repo, inputs, subscriptions)
     ),
   };
 }
@@ -320,7 +335,7 @@ export function describeNamespace(inputs: CatalogInputs, ref: string): Namespace
 export function describeRecipe(inputs: CatalogInputs, ref: string): RecipeDetail {
   const found = resolveRecipeRef(inputs, ref);
   const subscriptions = new Set(inputs.subscriptions);
-  const listing = recipeListing(found.key, found.repo, inputs.lock, subscriptions);
+  const listing = recipeListing(found.key, found.repo, inputs, subscriptions);
   const entry = found.repo.index.recipes[found.key]!;
 
   const describing = listing.pinned ?? listing.latest;
@@ -353,6 +368,75 @@ export function describeRecipe(inputs: CatalogInputs, ref: string): RecipeDetail
     })),
     manifestRead: manifest !== undefined,
   };
+}
+
+/**
+ * The same inputs, narrowed to what this project has installed: each
+ * repository's index keeps only the recipes the lockfile pins from that
+ * repository, and only the namespaces holding one of them. Every listing and
+ * every ref lookup over the result therefore sees only installed recipes. A
+ * recipe's published version history is kept whole, so the installed version
+ * still sits among the others.
+ *
+ * narrowToInstalled(inputs)
+ * // -> the index of "r" holds "a/x" only, when the lockfile pins "a/x" from "r"
+ *
+ * @param inputs - The catalog's inputs.
+ */
+export function narrowToInstalled(inputs: CatalogInputs): CatalogInputs {
+  const repos = inputs.repos.map((repo) => {
+    const recipes = Object.fromEntries(
+      Object.entries(repo.index.recipes).filter(
+        ([key]) => inputs.lock.recipes[key]?.repo === repo.name
+      )
+    );
+    const held = new Set(Object.keys(recipes).map((key) => key.slice(0, key.indexOf("/"))));
+    const namespaces = Object.fromEntries(
+      Object.entries(repo.index.namespaces).filter(([namespace]) => held.has(namespace))
+    );
+    return { ...repo, index: { ...repo.index, recipes, namespaces } };
+  });
+  return { ...inputs, repos };
+}
+
+/**
+ * Looks a ref up among the installed recipes only, so an ambiguity between an
+ * installed recipe and one the project does not use settles itself. A ref that
+ * names something published but not installed is an error saying exactly that,
+ * rather than the "no repository publishes" error the narrowed lookup alone
+ * would raise.
+ *
+ * describeInstalled(inputs, "workflow/task-files", describeRecipe, "recipe")
+ * // -> the recipe, when the lockfile pins it; otherwise an error saying the
+ * //    project has not installed it
+ *
+ * @param inputs - The catalog's inputs, not yet narrowed.
+ * @param ref - The ref being looked up.
+ * @param describe - The lookup to run: `describeNamespace` or `describeRecipe`.
+ * @param what - What the ref names, for the error.
+ */
+export function describeInstalled<T>(
+  inputs: CatalogInputs,
+  ref: string,
+  describe: (inputs: CatalogInputs, ref: string) => T,
+  what: "namespace" | "recipe"
+): T {
+  try {
+    return describe(narrowToInstalled(inputs), ref);
+  } catch {
+    // The full lookup either explains the ref better (ambiguous, unknown) or
+    // proves it is published and simply not installed.
+    describe(inputs, ref);
+    throw what === "namespace"
+      ? new ConfigError(
+          `This project has installed no recipe from the namespace '${ref}', so there is ` +
+            `nothing to show with '--installed'.`
+        )
+      : new ConfigError(
+          `This project has not installed the recipe '${ref}', so there is nothing to ` +
+            `show with '--installed'.`
+        );
+  }
 }
 
 // --- Resolving a ref ----------------------------------------------------------------------------
@@ -488,15 +572,16 @@ function coverageOf(
  *
  * @param key - The recipe key.
  * @param repo - The repository publishing it.
- * @param lock - The project's lockfile.
+ * @param inputs - The lockfile and the linked repositories.
  * @param subscriptions - The ref keys the project subscribes to.
  */
 function recipeListing(
   key: string,
   repo: CatalogRepo,
-  lock: Lockfile,
+  inputs: Pick<CatalogInputs, "lock" | "linked">,
   subscriptions: Set<string>
 ): RecipeListing {
+  const lock = inputs.lock;
   const entry = repo.index.recipes[key]!;
   const namespace = key.slice(0, key.indexOf("/"));
   const name = key.slice(namespace.length + 1);
@@ -507,6 +592,7 @@ function recipeListing(
   // the recipe came from this repository.
   const locked = lock.recipes[key];
   const pinned = locked !== undefined && locked.repo === repo.name ? locked.version : undefined;
+  const linkedPath = pinned === undefined ? undefined : inputs.linked?.[repo.name];
 
   return {
     key,
@@ -515,6 +601,7 @@ function recipeListing(
     repo: repo.name,
     ...(latest === undefined ? {} : { latest }),
     ...(pinned === undefined ? {} : { pinned }),
+    ...(linkedPath === undefined ? {} : { linkedPath }),
     subscribed: subscriptions.has(key) || subscriptions.has(namespace),
     ...(entry.description === undefined ? {} : { description: entry.description }),
   };
