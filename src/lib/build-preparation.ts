@@ -7,7 +7,16 @@
  */
 
 import type { SubscriptionService } from "./repos/subscription-service.js";
-import { blankLine, footer, heading, paragraph, warning } from "../utils/formatting.js";
+import {
+  blankLine,
+  footer,
+  heading,
+  note,
+  paragraph,
+  section,
+  showVariables,
+  warning,
+} from "../utils/formatting.js";
 
 /**
  * Gets this project's recipes ready to compile: restores whatever the store is
@@ -83,4 +92,38 @@ export async function prepareRepositoriesForBuild(
   }
 
   if (needsRestore) footer();
+
+  reportNewerVersions(upstream.newer);
+}
+
+/**
+ * States which recipes this project uses have a newer version within the range
+ * declared for them, as a fact: one line per recipe, the newer version beside the
+ * pinned one. Nothing moved, and the closing sentence says so. Prints nothing
+ * when there is nothing newer.
+ *
+ * @param newer - What the upstream check found.
+ */
+export function reportNewerVersions(
+  newer: Array<{ key: string; from: string; to: string }>
+): void {
+  if (newer.length === 0) return;
+
+  section("Newer versions published");
+  showVariables(
+    newer.map((entry) => ({
+      label: entry.key,
+      value: entry.to,
+      detail: `this project pins ${entry.from}`,
+    }))
+  );
+  blankLine();
+  note(
+    newer.length === 1
+      ? "This version is within the range declared for the recipe. No pin was changed, " +
+          "so this build uses the pinned version."
+      : "Each version is within the range declared for its recipe. No pin was changed, " +
+          "so this build uses the pinned versions."
+  );
+  footer();
 }

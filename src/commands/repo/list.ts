@@ -3,9 +3,12 @@
  *
  * Shows every repository this project trusts, what it publishes, and whether it
  * is currently being read from a working copy instead of a published version.
- * It reads only what sous already has on disk: a repository whose index has
- * never been fetched says so in its own row rather than triggering a download,
- * so the command is safe to run offline.
+ * By default it reads only what sous already has on disk: a repository whose
+ * index has never been fetched says so in its own row rather than triggering a
+ * download, so the command is safe to run offline. `--latest` reads each index
+ * from upstream instead, saving nothing, and `--installed` narrows the listing
+ * to the repositories the lockfile pins a recipe from, naming each one under
+ * its row.
  */
 
 import { Flags } from "@oclif/core";
@@ -15,14 +18,24 @@ import { subscriptionServiceFor } from "../../lib/repos/subscription-service.js"
 import { readEffectiveLinks } from "../../lib/repos/links.js";
 import { BUILT_IN_ADDED_BY } from "../../lib/repos/defaults.js";
 import { requireProvider } from "../../lib/repos/providers/index.js";
+import { readTrustedIndexes } from "../../lib/repos/catalog-inputs.js";
+import {
+  LINKED_REPO_NOTE,
+  describeIndexSource,
+  printBrowsingNotes,
+} from "../../lib/repos/catalog-display.js";
 import { renderTable, type TableColumn } from "../../utils/table.js";
+import { browsingFlags } from "../../utils/flags.js";
 import {
   footer,
   indent,
   log,
+  note,
   paragraph,
   section,
   showCommandVars,
+  wrapColumns,
+  wrapText,
 } from "../../utils/formatting.js";
 
 /** How far every line of this command's output is indented. */
@@ -71,10 +84,12 @@ export default class RepoList extends BaseCommand {
   static examples = [
     "<%= config.bin %> repo list",
     "<%= config.bin %> repo list --verbose",
+    "<%= config.bin %> repo list --installed --latest",
   ];
 
   static flags = {
     ...BaseCommand.baseFlags,
+    ...browsingFlags(),
     verbose: Flags.boolean({
       description: "Show the namespaces each repository publishes, under its row",
       default: false,
@@ -87,9 +102,15 @@ export default class RepoList extends BaseCommand {
     showCommandVars({
       Project: this.projectLabel,
       Config: this.configContext.configPath,
+      Reading: describeIndexSource(flags.latest),
+      ...(flags.installed ? { Showing: "only what this project has installed" } : {}),
     });
 
-    section("Repositories this project trusts");
+    section(
+      flags.installed
+        ? "Repositories this project has installed recipes from"
+        : "Repositories this project trusts"
+    );
 
     const service = subscriptionServiceFor({
       configContext: this.configContext,
@@ -98,7 +119,20 @@ export default class RepoList extends BaseCommand {
     });
 
     const repos = service.currentRepos();
-    const names = Object.keys(repos).sort();
+    const lock = service.lockService.read();
+    const names = Object.keys(repos)
+      .sort()
+      .filter(
+        (name) =>
+          !flags.installed ||
+          Object.values(lock.recipes).some((locked) => locked.repo === name)
+      );
+
+    if (names.length === 0 && flags.installed && Object.keys(repos).length > 0) {
+      paragraph("This project has installed no recipe from the repositories it trusts.");
+      footer();
+      return;
+    }
 
     if (names.length === 0) {
       paragraph(
@@ -110,10 +144,12 @@ export default class RepoList extends BaseCommand {
     }
 
     const links = readEffectiveLinks(this.configContext.sousDir);
+    const indexes = await readTrustedIndexes(service, { latest: flags.latest });
+    const indexFor = new Map(indexes.repos.map((entry) => [entry.name, entry.index]));
 
     const rows = names.map((name) => {
       const entry = repos[name]!;
-      const index = service.cachedIndex(name);
+      const index = indexFor.get(name);
       const namespaces =
         index === undefined ? "not fetched" : Object.keys(index.namespaces).sort().join(", ");
       // A repository whose index has never been fetched says so in the cell
@@ -130,19 +166,40 @@ export default class RepoList extends BaseCommand {
         namespaces: namespaces.length > 0 ? namespaces : "none",
         recipes,
         linked: links[name] === undefined ? "no" : `yes: ${links[name]!.path}`,
+        installed: Object.entries(lock.recipes)
+          .filter(([, locked]) => locked.repo === name)
+          .map(([key, locked]) => `${key} ${locked.version}`)
+          .sort()
+          .join(", "),
       };
     });
 
     for (const line of renderTable(COLUMNS, rows, {
       indent: INDENT,
-      rowNote: flags.verbose
-        ? (row) => color.gray(indent(`Namespaces: ${row.namespaces}`, INDENT))
-        : undefined,
+      rowNote: (row) => {
+        const notes: string[] = [];
+        if (flags.verbose) notes.push(`Namespaces: ${row.namespaces}`);
+        if (flags.installed) notes.push(`Installed: ${row.installed}`);
+        // Each note wraps under itself, inside the two indents it is printed at.
+        const width = Math.max(20, wrapColumns() - INDENT * 2);
+        return notes.length === 0
+          ? undefined
+          : notes
+              .flatMap((text) => wrapText(text, width))
+              .map((line) => color.gray(indent(line, INDENT)))
+              .join("\n");
+      },
     })) {
       log(indent(line, INDENT));
     }
 
-    // Everything the table can say, the table says; nothing goes under it.
+    // The table says everything about each repository; what sits under it is
+    // only what the rows could not: a repository upstream could not answer for,
+    // and what a linked row means for the installed recipes it names.
+    printBrowsingNotes({ notChecked: indexes.notChecked.filter((name) => names.includes(name)) });
+    if (flags.installed && names.some((name) => links[name] !== undefined)) {
+      note(LINKED_REPO_NOTE);
+    }
     footer();
   }
 }

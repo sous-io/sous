@@ -533,7 +533,10 @@ spawn a host tool, or build its arguments.
 `providers/index-cache.ts` keeps one index per repository under the store root's `_indexes/`
 directory, filed by canonical identity (so the path is nested), and falls back to the copy it
 already holds when a check fails; its messages take a `label` so a person still reads their own
-short name. `resolver.ts` looks a bare ref up across every added repo at once and refuses an
+short name. `fetchUpstream` is its READ-ONLY path: it fetches and validates an index and writes
+neither the copy nor the sidecar, which is what a browsing command's `--latest` uses, because only
+a command that resolves versions may change what the cache holds. Every fetch takes an optional
+abort `signal`, carried through `ProviderOptions` to `fetchText`. `resolver.ts` looks a bare ref up across every added repo at once and refuses an
 ambiguous one instead of picking a winner. A manifest's dependency is different: a SIBLING
 resolves inside the declaring recipe's own repository, and a LOCATOR matches an added repository
 by identity whatever short name it has there. A dependency naming a repository the project has
@@ -599,6 +602,25 @@ fall back to `*` here, since that is exactly how a `depends`-held recipe used to
 constraint its parent declared. `applyResolution` in `lock-service.ts` merges holders rather
 than replacing them, for the same refcounting reason.
 
+**Newer versions are reported, not taken.** For every repository the lockfile pins from that
+does NOT prefer newer versions, `checkUpstream` still looks upstream on the same freshness window,
+but only to fill `newer` in its report: each locked recipe with a newer version inside
+`effectiveRangeForHolders`' range. That look runs under `withDeadline` (`freshness.ts`,
+`NEWER_VERSION_CHECK_TIMEOUT_MS`), is recorded whether it succeeds or not, and fails QUIETLY into
+`unchecked`, with the cached index answering instead; nothing a build does not need may fail or
+slow it. `reportNewerVersions` in `build-preparation.ts` prints the list, and moves nothing.
+
+**Browsing reads the cache unless asked.** The browsing commands (`recipe list/show`,
+`namespace list/show`, `repo list`, `repo search`, `subscription list`) take `browsingFlags()`
+from `utils/flags.ts`: `--latest` (oclif alias `--remote`) and `--installed`. Where their indexes
+come from is decided once, by `readTrustedIndexes` in `catalog-inputs.ts` (upstream through
+`SubscriptionService.upstreamIndex`, falling back to the cache and naming the repository in
+`notChecked`); `loadCatalogContext` wraps it for the catalog. `--installed` is
+`narrowToInstalled` in `catalog.ts`, which filters each index to what the lockfile pins, and
+`describeInstalled` looks a ref up among installed recipes only. A pinned recipe of a linked
+repository carries `linkedPath`, rendered by `pinnedCell` in `catalog-display.ts`, which also
+holds the shared notes (`printBrowsingNotes`).
+
 **Where a locked recipe's files are.** `locked-recipes.ts` answers that once, for everyone
 who needs it: a LINKED repository is read from its working copy (a link is a deliberate
 instruction to bypass versions and the lockfile), and everything else from its immutable
@@ -629,7 +651,8 @@ before it compiles (`describeLinkedRepos`), then runs `prepareRepositoriesForBui
 (`src/lib/build-preparation.ts`): seed the packaged core recipe, lock any subscription the
 lockfile does not pin yet, restore whatever the store is missing, and ask upstream for the
 repositories that prefer a newer in-range version; a failed check is warned about and the last
-good answer stands. That step and its reporting live in their own module because `sous init`
+good answer stands. It then lists the newer in-range versions the other repositories publish
+(`reportNewerVersions`), without moving a pin. That step and its reporting live in their own module because `sous init`
 runs the same step for a project's first build, and the two must say the same things. Watch mode watches every linked checkout (they are in
 `fullRebuildPaths`) and polls upstream on `store.watchPollSeconds`. Prune and clear never
 reach into a linked checkout or the store: `protectedRepoPaths` names the three roots and
@@ -1129,16 +1152,16 @@ This enables `sous prune` (remove stale outputs) and `sous clear` (delete all ou
 | `sous config validate` | Validate the merged config: schema, then full variable resolution |
 | `sous repo add <url>` | Add a repository, which is also how you trust it, then fetch only its index (`--name`, `--provider`, `--yes` / `-y` / `--trust`, `--dry-run`) |
 | `sous repo remove <name>` | Stop trusting a repository: print the entry, the subscriptions that resolve into it, the recipes they alone hold, the outputs the build will prune and any link, ask once, then remove all of it and build (`--yes` / `-y` / `--force`, `--dry-run`, `--no-build`) |
-| `sous repo list` | List the trusted repositories: name, location, provider, namespaces, recipe count, and whether it is linked |
-| `sous repo search <text>` | Search the cached indexes by namespace, recipe name and description (`--limit`); also the top-level `sous search <text>` |
+| `sous repo list` | List the trusted repositories: name, location, provider, namespaces, recipe count, and whether it is linked (`--verbose`, `--latest`, `--installed`) |
+| `sous repo search <text>` | Search the cached indexes by namespace, recipe name and description (`--limit`, `--latest`, `--installed`); also the top-level `sous search <text>` |
 | `sous repo gc` | Collect the machine-wide store back to its size cap, protecting everything the lockfile pins (`--max-bytes`, `--dry-run`) |
-| `sous namespace list` | List every namespace the trusted repositories publish, with its recipe count and how much of it the project subscribes to |
-| `sous namespace show <ref>` | Show one namespace and every recipe in it, with each recipe's latest version, pinned version and subscription state |
-| `sous recipe list` | List every recipe the trusted repositories publish: latest version, pinned version, subscribed, description |
-| `sous recipe show <ref>` | Show one recipe in full: every published version, its dependencies as declared and as the index resolved them, the variables it declares, and where its files land |
+| `sous namespace list` | List every namespace the trusted repositories publish, with its recipe count and how much of it the project subscribes to (`--latest`, `--installed`) |
+| `sous namespace show <ref>` | Show one namespace and every recipe in it, with each recipe's latest version, pinned version and subscription state (`--latest`, `--installed`) |
+| `sous recipe list` | List every recipe the trusted repositories publish: latest version, pinned version, subscribed, description (`--latest`, `--installed`) |
+| `sous recipe show <ref>` | Show one recipe in full: every published version, its dependencies as declared and as the index resolved them, the variables it declares, and where its files land (`--latest`, `--installed`) |
 | `sous lock show` | Print what the lockfile pins: recipe, version, repository, and who holds it |
 | `sous lock rebuild` | Recompute the lockfile from the declared subscriptions and the cached indexes, dropping what nothing holds (`--dry-run`) |
-| `sous subscription list` | List what the project subscribes to: range, the versions the lockfile pins, origin, and whether it is on |
+| `sous subscription list` | List what the project subscribes to: range, the versions the lockfile pins, the latest version each has published, origin, and whether it is on (`--latest`, `--installed`) |
 | `sous subscription add <ref>` | Subscribe to a namespace or a recipe, install the whole closure, answer the variables it publishes, then build the project (`--yes` / `-y` / `--trust`, `--accept-first`, `--prerelease`, `--always-pull`, `--answer <name>=<value>`, `--answers-file <path>`, `--dry-run`, which also prints every question the closure would ask, `--no-build`); also `sous subscribe` |
 | `sous subscription remove <ref>` | Remove a subscription and everything only it brought in, refcounted, then build the project so its files are pruned (`--dry-run`, `--no-build`); also `sous unsubscribe` |
 | `sous repo init [dir]` | Scaffold a new recipe repository (`--name`, `--namespace`, `--force`) |
@@ -1257,7 +1280,8 @@ project. Every command that carries those flags also carries `--non-interactive`
 that run inside a recipe repository carry neither, because they extend `Command` rather than
 `BaseCommand`. Also: `--rebuild`, `--dry-run`,
 `--strict`, `--watch` / `-w` (build/compile), `--no-prune` / `--no-compile` (build),
-`--no-build` / `--continuous` (launch), `--accept-first` (subscribe).
+`--no-build` / `--continuous` (launch), `--accept-first` (subscribe), `--latest` / `--remote`
+and `--installed` (the browsing commands).
 
 **One confirmation flag.** Every yes-or-no question a command would ask is answered by one
 shared boolean, built by `confirmationFlag()` in `src/utils/flags.ts`: `--yes` / `-y`, with

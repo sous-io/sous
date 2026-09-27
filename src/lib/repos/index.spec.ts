@@ -37,6 +37,7 @@ const EXPECTED_EXPORTS = [
   "MANAGED_LAYER_COMMENT",
   "MANIFEST_EXTENSIONS",
   "NAMESPACE_NAME_PATTERN",
+  "NEWER_VERSION_CHECK_TIMEOUT_MS",
   "OFFICIAL_REPO_IDENTITY",
   "PROJECT_HOLDER",
   "PROJECT_REQUESTER",
@@ -167,6 +168,7 @@ const EXPECTED_EXPORTS = [
   "variableDefinitionSchema",
   "variableNameSchema",
   "variableValidationSchema",
+  "withDeadline",
   "writeManagedLayer",
   "writeTrustNotice",
 ];

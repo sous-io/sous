@@ -97,7 +97,12 @@ export type GetIndexOptions = {
    * shown; the identity is used when nothing supplies one.
    */
   label?: string;
+  /** Cancels the request, for a caller that will not wait past a deadline. */
+  signal?: AbortSignal;
 };
+
+/** Which repository to read from upstream, without touching the cache. */
+export type FetchUpstreamOptions = Pick<GetIndexOptions, "url" | "provider" | "signal">;
 
 /** How the cache is built. */
 export type IndexCacheOptions = {
@@ -334,23 +339,7 @@ export class IndexCache {
    * @param options - The repository URL and its provider.
    */
   async refresh(identity: string, options: GetIndexOptions): Promise<IndexLookup> {
-    const provider = this.resolveProvider(options.url, options.provider);
-    const repo = provider.canonicalize(options.url);
-    const fetched = await provider.fetchIndex(repo, this.providerOptions);
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(fetched.text);
-    } catch (error) {
-      throw new ConfigError(
-        `The index that ${options.url} published is not valid JSON.\n` +
-          `  ${(error as Error).message}\n` +
-          `  A repository's index is written by 'sous repo release'; this one may be ` +
-          `damaged or may not be a sous repository at all.`
-      );
-    }
-
-    const index = parseIndexFile(parsed, `${options.url} (${fetched.ref})`);
+    const { index, fetched } = await this.fetchFromProvider(options);
     const timestamp = this.now().toISOString();
     const meta: IndexMeta = {
       fetchedAt: timestamp,
@@ -367,6 +356,56 @@ export class IndexCache {
     // Written first, overlaid second: the file is what the repository served,
     // and the overlay exists only in the copy handed back to the caller.
     return { index: this.applyOverlay(identity, index), source: "network", meta };
+  }
+
+  /**
+   * Reads a repository's index from upstream and returns it, WITHOUT writing
+   * anything: neither the cached copy nor its sidecar changes. This is what a
+   * browsing command reading upstream uses, because only a command that
+   * resolves versions should change what the cache holds. Any installed overlay
+   * is folded into the answer, as it is for a cached copy. A failure is raised;
+   * the caller decides whether a cached copy stands in for it.
+   *
+   * @param identity - The repository's canonical identity, for the overlay.
+   * @param options - The repository URL, its provider, and an optional cancel signal.
+   */
+  async fetchUpstream(identity: string, options: FetchUpstreamOptions): Promise<IndexFile> {
+    const { index } = await this.fetchFromProvider(options);
+    return this.applyOverlay(identity, index);
+  }
+
+  /**
+   * Fetches and validates a repository's index through its provider. Writes
+   * nothing; `refresh` and `fetchUpstream` decide what happens next.
+   *
+   * @param options - The repository URL, its provider, and an optional cancel signal.
+   */
+  private async fetchFromProvider(
+    options: FetchUpstreamOptions
+  ): Promise<{ index: IndexFile; fetched: { ref: string; etag?: string } }> {
+    const provider = this.resolveProvider(options.url, options.provider);
+    const repo = provider.canonicalize(options.url);
+    const fetched = await provider.fetchIndex(
+      repo,
+      options.signal === undefined
+        ? this.providerOptions
+        : { ...this.providerOptions, signal: options.signal }
+    );
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(fetched.text);
+    } catch (error) {
+      throw new ConfigError(
+        `The index that ${options.url} published is not valid JSON.\n` +
+          `  ${(error as Error).message}\n` +
+          `  A repository's index is written by 'sous repo release'; this one may be ` +
+          `damaged or may not be a sous repository at all.`
+      );
+    }
+
+    const index = parseIndexFile(parsed, `${options.url} (${fetched.ref})`);
+    return { index, fetched };
   }
 
   /**

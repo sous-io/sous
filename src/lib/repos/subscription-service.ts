@@ -107,10 +107,12 @@ import { RecipeStore } from "./store/recipe-store.js";
 import type { RecipeStoreLike, StoreKey } from "./store/contract.js";
 import { resolveStoreSettings } from "./store/settings.js";
 import {
+  NEWER_VERSION_CHECK_TIMEOUT_MS,
   effectiveRangeForHolders,
   findNewerInRange,
   recordUpstreamCheck,
   shouldCheckUpstream,
+  withDeadline,
 } from "./freshness.js";
 import { REPO_NAME_PATTERN } from "./formats/patterns.js";
 import {
@@ -388,6 +390,17 @@ export type UpstreamCheckReport = {
   updated: Array<{ key: string; from: string; to: string }>;
   /** Repositories whose check failed; the last good answer still stands. */
   failed: Array<{ repo: string; reason: string }>;
+  /**
+   * Locked recipes with a newer version inside the range their holders
+   * declared, in a repository that does not prefer newer versions. Nothing
+   * moved; this is only what a build tells the person running it.
+   */
+  newer: Array<{ key: string; repo: string; from: string; to: string }>;
+  /**
+   * Repositories sous looked at only to find newer versions, whose look failed
+   * or ran out of time. Kept quiet: the cached index answered instead.
+   */
+  unchecked: Array<{ repo: string; reason: string }>;
 };
 
 // --- The service --------------------------------------------------------------------------------
@@ -1828,16 +1841,28 @@ export class SubscriptionService {
   }
 
   /**
-   * Looks upstream for the repositories that prefer a newer in-range version,
-   * and moves the lockfile to it when there is one. A failed check never breaks
-   * a build: it is warned about and the last good answer stands.
+   * Looks upstream for every repository the lockfile pins something from, on
+   * the freshness window. A repository that prefers a newer in-range version
+   * moves the lockfile to it; every other repository is only read, and a newer
+   * in-range version it publishes is reported in `newer` without moving any
+   * pin. A failed check never breaks a build: for a repository that prefers
+   * newer versions it is warned about, and for the others it is quiet, capped
+   * at a short deadline, and the cached index answers instead.
    *
-   * @param options - Whether to check regardless of the freshness window, and which window to use.
+   * @param options - Whether to check regardless of the freshness window, which
+   *   window to use, and how long to wait for a repository checked only for the
+   *   newer-version report.
    */
   async checkUpstream(
-    options: { force?: boolean; freshnessSeconds?: number } = {}
+    options: { force?: boolean; freshnessSeconds?: number; newerCheckTimeoutMs?: number } = {}
   ): Promise<UpstreamCheckReport> {
-    const report: UpstreamCheckReport = { checked: [], updated: [], failed: [] };
+    const report: UpstreamCheckReport = {
+      checked: [],
+      updated: [],
+      failed: [],
+      newer: [],
+      unchecked: [],
+    };
     const lock = this.lock.read();
     if (Object.keys(lock.recipes).length === 0) return report;
 
@@ -1850,19 +1875,32 @@ export class SubscriptionService {
     const recipes: Record<string, LockedRecipe> = { ...lock.recipes };
 
     for (const repoName of Object.keys(lock.repos).sort()) {
-      if (!this.prefersNewer(repoName, repos[repoName], lock, subscriptions)) continue;
-
       const identity = this.identityForRepo(repoName, lock);
       if (identity === undefined) continue;
 
+      const prefersNewer = this.prefersNewer(repoName, repos[repoName], lock, subscriptions);
       const meta = this.indexCache.readMeta(identity);
       const due = shouldCheckUpstream({
         ...(meta?.lastCheckedAt === undefined ? {} : { lastCheckedAt: meta.lastCheckedAt }),
         freshnessSeconds,
-        alwaysPull: true,
+        alwaysPull: prefersNewer,
         ...(options.force === undefined ? {} : { force: options.force }),
         now: this.now(),
       });
+
+      if (!prefersNewer) {
+        await this.reportNewerVersions({
+          repoName,
+          identity,
+          due,
+          lock,
+          subscriptions,
+          report,
+          timeoutMs: options.newerCheckTimeoutMs ?? NEWER_VERSION_CHECK_TIMEOUT_MS,
+        });
+        continue;
+      }
+
       if (!due) continue;
 
       report.checked.push(repoName);
@@ -1936,6 +1974,97 @@ export class SubscriptionService {
 
     if (changed) this.lock.write({ ...lock, recipes });
     return report;
+  }
+
+  /**
+   * The newer-version report for one repository that does not prefer newer
+   * versions: reads its index (from upstream when the freshness window has
+   * lapsed, within a short deadline, and from the cache otherwise) and records
+   * every locked recipe from it that has a newer version in range. Nothing
+   * moves, and nothing here is ever an error: a check that fails or runs out of
+   * time is noted in `unchecked` and the cached index answers instead.
+   *
+   * @param input - The repository, whether a check is due, and the report to fill.
+   */
+  private async reportNewerVersions(input: {
+    repoName: string;
+    identity: string;
+    due: boolean;
+    lock: Lockfile;
+    subscriptions: Record<string, SubscriptionEntry>;
+    report: UpstreamCheckReport;
+    timeoutMs: number;
+  }): Promise<void> {
+    const { repoName, identity, lock, report } = input;
+    let index: IndexFile | undefined;
+
+    if (input.due) {
+      report.checked.push(repoName);
+      const repo = this.currentRepos()[repoName];
+      const url = repo?.url ?? lock.repos[repoName]!.url;
+      try {
+        index = (
+          await withDeadline(
+            (signal) =>
+              this.indexCache.refresh(identity, {
+                url,
+                label: repoName,
+                ...(repo?.provider === undefined ? {} : { provider: repo.provider }),
+                signal,
+              }),
+            input.timeoutMs
+          )
+        ).index;
+      } catch (error) {
+        report.unchecked.push({ repo: repoName, reason: describeError(error) });
+      }
+      // Recorded whatever happened, so an unreachable host costs one short wait
+      // per freshness window rather than one per build.
+      recordUpstreamCheck(this.indexCache, identity, this.now());
+    }
+
+    index ??= this.indexCache.readCached(identity);
+    if (index === undefined) return;
+
+    for (const [key, entry] of Object.entries(lock.recipes).sort(([a], [b]) =>
+      a < b ? -1 : a > b ? 1 : 0
+    )) {
+      if (entry.repo !== repoName) continue;
+      const range = this.effectiveRangeFor(key, entry, input.subscriptions);
+      if (range === undefined) continue;
+      const subscription =
+        input.subscriptions[key] ?? input.subscriptions[key.split("/")[0]!];
+
+      const newer = findNewerInRange({
+        index,
+        key,
+        lockedVersion: entry.version,
+        ...(range === "*" ? {} : { range }),
+        ...(subscription?.prerelease === undefined
+          ? {}
+          : { prerelease: subscription.prerelease }),
+      });
+      if (newer !== undefined) report.newer.push({ ...newer, repo: repoName });
+    }
+  }
+
+  /**
+   * Reads one trusted repository's index from upstream, without writing it to
+   * the cache: what a browsing command asked to read the latest uses. A failure
+   * is raised, so the caller can fall back to the cached copy and say so.
+   *
+   * @param name - The repository's short name.
+   */
+  async upstreamIndex(name: string): Promise<IndexFile> {
+    const repo = this.currentRepos()[name];
+    if (repo === undefined) {
+      throw new ConfigError(`This project trusts no repository called '${name}'.`);
+    }
+    const identity = this.identityOf(repo.url, repo.provider);
+    return this.indexCache.fetchUpstream(identity, {
+      url: repo.url,
+      ...(repo.provider === undefined ? {} : { provider: repo.provider }),
+    });
   }
 
   /**
