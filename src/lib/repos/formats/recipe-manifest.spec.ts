@@ -534,3 +534,17 @@ describe("recipeManifestSchema", () => {
     expect(recipeManifestSchema.safeParse({}).success).toBe(false);
   });
 });
+
+describe("the recipe submissions block", () => {
+  /**
+   * A recipe manifest may carry its own submissions block, which covers that
+   * recipe alone.
+   */
+  it("should accept a submissions block on a recipe", () => {
+    const manifest = parseRecipeManifest(
+      { ...validManifest(), submissions: { allowed: false, instead: "Edit it upstream." } },
+      SOURCE
+    );
+    expect(manifest.submissions).toEqual({ allowed: false, instead: "Edit it upstream." });
+  });
+});

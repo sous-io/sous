@@ -21,8 +21,12 @@ Nothing there clones a whole repository. A provider that can also carry a contri
 the **write path**: report whether its command line tool is installed and signed in, say whether
 you may push to the repository itself, fork it onto your account, and open the proposal.
 
-Each provider declares which of the two features, `fetch` and `submit`, it genuinely answers, and
-sous consults that declaration rather than a provider's name. Asking for something outside a
+A provider may also answer the **proposals** path, which is what lets a submission follow a proposal
+after it is opened: find the proposal a branch was pushed for, report where it stands, and replace its
+title or body.
+
+Each provider declares which of the three features, `fetch`, `submit` and `proposals`, it genuinely
+answers, and sous consults that declaration rather than a provider's name. Asking for something outside a
 provider's features is refused with a sentence naming it and what it cannot do, never a crash.
 
 ## How a URL is matched
@@ -184,11 +188,15 @@ finds the index but cannot clone has only the second half missing.
 your repository, then hands the host-specific mechanics to the provider that owns its `origin`
 remote. Providers differ, and sous says so rather than pretending otherwise:
 
-| Provider | Tool | Push permission | Forking | Proposal |
-|---|---|---|---|---|
-| `github` | `gh` | read from GitHub, so a contributor without it is forked automatically | `gh repo fork`, with a `fork` remote added for you | pull request |
-| `gitlab` | `glab` | sous cannot tell, so it pushes to `origin` and says so | not done for you | merge request |
-| `local` | none | not applicable | not applicable | not applicable |
+| Provider | Tool | Push permission | Forking | Proposal | Following it up |
+|---|---|---|---|---|---|
+| `github` | `gh` | read from GitHub, so a contributor without it is forked automatically | `gh repo fork`, with a `fork` remote added for you | pull request | `gh pr list`, `gh pr view` and `gh pr edit`, matching a fork's pull request by its owner |
+| `gitlab` | `glab` | sous cannot tell, so it pushes to `origin` and says so | not done for you | merge request | not done: every run opens a merge request, and `--status` is refused |
+| `local` | none | not applicable | not applicable | not applicable | not applicable |
+
+**GitLab cannot follow a proposal up yet.** It does not declare `proposals`, so a submission cannot
+look for a merge request that is already open; it says so, pushes, and opens one. When the branch
+already has one, the push updates it and GitLab may refuse the second.
 
 **GitLab reports "cannot tell" rather than guessing.** Sous has no cheap, reliable way to ask
 whether you may push, and a wrong guess would send you down a fork path this provider cannot
@@ -297,14 +305,16 @@ subclass overrides it. Each member is documented where it lives, in
 The subclass supplies the rest:
 
 - `id`, the identifier a repository entry and a locator scheme use;
-- `features`, the ones it genuinely answers (`fetch`, and `submit` only if all four write calls
-  are real);
+- `features`, the ones it genuinely answers (`fetch`; `submit` only if all four write calls are
+  real; `proposals` only if `findProposal`, `proposalStatus` and `updateProposal` are);
 - `matches(url)` and `canonicalize(url)`, the URL half;
 - `fetchIndex(repo, options)` and `fetchRecipeTree(repo, recipePath, tag, destDir, options)`, the
   read half;
 - `cli` and `proposalNoun` when it submits, so messages can name the tool and call a proposal
   what the host calls it;
-- overrides of the four write-path calls when it submits.
+- overrides of the four write-path calls when it submits, and of the three proposals calls when
+  it can follow a proposal up. Each answers with plain data (a proposal's id, address, state,
+  title, review and check counts), never with a host's own vocabulary.
 
 Every call takes an options object carrying the testing seams (`cwd`, `env`, `fetchImpl`, `run`),
 which is why no provider reaches for `spawn` or the global `fetch` directly and no test in this

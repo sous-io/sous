@@ -3,12 +3,17 @@ import { makeTmpDir, type TmpDir } from "../../../test/utils/tmp.js";
 import { commitAll, git, initRepo, writeFile } from "../../../test/utils/git-repo.js";
 import type { CommandRunner } from "../providers/git.js";
 import {
+  branchExists,
+  commitEverything,
   createBranch,
   currentBranch,
   hasCommitIdentity,
   isCommittedAndUnchanged,
+  pathsChangedSince,
+  pushReportIsUpToDate,
   remoteUrl,
   submitBranchName,
+  switchBranch,
   uncommittedChanges,
 } from "./git-state.js";
 
@@ -136,5 +141,73 @@ describe("submitBranchName()", () => {
     expect(submitBranchName(new Date(2026, 8, 10, 14, 3))).toBe(
       "sous/submit-20260910-1403"
     );
+  });
+});
+
+describe("pushReportIsUpToDate()", () => {
+  /**
+   * A push report whose every ref line is flagged `=` sent nothing; any other
+   * flag, or a report with no ref lines, means something may have been sent.
+   *
+   * pushReportIsUpToDate("To o\n=\trefs/heads/a:refs/heads/a\t[up to date]\nDone");
+   * // -> true
+   */
+  it("should read an up-to-date push from git's porcelain report", () => {
+    expect(
+      pushReportIsUpToDate("To origin\n=\trefs/heads/a:refs/heads/a\t[up to date]\nDone")
+    ).toBe(true);
+    expect(
+      pushReportIsUpToDate("To origin\n \trefs/heads/a:refs/heads/a\t1a2b..3c4d\nDone")
+    ).toBe(false);
+    expect(pushReportIsUpToDate("To origin\n*\trefs/heads/a:refs/heads/a\t[new branch]\nDone")).toBe(
+      false
+    );
+    expect(pushReportIsUpToDate("")).toBe(false);
+  });
+});
+
+describe("branchExists() and switchBranch()", () => {
+  /**
+   * A local branch is found by name, and checking it out makes it current.
+   */
+  it("should find a local branch and check it out", async () => {
+    git(repo, "branch", "other");
+
+    expect(await branchExists(repo, "other")).toBe(true);
+    expect(await branchExists(repo, "missing")).toBe(false);
+
+    await switchBranch(repo, "other");
+    expect(await currentBranch(repo)).toBe("other");
+  });
+});
+
+describe("pathsChangedSince()", () => {
+  /**
+   * Every path the commits since a given one touched is listed.
+   */
+  it("should list the paths changed since a commit", async () => {
+    const first = git(repo, "rev-parse", "HEAD");
+    writeFile(repo, "a/one.md", "one\n");
+    writeFile(repo, "two.md", "two\n");
+    commitAll(repo, "add two files");
+
+    expect((await pathsChangedSince(repo, first)).sort()).toEqual(["a/one.md", "two.md"]);
+    expect(await pathsChangedSince(repo, "HEAD")).toEqual([]);
+  });
+});
+
+describe("commitEverything()", () => {
+  /**
+   * Edits, deletions and untracked files are all committed, with the message
+   * given, and the working tree is clean afterwards.
+   */
+  it("should stage and commit everything with the given message", async () => {
+    writeFile(repo, "new.md", "new\n");
+    writeFile(repo, "sous.index.json", '{"changed":true}\n');
+
+    await commitEverything(repo, "Subject line\n\nThe body.");
+
+    expect(await uncommittedChanges(repo)).toEqual([]);
+    expect(git(repo, "log", "-1", "--format=%B")).toBe("Subject line\n\nThe body.");
   });
 });

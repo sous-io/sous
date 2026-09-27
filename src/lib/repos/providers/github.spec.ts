@@ -460,3 +460,187 @@ describe("GitlabProvider write path", () => {
     expect(calls[0]?.command).toBe("glab");
   });
 });
+
+describe("GithubProvider proposals", () => {
+  const provider = new GithubProvider();
+  const repo = provider.canonicalize("https://github.com/owner/recipes");
+
+  /** A `gh pr list` answer holding the given pull requests. */
+  const listed = (entries: unknown[]): CommandResult => ({
+    code: 0,
+    stdout: JSON.stringify(entries),
+    stderr: "",
+  });
+
+  /**
+   * findProposal should list the branch's pull requests in every state and
+   * keep only the ones from the repository itself when the branch is not on a
+   * fork, preferring the open one.
+   *
+   * findProposal(repo, { branch: "b", fromFork: false });
+   * // -> { id: "3", state: "open", ... }
+   */
+  it("should find the open pull request a branch was pushed for", async () => {
+    const { run, calls } = scriptedRunner({
+      "pr list": listed([
+        { number: 2, state: "CLOSED", title: "old", isDraft: false, isCrossRepository: false },
+        {
+          number: 3,
+          url: "https://github.com/owner/recipes/pull/3",
+          state: "OPEN",
+          title: "Add a skill",
+          isDraft: true,
+          baseRefName: "main",
+          isCrossRepository: false,
+        },
+        {
+          number: 4,
+          state: "OPEN",
+          title: "a fork's",
+          isCrossRepository: true,
+          headRepositoryOwner: { login: "someone" },
+        },
+      ]),
+    });
+
+    const found = await provider.findProposal(repo, { branch: "b", fromFork: false }, { run });
+
+    expect(found).toEqual({
+      id: "3",
+      url: "https://github.com/owner/recipes/pull/3",
+      state: "open",
+      title: "Add a skill",
+      draft: true,
+      base: "main",
+    });
+    const args = callWith(calls, "pr list")!.args;
+    expect(args).toEqual(expect.arrayContaining(["--head", "b", "--state", "all"]));
+  });
+
+  /**
+   * A branch on a fork is matched by the fork's owner as well as its name, and
+   * the owner is asked of `gh` when the caller does not know it. With no open
+   * pull request, the newest one wins.
+   */
+  it("should match a fork's pull request by its owner, newest first", async () => {
+    const { run } = scriptedRunner({
+      "api user": { code: 0, stdout: "contributor\n", stderr: "" },
+      "pr list": listed([
+        {
+          number: 5,
+          state: "MERGED",
+          title: "first",
+          isCrossRepository: true,
+          headRepositoryOwner: { login: "contributor" },
+        },
+        {
+          number: 9,
+          state: "CLOSED",
+          title: "second",
+          isCrossRepository: true,
+          headRepositoryOwner: { login: "contributor" },
+        },
+        {
+          number: 11,
+          state: "OPEN",
+          title: "not mine",
+          isCrossRepository: true,
+          headRepositoryOwner: { login: "someone" },
+        },
+      ]),
+    });
+
+    const found = await provider.findProposal(repo, { branch: "b", fromFork: true }, { run });
+
+    expect(found?.id).toBe("9");
+    expect(found?.state).toBe("closed");
+  });
+
+  /**
+   * A branch with no pull request has none to report.
+   */
+  it("should return undefined when the branch has no pull request", async () => {
+    const { run } = scriptedRunner({ "pr list": listed([]) });
+
+    expect(await provider.findProposal(repo, { branch: "b", fromFork: false }, { run })).toBe(
+      undefined
+    );
+  });
+
+  /**
+   * A failed `gh pr list` is a ConfigError naming the command and what it said.
+   */
+  it("should raise a ConfigError when gh cannot list pull requests", async () => {
+    const { run } = scriptedRunner({ "pr list": { code: 1, stdout: "", stderr: "HTTP 404" } });
+
+    await expect(
+      provider.findProposal(repo, { branch: "b", fromFork: false }, { run })
+    ).rejects.toThrow(/'gh pr list' did not succeed[\s\S]*HTTP 404/);
+  });
+
+  /**
+   * proposalStatus should turn gh's review decision and check rollup into
+   * plain words and counts.
+   */
+  it("should report review and checks as plain data", async () => {
+    const { run } = scriptedRunner({
+      "pr view": {
+        code: 0,
+        stdout: JSON.stringify({
+          number: 3,
+          state: "OPEN",
+          title: "Add a skill",
+          isDraft: false,
+          reviewDecision: "CHANGES_REQUESTED",
+          mergeable: "CONFLICTING",
+          statusCheckRollup: [
+            { __typename: "CheckRun", status: "COMPLETED", conclusion: "SUCCESS" },
+            { __typename: "CheckRun", status: "COMPLETED", conclusion: "FAILURE" },
+            { __typename: "CheckRun", status: "IN_PROGRESS", conclusion: null },
+            { __typename: "StatusContext", state: "SUCCESS" },
+          ],
+        }),
+        stderr: "",
+      },
+    });
+
+    const status = await provider.proposalStatus(repo, "3", { run });
+
+    expect(status.review).toBe("changes requested");
+    expect(status.checks).toEqual({ passed: 2, failed: 1, pending: 1 });
+    expect(status.mergeable).toBe(false);
+    expect(status.proposal.state).toBe("open");
+  });
+
+  /**
+   * updateProposal should pass only the fields it was given to `gh pr edit`.
+   */
+  it("should edit only the fields it was given", async () => {
+    const { run, calls } = scriptedRunner({
+      "pr edit": { code: 0, stdout: "https://github.com/owner/recipes/pull/3\n", stderr: "" },
+    });
+
+    const result = await provider.updateProposal(repo, "3", { title: "New title" }, { run });
+
+    expect(result.url).toBe("https://github.com/owner/recipes/pull/3");
+    const args = callWith(calls, "pr edit")!.args;
+    expect(args).toEqual(["pr", "edit", "3", "--repo", "owner/recipes", "--title", "New title"]);
+  });
+});
+
+describe("providers without the proposals feature", () => {
+  /**
+   * A provider that does not declare `proposals` inherits refusals that name
+   * the provider and the feature, rather than a TypeError.
+   */
+  it("should refuse every proposals call with a ConfigError", async () => {
+    const provider = new GitlabProvider();
+    const repo = provider.canonicalize("https://gitlab.com/owner/recipes");
+
+    await expect(provider.findProposal(repo, { branch: "b", fromFork: false })).rejects.toThrow(
+      /'gitlab' provider does not support the 'proposals' feature/
+    );
+    await expect(provider.proposalStatus(repo, "1")).rejects.toThrow(/'proposals'/);
+    await expect(provider.updateProposal(repo, "1", {})).rejects.toThrow(/'proposals'/);
+  });
+});

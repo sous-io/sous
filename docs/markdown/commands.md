@@ -17,7 +17,8 @@ Every command that works on a project takes these four. `SOUS_CONFIG`, `SOUS_DIR
 a flag beats its variable, and both beat walk-up discovery. See [Discovery and overrides](config-discovery.md).
 
 ?> `repo init`, `repo release` and `repo submit` take none of these. They run inside a recipe repository, which
-has no `.sous/` directory to discover. All three still take `--non-interactive`.
+has no `.sous/` directory to discover. All three still take `--non-interactive`. `repo submit` may also be run
+from a project, which it finds by walking up from the working directory.
 
 ## Flags that answer questions
 
@@ -254,17 +255,32 @@ and `git config user.email`), because it commits and cuts annotated tags. Takes 
 - `--no-bump`: raise nothing; a changed recipe that was never raised is then an error.
 - `--include-unchanged`: release every recipe in scope, changed or not.
 - `--tag`, `--push`: tag even on a non-default branch, and push the commit and this run's tags.
-- `--check`: only validate. It fails on a problem the release would refuse, and reports, without failing, how
-  merging would rewrite the committed index.
+- `--check`: only validate. It fails on a problem the release would refuse, and on a change to a recipe that
+  takes no proposals (see [`submissions`](repositories-file-formats.md#the-submissions-block)), and reports,
+  without failing, how merging would rewrite the committed index.
 - `--ci`: the merge preset. Never bump, never ask, and fail on anything unbumped. It still needs `--yes` to
   accept the plan it prints, so a merge job runs `sous repo release --ci --yes --push`.
 
 Example: `sous repo release --recipe workflow/task-files --bump minor --push`
 
-### `sous repo submit`
-Proposes this repository's committed changes to its maintainers. `--title <text>` defaults to the last commit's
-subject and `--body <text>` to a summary sous writes; `--draft` opens the proposal as a draft, and `--dry-run`
-prints the plan without sending anything. Example: `sous repo submit --title "Add a linting recipe" --draft`
+### `sous repo submit [REPO]`
+Proposes a recipe repository's changes to its maintainers, and follows the proposal through: it opens one,
+updates it when there is more to send, reports where it stands, and starts the next one once it was merged. Run
+inside a recipe repository it works there; run inside a project, `REPO` names a linked repository and the
+submission runs in its checkout (with no `REPO`, the only linked repository is used, and several are a
+question). Takes `-y, --yes` and `--dry-run`.
+
+- `--title <text>`, `--body <text>`: the proposal's title and description. Both are required for a new
+  proposal, and asked for at a terminal when missing; on an open proposal they are optional and replace its own.
+  The body is followed by a changelog sous generates.
+- `--branch <name>`: work with this branch instead of the one checked out. A branch that does not exist is
+  created from the current commit.
+- `--status`: only report where the branch's proposal stands; nothing is checked, written or sent.
+- `--commit`: commit uncommitted changes for you, after listing them and asking once, with the title, the
+  description and the changelog as the message.
+- `--draft`: open a new proposal as a draft.
+
+Example: `sous repo submit --title "Add a linting recipe" --body "Adds lint rules for shell scripts." --draft`
 
 ## subscription
 

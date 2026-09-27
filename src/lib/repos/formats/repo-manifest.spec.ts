@@ -177,3 +177,35 @@ describe("repoManifestSchema", () => {
     expect(repoManifestSchema.safeParse({}).success).toBe(false);
   });
 });
+
+describe("the submissions block", () => {
+  /**
+   * A repo manifest may say its recipes take no proposals, and where to go
+   * instead; `allowed` defaults to true when the block leaves it out.
+   *
+   * parseRepoManifest({ ..., submissions: { allowed: false, instead: "..." } }, SOURCE);
+   * // -> manifest.submissions.allowed === false
+   */
+  it("should accept a submissions block and default allowed to true", () => {
+    const declined = parseRepoManifest(
+      { ...validManifest(), submissions: { allowed: false, instead: "Propose it upstream." } },
+      SOURCE
+    );
+    expect(declined.submissions).toEqual({ allowed: false, instead: "Propose it upstream." });
+
+    const bare = parseRepoManifest({ ...validManifest(), submissions: {} }, SOURCE);
+    expect(bare.submissions).toEqual({ allowed: true });
+  });
+
+  /**
+   * An unknown key or an empty `instead` is rejected, naming the field.
+   */
+  it("should reject an unknown key and an empty instead", () => {
+    expect(expectRejectMessage({ ...validManifest(), submissions: { allow: false } })).toMatch(
+      /submissions/
+    );
+    expect(
+      expectRejectMessage({ ...validManifest(), submissions: { allowed: false, instead: "" } })
+    ).toMatch(/submissions\.instead/);
+  });
+});

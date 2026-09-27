@@ -295,6 +295,9 @@ const MANAGED_LAYER_EXPORTS = [
  */
 const PROVIDER_WRITE_EXPORTS = ["ProviderBase", "firstUrlIn", "supportsSubmit"];
 
+/** The submission lifecycle: the `submissions` block and the `proposals` feature. */
+const SUBMIT_LIFECYCLE_EXPORTS = ["submissionsSchema", "supportsProposals"];
+
 /**
  * The names the link branch work added: the upstream check behind the
  * divergence report, and one git operation per step the branch flags and
@@ -334,6 +337,7 @@ describe("the repos barrel", () => {
       ...PHASE_7_EXPORTS,
       ...MANAGED_LAYER_EXPORTS,
       ...PROVIDER_WRITE_EXPORTS,
+      ...SUBMIT_LIFECYCLE_EXPORTS,
       ...LINK_BRANCH_EXPORTS,
     ].sort();
     expect(Object.keys(repos).sort()).toEqual(expected);

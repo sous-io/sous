@@ -11,7 +11,7 @@
       "version": "1.0.0"
     },
     "core/sous-skills": {
-      "hash": "sha256-a9d16d0fde719d7e05dace11810d16d2a0cee4e9afa26c1de5ea736a45e5f7ca",
+      "hash": "sha256-cb6d6a6e5d1c0cf9ffcaca64794450afd820f6efb1bb4cb12a2e26bdaf50977e",
       "kind": "subscribes",
       "repo": "sous-recipes",
       "requestedBy": [

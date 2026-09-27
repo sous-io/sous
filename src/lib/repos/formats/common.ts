@@ -313,6 +313,26 @@ export function extensibleObject<Shape extends z.ZodRawShape>(shape: Shape) {
   return z.preprocess(stripExtensionKeys, z.strictObject(shape));
 }
 
+/**
+ * The `submissions` block a repo manifest and a recipe manifest may both carry:
+ * whether the recipes it covers take proposed changes, and where to send a
+ * change instead when they do not. On a repo manifest it covers every recipe;
+ * on a recipe manifest it covers that recipe, and wins over the repository's.
+ *
+ *     submissions:
+ *       allowed: false
+ *       instead: Propose changes in sous-io/sous, under recipes/core/sous-skills/.
+ */
+export const submissionsSchema = extensibleObject({
+  /** Whether a proposed change to the covered recipes is accepted. Defaults to true. */
+  allowed: z.boolean().default(true),
+  /** Where a change should go instead, printed when one is proposed anyway. */
+  instead: z.string().min(1, "must not be empty").optional(),
+});
+
+/** A validated `submissions` block. */
+export type Submissions = z.infer<typeof submissionsSchema>;
+
 // --- Error reporting ----------------------------------------------------------------------------
 
 /** Renders a zod issue path (`["variables",0,"name"]`) as `variables[0].name`. */
