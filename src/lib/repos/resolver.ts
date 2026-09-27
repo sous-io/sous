@@ -95,6 +95,14 @@ export type ResolveContext = {
   loadManifest: RecipeManifestLoader;
   /** Whether prereleases are allowed when a request does not say. Defaults to false. */
   prerelease?: boolean;
+  /**
+   * Versions to hold where they are, keyed by recipe key. A recipe named here
+   * resolves to that version whenever it still satisfies every range asked of
+   * it, rather than to the newest one that does; a range that no longer allows
+   * it wins, and the newest satisfying version is chosen as usual. This is how
+   * an update moves only the pins it was asked to move.
+   */
+  keep?: Record<string, string>;
 };
 
 /** One recipe version the resolver settled on. */
@@ -608,7 +616,7 @@ function resolveRecipeRef(
     (previous?.prerelease ?? false) ||
     (item.prerelease ?? context.prerelease ?? false);
 
-  const version = pickVersion(key, entry, ranges, prerelease);
+  const version = pickVersion(key, entry, ranges, prerelease, context.keep?.[key]);
   const versionEntry = entry.versions[version]!;
 
   const requestedBy = [...(previous?.requestedBy ?? [])];
@@ -645,12 +653,14 @@ function resolveRecipeRef(
  * @param entry - The recipe's index entry.
  * @param ranges - Every range that has to hold, with who asked for it.
  * @param prerelease - Whether prereleases may match.
+ * @param keep - A version to hold, chosen whenever it is among the candidates.
  */
 function pickVersion(
   key: string,
   entry: IndexFile["recipes"][string],
   ranges: Array<{ range: string; requestedBy: string }>,
-  prerelease: boolean
+  prerelease: boolean,
+  keep?: string
 ): string {
   const published = Object.keys(entry.versions);
   const eligible = prerelease
@@ -662,6 +672,19 @@ function pickVersion(
     candidates = candidates.filter((version) =>
       semver.satisfies(version, range, { includePrerelease: prerelease })
     );
+  }
+
+  // A held version is kept exactly as long as every range still allows it. It
+  // is checked against the published list rather than the eligible one, so a
+  // prerelease a subscription once opted into is not moved just for being one.
+  if (
+    keep !== undefined &&
+    Object.hasOwn(entry.versions, keep) &&
+    ranges.every(({ range }) =>
+      semver.satisfies(keep, range, { includePrerelease: true })
+    )
+  ) {
+    return keep;
   }
 
   const best = semver.maxSatisfying(candidates, "*", { includePrerelease: prerelease });

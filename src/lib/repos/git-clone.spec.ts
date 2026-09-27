@@ -3,6 +3,8 @@ import path from "node:path";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
   cloneRepo,
+  hasNoUnsavedWork,
+  unsavedWork,
   isGitCheckout,
   looksLikeRepoUrl,
   normalizeRemoteUrl,
@@ -233,6 +235,65 @@ describe("remoteUrlOf()", () => {
 
     const withoutOrigin = fakeRunner({ "remote get-url origin": { status: 2 } });
     expect(remoteUrlOf("/a/repo", { runner: withoutOrigin })).toBeUndefined();
+  });
+});
+
+describe("unsavedWork()", () => {
+  /**
+   * unsavedWork should list uncommitted paths, commits no remote has and
+   * stashes, one line each, and hasNoUnsavedWork should say whether any exist.
+   *
+   * unsavedWork("/a/repo")
+   * // -> { uncommitted: ["?? notes.md"], unpushed: ["abc123 Local work"], stashes: [] }
+   */
+  it("should list uncommitted changes, unpushed commits and stashes", () => {
+    const runner = fakeRunner({
+      "status --porcelain": { status: 0, stdout: "?? notes.md\n M README.md" },
+      "log --branches --not --remotes --oneline": { status: 0, stdout: "abc123 Local work" },
+      "stash list": { status: 0, stdout: "" },
+    });
+
+    const work = unsavedWork("/a/repo", { runner });
+
+    expect(work).toEqual({
+      uncommitted: ["?? notes.md", "M README.md"],
+      unpushed: ["abc123 Local work"],
+      stashes: [],
+    });
+    expect(hasNoUnsavedWork(work)).toBe(false);
+    expect(runner.calls.every((call) => call.cwd === "/a/repo")).toBe(true);
+  });
+
+  /**
+   * A clean checkout has nothing to lose.
+   *
+   * hasNoUnsavedWork(unsavedWork("/a/clean")) // -> true
+   */
+  it("should report a clean checkout as holding nothing", () => {
+    const runner = fakeRunner({
+      "status --porcelain": { status: 0 },
+      "log --branches --not --remotes --oneline": { status: 0 },
+      "stash list": { status: 0 },
+    });
+
+    expect(hasNoUnsavedWork(unsavedWork("/a/clean", { runner }))).toBe(true);
+  });
+
+  /**
+   * A checkout git cannot read is reported as unknown, which never counts as
+   * clean: a caller must assume it may hold work.
+   *
+   * unsavedWork("/not/a/repo").unknown // -> "git could not read the checkout at /not/a/repo: ..."
+   */
+  it("should treat a checkout git cannot read as possibly holding work", () => {
+    const runner = fakeRunner({
+      "status --porcelain": { status: 128, stderr: "fatal: not a git repository" },
+    });
+
+    const work = unsavedWork("/not/a/repo", { runner });
+
+    expect(work.unknown).toContain("not a git repository");
+    expect(hasNoUnsavedWork(work)).toBe(false);
   });
 });
 

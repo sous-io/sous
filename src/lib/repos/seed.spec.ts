@@ -7,12 +7,19 @@ import {
   CORE_RECIPE_KEY,
   OFFICIAL_REPO_IDENTITY,
   OFFICIAL_REPO_NAME,
+  packagedCoreRecipeDir,
 } from "./core-recipe.js";
 import { parseIndexFile } from "./formats/index-file.js";
 import { INDEX_CACHE_DIRNAME, INDEX_SIDECAR_SUFFIX } from "./providers/index-cache.js";
 import { RecipeStore } from "./store/recipe-store.js";
 import type { IndexOverlay } from "./providers/index-cache.js";
-import { SEED_INDEX_COMMENT, coreIndexOverlay, seedCoreRecipe } from "./seed.js";
+import {
+  SEED_INDEX_COMMENT,
+  coreIndexOverlay,
+  packagedCoreIndexOverlay,
+  seedCoreRecipe,
+} from "./seed.js";
+import { hashDirectory } from "./store/hash.js";
 
 const tmpDirs: TmpDir[] = [];
 
@@ -359,6 +366,47 @@ describe("coreIndexOverlay()", () => {
 
     const cached = readIndex(root);
     expect(overlay(OFFICIAL_REPO_IDENTITY, cached)).toBe(cached);
+  });
+
+  /**
+   * The overlay every index cache starts with needs nothing seeded: it hashes
+   * the packaged recipe itself, and that hash is the one a seeded store entry
+   * carries, so a lockfile written from it restores on any machine.
+   *
+   * packagedCoreIndexOverlay({ version: "9.9.9" })(OFFICIAL_REPO_IDENTITY, index)
+   * // -> index plus 9.9.9, hashed from the packaged folder
+   */
+  it("should add the packaged version, hashed from the package, with nothing seeded", async () => {
+    const overlay = packagedCoreIndexOverlay({ version: "9.9.9" });
+
+    const result = overlay(OFFICIAL_REPO_IDENTITY, realIndex(["0.1.1"]));
+
+    expect(result.recipes[CORE_RECIPE_KEY]!.versions["9.9.9"]!.hash).toBe(
+      await hashDirectory(packagedCoreRecipeDir())
+    );
+    expect(overlay("github.com/someone/else", realIndex(["0.1.1"])).recipes).toEqual(
+      realIndex(["0.1.1"]).recipes
+    );
+  });
+
+  /**
+   * A package whose core recipe cannot be read adds nothing, and says nothing:
+   * seeding reports that failure in full where it matters.
+   *
+   * packagedCoreIndexOverlay({ version: "9.9.9", packageRoot: "/nowhere" })(OFFICIAL_REPO_IDENTITY, index)
+   * // -> index, unchanged
+   */
+  it("should leave the index alone when the packaged recipe cannot be read", () => {
+    const warnings: string[] = [];
+    const overlay = packagedCoreIndexOverlay({
+      version: "9.9.9",
+      packageRoot: path.join(tmp(), "no-package-here"),
+      warn: (message) => warnings.push(message),
+    });
+    const index = realIndex(["0.1.1"]);
+
+    expect(overlay(OFFICIAL_REPO_IDENTITY, index)).toBe(index);
+    expect(warnings).toEqual([]);
   });
 });
 

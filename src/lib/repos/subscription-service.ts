@@ -71,6 +71,7 @@ import { describeIndexSearch } from "./ref-search.js";
 import {
   PROJECT_REQUESTER,
   resolveRefs,
+  type MissingRepo,
   type RefRequest,
   type ResolvedRecipe,
   type ResolverRepo,
@@ -111,7 +112,16 @@ import {
   findNewerInRange,
   recordUpstreamCheck,
   shouldCheckUpstream,
+  type NewerVersion,
 } from "./freshness.js";
+import {
+  describeUpdateScope,
+  formatUpdatePlan,
+  isEmptyUpdate,
+  recipeInScope,
+  type UpdateScope,
+} from "./update-plan.js";
+import type { FetchLike } from "./providers/http.js";
 import { REPO_NAME_PATTERN } from "./formats/patterns.js";
 import {
   linkedPathFor,
@@ -121,14 +131,20 @@ import {
 } from "./links.js";
 import {
   keysHeldBySubscription,
+  lockedClosure,
   listLockedRecipes,
   mapLinkedRecipes,
   readRecipeManifestIn,
 } from "./locked-recipes.js";
 import { resolveStoreRoot } from "../sous-home.js";
-import { seedCoreRecipe, type SeedCoreRecipeReport } from "./seed.js";
+import {
+  packagedCoreIndexOverlay,
+  seedCoreRecipe,
+  type SeedCoreRecipeReport,
+} from "./seed.js";
 import { enabledRepos, enabledSubscriptions, isBuiltInEntry } from "./defaults.js";
 import {
+  CORE_NAMESPACE,
   CORE_RECIPE_KEY,
   OFFICIAL_REPO_IDENTITY,
   packagedCoreRecipeDir,
@@ -390,6 +406,72 @@ export type UpstreamCheckReport = {
   failed: Array<{ repo: string; reason: string }>;
 };
 
+/** What `update` is asked to do. */
+export type UpdateOptions = {
+  /**
+   * What to update: a repository, a namespace or a recipe, written at any level
+   * of qualification and resolved through `src/lib/refs/`. Left out, every
+   * subscription is updated.
+   */
+  ref?: string;
+  /**
+   * A repository short name the caller has already settled, which narrows the
+   * update exactly as a reference naming that repository would. `sous repo
+   * unlink --update` passes this; it is never combined with `ref`.
+   */
+  repo?: string;
+  /** Accept the plan, and trust any repository a newer version needs, without being asked. */
+  yes?: boolean;
+  /** Take the first candidate when the reference matched several things. */
+  acceptFirst?: boolean;
+  /** Answers supplied ahead of the questions the new versions ask. */
+  answers?: ProvidedAnswer[];
+  /** Work out and print the plan, writing nothing and downloading no recipe. */
+  dryRun?: boolean;
+};
+
+/** What `update` did, or would do on a dry run. */
+export type UpdateOutcome = {
+  /** What the update covered. */
+  scope: UpdateScope;
+  /** What changed in the lockfile. */
+  diff: LockDiff;
+  /** True when nothing needed moving, so nothing was asked and nothing written. */
+  nothingToUpdate: boolean;
+  /** Repositories whose index could not be fetched; their pins stayed. */
+  unreachable: Array<{ repo: string; reason: string }>;
+  /** Subscriptions that could not be resolved; their pins stayed. */
+  failed: Array<{ key: string; reason: string }>;
+  /** Linked repositories whose pins moved. */
+  linked: string[];
+  /** Repositories trusted along the way. */
+  trusted: string[];
+  /** What the variable questions produced, when any were asked. */
+  answers?: AskReport;
+  /** Dependency cycles the resolver noticed. */
+  cycles: string[][];
+  /** True when nothing was written, because this was a dry run. */
+  dryRun: boolean;
+};
+
+/** What looking for newer published versions of one repository's pins found. */
+export type NewerVersionsReport =
+  | {
+      /** The index was fetched and compared. */
+      checked: true;
+      /** Every pin with a newer published version its range allows, by key. */
+      newer: NewerVersion[];
+    }
+  | {
+      /** The index could not be fetched in time, so nothing is known. */
+      checked: false;
+      /** Why not, as a sentence. */
+      reason: string;
+    };
+
+/** How long a quick check for newer versions waits for an index, in milliseconds. */
+export const QUICK_CHECK_TIMEOUT_MS = 5000;
+
 // --- The service --------------------------------------------------------------------------------
 
 /** Adds repositories, subscribes to recipes, and keeps the store and lockfile honest. */
@@ -498,6 +580,11 @@ export class SubscriptionService {
         providerOptions: this.providerOptions,
         warn: this.warn,
         now: this.now,
+        // Every cache a command builds knows the packaged core version from the
+        // start, so a command that never seeds (a lockfile rebuild, a browsing
+        // command) resolves and lists exactly what a build does. Seeding
+        // replaces this with an overlay carrying the seeded entry's own hash.
+        overlay: packagedCoreIndexOverlay({ version: SOUS_VERSION, warn: this.warn }),
       });
     this.trust =
       options.trust ??
@@ -1571,6 +1658,674 @@ export class SubscriptionService {
 
     lines.push("");
     return lines;
+  }
+
+  // --- Moving pins within their ranges -----------------------------------------------------------
+
+  /**
+   * Moves the lockfile's pins to the newest published versions their ranges
+   * allow, and nothing else: the subscriptions themselves are never edited, and
+   * no range is ever widened.
+   *
+   * The order is the design, as it is for subscribing:
+   *
+   *   - Every trusted repository's index is fetched fresh first. One that
+   *     cannot be reached is reported, and its pins stay exactly where they are.
+   *   - The reference, when there is one, is resolved through `src/lib/refs/`
+   *     against those indexes, and it narrows which pins may move. Everything
+   *     outside it is held at its locked version for as long as its ranges
+   *     allow, so dependencies move with the closure and nothing else does.
+   *   - The whole change is printed as a plan and asked about once. With
+   *     nothing to change, nothing is asked. `--yes` accepts it; a run with no
+   *     terminal and no `--yes` fails naming the flag.
+   *   - Any repository a newer version needs that the project does not trust
+   *     goes through the usual trust question, and the plan is worked out again
+   *     once it is trusted.
+   *   - The lockfile is written, and then the questions the new versions ask
+   *     are asked, exactly as `subscribe` asks them.
+   *
+   * A subscription sous provides itself (the `core` namespace) never moves: its
+   * range is exactly the running sous version. Switched-off subscriptions take
+   * no part. A linked repository's pins move like any other, and builds keep
+   * reading its checkout until it is unlinked.
+   *
+   * @param options - What to update, and the confirmation, answer and dry-run flags.
+   */
+  async update(options: UpdateOptions = {}): Promise<UpdateOutcome> {
+    const dryRun = options.dryRun === true;
+
+    const repoNames = Object.keys(this.currentRepos()).sort();
+    const { indexes, unreachable } = await this.fetchFreshIndexes(repoNames);
+    const scope = await this.resolveUpdateScope(options, indexes);
+    const unreachableNames = new Set(unreachable.map((entry) => entry.repo));
+
+    let plan = await this.planUpdate(scope, indexes, unreachableNames, dryRun);
+    const facts = {
+      scope,
+      unreachable,
+      builtIn: this.builtInSubscriptionsIn(scope),
+      switchedOff: this.switchedOffSubscriptionsIn(scope),
+    };
+
+    const questions = planQuestions(this.definedVariables(plan.changed), this.ladderContext(), {
+      sousDir: this.sousDir,
+    }).filter((entry) => !entry.answered);
+
+    for (const line of formatUpdatePlan({
+      ...facts,
+      diff: plan.diff,
+      missingRepos: plan.missingRepos,
+      questions,
+      unreadable: dryRun ? this.unreadableRecipes(plan.changed) : [],
+      linked: plan.linked,
+      failed: plan.failed,
+    })) {
+      this.write(line === "" ? "" : indent(line));
+    }
+
+    const outcome = (trusted: string[], answers?: AskReport): UpdateOutcome => ({
+      scope,
+      diff: plan.diff,
+      nothingToUpdate: isEmptyUpdate(plan),
+      unreachable,
+      failed: plan.failed,
+      linked: plan.linked,
+      trusted,
+      ...(answers === undefined ? {} : { answers }),
+      cycles: plan.cycles,
+      dryRun,
+    });
+
+    if (isEmptyUpdate(plan) || dryRun) return outcome([]);
+
+    if (options.yes !== true) {
+      if (!this.interactive) {
+        throw nonInteractiveError({
+          prompt: `whether to update ${describeUpdateScope(scope)}`,
+          remedy:
+            "pass '--yes' (spelled '-y', '--force' or '--trust' if you prefer) to accept " +
+            "the plan above without being asked.",
+        });
+      }
+
+      const proceed = await this.ask("Update the lockfile?");
+      if (!proceed) {
+        throw new ConfigError(
+          `Nothing was written: the update was declined.\n` +
+            `  The lockfile and this project's config are exactly as they were.`
+        );
+      }
+    }
+
+    // A newer version that needs a repository this project does not trust is a
+    // trust decision, asked by name exactly as subscribing asks it. Once it is
+    // trusted, its index is read and the plan is worked out again, since the
+    // closure could not be walked past it before.
+    const trusted: string[] = [];
+    while (plan.missingRepos.length > 0) {
+      const decided = await this.trust.confirmTrust(plan.missingRepos, {
+        interactive: this.interactive,
+        ...(options.yes === undefined ? {} : { trustFlag: options.yes }),
+      });
+
+      if (decided.needUrl.length > 0) {
+        throw new ConfigError(
+          [
+            `Sous does not know where ${
+              decided.needUrl.length === 1
+                ? `the repository '${decided.needUrl[0]}' lives`
+                : `these repositories live: ${decided.needUrl.map((n) => `'${n}'`).join(", ")}`
+            }, so it cannot add ${decided.needUrl.length === 1 ? "it" : "them"} for you.`,
+            "  Nothing was written. Add each one with its URL, then run this command again:",
+            "",
+            ...decided.needUrl.map((name) => `    sous repo add <url> --name ${name}`),
+          ].join("\n")
+        );
+      }
+
+      trusted.push(...decided.added);
+      const added = await this.fetchFreshIndexes(decided.added);
+      for (const [name, index] of added.indexes) indexes.set(name, index);
+      plan = await this.planUpdate(scope, indexes, unreachableNames, false);
+    }
+
+    // Supplied answers are checked before anything is written, so one that does
+    // not fit fails the run rather than leaving the lockfile moved with its
+    // questions unanswered.
+    validateProvidedAnswers(this.definedVariables(plan.changed), options.answers ?? []);
+
+    for (const recipe of plan.changed) await this.ensureStored(recipe);
+    this.lock.write(plan.after);
+
+    const answers = await this.askVariables(plan.changed, options.answers ?? []);
+    return outcome(trusted, answers);
+  }
+
+  /**
+   * Fetches the index of each named repository straight from upstream,
+   * ignoring the freshness window. A repository that cannot be reached is
+   * reported rather than raised, and the copy already cached (when there is
+   * one) stands in for it so its pins can still be held where they are.
+   *
+   * @param names - The repositories' short names.
+   */
+  private async fetchFreshIndexes(names: string[]): Promise<{
+    indexes: Map<string, IndexFile>;
+    unreachable: Array<{ repo: string; reason: string }>;
+  }> {
+    const repos = this.currentRepos();
+    const indexes = new Map<string, IndexFile>();
+    const unreachable: Array<{ repo: string; reason: string }> = [];
+
+    for (const name of names) {
+      const entry = repos[name];
+      if (entry === undefined) continue;
+
+      let identity: string;
+      try {
+        identity = this.identityOf(entry.url, entry.provider);
+      } catch (error) {
+        unreachable.push({ repo: name, reason: describeError(error) });
+        continue;
+      }
+
+      try {
+        const lookup = await this.indexCache.refresh(identity, {
+          url: entry.url,
+          label: name,
+          ...(entry.provider === undefined ? {} : { provider: entry.provider }),
+        });
+        indexes.set(name, lookup.index);
+      } catch (error) {
+        unreachable.push({ repo: name, reason: describeError(error) });
+        const cached = this.indexCache.readCached(identity);
+        if (cached !== undefined) indexes.set(name, cached);
+      }
+    }
+
+    return { indexes, unreachable };
+  }
+
+  /**
+   * Settles what an update covers: a repository the caller named outright, the
+   * repository, namespace or recipe a reference names, or everything.
+   *
+   * @param options - The reference or repository, and the accept-first flag.
+   * @param indexes - The freshly fetched indexes, which the reference is resolved against.
+   */
+  private async resolveUpdateScope(
+    options: UpdateOptions,
+    indexes: Map<string, IndexFile>
+  ): Promise<UpdateScope> {
+    if (options.repo !== undefined) {
+      this.repoSearchOrder(options.repo);
+      return { kind: "repository", repo: options.repo };
+    }
+    if (options.ref === undefined) return { kind: "all" };
+
+    const repoOrder = this.repoSearchOrder();
+    const repos = this.currentRepos();
+    const urls: Record<string, string | undefined> = {};
+    for (const name of repoOrder) urls[name] = repos[name]?.url;
+
+    const matches = findReference(
+      options.ref,
+      [SousScope.Repository, SousScope.Namespace, SousScope.Recipe],
+      { repos: referenceReposFromIndexes(repoOrder, indexes, urls) }
+    );
+
+    const chosen = await pickReference(matches, {
+      search: options.ref,
+      interactive: this.interactive,
+      ...(options.acceptFirst === undefined ? {} : { acceptFirst: options.acceptFirst }),
+      details: [
+        `  No trusted repository, namespace or recipe has that name.`,
+        ...describeIndexSearch({ name: options.ref, repoOrder, indexes }),
+      ],
+      write: (message: string) => this.write(message),
+      choose: (message, offered) => this.choose(message, offered),
+    });
+
+    switch (chosen.scope) {
+      case SousScope.Repository:
+        return { kind: "repository", repo: chosen.repo! };
+      case SousScope.Namespace:
+        return { kind: "namespace", repo: chosen.repo!, namespace: chosen.namespace! };
+      default:
+        return {
+          kind: "recipe",
+          repo: chosen.repo!,
+          key: `${chosen.namespace!}/${chosen.recipe!}`,
+        };
+    }
+  }
+
+  /**
+   * Works out what an update would do, writing nothing.
+   *
+   * Every subscription the scope touches is resolved afresh against the indexes
+   * given, one at a time so one that cannot be resolved does not stop the
+   * others, with every pin outside the scope held where the lockfile has it.
+   * What the resolutions settle on is laid over the lockfile, and every hold the
+   * new closure no longer declares is released, refcounted, so a dependency a
+   * newer version dropped leaves the lockfile unless something else still holds
+   * it.
+   *
+   * @param scope - What may move.
+   * @param indexes - The indexes to resolve against.
+   * @param unreachable - Repositories whose pins must not move, because their
+   *   index could not be fetched.
+   * @param dryRun - When true, read manifests only from disk and download nothing.
+   */
+  private async planUpdate(
+    scope: UpdateScope,
+    indexes: Map<string, IndexFile>,
+    unreachable: Set<string>,
+    dryRun: boolean
+  ): Promise<{
+    after: Lockfile;
+    diff: LockDiff;
+    changed: ResolvedRecipe[];
+    missingRepos: MissingRepo[];
+    failed: Array<{ key: string; reason: string }>;
+    linked: string[];
+    cycles: string[][];
+  }> {
+    const before = this.lock.read();
+    const subscriptions = this.allSubscriptions();
+    const repos = this.resolverRepos();
+
+    /** True when the update may move this recipe. */
+    const movable = (key: string, repo: string): boolean => {
+      if (unreachable.has(repo)) return false;
+      if (key === CORE_RECIPE_KEY && this.isBuiltInSubscription(CORE_NAMESPACE)) {
+        return false;
+      }
+      return recipeInScope(scope, key, repo);
+    };
+
+    // Everything the update may not move is held where the lockfile has it.
+    const keep: Record<string, string> = {};
+    for (const [key, entry] of Object.entries(before.recipes)) {
+      if (!movable(key, entry.repo)) keep[key] = entry.version;
+    }
+
+    const targets = Object.keys(subscriptions)
+      .sort()
+      .filter((key) => !this.isBuiltInSubscription(key))
+      .filter((key) => this.subscriptionTouches(key, scope, before, movable));
+
+    const merged = new Map<string, ResolvedRecipe>();
+    const resolvedSubscriptions: string[] = [];
+    const missing = new Map<string, MissingRepo>();
+    const failed: Array<{ key: string; reason: string }> = [];
+    const cycles: string[][] = [];
+
+    for (const key of targets) {
+      const entry = subscriptions[key]!;
+      let request: RefRequest;
+      try {
+        const parsed = parseRef(key);
+        request = {
+          ref: { ...parsed, ...(entry.range === undefined ? {} : { range: entry.range }) },
+          requestedBy: PROJECT_REQUESTER,
+          kind: "subscribes",
+          ...(entry.prerelease === true ? { prerelease: true } : {}),
+        };
+      } catch (error) {
+        failed.push({ key, reason: describeError(error) });
+        continue;
+      }
+
+      let result;
+      try {
+        result = await resolveRefs([request], {
+          indexes,
+          repos,
+          keep,
+          loadManifest: (recipe) => this.loadRecipeManifest(recipe, dryRun),
+          ...(entry.prerelease === true ? { prerelease: true } : {}),
+        });
+      } catch (error) {
+        failed.push({ key, reason: describeError(error) });
+        continue;
+      }
+
+      cycles.push(...result.cycles);
+      for (const repo of result.missingRepos) {
+        const known = missing.get(repo.name);
+        if (known === undefined) missing.set(repo.name, { ...repo });
+        else known.requiredBy.push(...repo.requiredBy);
+      }
+
+      let conflict = false;
+      for (const recipe of result.resolved) {
+        const already = merged.get(recipe.key);
+        if (already !== undefined && already.version !== recipe.version) {
+          failed.push({
+            key,
+            reason:
+              `It wants version ${recipe.version} of '${recipe.key}', and another ` +
+              `subscription wants ${already.version}.`,
+          });
+          conflict = true;
+          break;
+        }
+      }
+      if (conflict) continue;
+
+      for (const recipe of result.resolved) {
+        const already = merged.get(recipe.key);
+        merged.set(recipe.key, already === undefined ? recipe : mergeHolders(already, recipe));
+      }
+      resolvedSubscriptions.push(key);
+    }
+
+    const settled = [...merged.values()];
+    const applied = this.lock.applyResolution(before, settled, this.lockRepoInputs());
+    const others = Object.keys(subscriptions).filter(
+      (key) => !resolvedSubscriptions.includes(key)
+    );
+    const after = this.releaseDroppedHolds(applied, merged, resolvedSubscriptions, others);
+    const diff = this.lock.diff(before, after);
+
+    const changed = settled.filter(
+      (recipe) => before.recipes[recipe.key]?.version !== recipe.version
+    );
+    const linked = [
+      ...new Set(
+        changed
+          .map((recipe) => recipe.repo)
+          .filter((repo) => linkedPathFor(repo, this.sousDir, this.env) !== undefined)
+      ),
+    ].sort();
+
+    return {
+      after,
+      diff,
+      changed,
+      missingRepos: [...missing.values()].sort((left, right) =>
+        left.name < right.name ? -1 : 1
+      ),
+      failed,
+      linked,
+      cycles,
+    };
+  }
+
+  /**
+   * True when a subscription reaches anything the update may move, which is
+   * what decides whether it is resolved again. A subscription with nothing
+   * locked yet counts when its own ref falls inside the scope.
+   *
+   * @param key - The subscription's ref key.
+   * @param scope - What the update covers.
+   * @param lock - The lockfile as it stands.
+   * @param movable - Whether one locked recipe may move.
+   */
+  private subscriptionTouches(
+    key: string,
+    scope: UpdateScope,
+    lock: Lockfile,
+    movable: (key: string, repo: string) => boolean
+  ): boolean {
+    if (scope.kind === "all") return true;
+
+    let parsed: ParsedRef;
+    try {
+      parsed = parseRef(key);
+    } catch {
+      return false;
+    }
+
+    const closure = lockedClosure(lock, keysHeldBySubscription(lock, refKey(parsed)));
+    if (closure.some((held) => movable(held, lock.recipes[held]!.repo))) return true;
+
+    // Nothing locked reaches the scope, but the subscription may still name it:
+    // a namespace subscription gains the recipes a namespace publishes later.
+    if (parsed.repo !== undefined && parsed.repo !== scope.repo) return false;
+    const covered = refKey(parsed);
+    switch (scope.kind) {
+      case "repository":
+        return parsed.repo === scope.repo;
+      case "namespace":
+        return covered === scope.namespace || covered.startsWith(`${scope.namespace}/`);
+      case "recipe":
+        return covered === scope.key || scope.key.startsWith(`${covered}/`);
+    }
+  }
+
+  /**
+   * Releases every hold the new resolution no longer declares.
+   *
+   * Laying a resolution over the lockfile only ever adds holders, which is right
+   * for a subscription and wrong for an update: a newer version that no longer
+   * depends on something must stop holding it, and a namespace that stopped
+   * publishing a recipe must stop holding that one. A hold is released when the
+   * holder was resolved again and did not declare the recipe this time; an entry
+   * left with no holders goes, and so does whatever only it was holding.
+   *
+   * @param lock - The lockfile with the resolution laid over it.
+   * @param merged - What the resolutions settled on, by key.
+   * @param resolvedSubscriptions - The subscriptions that were resolved again.
+   * @param otherSubscriptions - Subscriptions that were not, whose holds stand.
+   */
+  private releaseDroppedHolds(
+    lock: Lockfile,
+    merged: Map<string, ResolvedRecipe>,
+    resolvedSubscriptions: string[],
+    otherSubscriptions: string[]
+  ): Lockfile {
+    const coverOf = (key: string): string | undefined => {
+      try {
+        return refKey(parseRef(key));
+      } catch {
+        return undefined;
+      }
+    };
+    const covers = (cover: string | undefined, key: string): boolean =>
+      cover !== undefined && (key === cover || key.startsWith(`${cover}/`));
+    const resolvedCovers = resolvedSubscriptions.map(coverOf);
+    const otherCovers = otherSubscriptions.map(coverOf);
+
+    const recipes: Record<string, LockedRecipe> = { ...lock.recipes };
+    const orphaned: string[] = [];
+
+    for (const [key, entry] of Object.entries(lock.recipes)) {
+      const settled = merged.get(key);
+      const kept = entry.requestedBy.filter((holder) => {
+        if (holder === PROJECT_HOLDER) {
+          if (!resolvedCovers.some((cover) => covers(cover, key))) return true;
+          if (otherCovers.some((cover) => covers(cover, key))) return true;
+          return settled?.requestedBy.includes(PROJECT_HOLDER) === true;
+        }
+        if (!merged.has(holder)) return true;
+        return settled?.requestedBy.includes(holder) === true;
+      });
+
+      if (kept.length === entry.requestedBy.length) continue;
+      if (kept.length === 0) {
+        delete recipes[key];
+        orphaned.push(key);
+      } else {
+        recipes[key] = { ...entry, requestedBy: kept };
+      }
+    }
+
+    let result: Lockfile = { ...lock, recipes };
+    for (const key of orphaned) result = this.lock.removeHolder(result, key);
+    return result;
+  }
+
+  /**
+   * True when a subscription is one sous provides itself, which an update never
+   * moves: its range is exactly the running sous version.
+   *
+   * @param key - The subscription's ref key.
+   */
+  private isBuiltInSubscription(key: string): boolean {
+    const configured = enabledSubscriptions(this.settings) as Record<string, SubscriptionEntry>;
+    return isBuiltInEntry(configured[key]);
+  }
+
+  /**
+   * The subscriptions sous provides itself that an update of this scope would
+   * otherwise have covered, with the version each stays at, for the plan.
+   *
+   * @param scope - What the update covers.
+   */
+  private builtInSubscriptionsIn(
+    scope: UpdateScope
+  ): Array<{ key: string; version?: string }> {
+    const lock = this.lock.read();
+    return Object.keys(this.allSubscriptions())
+      .filter((key) => this.isBuiltInSubscription(key))
+      .filter((key) =>
+        keysHeldBySubscription(lock, key).some((held) =>
+          recipeInScope(scope, held, lock.recipes[held]!.repo)
+        )
+      )
+      .map((key) => {
+        const version = this.allSubscriptions()[key]?.range;
+        return { key, ...(version === undefined ? {} : { version }) };
+      });
+  }
+
+  /**
+   * The switched-off subscriptions an update of this scope leaves alone.
+   *
+   * @param scope - What the update covers.
+   */
+  private switchedOffSubscriptionsIn(scope: UpdateScope): string[] {
+    const declared: Record<string, SubscriptionEntry> = {
+      ...((this.settings.subscriptions ?? {}) as Record<string, SubscriptionEntry>),
+      ...this.readSubscriptionEntries(),
+    };
+
+    return Object.keys(declared)
+      .filter((key) => declared[key]?.enabled === false)
+      .filter((key) => {
+        if (scope.kind === "all") return true;
+        let parsed: ParsedRef;
+        try {
+          parsed = parseRef(key);
+        } catch {
+          return false;
+        }
+        const covered = refKey(parsed);
+        switch (scope.kind) {
+          case "repository":
+            return parsed.repo === scope.repo;
+          case "namespace":
+            return covered === scope.namespace || covered.startsWith(`${scope.namespace}/`);
+          case "recipe":
+            return covered === scope.key || scope.key.startsWith(`${covered}/`);
+        }
+      })
+      .sort();
+  }
+
+  /**
+   * Fetches one repository's index with a short timeout and says which of its
+   * pins have a newer published version their ranges allow. Nothing moves; this
+   * is the fact `sous repo unlink` reports. A fetch that fails or takes too long
+   * is an answer too: that sous could not check.
+   *
+   * @param name - The repository's short name.
+   * @param options - How long to wait for the index, in milliseconds.
+   */
+  async newerPublishedVersions(
+    name: string,
+    options: { timeoutMs?: number } = {}
+  ): Promise<NewerVersionsReport> {
+    const timeoutMs = options.timeoutMs ?? QUICK_CHECK_TIMEOUT_MS;
+    const lock = this.lock.read();
+    const entry = this.currentRepos()[name];
+    const url = entry?.url ?? lock.repos[name]?.url;
+    const identity = this.identityForRepo(name, lock);
+    if (url === undefined || identity === undefined) {
+      return {
+        checked: false,
+        reason: `This project does not trust a repository called '${name}'.`,
+      };
+    }
+
+    // The fetch itself is given the deadline, so a slow host is abandoned
+    // rather than left running; the race below covers a provider that does not
+    // fetch over HTTP at all.
+    const baseFetch =
+      this.providerOptions.fetchImpl ?? (globalThis.fetch as unknown as FetchLike | undefined);
+    const fetchImpl: FetchLike | undefined =
+      baseFetch === undefined
+        ? undefined
+        : (target, init) =>
+            baseFetch(target, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+    const cache = createIndexCache({
+      storeRoot: this.storeInstance.root,
+      resolveProvider: (repoUrl, providerId) =>
+        requireProvider(repoUrl, providerId, this.providers),
+      providerOptions: {
+        ...this.providerOptions,
+        ...(fetchImpl === undefined ? {} : { fetchImpl }),
+      },
+      warn: this.warn,
+      now: this.now,
+      overlay: packagedCoreIndexOverlay({ version: SOUS_VERSION, warn: this.warn }),
+    });
+
+    let timer: NodeJS.Timeout | undefined;
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () =>
+          reject(
+            new Error(
+              `The repository did not answer within ${Math.round(timeoutMs / 1000)} seconds.`
+            )
+          ),
+        timeoutMs
+      );
+      timer.unref();
+    });
+
+    let index: IndexFile;
+    try {
+      index = (
+        await Promise.race([
+          cache.refresh(identity, {
+            url,
+            label: name,
+            ...(entry?.provider === undefined ? {} : { provider: entry.provider }),
+          }),
+          deadline,
+        ])
+      ).index;
+    } catch (error) {
+      return { checked: false, reason: describeError(error) };
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
+
+    const subscriptions = this.allSubscriptions();
+    const newer: NewerVersion[] = [];
+    for (const [key, locked] of Object.entries(lock.recipes)) {
+      if (locked.repo !== name) continue;
+      const range = this.effectiveRangeFor(key, locked, subscriptions);
+      if (range === undefined) continue;
+      const subscription = subscriptions[key] ?? subscriptions[key.split("/")[0]!];
+      const found = findNewerInRange({
+        index,
+        key,
+        lockedVersion: locked.version,
+        ...(range === "*" ? {} : { range }),
+        ...(subscription?.prerelease === undefined
+          ? {}
+          : { prerelease: subscription.prerelease }),
+      });
+      if (found !== undefined) newer.push(found);
+    }
+
+    newer.sort((left, right) => (left.key < right.key ? -1 : 1));
+    return { checked: true, newer };
   }
 
   // --- Restoring and upstream checks -------------------------------------------------------------

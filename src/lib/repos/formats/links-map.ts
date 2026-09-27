@@ -4,7 +4,8 @@
  * A link redirects a repo's resolution away from the store and at a real
  * working copy on disk, which is how a maintainer edits recipes: edits happen
  * in a checkout, never in the store. `sous repo link` writes an entry;
- * `sous repo unlink` removes it and leaves the checkout in place.
+ * `sous repo unlink` removes it and leaves the checkout in place unless asked
+ * to delete one sous cloned.
  *
  * Two maps are read: the project's `.sous/sous.links.json` and the machine-wide
  * `$SOUS_HOME/sous.links.json`, with the project map winning on conflict. The
@@ -34,8 +35,9 @@ export const repoLinkSchema = z.strictObject({
   linkedAt: isoTimestampSchema,
   /**
    * Whether sous cloned the working copy itself ('clone') or was pointed at an
-   * existing checkout ('path'). Unlinking never deletes either, but the origin
-   * tells the user what sous put there.
+   * existing checkout ('path'). Unlinking leaves either in place unless
+   * `--remove` is passed, and even then only a 'clone' is ever deleted: a
+   * 'path' checkout belongs to whoever linked it.
    */
   origin: z.enum(LINK_ORIGINS),
 });

@@ -48,6 +48,7 @@ import {
   type IndexOverlay,
 } from "./providers/index-cache.js";
 import { warning } from "../../utils/formatting.js";
+import { hashDirectorySync } from "./store/hash.js";
 import { identitySegments } from "./identity.js";
 import { ensureIndexCacheDirectory } from "../../utils/sous-directory.js";
 import type { RecipeStoreLike, StoreKey } from "./store/contract.js";
@@ -204,13 +205,69 @@ export async function seedCoreRecipe(
 export type CoreIndexOverlayOptions = {
   /** The packaged version, which is by rule the running sous version. */
   version: string;
-  /** The content hash of the entry the seed put in the store. */
-  hash: string;
+  /**
+   * The content hash of the entry the seed put in the store, or a function
+   * that works it out the first time it is needed. The function form is what
+   * lets an overlay be installed before anything has been seeded.
+   */
+  hash: string | (() => string);
   /** The installed package's root directory. Defaults to the running CLI's own. */
   packageRoot?: string;
   /** Where the one warning this can produce goes. Defaults to the console banner. */
   warn?: (message: string) => void;
 };
+
+/**
+ * The overlay every index cache a command builds starts with: the packaged core
+ * version, hashed from the package itself the first time the official
+ * repository's index is read.
+ *
+ * Seeding installs a precise overlay of its own (carrying the hash of the entry
+ * it just wrote), but only the commands that seed get that one. This is what
+ * makes the packaged version resolvable everywhere else too: a lockfile rebuild,
+ * a browsing command, anything that reads the official index. The hash of the
+ * packaged folder is the hash a seeded store entry carries, because the store
+ * copies the folder byte for byte.
+ *
+ * A package whose core recipe cannot be read adds nothing, silently: seeding
+ * reports that failure in full, and a read-only command has nothing better to
+ * say about it.
+ *
+ * @param options - The packaged version, and where the package is.
+ */
+export function packagedCoreIndexOverlay(options: {
+  /** The packaged version, which is by rule the running sous version. */
+  version: string;
+  /** The installed package's root directory. Defaults to the running CLI's own. */
+  packageRoot?: string;
+  /** Where the one warning the overlay can produce goes. */
+  warn?: (message: string) => void;
+}): IndexOverlay {
+  let hash: string | null | undefined;
+  const packagedHash = (): string | null => {
+    if (hash === undefined) {
+      try {
+        hash = hashDirectorySync(packagedCoreRecipeDir(options.packageRoot));
+      } catch {
+        hash = null;
+      }
+    }
+    return hash;
+  };
+
+  const overlay = coreIndexOverlay({
+    version: options.version,
+    hash: () => packagedHash()!,
+    ...(options.packageRoot === undefined ? {} : { packageRoot: options.packageRoot }),
+    ...(options.warn === undefined ? {} : { warn: options.warn }),
+  });
+
+  return (identity, index) => {
+    if (identity !== OFFICIAL_REPO_IDENTITY) return index;
+    if (packagedHash() === null) return index;
+    return overlay(identity, index);
+  };
+}
 
 /**
  * Builds the overlay that makes the packaged core recipe resolvable whatever
@@ -236,6 +293,8 @@ export type CoreIndexOverlayOptions = {
  */
 export function coreIndexOverlay(options: CoreIndexOverlayOptions): IndexOverlay {
   let warned = false;
+  const packagedHash = (): string =>
+    typeof options.hash === "function" ? options.hash() : options.hash;
 
   return (identity: string, index: IndexFile): IndexFile => {
     if (identity !== OFFICIAL_REPO_IDENTITY) return index;
@@ -243,14 +302,14 @@ export function coreIndexOverlay(options: CoreIndexOverlayOptions): IndexOverlay
     const published = index.recipes[CORE_RECIPE_KEY]?.versions[options.version];
 
     if (published !== undefined) {
-      if (published.hash !== options.hash && !warned) {
+      if (published.hash !== packagedHash() && !warned) {
         warned = true;
         (options.warn ?? warning)(
           `The repository '${OFFICIAL_REPO_NAME}' publishes version ${options.version} of ` +
             `'${CORE_RECIPE_KEY}' with different contents from the copy inside this ` +
             `installation of sous, so sous is using the published one.\n` +
             `  Published: ${published.hash}\n` +
-            `  Packaged:  ${options.hash}\n` +
+            `  Packaged:  ${packagedHash()}\n` +
             `  Reinstalling sous will bring the two back into line.`
         );
       }
@@ -276,7 +335,7 @@ export function coreIndexOverlay(options: CoreIndexOverlayOptions): IndexOverlay
           versions: {
             ...recipe?.versions,
             [options.version]: {
-              hash: options.hash,
+              hash: packagedHash(),
               tag: `${CORE_RECIPE_KEY}@${options.version}`,
               prerelease: semver.prerelease(options.version) !== null,
               seeded: true,

@@ -5,6 +5,7 @@ import { makeTmpDir, type TmpDir } from "../../test/utils/tmp.js";
 import { makeSettings } from "../../test/utils/settings.js";
 import {
   keysHeldBySubscription,
+  lockedClosure,
   listLockedRecipes,
   mapLinkedRecipes,
   projectSubscriptionRefs,
@@ -281,6 +282,32 @@ describe("keysHeldBySubscription()", () => {
     ]);
     expect(keysHeldBySubscription(lock, "workflow/shared")).toEqual([]);
     expect(keysHeldBySubscription(lock, "workflow/nothing")).toEqual([]);
+  });
+});
+
+describe("lockedClosure()", () => {
+  /**
+   * lockedClosure should follow the holder lists from the keys it is given to
+   * everything they hold, transitively, and leave out what they do not reach.
+   *
+   * lockedClosure(lock, ["workflow/task-files"])
+   * // -> ["support/base", "support/partials", "workflow/task-files"]
+   */
+  it("should reach everything the given keys hold, transitively", () => {
+    writeLock([
+      { key: "workflow/task-files", requestedBy: ["project"] },
+      { key: "support/partials", requestedBy: ["workflow/task-files"] },
+      { key: "support/base", requestedBy: ["support/partials"] },
+      { key: "workflow/other", requestedBy: ["project"] },
+    ]);
+    const lock = readProjectLockfile(sousDir);
+
+    expect(lockedClosure(lock, ["workflow/task-files"])).toEqual([
+      "support/base",
+      "support/partials",
+      "workflow/task-files",
+    ]);
+    expect(lockedClosure(lock, ["workflow/missing"])).toEqual([]);
   });
 });
 

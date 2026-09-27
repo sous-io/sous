@@ -11,7 +11,7 @@ import { ConfigError } from "../../errors.js";
 /** The shape of `fetch` this module needs; the global satisfies it. */
 export type FetchLike = (
   url: string,
-  init?: { headers?: Record<string, string> }
+  init?: { headers?: Record<string, string>; signal?: AbortSignal }
 ) => Promise<{
   ok: boolean;
   status: number;

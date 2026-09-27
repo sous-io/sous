@@ -293,6 +293,21 @@ const MANAGED_LAYER_EXPORTS = [
  */
 const PROVIDER_WRITE_EXPORTS = ["ProviderBase", "firstUrlIn", "supportsSubmit"];
 
+/**
+ * The names the update work added: the synchronous hash the packaged core
+ * overlay needs, the overlay every index cache starts with, the check for work
+ * a checkout would lose, the lockfile closure walk, and how long a quick check
+ * for newer versions waits.
+ */
+const UPDATE_EXPORTS = [
+  "QUICK_CHECK_TIMEOUT_MS",
+  "hasNoUnsavedWork",
+  "hashDirectorySync",
+  "lockedClosure",
+  "packagedCoreIndexOverlay",
+  "unsavedWork",
+];
+
 describe("the repos barrel", () => {
   /**
    * The barrel exposes exactly the documented surface: nothing missing, and
@@ -308,6 +323,7 @@ describe("the repos barrel", () => {
       ...PHASE_7_EXPORTS,
       ...MANAGED_LAYER_EXPORTS,
       ...PROVIDER_WRITE_EXPORTS,
+      ...UPDATE_EXPORTS,
     ].sort();
     expect(Object.keys(repos).sort()).toEqual(expected);
   });

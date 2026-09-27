@@ -206,7 +206,48 @@ build` instead.
 `sous repo list` shows each trusted repository with its provider, origin, whether it is linked, its
 recipe count and its URL; `--verbose` adds a `Namespaces:` line under each row. `sous lock show`
 prints the other half: every version your lockfile pins, where it came from and who holds it. When
-that file has drifted, `sous lock rebuild` recomputes it from your subscriptions.
+that file has drifted, `sous lock rebuild` recomputes it from your subscriptions and the cached
+indexes, fetching nothing.
+
+## Moving to newer versions
+
+A build holds the versions the lockfile pins, so a newer release reaches the project only when
+something moves the pin. `sous subscription update` is that step:
+
+```term
+$ sous subscription update workflow/qa-variables
+  Updating the recipe 'qa-recipes:workflow/qa-variables' changes the lockfile:
+
+    • Adding workflow/qa-helper version 1.0.0
+    • Updating workflow/qa-variables from version 0.1.0 to version 0.2.0
+
+  Update the lockfile? (y/N)
+```
+
+It fetches every trusted repository's index first, so a version published a minute ago counts.
+With no reference it covers every subscription; a reference names a repository, a namespace or a
+recipe, at any level of qualification, and everything outside it stays exactly where it is pinned.
+What it will and will not do:
+
+- A pin moves only within the range its subscription declares, or the range the recipe depending
+  on it declares; a range is never widened. Prereleases count only for a subscription that opted
+  into them.
+- Dependencies move with the closure: a dependency a newer version adds is pinned, and one it
+  dropped leaves the lockfile unless something else still holds it.
+- Only the lockfile changes. Your subscriptions stay exactly as they are written.
+- It prints the plan and asks once; `--yes` accepts it, and a run with no terminal and no `--yes`
+  fails naming the flag. With nothing to update it says so and asks nothing.
+- A repository a newer version needs that the project does not trust goes through the usual trust
+  question, and new questions the newer versions ask are asked the way subscribing asks them.
+- A repository whose index cannot be fetched is skipped and named, and its pins stay put.
+- A linked repository's pins move too, and the plan notes that builds keep reading the checkout
+  until it is unlinked.
+- The built-in `core` subscription never moves: its range is exactly the running sous version, so
+  upgrading sous is what moves it.
+
+It rebuilds the project afterwards. `--dry-run` fetches the indexes and prints the plan, and
+downloads no recipe and writes nothing, so the dependencies and questions of a version this machine
+does not hold yet are named rather than listed. `--no-build` skips the rebuild.
 
 ## Remove a subscription
 
@@ -276,7 +317,8 @@ lapsed (`store.freshnessSeconds`, five minutes by default), or when a command fo
 check never breaks a build, because the cached index is used instead. Always-pull changes what
 happens after that check, not how often it happens: a repository or subscription marked
 `alwaysPull` takes a newer in-range version rather than the locked one; set it with
-`--always-pull`, or on either entry in the config.
+`--always-pull`, or on either entry in the config. Without it, `sous subscription update` is how a
+pin moves; see [Moving to newer versions](#moving-to-newer-versions).
 
 The store is machine-wide and disposable, because everything in it is re-fetchable from a
 lockfile's pins. `sous repo gc` collects it back to its size cap, evicting least recently used

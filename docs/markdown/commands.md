@@ -183,9 +183,22 @@ path alone links that checkout where it is, adding the repository first if neede
 Example: `sous repo link sous-recipes ~/Projects/sous-recipes`
 
 ### `sous repo unlink REPO`
-Stops reading a repository from a working copy and goes back to published versions; `REPO` is the short name as
-it appears in `sous.links.json` (see [File formats](repositories-file-formats.md)). `--global` removes the
-machine-wide link, not this project's; `--dry-run` prints what changes. Example: `sous repo unlink sous-recipes`
+Stops reading a repository from a working copy, goes back to the versions the lockfile pins, and rebuilds the
+project; `REPO` is the short name as it appears in `sous.links.json` (see
+[File formats](repositories-file-formats.md)). On its own it also fetches the repository's index, with a short
+timeout, and reports any newer published version the ranges allow, without moving anything; when the index
+cannot be fetched in time it says it could not check. The checkout stays where it is unless `--remove` is passed.
+Takes `--dry-run`, `--no-build`, `--answer` and `--answers-file`.
+
+- `--global`: remove the machine-wide link, not this project's.
+- `--update`: move this repository's pins to the newest versions their ranges allow before rebuilding. It runs
+  the same code as `sous subscription update REPO`.
+- `--remove`: delete the checkout as well, but only one sous cloned itself; a checkout linked by path is refused
+  with an error. Uncommitted changes, commits no remote has and stashes are listed first and asked about.
+- `-y, --yes`: answer every question this command asks: deleting a checkout that holds work, the update plan,
+  and the trust question for a repository a newer version needs (also `--force`, `--trust`).
+
+Example: `sous repo unlink sous-recipes --update`
 
 ### `sous repo init [DIRECTORY]`
 Creates a new recipe repository in a directory, defaulting to the current one; `--dry-run` prints the files it
@@ -243,6 +256,20 @@ Example: `sous subscription add workflow/task-files@^1.2.0 --answer apiUrl=https
 Removes a subscription and everything only it brought in, then rebuilds so those files are gone. Also spelled
 `sous unsubscribe`. Takes `--dry-run` and `--no-build`. Example: `sous subscription remove workflow/task-files`
 
+### `sous subscription update [REF]`
+Moves the lockfile's pins to the newest published versions their ranges allow, then rebuilds the project. With
+no `REF` it covers every subscription; a `REF` naming a repository, a namespace or a recipe narrows it, and
+everything outside it stays where it is pinned. It fetches every trusted repository's index first, never widens
+a range, moves dependencies with the closure, and changes only the lockfile, never the subscriptions. It prints
+the plan and asks once; with nothing to update it says so and asks nothing. See
+[Moving to newer versions](repositories-consuming.md#moving-to-newer-versions). Takes `--no-build`, `--answer`
+and `--answers-file`, and `--dry-run`, which fetches the indexes but downloads no recipe and writes nothing.
+
+- `-y, --yes`: accept the plan, and trust any repository a newer version needs (also `--force`, `--trust`).
+- `--accept-first`: when `REF` matches several things, take the first one listed.
+
+Example: `sous subscription update workflow/task-files`
+
 ### `sous subscription list`
 Lists the subscriptions this project declares, switched-off ones included, with the range each resolves within,
 the versions the lockfile pins, where it came from and whether it is on. Reads the config and the lockfile only.
@@ -251,7 +278,8 @@ Example: `sous subscription list`
 ## namespace
 
 `namespace` reads the cached indexes and the lockfile, so it works offline. A trusted repository whose index has
-never been fetched is named at the end of a listing, not left out.
+never been fetched is named at the end of a listing, not left out. The core version this installation of sous
+ships is listed even while the cached index does not publish it yet.
 
 ### `sous namespace list`
 Lists every namespace the trusted repositories publish, how many recipes each holds, and how much of it this
@@ -287,8 +315,10 @@ Prints what `.sous/sous.lock.json` pins: the recipe, the version, the repository
 ### `sous lock rebuild`
 Recomputes the whole lockfile from the subscriptions the config declares and the cached indexes, starting from
 empty, so an entry nothing holds any more is dropped rather than carried through: the repair for a file that
-drifted through a hand edit or a bad merge. It asks nothing, grants no trust and downloads nothing. Takes
-`--dry-run`. Example: `sous lock rebuild --dry-run`
+drifted through a hand edit or a bad merge. It asks nothing, grants no trust and downloads nothing. The core
+version this installation of sous ships resolves even when the cached index has not published it yet, exactly
+as it does in a build. To move pins to versions published since the last fetch, use `sous subscription update`.
+Takes `--dry-run`. Example: `sous lock rebuild --dry-run`
 
 ## vars
 

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { makeTmpDir, type TmpDir } from "../../../test/utils/tmp.js";
-import { hashDirectory, hashesEqual } from "./hash.js";
+import { hashDirectory, hashDirectorySync, hashesEqual } from "./hash.js";
 
 const tmpDirs: TmpDir[] = [];
 
@@ -239,5 +239,24 @@ describe("hashesEqual()", () => {
   it("should compare two content hashes exactly", () => {
     expect(hashesEqual("sha256-aa", "sha256-aa")).toBe(true);
     expect(hashesEqual("sha256-aa", "sha256-bb")).toBe(false);
+  });
+});
+
+describe("hashDirectorySync()", () => {
+  /**
+   * hashDirectorySync should compute exactly the hash hashDirectory computes,
+   * skipping `.git` the same way, so a synchronous caller and an asynchronous
+   * one can never disagree about a recipe folder.
+   *
+   * hashDirectorySync(dir) === (await hashDirectory(dir))
+   * // -> true
+   */
+  it("should equal the asynchronous hash of the same tree", async () => {
+    const dir = tmp();
+    write(dir, "SKILL.md", "hello");
+    write(dir, "nested/deep/notes.md", "world");
+    write(dir, ".git/HEAD", "ref: refs/heads/main");
+
+    expect(hashDirectorySync(dir)).toBe(await hashDirectory(dir));
   });
 });

@@ -252,3 +252,25 @@ export function projectSubscriptionRefs(
   }
   return [...refs].sort();
 }
+
+/**
+ * Every locked recipe reachable from a set of keys through the lockfile's
+ * holder lists: the keys themselves, whatever they hold, and so on.
+ *
+ * @param lock - The lockfile.
+ * @param roots - The keys to start from.
+ */
+export function lockedClosure(lock: Lockfile, roots: string[]): string[] {
+  const reached = new Set(roots.filter((key) => Object.hasOwn(lock.recipes, key)));
+  const queue = [...reached];
+  while (queue.length > 0) {
+    const holder = queue.shift()!;
+    for (const [key, entry] of Object.entries(lock.recipes)) {
+      if (reached.has(key) || !entry.requestedBy.includes(holder)) continue;
+      reached.add(key);
+      queue.push(key);
+    }
+  }
+  return [...reached].sort();
+}
+

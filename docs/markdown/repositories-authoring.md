@@ -286,8 +286,29 @@ and freshness checks no longer apply to it. Builds say so every time.
 Run 'sous repo unlink my-recipes' to go back to published versions.
 ```
 
-`sous repo unlink` removes the map entry and nothing else: the checkout stays where it is, and its path is
-printed so you can delete it. Unlinking a name linked in the other scope says which scope holds it.
+### Unlink, and pick up your release
+
+Linking never touches the lockfile, so `sous repo unlink my-recipes` goes back to exactly the versions pinned
+before the link, and rebuilds the project so its outputs match them. It also fetches the repository's index,
+with a short timeout, and says whether a newer version the ranges allow has been published since; it moves
+nothing, and when the index cannot be fetched in time it says it could not check. Unlinking a name linked in
+the other scope says which scope holds it.
+
+Once your change is released, one of these moves the project onto it:
+
+```bash
+sous repo unlink my-recipes --update       # unlink, move this repository's pins, then rebuild
+sous subscription update my-recipes        # the same move, when nothing is linked any more
+```
+
+`--update` runs exactly the code `sous subscription update my-recipes` runs: every pin the repository supplies
+moves to the newest version its range allows, after one plan and one question. See
+[Moving to newer versions](repositories-consuming.md#moving-to-newer-versions).
+
+The checkout stays where it is unless you pass `--remove`, because `sous repo submit` uses a leftover checkout to
+revise a proposal that is still open. `--remove` deletes it only when sous cloned it; a checkout you linked by
+path is yours, and sous refuses with an error. Before deleting, sous lists anything in the checkout that exists
+nowhere else (uncommitted changes, commits no remote has, and stashes) and asks; `--yes` answers ahead.
 
 ## Contribute to someone else's repository
 

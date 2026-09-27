@@ -4,7 +4,8 @@
  * A link redirects one repository's resolution away from the store and at a
  * real working copy on disk, which is how a maintainer edits recipes: edits
  * happen in a checkout, never in the store. `sous repo link` writes an entry
- * here; `sous repo unlink` removes it and leaves the checkout alone.
+ * here; `sous repo unlink` removes it and leaves the checkout alone unless
+ * `--remove` asks it to delete one sous cloned.
  *
  * Two maps exist. The project's `.sous/sous.links.json` covers one project; the
  * machine-wide `$SOUS_HOME/sous.links.json` covers every project on the machine,
