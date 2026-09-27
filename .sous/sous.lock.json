@@ -1,6 +1,15 @@
 {
   "formatVersion": 1,
   "recipes": {
+    "cli/command-design": {
+      "hash": "sha256-0e118b4221b7592fff1688f536753d7cdaedd11d8018d4f6334862e44734c0f0",
+      "kind": "subscribes",
+      "repo": "sous-recipes",
+      "requestedBy": [
+        "project"
+      ],
+      "version": "1.0.0"
+    },
     "communication/control-flow": {
       "hash": "sha256-7f036e8789ba950f9dbb31b1ef1f3d4383ee8329038c5696618707864e3b83e3",
       "kind": "subscribes",
