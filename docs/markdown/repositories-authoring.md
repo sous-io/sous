@@ -289,6 +289,59 @@ Run 'sous repo unlink my-recipes' to go back to published versions.
 `sous repo unlink` removes the map entry and nothing else: the checkout stays where it is, and its path is
 printed so you can delete it. Unlinking a name linked in the other scope says which scope holds it.
 
+### How a checkout compares with upstream
+
+A link says which checkout to read, not why, so `sous repo link` never changes a checkout on its own. When the
+checkout was already on disk (a clone reused from an earlier link, or one you named by path), it runs a short
+`git fetch`, which updates only the remote-tracking refs, and reports what it found. The part of the output that
+reports it looks like this:
+
+```term
+$ sous repo link my-recipes
+    Branch                 : lc/my-change
+    Compared with          : origin/main
+    Merged into origin/main: yes
+    Behind origin/main     : 12 commits
+```
+
+A branch that is merged and behind has usually been released already, and the checkout is building from an older
+state than upstream's. When the fetch fails or takes longer than a few seconds, the link is still recorded, and
+a warning gives git's reason and says since when the checkout may have diverged (the last time it was fetched).
+The fetch is skipped for a checkout sous has just cloned, and a checkout with no `origin` remote says it has no
+upstream to compare with.
+
+### Choosing the branch
+
+Every change to the checkout is a flag, and git carries each one out. When git refuses a step (a conflict with
+uncommitted changes, a branch that already exists, one that does not), the command stops and shows git's message
+under a line naming the step. Each flag works on a checkout linked by path, too.
+
+```bash
+sous repo link my-recipes --branch lc/their-change     # read from an existing branch
+sous repo link my-recipes --create-branch my-change    # start a new branch
+sous repo link my-recipes --generate-branch            # start one named sous/edit-<YYYYMMDD>-<HHMM>
+sous repo link my-recipes --generate-branch --from next  # start it from another branch
+sous repo link my-recipes --latest                     # bring the default branch up to upstream's
+```
+
+- `--branch <name>` switches with `git switch`, which also checks out a branch that exists only upstream. A clone
+  sous makes holds only the default branch, so a branch that is not local is fetched first and added to the
+  branches `origin` is fetched for.
+- `--create-branch <name>` and `--generate-branch` create a new branch and switch to it; the generated name is
+  printed. The new branch starts from upstream's copy of `--from`, which defaults to the repository's default
+  branch rather than whatever is checked out, so a new branch never silently stacks on an old, already-merged
+  one. `--from` is an error without one of the two.
+- `--branch`, `--create-branch` and `--generate-branch` exclude each other.
+- `--latest` means upstream's latest version of what you are working from: the `--branch` target, the `--from`
+  base, or otherwise the default branch. It fetches that branch, switches to it and makes it match upstream's,
+  and leaves every other branch alone. Making a branch match upstream discards local work without git warning
+  about it, so this is the one place sous checks for itself: uncommitted changes to tracked files and local
+  commits upstream lacks are listed first, with one question. `--yes` answers it, and a run with no terminal
+  fails naming that flag. When the fetch fails, `--latest` fails, with git's reason.
+
+A `--global` link's checkout is shared by every project on the machine that links the repository globally, so
+changing its branch says it affects all of them.
+
 ## Contribute to someone else's repository
 
 `sous repo submit` proposes your committed changes to a repository's maintainers; it never publishes and never

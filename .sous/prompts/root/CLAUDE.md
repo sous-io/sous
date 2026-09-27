@@ -236,7 +236,8 @@ src/
         recipe-store.ts    # RecipeStore: put/get/has/remove/list/gc, atomic and verified
         settings.ts        # the store's tunables and the defaults sous ships
       links.ts             # the links maps, their merged view, and the .gitignore hygiene
-      git-clone.ts         # the injectable git layer `repo link` clones and inspects with
+      git-clone.ts         # the injectable git layer `repo link` clones, inspects, fetches
+                           #   and switches branches with
       scaffold/            # string builders + scaffoldRepo(), what `repo init` writes
       release/             # the publish side: `repo release` and `repo submit`
         validate.ts        # findRepoRoot + validateRepo; every publish-side consistency rule
@@ -1142,7 +1143,7 @@ This enables `sous prune` (remove stale outputs) and `sous clear` (delete all ou
 | `sous subscription add <ref>` | Subscribe to a namespace or a recipe, install the whole closure, answer the variables it publishes, then build the project (`--yes` / `-y` / `--trust`, `--accept-first`, `--prerelease`, `--always-pull`, `--answer <name>=<value>`, `--answers-file <path>`, `--dry-run`, which also prints every question the closure would ask, `--no-build`); also `sous subscribe` |
 | `sous subscription remove <ref>` | Remove a subscription and everything only it brought in, refcounted, then build the project so its files are pruned (`--dry-run`, `--no-build`); also `sous unsubscribe` |
 | `sous repo init [dir]` | Scaffold a new recipe repository (`--name`, `--namespace`, `--force`) |
-| `sous repo link <repo\|path> [path]` | Read a repository from a working copy: link the checkout a path names in place, clone a repository named on its own, or link the checkout a second argument names (`--global`, `--yes` / `-y` / `--trust`) |
+| `sous repo link <repo\|path> [path]` | Read a repository from a working copy: link the checkout a path names in place, clone a repository named on its own, or link the checkout a second argument names (`--global`, `--yes` / `-y` / `--trust`); a checkout already on disk is fetched and compared with upstream, and `--branch`, `--create-branch`, `--generate-branch`, `--from` and `--latest` change its branch |
 | `sous repo unlink <repo>` | Drop the link and go back to published versions; the checkout stays (`--global`) |
 | `sous repo release` | Publish new versions of a recipe repository: plan, ask once, then bump, regenerate the index, commit and tag (`--namespace`, `--recipe`, `--bump`, `--no-bump`, `--include-unchanged`, `--tag`, `--push`, `--yes`, `--check`, `--ci`, `--dry-run`) |
 | `sous repo submit` | Propose this repository's committed changes to its maintainers (`--title`, `--body`, `--draft`, `--dry-run`) |
@@ -1201,8 +1202,18 @@ the same remote rather than re-cloning, and refuses a checkout of a different on
 directory path in the REPO slot (`checkoutInRepoSlot` in `link.ts`) links that checkout where
 it is, with `origin: "path"` and the short name its repo manifest suggests; a configured short
 name always wins over a directory of the same name in the working directory, and a path in both
-argument slots is refused. A second argument links the checkout it names. `repo unlink` removes
-the map entry and never touches the checkout. A `repo link` argument that is a URL or a path
+argument slots is refused. A second argument links the checkout it names. A link never changes
+a checkout on its own: one that was already on disk gets a short `git fetch` (under
+`UPSTREAM_CHECK_TIMEOUT_MS`) and a report of its branch, merged state and distance behind the
+upstream default branch, or a "may have diverged since" warning with git's reason when upstream
+cannot be reached, and the link still stands. Every change is a flag (`--branch`,
+`--create-branch`, `--generate-branch`, `--from`, `--latest`), carried out by one git operation
+per step in `git-clone.ts`, whose refusal is passed through under a line naming the step (the
+three branch flags are oclif-exclusive, and `--from` needs a create flag through a `some`
+relationship). A named branch is fetched by explicit refspec and added to `origin`'s fetch list
+first, because the clone is single-branch. `--latest` is the one place sous checks for itself:
+`discardableWork` lists what matching upstream would discard, one question answered by `--yes`.
+`repo unlink` removes the map entry and never touches the checkout. A `repo link` argument that is a URL or a path
 rather than a configured short name goes through `SubscriptionService.addRepo`, so it runs
 the SAME trust ceremony `repo add` runs (and gets `addRepo`'s short-name collision check) before
 anything is linked or cloned; linking reads recipes with no version, lockfile or hash check, so
