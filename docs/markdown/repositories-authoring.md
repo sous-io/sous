@@ -195,8 +195,9 @@ third case is what a merge looks like to continuous integration: the bump is don
 
 `--namespace <ns>` and `--recipe <ns/name>` narrow the run and both repeat; `--bump <level>` is `patch` (the
 default), `minor`, `major` or `prerelease`; `--no-bump` raises nothing; `--include-unchanged` releases every
-recipe in scope, changed or not; `--check` only reads, validating and failing when the committed index is stale;
-and `--ci` is the merge preset: never bump, accept the plan, never ask, fail on anything unbumped. Every flag
+recipe in scope, changed or not; `--check` only reads, validating, failing on any problem the release would
+refuse, and reporting how merging would rewrite the committed index without failing on it, since that index is
+the release's output; and `--ci` is the merge preset: never bump, accept the plan, never ask, fail on anything unbumped. Every flag
 this command takes, `--tag`, `--push` and `--non-interactive` among them, is in the
 [command reference](commands.md#sous-repo-release).
 
@@ -244,7 +245,8 @@ give that identity to the account a continuous integration job runs as (the scaf
 `sous repo init` writes `.github/workflows/sous-release.yml`, which runs the same command in its two presets,
 calling the CLI from npm so nothing is installed into the repository. On a **pull request** it runs
 `npx --yes @sous-io/sous repo release --check`, which only reads, so it is safe on an untrusted branch and
-fails the pull request when a manifest is wrong or the committed index is stale. On a **push to `main`** it
+fails the pull request when a manifest is wrong or a published version changed, and notes how the merge will
+rewrite the index. On a **push to `main`** it
 runs `npx --yes @sous-io/sous repo release --ci --push --yes`; edit the workflow's `branches` list if your
 default branch has another name. `--ci` accepts the plan on its own, the redundant `--yes` keeping the file
 working with an older published sous. Both jobs check out with `fetch-depth: 0`, so existing tags are visible

@@ -40,12 +40,15 @@ import {
   type ValidationProblem,
 } from "../../lib/repos/release/index.js";
 import {
+  BULLET,
   blankLine,
   displayErrorBlock,
   dryRunNotice,
   footer,
   header,
   log,
+  note,
+  paragraph,
   section,
   showCommandVars,
   showVariables,
@@ -373,23 +376,22 @@ export default class RepoRelease extends Command {
     reportProblems(result.problems);
     if (hasErrors(result.problems)) return this.stopForErrors(result.problems);
 
-    if (!result.stale) {
+    // The index is the release's output, not the author's: the release that
+    // runs after a merge rewrites it before tagging. So drift here is reported
+    // as what merging will change, never as a failure; only the problems the
+    // index build raises above stop a check.
+    if (result.stale) {
+      note(`Merging rewrites the committed ${INDEX_FILENAME}, because:`);
+      for (const line of describeIndexDrift(existing, result.index)) {
+        paragraph(`${BULLET} ${line}`, { indent: 4, hangingIndent: 2 });
+      }
+      blankLine();
+    } else {
       log(`  The committed ${INDEX_FILENAME} is current, and so are the dependencies it`);
       log("  records for every version it publishes.");
-      reportPending(result, "These versions have no tag yet; they publish when this merges:");
-      footer();
-      return;
     }
-
-    const lines = [
-      `The committed ${INDEX_FILENAME} is out of date:`,
-      "",
-      ...describeIndexDrift(existing, result.index).map((line) => `  ${line}`),
-      "",
-      "Run 'sous repo release' to regenerate it, and commit what it writes.",
-    ];
-    displayErrorBlock(lines.join("\n"));
-    this.exit(1);
+    reportPending(result, "These versions have no tag yet; they publish when this merges:");
+    footer();
   }
 
   // --- Output ---------------------------------------------------------------------------------
