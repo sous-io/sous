@@ -11,13 +11,13 @@
       "version": "1.0.0"
     },
     "core/sous-skills": {
-      "hash": "sha256-13f745482726ec5bd5e16c28c5a767f04292f259fd3fabe8952e64621fc10e88",
+      "hash": "sha256-6934770f3e9223a6d8745435905498cf7daf58d9fc11b52900ce8f7770696719",
       "kind": "subscribes",
       "repo": "sous-recipes",
       "requestedBy": [
         "project"
       ],
-      "version": "0.2.12"
+      "version": "0.2.13"
     },
     "workflow/github-projects": {
       "hash": "sha256-8cff152d6ec30b242a35f1e2c4c98a8ca730728de61630cec4b6bcf7dee45615",
