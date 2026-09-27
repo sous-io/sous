@@ -14,3 +14,5 @@ export * from "./index-builder.js";
 export * from "./plan.js";
 export * from "./bump.js";
 export * from "./submit-service.js";
+export * from "./changelog.js";
+export * from "./submissions.js";

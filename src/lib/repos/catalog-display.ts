@@ -10,7 +10,14 @@
  */
 
 import { renderFacts, type LabeledFact } from "../vars/display.js";
-import { log, wrapColumns } from "../../utils/formatting.js";
+import {
+  blankLine,
+  log,
+  note,
+  palette,
+  paragraph,
+  wrapColumns,
+} from "../../utils/formatting.js";
 import type { TableColumn } from "../../utils/table.js";
 import type {
   NamespaceCoverage,
@@ -42,6 +49,19 @@ export const RECIPE_COLUMNS: TableColumn[] = [
   },
 ];
 
+/**
+ * The recipe columns for one run. Narrowed to what the project has installed,
+ * the pinned column is the installed version, and is headed that way.
+ *
+ * @param options - Whether the listing is narrowed to installed recipes.
+ */
+export function recipeColumns(options: { installed?: boolean } = {}): TableColumn[] {
+  if (options.installed !== true) return RECIPE_COLUMNS;
+  return RECIPE_COLUMNS.map((column) =>
+    column.key === "pinned" ? { ...column, header: "Installed" } : column
+  );
+}
+
 /** One rendered recipe row, in the shape `RECIPE_COLUMNS` reads. */
 export type RecipeRow = {
   key: string;
@@ -64,10 +84,89 @@ export function recipeRows(listings: RecipeListing[]): RecipeRow[] {
     key: entry.key,
     repo: entry.repo,
     latest: entry.latest ?? "none published",
-    pinned: entry.pinned ?? "",
+    pinned: pinnedCell(entry.pinned, entry.linkedPath),
     subscribed: entry.subscribed ? "yes" : "no",
     description: entry.description ?? "no description published",
   }));
+}
+
+/**
+ * The pinned version as a cell: the version alone, or the version marked
+ * `linked` in muted grey when builds read the recipe from a linked checkout.
+ *
+ * @param pinned - The version the lockfile pins, when it pins one.
+ * @param linkedPath - The linked checkout, when the repository is linked.
+ */
+export function pinnedCell(pinned: string | undefined, linkedPath: string | undefined): string {
+  if (pinned === undefined) return "";
+  return linkedPath === undefined ? pinned : `${pinned} ${palette.muted("linked")}`;
+}
+
+/** What a listing says about the linked recipes it marked. */
+export const LINKED_NOTE =
+  "A recipe marked linked is pinned at the version shown, but builds currently read it " +
+  "from the linked checkout of its repository.";
+
+/** What a repository listing says when an installed repository is linked. */
+export const LINKED_REPO_NOTE =
+  "A recipe installed from a linked repository is pinned at the version shown, but " +
+  "builds currently read it from the linked checkout.";
+
+/**
+ * Where a browsing command read the indexes from, in the words its opening
+ * block shows.
+ *
+ * @param latest - Whether the latest was asked for.
+ */
+export function describeIndexSource(latest: boolean): string {
+  return latest ? "each repository, upstream" : "the cached indexes";
+}
+
+/** What a browsing command could not read, and whether any row is linked. */
+export type BrowsingNotes = {
+  /** Trusted repositories with no index at all. */
+  notFetched?: string[];
+  /** Repositories upstream could not answer for, shown from the cache. */
+  notChecked?: string[];
+  /** True when some row was marked linked. */
+  anyLinked?: boolean;
+};
+
+/**
+ * Prints what a browsing command's rows could not say themselves: repositories
+ * that were not listed at all, repositories shown from the cache because
+ * upstream could not be reached, and what `linked` means when a row carries
+ * it. Prints nothing when there is nothing to say.
+ *
+ * @param notes - What the command could not read, and whether a row was linked.
+ */
+export function printBrowsingNotes(notes: BrowsingNotes): void {
+  const lines: Array<{ text: string; kind: "fact" | "note" }> = [];
+
+  if ((notes.notFetched ?? []).length > 0) {
+    lines.push({
+      kind: "fact",
+      text:
+        `These repositories are trusted and their index has not been fetched yet, so ` +
+        `nothing in them is listed: ${notes.notFetched!.join(", ")}.`,
+    });
+  }
+  if ((notes.notChecked ?? []).length > 0) {
+    lines.push({
+      kind: "fact",
+      text:
+        `These repositories could not be reached, so they are shown from the cache and ` +
+        `were not checked: ${notes.notChecked!.join(", ")}.`,
+    });
+  }
+  if (notes.anyLinked === true) lines.push({ kind: "note", text: LINKED_NOTE });
+
+  if (lines.length === 0) return;
+  blankLine();
+  for (const line of lines) {
+    if (line.kind === "note") note(line.text);
+    else paragraph(line.text);
+  }
 }
 
 /**

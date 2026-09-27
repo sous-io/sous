@@ -11,6 +11,7 @@ import {
   anythingToCommit,
   buildIndex,
   buildReleasePlan,
+  checkSubmissions,
   bumpRecipeVersion,
   commitPaths,
   createAnnotatedTag,
@@ -391,6 +392,46 @@ export default class RepoRelease extends Command {
       log("  records for every version it publishes.");
     }
     reportPending(result, "These versions have no tag yet; they publish when this merges:");
+
+    // A pull request can be opened without `sous repo submit`, so this check is
+    // the one gate every change passes. The release itself is not restricted:
+    // whatever publishes such a recipe still releases it.
+    section("Checking the recipes that take no proposals");
+    const submissions = await checkSubmissions(validation);
+    if (submissions.refusing.length > 0) {
+      const problems: ValidationProblem[] = submissions.refusing.map((recipe) => ({
+        level: "error",
+        where: recipe.path,
+        message:
+          `this change touches '${recipe.key}', which does not take proposed changes ` +
+          `(${recipe.declaredBy === "recipe" ? "its own manifest" : "the repository manifest"} ` +
+          `says so). Merging it would break whatever publishes the recipe.` +
+          (recipe.instead === undefined ? "" : ` Instead: ${recipe.instead}`),
+      }));
+      reportProblems(problems);
+      displayErrorBlock(
+        `This change cannot be merged: it touches ` +
+          `${describeCount(problems.length, "recipe")} that ${problems.length === 1 ? "does" : "do"} ` +
+          `not take proposed changes, listed above.\n` +
+          `  Take those edits out of the change, and send them where each recipe asks.`
+      );
+      return this.exit(1);
+    }
+    if (submissions.comparedWith.kind === "branch") {
+      log(
+        `  Compared with the branch '${submissions.comparedWith.branch}': this change touches no ` +
+          `recipe that declines proposals.`
+      );
+    } else if (submissions.comparedWith.kind === "tags") {
+      log("  Compared with each recipe's last release tag: nothing that declines proposals changed.");
+    } else if (submissions.comparedWith.kind === "none declined") {
+      log("  No recipe in this repository declines proposed changes.");
+    } else {
+      note(
+        "This checkout holds neither a copy of the default branch nor a release tag of any " +
+          "recipe that declines proposed changes, so there was nothing to compare with."
+      );
+    }
     footer();
   }
 

@@ -54,6 +54,7 @@ recipes:                            # every recipe folder, relative to the repos
 | `description`, `contribute` | no | A summary for anyone reading the repository, and where to send a contribution when a provider cannot support `sous repo submit` |
 | `namespaces` | yes | Keyed by namespace name; each entry takes an optional `description` |
 | `recipes` | yes | Relative paths, each holding a recipe manifest; a path listed twice is an error |
+| `submissions` | no | Whether the repository's recipes take proposed changes; see [The submissions block](#the-submissions-block) |
 
 ## `sous.recipe.yaml`: the recipe manifest
 
@@ -77,10 +78,29 @@ contents:                           # what a subscriber actually receives
 | `description` | no | Copied into the index at release time; shown by `sous recipe list` and `sous repo search` |
 | `depends`, `subscribes` | no | Build dependencies and co-subscriptions; within either list, no entry may repeat |
 | `contents`, `variables` | no | Contents default to an empty list, which is what a curated bundle publishes; a duplicated variable name, or two definitions claiming one `env`, is an error |
+| `submissions` | no | Whether this recipe takes proposed changes, winning over the repository's block; see [The submissions block](#the-submissions-block) |
 
 `contents[].kind` is `skills`, `memories`, `prompts` or `config`. The first three are written to the
 destinations named by [`recipeOutputs`](#recipeoutputs-where-the-files-land); `config` entries become config
 layers instead. `include` needs at least one glob, and both lists are recipe-relative.
+
+### The submissions block
+
+Both manifests accept a `submissions` block. On `sous.repo.yaml` it covers every recipe in the repository; on
+`sous.recipe.yaml` it covers that recipe, and wins over the repository's.
+
+```yaml
+submissions:
+  allowed: false                    # defaults to true
+  instead: Propose changes in sous-io/sous, under recipes/core/sous-skills/.
+```
+
+It exists for a recipe whose files are copied in from somewhere else: an edit merged into the copy is
+overwritten by the next copy, and a version it tagged can collide with the one the real source publishes.
+`sous repo submit` warns before proposing a change that touches such a recipe, prints the `instead` text, and
+proposes it if the contributor carries on. `sous repo release --check` fails a pull request that changes one,
+because a pull request can be opened without `submit`, and the check is the one gate every change passes. A
+release itself is never restricted, so whatever publishes the recipe still releases it.
 
 ### Dependencies named by location
 

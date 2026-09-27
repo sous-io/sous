@@ -17,6 +17,7 @@ import {
   parseFormat,
   relativePathSchema,
   repoNameSchema,
+  submissionsSchema,
 } from "./common.js";
 
 /** A namespace declaration. Namespaces group recipes and are not versioned. */
@@ -48,6 +49,13 @@ export const repoManifestSchema = extensibleObject({
    * contributor is never left without a route.
    */
   contribute: z.string().min(1, "must not be empty").optional(),
+  /**
+   * Whether the repository's recipes take proposed changes. A recipe's own
+   * `submissions` block wins over this one. `sous repo submit` warns before
+   * proposing a change to a recipe that does not, and `sous repo release
+   * --check` fails a pull request that changes one.
+   */
+  submissions: submissionsSchema.optional(),
   /** Every namespace the repo publishes, keyed by namespace name. */
   namespaces: z.record(namespaceNameSchema, repoNamespaceSchema),
   /**

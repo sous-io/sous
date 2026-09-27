@@ -27,13 +27,25 @@ export type GitResult = {
   stderr: string;
 };
 
+/** Where and for how long one git command may run. */
+export type GitRunOptions = {
+  /** The directory git runs in. */
+  cwd?: string;
+  /**
+   * How long git may run, in milliseconds, before it is stopped. A command that
+   * runs out of time comes back with a null status and a sentence saying so in
+   * `stderr`, never as an exception. Unset means no limit.
+   */
+  timeoutMs?: number;
+};
+
 /**
  * Runs one git command. Swappable so tests never need a real git binary.
  *
  * @param args - The arguments passed to git, without the leading "git".
- * @param options - Where to run it.
+ * @param options - Where to run it, and for how long.
  */
-export type GitRunner = (args: string[], options: { cwd?: string }) => GitResult;
+export type GitRunner = (args: string[], options: GitRunOptions) => GitResult;
 
 /** Options shared by every function here. */
 export type GitOptions = {
@@ -54,7 +66,21 @@ export const runGit: GitRunner = (args, options = {}) => {
     // A clone must never stop to ask for a password; a prompt in a
     // non-interactive run would hang the command with no explanation.
     env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+    timeout: options.timeoutMs,
+    killSignal: "SIGKILL",
   });
+
+  if ((result.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT") {
+    const seconds = Math.round((options.timeoutMs ?? 0) / 1000);
+    const partial = (result.stderr ?? "").trim();
+    return {
+      status: null,
+      stdout: (result.stdout ?? "").trim(),
+      stderr:
+        `git did not finish within ${seconds} seconds and was stopped.` +
+        (partial.length > 0 ? `\n${partial}` : ""),
+    };
+  }
 
   if (result.error !== undefined) {
     const reason = (result.error as NodeJS.ErrnoException).code === "ENOENT"
@@ -75,23 +101,40 @@ export const runGit: GitRunner = (args, options = {}) => {
   };
 };
 
-/** Runs git and throws a ConfigError, carrying git's own message, on failure. */
+/**
+ * Runs git and throws a ConfigError on failure: a first line naming the step
+ * that failed, then the command, then git's own message, line for line. Git is
+ * the authority on what it will and will not do to a checkout, so its refusal
+ * is passed through rather than paraphrased.
+ */
 function runGitOrThrow(
   args: string[],
-  options: { cwd?: string; runner?: GitRunner; what: string }
+  options: { cwd?: string; runner?: GitRunner; what: string; timeoutMs?: number }
 ): GitResult {
   const runner = options.runner ?? runGit;
-  const result = runner(args, { cwd: options.cwd });
+  const result = runner(args, { cwd: options.cwd, timeoutMs: options.timeoutMs });
   if (result.status !== 0) {
-    const detail = result.stderr.length > 0 ? result.stderr : result.stdout;
+    const detail = gitMessage(result);
+    const said =
+      detail.length > 0
+        ? `  git said:\n${detail
+            .split("\n")
+            .map((line) => `    ${line}`)
+            .join("\n")}\n`
+        : "";
     throw new ConfigError(
       `${options.what} failed.\n` +
         `  Command: git ${args.join(" ")}\n` +
-        (detail.length > 0 ? `  git said: ${detail}\n` : "") +
+        said +
         `  Fix the problem git reported, then run the command again.`
     );
   }
   return result;
+}
+
+/** What git said about a result: its error output, or its standard output when that is all. */
+function gitMessage(result: GitResult): string {
+  return result.stderr.length > 0 ? result.stderr : result.stdout;
 }
 
 /**
@@ -349,6 +392,424 @@ export function looksLikeRepoUrl(value: string): boolean {
   if (value.includes("://")) return true;
   if (/^[^@/\s]+@[^/\s:]+:/.test(value)) return true;
   return value.startsWith("/") || value.startsWith("./") || value.startsWith("../");
+}
+
+// --- Branches and upstream ----------------------------------------------------------------------
+//
+// Everything below works on the `origin` remote, which is the one a clone
+// creates and the one `remoteUrlOf` reads. Each function either reports a fact
+// or runs exactly one git operation; when git refuses an operation, its own
+// message is passed through under a line naming the step, and nothing here
+// second-guesses it. The one exception is `discardableWork`, which exists
+// because making a branch match upstream discards work without git warning
+// about it.
+
+/** The remote every function here reads from and fetches. */
+export const UPSTREAM_REMOTE = "origin";
+
+/**
+ * How long the fetch behind the divergence report may take, in milliseconds.
+ * It is tight on purpose: the report is a courtesy, and an unreachable host
+ * must fall back to a warning rather than hold the link up.
+ */
+export const UPSTREAM_CHECK_TIMEOUT_MS = 10_000;
+
+/** What a fetch that is allowed to fail produced. */
+export type FetchOutcome =
+  | { ok: true }
+  | {
+      ok: false;
+      /** Git's own explanation, or the sentence saying it ran out of time. */
+      reason: string;
+    };
+
+/**
+ * The branch a checkout has checked out, or undefined when HEAD is detached
+ * (a tag or a bare commit is checked out instead of a branch).
+ *
+ * @param directory - The checkout to inspect.
+ * @param options - The git runner to use.
+ */
+export function currentBranch(directory: string, options: GitOptions = {}): string | undefined {
+  const runner = options.runner ?? runGit;
+  const result = runner(["symbolic-ref", "--quiet", "--short", "HEAD"], { cwd: directory });
+  if (result.status !== 0 || result.stdout.length === 0) return undefined;
+  return result.stdout;
+}
+
+/**
+ * The abbreviated commit HEAD points at, for describing a detached checkout.
+ *
+ * @param directory - The checkout to inspect.
+ * @param options - The git runner to use.
+ */
+export function headCommit(directory: string, options: GitOptions = {}): string | undefined {
+  const runner = options.runner ?? runGit;
+  const result = runner(["rev-parse", "--short", "HEAD"], { cwd: directory });
+  if (result.status !== 0 || result.stdout.length === 0) return undefined;
+  return result.stdout;
+}
+
+/**
+ * The upstream repository's default branch, or undefined when it cannot be
+ * worked out. A clone records it as `origin/HEAD`, which is read first and
+ * needs no network; a checkout that lacks that record (one made with `git
+ * init` and a remote added later, say) is asked about over the network, under
+ * the same tight timeout as the upstream check.
+ *
+ * @param directory - The checkout to inspect.
+ * @param options - The git runner to use.
+ */
+export function defaultBranch(directory: string, options: GitOptions = {}): string | undefined {
+  const runner = options.runner ?? runGit;
+  const prefix = `${UPSTREAM_REMOTE}/`;
+
+  const local = runner(
+    ["symbolic-ref", "--quiet", "--short", `refs/remotes/${UPSTREAM_REMOTE}/HEAD`],
+    { cwd: directory }
+  );
+  if (local.status === 0 && local.stdout.startsWith(prefix)) {
+    return local.stdout.slice(prefix.length);
+  }
+
+  const remote = runner(["ls-remote", "--symref", UPSTREAM_REMOTE, "HEAD"], {
+    cwd: directory,
+    timeoutMs: UPSTREAM_CHECK_TIMEOUT_MS,
+  });
+  if (remote.status !== 0) return undefined;
+  const match = /^ref:\s+refs\/heads\/(\S+)\s+HEAD$/m.exec(remote.stdout);
+  return match?.[1];
+}
+
+/**
+ * Fetches from upstream, allowing the fetch to fail. A fetch updates only the
+ * remote-tracking refs, never the user's files or branches, which is why the
+ * divergence report may run one unasked.
+ *
+ * @param directory - The checkout to fetch into.
+ * @param options - The git runner to use, and how long the fetch may take.
+ */
+export function tryFetchUpstream(
+  directory: string,
+  options: GitOptions & { timeoutMs?: number } = {}
+): FetchOutcome {
+  const runner = options.runner ?? runGit;
+  const result = runner(["fetch", "--quiet", UPSTREAM_REMOTE], {
+    cwd: directory,
+    timeoutMs: options.timeoutMs ?? UPSTREAM_CHECK_TIMEOUT_MS,
+  });
+  if (result.status === 0) return { ok: true };
+  const reason = gitMessage(result);
+  return {
+    ok: false,
+    reason: reason.length > 0 ? reason : `git exited with status ${String(result.status)}`,
+  };
+}
+
+/**
+ * When this checkout last heard from upstream, as far as it recorded: the
+ * newer of the last fetch and the last update to the default branch's
+ * remote-tracking ref (a clone writes the second and not the first).
+ * Undefined when neither record exists.
+ *
+ * @param directory - The checkout to inspect.
+ * @param branch - The upstream default branch, when it is known.
+ * @param options - The git runner to use.
+ */
+export function lastFetchedAt(
+  directory: string,
+  branch: string | undefined,
+  options: GitOptions = {}
+): Date | undefined {
+  const runner = options.runner ?? runGit;
+  const records = ["FETCH_HEAD"];
+  if (branch !== undefined) records.push(`logs/refs/remotes/${UPSTREAM_REMOTE}/${branch}`);
+
+  let newest: Date | undefined;
+  for (const record of records) {
+    const located = runner(["rev-parse", "--git-path", record], { cwd: directory });
+    if (located.status !== 0 || located.stdout.length === 0) continue;
+    const file = path.resolve(directory, located.stdout);
+    try {
+      const modified = fs.statSync(file).mtime;
+      if (newest === undefined || modified > newest) newest = modified;
+    } catch {
+      // No such record; the other one may still exist.
+    }
+  }
+  return newest;
+}
+
+/** How a checkout's current state compares with upstream's default branch. */
+export type UpstreamComparison = {
+  /** The branch checked out, or undefined when HEAD is detached. */
+  branch: string | undefined;
+  /** The commit HEAD points at, abbreviated. */
+  commit: string | undefined;
+  /** The upstream default branch compared against. */
+  defaultBranch: string;
+  /**
+   * True when every commit on HEAD is already on the upstream default branch;
+   * undefined when git could not tell (the remote-tracking ref is missing).
+   */
+  merged: boolean | undefined;
+  /** Commits on the upstream default branch that HEAD lacks; undefined when git could not tell. */
+  behind: number | undefined;
+};
+
+/**
+ * Compares a checkout's HEAD with the upstream default branch, from the
+ * remote-tracking refs as they stand. It runs no fetch of its own.
+ *
+ * @param directory - The checkout to inspect.
+ * @param branch - The upstream default branch.
+ * @param options - The git runner to use.
+ */
+export function compareWithUpstream(
+  directory: string,
+  branch: string,
+  options: GitOptions = {}
+): UpstreamComparison {
+  const runner = options.runner ?? runGit;
+  const upstream = `${UPSTREAM_REMOTE}/${branch}`;
+
+  const ancestor = runner(["merge-base", "--is-ancestor", "HEAD", upstream], {
+    cwd: directory,
+  });
+  const merged = ancestor.status === 0 ? true : ancestor.status === 1 ? false : undefined;
+
+  const count = runner(["rev-list", "--count", `HEAD..${upstream}`], { cwd: directory });
+  const parsed = Number.parseInt(count.stdout, 10);
+  const behind = count.status === 0 && Number.isFinite(parsed) ? parsed : undefined;
+
+  return {
+    branch: currentBranch(directory, options),
+    commit: headCommit(directory, options),
+    defaultBranch: branch,
+    merged,
+    behind,
+  };
+}
+
+/**
+ * Asks git whether a name is a valid branch name, and passes its refusal
+ * through when it is not. Every name the user types goes through this before
+ * it reaches any other git command, which is also what stops a name that starts
+ * with a dash from being read as an option.
+ *
+ * @param directory - The checkout the name is for.
+ * @param name - The branch name as the user typed it.
+ * @param options - The git runner to use.
+ */
+export function assertBranchName(directory: string, name: string, options: GitOptions = {}): void {
+  runGitOrThrow(["check-ref-format", "--branch", name], {
+    cwd: directory,
+    runner: options.runner,
+    what: `Checking the branch name '${name}'`,
+  });
+}
+
+/**
+ * True when the checkout has a local branch of that name.
+ *
+ * @param directory - The checkout to inspect.
+ * @param name - The branch name.
+ * @param options - The git runner to use.
+ */
+export function localBranchExists(
+  directory: string,
+  name: string,
+  options: GitOptions = {}
+): boolean {
+  const runner = options.runner ?? runGit;
+  const result = runner(["show-ref", "--verify", "--quiet", `refs/heads/${name}`], {
+    cwd: directory,
+  });
+  return result.status === 0;
+}
+
+/**
+ * Fetches one named branch from upstream into its remote-tracking ref.
+ *
+ * A clone sous makes is single-branch, so its fetch configuration covers only
+ * the default branch, and neither a plain fetch nor `git switch` would ever see
+ * another one. The branch is therefore fetched by an explicit refspec, and then
+ * added to the remote's fetch list (`git remote set-branches --add`), so later
+ * fetches keep it current and `git switch` can find it. A checkout whose fetch
+ * configuration already covers the branch is left as it is.
+ *
+ * @param directory - The checkout to fetch into.
+ * @param name - The branch to fetch.
+ * @param options - The git runner to use.
+ */
+export function fetchBranch(directory: string, name: string, options: GitOptions = {}): void {
+  runGitOrThrow(
+    [
+      "fetch",
+      "--quiet",
+      UPSTREAM_REMOTE,
+      `+refs/heads/${name}:refs/remotes/${UPSTREAM_REMOTE}/${name}`,
+    ],
+    {
+      cwd: directory,
+      runner: options.runner,
+      what: `Fetching the branch '${name}' from ${UPSTREAM_REMOTE}`,
+    }
+  );
+
+  if (fetchConfigCovers(directory, name, options)) return;
+
+  runGitOrThrow(["remote", "set-branches", "--add", UPSTREAM_REMOTE, name], {
+    cwd: directory,
+    runner: options.runner,
+    what: `Adding the branch '${name}' to the branches ${UPSTREAM_REMOTE} is fetched for`,
+  });
+}
+
+/**
+ * True when the remote's configured fetch refspecs already bring the branch
+ * in: a wildcard over every branch, or the branch by name.
+ */
+function fetchConfigCovers(directory: string, name: string, options: GitOptions): boolean {
+  const runner = options.runner ?? runGit;
+  const result = runner(["config", "--get-all", `remote.${UPSTREAM_REMOTE}.fetch`], {
+    cwd: directory,
+  });
+  if (result.status !== 0) return false;
+  return result.stdout.split("\n").some((line) => {
+    const source = line.trim().replace(/^\+/, "").split(":")[0];
+    return source === "refs/heads/*" || source === `refs/heads/${name}`;
+  });
+}
+
+/**
+ * Switches the checkout to an existing branch with `git switch`, which also
+ * creates a local branch tracking an upstream one of the same name.
+ *
+ * @param directory - The checkout to switch.
+ * @param name - The branch to switch to.
+ * @param options - The git runner to use.
+ */
+export function switchBranch(directory: string, name: string, options: GitOptions = {}): void {
+  runGitOrThrow(["switch", name], {
+    cwd: directory,
+    runner: options.runner,
+    what: `Switching to the branch '${name}'`,
+  });
+}
+
+/**
+ * Creates a branch at a start point and switches to it, with `git switch
+ * --create`, which refuses a branch that already exists. The new branch tracks
+ * nothing, so pushing it never lands on the branch it started from.
+ *
+ * @param directory - The checkout to work in.
+ * @param name - The branch to create.
+ * @param startPoint - Where it starts, such as `origin/main`.
+ * @param options - The git runner to use.
+ */
+export function createBranch(
+  directory: string,
+  name: string,
+  startPoint: string,
+  options: GitOptions = {}
+): void {
+  runGitOrThrow(["switch", "--create", name, "--no-track", startPoint], {
+    cwd: directory,
+    runner: options.runner,
+    what: `Creating the branch '${name}' from ${startPoint}`,
+  });
+}
+
+/** The local work that making a branch match upstream would throw away. */
+export type DiscardableWork = {
+  /** Changes to tracked files that are not committed, in `git status --short` form. */
+  uncommitted: string[];
+  /** Commits on the local branch that its upstream counterpart lacks, one line each. */
+  localCommits: string[];
+};
+
+/**
+ * Lists what `resetBranchToUpstream` would discard: uncommitted changes to
+ * tracked files (untracked files are left alone by it, so they are not listed),
+ * and commits on the local branch that the fetched upstream branch lacks. Run
+ * it after fetching the branch.
+ *
+ * @param directory - The checkout to inspect.
+ * @param name - The branch that would be made to match upstream.
+ * @param options - The git runner to use.
+ */
+export function discardableWork(
+  directory: string,
+  name: string,
+  options: GitOptions = {}
+): DiscardableWork {
+  const status = runGitOrThrow(["status", "--porcelain", "--untracked-files=no"], {
+    cwd: directory,
+    runner: options.runner,
+    what: "Listing the uncommitted changes",
+  });
+  const uncommitted = status.stdout
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .filter((line) => line.length > 0);
+
+  let localCommits: string[] = [];
+  if (localBranchExists(directory, name, options)) {
+    const log = runGitOrThrow(
+      ["log", "--oneline", "--no-decorate", `refs/remotes/${UPSTREAM_REMOTE}/${name}..refs/heads/${name}`],
+      {
+        cwd: directory,
+        runner: options.runner,
+        what: `Listing the commits on '${name}' that ${UPSTREAM_REMOTE} does not have`,
+      }
+    );
+    localCommits = log.stdout
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+  }
+
+  return { uncommitted, localCommits };
+}
+
+/**
+ * Switches to a branch and makes it match its fetched upstream counterpart
+ * exactly, creating the local branch when there is none. Uncommitted changes to
+ * tracked files and local commits upstream lacks are discarded, which is why a
+ * caller lists them with `discardableWork` and asks first. Every other branch
+ * is left as it is.
+ *
+ * @param directory - The checkout to work in.
+ * @param name - The branch to update.
+ * @param options - The git runner to use.
+ */
+export function resetBranchToUpstream(
+  directory: string,
+  name: string,
+  options: GitOptions = {}
+): void {
+  runGitOrThrow(
+    ["switch", "--discard-changes", "--force-create", name, `${UPSTREAM_REMOTE}/${name}`],
+    {
+      cwd: directory,
+      runner: options.runner,
+      what: `Making the branch '${name}' match ${UPSTREAM_REMOTE}/${name}`,
+    }
+  );
+}
+
+/**
+ * The name `--generate-branch` gives a new branch: `sous/edit-<YYYYMMDD>-<HHMM>`,
+ * in local time.
+ *
+ * @param now - The moment to name it after. Defaults to now.
+ */
+export function generatedBranchName(now: Date = new Date()): string {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  const date = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
+  const time = `${pad(now.getHours())}${pad(now.getMinutes())}`;
+  return `sous/edit-${date}-${time}`;
 }
 
 // --- Small filesystem helpers -------------------------------------------------------------------

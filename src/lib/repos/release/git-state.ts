@@ -6,8 +6,9 @@
  * branch is checked out, which branch is the default one, and where does
  * `origin` point. A release makes exactly one commit of its own (its version
  * bumps and its index, through `commitPaths`) and refuses while anything else
- * is uncommitted; everything else here is read to refuse politely rather than
- * to fix anything.
+ * is uncommitted; a submission commits only when `--commit` asks it to
+ * (`commitEverything`). Everything else here is read to refuse politely rather
+ * than to fix anything.
  *
  * Every function takes the injectable command runner, so tests never spawn git
  * unless they mean to.
@@ -240,10 +241,11 @@ export async function hasCommitIdentity(
 /**
  * Stages exactly the given paths and commits them.
  *
- * This is the one place sous commits on an author's behalf, and it is
+ * This is how `sous repo release` commits on an author's behalf, and it is
  * deliberately narrow: a release writes version bumps and an index, and those
  * are the only paths it stages. Anything else in the working tree is left
- * exactly as it was.
+ * exactly as it was. The only other commit sous makes is `commitEverything`,
+ * for `sous repo submit --commit`.
  *
  * @param rootDir - The repository's root directory.
  * @param paths - The paths to stage, relative to the repository root.
@@ -300,8 +302,18 @@ export async function createBranch(
   await runGit(["checkout", "-b", branch], { cwd: rootDir, run: options.run });
 }
 
+/** What a push did: sent new commits, or found the remote already had them. */
+export type PushOutcome = "updated" | "up-to-date";
+
 /**
- * Pushes one branch to a remote, setting it as the branch's upstream.
+ * Pushes one branch to a remote, setting it as the branch's upstream, and says
+ * whether anything was sent.
+ *
+ * The push is never forced. When the remote branch holds commits the local one
+ * lacks, git refuses, and its own explanation is what the caller receives: git
+ * is the authority on whether a push is safe, so nothing here second-guesses it.
+ * Whether anything was sent is read from git's machine-readable report, where a
+ * ref that was already current is flagged with `=`.
  *
  * @param rootDir - The repository's root directory.
  * @param remote - The remote to push to.
@@ -313,34 +325,108 @@ export async function pushBranch(
   remote: string,
   branch: string,
   options: RunOptions = {}
-): Promise<void> {
-  await runGit(["push", "--set-upstream", remote, branch], {
+): Promise<PushOutcome> {
+  const report = await runGit(["push", "--porcelain", "--set-upstream", remote, branch], {
     cwd: rootDir,
     run: options.run,
   });
+  return pushReportIsUpToDate(report) ? "up-to-date" : "updated";
 }
 
 /**
- * The subject line of the most recent commit, or undefined when there is none.
- * It is the default title for a proposed change, which is what a contributor
- * would have typed anyway.
+ * True when git's machine-readable push report says every ref it pushed was
+ * already current on the remote.
+ *
+ * pushReportIsUpToDate("To origin\n=\trefs/heads/a:refs/heads/a\t[up to date]\nDone");
+ * // -> true
+ *
+ * @param report - What `git push --porcelain` printed.
+ */
+export function pushReportIsUpToDate(report: string): boolean {
+  const refLines = report.split("\n").filter((line) => /^[ +\-*!=]\t/.test(line));
+  return refLines.length > 0 && refLines.every((line) => line.startsWith("=\t"));
+}
+
+/**
+ * True when a local branch of that name exists.
  *
  * @param rootDir - The repository's root directory.
+ * @param branch - The branch name.
  * @param options - The command runner to use.
  */
-export async function lastCommitSubject(
+export async function branchExists(
   rootDir: string,
+  branch: string,
   options: RunOptions = {}
-): Promise<string | undefined> {
+): Promise<boolean> {
   try {
-    const subject = await runGit(["log", "-1", "--format=%s"], {
+    await runGit(["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`], {
       cwd: rootDir,
       run: options.run,
     });
-    return subject.length > 0 ? subject : undefined;
+    return true;
   } catch {
-    return undefined;
+    return false;
   }
+}
+
+/**
+ * Checks out an existing branch. Git refuses when uncommitted changes would be
+ * overwritten, and that refusal reaches the caller unchanged.
+ *
+ * @param rootDir - The repository's root directory.
+ * @param branch - The branch to check out.
+ * @param options - The command runner to use.
+ */
+export async function switchBranch(
+  rootDir: string,
+  branch: string,
+  options: RunOptions = {}
+): Promise<void> {
+  await runGit(["switch", branch], { cwd: rootDir, run: options.run });
+}
+
+/**
+ * Every path the commits since `since` changed, comparing that commit with HEAD.
+ *
+ * @param rootDir - The repository's root directory.
+ * @param since - The commit to compare HEAD with.
+ * @param options - The command runner to use.
+ */
+export async function pathsChangedSince(
+  rootDir: string,
+  since: string,
+  options: RunOptions = {}
+): Promise<string[]> {
+  const changed = await runGit(["diff", "--name-only", since, "HEAD"], {
+    cwd: rootDir,
+    run: options.run,
+  });
+  return changed.length === 0 ? [] : changed.split("\n").filter((line) => line.length > 0);
+}
+
+/**
+ * Stages everything the working tree holds (edits, deletions and untracked
+ * files alike) and commits it with the given message.
+ *
+ * This is the second place sous commits on an author's behalf, and it runs only
+ * for `sous repo submit --commit`, after the contributor has seen every path it
+ * stages and agreed to it.
+ *
+ * @param rootDir - The repository's root directory.
+ * @param message - The commit message.
+ * @param options - The command runner to use.
+ */
+export async function commitEverything(
+  rootDir: string,
+  message: string,
+  options: RunOptions = {}
+): Promise<void> {
+  await runGit(["add", "--all"], { cwd: rootDir, run: options.run });
+  await runGit(["commit", "--quiet", "--message", message], {
+    cwd: rootDir,
+    run: options.run,
+  });
 }
 
 /**

@@ -17,7 +17,8 @@ Every command that works on a project takes these four. `SOUS_CONFIG`, `SOUS_DIR
 a flag beats its variable, and both beat walk-up discovery. See [Discovery and overrides](config-discovery.md).
 
 ?> `repo init`, `repo release` and `repo submit` take none of these. They run inside a recipe repository, which
-has no `.sous/` directory to discover. All three still take `--non-interactive`.
+has no `.sous/` directory to discover. All three still take `--non-interactive`. `repo submit` may also be run
+from a project, which it finds by walking up from the working directory.
 
 ## Flags that answer questions
 
@@ -40,6 +41,22 @@ Help has four spellings. `sous --help` prints the root screen; `sous repo add --
 `sous help repo add` all print that one command's. `sous help` alone lists the topics and commands, and
 `sous --version` prints the version alone, as `v1.2.3`; `sous --version --verbose` adds the package name, where
 it is installed, the platform and the Node build under it.
+
+## Flags that browse
+
+Every command that shows published versions takes the same two flags: `sous recipe list`, `sous recipe show`,
+`sous namespace list`, `sous namespace show`, `sous repo list`, `sous repo search` (and `sous search`) and
+`sous subscription list`. The flags combine.
+
+| Flag | What it does |
+|------|--------------|
+| `--latest` | Read each repository's index from upstream instead of the cache. `--remote` is the same flag. What it fetches is never written to the cache; a repository that cannot be reached is shown from the cache and named as not checked |
+| `--installed` | Show only what this project has installed, at the version its lockfile pins. A recipe whose repository is linked is marked `linked`, because builds read it from the checkout rather than the pinned version |
+
+Without either flag a browsing command reads only the cached indexes, so it works offline and fast.
+`sous recipe list --installed --latest` is the out-of-date view: each installed recipe with upstream's newest
+version beside the installed one. With `--installed`, `recipe show` and `namespace show` look the reference up
+among installed recipes only, and a reference to something published but not installed is an error saying so.
 
 Every topic answers to both spellings of its name: `repo` and `repos`, `subscription` and `subscriptions`,
 `namespace` and `namespaces`, `recipe` and `recipes`, `lock` and `locks`, `vars` and `var`, `config` and
@@ -79,6 +96,12 @@ and the command you want almost always. Takes `--dry-run`.
 - `--strict`: fail on any compilation error rather than reporting it and continuing.
 - `-w, --watch`: rebuild on every change to a source file, a config layer or a linked checkout.
 
+Before it compiles, a build lists each recipe this project uses that has a newer version within the range
+declared for it, beside the version pinned. It moves no pin; only always-pull moves one. The build reads upstream
+for this at most once per freshness window (`store.freshnessSeconds`, five minutes by default), gives a
+repository three seconds to answer, and otherwise answers from the cached index without a word about the
+failed check.
+
 Example: `sous build --rebuild`
 
 ### `sous compile`
@@ -103,8 +126,10 @@ Example: `sous launch claude --continuous`
 
 ### `sous search TEXT`
 Searches the recipes every trusted repository publishes, by name or description; reads the cached indexes only,
-so it works offline. `--limit <n>` sets how many matches to show, defaulting to 25. Also spelled
-`sous repo search`. Example: `sous search task --limit 50`
+so it works offline. `--limit <n>` sets how many matches to show, defaulting to 25. Takes the
+[browsing flags](#flags-that-browse): `--latest` searches the indexes upstream serves, and `--installed` searches
+only installed recipes and adds an Installed column. Also spelled `sous repo search`.
+Example: `sous search task --limit 50`
 
 ### `sous help [COMMAND]`
 Prints the help for sous, or for one command or topic. Works from any directory, including one with no config
@@ -155,7 +180,9 @@ held, the files the next build prunes, and the linked checkout if one points at 
 ### `sous repo list`
 Lists the repositories this project trusts, with the provider, where the entry came from, whether it is linked,
 how many recipes it publishes (`not fetched` until its index has been downloaded) and its URL. `--verbose` adds
-the namespaces each one publishes, on a line under its row.
+the namespaces each one publishes, on a line under its row. Takes the [browsing flags](#flags-that-browse):
+`--installed` keeps only the repositories something is installed from and names each installed recipe and
+version on a line under its row.
 
 ```term
 $ sous repo list
@@ -165,7 +192,8 @@ $ sous repo list
 ```
 
 ### `sous repo search TEXT`
-Same command as `sous search`, under its own topic; takes `--limit <n>`. Example: `sous repo search browser`
+Same command as `sous search`, under its own topic; takes `--limit <n>` and the
+[browsing flags](#flags-that-browse). Example: `sous repo search browser --installed`
 
 ### `sous repo gc`
 Collects the machine-wide recipe store down to its size cap. `--max-bytes <n>` collects to that cap instead of
@@ -177,10 +205,30 @@ Points a repository at a working copy on this machine instead of a published ver
 clones it into `.sous/repos` and links the clone; a name or URL with a `PATH` links the checkout at that path; a
 path alone links that checkout where it is, adding the repository first if needed. Takes `--dry-run`.
 
-- `--global`: link for every project on this machine, sharing one checkout.
-- `-y, --yes`: answer the trust question a not-yet-added repository raises (also `--trust`).
+A checkout that was already on disk is fetched (a fetch changes none of its files or branches) and compared with
+upstream: its branch, whether that branch is merged into the default branch, and how many commits it is behind.
+When upstream cannot be reached within a few seconds, a warning gives git's reason and says since when the
+checkout may have diverged, and the link is still recorded. Nothing else changes the checkout unless a flag
+asks for it; git carries out each step, and a step git refuses stops the command with git's own message.
 
-Example: `sous repo link sous-recipes ~/Projects/sous-recipes`
+- `--global`: link for every project on this machine, sharing one checkout. Changing that checkout's branch
+  says it affects every project that links it.
+- `--branch <name>`: switch to an existing branch, fetching it from upstream first when it is not local.
+- `--create-branch <name>`: create a new branch and switch to it; git refuses a name that already exists.
+- `--generate-branch`: the same, with the generated name `sous/edit-<YYYYMMDD>-<HHMM>`, which is printed.
+- `--from <branch>`: the base of the new branch, fetched first. Defaults to the repository's default branch,
+  not whatever is checked out, and needs `--create-branch` or `--generate-branch`.
+- `--latest`: make the branch being worked from (the `--branch` target, the `--from` base, or else the default
+  branch) match upstream's, leaving every other branch alone. What that would discard (uncommitted changes and
+  local commits upstream lacks) is listed first, with one question; it fails when the fetch fails.
+- `-y, --yes`: answer the trust question a not-yet-added repository raises and the question `--latest` asks
+  (also `-f`, `--force`, `--trust`).
+
+`--branch`, `--create-branch` and `--generate-branch` exclude each other; each flag works on a checkout linked
+by path, too.
+
+Example: `sous repo link sous-recipes ~/Projects/sous-recipes`, or `sous repo link sous-recipes
+--generate-branch --latest --yes`
 
 ### `sous repo unlink REPO`
 Stops reading a repository from a working copy, goes back to the versions the lockfile pins, and rebuilds the
@@ -220,17 +268,32 @@ and `git config user.email`), because it commits and cuts annotated tags. Takes 
 - `--no-bump`: raise nothing; a changed recipe that was never raised is then an error.
 - `--include-unchanged`: release every recipe in scope, changed or not.
 - `--tag`, `--push`: tag even on a non-default branch, and push the commit and this run's tags.
-- `--check`: only validate. It fails on a problem the release would refuse, and reports, without failing, how
-  merging would rewrite the committed index.
+- `--check`: only validate. It fails on a problem the release would refuse, and on a change to a recipe that
+  takes no proposals (see [`submissions`](repositories-file-formats.md#the-submissions-block)), and reports,
+  without failing, how merging would rewrite the committed index.
 - `--ci`: the merge preset. Never bump, never ask, and fail on anything unbumped. It still needs `--yes` to
   accept the plan it prints, so a merge job runs `sous repo release --ci --yes --push`.
 
 Example: `sous repo release --recipe workflow/task-files --bump minor --push`
 
-### `sous repo submit`
-Proposes this repository's committed changes to its maintainers. `--title <text>` defaults to the last commit's
-subject and `--body <text>` to a summary sous writes; `--draft` opens the proposal as a draft, and `--dry-run`
-prints the plan without sending anything. Example: `sous repo submit --title "Add a linting recipe" --draft`
+### `sous repo submit [REPO]`
+Proposes a recipe repository's changes to its maintainers, and follows the proposal through: it opens one,
+updates it when there is more to send, reports where it stands, and starts the next one once it was merged. Run
+inside a recipe repository it works there; run inside a project, `REPO` names a linked repository and the
+submission runs in its checkout (with no `REPO`, the only linked repository is used, and several are a
+question). Takes `-y, --yes` and `--dry-run`.
+
+- `--title <text>`, `--body <text>`: the proposal's title and description. Both are required for a new
+  proposal, and asked for at a terminal when missing; on an open proposal they are optional and replace its own.
+  The body is followed by a changelog sous generates.
+- `--branch <name>`: work with this branch instead of the one checked out. A branch that does not exist is
+  created from the current commit.
+- `--status`: only report where the branch's proposal stands; nothing is checked, written or sent.
+- `--commit`: commit uncommitted changes for you, after listing them and asking once, with the title, the
+  description and the changelog as the message.
+- `--draft`: open a new proposal as a draft.
+
+Example: `sous repo submit --title "Add a linting recipe" --body "Adds lint rules for shell scripts." --draft`
 
 ## subscription
 
@@ -272,13 +335,16 @@ Example: `sous subscription update workflow/task-files`
 
 ### `sous subscription list`
 Lists the subscriptions this project declares, switched-off ones included, with the range each resolves within,
-the versions the lockfile pins, where it came from and whether it is on. Reads the config and the lockfile only.
-Example: `sous subscription list`
+the versions the lockfile pins, the latest version each of those recipes has published, where it came from and
+whether it is on. Reads the config, the lockfile and the cached indexes only. Takes the
+[browsing flags](#flags-that-browse): `--latest` reads the latest versions from upstream, and `--installed` keeps
+only the subscriptions that have pinned something. Example: `sous subscription list --latest`
 
 ## namespace
 
 `namespace` reads the cached indexes and the lockfile, so it works offline. A trusted repository whose index has
-never been fetched is named at the end of a listing, not left out. The core version this installation of sous
+never been fetched is named at the end of a listing, not left out. Both commands take the
+[browsing flags](#flags-that-browse); with `--installed` the recipe count is the number installed. The core version this installation of sous
 ships is listed even while the cached index does not publish it yet.
 
 ### `sous namespace list`
@@ -292,11 +358,12 @@ Example: `sous namespace show sous-recipes:core`
 
 ## recipe
 
-Browses the recipes the trusted repositories publish; like `namespace`, it works offline.
+Browses the recipes the trusted repositories publish; like `namespace`, it works offline, and both commands take
+the [browsing flags](#flags-that-browse).
 
 ### `sous recipe list`
 Lists the recipes the trusted repositories publish, across every namespace, with the same per-recipe columns
-`namespace show` prints. Example: `sous recipe list`
+`namespace show` prints. Example: `sous recipe list --installed --latest`
 
 ### `sous recipe show REF`
 Describes one recipe completely: its repository and location, every published version, its dependencies as

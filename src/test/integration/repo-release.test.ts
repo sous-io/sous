@@ -122,6 +122,7 @@ describe("sous repo release and sous repo submit", () => {
         'if [ "$1" = "auth" ]; then exit 0; fi',
         'if [ "$1" = "api" ] && [ "$2" = "user" ]; then echo contributor; exit 0; fi',
         'if [ "$1" = "api" ]; then echo true; exit 0; fi',
+        'if [ "$1" = "pr" ] && [ "$2" = "list" ]; then echo "[]"; exit 0; fi',
         'echo "https://github.com/owner/recipes/pull/1"',
         "exit 0",
         "",
@@ -631,7 +632,15 @@ describe("sous repo release and sous repo submit", () => {
       git(recipeRepo, "add", "--all");
       git(recipeRepo, "commit", "--quiet", "--message", "contribute a skill");
 
-      const result = runSous("repo", "submit", "--dry-run");
+      const result = runSous(
+        "repo",
+        "submit",
+        "--dry-run",
+        "--title",
+        "Contribute a skill",
+        "--body",
+        "Adds a contributed skill."
+      );
 
       expect(result.status, result.stdout + result.stderr).toBe(0);
       expect(result.stdout).toContain("Checking that sous.index.json was left alone");

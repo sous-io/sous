@@ -9,6 +9,7 @@ import {
   findNewerInRange,
   recordUpstreamCheck,
   shouldCheckUpstream,
+  withDeadline,
   type UpstreamCheckRecord,
 } from "./freshness.js";
 import type { IndexMeta } from "./providers/index-cache.js";
@@ -309,5 +310,49 @@ describe("effectiveRangeForHolders()", () => {
         dependencyRange: () => "*",
       })
     ).toBeUndefined();
+  });
+});
+
+describe("withDeadline()", () => {
+  /**
+   * Work that finishes in time answers with its own result.
+   *
+   * await withDeadline(async () => 42, 1000) // -> 42
+   */
+  it("should return the result of work that finishes in time", async () => {
+    await expect(withDeadline(async () => 42, 1000)).resolves.toBe(42);
+  });
+
+  /**
+   * Work that runs past the deadline is abandoned: the promise rejects with a
+   * plain-language reason, and the work's signal is aborted so a request that
+   * honors it is cancelled.
+   *
+   * await withDeadline(() => new Promise(() => {}), 20)
+   * // -> rejects: the repository did not answer within 0 seconds
+   */
+  it("should reject and abort the signal at the deadline", async () => {
+    let signal: AbortSignal | undefined;
+    const pending = withDeadline((given) => {
+      signal = given;
+      return new Promise<never>(() => {});
+    }, 20);
+
+    await expect(pending).rejects.toThrow(/did not answer within/);
+    expect(signal?.aborted).toBe(true);
+  });
+
+  /**
+   * A failure inside the work is passed through unchanged.
+   *
+   * await withDeadline(async () => { throw new Error("offline"); }, 1000)
+   * // -> rejects: offline
+   */
+  it("should pass a failure of the work through", async () => {
+    await expect(
+      withDeadline(async () => {
+        throw new Error("offline");
+      }, 1000)
+    ).rejects.toThrow("offline");
   });
 });

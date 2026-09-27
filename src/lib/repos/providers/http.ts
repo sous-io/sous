@@ -36,6 +36,8 @@ export type FetchTextOptions = {
   fetchImpl?: FetchLike;
   /** What the URL is, named in error messages (for example "repo index"). */
   label?: string;
+  /** Cancels the request, for a caller that will not wait past a deadline. */
+  signal?: AbortSignal;
 };
 
 /**
@@ -67,7 +69,10 @@ export async function fetchText(
 
   let response: Awaited<ReturnType<FetchLike>>;
   try {
-    response = await fetchImpl(url, { headers });
+    response = await fetchImpl(
+      url,
+      options.signal === undefined ? { headers } : { headers, signal: options.signal }
+    );
   } catch (error) {
     throw new ConfigError(
       `Sous could not reach ${url} while fetching the ${label}.\n` +

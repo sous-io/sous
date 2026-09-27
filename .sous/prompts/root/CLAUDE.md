@@ -194,7 +194,8 @@ src/
       unlink.ts            # drop the link and rebuild; --update moves the pins, --remove
                            #   deletes a checkout sous cloned
       release.ts           # validate a recipe repo, regenerate its index, cut the tags
-      submit.ts            # propose this recipe repo's committed changes to its maintainers
+      submit.ts            # propose a recipe repo's changes and follow the proposal through;
+                           #   runs in a recipe repo, or from a project naming a linked one
     vars/
       index.ts             # bare `sous vars` and `sous vars <name>`: the hidden shorthand
       list.ts              # `sous vars list`: every variable, its answer and its source
@@ -243,7 +244,8 @@ src/
         recipe-store.ts    # RecipeStore: put/get/has/remove/list/gc, atomic and verified
         settings.ts        # the store's tunables and the defaults sous ships
       links.ts             # the links maps, their merged view, and the .gitignore hygiene
-      git-clone.ts         # the injectable git layer `repo link` clones and inspects with
+      git-clone.ts         # the injectable git layer `repo link` clones, inspects, fetches
+                           #   and switches branches with
       scaffold/            # string builders + scaffoldRepo(), what `repo init` writes
       release/             # the publish side: `repo release` and `repo submit`
         validate.ts        # findRepoRoot + validateRepo; every publish-side consistency rule
@@ -252,7 +254,11 @@ src/
         index-builder.ts   # buildIndex: regenerates sous.index.json from manifests + tags
         plan.ts            # buildReleasePlan: scope, what changed, bumps, tag order
         bump.ts            # raises a recipe version in place, keeping comments
-        submit-service.ts  # the whole submit flow, behind the injectable command runner
+        submit-service.ts  # the whole submit flow and lifecycle, behind the injectable runner
+        submit-checkout.ts # which checkout a submission runs in (a recipe repo, or a project's link)
+        submit-questions.ts # the questions submit asks, bound to the terminal and --yes
+        changelog.ts       # the changelog a proposal's body and a --commit message carry
+        submissions.ts     # the `submissions` block: who takes proposals, and the --check gate
       ref-search.ts        # which repositories a ref search covered, for the not-found error
       catalog.ts           # pure reads over the cached indexes, the lockfile and the subs
       catalog-inputs.ts    # wires a running command to the catalog; also locates recipe files
@@ -531,9 +537,11 @@ The interface has two sides, and BOTH are the only place a host-specific fact ma
 Read: `matches`, `canonicalize`, `fetchIndex`, `fetchRecipeTree`. Write: the optional `cli`
 descriptor and `proposalNoun`, plus `authStatus`, `canPush` (undefined means unknowable, which
 is not `false`), `fork` and `proposeChange`; each returns plain data and takes the injectable
-runner through `ProviderOptions` (which also carries `cwd`). `features` is what callers
-consult, never a provider id; `supportsSubmit()` narrows a provider to one that answers the
-whole write path. A new provider is ONE file: a class extending `ProviderBase`
+runner through `ProviderOptions` (which also carries `cwd`). Proposals (the `proposals`
+feature, GitHub only so far): `findProposal` (by branch, and by the fork's owner for a fork),
+`proposalStatus` and `updateProposal`, returning host-neutral plain data. `features` is what
+callers consult, never a provider id; `supportsSubmit()` narrows a provider to one that answers
+the whole write path, and `supportsProposals()` to one that answers the proposals calls. A new provider is ONE file: a class extending `ProviderBase`
 (`providers/base.ts`), which owns the shared subprocess, token and URL helpers and answers
 every write call a provider did not override with a ConfigError naming the provider and the
 feature, plus a line in `builtInProviders()`. No service above `providers/` may name a host,
@@ -541,7 +549,10 @@ spawn a host tool, or build its arguments.
 `providers/index-cache.ts` keeps one index per repository under the store root's `_indexes/`
 directory, filed by canonical identity (so the path is nested), and falls back to the copy it
 already holds when a check fails; its messages take a `label` so a person still reads their own
-short name. `resolver.ts` looks a bare ref up across every added repo at once and refuses an
+short name. `fetchUpstream` is its READ-ONLY path: it fetches and validates an index and writes
+neither the copy nor the sidecar, which is what a browsing command's `--latest` uses, because only
+a command that resolves versions may change what the cache holds. Every fetch takes an optional
+abort `signal`, carried through `ProviderOptions` to `fetchText`. `resolver.ts` looks a bare ref up across every added repo at once and refuses an
 ambiguous one instead of picking a winner. A manifest's dependency is different: a SIBLING
 resolves inside the declaring recipe's own repository, and a LOCATOR matches an added repository
 by identity whatever short name it has there. A dependency naming a repository the project has
@@ -607,6 +618,25 @@ fall back to `*` here, since that is exactly how a `depends`-held recipe used to
 constraint its parent declared. `applyResolution` in `lock-service.ts` merges holders rather
 than replacing them, for the same refcounting reason.
 
+**Newer versions are reported, not taken.** For every repository the lockfile pins from that
+does NOT prefer newer versions, `checkUpstream` still looks upstream on the same freshness window,
+but only to fill `newer` in its report: each locked recipe with a newer version inside
+`effectiveRangeForHolders`' range. That look runs under `withDeadline` (`freshness.ts`,
+`NEWER_VERSION_CHECK_TIMEOUT_MS`), is recorded whether it succeeds or not, and fails QUIETLY into
+`unchecked`, with the cached index answering instead; nothing a build does not need may fail or
+slow it. `reportNewerVersions` in `build-preparation.ts` prints the list, and moves nothing.
+
+**Browsing reads the cache unless asked.** The browsing commands (`recipe list/show`,
+`namespace list/show`, `repo list`, `repo search`, `subscription list`) take `browsingFlags()`
+from `utils/flags.ts`: `--latest` (oclif alias `--remote`) and `--installed`. Where their indexes
+come from is decided once, by `readTrustedIndexes` in `catalog-inputs.ts` (upstream through
+`SubscriptionService.upstreamIndex`, falling back to the cache and naming the repository in
+`notChecked`); `loadCatalogContext` wraps it for the catalog. `--installed` is
+`narrowToInstalled` in `catalog.ts`, which filters each index to what the lockfile pins, and
+`describeInstalled` looks a ref up among installed recipes only. A pinned recipe of a linked
+repository carries `linkedPath`, rendered by `pinnedCell` in `catalog-display.ts`, which also
+holds the shared notes (`printBrowsingNotes`).
+
 **Update moves pins, and only pins.** `update` (behind `sous subscription update` and `sous repo
 unlink --update`) fetches every trusted index fresh (`refresh`, never the stale fallback, so an
 unreachable repository is reported and its pins held), settles the scope through `src/lib/refs/`
@@ -618,9 +648,9 @@ declares (a dependency a newer version dropped), refcounted through `removeHolde
 `core` subscription is never re-resolved. The plan is rendered by `update-plan.ts` and asked once;
 a repository a newer version needs goes through `confirmTrust` AFTER that question, and the plan
 is worked out again once it is trusted. Only the lockfile is written; the subscriptions never are.
-`newerPublishedVersions` is the read-only half plain `repo unlink` reports: one index fetched under
-a short timeout (`QUICK_CHECK_TIMEOUT_MS`), compared through `effectiveRangeForHolders` and
-`findNewerInRange`, moving nothing.
+`newerPublishedVersions` is the read-only half plain `repo unlink` reports: one index refreshed
+under `withDeadline` and `NEWER_VERSION_CHECK_TIMEOUT_MS`, compared through `newerInRange`, the
+same helper `checkUpstream`'s newer-version report uses, and moving nothing.
 
 **Where a locked recipe's files are.** `locked-recipes.ts` answers that once, for everyone
 who needs it: a LINKED repository is read from its working copy (a link is a deliberate
@@ -652,7 +682,8 @@ before it compiles (`describeLinkedRepos`), then runs `prepareRepositoriesForBui
 (`src/lib/build-preparation.ts`): seed the packaged core recipe, lock any subscription the
 lockfile does not pin yet, restore whatever the store is missing, and ask upstream for the
 repositories that prefer a newer in-range version; a failed check is warned about and the last
-good answer stands. That step and its reporting live in their own module because `sous init`
+good answer stands. It then lists the newer in-range versions the other repositories publish
+(`reportNewerVersions`), without moving a pin. That step and its reporting live in their own module because `sous init`
 runs the same step for a project's first build, and the two must say the same things. Watch mode watches every linked checkout (they are in
 `fullRebuildPaths`) and polls upstream on `store.watchPollSeconds`. Prune and clear never
 reach into a linked checkout or the store: `protectedRepoPaths` names the three roots and
@@ -1152,24 +1183,24 @@ This enables `sous prune` (remove stale outputs) and `sous clear` (delete all ou
 | `sous config validate` | Validate the merged config: schema, then full variable resolution |
 | `sous repo add <url>` | Add a repository, which is also how you trust it, then fetch only its index (`--name`, `--provider`, `--yes` / `-y` / `--trust`, `--dry-run`) |
 | `sous repo remove <name>` | Stop trusting a repository: print the entry, the subscriptions that resolve into it, the recipes they alone hold, the outputs the build will prune and any link, ask once, then remove all of it and build (`--yes` / `-y` / `--force`, `--dry-run`, `--no-build`) |
-| `sous repo list` | List the trusted repositories: name, location, provider, namespaces, recipe count, and whether it is linked |
-| `sous repo search <text>` | Search the cached indexes by namespace, recipe name and description (`--limit`); also the top-level `sous search <text>` |
+| `sous repo list` | List the trusted repositories: name, location, provider, namespaces, recipe count, and whether it is linked (`--verbose`, `--latest`, `--installed`) |
+| `sous repo search <text>` | Search the cached indexes by namespace, recipe name and description (`--limit`, `--latest`, `--installed`); also the top-level `sous search <text>` |
 | `sous repo gc` | Collect the machine-wide store back to its size cap, protecting everything the lockfile pins (`--max-bytes`, `--dry-run`) |
-| `sous namespace list` | List every namespace the trusted repositories publish, with its recipe count and how much of it the project subscribes to |
-| `sous namespace show <ref>` | Show one namespace and every recipe in it, with each recipe's latest version, pinned version and subscription state |
-| `sous recipe list` | List every recipe the trusted repositories publish: latest version, pinned version, subscribed, description |
-| `sous recipe show <ref>` | Show one recipe in full: every published version, its dependencies as declared and as the index resolved them, the variables it declares, and where its files land |
+| `sous namespace list` | List every namespace the trusted repositories publish, with its recipe count and how much of it the project subscribes to (`--latest`, `--installed`) |
+| `sous namespace show <ref>` | Show one namespace and every recipe in it, with each recipe's latest version, pinned version and subscription state (`--latest`, `--installed`) |
+| `sous recipe list` | List every recipe the trusted repositories publish: latest version, pinned version, subscribed, description (`--latest`, `--installed`) |
+| `sous recipe show <ref>` | Show one recipe in full: every published version, its dependencies as declared and as the index resolved them, the variables it declares, and where its files land (`--latest`, `--installed`) |
 | `sous lock show` | Print what the lockfile pins: recipe, version, repository, and who holds it |
 | `sous lock rebuild` | Recompute the lockfile from the declared subscriptions and the cached indexes, dropping what nothing holds (`--dry-run`) |
-| `sous subscription list` | List what the project subscribes to: range, the versions the lockfile pins, origin, and whether it is on |
+| `sous subscription list` | List what the project subscribes to: range, the versions the lockfile pins, the latest version each has published, origin, and whether it is on (`--latest`, `--installed`) |
 | `sous subscription add <ref>` | Subscribe to a namespace or a recipe, install the whole closure, answer the variables it publishes, then build the project (`--yes` / `-y` / `--trust`, `--accept-first`, `--prerelease`, `--always-pull`, `--answer <name>=<value>`, `--answers-file <path>`, `--dry-run`, which also prints every question the closure would ask, `--no-build`); also `sous subscribe` |
 | `sous subscription remove <ref>` | Remove a subscription and everything only it brought in, refcounted, then build the project so its files are pruned (`--dry-run`, `--no-build`); also `sous unsubscribe` |
 | `sous subscription update [ref]` | Move the lockfile's pins to the newest published versions their ranges allow, for everything or for the repository, namespace or recipe named, after fetching fresh indexes; changes only the lockfile, prints the plan and asks once, then builds (`--yes` / `-y` / `--trust`, `--accept-first`, `--answer`, `--answers-file`, `--dry-run`, `--no-build`) |
 | `sous repo init [dir]` | Scaffold a new recipe repository (`--name`, `--namespace`, `--force`) |
-| `sous repo link <repo\|path> [path]` | Read a repository from a working copy: link the checkout a path names in place, clone a repository named on its own, or link the checkout a second argument names (`--global`, `--yes` / `-y` / `--trust`) |
+| `sous repo link <repo\|path> [path]` | Read a repository from a working copy: link the checkout a path names in place, clone a repository named on its own, or link the checkout a second argument names (`--global`, `--yes` / `-y` / `--trust`); a checkout already on disk is fetched and compared with upstream, and `--branch`, `--create-branch`, `--generate-branch`, `--from` and `--latest` change its branch |
 | `sous repo unlink <repo>` | Drop the link, go back to the pinned versions and build; on its own it reports newer published versions in range under a short timeout, `--update` moves the pins through `subscription update`, `--remove` deletes a checkout sous cloned after listing any unsaved work (`--global`, `--yes` / `-y` / `--trust`, `--dry-run`, `--no-build`) |
 | `sous repo release` | Publish new versions of a recipe repository: plan, ask once, then bump, regenerate the index, commit and tag (`--namespace`, `--recipe`, `--bump`, `--no-bump`, `--include-unchanged`, `--tag`, `--push`, `--yes`, `--check`, `--ci`, `--dry-run`) |
-| `sous repo submit` | Propose this repository's committed changes to its maintainers (`--title`, `--body`, `--draft`, `--dry-run`) |
+| `sous repo submit [repo]` | Propose a recipe repository's changes and follow the proposal through: open it, update it, report on it, or continue on a new branch once it was merged; from a project, `repo` names a linked repository (`--title`, `--body`, `--branch`, `--status`, `--commit`, `--draft`, `--yes` / `-y`, `--dry-run`) |
 | `sous vars list` | List every recipe variable in play: its answer, the env var that supplied it, and the source |
 | `sous vars show <name>` | Show one variable in full, with every candidate env var name and the rung that answered |
 | `sous vars ask [name]` | Answer what is unanswered, or everything the name covers: a variable, an environment variable name in use that answers one, a recipe, a namespace or a repository, resolved through `src/lib/refs/` (`--repo`, `--namespace`, `--var` narrow the same way, `--accept-first` settles an ambiguous name, `--all` re-asks everything); `--file` reads a standalone definitions file, `--answer <name>=<value>` and `--answers-file <path>` answer ahead of the questions, `--dry-run` writes nothing |
@@ -1226,7 +1257,18 @@ the same remote rather than re-cloning, and refuses a checkout of a different on
 directory path in the REPO slot (`checkoutInRepoSlot` in `link.ts`) links that checkout where
 it is, with `origin: "path"` and the short name its repo manifest suggests; a configured short
 name always wins over a directory of the same name in the working directory, and a path in both
-argument slots is refused. A second argument links the checkout it names. `repo unlink` removes
+argument slots is refused. A second argument links the checkout it names. A link never changes
+a checkout on its own: one that was already on disk gets a short `git fetch` (under
+`UPSTREAM_CHECK_TIMEOUT_MS`) and a report of its branch, merged state and distance behind the
+upstream default branch, or a "may have diverged since" warning with git's reason when upstream
+cannot be reached, and the link still stands. Every change is a flag (`--branch`,
+`--create-branch`, `--generate-branch`, `--from`, `--latest`), carried out by one git operation
+per step in `git-clone.ts`, whose refusal is passed through under a line naming the step (the
+three branch flags are oclif-exclusive, and `--from` needs a create flag through a `some`
+relationship). A named branch is fetched by explicit refspec and added to `origin`'s fetch list
+first, because the clone is single-branch. `--latest` is the one place sous checks for itself:
+`discardableWork` lists what matching upstream would discard, one question answered by `--yes`.
+`repo unlink` removes
 the map entry and leaves the checkout, unless `--remove` is passed: then a checkout whose link
 origin is `clone` and which lies under the repos directory sous clones into is deleted, after
 `unsavedWork` (`git-clone.ts`) lists uncommitted changes, unpushed commits and stashes and the
@@ -1246,24 +1288,45 @@ scope (`--namespace` / `--recipe`, repeatable; the whole repository by default) 
 recipes whose content changed since their last tag, patch-bumping any whose version still equals
 that tag, regenerating the index with each version's dependencies resolved, committing the
 manifests and the index together, then cutting annotated tags dependency-first. It prints the
-plan and asks once (`--yes` skips, `--dry-run` stops), and pushes only with `--push`. This is
-the ONE place sous commits for an author, and it stages nothing but its own bumps and index;
+plan and asks once (`--yes` skips, `--dry-run` stops), and pushes only with `--push`. It is
+one of the TWO places sous commits for an author (the other is `repo submit --commit`), and it
+stages nothing but its own bumps and index;
 it refuses while anything else is uncommitted, and it refuses before writing anything when git
 cannot work out who is committing (`hasCommitIdentity` in `release/git-state.ts`), naming
 `git config user.name` rather than leaving git's own "empty ident name" to surface halfway
 through. `--check` is the read-only pull-request form,
 `--ci` is the merge preset (implies `--no-bump` AND `--yes`, so it accepts the plan it prints
 rather than failing on the confirmation it cannot ask; it does NOT imply `--push`), and on a
-branch other than the default one tagging is skipped unless `--tag` says otherwise. `repo submit` is validate-then-propose: it checks the tooling and the working
-tree, then the recipes and that the change leaves `sous.index.json` alone (compared with the fork point on
-`origin/<default>`, through `forkPoint` in `release/git-state.ts`), and only then pushes and proposes. Whether
-the index agrees with the tags is `release --check`'s job, not submit's, so submit works from the shallow
-checkout `repo link` makes. `submit-service.ts`
+branch other than the default one tagging is skipped unless `--tag` says otherwise.
+`--check` also fails a change to a recipe whose `submissions` block says it takes no proposals
+(`checkSubmissions` in `release/submissions.ts`: compared with the fork point on
+`origin/<default>`, or with each such recipe's last tag when the checkout holds no copy of that
+branch); the release itself is never restricted, which is how the sous pipeline still publishes
+`core`, whose packaged manifest sets `allowed: false`.
+
+`repo submit` is validate-then-propose, over the proposal's whole life. It runs in a recipe
+repository, or from a project: `findSubmitCheckout` (`release/submit-checkout.ts`) resolves the
+optional argument through `src/lib/refs/` to a linked checkout, falls back to a clone sous left
+where `repo link` puts one (with a note), and fails when there is no working copy; with no
+argument inside a project the only link is used and several are a question. It looks for the
+project config itself, optionally (it still extends `Command`). The flow checks the tooling and
+the working tree (`--commit` lifts the uncommitted rule after listing, one confirmation and an
+identity check), then the recipes and that the change leaves `sous.index.json` alone (compared
+with the fork point on `origin/<default>`, through `forkPoint`), warns about recipes that take no
+proposals, then looks the branch's proposal up (`--branch` names another branch) and acts on its
+state: none opens one, open pushes (git's refusal of a non-fast-forward passes through; sous never
+forces) and replaces the title or body when given, merged asks for a new branch (named,
+generated, cancelled; `--yes` generates), closed opens a fresh one. `--status` only reports.
+A new proposal and a `--commit` both need a title and a description from the person
+(`--title`/`--body`, or asked); sous never derives them from commits. The body is the
+description plus the changelog `release/changelog.ts` builds by comparing the manifests with the
+default branch. Every question is asked before anything is written, through `SubmitQuestions`
+(`release/submit-questions.ts` binds them to the terminal and `--yes`). `submit-service.ts`
 is a SEQUENCER and nothing more: it names no provider, spawns no host tool, and builds no
 command arguments; every host-specific answer comes from the provider interface as plain data.
 Every step prints before it runs, and a failure names the steps that already completed. A
 provider that does not advertise the `submit` feature prints the repo manifest's own
-`contribute` pointer instead.
+`contribute` pointer instead, and one without `proposals` opens a proposal on every run.
 
 This `config` namespace is a fresh design, distinct from the old `configure` /
 `config *` commands and the `~/.sous` profile layer that were removed when walk-up
@@ -1285,7 +1348,8 @@ project. Every command that carries those flags also carries `--non-interactive`
 that run inside a recipe repository carry neither, because they extend `Command` rather than
 `BaseCommand`. Also: `--rebuild`, `--dry-run`,
 `--strict`, `--watch` / `-w` (build/compile), `--no-prune` / `--no-compile` (build),
-`--no-build` / `--continuous` (launch), `--accept-first` (subscribe).
+`--no-build` / `--continuous` (launch), `--accept-first` (subscribe), `--latest` / `--remote`
+and `--installed` (the browsing commands).
 
 **One confirmation flag.** Every yes-or-no question a command would ask is answered by one
 shared boolean, built by `confirmationFlag()` in `src/utils/flags.ts`: `--yes` / `-y`, with

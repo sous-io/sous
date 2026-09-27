@@ -648,6 +648,12 @@ describe("the core namespace with no network", () => {
         const listed = sousOffline(project, "namespace", "show", "core");
         expect(listed.status, listed.stdout + listed.stderr).toBe(0);
         expect(listed.stdout).toContain(SOUS_VERSION);
+
+        // Reading upstream goes through the same cache and its overlay; offline,
+        // the cached copy answers for it, and still carries the packaged version.
+        const latest = sousOffline(project, "recipe", "show", "core/sous-skills", "--latest");
+        expect(latest.status, latest.stdout + latest.stderr).toBe(0);
+        expect(latest.stdout).toContain(SOUS_VERSION);
       } finally {
         sousHome = sharedHome;
       }

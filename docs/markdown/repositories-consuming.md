@@ -52,6 +52,19 @@ sous namespace show workflow   # one namespace and the recipes in it
 sous recipe list               # every recipe, latest version, pinned version, subscribed
 ```
 
+The cache can be behind what a repository has published since. Every one of these commands, plus
+`sous recipe show`, `sous repo list` and `sous subscription list`, takes two flags that combine:
+
+- `--latest` (also `--remote`) reads each index from upstream instead. Nothing it fetches is
+  written to the cache; only a command that resolves versions changes what the cache holds. A
+  repository that cannot be reached is shown from the cache and named as not checked.
+- `--installed` narrows the listing to what this project has installed, at the version the
+  lockfile pins. A recipe from a linked repository is marked `linked`, because builds read it from
+  the checkout instead of that version.
+
+`sous recipe list --installed --latest` is the out-of-date view: every installed recipe, with
+upstream's newest version beside the installed one.
+
 Read `sous recipe show` before subscribing: every published version, what it depends on (as
 declared, beside the version the index resolved it to), and its questions and files once it has
 them here.
@@ -201,7 +214,8 @@ $ sous subscription list
 
 A namespace subscription names every recipe it holds, each with the version the lockfile pins. A
 subscription that has never been built has nothing pinned yet, and its cell reads `pinned on first
-build` instead.
+build` instead. The `Latest version` column beside it is read from the cache, or from upstream with
+`--latest`.
 
 `sous repo list` shows each trusted repository with its provider, origin, whether it is linked, its
 recipe count and its URL; `--verbose` adds a `Namespaces:` line under each row. `sous lock show`
@@ -319,6 +333,23 @@ happens after that check, not how often it happens: a repository or subscription
 `alwaysPull` takes a newer in-range version rather than the locked one; set it with
 `--always-pull`, or on either entry in the config. Without it, `sous subscription update` is how a
 pin moves; see [Moving to newer versions](#moving-to-newer-versions).
+
+Every other repository the lockfile pins from is checked on the same window, only to tell you what
+is newer. A build lists each recipe with a newer version inside the range declared for it, beside
+the version it pins, and moves nothing:
+
+```term
+$ sous build
+▶ Newer versions published:
+
+    workflow/qa-variables: 0.2.0 this project pins 0.1.0
+
+  This version is within the range declared for the recipe. No pin was changed, so this build
+  uses the pinned version.
+```
+
+That check waits at most three seconds for a repository, and a check that fails or runs out of
+time is not mentioned: the cached index answers instead, and the build carries on.
 
 The store is machine-wide and disposable, because everything in it is re-fetchable from a
 lockfile's pins. `sous repo gc` collects it back to its size cap, evicting least recently used

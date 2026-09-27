@@ -12,6 +12,8 @@
  * request opened by `gh pr create`, a contributor without push permission works
  * through a fork made by `gh repo fork`, and both are reported back as plain
  * data, so the service that sequences them never learns a GitHub-shaped fact.
+ * Finding a pull request again, reporting where it stands and replacing its
+ * text go through `gh pr list`, `gh pr view` and `gh pr edit` the same way.
  */
 
 import { ConfigError } from "../../errors.js";
@@ -28,6 +30,13 @@ import {
   type ChangeProposal,
   type FetchedIndex,
   type ForkedRepo,
+  type ProposalChecks,
+  type ProposalQuery,
+  type ProposalReview,
+  type ProposalState,
+  type ProposalStatus,
+  type ProposalSummary,
+  type ProposalUpdate,
   type ProposedChange,
   type ProviderCli,
   type ProviderFeature,
@@ -59,10 +68,10 @@ export class GithubProvider extends ProviderBase {
   readonly id = "github" as const;
 
   /**
-   * Reads the index and recipe subtrees, and proposes a change through
-   * the GitHub CLI ('gh').
+   * Reads the index and recipe subtrees, proposes a change through the GitHub
+   * CLI ('gh'), and finds, reports on and updates that pull request afterwards.
    */
-  readonly features: ProviderFeature[] = ["fetch", "submit"];
+  readonly features: ProviderFeature[] = ["fetch", "submit", "proposals"];
 
   /** The command line tool the write path is built on. */
   readonly cli: ProviderCli = {
@@ -113,6 +122,7 @@ export class GithubProvider extends ProviderBase {
       ...(options.fetchImpl === undefined
         ? {}
         : { fetchImpl: options.fetchImpl as FetchLike }),
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
       label: "repo index",
     });
 
@@ -291,4 +301,267 @@ export class GithubProvider extends ProviderBase {
     }
     return { url, detail: `The ${this.proposalNoun} is at ${url}.` };
   }
+
+  // --- Proposals after the fact ------------------------------------------------
+
+  /**
+   * The pull request a branch was pushed for. GitHub lists pull requests by
+   * head branch name alone, so the list is narrowed here by where the branch
+   * lives: the repository itself, or the contributor's fork. When a branch has
+   * had several, the open one wins, and otherwise the newest.
+   *
+   * @param repo - The canonicalized repository the proposal targets.
+   * @param query - The branch, and whether it lives on a fork.
+   * @param options - Subprocess runner and working directory overrides.
+   */
+  async findProposal(
+    repo: CanonicalRepo,
+    query: ProposalQuery,
+    options: ProviderOptions = {}
+  ): Promise<ProposalSummary | undefined> {
+    const forkOwner = query.fromFork
+      ? (query.forkOwner ?? (await this.signedInLogin(options)))
+      : undefined;
+
+    const listed = await this.ghJson<GhPullRequest[]>(
+      [
+        "pr",
+        "list",
+        "--repo",
+        `${repo.owner}/${repo.name}`,
+        "--head",
+        query.branch,
+        "--state",
+        "all",
+        "--limit",
+        "50",
+        "--json",
+        "number,url,state,title,isDraft,baseRefName,headRepositoryOwner,isCrossRepository",
+      ],
+      "pr list",
+      options
+    );
+
+    const mine = listed.filter((entry) =>
+      query.fromFork
+        ? entry.isCrossRepository === true && entry.headRepositoryOwner?.login === forkOwner
+        : entry.isCrossRepository !== true
+    );
+    if (mine.length === 0) return undefined;
+
+    const open = mine.find((entry) => entry.state === "OPEN");
+    const chosen = open ?? [...mine].sort((a, b) => b.number - a.number)[0]!;
+    return summarizePullRequest(chosen);
+  }
+
+  /**
+   * Where one pull request stands: its state, its review decision, and how
+   * its checks are going, counted.
+   *
+   * @param repo - The canonicalized repository the proposal targets.
+   * @param id - The pull request number.
+   * @param options - Subprocess runner and working directory overrides.
+   */
+  async proposalStatus(
+    repo: CanonicalRepo,
+    id: string,
+    options: ProviderOptions = {}
+  ): Promise<ProposalStatus> {
+    const viewed = await this.ghJson<GhPullRequest>(
+      [
+        "pr",
+        "view",
+        id,
+        "--repo",
+        `${repo.owner}/${repo.name}`,
+        "--json",
+        "number,url,state,title,isDraft,baseRefName,reviewDecision,statusCheckRollup,mergeable",
+      ],
+      "pr view",
+      options
+    );
+
+    const review = reviewFrom(viewed.reviewDecision);
+    const checks = checksFrom(viewed.statusCheckRollup);
+    const mergeable =
+      viewed.mergeable === "MERGEABLE"
+        ? true
+        : viewed.mergeable === "CONFLICTING"
+          ? false
+          : undefined;
+
+    return {
+      proposal: summarizePullRequest(viewed),
+      ...(review === undefined ? {} : { review }),
+      ...(checks === undefined ? {} : { checks }),
+      ...(mergeable === undefined ? {} : { mergeable }),
+    };
+  }
+
+  /**
+   * Replaces a pull request's title, its body, or both.
+   *
+   * @param repo - The canonicalized repository the proposal targets.
+   * @param id - The pull request number.
+   * @param update - What to replace.
+   * @param options - Subprocess runner and working directory overrides.
+   */
+  async updateProposal(
+    repo: CanonicalRepo,
+    id: string,
+    update: ProposalUpdate,
+    options: ProviderOptions = {}
+  ): Promise<ProposedChange> {
+    const args = ["pr", "edit", id, "--repo", `${repo.owner}/${repo.name}`];
+    if (update.title !== undefined) args.push("--title", update.title);
+    if (update.body !== undefined) args.push("--body", update.body);
+
+    const result = await this.runCommand(this.cli.command, args, options);
+    if (result.code !== 0) {
+      const reported = result.stderr.trim() || result.stdout.trim();
+      throw new ConfigError(
+        `'${this.cli.command} pr edit' did not succeed, so the ${this.proposalNoun} kept its ` +
+          `title and body.` +
+          (reported.length === 0 ? "" : `\n  ${reported}`)
+      );
+    }
+
+    const url = firstUrlIn(result.stdout);
+    return url === undefined
+      ? { detail: `The ${this.proposalNoun} was updated.` }
+      : { url, detail: `The ${this.proposalNoun} at ${url} was updated.` };
+  }
+
+  /**
+   * The login of the account `gh` is signed in as, which is the owner of any
+   * fork sous made for the contributor.
+   *
+   * @param options - Subprocess runner and working directory overrides.
+   */
+  private async signedInLogin(options: ProviderOptions): Promise<string> {
+    const who = await this.capturedOutput(
+      this.cli.command,
+      ["api", "user", "--jq", ".login"],
+      options
+    );
+    if (who === undefined || who.trim().length === 0) {
+      throw new ConfigError(
+        "Sous could not read your GitHub login from " +
+          `'${this.cli.command} api user', so it cannot tell which fork a ${this.proposalNoun} ` +
+          "would come from."
+      );
+    }
+    return who.trim();
+  }
+
+  /**
+   * Runs a `gh` command that prints JSON, and parses what it printed.
+   *
+   * @param args - The arguments, ending with the `--json` field list.
+   * @param what - The subcommand, as it is named in a failure.
+   * @param options - Subprocess runner and working directory overrides.
+   */
+  private async ghJson<T>(args: string[], what: string, options: ProviderOptions): Promise<T> {
+    const result = await this.runCommand(this.cli.command, args, options);
+    if (result.code !== 0) {
+      const reported = result.stderr.trim() || result.stdout.trim();
+      throw new ConfigError(
+        `'${this.cli.command} ${what}' did not succeed.` +
+          (reported.length === 0 ? "" : `\n  ${reported}`)
+      );
+    }
+    try {
+      return JSON.parse(result.stdout) as T;
+    } catch {
+      throw new ConfigError(
+        `'${this.cli.command} ${what}' printed something that is not JSON, so sous cannot read ` +
+          `the ${this.proposalNoun} it describes.`
+      );
+    }
+  }
+}
+
+// --- What gh prints, and how it maps onto plain data ---------------------------------------------
+
+/** The fields sous asks `gh` for, as it prints them. */
+type GhPullRequest = {
+  number: number;
+  url?: string;
+  state?: string;
+  title?: string;
+  isDraft?: boolean;
+  baseRefName?: string;
+  headRepositoryOwner?: { login?: string } | null;
+  isCrossRepository?: boolean;
+  reviewDecision?: string | null;
+  statusCheckRollup?: GhCheck[] | null;
+  mergeable?: string;
+};
+
+/** One entry of a pull request's status check rollup: a check run or a commit status. */
+type GhCheck = {
+  __typename?: string;
+  status?: string;
+  conclusion?: string | null;
+  state?: string;
+};
+
+/** A pull request's state, in the words every provider shares. */
+function stateFrom(state: string | undefined): ProposalState {
+  if (state === "MERGED") return "merged";
+  if (state === "CLOSED") return "closed";
+  return "open";
+}
+
+/**
+ * The plain summary of a pull request.
+ *
+ * @param entry - What `gh` printed for it.
+ */
+function summarizePullRequest(entry: GhPullRequest): ProposalSummary {
+  return {
+    id: String(entry.number),
+    ...(entry.url === undefined ? {} : { url: entry.url }),
+    state: stateFrom(entry.state),
+    title: entry.title ?? "",
+    draft: entry.isDraft === true,
+    ...(entry.baseRefName === undefined ? {} : { base: entry.baseRefName }),
+  };
+}
+
+/** GitHub's review decision, in the words every provider shares. */
+function reviewFrom(decision: string | null | undefined): ProposalReview | undefined {
+  if (decision === "APPROVED") return "approved";
+  if (decision === "CHANGES_REQUESTED") return "changes requested";
+  if (decision === "REVIEW_REQUIRED") return "review required";
+  return undefined;
+}
+
+/** Check runs whose conclusion counts as passing. */
+const PASSING_CONCLUSIONS = new Set(["SUCCESS", "NEUTRAL", "SKIPPED"]);
+
+/**
+ * Counts a status check rollup into passed, failed and pending. A check run
+ * that has not completed is pending; a commit status reports its state directly.
+ *
+ * @param rollup - What `gh` printed as the rollup, when it printed one.
+ */
+function checksFrom(rollup: GhCheck[] | null | undefined): ProposalChecks | undefined {
+  if (rollup === null || rollup === undefined || rollup.length === 0) return undefined;
+  const counts: ProposalChecks = { passed: 0, failed: 0, pending: 0 };
+  for (const check of rollup) {
+    const isStatus =
+      check.__typename === "StatusContext" ||
+      (check.status === undefined && check.state !== undefined);
+    if (isStatus) {
+      if (check.state === "SUCCESS") counts.passed += 1;
+      else if (check.state === "PENDING" || check.state === "EXPECTED") counts.pending += 1;
+      else counts.failed += 1;
+      continue;
+    }
+    if (check.status !== "COMPLETED") counts.pending += 1;
+    else if (PASSING_CONCLUSIONS.has(check.conclusion ?? "")) counts.passed += 1;
+    else counts.failed += 1;
+  }
+  return counts;
 }
