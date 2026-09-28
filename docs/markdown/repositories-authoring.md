@@ -36,8 +36,10 @@ commands spell `--yes`, `-y`, `--force` or `--trust`.
 `sous.repo.yaml` says what the repository publishes, `sous.index.json` is the catalog that `sous repo release`
 writes, and each recipe folder carries one `sous.recipe.yaml` beside the files it contributes. Nothing else is
 fixed: recipe folders may live anywhere, and what makes a folder a recipe is that `sous.repo.yaml` lists its
-path under `recipes`. Both hand-written manifests are YAML or JSON and never JavaScript, because a repository's
-trust story rests on being readable without running any of its code.
+path under `recipes`. Both hand-written manifests are YAML or JSON and never JavaScript, because manifests are
+data: sous reads, validates and browses them without executing anything, before a repository is trusted, in a
+dry run and in `sous repo release --check`. What trusting a repository authorizes is described under
+[Trust](repositories.md#trust).
 
 ## Write a recipe
 

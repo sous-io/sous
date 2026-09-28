@@ -29,13 +29,13 @@
       "version": "0.2.20"
     },
     "workflow/github-projects": {
-      "hash": "sha256-051bb65274caecd2d7f2121b7016758554f17a9fe9740a13b786c3519b4825be",
+      "hash": "sha256-71498b4cc26b08be63cd10adc72bfc84b9dc79dc70392a74bdc79b43e5d10f7d",
       "kind": "subscribes",
       "repo": "sous-recipes",
       "requestedBy": [
         "project"
       ],
-      "version": "1.1.0"
+      "version": "1.1.1"
     },
     "workflow/sub-agent-delegation": {
       "hash": "sha256-6841b6f61a9a62d84152bc0fcfe246af35b7f75001527d6addf55e51068f8387",

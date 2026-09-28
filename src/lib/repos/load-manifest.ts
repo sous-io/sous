@@ -1,9 +1,9 @@
 /**
  * Reading Repositories files off disk.
  *
- * Manifests are HAND-WRITTEN, and deliberately never JavaScript: trust in the
- * Repositories system rests on being able to read a repo's whole surface
- * without executing any of its code. So a manifest is YAML (`.yaml`, `.yml`) or
+ * Manifests are HAND-WRITTEN, and deliberately never JavaScript: a manifest is
+ * data, so sous can read, validate and browse it without executing anything,
+ * including before the repository is trusted. So a manifest is YAML (`.yaml`, `.yml`) or
  * JSON (`.json`, `.jsonc`), and the JSON dialect is permissive, allowing line
  * comments, block comments and trailing commas, so a manifest can explain
  * itself.
@@ -112,7 +112,8 @@ export function loadManifestFile(filePath: string): unknown {
   throw new ConfigError(
     `Cannot read the manifest at ${filePath}: '${extension}' is not a manifest format.\n` +
       `  A manifest is written as ${MANIFEST_EXTENSIONS.join(", ")}. Manifests are never ` +
-      `JavaScript, because sous must be able to read a repository without running its code.`
+      `JavaScript, because a manifest is data that sous reads, validates and browses ` +
+      `without executing anything, including before the repository is trusted.`
   );
 }
 
