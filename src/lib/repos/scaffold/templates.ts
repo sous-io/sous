@@ -45,9 +45,9 @@ export function exampleRecipePath(context: ScaffoldContext): string {
 export function buildRepoManifest(context: ScaffoldContext): string {
   return `# The repo manifest: what this repository publishes.
 #
-# It is read before anything is downloaded, and it is never executable, so
-# anyone deciding whether to trust this repository can read its whole surface
-# without running any of its code.
+# It is data, never code: sous reads it before anything is downloaded, so a
+# project can browse and validate what this repository publishes, and decide
+# whether to trust it, without executing anything.
 
 formatVersion: 1
 

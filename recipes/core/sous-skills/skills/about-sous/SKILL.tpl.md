@@ -51,6 +51,20 @@ Edit them only in the recipe repository, where they are the sources. Never edit 
 copy of them inside a consuming project; that copy is build output and is overwritten on
 the next sous run.
 
+## Trust and Activation
+
+Trust is the only security boundary sous draws. Adding a repository is trusting it, and
+that authorizes its recipes to run code on this machine: code sous runs itself and code an
+agent runs, such as skill scripts and hooks. Sous sandboxes neither; trusted code runs
+with the user's own permissions. Before a repository is trusted, nothing from it runs; the
+trust question reads only its index.
+
+Subscribing decides what is switched on, not what is safe. A recipe is active when the
+project subscribes to it, directly or through its namespace, or when an active recipe
+lists it under `subscribes`, and only an active recipe registers entry points of its own
+(output files, skills, hooks). A recipe held only through `depends` is a library: an active
+recipe may include, call or import its files, but it registers nothing itself.
+
 ## Sous's Own Documentation
 
 Sous's full documentation ships inside the installed package as plain markdown

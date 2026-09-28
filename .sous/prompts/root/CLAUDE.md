@@ -361,10 +361,22 @@ field. `formats/patterns.ts` holds the shared regular expressions and imports no
 `config-schema.ts` can reuse them; `formats/common.ts` composes them into the primitives the
 formats share. `ref.ts` parses BOTH grammars, `identity.ts` derives canonical repository
 identity, `load-manifest.ts` reads manifests off disk
-(YAML, or JSON with comments and trailing commas; never JavaScript, because repo trust rests
-on reading a repository without running its code), and `index.ts` is the barrel every later
-phase imports from. Hand-written formats reject unknown keys except a reserved `x-` extension
-namespace; machine-written formats reject them outright and serialize with sorted keys.
+(YAML, or JSON with comments and trailing commas; never JavaScript, because manifests and
+indexes are data that sous reads, validates and browses without executing anything: before
+trust, in a dry run, in the browsing commands and in `repo release --check`), and `index.ts` is
+the barrel every later phase imports from. Hand-written formats reject unknown keys except a
+reserved `x-` extension namespace; machine-written formats reject them outright and serialize
+with sorted keys.
+
+**Trust is the only security boundary; activation is not one.** Adding a repository IS
+trusting it, and trust authorizes its recipes to run code on this machine with the user's own
+permissions, whether sous runs it during a build or the agent runs it (skill scripts, hooks); sous sandboxes
+neither. Before a repository is trusted nothing from it runs, and the trust ceremony reads only
+its index. A recipe is ACTIVE when the project subscribes to it directly, through its namespace,
+or through an active recipe's `subscribes`, and only an active recipe registers entry points of
+its own (output files, skills, hooks). A recipe held only through `depends` is a library that an
+active recipe may include, call or import. Activation exists for efficiency and to avoid
+conflicts; never describe it as protection.
 
 **Two ways of naming a repository, and they are not interchangeable.** A SHORT NAME
 (`sous-recipes`) is one project's own label: it keys `repos:` in a config and in a lockfile, and

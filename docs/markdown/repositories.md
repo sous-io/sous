@@ -164,9 +164,12 @@ Do you trust this repository? (y/N)
 ```
 
 Trusting a repository trusts every namespace and recipe in it, including recipes published later,
-and it is the last gate before a recipe can run scripts on your machine; sous cannot tell you
-whether one deserves that, and says so rather than implying otherwise. Where there is no terminal
-to ask on, the run fails and names the repositories and the exact command that grants the trust:
+and it is the only security boundary sous draws. Trust authorizes those recipes to run code on your
+machine with your own permissions, whether sous runs it during a build or your agent runs it (a
+skill's scripts, a hook), and sous sandboxes neither. Before a repository is trusted nothing from it
+runs, and the question itself reads only its index. Sous cannot tell you whether a repository
+deserves that, and says so rather than implying otherwise. Where there is no terminal to ask on, the
+run fails and names the repositories and the exact command that grants the trust:
 
 ```text
 Error: One repository has to be trusted before this can continue, and sous is not
@@ -186,6 +189,14 @@ Error: One repository has to be trusted before this can continue, and sous is no
 !> Trust semantics do not soften for a repository already on your disk. A local path added
 through the `local` provider goes through the same ceremony, because its recipes still run on
 this machine.
+
+Subscribing decides what is switched on, and it is not a second security gate. A recipe is
+**active** when the project subscribes to it directly or through its namespace, or when an active
+recipe lists it under `subscribes`; only an active recipe registers entry points of its own, such as
+output files, skills and hooks. A recipe held only through `depends` is a library: an active recipe
+may include, call or import its files, but it registers nothing itself. Activation keeps a project
+from running what it has no use for and keeps unrelated recipes from colliding; everything in a
+trusted repository is already trusted.
 
 ## The official repository, and the built-in core
 

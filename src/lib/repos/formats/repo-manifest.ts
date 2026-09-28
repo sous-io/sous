@@ -4,9 +4,10 @@
  * point sous reads to learn what a repo publishes: its namespaces, and where
  * each recipe folder lives.
  *
- * The manifest is deliberately declarative and executable-free. Trust in the
- * Repositories system rests on being able to read a repo's whole surface
- * without running any of its code, so manifests are YAML or JSON only.
+ * The manifest is deliberately declarative and executable-free: it is data, so
+ * sous can read, validate and browse it before the repository is trusted, in a
+ * dry run and in `repo release --check` without executing anything. So
+ * manifests are YAML or JSON only.
  */
 
 import { z } from "zod";

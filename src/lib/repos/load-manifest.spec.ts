@@ -162,14 +162,15 @@ describe("loadManifestFile()", () => {
   });
 
   /**
-   * A manifest is never JavaScript. The rejection says why, since the reason is
-   * the whole trust model rather than an arbitrary limitation.
+   * A manifest is never JavaScript. The rejection says why, since the reason
+   * (a manifest is data, readable without executing anything) is not an
+   * arbitrary limitation.
    */
   it("should refuse a JavaScript manifest and say why", () => {
     const file = write("sous.repo.js", "export const config = {};");
     const message = expectRejectMessage(() => loadManifestFile(file));
     expect(message).toContain("'.js' is not a manifest format");
-    expect(message).toContain("without running its code");
+    expect(message).toContain("without executing anything");
   });
 });
 
