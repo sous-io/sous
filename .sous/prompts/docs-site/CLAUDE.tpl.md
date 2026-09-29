@@ -14,7 +14,7 @@ to the site, and delete anything here the code has made false.
 ## What this site is
 
 GitHub Pages serves this repo's `/docs` directory at
-**https://sous-io.github.io/sous/** (repo: `github.com/sous-io/sous`). Two
+**https://sous.io/** (repo: `github.com/sous-io/sous`). Two
 pages exist:
 
 - `index.html`: a GSAP-driven animated presentation introducing Sous, with

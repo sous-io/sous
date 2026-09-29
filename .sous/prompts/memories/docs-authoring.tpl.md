@@ -2,7 +2,7 @@
 
 - Documentation pages are plain markdown files in `docs/markdown/` (repo
   path). Each page is served live at
-  `https://sous-io.github.io/sous/markdown/#/<page-name>` (the filename minus
+  `https://sous.io/markdown/#/<page-name>` (the filename minus
   `.md`); docsify fetches and renders the markdown in the browser.
 - Publishing a page = commit the `.md` file and add one line to
   `docs/markdown/_sidebar.md`. No build step, no HTML edits.
