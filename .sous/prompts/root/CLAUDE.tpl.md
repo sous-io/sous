@@ -11,7 +11,29 @@ The binary was called `xcv` in earlier releases; the name is now `sous` everywhe
 
 @${sousDir}/prompts/memories/agent-conduct.md
 
+@~communication/agent-conduct/memories/agent-conduct.md
+
+@~communication/agent-conduct/memories/interaction-style.md
+
+@~communication/agent-conduct/memories/respect-the-users-time.md
+
+@~communication/agent-conduct/memories/quote-sources.md
+
+@~communication/agent-conduct/memories/rulings-and-provenance.md
+
+@~communication/agent-conduct/memories/drafting-and-outward-actions.md
+
+@~communication/agent-conduct/memories/outward-actions.md
+
+@~reasoning/evidence-and-verification/memories/evidence-and-verification.md
+
+@~workflow/sub-agent-delegation/memories/sub-agent-delegation.md
+
+@~workflow/agent-memory/memories/improving-the-instructions.md
+
 @${sousDir}/prompts/memories/writing-standards.md
+
+@~communication/plain-speech/memories/speak-plainly.md
 
 @${sousDir}/prompts/memories/cli-conventions.md
 
@@ -883,9 +905,21 @@ the COMMITTED `.sous/sous.lock.json`. Three sources feed `.claude/skills/`:
 - `core/sous-skills`, which every project gets without asking. It is not listed in the config
   at all; sous provides that subscription itself, and `recipes/core/sous-skills/` at the root
   of this repository is its source.
-- The subscriptions the config declares: `workflow/task-files`, `workflow/github-projects`,
-  `communication/control-flow` and `cli/command-design`, written into `recipeOutputs.skills`.
+- The subscriptions the project declares, written into `recipeOutputs.skills`. The primary
+  config declares `workflow/task-files`, `workflow/github-projects`,
+  `communication/control-flow` and `cli/command-design`; the managed
+  `.sous/conf.d/510-subscriptions.jsonc` layer (written by `sous subscription add`) declares
+  `communication/agent-conduct`, `communication/plain-speech`,
+  `reasoning/evidence-and-verification`, `workflow/sub-agent-delegation`,
+  `workflow/sources-of-truth`, `workflow/agent-memory` and `workflow/autonomous-work`.
 - This repository's own skills in `.sous/skills/`, compiled by the `projectSkills` target.
+
+A recipe's MEMORIES do not go through `recipeOutputs`: `recipeOutputs.memories` is unset, so
+every build warns that memories were skipped, and each subscribed recipe's memory is instead
+included by hand into the source of this file, one `@~namespace/recipe/memories/<file>.md` line
+each, placed where it fits. This source is a `.tpl.` template, so those memories render with the
+project's answers. A new subscription that publishes a memory gets its include line in the same
+change.
 
 `tool-usage/automated-browser-tasks` is deliberately NOT subscribed to: it needs
 `browserAutomationScriptsDir` pointing at a real script directory, and sous has none.
@@ -1494,7 +1528,7 @@ To add a tag: create `src/templating/tags/<name>.ts` exporting a `register<Name>
 function, then add it to the array in `src/templating/tags/index.ts`. Filters follow the
 same pattern under `filters/`.
 
-@${sousDir}/prompts/memories/sources-of-truth.md
+@~workflow/sources-of-truth/memories/sources-of-truth.md
 
 ## Important!
 

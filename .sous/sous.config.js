@@ -78,6 +78,9 @@ export const config = {
   // Deliberately NOT subscribed: `tool-usage/automated-browser-tasks`. It needs
   // browserAutomationScriptsDir pointing at a real script directory, and sous
   // has none.
+  //
+  // More subscriptions live in the managed layer
+  // .sous/conf.d/510-subscriptions.jsonc, which `sous subscription add` writes.
   subscriptions: {
     "workflow/task-files": { range: "^1" },
     "workflow/github-projects": { range: "^1" },
@@ -85,8 +88,10 @@ export const config = {
     "cli/command-design": { range: "^1" },
   },
 
-  // Where a subscribed recipe's files are written. Only `skills` is named,
-  // because the recipes above contribute only skills.
+  // Where a subscribed recipe's files are written. Only `skills` is named. The
+  // recipes' memories are included by hand, one `@~` line each, in the root
+  // instruction source (.sous/prompts/root/CLAUDE.tpl.md), so a build warns
+  // that memories were skipped; that warning is expected.
   recipeOutputs: {
     skills: ["${claudeSkillsDir}"],
   },

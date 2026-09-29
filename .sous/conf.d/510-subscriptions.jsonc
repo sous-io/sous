@@ -1,0 +1,47 @@
+// This file is managed by sous. Sous edits these files by key; you may edit
+// them too, and your comments, key order and formatting are kept.
+//
+// It records what this project subscribes to. The 'sous subscription add' and
+// 'sous subscription remove' commands write the entries under 'subscriptions'.
+//
+// It is JSON with comments (.jsonc): line comments, block comments and trailing
+// commas are all allowed here.
+{
+  "subscriptions": {
+    "communication/agent-conduct": {
+      "range": "^1",
+      "addedAt": "2026-09-29T11:07:56.872Z",
+      "addedBy": "user"
+    },
+    "communication/plain-speech": {
+      "range": "^1",
+      "addedAt": "2026-09-29T11:08:01.555Z",
+      "addedBy": "user"
+    },
+    "reasoning/evidence-and-verification": {
+      "range": "^1",
+      "addedAt": "2026-09-29T11:08:03.711Z",
+      "addedBy": "user"
+    },
+    "workflow/agent-memory": {
+      "range": "^1",
+      "addedAt": "2026-09-29T11:08:11.710Z",
+      "addedBy": "user"
+    },
+    "workflow/autonomous-work": {
+      "range": "^1",
+      "addedAt": "2026-09-29T11:08:13.901Z",
+      "addedBy": "user"
+    },
+    "workflow/sources-of-truth": {
+      "range": "^1",
+      "addedAt": "2026-09-29T11:08:09.430Z",
+      "addedBy": "user"
+    },
+    "workflow/sub-agent-delegation": {
+      "range": "^1",
+      "addedAt": "2026-09-29T11:08:05.969Z",
+      "addedBy": "user"
+    }
+  }
+}
