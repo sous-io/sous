@@ -13,7 +13,10 @@ content including code blocks, mock CLI output, and generated file comments.
   to paste verbatim.
 - **Instruction documents hold rules and pointers, never enumerations.** No names, dates, or
   lineage ("we decided on..."); if the code already holds a fact, point at the code. Hand-
-  maintained lists rot.
+  maintained lists rot. The rule keeps other projects, and people not directly involved in
+  sous, out of sous's instructions; it does not forbid quoting the sous maintainers. A ruling
+  by a sous maintainer may be quoted, with an attribution line naming them, where it is
+  relevant.
 - **CLI output is polished and plain-language**: colors, line padding, complete words and
   sentences. No abbreviated lingo, no compressed notation, no assuming the reader decodes
   terse status lines. This applies equally to MOCKED output in design discussions and docs;
