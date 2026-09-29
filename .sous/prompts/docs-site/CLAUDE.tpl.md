@@ -2,7 +2,7 @@
 
 > **GENERATED FILE. DO NOT EDIT `docs/CLAUDE.md` DIRECTLY.**
 > This file is compiled by sous (`npm run sous:build`) from
-> `.sous/prompts/docs-site/CLAUDE.md`. Edit that source, then rebuild.
+> `.sous/prompts/docs-site/CLAUDE.tpl.md`. Edit that source, then rebuild.
 > The compiled copy is gitignored; the source is tracked.
 
 **This document records rules, decisions, and pointers; never enumerations.**
