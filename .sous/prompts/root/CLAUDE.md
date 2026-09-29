@@ -319,7 +319,8 @@ recipes/                   # the recipes that SHIP INSIDE the package; see "Skil
     sous-skills/           # the core recipe: the offline seed, version-locked to the package
       sous.recipe.yaml     # its manifest; `version` must equal package.json's `version`
       skills/              # about-sous, about-sous-configuration, about-agent-skills,
-                           #   about-liquid-templates, create-skill
+                           #   about-liquid-templates, about-sous-repos,
+                           #   about-sous-recipes, create-skill
 bin/
   run.js                   # published bin (`sous`): hands off to a project's own install,
                            #   else registers tsx and hands off to oclif
@@ -1153,7 +1154,7 @@ radius of each is completely different.
 
 1. **`recipes/core/sous-skills/skills/` in THIS repository.** The core skills that teach an
    agent what sous is: `about-sous`, `about-sous-configuration`, `about-agent-skills`,
-   `about-liquid-templates` and `create-skill`. This is the SOURCE for every project in the
+   `about-liquid-templates`, `about-sous-repos`, `about-sous-recipes` and `create-skill`. This is the SOURCE for every project in the
    world that installs sous, so an edit here reaches all of them at the next release. The
    published copy in `sous-io/sous-recipes` is distribution output; edit it here.
 2. **A recipe in `sous-io/sous-recipes`.** Everything else sous publishes lives there and is

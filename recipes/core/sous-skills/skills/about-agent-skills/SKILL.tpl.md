@@ -48,8 +48,10 @@ user-invocable: false
 
 **`name`**: becomes the `/slash-command`. Defaults to the directory name if omitted.
 
-**`description`**: tells the agent when to invoke this skill. Use strong trigger
-language: open with "YOU MUST load this skill when...". Under 500 chars.
+**`description`**: tells the agent when to invoke this skill. For a skill the agent
+may load on its own, use strong trigger language: open with "YOU MUST load this skill
+when...". A command the user alone can run gets a plain description instead (see
+"Writing a Skill's Text"). Under 500 characters.
 
 **`disable-model-invocation`**: set `true` to prevent the agent from invoking the
 skill automatically. Use this for command skills that represent intentional,
@@ -116,8 +118,9 @@ that inventory things which will evolve (e.g. available skills, current files in
 directory). Teach the agent where to look rather than providing a snapshot that will go
 stale. Only document things stable by nature.
 
-**Use strong trigger language.** Descriptions must open with `YOU MUST load this
-skill when...`. Cross-references to other skills must use `YOU MUST load`; weak
+**Use strong trigger language where the agent decides.** A skill the agent may load on
+its own MUST open its description with `YOU MUST load this skill when...`; a command the
+user alone can run gets a plain description. Cross-references to other skills must use `YOU MUST load`; weak
 language like "consult" or "see" is not sufficient. In a skill body, write the
 requirement so it binds whichever agent executes ("The agent performing this work MUST
 load `x`"), not just the main session: delegated sub-agents start with fresh context and
@@ -133,29 +136,94 @@ user must return it to the orchestrator, which relays it.
 **If no action skill exists for a task, ask the user.** Do not improvise an action
 that warrants its own skill.
 
+## Writing a Skill's Text
+
+These rules apply to every new skill, memory, partial and reference file. A skill is read by an
+agent that has read nothing else, so it has to be unambiguous on its own.
+
+MUST, MUST NOT, SHOULD, SHOULD NOT and MAY carry the meaning RFC 2119 gives them when, and only
+when, they appear in capitals (RFC 8174). Write them in capitals wherever a sentence states a rule;
+a lowercase "must" is ordinary English. NEVER means exactly MUST NOT, and ALWAYS exactly MUST, as
+more emphatic forms.
+
+- https://www.rfc-editor.org/rfc/rfc2119
+- https://www.rfc-editor.org/rfc/rfc8174
+
+The rules:
+
+- **The user and the agent.** Instruction text says "the user" and "the agent", never "me", "I" or
+  "you" for either. An imperative ("Load `x` first.") needs no subject. Example output, meaning what
+  the agent will say to the user, speaks naturally, "I" and "you" included.
+- **Brief.** A skill SHOULD be brief; move depth into `references/`.
+- **Explain before listing.** Say what a list is before it starts, and define every term it depends
+  on. Assume the reader has read nothing else.
+- **Show it applied.** Follow a list of rules with an example of them applied; several when each
+  adds real value. A skill that produces something for the user (a report, a list, a question) MUST
+  include an example of that output, in a `text` fence.
+- **Description tone follows invocation.** A skill the agent may load on its own opens its
+  description with "YOU MUST load this skill when...". A command only the user can run
+  (`disable-model-invocation: true`) gets a plain description of what it does; the agent never sees
+  it, and the user reads it in the `/` menu.
+- **Arguments are optional.** A command that takes arguments places `$ARGUMENTS` under a label
+  saying what they are, and treats them as refining the goal. With none, it takes the broadest
+  reasonable reading of roughly the last 10 turns, NEVER asks which of several targets was meant,
+  and names what it took in the first line of its reply.
+- **Tiers, never models.** Name a sub-agent's model by tier ("the next tier down from the main
+  session"), never by product or provider.
+- **Public by default.** A skill published in a recipe repository is public: its examples use
+  fictional people and projects, and it names no real colleague, private project or private URL.
+- **Plain text.** No em-dashes (use semicolons, commas or parentheses), no emojis, and complete
+  sentences with no compressed notation.
+
+Example of a command's opening under these rules:
+
+```markdown
+---
+name: walk
+description: Go through what still needs the user's input, or a named topic, one item at a time.
+argument-hint: "[what to walk through]"
+disable-model-invocation: true
+---
+
+# Walk Through It, One Item at a Time
+
+What to walk through: $ARGUMENTS
+
+If nothing is named above, walk through everything in roughly the last 10 turns that still needs
+the user's input, and name what was gathered in the first line of the reply. The agent MUST NOT
+present the next item until the user says "Next".
+```
+
 ## Template-Compiled Skills
 
-Every skill distributed from a shared library, whether this library (`sous`) or any other
-shared skill library, must use `SKILL.tpl.md`, not `SKILL.md`. This is required because
-every distributed skill must end with a `## Source for this Skill` section (see below), and
-that section uses a template variable for the source path, which requires LiquidJS rendering.
-No exceptions.
+Every skill MUST be named `SKILL.tpl.md`, not `SKILL.md`, because every skill ends with a
+`## Source for this Skill` footer, and the footer's source path is a template variable that only a
+LiquidJS render fills in. No exceptions, even for a skill with no other variables.
 
-Every such skill's `SKILL.md` must end with a `## Source for this Skill` section:
+A skill published in a recipe names its recipe:
 
 ```
 ## Source for this Skill
 
-This skill was pulled from the `sous` project's "shared skills" library. It was compiled from a template and
-the output file should not be edited directly.
+This skill comes from the `<namespace>/<recipe>` recipe, installed by sous from a recipe
+repository. It was compiled from a template, so edit the source, never this output file.
 
 - Source Path: <resolved source path>
 ```
 
-This tells agents reading the compiled output where the skill originated and that the
-file must not be edited directly. Because this footer is required, all shared skills must
-use `SKILL.tpl.md` (not `SKILL.md`) so the source path variable can be rendered at
-compile time.
+A project's own skill says it belongs to the project:
+
+```
+## Source for this Skill
+
+This skill belongs to this project and was compiled by sous from a template, so edit the source,
+never this output file.
+
+- Source Path: <resolved source path>
+```
+
+The footer tells an agent reading the compiled copy where the skill came from and where to make a
+change.
 
 ## Examples
 
@@ -171,7 +239,7 @@ compile time.
 
 ## Source for this Skill
 
-This skill was pulled from the `sous` project's "shared skills" library. It was compiled from a template and
-the output file should not be edited directly.
+This skill comes from the `core/sous-skills` recipe, installed by sous from a recipe
+repository. It was compiled from a template, so edit the source, never this output file.
 
 - Source Path: {{ sousTemplatePath }}

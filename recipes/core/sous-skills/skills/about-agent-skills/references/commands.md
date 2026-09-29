@@ -23,6 +23,10 @@ Commands often accept arguments (e.g. `/deploy staging`). When they do:
    be substituted. See `substitutions.md` for full syntax.
 2. Add an `argument-hint` field to frontmatter; it appears in autocomplete next to the
    command name.
+3. A command that takes arguments also works without them. Put `$ARGUMENTS` under a label
+   saying what the arguments are. With none, the agent takes the broadest reasonable
+   reading of roughly the last 10 turns, never asks which target was meant, and names what
+   it took in the first line of its reply.
 
 ```yaml
 ---
