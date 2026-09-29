@@ -75,7 +75,7 @@ at `{{ sousRootPath }}/docs/markdown/`. Read `_sidebar.md` there first; it is
 the index of what exists. When you need to understand a sous feature beyond
 what the skills cover, read these files before guessing or searching the web:
 they match the INSTALLED version of sous, unlike the online copy
-(https://sous-io.github.io/sous/markdown/#/), which tracks the latest release.
+(https://sous.io/markdown/#/), which tracks the latest release.
 The reference content is still being written; the index shows what exists so
 far.
 

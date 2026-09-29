@@ -48,7 +48,7 @@ Read these files for anything beyond this page; do not guess and do not search t
   Schema artifact; the `sous config` commands
 
 These files match the INSTALLED sous version. The same content is published at
-https://sous-io.github.io/sous/markdown/#/configuration, which tracks the latest release;
+https://sous.io/markdown/#/configuration, which tracks the latest release;
 prefer the on-disk copies.
 
 ## Rules

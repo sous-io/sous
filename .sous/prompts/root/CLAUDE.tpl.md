@@ -354,7 +354,7 @@ sous.config.schema.json    # committed JSON Schema artifact; shipped in the npm 
   test.yml                 # install, type-check and run the suite on Node 22
   publish.yml              # the whole release: version, npm publish (OIDC), core recipe
                            #   (the file name is bound to npm's trusted publisher)
-docs/                      # the GitHub Pages site (sous-io.github.io/sous)
+docs/                      # the GitHub Pages site (sous.io)
   index.html               # the animated GSAP presentation page
   markdown/                # the documentation shell (docsify, client-side markdown render)
   css/main.css             # site design system (--sous-* design tokens)
