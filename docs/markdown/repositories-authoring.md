@@ -17,8 +17,11 @@ $ sous repo init ./my-recipes --name my-recipes --namespace workflow
   wrote sous.repo.yaml
   wrote sous.index.json
   wrote recipes/workflow/example/sous.recipe.yaml
-  wrote recipes/workflow/example/skills/example-skill/SKILL.md
+  wrote recipes/workflow/example/skills/example-skill/SKILL.tpl.md
   wrote README.md
+  wrote CONTRIBUTING.md
+  wrote CLAUDE.md
+  wrote AGENTS.md
   wrote .github/workflows/sous-release.yml
   wrote .gitignore
 ```
@@ -34,7 +37,11 @@ before releasing, since `sous repo release` reads and writes tags and fails in a
 commands spell `--yes`, `-y`, `--force` or `--trust`.
 
 `sous.repo.yaml` says what the repository publishes, `sous.index.json` is the catalog that `sous repo release`
-writes, and each recipe folder carries one `sous.recipe.yaml` beside the files it contributes. Nothing else is
+writes, and each recipe folder carries one `sous.recipe.yaml` beside the files it contributes. `CONTRIBUTING.md`,
+`CLAUDE.md` and `AGENTS.md` are for agents: they say that contribution instructions are written for agents, and
+point an agent at the sous core skills, which explain how a recipe repository works. The scaffold follows
+[`sous-io/sous-recipes`](https://github.com/sous-io/sous-recipes), a complete repository minus its recipes, and
+its placeholder skill is named `SKILL.tpl.md` because it ends with a footer that only a render fills in. Nothing else is
 fixed: recipe folders may live anywhere, and what makes a folder a recipe is that `sous.repo.yaml` lists its
 path under `recipes`. Both hand-written manifests are YAML or JSON and never JavaScript, because manifests are
 data: sous reads, validates and browses them without executing anything, before a repository is trusted, in a

@@ -161,8 +161,11 @@ sous repo init ~/projects/my-recipes --name my-recipes --namespace workflow
   wrote sous.repo.yaml
   wrote sous.index.json
   wrote recipes/workflow/example/sous.recipe.yaml
-  wrote recipes/workflow/example/skills/example-skill/SKILL.md
+  wrote recipes/workflow/example/skills/example-skill/SKILL.tpl.md
   wrote README.md
+  wrote CONTRIBUTING.md
+  wrote CLAUDE.md
+  wrote AGENTS.md
   wrote .github/workflows/sous-release.yml
   wrote .gitignore
 ```
@@ -173,7 +176,7 @@ recipe, with its own version.
 
 ## 7. Put something in the recipe
 
-Edit `recipes/workflow/example/skills/example-skill/SKILL.md` into a real skill, then name the
+Edit `recipes/workflow/example/skills/example-skill/SKILL.tpl.md` into a real skill, then name the
 recipe in its manifest:
 
 ```yaml

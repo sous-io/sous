@@ -164,9 +164,10 @@ yet, then unlinks with `--update`.
 
 `sous repo init [dir]` writes a new recipe repository into the directory (the current one by
 default): the repo manifest, an empty index, one example recipe with its manifest and a
-placeholder skill, a README, the release workflow and a `.gitignore`. It does not run git: run
-`git init`, commit, and add a remote before the first release, because `sous repo release` reads
-and writes tags. Every new recipe folder is then listed under `recipes` in `sous.repo.yaml`.
+placeholder skill, a README, `CONTRIBUTING.md`, `CLAUDE.md` and `AGENTS.md` for agents, the release
+workflow and a `.gitignore`. `sous-io/sous-recipes` is the model a scaffold follows: a new repository
+is as complete as it, minus its recipes. It does not run git: run `git init`, commit, and add a
+remote before the first release, because `sous repo release` reads and writes tags. Every new recipe folder is then listed under `recipes` in `sous.repo.yaml`.
 
 ## Source for this Skill
 
