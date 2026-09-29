@@ -49,13 +49,13 @@
       "version": "1.0.0"
     },
     "core/sous-skills": {
-      "hash": "sha256-d7b09dc06ab2e49ad3a3fe7afedd301790f43ac0450cdcd642abc399d3686162",
+      "hash": "sha256-f662987b0e30512aff0aed662506a8ad7cd3c14c1195b64f8f4a065540d77e71",
       "kind": "subscribes",
       "repo": "sous-recipes",
       "requestedBy": [
         "project"
       ],
-      "version": "0.2.21"
+      "version": "0.2.22"
     },
     "reasoning/evidence-and-verification": {
       "hash": "sha256-9634aedf36d0eb9a3e89e7041560320a95640bde48faa7e4d62a16082a1d2eac",
