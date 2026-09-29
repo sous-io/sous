@@ -9,7 +9,7 @@
     "type": "git",
     "url": "git+https://github.com/sous-io/sous.git"
   },
-  "homepage": "https://sous-io.github.io/sous",
+  "homepage": "https://sous.io",
   "bugs": "https://github.com/sous-io/sous/issues",
   "keywords": [
     "cli",
