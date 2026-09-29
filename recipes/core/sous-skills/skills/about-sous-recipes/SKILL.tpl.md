@@ -168,8 +168,11 @@ What to review: $ARGUMENTS
 ```
 
 The included text is pasted in before rendering, so any Liquid inside a partial renders only when
-the including file is a `.tpl.` file, and then with that file's variables. A partial SHOULD
-therefore hold no template variables.
+the including file is a `.tpl.` file, and then with that file's variables. Every compiled source in
+the official sous repositories is named `*.tpl.md`, partials included, so a partial MAY use template
+variables: they render in every file that includes it. For example, a partial holding
+`{% raw %}Task files live in {{ taskFileRoot }}.{% endraw %}` renders with the project's answer wherever it is included.
+Name a new partial `*.tpl.md` too.
 
 ## Source for this Skill
 
