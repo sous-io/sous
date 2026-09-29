@@ -112,6 +112,9 @@ The fields in that example, and the ones it leaves out:
   acceptable; the `prompt` is one plain question. An example is only shown beside the question,
   never stored or offered as an answer; a `default` is the answer of last resort. Both MUST fit the
   declared type.
+- Every variable MUST provide a conservative default: the answer that does the least harm when the
+  project never chose one. For example, a setting for whether the agent may merge pull requests on
+  its own defaults to "only when asked", never to "always".
 - `scope: local` stores the answer in the gitignored `.sous/.env.local`; use it for anything that
   belongs to one person or one machine. `scope: shared`, the default, stores it in the committed
   `.sous/.env`.
