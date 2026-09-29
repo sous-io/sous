@@ -17,7 +17,8 @@ description: >-
   The skills that teach an agent what sous is and how it works: which files sous
   owns and must never be hand-edited, how a sous configuration is written and
   debugged, the .tpl. template convention and LiquidJS syntax, what an agent
-  skill is, and how to create one.
+  skill is and how to create one, and how a recipe repository and a recipe
+  work.
 
 # The copy in sous-io/sous-recipes is overwritten by every sous release, so a
 # change proposed there would be lost, and a version it tagged would collide

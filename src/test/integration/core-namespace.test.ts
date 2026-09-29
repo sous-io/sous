@@ -269,6 +269,8 @@ describe("the core namespace with no network", () => {
         "about-sous-configuration",
         "about-agent-skills",
         "about-liquid-templates",
+        "about-sous-repos",
+        "about-sous-recipes",
         "create-skill",
       ]) {
         expect(fs.existsSync(path.join(skills, name, "SKILL.md"))).toBe(true);

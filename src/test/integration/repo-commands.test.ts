@@ -179,6 +179,9 @@ describe("sous repo init / link / unlink", () => {
         fs.existsSync(path.join(sourceRepo, ".github/workflows/sous-release.yml"))
       ).toBe(true);
       expect(fs.existsSync(path.join(sourceRepo, "README.md"))).toBe(true);
+      expect(fs.existsSync(path.join(sourceRepo, "CONTRIBUTING.md"))).toBe(true);
+      expect(fs.existsSync(path.join(sourceRepo, "CLAUDE.md"))).toBe(true);
+      expect(fs.existsSync(path.join(sourceRepo, "AGENTS.md"))).toBe(true);
       expect(fs.existsSync(path.join(sourceRepo, ".gitignore"))).toBe(true);
     },
     CLI_TIMEOUT

@@ -24,3 +24,4 @@
   - [0003: Project setup with sous init](adrs/0003-project-init.md)
   - [0004: A global sous defers to the project's install](adrs/0004-project-install-handoff.md)
   - [0005: Follow-ups from the first project on the hand-off](adrs/0005-first-project-follow-ups.md)
+  - [0006: `sous repo init` follows `sous-recipes`](adrs/0006-repo-init-model-home.md)

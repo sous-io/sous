@@ -44,11 +44,13 @@ $ sous build
   ✓ .claude/skills/about-sous-configuration/SKILL.md (~1,204 tokens)
   ✓ .claude/skills/about-agent-skills/SKILL.md (~1,937 tokens)
   ✓ .claude/skills/about-liquid-templates/SKILL.md (~1,486 tokens)
+  ✓ .claude/skills/about-sous-repos/SKILL.md (~1,579 tokens)
+  ✓ .claude/skills/about-sous-recipes/SKILL.md (~1,639 tokens)
   ✓ .claude/skills/create-skill/SKILL.md (~655 tokens)
 ✓ Done.
 ```
 
-You subscribed to nothing and five skills appeared. That is the `core` namespace, which every
+You subscribed to nothing and seven skills appeared. That is the `core` namespace, which every
 project is auto-subscribed to at the version matching the CLI you are running. It carries the
 skills that teach an agent what sous manages and why it must not hand-edit a generated file.
 
@@ -133,7 +135,7 @@ gitignored `.sous/.env.local`. [Recipe variables](repositories-variables.md) cov
 ## 5. Look at what landed
 
 `sous subscription add` finishes by building, so the files are already on disk. `ls .claude/skills`
-now lists the five `core` skills plus the seven this recipe ships, among them `about-task-files`,
+now lists the seven `core` skills plus the seven this recipe ships, among them `about-task-files`,
 `start-task` and `resume-task`. The build dependency contributes nothing: a recipe held through
 `depends` is fetched and pinned, and its files stay out of your output.
 
@@ -159,8 +161,11 @@ sous repo init ~/projects/my-recipes --name my-recipes --namespace workflow
   wrote sous.repo.yaml
   wrote sous.index.json
   wrote recipes/workflow/example/sous.recipe.yaml
-  wrote recipes/workflow/example/skills/example-skill/SKILL.md
+  wrote recipes/workflow/example/skills/example-skill/SKILL.tpl.md
   wrote README.md
+  wrote CONTRIBUTING.md
+  wrote CLAUDE.md
+  wrote AGENTS.md
   wrote .github/workflows/sous-release.yml
   wrote .gitignore
 ```
@@ -171,7 +176,7 @@ recipe, with its own version.
 
 ## 7. Put something in the recipe
 
-Edit `recipes/workflow/example/skills/example-skill/SKILL.md` into a real skill, then name the
+Edit `recipes/workflow/example/skills/example-skill/SKILL.tpl.md` into a real skill, then name the
 recipe in its manifest:
 
 ```yaml

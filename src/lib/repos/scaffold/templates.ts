@@ -59,8 +59,9 @@ description: >-
   One paragraph saying what this repository publishes and who it is for.
 
 # Where to send a change. Shown to anyone whose provider cannot open a proposal
-# for them, so a contributor is never left without a route.
-# contribute: https://example.com/contributing
+# for them, so a contributor is never left without a route. Point it at this
+# repository's CONTRIBUTING.md once the repository has a public URL.
+# contribute: https://github.com/<owner>/${context.name}/blob/main/CONTRIBUTING.md
 
 # Namespaces group recipes. They are not versioned, and a project may subscribe
 # to a whole namespace, which means every recipe in it, including ones published
@@ -164,7 +165,9 @@ contents:
 }
 
 /**
- * The placeholder skill the example recipe contributes.
+ * The placeholder skill the example recipe contributes. It is named
+ * `SKILL.tpl.md`, as every skill is, because it ends with the footer every
+ * skill carries, and the footer's source path is only filled in by a render.
  *
  * @param context - The repository being scaffolded.
  */
@@ -182,14 +185,23 @@ This file is a placeholder written by 'sous repo init'. Replace it with a real
 skill, or delete it once the ${context.recipe} recipe has content of its own.
 
 A skill is ordinary markdown. Everything under this recipe's 'contents' entry is
-copied into a subscribing project's agent skill directory, so what you write
-here is what an agent reads there.
+compiled into a subscribing project's agent skill directory, so what you write
+here is what an agent reads there. The '.tpl.' in this file's name means it is
+rendered as a LiquidJS template on the way, and the name it is written under
+drops the '.tpl.'.
 
 ## What to put here
 
 Describe the concept the skill covers, then the rules an agent should follow
 when it applies. Keep it short enough to be read in full, and point at reference
 files for anything long.
+
+## Source for this Skill
+
+This skill comes from the \`${context.namespace}/${context.recipe}\` recipe, installed by sous from a recipe
+repository. It was compiled from a template, so edit the source, never this output file.
+
+- Source Path: {{ sousTemplatePath }}
 `;
 }
 
@@ -292,6 +304,12 @@ To propose a change to a repository you do not maintain, commit it and run
 \`sous repo submit\`, which validates everything first and then opens a pull
 request through your provider's own command line tool.
 
+## Contributing
+
+Improvements are welcome, including new recipes. Contribution instructions in this repository are
+written for agents: \`CONTRIBUTING.md\` says why, and \`CLAUDE.md\` is where an agent without the sous
+core skills starts.
+
 ## Using it
 
 In any project that has a sous config:
@@ -316,7 +334,91 @@ sous repo link ${context.name} /path/to/this/checkout
 
 Builds say loudly when a repository is linked. Run \`sous repo unlink ${context.name}\`
 to go back to published versions.
+
+## License
+
+This repository has no license yet. Until it has one, others may read it but not reuse it; add a
+\`LICENSE\` file before publishing.
 `;
+}
+
+/**
+ * `CONTRIBUTING.md`: why this repository publishes no contribution
+ * instructions for people, and where an agent starts instead. It is
+ * `sous-io/sous-recipes`' own `CONTRIBUTING.md`, word for word apart from the
+ * name, because that repository is the model every scaffold follows.
+ *
+ * @param context - The repository being scaffolded.
+ */
+export function buildContributing(context: ScaffoldContext): string {
+  return `# Contributing to ${context.name}
+
+Sous is built for agentic coding, so this repository does not publish contribution instructions for
+people. Everything here is written for agents to read.
+
+Any agent working in this repository is assumed to have, at minimum, the sous core skills, such as
+\`about-sous\`, \`about-agent-skills\`, \`about-sous-repos\` and \`about-sous-recipes\`. They explain
+everything an agent needs to know to contribute: how a recipe is written, how its version is raised,
+and how a change is checked, proposed and released.
+
+An agent without those skills starts at \`CLAUDE.md\`, at the root of this repository.
+`;
+}
+
+/** Where the sous core skills can be read online, at their latest published version. */
+const CORE_SKILLS_URL =
+  "https://github.com/sous-io/sous-recipes/tree/main/recipes/core/sous-skills/skills";
+
+/** The official recipe repository every scaffold is modeled on. */
+const MODEL_REPOSITORY_URL = "https://github.com/sous-io/sous-recipes";
+
+/**
+ * The root `CLAUDE.md`: the entry point for an agent working in the repository.
+ * It points at the sous core skills rather than restating them, because they
+ * are the source of truth for how a recipe repository works. It follows
+ * `sous-io/sous-recipes`' own `CLAUDE.md`, minus what is only true there.
+ *
+ * @param context - The repository being scaffolded.
+ */
+export function buildClaudeMd(context: ScaffoldContext): string {
+  return `# ${context.name}
+
+This is a sous recipe repository. It publishes recipes: versioned bundles of agent skills, memories
+and partials that sous installs into the projects that subscribe to them.
+
+## Recipe Repositories Are Part of Sous
+
+Writing a recipe, raising its version, checking a change, proposing it and releasing it all work
+here exactly as they do in any other sous recipe repository. How a recipe repository works is part
+of sous itself, so the sous core skills teach it, and they are the official source of truth for it.
+This file does not repeat them. The agent MUST read these before changing anything here:
+
+- \`about-sous-repos\`: a recipe repository as a whole; the repo manifest, namespaces, the index,
+  release tags, what happens to a pull request and a merge, and proposing a change.
+- \`about-sous-recipes\`: one recipe; its manifest, how its version is raised, its variables, its
+  contents, its dependencies and its partials.
+- \`about-agent-skills\`: how a skill is written, including the rules every new skill follows.
+
+An agent in a project that uses sous already has these skills. An agent that cannot install sous or
+use it reads them directly, as plain markdown files, online, at their latest published version:
+
+- ${CORE_SKILLS_URL}
+
+## Where This Repository Came From
+
+\`sous repo init\` created this repository, modeled on \`sous-io/sous-recipes\`, the official recipe
+repository. Its files show a complete repository in use:
+
+- ${MODEL_REPOSITORY_URL}
+`;
+}
+
+/**
+ * The root `AGENTS.md`: one line sending an agent that reads `AGENTS.md`
+ * rather than `CLAUDE.md` to the same instructions.
+ */
+export function buildAgentsMd(): string {
+  return "Read `CLAUDE.md` in this directory; it holds the instructions for agents working in this\nrepository.\n";
 }
 
 /** The release workflow: validate every pull request, publish on merge. */

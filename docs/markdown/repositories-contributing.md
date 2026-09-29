@@ -125,7 +125,7 @@ renaming a variable, or tightening a variable's validation). The changelog `sous
 recipe your change touches without a version raise, with a warning that a `--ci` release refuses it, so a missed
 one is visible in the proposal. The repository's
 own guide is named by the `contribute` field of its `sous.repo.yaml`; for `sous-recipes` it is its
-`CONTRIBUTING.md`.
+`CONTRIBUTING.md`, and a repository `sous repo init` created starts with a `CONTRIBUTING.md` of the same kind.
 
 **Core is edited in sous itself.** The `core` recipes in `sous-io/sous-recipes` are machine-written copies. Their
 source is `recipes/core/sous-skills/` in `sous-io/sous`, and each sous release overwrites the copy, so an edit

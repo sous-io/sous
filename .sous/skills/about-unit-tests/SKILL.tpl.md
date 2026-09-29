@@ -225,5 +225,5 @@ user whether one should be created before continuing.
 # Source for this Skill
 
 This is a hand-maintained, sous-specific skill. Its source is
-`.sous/skills/about-unit-tests/SKILL.md` in the sous repository; the copy under
+`.sous/skills/about-unit-tests/SKILL.tpl.md` in the sous repository; the copy under
 `.claude/skills/` is compiled output and must not be edited directly.

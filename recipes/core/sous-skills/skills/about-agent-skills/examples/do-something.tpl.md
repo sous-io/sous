@@ -3,9 +3,7 @@
 ```markdown
 ---
 name: deploy
-description: >
-  YOU MUST use this skill when deploying the application. Do not use for rollbacks;
-  those follow a different process.
+description: Deploy the application to a target environment.
 disable-model-invocation: true
 ---
 

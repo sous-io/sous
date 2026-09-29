@@ -22,6 +22,9 @@ import { parseRecipeManifest } from "../formats/recipe-manifest.js";
 import { parseRepoManifest } from "../formats/repo-manifest.js";
 import { findRepoManifest, loadJsonFile, loadManifestFile } from "../load-manifest.js";
 import {
+  buildAgentsMd,
+  buildClaudeMd,
+  buildContributing,
   buildExampleSkill,
   buildGitignore,
   buildIndexFile,
@@ -79,9 +82,10 @@ type PlannedFile = {
 };
 
 /**
- * Creates a new recipe repository: a repo manifest, one example recipe with a
- * placeholder skill, an empty but valid index, a README, release automation and
- * a `.gitignore`.
+ * Creates a new recipe repository modeled on `sous-io/sous-recipes`: a repo
+ * manifest, one example recipe with a placeholder skill, an empty but valid
+ * index, a README, a `CONTRIBUTING.md`, a `CLAUDE.md` and an `AGENTS.md` for
+ * agents, release automation and a `.gitignore`.
  *
  * @param options - What to scaffold, and where.
  */
@@ -138,10 +142,13 @@ function planFiles(context: ScaffoldContext): PlannedFile[] {
       contents: buildRecipeManifest(context),
     },
     {
-      relativePath: `${recipeDir}/skills/example-skill/SKILL.md`,
+      relativePath: `${recipeDir}/skills/example-skill/SKILL.tpl.md`,
       contents: buildExampleSkill(context),
     },
     { relativePath: "README.md", contents: buildReadme(context) },
+    { relativePath: "CONTRIBUTING.md", contents: buildContributing(context) },
+    { relativePath: "CLAUDE.md", contents: buildClaudeMd(context) },
+    { relativePath: "AGENTS.md", contents: buildAgentsMd() },
     {
       relativePath: ".github/workflows/sous-release.yml",
       contents: buildReleaseWorkflow(),

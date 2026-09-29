@@ -74,14 +74,16 @@ variable straight into the output. The footer:
 ```markdown
 ## Source for this Skill
 
-This skill was compiled from a template and the output file should not be edited directly.
+This skill belongs to this project and was compiled by sous from a template, so edit the source,
+never this output file.
 
 - Source Path: {{ sousTemplatePath }}
 ```
 {% endraw %}
 
 The `{{ sousTemplatePath }}` variable renders to the absolute path of the source template
-at compile time, telling agents where the skill originated.
+at compile time, telling agents where the skill originated. A skill published in a recipe
+names its recipe instead; `about-agent-skills` has that form.
 
 For other files in the skill directory (references, scripts, supporting docs), use `.tpl.`
 naming only when the file genuinely needs LiquidJS processing. YOU MUST load
@@ -107,7 +109,7 @@ load `about-liquid-templates` if any file in your skill needs `.tpl.` processing
 
 ## Source for this Skill
 
-This skill was pulled from the `sous` project's "shared skills" library. It was compiled from a template and
-the output file should not be edited directly.
+This skill comes from the `core/sous-skills` recipe, installed by sous from a recipe
+repository. It was compiled from a template, so edit the source, never this output file.
 
 - Source Path: {{ sousTemplatePath }}

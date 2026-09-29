@@ -32,7 +32,8 @@ describe("scaffoldRepo()", () => {
    *
    * scaffoldRepo({ directory: "/tmp/my-recipes", sousVersion: "0.1.1" });
    * // -> writes sous.repo.yaml, sous.index.json, the example recipe, a README,
-   * //    the release workflow and a .gitignore
+   * //    CONTRIBUTING.md, CLAUDE.md, AGENTS.md, the release workflow and a
+   * //    .gitignore
    */
   it("should write every file a new repository needs", () => {
     const result = scaffoldRepo({ directory: target, sousVersion: SOUS_VERSION });
@@ -44,14 +45,94 @@ describe("scaffoldRepo()", () => {
     expect(result.files).toContain("sous.repo.yaml");
     expect(result.files).toContain("sous.index.json");
     expect(result.files).toContain("README.md");
+    expect(result.files).toContain("CONTRIBUTING.md");
+    expect(result.files).toContain("CLAUDE.md");
+    expect(result.files).toContain("AGENTS.md");
     expect(result.files).toContain(".gitignore");
     expect(result.files).toContain(".github/workflows/sous-release.yml");
     expect(result.files).toContain(
       `recipes/my-recipes/${EXAMPLE_RECIPE_NAME}/sous.recipe.yaml`
     );
     expect(result.files).toContain(
-      `recipes/my-recipes/${EXAMPLE_RECIPE_NAME}/skills/example-skill/SKILL.md`
+      `recipes/my-recipes/${EXAMPLE_RECIPE_NAME}/skills/example-skill/SKILL.tpl.md`
     );
+  });
+
+  /**
+   * The placeholder skill should be a template, as every skill is, and end with
+   * the footer naming the recipe it comes from.
+   *
+   * scaffoldRepo({ directory: "/tmp/my-recipes" });
+   * // -> .../skills/example-skill/SKILL.tpl.md, ending "## Source for this Skill"
+   */
+  it("should write the placeholder skill as a template with the recipe footer", () => {
+    scaffoldRepo({ directory: target, sousVersion: SOUS_VERSION });
+
+    const skill = fs.readFileSync(
+      path.join(
+        target,
+        "recipes/my-recipes",
+        EXAMPLE_RECIPE_NAME,
+        "skills/example-skill/SKILL.tpl.md"
+      ),
+      "utf8"
+    );
+
+    expect(skill).toContain("## Source for this Skill");
+    expect(skill).toContain(`\`my-recipes/${EXAMPLE_RECIPE_NAME}\` recipe`);
+    expect(skill).toContain("- Source Path: {{ sousTemplatePath }}");
+  });
+
+  /**
+   * The scaffolded CLAUDE.md should be the entry point for an agent: it names
+   * the repository, the core skills that teach how a recipe repository works,
+   * and where those skills can be read online.
+   */
+  it("should write a CLAUDE.md that points an agent at the core skills", () => {
+    scaffoldRepo({ directory: target, sousVersion: SOUS_VERSION });
+
+    const claude = fs.readFileSync(path.join(target, "CLAUDE.md"), "utf8");
+
+    expect(claude.startsWith("# my-recipes\n")).toBe(true);
+    expect(claude).toContain("`about-sous-repos`");
+    expect(claude).toContain("`about-sous-recipes`");
+    expect(claude).toContain(
+      "https://github.com/sous-io/sous-recipes/tree/main/recipes/core/sous-skills/skills"
+    );
+
+    const agents = fs.readFileSync(path.join(target, "AGENTS.md"), "utf8");
+    expect(agents).toContain("`CLAUDE.md`");
+  });
+
+  /**
+   * The scaffolded CONTRIBUTING.md should name the repository and send an
+   * agent without the core skills to CLAUDE.md; the README should point at
+   * both.
+   */
+  it("should write a CONTRIBUTING.md that points at CLAUDE.md", () => {
+    scaffoldRepo({ directory: target, sousVersion: SOUS_VERSION });
+
+    const contributing = fs.readFileSync(path.join(target, "CONTRIBUTING.md"), "utf8");
+    expect(contributing.startsWith("# Contributing to my-recipes\n")).toBe(true);
+    expect(contributing).toContain("starts at `CLAUDE.md`");
+
+    const readme = fs.readFileSync(path.join(target, "README.md"), "utf8");
+    expect(readme).toContain("## Contributing");
+    expect(readme).toContain("`CONTRIBUTING.md` says why");
+    expect(readme).toContain("## License");
+  });
+
+  /**
+   * No scaffolded file should contain an em-dash, which sous's writing
+   * standard forbids everywhere, generated files included.
+   */
+  it("should write no em-dash in any file", () => {
+    const result = scaffoldRepo({ directory: target, sousVersion: SOUS_VERSION });
+
+    for (const relative of result.files) {
+      const text = fs.readFileSync(path.join(target, relative), "utf8");
+      expect(text.includes("\u2014"), relative).toBe(false);
+    }
   });
 
   /**

@@ -39,6 +39,9 @@ YOU MUST load `about-sous-configuration` when creating or editing the project's 
 config (`sous.config.*`, `conf.d/` layers), defining or debugging config variables, or
 diagnosing a ConfigError.
 
+YOU MUST load `about-sous-repos` when working inside a recipe repository (one with a
+`sous.repo.yaml` at its root), and `about-sous-recipes` when creating or changing a recipe.
+
 ## Sous's Shared Recipes
 
 The `about-sous`, `about-sous-configuration`, `about-agent-skills` and
@@ -78,7 +81,7 @@ far.
 
 ## Source for this Skill
 
-This skill was pulled from the `sous` project's "shared skills" library. It was compiled from a template and
-the output file should not be edited directly.
+This skill comes from the `core/sous-skills` recipe, installed by sous from a recipe
+repository. It was compiled from a template, so edit the source, never this output file.
 
 - Source Path: {{ sousTemplatePath }}

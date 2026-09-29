@@ -32,9 +32,9 @@
 
 // [SOUS] Project-local skills: hand-maintained, sous-specific skills that have no
 // published equivalent (currently the unit-testing pair). These describe how to
-// work ON this repository, so they are not published as recipes. They are plain
-// SKILL.md files with no variables, so compilation is effectively a mirrored copy
-// into .claude/skills/.
+// work ON this repository, so they are not published as recipes. Every source is
+// named SKILL.tpl.md, as every markdown source sous compiles is, whether or not it
+// uses template tags; the compiled copies in .claude/skills/ are SKILL.md.
 const projectSkills = {
   entryGlob: "${projectSkillsDir}/**/*",
   globBase: "${projectSkillsDir}",
@@ -42,17 +42,18 @@ const projectSkills = {
 };
 
 // [ROOT] The repo-root CLAUDE.md: instructions for agents working ON sous.
-// The source is tracked; the compiled /CLAUDE.md is gitignored output. Plain
-// markdown (no .tpl.); @-includes work if the doc is ever split into sections.
+// The source is tracked; the compiled /CLAUDE.md is gitignored output. Named
+// .tpl.md like every markdown source sous compiles, so literal Liquid in it is
+// wrapped in raw tags; its @-includes pull in the memories under prompts/.
 const rootClaude = {
-  entryPoint: "${sousDir}/prompts/root/CLAUDE.md",
+  entryPoint: "${sousDir}/prompts/root/CLAUDE.tpl.md",
   outputs: [{ destinationFile: "${projectRoot}/CLAUDE.md" }],
 };
 
 // [SITE] Agent instructions for the GitHub Pages site under docs/. Same
 // tracked-source / gitignored-output arrangement as rootClaude.
 const docsSiteClaude = {
-  entryPoint: "${sousDir}/prompts/docs-site/CLAUDE.md",
+  entryPoint: "${sousDir}/prompts/docs-site/CLAUDE.tpl.md",
   outputs: [{ destinationFile: "${projectRoot}/docs/CLAUDE.md" }],
 };
 
@@ -77,6 +78,9 @@ export const config = {
   // Deliberately NOT subscribed: `tool-usage/automated-browser-tasks`. It needs
   // browserAutomationScriptsDir pointing at a real script directory, and sous
   // has none.
+  //
+  // More subscriptions live in the managed layer
+  // .sous/conf.d/510-subscriptions.jsonc, which `sous subscription add` writes.
   subscriptions: {
     "workflow/task-files": { range: "^1" },
     "workflow/github-projects": { range: "^1" },
@@ -84,8 +88,10 @@ export const config = {
     "cli/command-design": { range: "^1" },
   },
 
-  // Where a subscribed recipe's files are written. Only `skills` is named,
-  // because the recipes above contribute only skills.
+  // Where a subscribed recipe's files are written. Only `skills` is named. The
+  // recipes' memories are included by hand, one `@~` line each, in the root
+  // instruction source (.sous/prompts/root/CLAUDE.tpl.md), so a build warns
+  // that memories were skipped; that warning is expected.
   recipeOutputs: {
     skills: ["${claudeSkillsDir}"],
   },

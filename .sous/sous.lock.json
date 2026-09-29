@@ -2,19 +2,48 @@
   "formatVersion": 1,
   "recipes": {
     "cli/command-design": {
-      "hash": "sha256-0e118b4221b7592fff1688f536753d7cdaedd11d8018d4f6334862e44734c0f0",
+      "hash": "sha256-2393f09e33fd7cde218887876d1ee0a3a24c72a63aa3f6fa254d2e0e8660ce26",
       "kind": "subscribes",
       "repo": "sous-recipes",
       "requestedBy": [
         "project"
       ],
-      "version": "1.0.0"
+      "version": "1.0.1"
     },
-    "communication/control-flow": {
-      "hash": "sha256-7f036e8789ba950f9dbb31b1ef1f3d4383ee8329038c5696618707864e3b83e3",
+    "communication/agent-conduct": {
+      "hash": "sha256-60e380ef3ab5042575b8a46b5cd090569da5c76ccea98e68a5480c38bfc22988",
       "kind": "subscribes",
       "repo": "sous-recipes",
       "requestedBy": [
+        "communication/control-flow",
+        "project",
+        "workflow/agent-memory",
+        "workflow/autonomous-work",
+        "workflow/sources-of-truth",
+        "workflow/task-files"
+      ],
+      "version": "1.0.0"
+    },
+    "communication/control-flow": {
+      "hash": "sha256-a3113ae0c442237efa8367520b8564888ab71118e846ae8a44028cedd6ee65cf",
+      "kind": "subscribes",
+      "repo": "sous-recipes",
+      "requestedBy": [
+        "project",
+        "workflow/agent-memory",
+        "workflow/autonomous-work",
+        "workflow/sources-of-truth",
+        "workflow/task-files"
+      ],
+      "version": "1.1.0"
+    },
+    "communication/plain-speech": {
+      "hash": "sha256-6f4966daa90dc8ec1d153f7c7bdaede5d5300938d3dd7ca321ddde32edd07d1f",
+      "kind": "subscribes",
+      "repo": "sous-recipes",
+      "requestedBy": [
+        "communication/agent-conduct",
+        "communication/control-flow",
         "project"
       ],
       "version": "1.0.0"
@@ -28,34 +57,74 @@
       ],
       "version": "0.2.21"
     },
-    "workflow/github-projects": {
-      "hash": "sha256-71498b4cc26b08be63cd10adc72bfc84b9dc79dc70392a74bdc79b43e5d10f7d",
+    "reasoning/evidence-and-verification": {
+      "hash": "sha256-9634aedf36d0eb9a3e89e7041560320a95640bde48faa7e4d62a16082a1d2eac",
       "kind": "subscribes",
       "repo": "sous-recipes",
       "requestedBy": [
         "project"
-      ],
-      "version": "1.1.1"
-    },
-    "workflow/sub-agent-delegation": {
-      "hash": "sha256-6841b6f61a9a62d84152bc0fcfe246af35b7f75001527d6addf55e51068f8387",
-      "kind": "depends",
-      "repo": "sous-recipes",
-      "requestedBy": [
-        "communication/control-flow",
-        "workflow/github-projects",
-        "workflow/task-files"
       ],
       "version": "1.0.0"
     },
-    "workflow/task-files": {
-      "hash": "sha256-cbdb330aafe322839017c404beaaefae3140553436962b1949065512e7c156c5",
+    "workflow/agent-memory": {
+      "hash": "sha256-4f63dbd376e7848ec754b447cdc1fa098502308fae712cfdb56785b671338479",
       "kind": "subscribes",
       "repo": "sous-recipes",
       "requestedBy": [
         "project"
       ],
-      "version": "1.0.2"
+      "version": "1.0.0"
+    },
+    "workflow/autonomous-work": {
+      "hash": "sha256-b05e5df727ce2e4c08bcdee3862ad1afb87e087815e7650d218c74d1f7e32033",
+      "kind": "subscribes",
+      "repo": "sous-recipes",
+      "requestedBy": [
+        "project"
+      ],
+      "version": "1.0.0"
+    },
+    "workflow/github-projects": {
+      "hash": "sha256-0764a482f272006131cd7694301c3ad9cc1e1fad30ac580d29317a79ffe8b60c",
+      "kind": "subscribes",
+      "repo": "sous-recipes",
+      "requestedBy": [
+        "project"
+      ],
+      "version": "1.1.2"
+    },
+    "workflow/sources-of-truth": {
+      "hash": "sha256-c085d8e8f853d784b95826da6145a34d93d114ff881415b0d1ada5e75563bf52",
+      "kind": "subscribes",
+      "repo": "sous-recipes",
+      "requestedBy": [
+        "project"
+      ],
+      "version": "1.0.0"
+    },
+    "workflow/sub-agent-delegation": {
+      "hash": "sha256-2d69ae2727b66cc33c1afe9a035f1652a2a4189cca9aaa19b1cd8032e46a8b9c",
+      "kind": "subscribes",
+      "repo": "sous-recipes",
+      "requestedBy": [
+        "communication/control-flow",
+        "project",
+        "workflow/agent-memory",
+        "workflow/autonomous-work",
+        "workflow/github-projects",
+        "workflow/sources-of-truth",
+        "workflow/task-files"
+      ],
+      "version": "1.1.0"
+    },
+    "workflow/task-files": {
+      "hash": "sha256-5fee65861429bc0d358730fff6f02278346eb5d48fb770b9779aba6e923bc26c",
+      "kind": "subscribes",
+      "repo": "sous-recipes",
+      "requestedBy": [
+        "project"
+      ],
+      "version": "1.1.0"
     }
   },
   "repos": {
