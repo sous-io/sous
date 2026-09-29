@@ -5,9 +5,9 @@
   editing files or running state-changing commands.
 - **No unrequested features.** Never change CLI or product code as a side effect of other
   work, however obvious the improvement seems. Propose it, then wait for approval.
-- **Sub-agent model policy.** Never use Fable for sub-agents; use Opus for anything
-  substantive (writes, research, GitHub operations) and Sonnet only for light mechanical
-  chores.
+- **Sub-agent model policy.** Never use the top tier for sub-agents; use the second tier for
+  anything substantive (writes, research, GitHub operations) and the third tier only for light
+  mechanical chores.
 - **Task files are orchestrator-only.** The orchestrating agent reads and writes task files
   directly; never delegate task-file edits to sub-agents.
 - **NEVER store memories in machine-only stores** (e.g. a user-level MEMORY.md or any
