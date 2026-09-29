@@ -11,7 +11,7 @@
       "version": "1.0.1"
     },
     "communication/agent-conduct": {
-      "hash": "sha256-60e380ef3ab5042575b8a46b5cd090569da5c76ccea98e68a5480c38bfc22988",
+      "hash": "sha256-a82477b396594245be99ba03a7ca95b760514256d323cea66b38ce4ee72cb6e3",
       "kind": "subscribes",
       "repo": "sous-recipes",
       "requestedBy": [
@@ -22,10 +22,10 @@
         "workflow/sources-of-truth",
         "workflow/task-files"
       ],
-      "version": "1.0.0"
+      "version": "1.2.0"
     },
     "communication/control-flow": {
-      "hash": "sha256-a3113ae0c442237efa8367520b8564888ab71118e846ae8a44028cedd6ee65cf",
+      "hash": "sha256-d1434528ab05eb46685b8d61bf66df0183bcee4ecb28740a44ff9fb316199505",
       "kind": "subscribes",
       "repo": "sous-recipes",
       "requestedBy": [
@@ -35,7 +35,7 @@
         "workflow/sources-of-truth",
         "workflow/task-files"
       ],
-      "version": "1.1.0"
+      "version": "1.2.0"
     },
     "communication/plain-speech": {
       "hash": "sha256-6f4966daa90dc8ec1d153f7c7bdaede5d5300938d3dd7ca321ddde32edd07d1f",
@@ -67,22 +67,22 @@
       "version": "1.0.0"
     },
     "workflow/agent-memory": {
-      "hash": "sha256-4f63dbd376e7848ec754b447cdc1fa098502308fae712cfdb56785b671338479",
+      "hash": "sha256-c07c702c5b6e67db2c9d7d84f3b78e347e4bda68f4a10440b33ad9c2c52d89be",
       "kind": "subscribes",
       "repo": "sous-recipes",
       "requestedBy": [
         "project"
       ],
-      "version": "1.0.0"
+      "version": "1.1.0"
     },
     "workflow/autonomous-work": {
-      "hash": "sha256-b05e5df727ce2e4c08bcdee3862ad1afb87e087815e7650d218c74d1f7e32033",
+      "hash": "sha256-eccb8657a94da51d3992620e772060b67551c34561538ee174e5a8f1fc6747f9",
       "kind": "subscribes",
       "repo": "sous-recipes",
       "requestedBy": [
         "project"
       ],
-      "version": "1.0.0"
+      "version": "1.2.0"
     },
     "workflow/github-projects": {
       "hash": "sha256-0764a482f272006131cd7694301c3ad9cc1e1fad30ac580d29317a79ffe8b60c",
