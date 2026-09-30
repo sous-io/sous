@@ -93,10 +93,21 @@ and the command you want almost always. Takes `--dry-run`.
 
 - `--no-prune`, `--no-compile`: skip one half of the run.
 - `--rebuild`: ignore cached hashes and reprocess every output.
-- `--strict`: fail on any compilation error rather than reporting it and continuing.
+- `--strict`: treat compile warnings as errors (a `.tpl.` file copied without being rendered, a git branch the
+  runtime context could not read).
 - `-w, --watch`: rebuild on every change to a source file, a config layer or a linked checkout.
 
-Before it compiles, a build lists each recipe this project uses that has a newer version within the range
+Before it compiles, a build prepares the project's recipes: it seeds the core recipe, pins any subscription the
+lockfile does not pin yet, restores whatever the store on this machine is missing, and checks upstream for the
+repositories that ask for newer versions. Every command that builds (`init`, `build`, `launch`, `prune`,
+`repo remove`, `repo unlink`, `subscription add`, `subscription remove`, `subscription update`) runs this same
+build, so each one prints the same things.
+
+A compile error (a missing or circular include, a template that fails to render, a file sous cannot read) fails
+the build. Every target is still compiled and every error is listed, then the build exits `1`. An output whose
+target had an error is not written, so the copy from the last good build stays in place.
+
+A build also lists each recipe this project uses that has a newer version within the range
 declared for it, beside the version pinned. It moves no pin; only always-pull moves one. The build reads upstream
 for this at most once per freshness window (`store.freshnessSeconds`, five minutes by default), gives a
 repository three seconds to answer, and otherwise answers from the cached index without a word about the
@@ -106,18 +117,22 @@ Example: `sous build --rebuild`
 
 ### `sous compile`
 Compiles markdown templates into output files, and prunes nothing. Takes `--rebuild`, `--strict`, `--dry-run`
-and `-w, --watch`, each meaning what it means on `build`. Example: `sous compile --strict`
+and `-w, --watch`, each meaning what it means on `build`, and exits `1` after a compile error the way `build`
+does. It does not prepare the recipes first. Example: `sous compile --strict`
 
 ### `sous prune`
-Removes output files no longer in the current config. Takes `--dry-run` only. Example: `sous prune --dry-run`
+Removes output files no longer in the current config. It prepares the recipes first, as `build` does, because
+what counts as current depends on the recipes the lockfile pins. Takes `--dry-run` only. Example:
+`sous prune --dry-run`
 
 ### `sous clear`
 Deletes every file and directory sous has written for the project, and asks first; `-f, --force` answers that
 confirmation ahead of time. Example: `sous clear --force`
 
 ### `sous launch TOOL...`
-Builds this project's outputs, then starts a coding agent configured under `tools` in its config. `--no-build`
-launches without building; `--continuous` restarts the agent whenever it exits.
+Builds this project's outputs, then starts a coding agent configured under `tools` in its config. A build that
+fails starts nothing and exits `1`. `--no-build` launches without building; `--continuous` restarts the agent
+whenever it exits.
 
 Any argument `launch` does not recognize is forwarded to the tool; a flag that collides with one of sous's own
 goes after a bare `--`: `sous launch claude --resume`, `sous launch claude -- -c`.
@@ -447,8 +462,9 @@ Example: `sous vars ask --namespace workflow --var apiUrl`
 
 A command that succeeds exits `0`. A command line sous could not parse (a missing argument, an unknown flag, a
 value outside a flag's options) exits `2`. Every other failure exits `1`. A broken config halts sous rather than
-producing output built on a guess. Compilation is the one place sous reports a failure and carries on;
-`--strict` on `build` and `compile` turns those reports into a failed run.
+producing output built on a guess. A build with a compile error carries on long enough to compile every target
+and list every error, then exits `1`, leaving the last good copy of each output that had an error;
+`--strict` on `build` and `compile` makes compile warnings fail the run too.
 
 A failure prints one error block, in plain language, and nothing else; a usage mistake gets the command's own
 help under it, on standard error. An error sous raises names the cause and the cure:

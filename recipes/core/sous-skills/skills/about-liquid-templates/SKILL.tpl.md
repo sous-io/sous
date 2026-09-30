@@ -148,8 +148,9 @@ written `@~<namespace>/<recipe>/<path inside that recipe>`:
 
 Scoping is deliberate. A file inside a recipe may address that recipe itself plus the
 recipes it declares under `depends` or `subscribes`; a file in the project's own templates
-may address the project's subscriptions. Anything else is an error naming what was missing,
-so a reference can never quietly pick up a recipe nobody asked for.
+may address every recipe the project's lockfile pins, whatever brought it in. Anything else
+is an error naming what was missing, so a reference can never quietly pick up a recipe
+nobody asked for.
 
 Built-in **aliases** are reserved, always begin with `~`, and are consulted before recipe
 namespaces. There is exactly one:
