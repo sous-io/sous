@@ -17,8 +17,7 @@ import path from "node:path";
 import { Args, Flags } from "@oclif/core";
 import { confirm } from "@inquirer/prompts";
 import { BaseCommand } from "../base-command.js";
-import { prepareRepositoriesForBuild } from "../lib/build-preparation.js";
-import { buildProjectOutputs } from "../lib/build-service.js";
+import { runProjectBuild } from "../lib/build-service.js";
 import {
   CONFIG_FILE_NAMES,
   SOUS_DIR_NAME,
@@ -28,7 +27,6 @@ import {
 } from "../lib/config-discovery.js";
 import { ConfigError } from "../lib/errors.js";
 import { nonInteractiveError } from "../lib/interactive.js";
-import { subscriptionServiceFor } from "../lib/repos/subscription-service.js";
 import {
   PROJECT_CONFIG_FORMATS,
   SOUS_PACKAGE_NAME,
@@ -45,7 +43,6 @@ import {
   blankLine,
   dryRunNotice,
   footer,
-  heading,
   log,
   paragraph,
   section,
@@ -262,8 +259,8 @@ export default class Init extends BaseCommand {
   }
 
   /**
-   * Adopts the config just written and builds the project with it, in the
-   * same two steps `sous build` takes: the repositories are prepared (which
+   * Adopts the config just written and builds the project with it, through
+   * the same build `sous build` runs: the repositories are prepared (which
    * seeds the core recipe into the store and pins it in the lockfile), then
    * the outputs are compiled.
    *
@@ -274,17 +271,12 @@ export default class Init extends BaseCommand {
       resolveConfigFlag(configPath, this.configLocator.cwd, this.configLocator.confDirOverride)
     );
 
-    await prepareRepositoriesForBuild(
-      subscriptionServiceFor({
-        configContext: this.configContext,
-        settings: this.settings,
-        shellEnv: this.shellEnv,
-      })
-    );
-
-    heading("Building the project");
-
-    const succeeded = await buildProjectOutputs(this.settings, this.configContext);
+    const succeeded = await runProjectBuild({
+      settings: this.settings,
+      configContext: this.configContext,
+      shellEnv: this.shellEnv,
+      heading: "Building the project",
+    });
 
     if (!succeeded) {
       throw new ConfigError(

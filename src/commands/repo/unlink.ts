@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../base-command.js";
-import { buildProjectOutputs } from "../../lib/build-service.js";
+import { runProjectBuild } from "../../lib/build-service.js";
 import { ConfigError, isConfigError } from "../../lib/errors.js";
 import {
   NonInteractiveError,
@@ -409,11 +409,12 @@ export default class RepoUnlink extends BaseCommand {
   private async rebuildProject(name: string): Promise<void> {
     await this.reloadDiscoveredConfig();
 
-    heading("Building the project");
-
-    const succeeded = await buildProjectOutputs(this.settings, this.configContext);
-
-    footer();
+    const succeeded = await runProjectBuild({
+      settings: this.settings,
+      configContext: this.configContext,
+      shellEnv: this.shellEnv,
+      heading: "Building the project",
+    });
 
     if (!succeeded) {
       throw new ConfigError(

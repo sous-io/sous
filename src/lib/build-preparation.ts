@@ -1,9 +1,8 @@
 /**
  * The step that runs before a project's outputs are compiled, and what it says
- * while it runs. `sous build` runs it on every build, and `sous init` runs it
- * for the first build of a project it has just set up; both must say the same
- * things about the same events, so the reporting lives here rather than in
- * either command.
+ * while it runs. `runProjectBuild` (`build-service.ts`) calls it, and every
+ * command that builds goes through that one function, so the step and its
+ * reporting are the same whichever command the user typed.
  */
 
 import type { SubscriptionService } from "./repos/subscription-service.js";

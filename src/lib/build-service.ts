@@ -10,14 +10,16 @@ import { CompilationService, resolveOutputPath } from "./markdown-compiler.js";
 import type { CompilationConfig, CompilationTarget } from "./markdown-compiler.js";
 import { StateService } from "./state.js";
 import { isProtectedPath } from "./state.js";
-import { protectedRepoPaths } from "./repos/links.js";
+import { describeLinkedRepos, protectedRepoPaths } from "./repos/links.js";
+import { subscriptionServiceFor } from "./repos/subscription-service.js";
+import { prepareRepositoriesForBuild } from "./build-preparation.js";
 import {
   noRecipeAnswers,
   resolveRecipeAnswers,
   unansweredWarning,
   type RecipeAnswers,
 } from "./vars/answers.js";
-import { log, warning } from "../utils/formatting.js";
+import { footer, heading, log, warning } from "../utils/formatting.js";
 
 export type BuildOptions = {
   strict?: boolean;
@@ -437,22 +439,64 @@ export class BuildService {
   }
 }
 
+/** What {@link runProjectBuild} is given. */
+export type ProjectBuildInput = {
+  /** The merged project config, reloaded after any change a command made. */
+  settings: Settings;
+  /** Where the active config was discovered. */
+  configContext: ConfigContext;
+  /** The shell environment as it was before the env files were injected. */
+  shellEnv?: NodeJS.ProcessEnv;
+  /** The build's own options; every one defaults to what a plain `sous build` uses. */
+  options?: Omit<BuildOptions, "configContext">;
+  /** The heading printed above the compile and prune step. Defaults to "Building". */
+  heading?: string;
+};
+
 /**
- * Compiles and prunes a project exactly the way `sous build` does with no flags.
+ * The one build every command runs: `build`, `init`, `launch`, `prune`,
+ * `repo remove`, `repo unlink`, `subscription add`, `subscription remove` and
+ * `subscription update` all come through here, so a project is built the same
+ * way whichever of them the user typed.
  *
- * Shared by the subscription commands, which rebuild the project the moment they
- * have changed what it subscribes to: a newly subscribed recipe's files appear,
- * and a removed one's files are pruned, without anyone having to remember a
- * second command. Every option is left at its default on purpose, because the
- * point is to run the ordinary build and nothing else.
+ * In order, it announces every linked repository, prepares the project's
+ * recipes (seeds the core recipe, locks new subscriptions, restores whatever
+ * the store is missing, checks upstream and reports newer versions), and then
+ * compiles and prunes. A dry run prepares nothing, because preparing writes the
+ * lockfile and the store. A partial rebuild in watch mode (one changed source
+ * file) prepares nothing either: the config did not change, so neither did the
+ * recipes it needs.
  *
- * @param settings - The merged project config, reloaded after the change.
- * @param configContext - Where the active config was discovered.
- * @returns True when compile and prune both succeeded.
+ * @param input - The project, the build options and the heading.
+ * @returns True when compile and prune both succeeded; false after any compile error.
  */
-export async function buildProjectOutputs(
-  settings: Settings,
-  configContext: ConfigContext
-): Promise<boolean> {
-  return new BuildService().build(settings, { configContext });
+export async function runProjectBuild(input: ProjectBuildInput): Promise<boolean> {
+  const options = input.options ?? {};
+  const partial = options.changedFile !== undefined;
+
+  // A linked repository is read from a working copy instead of a published
+  // version, so it is announced on every build; a build that silently produced
+  // something different would be far worse than a noisy one.
+  if (!partial) {
+    const linked = describeLinkedRepos(input.configContext.sousDir);
+    if (linked.length > 0) warning(linked.join("\n"));
+  }
+
+  if (!options.dryRun && !partial) {
+    await prepareRepositoriesForBuild(
+      subscriptionServiceFor({
+        configContext: input.configContext,
+        settings: input.settings,
+        ...(input.shellEnv === undefined ? {} : { shellEnv: input.shellEnv }),
+      })
+    );
+  }
+
+  heading(input.heading ?? "Building");
+  const succeeded = await new BuildService().build(input.settings, {
+    ...options,
+    configContext: input.configContext,
+  });
+  footer();
+  return succeeded;
 }

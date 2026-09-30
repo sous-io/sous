@@ -2,7 +2,8 @@ import { Args, Flags } from "@oclif/core";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import { BaseCommand } from "../base-command.js";
-import { BuildService } from "../lib/build-service.js";
+import { runProjectBuild } from "../lib/build-service.js";
+import { ConfigError } from "../lib/errors.js";
 import { resolveRootScope, resolveTools } from "../lib/settings.js";
 import { displayError, footer, heading, showCommandVars } from "../utils/formatting.js";
 
@@ -85,16 +86,21 @@ export default class Launch extends BaseCommand {
       ...(passThroughArgs.length > 0 && { "Tool Args": passThroughArgs.join(" ") }),
     });
 
-    const buildService = new BuildService();
-
     do {
-      // Build step (unless --no-build)
+      // Build step (unless --no-build). A failed build stops here: the agent
+      // would otherwise start on outputs the build could not bring up to date.
       if (!flags["no-build"]) {
-        heading("Building");
-        await buildService.build(this.settings, {
+        const built = await runProjectBuild({
+          settings: this.settings,
           configContext: this.configContext,
+          shellEnv: this.shellEnv,
         });
-        footer();
+        if (!built) {
+          throw new ConfigError(
+            `The build failed, so ${args.tool} was not started. Fix the errors listed ` +
+              `above, or pass --no-build to start it with the outputs as they are.`
+          );
+        }
       }
 
       // Config-defined args first, then pass-through, then promptFile content
