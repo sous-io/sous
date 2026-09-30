@@ -290,6 +290,8 @@ src/
         submissions.ts     # the `submissions` block: who takes proposals, and the --check gate
       ref-search.ts        # which repositories a ref search covered, for the not-found error
       catalog.ts           # pure reads over the cached indexes, the lockfile and the subs
+      declarations.ts      # which manifest entry brings a dependency in, and its kind; the one
+                           #   rule the release, `recipe show` and the resolver share
       catalog-inputs.ts    # wires a running command to the catalog; also locates recipe files
       catalog-display.ts   # the shared wording and recipe table the browsing commands print
       subscription-service.ts  # the workflow: add, subscribe, unsubscribe, update, restore, check
@@ -402,6 +404,10 @@ with sorted keys. The one exception is the repo index, which a newer sous publis
 one reads: every object in it is a `forwardCompatibleObject` (`formats/common.ts`), which
 validates each known field in full and keeps an unknown one, unread, so a later release can add
 fields without breaking this version and a release carries them forward untouched (ADR 0007).
+`formats/variable-definition.ts` holds the variable definition schema twice over, strict for the
+manifest (which re-exports it) and forward compatible for the copy the index records; it imports
+only `common.ts`, because the index module sits below the ref parser the manifest needs, and an
+import of the manifest from the index is a cycle that breaks module loading.
 
 **Trust is the only security boundary; activation is not one.** Adding a repository IS
 trusting it, and trust authorizes its recipes to run code on this machine with the user's own
@@ -503,7 +509,16 @@ A carried-forward list is never compared with a fresh resolution, since a siblin
 later or a recipe a namespace gained later would then fail every release of an unrelated
 recipe; `checkRecordedDependencies` checks only that the list honours the manifest (every named
 recipe present, nothing undeclared, siblings inside their ranges, cross-repository entries
-unchanged). ADR 0007 records the decision. Reading a tagged tree goes through
+unchanged, and the recorded `declared` and `kind` equal to the manifest's). ADR 0007 records the
+decision. Every version recorded is also DESCRIBED (`describeVersion`): each dependency carries
+`declared` (the manifest entry bringing it in, as written) and `kind` (`subscribes` or `depends`),
+folded entry by entry by `foldDeclaration` in `repos/declarations.ts`; the version carries
+`variables`, its manifest's definitions, read by `publishedVariableDefinitionSchema` (the
+manifest's own field definitions and checks, built as a `forwardCompatibleObject`), and
+`depends` and `subscribes`, its manifest's lists as written (the only record of a namespace in
+another repository, which has no recipe key). All are written even when empty (`{}` and `[]`),
+so "none" differs from "not recorded"; an entry published before them keeps its entry as it is,
+and `checkRecordedLists` holds a recorded list to the manifest. ADR 0010 records the decision. Reading a tagged tree goes through
 `withTaggedTree` (`release/tags.ts`), which adds a linked git worktree rather than piping
 `git archive`, because the injectable command runner captures output as text and an archive's
 bytes would not survive that. Every git call in this directory takes the runner from
@@ -585,8 +600,11 @@ left the way the interactive flow would, overwriting an existing answer WHERE IT
 than under a name a lower rung would shadow, and `askForMissing` skips those keys through its
 `skip` option. `question-plan.ts` is what `subscription add --dry-run` prints after the plan:
 every variable the closure declares, grouped by recipe, through the same `renderFacts`
-renderer. A dry run downloads nothing, so a recipe the store does not hold yet has no manifest
-to read; that is reported (`SubscribeOutcome.unreadable`) rather than being fatal.
+renderer; `sous recipe show` prints the same plan with `answerHints: false`, which drops the
+`--answer` fact and every hint to rerun. A dry run downloads nothing, so a recipe the store does
+not hold yet is described from the definitions its index entry records (`ResolvedRecipe.variables`,
+read by `publishedVariables` in `subscription-service.ts`); only one whose entry records none is
+reported (`SubscribeOutcome.unreadable`) rather than being fatal.
 
 **What a build does with the answers.** `answers.ts` is the one place that turns definitions
 plus the ladder into a render scope: `resolveRecipeAnswers` walks every definition the lockfile
@@ -642,7 +660,11 @@ resolves inside the declaring recipe's own repository, and a LOCATOR matches an 
 by identity whatever short name it has there. A dependency naming a repository the project has
 not added is returned as a `MissingRepo` carrying its URL, identity and provider, so the trust
 round can offer to add it; when the parent's index records resolved dependencies, those exact
-versions are asked for instead of the declared ranges. Because the walk resolves refs in the order it meets them, a
+versions are asked for instead of the declared ranges. A recipe whose manifest the loader cannot
+produce (a dry run, `lock rebuild`, `recipe show`) is walked from its index entry instead, through
+`indexDependencyLists` (`repos/declarations.ts`), which reads the version's recorded `depends`
+and `subscribes` (`ResolvedRecipe.declares`); only an entry that records neither leaves the
+recipe in `missingManifests`. Because the walk resolves refs in the order it meets them, a
 recipe can be walked at one version and again at a lower one once a second holder narrows it;
 `keepOnlyReachable` then re-walks the settled closure and drops whatever only the replaced
 version reached, trimming each survivor's `requestedBy`, `ranges` and `kind` to what still
@@ -677,7 +699,8 @@ finished until the variables its recipes publish have been answered. `Subscripti
 takes every collaborator as an injectable option, and `subscriptionServiceFor({
 configContext, settings, shellEnv })` builds one from what a running command already has.
 Its methods are `addRepo`, `subscribe`, `unsubscribe`, `update`, `newerPublishedVersions`,
-`listSubscriptions`, `restore`, `checkUpstream`, `needsRestore` and `prepareForBuild`. Two steps run inside `subscribe` BEFORE anything is
+`previewSubscription`, `listSubscriptions`, `restore`, `checkUpstream`, `needsRestore` and
+`prepareForBuild`. Two steps run inside `subscribe` BEFORE anything is
 fetched or written, on the cached indexes alone: a one-word ref, or one typed in another
 case, is resolved to a fully qualified one through `src/lib/refs/` (over the namespace and
 recipe scopes; several matches ask, `--accept-first` takes the first), and a location is
@@ -1305,7 +1328,7 @@ This enables `sous prune` (remove stale outputs) and `sous clear` (delete all ou
 | `sous namespace list` | List every namespace the trusted repositories publish, with its recipe count and how much of it the project subscribes to (`--latest`, `--installed`) |
 | `sous namespace show <ref>` | Show one namespace and every recipe in it, with each recipe's latest version, pinned version and subscription state (`--latest`, `--installed`) |
 | `sous recipe list` | List every recipe the trusted repositories publish: latest version, pinned version, subscribed, description (`--latest`, `--installed`) |
-| `sous recipe show <ref>` | Show one recipe in full: every published version, its dependencies as declared and as the index resolved them, the variables it declares, and where its files land (`--latest`, `--installed`) |
+| `sous recipe show <ref>` | Show one recipe in full, offline and before it is installed: every published version, its dependencies (the entry declaring each, its kind, the version the index resolved), everything a subscription installs and every question it asks (`SubscriptionService.previewSubscription`, which fetches nothing), and where its files land (`--latest`, `--installed`) |
 | `sous lock show` | Print what the lockfile pins: recipe, version, repository, and who holds it |
 | `sous lock rebuild` | Recompute the lockfile from the declared subscriptions and the cached indexes, dropping what nothing holds (`--dry-run`) |
 | `sous subscription list` | List what the project subscribes to: range, the versions the lockfile pins, the latest version each has published, origin, and whether it is on (`--latest`, `--installed`) |

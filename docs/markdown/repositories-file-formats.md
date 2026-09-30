@@ -201,8 +201,16 @@ fetches only this file; nothing more is downloaded until a project subscribes.
   "namespaces": { "quality": { "description": "Recipes that exercise the edges." } },
   "recipes": { "quality/qa-remote-dep": { "path": "recipes/quality/qa-remote-dep",
     "versions": { "0.1.0": {
-      "dependencies": { "workflow/qa-helper": { "version": "0.1.0" },
-        "workflow/sub-agent-delegation": { "range": "^1.0", "repo": "github.com/sous-io/sous-recipes" } },
+      "dependencies": {
+        "workflow/qa-helper": { "version": "0.1.0", "declared": "workflow", "kind": "subscribes" },
+        "workflow/sub-agent-delegation": { "range": "^1.0", "repo": "github.com/sous-io/sous-recipes",
+          "declared": "github://sous-io/sous-recipes/workflow/sub-agent-delegation@^1.0",
+          "kind": "depends" } },
+      "depends": [ "github://sous-io/sous-recipes/workflow/sub-agent-delegation@^1.0" ],
+      "subscribes": [ "workflow" ],
+      "variables": [ { "name": "qaNotesDir", "type": "path", "prompt": "Where should notes go?",
+        "description": "The directory QA notes are written to.", "example": "docs/qa",
+        "default": ".sous/qa-notes", "required": true, "secret": false, "scope": "shared" } ],
       "hash": "sha256-46e75442aeb368116c8830ad382707759f1ecd03974c4b5d42a5fabffce0324f",
       "prerelease": false, "releasedAt": "2026-09-12T07:06:33.236Z",
       "tag": "quality/qa-remote-dep@0.1.0"
@@ -216,11 +224,29 @@ fetches only this file; nothing more is downloaded until a project subscribes.
 | `recipes` | top level | Keyed `namespace/recipe`; a recipe whose namespace is not declared is an error. Each entry carries `path` (the recipe folder), `description`, and `versions`, keyed by exact version |
 | `hash`, `tag` | per version | The content hash verified after every fetch, and the tag, which must be exactly `namespace/recipe@version` so a version can never point at a branch |
 | `prerelease`, `releasedAt`, `seeded` | per version | Whether ranges skip it unless a subscription opts in, when it was released, and whether it is the copy sous folds in from its own package |
+| `dependencies` | per version | What the version was released against, keyed `namespace/recipe`; see below |
+| `variables` | per version | The version's variable definitions, exactly as its manifest publishes them (see [Variable definitions](#variable-definitions)), with `required`, `secret` and `scope` filled in; `[]` when it asks nothing |
+| `depends`, `subscribes` | per version | The version's manifest lists, exactly as written; `[]` when empty |
 
 Dependencies are resolved at release time and keyed `namespace/recipe`. An entry carries `version` (a
 sibling, resolved exactly) or `range` plus `repo` (the identity of the repository publishing it, whose own
 index resolves the range); at least one is required. Installing a version installs these rather than
 re-resolving the manifest's ranges.
+
+**Each version describes itself.** So that a recipe can be described before anything is fetched, every
+version a release records carries more than its dependencies. Each dependency records `declared`, the
+manifest entry that brings it in exactly as written (a recipe such as `workflow/qa-helper@^1.0`, a whole
+namespace such as `workflow`, or a locator), and `kind`: `subscribes` for a co-subscription, whose files
+land and whose questions are asked, or `depends` for a build dependency. When several entries cover one
+recipe, an entry naming it wins over a namespace, and it is a co-subscription when any entry covering it is
+one. The version records `variables`, its manifest's definitions, and `depends` and `subscribes`, its
+manifest's lists as written; the lists are what a consumer walks, because a namespace of another repository
+has no recipe key to record it under. All of them are written even when empty (`"dependencies": {}`,
+`"variables": []`), so "none" reads differently from "not recorded". From these, `sous recipe show` and
+`sous subscription add --dry-run` list everything a subscription installs and every question it asks, and
+the resolver walks a recipe whose files are not on the machine from its index entry just as it would walk
+its manifest. A version recorded before a release wrote these fields keeps its entry as it is; its questions
+are known only once its files are fetched, and the dry run names it as such.
 
 **A published version's entry is frozen.** Its dependencies are resolved once, when the version is first
 recorded, and every later release carries the entry forward exactly as published, like its hash; releasing
@@ -234,9 +260,13 @@ against the repository as it stood at that tag, then frozen the same way. An ent
 recorded dependencies carries none, stays that way, and installs by resolving its manifest's ranges.
 
 **Fields this sous does not know are kept, not refused.** A later sous may add fields to the index, at any
-level. This one reads such an index, validates every field it defines as strictly as before, and ignores the
-rest; a release it runs carries a published version's entry forward with those fields intact. A sous older
-than the one that began tolerating unknown fields refuses the whole index once a repository publishes one.
+level, recorded variable definitions included. This one reads such an index, validates every field it
+defines as strictly as before, and ignores the rest; a release it runs carries a published version's entry
+forward with those fields intact.
+
+!> A sous older than 0.2.26, the first to tolerate unknown fields, refuses the whole index of any
+repository released with `declared`, `kind`, `variables`, `depends` or `subscribes` in it, the official
+one included. A project pinned to such a sous fails to read that index until it moves to 0.2.26 or later.
 
 **The `seeded` field.** Sous ships the `core` recipe in its own npm package, so a project can build before
 reaching the network. That copy is folded into the official repository's index in memory and resolved like

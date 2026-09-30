@@ -30,13 +30,15 @@ import {
   repoUrlSchema,
   semverVersionSchema,
   stableJsonStringify,
+  DEPENDENCY_KINDS,
+  type DependencyKind,
 } from "./common.js";
 
 /** The literal `requestedBy` holder meaning "the project subscribed to this directly". */
 export const PROJECT_HOLDER = "project";
 
-/** How a locked recipe entered the project. */
-export const LOCK_KINDS = ["subscribes", "depends"] as const;
+/** How a locked recipe entered the project: the dependency kinds every format shares. */
+export const LOCK_KINDS = DEPENDENCY_KINDS;
 
 /** One repo the project resolves against. */
 export const lockedRepoSchema = z
@@ -138,7 +140,7 @@ export type LockedRepo = z.infer<typeof lockedRepoSchema>;
 export type LockedRecipe = z.infer<typeof lockedRecipeSchema>;
 
 /** How a locked recipe entered the project. */
-export type LockKind = (typeof LOCK_KINDS)[number];
+export type LockKind = DependencyKind;
 
 /**
  * Validates a parsed lockfile, throwing a ConfigError that names the file and

@@ -13,7 +13,10 @@
  * project) and `subscribes` (co-subscribed with full semantics), and those refs
  * resolve the same way. The manifest lives inside the recipe's own files, so
  * the caller supplies a loader; that is also the seam where a caller decides
- * whether it is willing to fetch anything at this point.
+ * whether it is willing to fetch anything at this point. When the loader has no
+ * manifest to give, the lists are read from the version's index entry instead,
+ * which records the entry that declared each dependency; only a version whose
+ * entry predates that record goes unwalked.
  *
  * Two things the resolver deliberately does NOT do: it never downloads
  * anything, and it never resolves against a repository the project has not
@@ -25,7 +28,8 @@ import semver from "semver";
 import { ConfigError } from "../errors.js";
 import type { IndexFile } from "./formats/index-file.js";
 import type { LockKind } from "./formats/lockfile.js";
-import type { RecipeManifest } from "./formats/recipe-manifest.js";
+import type { RecipeManifest, VariableDefinition } from "./formats/recipe-manifest.js";
+import { indexDependencyLists, type DependencyLists } from "./declarations.js";
 import {
   formatRef,
   isBrowsedReading,
@@ -81,8 +85,9 @@ export type ResolverRepo = {
 
 /**
  * Loads a resolved recipe's manifest, which is what names its dependencies.
- * Returning undefined means "not available", and the recipe is reported under
- * `missingManifests` rather than having its dependencies walked.
+ * Returning undefined means "not available": the recipe's dependencies are then
+ * read from its index entry, and when that does not record them either, it is
+ * reported under `missingManifests` rather than having its dependencies walked.
  */
 export type RecipeManifestLoader = (
   recipe: ResolvedRecipe
@@ -141,6 +146,17 @@ export type ResolvedRecipe = {
    * published against rather than at whatever its range would reach today.
    */
   dependencies?: Record<string, IndexDependency>;
+  /**
+   * The variable definitions the index records for this exact version, when it
+   * records them: the questions it asks, known before its files are fetched.
+   */
+  variables?: VariableDefinition[];
+  /**
+   * The manifest `depends` and `subscribes` lists the index records for this
+   * exact version, when it records them, so the recipe can be walked before its
+   * files are fetched.
+   */
+  declares?: DependencyLists;
 };
 
 /** A repository something needs that the project has not added. */
@@ -166,7 +182,10 @@ export type ResolveResult = {
   resolved: ResolvedRecipe[];
   /** Repositories a dependency needs that the project has not added. */
   missingRepos: MissingRepo[];
-  /** Resolved recipes whose manifest the loader could not produce. */
+  /**
+   * Resolved recipes whose dependencies could not be read: the loader produced
+   * no manifest, and the index entry does not record them.
+   */
   missingManifests: string[];
   /** Any dependency cycle found, as the chain of recipe keys forming it. */
   cycles: string[][];
@@ -495,15 +514,15 @@ export async function resolveRefs(
     }
     walked.set(recipe.key, recipe.version);
 
-    const manifest = await context.loadManifest(recipe);
-    if (manifest === undefined) {
+    const lists = dependencyListsOf(recipe, await context.loadManifest(recipe));
+    if (lists === undefined) {
       missingManifests.add(recipe.key);
       continue;
     }
 
     for (const [kind, refs] of [
-      ["depends", manifest.depends ?? []],
-      ["subscribes", manifest.subscribes ?? []],
+      ["depends", lists.depends],
+      ["subscribes", lists.subscribes],
     ] as Array<[LockKind, string[]]>) {
       for (const written of refs) {
         queue.push(dependencyRequest(written, recipe, kind, context));
@@ -593,8 +612,9 @@ async function keepOnlyReachable(
     } catch {
       manifest = undefined;
     }
+    const lists = dependencyListsOf(recipe, manifest);
 
-    if (manifest === undefined) {
+    if (lists === undefined) {
       // An unreadable manifest is already reported as a missing manifest. Keep
       // everything this recipe held rather than dropping a dependency over it.
       for (const other of resolved.values()) {
@@ -606,8 +626,8 @@ async function keepOnlyReachable(
     }
 
     for (const [kind, refs] of [
-      ["depends", manifest.depends ?? []],
-      ["subscribes", manifest.subscribes ?? []],
+      ["depends", lists.depends],
+      ["subscribes", lists.subscribes],
     ] as Array<[LockKind, string[]]>) {
       for (const written of refs) {
         for (const target of dependencyTargets(written, recipe, context, resolved)) {
@@ -661,6 +681,24 @@ function dependencyTargets(
   return item.ref.recipe === undefined
     ? [...resolved.keys()].filter((entry) => entry.startsWith(`${namespace}/`))
     : [refKey(item.ref)];
+}
+
+/**
+ * What a resolved recipe declares under `depends` and `subscribes`: its
+ * manifest's lists when the manifest could be read, and otherwise the lists its
+ * index entry records, or undefined when neither says.
+ *
+ * @param recipe - The resolved recipe, carrying the lists its index entry records.
+ * @param manifest - Its manifest, when the loader produced one.
+ */
+function dependencyListsOf(
+  recipe: ResolvedRecipe,
+  manifest: RecipeManifest | undefined
+): DependencyLists | undefined {
+  if (manifest !== undefined) {
+    return { depends: manifest.depends ?? [], subscribes: manifest.subscribes ?? [] };
+  }
+  return recipe.declares;
 }
 
 /** Records one more reason a repository is needed. */
@@ -775,6 +813,7 @@ function resolveRecipeRef(
 
   const version = pickVersion(key, entry, ranges, prerelease, context.keep?.[key]);
   const versionEntry = entry.versions[version]!;
+  const declares = indexDependencyLists(versionEntry);
 
   const requestedBy = [...(previous?.requestedBy ?? [])];
   if (!requestedBy.includes(item.requestedBy)) requestedBy.push(item.requestedBy);
@@ -793,6 +832,8 @@ function resolveRecipeRef(
     ...(versionEntry.dependencies === undefined
       ? {}
       : { dependencies: versionEntry.dependencies }),
+    ...(versionEntry.variables === undefined ? {} : { variables: versionEntry.variables }),
+    ...(declares === undefined ? {} : { declares }),
     // A recipe held as a co-subscription by anyone is a co-subscription; a
     // build dependency only stays one while nothing subscribes to it.
     kind: previous?.kind === "subscribes" || item.kind === "subscribes" ? "subscribes" : "depends",

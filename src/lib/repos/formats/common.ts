@@ -161,6 +161,20 @@ export const recipeKeySchema = z
       "(for example 'workflow/task-files')"
   );
 
+/**
+ * The two ways one recipe can bring in another, named after the manifest lists
+ * that declare them: `subscribes` is a co-subscription, whose files land in the
+ * project and whose questions are asked; `depends` is a build dependency, a
+ * library whose files never reach the project's output.
+ */
+export const DEPENDENCY_KINDS = ["subscribes", "depends"] as const;
+
+/** A co-subscription or a build dependency. */
+export const dependencyKindSchema = z.enum(DEPENDENCY_KINDS);
+
+/** A co-subscription or a build dependency. */
+export type DependencyKind = (typeof DEPENDENCY_KINDS)[number];
+
 // --- Value primitives ---------------------------------------------------------------------------
 
 /** An exact semantic version, as published by a recipe. */

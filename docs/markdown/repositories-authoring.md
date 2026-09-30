@@ -243,9 +243,13 @@ this release's scope** is fine: the release depends on the last published versio
 ```
 
 Each version's resolved dependencies are written into the index, so a consumer installing that version gets what
-it was published with rather than ranges re-resolved months later. A published version never changes: its content
-hash and its dependencies are carried forward exactly as published, and a disagreement is an error telling you
-to bump rather than republish ([what is checked](repositories-file-formats.md#sousindexjson)). A version counts
+it was published with rather than ranges re-resolved months later. Each dependency also records the manifest
+entry that brought it in and whether it is a co-subscription or a build dependency, and each version records the
+variable definitions its manifest publishes, so `sous recipe show` and `sous subscription add --dry-run` can say
+what a recipe installs and asks before anything is fetched. A published version never changes: its content
+hash, its dependencies and its variable definitions are carried forward exactly as published, and a
+disagreement is an error telling you to bump rather than republish
+([what is checked](repositories-file-formats.md#sousindexjson)). A version counts
 as published once its tag exists, and the tags are the backstop, so a tagged version missing from the index is
 rebuilt from it, dependencies included, whenever the index is regenerated, which only happens on a run that
 publishes something. A bump edits the manifest in place, so comments, field order and layout survive; a folded

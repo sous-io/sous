@@ -28,3 +28,4 @@
   - [0007: Frozen index entries and tolerant readers](adrs/0007-frozen-index-dependencies.md)
   - [0008: One ref parser, told where the ref came from](adrs/0008-one-ref-parser.md)
   - [0009: One whole build, everywhere](adrs/0009-whole-build-everywhere.md)
+  - [0010: The index describes each version's dependencies and questions](adrs/0010-index-describes-recipes.md)

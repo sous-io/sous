@@ -347,8 +347,9 @@ optionally carrying an `@<range>` and a `repo:` qualifier; see
 ### `sous subscription add REF`
 Subscribes this project to a recipe, or to a whole namespace of them, then builds the project so the recipe's
 files are on disk when the command returns. Also spelled `sous subscribe`. Takes `-y, --yes`, `--no-build`, and
-`--dry-run`, which also prints the questions of every recipe this machine already holds; a recipe not held here
-yet is named instead, because a dry run downloads nothing.
+`--dry-run`, which also prints every question the recipes would ask. A dry run downloads nothing, so a recipe
+not on this machine is described from its repository's index; one whose index entry predates the release that
+began recording questions there is named instead.
 
 - `--prerelease`: let prerelease versions take part in range matching.
 - `--always-pull`: install a newer in-range version whenever one exists, rather than holding the lock.
@@ -409,10 +410,13 @@ Lists the recipes the trusted repositories publish, across every namespace, with
 `namespace show` prints. Example: `sous recipe list --installed --latest`
 
 ### `sous recipe show REF`
-Describes one recipe completely: its repository and location, every published version, its dependencies as
-declared and as resolved at release time, the questions it asks with the environment variable each answer is
-stored under, and the directories its files are written into. `REF` is `namespace/recipe`, a recipe name alone,
-or either with a `repository:` qualifier. Example: `sous recipe show sous-recipes:core/about-sous`
+Describes one recipe completely: its repository and location, every published version, its dependencies (the
+manifest entry bringing each one in, such as a whole namespace, whether it is a co-subscription or a build
+dependency, and the version it was released against), every recipe a subscription to it would install, every
+question that would ask, laid out as `sous subscription add --dry-run` lays them out, and the directories its
+files are written into. Everything but the files comes from the index, so a recipe nothing has installed yet
+is described in full, offline. `REF` is `namespace/recipe`, a recipe name alone, or either with a
+`repository:` qualifier. Example: `sous recipe show omakase/house`
 
 ## lock
 

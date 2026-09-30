@@ -150,7 +150,8 @@ export default class LockRebuild extends BaseCommand {
       repos,
       // A recipe's own manifest is what names its dependencies, and it is read
       // from the files this machine already holds. Nothing is fetched here, so a
-      // recipe that is not in the store yet comes back under `missingManifests`.
+      // recipe that is not in the store yet is walked from what its index entry
+      // records, and comes back under `missingManifests` when that is nothing.
       loadManifest: (recipe) => {
         const directory = recipeFilesDirectory({
           service,
@@ -208,9 +209,9 @@ export default class LockRebuild extends BaseCommand {
     if (result.missingManifests.length > 0) {
       blankLine();
       paragraph(
-        `The files of these recipes are not on this machine, so their own ` +
-          `dependencies could not be read and are not in the rebuilt lockfile: ` +
-          `${result.missingManifests.join(", ")}.`
+        `The files of these recipes are not on this machine, and their repository's ` +
+          `index does not record what they depend on, so their own dependencies are ` +
+          `not in the rebuilt lockfile: ${result.missingManifests.join(", ")}.`
       );
     }
 

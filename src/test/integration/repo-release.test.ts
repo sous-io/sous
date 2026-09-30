@@ -590,7 +590,7 @@ describe("sous repo release and sous repo submit", () => {
       const published = Object.keys(index.recipes["core/example"]!.versions).sort();
       const newest = published[published.length - 1]!;
       expect(index.recipes["core/example"]!.versions[newest]!.dependencies).toEqual({
-        "core/other": { version: "1.0.2" },
+        "core/other": { version: "1.0.2", declared: "core/other", kind: "depends" },
       });
     },
     CLI_TIMEOUT

@@ -293,7 +293,9 @@ describe("buildIndex()", () => {
 
     expect(
       result.index.recipes["core/example"]!.versions["1.0.0"]!.dependencies
-    ).toEqual({ "core/partials": { version: "2.0.0" } });
+    ).toEqual({
+      "core/partials": { version: "2.0.0", declared: "core/partials", kind: "depends" },
+    });
   });
 
   /**
@@ -320,6 +322,8 @@ describe("buildIndex()", () => {
       "workflow/task-files": {
         repo: "github.com/sous-io/sous-recipes",
         range: "^1.1",
+        declared: "github://sous-io/sous-recipes/workflow/task-files@^1.1",
+        kind: "depends",
       },
     });
   });
@@ -345,6 +349,12 @@ describe("buildIndex()", () => {
     commitAll(repo, "depend on a nested group");
     git(repo, "tag", "--annotate", "core/example@1.0.0", "--message", "release");
 
+    const settledEntry = {
+      repo: "gitlab.com/a/b/c",
+      range: "*",
+      declared: "gitlab://a/b/c/d",
+      kind: "depends",
+    };
     const result = await buildIndex({
       validation: validateRepo(repo),
       sousVersion: GENERATOR,
@@ -357,9 +367,15 @@ describe("buildIndex()", () => {
     expect(
       result.index.recipes["core/example"]!.versions["1.0.0"]!.dependencies
     ).toEqual({
-      "d/x": { repo: "gitlab.com/a/b/c", range: "*" },
-      "d/y": { repo: "gitlab.com/a/b/c", range: "*" },
+      "d/x": { ...settledEntry },
+      "d/y": { ...settledEntry },
     });
+    // The namespace in another repository has no key to record under, so the
+    // version's own lists are what carries it to a consumer.
+    expect(result.index.recipes["core/example"]!.versions["1.0.0"]!.depends).toEqual([
+      "gitlab://a/b/c/d",
+      "github://o/r/workflow",
+    ]);
   });
 
   /**
@@ -452,6 +468,13 @@ function editIndex(edit: (index: Record<string, any>) => void): void {
 describe("buildIndex() and published dependencies", () => {
   const HOUSE = "subscribes:\n  - workflow\n  - tools/gamma\n";
 
+  /** What each member of the set records: the version, and the entry naming it. */
+  const member = (version: string, declared: string) => ({
+    version,
+    declared,
+    kind: "subscribes",
+  });
+
   beforeEach(async () => {
     writeSetRepository(["omakase/house", "workflow/alpha", "workflow/beta", "tools/gamma"]);
     fs.rmSync(path.join(repo, "recipes/core"), { recursive: true, force: true });
@@ -478,10 +501,126 @@ describe("buildIndex() and published dependencies", () => {
    */
   it("should resolve a new version's dependencies when it is first published", () => {
     expect(readIndexFile(repo)!.recipes["omakase/house"]!.versions["0.1.0"]!.dependencies).toEqual({
-      "tools/gamma": { version: "0.1.0" },
-      "workflow/alpha": { version: "0.1.0" },
-      "workflow/beta": { version: "0.1.0" },
+      "tools/gamma": member("0.1.0", "tools/gamma"),
+      "workflow/alpha": member("0.1.0", "workflow"),
+      "workflow/beta": member("0.1.0", "workflow"),
     });
+  });
+
+  /**
+   * A version being published is described in full: each dependency carries
+   * the manifest entry that brings it in and its kind, and the version carries
+   * the variable definitions its manifest publishes. A recipe with neither
+   * records both as empty, so "none" reads differently from "not recorded".
+   *
+   * house@0.2.0 depends [workflow/alpha], subscribes [workflow], asks houseName
+   * // -> alpha declared "workflow/alpha" (subscribes, through the namespace);
+   * //    beta declared "workflow" (subscribes); variables [houseName]
+   */
+  it("should describe how each dependency is declared and what the version asks", async () => {
+    writeSetRecipe(
+      "omakase/house",
+      "0.2.0",
+      "depends:\n  - workflow/alpha\nsubscribes:\n  - workflow\n" +
+        "variables:\n  - name: houseName\n    type: string\n" +
+        "    prompt: What is the house called?\n" +
+        "    description: The name every skill in the set signs with.\n" +
+        "    example: Harbor\n"
+    );
+    commitAll(repo, "describe the set");
+    const index = await publish({ "omakase/house": "0.2.0" });
+
+    const house = index.recipes["omakase/house"]!.versions["0.2.0"]!;
+    expect(house.dependencies).toEqual({
+      "workflow/alpha": member("0.1.0", "workflow/alpha"),
+      "workflow/beta": member("0.1.0", "workflow"),
+    });
+    expect(house.depends).toEqual(["workflow/alpha"]);
+    expect(house.subscribes).toEqual(["workflow"]);
+    expect(house.variables).toEqual([
+      {
+        name: "houseName",
+        type: "string",
+        prompt: "What is the house called?",
+        description: "The name every skill in the set signs with.",
+        example: "Harbor",
+        required: true,
+        secret: false,
+        scope: "shared",
+      },
+    ]);
+
+    const gamma = index.recipes["tools/gamma"]!.versions["0.1.0"]!;
+    expect(gamma.dependencies).toEqual({});
+    expect(gamma.depends).toEqual([]);
+    expect(gamma.subscribes).toEqual([]);
+    expect(gamma.variables).toEqual([]);
+  });
+
+  /**
+   * The lists a published version records are copied from its manifest, so a
+   * recorded list that differs from the manifest means the index was edited,
+   * and it is an error like any other disagreement.
+   *
+   * recorded subscribes [workflow], manifest subscribes [workflow, tools/gamma] // -> error
+   */
+  it("should report recorded lists that disagree with the manifest", async () => {
+    editIndex((index) => {
+      index.recipes["omakase/house"].versions["0.1.0"].subscribes = ["workflow"];
+    });
+
+    const result = await regenerate();
+
+    expect(errorsIn(result.problems).map((problem) => problem.message).join("\n")).toContain(
+      "'subscribes': the index records [workflow], and the manifest declares " +
+        "[workflow, tools/gamma]"
+    );
+  });
+
+  /**
+   * A version published before sous described recipes in the index records no
+   * declaration, kind or variables. Its entry is carried forward exactly as it
+   * is, without an error, and nothing fills the new fields in afterwards.
+   */
+  it("should leave an entry published before descriptions were recorded as it is", async () => {
+    editIndex((index) => {
+      const entry = index.recipes["omakase/house"].versions["0.1.0"];
+      delete entry.variables;
+      delete entry.depends;
+      delete entry.subscribes;
+      for (const dependency of Object.values(entry.dependencies) as Array<Record<string, unknown>>) {
+        delete dependency.declared;
+        delete dependency.kind;
+      }
+    });
+    const before = houseEntryText();
+
+    const result = await regenerate();
+
+    expect(errorsIn(result.problems)).toEqual([]);
+    expect(result.stale).toBe(false);
+    expect(JSON.stringify(result.index.recipes["omakase/house"]!.versions["0.1.0"])).toBe(before);
+  });
+
+  /**
+   * A recorded declaration or kind that disagrees with the manifest of the
+   * version it describes is an error, like any other disagreement.
+   *
+   * recorded { tools/gamma: kind "depends" }, manifest subscribes [tools/gamma] // -> error
+   */
+  it("should report a recorded kind that disagrees with the manifest", async () => {
+    editIndex((index) => {
+      index.recipes["omakase/house"].versions["0.1.0"].dependencies["tools/gamma"].kind =
+        "depends";
+    });
+
+    const result = await regenerate();
+
+    expect(errorsIn(result.problems).map((problem) => problem.message).join("\n")).toContain(
+      "'tools/gamma': the index records version 0.1.0, through the entry 'tools/gamma' as a " +
+        "build dependency, and the manifest declares it with no range, through the entry " +
+        "'tools/gamma' as a co-subscription"
+    );
   });
 
   /**
@@ -530,8 +669,12 @@ describe("buildIndex() and published dependencies", () => {
     const index = await publish({ "omakase/house": "0.2.0" });
 
     const versions = index.recipes["omakase/house"]!.versions;
-    expect(versions["0.1.0"]!.dependencies!["tools/gamma"]).toEqual({ version: "0.1.0" });
-    expect(versions["0.2.0"]!.dependencies!["tools/gamma"]).toEqual({ version: "0.2.0" });
+    expect(versions["0.1.0"]!.dependencies!["tools/gamma"]).toEqual(
+      member("0.1.0", "tools/gamma")
+    );
+    expect(versions["0.2.0"]!.dependencies!["tools/gamma"]).toEqual(
+      member("0.2.0", "tools/gamma")
+    );
   });
 
   /**
@@ -568,15 +711,16 @@ describe("buildIndex() and published dependencies", () => {
     expect(errorsIn(rebuilt.problems)).toEqual([]);
     const house = rebuilt.index.recipes["omakase/house"]!.versions;
     expect(house["0.1.0"]!.dependencies).toEqual({
-      "tools/gamma": { version: "0.1.0" },
-      "workflow/alpha": { version: "0.1.0" },
-      "workflow/beta": { version: "0.1.0" },
+      "tools/gamma": member("0.1.0", "tools/gamma"),
+      "workflow/alpha": member("0.1.0", "workflow"),
+      "workflow/beta": member("0.1.0", "workflow"),
     });
     for (const [key, recipe] of Object.entries(published.recipes)) {
       for (const [version, entry] of Object.entries(recipe.versions)) {
-        expect(rebuilt.index.recipes[key]!.versions[version]!.dependencies).toEqual(
-          entry.dependencies
-        );
+        const again = rebuilt.index.recipes[key]!.versions[version]!;
+        expect(again.dependencies).toEqual(entry.dependencies);
+        expect(again.variables).toEqual(entry.variables);
+        expect(again.subscribes).toEqual(entry.subscribes);
       }
     }
   });
@@ -603,7 +747,8 @@ describe("buildIndex() and published dependencies", () => {
     );
     expect(errors[0]!.message).toContain("version 0.1.0 of 'omakase/house' is already published");
     expect(errors[0]!.message).toContain(
-      "'tools/gamma': the manifest declares it with no range, and the index records nothing for it"
+      "'tools/gamma': the manifest declares it with no range, through the entry " +
+        "'tools/gamma' as a co-subscription, and the index records nothing for it"
     );
     expect(errors[0]!.message).toContain(
       "'tools/ghost': the index records version 1.0.0, and the manifest does not declare it"
@@ -630,13 +775,16 @@ describe("buildIndex() and published dependencies", () => {
     editIndex((index) => {
       index.recipes["omakase/house"].versions["0.1.0"].dependencies["tools/gamma"] = {
         version: "0.2.0",
+        declared: "tools/gamma@^0.1.0",
+        kind: "subscribes",
       };
     });
 
     const result = await regenerate();
 
     expect(errorsIn(result.problems).map((problem) => problem.message).join("\n")).toContain(
-      "'tools/gamma': the index records version 0.2.0, and the manifest declares the range '^0.1.0'"
+      "'tools/gamma': the index records version 0.2.0, through the entry " +
+        "'tools/gamma@^0.1.0' as a co-subscription, and the manifest declares the range '^0.1.0'"
     );
   });
 
@@ -681,16 +829,16 @@ describe("buildIndex() and published dependencies", () => {
   it("should carry forward fields this sous does not define", async () => {
     editIndex((index) => {
       const entry = index.recipes["omakase/house"].versions["0.1.0"];
-      entry.variables = [{ name: "board" }];
-      entry.dependencies["tools/gamma"].declaredAs = "tools/gamma";
+      entry.futureVersionField = [{ name: "board" }];
+      entry.dependencies["tools/gamma"].futureDependencyField = "tools/gamma";
     });
 
     const result = await regenerate();
 
     expect(errorsIn(result.problems)).toEqual([]);
     expect(result.stale).toBe(false);
-    expect(result.text).toContain('"declaredAs": "tools/gamma"');
-    expect(result.text).toContain('"variables"');
+    expect(result.text).toContain('"futureDependencyField": "tools/gamma"');
+    expect(result.text).toContain('"futureVersionField"');
   });
 });
 

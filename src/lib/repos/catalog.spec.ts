@@ -345,17 +345,7 @@ describe("describeRecipe()", () => {
         kind: "depends",
       },
     ]);
-
-    expect(detail.variables).toEqual([
-      {
-        name: "qaAgentName",
-        type: "string",
-        env: "SOUS_VAR_QA_AGENT_NAME",
-        required: true,
-        secret: false,
-        prompt: "What name should agents sign notes with?",
-      },
-    ]);
+    expect(detail.dependenciesRecorded).toBe(true);
 
     expect(detail.contents).toEqual([
       {
@@ -379,10 +369,78 @@ describe("describeRecipe()", () => {
     );
 
     expect(detail.manifestRead).toBe(false);
-    expect(detail.variables).toEqual([]);
     expect(detail.contents).toEqual([]);
     expect(detail.dependencies).toEqual([
       { key: "workflow/qa-helper", resolvedVersion: "0.1.0" },
+    ]);
+  });
+
+  /**
+   * A set whose index records how each dependency was declared is described
+   * from the index alone: every member of a namespace it subscribes to shows
+   * that namespace as the entry bringing it in, and its kind.
+   *
+   * describeRecipe(inputs with set/house subscribing [workflow], "set/house");
+   * // -> workflow/qa-helper and workflow/qa-variables, each declared "workflow", subscribes
+   */
+  it("should describe a set's members from what the index records", () => {
+    const declaredBy = { declared: "workflow", kind: "subscribes" };
+    const setRepo: CatalogRepo = {
+      name: "sets",
+      url: "/repos/sets",
+      index: makeIndex(
+        "sets",
+        { set: undefined },
+        {
+          "set/house": {
+            versions: ["1.0.0"],
+            deps: {
+              "workflow/qa-helper": { version: "0.1.0", ...declaredBy },
+              "workflow/qa-variables": { version: "0.2.0", ...declaredBy },
+            },
+          },
+        }
+      ),
+    };
+
+    const detail = describeRecipe(
+      inputs({ repos: [primary, setRepo], readManifest: () => undefined }),
+      "set/house"
+    );
+
+    expect(detail.manifestRead).toBe(false);
+    expect(detail.dependenciesRecorded).toBe(true);
+    expect(detail.dependencies).toEqual([
+      { key: "workflow/qa-helper", resolvedVersion: "0.1.0", ...declaredBy },
+      { key: "workflow/qa-variables", resolvedVersion: "0.2.0", ...declaredBy },
+    ]);
+  });
+
+  /**
+   * An index entry recorded before the index said how each dependency was
+   * declared is answered from the manifest when it can be read, by the same
+   * rule a release applies: the members of a namespace the manifest subscribes
+   * to show that namespace, and the namespace is not listed again on its own.
+   *
+   * manifest subscribes [workflow]; index { workflow/qa-helper: 0.1.0 }
+   * // -> [{ key: workflow/qa-helper, declared: "workflow", kind: "subscribes" }]
+   */
+  it("should answer an older entry's declarations from the manifest", () => {
+    const detail = describeRecipe(
+      inputs({
+        readManifest: () =>
+          ({ ...manifest, depends: undefined, subscribes: ["workflow"] }) as RecipeManifest,
+      }),
+      "workflow/qa-variables"
+    );
+
+    expect(detail.dependencies).toEqual([
+      {
+        key: "workflow/qa-helper",
+        resolvedVersion: "0.1.0",
+        declared: "workflow",
+        kind: "subscribes",
+      },
     ]);
   });
 
