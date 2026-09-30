@@ -1,23 +1,14 @@
 import { Flags } from "@oclif/core";
 import { BaseCommand } from "../base-command.js";
-import { BuildService } from "../lib/build-service.js";
+import { runProjectBuild } from "../lib/build-service.js";
 import { PidService } from "../lib/pid-service.js";
 import { resolveRootScope } from "../lib/settings.js";
-import { describeLinkedRepos } from "../lib/repos/links.js";
 import { resolveStoreSettings } from "../lib/repos/store/settings.js";
-import { prepareRepositoriesForBuild } from "../lib/build-preparation.js";
 import { subscriptionServiceFor } from "../lib/repos/subscription-service.js";
 import { buildReloadWatchConfig, startConfigReloadWatch } from "../lib/watch-loop.js";
 import type { WatchHandle } from "../lib/watch-service.js";
 import { WatchService } from "../lib/watch-service.js";
-import {
-  footer,
-  heading,
-  log,
-  paragraph,
-  showCommandVars,
-  warning,
-} from "../utils/formatting.js";
+import { log, paragraph, showCommandVars } from "../utils/formatting.js";
 
 export default class Build extends BaseCommand {
   static description =
@@ -49,7 +40,7 @@ export default class Build extends BaseCommand {
       default: false,
     }),
     strict: Flags.boolean({
-      description: "Fail on any compilation error",
+      description: "Treat compile warnings as errors",
       default: false,
     }),
     watch: Flags.boolean({
@@ -71,37 +62,20 @@ export default class Build extends BaseCommand {
       "No Prune": flags["no-prune"],
     });
 
-    // A linked repository is read from a working copy instead of a published
-    // version, so it is announced every single time; a build that silently
-    // produced something different would be far worse than a noisy one.
-    const linked = describeLinkedRepos(this.configContext.sousDir);
-    if (linked.length > 0) warning(linked.join("\n"));
-
-    const repositories = subscriptionServiceFor({
-      configContext: this.configContext,
-      settings: this.settings,
-      shellEnv: this.shellEnv,
-    });
-
-    if (!flags["dry-run"] && !flags["no-compile"]) {
-      await prepareRepositoriesForBuild(repositories);
-    }
-
-    heading("Building");
-
     const buildOptions = {
       strict: flags.strict,
       rebuild: flags.rebuild,
       dryRun: flags["dry-run"],
       noCompile: flags["no-compile"],
       noPrune: flags["no-prune"],
-      configContext: this.configContext,
     };
 
-    const buildService = new BuildService();
-    const success = await buildService.build(this.settings, buildOptions);
-
-    footer();
+    const success = await runProjectBuild({
+      settings: this.settings,
+      configContext: this.configContext,
+      shellEnv: this.shellEnv,
+      options: buildOptions,
+    });
 
     if (!success && !flags.watch) {
       this.exit(1);
@@ -129,17 +103,23 @@ export default class Build extends BaseCommand {
 
       const watchService = new WatchService();
 
-      // Reruns compile + prune with the command's current settings. Called for
+      // Reruns the build with the command's current settings. Called for
       // partial rebuilds (with the changed file) and, after a clean reload, for
-      // full rebuilds. Owns the "Rebuilding" heading/footer.
+      // full rebuilds, which prepare the recipes again the way the first build did.
       const rebuild = async (changedFile?: string) => {
-        heading("Rebuilding");
-        await buildService.build(this.settings, {
-          ...buildOptions,
-          // --rebuild means full clean build on every trigger; skip partial optimisation
-          changedFile: buildOptions.rebuild ? undefined : changedFile,
+        // A failed rebuild has already listed its errors, and the watch keeps
+        // running so the next save can fix them.
+        await runProjectBuild({
+          settings: this.settings,
+          configContext: this.configContext,
+          shellEnv: this.shellEnv,
+          heading: "Rebuilding",
+          options: {
+            ...buildOptions,
+            // --rebuild means full clean build on every trigger; skip partial optimisation
+            changedFile: buildOptions.rebuild ? undefined : changedFile,
+          },
         });
-        footer();
       };
 
       const { handle, triggerFullRebuild } = startConfigReloadWatch({
@@ -154,6 +134,11 @@ export default class Build extends BaseCommand {
       // and a failure never breaks the watch; the last good answer stands.
       const pollSeconds = resolveStoreSettings(this.settings).watchPollSeconds;
       if (pollSeconds > 0) {
+        const repositories = subscriptionServiceFor({
+          configContext: this.configContext,
+          settings: this.settings,
+          shellEnv: this.shellEnv,
+        });
         const poll = setInterval(() => {
           void repositories
             .checkUpstream()

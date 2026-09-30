@@ -1,7 +1,7 @@
 import { Flags } from "@oclif/core";
 import { BaseCommand } from "../base-command.js";
-import { BuildService, resolveStateFilePath } from "../lib/build-service.js";
-import { footer, heading, showCommandVars } from "../utils/formatting.js";
+import { runProjectBuild } from "../lib/build-service.js";
+import { showCommandVars } from "../utils/formatting.js";
 
 export default class Prune extends BaseCommand {
   static description = "Remove output files that are no longer in the current config";
@@ -22,19 +22,22 @@ export default class Prune extends BaseCommand {
   async run(): Promise<void> {
     const { flags } = await this.parse(Prune);
 
-    const stateFilePath = resolveStateFilePath(this.settings, this.configContext);
-
     showCommandVars({
       Project: this.projectLabel,
       Config: this.configContext.configPath,
       "Dry Run": flags["dry-run"],
     });
 
-    heading("Pruning");
-
-    const buildService = new BuildService();
-    await buildService.prune(this.settings, stateFilePath, flags["dry-run"], this.configContext);
-
-    footer();
+    // Prune goes through the same build path as everything else, with the
+    // compile step switched off: what counts as current depends on the recipes
+    // the lockfile pins, so they are restored first, or a recipe missing from
+    // the store would have its outputs pruned as if it were gone.
+    await runProjectBuild({
+      settings: this.settings,
+      configContext: this.configContext,
+      shellEnv: this.shellEnv,
+      heading: "Pruning",
+      options: { noCompile: true, dryRun: flags["dry-run"] },
+    });
   }
 }

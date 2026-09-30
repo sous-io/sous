@@ -8,11 +8,14 @@ import {
   lockedClosure,
   listLockedRecipes,
   mapLinkedRecipes,
-  projectSubscriptionRefs,
   readProjectLockfile,
   readRecipeManifestIn,
 } from "./locked-recipes.js";
-import { createProjectNamespaceResolver } from "./locked-namespace-resolver.js";
+import {
+  createProjectNamespaceResolver,
+  explainUnpinnedRecipe,
+} from "./locked-namespace-resolver.js";
+import { makeIndexFile } from "../../test/utils/repo-fixtures.js";
 
 let tmp: TmpDir;
 let sousDir: string;
@@ -44,7 +47,12 @@ function writeRecipe(
 
 /** Writes a lockfile pinning the given recipes to one repository. */
 function writeLock(
-  entries: Array<{ key: string; version?: string; requestedBy?: string[] }>,
+  entries: Array<{
+    key: string;
+    version?: string;
+    requestedBy?: string[];
+    kind?: "subscribes" | "depends";
+  }>,
   repo = "fixtures"
 ): void {
   const recipes: Record<string, unknown> = {};
@@ -54,7 +62,7 @@ function writeLock(
       version: entry.version ?? "1.0.0",
       hash: `sha256-${"a".repeat(64)}`,
       requestedBy: entry.requestedBy ?? ["project"],
-      kind: "subscribes",
+      kind: entry.kind ?? "subscribes",
     };
   }
   write(
@@ -218,29 +226,6 @@ describe("mapLinkedRecipes()", () => {
   });
 });
 
-describe("projectSubscriptionRefs()", () => {
-  /**
-   * projectSubscriptionRefs should merge the subscriptions written in the config
-   * with the lockfile entries the project itself holds, so a subscription
-   * recorded in either place is in scope for the project's own templates.
-   *
-   * projectSubscriptionRefs(settings, located); // -> ["core", "workflow/task-files"]
-   */
-  it("should merge configured subscriptions with lockfile holders", () => {
-    writeLock([
-      { key: "workflow/task-files", requestedBy: ["project"] },
-      { key: "workflow/shared", requestedBy: ["workflow/task-files"] },
-    ]);
-    const located = listLockedRecipes({ sousDir, storeRoot });
-    const settings = makeSettings({ subscriptions: { core: {} } });
-
-    expect(projectSubscriptionRefs(settings, located)).toEqual([
-      "core",
-      "workflow/task-files",
-    ]);
-  });
-});
-
 describe("keysHeldBySubscription()", () => {
   /**
    * A namespace subscription holds the recipes in that namespace the PROJECT
@@ -356,6 +341,43 @@ describe("createProjectNamespaceResolver()", () => {
   });
 
   /**
+   * createProjectNamespaceResolver should let a project template address a
+   * recipe the lockfile pins only as another recipe's `depends`: a project's
+   * templates may include from anything the lockfile pins, whatever holds it.
+   *
+   * resolver.resolve({ namespace: "support", rest: "base/x.md", fromFile: projectFile });
+   * // -> { kind: "candidates", candidates: ["<store>/.../support/base/1.0.0/x.md"] }
+   */
+  it("should resolve a depends-only recipe from a project template", () => {
+    writeLock([
+      { key: "workflow/task-files" },
+      { key: "support/base", requestedBy: ["workflow/task-files"], kind: "depends" },
+    ]);
+    const fixtures = path.join(storeRoot, "example.com", "owner", "fixtures");
+    writeRecipe(path.join(fixtures, "workflow", "task-files", "1.0.0"), {
+      namespace: "workflow",
+      name: "task-files",
+      depends: ["support/base"],
+    });
+    const base = path.join(fixtures, "support", "base", "1.0.0");
+    writeRecipe(base, { namespace: "support", name: "base" });
+
+    const resolver = createProjectNamespaceResolver({
+      sousDir,
+      settings: makeSettings({ subscriptions: { "workflow/task-files": {} } }),
+      locked: listLockedRecipes({ sousDir, storeRoot }),
+    })!;
+
+    expect(
+      resolver.resolve({
+        namespace: "support",
+        rest: "base/x.md",
+        fromFile: path.join(sousDir, "prompts", "root.md"),
+      })
+    ).toEqual({ kind: "candidates", candidates: [path.join(base, "x.md")] });
+  });
+
+  /**
    * createProjectNamespaceResolver should refuse a reference from inside one
    * recipe to another recipe it does not declare as a dependency, which is the
    * scoping rule the whole sigil rests on.
@@ -422,6 +444,114 @@ describe("createProjectNamespaceResolver()", () => {
         fromFile: path.join(taskFiles, "SKILL.md"),
       })
     ).toEqual({ kind: "candidates", candidates: [path.join(other, "x.md")] });
+  });
+});
+
+describe("explainUnpinnedRecipe()", () => {
+  /** Writes the cached index the store keeps for the fixtures repository. */
+  function writeCachedIndex(index: unknown): void {
+    write(
+      path.join(storeRoot, "_indexes", "example.com", "owner", "fixtures.json"),
+      JSON.stringify(index, null, 2)
+    );
+  }
+
+  const env = (): NodeJS.ProcessEnv => ({ SOUS_HOME: path.dirname(storeRoot) });
+
+  /**
+   * explainUnpinnedRecipe should name the pinned recipe whose other published
+   * version declares the missing one, the newest such version, and the version
+   * pinned now: a set that dropped one of its members.
+   *
+   * explainUnpinnedRecipe("workflow/gone", { sousDir, settings, env });
+   * // -> { by: "recipe", recipe: "omakase/house", declaredAt: "1.1.0", pinned: "2.0.0" }
+   */
+  it("should name the recipe whose other version declared it", () => {
+    writeLock([{ key: "omakase/house", version: "2.0.0" }]);
+    writeCachedIndex(
+      makeIndexFile("fixtures", {
+        "omakase/house": {
+          versions: ["1.0.0", "1.1.0", "2.0.0"],
+          dependencies: {
+            "1.0.0": { "workflow/gone": { version: "1.0.0" } },
+            "1.1.0": { "workflow/gone": { version: "1.0.0" } },
+            "2.0.0": {},
+          },
+        },
+      })
+    );
+
+    expect(
+      explainUnpinnedRecipe("workflow/gone", { sousDir, settings: makeSettings(), env: env() })
+    ).toEqual({ by: "recipe", recipe: "omakase/house", declaredAt: "1.1.0", pinned: "2.0.0" });
+  });
+
+  /**
+   * explainUnpinnedRecipe should follow a chain through recipes that are no
+   * longer pinned either: a set's earlier version brought a member in, and the
+   * member brought a library in.
+   *
+   * explainUnpinnedRecipe("support/lib", ...);
+   * // -> { by: "recipe", recipe: "omakase/house", declaredAt: "1.0.0", pinned: "2.0.0",
+   * //      through: ["workflow/member"] }
+   */
+  it("should follow a chain through recipes that are no longer pinned", () => {
+    writeLock([{ key: "omakase/house", version: "2.0.0" }]);
+    writeCachedIndex(
+      makeIndexFile("fixtures", {
+        "omakase/house": {
+          versions: ["1.0.0", "2.0.0"],
+          dependencies: { "1.0.0": { "workflow/member": { version: "1.0.0" } } },
+        },
+        "workflow/member": {
+          versions: ["1.0.0"],
+          dependencies: { "1.0.0": { "support/lib": { version: "1.0.0" } } },
+        },
+        "support/lib": ["1.0.0"],
+      })
+    );
+
+    expect(
+      explainUnpinnedRecipe("support/lib", { sousDir, settings: makeSettings(), env: env() })
+    ).toEqual({
+      by: "recipe",
+      recipe: "omakase/house",
+      declaredAt: "1.0.0",
+      pinned: "2.0.0",
+      through: ["workflow/member"],
+    });
+  });
+
+  /**
+   * explainUnpinnedRecipe should name a switched-off subscription to the recipe
+   * or to its namespace before looking at any index.
+   *
+   * explainUnpinnedRecipe("workflow/gone", { settings: { subscriptions: { workflow: { enabled: false } } } });
+   * // -> { by: "disabled-subscription", subscription: "workflow" }
+   */
+  it("should name a switched-off subscription", () => {
+    const settings = makeSettings({ subscriptions: { workflow: { enabled: false } } });
+
+    expect(explainUnpinnedRecipe("workflow/gone", { sousDir, settings, env: env() })).toEqual({
+      by: "disabled-subscription",
+      subscription: "workflow",
+    });
+  });
+
+  /**
+   * explainUnpinnedRecipe should return undefined when nothing it can read
+   * says where the recipe came from: no cached index, or no version declaring it.
+   *
+   * explainUnpinnedRecipe("workflow/never", ...); // -> undefined
+   */
+  it("should return undefined when nothing explains it", () => {
+    writeLock([{ key: "omakase/house" }]);
+    const options = { sousDir, settings: makeSettings(), env: env() };
+
+    expect(explainUnpinnedRecipe("workflow/never", options)).toBeUndefined();
+
+    writeCachedIndex(makeIndexFile("fixtures", { "omakase/house": ["1.0.0", "1.1.0"] }));
+    expect(explainUnpinnedRecipe("workflow/never", options)).toBeUndefined();
   });
 });
 

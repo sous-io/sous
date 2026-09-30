@@ -331,9 +331,26 @@ published identity and then the path inside it, on a line of its own:
 ```
 
 The `~` is required. A bare `@path` is always a relative path or a declared alias, so an include
-line can never quietly stop meaning a file on disk. Inside a recipe, `~<namespace>` resolves only
-against that recipe's own `depends` and `subscribes` at the versions the lockfile pins, and the
-path after the recipe name may not be absolute or hold a `.` or `..` segment.
+line can never quietly stop meaning a file on disk. In your own templates, `~<namespace>`
+resolves against every recipe the lockfile pins, whatever brought it in: a recipe you subscribe
+to, a member of a set you subscribe to, or a library another recipe depends on. Inside a recipe,
+it resolves only against that recipe's own `depends` and `subscribes` at the versions the
+lockfile pins. The path after the recipe name may not be absolute or hold a `.` or `..` segment.
+
+An include naming a recipe the lockfile does not pin fails the build. When sous can tell what
+used to bring the recipe in (a switched-off subscription, or an earlier version of a set that
+listed it), the error names it:
+
+```text
+  Error: Include not found: @~workflow/member/memories/member.md
+  in file: .sous/prompts/AGENTS.md
+  namespace: workflow
+  recipe: workflow/member
+  The namespace "workflow" holds no recipe named "workflow/member".
+  Version 1.0.0 of "omakase/house" brought "workflow/member" in, but the version this project
+    pins, 1.1.0, does not, so the lockfile no longer pins it.
+  Subscribe to "workflow/member" directly to keep including it, or remove the include.
+```
 
 ## Where to go next
 
