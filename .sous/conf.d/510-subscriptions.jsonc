@@ -7,41 +7,5 @@
 // It is JSON with comments (.jsonc): line comments, block comments and trailing
 // commas are all allowed here.
 {
-  "subscriptions": {
-    "communication/agent-conduct": {
-      "range": "^1",
-      "addedAt": "2026-09-29T11:07:56.872Z",
-      "addedBy": "user"
-    },
-    "communication/plain-speech": {
-      "range": "^1",
-      "addedAt": "2026-09-29T11:08:01.555Z",
-      "addedBy": "user"
-    },
-    "reasoning/evidence-and-verification": {
-      "range": "^1",
-      "addedAt": "2026-09-29T11:08:03.711Z",
-      "addedBy": "user"
-    },
-    "workflow/agent-memory": {
-      "range": "^1",
-      "addedAt": "2026-09-29T11:08:11.710Z",
-      "addedBy": "user"
-    },
-    "workflow/autonomous-work": {
-      "range": "^1",
-      "addedAt": "2026-09-29T11:08:13.901Z",
-      "addedBy": "user"
-    },
-    "workflow/sources-of-truth": {
-      "range": "^1",
-      "addedAt": "2026-09-29T11:08:09.430Z",
-      "addedBy": "user"
-    },
-    "workflow/sub-agent-delegation": {
-      "range": "^1",
-      "addedAt": "2026-09-29T11:08:05.969Z",
-      "addedBy": "user"
-    }
-  }
+  "subscriptions": {}
 }
