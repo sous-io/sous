@@ -96,6 +96,12 @@ function context() {
   return loadLadderContext({ sousDir, shellEnv: {} });
 }
 
+/** Plan lines as one string, with color codes removed and every wrap undone. */
+function flatten(lines: string[]): string {
+  // eslint-disable-next-line no-control-regex
+  return lines.join("\n").replace(/\x1b\[[0-9;]*m/g, "").replace(/\s+/g, " ");
+}
+
 /** Reads one of the project's env files, or an empty string when it is missing. */
 function readEnv(name: string): string {
   const filePath = path.join(sousDir, name);
@@ -633,34 +639,62 @@ describe("answering variables ahead of the questions", () => {
 
   /**
    * A dry run downloads nothing, so a recipe whose files are not on this
-   * machine has no manifest to read. The plan should still describe every
-   * recipe it could read, and name the rest in one honest line rather than
-   * claiming the closure asks nothing.
+   * machine is described from its repository's index, and an index recorded
+   * before sous wrote questions there cannot say. The plan should still
+   * describe every recipe it could, and name the rest in one honest line
+   * rather than claiming the closure asks nothing.
    */
   it("should name the recipes whose questions it could not read", () => {
     const planned = planQuestions([defined()], context(), { sousDir });
+    const unknown =
+      "Not on this machine yet, and their repository's index does not record their " +
+      "questions, so they cannot be listed: misc/elsewhere.";
 
-    const partial = formatQuestionPlan(planned, {
-      width: 100,
-      unreadable: ["misc/elsewhere"],
-    })
-      .join("\n")
-      .replace(/\x1b\[[0-9;]*m/g, "");
+    const partial = flatten(
+      formatQuestionPlan(planned, {
+        width: 100,
+        unreadable: ["misc/elsewhere"],
+      })
+    );
 
     expect(partial).toContain("The recipes sous could read ask 1 question");
     expect(partial).toContain("misc/stuff asks 1 question:");
-    expect(partial).toContain(
-      "Not on this machine yet, so their questions cannot be listed: misc/elsewhere."
+    expect(partial).toContain(unknown);
+    expect(partial).toContain("run this command again without '--dry-run'");
+
+    const nothingReadable = flatten(
+      formatQuestionPlan([], {
+        width: 100,
+        unreadable: ["misc/elsewhere"],
+      })
     );
 
-    const nothingReadable = formatQuestionPlan([], {
-      width: 100,
-      unreadable: ["misc/elsewhere"],
-    }).join("\n");
-
-    expect(nothingReadable).toContain(
-      "Not on this machine yet, so their questions cannot be listed: misc/elsewhere."
-    );
+    expect(nothingReadable).toContain(unknown);
     expect(nothingReadable).not.toContain("None of these recipes ask any questions");
+  });
+
+  /**
+   * A plan printed where the questions are only described (`sous recipe show`)
+   * names no flag and no other command: no `--answer` under each question, no
+   * closing sentence about answering ahead of time, and no advice to rerun.
+   *
+   * formatQuestionPlan(planned, { answerHints: false, unreadable: ["misc/elsewhere"] })
+   * // -> the questions and the unknown recipes, and nothing about '--answer' or '--dry-run'
+   */
+  it("should leave out every answering hint when it only describes", () => {
+    const planned = planQuestions([defined()], context(), { sousDir });
+
+    const text = flatten(
+      formatQuestionPlan(planned, {
+        width: 100,
+        unreadable: ["misc/elsewhere"],
+        answerHints: false,
+      })
+    );
+
+    expect(text).toContain("misc/stuff asks 1 question:");
+    expect(text).toContain("so they cannot be listed: misc/elsewhere.");
+    expect(text).not.toContain("--answer");
+    expect(text).not.toContain("--dry-run");
   });
 });

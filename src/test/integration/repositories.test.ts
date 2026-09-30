@@ -715,7 +715,7 @@ describe("the repositories consumer surface", () => {
 
       expect(result.status, result.stdout + result.stderr).toBe(0);
       expect(result.stdout).toContain(
-        "Not on this machine yet, so their questions cannot be listed"
+        "Not on this machine yet, and their repository's index"
       );
       expect(result.stdout).toContain("formatter/daily");
 

@@ -93,11 +93,19 @@ function questionCount(count: number): string {
   return count === 1 ? "1 question" : `${count} questions`;
 }
 
-/** The labeled facts one planned question shows. */
-export function plannedVariableFacts(planned: PlannedVariable): LabeledFact[] {
+/**
+ * The labeled facts one planned question shows.
+ *
+ * @param planned - The planned question.
+ * @param answerHints - Whether to name the `--answer` flag that answers it ahead of time.
+ */
+export function plannedVariableFacts(
+  planned: PlannedVariable,
+  answerHints = true
+): LabeledFact[] {
   const { definition } = planned.defined;
 
-  return [
+  const facts: LabeledFact[] = [
     { label: "about", lines: [firstSentence(definition.description)] },
     { label: "example", lines: [String(definition.example)] },
     { label: "stored-as", lines: [planned.storedAs] },
@@ -112,8 +120,11 @@ export function plannedVariableFacts(planned: PlannedVariable): LabeledFact[] {
             : "no, and an answer is optional",
       ],
     },
-    { label: "answer-with", lines: [`--answer ${definition.name}=<value>`] },
   ];
+  if (answerHints) {
+    facts.push({ label: "answer-with", lines: [`--answer ${definition.name}=<value>`] });
+  }
+  return facts;
 }
 
 /** What `formatQuestionPlan` needs beyond the questions themselves. */
@@ -121,26 +132,37 @@ export interface QuestionPlanFormatOptions {
   /** The column to wrap descriptions at. */
   width?: number;
   /**
-   * Recipes in the closure whose files are not on this machine, so their
-   * manifests could not be read. They are named in the plan rather than
-   * silently left out of it.
+   * Recipes in the closure whose questions are unknown: their files are not on
+   * this machine, and their repository's index does not record their
+   * questions. They are named in the plan rather than silently left out of it.
    */
   unreadable?: string[];
+  /**
+   * Whether the plan says how to answer its questions ahead of time: the
+   * `--answer` flag under each question, and a closing sentence. True for the
+   * dry run of a command that asks them; false where the plan only describes.
+   */
+  answerHints?: boolean;
 }
 
 /**
- * The one line that names the recipes a dry run could not read. A dry run
- * downloads nothing, so a recipe this machine does not hold yet has no manifest
- * to read; saying so by name is more useful than leaving it out of the plan.
+ * The one line that names the recipes whose questions are unknown. Nothing is
+ * downloaded to plan, so a recipe this machine does not hold yet is described
+ * from its repository's index, and an index written before sous recorded
+ * questions there cannot say; naming those recipes is more useful than leaving
+ * them out of the plan.
  *
- * @param unreadable - The recipe keys whose manifests could not be read.
+ * @param unreadable - The recipe keys whose questions are unknown.
+ * @param answerHints - Whether the plan belongs to a dry run that could be run for real.
  */
-function unreadableLine(unreadable: string[]): string {
-  return (
-    `Not on this machine yet, so their questions cannot be listed: ` +
-    `${unreadable.join(", ")}. A dry run downloads nothing; run this command ` +
-    `again without '--dry-run' to install them and be asked.`
-  );
+function unreadableLine(unreadable: string[], answerHints: boolean): string {
+  const line =
+    `Not on this machine yet, and their repository's index does not record their ` +
+    `questions, so they cannot be listed: ${unreadable.join(", ")}.`;
+  return answerHints
+    ? `${line} A dry run downloads nothing; run this command again without ` +
+        `'--dry-run' to install them and be asked.`
+    : line;
 }
 
 /**
@@ -157,6 +179,7 @@ export function formatQuestionPlan(
   options: QuestionPlanFormatOptions = {}
 ): string[] {
   const unreadable = options.unreadable ?? [];
+  const answerHints = options.answerHints ?? true;
 
   const columns = options.width ?? wrapColumns();
   /** Wraps one sentence to the width the caller's indentation leaves for it. */
@@ -166,7 +189,7 @@ export function formatQuestionPlan(
   if (planned.length === 0) {
     return unreadable.length === 0
       ? sentence("None of these recipes ask any questions, so nothing needs answering.")
-      : sentence(unreadableLine(unreadable), palette.note);
+      : sentence(unreadableLine(unreadable, answerHints), palette.note);
   }
 
   const unanswered = planned.filter((entry) => !entry.answered).length;
@@ -194,15 +217,15 @@ export function formatQuestionPlan(
     for (const entry of entries) {
       lines.push("", `  ${color.cyan(entry.defined.definition.name)}`);
       // The facts block indents itself, so the plan adds nothing on top of it.
-      lines.push(...renderFacts(plannedVariableFacts(entry), columns - 2));
+      lines.push(...renderFacts(plannedVariableFacts(entry, answerHints), columns - 2));
     }
   }
 
   if (unreadable.length > 0) {
-    lines.push("", ...sentence(unreadableLine(unreadable), palette.note));
+    lines.push("", ...sentence(unreadableLine(unreadable, answerHints), palette.note));
   }
 
-  if (unanswered > 0) {
+  if (unanswered > 0 && answerHints) {
     lines.push(
       "",
       ...sentence(

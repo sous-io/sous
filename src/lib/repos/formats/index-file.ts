@@ -18,6 +18,7 @@
 import { z } from "zod";
 import {
   contentHashSchema,
+  dependencyKindSchema,
   formatVersionSchema,
   forwardCompatibleObject,
   isoTimestampSchema,
@@ -31,6 +32,7 @@ import {
   semverVersionSchema,
   stableJsonStringify,
 } from "./common.js";
+import { publishedVariableDefinitionSchema } from "./recipe-manifest.js";
 
 /**
  * One dependency of one published version, as the release resolved it.
@@ -54,6 +56,22 @@ export const indexDependencySchema = forwardCompatibleObject({
    * this same repository.
    */
   repo: repoIdentitySchema.optional(),
+  /**
+   * The entry of the version's manifest that brings this dependency in, exactly
+   * as it was written: a recipe (`workflow/task-files`, with its range when it
+   * has one), a whole namespace of this repository (`workflow`), or a locator
+   * naming a recipe in another repository. When several entries cover the same
+   * recipe, the one naming it wins over a namespace. Absent on an entry recorded
+   * before sous described recipes in the index (ADR 0010).
+   */
+  declared: z.string().min(1, "must not be empty").optional(),
+  /**
+   * Whether that brings it in as a co-subscription (`subscribes`: its files
+   * land in the project and its questions are asked) or as a build dependency
+   * (`depends`: a library only); `subscribes` when any entry covering it is a
+   * co-subscription. Recorded alongside `declared`.
+   */
+  kind: dependencyKindSchema.optional(),
 }).refine((entry) => entry.version !== undefined || entry.range !== undefined, {
   message:
     "must record either the exact version this dependency resolved to or the range " +
@@ -92,9 +110,19 @@ export const indexVersionSchema = forwardCompatibleObject({
    * published version means one thing forever.
    *
    * The field is additive: an index written before it existed still parses, and
-   * a consumer that finds no entry falls back to the manifest's ranges.
+   * a consumer that finds no entry falls back to the manifest's ranges. A
+   * version described in full (ADR 0010) carries this field even when it is
+   * empty, so "depends on nothing" and "not recorded" read differently.
    */
   dependencies: z.record(recipeKeySchema, indexDependencySchema).optional(),
+  /**
+   * The variable definitions this version's manifest publishes, in manifest
+   * order: the questions subscribing to it asks. An empty list means it asks
+   * none; an absent field means the release that recorded the version did not
+   * record them (a release made before ADR 0010), and only the recipe's own
+   * files can say.
+   */
+  variables: z.array(publishedVariableDefinitionSchema).optional(),
 });
 
 /** One recipe, with every version the repo publishes of it. */

@@ -69,7 +69,7 @@ describe("parseIndexFile()", () => {
    * sous still reads the index, and a release it runs writes a published
    * version back unchanged.
    *
-   * parseIndexFile({ ...index, futureField: 1, recipes: { ...: { versions: { ...: { declaredAs: "x" } } } } });
+   * parseIndexFile({ ...index, futureField: 1, recipes: { ...: { versions: { ...: { futureDependencyField: "x" } } } } });
    * // -> the same object, every unknown field still in place
    */
   it("should accept and keep a field it does not define, at every level", () => {
@@ -79,16 +79,110 @@ describe("parseIndexFile()", () => {
     const recipe = index.recipes["workflow/task-files"];
     recipe.futureRecipeField = ["kept"];
     const version = recipe.versions["1.0.0"];
-    version.variables = [{ name: "board", type: "string" }];
+    version.futureVersionField = [{ name: "board" }];
     version.dependencies = {
-      "workflow/partials": { version: "1.0.0", declaredAs: "workflow", kind: "subscribes" },
+      "workflow/partials": { version: "1.0.0", futureDependencyField: "workflow" },
     };
+    version.variables = [
+      {
+        name: "board",
+        type: "string",
+        prompt: "Which board?",
+        description: "The board the task files link to.",
+        example: "Sous",
+        required: true,
+        secret: false,
+        scope: "shared",
+        futureVariableField: "kept",
+        validate: { minLength: 1, futureRuleField: "kept" },
+      },
+    ];
 
     const parsed = parseIndexFile(index, SOURCE);
 
     expect(parsed).toEqual(index);
-    expect(stringifyIndexFile(parsed)).toContain('"declaredAs": "workflow"');
+    expect(stringifyIndexFile(parsed)).toContain('"futureDependencyField": "workflow"');
+    expect(stringifyIndexFile(parsed)).toContain('"futureVariableField": "kept"');
     expect(stringifyIndexFile(parsed)).toContain('"futureTopLevel"');
+  });
+
+  /**
+   * A version described in full records, per dependency, the manifest entry
+   * that declared it and whether it is a co-subscription, and the variable
+   * definitions the version publishes, so a consumer can describe it before
+   * fetching anything. Defaults the manifest schema applies are applied here
+   * too.
+   *
+   * parseIndexFile(indexWith({ dependencies: { "workflow/partials": { version: "1.0.0",
+   *   declared: "workflow", kind: "subscribes" } }, variables: [{ name: "board", ... }] }));
+   * // -> the same entry, with `required: true`, `secret: false` and `scope: "shared"` filled in
+   */
+  it("should read a version's declarations and variable definitions", () => {
+    const index = validIndex() as Record<string, any>;
+    const version = index.recipes["workflow/task-files"].versions["1.0.0"];
+    version.dependencies = {
+      "workflow/partials": { version: "1.0.0", declared: "workflow", kind: "subscribes" },
+    };
+    version.variables = [
+      {
+        name: "board",
+        type: "string",
+        prompt: "Which board?",
+        description: "The board the task files link to.",
+        example: "Sous",
+      },
+    ];
+
+    const parsed = parseIndexFile(index, SOURCE);
+    const entry = parsed.recipes["workflow/task-files"]!.versions["1.0.0"]!;
+
+    expect(entry.dependencies!["workflow/partials"]).toEqual({
+      version: "1.0.0",
+      declared: "workflow",
+      kind: "subscribes",
+    });
+    expect(entry.variables).toEqual([
+      {
+        name: "board",
+        type: "string",
+        prompt: "Which board?",
+        description: "The board the task files link to.",
+        example: "Sous",
+        required: true,
+        secret: false,
+        scope: "shared",
+      },
+    ]);
+  });
+
+  /**
+   * The recorded fields are checked as strictly as their manifest was: a kind
+   * other than the two dependency kinds, and a definition breaking a rule the
+   * manifest enforces, are both refused.
+   *
+   * parseIndexFile(indexWith({ kind: "requires" }));   // -> throws, naming 'kind'
+   * parseIndexFile(indexWith({ type: "enum" }));       // -> throws, naming 'validate.enum'
+   */
+  it("should reject a recorded kind or definition its manifest could not have had", () => {
+    const index = validIndex() as Record<string, any>;
+    const version = index.recipes["workflow/task-files"].versions["1.0.0"];
+    version.dependencies = {
+      "workflow/partials": { version: "1.0.0", declared: "workflow", kind: "requires" },
+    };
+    version.variables = [
+      {
+        name: "depth",
+        type: "enum",
+        prompt: "How deep?",
+        description: "How thorough a review is.",
+        example: "quick",
+      },
+    ];
+
+    const message = expectRejectMessage(index);
+
+    expect(message).toContain("dependencies.workflow/partials.kind");
+    expect(message).toContain("must list its options under 'validate.enum'");
   });
 
   /**

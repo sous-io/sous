@@ -523,6 +523,61 @@ describe("resolveRefs()", () => {
   });
 
   /**
+   * A recipe whose manifest the loader cannot produce is walked from its index
+   * entry when the entry records how each dependency was declared, exactly as
+   * its manifest would be walked: a namespace entry expands to the namespace as
+   * it stands, a named entry keeps its kind, and the version's recorded
+   * variable definitions travel with it. Only a recipe whose entry records
+   * nothing is reported as unreadable.
+   *
+   * omakase/house@1.0.0 records { workflow/a: "workflow" (subscribes), tools/c: "tools/c" (depends) }
+   * // -> house, tools/c (depends), workflow/a and workflow/b (subscribes)
+   */
+  it("should walk a recipe from its index entry when its manifest cannot be loaded", async () => {
+    const index = makeIndexFile("sous-recipes", {
+      "omakase/house": {
+        versions: ["1.0.0"],
+        dependencies: {
+          "1.0.0": {
+            "workflow/a": { version: "1.0.0", declared: "workflow", kind: "subscribes" },
+            "tools/c": { version: "1.0.0", declared: "tools/c", kind: "depends" },
+          },
+        },
+      },
+      "workflow/a": ["1.0.0"],
+      "workflow/b": ["1.0.0"],
+      "tools/c": ["1.0.0", "2.0.0"],
+    });
+    const variables = [
+      {
+        name: "houseName",
+        type: "string" as const,
+        prompt: "What is the house called?",
+        description: "The name every skill in the set signs with.",
+        example: "Harbor",
+        required: true,
+        secret: false,
+        scope: "shared" as const,
+      },
+    ];
+    index.recipes["omakase/house"]!.versions["1.0.0"]!.variables = variables;
+    const context = makeContext({ indexes: { "sous-recipes": index } });
+
+    const result = await resolveRefs([ask("omakase/house")], context);
+
+    expect(
+      result.resolved.map((recipe) => [recipe.key, recipe.version, recipe.kind])
+    ).toEqual([
+      ["omakase/house", "1.0.0", "subscribes"],
+      ["tools/c", "1.0.0", "depends"],
+      ["workflow/a", "1.0.0", "subscribes"],
+      ["workflow/b", "1.0.0", "subscribes"],
+    ]);
+    expect(result.resolved[0]!.variables).toEqual(variables);
+    expect(result.missingManifests).toEqual(["tools/c", "workflow/a", "workflow/b"]);
+  });
+
+  /**
    * Two recipes that depend on each other terminate rather than looping, and
    * the cycle is reported as the chain that formed it.
    */

@@ -31,7 +31,7 @@ export type UpdatePlanFacts = {
   missingRepos: MissingRepo[];
   /** The questions the new versions ask that nothing answers yet. */
   questions: PlannedVariable[];
-  /** Recipes whose files are not on this machine, so their questions are unknown. */
+  /** Recipes whose files are not on this machine and whose index does not record their questions. */
   unreadable: string[];
   /** Repositories whose index could not be fetched, so their pins stay where they are. */
   unreachable: Array<{ repo: string; reason: string }>;
@@ -153,7 +153,8 @@ export function formatUpdatePlan(
   if (facts.unreadable.length > 0) {
     notes.push(
       `A dry run downloads no recipe, so the dependencies of the versions not on this ` +
-        `machine yet are not shown: ${facts.unreadable.join(", ")}.`
+        `machine yet, and not described by their index, are not shown: ` +
+        `${facts.unreadable.join(", ")}.`
     );
   }
   for (const entry of facts.unreachable) {

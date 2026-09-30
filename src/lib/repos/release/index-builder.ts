@@ -26,6 +26,13 @@
  * its ranges long afterwards. Those dependencies are resolved exactly once: when
  * the version is first recorded, against the repository as it stands then (or,
  * for a version rebuilt from its tag, as it stood at that tag), and never again.
+ *
+ * A version recorded here is also DESCRIBED, so a consumer can say what
+ * subscribing to it brings in and asks before anything is fetched: each
+ * dependency carries the manifest entry that declared it and whether it is a
+ * co-subscription or a build dependency, and the version carries the variable
+ * definitions its manifest publishes. Those fields are frozen with the rest of
+ * the entry; a version published before they existed keeps its entry as it is.
  */
 
 import fs from "node:fs";
@@ -61,6 +68,11 @@ import {
   type ValidationProblem,
 } from "./validate.js";
 import { parseDependencyRef } from "../ref.js";
+import {
+  declarationFor,
+  describeDependencyKind,
+  type DependencyDeclaration,
+} from "../declarations.js";
 
 /** A version that is ready to publish but has no tag yet. */
 export type PendingRelease = {
@@ -188,7 +200,7 @@ export async function buildIndex(
         tag: tag.tag,
         prerelease: semver.prerelease(tag.version) !== null,
         ...(await releasedAtOf(rootDir, tag.tag, run)),
-        ...(rebuilt.dependencies === undefined ? {} : { dependencies: rebuilt.dependencies }),
+        ...rebuilt.description,
       };
     }
 
@@ -278,13 +290,12 @@ export async function buildIndex(
       // follows on the very commit that carries this index.
       const published = existingVersions[version];
       if (options.publishing?.[key] === version || published !== undefined) {
-        const dependencies = resolveIndexDependencies(declared, current);
         versions[version] = {
           hash: workingHash,
           tag: tagName,
           prerelease: semver.prerelease(version) !== null,
           releasedAt: published?.releasedAt ?? now.toISOString(),
-          ...(dependencies === undefined ? {} : { dependencies }),
+          ...describeVersion(recipe, declared, current),
         };
       }
 
@@ -419,10 +430,10 @@ export function describeIndexDrift(
  * `DeclaredDependencies`. A whole-namespace declaration is expanded into one
  * entry per recipe the namespace holds.
  */
-type DeclaredDependency =
+type DeclaredLocation =
   | {
       /** A recipe in another repository, named by its location. */
-      kind: "remote";
+      where: "remote";
       /** The canonical identity of the repository publishing it. */
       repo: string;
       /** The range the manifest declared, `*` when it declared none. */
@@ -430,7 +441,7 @@ type DeclaredDependency =
     }
   | {
       /** A recipe in this same repository. */
-      kind: "sibling";
+      where: "sibling";
       /** The range the manifest declared, when it declared one. */
       range?: string;
       /**
@@ -441,6 +452,9 @@ type DeclaredDependency =
        */
       named: boolean;
     };
+
+/** One declared dependency: where it lives, and the manifest entry bringing it in. */
+type DeclaredDependency = DeclaredLocation & DependencyDeclaration;
 
 /** Everything one recipe's manifest declares, under `depends` and `subscribes`. */
 type DeclaredDependencies = {
@@ -469,19 +483,20 @@ function declaredDependencies(
   recipe: ValidatedRecipe,
   validation: RepoValidation
 ): DeclaredDependencies {
-  const byKey = new Map<string, DeclaredDependency>();
+  const byKey = new Map<string, DeclaredLocation>();
   const namespaces = new Set<string>();
-  const declared = [
-    ...(recipe.manifest.depends ?? []),
-    ...(recipe.manifest.subscribes ?? []),
-  ];
+  const lists = {
+    depends: recipe.manifest.depends ?? [],
+    subscribes: recipe.manifest.subscribes ?? [],
+  };
+  const declared = [...lists.depends, ...lists.subscribes];
 
   /** Records one sibling, remembering whether any declaration named it. */
   const addSibling = (key: string, range: string | undefined, named: boolean): void => {
     const before = byKey.get(key);
-    const namedBefore = before?.kind === "sibling" && before.named;
+    const namedBefore = before?.where === "sibling" && before.named;
     byKey.set(key, {
-      kind: "sibling",
+      where: "sibling",
       ...(range === undefined ? {} : { range }),
       named: named || namedBefore,
     });
@@ -498,7 +513,7 @@ function declaredDependencies(
 
     if (parsed.kind === "remote") {
       byKey.set(`${parsed.namespace}/${parsed.recipe}`, {
-        kind: "remote",
+        where: "remote",
         repo: parsed.canonicalRepo!,
         range: parsed.range ?? "*",
       });
@@ -519,7 +534,14 @@ function declaredDependencies(
     }
   }
 
-  return { byKey, namespaces };
+  // Which entry brings each one in, and whether as a co-subscription, is the
+  // answer every reader of the index shares; see `declarationFor`.
+  const described = new Map<string, DeclaredDependency>();
+  for (const [key, dependency] of byKey) {
+    described.set(key, { ...dependency, ...declarationFor(lists, key)! });
+  }
+
+  return { byKey: described, namespaces };
 }
 
 /**
@@ -592,24 +614,52 @@ function siblingState(
 function resolveIndexDependencies(
   declared: DeclaredDependencies,
   siblings: SiblingState
-): Record<string, IndexDependency> | undefined {
+): Record<string, IndexDependency> {
   const resolved: Record<string, IndexDependency> = {};
 
   for (const [key, dependency] of declared.byKey) {
-    if (dependency.kind === "remote") {
-      resolved[key] = { repo: dependency.repo, range: dependency.range };
+    const how = { declared: dependency.declared, kind: dependency.kind };
+    if (dependency.where === "remote") {
+      resolved[key] = { repo: dependency.repo, range: dependency.range, ...how };
       continue;
     }
     if (dependency.range === undefined) {
       const settled = siblings.settled.get(key);
-      resolved[key] = settled === undefined ? { range: "*" } : { version: settled };
+      resolved[key] = {
+        ...(settled === undefined ? { range: "*" } : { version: settled }),
+        ...how,
+      };
       continue;
     }
     const best = semver.maxSatisfying(siblings.published.get(key) ?? [], dependency.range);
-    resolved[key] = best === null ? { range: dependency.range } : { version: best };
+    resolved[key] = {
+      ...(best === null ? { range: dependency.range } : { version: best }),
+      ...how,
+    };
   }
 
-  return Object.keys(resolved).length === 0 ? undefined : resolved;
+  return resolved;
+}
+
+/**
+ * Everything a version records about itself beyond its hash, tag and date: its
+ * dependencies, resolved and each with the entry that declared it, and the
+ * variable definitions its manifest publishes. Both are recorded even when
+ * empty, so a reader can tell "none" from "not recorded".
+ *
+ * @param recipe - The recipe, with the manifest of the version being recorded.
+ * @param declared - What that manifest declares.
+ * @param siblings - What each recipe here is published at, for this resolution.
+ */
+function describeVersion(
+  recipe: ValidatedRecipe,
+  declared: DeclaredDependencies,
+  siblings: SiblingState
+): Pick<IndexVersion, "dependencies" | "variables"> {
+  return {
+    dependencies: resolveIndexDependencies(declared, siblings),
+    variables: recipe.manifest.variables ?? [],
+  };
 }
 
 /**
@@ -643,7 +693,7 @@ function checkRecordedDependencies(
   for (const [name, dependency] of declared.byKey) {
     const entry = entries[name];
     if (entry === undefined) {
-      if (dependency.kind === "remote" || dependency.named) {
+      if (dependency.where === "remote" || dependency.named) {
         differences.push(
           `'${name}': the manifest declares ${describeDeclared(dependency)}, and the index ` +
             `records nothing for it`
@@ -690,7 +740,11 @@ function checkRecordedDependencies(
 
 /** True when a recorded dependency honours what the manifest declares for it. */
 function recordedSatisfies(entry: IndexDependency, dependency: DeclaredDependency): boolean {
-  if (dependency.kind === "remote") {
+  // How it was declared is recorded only since sous described recipes in the
+  // index; an entry that records it has to agree with the manifest too.
+  if (entry.declared !== undefined && entry.declared !== dependency.declared) return false;
+  if (entry.kind !== undefined && entry.kind !== dependency.kind) return false;
+  if (dependency.where === "remote") {
     return (
       entry.repo === dependency.repo &&
       entry.range === dependency.range &&
@@ -707,23 +761,34 @@ function recordedSatisfies(entry: IndexDependency, dependency: DeclaredDependenc
 function describeRecorded(entry: IndexDependency): string {
   const what =
     entry.version !== undefined ? `version ${entry.version}` : `the range '${entry.range}'`;
-  return entry.repo === undefined ? what : `${what} from ${entry.repo}`;
+  const from = entry.repo === undefined ? what : `${what} from ${entry.repo}`;
+  return entry.declared === undefined || entry.kind === undefined
+    ? from
+    : `${from}, through the entry '${entry.declared}' as a ${describeDependencyKind(entry.kind)}`;
 }
 
 /** Describes a declared dependency the way an author would say it. */
 function describeDeclared(dependency: DeclaredDependency): string {
-  if (dependency.kind === "remote") {
-    return `the range '${dependency.range}' from ${dependency.repo}`;
+  const how =
+    `, through the entry '${dependency.declared}' as a ` +
+    describeDependencyKind(dependency.kind);
+  if (dependency.where === "remote") {
+    return `the range '${dependency.range}' from ${dependency.repo}${how}`;
   }
-  return dependency.range === undefined ? "it with no range" : `the range '${dependency.range}'`;
+  return dependency.range === undefined
+    ? `it with no range${how}`
+    : `the range '${dependency.range}'${how}`;
 }
 
 /** What rebuilding one tagged version from its tag produced. */
 type RebuiltVersion = {
   /** The content hash of the recipe folder at the tag. */
   hash: string;
-  /** The dependencies it was released against, when they could be worked out. */
-  dependencies?: Record<string, IndexDependency>;
+  /**
+   * Its dependencies and variable definitions when the recipe could be read at
+   * the tag, and nothing when it could not; see `describeVersion`.
+   */
+  description: Pick<IndexVersion, "dependencies" | "variables">;
   /** A warning when they could not. */
   problems: ValidationProblem[];
 };
@@ -762,11 +827,12 @@ async function rebuildTaggedVersion(
         const snapshot = validateRepo(treeDir);
         const tagged = snapshot.recipes.find((entry) => entry.key === recipe.key);
         if (tagged !== undefined) {
-          const dependencies = resolveIndexDependencies(
+          const description = describeVersion(
+            tagged,
             declaredDependencies(tagged, snapshot),
             siblingState(snapshot, tagsByKey, existing)
           );
-          return { hash, ...(dependencies === undefined ? {} : { dependencies }), problems: [] };
+          return { hash, description, problems: [] };
         }
         reason = `The repository manifest at that tag does not list '${recipe.key}'.`;
       } catch (error) {
@@ -775,6 +841,7 @@ async function rebuildTaggedVersion(
 
       return {
         hash,
+        description: {},
         problems: [
           {
             level: "warning",

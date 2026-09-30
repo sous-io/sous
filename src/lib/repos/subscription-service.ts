@@ -56,7 +56,7 @@ import {
   type LockedRecipe,
   type Lockfile,
 } from "./formats/lockfile.js";
-import type { RecipeManifest } from "./formats/recipe-manifest.js";
+import type { RecipeManifest, VariableDefinition } from "./formats/recipe-manifest.js";
 import { formatRef, parseRef, refKey, type ParsedRef } from "./ref.js";
 import {
   SousScope,
@@ -279,15 +279,37 @@ export type SubscribeOutcome = {
    */
   questions?: PlannedVariable[];
   /**
-   * Recipes a dry run could not describe, because their files are not on this
-   * machine and a dry run downloads nothing. Their questions are unknown until
-   * they are installed.
+   * Recipes a dry run could not describe: their files are not on this machine,
+   * a dry run downloads nothing, and their repository's index does not record
+   * their questions. Their questions are unknown until they are installed.
    */
   unreadable?: string[];
   /** Dependency cycles the resolver noticed, reported rather than treated as fatal. */
   cycles: string[][];
   /** True when nothing was written, because this was a dry run. */
   dryRun: boolean;
+};
+
+/** What `previewSubscription` is asked about. */
+export type PreviewSubscriptionOptions = {
+  /** The indexes to resolve against, keyed by short name; the cached ones by default. */
+  indexes?: Map<string, IndexFile>;
+  /** Whether prerelease versions may take part in range matching. */
+  prerelease?: boolean;
+};
+
+/** What subscribing to a ref would install and ask, worked out without changing anything. */
+export type SubscriptionPreview = {
+  /** Every recipe version the subscription would install, sorted by key. */
+  resolved: ResolvedRecipe[];
+  /** Repositories the closure needs that the project does not trust yet. */
+  missingRepos: MissingRepo[];
+  /** Every question the closure would ask, and where each answer would go. */
+  questions: PlannedVariable[];
+  /** Recipes whose questions cannot be listed; see `SubscribeOutcome.unreadable`. */
+  unreadable: string[];
+  /** Dependency cycles the resolver noticed. */
+  cycles: string[][];
 };
 
 /** What `unsubscribe` is asked to do. */
@@ -3305,9 +3327,10 @@ export class SubscriptionService {
    * Every variable definition the resolved closure publishes, attributed to the
    * recipe that declared it and to the chain that pulled it in.
    *
-   * A recipe whose files are not on this machine contributes nothing rather
-   * than failing, which is what lets a dry run describe as much of the closure
-   * as it can without downloading any of it.
+   * A recipe whose files are not on this machine is described from the
+   * definitions its index entry records, and contributes nothing rather than
+   * failing when the entry records none, which is what lets a dry run describe
+   * as much of the closure as it can without downloading any of it.
    *
    * @param resolved - The recipe versions the resolution settled on.
    */
@@ -3357,12 +3380,12 @@ export class SubscriptionService {
     });
 
     for (const recipe of ordered) {
-      const manifest = readRecipeManifestIn(this.recipeDirectory(recipe));
-      if (manifest === undefined) continue;
+      const variables = this.publishedVariables(recipe);
+      if (variables === undefined) continue;
 
       const publisher = describe(recipe);
       const requiredBy = chainFor(recipe).map(describe);
-      for (const definition of manifest.variables ?? []) {
+      for (const definition of variables) {
         defined.push({ definition, recipe: publisher, requiredBy });
       }
     }
@@ -3380,9 +3403,68 @@ export class SubscriptionService {
    */
   private unreadableRecipes(resolved: ResolvedRecipe[]): string[] {
     return resolved
-      .filter((recipe) => readRecipeManifestIn(this.recipeDirectory(recipe)) === undefined)
+      .filter((recipe) => this.publishedVariables(recipe) === undefined)
       .map((recipe) => recipe.key)
       .sort();
+  }
+
+  /**
+   * The variable definitions one resolved recipe publishes: from its manifest
+   * when its files are on this machine (a linked checkout's working copy
+   * included), otherwise from its index entry, or undefined when neither can
+   * say.
+   *
+   * @param recipe - The resolved recipe.
+   */
+  private publishedVariables(recipe: ResolvedRecipe): VariableDefinition[] | undefined {
+    const manifest = readRecipeManifestIn(this.recipeDirectory(recipe));
+    if (manifest !== undefined) return manifest.variables ?? [];
+    return recipe.variables;
+  }
+
+  /**
+   * Works out what subscribing to a ref would install and which questions it
+   * would ask, from the indexes and the files already on this machine. Nothing
+   * is fetched, trusted or written, which is what lets `sous recipe show`
+   * describe a recipe before anyone subscribes to it. A repository the closure
+   * needs and the project does not trust is reported, and its recipes are not
+   * resolved.
+   *
+   * @param parsed - The fully qualified ref, with the exact version to describe as its range.
+   * @param options - The indexes to read, and whether prereleases may match.
+   */
+  async previewSubscription(
+    parsed: ParsedRef,
+    options: PreviewSubscriptionOptions = {}
+  ): Promise<SubscriptionPreview> {
+    const repos = this.resolverRepos();
+    const indexes = options.indexes ?? (await this.loadIndexes(Object.keys(repos)));
+    const result = await resolveRefs(
+      [
+        {
+          ref: parsed,
+          requestedBy: PROJECT_REQUESTER,
+          kind: "subscribes",
+          ...(options.prerelease === true ? { prerelease: true } : {}),
+        },
+      ],
+      {
+        indexes,
+        repos,
+        loadManifest: (recipe) => this.loadRecipeManifest(recipe, true),
+        ...(options.prerelease === true ? { prerelease: true } : {}),
+      }
+    );
+
+    return {
+      resolved: result.resolved,
+      missingRepos: result.missingRepos,
+      questions: planQuestions(this.definedVariables(result.resolved), this.ladderContext(), {
+        sousDir: this.sousDir,
+      }),
+      unreadable: this.unreadableRecipes(result.resolved),
+      cycles: result.cycles,
+    };
   }
 
   /** The environment layers and mapping records this project resolves against. */

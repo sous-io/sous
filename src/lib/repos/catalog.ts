@@ -8,11 +8,12 @@
  * This module answers all four.
  *
  * Everything here is a pure function over data the caller hands it: the cached
- * indexes, the lockfile, and the subscription keys the project declares. A
- * recipe's own manifest (its variables, its declared dependencies and the
- * content it contributes) lives inside the recipe's files rather than in the
- * index, so the caller supplies a reader for it; a recipe whose files are not on
- * this machine is described from its index alone rather than being an error.
+ * indexes, the lockfile, and the subscription keys the project declares. The
+ * content a recipe contributes is known only from its own manifest, inside the
+ * recipe's files, so the caller supplies a reader for it; a recipe whose files
+ * are not on this machine is described from its index alone rather than being
+ * an error, and an index recorded by a current release says how each of its
+ * dependencies was declared.
  *
  * Refs resolve the way `sous subscribe` resolves them: `namespace`,
  * `namespace/recipe`, and either of those qualified with `repo:`. A one-word ref
@@ -24,13 +25,9 @@ import semver from "semver";
 import { ConfigError } from "../errors.js";
 import type { IndexDependency, IndexFile } from "./formats/index-file.js";
 import type { Lockfile } from "./formats/lockfile.js";
-import type {
-  ContentKind,
-  RecipeManifest,
-  VariableDefinition,
-} from "./formats/recipe-manifest.js";
+import type { ContentKind, RecipeManifest } from "./formats/recipe-manifest.js";
 import { dependencyRefKey, parseDependencyRef, parseRef, type ParsedRef } from "./ref.js";
-import { bareName } from "../vars/names.js";
+import { declarationFor, type DependencyLists } from "./declarations.js";
 import {
   describeReference,
   findNamespace,
@@ -166,9 +163,13 @@ export type RecipeVersionListing = {
 export type RecipeDependencyListing = {
   /** The recipe key the dependency names, `namespace/recipe`. */
   key: string;
-  /** The dependency exactly as the recipe's manifest wrote it, when it could be read. */
+  /**
+   * The manifest entry that brings it in, exactly as written (a recipe, a whole
+   * namespace, or a locator), from the index when it records one and from the
+   * manifest otherwise.
+   */
   declared?: string;
-  /** Whether the manifest declared it a build dependency or a co-subscription. */
+  /** Whether that entry makes it a build dependency or a co-subscription. */
   kind?: "depends" | "subscribes";
   /** The exact version the release resolved it to, when the index records one. */
   resolvedVersion?: string;
@@ -176,22 +177,6 @@ export type RecipeDependencyListing = {
   resolvedRange?: string;
   /** The canonical identity of the repository publishing it, for a cross-repository dependency. */
   repo?: string;
-};
-
-/** One variable a recipe asks about. */
-export type RecipeVariableListing = {
-  /** The variable's name, as the manifest declares it. */
-  name: string;
-  /** The type of answer it takes. */
-  type: string;
-  /** The environment variable an answer is stored under. */
-  env: string;
-  /** True when an answer is required before the recipe is usable. */
-  required: boolean;
-  /** True when the answer is a secret, which sous never prints. */
-  secret: boolean;
-  /** The one-line question it asks. */
-  prompt: string;
 };
 
 /** One content kind a recipe contributes, and where its files would land. */
@@ -238,14 +223,18 @@ export type RecipeDetail = {
   versions: RecipeVersionListing[];
   /** What the described version depends on, by key. */
   dependencies: RecipeDependencyListing[];
-  /** The variables the recipe declares, in manifest order. */
-  variables: RecipeVariableListing[];
+  /**
+   * True when the index records the described version's dependencies, even as
+   * none at all, so an empty list means "depends on nothing" rather than "not
+   * recorded".
+   */
+  dependenciesRecorded: boolean;
   /** What the recipe contributes, and where each kind's files land. */
   contents: RecipeContentListing[];
   /**
    * True when the recipe's own manifest could be read. When it is false, the
-   * variables, the declared dependencies and the contents are unknown rather
-   * than empty, because the recipe's files are not on this machine.
+   * contents are unknown rather than empty, because the recipe's files are not
+   * on this machine.
    */
   manifestRead: boolean;
 };
@@ -360,7 +349,7 @@ export function describeRecipe(inputs: CatalogInputs, ref: string): RecipeDetail
     ...(describing === undefined ? {} : { describing }),
     versions: versionListings(entry.versions, listing.latest, listing.pinned),
     dependencies: dependencyListings(published?.dependencies, manifest),
-    variables: (manifest?.variables ?? []).map(variableListing),
+    dependenciesRecorded: published?.dependencies !== undefined,
     contents: (manifest?.contents ?? []).map((content) => ({
       kind: content.kind,
       include: [...content.include],
@@ -674,21 +663,39 @@ function dependencyListings(
   manifest: RecipeManifest | undefined
 ): RecipeDependencyListing[] {
   const rows = new Map<string, RecipeDependencyListing>();
+  const lists: DependencyLists | undefined =
+    manifest === undefined
+      ? undefined
+      : { depends: manifest.depends ?? [], subscribes: manifest.subscribes ?? [] };
 
   for (const [key, entry] of Object.entries(resolved ?? {})) {
+    // The index says how the release that published the version saw it. An
+    // entry recorded before the index said so is answered from the manifest,
+    // by the same rule the release applies.
+    const declaration =
+      entry.declared !== undefined && entry.kind !== undefined
+        ? { declared: entry.declared, kind: entry.kind }
+        : lists === undefined
+          ? undefined
+          : declarationFor(lists, key);
     rows.set(key, {
       key,
       ...(entry.version === undefined ? {} : { resolvedVersion: entry.version }),
       ...(entry.range === undefined ? {} : { resolvedRange: entry.range }),
       ...(entry.repo === undefined ? {} : { repo: entry.repo }),
+      ...(declaration ?? {}),
     });
   }
 
+  // A manifest entry that covers no row the index recorded is still shown, so a
+  // reader sees everything the manifest declares.
+  const covered = new Set([...rows.values()].map((row) => row.declared));
   for (const [kind, declared] of [
-    ["depends", manifest?.depends ?? []],
-    ["subscribes", manifest?.subscribes ?? []],
+    ["depends", lists?.depends ?? []],
+    ["subscribes", lists?.subscribes ?? []],
   ] as Array<["depends" | "subscribes", string[]]>) {
     for (const written of declared) {
+      if (covered.has(written.trim())) continue;
       let key: string;
       try {
         key = dependencyRefKey(parseDependencyRef(written));
@@ -702,25 +709,6 @@ function dependencyListings(
   }
 
   return [...rows.values()].sort((left, right) => compare(left.key, right.key));
-}
-
-/**
- * One variable row: what it is called, what kind of answer it takes, and the
- * environment variable an answer is stored under.
- *
- * @param definition - The variable definition from the recipe's manifest.
- */
-function variableListing(definition: VariableDefinition): RecipeVariableListing {
-  return {
-    name: definition.name,
-    type: definition.type,
-    // The manifest may bind an existing environment variable; otherwise the
-    // answer is stored under the name sous derives from the variable's own.
-    env: bareName(definition),
-    required: definition.required,
-    secret: definition.secret,
-    prompt: definition.prompt,
-  };
 }
 
 /**

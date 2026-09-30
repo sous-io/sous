@@ -2,27 +2,41 @@
  * `sous recipe show <ref>`.
  *
  * Shows one recipe in full: where it is published, every version it publishes,
- * what the version this project would use depends on, the questions it asks,
- * and where its files land in this project. It reads only what sous already has
- * on disk: the repository's cached index, the project's lockfile, and the
- * recipe's own files when they are in the store or a linked working copy.
- * `--latest` reads the repository's index from upstream instead, saving
- * nothing, and `--installed` looks the ref up among installed recipes only.
+ * what the version this project would use depends on and how each dependency is
+ * declared, everything subscribing to it would install, every question that
+ * would ask, and where its files land in this project. It reads only what sous
+ * already has on disk: the repository's cached index, the project's lockfile,
+ * and the recipe's own files when they are in the store or a linked working
+ * copy. The index describes each version's dependencies and questions, so a
+ * recipe nothing has installed is described as fully as one in the store, its
+ * files excepted. `--latest` reads the repository's index from upstream
+ * instead, saving nothing, and `--installed` looks the ref up among installed
+ * recipes only.
  */
 
 import { Args } from "@oclif/core";
+import semver from "semver";
 import { BaseCommand } from "../../base-command.js";
 import { resolveRootScope } from "../../lib/settings.js";
-import { subscriptionServiceFor } from "../../lib/repos/subscription-service.js";
+import {
+  subscriptionServiceFor,
+  type SubscriptionPreview,
+  type SubscriptionService,
+} from "../../lib/repos/subscription-service.js";
 import { loadCatalogContext } from "../../lib/repos/catalog-inputs.js";
 import {
   describeInstalled,
   describeRecipe,
+  type CatalogInputs,
   type RecipeContentListing,
   type RecipeDependencyListing,
-  type RecipeVariableListing,
+  type RecipeDetail,
   type RecipeVersionListing,
 } from "../../lib/repos/catalog.js";
+import { PROJECT_REQUESTER } from "../../lib/repos/resolver.js";
+import { describeDeclaration, describeDependencyKind } from "../../lib/repos/declarations.js";
+import { formatQuestionPlan } from "../../lib/vars/question-plan.js";
+import { describeError } from "../../lib/repos/release/validate.js";
 import {
   INDENT,
   describeIndexSource,
@@ -61,14 +75,19 @@ const DEPENDENCY_COLUMNS: TableColumn[] = [
   { key: "kind", header: "Kind", overflow: "wrap", priority: "medium", minWidth: 16 },
 ];
 
-/** The columns the variable listing shows. */
-const VARIABLE_COLUMNS: TableColumn[] = [
-  { key: "name", header: "Variable", overflow: "truncate", minWidth: 10 },
-  { key: "type", header: "Type", priority: "medium" },
-  { key: "env", header: "Environment variable", overflow: "truncate", minWidth: 12 },
-  { key: "required", header: "Required", priority: "medium" },
-  { key: "secret", header: "Secret", priority: "low" },
-  { key: "prompt", header: "What it asks", overflow: "wrap", flex: 1, priority: "low", minWidth: 16 },
+/** The columns the listing of everything a subscription installs shows. */
+const INSTALLS_COLUMNS: TableColumn[] = [
+  { key: "key", header: "Recipe", kind: "path", overflow: "truncate", minWidth: 12 },
+  { key: "version", header: "Version", overflow: "truncate", minWidth: 7 },
+  { key: "kind", header: "Kind", overflow: "wrap", minWidth: 16 },
+  {
+    key: "neededBy",
+    header: "Needed by",
+    overflow: "wrap",
+    flex: 1,
+    priority: "medium",
+    minWidth: 12,
+  },
 ];
 
 /** The columns the content listing shows. */
@@ -86,7 +105,8 @@ const CONTENT_COLUMNS: TableColumn[] = [
 ];
 
 export default class RecipeShow extends BaseCommand {
-  static description = "Show one recipe: its versions, dependencies, variables and files";
+  static description =
+    "Show one recipe: its versions, dependencies, what subscribing installs and asks, and its files";
 
   /**
    * The other spelling of the topic. It lives under a hidden topic, so it is
@@ -165,22 +185,74 @@ export default class RecipeShow extends BaseCommand {
     printBrowsingNotes({ notChecked: notChecked.filter((name) => name === detail.repo) });
 
     this.printVersions(detail.versions);
-    this.printDependencies(detail.dependencies, detail.manifestRead);
+    this.printDependencies(
+      detail.dependencies,
+      detail.manifestRead || detail.dependenciesRecorded
+    );
 
-    if (!detail.manifestRead) {
+    const preview = await this.preview(service, inputs, detail);
+    if (typeof preview === "string") {
       blankLine();
-      paragraph(
-        "The recipe's own files are not on this machine, so the questions it asks and " +
-          "the files it publishes are not known here. Subscribing to it fetches them."
-      );
-      footer();
-      return;
+      paragraph(preview);
+    } else {
+      this.printInstalls(preview);
+      this.printQuestions(preview);
     }
 
-    this.printVariables(detail.variables);
-    this.printContents(detail.contents);
+    if (detail.manifestRead) {
+      this.printContents(detail.contents);
+    } else {
+      blankLine();
+      subheading("Where its files land in this project");
+      blankLine();
+      paragraph(
+        "The recipe's own files are not on this machine, so the files it publishes are " +
+          "not known here. Subscribing to it fetches them."
+      );
+    }
 
     footer();
+  }
+
+  /**
+   * Works out what subscribing to the described version would install and ask,
+   * from the same indexes the rest of the page reads, fetching nothing. The
+   * answer is a sentence instead when it cannot be worked out.
+   *
+   * @param service - The project's subscription service.
+   * @param inputs - The catalog's inputs, whose indexes the preview resolves against.
+   * @param detail - The recipe being described.
+   */
+  private async preview(
+    service: SubscriptionService,
+    inputs: CatalogInputs,
+    detail: RecipeDetail
+  ): Promise<SubscriptionPreview | string> {
+    if (detail.describing === undefined) {
+      return (
+        "This recipe publishes no version a subscription would install, so nothing " +
+        "is described below."
+      );
+    }
+    try {
+      return await service.previewSubscription(
+        {
+          repo: detail.repo,
+          namespace: detail.namespace,
+          recipe: detail.name,
+          range: detail.describing,
+        },
+        {
+          indexes: new Map(inputs.repos.map((repo) => [repo.name, repo.index])),
+          ...(semver.prerelease(detail.describing) === null ? {} : { prerelease: true }),
+        }
+      );
+    } catch (error) {
+      return (
+        `Sous could not work out what subscribing to version ${detail.describing} ` +
+        `would install. ${describeError(error)}`
+      );
+    }
   }
 
   /**
@@ -207,24 +279,21 @@ export default class RecipeShow extends BaseCommand {
   }
 
   /**
-   * What the described version depends on, from both sides: what the recipe's
-   * manifest declares, and what its repository's index resolved that to when it
-   * was released.
+   * What the described version depends on: the manifest entry that brings each
+   * dependency in and whether it is a co-subscription or a build dependency,
+   * and what its repository's index resolved it to when it was released.
    *
    * @param dependencies - The dependencies the catalog listed.
-   * @param manifestRead - Whether the recipe's own manifest could be read.
+   * @param known - Whether the manifest or the index says what the version declares.
    */
-  private printDependencies(
-    dependencies: RecipeDependencyListing[],
-    manifestRead: boolean
-  ): void {
+  private printDependencies(dependencies: RecipeDependencyListing[], known: boolean): void {
     blankLine();
     subheading("What it depends on");
     blankLine();
 
     if (dependencies.length === 0) {
       paragraph(
-        manifestRead
+        known
           ? "This recipe depends on nothing else."
           : "The repository's index records no dependencies for this version."
       );
@@ -233,7 +302,10 @@ export default class RecipeShow extends BaseCommand {
 
     const rows = dependencies.map((entry) => ({
       key: entry.key,
-      declared: entry.declared ?? "not declared in the manifest",
+      declared:
+        entry.declared === undefined
+          ? "not recorded in the index"
+          : describeDeclaration(entry.declared),
       resolved:
         entry.resolvedVersion ??
         (entry.resolvedRange === undefined
@@ -249,32 +321,69 @@ export default class RecipeShow extends BaseCommand {
   }
 
   /**
-   * The questions the recipe asks, and the environment variable each answer is
-   * stored under.
+   * Every recipe a subscription to the described version would install, each
+   * with whether its files land in the project and what brings it in, and the
+   * repositories it would need that the project does not trust yet.
    *
-   * @param variables - The variables the catalog listed.
+   * @param preview - What subscribing would install and ask.
    */
-  private printVariables(variables: RecipeVariableListing[]): void {
+  private printInstalls(preview: SubscriptionPreview): void {
     blankLine();
-    subheading("What it asks you");
+    subheading("What subscribing installs");
     blankLine();
 
-    if (variables.length === 0) {
-      paragraph("This recipe asks no questions.");
-      return;
+    const rows = preview.resolved.map((recipe) => {
+      const subscribed = recipe.requestedBy.includes(PROJECT_REQUESTER);
+      const holders = recipe.requestedBy.filter((holder) => holder !== PROJECT_REQUESTER);
+      return {
+        key: recipe.key,
+        version: recipe.version,
+        kind: subscribed ? "the subscription itself" : describeDependencyKind(recipe.kind),
+        neededBy: holders.length === 0 ? "this subscription" : holders.join(", "),
+      };
+    });
+
+    for (const line of renderTable(INSTALLS_COLUMNS, rows, { indent: INDENT })) {
+      log(indent(line, INDENT));
     }
 
-    const rows = variables.map((entry) => ({
-      name: entry.name,
-      type: entry.type,
-      env: entry.env,
-      required: entry.required ? "yes" : "no",
-      secret: entry.secret ? "yes" : "no",
-      prompt: entry.prompt,
-    }));
+    if (preview.missingRepos.length > 0) {
+      blankLine();
+      paragraph(
+        `Subscribing also needs ${
+          preview.missingRepos.length === 1 ? "a repository" : "repositories"
+        } this project does not trust yet, so what ${
+          preview.missingRepos.length === 1 ? "it publishes" : "they publish"
+        } is not listed above: ` +
+          preview.missingRepos
+            .map(
+              (missing) =>
+                `${missing.name}${missing.url === undefined ? "" : ` (${missing.url})`}, ` +
+                `needed by ${missing.requiredBy.map((entry) => entry.requestedBy).join(", ")}`
+            )
+            .join("; ") +
+          "."
+      );
+    }
+  }
 
-    for (const line of renderTable(VARIABLE_COLUMNS, rows, { indent: INDENT })) {
-      log(indent(line, INDENT));
+  /**
+   * Every question a subscription to the described version would ask, laid out
+   * exactly as `sous subscription add --dry-run` lays them out, without the
+   * flags that answer them ahead of time.
+   *
+   * @param preview - What subscribing would install and ask.
+   */
+  private printQuestions(preview: SubscriptionPreview): void {
+    blankLine();
+    subheading("What subscribing asks you");
+    blankLine();
+
+    for (const line of formatQuestionPlan(preview.questions, {
+      unreadable: preview.unreadable,
+      answerHints: false,
+    })) {
+      log(line === "" ? "" : indent(line));
     }
   }
 
@@ -311,13 +420,3 @@ export default class RecipeShow extends BaseCommand {
   }
 }
 
-/**
- * Plain-language wording for how a dependency was declared.
- *
- * @param kind - What the manifest declared it as, when the manifest was read.
- */
-function describeDependencyKind(kind: "depends" | "subscribes" | undefined): string {
-  if (kind === "depends") return "build dependency";
-  if (kind === "subscribes") return "co-subscription";
-  return "unknown";
-}
