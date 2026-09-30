@@ -243,8 +243,8 @@ sous vars ask task-files                        # every question one recipe asks
 sous vars ask sous-recipes                      # every question that repository's recipes ask
 ```
 
-Matching is case-sensitive, and an environment variable name resolves when a definition declares it or an
-env file sets it. `--repo`, `--namespace` and `--var` say which kind is meant, each narrowing what the one
+Matching tries the exact spelling first, then ignores case; a name that still matches several things is a
+question. An environment variable name resolves when a definition declares it or an env file sets it. `--repo`, `--namespace` and `--var` say which kind is meant, each narrowing what the one
 before left, so `sous vars ask --namespace workflow apiUrl` asks about that namespace's `apiUrl` alone. When
 a name matches several things, sous lists them and asks; `--accept-first` takes the first, and a run with no
 terminal fails naming it.
