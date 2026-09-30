@@ -41,6 +41,14 @@ export type RecipeFixture = {
   version: string;
   description?: string;
   depends?: string[];
+  /** The recipe's co-subscriptions, as its manifest declares them. */
+  subscribes?: string[];
+  /**
+   * What the index records this version was released against, keyed by recipe,
+   * the way a real release resolves `depends` and `subscribes`. Left out of the
+   * index when not given.
+   */
+  dependencies?: Record<string, { version: string }>;
   files: Record<string, string>;
   variables?: unknown[];
   /** The recipe's `contents` block; defaults to a single skills entry. */
@@ -79,6 +87,7 @@ export async function buildFixtureRepo(
           version: recipe.version,
           ...(recipe.description === undefined ? {} : { description: recipe.description }),
           ...(recipe.depends === undefined ? {} : { depends: recipe.depends }),
+          ...(recipe.subscribes === undefined ? {} : { subscribes: recipe.subscribes }),
           contents: recipe.contents ?? [{ kind: "skills", include: ["skills/**/*.md"] }],
           ...(recipe.variables === undefined ? {} : { variables: recipe.variables }),
         },
@@ -112,6 +121,7 @@ export async function buildFixtureRepo(
           tag: `${recipe.namespace}/${recipe.name}@${recipe.version}`,
           prerelease: false,
           releasedAt: "2026-01-01T00:00:00.000Z",
+          ...(recipe.dependencies === undefined ? {} : { dependencies: recipe.dependencies }),
         },
       },
     };

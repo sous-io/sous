@@ -63,6 +63,11 @@ export type CompilationConfig = {
 };
 
 export type CompilationServiceOptions = {
+  /**
+   * Treat compile warnings as errors. An error always fails the compile; this
+   * only decides whether a warning (a `.tpl.` file copied without being
+   * rendered, a git branch that could not be read) does too.
+   */
   strict?: boolean;
   rebuild?: boolean;
   dryRun?: boolean;
@@ -184,14 +189,26 @@ export class CompilationService {
     this.encoder = get_encoding("o200k_base");
   }
 
-  /** Handle errors according to strict mode. */
+  /**
+   * Records a compile error and prints it. The compile carries on, so every
+   * target is compiled and every error is listed; the output the error belongs
+   * to is not written, and the compile as a whole reports failure.
+   */
   private handleError(message: string): void {
     this.errors.push(message);
     displayError(message);
+  }
 
+  /**
+   * Records a compile warning: printed as a warning, or, in strict mode,
+   * recorded as an error, with everything an error brings.
+   */
+  private handleWarning(message: string): void {
     if (this.strict) {
-      process.exit(1);
+      this.handleError(message);
+      return;
     }
+    warning(message);
   }
 
   /**
@@ -383,7 +400,10 @@ export class CompilationService {
       ).trim();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.handleError(`Failed to resolve current git branch: ${message}`);
+      this.handleWarning(
+        `Sous could not read the current git branch, so the runtime context says ` +
+          `"unknown": ${message}`
+      );
     }
 
     const runtimeHeader = `## Runtime Session Context
@@ -427,6 +447,21 @@ ${taskFileContents}
     fs.writeFileSync(ctx.outputPath, `${runtimeHeader}${taskFileBlock}\n`, "utf8");
   }
 
+  /**
+   * Says that an output was not written because its target had an error, and
+   * what that leaves on disk.
+   *
+   * @param destFile - The output that was not written.
+   */
+  private reportNotWritten(destFile: string): void {
+    const verb = this.dryRun ? "would not be written" : "not written";
+    log(
+      fs.existsSync(destFile)
+        ? `  ✗ ${destFile} (${verb} because of an error; the previous copy stays)`
+        : `  ✗ ${destFile} (${verb} because of an error)`
+    );
+  }
+
   /** Compile a single target, writing to all of its outputs. */
   private async compileTarget(
     target: CompilationTarget,
@@ -445,6 +480,8 @@ ${taskFileContents}
         ? target.includeSourceComments
         : this.includeSourceComments;
 
+    const errorsBefore = this.errors.length;
+
     if (target.runtimeContext) {
       this.generateRuntimeSessionContext(target);
     }
@@ -456,6 +493,11 @@ ${taskFileContents}
       displayError(`Failed to compile ${target.rootInputPath}`);
       return false;
     }
+
+    // An include that failed left a hole in the assembled content (and in strict
+    // mode, a warning counts as an error), so none of this target's outputs may
+    // be written: the previous copy stays in place.
+    const assembled = this.errors.length === errorsBefore;
 
     // Compute source hash once per target from the assembled content
     const contentHash = hashContent(content);
@@ -472,6 +514,12 @@ ${taskFileContents}
       // Neither destinationFile nor destinationDir set — skip
       if (resolvedDest === undefined) continue;
       destFile = resolvedDest;
+
+      if (!assembled) {
+        this.reportNotWritten(destFile);
+        allSucceeded = false;
+        continue;
+      }
 
       // A rendered output depends on its variables as much as on its source: a
       // changed answer or `_vars` value with the same template must re-render,
@@ -508,8 +556,15 @@ ${taskFileContents}
       // directly, and it stays as a tripwire in case the resolver ever changes.
       if (isTpl && !output.vars) {
         this.unrenderedTemplates.push(`${target.rootInputPath} → ${destFile}`);
+        // In strict mode this warning is an error, so the output is not written.
+        if (this.strict) {
+          this.reportNotWritten(destFile);
+          allSucceeded = false;
+          continue;
+        }
       }
 
+      const errorsBeforeRender = this.errors.length;
       const resolvedContent = (isTpl && output.vars)
         ? await this.renderContent(
             content,
@@ -522,6 +577,14 @@ ${taskFileContents}
             target.rootInputPath
           )
         : content;
+
+      // A template that failed to render is not written either.
+      if (this.errors.length > errorsBeforeRender) {
+        this.reportNotWritten(destFile);
+        allSucceeded = false;
+        continue;
+      }
+
       const fileContent = resolvedContent;
       const outputDir = path.dirname(destFile);
 
@@ -582,8 +645,11 @@ ${taskFileContents}
   }
 
   /**
-   * Compile all targets from the given config.
-   * Returns true if all targets compiled successfully.
+   * Compile all targets from the given config. Every target is compiled even
+   * after an error, so every error is listed; an output whose target had an
+   * error is not written and keeps its previous copy and its state entry.
+   *
+   * @returns True when nothing reported an error; false after any error.
    */
   async compile(config: CompilationConfig, stateFilePath?: string): Promise<boolean> {
     const stateService = new StateService();
@@ -632,15 +698,7 @@ ${taskFileContents}
           `\nFix: add a '_vars' block to the output (an empty '_vars: {}' is enough to\n` +
           `enable rendering), or rename the source so it does not contain '.tpl.'.`;
 
-        if (this.strict) {
-          // Recorded as a failure rather than exiting here, so state still gets
-          // written and the caller decides the exit code.
-          this.errors.push(message);
-          displayError(message);
-          allSucceeded = false;
-        } else {
-          warning(message);
-        }
+        this.handleWarning(message);
       }
 
       if (this.errors.length > 0) {
@@ -665,7 +723,9 @@ ${taskFileContents}
         await stateService.save(stateFilePath, state);
       }
 
-      return allSucceeded;
+      // Any error fails the compile, including one that belongs to no single
+      // target (a bad config option).
+      return allSucceeded && this.errors.length === 0;
     } finally {
       if (this.encoder) {
         this.encoder.free();

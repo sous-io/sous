@@ -143,7 +143,7 @@ variables:
 ## Declare dependencies and co-subscriptions
 
 `depends` fetches and pins a recipe whose files stay OUT of a subscriber's output but are addressable from your
-own templates. `subscribes` is a co-subscription: its questions run and its files DO enter the output, which is
+own templates, and from the templates of any project whose lockfile pins it. `subscribes` is a co-subscription: its questions run and its files DO enter the output, which is
 how a curated bundle is built. Both hold plain strings naming their target by where it lives.
 
 ```yaml

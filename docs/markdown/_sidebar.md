@@ -26,4 +26,5 @@
   - [0005: Follow-ups from the first project on the hand-off](adrs/0005-first-project-follow-ups.md)
   - [0006: `sous repo init` follows `sous-recipes`](adrs/0006-repo-init-model-home.md)
   - [0007: Frozen index entries and tolerant readers](adrs/0007-frozen-index-dependencies.md)
+  - [0009: One whole build, everywhere](adrs/0009-whole-build-everywhere.md)
   - [0010: The index describes each version's dependencies and questions](adrs/0010-index-describes-recipes.md)

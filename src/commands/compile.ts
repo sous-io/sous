@@ -34,7 +34,7 @@ export default class Compile extends BaseCommand {
   static flags = {
     ...BaseCommand.baseFlags,
     strict: Flags.boolean({
-      description: "Fail immediately on any error",
+      description: "Treat compile warnings as errors",
       default: false,
     }),
     rebuild: Flags.boolean({
@@ -113,7 +113,7 @@ export default class Compile extends BaseCommand {
 
     footer();
 
-    if (!success && flags.strict && !flags.watch) {
+    if (!success && !flags.watch) {
       this.exit(1);
     }
 

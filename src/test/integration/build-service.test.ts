@@ -51,6 +51,36 @@ describe("BuildService", () => {
 
   describe("build()", () => {
     /**
+     * A failed build returns false and nothing else: the process is not
+     * exited, strict or not, which is what lets watch mode carry on and the
+     * next build (once the error is fixed) succeed in the same process.
+     *
+     * build() with source.md including @missing.md  // -> false, process still running
+     * build() after the include is removed           // -> true
+     */
+    it("should return false on a compile error and let the next build succeed", async () => {
+      const exit = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+        throw new Error(`process.exit(${code}) was called`);
+      }) as never);
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      const settings = makeSettings({
+        compilation: {
+          targets: [{ entryPoint: srcFile, outputs: [{ destinationFile: destFile }] }],
+        },
+      });
+      const service = new BuildService();
+
+      fs.writeFileSync(srcFile, "Before\n@missing.md\nAfter\n", "utf8");
+      expect(await build(service, settings, { strict: true })).toBe(false);
+      expect(fs.existsSync(destFile)).toBe(false);
+
+      fs.writeFileSync(srcFile, "Fixed\n", "utf8");
+      expect(await build(service, settings, { strict: true })).toBe(true);
+      expect(fs.readFileSync(destFile, "utf8")).toBe("Fixed\n");
+      expect(exit).not.toHaveBeenCalled();
+    });
+
+    /**
      * build() should compile the entry point and write the output file to the
      * destination path specified in the settings.
      *

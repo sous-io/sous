@@ -249,7 +249,8 @@ src/
     settings.ts            # config loader (spawns the kernel), var resolution, scope chain
     markdown-compiler.ts   # CompilationService; @-include, LiquidJS rendering
     include-resolver.ts    # @-include alias/${var}/relative path resolution
-    build-service.ts       # orchestrates compile + prune; BuildService
+    build-service.ts       # orchestrates compile + prune; BuildService, and runProjectBuild,
+                           #   the one build every building command runs
     build-preparation.ts   # the step before a compile (seed core, lock, restore, check
                            #   upstream) and what it reports; shared by build and init
     project-scaffold/      # what `sous init` writes: string builders + scaffoldProject()
@@ -743,14 +744,21 @@ into the same one, so a directory prefix would leave an unsubscribed recipe's fi
 forever). `resolveOutputPath` in `markdown-compiler.ts` is the one definition of where a
 target's output lands, shared by the compiler and prune.
 
-**What a build does with all this.** `sous build` announces every linked repository loudly
-before it compiles (`describeLinkedRepos`), then runs `prepareRepositoriesForBuild`
+**What a build does with all this.** Every command that builds (`build`, `init`, `launch`,
+`prune`, `repo remove`, `repo unlink`, `subscription add`, `subscription remove`,
+`subscription update`) goes through ONE function, `runProjectBuild` in `build-service.ts`; no
+command calls `BuildService.build` or `BuildService.prune` on its own. It announces every
+linked repository loudly (`describeLinkedRepos`), then runs `prepareRepositoriesForBuild`
 (`src/lib/build-preparation.ts`): seed the packaged core recipe, lock any subscription the
 lockfile does not pin yet, restore whatever the store is missing, and ask upstream for the
 repositories that prefer a newer in-range version; a failed check is warned about and the last
 good answer stands. It then lists the newer in-range versions the other repositories publish
-(`reportNewerVersions`), without moving a pin. That step and its reporting live in their own module because `sous init`
-runs the same step for a project's first build, and the two must say the same things. Watch mode watches every linked checkout (they are in
+(`reportNewerVersions`), without moving a pin, and finally compiles and prunes under the
+heading the command names. A dry run prepares nothing (preparing writes the lockfile and the
+store), and neither does a partial rebuild in watch mode (one changed source file). `sous prune`
+runs it with the compile step switched off, because what counts as current depends on the
+recipes the lockfile pins: a recipe missing from the store would otherwise have its outputs
+pruned. ADR 0009 records the decision. Watch mode watches every linked checkout (they are in
 `fullRebuildPaths`) and polls upstream on `store.watchPollSeconds`. Prune and clear never
 reach into a linked checkout or the store: `protectedRepoPaths` names the three roots and
 `StateService.deleteTrackedFiles` refuses to touch anything under them, whatever the state
@@ -1185,7 +1193,12 @@ name and continues with the path inside that recipe, so
 a relative path or a declared alias. Scoping is enforced by the resolver: inside a recipe's
 own files a namespace resolves only against that recipe's declared dependencies (`depends`
 plus `subscribes`) at their pinned versions, while a project's own templates resolve
-against the project's subscriptions. The inner path may not contain `.` or `..` segments and
+against every recipe the lockfile pins, whatever holds it (the project, a set's `subscribes`,
+or a `depends`-only library). When a project template names a recipe the lockfile does not
+pin, `explainUnpinnedRecipe` (`repos/locked-namespace-resolver.ts`) looks for a switched-off
+subscription to it, then for another published version of a pinned recipe that brought it in
+(read from the cached indexes, through recipes no longer pinned either), and the error names
+it. The inner path may not contain `.` or `..` segments and
 may not be absolute, and the resolved candidate is `path.relative`-checked against the recipe
 directory; a reference that leaves it returns `{ kind: "escapes-recipe" }` rather than a path,
 because otherwise a recipe file could render anything on the machine into a project's output.
@@ -1250,12 +1263,12 @@ This enables `sous prune` (remove stale outputs) and `sous clear` (delete all ou
 | Command | Description |
 |---------|-------------|
 | `sous init [dir]` | Set a project up: write `.sous/` (a commented config in `js` or `json`, the starter prompt under `memories/`, `.env`, `.env.local.example`, the managed ignore block), add `@sous-io/sous` at the running version to `devDependencies` when the project has a `package.json` that does not depend on it yet (nothing is installed), then run the first build, which seeds and pins `core` (`--format`, `--name`, `--no-build`, `--dry-run`, `--yes` / `-y` to nest inside another project); refuses to touch a project that already holds a config |
-| `sous build` | Compile + prune (main workflow) |
+| `sous build` | Prepare the recipes, then compile + prune (main workflow); exits 1 after any compile error |
 | `sous compile` | Compile only |
-| `sous prune` | Remove output files no longer in config |
+| `sous prune` | Prepare the recipes, then remove output files no longer in config |
 | `sous clear` | Delete all Sous-written files for a project (`--force` / `-f`, also `--yes` / `-y`) |
 | `sous help [topic] [command]` | Print the same screen `--help` and `-h` print, for the CLI, a topic or a command |
-| `sous launch <tool>` | Build then spawn agent (e.g., `sous launch claude`) |
+| `sous launch <tool>` | Build then spawn agent (e.g., `sous launch claude`); a failed build starts nothing |
 | `sous config show` | Print the merged config (all layers merged, before var resolution) as JSON |
 | `sous config get <path>` | Print one value by dot-path (e.g. `compilation.targets[0].entryPoint`); `--layers` shows per-layer provenance |
 | `sous config validate` | Validate the merged config: schema, then full variable resolution |
@@ -1295,14 +1308,25 @@ that block is also where each topic's one-sentence description lives. `subscribe
 exactly one of the two lists. Bare `sous vars` is a hidden command carrying the optional
 name argument, so the top-level listing names `vars` once, as a topic.
 
-`subscription add`, `subscription remove`, `subscription update` and `repo unlink` end by
-rebuilding the project, because each changes what it compiles (`update` only when the lockfile
-moved). Each reloads the discovered config first (a subscription or a newly trusted
-repository lives in a managed `conf.d/` layer written moments earlier) and then calls
-`buildProjectOutputs` in `build-service.ts`, which runs `BuildService.build` with every option
-at its default: the same compile and prune `sous build` does, recipe targets and namespace
-resolver included. `--no-build` skips it, a dry run never reaches it, and a failed build leaves
-the change in place (it is already written and locked) and says so.
+`subscription add`, `subscription remove`, `subscription update`, `repo remove` and `repo
+unlink` end by rebuilding the project, because each changes what it compiles (`update` only
+when the lockfile moved). Each reloads the discovered config first (a subscription or a newly
+trusted repository lives in a managed `conf.d/` layer written moments earlier) and then calls
+`runProjectBuild` in `build-service.ts`, the same build `sous build` runs with no flags:
+preparation (seed, lock, restore, upstream check, newer-version report), then compile and
+prune, recipe targets and namespace resolver included. `--no-build` skips it, a dry run never
+reaches it, and a failed build leaves the change in place (it is already written and locked)
+and says so.
+
+**A compile error fails the build.** `CompilationService` (`markdown-compiler.ts`) records
+every error (a missing include, a circular include, a template that fails to render, an
+unreadable file) through `handleError`, carries on so every target compiles and every error is
+listed, and never calls `process.exit`. An output whose target had an error is not written, so
+the previous copy and its state entry stay; `compile()` returns false, and `sous build`,
+`sous compile` and every command on the shared build path exit 1 (`launch` does not start the
+tool). `--strict` only turns compile warnings (`handleWarning`: a `.tpl.` source copied without
+being rendered, a git branch the runtime context could not read) into errors. Watch mode
+reports a failed rebuild and keeps watching.
 
 The `sous config` namespace inspects the merged config. `show` and `get` emit machine-
 readable stdout (`config show | jq` works): they extend `ConfigCommand`, which routes the

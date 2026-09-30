@@ -230,10 +230,8 @@ describe("~namespace includes (real compile path)", () => {
     );
     expect(output).toContain('Add "workflow/github-projects" to the "depends" list');
 
-    const written = fs.readFileSync(dest, "utf8");
-    expect(written).toContain("before");
-    expect(written).toContain("after");
-    expect(written).not.toContain("GITHUB PARTIAL BODY");
+    // An output with a failed include in it is never written.
+    expect(fs.existsSync(dest)).toBe(false);
   });
 
   /**
@@ -286,7 +284,7 @@ describe("~namespace includes (real compile path)", () => {
     );
 
     expect(output).toContain("Circular dependency detected");
-    expect(fs.readFileSync(dest, "utf8")).toContain("A");
+    expect(fs.existsSync(dest)).toBe(false);
   });
 
   /**
@@ -338,6 +336,8 @@ describe("~namespace includes (real compile path)", () => {
     );
 
     expect(output).toContain("Template rendering error");
-    expect(output).toContain('This project does not subscribe to "workflow/task-files".');
+    expect(output).toContain(
+      `The project's own templates may not address "workflow/task-files".`
+    );
   });
 });

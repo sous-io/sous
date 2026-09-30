@@ -244,7 +244,7 @@ const PHASE_3_EXPORTS = [
   "looksLikeLocalPath",
   "resolveRepoArgument",
   "mapLinkedRecipes",
-  "projectSubscriptionRefs",
+  "explainUnpinnedRecipe",
   "protectedRepoPaths",
   "readProjectLockfile",
   "readRecipeManifestIn",
