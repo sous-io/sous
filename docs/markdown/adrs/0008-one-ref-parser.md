@@ -67,7 +67,10 @@ and that one parser need not mean one set of forms everywhere:
   records, once the project has that repository's index.
 - **On the command line, a location is settled against trusted repositories.** A location is matched to
   the trusted repository at it by identity, whatever the project calls it, and settled through its
-  index. `sous subscribe` runs the trust ceremony first for a location no trusted repository matches;
+  index. This holds for every command that takes a reference, `sous vars ask` included: the
+  repositories a reference searches carry their identity and each recipe's folder
+  (`SubscriptionService.cachedReferenceRepos`), and the variables command narrows to what the
+  settled repository, namespace or recipe covers. `sous subscribe` runs the trust ceremony first for a location no trusted repository matches;
   when that location reads as several repositories, which one is a question, since nothing may be
   fetched from a repository before it is trusted.
 - **Names match exactly first, then ignoring case.** Several matches go to `pickReference`, as any
