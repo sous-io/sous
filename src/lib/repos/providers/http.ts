@@ -38,15 +38,48 @@ export type FetchTextOptions = {
   label?: string;
   /** Cancels the request, for a caller that will not wait past a deadline. */
   signal?: AbortSignal;
+  /** The `Accept` header to send. Defaults to `application/json`. */
+  accept?: string;
+  /**
+   * The lines that explain a failed status to the reader. Defaults to the
+   * hints about a sous repository (a missing index, a private repository), so
+   * a caller fetching anything else names its own.
+   */
+  statusHints?: (status: number) => string[];
 };
+
+/**
+ * What a failed status usually means when the URL names a file in a sous
+ * repository: the default for `FetchTextOptions.statusHints`.
+ *
+ * @param status - The HTTP status the server answered with.
+ */
+function repositoryStatusHints(status: number): string[] {
+  if (status === 404) {
+    return [
+      "  Either the repository publishes no sous index yet, or the URL names a " +
+        "repository that does not exist.",
+    ];
+  }
+  if (status === 401 || status === 403) {
+    return [
+      "  The repository is private or the request was not authorized. Sous uses a " +
+        "token from the environment, or from the provider's command line tool when " +
+        "one is installed and signed in.",
+    ];
+  }
+  return [];
+}
 
 /**
  * GETs a URL and returns its body as text. Any non-2xx response, or a transport
  * failure, becomes a ConfigError that names the URL and the status, and says
- * plainly what a 404 or a 401 usually means for a sous repository.
+ * plainly what the status usually means (for a sous repository, unless the
+ * caller passes `statusHints`).
  *
  * @param url - The absolute HTTPS URL to fetch.
- * @param options - Bearer token, fetch implementation and error label.
+ * @param options - Bearer token, fetch implementation, error label, `Accept`
+ *   header and status hints.
  */
 export async function fetchText(
   url: string,
@@ -62,7 +95,7 @@ export async function fetchText(
     );
   }
 
-  const headers: Record<string, string> = { Accept: "application/json" };
+  const headers: Record<string, string> = { Accept: options.accept ?? "application/json" };
   if (options.token !== undefined && options.token.length > 0) {
     headers["Authorization"] = `Bearer ${options.token}`;
   }
@@ -85,19 +118,7 @@ export async function fetchText(
       `Sous could not fetch the ${label} from ${url}.`,
       `  The server answered ${response.status} ${response.statusText}.`,
     ];
-    if (response.status === 404) {
-      lines.push(
-        "  Either the repository publishes no sous index yet, or the URL names a " +
-          "repository that does not exist."
-      );
-    }
-    if (response.status === 401 || response.status === 403) {
-      lines.push(
-        "  The repository is private or the request was not authorized. Sous uses a " +
-          "token from the environment, or from the provider's command line tool when " +
-          "one is installed and signed in."
-      );
-    }
+    lines.push(...(options.statusHints ?? repositoryStatusHints)(response.status));
     throw new ConfigError(lines.join("\n"));
   }
 

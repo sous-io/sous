@@ -58,7 +58,10 @@ exists; `SOUS_NO_DELEGATE` switches it off, the notice it prints goes to stderr,
 the two versions differ unless `SOUS_DEBUG` is set or `--verbose` is on the command line
 (then every hand-off is announced, in full: both install paths and the escape hatch; the
 plain notice is one line naming the version handed off to), and anything unreadable means
-"run the invoked copy".
+"run the invoked copy". `sous update` always runs the invoked copy too (`planHandoff` reads
+the command word, the first argument not starting with `-`, so `sous subscription update`
+still hands off): updating the invoked copy is its job, and a project copy may predate the
+command.
 `src/lib/project-install.spec.ts` covers the rules and
 `src/test/integration/project-install-e2e.test.ts` proves the hand-off against a packed
 tarball, offline. `sous --version` is answered in `run.js` too, after tsx is registered and
@@ -193,6 +196,7 @@ src/
     prune.ts               # remove stale output files
     clear.ts               # delete all Sous-written files for a project
     launch.ts              # build + spawn a coding agent tool
+    update.ts              # update sous itself, globally and in the project; never handed off
     namespace/
       list.ts              # every namespace the trusted repos publish, and your coverage of it
       show.ts              # one namespace, and every recipe in it
@@ -244,8 +248,18 @@ src/
     env-local.ts           # parses .sous/.env.local and .sous/.env into process.env
     sous-home.ts           # the user-level sous dir (~/.sous or $SOUS_HOME) and its subpaths
     env-file.ts            # line-preserving WRITER for those same two files
-    project-install.mjs    # the hand-off from the invoked sous to a project's own install;
-                           #   plain ESM because bin/run.js calls it before tsx is registered
+    project-install.mjs    # the hand-off from the invoked sous to a project's own install
+                           #   (skipped for `update`), and the project-copy lookup the
+                           #   self-update layer reuses; plain ESM because bin/run.js calls
+                           #   it before tsx is registered
+    self-update/           # what `sous update` does; see "Updating sous itself" below
+      index.ts             # barrel for everything but run.ts
+      versions.ts          # reads the registry's package document; chooses each install's version
+      registry.ts          # fetches that document from the registry npm_config_registry names
+      installs.ts          # finds the project install, each global install and the running copy
+      managers.ts          # each manager's install command, from package-manager-detector
+      plan.ts              # buildUpdatePlans: one plan per install, notices for the rest
+      run.ts               # runSelfUpdate: print each plan, ask, install, then build
     version-report.ts      # what `sous --version` prints: the version alone, or the facts
                            #   under it with --verbose
     settings.ts            # config loader (spawns the kernel), var resolution, scope chain
@@ -808,6 +822,26 @@ reach into a linked checkout or the store: `protectedRepoPaths` names the three 
 `StateService.deleteTrackedFiles` refuses to touch anything under them, whatever the state
 file claims.
 
+### Updating sous itself (`src/lib/self-update/`)
+
+`sous update` (sous-io/sous#135, ADR 0011) finds the installs, plans each one, then takes them
+one at a time. `discoverInstalls` finds the project copy with the hand-off's own
+`findProjectCopy`, reads the project's manager with package-manager-detector's `detect` (plus a
+Yarn Berry correction), falls back to a Yarn Plug'n'Play project when no copy is found
+(`findPnpInstall`: a declaring package.json, a `.pnp.cjs` at or above it, the version from
+`yarn.lock`; the plan carries `pnpRoot`), and finds global installs by asking each manager for its global root
+(`npm root -g`, `pnpm root -g`, `yarn global dir`) through the injectable command runner.
+`chooseVersion` is pure: the default range is `defaultRange(current)`, `>=<current> <<major+1>.0.0-0`,
+so a 0.x install stays below 1.0.0 (not caret semantics). `buildUpdatePlans` returns one plan per
+install and a notice for every copy it will not touch (npx, Volta, an unsupported manager, an
+undeclared copy). `runSelfUpdate` fetches the registry first (an unreachable one fails the run),
+plans everything, then prints, asks (one question per install, `--yes` answers all) and runs each
+install through the injectable `InstallExecutor`, and finally runs the NEW project copy's bin with
+`build` under `SOUS_NO_DELEGATE=1` in the directory `Update.buildDirFor` names (under Plug'n'Play,
+`yarn run --binaries-only sous build`, since no bin is on disk). Nothing in the
+tests needs a network or a real package manager: `self-update.test.ts` drives the flow in process,
+and `update-command.test.ts` boots the real bin against a loopback registry and fake managers.
+
 ## Config Discovery
 
 There is no user-level config LAYER; no configuration is read from the user-level sous
@@ -815,9 +849,9 @@ directory (`~/.sous`, or `$SOUS_HOME`), which holds only machine-wide state such
 recipe store. Every command locates its config the same way, in `BaseCommand.init()` (see
 `config-discovery.ts`).
 
-**The one command that runs before a config exists.** `BaseCommand` carries a static
-`requiresConfig`, true everywhere but on `sous init`, which creates the config. Discovery still
-runs for it, and what the config-locating flags and environment said is kept in
+**The commands that run without a config.** `BaseCommand` carries a static
+`requiresConfig`, true everywhere but on `sous init`, which creates the config, and `sous
+update`, which updates sous wherever it is installed. Discovery still runs for them, and what the config-locating flags and environment said is kept in
 `configLocator`, which is how `--sous-dir` and `SOUS_DIR` decide where init writes; but finding
 nothing returns from `init()` instead of failing, and `settings` stays unset. The steps that
 follow discovery (env files, the second layer enumeration, `loadSettings`) live in
@@ -826,6 +860,16 @@ for the config it has just written, so both go through one path. When discovery 
 and the command needs a config, the `formatNotFoundMessage` block names `sous init` as the
 first fix and `--config` as the second; it no longer prints a config to copy, because init
 writes one and an inlined sample would only be a second copy to keep in step.
+
+**A config that fails to load.** A second static, `toleratesConfigErrors` (false by default),
+decides what a FAILURE to locate or load a config does; finding none is still
+`requiresConfig`'s question. Only `sous update` sets it, because a config this copy rejects
+(one written for a newer sous) is what installing a newer copy may fix. Then any failure in
+discovery, in `refreshDiscoveredConfig` or in `loadSettings` becomes one `warning` naming the
+config and quoting the error, the env files `adoptConfig` injected are taken back out of
+`process.env`, nothing is adopted (`hasConfig` is false), and `rejectedConfig` holds the path
+and `.sous/` directory of a config that was found but not loaded, which is where `update`'s
+post-update build still runs.
 
 What init writes is decided by `scaffoldProject` in `src/lib/project-scaffold/`, built the way
 `repos/scaffold/` is: plain string builders in `templates.ts` (the comments in the generated
@@ -1317,6 +1361,7 @@ This enables `sous prune` (remove stale outputs) and `sous clear` (delete all ou
 | `sous clear` | Delete all Sous-written files for a project (`--force` / `-f`, also `--yes` / `-y`) |
 | `sous help [topic] [command]` | Print the same screen `--help` and `-h` print, for the CLI, a topic or a command |
 | `sous launch <tool>` | Build then spawn agent (e.g., `sous launch claude`); a failed build starts nothing |
+| `sous update` | Update sous itself: every global install npm, pnpm or Yarn classic holds, and the project's own install, each through its own manager, printing every plan first and asking once per install; after a project update the new copy runs `build`, so the core pin moves. Default target is the newest version in each install's current major, never a downgrade (`--major`, `--version <version\|range\|tag>` which may downgrade, `--prerelease` / `--no-prerelease`, `--global`, `--project`, `--yes` / `-y`, `--dry-run`, `--no-build`); runs outside a project, is never handed off, and a config it cannot load is a warning |
 | `sous config show` | Print the merged config (all layers merged, before var resolution) as JSON |
 | `sous config get <path>` | Print one value by dot-path (e.g. `compilation.targets[0].entryPoint`); `--layers` shows per-layer provenance |
 | `sous config validate` | Validate the merged config: schema, then full variable resolution |
@@ -1576,8 +1621,10 @@ flags even in non-strict mode otherwise) and splits argv at the first `--` itsel
 
 - Every command that works on a PROJECT extends `BaseCommand`, which discovers the config,
   loads `.env.local`, and loads settings on every run. Discovery is required for those; the
-  one opt-out is `static requiresConfig = false`, which only `sous init` sets, because it
-  creates the config (see Config Discovery). The exceptions extend `Command` directly and are
+  opt-out is `static requiresConfig = false`, which `sous init` sets because it creates the
+  config and `sous update` sets because it runs anywhere, and `static toleratesConfigErrors =
+  true`, which only `sous update` sets, turns a config that fails to load into a warning (see
+  Config Discovery). The exceptions extend `Command` directly and are
   listed with their reasons under Key Commands: the three that run inside a recipe
   repository, and `help`.
 - `CompilationService` (alias `MarkdownCompiler`) is the core compiler class

@@ -88,6 +88,20 @@ export abstract class BaseCommand extends Command {
    */
   static requiresConfig = true;
 
+  /**
+   * Whether a config that cannot be located or loaded stops this command. It
+   * is false on every command but the one whose job may be to repair that
+   * config: `sous update` installs a sous that may understand a config this
+   * copy rejects (one written for a newer version, say). When true, a failure
+   * to locate or load the config becomes one warning, naming the config and
+   * quoting the error, and the run carries on with no config adopted:
+   * `hasConfig` is false, the env files are not applied, and `rejectedConfig`
+   * says where the config that failed to load was, when discovery found it.
+   * It only changes what a FAILURE does; finding no config at all is still
+   * decided by `requiresConfig`.
+   */
+  static toleratesConfigErrors = false;
+
   protected settings!: Settings;
 
   /** Where the active config was found. */
@@ -102,6 +116,13 @@ export abstract class BaseCommand extends Command {
 
   /** The full discovery result, including how the config was located. */
   protected discovered!: DiscoveredConfig;
+
+  /**
+   * The config discovery found but could not load, on a command that
+   * `toleratesConfigErrors`. Undefined when the config loaded, when there was
+   * none, or when the failure came before any config file was identified.
+   */
+  protected rejectedConfig?: { configPath: string; sousDir: string };
 
   /**
    * The real shell environment, snapshotted BEFORE the `.sous/` env files are
@@ -177,7 +198,7 @@ export abstract class BaseCommand extends Command {
       [sousDirEnv, "SOUS_DIR"],
     ];
     const primary = primaryCandidates.find(([value]) => value !== undefined);
-    const requiresConfig = (this.constructor as typeof BaseCommand).requiresConfig;
+    const { requiresConfig, toleratesConfigErrors } = this.constructor as typeof BaseCommand;
 
     this.configLocator = {
       cwd,
@@ -195,6 +216,12 @@ export abstract class BaseCommand extends Command {
       try {
         discovered = resolveConfigFlag(primarySource, cwd, confDirOverride, sourceLabel);
       } catch (error) {
+        if (toleratesConfigErrors) {
+          return this.warnConfigNotLoaded(
+            error,
+            `the project config at ${this.configLocator.primary?.value} (named by ${sourceLabel})`
+          );
+        }
         // A command that creates the config is pointed at a place with none in
         // it by design; the flag still says where, so this is not a failure.
         if (!requiresConfig) return;
@@ -202,7 +229,12 @@ export abstract class BaseCommand extends Command {
         return this.exit(1);
       }
     } else {
-      discovered = discoverConfig(cwd, confDirOverride);
+      try {
+        discovered = discoverConfig(cwd, confDirOverride);
+      } catch (error) {
+        if (!toleratesConfigErrors) throw error;
+        return this.warnConfigNotLoaded(error, `the project config it found searching up from ${cwd}`);
+      }
     }
 
     if (!discovered) {
@@ -243,6 +275,7 @@ export abstract class BaseCommand extends Command {
     try {
       refreshed = refreshDiscoveredConfig(discovered);
     } catch (error) {
+      if (this.toleratesConfigErrors) return this.rejectConfig(discovered, error);
       displayErrorBlock(error instanceof Error ? error.message : String(error), this.errorSink);
       return this.exit(1);
     }
@@ -262,9 +295,49 @@ export abstract class BaseCommand extends Command {
     try {
       this.settings = await loadSettings(refreshed);
     } catch (error) {
+      if (this.toleratesConfigErrors) return this.rejectConfig(refreshed, error);
       displayErrorBlock(error instanceof Error ? error.message : String(error), this.errorSink);
       return this.exit(1);
     }
+  }
+
+  /** The `toleratesConfigErrors` setting of the running command's class. */
+  private get toleratesConfigErrors(): boolean {
+    return (this.constructor as typeof BaseCommand).toleratesConfigErrors;
+  }
+
+  /**
+   * Undoes a config adoption that failed on a command that tolerates it: the
+   * env files it injected are taken back out of `process.env`, nothing is left
+   * adopted, and one warning says what happened.
+   */
+  private rejectConfig(discovered: DiscoveredConfig, error: unknown): void {
+    for (const name of Object.keys(process.env)) {
+      if (!(name in this.shellEnv)) delete process.env[name];
+    }
+    this.shellEnv = {};
+    this.discovered = undefined as unknown as DiscoveredConfig;
+    this.configContext = undefined as unknown as ConfigContext;
+    this.rejectedConfig = { configPath: discovered.configPath, sousDir: discovered.sousDir };
+    this.warnConfigNotLoaded(error, `the project config at ${discovered.configPath}`);
+  }
+
+  /**
+   * The one warning a command that tolerates config errors prints in place of
+   * failing.
+   *
+   * @param error - What locating or loading the config threw.
+   * @param config - Which config: its file, or where it was looked for.
+   */
+  private warnConfigNotLoaded(error: unknown, config: string): void {
+    const message = error instanceof Error ? error.message : String(error);
+    warning(
+      `Sous could not load ${config}, so this command carries on without it.\n` +
+        "\n" +
+        "The error was:\n" +
+        message,
+      this.errorSink
+    );
   }
 
   /**
