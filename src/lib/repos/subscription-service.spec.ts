@@ -79,3 +79,128 @@ describe("SubscriptionService", () => {
     );
   });
 });
+
+describe("SubscriptionService with a ref written as a location", () => {
+  /** The index of github.com/vendor/recipes, with its recipes in recipes/<key>. */
+  const VENDOR = JSON.stringify({
+    formatVersion: 1,
+    name: "vendor-recipes",
+    generatedAt: "2026-01-01T00:00:00.000Z",
+    generator: "0.0.1",
+    namespaces: { workflow: {} },
+    recipes: {
+      "workflow/alpha": {
+        path: "recipes/workflow/alpha",
+        versions: {
+          "1.0.0": {
+            hash: `sha256-${"b".repeat(64)}`,
+            tag: "workflow/alpha@1.0.0",
+            prerelease: false,
+          },
+        },
+      },
+    },
+  });
+
+  /** A fetch serving the vendor index, and nothing else. */
+  const vendorOnly: FetchLike = async (url) =>
+    url.includes("/vendor/recipes/")
+      ? {
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          text: async () => VENDOR,
+          headers: { get: () => null },
+        }
+      : {
+          ok: false,
+          status: 404,
+          statusText: "Not Found",
+          text: async () => "",
+          headers: { get: () => null },
+        };
+
+  /** A service over a fresh project, trusting the repositories given. */
+  function serviceWith(repos: Record<string, { url: string }>): SubscriptionService {
+    const tmp = makeTmpDir("sous-subscribe-location-");
+    tmpDirs.push(tmp);
+    return new SubscriptionService({
+      sousDir: path.join(tmp.path, "project", ".sous"),
+      settings: makeSettings({ repos } as Parameters<typeof makeSettings>[0]),
+      env: { SOUS_HOME: path.join(tmp.path, "sous-home") },
+      providerOptions: { env: { GITHUB_TOKEN: "test-token" }, fetchImpl: vendorOnly },
+      interactive: false,
+      warn: () => {},
+      write: () => {},
+    });
+  }
+
+  /**
+   * A browser URL for a repository the project does not trust yet runs the
+   * trust ceremony for that repository, then settles the URL through its
+   * index. What is recorded and printed is the canonical form.
+   *
+   * subscribe({ ref: "https://github.com/vendor/recipes/tree/main/recipes/workflow/alpha" })
+   * // -> ref "recipes:workflow/alpha", key "workflow/alpha", trusted ["recipes"]
+   */
+  it("should trust the repository at a location, then settle the ref through its index", async () => {
+    const service = serviceWith({});
+    const url = "https://github.com/vendor/recipes/tree/main/recipes/workflow/alpha";
+
+    const outcome = await service.subscribe({ ref: url, trust: true, yes: true, dryRun: true });
+
+    expect(outcome.ref).toBe("recipes:workflow/alpha");
+    expect(outcome.key).toBe("workflow/alpha");
+    expect(outcome.resolvedFrom).toBe(url);
+    expect(outcome.trusted).toEqual(["recipes"]);
+  });
+
+  /**
+   * A location naming a repository the project already trusts, under any short
+   * name, is matched by identity and needs no ceremony; names typed in another
+   * case still settle.
+   *
+   * subscribe({ ref: "git@github.com:vendor/recipes.git/Workflow/Alpha" })
+   * // -> ref "mine:workflow/alpha", trusted []
+   */
+  it("should match a trusted repository by identity, whatever it is called", async () => {
+    const service = serviceWith({ mine: { url: "https://github.com/vendor/recipes" } });
+
+    const outcome = await service.subscribe({
+      ref: "git@github.com:vendor/recipes.git/Workflow/Alpha",
+      yes: true,
+      dryRun: true,
+    });
+
+    expect(outcome.ref).toBe("mine:workflow/alpha");
+    expect(outcome.trusted).toEqual([]);
+  });
+
+  /**
+   * A short ref typed in another case settles to the published spelling.
+   *
+   * subscribe({ ref: "Workflow/Alpha" }) // -> ref "mine:workflow/alpha"
+   */
+  it("should settle a short ref typed in another case", async () => {
+    const service = serviceWith({ mine: { url: "https://github.com/vendor/recipes" } });
+
+    const outcome = await service.subscribe({ ref: "Workflow/Alpha", yes: true, dryRun: true });
+
+    expect(outcome.ref).toBe("mine:workflow/alpha");
+    expect(outcome.resolvedFrom).toBe("Workflow/Alpha");
+  });
+
+  /**
+   * A location whose repository publishes nothing there is an error that says
+   * so rather than a guess.
+   *
+   * subscribe({ ref: "github://vendor/recipes/workflow/gamma" }) // throws
+   */
+  it("should refuse a location its repository does not publish", async () => {
+    const service = serviceWith({ mine: { url: "https://github.com/vendor/recipes" } });
+
+    await expect(
+      service.subscribe({ ref: "github://vendor/recipes/workflow/gamma", yes: true, dryRun: true })
+    ).rejects.toThrow(/publishes no namespace or recipe there/);
+  });
+});

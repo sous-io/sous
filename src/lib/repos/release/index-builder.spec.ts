@@ -325,6 +325,44 @@ describe("buildIndex()", () => {
   });
 
   /**
+   * A dependency that reads more than one way is recorded as the release
+   * settled it: under every key it reached, with the repository it settled on,
+   * so a consumer reads the answer instead of probing. One that reads one way
+   * and names a whole namespace elsewhere records nothing, because the
+   * consumer reads that namespace from the other repository's own index.
+   *
+   * settled: { "gitlab://a/b/c/d" -> gitlab.com/a/b/c, keys ["d/x", "d/y"] }
+   * // -> dependencies { "d/x": { repo, range: "*" }, "d/y": { repo, range: "*" } }
+   */
+  it("should record a settled dependency under every key it reached", async () => {
+    writeFile(
+      repo,
+      "recipes/core/example/sous.recipe.yaml",
+      "formatVersion: 1\nnamespace: core\nname: example\nversion: 1.0.0\n" +
+        "description: An example recipe.\n" +
+        "depends:\n  - gitlab://a/b/c/d\n  - github://o/r/workflow\n"
+    );
+    commitAll(repo, "depend on a nested group");
+    git(repo, "tag", "--annotate", "core/example@1.0.0", "--message", "release");
+
+    const result = await buildIndex({
+      validation: validateRepo(repo),
+      sousVersion: GENERATOR,
+      now: new Date("2026-09-10T12:00:00.000Z"),
+      settled: new Map([
+        ["gitlab://a/b/c/d", { identity: "gitlab.com/a/b/c", keys: ["d/x", "d/y"] }],
+      ]),
+    });
+
+    expect(
+      result.index.recipes["core/example"]!.versions["1.0.0"]!.dependencies
+    ).toEqual({
+      "d/x": { repo: "gitlab.com/a/b/c", range: "*" },
+      "d/y": { repo: "gitlab.com/a/b/c", range: "*" },
+    });
+  });
+
+  /**
    * Tags for a recipe the repository no longer publishes are ordinary history
    * after a rename, so they are reported as a warning and left alone.
    */

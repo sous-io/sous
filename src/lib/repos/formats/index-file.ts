@@ -31,6 +31,7 @@ import {
   semverVersionSchema,
   stableJsonStringify,
 } from "./common.js";
+import { namespaceOfKey } from "../../refs/parse.js";
 
 /**
  * One dependency of one published version, as the release resolved it.
@@ -142,7 +143,7 @@ export const indexFileSchema = forwardCompatibleObject({
   // A recipe whose namespace is not declared could never be resolved, so a
   // release that produced one is broken; say which recipe and which namespace.
   for (const key of Object.keys(index.recipes)) {
-    const namespace = key.slice(0, key.indexOf("/"));
+    const namespace = namespaceOfKey(key);
     if (!Object.hasOwn(index.namespaces, namespace)) {
       ctx.addIssue({
         code: "custom",

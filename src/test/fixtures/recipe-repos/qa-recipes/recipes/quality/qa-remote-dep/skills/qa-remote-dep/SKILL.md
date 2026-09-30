@@ -13,6 +13,8 @@ Read this recipe's manifest beside this file. It declares two dependencies:
 - `github://sous-io/sous-recipes/workflow/sub-agent-delegation@^1.0`, a recipe
   in another repository, written as a locator whose scheme is the provider.
 
-The last two segments of a locator are always the namespace and the recipe;
-everything before them is the repository. A path such as `../qa-helper` is
-refused, and so is a short name such as `qa-recipes:workflow/qa-helper`.
+A dependency is recorded as its published identity (namespace and recipe),
+never as a folder path; any spelling that settles to one identity is accepted,
+including an HTTPS or SSH URL, or a URL copied from the browser. A path such as
+`../qa-helper` is refused, and so is a short name such as
+`qa-recipes:workflow/qa-helper`.

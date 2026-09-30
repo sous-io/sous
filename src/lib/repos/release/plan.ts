@@ -24,7 +24,8 @@
 import path from "node:path";
 import semver from "semver";
 import { hashDirectory } from "../store/hash.js";
-import { parseDependencyRef } from "../ref.js";
+import { isNamedReading, parseRef, splitRecipeKey } from "../../refs/parse.js";
+import { RefSource } from "../../refs/scopes.js";
 import type { RunOptions } from "../providers/git.js";
 import { listRecipeTags, tagFor, withTaggedTree, type RecipeTag } from "./tags.js";
 import { nextVersion, type BumpLevel } from "./bump.js";
@@ -343,13 +344,14 @@ export function siblingKeysOf(validation: RepoValidation, key: string): string[]
 
   const keys: string[] = [];
   for (const written of declared) {
-    let parsed;
+    let readings;
     try {
-      parsed = parseDependencyRef(written);
+      readings = parseRef(written, RefSource.Manifest);
     } catch {
       continue;
     }
-    if (parsed.kind !== "sibling") continue;
+    const parsed = readings[0]!;
+    if (!isNamedReading(parsed) || parsed.location !== undefined) continue;
 
     if (parsed.recipe !== undefined) {
       keys.push(`${parsed.namespace}/${parsed.recipe}`);
@@ -502,8 +504,8 @@ function coveredByScope(recipe: ValidatedRecipe, scope: ReleaseScope): boolean {
 
 /** The tag that publishes one version of one recipe key. */
 function tagOf(key: string, version: string): string {
-  const slash = key.indexOf("/");
-  return tagFor(key.slice(0, slash), key.slice(slash + 1), version);
+  const { namespace, name } = splitRecipeKey(key);
+  return tagFor(namespace, name, version);
 }
 
 /** Renders an absolute path as a repository-relative one, with forward slashes. */

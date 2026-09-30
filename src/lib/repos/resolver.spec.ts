@@ -12,7 +12,7 @@ import {
   type ResolveContext,
   type ResolverRepo,
 } from "./resolver.js";
-import { parseRef } from "./ref.js";
+import { parseShortRef as parseRef } from "../refs/parse.js";
 import type { IndexFile } from "./formats/index-file.js";
 import type { RecipeManifest } from "./formats/recipe-manifest.js";
 import { makeIndexFile } from "../../test/utils/repo-fixtures.js";
@@ -475,6 +475,207 @@ describe("resolveRefs()", () => {
       "our-mirror:core/partials@1.1.0",
       "sous-recipes:workflow/task-files@1.0.0",
     ]);
+  });
+
+  /**
+   * Every location form a manifest may write resolves the same way: an HTTPS
+   * URL, a host path and an SSH remote with a `.git` suffix all name the same
+   * added repository.
+   *
+   * depends: ["https://github.com/vendor/vendor-recipes/core/partials"]
+   * // -> our-mirror:core/partials
+   */
+  it("should resolve a dependency written in any location form", async () => {
+    for (const written of [
+      "https://github.com/vendor/vendor-recipes/core/partials",
+      "github.com/vendor/vendor-recipes.git/core/partials",
+      "git@github.com:vendor/vendor-recipes.git/core/partials",
+      "github://vendor/vendor-recipes/core/*",
+    ]) {
+      const context = makeContext({
+        indexes: {
+          "sous-recipes": makeIndexFile("sous-recipes", { "workflow/task-files": ["1.0.0"] }),
+          "our-mirror": makeIndexFile("our-mirror", { "core/partials": ["1.0.0"] }),
+        },
+        repos: {
+          "sous-recipes": {
+            url: "https://github.com/sous-io/sous-recipes",
+            identity: "github.com/sous-io/sous-recipes",
+          },
+          "our-mirror": {
+            url: "https://github.com/vendor/vendor-recipes",
+            identity: "github.com/vendor/vendor-recipes",
+          },
+        },
+        manifests: {
+          "workflow/task-files": manifest("workflow/task-files", "1.0.0", { depends: [written] }),
+        },
+      });
+
+      const result = await resolveRefs([ask("workflow/task-files")], context);
+      expect(result.resolved.map((recipe) => `${recipe.repo}:${recipe.key}`), written).toEqual([
+        "our-mirror:core/partials",
+        "sous-recipes:workflow/task-files",
+      ]);
+    }
+  });
+
+  /**
+   * A browser URL is settled through the folder each recipe of the added
+   * repository lives in, once the project has that repository's index.
+   *
+   * depends: ["https://github.com/vendor/vendor-recipes/tree/main/packages/partials"]
+   * // -> our-mirror:core/partials, the recipe in packages/partials
+   */
+  it("should settle a browser URL dependency through the recipe folders", async () => {
+    const context = makeContext({
+      indexes: {
+        "sous-recipes": makeIndexFile("sous-recipes", { "workflow/task-files": ["1.0.0"] }),
+        "our-mirror": makeIndexFile("our-mirror", {
+          "core/partials": { versions: ["1.0.0"], path: "packages/partials" },
+          "core/other": ["1.0.0"],
+        }),
+      },
+      repos: {
+        "sous-recipes": {
+          url: "https://github.com/sous-io/sous-recipes",
+          identity: "github.com/sous-io/sous-recipes",
+        },
+        "our-mirror": {
+          url: "https://github.com/vendor/vendor-recipes",
+          identity: "github.com/vendor/vendor-recipes",
+        },
+      },
+      manifests: {
+        "workflow/task-files": manifest("workflow/task-files", "1.0.0", {
+          depends: ["https://github.com/vendor/vendor-recipes/tree/main/packages/partials@^1"],
+        }),
+      },
+    });
+
+    const result = await resolveRefs([ask("workflow/task-files")], context);
+
+    expect(result.resolved.map((recipe) => `${recipe.repo}:${recipe.key}`)).toEqual([
+      "our-mirror:core/partials",
+      "sous-recipes:workflow/task-files",
+    ]);
+    expect(result.resolved[0]!.ranges).toEqual([
+      { range: "^1", requestedBy: "workflow/task-files" },
+    ]);
+  });
+
+  /**
+   * A browser URL naming no recipe folder in the repository is an error that
+   * says so, and names the recipe that asked for it.
+   *
+   * depends: ["https://github.com/vendor/vendor-recipes/tree/main/docs"] // throws
+   */
+  it("should refuse a browser URL dependency that names no recipe", async () => {
+    const context = makeContext({
+      indexes: {
+        "sous-recipes": makeIndexFile("sous-recipes", { "workflow/task-files": ["1.0.0"] }),
+        "our-mirror": makeIndexFile("our-mirror", { "core/partials": ["1.0.0"] }),
+      },
+      repos: {
+        "sous-recipes": { url: "https://github.com/sous-io/sous-recipes", identity: "github.com/sous-io/sous-recipes" },
+        "our-mirror": { url: "https://github.com/vendor/vendor-recipes", identity: "github.com/vendor/vendor-recipes" },
+      },
+      manifests: {
+        "workflow/task-files": manifest("workflow/task-files", "1.0.0", {
+          depends: ["https://github.com/vendor/vendor-recipes/tree/main/docs"],
+        }),
+      },
+    });
+
+    await expect(resolveRefs([ask("workflow/task-files")], context)).rejects.toThrow(
+      /names a folder, and the index .* publishes no recipe there/
+    );
+  });
+
+  /**
+   * A dependency that reads more than one way (a GitLab nested group) resolves
+   * to the reading the release recorded in the index, without probing.
+   *
+   * depends: ["gitlab://acme/team/recipes/core/partials"], index records
+   * core/partials -> gitlab.com/acme/team
+   * // -> the recipe core/partials in the project acme/team
+   */
+  it("should settle an ambiguous dependency by what the index recorded", async () => {
+    const context = makeContext({
+      indexes: {
+        "sous-recipes": makeIndexFile("sous-recipes", {
+          "workflow/task-files": {
+            versions: ["1.0.0"],
+            dependencies: {
+              "1.0.0": { "recipes/core": { repo: "gitlab.com/acme/team", range: "*" } },
+            },
+          },
+        }),
+        team: makeIndexFile("team", { "recipes/core": ["1.0.0"] }),
+      },
+      repos: {
+        "sous-recipes": { url: "https://github.com/sous-io/sous-recipes", identity: "github.com/sous-io/sous-recipes" },
+        team: { url: "https://gitlab.com/acme/team", identity: "gitlab.com/acme/team" },
+      },
+      manifests: {
+        "workflow/task-files": manifest("workflow/task-files", "1.0.0", {
+          depends: ["gitlab://acme/team/recipes/core"],
+        }),
+      },
+    });
+
+    const result = await resolveRefs([ask("workflow/task-files")], context);
+
+    expect(result.resolved.map((recipe) => `${recipe.repo}:${recipe.key}`)).toEqual([
+      "team:recipes/core",
+      "sous-recipes:workflow/task-files",
+    ]);
+  });
+
+  /**
+   * With nothing recorded, a reading whose repository is already added and
+   * whose cached index publishes it settles the dependency; with nothing known
+   * either, the dependency is an error listing every reading.
+   *
+   * depends: ["gitlab://acme/team/recipes/core"], nothing recorded, nothing added
+   * // throws "... can be read 2 ways ..."
+   */
+  it("should settle an ambiguous dependency by what is known, or refuse it", async () => {
+    const base = {
+      manifests: {
+        "workflow/task-files": manifest("workflow/task-files", "1.0.0", {
+          depends: ["gitlab://acme/team/recipes/core"],
+        }),
+      },
+    };
+
+    const known = await resolveRefs(
+      [ask("workflow/task-files")],
+      makeContext({
+        ...base,
+        indexes: {
+          "sous-recipes": makeIndexFile("sous-recipes", { "workflow/task-files": ["1.0.0"] }),
+          team: makeIndexFile("team", { "recipes/core": ["1.0.0"] }),
+        },
+        repos: {
+          "sous-recipes": { url: "https://github.com/sous-io/sous-recipes", identity: "github.com/sous-io/sous-recipes" },
+          team: { url: "https://gitlab.com/acme/team", identity: "gitlab.com/acme/team" },
+        },
+      })
+    );
+    expect(known.resolved.map((recipe) => recipe.key)).toEqual(["recipes/core", "workflow/task-files"]);
+
+    await expect(
+      resolveRefs(
+        [ask("workflow/task-files")],
+        makeContext({
+          ...base,
+          indexes: {
+            "sous-recipes": makeIndexFile("sous-recipes", { "workflow/task-files": ["1.0.0"] }),
+          },
+        })
+      )
+    ).rejects.toThrow(/can be read 2 ways[\s\S]*gitlab:\/\/acme\/team\/-\/recipes\/core/);
   });
 
   /**

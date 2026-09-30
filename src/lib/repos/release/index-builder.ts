@@ -60,7 +60,9 @@ import {
   type ValidatedRecipe,
   type ValidationProblem,
 } from "./validate.js";
-import { parseDependencyRef } from "../ref.js";
+import { isNamedReading, parseRef, refKey } from "../../refs/parse.js";
+import { RefSource } from "../../refs/scopes.js";
+import type { SettledDependency } from "./settle.js";
 
 /** A version that is ready to publish but has no tag yet. */
 export type PendingRelease = {
@@ -113,6 +115,12 @@ export type BuildIndexOptions = {
    * index that describes itself.
    */
   publishing?: Record<string, string>;
+  /**
+   * The dependencies that read more than one way, as `settleDependencyLocations`
+   * settled them, keyed by the dependency as written. Each is recorded under
+   * the keys it reached, with the repository it settled on.
+   */
+  settled?: Map<string, SettledDependency>;
 };
 
 /** The index file's absolute path in a repository. */
@@ -197,7 +205,7 @@ export async function buildIndex(
     const hasTag = recipeTags.some((entry) => entry.tag === tagName);
     const workingHash = await hashDirectory(recipe.dir);
     const where = relativeTo(rootDir, recipe.manifestPath);
-    const declared = declaredDependencies(recipe, validation);
+    const declared = declaredDependencies(recipe, validation, options.settled);
 
     // A version the index publishes must have a tag, with one exception: the
     // version the manifest declares right now, which is the one a release is in
@@ -464,10 +472,12 @@ type SiblingState = {
  *
  * @param recipe - The recipe whose dependencies are being read.
  * @param validation - The validated repository, for expanding namespace refs.
+ * @param settled - The dependencies that read more than one way, as the release settled them.
  */
 function declaredDependencies(
   recipe: ValidatedRecipe,
-  validation: RepoValidation
+  validation: RepoValidation,
+  settled: Map<string, SettledDependency> = new Map()
 ): DeclaredDependencies {
   const byKey = new Map<string, DeclaredDependency>();
   const namespaces = new Set<string>();
@@ -488,25 +498,43 @@ function declaredDependencies(
   };
 
   for (const written of declared) {
-    let parsed;
+    // A dependency that reads more than one way was settled by the release,
+    // and what it settled on is what a consumer reads instead of probing.
+    const answer = settled.get(written.trim());
+    if (answer !== undefined) {
+      for (const key of answer.keys) {
+        byKey.set(key, { kind: "remote", repo: answer.identity, range: answer.range ?? "*" });
+      }
+      continue;
+    }
+
+    let readings;
     try {
-      parsed = parseDependencyRef(written);
+      readings = parseRef(written, RefSource.Manifest);
     } catch {
       // A dependency that does not parse is already reported by validation.
       continue;
     }
+    // Several readings, or a browser path, are settled above or reported by
+    // the settling step; there is nothing more to record here.
+    const parsed = readings[0]!;
+    if (readings.length !== 1 || !isNamedReading(parsed)) continue;
 
-    if (parsed.kind === "remote") {
-      byKey.set(`${parsed.namespace}/${parsed.recipe}`, {
-        kind: "remote",
-        repo: parsed.canonicalRepo!,
-        range: parsed.range ?? "*",
-      });
+    if (parsed.location !== undefined) {
+      // A whole namespace in another repository is read from that repository's
+      // own index by the consumer; only a recipe has a key to record.
+      if (parsed.recipe !== undefined) {
+        byKey.set(refKey(parsed), {
+          kind: "remote",
+          repo: parsed.location.identity,
+          range: parsed.range ?? "*",
+        });
+      }
       continue;
     }
 
     if (parsed.recipe !== undefined) {
-      addSibling(`${parsed.namespace}/${parsed.recipe}`, parsed.range, true);
+      addSibling(refKey(parsed), parsed.range, true);
       continue;
     }
 

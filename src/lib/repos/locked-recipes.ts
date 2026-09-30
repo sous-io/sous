@@ -33,6 +33,7 @@ import {
 } from "./load-manifest.js";
 import { readEffectiveLinks } from "./links.js";
 import { identitySegments } from "./identity.js";
+import { splitRecipeKey } from "../refs/parse.js";
 import { PROJECT_HOLDER } from "./formats/lockfile.js";
 
 /** One locked recipe, together with the directory its files are read from. */
@@ -164,8 +165,7 @@ export function listLockedRecipes(
 
   for (const key of keys.sort()) {
     const entry = lock.recipes[key]!;
-    const namespace = key.slice(0, key.indexOf("/"));
-    const name = key.slice(namespace.length + 1);
+    const { namespace, name } = splitRecipeKey(key);
 
     let dir: string | undefined;
     let linked = false;

@@ -15,7 +15,6 @@ const EXPECTED_EXPORTS = [
   "DEFAULT_FRESHNESS_SECONDS",
   "DEFAULT_STORE_MAX_BYTES",
   "DEFAULT_WATCH_POLL_SECONDS",
-  "DEPENDENCY_PROVIDER_HOSTS",
   "ENV_VAR_NAME_PATTERN",
   "GITHUB_HOST",
   "GITHUB_TOKEN_ENV",
@@ -66,8 +65,6 @@ const EXPECTED_EXPORTS = [
   "createEmptyLinksMap",
   "createEmptyLockfile",
   "createIndexCache",
-  "dependencyRefKey",
-  "dependencyRepoUrl",
   "detectProvider",
   "detectProviderIn",
   "effectiveRangeForHolders",
@@ -81,9 +78,7 @@ const EXPECTED_EXPORTS = [
   "findNewerInRange",
   "findRecipeManifest",
   "findRepoManifest",
-  "formatDependencyRef",
   "formatIssuePath",
-  "formatRef",
   "formatStoreKey",
   "formatVersionSchema",
   "forwardCompatibleObject",
@@ -96,8 +91,6 @@ const EXPECTED_EXPORTS = [
   "indexRecipeSchema",
   "indexVersionSchema",
   "invalidRepoUrl",
-  "isNamespaceRef",
-  "isValidRef",
   "isoTimestampSchema",
   "keysHeldBySubscription",
   "linksMapSchema",
@@ -111,27 +104,26 @@ const EXPECTED_EXPORTS = [
   "mergeLinksMaps",
   "namespaceNameSchema",
   "normalizeRepoUrl",
-  "parseDependencyRef",
+  "proposeRepoName",
   "parseFormat",
   "parseIndexFile",
   "parseJsoncText",
   "parseLinksMap",
   "parseLockfile",
   "parseRecipeManifest",
-  "parseRef",
   "parseRepoManifest",
   "parseStoreEntry",
   "parseYamlText",
   "providerById",
   "providerByIdIn",
   "readManagedLayer",
+  "readingsAfterRepository",
   "recipeContentSchema",
   "recipeKeySchema",
   "recipeManifestKey",
   "recipeManifestSchema",
   "recipeNameSchema",
   "recordUpstreamCheck",
-  "refKey",
   "refKeySchema",
   "relativePathSchema",
   "removeManagedLayer",
@@ -139,6 +131,7 @@ const EXPECTED_EXPORTS = [
   "repoIdentitySchema",
   "repoLinkSchema",
   "repoManifestSchema",
+  "repoNamedByIdentity",
   "repoNameSchema",
   "repoNamespaceSchema",
   "requireProvider",
@@ -148,6 +141,7 @@ const EXPECTED_EXPORTS = [
   "resolveRefs",
   "resolveStoreSettings",
   "runGit",
+  "withoutGitSuffix",
   "sameRepoIdentity",
   "semverRangeSchema",
   "semverVersionSchema",
@@ -164,8 +158,6 @@ const EXPECTED_EXPORTS = [
   "stringifyLockfile",
   "stringifyStoreEntry",
   "tryCommand",
-  "tryParseDependencyRef",
-  "tryParseRef",
   "variableDefinitionSchema",
   "variableNameSchema",
   "variableValidationSchema",
@@ -371,18 +363,5 @@ describe("the repos barrel", () => {
   it("should re-export the shared patterns through common", () => {
     expect(repos.REPO_NAME_PATTERN.test("sous-recipes")).toBe(true);
     expect(repos.REF_KEY_PATTERN.test("workflow/task-files")).toBe(true);
-  });
-
-  /**
-   * A ref parsed through the barrel is the same one the ref module produces, so
-   * a caller never has to reach past it.
-   *
-   * repos.refKey(repos.parseRef("sous-recipes:workflow/task-files@^1.0.0"));
-   * // -> "workflow/task-files"
-   */
-  it("should expose a working ref parser", () => {
-    expect(repos.refKey(repos.parseRef("sous-recipes:workflow/task-files@^1.0.0"))).toBe(
-      "workflow/task-files"
-    );
   });
 });

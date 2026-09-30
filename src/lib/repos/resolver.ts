@@ -27,14 +27,17 @@ import type { IndexFile } from "./formats/index-file.js";
 import type { LockKind } from "./formats/lockfile.js";
 import type { RecipeManifest } from "./formats/recipe-manifest.js";
 import {
-  dependencyRefKey,
-  dependencyRepoUrl,
   formatRef,
-  parseDependencyRef,
+  isBrowsedReading,
+  isNamedReading,
+  parseRef,
   refKey,
-  type DependencyRef,
+  splitRecipeKey,
   type ParsedRef,
-} from "./ref.js";
+  type RefReading,
+} from "../refs/parse.js";
+import { settleBrowsed, settleDependency, settleInIndex } from "../refs/settle.js";
+import { RefSource } from "../refs/scopes.js";
 import { shortNameFromIdentity } from "./identity.js";
 import type { IndexDependency } from "./formats/index-file.js";
 
@@ -186,6 +189,15 @@ type WorkItem = RefRequest & {
     provider?: string;
     /** The dependency exactly as the manifest wrote it, for messages. */
     written: string;
+    /**
+     * A browser path the dependency named, settled through the repository's
+     * index once the project has it. Until then `ref` holds no namespace.
+     */
+    browsed?: string;
+    /** The range the manifest wrote, applied once a browsed path is settled. */
+    range?: string;
+    /** What the declaring version's index records, for pins once a browsed path is settled. */
+    pins?: Record<string, IndexDependency>;
   };
 };
 
@@ -200,24 +212,27 @@ type WorkItem = RefRequest & {
  * version is what gets asked for, rather than whatever the declared range would
  * reach today.
  *
+ * A dependency that reads more than one way (a GitLab URL with nested groups)
+ * is settled by what the release recorded in the index, and failing that by
+ * what the project's own cached indexes already publish; nothing is fetched to
+ * find out. One that still reads several ways is an error naming them.
+ *
  * @param written - The dependency as the manifest wrote it.
  * @param parent - The recipe whose manifest declared it.
  * @param kind - Whether it was declared as a dependency or a co-subscription.
+ * @param context - The added repositories and their cached indexes.
  */
 function dependencyRequest(
   written: string,
   parent: ResolvedRecipe,
-  kind: LockKind
+  kind: LockKind,
+  context: ResolveContext
 ): WorkItem {
-  const parsed = parseDependencyRef(written);
-  const pinned = parent.dependencies?.[dependencyRefKey(parsed)];
-
-  const ref: ParsedRef = { namespace: parsed.namespace };
-  if (parsed.recipe !== undefined) {
-    ref.recipe = parsed.recipe;
-    const range = pinned?.version ?? parsed.range ?? pinned?.range;
-    if (range !== undefined) ref.range = range;
-  }
+  const reading = settleDependency(written, {
+    ...(parent.dependencies === undefined ? {} : { recorded: parent.dependencies }),
+    known: (candidate) => knownLocally(candidate, context),
+  });
+  if (reading === undefined) throw unsettledDependencyError(written, parent);
 
   const base = {
     requestedBy: parent.key,
@@ -225,20 +240,141 @@ function dependencyRequest(
     ...(parent.prerelease ? { prerelease: true } : {}),
   };
 
-  if (parsed.kind === "sibling") {
+  if (isBrowsedReading(reading)) {
+    return {
+      ref: { namespace: "" },
+      ...base,
+      remote: {
+        ...remoteOf(reading, written),
+        browsed: reading.browsed,
+        ...(reading.range === undefined ? {} : { range: reading.range }),
+        ...(parent.dependencies === undefined ? {} : { pins: parent.dependencies }),
+      },
+    };
+  }
+  /* c8 ignore next */
+  if (!isNamedReading(reading)) throw unsettledDependencyError(written, parent);
+
+  const pinned = parent.dependencies?.[refKey(reading)];
+  const ref = pinnedRef(reading, pinned);
+
+  if (reading.location === undefined) {
     return { ref: { ...ref, repo: parent.repo }, ...base };
   }
 
+  const remote = remoteOf(reading, written);
   return {
     ref,
     ...base,
-    remote: {
-      identity: pinned?.repo ?? parsed.canonicalRepo!,
-      url: dependencyRepoUrl(parsed)!,
-      ...(parsed.provider === undefined ? {} : { provider: parsed.provider }),
-      written: written.trim(),
-    },
+    remote: { ...remote, identity: pinned?.repo ?? remote.identity },
   };
+}
+
+/**
+ * A named reading as a request asks for it: at the exact version the index
+ * recorded when it recorded one, otherwise at the range the manifest wrote.
+ *
+ * @param reading - The reading.
+ * @param pinned - What the declaring version's index recorded for it.
+ */
+function pinnedRef(reading: ParsedRef, pinned: IndexDependency | undefined): ParsedRef {
+  const ref: ParsedRef = { namespace: reading.namespace };
+  if (reading.recipe !== undefined) {
+    ref.recipe = reading.recipe;
+    const range = pinned?.version ?? reading.range ?? pinned?.range;
+    if (range !== undefined) ref.range = range;
+  }
+  return ref;
+}
+
+/** Where a located reading's repository lives, as a request carries it. */
+function remoteOf(
+  reading: RefReading,
+  written: string
+): NonNullable<WorkItem["remote"]> {
+  const location = reading.location!;
+  return {
+    identity: location.identity,
+    url: location.url,
+    provider: location.provider,
+    written: written.trim(),
+  };
+}
+
+/**
+ * Whether a reading's repository is one the project added and its cached index
+ * publishes what the reading names. It reads only what is already here.
+ *
+ * @param reading - One reading of a dependency.
+ * @param context - The added repositories and their cached indexes.
+ */
+function knownLocally(reading: RefReading, context: ResolveContext): boolean {
+  if (reading.location === undefined) return false;
+  const added = repoNamedByIdentity(context.repos, reading.location.identity);
+  const index = added === undefined ? undefined : context.indexes.get(added);
+  if (index === undefined) return false;
+  return settleInIndex(reading, { namespaces: Object.keys(index.namespaces), recipes: index.recipes }).length > 0;
+}
+
+/**
+ * The error for a dependency that reads more than one way with nothing to
+ * settle it.
+ *
+ * @param written - The dependency as written.
+ * @param parent - The recipe that declared it.
+ */
+function unsettledDependencyError(written: string, parent: ResolvedRecipe): ConfigError {
+  const readings = parseRef(written, RefSource.Manifest);
+  return new ConfigError(
+    `The dependency '${written.trim()}' of the recipe '${parent.key}' can be read ` +
+      `${readings.length} ways, and nothing says which one it means:\n` +
+      readings.map((reading) => `    ${formatRef(reading)}`).join("\n") +
+      `\n  A release records which one it settled on in the index; the index of ` +
+      `'${parent.repo}' records none for this version. Release the recipe again with this ` +
+      `version of sous, or write the dependency so it reads one way, as one of the forms above.`
+  );
+}
+
+/**
+ * Settles a browsed path, once the project has the repository it names.
+ *
+ * @param item - The request, whose `ref` is filled in.
+ * @param index - The repository's cached index.
+ */
+function settleBrowsedItem(item: WorkItem, index: IndexFile | undefined): void {
+  const remote = item.remote!;
+  const settled =
+    index === undefined
+      ? []
+      : settleBrowsed(remote.browsed!, {
+          namespaces: Object.keys(index.namespaces),
+          recipes: index.recipes,
+        });
+
+  let found: ParsedRef | undefined = settled.length === 1 ? settled[0] : undefined;
+  if (found === undefined) {
+    // The folder may have moved since the release; the key it settled on then
+    // is recorded beside the repository it lives in.
+    const recorded = Object.keys(remote.pins ?? {}).filter(
+      (key) => remote.pins![key]!.repo === remote.identity
+    );
+    if (recorded.length === 1) {
+      const { namespace, name } = splitRecipeKey(recorded[0]!);
+      found = { namespace, recipe: name };
+    }
+  }
+
+  if (found === undefined) {
+    throw new ConfigError(
+      `The dependency '${remote.written}' names a folder, and the index of the repository at ` +
+        `${remote.url} ${settled.length === 0 ? "publishes no recipe there" : "publishes several recipes there"}.` +
+        `\n  It was required by the recipe '${item.requestedBy}'. Write the dependency as the ` +
+        `recipe it means, such as '${remote.url}/<namespace>/<recipe>'.`
+    );
+  }
+
+  const withRange = { ...found, ...(remote.range === undefined ? {} : { range: remote.range }) };
+  item.ref = { ...pinnedRef(withRange, remote.pins?.[refKey(found)]), repo: item.ref.repo };
 }
 
 /**
@@ -249,7 +385,7 @@ function dependencyRequest(
  * @param repos - The repositories the project has added.
  * @param identity - The canonical identity to look for.
  */
-function repoNamedByIdentity(
+export function repoNamedByIdentity(
   repos: Record<string, ResolverRepo>,
   identity: string
 ): string | undefined {
@@ -266,7 +402,7 @@ function repoNamedByIdentity(
  * @param repos - The repositories the project has added.
  * @param identity - The canonical identity of the repository being named.
  */
-function proposeRepoName(
+export function proposeRepoName(
   repos: Record<string, ResolverRepo>,
   identity: string
 ): string {
@@ -334,6 +470,7 @@ export async function resolveRefs(
         continue;
       }
       item.ref = { ...item.ref, repo: added };
+      if (item.remote.browsed !== undefined) settleBrowsedItem(item, context.indexes.get(added));
     }
 
     if (item.ref.recipe === undefined) {
@@ -369,7 +506,7 @@ export async function resolveRefs(
       ["subscribes", manifest.subscribes ?? []],
     ] as Array<[LockKind, string[]]>) {
       for (const written of refs) {
-        queue.push(dependencyRequest(written, recipe, kind));
+        queue.push(dependencyRequest(written, recipe, kind, context));
       }
     }
   }
@@ -473,20 +610,7 @@ async function keepOnlyReachable(
       ["subscribes", manifest.subscribes ?? []],
     ] as Array<[LockKind, string[]]>) {
       for (const written of refs) {
-        let parsed: DependencyRef;
-        try {
-          parsed = parseDependencyRef(written);
-        } catch {
-          continue;
-        }
-        // A namespace ref means every recipe in it, exactly as the walk expanded it.
-        const targets =
-          parsed.recipe === undefined
-            ? [...resolved.keys()].filter((entry) =>
-                entry.startsWith(`${parsed.namespace}/`)
-              )
-            : [dependencyRefKey(parsed)];
-        for (const target of targets) {
+        for (const target of dependencyTargets(written, recipe, context, resolved)) {
           if (!resolved.has(target)) continue;
           if (declare(key, target, kind)) queue.push(target);
         }
@@ -504,6 +628,39 @@ async function keepOnlyReachable(
     recipe.ranges = recipe.ranges.filter((entry) => reached.has(entry.requestedBy));
     recipe.kind = [...reached.values()].includes("subscribes") ? "subscribes" : "depends";
   }
+}
+
+/**
+ * The resolved keys one dependency of a recipe reaches, the same way the walk
+ * reached them: a namespace means every recipe in it, and a browsed path means
+ * the recipe it settles on. A dependency that no longer settles reaches
+ * nothing, because the walk would have failed on it.
+ *
+ * @param written - The dependency as the manifest wrote it.
+ * @param holder - The recipe that declared it.
+ * @param context - The added repositories and their cached indexes.
+ * @param resolved - What the walk resolved.
+ */
+function dependencyTargets(
+  written: string,
+  holder: ResolvedRecipe,
+  context: ResolveContext,
+  resolved: Map<string, ResolvedRecipe>
+): string[] {
+  let item: WorkItem;
+  try {
+    item = dependencyRequest(written, holder, "depends", context);
+    if (item.remote?.browsed !== undefined) {
+      const added = repoNamedByIdentity(context.repos, item.remote.identity);
+      settleBrowsedItem(item, added === undefined ? undefined : context.indexes.get(added));
+    }
+  } catch {
+    return [];
+  }
+  const { namespace } = item.ref;
+  return item.ref.recipe === undefined
+    ? [...resolved.keys()].filter((entry) => entry.startsWith(`${namespace}/`))
+    : [refKey(item.ref)];
 }
 
 /** Records one more reason a repository is needed. */
@@ -622,11 +779,11 @@ function resolveRecipeRef(
   const requestedBy = [...(previous?.requestedBy ?? [])];
   if (!requestedBy.includes(item.requestedBy)) requestedBy.push(item.requestedBy);
 
-  const namespace = key.slice(0, key.indexOf("/"));
+  const { namespace, name } = splitRecipeKey(key);
   return {
     key,
     namespace,
-    name: key.slice(namespace.length + 1),
+    name,
     repo: chosen.repo,
     identity: context.repos[chosen.repo]?.identity ?? chosen.repo,
     version,

@@ -30,6 +30,7 @@ import {
   releaseScope,
   remoteUrl,
   scopeProblems,
+  settleDependencyLocations,
   uncommittedChanges,
   validateRepo,
   warningsIn,
@@ -38,6 +39,7 @@ import {
   type ReleasePlan,
   type ReleaseScope,
   type RepoValidation,
+  type SettledDependency,
   type ValidationProblem,
 } from "../../lib/repos/release/index.js";
 import {
@@ -195,7 +197,14 @@ export default class RepoRelease extends Command {
     }
     log(`  Read ${describeCount(validation.recipes.length, "recipe")}.`);
 
-    if (flags.check) return await this.runCheck(rootDir, validation);
+    // A dependency that reads more than one way is settled before anything is
+    // planned or written, so a repository that cannot be reached stops the run
+    // with nothing changed.
+    const settling = await settleDependencyLocations(validation);
+    reportProblems(settling.problems);
+    if (hasErrors(settling.problems)) return this.stopForErrors(settling.problems);
+
+    if (flags.check) return await this.runCheck(rootDir, validation, settling.settled);
 
     // --- Plan -------------------------------------------------------------
 
@@ -284,6 +293,7 @@ export default class RepoRelease extends Command {
       existing,
       sousVersion: SOUS_VERSION,
       publishing,
+      settled: settling.settled,
     });
     reportProblems(rebuilt.problems);
     if (hasErrors(rebuilt.problems)) return this.stopForErrors(rebuilt.problems);
@@ -365,15 +375,22 @@ export default class RepoRelease extends Command {
    *
    * @param rootDir - The repository's root directory.
    * @param validation - The validated repository.
+   * @param settled - The dependencies that read more than one way, as settled.
    */
   private async runCheck(
     rootDir: string,
-    validation: RepoValidation
+    validation: RepoValidation,
+    settled: Map<string, SettledDependency>
   ): Promise<void> {
     section("Checking the index");
 
     const existing = readExistingIndex(rootDir);
-    const result = await buildIndex({ validation, existing, sousVersion: SOUS_VERSION });
+    const result = await buildIndex({
+      validation,
+      existing,
+      sousVersion: SOUS_VERSION,
+      settled,
+    });
     reportProblems(result.problems);
     if (hasErrors(result.problems)) return this.stopForErrors(result.problems);
 

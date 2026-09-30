@@ -8,5 +8,7 @@
  */
 
 export * from "./scopes.js";
+export * from "./parse.js";
+export * from "./settle.js";
 export * from "./find.js";
 export * from "./pick.js";
