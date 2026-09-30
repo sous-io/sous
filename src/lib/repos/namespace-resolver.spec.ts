@@ -3,7 +3,6 @@ import { describe, it, expect } from "vitest";
 import {
   StaticNamespaceResolver,
   formatNamespaceProblem,
-  normalizeRef,
   type DroppedRecipe,
   type NamespaceResolution,
 } from "./namespace-resolver.js";
@@ -155,15 +154,16 @@ describe("StaticNamespaceResolver", () => {
   });
 
   /**
-   * A declared reference may carry a repository qualifier and a version range;
-   * both are decoration around the same recipe ref and are ignored when
-   * matching.
+   * Declared dependencies are settled keys, so a key names exactly one recipe
+   * and nothing is read off a written form: a key for another recipe in the
+   * same namespace does not cover this one.
    *
-   * "sous-public:workflow/task-files@^1.2" matches "workflow/task-files".
+   * dependencies: { "core/sous-skills": ["workflow/other"] }
+   * // "@~workflow/task-files/..." from core/sous-skills -> not-a-dependency
    */
-  it("should match a dependency written with a repo qualifier and a version range", () => {
+  it("should match declared keys exactly", () => {
     const resolver = makeResolver({
-      dependencies: { "core/sous-skills": ["sous-public:workflow/task-files@^1.2"] },
+      dependencies: { "core/sous-skills": ["workflow/other"] },
     });
 
     const result = resolver.resolve({
@@ -172,7 +172,7 @@ describe("StaticNamespaceResolver", () => {
       fromFile: path.join(STORE, "core", "sous-skills", "SKILL.md"),
     });
 
-    expect(result.kind).toBe("candidates");
+    expect(result.kind).toBe("not-a-dependency");
   });
 
   /**
@@ -346,20 +346,6 @@ describe("StaticNamespaceResolver explainMissing", () => {
       recipe: "workflow/gone",
       known: ["workflow/github-projects", "workflow/task-files"],
     });
-  });
-});
-
-describe("normalizeRef()", () => {
-  /**
-   * normalizeRef strips a leading repository qualifier and a trailing version
-   * range, leaving the bare namespace or namespace/recipe form.
-   *
-   * normalizeRef("sous-public:misc/stuff@^1.2"); // -> "misc/stuff"
-   */
-  it("should strip a repo qualifier and a version range", () => {
-    expect(normalizeRef("sous-public:misc/stuff@^1.2")).toBe("misc/stuff");
-    expect(normalizeRef("misc/stuff")).toBe("misc/stuff");
-    expect(normalizeRef("misc")).toBe("misc");
   });
 });
 

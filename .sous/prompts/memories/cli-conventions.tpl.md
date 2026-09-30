@@ -22,8 +22,10 @@ holds the mechanism, use it rather than building a second one beside it.
   command accepts, plus the tighter `findRepository`, `findNamespace`, `findRecipe` and
   `findVariable`), and one settles which meaning a run proceeds with (`pickReference`: one
   match, a question, `--accept-first`, or the shared non-interactive failure). Any level of
-  qualification is accepted up to the fully qualified name, matching is case-sensitive, and
-  the listing order is the contract. What a reference resolved to is reported by
+  qualification is accepted up to the fully qualified name, and so is a location (a URL, an
+  SSH remote, a provider-scheme locator, a URL copied from the browser). Matching tries the
+  exact spelling first, then ignores case; a name that still matches several things is a
+  question. The listing order is the contract. What a reference resolved to is reported by
   `formatResolvedReference` (`src/lib/repos/reference-report.ts`), which `pickReference` calls:
   the facts as a key and value list, then one sentence saying why that candidate won. Never
   resolve a name by walking an index or a definition list in a command.
@@ -47,9 +49,14 @@ holds the mechanism, use it rather than building a second one beside it.
 - **Variable definitions require `description` and `example`.** The description says, in full
   sentences, what the setting is for, what the default does, and what else is acceptable; the
   prompt itself stays one plain question.
-- **Dependencies are declared by location**: a bare sibling ref, or a provider-scheme locator
-  URL. The last two path segments are always the recipe identity (namespace and name), never a
-  filesystem path. The ref grammar lives in `src/lib/repos/ref.ts`.
+- **One ref parser, told where the ref came from**: `parseRef(ref, from)` in
+  `src/lib/refs/parse.ts` reads every form and returns every reading; `RefSource`
+  (`src/lib/refs/scopes.ts`) decides which forms a place allows, and a refused form says what
+  to write instead. Never parse a ref, or split a key, anywhere else (`splitRecipeKey` and
+  `namespaceOfKey` wrap it for stored keys). A ref is stored and printed as its published
+  identity (namespace and recipe), never as a folder path. Any spelling that settles to one
+  identity is accepted, including a folder path or a pasted browser URL; host-specific
+  readings belong to each provider's `readLocation`.
 - **One way to show a key and its value**: `showVariable` and `showVariables` in
   `src/utils/formatting.ts`, four spaces in, labels padded so every colon lines up, values in the
   value color, and anything secondary (a location, a provenance) trailing in muted grey rather

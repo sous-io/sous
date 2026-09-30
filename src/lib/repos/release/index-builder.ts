@@ -60,7 +60,9 @@ import {
   type ValidatedRecipe,
   type ValidationProblem,
 } from "./validate.js";
-import { parseDependencyRef } from "../ref.js";
+import { isNamedReading, namespaceOfKey, parseRef, refKey } from "../../refs/parse.js";
+import { RefSource } from "../../refs/scopes.js";
+import type { SettledDependency } from "./settle.js";
 
 /** A version that is ready to publish but has no tag yet. */
 export type PendingRelease = {
@@ -113,6 +115,12 @@ export type BuildIndexOptions = {
    * index that describes itself.
    */
   publishing?: Record<string, string>;
+  /**
+   * The dependencies that read more than one way, as `settleDependencyLocations`
+   * settled them, keyed by the dependency as written. Each is recorded under
+   * the keys it reached, with the repository it settled on.
+   */
+  settled?: Map<string, SettledDependency>;
 };
 
 /** The index file's absolute path in a repository. */
@@ -181,7 +189,15 @@ export async function buildIndex(
     // repository as it stood at the tag, which is what it was released against.
     for (const tag of recipeTags) {
       if (Object.hasOwn(versions, tag.version)) continue;
-      const rebuilt = await rebuildTaggedVersion(rootDir, tag, recipe, tagsByKey, existing, run);
+      const rebuilt = await rebuildTaggedVersion(
+        rootDir,
+        tag,
+        recipe,
+        tagsByKey,
+        existing,
+        run,
+        options.settled
+      );
       problems.push(...rebuilt.problems);
       versions[tag.version] = {
         hash: rebuilt.hash,
@@ -197,7 +213,7 @@ export async function buildIndex(
     const hasTag = recipeTags.some((entry) => entry.tag === tagName);
     const workingHash = await hashDirectory(recipe.dir);
     const where = relativeTo(rootDir, recipe.manifestPath);
-    const declared = declaredDependencies(recipe, validation);
+    const declared = declaredDependencies(recipe, validation, options.settled);
 
     // A version the index publishes must have a tag, with one exception: the
     // version the manifest declares right now, which is the one a release is in
@@ -464,10 +480,12 @@ type SiblingState = {
  *
  * @param recipe - The recipe whose dependencies are being read.
  * @param validation - The validated repository, for expanding namespace refs.
+ * @param settled - The dependencies that read more than one way, as the release settled them.
  */
 function declaredDependencies(
   recipe: ValidatedRecipe,
-  validation: RepoValidation
+  validation: RepoValidation,
+  settled: Map<string, SettledDependency> = new Map()
 ): DeclaredDependencies {
   const byKey = new Map<string, DeclaredDependency>();
   const namespaces = new Set<string>();
@@ -488,25 +506,43 @@ function declaredDependencies(
   };
 
   for (const written of declared) {
-    let parsed;
+    // A dependency that reads more than one way was settled by the release,
+    // and what it settled on is what a consumer reads instead of probing.
+    const answer = settled.get(written.trim());
+    if (answer !== undefined) {
+      for (const key of answer.keys) {
+        byKey.set(key, { kind: "remote", repo: answer.identity, range: answer.range ?? "*" });
+      }
+      continue;
+    }
+
+    let readings;
     try {
-      parsed = parseDependencyRef(written);
+      readings = parseRef(written, RefSource.Manifest);
     } catch {
       // A dependency that does not parse is already reported by validation.
       continue;
     }
+    // Several readings, or a browser path, are settled above or reported by
+    // the settling step; there is nothing more to record here.
+    const parsed = readings[0]!;
+    if (readings.length !== 1 || !isNamedReading(parsed)) continue;
 
-    if (parsed.kind === "remote") {
-      byKey.set(`${parsed.namespace}/${parsed.recipe}`, {
-        kind: "remote",
-        repo: parsed.canonicalRepo!,
-        range: parsed.range ?? "*",
-      });
+    if (parsed.location !== undefined) {
+      // A whole namespace in another repository is read from that repository's
+      // own index by the consumer; only a recipe has a key to record.
+      if (parsed.recipe !== undefined) {
+        byKey.set(refKey(parsed), {
+          kind: "remote",
+          repo: parsed.location.identity,
+          range: parsed.range ?? "*",
+        });
+      }
       continue;
     }
 
     if (parsed.recipe !== undefined) {
-      addSibling(`${parsed.namespace}/${parsed.recipe}`, parsed.range, true);
+      addSibling(refKey(parsed), parsed.range, true);
       continue;
     }
 
@@ -663,7 +699,7 @@ function checkRecordedDependencies(
     if (declared.byKey.has(name)) continue;
     // A recipe the declared namespace held when the version was published, and
     // no longer does, is history rather than a disagreement.
-    const namespace = name.slice(0, name.indexOf("/"));
+    const namespace = namespaceOfKey(name);
     if (entry.repo === undefined && declared.namespaces.has(namespace)) continue;
     differences.push(
       `'${name}': the index records ${describeRecorded(entry)}, and the manifest does not ` +
@@ -741,6 +777,7 @@ type RebuiltVersion = {
  * @param tagsByKey - Every release tag, grouped by recipe.
  * @param existing - The committed index, when there is one.
  * @param run - The command runner git calls go through.
+ * @param settled - The dependencies that read more than one way, as the release settled them.
  */
 async function rebuildTaggedVersion(
   rootDir: string,
@@ -748,7 +785,8 @@ async function rebuildTaggedVersion(
   recipe: ValidatedRecipe,
   tagsByKey: Map<string, RecipeTag[]>,
   existing: IndexFile | undefined,
-  run: RunOptions["run"]
+  run: RunOptions["run"],
+  settled?: Map<string, SettledDependency>
 ): Promise<RebuiltVersion> {
   return withTaggedTree(
     rootDir,
@@ -763,7 +801,7 @@ async function rebuildTaggedVersion(
         const tagged = snapshot.recipes.find((entry) => entry.key === recipe.key);
         if (tagged !== undefined) {
           const dependencies = resolveIndexDependencies(
-            declaredDependencies(tagged, snapshot),
+            declaredDependencies(tagged, snapshot, settled),
             siblingState(snapshot, tagsByKey, existing)
           );
           return { hash, ...(dependencies === undefined ? {} : { dependencies }), problems: [] };

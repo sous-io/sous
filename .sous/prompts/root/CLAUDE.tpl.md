@@ -260,10 +260,9 @@ src/
     watch-service.ts       # chokidar watcher with debounce; WatchService
     watch-loop.ts          # shared build/compile --watch reload loop (config + template edits)
     pid-service.ts         # PidService; single-instance watcher enforcement via PID files
-    repos/                 # the Repositories layer: on-disk formats, loaders, ref parser
+    repos/                 # the Repositories layer: on-disk formats, loaders, services
       identity.ts          # canonical repository identity; keys everything machine-wide
       index.ts             # barrel; import the whole layer from here
-      ref.ts               # parses/formats refs (repo qualifier, namespace/recipe, @range)
       load-manifest.ts     # YAML + permissive-JSON manifest reading; exactly-one discovery
       formats/             # one module per on-disk format, each with schema, type, parseX()
       store/               # the machine-wide recipe store under $SOUS_HOME/cache
@@ -280,6 +279,8 @@ src/
         tags.ts            # release tag naming, listing, reading and creating
         git-state.ts       # what git says about the working tree, branches and remotes
         index-builder.ts   # buildIndex: regenerates sous.index.json from manifests + tags
+        settle.ts          # settles a dependency that reads more than one way, by probing
+                           #   each candidate's index; the answer is recorded in the index
         plan.ts            # buildReleasePlan: scope, what changed, bumps, tag order
         bump.ts            # raises a recipe version in place, keeping comments
         submit-service.ts  # the whole submit flow and lifecycle, behind the injectable runner
@@ -298,9 +299,14 @@ src/
       locked-namespace-resolver.ts # the real NamespaceResolver, built from the lockfile
       recipe-targets.ts    # subscribed recipe contents -> compile targets; recipeOutputs
       recipe-config-layers.ts  # a recipe's `config` contents, as config layers
-    refs/                  # what a word on the command line names; every command resolves
-                           #   a reference through this one module
-      scopes.ts            # SousScope: repository, namespace, recipe, variable, env var name
+    refs/                  # what a ref names; every ref, wherever it is written, goes
+                           #   through this one module
+      scopes.ts            # SousScope: repository, namespace, recipe, variable, env var name;
+                           #   RefSource: where a ref was written, which decides its forms
+      parse.ts             # parseRef(ref, from): every form, every reading; formatRef,
+                           #   refKey, splitRecipeKey, namespaceOfKey
+      settle.ts            # settles readings against an index: exact-then-any-case names,
+                           #   browser paths through recipe paths, recorded dependencies
       find.ts              # findReference + the per-scope wrappers; the matching and ordering rules
       pick.ts              # pickReference: one match, a question, --accept-first, or the
                            #   shared non-interactive failure; reports what a reference
@@ -385,8 +391,8 @@ per format, each exporting its zod schema, the inferred TypeScript type and a `p
 sourceLabel)` helper that throws a `ConfigError` naming the file and the path of every bad
 field. `formats/patterns.ts` holds the shared regular expressions and imports nothing, so
 `config-schema.ts` can reuse them; `formats/common.ts` composes them into the primitives the
-formats share. `ref.ts` parses BOTH grammars, `identity.ts` derives canonical repository
-identity, `load-manifest.ts` reads manifests off disk
+formats share. `src/lib/refs/parse.ts` reads every ref (see **Refs** below), `identity.ts`
+derives canonical repository identity, `load-manifest.ts` reads manifests off disk
 (YAML, or JSON with comments and trailing commas; never JavaScript, because manifests and
 indexes are data that sous reads, validates and browses without executing anything: before
 trust, in a dry run, in the browsing commands and in `repo release --check`), and `index.ts` is
@@ -416,10 +422,28 @@ store layout, the store entry marker's `repo` field, the index cache, and each l
 migrates an old store, it is simply re-fetched. That lockfile `identity` is OPTIONAL ON READ
 and required on the written shape: `lockedRepoSchema` in `formats/lockfile.ts` derives a missing
 one from the entry's `url` through `requireProvider(url).canonicalize(url)`, so a lockfile
-written before the store was re-keyed still loads and fills the field in on its next write. `ref.ts` also holds `parseDependencyRef`, the
-manifest-side grammar: a bare sibling ref, or a locator URL whose scheme is the provider id and
-whose last two path segments are ALWAYS the namespace and recipe (a first segment with a dot is
-the host, otherwise the provider's default). `local://` and `repo:` are both refused there.
+written before the store was re-keyed still loads and fills the field in on its next write.
+
+**Refs.** Every ref, wherever it is written, is read by ONE function: `parseRef(ref, from)` in
+`src/lib/refs/parse.ts` (decision record 0008). It recognizes every form (a bare namespace,
+`namespace/recipe`, `namespace/*`, `repo:`, a range, a provider-scheme locator, an HTTPS, SSH or
+scheme-less URL, a `.git` suffix, a browser URL from a host's file view, GitLab's `/-/` and
+nested groups) and returns EVERY reading, because a GitLab nested group does not say where the
+project path ends and a browser URL names a folder only an index can map to a recipe. The
+`RefSource` enum (`src/lib/refs/scopes.ts`: `CommandLine`, `Config`, `Manifest`, `Lockfile`)
+decides which forms a place allows; a refused form is an error saying what to write instead
+(`repo:` in a manifest names the locator form, a location in a config file names `sous
+subscribe`). A manifest's names are lowercased; the command line keeps what was typed, and
+matching settles it. Nothing host-specific lives in the parser: the host and path segments go to
+each provider's `readLocation`, which returns the readings, and `formatLocator` prints the
+canonical locator (GitLab always marks the project's end with `/-/`). A reading is a
+`ParsedRef` (with an optional `location`), a `BrowsedRef` or a `RepositoryRef`.
+`src/lib/refs/settle.ts` settles readings once an index is at hand: `matchNames` (exact first,
+then ignoring case), `settleInIndex`, `settleBrowsed` (through each recipe's index `path`, every
+split of the branch tried) and `settleDependency`, which uses the index's record of what a
+release settled on and never probes. `splitRecipeKey` and `namespaceOfKey` are the only way a
+stored key is taken apart. A ref is stored and printed as its published identity (namespace and
+recipe), never as a folder path; any spelling that settles to one identity is accepted.
 
 `store/` holds the machine-wide recipe store: one immutable directory per recipe version at
 `<storeRoot>/<identity>/<namespace>/<recipe>/<version>/`, with the `.sous.entry.json` marker
@@ -483,7 +507,15 @@ unchanged). ADR 0007 records the decision. Reading a tagged tree goes through
 `withTaggedTree` (`release/tags.ts`), which adds a linked git worktree rather than piping
 `git archive`, because the injectable command runner captures output as text and an archive's
 bytes would not survive that. Every git call in this directory takes the runner from
-`providers/git.ts`, so no test needs a network.
+`providers/git.ts`, so no test needs a network. A dependency that reads more than one way (a
+GitLab nested group) or names a browser path is settled BEFORE anything is planned or written,
+by `settleDependencyLocations` (`release/settle.ts`): it fetches each candidate repository's
+index through the provider layer and keeps the reading whose index publishes what was named.
+A network failure fails the release (never a fall-through to the next reading); a tie is an
+error naming the `/*` spelling. `buildIndex` records the answer in the version's
+`dependencies`, under each key it reached with the repository it settled on, and consumers read
+that record instead of probing. A repository whose dependencies all read one way fetches
+nothing and releases offline as before.
 
 **Ignore hygiene.** `ensureReposIgnoreFiles(sousDir)` writes `.sous/repos/.gitignore` holding a
 single `*` (which covers the ignore file itself, so the directory contributes nothing to the
@@ -646,9 +678,12 @@ takes every collaborator as an injectable option, and `subscriptionServiceFor({
 configContext, settings, shellEnv })` builds one from what a running command already has.
 Its methods are `addRepo`, `subscribe`, `unsubscribe`, `update`, `newerPublishedVersions`,
 `listSubscriptions`, `restore`, `checkUpstream`, `needsRestore` and `prepareForBuild`. Two steps run inside `subscribe` BEFORE anything is
-fetched or written, on the cached indexes alone: a one-word ref is resolved to a fully
-qualified one through `src/lib/refs/` (over the namespace and recipe scopes; several
-matches ask, `--accept-first` takes the first), and then the plan is printed and confirmed (the confirmation flag skips the question,
+fetched or written, on the cached indexes alone: a one-word ref, or one typed in another
+case, is resolved to a fully qualified one through `src/lib/refs/` (over the namespace and
+recipe scopes; several matches ask, `--accept-first` takes the first), and a location is
+matched to the trusted repository at it by identity and settled through its index (an
+untrusted one goes through the trust ceremony first, and nothing is fetched from it before
+the answer), and then the plan is printed and confirmed (the confirmation flag skips the question,
 a dry run states the plan and never asks, declining aborts with nothing written). Keep
 that order: the confirmation is worthless once a manifest has been fetched to read it,
 which is why the plan names untrusted dependency repositories only as far as what is
@@ -709,8 +744,9 @@ who needs it: a LINKED repository is read from its working copy (a link is a del
 instruction to bypass versions and the lockfile), and everything else from its immutable
 store entry at the pinned version. A recipe the store does not hold yet comes back with
 `present: false` rather than an error, so a fresh clone can be restored instead of refused.
-`locked-namespace-resolver.ts` builds the real `NamespaceResolver` from that plus each
-recipe's declared `depends` and `subscribes`; `vars/definition-source.ts` reads the same
+`locked-namespace-resolver.ts` builds the real `NamespaceResolver` from that plus the
+lockfile's holder lists, which record the key every `depends` and `subscribes` entry resolved
+to, whatever form the manifest wrote it in; `vars/definition-source.ts` reads the same
 list for `sous vars`; `recipe-targets.ts` turns it into compile targets.
 
 **Recipe outputs.** `recipe-targets.ts` turns each subscribed recipe's manifest `contents`
@@ -1180,11 +1216,12 @@ name and continues with the path inside that recipe, so
 `workflow/task-files`. A bare `@path` (no `~`) never falls through to a namespace; it stays
 a relative path or a declared alias. Scoping is enforced by the resolver: inside a recipe's
 own files a namespace resolves only against that recipe's declared dependencies (`depends`
-plus `subscribes`) at their pinned versions, while a project's own templates resolve
+plus `subscribes`, as settled keys) at their pinned versions, while a project's own templates resolve
 against every recipe the lockfile pins, whatever holds it (the project, a set's `subscribes`,
 or a `depends`-only library). When a project template names a recipe the lockfile does not
 pin, `explainUnpinnedRecipe` (`repos/locked-namespace-resolver.ts`) looks for a switched-off
-subscription to it, then for another published version of a pinned recipe that brought it in
+subscription to it (its key read through `parseShortRef` with `RefSource.Config`), then for
+another published version of a pinned recipe that brought it in
 (read from the cached indexes, through recipes no longer pinned either), and the error names
 it. The inner path may not contain `.` or `..` segments and
 may not be absolute, and the resolved candidate is `path.relative`-checked against the recipe
@@ -1283,7 +1320,7 @@ This enables `sous prune` (remove stale outputs) and `sous clear` (delete all ou
 | `sous repo submit [repo]` | Propose a recipe repository's changes and follow the proposal through: open it, update it, report on it, or continue on a new branch once it was merged; from a project, `repo` names a linked repository (`--title`, `--body`, `--branch`, `--status`, `--commit`, `--draft`, `--yes` / `-y`, `--dry-run`) |
 | `sous vars list` | List every recipe variable in play: its answer, the env var that supplied it, and the source |
 | `sous vars show <name>` | Show one variable in full, with every candidate env var name and the rung that answered |
-| `sous vars ask [name]` | Answer what is unanswered, or everything the name covers: a variable, an environment variable name in use that answers one, a recipe, a namespace or a repository, resolved through `src/lib/refs/` (`--repo`, `--namespace`, `--var` narrow the same way, `--accept-first` settles an ambiguous name, `--all` re-asks everything); `--file` reads a standalone definitions file, `--answer <name>=<value>` and `--answers-file <path>` answer ahead of the questions, `--dry-run` writes nothing |
+| `sous vars ask [name]` | Answer what is unanswered, or everything the name covers: a variable, an environment variable name in use that answers one, a recipe, a namespace or a repository (any of the last three also as a location, settled against the trusted repositories from `cachedReferenceRepos`), resolved through `src/lib/refs/` (`--repo`, `--namespace`, `--var` narrow the same way, `--accept-first` settles an ambiguous name, `--all` re-asks everything); `--file` reads a standalone definitions file, `--answer <name>=<value>` and `--answers-file <path>` answer ahead of the questions, `--dry-run` writes nothing |
 
 Every topic answers to both spellings of its name (`repo`/`repos`, `subscription`/
 `subscriptions`, `namespace`/`namespaces`, `recipe`/`recipes`, `lock`/`locks`, `var`/`vars`,

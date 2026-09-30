@@ -6,7 +6,6 @@ import {
   SousScope,
   findReference,
   pickReference,
-  referenceReposFromIndexes,
   type ReferenceRepo,
 } from "../../lib/refs/index.js";
 import {
@@ -374,15 +373,7 @@ export default class RepoContribute extends BaseCommand {
       shellEnv: this.shellEnv,
     });
 
-    const trusted = service.currentRepos();
-    const repos: ReferenceRepo[] = Object.keys(trusted).map((name) => {
-      const url = trusted[name]?.url;
-      const index = service.cachedIndex(name);
-      if (index === undefined) {
-        return { name, ...(url === undefined ? {} : { url }), namespaces: [], recipes: [] };
-      }
-      return referenceReposFromIndexes([name], new Map([[name, index]]), { [name]: url })[0]!;
-    });
+    const repos: ReferenceRepo[] = service.cachedReferenceRepos();
 
     const matches = findReference(
       ref,

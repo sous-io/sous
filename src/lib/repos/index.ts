@@ -18,7 +18,6 @@ export * from "./formats/lockfile.js";
 export * from "./formats/store-entry.js";
 export * from "./formats/links-map.js";
 export * from "./load-manifest.js";
-export * from "./ref.js";
 export * from "./identity.js";
 
 // Phase 2a: the machine-wide recipe store, under the user-level sous directory.

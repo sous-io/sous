@@ -1,4 +1,5 @@
 import path from "node:path";
+import { namespaceOfKey } from "../refs/parse.js";
 
 /**
  * Namespace addressability for templates: the reserved `~` include sigil.
@@ -202,7 +203,7 @@ function describeDropped(
   dropped: DroppedRecipe,
   opts: { namespace: string; rest: string }
 ): string[] {
-  const recipe = `${opts.namespace}/${opts.rest.split("/")[0] ?? ""}`;
+  const { recipe } = splitIncludePath(opts.namespace, opts.rest);
   if (dropped.by === "disabled-subscription") {
     return [
       `This project subscribes to "${dropped.subscription}", but that subscription is ` +
@@ -232,14 +233,15 @@ export type StaticNamespaceResolverOptions = {
    */
   recipes: Record<string, string>;
   /**
-   * What each recipe declares, mapping `<namespace>/<recipe>` to the refs it
-   * may address. An entry may be a full ref (`workflow/task-files`) or a bare
-   * namespace (`workflow`, meaning every recipe in it). A recipe with no entry
-   * declares nothing and may address only itself.
+   * What each recipe declares, mapping `<namespace>/<recipe>` to the keys it
+   * may address. An entry is a recipe key (`workflow/task-files`) or a bare
+   * namespace (`workflow`, meaning every recipe in it), already settled from
+   * however the manifest wrote it. A recipe with no entry declares nothing and
+   * may address only itself.
    */
   dependencies?: Record<string, string[]>;
   /**
-   * What the project's own templates may address, in the same ref forms as
+   * What the project's own templates may address, as the same kind of keys as
    * `dependencies`. Omit it to make every known recipe addressable from
    * project templates, which is the rule for a real project: its templates may
    * address everything its lockfile pins.
@@ -293,7 +295,7 @@ export class StaticNamespaceResolver implements NamespaceResolver {
   private knownNamespaces(): string[] {
     const names = new Set<string>();
     for (const ref of Object.keys(this.recipes)) {
-      names.add(ref.split("/")[0]);
+      names.add(namespaceOfKey(ref));
     }
     return [...names].sort();
   }
@@ -301,7 +303,7 @@ export class StaticNamespaceResolver implements NamespaceResolver {
   /** Every known recipe ref inside one namespace, sorted. */
   private recipesIn(namespace: string): string[] {
     return Object.keys(this.recipes)
-      .filter((ref) => ref.split("/")[0] === namespace)
+      .filter((ref) => namespaceOfKey(ref) === namespace)
       .sort();
   }
 
@@ -329,9 +331,7 @@ export class StaticNamespaceResolver implements NamespaceResolver {
   resolve(request: NamespaceRequest): NamespaceResolution {
     const { namespace, rest, fromFile } = request;
 
-    const segments = rest.split("/").filter((segment) => segment.length > 0);
-    const recipeName = segments[0] ?? "";
-    const ref = `${namespace}/${recipeName}`;
+    const { recipe: ref, segments } = splitIncludePath(namespace, rest);
 
     if (!this.knownNamespaces().includes(namespace)) {
       return {
@@ -361,7 +361,7 @@ export class StaticNamespaceResolver implements NamespaceResolver {
       return { kind: "not-a-dependency", recipe: ref, includingRecipe };
     }
 
-    const inner = segments.slice(1).join("/");
+    const inner = segments.join("/");
     const resolved = path.resolve(recipeDir, inner);
 
     // A `~namespace` reference addresses a recipe's own files. Without this the
@@ -370,12 +370,33 @@ export class StaticNamespaceResolver implements NamespaceResolver {
     // segment check catches the written form, and the relative check catches
     // everything else, including an absolute inner path and any symlink-free
     // route out that normalisation would otherwise hide.
-    if (escapesRecipe(recipeDir, segments.slice(1), inner, resolved)) {
+    if (escapesRecipe(recipeDir, segments, inner, resolved)) {
       return { kind: "escapes-recipe", recipe: ref, reference: `${namespace}/${rest}` };
     }
 
     return { kind: "candidates", candidates: [resolved] };
   }
+}
+
+/**
+ * Takes the part of a `@~namespace/...` include line after the namespace apart:
+ * its first segment names the recipe, and the rest is a file path inside it.
+ * This is an include path, not a ref; it is the one place such a path is split.
+ *
+ * splitIncludePath("workflow", "task-files/_partials/resume.md")
+ * // -> { recipe: "workflow/task-files", segments: ["_partials", "resume.md"] }
+ *
+ * @param namespace - The namespace the include line named.
+ * @param rest - Everything after `~<namespace>/`.
+ */
+function splitIncludePath(
+  namespace: string,
+  rest: string
+): { recipe: string; segments: string[] } {
+  const [recipeName = "", ...segments] = rest
+    .split("/")
+    .filter((segment) => segment.length > 0);
+  return { recipe: `${namespace}/${recipeName}`, segments };
 }
 
 /**
@@ -401,46 +422,18 @@ function escapesRecipe(
 }
 
 /**
- * Strip the decorations a written reference may carry so it can be compared to
- * a plain `<namespace>/<recipe>` ref: a repository qualifier (a subscription's
- * `sous-public:misc/stuff`, or a manifest's
- * `github://owner/repo/misc/stuff` locator) and a trailing version range
- * (`misc/stuff@^1.2`).
+ * Whether a list of declared keys covers a recipe, either by naming the recipe
+ * itself or by naming its whole namespace. The keys are already settled
+ * (`namespace` or `namespace/recipe`): whatever form a manifest wrote a
+ * dependency in, the lockfile records the key it resolved to.
  *
- * @param ref - A reference as written in a manifest or subscription entry.
- * @returns The bare `<namespace>` or `<namespace>/<recipe>` form.
- */
-export function normalizeRef(ref: string): string {
-  const trimmed = ref.trim();
-
-  // A locator URL names the repository first and the recipe last, so the two
-  // trailing segments are the ref; everything before them is where it lives.
-  const scheme = trimmed.indexOf("://");
-  const body =
-    scheme === -1
-      ? trimmed.includes(":")
-        ? trimmed.slice(trimmed.indexOf(":") + 1)
-        : trimmed
-      : trimmed.slice(scheme + 3).split("/").slice(-2).join("/");
-
-  const at = body.lastIndexOf("@");
-  return (at > 0 ? body.slice(0, at) : body).trim();
-}
-
-/**
- * Whether a list of declared refs covers a recipe, either by naming the recipe
- * itself or by naming its whole namespace.
- *
- * @param declared - Declared refs (dependencies, or the project's subscriptions).
+ * @param declared - Declared keys (dependencies, or the project's subscriptions).
  * @param namespace - The namespace being addressed.
  * @param ref - The fully qualified recipe ref being addressed.
  * @returns True when the reference is in scope.
  */
 function declaresRef(declared: string[], namespace: string, ref: string): boolean {
-  return declared.some((entry) => {
-    const normalized = normalizeRef(entry);
-    return normalized === ref || normalized === namespace;
-  });
+  return declared.some((entry) => entry === ref || entry === namespace);
 }
 
 /**

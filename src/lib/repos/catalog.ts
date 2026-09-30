@@ -29,7 +29,15 @@ import type {
   RecipeManifest,
   VariableDefinition,
 } from "./formats/recipe-manifest.js";
-import { dependencyRefKey, parseDependencyRef, parseRef, type ParsedRef } from "./ref.js";
+import {
+  isNamedReading,
+  namespaceOfKey,
+  parseRef,
+  refKey,
+  splitRecipeKey,
+  type ParsedRef,
+} from "../refs/parse.js";
+import { settleDependency } from "../refs/settle.js";
 import { bareName } from "../vars/names.js";
 import {
   describeReference,
@@ -390,7 +398,7 @@ export function narrowToInstalled(inputs: CatalogInputs): CatalogInputs {
         ([key]) => inputs.lock.recipes[key]?.repo === repo.name
       )
     );
-    const held = new Set(Object.keys(recipes).map((key) => key.slice(0, key.indexOf("/"))));
+    const held = new Set(Object.keys(recipes).map(namespaceOfKey));
     const namespaces = Object.fromEntries(
       Object.entries(repo.index.namespaces).filter(([namespace]) => held.has(namespace))
     );
@@ -468,16 +476,16 @@ export type ResolvedRecipeRef = {
  * @param ref - The namespace, optionally qualified with `repo:`.
  */
 export function resolveNamespaceRef(inputs: CatalogInputs, ref: string): ResolvedNamespace {
-  const parsed = parseRef(ref);
+  const { parsed, search } = readCommandLineRef(ref);
 
-  if (parsed.recipe !== undefined) {
+  if (parsed?.recipe !== undefined) {
     throw new ConfigError(
       `'${ref}' names the recipe '${parsed.recipe}', not a namespace.\n` +
         `  The namespace it belongs to is '${parsed.namespace}'.`
     );
   }
 
-  const matches = findNamespace(refSearchString(parsed), referenceContext(inputs));
+  const matches = findNamespace(search, referenceContext(inputs));
 
   if (matches.length === 1) {
     return { repo: repoNamed(inputs, matches[0]!.repo!), namespace: matches[0]!.namespace! };
@@ -485,8 +493,8 @@ export function resolveNamespaceRef(inputs: CatalogInputs, ref: string): Resolve
 
   if (matches.length > 1) throw ambiguousError(ref, "namespace", matches);
 
-  const asRecipe = findRecipe(refSearchString(parsed), referenceContext(inputs));
-  if (parsed.repo === undefined && asRecipe.length > 0) {
+  const asRecipe = findRecipe(search, referenceContext(inputs));
+  if (parsed !== undefined && parsed.repo === undefined && asRecipe.length > 0) {
     throw new ConfigError(
       `No repository this project trusts publishes a namespace called ` +
         `'${parsed.namespace}'.\n` +
@@ -495,7 +503,7 @@ export function resolveNamespaceRef(inputs: CatalogInputs, ref: string): Resolve
     );
   }
 
-  throw unknownError(inputs, ref, "namespace", parsed.repo);
+  throw unknownError(inputs, ref, "namespace", parsed?.repo);
 }
 
 /**
@@ -507,8 +515,7 @@ export function resolveNamespaceRef(inputs: CatalogInputs, ref: string): Resolve
  * @param ref - The recipe, as `namespace/recipe`, a bare recipe name, or either qualified with `repo:`.
  */
 export function resolveRecipeRef(inputs: CatalogInputs, ref: string): ResolvedRecipeRef {
-  const parsed = parseRef(ref);
-  const search = refSearchString(parsed);
+  const { parsed, search } = readCommandLineRef(ref);
   const context = referenceContext(inputs);
 
   const matches = findRecipe(search, context);
@@ -529,13 +536,13 @@ export function resolveRecipeRef(inputs: CatalogInputs, ref: string): ResolvedRe
   if (asNamespace.length > 0) {
     throw new ConfigError(
       `No repository this project trusts publishes a recipe called ` +
-        `'${parsed.namespace}'.\n` +
+        `'${parsed?.namespace ?? ref}'.\n` +
         `  It is the name of a namespace:\n` +
         asNamespace.map((candidate) => `    ${describeReference(candidate)}`).join("\n")
     );
   }
 
-  throw unknownError(inputs, ref, "recipe", parsed.repo);
+  throw unknownError(inputs, ref, "recipe", parsed?.repo);
 }
 
 // --- The pieces ---------------------------------------------------------------------------------
@@ -543,7 +550,7 @@ export function resolveRecipeRef(inputs: CatalogInputs, ref: string): ResolvedRe
 /** Every recipe key one index publishes in one namespace, sorted. */
 function recipeKeysIn(index: IndexFile, namespace: string): string[] {
   return Object.keys(index.recipes)
-    .filter((key) => key.slice(0, key.indexOf("/")) === namespace)
+    .filter((key) => namespaceOfKey(key) === namespace)
     .sort();
 }
 
@@ -583,8 +590,7 @@ function recipeListing(
 ): RecipeListing {
   const lock = inputs.lock;
   const entry = repo.index.recipes[key]!;
-  const namespace = key.slice(0, key.indexOf("/"));
-  const name = key.slice(namespace.length + 1);
+  const { namespace, name } = splitRecipeKey(key);
   const latest = latestVersion(Object.keys(entry.versions), entry.versions);
 
   // A locked entry pins one recipe from one repository. Two repositories can
@@ -689,12 +695,17 @@ function dependencyListings(
     ["subscribes", manifest?.subscribes ?? []],
   ] as Array<["depends" | "subscribes", string[]]>) {
     for (const written of declared) {
-      let key: string;
+      // A dependency that reads more than one way is listed under the key the
+      // index recorded for it. One sous cannot parse or settle is still worth
+      // showing; it is listed under what it was written as, so the reader sees
+      // the entry as it stands.
+      let key = written;
       try {
-        key = dependencyRefKey(parseDependencyRef(written));
+        const reading = settleDependency(written, {
+          ...(resolved === undefined ? {} : { recorded: resolved }),
+        });
+        if (reading !== undefined && isNamedReading(reading)) key = refKey(reading);
       } catch {
-        // A manifest sous cannot parse is still worth showing; it is listed
-        // under what it was written as, so the reader sees the bad entry.
         key = written;
       }
       rows.set(key, { ...(rows.get(key) ?? { key }), declared: written, kind });
@@ -746,14 +757,22 @@ function referenceContext(inputs: CatalogInputs): ReferenceContext {
 }
 
 /**
- * A parsed ref written back out as a reference, without its version range: the
- * range says which version to use, never which thing is meant.
+ * A ref from the command line, checked by the one parser, and the spelling to
+ * search for: a short ref written back without its version range (the range
+ * says which version to use, never which thing is meant), or a location
+ * exactly as written, which the search settles through the repository's index.
  *
- * @param parsed - The parsed ref.
+ * @param ref - The ref as typed.
+ * @returns The short reading, when the ref was short, and the search term.
  */
-function refSearchString(parsed: ParsedRef): string {
-  const path = parsed.recipe === undefined ? parsed.namespace : `${parsed.namespace}/${parsed.recipe}`;
-  return parsed.repo === undefined ? path : `${parsed.repo}:${path}`;
+function readCommandLineRef(ref: string): { parsed?: ParsedRef; search: string } {
+  const readings = parseRef(ref);
+  const first = readings[0]!;
+  if (first.location !== undefined || !isNamedReading(first)) return { search: ref.trim() };
+  return {
+    parsed: first,
+    search: first.repo === undefined ? refKey(first) : `${first.repo}:${refKey(first)}`,
+  };
 }
 
 /** The error a ref that could have meant several things raises. */

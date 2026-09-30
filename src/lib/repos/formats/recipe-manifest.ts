@@ -15,13 +15,15 @@
  *   its files DO enter the output. A curated bundle is simply a recipe made
  *   mostly of `subscribes` entries.
  *
- * Both lists name their targets BY LOCATION, in one of two spellings:
+ * Both lists name their targets BY LOCATION:
  *
  *     workflow/sat                                  a sibling in this repository
  *     github://sous-io/sous-recipes/workflow/sat    a recipe in another one
  *
- * A short name such as `sous-recipes:` is a consuming project's own label, so
- * it never appears in a published manifest; see `parseDependencyRef`.
+ * Every other location form works too (an HTTPS or SSH URL, a browser URL); a
+ * short name such as `sous-recipes:` is a consuming project's own label, so it
+ * never appears in a published manifest. See `parseRef` with
+ * `RefSource.Manifest`.
  */
 
 import { z } from "zod";
@@ -37,20 +39,20 @@ import {
   submissionsSchema,
   variableNameSchema,
 } from "./common.js";
-import { parseDependencyRef } from "../ref.js";
+import { parseRef } from "../../refs/parse.js";
+import { RefSource } from "../../refs/scopes.js";
 
 // --- Dependency refs ----------------------------------------------------------------------------
 
 /**
- * A dependency in `depends` or `subscribes`, in either of the two spellings a
- * manifest may use: a bare ref naming a recipe in this same repository, or a
- * locator URL naming one in another repository. Parsed with the real parser so
+ * A dependency in `depends` or `subscribes`: a bare ref naming a recipe in this
+ * same repository, or a location naming one in another repository. Parsed with the real parser so
  * a manifest and the rest of sous never disagree about what a dependency means;
  * the parser's message is carried through as the zod issue message.
  */
 const dependencyRefSchema = z.string().superRefine((value, ctx) => {
   try {
-    parseDependencyRef(value);
+    parseRef(value, RefSource.Manifest);
   } catch (error) {
     ctx.addIssue({ code: "custom", message: (error as Error).message });
   }

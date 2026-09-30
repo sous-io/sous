@@ -104,15 +104,60 @@ release itself is never restricted, so whatever publishes the recipe still relea
 
 ### Dependencies named by location
 
-`depends` and `subscribes` share one grammar in two spellings: `workflow/qa-helper` is a sibling in this
+`depends` and `subscribes` name their targets by where they live: `workflow/qa-helper` is a sibling in this
 same repository, and `github://sous-io/sous-recipes/workflow/sub-agent-delegation@^1.0` is a recipe in
-another one. A locator URL's scheme is the provider's identifier (`github` and `gitlab` ship today), and its
-path is read from the RIGHT: the last two segments are the namespace and the recipe, and everything before
-them names the repository, whose first segment is the host when it carries a dot and otherwise the
-provider's public host, so `gitlab://gitlab.example.com/group/subgroup/project/workflow/task-files`
-resolves. A trailing `.git` is dropped and at most one `@` range may follow. A manifest may write no `repo:`
-qualifier, no `local://` locator (a local repository is a convenience, not a published location) and no
-filesystem path such as `../qa-helper`.
+another one. Every spelling in [Ref forms](#ref-forms) that names a namespace or a recipe is accepted here,
+except a `repo:` qualifier (one project's private name for a repository), a local path or `local://`
+locator (a convenience, not a published location), and a location naming a whole repository with nothing
+inside it. Names are recorded lowercase.
+
+A ref is stored and printed as its published identity (namespace and recipe), never as a folder path. Any
+spelling that settles to one identity is accepted, including a folder path or a pasted browser URL. Two
+spellings need the other repository's index to settle: a GitLab URL with nested groups, which does not say
+where the project path ends (`gitlab.com/a/b/c/d` may be project `a/b` naming the recipe `c/d`, or project
+`a/b/c` naming the namespace `d`), and a browser URL, which names a folder. `sous repo release` settles each
+by fetching the index of every candidate repository and keeping the reading whose index publishes what was
+named, then records the repository it settled on in the index, beside each key the dependency reached. A
+consumer reads that record and never probes. A network failure fails the release rather than guessing, and
+two readings that both publish what is named fail it too, naming the spellings that read one way:
+`gitlab://a/b/c/-/d/*` for the namespace, `gitlab://a/b/-/c/d` for the recipe.
+
+### Ref forms
+
+Every place a ref is written reads it with one parser, told where the ref came from. These forms are
+recognized everywhere; the table after them says which each place allows. A refused form is an error saying
+what to write there instead.
+
+| Form | Example | Names |
+| --- | --- | --- |
+| A bare name | `workflow` | a namespace (on the command line, also a recipe or anything else by that name) |
+| Namespace and recipe | `workflow/alpha` | a recipe |
+| Namespace, spelled out | `workflow/*` | a namespace |
+| Repository-qualified | `sous-recipes:workflow/alpha` | a recipe in the repository this project calls `sous-recipes` |
+| With a range | `workflow/alpha@^1.2` | a recipe, within an npm-style range |
+| Provider-scheme locator | `github://owner/repo/workflow`, `.../workflow/*`, `.../workflow/alpha` | a namespace or a recipe in that repository |
+| A host other than the provider's own | `gitlab://gitlab.example.com/group/proj/-/workflow/alpha` | the same, on a self-hosted instance |
+| HTTPS URL | `https://github.com/owner/repo/workflow/alpha` | the same as the locator |
+| URL with no scheme | `github.com/owner/repo/workflow/alpha` | the same |
+| SSH remote | `git@github.com:owner/repo.git`, `ssh://git@github.com/owner/repo.git/workflow` | the repository, or something inside it |
+| Browser URL | `https://github.com/owner/repo/tree/main/recipes/workflow/alpha` | the recipe whose index `path` holds that folder (or a file in it); a folder holding one namespace's recipes names the namespace |
+| GitLab separator | `https://gitlab.com/group/sub/proj/-/tree/main/recipes/workflow/alpha` | the same, with `/-/` marking where the project path ends |
+| GitLab nested group | `gitlab://group/sub/proj/workflow/alpha` | every reading the path allows, settled as described above |
+
+A `.git` suffix on the repository is dropped in every URL form. GitLab's canonical locator always marks the
+end of the project path with `/-/`, so it reads one way.
+
+| Place | Allows |
+| --- | --- |
+| The command line | every form; names in any case |
+| A config file's subscription keys | `namespace` or `namespace/recipe`, lowercase; the repository is recorded in the lockfile and a range in the entry's `range` field |
+| A recipe manifest's `depends` and `subscribes` | every form naming a namespace or a recipe, except `repo:` and a local location |
+| A key sous stores (the lockfile, the index, the store) | `namespace` or `namespace/recipe`, lowercase |
+
+Matching tries the exact spelling first, then ignores case; a name that still matches several things is a
+question, answered by `--accept-first` or by choosing. What sous writes (config layers, the lockfile, the
+index) and prints is always the canonical form: `namespace/recipe`, qualified with the repository's short
+name where one is needed.
 
 ### Variable definitions
 

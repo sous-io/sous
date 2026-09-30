@@ -17,6 +17,7 @@ import { subscriptionServiceFor } from "../../lib/repos/subscription-service.js"
 import { resolveStoreSettings } from "../../lib/repos/store/settings.js";
 import type { StoreKey } from "../../lib/repos/store/contract.js";
 import { renderTable, type TableColumn } from "../../utils/table.js";
+import { splitRecipeKey } from "../../lib/refs/parse.js";
 import {
   blankLine,
   dryRunNotice,
@@ -120,12 +121,12 @@ export default class RepoGc extends BaseCommand {
     const keep: StoreKey[] = Object.entries(lock.recipes).flatMap(([key, entry]) => {
       const identity = lock.repos[entry.repo]?.identity;
       if (identity === undefined) return [];
-      const namespace = key.slice(0, key.indexOf("/"));
+      const { namespace, name } = splitRecipeKey(key);
       return [
         {
           identity,
           namespace,
-          name: key.slice(namespace.length + 1),
+          name,
           version: entry.version,
         },
       ];

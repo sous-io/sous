@@ -4,14 +4,17 @@
  * Phase 4 defined the `NamespaceResolver` contract and shipped an in-memory
  * implementation for tests. This is the implementation backed by the project's
  * actual state: the lockfile says which recipes are in play and at what version,
- * the links map and the store say where each one's files are, and each recipe's
- * own manifest says what it is allowed to address.
+ * the links map and the store say where each one's files are, and the
+ * lockfile's holder lists say what each recipe is allowed to address.
  *
  * The scoping rule is the whole point, and it is enforced by handing
  * `StaticNamespaceResolver` the right two maps:
  *
  *   - a file inside a recipe may address only that recipe's own declared
- *     dependencies (`depends` plus `subscribes`), at their pinned versions;
+ *     dependencies (`depends` plus `subscribes`), at their pinned versions. The
+ *     lockfile records which keys each recipe holds, however its manifest wrote
+ *     them (a sibling ref, a locator, a URL copied from the browser), so that
+ *     record is what decides it;
  *   - a file in the project's own templates may address every recipe the
  *     lockfile pins, whatever holds it: the project, a set it subscribes to,
  *     or another recipe's `depends`.
@@ -28,16 +31,16 @@
 import semver from "semver";
 import type { Settings } from "../settings.js";
 import { resolveStoreRoot } from "../sous-home.js";
+import { RefSource } from "../refs/scopes.js";
+import { namespaceOfKey, parseShortRef, refKey } from "../refs/parse.js";
 import {
   StaticNamespaceResolver,
-  normalizeRef,
   type DroppedRecipe,
   type NamespaceResolver,
 } from "./namespace-resolver.js";
 import {
   listLockedRecipes,
   readProjectLockfile,
-  readRecipeManifestIn,
   type LockedRecipeLocation,
 } from "./locked-recipes.js";
 import { createIndexCache } from "./providers/index.js";
@@ -84,14 +87,11 @@ export function createProjectNamespaceResolver(
   for (const recipe of locked) {
     recipes[recipe.key] = recipe.dir;
 
-    // A recipe declares what it may address in its own manifest. A recipe whose
-    // files are not on disk yet declares nothing, which is the conservative
-    // answer: it cannot be including anything either.
-    const manifest = recipe.present ? readRecipeManifestIn(recipe.dir) : undefined;
-    if (manifest === undefined) continue;
-
-    const declared = [...(manifest.depends ?? []), ...(manifest.subscribes ?? [])];
-    if (declared.length > 0) dependencies[recipe.key] = declared;
+    // Every recipe holding this one declared it, in `depends` or `subscribes`,
+    // and the lockfile records the key that declaration resolved to.
+    for (const holder of recipe.requestedBy) {
+      (dependencies[holder] ??= []).push(recipe.key);
+    }
   }
 
   // No `projectScope`: a project template may address every recipe the
@@ -126,10 +126,16 @@ export function explainUnpinnedRecipe(
   recipe: string,
   options: Pick<ProjectNamespaceResolverOptions, "sousDir" | "settings" | "env">
 ): DroppedRecipe | undefined {
-  const namespace = recipe.slice(0, recipe.indexOf("/"));
+  const namespace = namespaceOfKey(recipe);
   for (const [key, entry] of Object.entries(options.settings.subscriptions ?? {})) {
     if (entry?.enabled !== false) continue;
-    const ref = normalizeRef(key);
+    let ref: string;
+    try {
+      ref = refKey(parseShortRef(key, RefSource.Config));
+    } catch {
+      // The config schema already refuses a key that is not a ref.
+      continue;
+    }
     if (ref === recipe || ref === namespace) {
       return { by: "disabled-subscription", subscription: key };
     }

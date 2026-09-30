@@ -28,7 +28,11 @@ import { fetchText, type FetchLike } from "./http.js";
 import {
   buildCanonicalRepo,
   invalidRepoUrl,
+  readingsAfterRepository,
   splitRepoUrl,
+  withoutGitSuffix,
+  type LocationReading,
+  type WrittenLocation,
   type AuthStatus,
   type CanonicalRepo,
   type ChangeProposal,
@@ -79,6 +83,70 @@ export class GitlabProvider extends ProviderBase {
 
   /** What GitLab calls a proposal. */
   readonly proposalNoun = "merge request";
+
+  /** The host a `gitlab://` locator means when it names none. */
+  readonly defaultHost = GITLAB_HOST;
+
+  /**
+   * A GitLab project path nests (`group/subgroup/project`), so where it ends is
+   * only certain when the location says so: a `-` segment (GitLab's own
+   * separator, as in `/-/tree/main/...`) or a `.git` suffix ends it. Otherwise
+   * every split that leaves a project of at least two segments and at most a
+   * namespace and a recipe after it is a reading, and the caller keeps the one
+   * an index confirms.
+   *
+   * readLocation({ host: "gitlab.com", segments: ["a", "b", "c", "d"] });
+   * // -> project "a/b" naming "c/d", project "a/b/c" naming "d",
+   * //    and project "a/b/c/d" naming nothing
+   *
+   * @param location - The host and the segments after it.
+   */
+  readLocation(location: WrittenLocation): LocationReading[] {
+    const { segments } = location;
+
+    const separator = segments.indexOf("-");
+    if (separator >= 2) {
+      return readingsAfterRepository(
+        this.projectPath(segments.slice(0, separator)),
+        segments.slice(separator)
+      );
+    }
+
+    const suffixed = segments.findIndex((segment) => /\.git$/i.test(segment));
+    if (suffixed >= 1) {
+      return readingsAfterRepository(
+        this.projectPath(segments.slice(0, suffixed + 1)),
+        segments.slice(suffixed + 1)
+      );
+    }
+
+    const readings: LocationReading[] = [];
+    for (let end = 2; end <= segments.length; end++) {
+      const rest = segments.slice(end);
+      if (rest.length > 2) continue;
+      readings.push({ repoPath: this.projectPath(segments.slice(0, end)), named: rest });
+    }
+    return readings;
+  }
+
+  /**
+   * The canonical locator always marks where the project path ends with `-`,
+   * because without it a nested group reads more than one way.
+   *
+   * @param host - The project's host.
+   * @param repoPath - The project's path on that host.
+   * @param rest - What is named inside it.
+   */
+  formatLocator(host: string, repoPath: string, rest: string): string {
+    const where = host === this.defaultHost ? repoPath : `${host}/${repoPath}`;
+    return `${this.id}://${where}${rest.length === 0 ? "" : `/-/${rest}`}`;
+  }
+
+  /** A project path from its segments, with the last one's `.git` gone. */
+  private projectPath(segments: string[]): string {
+    const last = segments.length - 1;
+    return segments.map((segment, index) => (index === last ? withoutGitSuffix(segment) : segment)).join("/");
+  }
 
   matches(url: string): boolean {
     const parts = splitRepoUrl(url);

@@ -415,13 +415,17 @@ describe("createProjectNamespaceResolver()", () => {
 
   /**
    * createProjectNamespaceResolver should allow a reference from inside a recipe
-   * to something that recipe's manifest declares under `depends`.
+   * to something that recipe declared under `depends`, which the lockfile
+   * records by listing the recipe among the holders of what it declared.
    *
    * resolver.resolve({ namespace: "workflow", rest: "other/x.md", fromFile: insideA });
    * // -> { kind: "candidates", ... }
    */
   it("should allow a recipe the including recipe declares", () => {
-    writeLock([{ key: "workflow/task-files" }, { key: "workflow/other" }]);
+    writeLock([
+      { key: "workflow/task-files" },
+      { key: "workflow/other", requestedBy: ["workflow/task-files"] },
+    ]);
     const taskFiles = path.join(storeRoot, "example.com", "owner", "fixtures", "workflow", "task-files", "1.0.0");
     writeRecipe(taskFiles, {
       namespace: "workflow",
