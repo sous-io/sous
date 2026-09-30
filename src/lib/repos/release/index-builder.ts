@@ -60,7 +60,7 @@ import {
   type ValidatedRecipe,
   type ValidationProblem,
 } from "./validate.js";
-import { isNamedReading, parseRef, refKey } from "../../refs/parse.js";
+import { isNamedReading, namespaceOfKey, parseRef, refKey } from "../../refs/parse.js";
 import { RefSource } from "../../refs/scopes.js";
 import type { SettledDependency } from "./settle.js";
 
@@ -699,7 +699,7 @@ function checkRecordedDependencies(
     if (declared.byKey.has(name)) continue;
     // A recipe the declared namespace held when the version was published, and
     // no longer does, is history rather than a disagreement.
-    const namespace = name.slice(0, name.indexOf("/"));
+    const namespace = namespaceOfKey(name);
     if (entry.repo === undefined && declared.namespaces.has(namespace)) continue;
     differences.push(
       `'${name}': the index records ${describeRecorded(entry)}, and the manifest does not ` +

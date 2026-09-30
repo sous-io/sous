@@ -203,7 +203,7 @@ function describeDropped(
   dropped: DroppedRecipe,
   opts: { namespace: string; rest: string }
 ): string[] {
-  const recipe = `${opts.namespace}/${opts.rest.split("/")[0] ?? ""}`;
+  const { recipe } = splitIncludePath(opts.namespace, opts.rest);
   if (dropped.by === "disabled-subscription") {
     return [
       `This project subscribes to "${dropped.subscription}", but that subscription is ` +
@@ -331,9 +331,7 @@ export class StaticNamespaceResolver implements NamespaceResolver {
   resolve(request: NamespaceRequest): NamespaceResolution {
     const { namespace, rest, fromFile } = request;
 
-    const segments = rest.split("/").filter((segment) => segment.length > 0);
-    const recipeName = segments[0] ?? "";
-    const ref = `${namespace}/${recipeName}`;
+    const { recipe: ref, segments } = splitIncludePath(namespace, rest);
 
     if (!this.knownNamespaces().includes(namespace)) {
       return {
@@ -363,7 +361,7 @@ export class StaticNamespaceResolver implements NamespaceResolver {
       return { kind: "not-a-dependency", recipe: ref, includingRecipe };
     }
 
-    const inner = segments.slice(1).join("/");
+    const inner = segments.join("/");
     const resolved = path.resolve(recipeDir, inner);
 
     // A `~namespace` reference addresses a recipe's own files. Without this the
@@ -372,12 +370,33 @@ export class StaticNamespaceResolver implements NamespaceResolver {
     // segment check catches the written form, and the relative check catches
     // everything else, including an absolute inner path and any symlink-free
     // route out that normalisation would otherwise hide.
-    if (escapesRecipe(recipeDir, segments.slice(1), inner, resolved)) {
+    if (escapesRecipe(recipeDir, segments, inner, resolved)) {
       return { kind: "escapes-recipe", recipe: ref, reference: `${namespace}/${rest}` };
     }
 
     return { kind: "candidates", candidates: [resolved] };
   }
+}
+
+/**
+ * Takes the part of a `@~namespace/...` include line after the namespace apart:
+ * its first segment names the recipe, and the rest is a file path inside it.
+ * This is an include path, not a ref; it is the one place such a path is split.
+ *
+ * splitIncludePath("workflow", "task-files/_partials/resume.md")
+ * // -> { recipe: "workflow/task-files", segments: ["_partials", "resume.md"] }
+ *
+ * @param namespace - The namespace the include line named.
+ * @param rest - Everything after `~<namespace>/`.
+ */
+function splitIncludePath(
+  namespace: string,
+  rest: string
+): { recipe: string; segments: string[] } {
+  const [recipeName = "", ...segments] = rest
+    .split("/")
+    .filter((segment) => segment.length > 0);
+  return { recipe: `${namespace}/${recipeName}`, segments };
 }
 
 /**
