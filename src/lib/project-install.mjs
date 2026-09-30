@@ -27,6 +27,10 @@
  *   - Anything unreadable or ambiguous means "run the copy that was invoked".
  *     A hand-off is a convenience; a refusal to run is not.
  *   - `SOUS_NO_DELEGATE` (anything but 0/false/no/off) runs the invoked copy.
+ *   - `sous update` runs the invoked copy: updating the copy that was invoked
+ *     is its job, and a project copy may be too old to have the command. The
+ *     command word is the first entry on the command line that is not a flag,
+ *     so `sous subscription update` still hands off.
  *   - The notice goes to stderr, so piped stdout stays clean. It prints when
  *     the two versions differ, and on every hand-off under `SOUS_DEBUG` or
  *     with `--verbose` anywhere on the command line. Plain, it is one line
@@ -49,6 +53,20 @@ export const DEBUG_ENV = "SOUS_DEBUG";
 
 /** The flag that makes the notice say where both installs are. */
 export const VERBOSE_FLAG = "--verbose";
+
+/** The command that always runs in the copy that was invoked. */
+export const SELF_UPDATE_COMMAND = "update";
+
+/**
+ * The command word on a command line: its first entry that does not start
+ * with `-`, or undefined when every entry is a flag.
+ *
+ * commandWordOf(["--verbose", "update", "--yes"]) -> "update"
+ * commandWordOf(["subscription", "update"]) -> "subscription"
+ */
+export function commandWordOf(argv) {
+  return argv.find((arg) => !arg.startsWith("-"));
+}
 
 /**
  * Whether an on/off environment variable is on: set to anything but an empty
@@ -181,6 +199,7 @@ export function formatHandoffNotice({ install, ownVersion, ownRoot, verbose }) {
  */
 export function planHandoff({ cwd, ownRoot, env, argv = [] }) {
   if (isEnvFlagOn(env[NO_DELEGATE_ENV])) return { kind: "run-self" };
+  if (commandWordOf(argv) === SELF_UPDATE_COMMAND) return { kind: "run-self" };
   const install = findProjectInstall(cwd, ownRoot);
   if (!install || install.same) return { kind: "run-self" };
 

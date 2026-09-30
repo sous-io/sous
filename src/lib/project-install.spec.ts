@@ -295,6 +295,22 @@ describe("project-install", () => {
       const copy = copyPathIn(project);
       expect(planHandoff({ cwd: project, ownRoot: copy, env: {} })).toEqual({ kind: "run-self" });
     });
+    /**
+     * `sous update` updates the copy that was invoked, so it never hands off;
+     * the command word is the first entry that is not a flag, so a subcommand
+     * named `update` under another topic still hands off.
+     * Example: ["--verbose", "update"] runs self; ["subscription", "update"] hands off.
+     */
+    it("should run self for the update command and hand off for a subcommand named update", () => {
+      const project = path.join(tmp.path, "project");
+      writePackage(copyPathIn(project), { version: "1.2.3" });
+      for (const argv of [["update"], ["--verbose", "update", "--yes"]]) {
+        expect(planHandoff({ cwd: project, ownRoot, env: {}, argv })).toEqual({ kind: "run-self" });
+      }
+      for (const argv of [["subscription", "update"], ["build", "update"]]) {
+        expect(planHandoff({ cwd: project, ownRoot, env: {}, argv }).kind).toBe("hand-off");
+      }
+    });
   });
 
   describe("handOffToProjectInstall()", () => {
