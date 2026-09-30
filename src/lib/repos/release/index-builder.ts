@@ -189,7 +189,15 @@ export async function buildIndex(
     // repository as it stood at the tag, which is what it was released against.
     for (const tag of recipeTags) {
       if (Object.hasOwn(versions, tag.version)) continue;
-      const rebuilt = await rebuildTaggedVersion(rootDir, tag, recipe, tagsByKey, existing, run);
+      const rebuilt = await rebuildTaggedVersion(
+        rootDir,
+        tag,
+        recipe,
+        tagsByKey,
+        existing,
+        run,
+        options.settled
+      );
       problems.push(...rebuilt.problems);
       versions[tag.version] = {
         hash: rebuilt.hash,
@@ -769,6 +777,7 @@ type RebuiltVersion = {
  * @param tagsByKey - Every release tag, grouped by recipe.
  * @param existing - The committed index, when there is one.
  * @param run - The command runner git calls go through.
+ * @param settled - The dependencies that read more than one way, as the release settled them.
  */
 async function rebuildTaggedVersion(
   rootDir: string,
@@ -776,7 +785,8 @@ async function rebuildTaggedVersion(
   recipe: ValidatedRecipe,
   tagsByKey: Map<string, RecipeTag[]>,
   existing: IndexFile | undefined,
-  run: RunOptions["run"]
+  run: RunOptions["run"],
+  settled?: Map<string, SettledDependency>
 ): Promise<RebuiltVersion> {
   return withTaggedTree(
     rootDir,
@@ -791,7 +801,7 @@ async function rebuildTaggedVersion(
         const tagged = snapshot.recipes.find((entry) => entry.key === recipe.key);
         if (tagged !== undefined) {
           const dependencies = resolveIndexDependencies(
-            declaredDependencies(tagged, snapshot),
+            declaredDependencies(tagged, snapshot, settled),
             siblingState(snapshot, tagsByKey, existing)
           );
           return { hash, ...(dependencies === undefined ? {} : { dependencies }), problems: [] };
