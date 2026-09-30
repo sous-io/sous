@@ -77,6 +77,7 @@ import {
   referenceReposFromIndexes,
   referenceToRef,
   type ReferenceMatch,
+  type ReferenceRepo,
 } from "../refs/index.js";
 import { describeIndexSearch } from "./ref-search.js";
 import {
@@ -649,6 +650,26 @@ export class SubscriptionService {
   cachedIndex(name: string): IndexFile | undefined {
     const identity = this.identityForRepo(name);
     return identity === undefined ? undefined : this.indexCache.readCached(identity);
+  }
+
+  /**
+   * Every trusted repository as a reference searches it, read from the cached
+   * indexes alone: what it publishes, where each recipe lives, and its
+   * canonical identity, so a reference written as a location finds it whatever
+   * this project calls it. A repository whose index has never been fetched can
+   * still be named, just not searched inside.
+   */
+  cachedReferenceRepos(): ReferenceRepo[] {
+    const repos = this.resolverRepos();
+    return Object.keys(repos).map((name) => {
+      const { url, identity } = repos[name]!;
+      const index = this.cachedIndex(name);
+      const base =
+        index === undefined
+          ? { name, url, namespaces: [], recipes: [] }
+          : referenceReposFromIndexes([name], new Map([[name, index]]), { [name]: url })[0]!;
+      return { ...base, identity };
+    });
   }
 
   // --- Repository identity ----------------------------------------------------------------------

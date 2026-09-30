@@ -203,4 +203,35 @@ describe("SubscriptionService with a ref written as a location", () => {
       service.subscribe({ ref: "github://vendor/recipes/workflow/gamma", yes: true, dryRun: true })
     ).rejects.toThrow(/publishes no namespace or recipe there/);
   });
+
+  /**
+   * cachedReferenceRepos is what every command that settles a location searches
+   * (`sous vars ask`, `sous repo contribute`): each trusted repository with its
+   * identity, and, once its index is cached, what it publishes and where each
+   * recipe lives. Nothing is fetched to answer it.
+   *
+   * service.cachedReferenceRepos()
+   * // -> [{ name: "mine", identity: "github.com/vendor/recipes", recipes: [...] }]
+   */
+  it("should list the trusted repositories from the cache, with identities", async () => {
+    const service = serviceWith({ mine: { url: "https://github.com/vendor/recipes" } });
+
+    const before = service.cachedReferenceRepos();
+    expect(before).toEqual([
+      {
+        name: "mine",
+        url: "https://github.com/vendor/recipes",
+        identity: "github.com/vendor/recipes",
+        namespaces: [],
+        recipes: [],
+      },
+    ]);
+
+    await service.loadIndexes(["mine"]);
+    const [after] = service.cachedReferenceRepos();
+    expect(after!.identity).toBe("github.com/vendor/recipes");
+    expect(after!.recipes).toEqual([
+      { namespace: "workflow", name: "alpha", path: "recipes/workflow/alpha" },
+    ]);
+  });
 });

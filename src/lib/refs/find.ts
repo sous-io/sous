@@ -583,21 +583,35 @@ function identityOfUrl(url: string): string | undefined {
  * context from the definitions also means `sous vars ask --file` resolves
  * references exactly as a subscribed project does.
  *
+ * The trusted repositories, when given, lend each repository its identity and
+ * URL and each recipe its folder, so a reference written as a location (a URL,
+ * a locator, a URL copied from the browser) settles here exactly as it does in
+ * every other command.
+ *
  * @param variables - The variable definitions in play.
  * @param ladder - The environment layers, for environment variable names.
+ * @param trusted - The trusted repositories as a reference searches them.
  */
 export function referenceContextFromVariables(
   variables: DefinedVariable[],
-  ladder?: LadderContext
+  ladder?: LadderContext,
+  trusted: readonly ReferenceRepo[] = []
 ): ReferenceContext {
   const repos = new Map<string, ReferenceRepo>();
 
   for (const defined of variables) {
     const { repo: repoName, namespace, name: recipe } = defined.recipe;
+    const known = trusted.find((entry) => entry.name === repoName);
 
     let repo = repos.get(repoName);
     if (repo === undefined) {
-      repo = { name: repoName, namespaces: [], recipes: [] };
+      repo = {
+        name: repoName,
+        namespaces: [],
+        recipes: [],
+        ...(known?.url === undefined ? {} : { url: known.url }),
+        ...(known?.identity === undefined ? {} : { identity: known.identity }),
+      };
       repos.set(repoName, repo);
     }
 
@@ -605,7 +619,10 @@ export function referenceContextFromVariables(
       repo.namespaces.push({ name: namespace });
     }
     if (!repo.recipes.some((entry) => entry.namespace === namespace && entry.name === recipe)) {
-      repo.recipes.push({ namespace, name: recipe });
+      const path = known?.recipes.find(
+        (entry) => entry.namespace === namespace && entry.name === recipe
+      )?.path;
+      repo.recipes.push({ namespace, name: recipe, ...(path === undefined ? {} : { path }) });
     }
   }
 

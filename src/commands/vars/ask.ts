@@ -48,7 +48,9 @@ import {
   referenceContextFromVariables,
   variableReferenceKey,
   type ReferenceMatch,
+  type ReferenceRepo,
 } from "../../lib/refs/index.js";
+import { subscriptionServiceFor } from "../../lib/repos/subscription-service.js";
 import {
   applyProvidedAnswers,
   askForMissing,
@@ -212,7 +214,10 @@ export default class VarsAsk extends BaseCommand {
 
     // What the reference and the flags name, as the fully qualified reference of
     // every variable to ask. Undefined means everything the usual rules pick.
-    const only = await this.resolveSelection(defined, context, selection);
+    // A reference written as a location settles against the trusted
+    // repositories, read from the cached indexes; a definitions file has none.
+    const trusted = flags.file === undefined ? this.trustedRepos() : [];
+    const only = await this.resolveSelection(defined, context, selection, trusted);
 
     const askOptions = {
       sousDir: this.configContext.sousDir,
@@ -257,13 +262,17 @@ export default class VarsAsk extends BaseCommand {
    * @param defined - Every variable definition in play.
    * @param ladder - The environment layers, for resolving environment variable names.
    * @param selection - The reference and the flags, as the caller wrote them.
+   * @param trusted - The trusted repositories, which settle a reference written as a location.
    * @returns The variables to ask, or undefined when nothing narrowed anything.
    */
   private async resolveSelection(
     defined: DefinedVariable[],
     ladder: LadderContext,
-    selection: Selection
+    selection: Selection,
+    trusted: ReferenceRepo[] = []
   ): Promise<string[] | undefined> {
+    const contextOf = (pool: DefinedVariable[]) =>
+      referenceContextFromVariables(pool, ladder, trusted);
     const { name, repo, namespace, vars } = selection;
     if (name === undefined && repo === undefined && namespace === undefined && vars === undefined) {
       return undefined;
@@ -272,13 +281,13 @@ export default class VarsAsk extends BaseCommand {
     let pool = defined;
 
     if (repo !== undefined) {
-      const match = await this.pick(findRepository(repo, contextOf(pool, ladder)), repo, selection);
+      const match = await this.pick(findRepository(repo, contextOf(pool)), repo, selection);
       pool = pool.filter((entry) => entry.recipe.repo === match.repo);
     }
 
     if (namespace !== undefined) {
       const match = await this.pick(
-        findNamespace(namespace, contextOf(pool, ladder)),
+        findNamespace(namespace, contextOf(pool)),
         namespace,
         selection
       );
@@ -287,7 +296,7 @@ export default class VarsAsk extends BaseCommand {
 
     if (name !== undefined) {
       const match = await this.pick(
-        findReference(name, ALL_SCOPES, contextOf(pool, ladder)),
+        findReference(name, ALL_SCOPES, contextOf(pool)),
         name,
         selection
       );
@@ -298,7 +307,7 @@ export default class VarsAsk extends BaseCommand {
       const chosen: DefinedVariable[] = [];
       for (const wanted of vars) {
         const match = await this.pick(
-          findVariable(wanted, contextOf(pool, ladder)),
+          findVariable(wanted, contextOf(pool)),
           wanted,
           selection
         );
@@ -315,6 +324,23 @@ export default class VarsAsk extends BaseCommand {
     }
 
     return [...new Set(pool.map(variableReferenceKey))];
+  }
+
+  /**
+   * The trusted repositories as a reference searches them, from the cached
+   * indexes alone. A project whose repositories cannot be read this way still
+   * answers every other form of reference, so a failure here is an empty list.
+   */
+  private trustedRepos(): ReferenceRepo[] {
+    try {
+      return subscriptionServiceFor({
+        configContext: this.configContext,
+        settings: this.settings,
+        shellEnv: this.shellEnv,
+      }).cachedReferenceRepos();
+    } catch {
+      return [];
+    }
   }
 
   /**
@@ -356,10 +382,6 @@ function narrowTo(pool: DefinedVariable[], match: ReferenceMatch): DefinedVariab
   });
 }
 
-/** The reference context for the variables still in the running. */
-function contextOf(pool: DefinedVariable[], ladder: LadderContext) {
-  return referenceContextFromVariables(pool, ladder);
-}
 
 /** What this run is asking about, in the words the header shows. */
 function describeSelection(selection: Selection, all: boolean): string {
