@@ -105,7 +105,14 @@ describe("the sous update command", () => {
       'printf "npm %s @ %s\\n" "$*" "$PWD" >> "$FAKE_CALLS"',
       "exit 0",
     ]);
-    for (const tool of ["pnpm", "yarn"]) writeScript(path.join(fakeBin, tool), ["exit 127"]);
+    writeScript(path.join(fakeBin, "pnpm"), ["exit 127"]);
+    // Yarn has no global install here; every other call is recorded, with the
+    // hand-off switch a build would run under.
+    writeScript(path.join(fakeBin, "yarn"), [
+      'if [ "$1" = "global" ]; then exit 127; fi',
+      'printf "yarn %s @ %s SOUS_NO_DELEGATE=%s\\n" "$*" "$PWD" "$SOUS_NO_DELEGATE" >> "$FAKE_CALLS"',
+      "exit 0",
+    ]);
 
     server = http.createServer((_request, response) => {
       response.writeHead(200, { "content-type": "application/json" });
@@ -292,6 +299,49 @@ describe("the sous update command", () => {
       expect(takeCalls()).toEqual([
         `npm i -D -E @sous-io/sous@0.2.34 @ ${project}`,
         `project-copy build @ ${app} SOUS_NO_DELEGATE=1`,
+      ]);
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * A Yarn Plug'n'Play project has no node_modules copy: it is found by its
+   * package.json and `.pnp.cjs`, its version is read from yarn.lock, Yarn
+   * Berry pins the new version, and Yarn runs the new copy's build.
+   *
+   * sous update --project --yes (PnP, yarn.lock at 0.2.18)
+   * // -> yarn add -D -E @sous-io/sous@0.2.34, then yarn run --binaries-only sous build
+   */
+  it(
+    "should update and build a Yarn Plug'n'Play project through Yarn",
+    async () => {
+      const project = path.join(tmp.path, "project");
+      writePackage(project, { name: "widget", devDependencies: { "@sous-io/sous": "0.2.18" } });
+      fs.writeFileSync(path.join(project, ".pnp.cjs"), "// stub\n", "utf8");
+      fs.writeFileSync(
+        path.join(project, "yarn.lock"),
+        '__metadata:\n  version: 8\n\n"@sous-io/sous@npm:0.2.18":\n  version: 0.2.18\n',
+        "utf8"
+      );
+      fs.mkdirSync(path.join(project, ".sous"), { recursive: true });
+      fs.writeFileSync(path.join(project, ".sous", "sous.config.json"), '{ "version": 1 }', "utf8");
+
+      const dry = await runSous(project, "update", "--project", "--dry-run");
+      expect(dry.status).toBe(0);
+      const plan = flat(dry.stdout);
+      expect(plan).toContain(
+        `Location : ${path.join(project, ".pnp.cjs")} Yarn Plug'n'Play, which keeps no node_modules copy`
+      );
+      expect(plan).toContain("Package manager: yarn@berry");
+      expect(plan).toContain("Installed : 0.2.18");
+      expect(plan).toContain("Command : yarn add -D -E @sous-io/sous@0.2.34");
+      expect(takeCalls()).toEqual([]);
+
+      const result = await runSous(project, "update", "--project", "--yes");
+      expect(result.status).toBe(0);
+      expect(takeCalls()).toEqual([
+        `yarn add -D -E @sous-io/sous@0.2.34 @ ${project} SOUS_NO_DELEGATE=`,
+        `yarn run --binaries-only sous build @ ${project} SOUS_NO_DELEGATE=1`,
       ]);
     },
     CLI_TIMEOUT

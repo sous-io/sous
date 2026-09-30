@@ -43,6 +43,11 @@ export type UpdatePlan = {
   location: string;
   /** The project root; set only for a project plan. */
   projectRoot?: string;
+  /**
+   * Set only for a project that uses Yarn Plug'n'Play: the directory holding
+   * its `.pnp.cjs`. `location` is then that file, and the build runs through Yarn.
+   */
+  pnpRoot?: string;
   /** The package manager that runs `command` (`npm`, `pnpm`, `yarn`, `yarn@berry`). */
   manager: string;
   /**
@@ -219,7 +224,7 @@ function planProject(
     section: install.declared.section,
     workspaceRoot: install.workspaceRoot,
   });
-  return {
+  const plan: UpdatePlan = {
     scope: "project",
     location: install.location,
     projectRoot: install.projectRoot,
@@ -231,6 +236,8 @@ function planProject(
     declaredIn: install.declared,
     command: { ...command, cwd: install.projectRoot },
   };
+  if (install.pnpRoot !== undefined) plan.pnpRoot = install.pnpRoot;
+  return plan;
 }
 
 /**

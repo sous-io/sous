@@ -70,9 +70,19 @@ manager that installed it, so you never need to remember which one that was or i
 - **In a project that installs sous**, it updates the project's install with the project's own
   manager (`npm i -D -E`, `pnpm add -D -E`, `yarn add -D -E`), which pins the exact version in
   `package.json` and updates the lockfile. A dependency declared under `dependencies` stays there.
-  It updates the global install as well when there is one.
+  It updates the global install as well when there is one. A Yarn Plug'n'Play project, which has
+  no `node_modules`, counts as installing sous when its `package.json` declares it and a `.pnp.cjs`
+  sits beside it or above it; the installed version is read from `yarn.lock`.
 - **After a project update**, the newly installed copy builds the project, so
-  `.sous/sous.lock.json` pins the core recipe at the new version. `--no-build` skips it.
+  `.sous/sous.lock.json` pins the core recipe at the new version. Under Yarn Plug'n'Play, Yarn
+  runs that build (`yarn run --binaries-only sous build`). `--no-build` skips it.
+
+Under Yarn Plug'n'Play, sous runs only from a copy Yarn has unpacked; from inside Yarn's zip cache
+it fails with `EBADF: bad file descriptor`. Unpack it in `package.json`, then run `yarn install`:
+
+```json
+"dependenciesMeta": { "@sous-io/sous": { "unplugged": true } }
+```
 
 `update` always runs in the copy you invoked, never handed off to the project's own; a project copy
 may be too old to have the command. A project config this copy cannot load (one written for a newer

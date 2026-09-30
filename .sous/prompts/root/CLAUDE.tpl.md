@@ -827,7 +827,9 @@ file claims.
 `sous update` (sous-io/sous#135, ADR 0011) finds the installs, plans each one, then takes them
 one at a time. `discoverInstalls` finds the project copy with the hand-off's own
 `findProjectCopy`, reads the project's manager with package-manager-detector's `detect` (plus a
-Yarn Berry correction), and finds global installs by asking each manager for its global root
+Yarn Berry correction), falls back to a Yarn Plug'n'Play project when no copy is found
+(`findPnpInstall`: a declaring package.json, a `.pnp.cjs` at or above it, the version from
+`yarn.lock`; the plan carries `pnpRoot`), and finds global installs by asking each manager for its global root
 (`npm root -g`, `pnpm root -g`, `yarn global dir`) through the injectable command runner.
 `chooseVersion` is pure: the default range is `defaultRange(current)`, `>=<current> <<major+1>.0.0-0`,
 so a 0.x install stays below 1.0.0 (not caret semantics). `buildUpdatePlans` returns one plan per
@@ -835,7 +837,8 @@ install and a notice for every copy it will not touch (npx, Volta, an unsupporte
 undeclared copy). `runSelfUpdate` fetches the registry first (an unreachable one fails the run),
 plans everything, then prints, asks (one question per install, `--yes` answers all) and runs each
 install through the injectable `InstallExecutor`, and finally runs the NEW project copy's bin with
-`build` under `SOUS_NO_DELEGATE=1` in the directory `Update.buildDirFor` names. Nothing in the
+`build` under `SOUS_NO_DELEGATE=1` in the directory `Update.buildDirFor` names (under Plug'n'Play,
+`yarn run --binaries-only sous build`, since no bin is on disk). Nothing in the
 tests needs a network or a real package manager: `self-update.test.ts` drives the flow in process,
 and `update-command.test.ts` boots the real bin against a loopback registry and fake managers.
 

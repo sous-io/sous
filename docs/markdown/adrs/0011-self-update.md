@@ -48,6 +48,11 @@ issue's "Technical Notes", which the issue itself labels as agent suggestions.
   >
   >   -- gh-135, "Which installs are updated"
 
+- A Yarn Plug'n'Play project keeps no `node_modules` copy, so when the walk finds none, the project install is
+  the nearest `package.json` at or above the working directory that declares the package, with a `.pnp.cjs` in
+  its directory or above it. Its manager is Yarn Berry, its version is the one `yarn.lock` (beside `.pnp.cjs`)
+  resolves the declared range to, and the plan names `.pnp.cjs` as its location. (Agent suggestion; the
+  maintainer has not ruled on it.)
 - `--global` and `--project` narrow the run to one side, and exclude each other.
 - A global install's manager is found by asking each of npm, pnpm and Yarn classic for its global root
   (`npm root -g`, `pnpm root -g`, `yarn global dir`) and looking for the package there; two managers naming one
@@ -119,6 +124,10 @@ issue's "Technical Notes", which the issue itself labels as agent suggestions.
   `SOUS_NO_DELEGATE=1` so no other copy takes the build over. That build moves the `core/sous-skills` pin to the
   new version, which is how the maintainer's "update the project lockfile(s)" is met. `--no-build` skips it, as
   on every command that ends in a build.
+- Under Yarn Plug'n'Play there is no bin on disk for Node to run, so Yarn runs the dependency's bin itself:
+  `yarn run --binaries-only sous build`, with the same `SOUS_NO_DELEGATE=1`. Sous runs there only from a copy
+  Yarn has unpacked (`dependenciesMeta` with `unplugged: true`); a failed build says so. (Agent suggestion; the
+  maintainer has not ruled on it.)
 - The build runs in the directory of the config this run found, when that lies inside the updated project, and
   otherwise in the project root when its `.sous/` holds a primary config; a project with neither is not built.
   (Agent suggestion; the maintainer has not ruled on it.)

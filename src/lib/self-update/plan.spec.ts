@@ -161,6 +161,33 @@ describe("buildUpdatePlans()", () => {
   });
 
   /**
+   * buildUpdatePlans should plan a Yarn Plug'n'Play project with Yarn Berry's
+   * add command, its `.pnp.cjs` as the location, and carry `pnpRoot`, which
+   * a project without Plug'n'Play never has.
+   *
+   * project { manager: yarn@berry, location: "/p/.pnp.cjs", pnpRoot: "/p" }
+   * // -> { pnpRoot: "/p", command: yarn add -D -E @sous-io/sous@0.2.34 (cwd /p) }
+   */
+  it("should plan a Plug'n'Play project through Yarn Berry", () => {
+    const discovery = both({
+      project: pnpmProject({
+        location: "/p/.pnp.cjs",
+        realPath: "/p/.pnp.cjs",
+        manager: { supported: true, agent: "yarn@berry", detected: true },
+        pnpRoot: "/p",
+      }),
+    });
+    const [, project] = buildUpdatePlans(discovery, METADATA, DEFAULT).plans;
+    expect(project).toMatchObject({
+      location: "/p/.pnp.cjs",
+      pnpRoot: "/p",
+      manager: "yarn@berry",
+      command: { command: "yarn", args: ["add", "-D", "-E", "@sous-io/sous@0.2.34"], cwd: "/p" },
+    });
+    expect("pnpRoot" in buildUpdatePlans(both(), METADATA, DEFAULT).plans[1]!).toBe(false);
+  });
+
+  /**
    * buildUpdatePlans should turn an undeclared copy, a copy with an unknown
    * version and a manager sous does not drive into notices, the last with the
    * manager's own command when it has one.

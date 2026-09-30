@@ -50,19 +50,35 @@ export type ProjectManagerInfo =
 
 /** The project's own install of sous. */
 export type ProjectInstallInfo = {
-  /** The directory holding the `node_modules` the copy is in, and the project's package.json. */
+  /**
+   * The directory holding the project's package.json: the one holding the
+   * `node_modules` the copy is in, or under Yarn Plug'n'Play the nearest one
+   * that declares the package.
+   */
   projectRoot: string;
-  /** The copy's path under `node_modules`, as found (not resolved through links). */
+  /**
+   * The copy's path under `node_modules`, as found (not resolved through
+   * links), or under Yarn Plug'n'Play the `.pnp.cjs` file that maps it, since
+   * the package itself stays in Yarn's cache.
+   */
   location: string;
   /** The copy's real path, which is what is compared with other copies. */
   realPath: string;
-  /** The version in the copy's package.json, or `UNKNOWN_VERSION`. */
+  /**
+   * The version in the copy's package.json (under Yarn Plug'n'Play, the one
+   * `yarn.lock` resolves the declared range to), or `UNKNOWN_VERSION`.
+   */
   installed: string;
   /** How package.json declares sous; undefined when it is installed but not declared. */
   declared?: DeclaredDependency;
   manager: ProjectManagerInfo;
   /** Whether the project is a workspace root, as its manager reads one. */
   workspaceRoot: boolean;
+  /**
+   * Set only when the project uses Yarn Plug'n'Play: the directory holding
+   * `.pnp.cjs` and `yarn.lock` (the project root, or its workspace's root).
+   */
+  pnpRoot?: string;
 };
 
 /** One global install of sous, and the manager whose global root holds it. */
@@ -127,31 +143,127 @@ export async function discoverInstalls(options: DiscoverInstallsOptions): Promis
 }
 
 /**
- * The project install nearest `cwd`, found the way the hand-off finds it
- * (`findProjectCopy`), or undefined when there is none or its package.json
- * does not name the package.
+ * The project install nearest `cwd`: the copy the hand-off finds
+ * (`findProjectCopy`), and when there is none, a Yarn Plug'n'Play project
+ * that declares the package (`findPnpInstall`). Undefined when there is
+ * neither, or the `node_modules` copy found is some other package.
  */
 export async function findProjectInstallInfo(cwd: string): Promise<ProjectInstallInfo | undefined> {
   const location = findProjectCopy(cwd);
-  if (location === undefined) return undefined;
+  if (location === undefined) return findPnpInstall(cwd);
   const copy = readPackageJson(location);
   if (copy?.name !== PACKAGE_NAME) return undefined;
 
   // <projectRoot>/node_modules/@sous-io/sous
   const projectRoot = path.resolve(location, "..", "..", "..");
-  const pkg = readPackageJson(projectRoot);
-  const declared = declaredDependency(pkg);
-  const manager = await projectManager(projectRoot);
-  const info: ProjectInstallInfo = {
-    projectRoot,
+  return describeProject(projectRoot, await projectManager(projectRoot), {
     location,
     realPath: realpathOr(location),
     installed: versionOf(copy),
+  });
+}
+
+/** The file Yarn Plug'n'Play writes in place of `node_modules`. */
+export const PNP_FILE = ".pnp.cjs";
+
+/**
+ * A Yarn Plug'n'Play install, which has no `node_modules` copy to find: the
+ * nearest package.json at or above `cwd` that declares the package, with a
+ * `.pnp.cjs` in its directory or above it. The version is the one `yarn.lock`
+ * (beside `.pnp.cjs`) resolves the declared range to, and the manager is Yarn
+ * Berry, the only Yarn that writes `.pnp.cjs`. Undefined when either is missing.
+ */
+export function findPnpInstall(cwd: string): ProjectInstallInfo | undefined {
+  const projectRoot = findUp(cwd, (dir) => declaredDependency(readPackageJson(dir)) !== undefined);
+  if (projectRoot === undefined) return undefined;
+  const pnpRoot = findUp(projectRoot, (dir) => fs.existsSync(path.join(dir, PNP_FILE)));
+  if (pnpRoot === undefined) return undefined;
+
+  const range = declaredDependency(readPackageJson(projectRoot))?.range ?? "";
+  let lockfile = "";
+  try {
+    lockfile = fs.readFileSync(path.join(pnpRoot, "yarn.lock"), "utf8");
+  } catch {
+    // No lockfile: the version is unknown, and the plan says so.
+  }
+  const location = path.join(pnpRoot, PNP_FILE);
+  const info = describeProject(
+    projectRoot,
+    { supported: true, agent: "yarn@berry", detected: true },
+    {
+      location,
+      realPath: realpathOr(location),
+      installed: yarnLockVersion(lockfile, range) ?? UNKNOWN_VERSION,
+    }
+  );
+  info.pnpRoot = pnpRoot;
+  return info;
+}
+
+/**
+ * The version a Yarn Berry `yarn.lock` resolves the package's declared
+ * `range` to. Each entry opens with an unindented key listing the
+ * descriptors it answers (`"@sous-io/sous@npm:0.2.28, @sous-io/sous@npm:^0.2.0":`)
+ * and holds an indented `version:` line. The entry whose key names the range
+ * wins; when none does and the lockfile holds exactly one version of the
+ * package, that version is the answer. Undefined otherwise.
+ *
+ * yarnLockVersion('"@sous-io/sous@npm:0.2.28":\n  version: 0.2.28\n', "0.2.28") -> "0.2.28"
+ */
+export function yarnLockVersion(lockfile: string, range: string): string | undefined {
+  const prefix = `${PACKAGE_NAME}@`;
+  const wanted = new Set([`${prefix}${range}`, `${prefix}npm:${range}`]);
+  const entries: { descriptors: string[]; version?: string }[] = [];
+  let entry: { descriptors: string[]; version?: string } | undefined;
+  for (const line of lockfile.split(/\r?\n/)) {
+    if (/^[^\s#].*:$/.test(line)) {
+      const descriptors = line
+        .slice(0, -1)
+        .split(",")
+        .map((part) => part.trim().replace(/^"|"$/g, ""))
+        .filter((descriptor) => descriptor.startsWith(prefix));
+      entry = descriptors.length > 0 ? { descriptors } : undefined;
+      if (entry !== undefined) entries.push(entry);
+      continue;
+    }
+    const version = /^\s+version:\s*"?([^"\s]+)"?\s*$/.exec(line);
+    if (entry !== undefined && version !== null && entry.version === undefined) {
+      entry.version = version[1];
+    }
+  }
+  const exact = entries.find((candidate) => candidate.descriptors.some((d) => wanted.has(d)));
+  if (exact !== undefined) return exact.version;
+  const versions = new Set(entries.flatMap((candidate) => candidate.version ?? []));
+  return versions.size === 1 ? [...versions][0] : undefined;
+}
+
+/** A project install, from its root, its manager and the facts about its copy. */
+function describeProject(
+  projectRoot: string,
+  manager: ProjectManagerInfo,
+  copy: { location: string; realPath: string; installed: string }
+): ProjectInstallInfo {
+  const pkg = readPackageJson(projectRoot);
+  const declared = declaredDependency(pkg);
+  const info: ProjectInstallInfo = {
+    projectRoot,
+    ...copy,
     manager,
     workspaceRoot: isWorkspaceRoot(manager.agent, projectRoot, pkg),
   };
   if (declared !== undefined) info.declared = declared;
   return info;
+}
+
+/** The nearest directory at or above `start` that `test` accepts, or undefined. */
+function findUp(start: string, test: (dir: string) => boolean): string | undefined {
+  let dir = path.resolve(start);
+  for (;;) {
+    if (test(dir)) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) return undefined;
+    dir = parent;
+  }
 }
 
 /**
@@ -271,7 +383,7 @@ export function classifyRunning(
   const realPath = realpathOr(ownRoot);
   const pkg = readPackageJson(ownRoot);
   const installed = pkg === undefined ? UNKNOWN_VERSION : versionOf(pkg);
-  if (project !== undefined && project.realPath === realPath) {
+  if (project !== undefined && (project.realPath === realPath || isPnpCopy(project, realPath))) {
     return { kind: "project", realPath, installed };
   }
   const global = globals.find((install) => install.realPath === realPath);
@@ -280,6 +392,18 @@ export function classifyRunning(
   if (slashed.includes("/_npx/")) return { kind: "npx", realPath, installed };
   if (slashed.includes("/.volta/")) return { kind: "volta", realPath, installed };
   return { kind: "unknown", realPath, installed };
+}
+
+/**
+ * Whether `realPath` is the Plug'n'Play project's own copy, unpacked by Yarn
+ * into `<pnpRoot>/.yarn/unplugged/` (a copy still inside Yarn's zip cache
+ * cannot run sous at all).
+ */
+function isPnpCopy(project: ProjectInstallInfo, realPath: string): boolean {
+  if (project.pnpRoot === undefined) return false;
+  const unplugged = path.join(realpathOr(project.pnpRoot), ".yarn", "unplugged");
+  const relative = path.relative(unplugged, realPath);
+  return relative.length > 0 && !relative.startsWith("..") && !path.isAbsolute(relative);
 }
 
 /** The `version` a package.json names, or `UNKNOWN_VERSION`. */

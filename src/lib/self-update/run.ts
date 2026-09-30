@@ -306,7 +306,11 @@ function planFacts(
 ): VariableEntry[] {
   const facts: VariableEntry[] = [];
   if (plan.projectRoot !== undefined) facts.push({ label: "Project", value: plan.projectRoot });
-  facts.push({ label: "Location", value: plan.location });
+  facts.push(
+    plan.pnpRoot === undefined
+      ? { label: "Location", value: plan.location }
+      : { label: "Location", value: plan.location, detail: "Yarn Plug'n'Play, which keeps no node_modules copy" }
+  );
   facts.push(
     plan.managerAssumed
       ? {
@@ -398,10 +402,12 @@ async function runCommandAnnounced(
 
 /**
  * Runs the newly installed project copy's own build, so the lockfile's
- * `core/sous-skills` pin moves to the version just installed. The copy's bin
+ * `core/sous-skills` pin moves to the version just installed, with the
+ * hand-off switched off so no other copy takes the build over. The copy's bin
  * is read from its package.json again, now that the install has replaced it,
- * and it runs under this Node with the hand-off switched off, so no other copy
- * takes the build over.
+ * and runs under this Node. Under Yarn Plug'n'Play there is no bin on disk to
+ * run that way, so Yarn runs the dependency's bin itself
+ * (`yarn run --binaries-only sous build`), with its resolution hooks loaded.
  */
 async function buildProject(
   plan: UpdatePlan,
@@ -413,33 +419,44 @@ async function buildProject(
   if (!build) return { result: "skipped" };
   if (buildDir === undefined) return { result: "no-config" };
 
-  const root = realpathOr(plan.location);
-  const entry = binEntryOf(readPackageJson(root));
   section("Building the project");
-  if (entry === undefined) {
-    displayError(
-      `The update stands, but the new copy at ${root} names no bin sous can run, so the ` +
-        "project was not built. Run 'sous build' in the project.",
-      (line) => console.error(line)
-    );
-    return { result: "no-bin", directory: buildDir };
+  let command: PlannedCommand;
+  if (plan.pnpRoot !== undefined) {
+    command = { command: "yarn", args: ["run", "--binaries-only", "sous", "build"], cwd: buildDir };
+  } else {
+    const root = realpathOr(plan.location);
+    const entry = binEntryOf(readPackageJson(root));
+    if (entry === undefined) {
+      displayError(
+        `The update stands, but the new copy at ${root} names no bin sous can run, so the ` +
+          "project was not built. Run 'sous build' in the project.",
+        (line) => console.error(line)
+      );
+      return { result: "no-bin", directory: buildDir };
+    }
+    command = { command: process.execPath, args: [path.resolve(root, entry), "build"], cwd: buildDir };
   }
-  const command: PlannedCommand = {
-    command: process.execPath,
-    args: [path.resolve(root, entry), "build"],
-    cwd: buildDir,
-  };
   const code = await runCommandAnnounced(execute, command, { ...env, SOUS_NO_DELEGATE: "1" });
   if (code !== 0) {
     displayError(
       `The update stands, but the build that followed it exited with code ${code}. ` +
-        "Fix what the build reported above and run 'sous build' again.",
+        "Fix what the build reported above and run 'sous build' again." +
+        (plan.pnpRoot === undefined ? "" : PNP_BUILD_HINT),
       (line) => console.error(line)
     );
     return { result: "failed", directory: buildDir, code };
   }
   return { result: "built", directory: buildDir };
 }
+
+/**
+ * What a failed build under Yarn Plug'n'Play adds: sous cannot run from inside
+ * Yarn's zip cache, only from a copy Yarn has unpacked.
+ */
+const PNP_BUILD_HINT =
+  " Under Yarn Plug'n'Play, sous runs only from an unpacked copy: if the error above is " +
+  "'EBADF: bad file descriptor', add \"dependenciesMeta\": { \"@sous-io/sous\": { \"unplugged\": true } } " +
+  "to package.json, then run 'yarn install'.";
 
 /** Prints one notice: its sentence, then where the copy is and the command to run by hand. */
 function printNotice(notice: UpdateNotice): void {
