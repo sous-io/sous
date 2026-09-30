@@ -4,8 +4,11 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { makeTmpDir, type TmpDir } from "../test/utils/tmp.js";
 import {
   binEntryOf,
+  findProjectCopy,
   findProjectInstall,
   isEnvFlagOn,
+  readPackageJson,
+  realpathOr,
   planHandoff,
   handOffToProjectInstall,
   NO_DELEGATE_ENV,
@@ -167,6 +170,44 @@ describe("project-install", () => {
       writePackage(copyPathIn(badJson));
       fs.writeFileSync(path.join(copyPathIn(badJson), "package.json"), "{ not json");
       expect(findProjectInstall(badJson, ownRoot)).toBeUndefined();
+    });
+  });
+
+  describe("findProjectCopy()", () => {
+    /**
+     * findProjectCopy should return the nearest copy's path as found, without
+     * resolving a symlink (pnpm links the copy into its store), and undefined
+     * when no ancestor holds one.
+     *
+     * findProjectCopy("<project>/src") -> "<project>/node_modules/@sous-io/sous"
+     */
+    it("should return the unresolved path of the nearest copy", () => {
+      const project = path.join(tmp.path, "project");
+      const stored = writePackage(path.join(tmp.path, "store", "sous"));
+      fs.mkdirSync(path.join(project, "node_modules", "@sous-io"), { recursive: true });
+      fs.symlinkSync(stored, copyPathIn(project), "dir");
+      fs.mkdirSync(path.join(project, "src"));
+      expect(findProjectCopy(path.join(project, "src"))).toBe(copyPathIn(project));
+      expect(findProjectCopy(path.join(tmp.path, "store"))).toBeUndefined();
+    });
+  });
+
+  describe("realpathOr() and readPackageJson()", () => {
+    /**
+     * realpathOr should resolve a path that exists and fall back to the
+     * resolved path for one that does not; readPackageJson should return
+     * undefined for a missing or unparsable file.
+     *
+     * realpathOr("<tmp>/missing") -> "<tmp>/missing"
+     * readPackageJson("<tmp>/missing") -> undefined
+     */
+    it("should fall back quietly for missing files", () => {
+      const missing = path.join(tmp.path, "missing");
+      expect(realpathOr(missing)).toBe(missing);
+      expect(readPackageJson(missing)).toBeUndefined();
+      fs.writeFileSync(path.join(tmp.path, "package.json"), "{ not json");
+      expect(readPackageJson(tmp.path)).toBeUndefined();
+      expect(readPackageJson(ownRoot)).toMatchObject({ version: "2.0.0" });
     });
   });
 

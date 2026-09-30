@@ -18,7 +18,11 @@ export type HandoffPlan =
 
 export function isEnvFlagOn(value: string | undefined): boolean;
 export function binEntryOf(pkg: unknown): string | undefined;
+export function readPackageJson(dir: string): Record<string, unknown> | undefined;
 export function findProjectInstall(startDir: string, ownRoot: string): ProjectInstall | undefined;
+export function findProjectCopy(startDir: string): string | undefined;
+export function realpathOr(p: string): string;
+export function describeInstall(candidate: string, ownRoot: string): ProjectInstall | undefined;
 export function formatHandoffNotice(input: {
   install: Extract<ProjectInstall, { same: false }>;
   ownVersion: string;

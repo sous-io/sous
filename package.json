@@ -60,6 +60,7 @@
     "jsonc-parser": "^3.3.1",
     "liquidjs": "^10.25.0",
     "minimatch": "^10.2.4",
+    "package-manager-detector": "^1.8.0",
     "semver": "^7.8.5",
     "tiktoken": "^1.0.22",
     "tsx": "^4",

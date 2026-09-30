@@ -60,10 +60,10 @@ export function isEnvFlagOn(value) {
 }
 
 /**
- * Reads a package.json, returning the parsed object or undefined for a file
- * that is missing, unreadable or not JSON.
+ * Reads the package.json in `dir`, returning the parsed object or undefined
+ * for a file that is missing, unreadable or not JSON.
  */
-function readPackageJson(dir) {
+export function readPackageJson(dir) {
   try {
     return JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf8"));
   } catch {
@@ -103,19 +103,32 @@ export function binEntryOf(pkg) {
  * older one further up would be a guess.
  */
 export function findProjectInstall(startDir, ownRoot) {
+  const candidate = findProjectCopy(startDir);
+  return candidate === undefined ? undefined : describeInstall(candidate, ownRoot);
+}
+
+/**
+ * Looks up from `startDir` for the nearest `node_modules/@sous-io/sous` that
+ * holds a package.json, and returns that path as found, WITHOUT resolving
+ * symlinks (pnpm links it into its own store, so only the unresolved path says
+ * which project holds it). Undefined when no ancestor holds one.
+ */
+export function findProjectCopy(startDir) {
   let dir = path.resolve(startDir);
   for (;;) {
     const candidate = path.join(dir, "node_modules", ...PACKAGE_NAME.split("/"));
-    if (fs.existsSync(path.join(candidate, "package.json"))) {
-      return describeInstall(candidate, ownRoot);
-    }
+    if (fs.existsSync(path.join(candidate, "package.json"))) return candidate;
     const parent = path.dirname(dir);
     if (parent === dir) return undefined;
     dir = parent;
   }
 }
 
-function realpathOr(p) {
+/**
+ * The real path of `p`, or `p` resolved when it cannot be read (it does not
+ * exist, or a link in it is broken).
+ */
+export function realpathOr(p) {
   try {
     return fs.realpathSync(p);
   } catch {
@@ -123,7 +136,13 @@ function realpathOr(p) {
   }
 }
 
-function describeInstall(candidate, ownRoot) {
+/**
+ * Describes the copy of the package at `candidate` the way `findProjectInstall`
+ * does: `{ same: true, root }` when it is `ownRoot`, compared by real path,
+ * `{ same: false, root, version, bin }` for a usable other copy, and undefined
+ * for one that is not usable.
+ */
+export function describeInstall(candidate, ownRoot) {
   const root = realpathOr(candidate);
   if (root === realpathOr(ownRoot)) return { same: true, root };
   const pkg = readPackageJson(root);
