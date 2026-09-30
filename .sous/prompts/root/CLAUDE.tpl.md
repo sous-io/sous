@@ -31,6 +31,8 @@ The binary was called `xcv` in earlier releases; the name is now `sous` everywhe
 
 @~workflow/agent-memory/memories/improving-the-instructions.md
 
+@~engineering/design-tenets/memories/design-tenets.md
+
 @${sousDir}/prompts/memories/writing-standards.md
 
 @~communication/plain-speech/memories/speak-plainly.md
@@ -924,20 +926,23 @@ the COMMITTED `.sous/sous.lock.json`. Three sources feed `.claude/skills/`:
   at all; sous provides that subscription itself, and `recipes/core/sous-skills/` at the root
   of this repository is its source.
 - The subscriptions the project declares, written into `recipeOutputs.skills`. The primary
-  config declares `workflow/task-files`, `workflow/github-projects`,
-  `communication/control-flow` and `cli/command-design`; the managed
-  `.sous/conf.d/510-subscriptions.jsonc` layer (written by `sous subscription add`) declares
-  `communication/agent-conduct`, `communication/plain-speech`,
-  `reasoning/evidence-and-verification`, `workflow/sub-agent-delegation`,
-  `workflow/sources-of-truth`, `workflow/agent-memory` and `workflow/autonomous-work`.
+  config declares `omakase/house`, the standard set, plus the two recipes the set leaves out
+  that sous uses: `workflow/github-projects` and `cli/command-design`. The set has no files of
+  its own; its `subscribes` list brings in the rest (every `communication` and `reasoning`
+  recipe, `engineering/design-tenets`, and `workflow/agent-memory`, `workflow/autonomous-work`,
+  `workflow/sources-of-truth`, `workflow/sub-agent-delegation` and `workflow/task-files`). The
+  managed `.sous/conf.d/510-subscriptions.jsonc` layer is where `sous subscription add` writes
+  any further subscription.
 - This repository's own skills in `.sous/skills/`, compiled by the `projectSkills` target.
 
 A recipe's MEMORIES do not go through `recipeOutputs`: `recipeOutputs.memories` is unset, so
 every build warns that memories were skipped, and each subscribed recipe's memory is instead
 included by hand into the source of this file, one `@~namespace/recipe/memories/<file>.md` line
-each, placed where it fits. This source is a `.tpl.` template, so those memories render with the
+each, placed where it fits (the conduct memories, `engineering/design-tenets` among them, sit
+together near the top). This source is a `.tpl.` template, so those memories render with the
 project's answers. A new subscription that publishes a memory gets its include line in the same
-change.
+change. The website's source (`.sous/prompts/docs-site/CLAUDE.tpl.md`) includes only this
+project's own memories under `.sous/prompts/memories/`, none from a recipe.
 
 `tool-usage/automated-browser-tasks` is deliberately NOT subscribed to: it needs
 `browserAutomationScriptsDir` pointing at a real script directory, and sous has none.
