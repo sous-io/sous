@@ -29,3 +29,4 @@
   - [0008: One ref parser, told where the ref came from](adrs/0008-one-ref-parser.md)
   - [0009: One whole build, everywhere](adrs/0009-whole-build-everywhere.md)
   - [0010: The index describes each version's dependencies and questions](adrs/0010-index-describes-recipes.md)
+  - [0011: `sous update` updates sous through the package managers](adrs/0011-self-update.md)

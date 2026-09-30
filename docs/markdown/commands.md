@@ -146,6 +146,27 @@ so it works offline. `--limit <n>` sets how many matches to show, defaulting to 
 only installed recipes and adds an Installed column. Also spelled `sous repo search`.
 Example: `sous search task --limit 50`
 
+### `sous update`
+Updates sous itself: the global install, this project's own install, or both, each through the package manager
+that installed it. It works outside a project too, and it always runs in the copy you invoked, never handed off
+to the project's own. Every plan is printed before anything is installed, and each install asks its own
+question. After a project update the new copy builds the project, so the lockfile pins the core recipe at the new
+version. A project config this copy cannot load is one warning, not a stop. Takes `-y, --yes` and `--dry-run`
+(which also prints the command each install would run). See [Updating](README.md#updating).
+
+- `--major`: install the newest published version, whatever its major. By default each install moves to the
+  newest version in its current major, and never down.
+- `--version <version|range|tag>`: install exactly this version, the newest in this range, or the one this
+  dist-tag names. This is how you downgrade.
+- `--prerelease`, `--no-prerelease`: count prerelease versions as candidates, or not. On by default when the
+  installed version is a prerelease. `--pre` is the same flag.
+- `--global`, `--project`: update only that install.
+- `--no-build`: update the project install without building the project afterwards.
+
+`--major` and `--version` exclude each other, and so do `--global` and `--project`.
+
+Example: `sous update --version next --dry-run`
+
 ### `sous help [COMMAND]`
 Prints the help for sous, or for one command or topic. Works from any directory, including one with no config
 above it. Example: `sous help repo add`
