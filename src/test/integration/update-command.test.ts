@@ -233,6 +233,71 @@ describe("the sous update command", () => {
   );
 
   /**
+   * A project config this copy rejects (here a top-level key the strict
+   * schema does not know, as a config written for a newer sous would carry)
+   * is one warning, not a stop: the update still runs, and the new copy still
+   * builds the project, since it may be the copy that understands the config.
+   *
+   * sous update --project --yes (config rejected) -> warning, npm, project-copy build
+   */
+  it(
+    "should warn about a config it cannot load and still update and build",
+    async () => {
+      const project = makeProject();
+      const configPath = path.join(project, ".sous", "sous.config.json");
+      fs.writeFileSync(configPath, '{ "version": 1, "futureSetting": true }', "utf8");
+
+      const result = await runSous(project, "update", "--project", "--yes");
+
+      expect(result.status).toBe(0);
+      const printed = flat(result.stdout);
+      expect(printed).toContain("WARNING:");
+      expect(printed).toContain(
+        `Sous could not load the project config at ${configPath}, so this command carries on without it.`
+      );
+      expect(printed).toContain("futureSetting");
+      expect(printed).toContain(`Then builds : yes with the new copy, in ${project}`);
+      expect(takeCalls()).toEqual([
+        `npm i -D -E @sous-io/sous@0.2.34 @ ${project}`,
+        `project-copy build @ ${project} SOUS_NO_DELEGATE=1`,
+      ]);
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * A rejected config in a subdirectory of the project is still where the
+   * build runs, exactly as a config that loaded would be; the project root,
+   * which has no config of its own here, is not.
+   *
+   * sous update --project --yes (in packages/app, its config rejected) -> build in packages/app
+   */
+  it(
+    "should build where the rejected config is, inside the project",
+    async () => {
+      const project = makeProject();
+      fs.rmSync(path.join(project, ".sous"), { recursive: true });
+      const app = path.join(project, "packages", "app");
+      fs.mkdirSync(path.join(app, ".sous"), { recursive: true });
+      fs.writeFileSync(
+        path.join(app, ".sous", "sous.config.json"),
+        '{ "version": 1, "futureSetting": true }',
+        "utf8"
+      );
+
+      const result = await runSous(app, "update", "--project", "--yes");
+
+      expect(result.status).toBe(0);
+      expect(flat(result.stdout)).toContain("Sous could not load the project config at");
+      expect(takeCalls()).toEqual([
+        `npm i -D -E @sous-io/sous@0.2.34 @ ${project}`,
+        `project-copy build @ ${app} SOUS_NO_DELEGATE=1`,
+      ]);
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
    * `--no-build` updates the project install and runs no build.
    *
    * sous update --project --yes --no-build -> only npm runs

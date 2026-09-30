@@ -20,7 +20,7 @@ import path from "node:path";
 import { Flags } from "@oclif/core";
 import { BaseCommand } from "../base-command.js";
 import { SOUS_DIR_NAME, findConfigInSousDir } from "../lib/config-discovery.js";
-import { ConfigError } from "../lib/errors.js";
+import { ConfigError, isConfigError } from "../lib/errors.js";
 import { CLI_ROOT } from "../lib/package-info.js";
 import { registryUrl, runSelfUpdate } from "../lib/self-update/run.js";
 import type { UpdateScope, VersionRequest } from "../lib/self-update/index.js";
@@ -33,6 +33,12 @@ export default class Update extends BaseCommand {
 
   /** This command updates sous wherever it is installed; a project config is optional. */
   static override requiresConfig = false;
+
+  /**
+   * A config this copy cannot load (one written for a newer sous, say) is the
+   * very thing an update may fix, so it is a warning here rather than a stop.
+   */
+  static override toleratesConfigErrors = true;
 
   static examples = [
     "<%= config.bin %> update",
@@ -136,17 +142,31 @@ export default class Update extends BaseCommand {
    * Where a build after a project update runs: the directory of the config
    * discovery found, when it lies inside the project that was updated, and
    * otherwise the project root when its own `.sous/` holds a primary config.
+   * A config this copy could not load counts as found: the new copy may
+   * understand it, and its build is where any real problem is reported.
    * Undefined means the project has no sous config, so nothing is built.
    */
   private buildDirFor(projectRoot: string): string | undefined {
-    if (this.hasConfig) {
-      const configDir = path.dirname(this.discovered.sousDir);
+    const found = this.hasConfig ? this.discovered.sousDir : this.rejectedConfig?.sousDir;
+    if (found !== undefined) {
+      const configDir = path.dirname(found);
       const relative = path.relative(projectRoot, configDir);
       if (!relative.startsWith("..") && !path.isAbsolute(relative)) return configDir;
     }
-    return findConfigInSousDir(path.join(projectRoot, SOUS_DIR_NAME)) === null
-      ? undefined
-      : projectRoot;
+    return holdsPrimaryConfig(path.join(projectRoot, SOUS_DIR_NAME)) ? projectRoot : undefined;
+  }
+}
+
+/**
+ * Whether a `.sous/` directory holds a primary config. Holding several is
+ * still holding one: the build that follows reports that mistake itself.
+ */
+function holdsPrimaryConfig(sousDir: string): boolean {
+  try {
+    return findConfigInSousDir(sousDir) !== null;
+  } catch (error) {
+    if (isConfigError(error)) return true;
+    throw error;
   }
 }
 
