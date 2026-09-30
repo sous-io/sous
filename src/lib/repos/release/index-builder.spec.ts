@@ -339,6 +339,323 @@ describe("buildIndex()", () => {
   });
 });
 
+/**
+ * The repository the frozen-dependency tests release: a preset set,
+ * `omakase/house`, that subscribes to the whole `workflow` namespace and to
+ * `tools/gamma`, beside the recipes it names.
+ */
+function writeSetRepository(recipes: string[]): void {
+  writeFile(
+    repo,
+    "sous.repo.yaml",
+    "formatVersion: 1\nname: test-repo\nnamespaces:\n  omakase: {}\n  workflow: {}\n" +
+      "  tools: {}\nrecipes:\n" +
+      recipes.map((key) => `  - recipes/${key}\n`).join("")
+  );
+}
+
+/** Writes one recipe of the set repository, with a file so it has content. */
+function writeSetRecipe(key: string, version: string, extra = ""): void {
+  const [namespace, name] = key.split("/");
+  writeFile(
+    repo,
+    `recipes/${key}/sous.recipe.yaml`,
+    `formatVersion: 1\nnamespace: ${namespace}\nname: ${name}\nversion: ${version}\n${extra}`
+  );
+  writeFile(repo, `recipes/${key}/skills/${name}.md`, `${key} ${version}\n`);
+}
+
+/**
+ * Publishes the given versions the way `sous repo release` does: regenerate the
+ * index against the committed one, write it, commit, then tag. Fails the test
+ * on any error the regeneration reports.
+ */
+async function publish(versions: Record<string, string>): Promise<IndexFile> {
+  const result = await buildIndex({
+    validation: validateRepo(repo),
+    existing: readIndexFile(repo),
+    sousVersion: GENERATOR,
+    now: new Date("2026-09-10T12:00:00.000Z"),
+    publishing: versions,
+  });
+  expect(errorsIn(result.problems)).toEqual([]);
+  saveIndex(result.text);
+  commitAll(repo, `release ${Object.keys(versions).join(", ")}`);
+  for (const [key, version] of Object.entries(versions)) {
+    git(repo, "tag", "--annotate", `${key}@${version}`, "--message", "release");
+  }
+  return result.index;
+}
+
+/** The index entry of `omakase/house@0.1.0`, exactly as it is written to disk. */
+function houseEntryText(): string {
+  const index = readIndexFile(repo)!;
+  return JSON.stringify(index.recipes["omakase/house"]!.versions["0.1.0"]);
+}
+
+/** Regenerates the index against the committed one, publishing nothing new. */
+async function regenerate() {
+  return buildIndex({
+    validation: validateRepo(repo),
+    existing: readIndexFile(repo),
+    sousVersion: GENERATOR,
+    now: new Date("2026-09-11T12:00:00.000Z"),
+  });
+}
+
+/** Rewrites the committed index through a function, and commits it. */
+function editIndex(edit: (index: Record<string, any>) => void): void {
+  const index = JSON.parse(fs.readFileSync(indexFilePath(repo), "utf8"));
+  edit(index);
+  saveIndex(`${JSON.stringify(index, null, 2)}\n`);
+  commitAll(repo, "edit the index");
+}
+
+describe("buildIndex() and published dependencies", () => {
+  const HOUSE = "subscribes:\n  - workflow\n  - tools/gamma\n";
+
+  beforeEach(async () => {
+    writeSetRepository(["omakase/house", "workflow/alpha", "workflow/beta", "tools/gamma"]);
+    fs.rmSync(path.join(repo, "recipes/core"), { recursive: true, force: true });
+    writeSetRecipe("omakase/house", "0.1.0", HOUSE);
+    writeSetRecipe("workflow/alpha", "0.1.0");
+    writeSetRecipe("workflow/beta", "0.1.0");
+    writeSetRecipe("tools/gamma", "0.1.0");
+    commitAll(repo, "the set and its recipes");
+    await publish({
+      "omakase/house": "0.1.0",
+      "workflow/alpha": "0.1.0",
+      "workflow/beta": "0.1.0",
+      "tools/gamma": "0.1.0",
+    });
+  });
+
+  /**
+   * A version being published resolves its dependencies once: a whole
+   * namespace expands to the recipes it holds, and a sibling with no range is
+   * the version released alongside it.
+   *
+   * house subscribes [workflow, tools/gamma]
+   * // -> { tools/gamma: 0.1.0, workflow/alpha: 0.1.0, workflow/beta: 0.1.0 }
+   */
+  it("should resolve a new version's dependencies when it is first published", () => {
+    expect(readIndexFile(repo)!.recipes["omakase/house"]!.versions["0.1.0"]!.dependencies).toEqual({
+      "tools/gamma": { version: "0.1.0" },
+      "workflow/alpha": { version: "0.1.0" },
+      "workflow/beta": { version: "0.1.0" },
+    });
+  });
+
+  /**
+   * Releasing other recipes never changes a published version's entry: not a
+   * recipe its namespace gains, and not a newer version of a sibling it names.
+   * The entry stays byte for byte what it was, with no error.
+   *
+   * publish(workflow/epsilon@0.1.0); publish(tools/gamma@0.2.0);
+   * // -> omakase/house@0.1.0 unchanged
+   */
+  it("should leave a published version's entry unchanged while other recipes release", async () => {
+    const before = houseEntryText();
+
+    writeSetRepository([
+      "omakase/house",
+      "workflow/alpha",
+      "workflow/beta",
+      "tools/gamma",
+      "workflow/epsilon",
+    ]);
+    writeSetRecipe("workflow/epsilon", "0.1.0");
+    commitAll(repo, "add epsilon");
+    await publish({ "workflow/epsilon": "0.1.0" });
+    expect(houseEntryText()).toBe(before);
+
+    writeSetRecipe("tools/gamma", "0.2.0");
+    commitAll(repo, "raise gamma");
+    await publish({ "tools/gamma": "0.2.0" });
+    expect(houseEntryText()).toBe(before);
+
+    const check = await regenerate();
+    expect(errorsIn(check.problems)).toEqual([]);
+    expect(check.stale).toBe(false);
+  });
+
+  /**
+   * A new version of the set resolves afresh, against what is published when it
+   * is released, while the older version keeps what it recorded.
+   */
+  it("should resolve a newly published version against the repository as it stands", async () => {
+    writeSetRecipe("tools/gamma", "0.2.0");
+    commitAll(repo, "raise gamma");
+    await publish({ "tools/gamma": "0.2.0" });
+    writeSetRecipe("omakase/house", "0.2.0", HOUSE);
+    commitAll(repo, "raise the set");
+    const index = await publish({ "omakase/house": "0.2.0" });
+
+    const versions = index.recipes["omakase/house"]!.versions;
+    expect(versions["0.1.0"]!.dependencies!["tools/gamma"]).toEqual({ version: "0.1.0" });
+    expect(versions["0.2.0"]!.dependencies!["tools/gamma"]).toEqual({ version: "0.2.0" });
+  });
+
+  /**
+   * A lost index is rebuilt from the tags, and each tagged version records the
+   * dependencies it was released against: the repository as it stood at its
+   * tag, not as it stands now.
+   *
+   * rm sous.index.json; buildIndex(...)
+   * // -> house@0.1.0 still depends on tools/gamma 0.1.0, with no workflow/epsilon
+   */
+  it("should rebuild each tagged version's dependencies from its tag", async () => {
+    writeSetRepository([
+      "omakase/house",
+      "workflow/alpha",
+      "workflow/beta",
+      "tools/gamma",
+      "workflow/epsilon",
+    ]);
+    writeSetRecipe("workflow/epsilon", "0.1.0");
+    writeSetRecipe("tools/gamma", "0.2.0");
+    commitAll(repo, "add epsilon, raise gamma");
+    await publish({ "workflow/epsilon": "0.1.0", "tools/gamma": "0.2.0" });
+    writeSetRecipe("omakase/house", "0.2.0", HOUSE);
+    commitAll(repo, "raise the set");
+    const published = await publish({ "omakase/house": "0.2.0" });
+
+    fs.rmSync(indexFilePath(repo));
+    const rebuilt = await buildIndex({
+      validation: validateRepo(repo),
+      sousVersion: GENERATOR,
+      now: new Date("2026-09-12T12:00:00.000Z"),
+    });
+
+    expect(errorsIn(rebuilt.problems)).toEqual([]);
+    const house = rebuilt.index.recipes["omakase/house"]!.versions;
+    expect(house["0.1.0"]!.dependencies).toEqual({
+      "tools/gamma": { version: "0.1.0" },
+      "workflow/alpha": { version: "0.1.0" },
+      "workflow/beta": { version: "0.1.0" },
+    });
+    for (const [key, recipe] of Object.entries(published.recipes)) {
+      for (const [version, entry] of Object.entries(recipe.versions)) {
+        expect(rebuilt.index.recipes[key]!.versions[version]!.dependencies).toEqual(
+          entry.dependencies
+        );
+      }
+    }
+  });
+
+  /**
+   * An index whose published entry names a recipe the manifest names, or lists
+   * one it does not declare, disagrees with the version it describes. That is an
+   * error naming the recipe, the version and each difference, and telling the
+   * author to bump rather than republish.
+   */
+  it("should report recorded dependencies that disagree with the manifest", async () => {
+    editIndex((index) => {
+      const dependencies = index.recipes["omakase/house"].versions["0.1.0"].dependencies;
+      delete dependencies["tools/gamma"];
+      dependencies["tools/ghost"] = { version: "1.0.0" };
+    });
+
+    const result = await regenerate();
+
+    const errors = errorsIn(result.problems);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.where).toBe(
+      "sous.index.json recipes['omakase/house'].versions['0.1.0'].dependencies"
+    );
+    expect(errors[0]!.message).toContain("version 0.1.0 of 'omakase/house' is already published");
+    expect(errors[0]!.message).toContain(
+      "'tools/gamma': the manifest declares it with no range, and the index records nothing for it"
+    );
+    expect(errors[0]!.message).toContain(
+      "'tools/ghost': the index records version 1.0.0, and the manifest does not declare it"
+    );
+    expect(errors[0]!.message).toContain("'sous repo release --bump patch'");
+    // The recorded list is still carried forward, never rewritten.
+    expect(
+      result.index.recipes["omakase/house"]!.versions["0.1.0"]!.dependencies!["tools/ghost"]
+    ).toEqual({ version: "1.0.0" });
+  });
+
+  /**
+   * A sibling the manifest constrains with a range must be recorded at a
+   * version inside it.
+   *
+   * subscribes: [tools/gamma@^0.1.0], recorded { tools/gamma: 0.2.0 } // -> error
+   */
+  it("should report a recorded sibling outside its declared range", async () => {
+    writeSetRecipe("omakase/house", "0.1.0", "subscribes:\n  - tools/gamma@^0.1.0\n");
+    git(repo, "tag", "--delete", "omakase/house@0.1.0");
+    fs.rmSync(indexFilePath(repo));
+    commitAll(repo, "republish the set with a range");
+    await publish({ "omakase/house": "0.1.0" });
+    editIndex((index) => {
+      index.recipes["omakase/house"].versions["0.1.0"].dependencies["tools/gamma"] = {
+        version: "0.2.0",
+      };
+    });
+
+    const result = await regenerate();
+
+    expect(errorsIn(result.problems).map((problem) => problem.message).join("\n")).toContain(
+      "'tools/gamma': the index records version 0.2.0, and the manifest declares the range '^0.1.0'"
+    );
+  });
+
+  /**
+   * A recipe the declared namespace held when the version was published, and
+   * has since been retired, stays in that version's entry without an error: it
+   * is history, not a disagreement.
+   */
+  it("should keep a retired namespace member without reporting it", async () => {
+    writeSetRepository(["omakase/house", "workflow/alpha", "tools/gamma"]);
+    commitAll(repo, "retire beta");
+    const before = houseEntryText();
+
+    const result = await regenerate();
+
+    expect(errorsIn(result.problems)).toEqual([]);
+    expect(
+      JSON.stringify(result.index.recipes["omakase/house"]!.versions["0.1.0"])
+    ).toBe(before);
+  });
+
+  /**
+   * An entry recorded before sous wrote dependencies at all carries none, and a
+   * consumer resolves that version's ranges instead. It is left exactly as it
+   * is, and it is not an error.
+   */
+  it("should carry forward an entry published before dependencies were recorded", async () => {
+    editIndex((index) => {
+      delete index.recipes["omakase/house"].versions["0.1.0"].dependencies;
+    });
+
+    const result = await regenerate();
+
+    expect(errorsIn(result.problems)).toEqual([]);
+    expect(result.index.recipes["omakase/house"]!.versions["0.1.0"]!.dependencies).toBeUndefined();
+  });
+
+  /**
+   * A field a later sous wrote into a published entry is carried forward with
+   * it, so a release run by an older sous never strips it.
+   */
+  it("should carry forward fields this sous does not define", async () => {
+    editIndex((index) => {
+      const entry = index.recipes["omakase/house"].versions["0.1.0"];
+      entry.variables = [{ name: "board" }];
+      entry.dependencies["tools/gamma"].declaredAs = "tools/gamma";
+    });
+
+    const result = await regenerate();
+
+    expect(errorsIn(result.problems)).toEqual([]);
+    expect(result.stale).toBe(false);
+    expect(result.text).toContain('"declaredAs": "tools/gamma"');
+    expect(result.text).toContain('"variables"');
+  });
+});
+
 describe("readIndexFile()", () => {
   /**
    * A repository with no index yet reads back as undefined rather than failing,

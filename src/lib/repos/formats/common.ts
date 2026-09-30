@@ -307,10 +307,27 @@ function stripExtensionKeys(value: unknown): unknown {
  * Builds a strict object schema for a HAND-WRITTEN format: unknown keys are
  * rejected so typos surface immediately, except keys in the reserved `x-`
  * extension namespace, which are accepted and ignored. Machine-written formats
- * use plain `z.strictObject` instead; nothing writes extension keys into them.
+ * use `z.strictObject` or `forwardCompatibleObject` instead; nothing writes
+ * extension keys into them.
  */
 export function extensibleObject<Shape extends z.ZodRawShape>(shape: Shape) {
   return z.preprocess(stripExtensionKeys, z.strictObject(shape));
+}
+
+/**
+ * Builds an object schema for a machine-written format that other versions of
+ * sous publish and this one reads: the repo index. Every known key is validated
+ * exactly as strictly as `z.strictObject` would, and a key this version does not
+ * define is kept, unread, rather than refused.
+ *
+ * A later sous adds fields to the index, and a repository published by it is
+ * read by every older sous a project happens to pin; refusing the whole index
+ * over a field it cannot use would break those projects for nothing. The key is
+ * kept rather than dropped, so a release carrying a published version forward
+ * writes it back byte for byte, whichever sous runs the release.
+ */
+export function forwardCompatibleObject<Shape extends z.ZodRawShape>(shape: Shape) {
+  return z.looseObject(shape);
 }
 
 /**

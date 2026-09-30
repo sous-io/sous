@@ -389,7 +389,10 @@ indexes are data that sous reads, validates and browses without executing anythi
 trust, in a dry run, in the browsing commands and in `repo release --check`), and `index.ts` is
 the barrel every later phase imports from. Hand-written formats reject unknown keys except a
 reserved `x-` extension namespace; machine-written formats reject them outright and serialize
-with sorted keys.
+with sorted keys. The one exception is the repo index, which a newer sous publishes and an older
+one reads: every object in it is a `forwardCompatibleObject` (`formats/common.ts`), which
+validates each known field in full and keeps an unknown one, unread, so a later release can add
+fields without breaking this version and a release carries them forward untouched (ADR 0007).
 
 **Trust is the only security boundary; activation is not one.** Adding a repository IS
 trusting it, and trust authorizes its recipes to run code on this machine with the user's own
@@ -462,11 +465,18 @@ claim one environment variable (two definitions of the SAME name may, since that
 rung of the ladder doing its job). Claiming a well-known system or secret name warns unless
 the definition carries `x-intentional: true`, which is read from the RAW manifest because the
 schema drops every `x-` key before validation. `buildIndex` (`release/index-builder.ts`)
-regenerates `sous.index.json` under three rules: a published version is immutable, so its hash
-is carried forward and a disagreement is an error; a version is published only when a tag
-carries it, so an untagged version is left OUT of the index (the schema requires a tag on
-every entry) and reported as pending instead; and every tagged version missing from the index
-is rebuilt from its tag, so a lost index regenerates whole. Reading a tagged tree goes through
+regenerates `sous.index.json` under three rules: a published version is immutable, so its
+entry (hash AND dependencies) is carried forward and a disagreement is an error; a version is
+published only when a tag carries it, so an untagged version is left OUT of the index (the
+schema requires a tag on every entry) and reported as pending instead; and every tagged version
+missing from the index is rebuilt from its tag, so a lost index regenerates whole. Dependencies
+are resolved ONCE, when a version is first recorded (`resolveIndexDependencies`), and a tag
+rebuild resolves them against the repository as it stood at the tag (`rebuildTaggedVersion`).
+A carried-forward list is never compared with a fresh resolution, since a sibling released
+later or a recipe a namespace gained later would then fail every release of an unrelated
+recipe; `checkRecordedDependencies` checks only that the list honours the manifest (every named
+recipe present, nothing undeclared, siblings inside their ranges, cross-repository entries
+unchanged). ADR 0007 records the decision. Reading a tagged tree goes through
 `withTaggedTree` (`release/tags.ts`), which adds a linked git worktree rather than piping
 `git archive`, because the injectable command runner captures output as text and an archive's
 bytes would not survive that. Every git call in this directory takes the runner from

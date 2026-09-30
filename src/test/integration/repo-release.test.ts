@@ -283,6 +283,42 @@ describe("sous repo release and sous repo submit", () => {
   );
 
   /**
+   * A published version's dependencies are frozen, so an index recording ones
+   * its manifest does not declare is not drift a merge may rewrite: `--check`
+   * fails, naming the recipe, the version and the difference. The committed
+   * index is put back afterwards, for the tests that follow.
+   *
+   * sous repo release --check   // -> exit 1, "'core/ghost': ... the manifest does not declare it"
+   */
+  it(
+    "should fail --check when a published version's dependencies disagree with its manifest",
+    () => {
+      const indexPath = path.join(recipeRepo, "sous.index.json");
+      const index = JSON.parse(fs.readFileSync(indexPath, "utf8"));
+      index.recipes["core/example"].versions["0.1.0"].dependencies = {
+        "core/ghost": { version: "1.0.0" },
+      };
+      fs.writeFileSync(indexPath, `${JSON.stringify(index, null, 2)}\n`, "utf8");
+      commitAll(recipeRepo, "edit a published version's dependencies");
+
+      try {
+        const result = runSous("repo", "release", "--check");
+        const output = result.stdout + result.stderr;
+
+        expect(result.status, output).toBe(1);
+        expect(output).toContain("version 0.1.0 of 'core/example' is already published");
+        expect(output).toContain(
+          "'core/ghost': the index records version 1.0.0, and the manifest does not declare it"
+        );
+        expect(output).toContain("bump the version");
+      } finally {
+        git(recipeRepo, "reset", "--quiet", "--hard", "HEAD~1");
+      }
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
    * A recipe nobody has touched since its tag is not re-released; a published
    * version that says the same thing as the one before it is noise.
    */
