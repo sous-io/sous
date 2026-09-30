@@ -240,9 +240,10 @@ this release's scope** is fine: the release depends on the last published versio
 
 Each version's resolved dependencies are written into the index, so a consumer installing that version gets what
 it was published with rather than ranges re-resolved months later. A published version never changes: its content
-hash is carried forward exactly as published, and a disagreement is an error telling you to bump rather than
-republish. A version counts as published once its tag exists, and the tags are the backstop, so a tagged version
-missing from the index is rebuilt from it whenever the index is regenerated, which only happens on a run that
+hash and its dependencies are carried forward exactly as published, and a disagreement is an error telling you
+to bump rather than republish ([what is checked](repositories-file-formats.md#sousindexjson)). A version counts
+as published once its tag exists, and the tags are the backstop, so a tagged version missing from the index is
+rebuilt from it, dependencies included, whenever the index is regenerated, which only happens on a run that
 publishes something. A bump edits the manifest in place, so comments, field order and layout survive; a folded
 block of YAML prose may be re-wrapped and the space before a trailing comment collapsed to one.
 

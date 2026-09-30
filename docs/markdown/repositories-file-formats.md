@@ -177,6 +177,22 @@ sibling, resolved exactly) or `range` plus `repo` (the identity of the repositor
 index resolves the range); at least one is required. Installing a version installs these rather than
 re-resolving the manifest's ranges.
 
+**A published version's entry is frozen.** Its dependencies are resolved once, when the version is first
+recorded, and every later release carries the entry forward exactly as published, like its hash; releasing
+other recipes, adding a recipe to a namespace it subscribes to, or raising a sibling it names changes nothing
+in it. A release still checks the recorded list against the version's manifest: a recipe the manifest names
+that the list lacks, a recipe in the list the manifest does not declare, a sibling outside its declared
+range, or another repository's entry with a different repository or range is an error naming the recipe, the
+version and each difference; restore the entry if the index was edited, or bump the version to publish
+different dependencies. A version rebuilt from its tag, when the index lost it, has its dependencies resolved
+against the repository as it stood at that tag, then frozen the same way. An entry written before sous
+recorded dependencies carries none, stays that way, and installs by resolving its manifest's ranges.
+
+**Fields this sous does not know are kept, not refused.** A later sous may add fields to the index, at any
+level. This one reads such an index, validates every field it defines as strictly as before, and ignores the
+rest; a release it runs carries a published version's entry forward with those fields intact. A sous older
+than the one that began tolerating unknown fields refuses the whole index once a repository publishes one.
+
 **The `seeded` field.** Sous ships the `core` recipe in its own npm package, so a project can build before
 reaching the network. That copy is folded into the official repository's index in memory and resolved like
 any other, marked `seeded: true`; if the repository already publishes it, the published copy wins. Sous
