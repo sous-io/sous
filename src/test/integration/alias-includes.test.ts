@@ -73,21 +73,20 @@ describe("alias @include resolution (real compile path)", () => {
     expect(fs.readFileSync(dest, "utf8")).toContain("RELATIVE WINS");
   });
 
-  it("errors (does not write content) when no candidate exists", async () => {
+  it("errors and writes nothing when no candidate exists", async () => {
     tmp = makeTmpDir("alias-inc-");
     const entry = write("p/entry.tpl.md", "before\n@~lib/missing.md\nafter\n");
     const dest = path.join(tmp.path, "out/entry.md");
 
     const compiler = new CompilationService();
-    await compiler.compile({
+    const ok = await compiler.compile({
       aliases: { "~lib": [path.join(tmp.path, "shared")] },
       targets: [{ rootInputPath: entry, outputs: [{ destinationFile: dest, vars: {} }] }],
     });
 
-    // include line removed, surrounding content intact
-    const out = fs.readFileSync(dest, "utf8");
-    expect(out).toContain("before");
-    expect(out).toContain("after");
-    expect(out).not.toContain("missing.md");
+    // A missing include fails the compile, and an output with a hole in it is
+    // never written.
+    expect(ok).toBe(false);
+    expect(fs.existsSync(dest)).toBe(false);
   });
 });

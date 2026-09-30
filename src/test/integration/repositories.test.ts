@@ -446,7 +446,15 @@ describe("the repositories consumer surface", () => {
       // them; nothing in this one depends on it.
       expect(sous(projectRoot, "repo", "add", extrasRepo, "--trust").status).toBe(0);
 
-      const result = sous(projectRoot, "subscribe", "workflow/needs-partials", "--yes");
+      // No build: the project's own template includes from workflow/task-files,
+      // which the next test subscribes to, and a build with an include error fails.
+      const result = sous(
+        projectRoot,
+        "subscribe",
+        "workflow/needs-partials",
+        "--yes",
+        "--no-build"
+      );
       expect(result.status, result.stdout + result.stderr).toBe(0);
 
       const lock = readJson(path.join(sousDir, "sous.lock.json"));

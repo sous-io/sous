@@ -942,4 +942,175 @@ describe("CompilationService", () => {
     expect(output).not.toContain("FENCED CONTENT");
     expect(output).toContain("REAL CONTENT");
   });
+
+  // -------------------------------------------------------------------------
+  // Compile errors fail the compile and keep the last good output
+  // -------------------------------------------------------------------------
+
+  describe("compile errors", () => {
+    /** Silences the compiler's output and fails the test if anything exits the process. */
+    function quietAndNoExit() {
+      vi.spyOn(console, "log").mockImplementation(() => {});
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      return vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+        throw new Error(`process.exit(${code}) was called`);
+      }) as never);
+    }
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    /**
+     * The reproduction from gh-127: a build that compiled cleanly, then an
+     * entry point that includes a missing file. The compile reports failure,
+     * the output keeps its previous contents, and the state file keeps its
+     * previous entry for it.
+     *
+     * AGENTS.md holds "first build"; entry.md becomes "Before\n@missing.md\nAfter"
+     * // -> compile() is false, AGENTS.md still holds "first build"
+     */
+    it("should keep the previous output and state entry when an include is missing", async () => {
+      tmp = makeTmpDir();
+      const exit = quietAndNoExit();
+      const entry = path.join(tmp.path, "entry.md");
+      const dest = path.join(tmp.path, "AGENTS.md");
+      const statePath = path.join(tmp.path, "sous.state.json");
+      const config = { targets: [{ rootInputPath: entry, outputs: [{ destinationFile: dest }] }] };
+
+      fs.writeFileSync(entry, "first build\n");
+      expect(await makeCompiler().compile(config, statePath)).toBe(true);
+      const before = JSON.parse(fs.readFileSync(statePath, "utf8")) as {
+        files: Array<{ dest: string; destHash: string }>;
+      };
+
+      fs.writeFileSync(entry, "Before\n@missing.md\nAfter\n");
+      const result = await makeCompiler().compile(config, statePath);
+
+      expect(result).toBe(false);
+      expect(fs.readFileSync(dest, "utf8")).toBe("first build\n");
+      const after = JSON.parse(fs.readFileSync(statePath, "utf8")) as typeof before;
+      expect(after.files.find((f) => f.dest === dest)).toEqual(
+        before.files.find((f) => f.dest === dest)
+      );
+      expect(exit).not.toHaveBeenCalled();
+    });
+
+    /**
+     * Every target is compiled even after one fails, and every error is listed:
+     * the good target is written, the failing ones are not created.
+     *
+     * targets: bad.md (@missing.md), loop.md (includes itself), good.md (clean)
+     * // -> false; good output written; bad and loop outputs absent; both errors listed
+     */
+    it("should compile every target and list every error", async () => {
+      tmp = makeTmpDir();
+      quietAndNoExit();
+      const errors: string[] = [];
+      vi.mocked(console.error).mockImplementation((...args: unknown[]) => {
+        errors.push(args.map(String).join(" "));
+      });
+      vi.mocked(console.log).mockImplementation((...args: unknown[]) => {
+        errors.push(args.map(String).join(" "));
+      });
+      const good = path.join(tmp.path, "good.md");
+      const bad = path.join(tmp.path, "bad.md");
+      const loop = path.join(tmp.path, "loop.md");
+      fs.writeFileSync(good, "GOOD\n");
+      fs.writeFileSync(bad, "@missing.md\n");
+      fs.writeFileSync(loop, "@loop.md\n");
+      const out = (name: string) => path.join(tmp.path, "out", name);
+
+      const result = await makeCompiler().compile({
+        targets: [
+          { rootInputPath: bad, outputs: [{ destinationFile: out("bad.md") }] },
+          { rootInputPath: loop, outputs: [{ destinationFile: out("loop.md") }] },
+          { rootInputPath: good, outputs: [{ destinationFile: out("good.md") }] },
+        ],
+      });
+
+      expect(result).toBe(false);
+      expect(fs.readFileSync(out("good.md"), "utf8")).toBe("GOOD\n");
+      expect(fs.existsSync(out("bad.md"))).toBe(false);
+      expect(fs.existsSync(out("loop.md"))).toBe(false);
+      const printed = errors.join("\n");
+      expect(printed).toContain("Include not found: @missing.md");
+      expect(printed).toContain("Circular dependency detected");
+      expect(printed).toContain("Done with 2 error(s).");
+    });
+
+    /**
+     * A template that fails to render is an error like any other: the output
+     * is not written and the compile reports failure.
+     *
+     * entry.tpl.md holds "{% if %}" (a syntax error)
+     * // -> false, no output
+     */
+    it("should not write an output whose template fails to render", async () => {
+      tmp = makeTmpDir();
+      quietAndNoExit();
+      const entry = path.join(tmp.path, "entry.tpl.md");
+      const dest = path.join(tmp.path, "out", "entry.md");
+      fs.writeFileSync(entry, "Hello {% if %}\n");
+
+      const result = await makeCompiler().compile({
+        targets: [{ rootInputPath: entry, outputs: [{ destinationFile: dest, vars: {} }] }],
+      });
+
+      expect(result).toBe(false);
+      expect(fs.existsSync(dest)).toBe(false);
+    });
+
+    /**
+     * Strict mode turns a warning into an error without exiting the process:
+     * the unrendered template is not written, and the next target still
+     * compiles.
+     *
+     * strict: true; thing.tpl.md with no vars, then plain.md
+     * // -> false; thing.md absent; plain.md written; process.exit never called
+     */
+    it("should treat a warning as an error in strict mode and carry on", async () => {
+      tmp = makeTmpDir();
+      const exit = quietAndNoExit();
+      const tpl = path.join(tmp.path, "thing.tpl.md");
+      const plain = path.join(tmp.path, "plain.md");
+      fs.writeFileSync(tpl, "{{ projectName }}\n");
+      fs.writeFileSync(plain, "PLAIN\n");
+      const out = (name: string) => path.join(tmp.path, "out", name);
+
+      const result = await makeCompiler({ strict: true }).compile({
+        targets: [
+          { rootInputPath: tpl, outputs: [{ destinationFile: out("thing.md") }] },
+          { rootInputPath: plain, outputs: [{ destinationFile: out("plain.md") }] },
+        ],
+      });
+
+      expect(result).toBe(false);
+      expect(fs.existsSync(out("thing.md"))).toBe(false);
+      expect(fs.readFileSync(out("plain.md"), "utf8")).toBe("PLAIN\n");
+      expect(exit).not.toHaveBeenCalled();
+    });
+
+    /**
+     * Without strict mode the same warning stays a warning: the output is
+     * written and the compile succeeds, so strict mode changes warnings only.
+     *
+     * strict: false; thing.tpl.md with no vars
+     * // -> true; thing.md written
+     */
+    it("should leave a warning a warning without strict mode", async () => {
+      tmp = makeTmpDir();
+      quietAndNoExit();
+      const tpl = path.join(tmp.path, "thing.tpl.md");
+      fs.writeFileSync(tpl, "{{ projectName }}\n");
+      const dest = path.join(tmp.path, "out", "thing.md");
+
+      const result = await makeCompiler().compile({
+        targets: [{ rootInputPath: tpl, outputs: [{ destinationFile: dest }] }],
+      });
+
+      expect(result).toBe(true);
+      expect(fs.existsSync(dest)).toBe(true);
+    });
+  });
 });
