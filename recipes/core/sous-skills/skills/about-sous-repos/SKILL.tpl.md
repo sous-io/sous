@@ -65,10 +65,13 @@ contribute: https://github.com/harbor-labs/team-recipes/blob/main/CONTRIBUTING.m
 A recipe's version lives in its manifest, which is the source of truth. A version is **published**
 once a git tag shaped `namespace/recipe@version` exists for it (for example
 `review/checklist@1.2.0`). The index records each published version with its content hash, its
-tag and the exact versions of its dependencies at release time; for the length of one release
-commit it also records the version each manifest declares, whose tag that release cuts next. A
-published version never changes: new files need a new version, and a release refuses to publish
-different content under a version already tagged. A lost index is rebuilt from the tags.
+tag, the exact versions of its dependencies at release time (each with the manifest entry that
+brought it in and whether it is a co-subscription or a build dependency) and the variable
+definitions it publishes, which is how a project lists what a recipe installs and asks before
+fetching it; for the length of one release commit it also records the version each manifest
+declares, whose tag that release cuts next. A published version never changes: new files need a
+new version, and a release refuses to publish different content under a version already tagged. A
+lost index is rebuilt from the tags.
 
 ## Releasing
 

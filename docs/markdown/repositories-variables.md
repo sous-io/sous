@@ -12,7 +12,10 @@ a separate, ceremony-free system; see [Variables](config-variables.md). The two 
 
 A definition ships inside the recipe that needs it, in its manifest's `variables:` array, so it versions,
 resolves, pins and trusts like the rest of the recipe; every field it can carry is listed in
-[Variable definitions](repositories-file-formats.md#variable-definitions).
+[Variable definitions](repositories-file-formats.md#variable-definitions). `sous repo release` also copies
+each version's definitions into the repository's index, which is how `sous recipe show` and
+`sous subscription add --dry-run` list a recipe's questions before its files are on your machine. The index
+holds definitions only, never an answer; answers come from the ladder below and nowhere else.
 
 A definition is in play when your lockfile pins the recipe that declares it, whether you subscribed to that
 recipe or a dependency pulled it in. A recipe the store does not hold yet contributes nothing rather than

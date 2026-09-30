@@ -65,21 +65,34 @@ The cache can be behind what a repository has published since. Every one of thes
 `sous recipe list --installed --latest` is the out-of-date view: every installed recipe, with
 upstream's newest version beside the installed one.
 
-Read `sous recipe show` before subscribing: every published version, what it depends on (as
-declared, beside the version the index resolved it to), and its questions and files once it has
-them here.
+Read `sous recipe show` before subscribing. It works offline, from the index alone: every published
+version, what the version depends on (the manifest entry that brings each dependency in, whether it
+is a co-subscription whose files land here or a build dependency, and the version it was released
+against), every recipe a subscription would install, and every question that would ask. Only the
+files it publishes wait until it is installed. A preset set, a recipe that only bundles others,
+reads like this:
 
 ```term
-$ sous recipe show workflow/qa-variables
-    Latest version : 0.1.0
+$ sous recipe show omakase/house
+    Latest version : 1.0.0
     Pinned version : this project pins none
     Subscribed     : no
-  Dependency          Declared as                     Resolved to  Repository       Kind
-  ------------------  ------------------------------  -----------  ---------------  ----------------
-  workflow/qa-helper  not declared in the manifest    0.1.0        this repository  unknown
-  The recipe's own files are not on this machine, so the questions it asks and the files it
-    publishes are not known here. Subscribing to it fetches them.
+  Dependency       Declared as                     Resolved to  Repository       Kind
+  ---------------  ------------------------------  -----------  ---------------  ----------------
+  tools/lint       tools/lint                      1.0.0        this repository  build dependency
+  workflow/notes   the whole 'workflow' namespace  1.0.0        this repository  co-subscription
+  workflow/review  the whole 'workflow' namespace  1.0.0        this repository  co-subscription
+➔ What subscribing asks you:
+  These recipes ask 3 questions, 3 of which nothing answers yet.
+  workflow/notes asks 1 question:
+    notesDir
+      about       : Where the notes skill keeps its notes.
+      stored-as   : SOUS_VAR_NOTES_DIR
+      answered    : no, and this recipe requires an answer
 ```
+
+?> A recipe released before sous recorded questions in the index is described from its files
+instead, so its questions are listed once it is installed, and named as unknown until then.
 
 ## Subscribe to a recipe
 
@@ -199,8 +212,9 @@ stored value nothing reads. Names are camelCase, as the recipe declares them; th
 `namespace/recipe.name` key works too when two recipes publish the same name, and everything after
 the first `=` is the answer. `--answers-file answers.yaml` reads a YAML or JSON file of them.
 
-?> A dry run downloads nothing, so a recipe your machine does not hold yet has no manifest to read
-and its questions cannot be listed; the run still succeeds and names them.
+?> A dry run downloads nothing. A recipe your machine does not hold yet is described from the
+questions its repository's index records; one released before sous recorded questions there cannot
+be, so the run still succeeds and names it.
 
 ## See what you have
 
