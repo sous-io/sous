@@ -56,6 +56,44 @@ export type CanonicalRepo = {
   sshUrl: string;
 };
 
+/**
+ * A location as written in a ref, taken apart only as far as every host agrees:
+ * the host, and the path segments after it. Which of those segments are the
+ * repository and which name something inside it is a host's own rule, so a
+ * provider answers that (see `RepoProvider.readLocation`).
+ *
+ *     https://gitlab.com/group/sub/project/-/tree/main/recipes/workflow/alpha
+ *     // -> { host: "gitlab.com",
+ *     //      segments: ["group", "sub", "project", "-", "tree", "main", ...] }
+ */
+export type WrittenLocation = {
+  /** The host, lowercased, such as `github.com`. */
+  host: string;
+  /** Every path segment after the host, in order, none of them empty. */
+  segments: string[];
+};
+
+/**
+ * One way a provider reads a written location. A location on a host where a
+ * repository path can be any length (a GitLab group nests) may have several.
+ */
+export type LocationReading = {
+  /** The repository's path on the host, such as `sous-io/sous-recipes`, with no `.git`. */
+  repoPath: string;
+  /**
+   * The segments after the repository that name something inside it: a
+   * namespace, a namespace and a recipe, or a namespace and `*`. Empty when the
+   * location names only the repository.
+   */
+  named?: string[];
+  /**
+   * A browser URL's path inside the repository, copied from a host's file view
+   * (after `tree/` or `blob/`), with the branch still in front of it. It is
+   * settled against the `path` each recipe's index entry records.
+   */
+  browsed?: string;
+};
+
 /** Options every provider call accepts, all of them for testing seams. */
 export type ProviderOptions = {
   /**
@@ -215,6 +253,27 @@ export interface RepoProvider {
   readonly id: ProviderId;
   /** What this provider can do; see ProviderFeature. */
   readonly features: ProviderFeature[];
+  /**
+   * The host a locator such as `github://owner/repo/...` means when it names
+   * none. A provider without a public host of its own leaves it out.
+   */
+  readonly defaultHost?: string;
+  /**
+   * Every way this provider reads a location inside one of its repositories:
+   * where the repository path ends, and whether the rest names a namespace, a
+   * recipe or a browser path. An empty list means the provider reads no such
+   * location.
+   */
+  readLocation(location: WrittenLocation): LocationReading[];
+  /**
+   * The canonical locator for something inside one of this provider's
+   * repositories, which is how sous prints a located ref.
+   *
+   * @param host - The repository's host.
+   * @param repoPath - The repository's path on that host.
+   * @param rest - What is named inside it, such as `workflow/alpha`.
+   */
+  formatLocator(host: string, repoPath: string, rest: string): string;
   /** True when this provider handles the given repository URL. */
   matches(url: string): boolean;
   /** Takes a repository URL apart, raising a ConfigError when it does not fit. */
@@ -337,6 +396,43 @@ export function supportsSubmit(provider: RepoProvider): provider is SubmitCapabl
     typeof provider.fork === "function" &&
     typeof provider.proposeChange === "function"
   );
+}
+
+/** The words a host's file view puts between a repository and a path: `tree/` and `blob/`. */
+const BROWSE_WORDS = new Set(["tree", "blob"]);
+
+/**
+ * A repository's last path segment without a `.git` suffix.
+ *
+ * @param segment - The segment as written.
+ */
+export function withoutGitSuffix(segment: string): string {
+  return segment.replace(/\.git$/i, "");
+}
+
+/**
+ * Every reading of the segments after a repository: what they name, and, when
+ * they start with `tree/` or `blob/`, the browser path they could also be. Both
+ * are returned when both are possible (a namespace could be called `tree`), and
+ * the caller keeps the one the repository's index confirms. A leading `-`
+ * segment (GitLab's separator between a project and its pages) is dropped
+ * first, wherever it is written.
+ *
+ * readingsAfterRepository("o/r", ["tree", "main", "recipes", "workflow", "alpha"]);
+ * // -> [{ repoPath: "o/r", browsed: "main/recipes/workflow/alpha" },
+ * //     { repoPath: "o/r", named: ["tree", "main", "recipes", "workflow", "alpha"] }]
+ *
+ * @param repoPath - The repository's path on its host.
+ * @param rest - The segments after it.
+ */
+export function readingsAfterRepository(repoPath: string, rest: string[]): LocationReading[] {
+  const after = rest[0] === "-" ? rest.slice(1) : rest;
+  const readings: LocationReading[] = [];
+  if (after.length >= 2 && BROWSE_WORDS.has(after[0]!.toLowerCase())) {
+    readings.push({ repoPath, browsed: after.slice(1).join("/") });
+  }
+  readings.push({ repoPath, named: after });
+  return readings;
 }
 
 /**

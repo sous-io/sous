@@ -329,6 +329,56 @@ describe("buildIndex()", () => {
   });
 
   /**
+   * A dependency that reads more than one way is recorded as the release
+   * settled it: under every key it reached, with the repository it settled on,
+   * so a consumer reads the answer instead of probing. One that reads one way
+   * and names a whole namespace elsewhere records nothing, because the
+   * consumer reads that namespace from the other repository's own index.
+   *
+   * settled: { "gitlab://a/b/c/d" -> gitlab.com/a/b/c, keys ["d/x", "d/y"] }
+   * // -> dependencies { "d/x": { repo, range: "*" }, "d/y": { repo, range: "*" } }
+   */
+  it("should record a settled dependency under every key it reached", async () => {
+    writeFile(
+      repo,
+      "recipes/core/example/sous.recipe.yaml",
+      "formatVersion: 1\nnamespace: core\nname: example\nversion: 1.0.0\n" +
+        "description: An example recipe.\n" +
+        "depends:\n  - gitlab://a/b/c/d\n  - github://o/r/workflow\n"
+    );
+    commitAll(repo, "depend on a nested group");
+    git(repo, "tag", "--annotate", "core/example@1.0.0", "--message", "release");
+
+    const settledEntry = {
+      repo: "gitlab.com/a/b/c",
+      range: "*",
+      declared: "gitlab://a/b/c/d",
+      kind: "depends",
+    };
+    const result = await buildIndex({
+      validation: validateRepo(repo),
+      sousVersion: GENERATOR,
+      now: new Date("2026-09-10T12:00:00.000Z"),
+      settled: new Map([
+        ["gitlab://a/b/c/d", { identity: "gitlab.com/a/b/c", keys: ["d/x", "d/y"] }],
+      ]),
+    });
+
+    expect(
+      result.index.recipes["core/example"]!.versions["1.0.0"]!.dependencies
+    ).toEqual({
+      "d/x": { ...settledEntry },
+      "d/y": { ...settledEntry },
+    });
+    // The namespace in another repository has no key to record under, so the
+    // version's own lists are what carries it to a consumer.
+    expect(result.index.recipes["core/example"]!.versions["1.0.0"]!.depends).toEqual([
+      "gitlab://a/b/c/d",
+      "github://o/r/workflow",
+    ]);
+  });
+
+  /**
    * Tags for a recipe the repository no longer publishes are ordinary history
    * after a rename, so they are reported as a warning and left alone.
    */
@@ -485,6 +535,8 @@ describe("buildIndex() and published dependencies", () => {
       "workflow/alpha": member("0.1.0", "workflow/alpha"),
       "workflow/beta": member("0.1.0", "workflow"),
     });
+    expect(house.depends).toEqual(["workflow/alpha"]);
+    expect(house.subscribes).toEqual(["workflow"]);
     expect(house.variables).toEqual([
       {
         name: "houseName",
@@ -500,7 +552,29 @@ describe("buildIndex() and published dependencies", () => {
 
     const gamma = index.recipes["tools/gamma"]!.versions["0.1.0"]!;
     expect(gamma.dependencies).toEqual({});
+    expect(gamma.depends).toEqual([]);
+    expect(gamma.subscribes).toEqual([]);
     expect(gamma.variables).toEqual([]);
+  });
+
+  /**
+   * The lists a published version records are copied from its manifest, so a
+   * recorded list that differs from the manifest means the index was edited,
+   * and it is an error like any other disagreement.
+   *
+   * recorded subscribes [workflow], manifest subscribes [workflow, tools/gamma] // -> error
+   */
+  it("should report recorded lists that disagree with the manifest", async () => {
+    editIndex((index) => {
+      index.recipes["omakase/house"].versions["0.1.0"].subscribes = ["workflow"];
+    });
+
+    const result = await regenerate();
+
+    expect(errorsIn(result.problems).map((problem) => problem.message).join("\n")).toContain(
+      "'subscribes': the index records [workflow], and the manifest declares " +
+        "[workflow, tools/gamma]"
+    );
   });
 
   /**
@@ -512,6 +586,8 @@ describe("buildIndex() and published dependencies", () => {
     editIndex((index) => {
       const entry = index.recipes["omakase/house"].versions["0.1.0"];
       delete entry.variables;
+      delete entry.depends;
+      delete entry.subscribes;
       for (const dependency of Object.values(entry.dependencies) as Array<Record<string, unknown>>) {
         delete dependency.declared;
         delete dependency.kind;
@@ -644,6 +720,7 @@ describe("buildIndex() and published dependencies", () => {
         const again = rebuilt.index.recipes[key]!.versions[version]!;
         expect(again.dependencies).toEqual(entry.dependencies);
         expect(again.variables).toEqual(entry.variables);
+        expect(again.subscribes).toEqual(entry.subscribes);
       }
     }
   });

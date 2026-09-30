@@ -198,7 +198,17 @@ describe("a recipe set described from the index", () => {
     ) as {
       recipes: Record<
         string,
-        { versions: Record<string, { dependencies?: object; variables?: object[] }> }
+        {
+          versions: Record<
+            string,
+            {
+              dependencies?: object;
+              variables?: object[];
+              depends?: string[];
+              subscribes?: string[];
+            }
+          >;
+        }
       >;
     };
 
@@ -209,6 +219,8 @@ describe("a recipe set described from the index", () => {
       "workflow/review": { version: "1.0.0", declared: "workflow", kind: "subscribes" },
     });
     expect(house.variables).toEqual([]);
+    expect(house.depends).toEqual(["tools/lint"]);
+    expect(house.subscribes).toEqual(["workflow"]);
     expect(index.recipes["workflow/notes"]!.versions["1.0.0"]!.variables).toHaveLength(1);
   });
 

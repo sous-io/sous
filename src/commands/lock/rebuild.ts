@@ -24,7 +24,7 @@ import { recipeFilesDirectory } from "../../lib/repos/catalog-inputs.js";
 import { readRecipeManifestIn } from "../../lib/repos/locked-recipes.js";
 import { createEmptyLockfile } from "../../lib/repos/formats/lockfile.js";
 import type { LockRepoInput } from "../../lib/repos/lock-service.js";
-import { parseRef } from "../../lib/repos/ref.js";
+import { RefSource, parseShortRef } from "../../lib/refs/index.js";
 import {
   PROJECT_REQUESTER,
   resolveRefs,
@@ -133,7 +133,7 @@ export default class LockRebuild extends BaseCommand {
       .sort()
       .map((key) => {
         const entry = subscriptions[key]!;
-        const parsed = parseRef(key);
+        const parsed = parseShortRef(key, RefSource.Config);
         return {
           ref: {
             ...parsed,

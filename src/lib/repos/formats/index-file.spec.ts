@@ -123,6 +123,8 @@ describe("parseIndexFile()", () => {
     version.dependencies = {
       "workflow/partials": { version: "1.0.0", declared: "workflow", kind: "subscribes" },
     };
+    version.depends = [];
+    version.subscribes = ["workflow", "github://sous-io/sous-recipes/tools"];
     version.variables = [
       {
         name: "board",
@@ -135,6 +137,9 @@ describe("parseIndexFile()", () => {
 
     const parsed = parseIndexFile(index, SOURCE);
     const entry = parsed.recipes["workflow/task-files"]!.versions["1.0.0"]!;
+
+    expect(entry.depends).toEqual([]);
+    expect(entry.subscribes).toEqual(["workflow", "github://sous-io/sous-recipes/tools"]);
 
     expect(entry.dependencies!["workflow/partials"]).toEqual({
       version: "1.0.0",

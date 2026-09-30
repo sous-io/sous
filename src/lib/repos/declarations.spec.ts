@@ -74,42 +74,30 @@ describe("declarationFor()", () => {
 
 describe("indexDependencyLists()", () => {
   /**
-   * The recorded declarations stand for the manifest's lists, each entry once.
+   * A version entry that records the manifest's lists stands for them, and a
+   * list it leaves out is empty.
    *
-   * indexDependencyLists({ "workflow/a": { declared: "workflow", kind: "subscribes" },
-   *   "workflow/b": { declared: "workflow", kind: "subscribes" },
-   *   "tools/c": { declared: "tools/c", kind: "depends" } })
-   * // -> { depends: ["tools/c"], subscribes: ["workflow"] }
+   * indexDependencyLists({ subscribes: ["workflow", "github://o/r/tools"] })
+   * // -> { depends: [], subscribes: ["workflow", "github://o/r/tools"] }
    */
-  it("should rebuild the lists from what each dependency records", () => {
+  it("should answer with the lists the entry records", () => {
     expect(
-      indexDependencyLists({
-        "workflow/a": { version: "1.0.0", declared: "workflow", kind: "subscribes" },
-        "workflow/b": { version: "1.0.0", declared: "workflow", kind: "subscribes" },
-        "tools/c": { version: "2.0.0", declared: "tools/c", kind: "depends" },
-      })
+      indexDependencyLists({ depends: ["tools/c"], subscribes: ["workflow"] })
     ).toEqual({ depends: ["tools/c"], subscribes: ["workflow"] });
+    expect(indexDependencyLists({ subscribes: ["github://o/r/tools"] })).toEqual({
+      depends: [],
+      subscribes: ["github://o/r/tools"],
+    });
   });
 
   /**
-   * A version recorded as depending on nothing stands for two empty lists.
+   * An entry recorded before the index described recipes records neither list,
+   * and cannot stand for the manifest.
    *
-   * indexDependencyLists({}) // -> { depends: [], subscribes: [] }
+   * indexDependencyLists({}) // -> undefined
    */
-  it("should read an empty record as depending on nothing", () => {
-    expect(indexDependencyLists({})).toEqual({ depends: [], subscribes: [] });
-  });
-
-  /**
-   * An entry that records no dependencies, or records them without saying how
-   * they were declared, cannot stand for the manifest's lists.
-   *
-   * indexDependencyLists(undefined)                               // -> undefined
-   * indexDependencyLists({ "workflow/a": { version: "1.0.0" } })  // -> undefined
-   */
-  it("should answer undefined when the entry does not record declarations", () => {
-    expect(indexDependencyLists(undefined)).toBeUndefined();
-    expect(indexDependencyLists({ "workflow/a": { version: "1.0.0" } })).toBeUndefined();
+  it("should answer undefined when the entry records neither list", () => {
+    expect(indexDependencyLists({})).toBeUndefined();
   });
 });
 

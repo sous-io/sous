@@ -239,16 +239,55 @@ describe("findReference()", () => {
   });
 
   /**
-   * Matching is case-sensitive: a variable and the environment variable that
-   * answers it differ only in case and shape, and confusing them would resolve
-   * one reference to two things.
+   * Matching tries the exact spelling first, then ignores case: a name typed in
+   * another case still finds what it names.
    *
-   * findReference("WORKFLOW", [Namespace], context)  // -> []
+   * findNamespace("WORKFLOW", context)  // -> [fixtures:workflow]
    */
-  it("should match identifiers case-sensitively", () => {
+  it("should fall back to ignoring case when nothing matches exactly", () => {
     const context = { repos: [repoOf("fixtures", ["workflow/task-files"])] };
-    expect(findNamespace("WORKFLOW", context)).toEqual([]);
-    expect(findRecipe("Task-Files", context)).toEqual([]);
+    expect(findNamespace("WORKFLOW", context).map((match) => match.key)).toEqual([
+      "fixtures:workflow",
+    ]);
+    expect(findRecipe("Workflow/Task-Files", context).map((match) => match.key)).toEqual([
+      "fixtures:workflow/task-files",
+    ]);
+    expect(findRecipe("Fixtures:Task-Files", context).map((match) => match.key)).toEqual([
+      "fixtures:workflow/task-files",
+    ]);
+  });
+
+  /**
+   * An exact match wins outright: the case-insensitive pass runs only when the
+   * exact spelling matched nothing, so a name that differs from another only
+   * in case is never offered alongside it.
+   *
+   * findReference("apiUrl", [VariableName, EnvVarName], context)
+   * // -> the variable only, not an environment variable named APIURL
+   */
+  it("should not ignore case when the exact spelling matches", () => {
+    const context = {
+      repos: [repoOf("fixtures", ["workflow/task-files", "Workflow/other"])],
+    };
+    expect(findNamespace("workflow", context).map((match) => match.key)).toEqual([
+      "fixtures:workflow",
+    ]);
+  });
+
+  /**
+   * A name that still matches several things when case is ignored is handed
+   * back as several matches, for `pickReference` to settle.
+   *
+   * findNamespace("WORKFLOW", context) // -> two matches
+   */
+  it("should return every case-insensitive match when several differ only in case", () => {
+    const context = {
+      repos: [repoOf("fixtures", ["workflow/task-files", "Workflow/other"])],
+    };
+    expect(findNamespace("WORKFLOW", context).map((match) => match.key)).toEqual([
+      "fixtures:Workflow",
+      "fixtures:workflow",
+    ]);
   });
 
   /** A name nothing publishes finds nothing at all. */
@@ -513,5 +552,187 @@ describe("variableReferenceKey()", () => {
     expect(variableReferenceKey(variableOf("fixtures", "workflow", "task-files", "apiUrl"))).toBe(
       "fixtures:workflow/task-files.apiUrl"
     );
+  });
+});
+
+describe("findReference() with a location", () => {
+  /** A trusted repository at github.com/owner/recipes, called "mine" in this project. */
+  const context = {
+    repos: [
+      {
+        ...repoOf("mine", ["workflow/alpha", "workflow/beta"]),
+        url: "https://github.com/owner/recipes",
+        identity: "github.com/owner/recipes",
+        recipes: [
+          { namespace: "workflow", name: "alpha", path: "recipes/workflow/alpha" },
+          { namespace: "workflow", name: "beta", path: "recipes/workflow/beta" },
+        ],
+      },
+    ],
+  };
+
+  /**
+   * A location is matched to the trusted repository at it, whatever this
+   * project calls it, in every URL form.
+   *
+   * findRecipe("https://github.com/owner/recipes/workflow/alpha", context)
+   * // -> [mine:workflow/alpha]
+   */
+  it("should find a recipe named by any location form", () => {
+    for (const ref of [
+      "github://owner/recipes/workflow/alpha",
+      "https://github.com/owner/recipes/workflow/alpha",
+      "github.com/owner/recipes.git/workflow/alpha",
+      "git@github.com:owner/recipes.git/workflow/alpha",
+      "https://github.com/Owner/Recipes/Workflow/Alpha",
+    ]) {
+      expect(findRecipe(ref, context).map((match) => match.key), ref).toEqual([
+        "mine:workflow/alpha",
+      ]);
+    }
+  });
+
+  /**
+   * A browser URL is settled through the folder each recipe lives in.
+   *
+   * findRecipe("https://github.com/owner/recipes/tree/main/recipes/workflow/beta", context)
+   * // -> [mine:workflow/beta]
+   */
+  it("should find a recipe named by a browser URL", () => {
+    expect(
+      findRecipe(
+        "https://github.com/owner/recipes/tree/main/recipes/workflow/beta",
+        context
+      ).map((match) => match.key)
+    ).toEqual(["mine:workflow/beta"]);
+  });
+
+  /**
+   * A namespace and a whole repository are found the same way.
+   *
+   * findNamespace("github://owner/recipes/workflow/*", context) // -> [mine:workflow]
+   * findRepository("git@github.com:owner/recipes.git", context) // -> [mine]
+   */
+  it("should find a namespace and a repository named by location", () => {
+    expect(
+      findNamespace("github://owner/recipes/workflow/*", context).map((match) => match.key)
+    ).toEqual(["mine:workflow"]);
+    expect(
+      findRepository("git@github.com:owner/recipes.git", context).map((match) => match.key)
+    ).toEqual(["mine"]);
+  });
+
+  /**
+   * A location this project does not trust, or one that does not parse, names
+   * nothing.
+   *
+   * findRecipe("https://github.com/someone/else/workflow/alpha", context) // -> []
+   */
+  it("should find nothing at an untrusted or malformed location", () => {
+    expect(findRecipe("https://github.com/someone/else/workflow/alpha", context)).toEqual([]);
+    expect(findRecipe("https://github.com/owner/recipes/a/b/c", context)).toEqual([]);
+    expect(findRecipe("https://github.com/owner/recipes/workflow/gamma", context)).toEqual([]);
+  });
+});
+
+describe("referenceReposFromIndexes()", () => {
+  /**
+   * Each repository carries its identity, worked out from its URL, and each
+   * recipe the folder it lives in.
+   *
+   * referenceReposFromIndexes(["mine"], indexes, { mine: "https://github.com/o/r" })[0].identity
+   * // -> "github.com/o/r"
+   */
+  it("should carry each repository's identity and each recipe's path", () => {
+    const index = {
+      formatVersion: 1,
+      name: "mine",
+      generatedAt: "2026-01-01T00:00:00.000Z",
+      generator: "0.0.1",
+      namespaces: { workflow: {} },
+      recipes: {
+        "workflow/alpha": {
+          path: "recipes/workflow/alpha",
+          versions: {},
+        },
+      },
+    } as unknown as IndexFile;
+    const [repo] = referenceReposFromIndexes(["mine"], new Map([["mine", index]]), {
+      mine: "https://github.com/o/r",
+    });
+    expect(repo!.identity).toBe("github.com/o/r");
+    expect(repo!.recipes[0]!.path).toBe("recipes/workflow/alpha");
+    const [unknown] = referenceReposFromIndexes(["mine"], new Map([["mine", index]]), {
+      mine: "https://nowhere.example/o/r",
+    });
+    expect(unknown!.identity).toBeUndefined();
+  });
+});
+
+describe("referenceContextFromVariables() with a location", () => {
+  /** Two variables of two recipes in the repository this project calls "mine". */
+  const variables = [
+    variableOf("mine", "workflow", "alpha", "apiUrl"),
+    variableOf("mine", "workflow", "beta", "token"),
+  ];
+
+  /** The trusted repository "mine", as the cached index describes it. */
+  const trusted: ReferenceRepo[] = [
+    {
+      name: "mine",
+      url: "https://github.com/owner/recipes",
+      identity: "github.com/owner/recipes",
+      namespaces: [{ name: "workflow" }],
+      recipes: [
+        { namespace: "workflow", name: "alpha", path: "recipes/workflow/alpha" },
+        { namespace: "workflow", name: "beta", path: "recipes/workflow/beta" },
+      ],
+    },
+  ];
+
+  /**
+   * With the trusted repositories lent to it, the variables context settles a
+   * location the way every other command does: a locator, an HTTPS URL, an SSH
+   * remote and a browser URL each name the recipe whose variables are asked.
+   *
+   * findRecipe("https://github.com/owner/recipes/tree/main/recipes/workflow/beta",
+   *   referenceContextFromVariables(variables, undefined, trusted))
+   * // -> [mine:workflow/beta]
+   */
+  it("should settle a location against the trusted repository", () => {
+    const context = referenceContextFromVariables(variables, undefined, trusted);
+    for (const [ref, key] of [
+      ["github://owner/recipes/workflow/alpha", "mine:workflow/alpha"],
+      ["https://github.com/owner/recipes/workflow/alpha", "mine:workflow/alpha"],
+      ["git@github.com:owner/recipes.git/workflow/beta", "mine:workflow/beta"],
+      ["https://github.com/owner/recipes/tree/main/recipes/workflow/beta", "mine:workflow/beta"],
+    ] as const) {
+      expect(findReference(ref, ALL_SCOPES, context).map((match) => match.key), ref).toEqual([
+        key,
+      ]);
+    }
+    expect(
+      findReference("https://github.com/owner/recipes/workflow", ALL_SCOPES, context).map(
+        (match) => match.key
+      )
+    ).toEqual(["mine:workflow"]);
+    expect(
+      findRepository("git@github.com:owner/recipes.git", context).map((match) => match.key)
+    ).toEqual(["mine"]);
+  });
+
+  /**
+   * The context still holds only what the variables belong to, so a location
+   * naming a recipe that asks nothing, or one without the trusted repositories,
+   * names nothing here.
+   *
+   * findRecipe("github://owner/recipes/workflow/gamma", context) // -> []
+   */
+  it("should name nothing the variables do not belong to", () => {
+    const context = referenceContextFromVariables(variables, undefined, trusted);
+    expect(findRecipe("github://owner/recipes/workflow/gamma", context)).toEqual([]);
+    expect(
+      findRecipe("github://owner/recipes/workflow/alpha", referenceContextFromVariables(variables))
+    ).toEqual([]);
   });
 });

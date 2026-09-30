@@ -100,7 +100,14 @@ instead, so its questions are listed once it is installed, and named as unknown 
 sous subscription add workflow/qa-variables
 sous subscription add workflow/qa-variables@^1.2.0
 sous subscription add workflow          # a whole namespace
+sous subscription add https://github.com/acme/recipes/tree/main/recipes/workflow/alpha
 ```
+
+A ref may be written in any form sous reads ([Ref forms](repositories-file-formats.md#ref-forms)),
+including a URL copied from the browser. A location is matched to the trusted repository at it,
+whatever this project calls that repository; one the project does not trust yet goes through the
+trust question first, and nothing is fetched from it before the answer. The subscription is
+recorded in its canonical form, `namespace/recipe`.
 
 The whole dependency closure resolves before anything is downloaded, and only then is anything
 written; an install is whole or not at all.
@@ -108,7 +115,7 @@ written; an install is whole or not at all.
 | Flag | What it does |
 |------|--------------|
 | `-y, --yes` | Answer yes to both questions this command can ask: the subscribe confirmation, and the trust question for a repository it has to add |
-| `--accept-first` | When a one-word ref matches several things, take the first one listed |
+| `--accept-first` | When a ref matches several things, take the first one listed |
 | `--answer <name>=<value>` | Answer one question ahead of time. Repeat it per answer, or read a whole file of them with `--answers-file <path>` |
 | `--always-pull` | Install a newer in-range version whenever one exists, rather than holding the locked one |
 | `--dry-run` | Print what would be installed, writing and downloading nothing |

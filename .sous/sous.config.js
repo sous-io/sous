@@ -75,16 +75,21 @@ export const config = {
   // needs no `repos:` entry: sous provides that one, and the `core` namespace
   // subscription, to every project.
   //
+  // `omakase/house` is the standard set: it has no files of its own, and
+  // subscribing to it subscribes this project to every recipe its manifest
+  // lists under `subscribes`. The other two are recipes the set leaves out
+  // because most projects cannot use them, and sous can: it has a GitHub
+  // Projects board, and it is a command-line tool.
+  //
   // Deliberately NOT subscribed: `tool-usage/automated-browser-tasks`. It needs
   // browserAutomationScriptsDir pointing at a real script directory, and sous
   // has none.
   //
-  // More subscriptions live in the managed layer
-  // .sous/conf.d/510-subscriptions.jsonc, which `sous subscription add` writes.
+  // `sous subscription add` writes any further subscriptions into the managed
+  // layer .sous/conf.d/510-subscriptions.jsonc.
   subscriptions: {
-    "workflow/task-files": { range: "^1" },
+    "omakase/house": { range: "^1" },
     "workflow/github-projects": { range: "^1" },
-    "communication/control-flow": { range: "^1" },
     "cli/command-design": { range: "^1" },
   },
 

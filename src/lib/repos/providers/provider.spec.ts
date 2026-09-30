@@ -3,7 +3,13 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { buildCanonicalRepo, normalizeRepoUrl, splitRepoUrl } from "./provider.js";
+import {
+  buildCanonicalRepo,
+  normalizeRepoUrl,
+  readingsAfterRepository,
+  splitRepoUrl,
+  withoutGitSuffix,
+} from "./provider.js";
 import { builtInProviders, detectProvider, providerById, requireProvider } from "./index.js";
 
 describe("normalizeRepoUrl()", () => {
@@ -142,5 +148,182 @@ describe("the built-in provider list", () => {
     expect(() => requireProvider("https://git.example.com/a/b", "bitbucket")).toThrow(
       /names the provider 'bitbucket'/
     );
+  });
+});
+
+describe("readingsAfterRepository()", () => {
+  /**
+   * readingsAfterRepository should read the segments after a repository as
+   * what they name, and, when they start with `tree/` or `blob/`, also as the
+   * browser path they could be, dropping a leading `-` separator first.
+   *
+   * readingsAfterRepository("o/r", ["-", "tree", "main", "x"])
+   * // -> [{ repoPath: "o/r", browsed: "main/x" },
+   * //     { repoPath: "o/r", named: ["tree", "main", "x"] }]
+   */
+  it("should return a browsed and a named reading after tree or blob", () => {
+    expect(readingsAfterRepository("o/r", ["-", "tree", "main", "x"])).toEqual([
+      { repoPath: "o/r", browsed: "main/x" },
+      { repoPath: "o/r", named: ["tree", "main", "x"] },
+    ]);
+    expect(readingsAfterRepository("o/r", ["blob", "main", "x", "SKILL.md"])[0]).toEqual({
+      repoPath: "o/r",
+      browsed: "main/x/SKILL.md",
+    });
+  });
+
+  /**
+   * Segments that do not start with a browse word are one named reading.
+   *
+   * readingsAfterRepository("o/r", ["workflow", "alpha"])
+   * // -> [{ repoPath: "o/r", named: ["workflow", "alpha"] }]
+   */
+  it("should return one named reading otherwise", () => {
+    expect(readingsAfterRepository("o/r", ["workflow", "alpha"])).toEqual([
+      { repoPath: "o/r", named: ["workflow", "alpha"] },
+    ]);
+    expect(readingsAfterRepository("o/r", [])).toEqual([{ repoPath: "o/r", named: [] }]);
+  });
+});
+
+describe("withoutGitSuffix()", () => {
+  /**
+   * withoutGitSuffix should drop a `.git` suffix in any case, and nothing else.
+   *
+   * withoutGitSuffix("repo.GIT") // -> "repo"
+   */
+  it("should drop a .git suffix", () => {
+    expect(withoutGitSuffix("repo.GIT")).toBe("repo");
+    expect(withoutGitSuffix("repo")).toBe("repo");
+  });
+});
+
+describe("GithubProvider.readLocation()", () => {
+  const github = providerById("github")!;
+
+  /**
+   * A GitHub repository is always an owner and a name, so the reading splits
+   * after the second segment, with any `.git` suffix removed.
+   *
+   * readLocation({ host: "github.com", segments: ["o", "r.git", "workflow"] })
+   * // -> [{ repoPath: "o/r", named: ["workflow"] }]
+   */
+  it("should read the first two segments as the repository", () => {
+    expect(
+      github.readLocation({ host: "github.com", segments: ["o", "r.git", "workflow"] })
+    ).toEqual([{ repoPath: "o/r", named: ["workflow"] }]);
+  });
+
+  /**
+   * A browser URL reads as a browsed path after `tree/`.
+   *
+   * readLocation({ segments: ["o", "r", "tree", "main", "recipes", "x"] })[0]
+   * // -> { repoPath: "o/r", browsed: "main/recipes/x" }
+   */
+  it("should read a browser path", () => {
+    expect(
+      github.readLocation({
+        host: "github.com",
+        segments: ["o", "r", "tree", "main", "recipes", "x"],
+      })[0]
+    ).toEqual({ repoPath: "o/r", browsed: "main/recipes/x" });
+  });
+
+  /**
+   * A single segment is not a repository at all.
+   *
+   * readLocation({ segments: ["o"] }) // -> []
+   */
+  it("should read nothing from a single segment", () => {
+    expect(github.readLocation({ host: "github.com", segments: ["o"] })).toEqual([]);
+  });
+
+  /**
+   * The canonical locator leaves out the default host and keeps any other.
+   *
+   * formatLocator("github.com", "o/r", "workflow/alpha") // -> "github://o/r/workflow/alpha"
+   */
+  it("should format a canonical locator", () => {
+    expect(github.formatLocator("github.com", "o/r", "workflow/alpha")).toBe(
+      "github://o/r/workflow/alpha"
+    );
+    expect(github.formatLocator("ghe.example.com", "o/r", "")).toBe(
+      "github://ghe.example.com/o/r"
+    );
+  });
+});
+
+describe("GitlabProvider.readLocation()", () => {
+  const gitlab = providerById("gitlab")!;
+
+  /**
+   * Without a separator, a nested group reads every way that leaves a project
+   * of at least two segments and at most a namespace and a recipe after it.
+   *
+   * readLocation({ segments: ["a", "b", "c", "d"] })
+   * // -> project a/b naming c/d, a/b/c naming d, and a/b/c/d naming nothing
+   */
+  it("should return every split of a nested group", () => {
+    expect(gitlab.readLocation({ host: "gitlab.com", segments: ["a", "b", "c", "d"] })).toEqual([
+      { repoPath: "a/b", named: ["c", "d"] },
+      { repoPath: "a/b/c", named: ["d"] },
+      { repoPath: "a/b/c/d", named: [] },
+    ]);
+  });
+
+  /**
+   * GitLab's `-` separator ends the project path, and what follows it is a
+   * browser path or what it names.
+   *
+   * readLocation({ segments: ["a", "b", "c", "-", "tree", "main", "x"] })[0]
+   * // -> { repoPath: "a/b/c", browsed: "main/x" }
+   */
+  it("should end the project path at the separator", () => {
+    expect(
+      gitlab.readLocation({
+        host: "gitlab.com",
+        segments: ["a", "b", "c", "-", "tree", "main", "x"],
+      })[0]
+    ).toEqual({ repoPath: "a/b/c", browsed: "main/x" });
+    expect(
+      gitlab.readLocation({ host: "gitlab.com", segments: ["a", "b", "-", "c", "d"] })
+    ).toEqual([{ repoPath: "a/b", named: ["c", "d"] }]);
+  });
+
+  /**
+   * A `.git` suffix also ends the project path.
+   *
+   * readLocation({ segments: ["a", "b", "c.git", "d"] })
+   * // -> [{ repoPath: "a/b/c", named: ["d"] }]
+   */
+  it("should end the project path at a .git suffix", () => {
+    expect(
+      gitlab.readLocation({ host: "gitlab.com", segments: ["a", "b", "c.git", "d"] })
+    ).toEqual([{ repoPath: "a/b/c", named: ["d"] }]);
+  });
+
+  /**
+   * The canonical locator always marks where the project path ends.
+   *
+   * formatLocator("gitlab.com", "a/b", "c/d") // -> "gitlab://a/b/-/c/d"
+   */
+  it("should format a canonical locator with the separator", () => {
+    expect(gitlab.formatLocator("gitlab.com", "a/b", "c/d")).toBe("gitlab://a/b/-/c/d");
+    expect(gitlab.formatLocator("gitlab.example.com", "a/b", "")).toBe(
+      "gitlab://gitlab.example.com/a/b"
+    );
+  });
+});
+
+describe("LocalProvider.readLocation()", () => {
+  /**
+   * The local provider reads no location inside its repositories.
+   *
+   * readLocation({ host: "localhost", segments: ["a", "b"] }) // -> []
+   */
+  it("should read nothing", () => {
+    expect(
+      providerById("local")!.readLocation({ host: "localhost", segments: ["a", "b"] })
+    ).toEqual([]);
   });
 });

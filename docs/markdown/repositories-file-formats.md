@@ -104,15 +104,60 @@ release itself is never restricted, so whatever publishes the recipe still relea
 
 ### Dependencies named by location
 
-`depends` and `subscribes` share one grammar in two spellings: `workflow/qa-helper` is a sibling in this
+`depends` and `subscribes` name their targets by where they live: `workflow/qa-helper` is a sibling in this
 same repository, and `github://sous-io/sous-recipes/workflow/sub-agent-delegation@^1.0` is a recipe in
-another one. A locator URL's scheme is the provider's identifier (`github` and `gitlab` ship today), and its
-path is read from the RIGHT: the last two segments are the namespace and the recipe, and everything before
-them names the repository, whose first segment is the host when it carries a dot and otherwise the
-provider's public host, so `gitlab://gitlab.example.com/group/subgroup/project/workflow/task-files`
-resolves. A trailing `.git` is dropped and at most one `@` range may follow. A manifest may write no `repo:`
-qualifier, no `local://` locator (a local repository is a convenience, not a published location) and no
-filesystem path such as `../qa-helper`.
+another one. Every spelling in [Ref forms](#ref-forms) that names a namespace or a recipe is accepted here,
+except a `repo:` qualifier (one project's private name for a repository), a local path or `local://`
+locator (a convenience, not a published location), and a location naming a whole repository with nothing
+inside it. Names are recorded lowercase.
+
+A ref is stored and printed as its published identity (namespace and recipe), never as a folder path. Any
+spelling that settles to one identity is accepted, including a folder path or a pasted browser URL. Two
+spellings need the other repository's index to settle: a GitLab URL with nested groups, which does not say
+where the project path ends (`gitlab.com/a/b/c/d` may be project `a/b` naming the recipe `c/d`, or project
+`a/b/c` naming the namespace `d`), and a browser URL, which names a folder. `sous repo release` settles each
+by fetching the index of every candidate repository and keeping the reading whose index publishes what was
+named, then records the repository it settled on in the index, beside each key the dependency reached. A
+consumer reads that record and never probes. A network failure fails the release rather than guessing, and
+two readings that both publish what is named fail it too, naming the spellings that read one way:
+`gitlab://a/b/c/-/d/*` for the namespace, `gitlab://a/b/-/c/d` for the recipe.
+
+### Ref forms
+
+Every place a ref is written reads it with one parser, told where the ref came from. These forms are
+recognized everywhere; the table after them says which each place allows. A refused form is an error saying
+what to write there instead.
+
+| Form | Example | Names |
+| --- | --- | --- |
+| A bare name | `workflow` | a namespace (on the command line, also a recipe or anything else by that name) |
+| Namespace and recipe | `workflow/alpha` | a recipe |
+| Namespace, spelled out | `workflow/*` | a namespace |
+| Repository-qualified | `sous-recipes:workflow/alpha` | a recipe in the repository this project calls `sous-recipes` |
+| With a range | `workflow/alpha@^1.2` | a recipe, within an npm-style range |
+| Provider-scheme locator | `github://owner/repo/workflow`, `.../workflow/*`, `.../workflow/alpha` | a namespace or a recipe in that repository |
+| A host other than the provider's own | `gitlab://gitlab.example.com/group/proj/-/workflow/alpha` | the same, on a self-hosted instance |
+| HTTPS URL | `https://github.com/owner/repo/workflow/alpha` | the same as the locator |
+| URL with no scheme | `github.com/owner/repo/workflow/alpha` | the same |
+| SSH remote | `git@github.com:owner/repo.git`, `ssh://git@github.com/owner/repo.git/workflow` | the repository, or something inside it |
+| Browser URL | `https://github.com/owner/repo/tree/main/recipes/workflow/alpha` | the recipe whose index `path` holds that folder (or a file in it); a folder holding one namespace's recipes names the namespace |
+| GitLab separator | `https://gitlab.com/group/sub/proj/-/tree/main/recipes/workflow/alpha` | the same, with `/-/` marking where the project path ends |
+| GitLab nested group | `gitlab://group/sub/proj/workflow/alpha` | every reading the path allows, settled as described above |
+
+A `.git` suffix on the repository is dropped in every URL form. GitLab's canonical locator always marks the
+end of the project path with `/-/`, so it reads one way.
+
+| Place | Allows |
+| --- | --- |
+| The command line | every form; names in any case |
+| A config file's subscription keys | `namespace` or `namespace/recipe`, lowercase; the repository is recorded in the lockfile and a range in the entry's `range` field |
+| A recipe manifest's `depends` and `subscribes` | every form naming a namespace or a recipe, except `repo:` and a local location |
+| A key sous stores (the lockfile, the index, the store) | `namespace` or `namespace/recipe`, lowercase |
+
+Matching tries the exact spelling first, then ignores case; a name that still matches several things is a
+question, answered by `--accept-first` or by choosing. What sous writes (config layers, the lockfile, the
+index) and prints is always the canonical form: `namespace/recipe`, qualified with the repository's short
+name where one is needed.
 
 ### Variable definitions
 
@@ -161,6 +206,8 @@ fetches only this file; nothing more is downloaded until a project subscribes.
         "workflow/sub-agent-delegation": { "range": "^1.0", "repo": "github.com/sous-io/sous-recipes",
           "declared": "github://sous-io/sous-recipes/workflow/sub-agent-delegation@^1.0",
           "kind": "depends" } },
+      "depends": [ "github://sous-io/sous-recipes/workflow/sub-agent-delegation@^1.0" ],
+      "subscribes": [ "workflow" ],
       "variables": [ { "name": "qaNotesDir", "type": "path", "prompt": "Where should notes go?",
         "description": "The directory QA notes are written to.", "example": "docs/qa",
         "default": ".sous/qa-notes", "required": true, "secret": false, "scope": "shared" } ],
@@ -179,6 +226,7 @@ fetches only this file; nothing more is downloaded until a project subscribes.
 | `prerelease`, `releasedAt`, `seeded` | per version | Whether ranges skip it unless a subscription opts in, when it was released, and whether it is the copy sous folds in from its own package |
 | `dependencies` | per version | What the version was released against, keyed `namespace/recipe`; see below |
 | `variables` | per version | The version's variable definitions, exactly as its manifest publishes them (see [Variable definitions](#variable-definitions)), with `required`, `secret` and `scope` filled in; `[]` when it asks nothing |
+| `depends`, `subscribes` | per version | The version's manifest lists, exactly as written; `[]` when empty |
 
 Dependencies are resolved at release time and keyed `namespace/recipe`. An entry carries `version` (a
 sibling, resolved exactly) or `range` plus `repo` (the identity of the repository publishing it, whose own
@@ -186,12 +234,14 @@ index resolves the range); at least one is required. Installing a version instal
 re-resolving the manifest's ranges.
 
 **Each version describes itself.** So that a recipe can be described before anything is fetched, every
-version a release records carries two more things. Each dependency records `declared`, the manifest entry
-that brings it in exactly as written (a recipe such as `workflow/qa-helper@^1.0`, a whole namespace such as
-`workflow`, or a locator), and `kind`: `subscribes` for a co-subscription, whose files land and whose
-questions are asked, or `depends` for a build dependency. When several entries cover one recipe, an entry
-naming it wins over a namespace, and it is a co-subscription when any entry covering it is one. The version
-records `variables`, its manifest's definitions. Both are written even when empty (`"dependencies": {}` and
+version a release records carries more than its dependencies. Each dependency records `declared`, the
+manifest entry that brings it in exactly as written (a recipe such as `workflow/qa-helper@^1.0`, a whole
+namespace such as `workflow`, or a locator), and `kind`: `subscribes` for a co-subscription, whose files
+land and whose questions are asked, or `depends` for a build dependency. When several entries cover one
+recipe, an entry naming it wins over a namespace, and it is a co-subscription when any entry covering it is
+one. The version records `variables`, its manifest's definitions, and `depends` and `subscribes`, its
+manifest's lists as written; the lists are what a consumer walks, because a namespace of another repository
+has no recipe key to record it under. All of them are written even when empty (`"dependencies": {}`,
 `"variables": []`), so "none" reads differently from "not recorded". From these, `sous recipe show` and
 `sous subscription add --dry-run` list everything a subscription installs and every question it asks, and
 the resolver walks a recipe whose files are not on the machine from its index entry just as it would walk
@@ -215,8 +265,8 @@ defines as strictly as before, and ignores the rest; a release it runs carries a
 forward with those fields intact.
 
 !> A sous older than 0.2.26, the first to tolerate unknown fields, refuses the whole index of any
-repository released with `declared`, `kind` and `variables` in it, the official one included. A project
-pinned to such a sous fails to read that index until it moves to 0.2.26 or later.
+repository released with `declared`, `kind`, `variables`, `depends` or `subscribes` in it, the official
+one included. A project pinned to such a sous fails to read that index until it moves to 0.2.26 or later.
 
 **The `seeded` field.** Sous ships the `core` recipe in its own npm package, so a project can build before
 reaching the network. That copy is folded into the official repository's index in memory and resolved like

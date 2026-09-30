@@ -16,6 +16,7 @@ import os from "node:os";
 import path from "node:path";
 import { runGit, type RunOptions } from "../providers/git.js";
 import { RECIPE_KEY_PATTERN } from "../formats/patterns.js";
+import { splitRecipeKey } from "../../refs/parse.js";
 
 /** One release tag, taken apart into the recipe it publishes. */
 export type RecipeTag = {
@@ -60,13 +61,8 @@ export function parseRecipeTag(tag: string): RecipeTag | undefined {
   const version = tag.slice(at + 1);
   if (!RECIPE_KEY_PATTERN.test(key)) return undefined;
 
-  const slash = key.indexOf("/");
-  return {
-    tag,
-    namespace: key.slice(0, slash),
-    name: key.slice(slash + 1),
-    version,
-  };
+  const { namespace, name } = splitRecipeKey(key);
+  return { tag, namespace, name, version };
 }
 
 /**

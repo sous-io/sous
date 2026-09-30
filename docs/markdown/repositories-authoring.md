@@ -151,19 +151,23 @@ depends:
   - workflow/qa-helper                                       # a sibling, released alongside me
   - workflow/qa-helper@^1.1                                  # a sibling with a range; uncommon
   - github://sous-io/sous-recipes/workflow/sat@^1.0          # another repository
-  - gitlab://gitlab.example.com/group/subgroup/proj/qa/lint  # a self-hosted host, with subgroups
+  - gitlab://gitlab.example.com/group/subgroup/proj/-/qa/lint  # a self-hosted host, with subgroups
+  - https://github.com/acme/recipes/tree/main/recipes/lint     # a URL copied from the browser
 subscribes:
   - quality/code-review                                      # co-subscribed: its files land too
 ```
 
 A **bare ref** is a sibling in this repository; with no range it means "the version released alongside me", since
-one run cuts both tags and records the exact version in the index. A locator URL names another repository,
-and its last two segments are always the namespace and the recipe, which is the recipe's published **identity and
-never a path on disk**: a recipe stored at `recipes/shared/sat/` and published as `workflow/sat` is written
-`github://owner/repo/workflow/sat`. Everything before them is the repository, a dotted first segment naming the
-host. The optional range after `@` follows npm's rules. `local://` locators and `repo:` short names are refused:
-a local repository is a consumer's convenience, and a short name is one project's private label. See
-[Dependencies named by location](repositories-file-formats.md#dependencies-named-by-location).
+one run cuts both tags and records the exact version in the index. A location names another repository: a
+locator, an HTTPS or SSH URL, or a URL copied from the browser. A ref is stored and printed as its published
+**identity** (namespace and recipe), never as a folder path. Any spelling that settles to one identity is
+accepted, including a folder path or a pasted browser URL: a recipe stored at `recipes/shared/sat/` and
+published as `workflow/sat` may be written `github://owner/repo/workflow/sat` or
+`https://github.com/owner/repo/tree/main/recipes/shared/sat`, and the release settles the second through the
+other repository's index. The optional range after `@` follows npm's rules. `local://` locators and `repo:`
+short names are refused: a local repository is a consumer's convenience, and a short name is one project's
+private label. See [Dependencies named by location](repositories-file-formats.md#dependencies-named-by-location)
+and every accepted spelling in [Ref forms](repositories-file-formats.md#ref-forms).
 
 ## Cut a release
 

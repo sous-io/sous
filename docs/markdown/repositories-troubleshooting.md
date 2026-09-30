@@ -108,7 +108,13 @@ providers sous ships named (see [Providers](repositories-providers.md)). The leg
 depends:
   - workflow/sat                                       # a sibling in this repository
   - github://acme/recipes/workflow/sat@^1.1            # a recipe in another repository
+  - https://github.com/acme/recipes/tree/main/sat      # the same, copied from the browser
 ```
+
+Every accepted spelling is in [Ref forms](repositories-file-formats.md#ref-forms). A GitLab URL
+with nested groups, or a browser URL, is settled by `sous repo release` through the other
+repository's index; when that index cannot be read, the release stops and names it, and when two
+readings both publish what was named, it names the `/-/` and `/*` spellings that read one way.
 
 While developing both sides, use
 [`sous repo link`](repositories-authoring.md#edit-a-repository-in-place); it redirects resolution

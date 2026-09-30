@@ -37,6 +37,8 @@ import type {
   ProviderId,
   ProviderOptions,
   RepoProvider,
+  LocationReading,
+  WrittenLocation,
 } from "./provider.js";
 
 /**
@@ -67,6 +69,34 @@ export abstract class ProviderBase implements RepoProvider {
     destDir: string,
     options?: ProviderOptions
   ): Promise<void>;
+
+  // --- Reading a location ----------------------------------------------------
+
+  /** This provider's public host, declared by a provider that has one. */
+  declare readonly defaultHost?: string;
+
+  /**
+   * No readings: a provider that does not override this reads no location
+   * inside its repositories, so a ref naming one is refused with a sentence.
+   *
+   * @param _location - The written location; unused.
+   */
+  readLocation(_location: WrittenLocation): LocationReading[] {
+    return [];
+  }
+
+  /**
+   * `<id>://<host>/<repoPath>/<rest>`, with the host left out when it is this
+   * provider's default.
+   *
+   * @param host - The repository's host.
+   * @param repoPath - The repository's path on that host.
+   * @param rest - What is named inside it.
+   */
+  formatLocator(host: string, repoPath: string, rest: string): string {
+    const where = host === this.defaultHost ? repoPath : `${host}/${repoPath}`;
+    return `${this.id}://${where}${rest.length === 0 ? "" : `/${rest}`}`;
+  }
 
   // --- Subprocess plumbing ---------------------------------------------------
 

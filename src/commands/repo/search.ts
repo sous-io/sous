@@ -21,6 +21,7 @@ import {
 } from "../../lib/repos/catalog-display.js";
 import { readEffectiveLinks } from "../../lib/repos/links.js";
 import { renderTable, type TableColumn } from "../../utils/table.js";
+import { namespaceOfKey } from "../../lib/refs/parse.js";
 import { browsingFlags } from "../../utils/flags.js";
 import {
   blankLine,
@@ -142,7 +143,7 @@ export default class RepoSearch extends BaseCommand {
         const installed = locked?.repo === repo ? locked.version : undefined;
         if (flags.installed && installed === undefined) continue;
 
-        const namespace = key.slice(0, key.indexOf("/"));
+        const namespace = namespaceOfKey(key);
         const haystack = [
           key,
           recipe.description ?? "",

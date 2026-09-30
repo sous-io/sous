@@ -128,12 +128,14 @@ Canonicalizing also produces the two clone URLs sous hands to git, `https://<hos
 and `git@<host>:<owner>/<name>.git`. For the `local` provider the HTTPS slot carries the
 absolute directory, because that is what git is given when a recipe is fetched.
 
-?> A published manifest names a dependency in another repository by a locator URL whose
-scheme is the provider's identifier: `github://sous-io/sous-recipes/workflow/sat@^1.1`. A first
-segment containing a dot is read as the host, so `gitlab://gitlab.example.com/group/project/ns/recipe`
-addresses a self-hosted instance; without one, the provider's public host is assumed. `local://`
-is refused, because a path on your disk is not a published location. The grammar is in
-[Dependencies named by location](repositories-file-formats.md#dependencies-named-by-location).
+?> A published manifest names a dependency in another repository by location, such as a locator
+whose scheme is the provider's identifier: `github://sous-io/sous-recipes/workflow/sat@^1.1`. A
+first segment containing a dot is read as the host, so `gitlab://gitlab.example.com/group/project/-/ns/recipe`
+addresses a self-hosted instance; without one, the provider's public host is assumed. Where a
+repository path ends, and what a browser URL's path looks like, is each provider's own rule (its
+`readLocation`), so a URL copied from either host's file view works too. `local://` is refused,
+because a path on your disk is not a published location. Every form is in
+[Ref forms](repositories-file-formats.md#ref-forms).
 
 ## Private repositories
 

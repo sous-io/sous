@@ -24,6 +24,40 @@ export enum SousScope {
 }
 
 /**
+ * Where a ref was written. `parseRef` reads every form wherever a ref comes
+ * from, and the place decides which of those forms it allows: a refused form
+ * is an error saying what to write there instead.
+ */
+export enum RefSource {
+  /**
+   * A ref typed on the command line. Every form is allowed: a bare name, a
+   * namespace and recipe, a `repo:` qualifier, a version range, a
+   * provider-scheme locator, an HTTPS, SSH or scheme-less URL, and a browser
+   * URL copied from a host's file view. Names may be written in any case.
+   */
+  CommandLine = "commandLine",
+  /**
+   * A subscription key in a config layer. Only the stored form is allowed:
+   * `namespace` or `namespace/recipe`, lowercase. The repository a
+   * subscription resolves into is recorded in the lockfile, and its range in
+   * the entry's own `range` field.
+   */
+  Config = "config",
+  /**
+   * An entry of a recipe manifest's `depends` or `subscribes` list. A bare ref
+   * names a recipe in the same repository; every locator and URL form names
+   * one in another repository. A `repo:` qualifier is refused, because it is
+   * one project's private name for a repository, and so is a local path.
+   */
+  Manifest = "manifest",
+  /**
+   * A key sous wrote itself: the lockfile, the index and the store. Only the
+   * canonical `namespace` or `namespace/recipe` is allowed.
+   */
+  Lockfile = "lockfile",
+}
+
+/**
  * Every scope, in the order matches of equal specificity are listed in. It is
  * the order the one-word ref search has always used (a whole namespace before
  * the recipes inside it), widened to the other three kinds: the broadest thing

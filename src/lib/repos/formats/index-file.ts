@@ -32,7 +32,8 @@ import {
   semverVersionSchema,
   stableJsonStringify,
 } from "./common.js";
-import { publishedVariableDefinitionSchema } from "./recipe-manifest.js";
+import { publishedVariableDefinitionSchema } from "./variable-definition.js";
+import { namespaceOfKey } from "../../refs/parse.js";
 
 /**
  * One dependency of one published version, as the release resolved it.
@@ -123,6 +124,17 @@ export const indexVersionSchema = forwardCompatibleObject({
    * files can say.
    */
   variables: z.array(publishedVariableDefinitionSchema).optional(),
+  /**
+   * The version's manifest `depends` and `subscribes` lists, exactly as
+   * written, so a consumer walks a recipe whose files it has not fetched the
+   * same way it walks its manifest: a namespace still expands to what the
+   * namespace holds, including a namespace of another repository, which no
+   * key of `dependencies` can record. Written, even when empty, beside
+   * `variables`; absent on a version recorded before ADR 0010. Kept as plain
+   * strings, so a ref form a later sous accepts never breaks this reader.
+   */
+  depends: z.array(z.string().min(1, "must not be empty")).optional(),
+  subscribes: z.array(z.string().min(1, "must not be empty")).optional(),
 });
 
 /** One recipe, with every version the repo publishes of it. */
@@ -170,7 +182,7 @@ export const indexFileSchema = forwardCompatibleObject({
   // A recipe whose namespace is not declared could never be resolved, so a
   // release that produced one is broken; say which recipe and which namespace.
   for (const key of Object.keys(index.recipes)) {
-    const namespace = key.slice(0, key.indexOf("/"));
+    const namespace = namespaceOfKey(key);
     if (!Object.hasOwn(index.namespaces, namespace)) {
       ctx.addIssue({
         code: "custom",

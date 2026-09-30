@@ -48,20 +48,27 @@ on, proposed for review in the pull request that closes gh-124.
 - **Each version records its variable definitions.** `variables` is the manifest's `variables` list, parsed
   by the manifest's own rules, with `required`, `secret` and `scope` filled in. The index schema reads it
   with the same field definitions and the same checks as the manifest (`variableDefinitionShape` and
-  `checkVariableDefinition` in `src/lib/repos/formats/recipe-manifest.ts`); the one difference is that it
+  `checkVariableDefinition` in `src/lib/repos/formats/variable-definition.ts`); the one difference is that it
   keeps a field it does not know, as every index object does. The index records definitions only, never an
   answer, so it adds no answer source outside the ladder.
-- **"None" and "not recorded" read differently.** A described version always carries both fields:
-  `"dependencies": {}` for a version with no dependencies, and `"variables": []` for one that asks nothing.
-  An absent field, or a dependency without `declared` and `kind`, means the release that recorded the
-  version predates this record.
+- **Each version records its manifest's lists.** `depends` and `subscribes` are the manifest's lists,
+  exactly as written, and they are what a consumer walks when it has not fetched the recipe. The
+  per-dependency `declared` cannot stand in for them: a whole namespace of another repository is read from
+  that repository's own index, so no recipe key of `dependencies` records it. The lists are kept as plain
+  strings, so a ref form a later sous accepts never breaks this reader.
+- **"None" and "not recorded" read differently.** A described version always carries every field:
+  `"dependencies": {}` for a version with no dependencies, `[]` for an empty list, and `"variables": []`
+  for one that asks nothing. An absent field, or a dependency without `declared` and `kind`, means the
+  release that recorded the version predates this record.
 - **Only newly recorded versions get the fields.** A published version's entry is frozen (ADR 0007), so no
   release fills them in afterwards. A version being published, and a version rebuilt from its tag because
   the index lost it, are described from the manifest they carry. The release's check of a published entry
-  against its manifest now also compares `declared` and `kind` when the entry records them.
-- **One rule, in one module.** `declarationFor` in `src/lib/repos/declarations.ts` decides a recipe's
-  declaration for the release that records it and for `sous recipe show` reading an older entry beside its
-  manifest; `indexDependencyLists` turns a recorded entry back into the manifest's two lists.
+  against its manifest now also compares `declared`, `kind`, `depends` and `subscribes` when the entry
+  records them.
+- **One rule, in one module.** `foldDeclaration` in `src/lib/repos/declarations.ts` decides a recipe's
+  declaration, entry by entry, for the release that records it and, through `declarationFor`, for
+  `sous recipe show` reading an older entry beside its manifest; `indexDependencyLists` reads a version's
+  recorded lists.
 - **Readers use the fields when present and fall back when absent.** The resolver walks a recipe whose
   manifest it cannot load from its index entry's lists, exactly as it would walk the manifest, so a
   namespace entry still expands to the namespace as it stands; only a recipe whose entry records nothing is
@@ -80,9 +87,6 @@ on, proposed for review in the pull request that closes gh-124.
   fields, the official one included. The user accepted this in choosing option 2.
 - A version published before this release keeps its entry as it is. Its questions are listed once its
   files are fetched, and a dry run names it as unknown until then.
-- A namespace declared by a version whose namespace held no other recipe when it was published leaves no
-  dependency to record the declaration on, so a reader walking that version from the index does not expand
-  the namespace; the version's manifest, once fetched, does.
 - A later sous that adds a field to a variable definition is read by this one, which keeps the field unread.
   A later sous that adds a new variable `type` is not: this one refuses the value, as it would in a manifest.
 - `src/lib/repos/release/index-builder.spec.ts`, `src/lib/repos/declarations.spec.ts`,

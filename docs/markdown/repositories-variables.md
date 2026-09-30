@@ -244,10 +244,17 @@ sous vars ask SOUS_VAR_TASK_FILE_ROOT           # the same one, by a name in use
 sous vars ask workflow/task-files.taskFileRoot  # the same one, spelled out in full
 sous vars ask task-files                        # every question one recipe asks
 sous vars ask sous-recipes                      # every question that repository's recipes ask
+sous vars ask https://github.com/sous-io/sous-recipes/tree/main/recipes/workflow/task-files
+                                                # the same recipe, as a URL copied from the browser
 ```
 
-Matching is case-sensitive, and an environment variable name resolves when a definition declares it or an
-env file sets it. `--repo`, `--namespace` and `--var` say which kind is meant, each narrowing what the one
+A repository, namespace or recipe may be written in any form in
+[Ref forms](repositories-file-formats.md#ref-forms), including a location: it is matched to the
+trusted repository at it and settled through that repository's cached index, then narrowed to the
+variables it covers. `--repo` and `--namespace` accept a location the same way.
+
+Matching tries the exact spelling first, then ignores case; a name that still matches several things is a
+question. An environment variable name resolves when a definition declares it or an env file sets it. `--repo`, `--namespace` and `--var` say which kind is meant, each narrowing what the one
 before left, so `sous vars ask --namespace workflow apiUrl` asks about that namespace's `apiUrl` alone. When
 a name matches several things, sous lists them and asks; `--accept-first` takes the first, and a run with no
 terminal fails naming it.

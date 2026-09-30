@@ -13,8 +13,10 @@
  */
 
 import type { DependencyKind } from "./formats/common.js";
-import type { IndexDependency } from "./formats/index-file.js";
-import { dependencyRefKey, parseDependencyRef } from "./ref.js";
+import type { IndexVersion } from "./formats/index-file.js";
+import { isNamedReading, namespaceOfKey, parseRef, refKey } from "../refs/parse.js";
+import { RefSource } from "../refs/scopes.js";
+import { settleDependency, type RecordedDependencies } from "../refs/settle.js";
 
 /** A manifest's two dependency lists, each entry exactly as it was written. */
 export type DependencyLists = {
@@ -29,88 +31,114 @@ export type DependencyDeclaration = {
   /**
    * The manifest entry that brings it in, as written. An entry naming the
    * recipe wins over a namespace entry that also covers it; between two
-   * entries of the same form, the later one (in `depends`, then `subscribes`
-   * order) wins.
+   * entries naming it, the later one (in `depends`, then `subscribes` order)
+   * wins, and between two namespace entries, the first.
    */
   declared: string;
   /** `subscribes` when any entry covering the recipe is a co-subscription. */
   kind: DependencyKind;
 };
 
+/** A declaration being gathered, entry by entry. */
+export type GatheredDeclaration = DependencyDeclaration & {
+  /** True when an entry named the recipe itself rather than its namespace. */
+  named: boolean;
+};
+
+/** One manifest entry covering a recipe. */
+export type CoveringEntry = {
+  /** The entry as written. */
+  written: string;
+  /** The list it sits in. */
+  kind: DependencyKind;
+  /** True when it names the recipe itself rather than a namespace holding it. */
+  named: boolean;
+};
+
+/**
+ * Folds one more manifest entry covering a recipe into what is known about the
+ * recipe's declaration, by the rule `DependencyDeclaration` states. Every
+ * reader applies this one function, entry by entry in manifest order
+ * (`depends` first, then `subscribes`).
+ *
+ * foldDeclaration(undefined, { written: "workflow", kind: "subscribes", named: false })
+ * // -> { declared: "workflow", kind: "subscribes", named: false }
+ *
+ * @param before - What the earlier entries said, when any covered the recipe.
+ * @param entry - The next entry covering it.
+ */
+export function foldDeclaration(
+  before: GatheredDeclaration | undefined,
+  entry: CoveringEntry
+): GatheredDeclaration {
+  const keepBefore = before !== undefined && !entry.named;
+  return {
+    declared: keepBefore ? before.declared : entry.written.trim(),
+    kind: before?.kind === "subscribes" || entry.kind === "subscribes" ? "subscribes" : "depends",
+    named: entry.named || before?.named === true,
+  };
+}
+
 /**
  * The declaration that brings one recipe in, or undefined when no entry of the
- * lists covers it.
+ * lists covers it. An entry that reads more than one way is settled from what
+ * the version's index entry recorded, and one that cannot be settled, or does
+ * not parse, covers nothing.
  *
  * declarationFor({ depends: ["workflow/a"], subscribes: ["workflow"] }, "workflow/a")
  * // -> { declared: "workflow/a", kind: "subscribes" }
  *
  * @param lists - The declaring recipe's `depends` and `subscribes` lists.
  * @param key - The recipe being asked about, `namespace/recipe`.
+ * @param recorded - What the declaring version's index entry records, for settling.
  */
 export function declarationFor(
   lists: Partial<DependencyLists>,
-  key: string
+  key: string,
+  recorded?: RecordedDependencies
 ): DependencyDeclaration | undefined {
-  let named: string | undefined;
-  let namespace: string | undefined;
-  let subscribed = false;
+  let gathered: GatheredDeclaration | undefined;
 
   for (const [kind, entries] of [
     ["depends", lists.depends ?? []],
     ["subscribes", lists.subscribes ?? []],
   ] as Array<[DependencyKind, string[]]>) {
     for (const written of entries) {
-      let parsed;
+      let reading;
       try {
-        parsed = parseDependencyRef(written);
+        reading = settleDependency(written, recorded === undefined ? {} : { recorded });
       } catch {
         // An entry that does not parse is reported wherever the manifest is
         // validated; here it simply covers nothing.
         continue;
       }
+      if (reading === undefined || !isNamedReading(reading)) continue;
 
-      if (parsed.recipe !== undefined) {
-        if (dependencyRefKey(parsed) !== key) continue;
-        named = written.trim();
-      } else {
-        if (!key.startsWith(`${parsed.namespace}/`)) continue;
-        namespace ??= written.trim();
-      }
-      if (kind === "subscribes") subscribed = true;
+      const named = reading.recipe !== undefined;
+      const covers = named ? refKey(reading) === key : namespaceOfKey(key) === reading.namespace;
+      if (covers) gathered = foldDeclaration(gathered, { written, kind, named });
     }
   }
 
-  const declared = named ?? namespace;
-  if (declared === undefined) return undefined;
-  return { declared, kind: subscribed ? "subscribes" : "depends" };
+  return gathered === undefined ? undefined : { declared: gathered.declared, kind: gathered.kind };
 }
 
 /**
- * The dependency lists a version's index entry stands for, rebuilt from the
- * `declared` and `kind` each recorded dependency carries, or undefined when
- * the entry does not record them. That is what lets the resolver walk a recipe
- * whose files are not on this machine exactly as it would walk its manifest.
+ * The manifest lists a version's index entry records, or undefined when it
+ * records neither (a version recorded before the index described recipes).
+ * That is what lets the resolver walk a recipe whose files are not on this
+ * machine exactly as it would walk its manifest.
  *
- * indexDependencyLists({
- *   "workflow/a": { version: "1.0.0", declared: "workflow", kind: "subscribes" },
- *   "workflow/b": { version: "1.2.0", declared: "workflow", kind: "subscribes" },
- * })
+ * indexDependencyLists({ subscribes: ["workflow"], depends: [] , ... })
  * // -> { depends: [], subscribes: ["workflow"] }
  *
- * @param dependencies - The version's recorded dependencies, when it records any.
+ * @param version - The version's index entry.
  */
 export function indexDependencyLists(
-  dependencies: Record<string, IndexDependency> | undefined
+  version: Pick<IndexVersion, "depends" | "subscribes">
 ): DependencyLists | undefined {
-  if (dependencies === undefined) return undefined;
-
-  const lists: DependencyLists = { depends: [], subscribes: [] };
-  for (const entry of Object.values(dependencies)) {
-    if (entry.declared === undefined || entry.kind === undefined) return undefined;
-    const list = lists[entry.kind];
-    if (!list.includes(entry.declared)) list.push(entry.declared);
-  }
-  return lists;
+  if (version.depends === undefined && version.subscribes === undefined) return undefined;
+  return { depends: [...(version.depends ?? [])], subscribes: [...(version.subscribes ?? [])] };
 }
 
 /**
@@ -124,8 +152,13 @@ export function indexDependencyLists(
  */
 export function describeDeclaration(declared: string): string {
   try {
-    const parsed = parseDependencyRef(declared);
-    if (parsed.recipe === undefined) return `the whole '${parsed.namespace}' namespace`;
+    const readings = parseRef(declared, RefSource.Manifest);
+    const only = readings[0]!;
+    if (readings.length === 1 && isNamedReading(only) && only.recipe === undefined) {
+      return only.location === undefined
+        ? `the whole '${only.namespace}' namespace`
+        : `the whole '${only.namespace}' namespace of ${only.location.identity}`;
+    }
   } catch {
     // Shown as it was written; the reader sees the bad entry.
   }

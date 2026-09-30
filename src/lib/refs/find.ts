@@ -19,10 +19,14 @@
  *     taskFileRoot                              the same variable, bare
  *     SOUS_VAR_TASK_FILE_ROOT                   the environment variable answering it
  *
- * Matching is case-sensitive, because every identifier in sous is (namespaces
- * and recipes are lowercase kebab-case, variables are camelCase, environment
- * variable names are upper snake case), and a case-insensitive search would
- * report a variable and its own environment variable name as the same thing.
+ * A location names the same things: an HTTPS, SSH or scheme-less URL, a
+ * provider-scheme locator, or a URL copied from the browser, matched against
+ * the trusted repository at that location and settled through its index.
+ *
+ * Matching tries the exact spelling first, then ignores case; a name that still
+ * matches several things is a question for `pickReference`. The exact pass
+ * comes first because a variable (`apiUrl`) and an environment variable name
+ * can differ only in case, and the spelling typed is the one meant.
  *
  * The order matches come back in is part of the contract, because it is the
  * order they are offered in and the one `--accept-first` picks from. Matches
@@ -34,7 +38,17 @@
  */
 
 import type { IndexFile } from "../repos/formats/index-file.js";
-import type { ParsedRef } from "../repos/ref.js";
+import { repoIdentity } from "../repos/identity.js";
+import { requireProvider } from "../repos/providers/index.js";
+import {
+  isRepositoryReading,
+  looksLikeLocation,
+  parseRef,
+  splitRecipeKey,
+  type ParsedRef,
+  type RefReading,
+} from "./parse.js";
+import { settleInIndex } from "./settle.js";
 import type { DefinedVariable } from "../vars/definition-source.js";
 import { variableCandidates, type LadderContext } from "../vars/ladder.js";
 import { bareName } from "../vars/names.js";
@@ -58,6 +72,8 @@ export type ReferenceRecipe = {
   name: string;
   /** Its one-paragraph summary, when the index carries one. */
   description?: string;
+  /** The folder it lives in, relative to the repository root, when the index says. */
+  path?: string;
 };
 
 /** One repository a reference could name, and what it publishes. */
@@ -66,6 +82,11 @@ export type ReferenceRepo = {
   name: string;
   /** Where it lives, as the project's config records it. */
   url?: string;
+  /**
+   * Its canonical identity, which is how a reference written as a location
+   * finds it whatever short name this project gave it.
+   */
+  identity?: string;
   /** Every namespace it publishes. */
   namespaces: ReferenceNamespace[];
   /** Every recipe it publishes. */
@@ -163,11 +184,40 @@ export function findReference(
   const term = search.trim();
   if (term.length === 0) return [];
 
+  if (looksLikeLocation(term)) return findLocated(term, wanted, context);
+
+  const exact = collectMatches(term, wanted, context, (one, other) => one === other);
+  if (exact.length > 0) return exact;
+  return collectMatches(
+    term,
+    wanted,
+    context,
+    (one, other) => one.toLowerCase() === other.toLowerCase()
+  );
+}
+
+/** How two spellings are compared in one pass of the search. */
+type SameSpelling = (one: string, other: string) => boolean;
+
+/**
+ * Every match of a term under one way of comparing spellings.
+ *
+ * @param term - The reference, trimmed.
+ * @param wanted - The kinds of thing the command accepts.
+ * @param context - What to search.
+ * @param same - Whether two spellings count as the same.
+ */
+function collectMatches(
+  term: string,
+  wanted: Set<SousScope>,
+  context: ReferenceContext,
+  same: SameSpelling
+): ReferenceMatch[] {
   const matches: ReferenceMatch[] = [];
   const repoOrder = new Map((context.repos ?? []).map((repo, position) => [repo.name, position]));
 
   for (const repo of context.repos ?? []) {
-    if (wanted.has(SousScope.Repository) && term === repo.name) {
+    if (wanted.has(SousScope.Repository) && same(term, repo.name)) {
       matches.push({
         scope: SousScope.Repository,
         key: repo.name,
@@ -181,7 +231,7 @@ export function findReference(
     if (wanted.has(SousScope.Namespace)) {
       for (const namespace of repo.namespaces) {
         const key = `${repo.name}:${namespace.name}`;
-        const qualification = qualificationOf(term, [
+        const qualification = qualificationOf(term, same, [
           [key, Qualification.Full],
           [namespace.name, Qualification.Bare],
         ]);
@@ -201,7 +251,7 @@ export function findReference(
     if (wanted.has(SousScope.Recipe)) {
       for (const recipe of repo.recipes) {
         const key = `${repo.name}:${recipe.namespace}/${recipe.name}`;
-        const qualification = qualificationOf(term, [
+        const qualification = qualificationOf(term, same, [
           [key, Qualification.Full],
           [`${recipe.namespace}/${recipe.name}`, Qualification.Partial],
           [`${repo.name}:${recipe.name}`, Qualification.Partial],
@@ -229,7 +279,7 @@ export function findReference(
       const variable = defined.definition.name;
 
       if (wanted.has(SousScope.VariableName)) {
-        const qualification = qualificationOf(term, [
+        const qualification = qualificationOf(term, same, [
           [key, Qualification.Full],
           [`${namespace}/${recipe}.${variable}`, Qualification.Partial],
           [`${recipe}.${variable}`, Qualification.Partial],
@@ -252,18 +302,109 @@ export function findReference(
         }
       }
 
-      if (wanted.has(SousScope.EnvVarName) && environmentNamesFor(defined, context).has(term)) {
+      const envName = [...environmentNamesFor(defined, context)].find((name) => same(term, name));
+      if (wanted.has(SousScope.EnvVarName) && envName !== undefined) {
         matches.push({
           scope: SousScope.EnvVarName,
           key,
-          label: term,
+          label: envName,
           repo,
           namespace,
           recipe,
           variable,
-          envName: term,
+          envName,
           qualification: Qualification.EnvName,
           detail: defined.definition.prompt,
+        });
+      }
+    }
+  }
+
+  return sortMatches(matches, repoOrder);
+}
+
+/**
+ * Every match of a reference written as a location. Each reading of it is
+ * looked for among the repositories at that location, whatever short name this
+ * project gave them, and settled through that repository's index: a named
+ * namespace or recipe exactly first and then ignoring case, a browser path
+ * through the folder each recipe lives in. A location that does not parse, or
+ * whose repository this project does not trust, names nothing here.
+ *
+ * @param term - The reference, trimmed.
+ * @param wanted - The kinds of thing the command accepts.
+ * @param context - What to search.
+ */
+function findLocated(
+  term: string,
+  wanted: Set<SousScope>,
+  context: ReferenceContext
+): ReferenceMatch[] {
+  let readings: RefReading[];
+  try {
+    readings = parseRef(term);
+  } catch {
+    return [];
+  }
+
+  const matches: ReferenceMatch[] = [];
+  const repoOrder = new Map((context.repos ?? []).map((repo, position) => [repo.name, position]));
+
+  for (const reading of readings) {
+    for (const repo of context.repos ?? []) {
+      if (repo.identity === undefined || repo.identity !== reading.location?.identity) continue;
+
+      if (isRepositoryReading(reading)) {
+        if (wanted.has(SousScope.Repository)) {
+          matches.push({
+            scope: SousScope.Repository,
+            key: repo.name,
+            label: repo.name,
+            repo: repo.name,
+            qualification: Qualification.Full,
+            ...(repo.url === undefined ? {} : { detail: repo.url }),
+          });
+        }
+        continue;
+      }
+
+      const recipes: Record<string, { path: string }> = {};
+      for (const recipe of repo.recipes) {
+        recipes[`${recipe.namespace}/${recipe.name}`] = { path: recipe.path ?? "" };
+      }
+      const settled = settleInIndex(reading, {
+        namespaces: repo.namespaces.map((namespace) => namespace.name),
+        recipes,
+      });
+
+      for (const found of settled) {
+        if (found.recipe === undefined) {
+          if (!wanted.has(SousScope.Namespace)) continue;
+          const namespace = repo.namespaces.find((entry) => entry.name === found.namespace);
+          matches.push({
+            scope: SousScope.Namespace,
+            key: `${repo.name}:${found.namespace}`,
+            label: found.namespace,
+            repo: repo.name,
+            namespace: found.namespace,
+            qualification: Qualification.Full,
+            ...(namespace?.description === undefined ? {} : { detail: namespace.description }),
+          });
+          continue;
+        }
+        if (!wanted.has(SousScope.Recipe)) continue;
+        const recipe = repo.recipes.find(
+          (entry) => entry.namespace === found.namespace && entry.name === found.recipe
+        );
+        matches.push({
+          scope: SousScope.Recipe,
+          key: `${repo.name}:${found.namespace}/${found.recipe}`,
+          label: found.recipe,
+          repo: repo.name,
+          namespace: found.namespace,
+          recipe: found.recipe,
+          qualification: Qualification.Full,
+          ...(recipe?.description === undefined ? {} : { detail: recipe.description }),
         });
       }
     }
@@ -395,20 +536,41 @@ export function referenceReposFromIndexes(
 
     const recipes: ReferenceRecipe[] = [];
     for (const [key, recipe] of Object.entries(index.recipes)) {
-      const slash = key.indexOf("/");
-      if (slash === -1) continue;
+      const { namespace, name: recipeName } = splitRecipeKey(key);
       recipes.push({
-        namespace: key.slice(0, slash),
-        name: key.slice(slash + 1),
+        namespace,
+        name: recipeName,
+        path: recipe.path,
         ...(recipe.description === undefined ? {} : { description: recipe.description }),
       });
     }
 
     const url = urls[name];
-    repos.push({ name, namespaces, recipes, ...(url === undefined ? {} : { url }) });
+    const identity = url === undefined ? undefined : identityOfUrl(url);
+    repos.push({
+      name,
+      namespaces,
+      recipes,
+      ...(url === undefined ? {} : { url }),
+      ...(identity === undefined ? {} : { identity }),
+    });
   }
 
   return repos;
+}
+
+/**
+ * The canonical identity of a repository at a URL, or undefined when no
+ * provider recognizes it.
+ *
+ * @param url - Where the repository lives.
+ */
+function identityOfUrl(url: string): string | undefined {
+  try {
+    return repoIdentity(requireProvider(url).canonicalize(url));
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -421,21 +583,35 @@ export function referenceReposFromIndexes(
  * context from the definitions also means `sous vars ask --file` resolves
  * references exactly as a subscribed project does.
  *
+ * The trusted repositories, when given, lend each repository its identity and
+ * URL and each recipe its folder, so a reference written as a location (a URL,
+ * a locator, a URL copied from the browser) settles here exactly as it does in
+ * every other command.
+ *
  * @param variables - The variable definitions in play.
  * @param ladder - The environment layers, for environment variable names.
+ * @param trusted - The trusted repositories as a reference searches them.
  */
 export function referenceContextFromVariables(
   variables: DefinedVariable[],
-  ladder?: LadderContext
+  ladder?: LadderContext,
+  trusted: readonly ReferenceRepo[] = []
 ): ReferenceContext {
   const repos = new Map<string, ReferenceRepo>();
 
   for (const defined of variables) {
     const { repo: repoName, namespace, name: recipe } = defined.recipe;
+    const known = trusted.find((entry) => entry.name === repoName);
 
     let repo = repos.get(repoName);
     if (repo === undefined) {
-      repo = { name: repoName, namespaces: [], recipes: [] };
+      repo = {
+        name: repoName,
+        namespaces: [],
+        recipes: [],
+        ...(known?.url === undefined ? {} : { url: known.url }),
+        ...(known?.identity === undefined ? {} : { identity: known.identity }),
+      };
       repos.set(repoName, repo);
     }
 
@@ -443,7 +619,10 @@ export function referenceContextFromVariables(
       repo.namespaces.push({ name: namespace });
     }
     if (!repo.recipes.some((entry) => entry.namespace === namespace && entry.name === recipe)) {
-      repo.recipes.push({ namespace, name: recipe });
+      const path = known?.recipes.find(
+        (entry) => entry.namespace === namespace && entry.name === recipe
+      )?.path;
+      repo.recipes.push({ namespace, name: recipe, ...(path === undefined ? {} : { path }) });
     }
   }
 
@@ -494,14 +673,16 @@ export function referenceToRef(match: ReferenceMatch, original: ParsedRef): Pars
  * the first one that matches wins.
  *
  * @param term - The search term.
+ * @param same - Whether two spellings count as the same.
  * @param spellings - Each spelling of this thing, with how qualified it is.
  */
 function qualificationOf(
   term: string,
+  same: SameSpelling,
   spellings: [string, Qualification][]
 ): Qualification | undefined {
   for (const [spelling, qualification] of spellings) {
-    if (spelling === term) return qualification;
+    if (same(spelling, term)) return qualification;
   }
   return undefined;
 }

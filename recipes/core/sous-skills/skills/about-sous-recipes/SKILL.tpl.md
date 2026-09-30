@@ -138,13 +138,17 @@ Both lists name other recipes, and they do different things:
 - `subscribes` is a **co-subscription**. The other recipe's files land and its questions are asked,
   as if the project had subscribed to it too.
 
-Each entry names its target by where it lives, in one of two forms:
+Each entry names its target by where it lives:
 
-- a bare `namespace/recipe` for a sibling in the same repository. With no range it means the
-  version released alongside this one; an `@` range (npm's rules) is allowed but uncommon.
-- a locator URL for a recipe in another repository, such as
-  `github://example-org/team-recipes/review/wording@^1.0`. The scheme is the provider, and the last
-  two segments are always the recipe's namespace and name, never a path on disk.
+- a bare `namespace/recipe` (or `namespace` for all of it) for a sibling in the same repository.
+  With no range it means the version released alongside this one; an `@` range (npm's rules) is
+  allowed but uncommon.
+- a location for a recipe in another repository, such as
+  `github://example-org/team-recipes/review/wording@^1.0`, an HTTPS or SSH URL, or a URL copied
+  from the browser. A ref is stored and printed as its published identity (namespace and recipe),
+  never as a folder path. Any spelling that settles to one identity is accepted, including a
+  folder path or a pasted browser URL; `sous repo release` settles one that needs the other
+  repository's index, and fails rather than guess.
 
 `local://` locators and `repo:` short names are refused: both are one project's private view of a
 repository, and a published manifest is read everywhere.

@@ -26,12 +26,9 @@ import {
   managedLayerHeader,
   updateManagedLayer,
 } from "../repos/managed-layer.js";
-import {
-  NAMESPACE_NAME_PATTERN,
-  RECIPE_NAME_PATTERN,
-  REPO_NAME_PATTERN,
-  VARIABLE_NAME_PATTERN,
-} from "../repos/formats/patterns.js";
+import { VARIABLE_NAME_PATTERN } from "../repos/formats/patterns.js";
+import { RefSource } from "../refs/scopes.js";
+import { formatRef, parseShortRef, type ParsedRef } from "../refs/parse.js";
 import type { DefinedVariable } from "./definition-source.js";
 
 /** File name of the machine-written mapping record layer. */
@@ -84,32 +81,22 @@ export function parseMappingTarget(input: string): MappingTarget {
   const trimmed = typeof input === "string" ? input.trim() : "";
   if (trimmed.length === 0) fail("a target must not be empty.");
 
-  let body = trimmed;
-  let repo: string | undefined;
-
-  const colon = body.indexOf(":");
-  if (colon !== -1) {
-    repo = body.slice(0, colon);
-    body = body.slice(colon + 1);
-    if (!REPO_NAME_PATTERN.test(repo)) {
-      fail(
-        `the repository qualifier '${repo}' must be lowercase kebab-case: a letter, ` +
-          "then letters, digits or hyphens."
-      );
-    }
+  // A target is a recipe ref with the variable after one more slash, so the
+  // ref part is read by the one ref parser and held to the stored form.
+  const slash = trimmed.lastIndexOf("/");
+  const variable = slash === -1 ? "" : trimmed.slice(slash + 1);
+  let ref: ParsedRef = { namespace: "" };
+  try {
+    ref = parseShortRef(trimmed.slice(0, Math.max(slash, 0)), RefSource.CommandLine);
+  } catch (error) {
+    fail((error as Error).message.split("\n")[0]!.replace(/^Invalid ref '[^']*': /, ""));
   }
-
-  const segments = body.split("/");
-  if (segments.length !== 3) {
+  const { repo, namespace, recipe } = ref;
+  if (recipe === undefined || ref.range !== undefined) {
     fail("a target names a namespace, a recipe and a variable, joined by slashes.");
   }
-
-  const [namespace, recipe, variable] = segments as [string, string, string];
-  if (!NAMESPACE_NAME_PATTERN.test(namespace)) {
-    fail(`the namespace '${namespace}' must be lowercase kebab-case.`);
-  }
-  if (!RECIPE_NAME_PATTERN.test(recipe)) {
-    fail(`the recipe name '${recipe}' must be lowercase kebab-case.`);
+  if (formatRef(ref) !== formatRef(ref).toLowerCase()) {
+    fail(`the repository, namespace and recipe in '${formatRef(ref)}' must be lowercase.`);
   }
   if (!VARIABLE_NAME_PATTERN.test(variable)) {
     fail(
@@ -118,7 +105,7 @@ export function parseMappingTarget(input: string): MappingTarget {
     );
   }
 
-  const parsed: MappingTarget = { namespace, recipe, variable };
+  const parsed: MappingTarget = { namespace, recipe: recipe!, variable };
   if (repo !== undefined) parsed.repo = repo;
   return parsed;
 }
