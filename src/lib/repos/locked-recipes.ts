@@ -20,7 +20,6 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import type { Settings } from "../settings.js";
 import { resolveStoreRoot } from "../sous-home.js";
 import { parseLockfile, type LockKind, type Lockfile } from "./formats/lockfile.js";
 import { parseRecipeManifest, type RecipeManifest } from "./formats/recipe-manifest.js";
@@ -34,7 +33,6 @@ import {
 } from "./load-manifest.js";
 import { readEffectiveLinks } from "./links.js";
 import { identitySegments } from "./identity.js";
-import { enabledSubscriptions } from "./defaults.js";
 import { PROJECT_HOLDER } from "./formats/lockfile.js";
 
 /** One locked recipe, together with the directory its files are read from. */
@@ -231,26 +229,6 @@ export function keysHeldBySubscription(lock: Lockfile, key: string): string[] {
   return Object.keys(lock.recipes)
     .filter((entry) => entry.startsWith(`${key}/`) && heldByProject(entry))
     .sort();
-}
-
-/**
- * The refs a project's own templates may address: everything it subscribed to
- * directly. Both sources are read, because a subscription may be written by
- * `sous subscribe` into the managed layer, hand-written in the primary config,
- * or (for an older project) recorded only in the lockfile.
- *
- * @param settings - The merged project config.
- * @param locked - The locked recipes, as returned by listLockedRecipes.
- */
-export function projectSubscriptionRefs(
-  settings: Settings,
-  locked: LockedRecipeLocation[]
-): string[] {
-  const refs = new Set<string>(Object.keys(enabledSubscriptions(settings)));
-  for (const recipe of locked) {
-    if (recipe.requestedBy.includes(PROJECT_HOLDER)) refs.add(recipe.key);
-  }
-  return [...refs].sort();
 }
 
 /**

@@ -4,6 +4,7 @@ import {
   StaticNamespaceResolver,
   formatNamespaceProblem,
   normalizeRef,
+  type DroppedRecipe,
   type NamespaceResolution,
 } from "./namespace-resolver.js";
 
@@ -13,6 +14,7 @@ const STORE = "/store/recipes";
 function makeResolver(overrides: {
   dependencies?: Record<string, string[]>;
   projectScope?: string[];
+  explainMissing?: (recipe: string) => DroppedRecipe | undefined;
 } = {}) {
   return new StaticNamespaceResolver({
     recipes: {
@@ -22,6 +24,7 @@ function makeResolver(overrides: {
     },
     dependencies: overrides.dependencies,
     projectScope: overrides.projectScope,
+    explainMissing: overrides.explainMissing,
   });
 }
 
@@ -287,6 +290,65 @@ describe("StaticNamespaceResolver", () => {
   });
 });
 
+describe("StaticNamespaceResolver explainMissing", () => {
+  const dropped: DroppedRecipe = {
+    by: "recipe",
+    recipe: "omakase/house",
+    declaredAt: "1.0.0",
+    pinned: "1.1.0",
+  };
+
+  /**
+   * A project template asking for a recipe the resolver does not know gets the
+   * explanation attached, whether the namespace is known or not.
+   *
+   * resolve({ namespace: "workflow", rest: "gone/x.md", fromFile: "/project/AGENTS.md" })
+   * // -> { kind: "unknown-recipe", recipe: "workflow/gone", ..., dropped }
+   */
+  it("should attach the explanation for a project template", () => {
+    const asked: string[] = [];
+    const resolver = makeResolver({
+      explainMissing: (recipe) => {
+        asked.push(recipe);
+        return dropped;
+      },
+    });
+
+    expect(
+      resolver.resolve({ namespace: "workflow", rest: "gone/x.md", fromFile: "/project/AGENTS.md" })
+    ).toEqual({
+      kind: "unknown-recipe",
+      recipe: "workflow/gone",
+      known: ["workflow/github-projects", "workflow/task-files"],
+      dropped,
+    });
+    expect(
+      resolver.resolve({ namespace: "nope", rest: "gone/x.md", fromFile: "/project/AGENTS.md" })
+    ).toEqual({ kind: "unknown-namespace", known: ["core", "workflow"], dropped });
+    expect(asked).toEqual(["workflow/gone", "nope/gone"]);
+  });
+
+  /**
+   * A file inside a recipe keeps the plain answer: the explanation is about
+   * what the project's lockfile pins, which a recipe's own scoping ignores.
+   */
+  it("should not consult the explanation for a file inside a recipe", () => {
+    const resolver = makeResolver({ explainMissing: () => dropped });
+
+    const result = resolver.resolve({
+      namespace: "workflow",
+      rest: "gone/x.md",
+      fromFile: path.join(STORE, "core", "sous-skills", "SKILL.md"),
+    });
+
+    expect(result).toEqual({
+      kind: "unknown-recipe",
+      recipe: "workflow/gone",
+      known: ["workflow/github-projects", "workflow/task-files"],
+    });
+  });
+});
+
 describe("normalizeRef()", () => {
   /**
    * normalizeRef strips a leading repository qualifier and a trailing version
@@ -346,10 +408,11 @@ describe("formatNamespaceProblem()", () => {
   });
 
   /**
-   * The same answer from a project template talks about subscribing instead,
+   * The same answer for a project template (only possible when a resolver was
+   * given a narrower project scope) says the project may not address it,
    * since a project has no manifest to edit.
    */
-  it("should tell a project to subscribe when no recipe is including", () => {
+  it("should say a project template may not address the recipe", () => {
     const text = formatNamespaceProblem({
       ...base,
       resolution: {
@@ -359,7 +422,53 @@ describe("formatNamespaceProblem()", () => {
       },
     });
 
-    expect(text).toContain('This project does not subscribe to "workflow/task-files".');
+    expect(text).toContain(`The project's own templates may not address "workflow/task-files".`);
+  });
+
+  /**
+   * An unknown recipe that a pinned recipe used to bring in names that recipe,
+   * the version that declared it and the version pinned now.
+   *
+   * { kind: "unknown-recipe", dropped: { by: "recipe", recipe: "omakase/house",
+   *   declaredAt: "1.0.0", pinned: "1.1.0" } }
+   * // -> 'Version 1.0.0 of "omakase/house" brought "workflow/task-files" in, ...'
+   */
+  it("should name the recipe that used to bring an unpinned recipe in", () => {
+    const text = formatNamespaceProblem({
+      ...base,
+      resolution: {
+        kind: "unknown-recipe",
+        recipe: "workflow/task-files",
+        known: [],
+        dropped: { by: "recipe", recipe: "omakase/house", declaredAt: "1.0.0", pinned: "1.1.0" },
+      },
+    });
+
+    expect(text).toContain(
+      'Version 1.0.0 of "omakase/house" brought "workflow/task-files" in, but the version ' +
+        "this project pins, 1.1.0, does not, so the lockfile no longer pins it."
+    );
+    expect(text).toContain('Subscribe to "workflow/task-files" directly');
+  });
+
+  /**
+   * An unknown namespace whose recipe a switched-off subscription names says
+   * so, and how to bring it back.
+   */
+  it("should name a switched-off subscription for an unknown namespace", () => {
+    const text = formatNamespaceProblem({
+      ...base,
+      resolution: {
+        kind: "unknown-namespace",
+        known: ["core"],
+        dropped: { by: "disabled-subscription", subscription: "workflow" },
+      },
+    });
+
+    expect(text).toContain(
+      'This project subscribes to "workflow", but that subscription is switched off'
+    );
+    expect(text).toContain("Switch the subscription back on, or remove the include.");
   });
 
   /**

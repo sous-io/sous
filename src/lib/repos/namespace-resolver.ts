@@ -26,9 +26,30 @@ import path from "node:path";
  * the including file:
  *   - a file that lives inside a recipe may address only that recipe's declared
  *     dependencies (`depends` plus `subscribes`) at their pinned versions;
- *   - a file in the project's own templates may address the project's
- *     subscriptions.
+ *   - a file in the project's own templates may address every recipe the
+ *     project's lockfile pins, whatever holds it.
  */
+
+/**
+ * Why a recipe a project template asked for is not pinned any more, when that
+ * can be known. Only ever attached to an answer for a project template.
+ */
+export type DroppedRecipe =
+  /**
+   * Another version of a pinned recipe declares it (in `depends` or
+   * `subscribes`), and the version the lockfile pins does not: the usual story
+   * of a set that dropped one of its members.
+   */
+  | {
+      by: "recipe";
+      recipe: string;
+      declaredAt: string;
+      pinned: string;
+      /** The recipes, no longer pinned either, that the chain ran through, in order. */
+      through?: string[];
+    }
+  /** The project subscribes to it, but the subscription is switched off. */
+  | { by: "disabled-subscription"; subscription: string };
 
 /** A single `~namespace/rest` resolution request. */
 export type NamespaceRequest = {
@@ -59,20 +80,24 @@ export type NamespaceRequest = {
 export type NamespaceResolution =
   /** Ordered absolute paths to try, most preferred first. An empty list means the lookup produced nothing. */
   | { kind: "candidates"; candidates: string[] }
-  /** No such namespace is known at all. `known` lists the namespaces that are. */
-  | { kind: "unknown-namespace"; known: string[] }
+  /**
+   * No such namespace is known at all. `known` lists the namespaces that are.
+   * `dropped` says why a project template's recipe is no longer pinned, when
+   * that can be known.
+   */
+  | { kind: "unknown-namespace"; known: string[]; dropped?: DroppedRecipe }
   /**
    * The namespace exists but holds no such recipe. `recipe` is the fully
    * qualified ref that was asked for; `known` lists the recipe refs the
-   * namespace does hold.
+   * namespace does hold; `dropped` is as above.
    */
-  | { kind: "unknown-recipe"; recipe: string; known: string[] }
+  | { kind: "unknown-recipe"; recipe: string; known: string[]; dropped?: DroppedRecipe }
   /**
    * The recipe exists but the including file is not allowed to address it.
    * `recipe` is the fully qualified ref that was asked for. `includingRecipe`
    * is the ref of the recipe the including file belongs to, or `null` when the
-   * including file is one of the project's own templates (in which case the
-   * project simply does not subscribe to the recipe).
+   * including file is one of the project's own templates (which only happens
+   * when the resolver was given a narrower `projectScope`).
    */
   | { kind: "not-a-dependency"; recipe: string; includingRecipe: string | null }
   /**
@@ -126,6 +151,7 @@ export function formatNamespaceProblem(opts: {
         ? `Available namespaces: ${resolution.known.join(", ")}.`
         : "This project has no recipe namespaces available yet."
     );
+    if (resolution.dropped) lines.push(...describeDropped(resolution.dropped, opts));
   } else if (resolution.kind === "unknown-recipe") {
     lines.push(`recipe: ${resolution.recipe}`);
     lines.push(`The namespace "${opts.namespace}" holds no recipe named "${resolution.recipe}".`);
@@ -134,6 +160,7 @@ export function formatNamespaceProblem(opts: {
         ? `Recipes in this namespace: ${resolution.known.join(", ")}.`
         : `The namespace "${opts.namespace}" currently holds no recipes.`
     );
+    if (resolution.dropped) lines.push(...describeDropped(resolution.dropped, opts));
   } else if (resolution.kind === "not-a-dependency") {
     lines.push(`recipe: ${resolution.recipe}`);
     if (resolution.includingRecipe) {
@@ -144,10 +171,7 @@ export function formatNamespaceProblem(opts: {
         `Add "${resolution.recipe}" to the "depends" list in that recipe's manifest before addressing it as "~${opts.namespace}".`
       );
     } else {
-      lines.push(`This project does not subscribe to "${resolution.recipe}".`);
-      lines.push(
-        `Subscribe to it before addressing it as "~${opts.namespace}" from a project template.`
-      );
+      lines.push(`The project's own templates may not address "${resolution.recipe}".`);
     }
   } else if (resolution.kind === "escapes-recipe") {
     lines.push(`recipe: ${resolution.recipe}`);
@@ -165,6 +189,37 @@ export function formatNamespaceProblem(opts: {
   }
 
   return lines.map((line) => `  ${line}`).join("\n");
+}
+
+/**
+ * The lines that say why a recipe a project template asked for is no longer
+ * pinned, and what brings it back.
+ *
+ * @param dropped - What is known about how the recipe used to be pinned.
+ * @param opts - The namespace and the rest of the reference, for the recipe's name.
+ */
+function describeDropped(
+  dropped: DroppedRecipe,
+  opts: { namespace: string; rest: string }
+): string[] {
+  const recipe = `${opts.namespace}/${opts.rest.split("/")[0] ?? ""}`;
+  if (dropped.by === "disabled-subscription") {
+    return [
+      `This project subscribes to "${dropped.subscription}", but that subscription is ` +
+        `switched off ("enabled: false"), so the lockfile does not pin "${recipe}".`,
+      `Switch the subscription back on, or remove the include.`,
+    ];
+  }
+  const through =
+    dropped.through === undefined || dropped.through.length === 0
+      ? ""
+      : ` (through ${dropped.through.map((key) => `"${key}"`).join(", ")})`;
+  return [
+    `Version ${dropped.declaredAt} of "${dropped.recipe}" brought "${recipe}" in${through}, but ` +
+      `the version this project pins, ${dropped.pinned}, does not, so the lockfile no longer ` +
+      `pins it.`,
+    `Subscribe to "${recipe}" directly to keep including it, or remove the include.`,
+  ];
 }
 
 /** Options for {@link StaticNamespaceResolver}. */
@@ -186,9 +241,16 @@ export type StaticNamespaceResolverOptions = {
   /**
    * What the project's own templates may address, in the same ref forms as
    * `dependencies`. Omit it to make every known recipe addressable from
-   * project templates (the convenient default for tests).
+   * project templates, which is the rule for a real project: its templates may
+   * address everything its lockfile pins.
    */
   projectScope?: string[];
+  /**
+   * Says why a recipe a project template asked for is not among `recipes`,
+   * when that can be known. Consulted only for a project template's reference
+   * to a recipe the resolver does not know.
+   */
+  explainMissing?: (recipe: string) => DroppedRecipe | undefined;
 };
 
 /**
@@ -196,7 +258,7 @@ export type StaticNamespaceResolverOptions = {
  * recipe refs to directories.
  *
  * It implements the full scoping rule (recipe files see their declared
- * dependencies; project files see the project's subscriptions) without knowing
+ * dependencies; project files see every known recipe, or `projectScope`) without knowing
  * anything about repositories, versions or the store, which makes it the
  * resolver used by tests and a usable core for the real implementation to wrap.
  */
@@ -204,6 +266,7 @@ export class StaticNamespaceResolver implements NamespaceResolver {
   private readonly recipes: Record<string, string>;
   private readonly dependencies: Record<string, string[]>;
   private readonly projectScope?: string[];
+  private readonly explainMissing?: (recipe: string) => DroppedRecipe | undefined;
 
   constructor(options: StaticNamespaceResolverOptions) {
     this.recipes = {};
@@ -212,6 +275,18 @@ export class StaticNamespaceResolver implements NamespaceResolver {
     }
     this.dependencies = options.dependencies ?? {};
     this.projectScope = options.projectScope;
+    this.explainMissing = options.explainMissing;
+  }
+
+  /**
+   * Why a project template's reference names a recipe this resolver does not
+   * know, or undefined when the including file is a recipe's own or nothing is
+   * known.
+   */
+  private droppedFor(recipe: string, fromFile: string): { dropped?: DroppedRecipe } {
+    if (this.explainMissing === undefined || this.includingRecipe(fromFile) !== null) return {};
+    const dropped = this.explainMissing(recipe);
+    return dropped === undefined ? {} : { dropped };
   }
 
   /** Every namespace this resolver knows about, sorted. */
@@ -254,17 +329,27 @@ export class StaticNamespaceResolver implements NamespaceResolver {
   resolve(request: NamespaceRequest): NamespaceResolution {
     const { namespace, rest, fromFile } = request;
 
-    if (!this.knownNamespaces().includes(namespace)) {
-      return { kind: "unknown-namespace", known: this.knownNamespaces() };
-    }
-
     const segments = rest.split("/").filter((segment) => segment.length > 0);
     const recipeName = segments[0] ?? "";
     const ref = `${namespace}/${recipeName}`;
+
+    if (!this.knownNamespaces().includes(namespace)) {
+      return {
+        kind: "unknown-namespace",
+        known: this.knownNamespaces(),
+        ...this.droppedFor(ref, fromFile),
+      };
+    }
+
     const recipeDir = this.recipes[ref];
 
     if (!recipeDir) {
-      return { kind: "unknown-recipe", recipe: ref, known: this.recipesIn(namespace) };
+      return {
+        kind: "unknown-recipe",
+        recipe: ref,
+        known: this.recipesIn(namespace),
+        ...this.droppedFor(ref, fromFile),
+      };
     }
 
     const includingRecipe = this.includingRecipe(fromFile);
