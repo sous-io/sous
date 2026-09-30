@@ -150,5 +150,14 @@ issue's "Technical Notes", which the issue itself labels as agent suggestions.
 - A project copy too old to have `update` does not matter, because the invoked copy runs it.
 - Copies sous cannot drive (npx, Volta, bun, deno, a source checkout) are named with a command to run by hand,
   rather than updated.
+- npm and pnpm are the managers that must work; a Yarn problem may be deferred. The maintainer ruled:
+
+  > "as long as pnpm and npm are working, we can punt anything related to yarn that is giving us trouble."
+  >
+  >   -- **Luke Chavers** in an agent session (2026-09-30; recorded in gh-135)
+
+  Sous itself cannot run from Yarn's zip cache under Plug'n'Play, so there the post-update build succeeds only
+  from an unplugged copy; that is tracked in [gh-137](https://github.com/sous-io/sous/issues/137) (sous runs in
+  a Yarn Plug'n'Play project without unplugging).
 - On Windows a global install may hold the running shim open while it is replaced. gh-135's notes mention it,
   and nothing in this decision addresses it.
