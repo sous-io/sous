@@ -24,7 +24,11 @@ import { fetchText, type FetchLike } from "./http.js";
 import {
   buildCanonicalRepo,
   invalidRepoUrl,
+  readingsAfterRepository,
   splitRepoUrl,
+  withoutGitSuffix,
+  type LocationReading,
+  type WrittenLocation,
   type AuthStatus,
   type CanonicalRepo,
   type ChangeProposal,
@@ -82,6 +86,24 @@ export class GithubProvider extends ProviderBase {
 
   /** What GitHub calls a proposal. */
   readonly proposalNoun = "pull request";
+
+  /** The host a `github://` locator means when it names none. */
+  readonly defaultHost = GITHUB_HOST;
+
+  /**
+   * A GitHub repository is always an owner and a name, so the first two
+   * segments are the repository and everything after them names something
+   * inside it: a namespace, a recipe, or a browser path after `tree/` or
+   * `blob/`.
+   *
+   * @param location - The host and the segments after it.
+   */
+  readLocation(location: WrittenLocation): LocationReading[] {
+    const { segments } = location;
+    if (segments.length < 2) return [];
+    const repoPath = `${segments[0]}/${withoutGitSuffix(segments[1]!)}`;
+    return readingsAfterRepository(repoPath, segments.slice(2));
+  }
 
   matches(url: string): boolean {
     const parts = splitRepoUrl(url);
