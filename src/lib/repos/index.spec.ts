@@ -86,6 +86,7 @@ const EXPECTED_EXPORTS = [
   "formatRef",
   "formatStoreKey",
   "formatVersionSchema",
+  "forwardCompatibleObject",
   "hashDirectory",
   "hashesEqual",
   "identitySegments",

@@ -9,12 +9,17 @@
  *
  * Adding a repo fetches only this file. Nothing else is downloaded until a
  * project subscribes to something inside it.
+ *
+ * Every object in it is a `forwardCompatibleObject`: a field a later sous adds is
+ * kept and ignored rather than refused, so an index published by a newer sous
+ * still reads here. The fields this version defines are validated in full.
  */
 
 import { z } from "zod";
 import {
   contentHashSchema,
   formatVersionSchema,
+  forwardCompatibleObject,
   isoTimestampSchema,
   namespaceNameSchema,
   parseFormat,
@@ -38,30 +43,25 @@ import {
  * belongs to that repository's own index, so this entry carries the range the
  * manifest declared instead.
  */
-export const indexDependencySchema = z
-  .strictObject({
-    /** The exact version this dependency resolved to, when the release could resolve one. */
-    version: semverVersionSchema.optional(),
-    /** The range the manifest declared, recorded when no exact version could be resolved. */
-    range: semverRangeSchema.optional(),
-    /**
-     * The canonical identity of the repository publishing it
-     * (`github.com/sous-io/sous-recipes`). Omitted for a sibling, which lives in
-     * this same repository.
-     */
-    repo: repoIdentitySchema.optional(),
-  })
-  .refine(
-    (entry) => entry.version !== undefined || entry.range !== undefined,
-    {
-      message:
-        "must record either the exact version this dependency resolved to or the range " +
-        "the recipe declared",
-    }
-  );
+export const indexDependencySchema = forwardCompatibleObject({
+  /** The exact version this dependency resolved to, when the release could resolve one. */
+  version: semverVersionSchema.optional(),
+  /** The range the manifest declared, recorded when no exact version could be resolved. */
+  range: semverRangeSchema.optional(),
+  /**
+   * The canonical identity of the repository publishing it
+   * (`github.com/sous-io/sous-recipes`). Omitted for a sibling, which lives in
+   * this same repository.
+   */
+  repo: repoIdentitySchema.optional(),
+}).refine((entry) => entry.version !== undefined || entry.range !== undefined, {
+  message:
+    "must record either the exact version this dependency resolved to or the range " +
+    "the recipe declared",
+});
 
 /** One published version of one recipe. */
-export const indexVersionSchema = z.strictObject({
+export const indexVersionSchema = forwardCompatibleObject({
   /** Content hash of the recipe folder at this version, verified after every fetch. */
   hash: contentHashSchema,
   /**
@@ -98,7 +98,7 @@ export const indexVersionSchema = z.strictObject({
 });
 
 /** One recipe, with every version the repo publishes of it. */
-export const indexRecipeSchema = z.strictObject({
+export const indexRecipeSchema = forwardCompatibleObject({
   /** The recipe folder, relative to the repo root. */
   path: relativePathSchema("a recipe path"),
   /** One-paragraph summary, copied from the recipe manifest at release time. */
@@ -112,71 +112,69 @@ export const indexRecipeSchema = z.strictObject({
 });
 
 /** One namespace declaration, copied from the repo manifest at release time. */
-export const indexNamespaceSchema = z.strictObject({
+export const indexNamespaceSchema = forwardCompatibleObject({
   description: z.string().optional(),
 });
 
 /** The repo index schema. */
-export const indexFileSchema = z
-  .strictObject({
-    /**
-     * A plain-language note about where this copy of the index came from. JSON
-     * has no comment syntax and an index is machine-written, so this is the one
-     * place a writer can say something to whoever opens the file. Sous ignores
-     * the value everywhere except one place: the seed index it writes for its
-     * own built-in repository carries `SEED_INDEX_COMMENT`, which is how a
-     * later run recognizes its own placeholder and is willing to replace it.
-     */
-    $comment: z.string().optional(),
-    formatVersion: formatVersionSchema,
-    /** The repo's suggested short name, copied from its manifest. */
-    name: repoNameSchema,
-    /** When this index was generated. */
-    generatedAt: isoTimestampSchema,
-    /** The version of sous that generated it. */
-    generator: semverVersionSchema,
-    /** Every namespace the repo publishes. */
-    namespaces: z.record(namespaceNameSchema, indexNamespaceSchema),
-    /** Every recipe the repo publishes, keyed `namespace/recipe`. */
-    recipes: z.record(recipeKeySchema, indexRecipeSchema),
-  })
-  .superRefine((index, ctx) => {
-    // A recipe whose namespace is not declared could never be resolved, so a
-    // release that produced one is broken; say which recipe and which namespace.
-    for (const key of Object.keys(index.recipes)) {
-      const namespace = key.slice(0, key.indexOf("/"));
-      if (!Object.hasOwn(index.namespaces, namespace)) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["recipes", key],
-          message:
-            `belongs to the namespace '${namespace}', which this index does not ` +
-            `declare under 'namespaces'`,
-        });
-      }
+export const indexFileSchema = forwardCompatibleObject({
+  /**
+   * A plain-language note about where this copy of the index came from. JSON
+   * has no comment syntax and an index is machine-written, so this is the one
+   * place a writer can say something to whoever opens the file. Sous ignores
+   * the value everywhere except one place: the seed index it writes for its
+   * own built-in repository carries `SEED_INDEX_COMMENT`, which is how a
+   * later run recognizes its own placeholder and is willing to replace it.
+   */
+  $comment: z.string().optional(),
+  formatVersion: formatVersionSchema,
+  /** The repo's suggested short name, copied from its manifest. */
+  name: repoNameSchema,
+  /** When this index was generated. */
+  generatedAt: isoTimestampSchema,
+  /** The version of sous that generated it. */
+  generator: semverVersionSchema,
+  /** Every namespace the repo publishes. */
+  namespaces: z.record(namespaceNameSchema, indexNamespaceSchema),
+  /** Every recipe the repo publishes, keyed `namespace/recipe`. */
+  recipes: z.record(recipeKeySchema, indexRecipeSchema),
+}).superRefine((index, ctx) => {
+  // A recipe whose namespace is not declared could never be resolved, so a
+  // release that produced one is broken; say which recipe and which namespace.
+  for (const key of Object.keys(index.recipes)) {
+    const namespace = key.slice(0, key.indexOf("/"));
+    if (!Object.hasOwn(index.namespaces, namespace)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["recipes", key],
+        message:
+          `belongs to the namespace '${namespace}', which this index does not ` +
+          `declare under 'namespaces'`,
+      });
     }
+  }
 
-    // A version's tag is what the provider fetches, so a tag that does not
-    // name this exact recipe and version is a version pointing somewhere else.
-    // Nothing on the consumer side could otherwise tell: an index publishing
-    // `1.0.0` with `tag: "main"` would hand `git clone --branch main` a moving
-    // target, whose content changes on every push and whose pinned hash then
-    // simply starts failing. Sous writes these tags itself, so requiring the
-    // shape it writes costs a correct index nothing.
-    for (const [key, recipe] of Object.entries(index.recipes)) {
-      for (const [version, published] of Object.entries(recipe.versions)) {
-        const expected = `${key}@${version}`;
-        if (published.tag === expected) continue;
-        ctx.addIssue({
-          code: "custom",
-          path: ["recipes", key, "versions", version, "tag"],
-          message:
-            `is '${published.tag}', but a published version's tag names the recipe and ` +
-            `the version it carries, so this one must be '${expected}'`,
-        });
-      }
+  // A version's tag is what the provider fetches, so a tag that does not
+  // name this exact recipe and version is a version pointing somewhere else.
+  // Nothing on the consumer side could otherwise tell: an index publishing
+  // `1.0.0` with `tag: "main"` would hand `git clone --branch main` a moving
+  // target, whose content changes on every push and whose pinned hash then
+  // simply starts failing. Sous writes these tags itself, so requiring the
+  // shape it writes costs a correct index nothing.
+  for (const [key, recipe] of Object.entries(index.recipes)) {
+    for (const [version, published] of Object.entries(recipe.versions)) {
+      const expected = `${key}@${version}`;
+      if (published.tag === expected) continue;
+      ctx.addIssue({
+        code: "custom",
+        path: ["recipes", key, "versions", version, "tag"],
+        message:
+          `is '${published.tag}', but a published version's tag names the recipe and ` +
+          `the version it carries, so this one must be '${expected}'`,
+      });
     }
-  });
+  }
+});
 
 /** A validated repo index. */
 export type IndexFile = z.infer<typeof indexFileSchema>;

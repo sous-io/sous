@@ -64,13 +64,47 @@ describe("parseIndexFile()", () => {
   });
 
   /**
-   * The index is machine-written, so unknown keys are always a bug rather than
-   * a forward-compatible extension. There is no `x-` escape hatch here.
+   * A later sous may publish an index carrying fields this one does not
+   * define. They are accepted at every level and kept as they are, so an older
+   * sous still reads the index, and a release it runs writes a published
+   * version back unchanged.
+   *
+   * parseIndexFile({ ...index, futureField: 1, recipes: { ...: { versions: { ...: { declaredAs: "x" } } } } });
+   * // -> the same object, every unknown field still in place
    */
-  it("should reject an unknown key", () => {
-    const message = expectRejectMessage({ ...validIndex(), "x-extra": true });
+  it("should accept and keep a field it does not define, at every level", () => {
+    const index = validIndex() as Record<string, any>;
+    index.futureTopLevel = { anything: true };
+    index.namespaces.workflow.futureNamespaceField = "kept";
+    const recipe = index.recipes["workflow/task-files"];
+    recipe.futureRecipeField = ["kept"];
+    const version = recipe.versions["1.0.0"];
+    version.variables = [{ name: "board", type: "string" }];
+    version.dependencies = {
+      "workflow/partials": { version: "1.0.0", declaredAs: "workflow", kind: "subscribes" },
+    };
+
+    const parsed = parseIndexFile(index, SOURCE);
+
+    expect(parsed).toEqual(index);
+    expect(stringifyIndexFile(parsed)).toContain('"declaredAs": "workflow"');
+    expect(stringifyIndexFile(parsed)).toContain('"futureTopLevel"');
+  });
+
+  /**
+   * Keeping unknown fields does not loosen the known ones: a field this sous
+   * defines is still checked in full, next to a field it does not.
+   */
+  it("should still reject a known field with a bad value beside an unknown one", () => {
+    const index = validIndex() as Record<string, any>;
+    const version = index.recipes["workflow/task-files"].versions["1.0.0"];
+    version.futureField = true;
+    version.prerelease = "no";
+
+    const message = expectRejectMessage(index);
+
     expect(message).toContain(`Invalid repo index at ${SOURCE}:`);
-    expect(message).toContain("unknown key 'x-extra'");
+    expect(message).toContain("prerelease");
   });
 
   /**
