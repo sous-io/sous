@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, it, expect, afterEach } from "vitest";
-import { CompilationService, inferGlobBase } from "./markdown-compiler.js";
+import { CompilationService, inferGlobBase, looksLikeIncludeLine } from "./markdown-compiler.js";
 import { makeTmpDir, type TmpDir } from "../test/utils/tmp.js";
 
 // ---------------------------------------------------------------------------
@@ -146,5 +146,31 @@ describe("CompilationService — destinationDir with globBase", () => {
 
     expect(fs.existsSync(path.join(destDir, "subdir", "entry.md"))).toBe(true);
     expect(fs.existsSync(path.join(destDir, "subdir", "entry.tpl.md"))).toBe(false);
+  });
+});
+
+describe("looksLikeIncludeLine", () => {
+  /**
+   * A single path-like word that starts with `@` looks like an include, so
+   * when it is not a well-formed one the build fails instead of copying it.
+   *
+   * looksLikeIncludeLine("@docs/notes.txt") // -> true
+   */
+  it("should accept a single path-like word", () => {
+    for (const line of ["@docs/notes.txt", "@notes.md.bak", "@~workflow/x", "@#project", "@./x", "@${root}"]) {
+      expect(looksLikeIncludeLine(line), line).toBe(true);
+    }
+  });
+
+  /**
+   * Prose that merely starts with `@` is left alone: a mention or an email
+   * address followed by words, a lone mention, a mention with punctuation.
+   *
+   * looksLikeIncludeLine("@alice thanks for the review") // -> false
+   */
+  it("should reject ordinary prose", () => {
+    for (const line of ["@alice thanks for the review", "@alice", "@bob,", "@", "@a b/c", "text @x/y"]) {
+      expect(looksLikeIncludeLine(line), line).toBe(false);
+    }
   });
 });

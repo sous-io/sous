@@ -14,6 +14,7 @@ import {
   type DiscoveredConfig,
 } from "./config-discovery.js";
 import { ConfigError } from "./errors.js";
+import { sharedHashNames } from "../services/ref-resolver/index.js";
 import { resolveSousHome } from "./sous-home.js";
 import { validateSettings } from "./config-schema.js";
 import { applyRepoDefaults } from "./repos/defaults.js";
@@ -822,30 +823,29 @@ function resolveAnswerLayer(
 }
 
 /**
- * Built-in `@include` aliases, always available and reserved (their names begin
- * with `~` so user `_aliases` can never shadow them). Add new entries here as
- * needed; keep names kebab-case.
+ * Built-in `@include` aliases: every `#` name the registry holds
+ * (`sharedHashNames`), each standing for its directories in this project. They
+ * are reserved (user `_aliases` may not start with `#`), so a user alias can
+ * never shadow one.
  *
- * - `~project` → the consuming project's root (`projectRoot`).
+ * - `#project` is the consuming project's root (`projectRoot`).
  *
- * There is exactly one, on purpose. Files that used to be reached through a
- * built-in alias pointing inside the sous package are published as recipes now,
- * and a recipe's files are addressed by its namespace (`@~workflow/task-files/
- * _partials/resume-task.md`), resolved against what the project has pinned. A
- * `~namespace` reference is NOT an alias: it is resolved separately, after the
- * alias map has been tried; see `locked-namespace-resolver.ts`.
+ * Files that used to be reached through a built-in alias pointing inside the
+ * sous package are published as recipes now, and a recipe's files are addressed
+ * by its namespace (`@~workflow/task-files/_partials/resume-task.md`),
+ * resolved against what the project has pinned. A `~` reference is NOT an
+ * alias: it is resolved separately, after the alias map has been tried; see
+ * `locked-namespace-resolver.ts`.
  */
 export function buildBuiltInAliases(scope: VarScope): AliasMap {
-  const builtIns: AliasMap = {};
-  if (scope.projectRoot) builtIns["~project"] = [scope.projectRoot];
-  return builtIns;
+  return sharedHashNames().aliasMap(scope as Record<string, string>);
 }
 
 /**
  * Resolve the full `@include` alias map: built-ins, then the config's
  * `_aliases` block (user entries prepend, so they are tried first and fall
  * through to built-in bases of the same name). User alias names starting
- * with `~` are rejected (reserved).
+ * with `~` or `#` are a ConfigError (reserved).
  *
  * @param settings - The loaded settings (for the `_aliases` block).
  * @param scope - The resolved settings scope (for ${var} substitution + projectRoot).
@@ -855,7 +855,9 @@ export function resolveAliases(settings: Settings, scope: VarScope): AliasMap {
     builtIns: buildBuiltInAliases(scope),
     userAliases: [settings._aliases],
     scope,
-    onError: warning,
+    onError: (message) => {
+      throw new ConfigError(message);
+    },
   });
 }
 
@@ -1004,7 +1006,7 @@ export function resolveCompilation(
 
       /* c8 ignore start */
       // Glob target: expand pattern into one CompilationTarget per matched file, skipping dirs.
-      // A leading alias (`~project/skills/**`) expands to one candidate pattern per alias
+      // A leading alias (`#project/skills/**`) expands to one candidate pattern per alias
       // base; the first base that matches any files wins, mirroring the first-existing-wins
       // rule of @include resolution.
       const rawPattern = substituteVarsStrict(target.entryGlob!, targetScope, `${where}.entryGlob`);

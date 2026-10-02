@@ -1,13 +1,25 @@
 import path from "node:path";
-import { namespaceOfKey } from "../../services/ref-resolver/index.js";
+import { escape as escapeGlob } from "glob";
+import {
+  RefResolveArguments,
+  RefSource,
+  namespaceOfKey,
+  splitRecipeKey,
+  sharedRefResolver,
+  splitSegments,
+  type RecipeFileRef,
+} from "../../services/ref-resolver/index.js";
+import { LockedRecipeFileLookup } from "./locked-recipe-lookup.js";
 
 /**
  * Namespace addressability for templates: the reserved `~` include sigil.
  *
- * An include line of the form `@~<namespace>/<rest>` (and the equivalent
- * `{% render "~<namespace>/<rest>" %}`) addresses a recipe namespace rather
- * than the filesystem. `<rest>` begins with the recipe name and continues with
- * the path inside that recipe, so
+ * An include line of the form `@~<namespace>/<recipe>/<path>` (and the
+ * equivalent `{% render "~<namespace>/<recipe>/<path>" %}`) addresses a recipe
+ * rather than the filesystem. The reference is read by the ref resolver service
+ * (`RefSource.Include`) and matched against the recipes the project pins, so any
+ * form that service allows works: a glob in any name or in the path, a `repo:`
+ * qualifier, a name in any case. For example
  *
  *     @~workflow/task-files/_partials/resume.md
  *
@@ -52,16 +64,14 @@ export type DroppedRecipe =
   /** The project subscribes to it, but the subscription is switched off. */
   | { by: "disabled-subscription"; subscription: string };
 
-/** A single `~namespace/rest` resolution request. */
+/** A single `~` reference resolution request. */
 export type NamespaceRequest = {
-  /** The namespace name, with the leading `~` already stripped (e.g. `workflow`). */
-  namespace: string;
   /**
-   * Everything after the namespace segment: the recipe name, then the path
-   * inside that recipe (e.g. `task-files/_partials/resume.md`). Never has a
-   * leading separator.
+   * The reference with its `~` sigil taken off: namespace, recipe and the path
+   * inside the recipe (e.g. `workflow/task-files/_partials/resume.md`), as
+   * written, possibly with a `repo:` qualifier, globs and a `?name=value` query.
    */
-  rest: string;
+  reference: string;
   /**
    * Absolute path of the file performing the include, used to decide which
    * recipe (if any) is asking. A directory path is accepted for callers that
@@ -79,14 +89,19 @@ export type NamespaceRequest = {
  * grow without breaking older callers.
  */
 export type NamespaceResolution =
-  /** Ordered absolute paths to try, most preferred first. An empty list means the lookup produced nothing. */
-  | { kind: "candidates"; candidates: string[] }
+  /**
+   * Ordered absolute paths to try, most preferred first. An empty list means
+   * the lookup produced nothing. When `glob` is true the reference was a glob:
+   * every candidate is a pattern (the recipe's own directory escaped), and ALL
+   * of them are included, in order, not just the first that exists.
+   */
+  | { kind: "candidates"; candidates: string[]; glob?: true }
   /**
    * No such namespace is known at all. `known` lists the namespaces that are.
    * `dropped` says why a project template's recipe is no longer pinned, when
    * that can be known.
    */
-  | { kind: "unknown-namespace"; known: string[]; dropped?: DroppedRecipe }
+  | { kind: "unknown-namespace"; namespace: string; recipe: string; known: string[]; dropped?: DroppedRecipe }
   /**
    * The namespace exists but holds no such recipe. `recipe` is the fully
    * qualified ref that was asked for; `known` lists the recipe refs the
@@ -107,14 +122,20 @@ export type NamespaceResolution =
    * recipe's own files and nothing else, so this is refused rather than
    * resolved. `reference` is the reference as it was written.
    */
-  | { kind: "escapes-recipe"; recipe: string; reference: string };
+  | { kind: "escapes-recipe"; recipe: string; reference: string }
+  /**
+   * The reference is not one an include line may hold (it names no file inside
+   * a recipe, carries a version range, and so on). `message` is the ref
+   * service's own sentence, which says what to write instead.
+   */
+  | { kind: "invalid"; reference: string; message: string };
 
-/** Resolves `~namespace/rest` references to candidate absolute paths. */
+/** Resolves `~` references to candidate absolute paths. */
 export interface NamespaceResolver {
   /**
-   * Resolve one `~namespace/rest` reference.
+   * Resolve one `~` reference.
    *
-   * @param request - The namespace, the remainder of the reference, and the including file.
+   * @param request - The reference and the including file.
    * @returns Candidate absolute paths (most preferred first), or a reason the lookup failed.
    */
   resolve(request: NamespaceRequest): NamespaceResolution;
@@ -125,43 +146,49 @@ export interface NamespaceResolver {
  * message. Each line is indented by two spaces so it can be appended directly
  * to the compiler's "Include not found" block.
  *
- * @param opts.namespace - The namespace that was asked for.
- * @param opts.rest - The remainder of the reference (recipe name plus inner path).
  * @param opts.fromFile - The file (or directory) that performed the include.
  * @param opts.resolution - What the resolver returned.
  * @returns Indented, newline-joined explanation lines; an empty string when there is nothing to add.
  */
 export function formatNamespaceProblem(opts: {
-  namespace: string;
-  rest: string;
   fromFile: string;
   resolution: NamespaceResolution;
 }): string {
-  const lines: string[] = [`in file: ${opts.fromFile}`, `namespace: ${opts.namespace}`];
-
   const resolution = opts.resolution;
 
   if (resolution.kind === "candidates") {
     return "";
   }
 
+  if (resolution.kind === "invalid") {
+    return [`in file: ${opts.fromFile}`, `reference: ~${resolution.reference}`, ...resolution.message.split("\n")]
+      .map((line) => `  ${line}`)
+      .join("\n");
+  }
+
+  const namespace =
+    resolution.kind === "unknown-namespace"
+      ? resolution.namespace
+      : namespaceOfKey(resolution.recipe);
+  const lines: string[] = [`in file: ${opts.fromFile}`, `namespace: ${namespace}`];
+
   if (resolution.kind === "unknown-namespace") {
-    lines.push(`There is no recipe namespace named "${opts.namespace}" available here.`);
+    lines.push(`There is no recipe namespace named "${namespace}" available here.`);
     lines.push(
       resolution.known.length > 0
         ? `Available namespaces: ${resolution.known.join(", ")}.`
         : "This project has no recipe namespaces available yet."
     );
-    if (resolution.dropped) lines.push(...describeDropped(resolution.dropped, opts));
+    if (resolution.dropped) lines.push(...describeDropped(resolution.dropped, resolution.recipe));
   } else if (resolution.kind === "unknown-recipe") {
     lines.push(`recipe: ${resolution.recipe}`);
-    lines.push(`The namespace "${opts.namespace}" holds no recipe named "${resolution.recipe}".`);
+    lines.push(`The namespace "${namespace}" holds no recipe named "${resolution.recipe}".`);
     lines.push(
       resolution.known.length > 0
         ? `Recipes in this namespace: ${resolution.known.join(", ")}.`
-        : `The namespace "${opts.namespace}" currently holds no recipes.`
+        : `The namespace "${namespace}" currently holds no recipes.`
     );
-    if (resolution.dropped) lines.push(...describeDropped(resolution.dropped, opts));
+    if (resolution.dropped) lines.push(...describeDropped(resolution.dropped, resolution.recipe));
   } else if (resolution.kind === "not-a-dependency") {
     lines.push(`recipe: ${resolution.recipe}`);
     if (resolution.includingRecipe) {
@@ -169,7 +196,7 @@ export function formatNamespaceProblem(opts: {
         `The recipe "${resolution.includingRecipe}" does not declare "${resolution.recipe}" as a dependency.`
       );
       lines.push(
-        `Add "${resolution.recipe}" to the "depends" list in that recipe's manifest before addressing it as "~${opts.namespace}".`
+        `Add "${resolution.recipe}" to the "depends" list in that recipe's manifest before addressing it as "~${namespace}".`
       );
     } else {
       lines.push(`The project's own templates may not address "${resolution.recipe}".`);
@@ -197,13 +224,9 @@ export function formatNamespaceProblem(opts: {
  * pinned, and what brings it back.
  *
  * @param dropped - What is known about how the recipe used to be pinned.
- * @param opts - The namespace and the rest of the reference, for the recipe's name.
+ * @param recipe - The `namespace/recipe` the template asked for.
  */
-function describeDropped(
-  dropped: DroppedRecipe,
-  opts: { namespace: string; rest: string }
-): string[] {
-  const { recipe } = splitIncludePath(opts.namespace, opts.rest);
+function describeDropped(dropped: DroppedRecipe, recipe: string): string[] {
   if (dropped.by === "disabled-subscription") {
     return [
       `This project subscribes to "${dropped.subscription}", but that subscription is ` +
@@ -253,6 +276,12 @@ export type StaticNamespaceResolverOptions = {
    * to a recipe the resolver does not know.
    */
   explainMissing?: (recipe: string) => DroppedRecipe | undefined;
+  /**
+   * The short name of the repository each recipe came from, keyed like
+   * `recipes`. It is what a `repo:` qualifier in an include line is matched
+   * against; a recipe with no entry matches no qualifier.
+   */
+  repos?: Record<string, string>;
 };
 
 /**
@@ -269,6 +298,7 @@ export class StaticNamespaceResolver implements NamespaceResolver {
   private readonly dependencies: Record<string, string[]>;
   private readonly projectScope?: string[];
   private readonly explainMissing?: (recipe: string) => DroppedRecipe | undefined;
+  private readonly lookup: LockedRecipeFileLookup;
 
   constructor(options: StaticNamespaceResolverOptions) {
     this.recipes = {};
@@ -278,6 +308,17 @@ export class StaticNamespaceResolver implements NamespaceResolver {
     this.dependencies = options.dependencies ?? {};
     this.projectScope = options.projectScope;
     this.explainMissing = options.explainMissing;
+    this.lookup = new LockedRecipeFileLookup(
+      Object.keys(this.recipes).map((key) => {
+        const recipe = splitRecipeKey(key);
+        const repo = options.repos?.[key];
+        return {
+          namespace: recipe.namespace,
+          name: recipe.name ?? "",
+          ...(repo === undefined ? {} : { repo }),
+        };
+      })
+    );
   }
 
   /**
@@ -289,22 +330,6 @@ export class StaticNamespaceResolver implements NamespaceResolver {
     if (this.explainMissing === undefined || this.includingRecipe(fromFile) !== null) return {};
     const dropped = this.explainMissing(recipe);
     return dropped === undefined ? {} : { dropped };
-  }
-
-  /** Every namespace this resolver knows about, sorted. */
-  private knownNamespaces(): string[] {
-    const names = new Set<string>();
-    for (const ref of Object.keys(this.recipes)) {
-      names.add(namespaceOfKey(ref));
-    }
-    return [...names].sort();
-  }
-
-  /** Every known recipe ref inside one namespace, sorted. */
-  private recipesIn(namespace: string): string[] {
-    return Object.keys(this.recipes)
-      .filter((ref) => namespaceOfKey(ref) === namespace)
-      .sort();
   }
 
   /**
@@ -328,27 +353,72 @@ export class StaticNamespaceResolver implements NamespaceResolver {
     return best;
   }
 
+  /**
+   * The answer for a reference the ref service refused: a path that climbs out
+   * of the recipe is `escapes-recipe`, and anything else is `invalid`, with the
+   * service's own sentence.
+   */
+  private refused(reference: string, error: unknown): NamespaceResolution {
+    const resolver = sharedRefResolver();
+    try {
+      const { dropped } = resolver.inspect(reference, RefSource.Include);
+      for (const entry of dropped) {
+        if (entry.ref.kind !== "recipeFile") continue;
+        if (splitSegments(entry.ref.path).some((part) => part === "." || part === "..")) {
+          return {
+            kind: "escapes-recipe",
+            recipe: `${entry.ref.recipe.namespace?.name ?? ""}/${entry.ref.recipe.name}`,
+            reference,
+          };
+        }
+      }
+    } catch {
+      // Not a ref in any reading; the original refusal says why.
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    return { kind: "invalid", reference, message };
+  }
+
   resolve(request: NamespaceRequest): NamespaceResolution {
-    const { namespace, rest, fromFile } = request;
+    const { reference, fromFile } = request;
+    const resolver = sharedRefResolver();
 
-    const { recipe: ref, segments } = splitIncludePath(namespace, rest);
-
-    if (!this.knownNamespaces().includes(namespace)) {
-      return {
-        kind: "unknown-namespace",
-        known: this.knownNamespaces(),
-        ...this.droppedFor(ref, fromFile),
-      };
+    let result;
+    try {
+      result = resolver.resolveSync(new RefResolveArguments({
+        input: reference,
+        from: RefSource.Include,
+        lookup: this.lookup,
+        kinds: ["recipeFile"],
+      }));
+    } catch (error) {
+      return this.refused(reference, error);
     }
 
-    const recipeDir = this.recipes[ref];
+    // The reading the caller meant: of a `?name=value` that could also be part
+    // of a glob, the one that read it as values comes first.
+    const { kept } = resolver.inspect(reference, RefSource.Include);
+    const written = (kept.find((ref) => ref.vars !== undefined) ?? kept[0]) as RecipeFileRef;
+    const namespaceName = written.recipe.namespace?.name ?? "";
+    const wanted = `${namespaceName}/${written.recipe.name}`;
 
-    if (!recipeDir) {
+    const matched = result.refs.filter((ref): ref is RecipeFileRef => ref.kind === "recipeFile");
+    if (matched.length === 0) {
+      if (written.glob === true) return { kind: "candidates", candidates: [], glob: true };
+      if (!this.lookup.knowsNamespace(namespaceName)) {
+        return {
+          kind: "unknown-namespace",
+          namespace: namespaceName,
+          recipe: wanted,
+          known: this.lookup.namespaces(),
+          ...this.droppedFor(wanted, fromFile),
+        };
+      }
       return {
         kind: "unknown-recipe",
-        recipe: ref,
-        known: this.recipesIn(namespace),
-        ...this.droppedFor(ref, fromFile),
+        recipe: wanted,
+        known: this.lookup.recipesInNamespace(namespaceName),
+        ...this.droppedFor(wanted, fromFile),
       };
     }
 
@@ -357,66 +427,47 @@ export class StaticNamespaceResolver implements NamespaceResolver {
       ? [includingRecipe, ...(this.dependencies[includingRecipe] ?? [])]
       : this.projectScope;
 
-    if (declared !== undefined && !declaresRef(declared, namespace, ref)) {
-      return { kind: "not-a-dependency", recipe: ref, includingRecipe };
+    const candidates: string[] = [];
+    for (const ref of matched) {
+      const key = `${ref.recipe.namespace?.name ?? ""}/${ref.recipe.name}`;
+      const recipeDir = this.recipes[key];
+      if (recipeDir === undefined) continue;
+
+      if (declared !== undefined && !declaresRef(declared, ref.recipe.namespace?.name ?? "", key)) {
+        if (written.glob === true) continue;
+        return { kind: "not-a-dependency", recipe: key, includingRecipe };
+      }
+
+      if (written.glob === true) {
+        candidates.push(`${escapeGlob(recipeDir)}/${ref.path}`);
+        continue;
+      }
+
+      const resolved = path.resolve(recipeDir, ref.path);
+      // A `~` reference addresses a recipe's own files. The ref service already
+      // refuses `.` and `..` segments; this catches whatever else would leave
+      // the recipe directory, so a reference can never have the compiler render
+      // anything on the machine into the project's output.
+      if (escapesRecipe(recipeDir, resolved)) {
+        return { kind: "escapes-recipe", recipe: key, reference };
+      }
+      candidates.push(resolved);
     }
 
-    const inner = segments.join("/");
-    const resolved = path.resolve(recipeDir, inner);
-
-    // A `~namespace` reference addresses a recipe's own files. Without this the
-    // reference could walk out of the recipe with `..` segments and have the
-    // compiler render anything on the machine into the project's output. The
-    // segment check catches the written form, and the relative check catches
-    // everything else, including an absolute inner path and any symlink-free
-    // route out that normalisation would otherwise hide.
-    if (escapesRecipe(recipeDir, segments, inner, resolved)) {
-      return { kind: "escapes-recipe", recipe: ref, reference: `${namespace}/${rest}` };
-    }
-
-    return { kind: "candidates", candidates: [resolved] };
+    return written.glob === true
+      ? { kind: "candidates", candidates, glob: true }
+      : { kind: "candidates", candidates };
   }
 }
 
 /**
- * Takes the part of a `@~namespace/...` include line after the namespace apart:
- * its first segment names the recipe, and the rest is a file path inside it.
- * This is an include path, not a ref; it is the one place such a path is split.
- *
- * splitIncludePath("workflow", "task-files/_partials/resume.md")
- * // -> { recipe: "workflow/task-files", segments: ["_partials", "resume.md"] }
- *
- * @param namespace - The namespace the include line named.
- * @param rest - Everything after `~<namespace>/`.
- */
-function splitIncludePath(
-  namespace: string,
-  rest: string
-): { recipe: string; segments: string[] } {
-  const [recipeName = "", ...segments] = rest
-    .split("/")
-    .filter((segment) => segment.length > 0);
-  return { recipe: `${namespace}/${recipeName}`, segments };
-}
-
-/**
- * Whether an inner path would address something outside the recipe directory.
+ * Whether a resolved path sits outside the recipe directory.
  *
  * @param recipeDir - The recipe's absolute directory.
- * @param innerSegments - The inner path's segments, as they were written.
- * @param inner - Those segments rejoined.
  * @param resolved - What the inner path resolved to.
  */
-function escapesRecipe(
-  recipeDir: string,
-  innerSegments: string[],
-  inner: string,
-  resolved: string
-): boolean {
-  if (innerSegments.some((segment) => segment === "." || segment === "..")) return true;
-  if (inner !== "" && path.isAbsolute(inner)) return true;
+function escapesRecipe(recipeDir: string, resolved: string): boolean {
   if (resolved === recipeDir) return false;
-
   const relative = path.relative(recipeDir, resolved);
   return relative === "" || relative.startsWith("..") || path.isAbsolute(relative);
 }

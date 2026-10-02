@@ -11,7 +11,8 @@ import {
   hashContent,
   recordDirCreation,
 } from "./state.js";
-import { resolveInclude, type AliasMap } from "./include-resolver.js";
+import { resolveIncludeFiles, splitIncludeQuery, type AliasMap } from "./include-resolver.js";
+import { RefSource, sharedRefResolver } from "../services/ref-resolver/index.js";
 import {
   formatNamespaceProblem,
   type NamespaceResolver,
@@ -145,11 +146,39 @@ export function stableVarsFingerprint(vars: Record<string, string>): string {
   return JSON.stringify(Object.keys(vars).sort().map((key) => [key, vars[key]]));
 }
 
+/**
+ * An include line: `@`, a path that ends in `.md` and an optional
+ * `?name=value` query, and nothing else. The first character is a sigil, a
+ * variable, a dot or a letter, a digit or a glob character; the rest may hold
+ * the characters of a path, a `${var}`, a glob and a recipe reference's `repo:`
+ * qualifier.
+ */
+const INCLUDE_LINE_PATTERN =
+  /^@([~#a-zA-Z0-9_.${}*?[][a-zA-Z0-9_\-/.:${}*?[\],!~#%+^()]*\.md(?:\?[^?\s]*=\S*)?)$/;
+
+/**
+ * Whether a line that is not a well-formed include still looks like one: it
+ * starts with `@` and is a single path-like word, meaning it holds a `/` or a
+ * `.md`, or starts with a sigil or a variable (`@~`, `@#`, `@.`, `@$`). A line
+ * that merely starts with `@` (a mention or an email address followed by
+ * words, or a lone `@name`) does not.
+ *
+ * looksLikeIncludeLine("@docs/notes.txt"); // -> true, the include has no .md
+ * looksLikeIncludeLine("@alice thanks for the review"); // -> false
+ * looksLikeIncludeLine("@alice"); // -> false
+ *
+ * @param line - One line of a file, with trailing whitespace already removed.
+ */
+export function looksLikeIncludeLine(line: string): boolean {
+  if (!/^@\S+$/.test(line)) return false;
+  const word = line.slice(1);
+  return /[/]/.test(word) || /\.md\b/.test(word) || /^[~#.$]/.test(word);
+}
+
 export class CompilationService {
   private strict: boolean;
   private rebuild: boolean;
   private dryRun: boolean;
-  private visited: Set<string>;
   private includeStack: string[];
   private errors: string[];
   private includeSourceComments: boolean;
@@ -170,7 +199,6 @@ export class CompilationService {
     this.strict = options.strict ?? false;
     this.rebuild = options.rebuild ?? false;
     this.dryRun = options.dryRun ?? false;
-    this.visited = new Set();
     this.includeStack = [];
     this.errors = [];
     this.includeSourceComments = false;
@@ -214,23 +242,36 @@ export class CompilationService {
   /**
    * Process @<path> includes in content.
    *
-   * Matches an `@`-prefixed `.md` path on its own line. The path may be:
+   * Matches an `@`-prefixed `.md` path on its own line, optionally followed by
+   * a `?name=value` query (read by the ref service and otherwise ignored). The
+   * path may be:
    *   - relative to the including file (`@sections/intro.md`),
    *   - a `${var}`-substituted path (`@${sousRootPath}/x.md`),
-   *   - an alias path (`@~project/memories/x.md`, `@docs/x.md`), where the
-   *     first segment (up to `/` or `:`) names a registered alias,
-   *   - or a recipe namespace path (`@~workflow/task-files/_partials/x.md`),
-   *     where the `~` sigil names a namespace and the rest names a recipe and a
-   *     file inside it. Namespaces are only consulted when a namespace resolver
-   *     was supplied, and always after aliases.
+   *   - a `#name` path (`@#project/memories/x.md`), or an alias path
+   *     (`@docs/x.md`), where the first segment (up to `/` or `:`) names a
+   *     registered alias,
+   *   - a home-relative path (`@~/notes/x.md`),
+   *   - or a recipe reference (`@~workflow/task-files/_partials/x.md`), where
+   *     the `~` sigil is followed by a namespace, a recipe and a file inside it.
+   *     Recipe references are only consulted when a namespace resolver was
+   *     supplied.
+   * Any of them may use glob syntax, and then includes every file it matches,
+   * in sorted path order; a glob that matches nothing is an error.
+   *
+   * A file may be included any number of times; only a file that includes
+   * itself (directly or through others) is an error.
    *
    * Lines inside fenced code blocks (``` or ~~~, per CommonMark) are left
    * verbatim, so include syntax can be documented without being executed.
    *
-   * Resolution produces an ordered candidate list (see include-resolver); the
-   * first candidate that exists on disk is used. If none exist, it errors,
-   * naming the including file and listing every path tried, plus what went
-   * wrong with the namespace lookup when one was attempted.
+   * A line that starts with `@` and looks like an include (see
+   * {@link looksLikeIncludeLine}) but is not a well-formed one is a compile
+   * error naming the file and the line, never text copied to the output.
+   *
+   * Resolution produces ordered groups of candidates (see include-resolver);
+   * the first group that names a file is used. If none does, it errors, naming
+   * the including file and listing every path tried, plus what went wrong with
+   * a `~` or `#` reference when one was attempted.
    *
    * @param content - The file's raw text.
    * @param baseDir - Directory the relative candidate resolves against.
@@ -243,17 +284,15 @@ export class CompilationService {
     projectRoot: string,
     fromFile?: string
   ): string {
-    // First segment allows ~ and . (so ./ and ../ work), then path chars;
-    // separators / and :; allows ${...}.
-    const includePattern = /^@([~a-zA-Z0-9_.${}][a-zA-Z0-9_\-/.:${}]*\.md)$/;
     const fenceOpenPattern = /^ {0,3}(`{3,}|~{3,})/;
     const fenceClosePattern = /^ {0,3}(`{3,}|~{3,})[ \t]*$/;
+    const where = fromFile ?? baseDir;
 
     const out: string[] = [];
     let fenceChar: string | null = null;
     let fenceLength = 0;
 
-    for (const line of content.split("\n")) {
+    for (const [lineIndex, line] of content.split("\n").entries()) {
       if (fenceChar !== null) {
         // Inside a fence: emit verbatim; only a matching closing fence ends it.
         const close = fenceClosePattern.exec(line);
@@ -272,28 +311,59 @@ export class CompilationService {
         continue;
       }
 
-      const match = includePattern.exec(line);
+      const trimmed = line.trimEnd();
+      const match = INCLUDE_LINE_PATTERN.exec(trimmed);
       if (!match) {
+        if (looksLikeIncludeLine(trimmed)) {
+          this.handleError(
+            `Malformed include line: ${trimmed}\n  in file: ${where}, line ${lineIndex + 1}\n` +
+              `  An include is "@" followed by a path that ends in .md, optionally followed by ` +
+              `"?name=value". The path may hold letters, digits and . _ - / : $ { } * ? [ ] , ~ #.\n` +
+              `  To write a line that starts with "@" as text, put a word after it.`
+          );
+        }
         out.push(line);
         continue;
       }
 
       const includePath = match[1].trim();
-      const { candidates, namespaceIssue } = resolveInclude(includePath, {
-        aliases: this.aliases,
-        scope: this.includeScope,
-        baseDir,
-        namespaceResolver: this.namespaceResolver,
-        fromFile: fromFile ?? baseDir,
-      });
-      const fullPath = candidates.find((c) => fs.existsSync(c));
+      const { files, glob, candidates, namespaceIssue, hashIssue } = resolveIncludeFiles(
+        includePath,
+        {
+          aliases: this.aliases,
+          scope: this.includeScope,
+          baseDir,
+          namespaceResolver: this.namespaceResolver,
+          fromFile: where,
+        }
+      );
 
-      if (!fullPath) {
+      if (files.length === 0) {
+        if (this.namespaceResolver === undefined && includePath.startsWith("~")) {
+          // Without a resolver the reference is only a relative path, so say
+          // what is wrong with a malformed one instead of "not found".
+          const reference = splitIncludeQuery(includePath).path.slice(1);
+          if (reference.includes("/") && !reference.includes("${")) {
+            try {
+              sharedRefResolver().parse(reference, RefSource.Include);
+            } catch (error) {
+              this.handleError(
+                `Malformed include line: ${trimmed}\n  in file: ${where}, line ${lineIndex + 1}\n  ${
+                  error instanceof Error ? error.message : String(error)
+                }`
+              );
+              out.push("");
+              continue;
+            }
+          }
+        }
         const explanation = namespaceIssue
           ? `\n${formatNamespaceProblem(namespaceIssue)}`
-          : `\n  in file: ${fromFile ?? baseDir}`;
+          : hashIssue
+            ? `\n  in file: ${where}\n  ${hashIssue.split("\n").join("\n  ")}`
+            : `\n  in file: ${where}`;
         this.handleError(
-          `Include not found: @${includePath}${explanation}\n  tried:\n${candidates
+          `${glob ? "Include matched no files" : "Include not found"}: @${includePath}${explanation}\n  tried:\n${candidates
             .map((c) => `    - ${c}`)
             .join("\n")}`
         );
@@ -301,23 +371,25 @@ export class CompilationService {
         continue;
       }
 
-      if (this.includeStack.includes(fullPath)) {
-        this.handleError(
-          `Circular dependency detected: ${this.includeStack.join(" -> ")} -> ${fullPath}`
-        );
-        out.push("");
-        continue;
-      }
+      for (const fullPath of files) {
+        if (this.includeStack.includes(fullPath)) {
+          this.handleError(
+            `Circular dependency detected: ${this.includeStack.join(" -> ")} -> ${fullPath}`
+          );
+          out.push("");
+          continue;
+        }
 
-      const includedContent = this.loadFile(fullPath, projectRoot);
-      if (includedContent !== null) {
-        const relativePath = path.relative(projectRoot, fullPath);
-        const sourceComment = this.currentIncludeSourceComments
-          ? `<!-- from: ${relativePath} -->\n`
-          : "";
-        out.push(sourceComment + includedContent);
-      } else {
-        out.push("");
+        const includedContent = this.loadFile(fullPath, projectRoot);
+        if (includedContent !== null) {
+          const relativePath = path.relative(projectRoot, fullPath);
+          const sourceComment = this.currentIncludeSourceComments
+            ? `<!-- from: ${relativePath} -->\n`
+            : "";
+          out.push(sourceComment + includedContent);
+        } else {
+          out.push("");
+        }
       }
     }
 
@@ -331,18 +403,12 @@ export class CompilationService {
       return null;
     }
 
-    if (this.visited.has(filePath)) {
-      return "";
-    }
-
     this.includeStack.push(filePath);
 
     try {
       const content = fs.readFileSync(filePath, "utf8");
       const baseDir = path.dirname(filePath);
-      const processedContent = this.processIncludes(content, baseDir, projectRoot, filePath);
-      this.visited.add(filePath);
-      return processedContent;
+      return this.processIncludes(content, baseDir, projectRoot, filePath);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.handleError(`Failed to read file ${filePath}: ${message}`);
@@ -473,7 +539,6 @@ ${taskFileContents}
 
     this.initializeEncoder();
 
-    this.visited.clear();
     this.includeStack = [];
     this.currentIncludeSourceComments =
       typeof target.includeSourceComments === "boolean"

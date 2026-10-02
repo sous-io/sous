@@ -32,15 +32,14 @@ describe("StaticNamespaceResolver", () => {
    * A project template (a file outside every recipe directory) addressing a
    * known recipe gets the file's absolute path inside that recipe's directory.
    *
-   * resolve({ namespace: "workflow", rest: "task-files/_partials/resume.md",
+   * resolve({ reference: "workflow/task-files/_partials/resume.md",
    *           fromFile: "/project/prompts/AGENTS.md" })
    * // -> { kind: "candidates",
    * //      candidates: ["/store/recipes/workflow/task-files/_partials/resume.md"] }
    */
   it("should map a namespace reference to a path inside the recipe directory", () => {
     const result = makeResolver().resolve({
-      namespace: "workflow",
-      rest: "task-files/_partials/resume.md",
+      reference: "workflow/task-files/_partials/resume.md",
       fromFile: "/project/prompts/AGENTS.md",
     });
 
@@ -54,31 +53,34 @@ describe("StaticNamespaceResolver", () => {
    * A namespace nobody declared is reported as unknown, together with the sorted
    * list of namespaces that do exist, so the error can name the alternatives.
    *
-   * resolve({ namespace: "nope", ... })
+   * resolve({ reference: "nope/thing/file.md", ... })
    * // -> { kind: "unknown-namespace", known: ["core", "workflow"] }
    */
   it("should report an unknown namespace and list the known ones", () => {
     const result = makeResolver().resolve({
-      namespace: "nope",
-      rest: "thing/file.md",
+      reference: "nope/thing/file.md",
       fromFile: "/project/prompts/AGENTS.md",
     });
 
-    expect(result).toEqual({ kind: "unknown-namespace", known: ["core", "workflow"] });
+    expect(result).toEqual({
+      kind: "unknown-namespace",
+      namespace: "nope",
+      recipe: "nope/thing",
+      known: ["core", "workflow"],
+    });
   });
 
   /**
    * A known namespace that holds no such recipe is reported separately from an
    * unknown namespace, listing the recipes it does hold.
    *
-   * resolve({ namespace: "workflow", rest: "missing/file.md", ... })
+   * resolve({ reference: "workflow/missing/file.md", ... })
    * // -> { kind: "unknown-recipe", recipe: "workflow/missing",
    * //      known: ["workflow/github-projects", "workflow/task-files"] }
    */
   it("should report an unknown recipe inside a known namespace", () => {
     const result = makeResolver().resolve({
-      namespace: "workflow",
-      rest: "missing/file.md",
+      reference: "workflow/missing/file.md",
       fromFile: "/project/prompts/AGENTS.md",
     });
 
@@ -103,8 +105,7 @@ describe("StaticNamespaceResolver", () => {
     });
 
     const result = resolver.resolve({
-      namespace: "workflow",
-      rest: "task-files/partial.md",
+      reference: "workflow/task-files/partial.md",
       fromFile: path.join(STORE, "core", "sous-skills", "SKILL.md"),
     });
 
@@ -125,8 +126,7 @@ describe("StaticNamespaceResolver", () => {
     });
 
     const result = resolver.resolve({
-      namespace: "workflow",
-      rest: "github-projects/partial.md",
+      reference: "workflow/github-projects/partial.md",
       fromFile: path.join(STORE, "core", "sous-skills", "SKILL.md"),
     });
 
@@ -145,8 +145,7 @@ describe("StaticNamespaceResolver", () => {
     const resolver = makeResolver({ dependencies: { "core/sous-skills": ["workflow"] } });
 
     const result = resolver.resolve({
-      namespace: "workflow",
-      rest: "github-projects/partial.md",
+      reference: "workflow/github-projects/partial.md",
       fromFile: path.join(STORE, "core", "sous-skills", "SKILL.md"),
     });
 
@@ -167,8 +166,7 @@ describe("StaticNamespaceResolver", () => {
     });
 
     const result = resolver.resolve({
-      namespace: "workflow",
-      rest: "task-files/partial.md",
+      reference: "workflow/task-files/partial.md",
       fromFile: path.join(STORE, "core", "sous-skills", "SKILL.md"),
     });
 
@@ -183,8 +181,7 @@ describe("StaticNamespaceResolver", () => {
     const resolver = makeResolver({ dependencies: {} });
 
     const result = resolver.resolve({
-      namespace: "workflow",
-      rest: "task-files/_partials/x.md",
+      reference: "workflow/task-files/_partials/x.md",
       fromFile: path.join(STORE, "workflow", "task-files", "SKILL.md"),
     });
 
@@ -200,8 +197,7 @@ describe("StaticNamespaceResolver", () => {
     const resolver = makeResolver({ projectScope: ["core/sous-skills"] });
 
     const result = resolver.resolve({
-      namespace: "workflow",
-      rest: "task-files/partial.md",
+      reference: "workflow/task-files/partial.md",
       fromFile: "/project/prompts/AGENTS.md",
     });
 
@@ -218,16 +214,14 @@ describe("StaticNamespaceResolver", () => {
    * compiler rendered whatever it found into the project's output. Every other
    * path in the system rejects `..`; this one does too now.
    *
-   * resolve({ namespace: "workflow",
-   *           rest: "task-files/../../../../../../home/me/.ssh/id_rsa", ... })
+   * resolve({ reference: "workflow/task-files/../../../../../../home/me/.ssh/id_rsa", ... })
    * // -> { kind: "escapes-recipe", recipe: "workflow/task-files", reference: ... }
    */
   it("should refuse a `~namespace` reference containing `..` segments", () => {
     const rest = "task-files/../../../../../../home/me/.ssh/id_rsa";
 
     const result = makeResolver().resolve({
-      namespace: "workflow",
-      rest,
+      reference: `workflow/${rest}`,
       fromFile: "/project/prompts/AGENTS.md",
     });
 
@@ -243,7 +237,7 @@ describe("StaticNamespaceResolver", () => {
    * inspects path syntax in one place and trusts it in another. It is refused
    * the same way, along with anything else that leaves the recipe directory.
    *
-   * resolve({ namespace: "workflow", rest: "task-files/./x.md", ... })
+   * resolve({ reference: "workflow/task-files/./x.md", ... })
    * // -> { kind: "escapes-recipe", ... }
    */
   it("should refuse a `.` segment and an inner path that leaves the recipe", () => {
@@ -252,8 +246,7 @@ describe("StaticNamespaceResolver", () => {
       "task-files/sub/../../github-projects/partial.md",
     ]) {
       const result = makeResolver().resolve({
-        namespace: "workflow",
-        rest,
+        reference: `workflow/${rest}`,
         fromFile: "/project/prompts/AGENTS.md",
       });
       expect(result.kind).toBe("escapes-recipe");
@@ -261,26 +254,23 @@ describe("StaticNamespaceResolver", () => {
   });
 
   /**
-   * The recipe root itself is still addressable, and so is any file under it;
-   * the guard must not refuse ordinary references.
+   * An include names a file, so a reference to the recipe root alone is
+   * refused with the ref service's own sentence, and any file under the recipe
+   * still resolves; the guard must not refuse ordinary references.
    *
-   * resolve({ namespace: "workflow", rest: "task-files", ... })
-   * // -> { kind: "candidates", candidates: ["/store/recipes/workflow/task-files"] }
+   * resolve({ reference: "workflow/task-files", ... })
+   * // -> { kind: "invalid", ... "names a file inside a recipe" }
    */
-  it("should still resolve the recipe root and ordinary inner paths", () => {
+  it("should refuse the recipe root and still resolve ordinary inner paths", () => {
     const root = makeResolver().resolve({
-      namespace: "workflow",
-      rest: "task-files",
+      reference: "workflow/task-files",
       fromFile: "/project/prompts/AGENTS.md",
     });
-    expect(root).toEqual({
-      kind: "candidates",
-      candidates: [path.join(STORE, "workflow", "task-files")],
-    });
+    expect(root.kind).toBe("invalid");
+    expect(root.kind === "invalid" && root.message).toContain("names a file inside a recipe");
 
     const nested = makeResolver().resolve({
-      namespace: "workflow",
-      rest: "task-files/a/b/c.md",
+      reference: "workflow/task-files/a/b/c.md",
       fromFile: "/project/prompts/AGENTS.md",
     });
     expect(nested).toEqual({
@@ -302,7 +292,7 @@ describe("StaticNamespaceResolver explainMissing", () => {
    * A project template asking for a recipe the resolver does not know gets the
    * explanation attached, whether the namespace is known or not.
    *
-   * resolve({ namespace: "workflow", rest: "gone/x.md", fromFile: "/project/AGENTS.md" })
+   * resolve({ reference: "workflow/gone/x.md", fromFile: "/project/AGENTS.md" })
    * // -> { kind: "unknown-recipe", recipe: "workflow/gone", ..., dropped }
    */
   it("should attach the explanation for a project template", () => {
@@ -315,7 +305,7 @@ describe("StaticNamespaceResolver explainMissing", () => {
     });
 
     expect(
-      resolver.resolve({ namespace: "workflow", rest: "gone/x.md", fromFile: "/project/AGENTS.md" })
+      resolver.resolve({ reference: "workflow/gone/x.md", fromFile: "/project/AGENTS.md" })
     ).toEqual({
       kind: "unknown-recipe",
       recipe: "workflow/gone",
@@ -323,8 +313,14 @@ describe("StaticNamespaceResolver explainMissing", () => {
       dropped,
     });
     expect(
-      resolver.resolve({ namespace: "nope", rest: "gone/x.md", fromFile: "/project/AGENTS.md" })
-    ).toEqual({ kind: "unknown-namespace", known: ["core", "workflow"], dropped });
+      resolver.resolve({ reference: "nope/gone/x.md", fromFile: "/project/AGENTS.md" })
+    ).toEqual({
+      kind: "unknown-namespace",
+      namespace: "nope",
+      recipe: "nope/gone",
+      known: ["core", "workflow"],
+      dropped,
+    });
     expect(asked).toEqual(["workflow/gone", "nope/gone"]);
   });
 
@@ -336,8 +332,7 @@ describe("StaticNamespaceResolver explainMissing", () => {
     const resolver = makeResolver({ explainMissing: () => dropped });
 
     const result = resolver.resolve({
-      namespace: "workflow",
-      rest: "gone/x.md",
+      reference: "workflow/gone/x.md",
       fromFile: path.join(STORE, "core", "sous-skills", "SKILL.md"),
     });
 
@@ -351,8 +346,6 @@ describe("StaticNamespaceResolver explainMissing", () => {
 
 describe("formatNamespaceProblem()", () => {
   const base = {
-    namespace: "workflow",
-    rest: "task-files/x.md",
     fromFile: "/project/prompts/AGENTS.md",
   };
 
@@ -364,7 +357,12 @@ describe("formatNamespaceProblem()", () => {
   it("should explain an unknown namespace and list the available ones", () => {
     const text = formatNamespaceProblem({
       ...base,
-      resolution: { kind: "unknown-namespace", known: ["core", "workflow"] },
+      resolution: {
+        kind: "unknown-namespace",
+        namespace: "workflow",
+        recipe: "workflow/task-files",
+        known: ["core", "workflow"],
+      },
     });
 
     expect(text).toContain("  in file: /project/prompts/AGENTS.md");

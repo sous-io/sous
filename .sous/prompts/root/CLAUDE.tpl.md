@@ -1238,7 +1238,7 @@ In any source `.md` file, `@path/to/file.md` on its own line includes that file'
 @../shared/intro.md
 @${projectRoot}/prompts/x.md
 @~/notes/private-context.md
-@~project/prompts/intro.md
+@#project/prompts/intro.md
 @~workflow/task-files/_partials/resume.md
 @myAlias/doc.md
 ```
@@ -1257,8 +1257,19 @@ namespaces work in both). A `@`-path may be:
   `config-discovery.ts`, the same expansion the config-locating flags get); the sigil with
   nothing but a separator after it names no alias or namespace, so this is unambiguous,
 - **aliased**: the first segment (up to `/` or `:`; both separators work) names an alias,
-- **namespaced**: a first segment carrying the reserved `~` sigil names a recipe
-  namespace (see below).
+- **a `#` name**: the reserved `#` sigil names something sous or a plugin registers, such as
+  `#project` (the project root); see below,
+- **a recipe reference**: a path starting with the reserved `~` sigil, then namespace,
+  recipe and path inside the recipe (see below).
+
+Any of them may use the full `glob` syntax (`*`, `**`, `?`, `[..]`, `{a,b}`) after `${var}`
+substitution, and then includes every file it matches in bytewise path order, each expanded
+as a single include would be; a glob matching nothing is a build error naming the pattern.
+A file may be included any number of times, and only a cycle is an error. A trailing
+`?name=value` query is read by the ref service and otherwise ignored. A line that starts
+with `@` and looks like an include (one word holding a `/`, a `.md`, or starting with `~`,
+`#`, `.` or `$`) but is not well formed is a build error naming the file and line
+(`looksLikeIncludeLine` in `markdown-compiler.ts`); prose such as `@alice thanks` is text.
 
 Every candidate is followed by its `.tpl.` twin (`templateTwin` in `include-resolver.ts`):
 `@shared.md` finds `shared.tpl.md` when that is what exists, and `@notes.tpl.md` finds
@@ -1267,18 +1278,24 @@ candidate, so an alias base still beats the relative fallback; a writer never ha
 whether an included file has been turned into a template. The twin's content is included as
 it is, so Liquid inside it renders only when the entry point itself is a `.tpl.` file.
 
-**Aliases.** There is exactly ONE built-in, reserved and `~`-prefixed: `~project`, the
-project root (see `buildBuiltInAliases` in `settings.ts`). Everything sous once reached
+**Aliases and `#` names.** Built-ins are `#`-prefixed names held by the `HashNameRegistry`
+(`src/services/ref-resolver/hash-names.ts`, bound in the ref container so a plugin or a later
+view registers one more; a duplicate registration is an error naming both). There is exactly
+ONE today, `#project`, the project root (see `buildBuiltInAliases` in `settings.ts`, which
+puts every registered name into the alias map). Everything sous once reached
 through a built-in alias into its own package is published as a recipe now, and a recipe's
 files are addressed by namespace instead. Projects add their own aliases via the top-level
 `_aliases` block (string or array values, `${var}`-substituted); user names may not start with
-`~`. Precedence: built-ins, then `_aliases`, where the user block **prepends** (user bases
+`~` or `#` (a `ConfigError`). Precedence: built-ins, then `_aliases`, where the user block **prepends** (user bases
 tried first, falling through to built-in bases of the same name). Resolved by
 `resolveAliases(settings, scope)`.
 
-**Recipe namespaces (the `~` sigil).** A first segment written `~<namespace>` addresses a
-recipe namespace rather than the filesystem; everything after it starts with the recipe
-name and continues with the path inside that recipe, so
+**Recipe references (the `~` sigil).** A path written `~<namespace>/<recipe>/<path>`
+addresses a recipe rather than the filesystem. The reference is parsed and pruned by the ref
+resolver service with `RefSource.Include` and matched through a `LockedRecipeFileLookup`
+(`repos/locked-recipe-lookup.ts`), so a glob may stand in any name or in the path
+(`@~*/*/memories/*.md`), a `repo:` qualifier names the repository by its short name, and
+names match by exact spelling first, then ignoring case. So
 `@~workflow/task-files/_partials/resume.md` means the file `_partials/resume.md` in recipe
 `workflow/task-files`. A bare `@path` (no `~`) never falls through to a namespace; it stays
 a relative path or a declared alias. Scoping is enforced by the resolver: inside a recipe's
@@ -1290,21 +1307,22 @@ pin, `explainUnpinnedRecipe` (`repos/locked-namespace-resolver.ts`) looks for a 
 subscription to it (its key read through `parseShortRef` with `RefSource.Config`), then for
 another published version of a pinned recipe that brought it in
 (read from the cached indexes, through recipes no longer pinned either), and the error names
-it. The inner path may not contain `.` or `..` segments and
-may not be absolute, and the resolved candidate is `path.relative`-checked against the recipe
+it. The inner path may not contain `.` or `..` segments,
+and the resolved candidate is `path.relative`-checked against the recipe
 directory; a reference that leaves it returns `{ kind: "escapes-recipe" }` rather than a path,
 because otherwise a recipe file could render anything on the machine into a project's output.
 The contract lives in
 `src/lib/repos/namespace-resolver.ts` (`NamespaceResolver`, plus the in-memory
 `StaticNamespaceResolver` used by tests); a resolver is injected through the
 `namespaceResolver` option on `CompilationService` and `BuildService`, and when none is
-supplied the `~` sigil only ever means an alias.
+supplied a `~` path is only ever a relative path.
 
-**Candidate order.** Each alias base in order, then the namespace resolver's candidates
-(only for a `~` first segment, and only when a resolver was supplied), then the path
+**Candidate order.** Each alias base in order (a `#name` is one), then the namespace
+resolver's candidates (only for a `~` path holding a `/`, and only when a resolver was
+supplied; a recipe glob is ONE group of every match), then the path
 resolved relative to the including file (full path incl. the first segment, so an alias
-can *augment* a real local dir). Aliases therefore always beat a namespace of the same
-name, which keeps `~project` stable. First candidate that exists wins;
+can *augment* a real local dir). The first group that names a file wins and supplies all of
+its files;
 none → error naming the including file, listing every path tried, and explaining the
 namespace lookup when one was attempted (unknown namespace, unknown recipe, or a recipe the
 including recipe must add to its `depends`). Circular includes are detected and reported,

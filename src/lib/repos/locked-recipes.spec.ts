@@ -314,7 +314,7 @@ describe("createProjectNamespaceResolver()", () => {
    * createProjectNamespaceResolver should resolve a namespace reference made
    * from one of the project's own templates to the pinned recipe directory.
    *
-   * resolver.resolve({ namespace: "workflow", rest: "task-files/x.md", fromFile });
+   * resolver.resolve({ reference: "workflow/task-files/x.md", fromFile });
    * // -> { kind: "candidates", candidates: ["<store>/.../1.0.0/x.md"] }
    */
   it("should resolve a subscribed recipe from a project template", () => {
@@ -330,8 +330,7 @@ describe("createProjectNamespaceResolver()", () => {
 
     expect(
       resolver.resolve({
-        namespace: "workflow",
-        rest: "task-files/partials/x.md",
+        reference: "workflow/task-files/partials/x.md",
         fromFile: path.join(sousDir, "prompts", "root.md"),
       })
     ).toEqual({
@@ -345,7 +344,7 @@ describe("createProjectNamespaceResolver()", () => {
    * recipe the lockfile pins only as another recipe's `depends`: a project's
    * templates may include from anything the lockfile pins, whatever holds it.
    *
-   * resolver.resolve({ namespace: "support", rest: "base/x.md", fromFile: projectFile });
+   * resolver.resolve({ reference: "support/base/x.md", fromFile: projectFile });
    * // -> { kind: "candidates", candidates: ["<store>/.../support/base/1.0.0/x.md"] }
    */
   it("should resolve a depends-only recipe from a project template", () => {
@@ -370,8 +369,7 @@ describe("createProjectNamespaceResolver()", () => {
 
     expect(
       resolver.resolve({
-        namespace: "support",
-        rest: "base/x.md",
+        reference: "support/base/x.md",
         fromFile: path.join(sousDir, "prompts", "root.md"),
       })
     ).toEqual({ kind: "candidates", candidates: [path.join(base, "x.md")] });
@@ -382,7 +380,7 @@ describe("createProjectNamespaceResolver()", () => {
    * recipe to another recipe it does not declare as a dependency, which is the
    * scoping rule the whole sigil rests on.
    *
-   * resolver.resolve({ namespace: "workflow", rest: "other/x.md", fromFile: insideA });
+   * resolver.resolve({ reference: "workflow/other/x.md", fromFile: insideA });
    * // -> { kind: "not-a-dependency", includingRecipe: "workflow/task-files" }
    */
   it("should refuse a recipe the including recipe does not declare", () => {
@@ -402,8 +400,7 @@ describe("createProjectNamespaceResolver()", () => {
 
     expect(
       resolver.resolve({
-        namespace: "workflow",
-        rest: "other/x.md",
+        reference: "workflow/other/x.md",
         fromFile: path.join(taskFiles, "SKILL.md"),
       })
     ).toEqual({
@@ -418,7 +415,7 @@ describe("createProjectNamespaceResolver()", () => {
    * to something that recipe declared under `depends`, which the lockfile
    * records by listing the recipe among the holders of what it declared.
    *
-   * resolver.resolve({ namespace: "workflow", rest: "other/x.md", fromFile: insideA });
+   * resolver.resolve({ reference: "workflow/other/x.md", fromFile: insideA });
    * // -> { kind: "candidates", ... }
    */
   it("should allow a recipe the including recipe declares", () => {
@@ -443,8 +440,7 @@ describe("createProjectNamespaceResolver()", () => {
 
     expect(
       resolver.resolve({
-        namespace: "workflow",
-        rest: "other/x.md",
+        reference: "workflow/other/x.md",
         fromFile: path.join(taskFiles, "SKILL.md"),
       })
     ).toEqual({ kind: "candidates", candidates: [path.join(other, "x.md")] });

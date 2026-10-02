@@ -1,46 +1,52 @@
+import fs from "node:fs";
 import path from "node:path";
+import { globSync } from "glob";
+import { compareBytewise, hasGlob } from "../services/ref-resolver/index.js";
 import { expandHome } from "./config-discovery.js";
 import type { NamespaceResolution, NamespaceResolver } from "./repos/namespace-resolver.js";
 
 /**
- * @include path resolution: aliases, recipe namespaces, variable substitution,
- * and the ordered candidate search.
+ * @include path resolution: aliases, `#` names, recipe references, globs,
+ * variable substitution and the ordered candidate search.
  *
- * An include path (the part after `@`) is resolved to an ordered list of
- * candidate absolute paths. The caller tries each in order and uses the first
- * that exists on disk; if none exist, it errors listing every candidate tried.
+ * An include path (the part after `@`) resolves to an ordered list of groups.
+ * The caller uses the first group that names at least one file, and gets every
+ * file in it; if none does, it errors listing every path tried.
  *
  * Resolution pipeline for a raw path P (with leading `@` already stripped):
  *   1. Substitute ${vars} in P, then expand a leading `~/` to the home
- *      directory (the `~` sigil on its own, with nothing but a separator after
- *      it, names no alias or namespace, so `@~/notes/x.md` is unambiguous). If
- *      the result is absolute, it is the sole candidate (feature:
- *      `@${sousRootPath}/x.md`).
+ *      directory (the `~` sigil with nothing but a separator after it names no
+ *      namespace, so `@~/notes/x.md` is unambiguous). If the result is
+ *      absolute, it is the sole candidate (`@${sousRootPath}/x.md`).
  *   2. Split the first segment (up to the first `/` or `:`) as the alias key,
  *      the remainder as `rest`. If the key is a registered alias, push
- *      join(base, rest) for EACH base in the alias's ordered array.
- *   3. If the key begins with `~` and a namespace resolver was supplied, ask it
- *      for the recipe namespace named by the key (minus the `~`) and push its
- *      candidates. Aliases are consulted first, so `~project` keeps meaning
- *      the built-in alias even if a namespace of that name exists.
+ *      join(base, rest) for EACH base in the alias's ordered array. A `#name`
+ *      (`#project`) is registered in the alias map by the `#` name registry.
+ *   3. If P begins with `~` and holds a `/`, and a namespace resolver was
+ *      supplied, hand the reference (P without the `~`) to it. The resolver
+ *      reads it with the ref resolver service: `namespace/recipe/path`, any of
+ *      the three possibly a glob, optionally with a `repo:` qualifier.
  *   4. Always push the relative candidate: join(baseDir, P), the FULL path
- *      including the alias segment. This lets an alias augment a real relative
+ *      including the first segment. This lets an alias augment a real relative
  *      directory of the same name (e.g. `@stuff/x` tries the alias bases, then
  *      `./stuff/x`).
- *   5. Follow every candidate with its `.tpl.` twin: `x.md` is followed by
- *      `x.tpl.md`, and `x.tpl.md` by `x.md`. The literal spelling is always
- *      tried first, and the twin comes right after it (not after every other
- *      candidate), so an alias base still beats the relative fallback. A
- *      writer therefore never has to know whether an included file has been
- *      turned into a template or back.
+ *   5. Follow every NON-glob candidate with its `.tpl.` twin: `x.md` is
+ *      followed by `x.tpl.md`, and `x.tpl.md` by `x.md`. The literal spelling
+ *      is always tried first, and the twin comes right after it, so an alias
+ *      base still beats the relative fallback.
  *
- * A key WITHOUT the `~` sigil never reaches the namespace resolver: a bare
- * `@path` is always a relative path or a declared alias, so include lines never
- * masquerade as filesystem paths.
+ * Any path may use glob syntax (`*`, `**`, `?`, `[..]`, `{a,b}`) after
+ * substitution. A glob names every file it matches, in bytewise path order, and
+ * a `~` glob also matches recipes (`@~*` + `/*` + `/memories/*.md`).
  *
- * Aliases whose names begin with `~` are reserved for built-ins; user aliases
- * may not use that prefix. The primary separator is `/` (TS-style,
- * `@alias/path`); `:` is accepted as an equivalent (`@alias:path`).
+ * A key WITHOUT a sigil never reaches the namespace resolver: a bare `@path` is
+ * always a relative path or a declared alias, so include lines never masquerade
+ * as filesystem paths.
+ *
+ * Aliases whose names begin with `~` or `#` are reserved: `~` for the home
+ * directory and recipe namespaces, `#` for names sous or a plugin registers.
+ * The primary separator is `/` (`@alias/path`); `:` is accepted as an
+ * equivalent for an alias (`@alias:path`).
  */
 
 /** An alias maps a name to an ordered list of absolute base directories. */
@@ -104,9 +110,9 @@ export function splitAliasKey(p: string): { key: string; rest: string } {
   return { key: m[1], rest: m[2] };
 }
 
-/** Options shared by {@link resolveInclude} and {@link resolveIncludeCandidates}. */
+/** Options shared by {@link resolveInclude} and {@link resolveIncludeFiles}. */
 export type IncludeResolveOptions = {
-  /** The resolved alias map (name → ordered base dirs). */
+  /** The resolved alias map (name → ordered base dirs); `#` names are in it too. */
   aliases?: AliasMap;
   /** Variable scope for ${var} substitution. */
   scope?: Record<string, string>;
@@ -122,80 +128,202 @@ export type IncludeResolveOptions = {
   fromFile?: string;
 };
 
-/** A namespace lookup that produced no usable candidates, kept for error reporting. */
+/** A `~` reference that produced no usable candidates, kept for error reporting. */
 export type NamespaceIssue = {
-  /** The namespace that was asked for, without its `~` sigil. */
-  namespace: string;
-  /** The remainder of the reference (recipe name plus the path inside it). */
-  rest: string;
+  /** The reference with its `~` sigil taken off. */
+  reference: string;
   /** The file (or directory) that performed the include. */
   fromFile: string;
   /** What the resolver returned. */
   resolution: NamespaceResolution;
 };
 
-/** The full result of resolving one include path. */
-export type IncludeResolution = {
-  /** Ordered, de-duplicated absolute candidate paths. */
-  candidates: string[];
-  /**
-   * Present when the first segment named a `~namespace` that the resolver could
-   * not satisfy. The candidate list is still usable (it holds the alias and
-   * relative fallbacks); this only explains what went wrong with the namespace.
-   */
-  namespaceIssue?: NamespaceIssue;
+/**
+ * One place an include may be found. A group is found when any of its paths
+ * names at least one file, and then it supplies ALL of them: a plain include
+ * has one path per group, a glob over recipes has one per recipe.
+ */
+export type IncludeGroup = {
+  /** Absolute paths, or glob patterns when `glob` is true. */
+  paths: string[];
+  /** True when the paths are patterns to expand. */
+  glob: boolean;
 };
 
+/** The full result of resolving one include path. */
+export type IncludeResolution = {
+  /** Every group, in the order they are tried; the first that names a file wins. */
+  groups: IncludeGroup[];
+  /** Every path or pattern, flattened, in order and de-duplicated: what an error lists as tried. */
+  candidates: string[];
+  /** True when the include path holds glob syntax. */
+  glob: boolean;
+  /**
+   * Present when a `~` reference could not be satisfied. The groups are still
+   * usable (they hold the alias and relative fallbacks); this only explains
+   * what went wrong with the reference.
+   */
+  namespaceIssue?: NamespaceIssue;
+  /** Present when the path starts with a `#` name nothing registered. */
+  hashIssue?: string;
+};
+
+/** The files an include names, and how the search went. */
+export type IncludeFiles = {
+  /** Every file the include names, each once, in the order they are included. */
+  files: string[];
+  /** Everything that was tried. */
+  candidates: string[];
+  /** True when the include path holds glob syntax. */
+  glob: boolean;
+  /** Why a `~` reference failed, when it did. */
+  namespaceIssue?: NamespaceIssue;
+  /** Why a `#` name failed, when it did. */
+  hashIssue?: string;
+};
+
+/** The `?name=value&...` query an include line may end with, after its `.md`. */
+const QUERY_SUFFIX = /^(.*\.md)(\?[^?\s]*=\S*)$/;
+
 /**
- * Resolve an include path to its ordered candidates plus any namespace
- * diagnostic. Use this when the caller wants to report WHY a `~namespace`
- * reference failed; {@link resolveIncludeCandidates} is the plain-list form.
+ * Splits the query off an include path: `a/b.md?name=value` gives the path
+ * `a/b.md` and the query `?name=value`.
+ *
+ * @param raw - The include path, without its `@`.
+ */
+export function splitIncludeQuery(raw: string): { path: string; query: string } {
+  const match = QUERY_SUFFIX.exec(raw);
+  return match === null ? { path: raw, query: "" } : { path: match[1]!, query: match[2]! };
+}
+
+/** The group of one literal path followed by its `.tpl.` twin. */
+function literalGroups(candidate: string): IncludeGroup[] {
+  return withTemplateTwins([candidate]).map((entry) => ({ paths: [entry], glob: false }));
+}
+
+/**
+ * Resolve an include path to its ordered groups plus any diagnostic. Nothing is
+ * read from disk. Use this when the caller wants to report WHY a `~` or `#`
+ * reference failed; {@link resolveIncludeFiles} reads the disk and returns the
+ * files.
  *
  * @param rawPath - The include path with the leading `@` already stripped.
  * @param opts - Aliases, variable scope, including directory and optional namespace resolver.
- * @returns The candidate list and, when a namespace lookup failed, the reason.
+ * @returns The groups, the flat candidate list and, when a reference failed, the reason.
  */
 export function resolveInclude(rawPath: string, opts: IncludeResolveOptions): IncludeResolution {
   const aliases = opts.aliases ?? {};
   const scope = opts.scope ?? {};
-  const substituted = expandHome(substituteVars(rawPath, scope));
+  const withQuery = expandHome(substituteVars(rawPath, scope));
+  const substituted = splitIncludeQuery(withQuery).path;
+  const glob = hasGlob(substituted);
 
-  // 1. Substituted (or home-expanded) to an absolute path → that, and its twin.
+  const finish = (
+    groups: IncludeGroup[],
+    extra: Pick<IncludeResolution, "namespaceIssue" | "hashIssue"> = {}
+  ): IncludeResolution => ({
+    groups,
+    candidates: [...new Set(groups.flatMap((group) => group.paths))],
+    glob,
+    ...extra,
+  });
+  const single = (candidate: string): IncludeGroup[] =>
+    glob ? [{ paths: [candidate], glob: true }] : literalGroups(candidate);
+
+  // 1. Substituted (or home-expanded) to an absolute path: that, and its twin.
   if (path.isAbsolute(substituted)) {
-    return { candidates: withTemplateTwins([path.normalize(substituted)]) };
+    return finish(single(path.normalize(substituted)));
   }
 
-  const candidates: string[] = [];
+  const groups: IncludeGroup[] = [];
   let namespaceIssue: NamespaceIssue | undefined;
+  let hashIssue: string | undefined;
 
-  // 2. Alias bases (ordered), if the first segment is a registered alias.
+  // 2. Alias bases (ordered), if the first segment is a registered alias. A
+  //    `#` name is an alias too: the registry puts every `#name` in the map.
   const { key, rest } = splitAliasKey(substituted);
   if (key && Object.prototype.hasOwnProperty.call(aliases, key)) {
-    for (const base of aliases[key]) {
-      candidates.push(path.resolve(base, rest));
-    }
+    for (const base of aliases[key]!) groups.push(...single(path.resolve(base, rest)));
+  } else if (key.startsWith("#") && rest.length > 0) {
+    const known = Object.keys(aliases).filter((name) => name.startsWith("#"));
+    hashIssue =
+      `There is no built-in name "${key}" available here.\n` +
+      (known.length > 0
+        ? `Available names: ${known.sort().join(", ")}.`
+        : "No '#' names are available in this project.");
   }
 
-  // 3. Recipe namespace, only for a `~`-sigil key naming something after it.
-  //    Aliases above already had their turn, so a built-in or user alias of the
-  //    same name is always preferred.
-  if (opts.namespaceResolver && key.startsWith("~") && key.length > 1 && rest.length > 0) {
-    const namespace = key.slice(1);
+  // 3. A recipe reference: a `~` sigil, then namespace, recipe and path. Only
+  //    when a resolver was supplied and a `/` follows, so a file that is
+  //    simply named `~notes.md` is still a relative path.
+  if (
+    opts.namespaceResolver &&
+    substituted.startsWith("~") &&
+    substituted.length > 1 &&
+    substituted.includes("/")
+  ) {
+    const reference = withQuery.slice(1);
     const fromFile = opts.fromFile ?? opts.baseDir;
-    const resolution = opts.namespaceResolver.resolve({ namespace, rest, fromFile });
+    const resolution = opts.namespaceResolver.resolve({ reference, fromFile });
 
-    if (resolution.kind === "candidates" && resolution.candidates.length > 0) {
-      candidates.push(...resolution.candidates.map((c) => path.normalize(c)));
-    } else {
-      namespaceIssue = { namespace, rest, fromFile, resolution };
+    if (resolution.kind === "candidates" && resolution.glob === true) {
+      groups.push({ paths: resolution.candidates.map((c) => c), glob: true });
+    } else if (resolution.kind === "candidates" && resolution.candidates.length > 0) {
+      for (const candidate of resolution.candidates) {
+        groups.push(...literalGroups(path.normalize(candidate)));
+      }
+    } else if (resolution.kind !== "candidates") {
+      namespaceIssue = { reference, fromFile, resolution };
     }
   }
 
   // 4. Relative fallback: the FULL substituted path under the including dir.
-  candidates.push(path.resolve(opts.baseDir, substituted));
+  groups.push(...single(path.resolve(opts.baseDir, substituted)));
 
-  // 5. Each candidate's `.tpl.` twin right after it; de-duped, order kept.
-  return { candidates: withTemplateTwins(candidates), namespaceIssue };
+  return finish(groups, {
+    ...(namespaceIssue === undefined ? {} : { namespaceIssue }),
+    ...(hashIssue === undefined ? {} : { hashIssue }),
+  });
+}
+
+/**
+ * Expands a glob pattern to the files it matches, sorted by path bytewise so
+ * the order is the same on every machine.
+ *
+ * @param pattern - An absolute glob pattern.
+ */
+function expandPattern(pattern: string): string[] {
+  return globSync(pattern, { absolute: true, nodir: true, dot: true }).sort(compareBytewise);
+}
+
+/**
+ * Resolve an include path to the files it names. The groups are tried in
+ * order and the first that names any file supplies all of them: a plain path
+ * is one file, a glob is every file it matches in sorted path order.
+ *
+ * @param rawPath - The include path with the leading `@` already stripped.
+ * @param opts - Aliases, variable scope, including directory and optional namespace resolver.
+ * @returns The files (empty when nothing was found) and what was tried.
+ */
+export function resolveIncludeFiles(rawPath: string, opts: IncludeResolveOptions): IncludeFiles {
+  const resolution = resolveInclude(rawPath, opts);
+  const out: IncludeFiles = {
+    files: [],
+    candidates: resolution.candidates,
+    glob: resolution.glob,
+    ...(resolution.namespaceIssue === undefined ? {} : { namespaceIssue: resolution.namespaceIssue }),
+    ...(resolution.hashIssue === undefined ? {} : { hashIssue: resolution.hashIssue }),
+  };
+  for (const group of resolution.groups) {
+    const found = group.glob
+      ? group.paths.flatMap(expandPattern)
+      : group.paths.filter((candidate) => fs.existsSync(candidate));
+    if (found.length > 0) {
+      out.files = [...new Set(found)];
+      return out;
+    }
+  }
+  return out;
 }
 
 /**
@@ -203,7 +331,7 @@ export function resolveInclude(rawPath: string, opts: IncludeResolveOptions): In
  *
  * @param rawPath - The include path with the leading `@` already stripped.
  * @param opts - Aliases, variable scope, including directory and optional namespace resolver.
- * @returns Ordered, de-duplicated absolute candidate paths.
+ * @returns Ordered, de-duplicated absolute candidate paths (patterns, for a glob).
  */
 export function resolveIncludeCandidates(rawPath: string, opts: IncludeResolveOptions): string[] {
   return resolveInclude(rawPath, opts).candidates;
@@ -238,10 +366,10 @@ export function resolveAliasPrefix(p: string, aliases: AliasMap): string[] {
  * Each user alias value may be a single string or an array of strings, and
  * each is run through ${var} substitution against `scope`.
  *
- * User aliases may NOT use names beginning with `~` (reserved for built-ins);
+ * User aliases may NOT use names beginning with `~` or `#` (reserved);
  * such entries are rejected via `onError` and ignored.
  *
- * @param opts.builtIns - Built-in alias map (already absolute; `~`-prefixed names).
+ * @param opts.builtIns - Built-in alias map (already absolute; `#`-prefixed names).
  * @param opts.userAliases - Ordered list of user `_aliases` blocks (root, then project).
  * @param opts.scope - Variable scope for substituting alias values.
  * @param opts.onError - Called with a message for each rejected/invalid entry.
@@ -266,9 +394,10 @@ export function buildAliasMap(opts: {
   for (const block of opts.userAliases ?? []) {
     if (!block) continue;
     for (const [name, value] of Object.entries(block)) {
-      if (name.startsWith("~")) {
+      if (name.startsWith("~") || name.startsWith("#")) {
         opts.onError?.(
-          `Alias "${name}" is invalid: names beginning with "~" are reserved for built-in aliases.`
+          `Alias "${name}" is invalid: names beginning with "~" or "#" are reserved ` +
+            `("~" for the home directory and recipe namespaces, "#" for built-in names).`
         );
         continue;
       }
