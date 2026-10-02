@@ -408,9 +408,7 @@ export default class RecipeShow extends BaseCommand {
       destination:
         entry.destinations.length > 0
           ? entry.destinations.join(", ")
-          : entry.kind === "config"
-            ? "loaded as a config layer, so nothing is written"
-            : `nowhere: this project sets no 'recipeOutputs.${entry.kind}' directory`,
+          : noDestinationText(entry.kind),
     }));
 
     for (const line of renderTable(CONTENT_COLUMNS, rows, { indent: INDENT })) {
@@ -419,3 +417,23 @@ export default class RecipeShow extends BaseCommand {
   }
 }
 
+/**
+ * What to say where a content kind has no destination directory: each kind
+ * reaches the project in its own way.
+ *
+ * noDestinationText("memories"); // -> "included in an agent's instructions by an include line, so nothing is written"
+ *
+ * @param kind - The content kind.
+ */
+function noDestinationText(kind: string): string {
+  switch (kind) {
+    case "config":
+      return "loaded as a config layer, so nothing is written";
+    case "memories":
+      return "reaches an agent through an include line in its instructions, so nothing is written";
+    case "skills":
+      return "nowhere: this project sets no 'recipes.skills.outputs' directory";
+    default:
+      return `nowhere: this project has no destination for ${kind} yet`;
+  }
+}

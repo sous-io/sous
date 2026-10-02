@@ -362,7 +362,7 @@ export type RemoveRepoOptions = {
   dryRun?: boolean;
   /**
    * The resolved settings scope, used to work out which output files the
-   * removed recipes wrote. Without it a `recipeOutputs` destination holding a
+   * removed recipes wrote. Without it a `recipes.skills.outputs` destination holding a
    * `${var}` cannot be resolved, and the file list is left out of the report.
    */
   scope?: VarScope;
