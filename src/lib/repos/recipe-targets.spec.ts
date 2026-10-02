@@ -92,21 +92,17 @@ describe("destinationsFor()", () => {
    *
    * destinationsFor("memories", { sousDir, settings }); // -> []
    */
-  it("should return nothing for an unconfigured kind", () => {
-    expect(destinationsFor("memories", { sousDir, settings: makeSettings() })).toEqual([]);
-  });
-
   /**
    * destinationsFor should substitute `${var}` in every configured destination
    * and normalize the result, so a destination written against the project's own
    * variables lands where it reads.
    *
-   * destinationsFor("skills", { settings: { recipeOutputs: { skills: ["${root}/x"] } } });
+   * destinationsFor("skills", { settings: { recipes: { skills: { outputs: ["${root}/x"] } } } });
    * // -> ["/a/project/x"]
    */
   it("should substitute variables in configured destinations", () => {
     const settings = makeSettings({
-      recipeOutputs: { skills: ["${root}/.claude/skills", "${root}/.codex/skills"] },
+      recipes: { skills: { outputs: ["${root}/.claude/skills", "${root}/.codex/skills"] } },
     });
 
     expect(
@@ -191,20 +187,22 @@ describe("buildRecipeTargets()", () => {
   });
 
   /**
-   * buildRecipeTargets should skip a content kind the project has configured no
-   * destination for, and say so once, naming the config key and showing the
-   * shape of an entry.
+   * buildRecipeTargets should skip prompts, which have no destination yet, and
+   * say so once, naming the `recipes` config key. Memories are never copied and
+   * produce no warning.
    *
    * buildRecipeTargets(...).warnings;
-   * // -> ["Some subscribed recipes contribute memories files, ... 'recipeOutputs' ..."]
+   * // -> ["Some subscribed recipes contribute prompts, ... 'recipes' ..."]
    */
-  it("should warn once about a kind with nowhere to go", () => {
+  it("should warn once about prompts and copy no memories", () => {
     writeManifest([
       { kind: "skills", include: ["skills/**/*.md"] },
       { kind: "memories", include: ["memories/**/*.md"] },
+      { kind: "prompts", include: ["prompts/**/*.md"] },
     ]);
     write(path.join(recipeDir, "skills", "greeting", "SKILL.md"), "# hello");
     write(path.join(recipeDir, "memories", "notes.md"), "# notes");
+    write(path.join(recipeDir, "prompts", "p.md"), "# p");
 
     const result = buildRecipeTargets({
       sousDir,
@@ -214,8 +212,8 @@ describe("buildRecipeTargets()", () => {
 
     expect(result.targets).toHaveLength(1);
     expect(result.warnings).toHaveLength(1);
-    expect(result.warnings[0]).toContain("memories");
-    expect(result.warnings[0]).toContain("recipeOutputs");
+    expect(result.warnings[0]).toContain("prompts");
+    expect(result.warnings[0]).toContain("'recipes'");
   });
 
   /**

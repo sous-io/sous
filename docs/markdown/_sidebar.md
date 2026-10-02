@@ -31,3 +31,4 @@
   - [0010: The index describes each version's dependencies and questions](adrs/0010-index-describes-recipes.md)
   - [0011: `sous update` updates sous through the package managers](adrs/0011-self-update.md)
   - [0012: Recipes do not install Sous plugins](adrs/0012-recipes-and-plugins.md)
+  - [0013: One ref resolver, and recipe memories through a `#memories` view](adrs/0013-one-ref-resolver.md)

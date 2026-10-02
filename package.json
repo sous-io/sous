@@ -57,6 +57,7 @@
     "@oclif/core": "^4",
     "chokidar": "^5.0.0",
     "glob": "^13.0.6",
+    "inversify": "^8.2.3",
     "jsonc-parser": "^3.3.1",
     "liquidjs": "^10.25.0",
     "minimatch": "^10.2.4",

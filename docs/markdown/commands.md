@@ -67,8 +67,8 @@ Every topic answers to both spellings of its name: `repo` and `repos`, `subscrip
 ### `sous init [DIRECTORY]`
 Sets a project up for sous: writes its `.sous/` directory, then runs the first build. It is the one command that
 runs before a config exists, and the starting point for a project that has never used sous. It writes a commented
-primary config, a starter prompt at `.sous/memories/AGENTS.md` that the config compiles to `AGENTS.md` at the
-project root, `.sous/.env` and `.sous/.env.local.example`, and the sous-managed block in `.sous/.gitignore`. A
+primary config, a starter prompt at `.sous/memories/AGENTS.tpl.md` that the config compiles to `AGENTS.md` at the
+project root (it holds the one line, `@#memories/**/*.md`, that includes every memory your subscribed recipes publish), `.sous/.env` and `.sous/.env.local.example`, and the sous-managed block in `.sous/.gitignore`. A
 project that has a `package.json` also gains `@sous-io/sous` in its `devDependencies`, at exactly the running
 version, unless it already depends on it; nothing is installed, so run your package manager's install afterwards.
 The first build compiles the starter prompt and the `core` skills, and pins them in `.sous/sous.lock.json`.
@@ -103,9 +103,13 @@ repositories that ask for newer versions. Every command that builds (`init`, `bu
 `repo remove`, `repo unlink`, `subscription add`, `subscription remove`, `subscription update`) runs this same
 build, so each one prints the same things.
 
-A compile error (a missing or circular include, a template that fails to render, a file sous cannot read) fails
-the build. Every target is still compiled and every error is listed, then the build exits `1`. An output whose
+A compile error (a missing or circular include, a line that looks like an include but cannot be read as one, a
+template that fails to render, a file sous cannot read) fails the build. Every target is still compiled and every error is listed, then the build exits `1`. An output whose
 target had an error is not written, so the copy from the last good build stays in place.
+
+A build also warns about every memory an active recipe publishes that no output includes, naming the line to add
+(`@#memories/**/*.md`) and the `recipes.memories.exclude` opt-out; see
+[Recipe memories](repositories-consuming.md#recipe-memories).
 
 A build also lists each recipe this project uses that has a newer version within the range
 declared for it, beside the version pinned. It moves no pin; only always-pull moves one. The build reads upstream

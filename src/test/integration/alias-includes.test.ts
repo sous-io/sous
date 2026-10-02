@@ -20,17 +20,17 @@ describe("alias @include resolution (real compile path)", () => {
     return abs;
   }
 
-  it("resolves a ~alias include from a directory outside the entry's tree", async () => {
+  it("resolves a #name include from a directory outside the entry's tree", async () => {
     tmp = makeTmpDir("alias-inc-");
     // "shared" library, somewhere else entirely
     write("shared/snippet.md", "SHARED SNIPPET BODY");
     // project entry that pulls it in by alias
-    const entry = write("project/AGENTS.tpl.md", "# Top\n\n@~lib/snippet.md\n");
+    const entry = write("project/AGENTS.tpl.md", "# Top\n\n@#lib/snippet.md\n");
     const dest = path.join(tmp.path, "out/AGENTS.md");
 
     const compiler = new CompilationService();
     const ok = await compiler.compile({
-      aliases: { "~lib": [path.join(tmp.path, "shared")] },
+      aliases: { "#lib": [path.join(tmp.path, "shared")] },
       includeScope: {},
       targets: [{ rootInputPath: entry, outputs: [{ destinationFile: dest, vars: {} }] }],
     });
@@ -75,12 +75,12 @@ describe("alias @include resolution (real compile path)", () => {
 
   it("errors and writes nothing when no candidate exists", async () => {
     tmp = makeTmpDir("alias-inc-");
-    const entry = write("p/entry.tpl.md", "before\n@~lib/missing.md\nafter\n");
+    const entry = write("p/entry.tpl.md", "before\n@#lib/missing.md\nafter\n");
     const dest = path.join(tmp.path, "out/entry.md");
 
     const compiler = new CompilationService();
     const ok = await compiler.compile({
-      aliases: { "~lib": [path.join(tmp.path, "shared")] },
+      aliases: { "#lib": [path.join(tmp.path, "shared")] },
       targets: [{ rootInputPath: entry, outputs: [{ destinationFile: dest, vars: {} }] }],
     });
 

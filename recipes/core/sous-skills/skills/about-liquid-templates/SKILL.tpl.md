@@ -92,7 +92,7 @@ Include another file at render time (path **relative to the template file's dire
 {% endraw %}
 
 `render` resolves paths relative to the template file. For files outside that tree, use
-a recipe reference (`@~<namespace>/<recipe>/...`), a path **alias** (`@~project/...`, or a
+a recipe reference (`@~<namespace>/<recipe>/...`), a path **alias** (`@#project/...`, or a
 user-defined alias), a home-relative path (`@~/...`) or a `@`-prefixed `${var}` path; the
 same resolution as `@include` (see below) works in `render` too.
 
@@ -107,23 +107,24 @@ The `@path` syntax is processed by the build system before LiquidJS runs. It inc
 a file's content inline. Write `@` immediately followed by a `.md` path on its own line
 with nothing else on that line.
 
-`@include` works in both `.tpl.` and plain `.md` files. Included content is subject to
-LiquidJS rendering if the parent file is a `.tpl.` (so a Liquid tag inside the included
-file runs in the parent's render pass).
+`@include` works in both `.tpl.` and plain `.md` files. A file's own name decides whether it
+renders, every time: a `.tpl.` file always renders as Liquid and any other file never does, wherever
+it is included from. Each included file renders on its own, by its own name, with the including
+output's variables, and its text is then placed where the line was. A plain `.md` file that holds
+{% raw %}`{{ tags }}`{% endraw %} therefore keeps them verbatim; rename it `.tpl.md` when it needs rendering.
 
 The engine sets both `strictVariables: false` and `strictFilters: false`. An undefined
 variable renders as an empty string, and an **unknown filter silently no-ops**, passing
 its input through unchanged. Neither mistake raises an error, so a typo in a variable or
 filter name shows up only as missing or unfiltered output.
 
-### Gotcha: `@include` fires inside fenced code blocks
+### Fenced code blocks, repeats and malformed lines
 
-The `@include` processor runs on the raw file content *before* LiquidJS and has no
-markdown awareness whatsoever; it matches any line that is nothing but an `@`-prefixed
-`.md` path. A fenced code block does not protect it: an `@path.md` line inside triple
-backticks is still executed and replaced with the file's content. There is no escape
-syntax. To show an `@`-path as an example, put something else on the line (indent it,
-prefix it with a word, or wrap it in backticks inline).
+A line inside a fenced code block (``` or ~~~) is never an include, so an `@path.md` example
+inside a fence shows as written. The same file may be included in more than one place; a circular
+include is an error. A line that looks like an include (one word starting with `@`, holding a `/` or
+`.md`, or starting with `~`, `#`, `.` or `$`) but cannot be resolved fails the build, naming the file
+and the line; a line like `@alice thanks` is plain text.
 
 ### Path forms
 
@@ -133,12 +134,14 @@ A `@`-path may be any of:
 - **Variable-substituted**: `@${projectRoot}/prompts/x.md`; `${var}` is
   substituted before resolving; if the result is absolute it is used directly.
 - **Aliased**: `@<alias>/rest.md`, where the first segment names a registered alias.
+- **A glob**: `*`, `**`, `?`, `[..]` and `{a,b}` after substitution, as in `entryGlob`; it
+  includes every file it matches, in bytewise path order.
 
 ### Recipe references and path aliases
 
 The first path segment, up to the first `/` or `:` (both separators work, so `@a/b.md`
-is the same as `@a:b.md`), is matched first against the alias registry and then, when it begins with
-`~`, against the recipe namespaces this project or recipe can address.
+is the same as `@a:b.md`), is matched first against the alias registry (which holds the `#` names) and then, when it begins
+with `~`, against the recipe namespaces this project or recipe can address.
 
 The normal way to reach a file that another recipe publishes is a **recipe reference**,
 written `@~<namespace>/<recipe>/<path inside that recipe>`:
@@ -152,10 +155,15 @@ may address every recipe the project's lockfile pins, whatever brought it in. An
 is an error naming what was missing, so a reference can never quietly pick up a recipe
 nobody asked for.
 
-Built-in **aliases** are reserved, always begin with `~`, and are consulted before recipe
-namespaces. There is exactly one:
+Built-in names are reserved, begin with `#` (names sous or a plugin registers), and are consulted
+before recipe namespaces:
 
-- `@~project/...` → the consuming project's root.
+- `@#project/...` → the consuming project's root.
+- `@#memories/**/*.md` → a **view**: every memory published by a recipe this project holds
+  directly (a subscription, or a co-subscription of one), at the virtual path
+  `#memories/<namespace>/<recipe>/<path>`, in dependency order. A recipe held only through
+  `depends` contributes none. The `recipes.memories.first` and `recipes.memories.exclude` config
+  lists reorder and filter it.
 
 A bare `@~/...` is not an alias: the sigil followed only by a separator is the home
 directory, so `@~/notes/context.md` includes a file from your home directory.
@@ -168,7 +176,7 @@ Everything else sous once shipped inside its own package is published as a recip
 a recipe reference is what reaches it.
 
 Projects register their own aliases in settings via an `_aliases` block (root and/or
-project level); names may **not** start with `~` (reserved). An alias value is a string
+project level); names may **not** start with `~` or `#` (reserved). An alias value is a string
 or an array of strings (each may use `${var}`):
 
 ```

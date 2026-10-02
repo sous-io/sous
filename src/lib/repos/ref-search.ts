@@ -1,7 +1,7 @@
 /**
  * What was searched when a ref matched nothing.
  *
- * Resolving a ref itself lives in `src/lib/refs/`, which every command shares.
+ * Resolving a ref itself lives in `src/services/ref-resolver/`, which every command shares.
  * All that is left here is the one thing only a repository search can say: which
  * repositories were actually looked in, and which were trusted but unreadable,
  * so the reader can tell "the name is wrong" from "the repository holding it

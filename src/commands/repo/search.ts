@@ -21,7 +21,7 @@ import {
 } from "../../lib/repos/catalog-display.js";
 import { readEffectiveLinks } from "../../lib/repos/links.js";
 import { renderTable, type TableColumn } from "../../utils/table.js";
-import { namespaceOfKey } from "../../lib/refs/parse.js";
+import { namespaceOfKey } from "../../services/ref-resolver/index.js";
 import { browsingFlags } from "../../utils/flags.js";
 import {
   blankLine,

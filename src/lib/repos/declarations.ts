@@ -14,9 +14,16 @@
 
 import type { DependencyKind } from "./formats/common.js";
 import type { IndexVersion } from "./formats/index-file.js";
-import { isNamedReading, namespaceOfKey, parseRef, refKey } from "../refs/parse.js";
-import { RefSource } from "../refs/scopes.js";
-import { settleDependency, type RecordedDependencies } from "../refs/settle.js";
+import {
+  RefSource,
+  isNamedRef,
+  locationOf,
+  namespaceOfKey,
+  settleDependency,
+  shortKey,
+  sharedRefResolver,
+  type RecordedDependencies,
+} from "../../services/ref-resolver/index.js";
 
 /** A manifest's two dependency lists, each entry exactly as it was written. */
 export type DependencyLists = {
@@ -112,10 +119,12 @@ export function declarationFor(
         // validated; here it simply covers nothing.
         continue;
       }
-      if (reading === undefined || !isNamedReading(reading)) continue;
+      if (reading === undefined || !isNamedRef(reading)) continue;
 
-      const named = reading.recipe !== undefined;
-      const covers = named ? refKey(reading) === key : namespaceOfKey(key) === reading.namespace;
+      const named = reading.kind === "recipe";
+      const covers = named
+        ? shortKey(reading) === key
+        : namespaceOfKey(key) === reading.name;
       if (covers) gathered = foldDeclaration(gathered, { written, kind, named });
     }
   }
@@ -152,12 +161,13 @@ export function indexDependencyLists(
  */
 export function describeDeclaration(declared: string): string {
   try {
-    const readings = parseRef(declared, RefSource.Manifest);
-    const only = readings[0]!;
-    if (readings.length === 1 && isNamedReading(only) && only.recipe === undefined) {
-      return only.location === undefined
-        ? `the whole '${only.namespace}' namespace`
-        : `the whole '${only.namespace}' namespace of ${only.location.identity}`;
+    const { refs } = sharedRefResolver().parse(declared, RefSource.Manifest);
+    const only = refs[0]!;
+    if (refs.length === 1 && only.kind === "namespace") {
+      const location = locationOf(only);
+      return location === undefined
+        ? `the whole '${only.name}' namespace`
+        : `the whole '${only.name}' namespace of ${location.identity}`;
     }
   } catch {
     // Shown as it was written; the reader sees the bad entry.

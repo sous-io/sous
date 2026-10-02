@@ -3,7 +3,7 @@ import path from "node:path";
 import { Liquid, type FS } from "liquidjs";
 import filterRegistrars from "./filters/index.js";
 import tagRegistrars from "./tags/index.js";
-import { resolveInclude, type AliasMap } from "../lib/include-resolver.js";
+import { resolveIncludeFiles, type AliasMap, type ViewMap } from "../lib/include-resolver.js";
 import {
   formatNamespaceProblem,
   type NamespaceResolver,
@@ -13,9 +13,11 @@ import {
 export type EngineAliasOptions = {
   /** Resolved alias map (name → ordered base dirs). */
   aliases?: AliasMap;
+  /** The files each view lists, so a render path may name `#memories/...`. */
+  views?: ViewMap;
   /** Variable scope for `${var}` substitution in render paths. */
   scope?: Record<string, string>;
-  /** Resolver consulted for a `~namespace` first segment in a render path. */
+  /** Resolver consulted for a `~` recipe reference in a render path. */
   namespaceResolver?: NamespaceResolver;
   /**
    * Absolute path of the template being rendered, handed to the namespace
@@ -26,13 +28,14 @@ export type EngineAliasOptions = {
 };
 
 /**
- * A node-backed LiquidJS FS that additionally understands alias and namespace
- * render paths — `{% render "@~project/x.md" %}`, `{% render "@docs/y.md" %}`,
- * `{% render "@${var}/z.md" %}` and `{% render "~workflow/task-files/x.md" %}` —
- * resolving them through the same alias/namespace/var/relative candidate logic
- * as `@include`. The leading `@` is optional for a `~`-sigil path, since `~`
- * already marks the path as symbolic rather than relative. Every other path
- * uses standard root-based resolution.
+ * A node-backed LiquidJS FS that additionally understands alias, `#` name and
+ * recipe render paths: `{% render "#project/x.md" %}`, `{% render "@docs/y.md" %}`,
+ * `{% render "@${var}/z.md" %}` and `{% render "~workflow/task-files/x.md" %}`.
+ * They resolve through the same alias/`#`/recipe/var/relative candidate logic
+ * as `@include`, and a glob renders the first file it matches. The leading `@`
+ * is optional for a `~` or `#` path, since the sigil already marks the path as
+ * symbolic rather than relative. Every other path uses standard root-based
+ * resolution.
  *
  * @param opts - Alias map, variable scope, namespace resolver and including file.
  * @returns A LiquidJS FS implementation.
@@ -42,27 +45,31 @@ function createAliasFS(opts: EngineAliasOptions): FS {
   const scope = opts.scope ?? {};
 
   /**
-   * Resolve an `@`-path or `~`-path to its first existing candidate, or the
-   * first candidate. Returns null for ordinary paths so the caller falls back
-   * to root-based resolution. Throws when a `~namespace` reference resolved to
-   * nothing and the resolver explained why, so the reason reaches the user
+   * Resolve an `@`-path, `~`-path or `#`-path to its first existing file, or
+   * the first candidate. Returns null for ordinary paths so the caller falls
+   * back to root-based resolution. Throws when a `~` or `#` reference resolved
+   * to nothing and the resolver explained why, so the reason reaches the user
    * instead of a bare "file not found".
    */
   const resolveSymbolic = (file: string, dir: string): string | null => {
     const isAt = file.startsWith("@");
-    if (!isAt && !file.startsWith("~")) return null;
+    if (!isAt && !file.startsWith("~") && !file.startsWith("#")) return null;
 
     const rawPath = isAt ? file.slice(1) : file;
-    const { candidates, namespaceIssue } = resolveInclude(rawPath, {
+    const { files, candidates, namespaceIssue, hashIssue } = resolveIncludeFiles(rawPath, {
       aliases,
+      views: opts.views,
       scope,
       baseDir: dir,
       namespaceResolver: opts.namespaceResolver,
       fromFile: opts.fromFile ?? dir,
     });
 
-    const existing = candidates.find((c) => fs.existsSync(c));
-    if (existing) return existing;
+    if (files[0] !== undefined) return files[0];
+
+    if (hashIssue) {
+      throw new Error(`Cannot render "${file}"\n  ${hashIssue.split("\n").join("\n  ")}`);
+    }
 
     if (namespaceIssue) {
       throw new Error(
@@ -100,7 +107,7 @@ function createAliasFS(opts: EngineAliasOptions): FS {
  * @param roots - Filesystem root paths searched (in order) when resolving
  *   `{% render %}` partials (relative paths resolve against these).
  * @param aliasOpts - Optional alias map, variable scope and namespace resolver,
- *   enabling `@alias/...`, `@${var}/...` and `~namespace/...` paths in
+ *   enabling `@alias/...`, `#name/...`, `@${var}/...` and `~namespace/...` paths in
  *   `{% render %}` (parity with `@include`).
  */
 export function createLiquidEngine(roots: string[], aliasOpts: EngineAliasOptions = {}): Liquid {

@@ -24,15 +24,19 @@
  * can tell.
  *
  * A project with no lockfile entries gets no resolver at all, so a project that
- * uses no repositories behaves exactly as it did before: `~` in an include line
- * means an alias and nothing else.
+ * uses no repositories behaves exactly as it did before: a `~` reference in an
+ * include line is just a relative path.
  */
 
 import semver from "semver";
 import type { Settings } from "../settings.js";
 import { resolveStoreRoot } from "../sous-home.js";
-import { RefSource } from "../refs/scopes.js";
-import { namespaceOfKey, parseShortRef, refKey } from "../refs/parse.js";
+import {
+  RefSource,
+  namespaceOfKey,
+  parseNamedRef,
+  shortKey,
+} from "../../services/ref-resolver/index.js";
 import {
   StaticNamespaceResolver,
   type DroppedRecipe,
@@ -64,7 +68,8 @@ export type ProjectNamespaceResolverOptions = {
  * locks no recipes at all.
  *
  * createProjectNamespaceResolver({ sousDir, settings })
- * // -> resolves "@~workflow/task-files/_partials/resume.md" to the pinned
+ * // -> resolves "@~workflow/task-files/_partials/resume.md" (or a glob such as
+ * //    "@~*" + "/*" + "/memories/*.md") to the pinned
  * //    recipe directory, when the project (or the including recipe) may address it
  *
  * @param options - The project's `.sous/` directory, its config and the environment.
@@ -82,10 +87,12 @@ export function createProjectNamespaceResolver(
   if (locked.length === 0) return undefined;
 
   const recipes: Record<string, string> = {};
+  const repos: Record<string, string> = {};
   const dependencies: Record<string, string[]> = {};
 
   for (const recipe of locked) {
     recipes[recipe.key] = recipe.dir;
+    repos[recipe.key] = recipe.repo;
 
     // Every recipe holding this one declared it, in `depends` or `subscribes`,
     // and the lockfile records the key that declaration resolved to.
@@ -98,6 +105,7 @@ export function createProjectNamespaceResolver(
   // lockfile pins, and those are exactly the recipes this resolver knows.
   return new StaticNamespaceResolver({
     recipes,
+    repos,
     dependencies,
     explainMissing: (recipe) => explainUnpinnedRecipe(recipe, options),
   });
@@ -131,7 +139,7 @@ export function explainUnpinnedRecipe(
     if (entry?.enabled !== false) continue;
     let ref: string;
     try {
-      ref = refKey(parseShortRef(key, RefSource.Config));
+      ref = shortKey(parseNamedRef(key, RefSource.Config));
     } catch {
       // The config schema already refuses a key that is not a ref.
       continue;

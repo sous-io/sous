@@ -17,7 +17,7 @@ import { subscriptionServiceFor } from "../../lib/repos/subscription-service.js"
 import { resolveStoreSettings } from "../../lib/repos/store/settings.js";
 import type { StoreKey } from "../../lib/repos/store/contract.js";
 import { renderTable, type TableColumn } from "../../utils/table.js";
-import { splitRecipeKey } from "../../lib/refs/parse.js";
+import { splitRecipeKey } from "../../services/ref-resolver/index.js";
 import {
   blankLine,
   dryRunNotice,

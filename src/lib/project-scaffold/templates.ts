@@ -33,7 +33,7 @@ export type ProjectConfigFormat = (typeof PROJECT_CONFIG_FORMATS)[number];
  * compiled output (`AGENTS.md` at the project root) are never mistaken for one
  * another.
  */
-export const STARTER_PROMPT_RELATIVE_PATH = "memories/AGENTS.md";
+export const STARTER_PROMPT_RELATIVE_PATH = "memories/AGENTS.tpl.md";
 
 /** The name of the file the starter prompt is compiled into, at the project root. */
 export const STARTER_OUTPUT_NAME = "AGENTS.md";
@@ -98,14 +98,19 @@ export const config = {
     ],
   },
 
-  // Where the recipes this project subscribes to write their files. Every
-  // project subscribes to the \`core\` namespace on its own, which is how the
-  // skills that teach an agent about sous reach \`.claude/skills\`. Memories and
-  // prompts have no default home; name one to receive them.
-  recipeOutputs: {
-    skills: ["\${projectRoot}/.claude/skills"],
-    // memories: ["\${projectRoot}/.claude/memories"],
-    // prompts: ["\${projectRoot}/.claude/prompts"],
+  // What to do with the content the recipes this project subscribes to publish.
+  // Every project subscribes to the \`core\` namespace on its own, which is how
+  // the skills that teach an agent about sous reach \`.claude/skills\`. Memories
+  // are not copied anywhere: the starter prompt pulls them in with one include
+  // line, and the lists below (uncomment to use them) choose which come first
+  // and which are left out. An entry is a glob over \`namespace/recipe\`, or a
+  // regular expression written between two slashes.
+  recipes: {
+    skills: { outputs: ["\${projectRoot}/.claude/skills"] },
+    // memories: {
+    //   first: ["communication/*"],
+    //   exclude: ["tool-usage/automated-browser-tasks", "/^experimental\\//"],
+    // },
   },
 };
 `;
@@ -132,8 +137,8 @@ export function buildConfigJson(context: ProjectScaffoldContext): string {
         },
       ],
     },
-    recipeOutputs: {
-      skills: ["${projectRoot}/.claude/skills"],
+    recipes: {
+      skills: { outputs: ["${projectRoot}/.claude/skills"] },
     },
   };
   return `${JSON.stringify(config, null, 2)}\n`;
@@ -158,6 +163,9 @@ source, run \`sous build\`, and the compiled copy follows; never edit the compil
   each one in with a line holding only \`@sections/name.md\`.
 - The skills under \`.claude/skills\` are written by sous from the recipes this
   project subscribes to. \`sous recipe list\` shows what is available.
+
+{% comment %}This line pulls in the memories of every recipe this project subscribes to.{% endcomment %}
+@#memories/**/*.md
 `;
 }
 

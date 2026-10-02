@@ -34,7 +34,7 @@ import type { ResolvedRecipe } from "./resolver.js";
 import type { RecipeStoreLike, StoreKey } from "./store/contract.js";
 import { builtInProviders, requireProvider } from "./providers/index.js";
 import { repoIdentity } from "./identity.js";
-import { splitRecipeKey } from "../refs/parse.js";
+import { splitRecipeKey } from "../../services/ref-resolver/index.js";
 import type { ProviderOptions, RepoProvider } from "./providers/provider.js";
 
 /** What the lockfile needs to know about a repository. */

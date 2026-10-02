@@ -49,10 +49,12 @@ The fields in that example:
   `sous repo search`.
 - `contents` is what a subscriber receives: one group per kind (`skills`, `memories`, `prompts` or
   `config`), each with `include` globs and optional `exclude` globs, relative to the recipe folder.
-  The subscribing project decides where skills, memories and prompts land. A `config` file becomes
+  The subscribing project decides where skills land; memories are included into its instruction
+  files by one line, `@#memories/**/*.md` (see "Shipping Memories" below), and nothing takes
+  prompts yet. A `config` file becomes
   a config layer in the project, loaded under the project's own config so the project always wins;
   it MUST be `.json`, `.jsonc`, `.yaml` or `.yml`, and every key outside `_aliases`, `_vars`,
-  `compilation`, `recipeOutputs`, `runtimeContext`, `store` and `varMappings` is dropped with a
+  `compilation`, `recipes`, `runtimeContext`, `store` and `varMappings` is dropped with a
   warning. A recipe that only bundles others may leave `contents` out.
 - A recipe MAY install tool plugins (a plugin for a coding agent tool, such as a Claude Code
   plugin) and MUST NOT install a Sous plugin (one that extends sous itself). Sous plugins come only
@@ -161,13 +163,24 @@ Each entry names its target by where it lives:
 `local://` locators and `repo:` short names are refused: both are one project's private view of a
 repository, and a published manifest is read everywhere.
 
+## Shipping Memories
+
+A memory is a fragment of an agent's always-loaded instructions. Publish one with a `contents`
+group of `kind: memories`, for example `include: [memories/**/*.md]`. A plain `.md` file is copied
+as it is; name a file `*.tpl.md` when it needs the subscriber's answers. The recipe never says where
+a memory lands: a subscribing project includes the memories of every recipe it holds directly with
+one line, `@#memories/**/*.md`, at the virtual path `#memories/<namespace>/<recipe>/<path>` (the path
+being relative to the pattern's static base). A recipe held only through `depends` is a library and
+contributes none, and the subscriber's build warns about a published memory no output includes.
+
 ## Includes and Partials
 
 A line holding only `@~<namespace>/<recipe>/<path>.md`, starting at the first column, includes that
 file from a recipe at its pinned version. Inside a recipe it resolves only against the recipe
 itself and the recipes it lists under `depends` or `subscribes`; the path may not be absolute or
-contain `.` or `..` segments, and it MUST end in `.md` (`notes.md` also finds `notes.tpl.md`). A
-line inside a fenced code block is never an include.
+contain `.` or `..` segments, and it MUST end in `.md` (`notes.md` also finds `notes.tpl.md`). Any
+part may be a glob, which includes every match. A line inside a fenced code block is never an
+include, and a line that looks like an include but cannot be read as one fails the build.
 
 A **partial** is a short piece of text several skills share, kept in the recipe's `_partials/`
 folder beside `skills/`. As long as no `contents` glob covers `_partials/`, it is never installed on
@@ -179,12 +192,11 @@ What to review: $ARGUMENTS
 @~review/checklist/_partials/review-rules.md
 ```
 
-The included text is pasted in before rendering, so any Liquid inside a partial renders only when
-the including file is a `.tpl.` file, and then with that file's variables. Every compiled source in
-the official sous repositories is named `*.tpl.md`, partials included, so a partial MAY use template
-variables: they render in every file that includes it. For example, a partial holding
+A file's own name decides whether it renders: a `.tpl.` file always renders as Liquid, and any other
+file never does, wherever it is included from. So a partial that uses template variables MUST be named
+`*.tpl.md`, and it renders with the including output's variables in every file that includes it. For
+example, a partial holding
 `{% raw %}Task files live in {{ taskFileRoot }}.{% endraw %}` renders with the project's answer wherever it is included.
-Name a new partial `*.tpl.md` too.
 
 ## Source for this Skill
 

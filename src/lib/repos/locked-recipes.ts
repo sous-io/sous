@@ -33,7 +33,7 @@ import {
 } from "./load-manifest.js";
 import { readEffectiveLinks } from "./links.js";
 import { identitySegments } from "./identity.js";
-import { splitRecipeKey } from "../refs/parse.js";
+import { splitRecipeKey } from "../../services/ref-resolver/index.js";
 import { PROJECT_HOLDER } from "./formats/lockfile.js";
 
 /** One locked recipe, together with the directory its files are read from. */

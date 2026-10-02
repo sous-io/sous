@@ -1,6 +1,6 @@
 # ADR 0005: Follow-ups from the first project on the hand-off
 
-**Status:** Accepted, 2026-09-16.
+**Status:** Accepted, 2026-09-16. Amended by [ADR 0013](0013-one-ref-resolver.md), which decides rendering by each file's own name.
 
 This record amends [ADR 0003](0003-project-init.md) in one place (where `sous init` writes the
 starter prompt, and what it does to a `package.json`) and [ADR 0004](0004-project-install-handoff.md)

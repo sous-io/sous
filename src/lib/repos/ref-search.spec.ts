@@ -4,7 +4,7 @@ import type { IndexFile } from "./formats/index-file.js";
 
 /**
  * What a repository search says it looked in. Resolving a ref itself is covered
- * by `src/lib/refs/find.spec.ts`; all that is left here is the sentence a name
+ * by `src/services/ref-resolver/ref-resolver-service.spec.ts`; all that is left here is the sentence a name
  * that matched nothing is explained with.
  */
 

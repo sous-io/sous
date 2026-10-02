@@ -173,17 +173,46 @@ like `workflow/qa-helper` above, is fetched and pinned but stays out of your out
 
 ## Choose where the files land
 
-Recipe files compile the way one of your own `entryGlob` targets does, under the
-[`.tpl.` convention](configuration.md#templates-and-the-tpl-convention): a file with `.tpl.` in its
-name is rendered through LiquidJS and loses `.tpl.` on the way out, and anything else is copied
-verbatim. Where each content kind lands is your project's decision, under the
-[`recipeOutputs`](repositories-file-formats.md#recipeoutputs-where-the-files-land) config key, which takes a list of
-directories for each of `skills`, `memories` and `prompts`; for example
-`recipeOutputs: { skills: ["${projectRoot}/.claude/skills", "${projectRoot}/.codex/skills"] }`.
-Only `skills` has a default, `<project root>/.claude/skills`, because that is where every agent
-looks; a kind with no destination is skipped and the build says so once, naming the key. Recipe
-outputs are tracked like every other file sous writes, so `sous prune` removes what an unsubscribed
-recipe used to write and `sous clear` removes all of it; neither reaches into a linked checkout.
+Recipe files compile under the [`.tpl.` convention](configuration.md#templates-and-the-tpl-convention): a file
+with `.tpl.` in its name is rendered through LiquidJS and loses `.tpl.` on the way out, and anything else is copied
+verbatim. Skills are written to the directories named by the
+[`recipes`](repositories-file-formats.md#recipes-what-each-content-kind-does) config key; for example
+`recipes: { skills: { outputs: ["${projectRoot}/.claude/skills", "${projectRoot}/.codex/skills"] } }`. The
+default is `<project root>/.claude/skills`, because that is where every agent looks. Written skills are tracked
+like every other file sous writes, so `sous prune` removes what an unsubscribed recipe used to write and
+`sous clear` removes all of it; neither reaches into a linked checkout.
+
+## Recipe memories
+
+A memory is a recipe's fragment of an agent's instructions. Sous does not copy memories anywhere; your
+instruction source includes them. Put one line in the file your `AGENTS.md` or `CLAUDE.md` is built from:
+
+```text
+@#memories/**/*.md
+```
+
+`#memories` is a view: it lists the memories of every recipe you hold directly (a subscription to it, to its
+namespace, or a co-subscription of a recipe you hold) at the virtual path
+`#memories/<namespace>/<recipe>/<path>`, and the line includes each one. A recipe held only through `depends`
+adds none. `sous init` writes this line into its starter, `.sous/memories/AGENTS.tpl.md`.
+
+Memories come in dependency order (a recipe after the recipes it depends on, ties by recipe key). Two config
+lists under `recipes.memories` shape the rest, each entry a glob over `namespace/recipe` keys or a regular
+expression written `/.../`:
+
+```js
+recipes: {
+  memories: { first: ["communication/*"], exclude: ["tool-usage/automated-browser-tasks"] },
+}
+```
+
+- `first`: those recipes' memories lead.
+- `exclude`: those recipes' memories are left out; this is how you opt a recipe out on purpose.
+
+A glob narrows the view as it does any path: `@#memories/communication/**/*.md` includes only that namespace.
+When a build finds a memory an active recipe publishes that no include of any output reached (by exact path, glob
+or the view) and `exclude` does not name, it warns, naming the memory and the line to add. Subscribing alone
+includes nothing, and the warning is how that is never silent.
 
 ## Answer the questions
 

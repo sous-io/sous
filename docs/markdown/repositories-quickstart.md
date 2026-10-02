@@ -145,7 +145,7 @@ its name is rendered through LiquidJS and loses that segment (`SKILL.tpl.md` bec
 and any other file is copied verbatim. They are tracked like every file sous writes, so
 `sous prune` removes them when you unsubscribe. Where each kind lands is your project's decision,
 under
-[`recipeOutputs`](repositories-file-formats.md#recipeoutputs-where-the-files-land).
+[`recipes`](repositories-file-formats.md#recipes-what-each-content-kind-does).
 
 ## 6. Start a repository of your own
 

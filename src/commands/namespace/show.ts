@@ -85,8 +85,8 @@ export default class NamespaceShow extends BaseCommand {
     });
 
     const detail = flags.installed
-      ? describeInstalled(inputs, args.ref, describeNamespace, "namespace")
-      : describeNamespace(inputs, args.ref);
+      ? await describeInstalled(inputs, args.ref, describeNamespace, "namespace")
+      : await describeNamespace(inputs, args.ref);
 
     heading(`The namespace ${detail.namespace}`);
     blankLine();

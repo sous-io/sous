@@ -3,7 +3,7 @@
  *
  * Inside a recipe repository with no argument, it is that repository, as it
  * always was. Inside a project, the argument names a repository the project
- * knows (resolved through `src/lib/refs/`, like every reference), and the
+ * knows (resolved through `src/services/ref-resolver/`, like every reference), and the
  * submission runs in that repository's checkout:
  *
  *   - a linked repository is read from the checkout its link points at;
@@ -23,7 +23,16 @@ import fs from "node:fs";
 import path from "node:path";
 import { ConfigError } from "../../errors.js";
 import { nonInteractiveError } from "../../interactive.js";
-import { findRepository, pickReference, type ReferenceRepo } from "../../refs/index.js";
+import {
+  CatalogLookup,
+  RefPickArguments,
+  RefResolveArguments,
+  locationFromUrl,
+  repoOf,
+  sharedRefPicker,
+  sharedRefResolver,
+  type CatalogRepo,
+} from "../../../services/ref-resolver/index.js";
 import type { RepoEntry } from "../../settings.js";
 import { isGitCheckout, remoteUrlOf, repoSlugFromUrl, sameRemote } from "../git-clone.js";
 import { globalReposDir, projectReposDir, readEffectiveLinks } from "../links.js";
@@ -103,17 +112,28 @@ export async function findSubmitCheckout(
 
   const links = readEffectiveLinks(project.sousDir, env);
   const reference = referenceRepos(project, links);
-  const match = await pickReference(findRepository(options.repo, { repos: reference }), {
-    search: options.repo,
-    interactive: options.interactive,
-    ...(options.write === undefined ? {} : { write: options.write }),
-    details: [
-      reference.length === 0
-        ? "  This project uses no repositories."
-        : `  This project uses: ${reference.map((entry) => entry.name).join(", ")}.`,
-    ],
-  });
-  const name = match.repo ?? match.key;
+  const { refs } = await sharedRefResolver().resolve(
+    new RefResolveArguments({
+      input: options.repo,
+      lookup: new CatalogLookup(reference),
+      kinds: ["repo"],
+      refusedIsEmpty: true,
+    })
+  );
+  const match = await sharedRefPicker().pick(
+    refs,
+    new RefPickArguments({
+      search: options.repo,
+      interactive: options.interactive,
+      ...(options.write === undefined ? {} : { write: options.write }),
+      details: [
+        reference.length === 0
+          ? "  This project uses no repositories."
+          : `  This project uses: ${reference.map((entry) => entry.name).join(", ")}.`,
+      ],
+    })
+  );
+  const name = repoOf(match)!.name!;
 
   const link = links[name];
   if (link !== undefined) {
@@ -216,17 +236,16 @@ async function chooseLinked(
 function referenceRepos(
   project: SubmitProject,
   links: Record<string, { path: string }>
-): ReferenceRepo[] {
-  const repos: ReferenceRepo[] = Object.entries(project.repos).map(([name, entry]) => ({
-    name,
-    url: entry.url,
-    namespaces: [],
-    recipes: [],
-  }));
+): CatalogRepo[] {
+  const known = (name: string, url: string): CatalogRepo => {
+    const location = locationFromUrl(url);
+    return { name, ...(location === undefined ? {} : { location }), namespaces: [], recipes: [] };
+  };
+  const repos: CatalogRepo[] = Object.entries(project.repos).map(([name, entry]) =>
+    known(name, entry.url)
+  );
   for (const name of Object.keys(links).sort()) {
-    if (project.repos[name] === undefined) {
-      repos.push({ name, url: links[name]!.path, namespaces: [], recipes: [] });
-    }
+    if (project.repos[name] === undefined) repos.push(known(name, links[name]!.path));
   }
   return repos;
 }

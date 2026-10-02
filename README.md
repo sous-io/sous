@@ -70,8 +70,8 @@ sous init
 
 `sous init` writes the project's `.sous/` directory and runs the first build. It creates a
 commented `sous.config.js` (pass `--format json` for a JSON config bound to the shipped
-schema), a starter prompt at `.sous/memories/AGENTS.md` that the config compiles to `AGENTS.md`
-at the project root, the two env files described below, and a `.sous/.gitignore` covering the
+schema), a starter prompt at `.sous/memories/AGENTS.tpl.md` that the config compiles to `AGENTS.md`
+at the project root (it includes every memory your subscribed recipes publish, with one line, `@#memories/**/*.md`), the two env files described below, and a `.sous/.gitignore` covering the
 files sous keeps local to one machine. A project with a `package.json` also gains `@sous-io/sous`
 as a devDependency at the running version, so the project pins the sous it builds with; run
 your package manager's install afterwards. The first build compiles the starter prompt and the
@@ -87,12 +87,12 @@ export const config = {
   compilation: {
     targets: [
       {
-        entryPoint: "${sousDir}/memories/AGENTS.md",
+        entryPoint: "${sousDir}/memories/AGENTS.tpl.md",
         outputs: [{ destinationFile: "${projectRoot}/AGENTS.md" }],
       },
     ],
   },
-  recipeOutputs: { skills: ["${projectRoot}/.claude/skills"] },
+  recipes: { skills: { outputs: ["${projectRoot}/.claude/skills"] } },
 };
 ```
 
@@ -179,8 +179,9 @@ A recipe's files are reachable without knowing where anything is installed. An `
 path may name a recipe by its namespace, so
 `@~workflow/task-files/_partials/resume-task.md` composes a block published by the recipe
 `workflow/task-files`, at the version your project has pinned, into your own instruction
-file. `@~project/...` names your project's root, `@~/...` names your home directory, and you
-can define your own aliases with an `_aliases` block. Either spelling of a file finds it:
+file. `@#project/...` names your project's root, `@~/...` names your home directory, and you
+can define your own aliases with an `_aliases` block. A path may be a glob, and
+`@#memories/**/*.md` includes the memories of every recipe your project subscribes to. Either spelling of a file finds it:
 `@shared.md` also finds `shared.tpl.md`, and the other way round.
 
 Sous records every file and directory it writes in a state file, `.sous/sous.state.json` by

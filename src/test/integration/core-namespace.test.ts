@@ -106,7 +106,7 @@ beforeAll(() => {
   );
 
   // A project that says nothing whatsoever about repositories: no `repos`, no
-  // `subscriptions`, no `recipeOutputs`. Everything that follows comes from the
+  // `subscriptions`, no `recipes`. Everything that follows comes from the
   // defaults sous provides.
   write(
     path.join(sousDir, "sous.config.json"),

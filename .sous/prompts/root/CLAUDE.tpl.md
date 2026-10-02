@@ -11,31 +11,9 @@ The binary was called `xcv` in earlier releases; the name is now `sous` everywhe
 
 @${sousDir}/prompts/memories/agent-conduct.md
 
-@~communication/agent-conduct/memories/agent-conduct.md
-
-@~communication/agent-conduct/memories/interaction-style.md
-
-@~communication/agent-conduct/memories/respect-the-users-time.md
-
-@~communication/agent-conduct/memories/quote-sources.md
-
-@~communication/agent-conduct/memories/rulings-and-provenance.md
-
-@~communication/agent-conduct/memories/drafting-and-outward-actions.md
-
-@~communication/agent-conduct/memories/outward-actions.md
-
-@~reasoning/evidence-and-verification/memories/evidence-and-verification.md
-
-@~workflow/sub-agent-delegation/memories/sub-agent-delegation.md
-
-@~workflow/agent-memory/memories/improving-the-instructions.md
-
-@~engineering/design-tenets/memories/design-tenets.md
+@#memories/**/*.md
 
 @${sousDir}/prompts/memories/writing-standards.md
-
-@~communication/plain-speech/memories/speak-plainly.md
 
 @${sousDir}/prompts/memories/cli-conventions.md
 
@@ -313,20 +291,12 @@ src/
       update-plan.ts       # an update's scope, and the plan it prints before its one question
       locked-recipes.ts    # where each locked recipe's files are (a link beats the store)
       locked-namespace-resolver.ts # the real NamespaceResolver, built from the lockfile
-      recipe-targets.ts    # subscribed recipe contents -> compile targets; recipeOutputs
+      locked-recipe-lookup.ts # the ref lookup that finds a locked recipe's files (include lines)
+      recipe-memories.ts   # the memories each active recipe publishes, in `#memories` order
+      memories-hash-name.ts # registers the `#memories` view with the ref services
+      recipe-key-matcher.ts # globs and `/regex/` strings over recipe keys (`first`, `exclude`)
+      recipe-targets.ts    # subscribed recipe contents -> compile targets; `recipes`
       recipe-config-layers.ts  # a recipe's `config` contents, as config layers
-    refs/                  # what a ref names; every ref, wherever it is written, goes
-                           #   through this one module
-      scopes.ts            # SousScope: repository, namespace, recipe, variable, env var name;
-                           #   RefSource: where a ref was written, which decides its forms
-      parse.ts             # parseRef(ref, from): every form, every reading; formatRef,
-                           #   refKey, splitRecipeKey, namespaceOfKey
-      settle.ts            # settles readings against an index: exact-then-any-case names,
-                           #   browser paths through recipe paths, recorded dependencies
-      find.ts              # findReference + the per-scope wrappers; the matching and ordering rules
-      pick.ts              # pickReference: one match, a question, --accept-first, or the
-                           #   shared non-interactive failure; reports what a reference
-                           #   resolved to via repos/reference-report.ts
     vars/                  # recipe variable definitions, answers and the resolution ladder
       index.ts             # barrel; import the whole layer from here
       definition-source.ts # where definitions come from; the one wiring seam
@@ -345,6 +315,18 @@ src/
       lock-service.ts      # LockService; read/write/apply/diff the lock, restore the store
       freshness.ts         # when to look upstream; always-pull's in-range lookup
       providers/           # GitHub, GitLab and local: read and write paths, plus the index cache
+  services/
+    ref-resolver/          # the ONE module that reads a ref, wherever it is written; import
+                           #   from its index.ts
+      types.ts, source.ts  # SousRef kinds (plain data); RefSource, where a ref was written
+      parser/              # RefParser plus one splitter per form; returns every reading
+      pruners/             # one RefPruner per RefSource: which readings a place allows
+      lookups/             # RefLookup: what exists (cached or fetched index, recorded
+                           #   dependency, locked recipe files, variables, env var names)
+      ref-resolver-service.ts  # parse, prune, then match against a lookup
+      ref-picker-service.ts    # the interactive choice between several matches
+      hash-names.ts        # the registry of `#` names (`#project`, views such as `#memories`)
+      container.ts, tokens.ts, injectable.ts  # the Inversify container and its tokens
   templating/
     init-liquid-engine.ts  # LiquidJS engine factory (createLiquidEngine)
     tags/                  # custom Liquid tags: showVars, exportScalarVarsJs, getFiles, listFiles
@@ -386,7 +368,7 @@ docs/                      # the GitHub Pages site (sous.io)
   CLAUDE.md                # GENERATED site instructions (gitignored output); the site's
                            #   full documentation lives there, not here
 .sous/                     # THIS repo's own sous config; sous configures itself
-  sous.config.js           # the primary config: subscriptions, recipeOutputs, and three targets
+  sous.config.js           # the primary config: subscriptions, `recipes`, and three targets
   sous.lock.json           # COMMITTED; pins every recipe version this repo builds with
   conf.d/                  # optional drop-in layer dir (*.js|mjs|json|yaml); merged after the primary config
   skills/                  # this repo's OWN skills (skillsRoot); not published as recipes
@@ -407,7 +389,7 @@ per format, each exporting its zod schema, the inferred TypeScript type and a `p
 sourceLabel)` helper that throws a `ConfigError` naming the file and the path of every bad
 field. `formats/patterns.ts` holds the shared regular expressions and imports nothing, so
 `config-schema.ts` can reuse them; `formats/common.ts` composes them into the primitives the
-formats share. `src/lib/refs/parse.ts` reads every ref (see **Refs** below), `identity.ts`
+formats share. `src/services/ref-resolver/` reads every ref (see **Refs** below), `identity.ts`
 derives canonical repository identity, `load-manifest.ts` reads manifests off disk
 (YAML, or JSON with comments and trailing commas; never JavaScript, because manifests and
 indexes are data that sous reads, validates and browses without executing anything: before
@@ -451,26 +433,27 @@ and required on the written shape: `lockedRepoSchema` in `formats/lockfile.ts` d
 one from the entry's `url` through `requireProvider(url).canonicalize(url)`, so a lockfile
 written before the store was re-keyed still loads and fills the field in on its next write.
 
-**Refs.** Every ref, wherever it is written, is read by ONE function: `parseRef(ref, from)` in
-`src/lib/refs/parse.ts` (decision record 0008). It recognizes every form (a bare namespace,
-`namespace/recipe`, `namespace/*`, `repo:`, a range, a provider-scheme locator, an HTTPS, SSH or
-scheme-less URL, a `.git` suffix, a browser URL from a host's file view, GitLab's `/-/` and
-nested groups) and returns EVERY reading, because a GitLab nested group does not say where the
-project path ends and a browser URL names a folder only an index can map to a recipe. The
-`RefSource` enum (`src/lib/refs/scopes.ts`: `CommandLine`, `Config`, `Manifest`, `Lockfile`)
-decides which forms a place allows; a refused form is an error saying what to write instead
-(`repo:` in a manifest names the locator form, a location in a config file names `sous
-subscribe`). A manifest's names are lowercased; the command line keeps what was typed, and
-matching settles it. Nothing host-specific lives in the parser: the host and path segments go to
-each provider's `readLocation`, which returns the readings, and `formatLocator` prints the
-canonical locator (GitLab always marks the project's end with `/-/`). A reading is a
-`ParsedRef` (with an optional `location`), a `BrowsedRef` or a `RepositoryRef`.
-`src/lib/refs/settle.ts` settles readings once an index is at hand: `matchNames` (exact first,
-then ignoring case), `settleInIndex`, `settleBrowsed` (through each recipe's index `path`, every
-split of the branch tried) and `settleDependency`, which uses the index's record of what a
-release settled on and never probes. `splitRecipeKey` and `namespaceOfKey` are the only way a
-stored key is taken apart. A ref is stored and printed as its published identity (namespace and
-recipe), never as a folder path; any spelling that settles to one identity is accepted.
+**Refs.** Every ref, wherever it is written, is read by ONE service, `src/services/ref-resolver/`
+(decision record 0013, which supersedes 0008). `RefParser` is context-free and returns EVERY reading
+of a string (a bare word is a repository, namespace, recipe, variable and env var name at once),
+because a GitLab nested group does not say where the project path ends and a browser URL names a
+folder only an index can map to a recipe. A `RefPruner` per `RefSource` (`CommandLine`, `Config`,
+`Manifest`, `Lockfile`, `Include`) drops the readings its place refuses, with an error saying what to
+write instead. A `RefLookup` (async, chained, first answer wins) keeps the readings that exist;
+names match exactly, then ignoring case, and the known spelling is returned. The caller decides
+what remaining ambiguity means (`RefPickerService`, `getFirstRef`, `isValidRef`). Nothing
+host-specific lives in the parser: the providers' `readLocation` and `formatLocator` own it.
+`splitRecipeKey` and `namespaceOfKey` (`named-refs.ts`) are the only way a stored key is taken apart.
+A ref is stored and printed as its published identity (namespace and recipe), never as a folder
+path; any spelling that settles to one identity is accepted.
+
+**Services and the container.** A service is a singleton class with its collaborators injected by
+Inversify (`createRefContainer()`, tokens in `REF_TOKENS`); parts that come in kinds (splitters,
+pruners, providers, `#` names) are bound many times under one token and injected as a list, so a
+plugin adds one by binding one more. Every injected parameter names its token through
+`makeInjectable` (`injectable.ts`), never decorator metadata, because the published bin runs
+through tsx, which emits none. Only the ref services are in a container; the wider move is gh-48.
+Callers with no container use `sharedRefResolver()`, `sharedHashNames()` and `sharedRefPicker()`.
 
 `store/` holds the machine-wide recipe store: one immutable directory per recipe version at
 `<storeRoot>/<identity>/<namespace>/<recipe>/<version>/`, with the `.sous.entry.json` marker
@@ -723,7 +706,7 @@ Its methods are `addRepo`, `subscribe`, `unsubscribe`, `update`, `newerPublished
 `previewSubscription`, `listSubscriptions`, `restore`, `checkUpstream`, `needsRestore` and
 `prepareForBuild`. Two steps run inside `subscribe` BEFORE anything is
 fetched or written, on the cached indexes alone: a one-word ref, or one typed in another
-case, is resolved to a fully qualified one through `src/lib/refs/` (over the namespace and
+case, is resolved to a fully qualified one through the ref resolver (over the namespace and
 recipe scopes; several matches ask, `--accept-first` takes the first), and a location is
 matched to the trusted repository at it by identity and settled through its index (an
 untrusted one goes through the trust ceremony first, and nothing is fetched from it before
@@ -770,7 +753,7 @@ holds the shared notes (`printBrowsingNotes`).
 
 **Update moves pins, and only pins.** `update` (behind `sous subscription update` and `sous repo
 unlink --update`) fetches every trusted index fresh (`refresh`, never the stale fallback, so an
-unreachable repository is reported and its pins held), settles the scope through `src/lib/refs/`
+unreachable repository is reported and its pins held), settles the scope through the ref resolver
 (repository, namespace or recipe), and re-resolves every subscription that reaches the scope, one
 at a time, with the resolver's `keep` option holding every pin outside the scope at its locked
 version while its ranges allow it. The resolutions are laid over the lockfile with
@@ -793,21 +776,23 @@ lockfile's holder lists, which record the key every `depends` and `subscribes` e
 to, whatever form the manifest wrote it in; `vars/definition-source.ts` reads the same
 list for `sous vars`; `recipe-targets.ts` turns it into compile targets.
 
-**Recipe outputs.** `recipe-targets.ts` turns each subscribed recipe's manifest `contents`
-into ordinary `entryGlob`-style compile targets: the recipe directory is the glob root, the
-static part of each include pattern is the base the output tree mirrors, and the `.tpl.`
-convention applies unchanged. Only recipes held through `subscribes` contribute files; a
-recipe held only through `depends` is fetched, pinned and addressable from the recipe that
-declared it, and its files never enter the output. Destinations come from the top-level
-`recipeOutputs` config key (`{ skills?: string[], memories?: string[], prompts?: string[] }`,
-each `${var}`-substituted). Only `skills` has a default, `<project root>/.claude/skills`;
-a kind with no destination is skipped with ONE warning naming the key, because sous cannot
-guess where a project wants its memories or its prompts. `BuildService` appends these
-targets to the project's own, so compile, prune and clear all see them, and prune counts
-them file by file rather than by their shared destination directory (every recipe writes
-into the same one, so a directory prefix would leave an unsubscribed recipe's files behind
-forever). `resolveOutputPath` in `markdown-compiler.ts` is the one definition of where a
-target's output lands, shared by the compiler and prune.
+**Recipe outputs and memories.** `recipe-targets.ts` turns each subscribed recipe's manifest `contents`
+of kind `skills` into ordinary `entryGlob`-style compile targets: the recipe directory is the glob
+root, the static part of each include pattern is the base the output tree mirrors, and the `.tpl.`
+convention applies. Only recipes held through `subscribes` contribute (ACTIVE; a `depends`-only
+recipe is a library whose files never enter the output). Destinations come from the top-level
+`recipes` config key (`recipes.skills.outputs`, `${var}`-substituted, default `<project root>/.claude/skills`;
+`RECIPE_CONFIG_ALLOWED_KEYS` allows `recipes`). `BuildService` appends these
+targets to the project's own, so compile, prune and clear all see them, and prune counts them
+file by file rather than by their shared destination directory. `resolveOutputPath` in
+`markdown-compiler.ts` is the one definition of where a target's output lands.
+
+Memories are never written anywhere: the `#memories` view (`recipe-memories.ts`, registered by
+`memories-hash-name.ts`) lists the files of every active recipe's `kind: memories` contents, at
+`#memories/<namespace>/<recipe>/<path>`, in dependency order, narrowed by `recipes.memories.first`
+and `exclude` (`recipe-key-matcher.ts`: globs, or `/regex/` strings, since config layers are JSON).
+`unincludedMemories` (`build-service.ts`) makes the build warn about every memory no output included.
+`sous init` writes `memories/AGENTS.tpl.md` with the one line `@#memories/**/*.md`. ADR 0013.
 
 **What a build does with all this.** Every command that builds (`build`, `init`, `launch`,
 `prune`, `repo remove`, `repo unlink`, `subscription add`, `subscription remove`,
@@ -955,7 +940,9 @@ already-parsed, already-filtered object is handed to the kernel as an inline
 set only keys that configure the recipe itself, and every other key is dropped with a
 warning naming the recipe and the key. Subscribing to a recipe is not a decision to let it
 choose what the project trusts or what sous runs, so `repos`, `subscriptions`, `tools` and
-`_env` in particular can never come from one. Change the allowlist only in
+`_env` in particular can never come from one. Under `recipes` only `skills` is allowed
+(`RECIPE_CONFIG_ALLOWED_RECIPES_KEYS`); `recipes.memories` configures the project, so it is
+dropped with a warning naming `recipes.memories`. Change the allowlist only in
 `recipe-config-layers.ts`, and keep `docs/markdown/repositories-consuming.md` and
 `docs/markdown/repositories-file-formats.md` in step with it.
 
@@ -1000,7 +987,7 @@ migration message) and then by the zod schema in `config-schema.ts` (`validateSe
 
 One config = one project. The config is flat: `version`, `$schema`, `name`, `_env`,
 `_vars`, `_aliases`, `compilation`, `runtimeContext`, `tools`, `repos`, `subscriptions`,
-`store`, `recipeOutputs` and `varMappings` all live at the top level. The last five belong
+`store`, `recipes` and `varMappings` all live at the top level. The last five belong
 to the Repositories system; see `docs/markdown/repositories-file-formats.md` for their
 shape. There is no `$comment` key: the machine-written layers are `.jsonc` and carry a real
 header comment instead (`repos/managed-layer.ts`, `vars/mappings.ts`).
@@ -1035,7 +1022,7 @@ the COMMITTED `.sous/sous.lock.json`. Three sources feed `.claude/skills/`:
 - `core/sous-skills`, which every project gets without asking. It is not listed in the config
   at all; sous provides that subscription itself, and `recipes/core/sous-skills/` at the root
   of this repository is its source.
-- The subscriptions the project declares, written into `recipeOutputs.skills`. The primary
+- The subscriptions the project declares, written into `recipes.skills.outputs`. The primary
   config declares `omakase/house`, the standard set, plus the two recipes the set leaves out
   that sous uses: `workflow/github-projects` and `cli/command-design`. The set has no files of
   its own; its `subscribes` list brings in the rest (every `communication` and `reasoning`
@@ -1045,14 +1032,10 @@ the COMMITTED `.sous/sous.lock.json`. Three sources feed `.claude/skills/`:
   any further subscription.
 - This repository's own skills in `.sous/skills/`, compiled by the `projectSkills` target.
 
-A recipe's MEMORIES do not go through `recipeOutputs`: `recipeOutputs.memories` is unset, so
-every build warns that memories were skipped, and each subscribed recipe's memory is instead
-included by hand into the source of this file, one `@~namespace/recipe/memories/<file>.md` line
-each, placed where it fits (the conduct memories, `engineering/design-tenets` among them, sit
-together near the top). This source is a `.tpl.` template, so those memories render with the
-project's answers. A new subscription that publishes a memory gets its include line in the same
-change. The website's source (`.sous/prompts/docs-site/CLAUDE.tpl.md`) includes only this
-project's own memories under `.sous/prompts/memories/`, none from a recipe.
+A recipe's MEMORIES are never copied into the project. This source includes all of them with
+the one line `@#memories/**/*.md` near the top (no `recipes.memories.first` or `exclude` is
+configured here), so a new subscription needs no edit to this file. The website's source (`.sous/prompts/docs-site/CLAUDE.tpl.md`) includes only this project's own
+memories under `.sous/prompts/memories/`, none from a recipe.
 
 `tool-usage/automated-browser-tasks` is deliberately NOT subscribed to: it needs
 `browserAutomationScriptsDir` pointing at a real script directory, and sous has none.
@@ -1231,10 +1214,16 @@ files (`sous vars ask` writes them), not in `_vars`; `_vars` is for what no reci
 
 ## The `.tpl.` Convention
 
-- Files **without** `.tpl.` in their name are copied verbatim (no LiquidJS processing)
-- Files **with** `.tpl.` are rendered through LiquidJS; `.tpl.` is stripped from output filename
-  - e.g., `agent.tpl.md` → `agent.md`
-- The `.tpl.` convention applies to both `entryPoint` and `entryGlob`/`destinationDir` targets
+A file's OWN name decides, every time (ADR 0013, which amends ADR 0005's "decided by the entry point"):
+
+- A file **with** `.tpl.` always renders through LiquidJS; `.tpl.` is stripped from the output
+  name (`agent.tpl.md` → `agent.md`). A file **without** it never renders, even when a template
+  includes it.
+- The compiler reads the include graph first, renders a `.tpl.` host with each include line held
+  as a marker (so a Liquid condition around an include still applies), renders every included file on
+  its own by its own name, then puts the results in place of the markers (`expand` in
+  `markdown-compiler.ts`, guarded by `per-file-rendering.test.ts`).
+- Applies to `entryPoint` and `entryGlob`/`destinationDir` targets alike.
 
 ## Include Syntax (Markdown Compiler)
 
@@ -1245,7 +1234,7 @@ In any source `.md` file, `@path/to/file.md` on its own line includes that file'
 @../shared/intro.md
 @${projectRoot}/prompts/x.md
 @~/notes/private-context.md
-@~project/prompts/intro.md
+@#project/prompts/intro.md
 @~workflow/task-files/_partials/resume.md
 @myAlias/doc.md
 ```
@@ -1264,58 +1253,58 @@ namespaces work in both). A `@`-path may be:
   `config-discovery.ts`, the same expansion the config-locating flags get); the sigil with
   nothing but a separator after it names no alias or namespace, so this is unambiguous,
 - **aliased**: the first segment (up to `/` or `:`; both separators work) names an alias,
-- **namespaced**: a first segment carrying the reserved `~` sigil names a recipe
-  namespace (see below).
+- **a `#` name**: the reserved `#` sigil names something sous or a plugin registers, such as
+  `#project` (the project root); see below,
+- **a recipe reference**: a path starting with the reserved `~` sigil, then namespace,
+  recipe and path inside the recipe (see below).
+
+Any of them may use the full `glob` syntax (`*`, `**`, `?`, `[..]`, `{a,b}`) after `${var}`
+substitution, and then includes every file it matches in bytewise path order, each expanded
+as a single include would be; a glob matching nothing is a build error naming the pattern.
+A file may be included any number of times, and only a cycle is an error. A trailing
+`?name=value` query is read by the ref service and otherwise ignored. A line that starts
+with `@` and looks like an include (one word holding a `/`, a `.md`, or starting with `~`,
+`#`, `.` or `$`) but is not well formed is a build error naming the file and line
+(`looksLikeIncludeLine` in `markdown-compiler.ts`); prose such as `@alice thanks` is text.
 
 Every candidate is followed by its `.tpl.` twin (`templateTwin` in `include-resolver.ts`):
 `@shared.md` finds `shared.tpl.md` when that is what exists, and `@notes.tpl.md` finds
 `notes.md`. The literal spelling is tried first and the twin comes right after it, per
 candidate, so an alias base still beats the relative fallback; a writer never has to know
-whether an included file has been turned into a template. The twin's content is included as
-it is, so Liquid inside it renders only when the entry point itself is a `.tpl.` file.
+whether an included file has been turned into a template. The twin renders or not by its own name.
 
-**Aliases.** There is exactly ONE built-in, reserved and `~`-prefixed: `~project`, the
-project root (see `buildBuiltInAliases` in `settings.ts`). Everything sous once reached
-through a built-in alias into its own package is published as a recipe now, and a recipe's
-files are addressed by namespace instead. Projects add their own aliases via the top-level
+**Aliases and `#` names.** Built-ins are `#`-prefixed names held by the `HashNameRegistry`
+(`src/services/ref-resolver/hash-names.ts`, bound in the ref container so a plugin or a later
+view registers one more; a duplicate registration is an error naming both). Today there are
+two: `#project`, the project root (`buildBuiltInAliases` in `settings.ts` puts every registered
+name that has directories into the alias map), and the VIEW `#memories` (a `HashName.view` lists
+virtual files; `@#memories/**/*.md` is globbed against that listing and includes the real files
+behind it, in listed order; an empty match includes nothing and is not an error). Projects add their own aliases via the top-level
 `_aliases` block (string or array values, `${var}`-substituted); user names may not start with
-`~`. Precedence: built-ins, then `_aliases`, where the user block **prepends** (user bases
+`~` or `#` (a `ConfigError`). Precedence: built-ins, then `_aliases`, where the user block **prepends** (user bases
 tried first, falling through to built-in bases of the same name). Resolved by
 `resolveAliases(settings, scope)`.
 
-**Recipe namespaces (the `~` sigil).** A first segment written `~<namespace>` addresses a
-recipe namespace rather than the filesystem; everything after it starts with the recipe
-name and continues with the path inside that recipe, so
-`@~workflow/task-files/_partials/resume.md` means the file `_partials/resume.md` in recipe
-`workflow/task-files`. A bare `@path` (no `~`) never falls through to a namespace; it stays
-a relative path or a declared alias. Scoping is enforced by the resolver: inside a recipe's
-own files a namespace resolves only against that recipe's declared dependencies (`depends`
-plus `subscribes`, as settled keys) at their pinned versions, while a project's own templates resolve
-against every recipe the lockfile pins, whatever holds it (the project, a set's `subscribes`,
-or a `depends`-only library). When a project template names a recipe the lockfile does not
-pin, `explainUnpinnedRecipe` (`repos/locked-namespace-resolver.ts`) looks for a switched-off
-subscription to it (its key read through `parseShortRef` with `RefSource.Config`), then for
-another published version of a pinned recipe that brought it in
-(read from the cached indexes, through recipes no longer pinned either), and the error names
-it. The inner path may not contain `.` or `..` segments and
-may not be absolute, and the resolved candidate is `path.relative`-checked against the recipe
-directory; a reference that leaves it returns `{ kind: "escapes-recipe" }` rather than a path,
-because otherwise a recipe file could render anything on the machine into a project's output.
-The contract lives in
-`src/lib/repos/namespace-resolver.ts` (`NamespaceResolver`, plus the in-memory
-`StaticNamespaceResolver` used by tests); a resolver is injected through the
-`namespaceResolver` option on `CompilationService` and `BuildService`, and when none is
-supplied the `~` sigil only ever means an alias.
+**Recipe references (the `~` sigil).** A path `~<namespace>/<recipe>/<path>` addresses a recipe, not
+the filesystem. The ref resolver parses and prunes it with `RefSource.Include` and matches it through
+a `LockedRecipeFileLookup` (`repos/locked-recipe-lookup.ts`), so a glob may stand in any name or in
+the path (`@~*/*/memories/*.md`) and a `repo:` qualifier names the repository by short name. A bare
+`@path` never falls through to a namespace. Scoping: inside a recipe, a namespace resolves only
+against that recipe's `depends` and `subscribes` at their pinned versions; a project's own templates
+resolve against every recipe the lockfile pins, whatever holds it. A recipe the lockfile does not pin
+is explained by `explainUnpinnedRecipe` (`repos/locked-namespace-resolver.ts`: a switched-off
+subscription, or an older version that brought it in). The inner path may not hold `.` or `..`, and a
+candidate leaving the recipe directory returns `{ kind: "escapes-recipe" }`, because otherwise a recipe
+file could render anything on the machine into a project's output. The contract is
+`NamespaceResolver` in `src/lib/repos/namespace-resolver.ts` (in-memory `StaticNamespaceResolver` for
+tests), injected through the `namespaceResolver` option on `CompilationService` and `BuildService`;
+without one a `~` path is only a relative path.
 
-**Candidate order.** Each alias base in order, then the namespace resolver's candidates
-(only for a `~` first segment, and only when a resolver was supplied), then the path
-resolved relative to the including file (full path incl. the first segment, so an alias
-can *augment* a real local dir). Aliases therefore always beat a namespace of the same
-name, which keeps `~project` stable. First candidate that exists wins;
-none → error naming the including file, listing every path tried, and explaining the
-namespace lookup when one was attempted (unknown namespace, unknown recipe, or a recipe the
-including recipe must add to its `depends`). Circular includes are detected and reported,
-including cycles that run through namespace references.
+**Candidate order.** Each alias base in order (a `#name` is one), then the namespace resolver's
+candidates (a `~` path holding a `/`, when a resolver was supplied; a recipe glob is ONE group of
+every match), then the path relative to the including file (full path, so an alias can augment a
+real local dir). The first group naming a file wins and supplies all of its files; none is an
+error listing every path tried. Circular includes are reported, namespace cycles included.
 
 ## Skills System
 
@@ -1390,12 +1379,12 @@ This enables `sous prune` (remove stale outputs) and `sous clear` (delete all ou
 | `sous repo init [dir]` | Scaffold a new recipe repository modeled on `sous-recipes`: the manifests, an example recipe, a README, `CONTRIBUTING.md`, `CLAUDE.md` and `AGENTS.md` for agents, release automation and a `.gitignore` (`--name`, `--namespace`, `--force`, `--dry-run`) |
 | `sous repo link <repo\|path> [path]` | Read a repository from a working copy: link the checkout a path names in place, clone a repository named on its own, or link the checkout a second argument names (`--global`, `--yes` / `-y` / `--trust`); a checkout already on disk is fetched and compared with upstream, and `--branch`, `--create-branch`, `--generate-branch`, `--from` and `--latest` change its branch |
 | `sous repo unlink <repo>` | Drop the link, go back to the pinned versions and build; on its own it reports newer published versions in range under a short timeout, `--update` moves the pins through `subscription update`, `--remove` deletes a checkout sous cloned after listing any unsaved work (`--global`, `--yes` / `-y` / `--trust`, `--dry-run`, `--no-build`) |
-| `sous repo contribute <ref>` | Start a contribution: `repo link <repo> --latest` on a new branch (`--generate-branch` unless `--create-branch` or `--branch` names one; `--from`, `--global`). With `--finish`: look for work no proposal carries yet, ask whether to submit it through `repo submit` (`--submit` / `--no-submit`, `--yes`; skipped when there is nothing), then `repo unlink <repo> --update` (`--remove`); `--title`, `--body`, `--draft`, `--commit`, `--branch` pass through to submit. The ref may name a namespace or recipe, resolved to its repository through `src/lib/refs/` (`--accept-first`); `--dry-run` runs no step; also `sous repo contrib` (hidden) |
+| `sous repo contribute <ref>` | Start a contribution: `repo link <repo> --latest` on a new branch (`--generate-branch` unless `--create-branch` or `--branch` names one; `--from`, `--global`). With `--finish`: look for work no proposal carries yet, ask whether to submit it through `repo submit` (`--submit` / `--no-submit`, `--yes`; skipped when there is nothing), then `repo unlink <repo> --update` (`--remove`); `--title`, `--body`, `--draft`, `--commit`, `--branch` pass through to submit. The ref may name a namespace or recipe, resolved to its repository through the ref resolver (`--accept-first`); `--dry-run` runs no step; also `sous repo contrib` (hidden) |
 | `sous repo release` | Publish new versions of a recipe repository: plan, ask once, then bump, regenerate the index, commit and tag (`--namespace`, `--recipe`, `--bump`, `--no-bump`, `--include-unchanged`, `--tag`, `--push`, `--yes`, `--check`, `--ci`, `--dry-run`) |
 | `sous repo submit [repo]` | Propose a recipe repository's changes and follow the proposal through: open it, update it, report on it, or continue on a new branch once it was merged; from a project, `repo` names a linked repository (`--title`, `--body`, `--branch`, `--status`, `--commit`, `--draft`, `--yes` / `-y`, `--dry-run`) |
 | `sous vars list` | List every recipe variable in play: its answer, the env var that supplied it, and the source |
 | `sous vars show <name>` | Show one variable in full, with every candidate env var name and the rung that answered |
-| `sous vars ask [name]` | Answer what is unanswered, or everything the name covers: a variable, an environment variable name in use that answers one, a recipe, a namespace or a repository (any of the last three also as a location, settled against the trusted repositories from `cachedReferenceRepos`), resolved through `src/lib/refs/` (`--repo`, `--namespace`, `--var` narrow the same way, `--accept-first` settles an ambiguous name, `--all` re-asks everything); `--file` reads a standalone definitions file, `--answer <name>=<value>` and `--answers-file <path>` answer ahead of the questions, `--dry-run` writes nothing |
+| `sous vars ask [name]` | Answer what is unanswered, or everything the name covers: a variable, an environment variable name in use that answers one, a recipe, a namespace or a repository (any of the last three also as a location, settled against the trusted repositories from `cachedReferenceRepos`), resolved through the ref resolver (`--repo`, `--namespace`, `--var` narrow the same way, `--accept-first` settles an ambiguous name, `--all` re-asks everything); `--file` reads a standalone definitions file, `--answer <name>=<value>` and `--answers-file <path>` answer ahead of the questions, `--dry-run` writes nothing |
 
 Every topic answers to both spellings of its name (`repo`/`repos`, `subscription`/
 `subscriptions`, `namespace`/`namespaces`, `recipe`/`recipes`, `lock`/`locks`, `var`/`vars`,
@@ -1509,7 +1498,7 @@ branch); the release itself is never restricted, which is how the sous pipeline 
 
 `repo submit` is validate-then-propose, over the proposal's whole life. It runs in a recipe
 repository, or from a project: `findSubmitCheckout` (`release/submit-checkout.ts`) resolves the
-optional argument through `src/lib/refs/` to a linked checkout, falls back to a clone sous left
+optional argument through the ref resolver to a linked checkout, falls back to a clone sous left
 where `repo link` puts one (with a note), and fails when there is no working copy; with no
 argument inside a project the only link is used and several are a question. It looks for the
 project config itself, optionally (it still extends `Command`). The flow checks the tooling and
@@ -1634,6 +1623,10 @@ flags even in non-strict mode otherwise) and splits argv at the first `--` itsel
   Config Discovery). The exceptions extend `Command` directly and are
   listed with their reasons under Key Commands: the three that run inside a recipe
   repository, and `help`.
+- A new cross-cutting service goes under `src/services/<name>/` as a singleton class bound in an
+  Inversify container (see **Services and the container** above); arguments and results are
+  classes (`RefResolveArguments`, `RefResolveResult`). Do not read, split or match a ref anywhere
+  else.
 - `CompilationService` (alias `MarkdownCompiler`) is the core compiler class
 - `BuildService` orchestrates `CompilationService` + prune in one step
 - Watch mode uses `WatchService` (chokidar + debounce, 300ms); ignores `*.sous.state.json` files
@@ -1680,8 +1673,6 @@ like `getFiles import=` can `import()` files. Do not revert to `parseAndRenderSy
 To add a tag: create `src/templating/tags/<name>.ts` exporting a `register<Name>Tag(engine)`
 function, then add it to the array in `src/templating/tags/index.ts`. Filters follow the
 same pattern under `filters/`.
-
-@~workflow/sources-of-truth/memories/sources-of-truth.md
 
 ## Important!
 
