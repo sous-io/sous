@@ -1,6 +1,6 @@
 # ADR 0008: One ref parser, told where the ref came from
 
-**Status:** Accepted, 2026-09-29.
+**Status:** Accepted, 2026-09-29. Superseded by [ADR 0012](0012-one-ref-resolver.md).
 
 This record amends [ADR 0001](0001-repositories.md) where it defines how a ref is written and read:
 the grammar of a dependency, and the rule that a locator's last two path segments are the recipe. The

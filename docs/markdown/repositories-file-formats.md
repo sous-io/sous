@@ -80,9 +80,11 @@ contents:                           # what a subscriber actually receives
 | `contents`, `variables` | no | Contents default to an empty list, which is what a curated bundle publishes; a duplicated variable name, or two definitions claiming one `env`, is an error |
 | `submissions` | no | Whether this recipe takes proposed changes, winning over the repository's block; see [The submissions block](#the-submissions-block) |
 
-`contents[].kind` is `skills`, `memories`, `prompts` or `config`. The first three are written to the
-destinations named by [`recipeOutputs`](#recipeoutputs-where-the-files-land); `config` entries become config
-layers instead. `include` needs at least one glob, and both lists are recipe-relative.
+`contents[].kind` is `skills`, `memories`, `prompts` or `config`. `skills` are written to the destinations named
+by [`recipes`](#recipes-what-each-content-kind-does); `memories` are included into your instruction files by one
+line (see [Recipe memories](repositories-consuming.md#recipe-memories)); `config` entries become config layers;
+nothing takes `prompts` yet, and the build warns about a recipe that publishes them. `include` needs at least one
+glob, and both lists are recipe-relative.
 
 ### The submissions block
 
@@ -124,9 +126,10 @@ two readings that both publish what is named fail it too, naming the spellings t
 
 ### Ref forms
 
-Every place a ref is written reads it with one parser, told where the ref came from. These forms are
-recognized everywhere; the table after them says which each place allows. A refused form is an error saying
-what to write there instead.
+Every place a ref is written reads it with one ref resolver (`src/services/ref-resolver/`): a parser that
+returns every reading of the text, a pruner for the place that drops the readings the place refuses, and a
+lookup that keeps the readings that exist. These forms are recognized everywhere; the table after them says
+which each place allows. A refused form is an error saying what to write there instead.
 
 | Form | Example | Names |
 | --- | --- | --- |
@@ -153,6 +156,7 @@ end of the project path with `/-/`, so it reads one way.
 | A config file's subscription keys | `namespace` or `namespace/recipe`, lowercase; the repository is recorded in the lockfile and a range in the entry's `range` field |
 | A recipe manifest's `depends` and `subscribes` | every form naming a namespace or a recipe, except `repo:` and a local location |
 | A key sous stores (the lockfile, the index, the store) | `namespace` or `namespace/recipe`, lowercase |
+| An include line, after its `~` | `namespace/recipe/path`, any part a glob, optionally starting with a `repo:` qualifier; see [Include syntax](configuration.md#include-syntax) |
 
 Matching tries the exact spelling first, then ignores case; a name that still matches several things is a
 question, answered by `--accept-first` or by choosing. What sous writes (config layers, the lockfile, the
@@ -368,8 +372,9 @@ store:                     # every value is a default you can change
   maxBytes: 1073741824     # one gigabyte; past it, 'sous repo gc' evicts unpinned entries
   freshnessSeconds: 300    # how long a fetched index stays fresh
   watchPollSeconds: 300    # how often watch mode polls upstream
-recipeOutputs:             # 'memories' and 'prompts' take the same list-of-paths shape
-  skills: ["${projectRoot}/.claude/skills", "${projectRoot}/.codex/skills"]
+recipes:                   # what each content kind a subscribed recipe publishes does
+  skills: { outputs: ["${projectRoot}/.claude/skills", "${projectRoot}/.codex/skills"] }
+  memories: { first: ["communication/*"], exclude: ["tool-usage/automated-browser-tasks"] }
 varMappings:
   QA_SERVICE_TOKEN: workflow/qa-variables/qaServiceToken
 ```
@@ -380,7 +385,7 @@ varMappings:
 | `subscriptions` | a ref key | A bare namespace (every recipe in it, including ones published later) or `namespace/recipe`. No repo qualifier and no range in the key |
 | `enabled: false` | either of the two above | The opt-out for the entries sous provides itself, the `sous-recipes` repository and the `core` subscription |
 | `store` | fixed fields | Plain numbers, all optional; the values sous ships are defaults, not assumptions |
-| `recipeOutputs` | content kind | Destination directories per kind; see [recipeOutputs: where the files land](#recipeoutputs-where-the-files-land) |
+| `recipes` | content kind | What each kind does; see [recipes: what each content kind does](#recipes-what-each-content-kind-does) |
 | `varMappings` | environment variable name | Binds one name to one recipe variable, written `namespace/recipe/variableName` with an optional `repo:` qualifier |
 
 A repository's `url` may be a URL or an absolute path to one on this machine, read by the `local` provider
@@ -388,11 +393,20 @@ with identical trust. A hand-written entry is laid over sous's default field by 
 `{ enabled: false }` is a complete opt-out, and a written `url` repoints the repository while the rest of
 the default stands.
 
-### recipeOutputs: where the files land
+### recipes: what each content kind does
 
-Where each content kind lands, `${var}` substituted as in any config path. Only `skills` has a default,
-`<project root>/.claude/skills`; sous cannot guess where memories or prompts go, so a kind with no
-destination is skipped and one warning names this key. A recipe's `config` contents become layers, not files.
+One block per content kind a subscribed recipe publishes. A recipe's `config` contents become layers, not files,
+and a recipe's own config layer may set `recipes`.
+
+- `recipes.skills.outputs` (`string[]`, default `["<project root>/.claude/skills"]`): the directories recipe skill
+  bundles are written into, `${var}` substituted as in any config path. Name several to feed more than one agent.
+- `recipes.memories.first` (`string[]`, default none): recipes whose memories lead the `#memories` view. An entry
+  is a glob over `namespace/recipe` keys (`communication/*`), or a regular expression written between two slashes
+  (`/^tool-usage\//`); a string, because a config layer is JSON and cannot hold a `RegExp`.
+- `recipes.memories.exclude` (`string[]`, default none): recipes whose memories the view leaves out, and the
+  build's unincluded-memory warning never lists. The same entry forms as `first`.
+
+There is no `prompts` block. The old `recipeOutputs` key is not accepted.
 
 ## Managed config layers
 
