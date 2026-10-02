@@ -188,6 +188,13 @@ wins**; if none exist, the build errors listing every path tried:
 
 ## Custom Tags
 
+The tags below are built into sous. A recipe cannot add a tag or a filter, since that would be a
+Sous plugin; a Sous plugin comes only from sous's built-ins or an npm-style module.
+
+> "recipes will not be allowed to install _Sous_ plugins. All Sous plugins, besides any built-ins that ship with Sous, itself, will come from a NPM repo (or similar) as modules. Recipes _will_ be allowed to install tool plugins (e.g. Claude Code Plugins)."
+>
+>   -- **Luke Chavers** in an agent session (2026-09-29)
+
 **`showVars`**: dumps all variables currently in scope as a fenced JSON block.
 Useful during development to see exactly what variables are available at a given point
 in a template. Remove before finalizing.

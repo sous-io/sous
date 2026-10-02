@@ -54,6 +54,14 @@ The fields in that example:
   it MUST be `.json`, `.jsonc`, `.yaml` or `.yml`, and every key outside `_aliases`, `_vars`,
   `compilation`, `recipeOutputs`, `runtimeContext`, `store` and `varMappings` is dropped with a
   warning. A recipe that only bundles others may leave `contents` out.
+- A recipe MAY install tool plugins (a plugin for a coding agent tool, such as a Claude Code
+  plugin) and MUST NOT install a Sous plugin (one that extends sous itself). Sous plugins come only
+  from the built-ins that ship with sous and from npm-style modules. A `config` file is
+  configuration, not a Sous plugin.
+
+  > "recipes will not be allowed to install _Sous_ plugins. All Sous plugins, besides any built-ins that ship with Sous, itself, will come from a NPM repo (or similar) as modules. Recipes _will_ be allowed to install tool plugins (e.g. Claude Code Plugins)."
+  >
+  >   -- **Luke Chavers** in an agent session (2026-09-29)
 - `depends`, `subscribes` and `variables` are described below; `submissions` is in
   `about-sous-repos`.
 
