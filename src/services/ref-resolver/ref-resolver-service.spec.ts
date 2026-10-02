@@ -622,3 +622,66 @@ describe("RefResolverService helpers", () => {
     expect(include.map((entry) => entry.text)).toEqual(["w/a/b.md"]);
   });
 });
+
+describe("RefResolverService.resolveSync and inspect", () => {
+  /** A lookup that knows one recipe file, answering both ways. */
+  const lookup = {
+    findSync: (candidate: SousRef) =>
+      candidate.kind === "recipeFile" && candidate.recipe.name === "alpha"
+        ? [{ ref: candidate, exactSpelling: true }]
+        : [],
+    find: async () => [],
+  };
+
+  /**
+   * resolveSync should narrow the readings against a lookup without waiting.
+   *
+   * resolveSync({ input: "w/alpha/f.md", from: Include, lookup }) // -> the recipe file
+   */
+  it("should narrow readings against a synchronous lookup", () => {
+    const found = resolver.resolveSync(
+      new RefResolveArguments({ input: "w/alpha/f.md", from: RefSource.Include, lookup })
+    );
+    expect(found.refs.map((ref) => ref.kind)).toEqual(["recipeFile"]);
+    const none = resolver.resolveSync(
+      new RefResolveArguments({ input: "w/beta/f.md", from: RefSource.Include, lookup })
+    );
+    expect(none.isEmpty).toBe(true);
+  });
+
+  /**
+   * A lookup with no findSync cannot be used synchronously, and a refused ref
+   * raises the place's refusal, as resolve does.
+   *
+   * resolveSync with { find } only // throws
+   */
+  it("should refuse a lookup that cannot answer synchronously and a refused ref", () => {
+    expect(() =>
+      resolver.resolveSync(
+        new RefResolveArguments({
+          input: "w/alpha/f.md",
+          from: RefSource.Include,
+          lookup: { find: async () => [] },
+        })
+      )
+    ).toThrow(/findSync/);
+    expect(() =>
+      resolver.resolveSync(
+        new RefResolveArguments({ input: "w/alpha", from: RefSource.Include, lookup })
+      )
+    ).toThrow(/names a file inside a recipe/);
+  });
+
+  /**
+   * inspect returns what a place dropped, so a caller can explain a refusal
+   * in its own words.
+   *
+   * inspect("w/a/../f.md", Include) // -> kept [], dropped one recipeFile
+   */
+  it("should return the dropped readings with the reason", () => {
+    const { kept, dropped } = resolver.inspect("w/a/../f.md", RefSource.Include);
+    expect(kept).toEqual([]);
+    expect(dropped[0]?.ref.kind).toBe("recipeFile");
+    expect(dropped[0]?.reason).toContain("'.' or '..'");
+  });
+});

@@ -100,3 +100,16 @@ export function matchNames(written: string, names: Iterable<string>): string[] {
   if (exact.length > 0) return exact;
   return all.filter((name) => matchName(written, name) === "folded");
 }
+
+/**
+ * Orders two strings by their UTF-8 bytes, so the order is the same on every
+ * machine whatever its locale.
+ *
+ * ["b", "B", "a"].sort(compareBytewise); // -> ["B", "a", "b"]
+ *
+ * @param left - The first string.
+ * @param right - The second string.
+ */
+export function compareBytewise(left: string, right: string): number {
+  return Buffer.compare(Buffer.from(left), Buffer.from(right));
+}

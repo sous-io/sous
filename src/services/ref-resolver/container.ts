@@ -12,8 +12,12 @@
  *     container.bind(REF_TOKENS.Splitter).to(MyNewFormSplitter);
  *     const resolver = container.get<RefResolverService>(REF_TOKENS.Resolver);
  *
- * Callers that have no container of their own use `sharedRefResolver` and
- * `sharedRefPicker`, which come from one container built the first time they
+ * The `#` names are bound the same way: one more `HashName` under
+ * `REF_TOKENS.HashName` registers a view or a built-in, and a name bound twice
+ * is an error when the registry is first read.
+ *
+ * Callers that have no container of their own use `sharedRefResolver`,
+ * `sharedHashNames` and `sharedRefPicker`, which come from one container built the first time they
  * are read.
  */
 
@@ -30,6 +34,7 @@ import { CommandLinePruner } from "./pruners/command-line-pruner.js";
 import { IncludePruner } from "./pruners/include-pruner.js";
 import { ManifestPruner } from "./pruners/manifest-pruner.js";
 import { ConfigPruner, LockfilePruner } from "./pruners/stored-key-pruner.js";
+import { HashNameRegistry, ProjectHashName } from "./hash-names.js";
 import { RefPickerService } from "./ref-picker-service.js";
 import { RefResolverService } from "./ref-resolver-service.js";
 import { REF_TOKENS } from "./tokens.js";
@@ -67,6 +72,8 @@ export function createRefContainer(): Container {
     container.bind(REF_TOKENS.Pruner).to(pruner);
   }
 
+  container.bind(REF_TOKENS.HashName).to(ProjectHashName);
+  container.bind(REF_TOKENS.HashNames).to(HashNameRegistry);
   container.bind(REF_TOKENS.Parser).to(RefParser);
   container.bind(REF_TOKENS.Resolver).to(RefResolverService);
   container.bind(REF_TOKENS.Picker).to(RefPickerService);
@@ -85,6 +92,11 @@ export function getSharedRefContainer(): Container {
 /** The shared resolver, for callers that have no container. */
 export function sharedRefResolver(): RefResolverService {
   return getSharedRefContainer().get<RefResolverService>(REF_TOKENS.Resolver);
+}
+
+/** The shared registry of `#` names, for callers that have no container. */
+export function sharedHashNames(): HashNameRegistry {
+  return getSharedRefContainer().get<HashNameRegistry>(REF_TOKENS.HashNames);
 }
 
 /** The shared picker, for callers that have no container. */

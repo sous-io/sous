@@ -134,7 +134,7 @@ describe("IncludePruner", () => {
    */
   it("should refuse every other kind, a repository, a range and a path that climbs", () => {
     expect(refusal("w/a", RefSource.Include)).toContain("names a file inside a recipe");
-    expect(refusal("r:w/a/f.md", RefSource.Include)).toContain("never through a repository's short name");
+    expect(kept("r:w/a/f.md", RefSource.Include)).toEqual(["recipeFile:r:w/a/f.md"]);
     expect(refusal("github://o/r/w/a/f.md", RefSource.Include)).toBeDefined();
     expect(refusal("w/a/f.md@^1", RefSource.Include)).toContain("takes no version range");
     expect(refusal("w/a/../f.md", RefSource.Include)).toContain("'.' or '..'");

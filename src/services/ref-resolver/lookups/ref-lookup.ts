@@ -38,3 +38,17 @@ export interface RefLookup {
    */
   find(candidate: SousRef): Promise<RefMatch[]>;
 }
+
+/**
+ * A lookup that can also answer without waiting, for a caller whose own
+ * interface is synchronous (a template engine resolving a path). It answers
+ * exactly what `find` answers.
+ */
+export interface SyncRefLookup extends RefLookup {
+  /**
+   * Every known ref a candidate names, at once.
+   *
+   * @param candidate - One reading of a written ref.
+   */
+  findSync(candidate: SousRef): RefMatch[];
+}

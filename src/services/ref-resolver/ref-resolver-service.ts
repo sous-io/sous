@@ -14,7 +14,7 @@ import { makeInjectable } from "./injectable.js";
 import { REF_TOKENS } from "./tokens.js";
 import { ConfigError } from "../../lib/errors.js";
 import { refIdentity } from "./format.js";
-import type { RefMatch } from "./lookups/ref-lookup.js";
+import type { RefLookup, RefMatch, SyncRefLookup } from "./lookups/ref-lookup.js";
 import { repoOf } from "./parts.js";
 import type { RefParser } from "./parser/ref-parser.js";
 import { DroppedRef, type RefPruner } from "./pruners/ref-pruner.js";
@@ -93,17 +93,81 @@ export class RefResolverService {
    * @throws A ConfigError listing every reason when the place refuses every reading.
    */
   async resolve(args: RefResolveArguments): Promise<RefResolveResult> {
+    const early = this.beginResolve(args);
+    if ("result" in early) return early.result;
+    const found: Array<{ match: RefMatch; rank: SousRef }> = [];
+    if (early.lookup !== undefined) {
+      for (const candidate of early.kept) {
+        for (const match of await early.lookup.find(candidate)) {
+          found.push({ match, rank: candidate });
+        }
+      }
+    }
+    return this.finishResolve(args, early, found);
+  }
+
+  /**
+   * The same as `resolve`, for a caller that cannot wait: it asks the lookup's
+   * `findSync`, so the lookup must have one. A template engine's path
+   * resolution is synchronous, and is why this exists.
+   *
+   * @param args - The ref, where it was written, and what exists (a lookup with `findSync`).
+   * @throws A ConfigError listing every reason when the place refuses every reading.
+   */
+  resolveSync(args: RefResolveArguments): RefResolveResult {
+    const early = this.beginResolve(args);
+    if ("result" in early) return early.result;
+    const found: Array<{ match: RefMatch; rank: SousRef }> = [];
+    if (early.lookup !== undefined) {
+      const lookup = early.lookup as Partial<SyncRefLookup>;
+      if (lookup.findSync === undefined) {
+        throw new ConfigError("resolveSync needs a lookup that has a findSync method.");
+      }
+      for (const candidate of early.kept) {
+        for (const match of lookup.findSync(candidate)) found.push({ match, rank: candidate });
+      }
+    }
+    return this.finishResolve(args, early, found);
+  }
+
+  /**
+   * Parses and prunes without refusing: the readings a place keeps and the
+   * ones it drops, with the reason for each. For a caller that explains a
+   * refusal in its own words.
+   *
+   * @param input - The ref exactly as it was written.
+   * @param from - Where it was written.
+   * @throws A ConfigError when the text is not a ref in any reading.
+   */
+  inspect(input: string, from: RefSource): { kept: SousRef[]; dropped: DroppedRef[] } {
+    const { kept, dropped } = this.prune(input, from);
+    return { kept, dropped };
+  }
+
+  /** Everything `resolve` does before it asks a lookup, or the answer when it needs none. */
+  private beginResolve(
+    args: RefResolveArguments
+  ):
+    | { result: RefResolveResult }
+    | {
+        kept: SousRef[];
+        dropped: DroppedRef[];
+        warnings: string[];
+        lookup: RefLookup | undefined;
+      } {
     let pruned;
     try {
       pruned = this.prune(args.input, args.from);
     } catch (error) {
       // A text no reading exists for (empty, say) is refused the same way.
-      if (args.refusedIsEmpty) return new RefResolveResult(args.input, [], [], [], true);
+      if (args.refusedIsEmpty) return { result: new RefResolveResult(args.input, [], [], [], true) };
       throw error;
     }
     const { dropped, warnings, place } = pruned;
     if (pruned.kept.length === 0) {
-      if (args.refusedIsEmpty) return new RefResolveResult(args.input, [], dropped, warnings, true);
+      if (args.refusedIsEmpty) {
+        return { result: new RefResolveResult(args.input, [], dropped, warnings, true) };
+      }
       throw this.refusal(args.input, place, dropped);
     }
     const kinds = args.kinds;
@@ -118,33 +182,38 @@ export class RefResolverService {
                 (kinds.includes("namespace") || kinds.includes("recipe")))
           );
 
-    const lookup = args.lookup;
-    if (lookup === undefined) {
-      return new RefResolveResult(
-        args.input,
-        this.order(kept.map((ref) => ({ ref, rank: ref }))),
-        dropped,
-        warnings,
-        false
-      );
+    if (args.lookup === undefined) {
+      return {
+        result: new RefResolveResult(
+          args.input,
+          this.order(kept.map((ref) => ({ ref, rank: ref }))),
+          dropped,
+          warnings,
+          false
+        ),
+      };
     }
+    return { kept, dropped, warnings, lookup: args.lookup };
+  }
 
-    const found: Array<{ match: RefMatch; rank: SousRef }> = [];
-    for (const candidate of kept) {
-      for (const match of await lookup.find(candidate)) {
-        if (kinds === undefined || kinds.includes(match.ref.kind)) {
-          found.push({ match, rank: candidate });
-        }
-      }
-    }
-    const exact = found.filter((entry) => entry.match.exactSpelling);
-    const chosen = exact.length > 0 ? exact : found;
+  /** Everything `resolve` does with what a lookup found. */
+  private finishResolve(
+    args: RefResolveArguments,
+    early: { dropped: DroppedRef[]; warnings: string[] },
+    found: Array<{ match: RefMatch; rank: SousRef }>
+  ): RefResolveResult {
+    const kinds = args.kinds;
+    const matching = found.filter(
+      (entry) => kinds === undefined || kinds.includes(entry.match.ref.kind)
+    );
+    const exact = matching.filter((entry) => entry.match.exactSpelling);
+    const chosen = exact.length > 0 ? exact : matching;
 
     return new RefResolveResult(
       args.input,
       this.order(chosen.map((entry) => ({ ref: entry.match.ref, rank: entry.rank }))),
-      dropped,
-      warnings,
+      early.dropped,
+      early.warnings,
       true
     );
   }

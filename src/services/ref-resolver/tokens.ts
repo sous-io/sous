@@ -12,6 +12,10 @@ export const REF_TOKENS = {
   Pruner: Symbol.for("sous.ref.Pruner"),
   /** A `RepoProvider`; bound once per provider, injected as a list. */
   Provider: Symbol.for("sous.ref.Provider"),
+  /** A `HashName`; bound once per `#` name, injected as a list. */
+  HashName: Symbol.for("sous.ref.HashName"),
+  /** The `HashNameRegistry`. */
+  HashNames: Symbol.for("sous.ref.HashNames"),
   /** The `RefParser`. */
   Parser: Symbol.for("sous.ref.Parser"),
   /** The `RefResolverService`. */

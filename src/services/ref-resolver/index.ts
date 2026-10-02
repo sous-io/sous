@@ -20,6 +20,7 @@ export * from "./glob.js";
 export * from "./location.js";
 export * from "./format.js";
 export * from "./tokens.js";
+export * from "./hash-names.js";
 export * from "./injectable.js";
 export * from "./parser/partial-ref.js";
 export * from "./parser/ref-parser.js";

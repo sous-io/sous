@@ -4,7 +4,7 @@ import { rangeOf } from "../parts.js";
 import { RefSource, SOURCE_LABELS } from "../source.js";
 import type { SousRef } from "../types.js";
 import { RuleRefPruner, type RefPruneRule } from "./ref-pruner.js";
-import { hasLocation, hasRepoName } from "./rule-helpers.js";
+import { hasLocation } from "./rule-helpers.js";
 
 /** The path of a recipe file ref, or an empty string for any other ref. */
 function pathOf(ref: SousRef): string {
@@ -20,9 +20,10 @@ function instead(ref: SousRef): string {
 
 /**
  * The path of a template include line, once its sigil is taken off. Only a
- * file inside a recipe is allowed, and its path may be a glob. A recipe is
- * named by its namespace and name, never through a repository, and it takes no
- * version range (the version is the one the project pins).
+ * file inside a recipe is allowed, and its path, namespace and recipe name may
+ * be globs. A `repo:` qualifier may name the repository by the short name this
+ * project gave it. A location never counts, and neither does a version range
+ * (the version is the one the project pins).
  */
 export class IncludePruner extends RuleRefPruner {
   readonly source = RefSource.Include;
@@ -36,14 +37,6 @@ export class IncludePruner extends RuleRefPruner {
         message:
           "an include line names a file inside a recipe: its namespace, its recipe and the " +
           "path inside it.",
-        instead,
-      },
-      {
-        matches: hasRepoName,
-        action: "drop",
-        message:
-          "an include line names a recipe by its namespace and name, never through a " +
-          "repository's short name.",
         instead,
       },
       {
