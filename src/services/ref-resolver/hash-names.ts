@@ -12,6 +12,7 @@
  */
 
 import { ConfigError } from "../../lib/errors.js";
+import { compareBytewise } from "./glob.js";
 import { makeInjectable } from "./injectable.js";
 import { REF_TOKENS } from "./tokens.js";
 
@@ -119,7 +120,7 @@ export class HashNameRegistry {
 
   /** Every registered name, sorted. */
   list(): HashName[] {
-    return [...this.entries.values()].sort((left, right) => left.name.localeCompare(right.name));
+    return [...this.entries.values()].sort((left, right) => compareBytewise(left.name, right.name));
   }
 
   /**
