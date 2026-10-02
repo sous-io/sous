@@ -11,31 +11,9 @@ The binary was called `xcv` in earlier releases; the name is now `sous` everywhe
 
 @${sousDir}/prompts/memories/agent-conduct.md
 
-@~communication/agent-conduct/memories/agent-conduct.md
-
-@~communication/agent-conduct/memories/interaction-style.md
-
-@~communication/agent-conduct/memories/respect-the-users-time.md
-
-@~communication/agent-conduct/memories/quote-sources.md
-
-@~communication/agent-conduct/memories/rulings-and-provenance.md
-
-@~communication/agent-conduct/memories/drafting-and-outward-actions.md
-
-@~communication/agent-conduct/memories/outward-actions.md
-
-@~reasoning/evidence-and-verification/memories/evidence-and-verification.md
-
-@~workflow/sub-agent-delegation/memories/sub-agent-delegation.md
-
-@~workflow/agent-memory/memories/improving-the-instructions.md
-
-@~engineering/design-tenets/memories/design-tenets.md
+@#memories/**/*.md
 
 @${sousDir}/prompts/memories/writing-standards.md
-
-@~communication/plain-speech/memories/speak-plainly.md
 
 @${sousDir}/prompts/memories/cli-conventions.md
 
@@ -1038,14 +1016,15 @@ the COMMITTED `.sous/sous.lock.json`. Three sources feed `.claude/skills/`:
   any further subscription.
 - This repository's own skills in `.sous/skills/`, compiled by the `projectSkills` target.
 
-A recipe's MEMORIES do not go through `recipeOutputs`: `recipeOutputs.memories` is unset, so
-every build warns that memories were skipped, and each subscribed recipe's memory is instead
-included by hand into the source of this file, one `@~namespace/recipe/memories/<file>.md` line
-each, placed where it fits (the conduct memories, `engineering/design-tenets` among them, sit
-together near the top). This source is a `.tpl.` template, so those memories render with the
-project's answers. A new subscription that publishes a memory gets its include line in the same
-change. The website's source (`.sous/prompts/docs-site/CLAUDE.tpl.md`) includes only this
-project's own memories under `.sous/prompts/memories/`, none from a recipe.
+A recipe's MEMORIES are never copied into the project. This source includes all of them with
+the one line `@#memories/**/*.md` near the top: the `#memories` view lists every memory an
+active recipe (one the project subscribes to, directly or through a set) publishes, in
+dependency order, and no `recipes.memories.first` or `exclude` is configured here. A new
+subscription needs no edit to this file. Each memory renders as Liquid with the project's
+answers, because its own file name contains `.tpl.`; a plain `.md` memory is copied as it is.
+A build warns about any memory an active recipe publishes that no output includes. The
+website's source (`.sous/prompts/docs-site/CLAUDE.tpl.md`) includes only this project's own
+memories under `.sous/prompts/memories/`, none from a recipe.
 
 `tool-usage/automated-browser-tasks` is deliberately NOT subscribed to: it needs
 `browserAutomationScriptsDir` pointing at a real script directory, and sous has none.
@@ -1691,8 +1670,6 @@ like `getFiles import=` can `import()` files. Do not revert to `parseAndRenderSy
 To add a tag: create `src/templating/tags/<name>.ts` exporting a `register<Name>Tag(engine)`
 function, then add it to the array in `src/templating/tags/index.ts`. Filters follow the
 same pattern under `filters/`.
-
-@~workflow/sources-of-truth/memories/sources-of-truth.md
 
 ## Important!
 
