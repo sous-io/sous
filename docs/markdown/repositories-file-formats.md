@@ -80,9 +80,9 @@ contents:                           # what a subscriber actually receives
 | `contents`, `variables` | no | Contents default to an empty list, which is what a curated bundle publishes; a duplicated variable name, or two definitions claiming one `env`, is an error |
 | `submissions` | no | Whether this recipe takes proposed changes, winning over the repository's block; see [The submissions block](#the-submissions-block) |
 
-`contents[].kind` is `skills`, `memories`, `prompts` or `config`. The first three are written to the
-destinations named by [`recipeOutputs`](#recipeoutputs-where-the-files-land); `config` entries become config
-layers instead. `include` needs at least one glob, and both lists are recipe-relative.
+`contents[].kind` is `skills`, `memories`, `prompts` or `config`; there is no kind for a sous plugin. The
+first three are written to the destinations named by [`recipeOutputs`](#recipeoutputs-where-the-files-land);
+`config` entries become config layers instead. `include` needs at least one glob, and both lists are recipe-relative.
 
 ### The submissions block
 

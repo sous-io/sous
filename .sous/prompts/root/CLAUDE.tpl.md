@@ -429,9 +429,16 @@ permissions, whether sous runs it during a build or the agent runs it (skill scr
 neither. Before a repository is trusted nothing from it runs, and the trust ceremony reads only
 its index. A recipe is ACTIVE when the project subscribes to it directly, through its namespace,
 or through an active recipe's `subscribes`, and only an active recipe registers entry points of
-its own (output files, skills, hooks). A recipe held only through `depends` is a library that an
-active recipe may include, call or import. Activation exists for efficiency and to avoid
-conflicts; never describe it as protection.
+its own (output files, skills, tool hooks and tool plugins). A recipe held only through `depends`
+is a library that an active recipe may include, call or import. A recipe never installs a Sous
+plugin (one that extends sous itself); Sous plugins are the built-ins that ship with sous or
+npm-style modules, and a recipe's config layer is config, not a plugin.
+
+> "recipes will not be allowed to install _Sous_ plugins. All Sous plugins, besides any built-ins that ship with Sous, itself, will come from a NPM repo (or similar) as modules. Recipes _will_ be allowed to install tool plugins (e.g. Claude Code Plugins)."
+>
+>   -- **Luke Chavers** in an agent session (2026-09-29)
+
+Activation exists for efficiency and to avoid conflicts; never describe it as protection.
 
 **Two ways of naming a repository, and they are not interchangeable.** A SHORT NAME
 (`sous-recipes`) is one project's own label: it keys `repos:` in a config and in a lockfile, and
