@@ -333,7 +333,7 @@ describe("createProjectNamespaceResolver()", () => {
         reference: "workflow/task-files/partials/x.md",
         fromFile: path.join(sousDir, "prompts", "root.md"),
       })
-    ).toEqual({
+    ).toMatchObject({
       kind: "candidates",
       candidates: [path.join(recipeDir, "partials/x.md")],
     });
@@ -372,7 +372,7 @@ describe("createProjectNamespaceResolver()", () => {
         reference: "support/base/x.md",
         fromFile: path.join(sousDir, "prompts", "root.md"),
       })
-    ).toEqual({ kind: "candidates", candidates: [path.join(base, "x.md")] });
+    ).toMatchObject({ kind: "candidates", candidates: [path.join(base, "x.md")] });
   });
 
   /**
@@ -443,7 +443,7 @@ describe("createProjectNamespaceResolver()", () => {
         reference: "workflow/other/x.md",
         fromFile: path.join(taskFiles, "SKILL.md"),
       })
-    ).toEqual({ kind: "candidates", candidates: [path.join(other, "x.md")] });
+    ).toMatchObject({ kind: "candidates", candidates: [path.join(other, "x.md")] });
   });
 });
 

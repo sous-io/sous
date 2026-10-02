@@ -151,3 +151,26 @@ describe("listMemories()", () => {
     expect(listMemories({ sousDir: tmp.path, locked: [] })).toEqual([]);
   });
 });
+
+describe("listMemories() with links", () => {
+  /**
+   * A memory whose real path is outside its recipe's directory is skipped with
+   * one warning naming it; ordinary memories stay.
+   *
+   * memories/leak.md links to a file outside the recipe -> only memories/m.md is listed
+   */
+  it("should skip a memory that is a link leading out of its recipe, with a warning", () => {
+    const one = recipe("c/one");
+    write("outside/secret.md", "secret");
+    fs.symlinkSync(path.join(tmp.path, "outside/secret.md"), path.join(one.dir, "memories", "leak.md"));
+    const warnings: string[] = [];
+    const listed = listMemories({
+      sousDir: tmp.path,
+      locked: [one],
+      onWarning: (message) => warnings.push(message),
+    });
+    expect(listed.map((entry) => entry.path)).toEqual(["c/one/m.md"]);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("leak.md");
+  });
+});

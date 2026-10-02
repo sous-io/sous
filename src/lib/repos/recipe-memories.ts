@@ -20,6 +20,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { globSync } from "glob";
 import { compareBytewise } from "../../services/ref-resolver/index.js";
+import { realPathInside } from "../include-resolver.js";
 import { inferGlobBase } from "../markdown-compiler.js";
 import { compileRecipeKeyMatcher } from "./recipe-key-matcher.js";
 import {
@@ -52,7 +53,22 @@ export type MemoryListingOptions = {
   exclude?: readonly string[] | undefined;
   /** The locked recipes, when the caller has already located them. */
   locked?: LockedRecipeLocation[];
+  /**
+   * Receives a sentence for each memory skipped because its real path is
+   * outside its recipe's directory. Defaults to one line on stderr per file.
+   */
+  onWarning?: (message: string) => void;
 };
+
+/** Files already warned about by the default sink, so a repeated listing warns once. */
+const warnedFiles = new Set<string>();
+
+/** The default warning sink: one line on stderr, once per file. */
+function warnOnce(message: string): void {
+  if (warnedFiles.has(message)) return;
+  warnedFiles.add(message);
+  process.stderr.write(`Warning: ${message}\n`);
+}
 
 /**
  * Orders recipe keys so each comes after every pinned recipe it depends on or
@@ -127,6 +143,13 @@ export function listMemories(options: MemoryListingOptions): MemoryFile[] {
         const base = inferGlobBase(pattern);
         for (const file of globSync(pattern, { absolute: true, ignore, dot: true })) {
           if (!isFile(file)) continue;
+          if (!realPathInside(file, recipe.dir)) {
+            (options.onWarning ?? warnOnce)(
+              `The memory ${file} of the recipe ${key} was left out, because it is a link ` +
+                `that leads outside the recipe's directory. Replace the link with the file itself.`
+            );
+            continue;
+          }
           const inside = path.relative(base, file).split(path.sep).join("/");
           mine.set(file, {
             recipe: key,

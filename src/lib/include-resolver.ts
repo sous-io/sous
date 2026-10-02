@@ -4,7 +4,11 @@ import { globSync } from "glob";
 import { minimatch } from "minimatch";
 import { compareBytewise, hasGlob, type ViewFile } from "../services/ref-resolver/index.js";
 import { expandHome } from "./config-discovery.js";
-import type { NamespaceResolution, NamespaceResolver } from "./repos/namespace-resolver.js";
+import type {
+  NamespaceResolution,
+  NamespaceResolver,
+  RecipeRoot,
+} from "./repos/namespace-resolver.js";
 
 /**
  * @include path resolution: aliases, `#` names, recipe references, globs,
@@ -158,6 +162,13 @@ export type IncludeGroup = {
   paths: string[];
   /** True when the paths are patterns to expand. */
   glob: boolean;
+  /**
+   * The recipe each path belongs to (same length and order as `paths`), when
+   * they came from a `~` reference. Every file a path names must have a real
+   * path inside that recipe's real directory; one that does not (a link
+   * leading out) is refused.
+   */
+  roots?: RecipeRoot[];
 };
 
 /** The full result of resolving one include path. */
@@ -211,8 +222,32 @@ export function splitIncludeQuery(raw: string): { path: string; query: string } 
 }
 
 /** The group of one literal path followed by its `.tpl.` twin. */
-function literalGroups(candidate: string): IncludeGroup[] {
-  return withTemplateTwins([candidate]).map((entry) => ({ paths: [entry], glob: false }));
+function literalGroups(candidate: string, root?: RecipeRoot): IncludeGroup[] {
+  return withTemplateTwins([candidate]).map((entry) => ({
+    paths: [entry],
+    glob: false,
+    ...(root === undefined ? {} : { roots: [root] }),
+  }));
+}
+
+/**
+ * Whether a file's real path sits inside a directory's real path, so a link
+ * cannot lead out of it. A path that cannot be resolved (it does not exist) is
+ * not an escape.
+ *
+ * @param file - An absolute file path.
+ * @param dir - An absolute directory path.
+ */
+export function realPathInside(file: string, dir: string): boolean {
+  let realFile: string;
+  let realDir: string;
+  try {
+    realFile = fs.realpathSync(file);
+    realDir = fs.realpathSync(dir);
+  } catch {
+    return true;
+  }
+  return realFile === realDir || realFile.startsWith(realDir + path.sep);
 }
 
 /**
@@ -254,6 +289,17 @@ export function resolveInclude(rawPath: string, opts: IncludeResolveOptions): In
   const views = opts.views ?? {};
   const viewKey = splitAliasKey(substituted);
   if (viewKey.key.startsWith("#") && Object.prototype.hasOwnProperty.call(views, viewKey.key)) {
+    const includingRecipe = opts.namespaceResolver?.includingRecipe?.(opts.fromFile ?? opts.baseDir) ?? null;
+    if (includingRecipe !== null) {
+      return finish([], {
+        view: true,
+        hashIssue:
+          `The recipe "${includingRecipe}" may not include "${viewKey.key}", because a view lists ` +
+          `other recipes' files.\n` +
+          `A recipe includes another recipe's files with "@~namespace/recipe/..." and a ` +
+          `dependency declared in its manifest ("depends" or "subscribes").`,
+      });
+    }
     const listed = views[viewKey.key]!;
     const wanted = viewKey.rest;
     const matched = listed.filter((entry) =>
@@ -306,11 +352,15 @@ export function resolveInclude(rawPath: string, opts: IncludeResolveOptions): In
     const resolution = opts.namespaceResolver.resolve({ reference, fromFile });
 
     if (resolution.kind === "candidates" && resolution.glob === true) {
-      groups.push({ paths: resolution.candidates.map((c) => c), glob: true });
+      groups.push({
+        paths: resolution.candidates.map((c) => c),
+        glob: true,
+        ...(resolution.roots === undefined ? {} : { roots: resolution.roots }),
+      });
     } else if (resolution.kind === "candidates" && resolution.candidates.length > 0) {
-      for (const candidate of resolution.candidates) {
-        groups.push(...literalGroups(path.normalize(candidate)));
-      }
+      resolution.candidates.forEach((candidate, index) => {
+        groups.push(...literalGroups(path.normalize(candidate), resolution.roots?.[index]));
+      });
     } else if (resolution.kind !== "candidates") {
       namespaceIssue = { reference, fromFile, resolution };
     }
@@ -358,6 +408,25 @@ export function resolveIncludeFiles(rawPath: string, opts: IncludeResolveOptions
     const found = group.glob
       ? group.paths.flatMap(expandPattern)
       : group.paths.filter((candidate) => fs.existsSync(candidate));
+    if (group.roots !== undefined) {
+      const roots = group.roots;
+      const leaving = group.paths.flatMap((entry, index) => {
+        const root = roots[index];
+        if (root === undefined) return [];
+        const files = group.glob ? expandPattern(entry) : fs.existsSync(entry) ? [entry] : [];
+        return files.filter((file) => !realPathInside(file, root.dir)).map(() => root);
+      });
+      const { recipe } = leaving[0] ?? { recipe: "" };
+      if (leaving.length > 0) {
+        out.files = [];
+        out.namespaceIssue = {
+          reference: rawPath.replace(/^~/, ""),
+          fromFile: opts.fromFile ?? opts.baseDir,
+          resolution: { kind: "escapes-recipe", recipe, reference: rawPath.replace(/^~/, "") },
+        };
+        return out;
+      }
+    }
     if (found.length > 0) {
       out.files = [...new Set(found)];
       return out;

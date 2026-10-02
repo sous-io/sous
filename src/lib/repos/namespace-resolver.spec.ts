@@ -43,7 +43,7 @@ describe("StaticNamespaceResolver", () => {
       fromFile: "/project/prompts/AGENTS.md",
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       kind: "candidates",
       candidates: [path.join(STORE, "workflow", "task-files", "_partials", "resume.md")],
     });
@@ -109,7 +109,7 @@ describe("StaticNamespaceResolver", () => {
       fromFile: path.join(STORE, "core", "sous-skills", "SKILL.md"),
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       kind: "candidates",
       candidates: [path.join(STORE, "workflow", "task-files", "partial.md")],
     });
@@ -273,7 +273,7 @@ describe("StaticNamespaceResolver", () => {
       reference: "workflow/task-files/a/b/c.md",
       fromFile: "/project/prompts/AGENTS.md",
     });
-    expect(nested).toEqual({
+    expect(nested).toMatchObject({
       kind: "candidates",
       candidates: [path.join(STORE, "workflow", "task-files", "a", "b", "c.md")],
     });

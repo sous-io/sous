@@ -1,5 +1,6 @@
 import path from "node:path";
 import { escape as escapeGlob } from "glob";
+import { braceExpand } from "minimatch";
 import {
   RefResolveArguments,
   RefSource,
@@ -64,6 +65,9 @@ export type DroppedRecipe =
   /** The project subscribes to it, but the subscription is switched off. */
   | { by: "disabled-subscription"; subscription: string };
 
+/** A recipe a candidate belongs to: its key and its directory. */
+export type RecipeRoot = { recipe: string; dir: string };
+
 /** A single `~` reference resolution request. */
 export type NamespaceRequest = {
   /**
@@ -94,8 +98,12 @@ export type NamespaceResolution =
    * the lookup produced nothing. When `glob` is true the reference was a glob:
    * every candidate is a pattern (the recipe's own directory escaped), and ALL
    * of them are included, in order, not just the first that exists.
+   * `roots`, when present, holds the recipe (and its directory) each candidate belongs to
+   * (same length and order); a caller that reads files refuses any file whose
+   * real path is outside its root, which is how a symlink inside a recipe cannot
+   * lead out of it.
    */
-  | { kind: "candidates"; candidates: string[]; glob?: true }
+  | { kind: "candidates"; candidates: string[]; glob?: true; roots?: RecipeRoot[] }
   /**
    * No such namespace is known at all. `known` lists the namespaces that are.
    * `dropped` says why a project template's recipe is no longer pinned, when
@@ -139,6 +147,15 @@ export interface NamespaceResolver {
    * @returns Candidate absolute paths (most preferred first), or a reason the lookup failed.
    */
   resolve(request: NamespaceRequest): NamespaceResolution;
+
+  /**
+   * The ref of the recipe whose directory holds `fromFile`, or null when the
+   * file is not inside any recipe (a project template). Optional: a resolver
+   * that cannot tell is treated as one for which every file is the project's.
+   *
+   * @param fromFile - Absolute path of a file or directory.
+   */
+  includingRecipe?(fromFile: string): string | null;
 }
 
 /**
@@ -208,7 +225,8 @@ export function formatNamespaceProblem(opts: {
     );
     lines.push(
       `A "~namespace" reference addresses a recipe's own files, so it may not contain ` +
-        `"." or ".." segments and may not be an absolute path.`
+        `"." or ".." segments (also inside a { } alternative), may not be an absolute path, ` +
+        `and may not reach a file through a link that leaves the recipe.`
     );
     lines.push(
       `Write the path of a file inside the recipe, or include the other file by a ` +
@@ -337,7 +355,7 @@ export class StaticNamespaceResolver implements NamespaceResolver {
    * file lives outside every recipe (a project template). The deepest matching
    * recipe directory wins, so nested layouts resolve to the innermost recipe.
    */
-  private includingRecipe(fromFile: string): string | null {
+  includingRecipe(fromFile: string): string | null {
     const target = path.resolve(fromFile);
     let best: string | null = null;
     let bestLength = -1;
@@ -428,6 +446,7 @@ export class StaticNamespaceResolver implements NamespaceResolver {
       : this.projectScope;
 
     const candidates: string[] = [];
+    const roots: RecipeRoot[] = [];
     for (const ref of matched) {
       const key = `${ref.recipe.namespace?.name ?? ""}/${ref.recipe.name}`;
       const recipeDir = this.recipes[key];
@@ -439,7 +458,15 @@ export class StaticNamespaceResolver implements NamespaceResolver {
       }
 
       if (written.glob === true) {
+        // A brace alternative can hold a `.` or `..` segment that the ref
+        // service keeps inside one segment (`{..,x}`), so expand every
+        // alternative and refuse any that climbs.
+        const climbs = braceExpand(ref.path).some((alternative) =>
+          alternative.split("/").some((part) => part === "." || part === "..")
+        );
+        if (climbs) return { kind: "escapes-recipe", recipe: key, reference };
         candidates.push(`${escapeGlob(recipeDir)}/${ref.path}`);
+        roots.push({ recipe: key, dir: recipeDir });
         continue;
       }
 
@@ -452,11 +479,12 @@ export class StaticNamespaceResolver implements NamespaceResolver {
         return { kind: "escapes-recipe", recipe: key, reference };
       }
       candidates.push(resolved);
+      roots.push({ recipe: key, dir: recipeDir });
     }
 
     return written.glob === true
-      ? { kind: "candidates", candidates, glob: true }
-      : { kind: "candidates", candidates };
+      ? { kind: "candidates", candidates, glob: true, roots }
+      : { kind: "candidates", candidates, roots };
   }
 }
 
