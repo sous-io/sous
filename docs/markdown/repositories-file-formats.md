@@ -406,7 +406,7 @@ and a recipe's own config layer may set `recipes`.
 - `recipes.memories.exclude` (`string[]`, default none): recipes whose memories the view leaves out, and the
   build's unincluded-memory warning never lists. The same entry forms as `first`.
 
-There is no `prompts` block. The old `recipeOutputs` key is not accepted.
+There is no `prompts` block.
 
 ## Managed config layers
 

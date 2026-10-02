@@ -62,8 +62,7 @@ prefer the on-disk copies.
 - The top-level `recipes` key says what the project does with each content kind its subscribed
   recipes publish: `recipes.skills.outputs` lists the directories skills are written to, and
   `recipes.memories.first` and `recipes.memories.exclude` (globs over `namespace/recipe`, or
-  `/regex/` strings) order and filter the memories the `@#memories/**/*.md` include pulls in. The
-  old `recipeOutputs` key is gone.
+  `/regex/` strings) order and filter the memories the `@#memories/**/*.md` include pulls in.
 - Any config problem halts sous with a ConfigError naming the offending file; fix the named
   file rather than working around it.
 - Configs use `${var}`; template files use LiquidJS double-brace syntax. The two resolve at
