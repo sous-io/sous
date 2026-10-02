@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { FetchLike } from "../providers/http.js";
-import { parseRef } from "../../refs/parse.js";
+import { RefSource, sharedRefResolver } from "../../../services/ref-resolver/index.js";
 import { needsSettling, settleDependencyLocations } from "./settle.js";
 import type { RepoValidation } from "./validate.js";
+
+/** Every reading of a dependency as a manifest may write it. */
+const parseRef = (written: string) => sharedRefResolver().parse(written, RefSource.Manifest).refs;
 
 /**
  * Unit tests for settling, at release time, the dependencies that read more

@@ -31,8 +31,12 @@
 import semver from "semver";
 import type { Settings } from "../settings.js";
 import { resolveStoreRoot } from "../sous-home.js";
-import { RefSource } from "../refs/scopes.js";
-import { namespaceOfKey, parseShortRef, refKey } from "../refs/parse.js";
+import {
+  RefSource,
+  namespaceOfKey,
+  parseNamedRef,
+  shortKey,
+} from "../../services/ref-resolver/index.js";
 import {
   StaticNamespaceResolver,
   type DroppedRecipe,
@@ -131,7 +135,7 @@ export function explainUnpinnedRecipe(
     if (entry?.enabled !== false) continue;
     let ref: string;
     try {
-      ref = refKey(parseShortRef(key, RefSource.Config));
+      ref = shortKey(parseNamedRef(key, RefSource.Config));
     } catch {
       // The config schema already refuses a key that is not a ref.
       continue;

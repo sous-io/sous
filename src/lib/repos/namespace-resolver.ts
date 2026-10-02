@@ -1,5 +1,5 @@
 import path from "node:path";
-import { namespaceOfKey } from "../refs/parse.js";
+import { namespaceOfKey } from "../../services/ref-resolver/index.js";
 
 /**
  * Namespace addressability for templates: the reserved `~` include sigil.

@@ -24,8 +24,15 @@
 import path from "node:path";
 import semver from "semver";
 import { hashDirectory } from "../store/hash.js";
-import { isNamedReading, parseRef, splitRecipeKey } from "../../refs/parse.js";
-import { RefSource } from "../../refs/scopes.js";
+import {
+  RefSource,
+  isNamedRef,
+  locationOf,
+  namespaceOf,
+  sharedRefResolver,
+  shortKey,
+  splitRecipeKey,
+} from "../../../services/ref-resolver/index.js";
 import type { RunOptions } from "../providers/git.js";
 import { listRecipeTags, tagFor, withTaggedTree, type RecipeTag } from "./tags.js";
 import { nextVersion, type BumpLevel } from "./bump.js";
@@ -346,20 +353,20 @@ export function siblingKeysOf(validation: RepoValidation, key: string): string[]
   for (const written of declared) {
     let readings;
     try {
-      readings = parseRef(written, RefSource.Manifest);
+      readings = sharedRefResolver().parse(written, RefSource.Manifest).refs;
     } catch {
       continue;
     }
     const parsed = readings[0]!;
-    if (!isNamedReading(parsed) || parsed.location !== undefined) continue;
+    if (!isNamedRef(parsed) || locationOf(parsed) !== undefined) continue;
 
-    if (parsed.recipe !== undefined) {
-      keys.push(`${parsed.namespace}/${parsed.recipe}`);
+    if (parsed.kind === "recipe") {
+      keys.push(shortKey(parsed));
       continue;
     }
     // A whole-namespace dependency means every recipe in it.
     for (const entry of validation.recipes) {
-      if (entry.manifest.namespace === parsed.namespace && entry.key !== key) {
+      if (entry.manifest.namespace === namespaceOf(parsed)!.name && entry.key !== key) {
         keys.push(entry.key);
       }
     }

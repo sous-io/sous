@@ -12,7 +12,7 @@ import {
   type ResolveContext,
   type ResolverRepo,
 } from "./resolver.js";
-import { parseShortRef as parseRef } from "../refs/parse.js";
+import { parseNamedRef as parseRef } from "../../services/ref-resolver/index.js";
 import type { IndexFile } from "./formats/index-file.js";
 import type { RecipeManifest } from "./formats/recipe-manifest.js";
 import { makeIndexFile } from "../../test/utils/repo-fixtures.js";

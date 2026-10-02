@@ -75,8 +75,15 @@ import {
   type GatheredDeclaration,
 } from "../declarations.js";
 import type { DependencyKind } from "../formats/common.js";
-import { isNamedReading, namespaceOfKey, parseRef, refKey } from "../../refs/parse.js";
-import { RefSource } from "../../refs/scopes.js";
+import {
+  RefSource,
+  isNamedRef,
+  locationOf,
+  namespaceOfKey,
+  rangeOf,
+  sharedRefResolver,
+  shortKey,
+} from "../../../services/ref-resolver/index.js";
 import type { SettledDependency } from "./settle.js";
 
 /** A version that is ready to publish but has no tag yet. */
@@ -547,7 +554,7 @@ function declaredDependencies(
 
     let readings;
     try {
-      readings = parseRef(written, RefSource.Manifest);
+      readings = sharedRefResolver().parse(written, RefSource.Manifest).refs;
     } catch {
       // A dependency that does not parse is already reported by validation.
       continue;
@@ -555,32 +562,33 @@ function declaredDependencies(
     // Several readings, or a browser path, are settled above or reported by
     // the settling step; there is nothing more to record here.
     const parsed = readings[0]!;
-    if (readings.length !== 1 || !isNamedReading(parsed)) continue;
+    if (readings.length !== 1 || !isNamedRef(parsed)) continue;
 
-    if (parsed.location !== undefined) {
+    const location = locationOf(parsed);
+    if (location !== undefined) {
       // A whole namespace in another repository is read from that repository's
       // own index by the consumer; only a recipe has a key to record.
-      if (parsed.recipe !== undefined) {
-        byKey.set(refKey(parsed), {
+      if (parsed.kind === "recipe") {
+        byKey.set(shortKey(parsed), {
           where: "remote",
-          repo: parsed.location.identity,
-          range: parsed.range ?? "*",
+          repo: location.identity,
+          range: rangeOf(parsed) ?? "*",
         });
-        cover(refKey(parsed), { written, kind, named: true });
+        cover(shortKey(parsed), { written, kind, named: true });
       }
       continue;
     }
 
-    if (parsed.recipe !== undefined) {
-      addSibling(refKey(parsed), parsed.range, true);
-      cover(refKey(parsed), { written, kind, named: true });
+    if (parsed.kind === "recipe") {
+      addSibling(shortKey(parsed), rangeOf(parsed), true);
+      cover(shortKey(parsed), { written, kind, named: true });
       continue;
     }
 
     // A whole-namespace dependency means every recipe in that namespace.
-    namespaces.add(parsed.namespace);
+    namespaces.add(parsed.name);
     for (const entry of validation.recipes) {
-      if (entry.manifest.namespace !== parsed.namespace) continue;
+      if (entry.manifest.namespace !== parsed.name) continue;
       if (entry.key === recipe.key) continue;
       addSibling(entry.key, undefined, false);
       cover(entry.key, { written, kind, named: false });

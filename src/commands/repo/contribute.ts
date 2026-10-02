@@ -3,11 +3,14 @@ import { BaseCommand } from "../../base-command.js";
 import { ConfigError } from "../../lib/errors.js";
 import { nonInteractiveError } from "../../lib/interactive.js";
 import {
-  SousScope,
-  findReference,
-  pickReference,
-  type ReferenceRepo,
-} from "../../lib/refs/index.js";
+  CatalogLookup,
+  RefPickArguments,
+  RefResolveArguments,
+  repoOf,
+  sharedRefPicker,
+  sharedRefResolver,
+  type CatalogRepo,
+} from "../../services/ref-resolver/index.js";
 import {
   assessPendingWork,
   assessProposal,
@@ -373,27 +376,33 @@ export default class RepoContribute extends BaseCommand {
       shellEnv: this.shellEnv,
     });
 
-    const repos: ReferenceRepo[] = service.cachedReferenceRepos();
+    const repos: CatalogRepo[] = service.cachedReferenceRepos();
 
-    const matches = findReference(
-      ref,
-      [SousScope.Repository, SousScope.Namespace, SousScope.Recipe],
-      { repos }
+    const { refs } = await sharedRefResolver().resolve(
+      new RefResolveArguments({
+        input: ref,
+        lookup: new CatalogLookup(repos),
+        kinds: ["repo", "namespace", "recipe"],
+        refusedIsEmpty: true,
+      })
     );
 
-    const chosen = await pickReference(matches, {
-      search: ref,
-      interactive: this.interactive,
-      acceptFirst,
-      prompt: `Which '${ref}' do you want to contribute to?`,
-      details: [
-        "  No trusted repository, namespace or recipe has that name.",
-        repos.length === 0
-          ? "  This project trusts no repositories."
-          : `  This project trusts: ${repos.map((entry) => entry.name).join(", ")}.`,
-      ],
-    });
-    return chosen.repo ?? chosen.key;
+    const chosen = await sharedRefPicker().pick(
+      refs,
+      new RefPickArguments({
+        search: ref,
+        interactive: this.interactive,
+        acceptFirst,
+        prompt: `Which '${ref}' do you want to contribute to?`,
+        details: [
+          "  No trusted repository, namespace or recipe has that name.",
+          repos.length === 0
+            ? "  This project trusts no repositories."
+            : `  This project trusts: ${repos.map((entry) => entry.name).join(", ")}.`,
+        ],
+      })
+    );
+    return chosen.kind === "repo" ? chosen.name! : repoOf(chosen)!.name!;
   }
 
   // --- The link ---------------------------------------------------------------------------------

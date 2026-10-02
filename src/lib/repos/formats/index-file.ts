@@ -33,7 +33,7 @@ import {
   stableJsonStringify,
 } from "./common.js";
 import { publishedVariableDefinitionSchema } from "./variable-definition.js";
-import { namespaceOfKey } from "../../refs/parse.js";
+import { namespaceOfKey } from "../../../services/ref-resolver/index.js";
 
 /**
  * One dependency of one published version, as the release resolved it.

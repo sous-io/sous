@@ -34,6 +34,7 @@ import {
   type RecipeVersionListing,
 } from "../../lib/repos/catalog.js";
 import { PROJECT_REQUESTER } from "../../lib/repos/resolver.js";
+import { recipeRef } from "../../services/ref-resolver/index.js";
 import { describeDeclaration, describeDependencyKind } from "../../lib/repos/declarations.js";
 import { formatQuestionPlan } from "../../lib/vars/question-plan.js";
 import { describeError } from "../../lib/repos/release/validate.js";
@@ -156,8 +157,8 @@ export default class RecipeShow extends BaseCommand {
     });
 
     const detail = flags.installed
-      ? describeInstalled(inputs, args.ref, describeRecipe, "recipe")
-      : describeRecipe(inputs, args.ref);
+      ? await describeInstalled(inputs, args.ref, describeRecipe, "recipe")
+      : await describeRecipe(inputs, args.ref);
 
     heading(detail.key);
     blankLine();
@@ -236,12 +237,10 @@ export default class RecipeShow extends BaseCommand {
     }
     try {
       return await service.previewSubscription(
-        {
+        recipeRef(detail.namespace, detail.name, {
           repo: detail.repo,
-          namespace: detail.namespace,
-          recipe: detail.name,
           range: detail.describing,
-        },
+        }),
         {
           indexes: new Map(inputs.repos.map((repo) => [repo.name, repo.index])),
           ...(semver.prerelease(detail.describing) === null ? {} : { prerelease: true }),
