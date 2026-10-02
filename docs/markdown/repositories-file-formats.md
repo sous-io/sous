@@ -80,11 +80,11 @@ contents:                           # what a subscriber actually receives
 | `contents`, `variables` | no | Contents default to an empty list, which is what a curated bundle publishes; a duplicated variable name, or two definitions claiming one `env`, is an error |
 | `submissions` | no | Whether this recipe takes proposed changes, winning over the repository's block; see [The submissions block](#the-submissions-block) |
 
-`contents[].kind` is `skills`, `memories`, `prompts` or `config`. `skills` are written to the destinations named
-by [`recipes`](#recipes-what-each-content-kind-does); `memories` are included into your instruction files by one
-line (see [Recipe memories](repositories-consuming.md#recipe-memories)); `config` entries become config layers;
-nothing takes `prompts` yet, and the build warns about a recipe that publishes them. `include` needs at least one
-glob, and both lists are recipe-relative.
+`contents[].kind` is `skills`, `memories`, `prompts` or `config`; there is no kind for a sous plugin. `skills` are
+written to the destinations named by [`recipes`](#recipes-what-each-content-kind-does); `memories` are included
+into your instruction files by one line (see [Recipe memories](repositories-consuming.md#recipe-memories));
+`config` entries become config layers; nothing takes `prompts` yet, and the build warns about a recipe that
+publishes them. `include` needs at least one glob, and both lists are recipe-relative.
 
 ### The submissions block
 

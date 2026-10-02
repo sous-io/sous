@@ -73,7 +73,7 @@ path order. The same file may be included in more than one place; a circular inc
 that looks like an include (`@docs/notes.txt`, `@~workflow/missing`) but cannot be resolved, which fails the
 build naming the file and the line. A line inside a fenced code block is left as written. An alias name may not
 start with `~` or `#`. Reads of recipe files go through the
-[ref resolver](adrs/0012-one-ref-resolver.md); [Including recipe files in your own templates](repositories.md#including-recipe-files-in-your-own-templates)
+[ref resolver](adrs/0013-one-ref-resolver.md); [Including recipe files in your own templates](repositories.md#including-recipe-files-in-your-own-templates)
 has the namespace rules.
 
 ## Composition

@@ -411,9 +411,16 @@ permissions, whether sous runs it during a build or the agent runs it (skill scr
 neither. Before a repository is trusted nothing from it runs, and the trust ceremony reads only
 its index. A recipe is ACTIVE when the project subscribes to it directly, through its namespace,
 or through an active recipe's `subscribes`, and only an active recipe registers entry points of
-its own (output files, skills, hooks). A recipe held only through `depends` is a library that an
-active recipe may include, call or import. Activation exists for efficiency and to avoid
-conflicts; never describe it as protection.
+its own (output files, skills, tool hooks and tool plugins). A recipe held only through `depends`
+is a library that an active recipe may include, call or import. A recipe never installs a Sous
+plugin (one that extends sous itself); Sous plugins are the built-ins that ship with sous or
+npm-style modules, and a recipe's config layer is config, not a plugin.
+
+> "recipes will not be allowed to install _Sous_ plugins. All Sous plugins, besides any built-ins that ship with Sous, itself, will come from a NPM repo (or similar) as modules. Recipes _will_ be allowed to install tool plugins (e.g. Claude Code Plugins)."
+>
+>   -- **Luke Chavers** in an agent session (2026-09-29)
+
+Activation exists for efficiency and to avoid conflicts; never describe it as protection.
 
 **Two ways of naming a repository, and they are not interchangeable.** A SHORT NAME
 (`sous-recipes`) is one project's own label: it keys `repos:` in a config and in a lockfile, and
@@ -427,7 +434,7 @@ one from the entry's `url` through `requireProvider(url).canonicalize(url)`, so 
 written before the store was re-keyed still loads and fills the field in on its next write.
 
 **Refs.** Every ref, wherever it is written, is read by ONE service, `src/services/ref-resolver/`
-(decision record 0012, which supersedes 0008). `RefParser` is context-free and returns EVERY reading
+(decision record 0013, which supersedes 0008). `RefParser` is context-free and returns EVERY reading
 of a string (a bare word is a repository, namespace, recipe, variable and env var name at once),
 because a GitLab nested group does not say where the project path ends and a browser URL names a
 folder only an index can map to a recipe. A `RefPruner` per `RefSource` (`CommandLine`, `Config`,
@@ -785,7 +792,7 @@ Memories are never written anywhere: the `#memories` view (`recipe-memories.ts`,
 `#memories/<namespace>/<recipe>/<path>`, in dependency order, narrowed by `recipes.memories.first`
 and `exclude` (`recipe-key-matcher.ts`: globs, or `/regex/` strings, since config layers are JSON).
 `unincludedMemories` (`build-service.ts`) makes the build warn about every memory no output included.
-`sous init` writes `memories/AGENTS.tpl.md` with the one line `@#memories/**/*.md`. ADR 0012.
+`sous init` writes `memories/AGENTS.tpl.md` with the one line `@#memories/**/*.md`. ADR 0013.
 
 **What a build does with all this.** Every command that builds (`build`, `init`, `launch`,
 `prune`, `repo remove`, `repo unlink`, `subscription add`, `subscription remove`,
@@ -1207,7 +1214,7 @@ files (`sous vars ask` writes them), not in `_vars`; `_vars` is for what no reci
 
 ## The `.tpl.` Convention
 
-A file's OWN name decides, every time (ADR 0012, which amends ADR 0005's "decided by the entry point"):
+A file's OWN name decides, every time (ADR 0013, which amends ADR 0005's "decided by the entry point"):
 
 - A file **with** `.tpl.` always renders through LiquidJS; `.tpl.` is stripped from the output
   name (`agent.tpl.md` → `agent.md`). A file **without** it never renders, even when a template

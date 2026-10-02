@@ -1,4 +1,4 @@
-# ADR 0012: One ref resolver, and recipe memories included through a `#memories` view
+# ADR 0013: One ref resolver, and recipe memories included through a `#memories` view
 
 **Status:** Accepted, 2026-10-02.
 

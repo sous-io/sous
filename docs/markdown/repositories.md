@@ -47,7 +47,8 @@ $ sous namespace list
 
 A recipe is the unit you subscribe to and the only thing that carries a version. It may hold
 skills, memories, prompts, config layers and variable definitions in any mixture, and
-subscribing to it gets all of them.
+subscribing to it gets all of them. A recipe may ship a plugin for a coding tool (a Claude Code
+plugin, say), but never a plugin for sous itself; those come only with sous or as npm packages.
 
 ```yaml
 # recipes/workflow/task-files/sous.recipe.yaml
@@ -193,10 +194,10 @@ this machine.
 Subscribing decides what is switched on, and it is not a second security gate. A recipe is
 **active** when the project subscribes to it directly or through its namespace, or when an active
 recipe lists it under `subscribes`; only an active recipe registers entry points of its own, such as
-output files, skills and hooks. A recipe held only through `depends` is a library: an active recipe
-may include, call or import its files, but it registers nothing itself. Activation keeps a project
-from running what it has no use for and keeps unrelated recipes from colliding; everything in a
-trusted repository is already trusted.
+output files, skills, tool hooks and tool plugins. A recipe held only through `depends` is a library:
+an active recipe may include, call or import its files, but it registers nothing itself. Activation
+keeps a project from running what it has no use for and keeps unrelated recipes from colliding;
+everything in a trusted repository is already trusted.
 
 ## The official repository, and the built-in core
 
