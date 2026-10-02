@@ -15,6 +15,26 @@ import { ConfigError } from "../../lib/errors.js";
 import { makeInjectable } from "./injectable.js";
 import { REF_TOKENS } from "./tokens.js";
 
+/** One file a view lists: where it sits in the view, and the real file behind it. */
+export interface ViewFile {
+  /** The path inside the view, without the `#name/` prefix, with `/` separators. */
+  readonly path: string;
+  /** The real file's absolute path. */
+  readonly file: string;
+}
+
+/** What a view needs to know about the project to list its files. */
+export interface HashViewContext {
+  /** The project's `.sous/` directory. */
+  sousDir: string;
+  /** The environment to read; decides where the recipe store is. */
+  env?: NodeJS.ProcessEnv;
+  /** The merged project config, read for the `recipes` key. */
+  settings: {
+    recipes?: { memories?: { first?: string[] | undefined; exclude?: string[] | undefined } };
+  };
+}
+
 /** One `#` name and what it stands for. */
 export interface HashName {
   /** The name without its `#`: lowercase kebab-case, such as `project`. */
@@ -31,6 +51,14 @@ export interface HashName {
    * @param scope - The settings scope the project's paths come from.
    */
   bases(scope: Record<string, string>): string[];
+  /**
+   * A view lists virtual files instead of standing for directories: an include
+   * of `#name/<glob>` selects among the listed paths and includes the real
+   * files behind them, in the listed order. A view has no bases.
+   *
+   * @param context - The project the files are listed for.
+   */
+  view?(context: HashViewContext): ViewFile[];
 }
 
 /** The characters a registered name may hold. */
@@ -92,6 +120,19 @@ export class HashNameRegistry {
   /** Every registered name, sorted. */
   list(): HashName[] {
     return [...this.entries.values()].sort((left, right) => left.name.localeCompare(right.name));
+  }
+
+  /**
+   * Every view's listed files, keyed by the name with its `#`.
+   *
+   * @param context - The project the files are listed for.
+   */
+  viewMap(context: HashViewContext): Record<string, ViewFile[]> {
+    const map: Record<string, ViewFile[]> = {};
+    for (const entry of this.list()) {
+      if (entry.view !== undefined) map[`#${entry.name}`] = entry.view(context);
+    }
+    return map;
   }
 
   /**

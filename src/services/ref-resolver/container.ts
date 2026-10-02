@@ -34,6 +34,7 @@ import { CommandLinePruner } from "./pruners/command-line-pruner.js";
 import { IncludePruner } from "./pruners/include-pruner.js";
 import { ManifestPruner } from "./pruners/manifest-pruner.js";
 import { ConfigPruner, LockfilePruner } from "./pruners/stored-key-pruner.js";
+import { MemoriesHashName } from "../../lib/repos/memories-hash-name.js";
 import { HashNameRegistry, ProjectHashName } from "./hash-names.js";
 import { RefPickerService } from "./ref-picker-service.js";
 import { RefResolverService } from "./ref-resolver-service.js";
@@ -73,6 +74,7 @@ export function createRefContainer(): Container {
   }
 
   container.bind(REF_TOKENS.HashName).to(ProjectHashName);
+  container.bind(REF_TOKENS.HashName).to(MemoriesHashName);
   container.bind(REF_TOKENS.HashNames).to(HashNameRegistry);
   container.bind(REF_TOKENS.Parser).to(RefParser);
   container.bind(REF_TOKENS.Resolver).to(RefResolverService);

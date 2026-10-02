@@ -154,8 +154,21 @@ describe("sous init in a directory that has never seen sous", () => {
       ) as { recipes: Record<string, { version: string }> };
       expect(lock.recipes["core/sous-skills"]?.version).toBe(SOUS_VERSION);
 
+      // The starter holds the `#memories` view line. The core recipe publishes
+      // no memories, so the view is empty: the line includes nothing, is not an
+      // error, and is not left in the output as text.
+      const source = fs.readFileSync(
+        path.join(project, ".sous", "memories", "AGENTS.tpl.md"),
+        "utf8"
+      );
+      expect(source).toContain("@#memories/**/*.md");
+      const agents = fs.readFileSync(path.join(project, "AGENTS.md"), "utf8");
+      expect(agents).not.toContain("@#memories");
+      expect(init.stdout + init.stderr).not.toContain("Error:");
+
       const build = sous(project, ["build"]);
       expect(build.status, build.stdout + build.stderr).toBe(0);
+      expect(build.stdout + build.stderr).not.toContain("not included in any output");
     },
     CLI_TIMEOUT
   );
@@ -241,6 +254,7 @@ describe("sous init in a directory that has never seen sous", () => {
       const build = sous(project, ["build"]);
       expect(build.status, build.stdout + build.stderr).toBe(0);
       expect(fs.existsSync(path.join(project, "AGENTS.md"))).toBe(true);
+      expect(fs.readFileSync(path.join(project, "AGENTS.md"), "utf8")).not.toContain("@#memories");
     },
     CLI_TIMEOUT
   );

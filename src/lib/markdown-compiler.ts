@@ -11,7 +11,12 @@ import {
   hashContent,
   recordDirCreation,
 } from "./state.js";
-import { resolveIncludeFiles, splitIncludeQuery, type AliasMap } from "./include-resolver.js";
+import {
+  resolveIncludeFiles,
+  splitIncludeQuery,
+  type AliasMap,
+  type ViewMap,
+} from "./include-resolver.js";
 import { RefSource, sharedRefResolver } from "../services/ref-resolver/index.js";
 import {
   formatNamespaceProblem,
@@ -59,6 +64,8 @@ export type CompilationConfig = {
   targets: CompilationTarget[];
   /** Resolved `@include` alias map (name → ordered base dirs). */
   aliases?: Record<string, string[]>;
+  /** The files each view lists (`#memories`), keyed by the name with its `#`. */
+  views?: ViewMap;
   /** Variable scope for `${var}` substitution in `@include` paths. */
   includeScope?: Record<string, string>;
 };
@@ -153,7 +160,7 @@ export function stableVarsFingerprint(vars: Record<string, string>): string {
  * the characters of a path, a `${var}`, a glob and a recipe reference's `repo:`
  * qualifier.
  */
-const INCLUDE_LINE_PATTERN =
+export const INCLUDE_LINE_PATTERN =
   /^@([~#a-zA-Z0-9_.${}*?[][a-zA-Z0-9_\-/.:${}*?[\],!~#%+^()]*\.md(?:\?[^?\s]*=\S*)?)$/;
 
 /**
@@ -175,11 +182,26 @@ export function looksLikeIncludeLine(line: string): boolean {
   return /[/]/.test(word) || /\.md\b/.test(word) || /^[~#.$]/.test(word);
 }
 
+/** One piece of a read file: a line of its own text, or a file it includes. */
+type Part = string | { file: string };
+
+/** A file read for a target: its text, whether its name makes it a template, and its pieces. */
+type FileNode = {
+  path: string;
+  content: string;
+  /** True when the file's own name contains `.tpl.`: the only files that render as Liquid. */
+  isTpl: boolean;
+  parts: Part[];
+};
+
 export class CompilationService {
   private strict: boolean;
   private rebuild: boolean;
   private dryRun: boolean;
   private includeStack: string[];
+  private nodes: Map<string, FileNode>;
+  private views: ViewMap;
+  private includedFilesSeen: Set<string>;
   private errors: string[];
   private includeSourceComments: boolean;
   private currentIncludeSourceComments: boolean;
@@ -200,6 +222,9 @@ export class CompilationService {
     this.rebuild = options.rebuild ?? false;
     this.dryRun = options.dryRun ?? false;
     this.includeStack = [];
+    this.nodes = new Map();
+    this.views = {};
+    this.includedFilesSeen = new Set();
     this.errors = [];
     this.includeSourceComments = false;
     this.currentIncludeSourceComments = false;
@@ -283,12 +308,12 @@ export class CompilationService {
     baseDir: string,
     projectRoot: string,
     fromFile?: string
-  ): string {
+  ): Part[] {
     const fenceOpenPattern = /^ {0,3}(`{3,}|~{3,})/;
     const fenceClosePattern = /^ {0,3}(`{3,}|~{3,})[ \t]*$/;
     const where = fromFile ?? baseDir;
 
-    const out: string[] = [];
+    const out: Part[] = [];
     let fenceChar: string | null = null;
     let fenceLength = 0;
 
@@ -327,10 +352,11 @@ export class CompilationService {
       }
 
       const includePath = match[1].trim();
-      const { files, glob, candidates, namespaceIssue, hashIssue } = resolveIncludeFiles(
+      const { files, glob, candidates, namespaceIssue, hashIssue, view } = resolveIncludeFiles(
         includePath,
         {
           aliases: this.aliases,
+          views: this.views,
           scope: this.includeScope,
           baseDir,
           namespaceResolver: this.namespaceResolver,
@@ -339,6 +365,9 @@ export class CompilationService {
       );
 
       if (files.length === 0) {
+        // A view is a list that may be empty: a glob over it that selects
+        // nothing includes nothing, and the line leaves no trace.
+        if (view === true && glob && hashIssue === undefined) continue;
         if (this.namespaceResolver === undefined && includePath.startsWith("~")) {
           // Without a resolver the reference is only a relative path, so say
           // what is wrong with a malformed one instead of "not found".
@@ -380,24 +409,23 @@ export class CompilationService {
           continue;
         }
 
-        const includedContent = this.loadFile(fullPath, projectRoot);
-        if (includedContent !== null) {
-          const relativePath = path.relative(projectRoot, fullPath);
-          const sourceComment = this.currentIncludeSourceComments
-            ? `<!-- from: ${relativePath} -->\n`
-            : "";
-          out.push(sourceComment + includedContent);
-        } else {
-          out.push("");
-        }
+        out.push(this.loadFile(fullPath, projectRoot) === null ? "" : { file: fullPath });
       }
     }
 
-    return out.join("\n");
+    return out;
   }
 
-  /** Load a file and recursively process its includes. */
-  private loadFile(filePath: string, projectRoot: string): string | null {
+  /**
+   * Reads a file and, recursively, every file it includes, without rendering
+   * anything. A file already read for this target is not read again (its
+   * includes resolve the same way whoever includes it), so a file may be
+   * included any number of times; only a cycle is an error.
+   */
+  private loadFile(filePath: string, projectRoot: string): FileNode | null {
+    const known = this.nodes.get(filePath);
+    if (known !== undefined) return known;
+
     if (!fs.existsSync(filePath)) {
       this.handleError(`File not found: ${filePath}`);
       return null;
@@ -408,14 +436,83 @@ export class CompilationService {
     try {
       const content = fs.readFileSync(filePath, "utf8");
       const baseDir = path.dirname(filePath);
-      return this.processIncludes(content, baseDir, projectRoot, filePath);
+      const node: FileNode = {
+        path: filePath,
+        content,
+        isTpl: path.basename(filePath).includes(".tpl."),
+        parts: [],
+      };
+      // Registered before its includes are read so the graph lists parents
+      // first; the cycle check uses the stack, not this map.
+      this.nodes.set(filePath, node);
+      node.parts = this.processIncludes(content, baseDir, projectRoot, filePath);
+      return node;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.handleError(`Failed to read file ${filePath}: ${message}`);
+      this.nodes.delete(filePath);
       return null;
     } finally {
       this.includeStack.pop();
     }
+  }
+
+  /**
+   * Turns a read file into its final text.
+   *
+   * A file whose own name contains `.tpl.` is rendered as Liquid with the
+   * given variables; no other file ever is. Each include is left as a unique
+   * marker while the file renders, so a condition around an include line is
+   * honored, and an included file's own output is never rendered again. Every
+   * marker that survives the render is then replaced by that file's final text,
+   * produced the same way.
+   *
+   * @param filePath - The file to expand.
+   * @param vars - The output's variable scope; undefined means templates stay unrendered.
+   * @param entryDir - The directory of the target's entry point, also searched by `{% render %}`.
+   * @param projectRoot - Root used to render source comments as relative paths.
+   */
+  private async expand(
+    filePath: string,
+    vars: Record<string, string> | undefined,
+    entryDir: string,
+    projectRoot: string
+  ): Promise<string> {
+    const node = this.nodes.get(filePath)!;
+    const nonce = `${process.pid}-${Math.random().toString(36).slice(2)}`;
+    const markers = new Map<string, string>();
+    const chunks = node.parts.map((part) => {
+      if (typeof part === "string") return part;
+      const marker = `\u0001SOUS-INCLUDE-${nonce}-${markers.size}\u0001`;
+      markers.set(marker, part.file);
+      return marker;
+    });
+
+    let text = chunks.join("\n");
+    if (node.isTpl && vars !== undefined) {
+      const dir = path.dirname(node.path);
+      text = await this.renderContent(
+        text,
+        { ...vars, sousTemplatePath: node.path, sousTemplateDir: dir },
+        [...new Set([dir, entryDir])],
+        node.path
+      );
+    }
+
+    for (const [marker, child] of markers) {
+      if (!text.includes(marker)) continue;
+      const body = await this.expand(child, vars, entryDir, projectRoot);
+      const comment = this.currentIncludeSourceComments
+        ? `<!-- from: ${path.relative(projectRoot, child)} -->\n`
+        : "";
+      text = text.split(marker).join(comment + body);
+    }
+    return text;
+  }
+
+  /** Every file read for the current target, parents before the files they include. */
+  private graphNodes(): FileNode[] {
+    return [...this.nodes.values()];
   }
 
   /**
@@ -434,6 +531,7 @@ export class CompilationService {
   ): Promise<string> {
     const engine = createLiquidEngine(roots, {
       aliases: this.aliases,
+      views: this.views,
       scope: { ...this.includeScope, ...vars },
       namespaceResolver: this.namespaceResolver,
       fromFile,
@@ -540,6 +638,7 @@ ${taskFileContents}
     this.initializeEncoder();
 
     this.includeStack = [];
+    this.nodes = new Map();
     this.currentIncludeSourceComments =
       typeof target.includeSourceComments === "boolean"
         ? target.includeSourceComments
@@ -552,9 +651,9 @@ ${taskFileContents}
     }
 
     const promptsRoot = path.dirname(target.rootInputPath);
-    const content = this.loadFile(target.rootInputPath, promptsRoot);
+    const entry = this.loadFile(target.rootInputPath, promptsRoot);
 
-    if (content === null) {
+    if (entry === null) {
       displayError(`Failed to compile ${target.rootInputPath}`);
       return false;
     }
@@ -564,12 +663,24 @@ ${taskFileContents}
     // be written: the previous copy stays in place.
     const assembled = this.errors.length === errorsBefore;
 
-    // Compute source hash once per target from the assembled content
-    const contentHash = hashContent(content);
+    // Compute the source hash once per target from every file read: the entry
+    // point and everything it includes, whatever a condition decides later.
+    const graph = this.graphNodes();
+    for (const node of graph) this.includedFilesSeen.add(realPathOf(node.path));
+    const templates = graph.filter((node) => node.isTpl);
+    const contentHash = hashContent(
+      JSON.stringify([
+        this.currentIncludeSourceComments,
+        graph.map((node) => [path.relative(promptsRoot, node.path), node.content]),
+      ])
+    );
 
     let allSucceeded = true;
 
-    const isTpl = path.basename(target.rootInputPath).includes(".tpl.");
+    const isTpl = entry.isTpl;
+    // Whether any file of this target renders as Liquid, which makes the
+    // output depend on its variables.
+    const rendersAnything = templates.length > 0;
 
     for (const output of target.outputs) {
       // Resolve destination path: prefer destinationFile, fall back to destinationDir mirroring
@@ -590,8 +701,8 @@ ${taskFileContents}
       // changed answer or `_vars` value with the same template must re-render,
       // so the variable scope is part of a `.tpl.` output's source hash. A
       // verbatim copy hashes its content alone.
-      const srcHash = isTpl && output.vars
-        ? hashContent(`${content}\n${stableVarsFingerprint(output.vars)}`)
+      const srcHash = rendersAnything && output.vars
+        ? hashContent(`${contentHash}\n${stableVarsFingerprint(output.vars)}`)
         : contentHash;
 
       // Skip if content is unchanged and file already exists (unless --rebuild)
@@ -619,8 +730,10 @@ ${taskFileContents}
       // resolver always sets `vars` on every output (at minimum the inherited
       // scope). It is a real guard for callers that build a CompilationConfig
       // directly, and it stays as a tripwire in case the resolver ever changes.
-      if (isTpl && !output.vars) {
-        this.unrenderedTemplates.push(`${target.rootInputPath} → ${destFile}`);
+      if (rendersAnything && !output.vars) {
+        for (const template of templates) {
+          this.unrenderedTemplates.push(`${template.path} → ${destFile}`);
+        }
         // In strict mode this warning is an error, so the output is not written.
         if (this.strict) {
           this.reportNotWritten(destFile);
@@ -630,18 +743,12 @@ ${taskFileContents}
       }
 
       const errorsBeforeRender = this.errors.length;
-      const resolvedContent = (isTpl && output.vars)
-        ? await this.renderContent(
-            content,
-            {
-              ...output.vars,
-              sousTemplatePath: target.rootInputPath,
-              sousTemplateDir: promptsRoot,
-            },
-            [promptsRoot],
-            target.rootInputPath
-          )
-        : content;
+      const resolvedContent = await this.expand(
+        target.rootInputPath,
+        output.vars,
+        promptsRoot,
+        promptsRoot
+      );
 
       // A template that failed to render is not written either.
       if (this.errors.length > errorsBeforeRender) {
@@ -710,6 +817,15 @@ ${taskFileContents}
   }
 
   /**
+   * Every file the last compile read, as real paths: the entry points and every
+   * file any include line of any target named, by any route (exact path, glob
+   * or view). Includes inside an unmet condition count, since they are read.
+   */
+  includedFiles(): ReadonlySet<string> {
+    return this.includedFilesSeen;
+  }
+
+  /**
    * Compile all targets from the given config. Every target is compiled even
    * after an error, so every error is listed; an output whose target had an
    * error is not written and keeps its previous copy and its state entry.
@@ -740,6 +856,8 @@ ${taskFileContents}
 
       this.includeSourceComments = config.includeSourceComments === true;
       this.aliases = config.aliases ?? {};
+      this.views = config.views ?? {};
+      this.includedFilesSeen = new Set();
       this.includeScope = config.includeScope ?? {};
 
       this.initializeEncoder();
@@ -803,3 +921,12 @@ ${taskFileContents}
 // Backward-compat alias so existing imports of MarkdownCompiler keep working
 export { CompilationService as MarkdownCompiler };
 export type { CompilationServiceOptions as MarkdownCompilerOptions };
+
+/** The path with symbolic links resolved, or the path itself when it cannot be read. */
+function realPathOf(filePath: string): string {
+  try {
+    return fs.realpathSync(filePath);
+  } catch {
+    return filePath;
+  }
+}

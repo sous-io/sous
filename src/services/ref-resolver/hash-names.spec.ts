@@ -82,9 +82,9 @@ describe("the container's # names", () => {
    */
   it("should accept one more name and refuse a name bound twice", () => {
     const container = createRefContainer();
-    container.bind(REF_TOKENS.HashName).toConstantValue(named("memories", "plugin"));
+    container.bind(REF_TOKENS.HashName).toConstantValue(named("extras", "plugin"));
     const registry = container.get<HashNameRegistry>(REF_TOKENS.HashNames);
-    expect(registry.list().map((entry) => entry.name)).toEqual(["memories", "project"]);
+    expect(registry.list().map((entry) => entry.name)).toEqual(["extras", "memories", "project"]);
 
     const clash = createRefContainer();
     clash.bind(REF_TOKENS.HashName).toConstantValue(named("project", "plugin"));

@@ -3,7 +3,7 @@ import path from "node:path";
 import { Liquid, type FS } from "liquidjs";
 import filterRegistrars from "./filters/index.js";
 import tagRegistrars from "./tags/index.js";
-import { resolveIncludeFiles, type AliasMap } from "../lib/include-resolver.js";
+import { resolveIncludeFiles, type AliasMap, type ViewMap } from "../lib/include-resolver.js";
 import {
   formatNamespaceProblem,
   type NamespaceResolver,
@@ -13,6 +13,8 @@ import {
 export type EngineAliasOptions = {
   /** Resolved alias map (name → ordered base dirs). */
   aliases?: AliasMap;
+  /** The files each view lists, so a render path may name `#memories/...`. */
+  views?: ViewMap;
   /** Variable scope for `${var}` substitution in render paths. */
   scope?: Record<string, string>;
   /** Resolver consulted for a `~` recipe reference in a render path. */
@@ -56,6 +58,7 @@ function createAliasFS(opts: EngineAliasOptions): FS {
     const rawPath = isAt ? file.slice(1) : file;
     const { files, candidates, namespaceIssue, hashIssue } = resolveIncludeFiles(rawPath, {
       aliases,
+      views: opts.views,
       scope,
       baseDir: dir,
       namespaceResolver: opts.namespaceResolver,

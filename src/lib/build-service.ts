@@ -2,11 +2,11 @@ import path from "node:path";
 import fs from "node:fs";
 import type { ConfigContext, Settings } from "./settings.js";
 import { resolveAliases, resolveCompilation, resolveRootScope } from "./settings.js";
-import { resolveIncludeCandidates } from "./include-resolver.js";
+import { resolveIncludeFiles, type ViewMap } from "./include-resolver.js";
 import type { NamespaceResolver } from "./repos/namespace-resolver.js";
 import { createProjectNamespaceResolver } from "./repos/locked-namespace-resolver.js";
 import { buildRecipeTargets, type RecipeTargets } from "./repos/recipe-targets.js";
-import { CompilationService, resolveOutputPath } from "./markdown-compiler.js";
+import { CompilationService, INCLUDE_LINE_PATTERN, resolveOutputPath } from "./markdown-compiler.js";
 import type { CompilationConfig, CompilationTarget } from "./markdown-compiler.js";
 import { StateService } from "./state.js";
 import { isProtectedPath } from "./state.js";
@@ -19,7 +19,9 @@ import {
   unansweredWarning,
   type RecipeAnswers,
 } from "./vars/answers.js";
-import { footer, heading, log, warning } from "../utils/formatting.js";
+import { BULLET, footer, heading, log, warning } from "../utils/formatting.js";
+import { sharedHashNames } from "../services/ref-resolver/index.js";
+import { listMemories, type MemoryFile } from "./repos/recipe-memories.js";
 
 export type BuildOptions = {
   strict?: boolean;
@@ -147,6 +149,54 @@ export function withRecipeTargets(
 }
 
 /**
+ * The memories an active recipe publishes that no output of the build included
+ * by any route (an exact path, a glob or the `#memories` view). Recipes under
+ * `recipes.memories.exclude` are never listed.
+ *
+ * @param settings - The merged project config, for `recipes.memories`.
+ * @param sousDir - The project's `.sous/` directory.
+ * @param included - Every file the compile read, as real paths.
+ */
+export function unincludedMemories(
+  settings: Settings,
+  sousDir: string,
+  included: ReadonlySet<string>
+): MemoryFile[] {
+  const memories = settings.recipes?.memories;
+  return listMemories({ sousDir, first: memories?.first, exclude: memories?.exclude }).filter(
+    (memory) => !included.has(realPath(memory.file))
+  );
+}
+
+/** The path with symbolic links resolved, or the path itself when it cannot be read. */
+function realPath(filePath: string): string {
+  try {
+    return fs.realpathSync(filePath);
+  } catch {
+    return filePath;
+  }
+}
+
+/**
+ * The warning for memories no output included, or undefined when there are none.
+ *
+ * @param missing - What {@link unincludedMemories} found.
+ */
+export function unincludedMemoriesWarning(missing: readonly MemoryFile[]): string | undefined {
+  if (missing.length === 0) return undefined;
+  const noun = missing.length === 1 ? "memory" : "memories";
+  return (
+    `${missing.length} ${noun} published by your subscribed recipes ${
+      missing.length === 1 ? "is" : "are"
+    } not included in any output, so no agent will read ${missing.length === 1 ? "it" : "them"}:\n` +
+    missing.map((memory) => `${BULLET} ${memory.recipe}: ${memory.relative}`).join("\n") +
+    `\nTo include every memory, add the line "@#memories/**/*.md" to your project's instruction ` +
+    `source (the file your AGENTS.md or CLAUDE.md is built from). To leave a recipe's memories out on purpose, ` +
+    `list the recipe in "recipes.memories.exclude" in your sous config.`
+  );
+}
+
+/**
  * The directories a build's deletions must never reach into, for the project the
  * options describe. Empty when the caller gave no config context, which is the
  * case only in tests that build a settings object by hand.
@@ -193,6 +243,7 @@ function collectIncludeGraph(
     aliases?: Record<string, string[]>;
     scope?: Record<string, string>;
     namespaceResolver?: NamespaceResolver;
+    views?: ViewMap;
   } = {},
   visited: Set<string> = new Set()
 ): Set<string> {
@@ -208,21 +259,23 @@ function collectIncludeGraph(
     return visited;
   }
 
-  const includePattern = /^@([~a-zA-Z0-9_${}][a-zA-Z0-9_\-/.:${}]*\.md)$/gm;
   const baseDir = path.dirname(filePath);
-  let match: RegExpExecArray | null;
 
-  while ((match = includePattern.exec(content)) !== null) {
-    const includePath = match[1].trim();
-    const candidates = resolveIncludeCandidates(includePath, {
+  for (const line of content.split("\n")) {
+    const match = INCLUDE_LINE_PATTERN.exec(line.trimEnd());
+    if (match === null) continue;
+    const { files, candidates } = resolveIncludeFiles(match[1].trim(), {
       aliases: resolveOpts.aliases,
+      views: resolveOpts.views,
       scope: resolveOpts.scope,
       baseDir,
       namespaceResolver: resolveOpts.namespaceResolver,
       fromFile: filePath,
     });
-    const fullPath = candidates.find((c) => fs.existsSync(c)) ?? candidates[0];
-    collectIncludeGraph(fullPath, resolveOpts, visited);
+    // A file that does not exist yet is still part of the graph, as its first candidate.
+    for (const fullPath of files.length > 0 ? files : candidates.slice(0, 1)) {
+      collectIncludeGraph(fullPath, resolveOpts, visited);
+    }
   }
 
   return visited;
@@ -248,6 +301,7 @@ export function findAffectedTargets(
   return config.targets.filter(target => {
     const graph = collectIncludeGraph(target.rootInputPath, {
       aliases: config.aliases,
+      views: config.views,
       scope: config.includeScope,
       namespaceResolver,
     });
@@ -313,12 +367,23 @@ export class BuildService {
       const recipes = resolveRecipeTargets(settings, rootScope, options.configContext, answers);
       for (const notice of recipes.warnings) warning(notice);
 
-      const config = withRecipeTargets(
+      const withoutViews = withRecipeTargets(
         resolveCompilation(settings, rootScope),
         recipes,
         settings,
         rootScope
       );
+      // The files each view lists (`#memories`), worked out once per build.
+      const config: CompilationConfig | null =
+        withoutViews === null || options.configContext === undefined
+          ? withoutViews
+          : {
+              ...withoutViews,
+              views: sharedHashNames().viewMap({
+                sousDir: options.configContext.sousDir,
+                settings,
+              }),
+            };
 
       if (config) {
         let effectiveConfig: CompilationConfig = config;
@@ -351,6 +416,15 @@ export class BuildService {
           });
           const compileOk = await compiler.compile(effectiveConfig, stateFilePath);
           if (!compileOk) success = false;
+
+          // Only a full build knows every route an include can take, so only a
+          // full build that compiled cleanly checks that every memory got in.
+          if (compileOk && options.configContext !== undefined) {
+            const notice = unincludedMemoriesWarning(
+              unincludedMemories(settings, options.configContext.sousDir, compiler.includedFiles())
+            );
+            if (notice !== undefined) warning(notice);
+          }
         }
       }
     }

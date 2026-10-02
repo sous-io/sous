@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { globSync } from "glob";
-import { compareBytewise, hasGlob } from "../services/ref-resolver/index.js";
+import { minimatch } from "minimatch";
+import { compareBytewise, hasGlob, type ViewFile } from "../services/ref-resolver/index.js";
 import { expandHome } from "./config-discovery.js";
 import type { NamespaceResolution, NamespaceResolver } from "./repos/namespace-resolver.js";
 
@@ -51,6 +52,9 @@ import type { NamespaceResolution, NamespaceResolver } from "./repos/namespace-r
 
 /** An alias maps a name to an ordered list of absolute base directories. */
 export type AliasMap = Record<string, string[]>;
+
+/** The files each view lists (`#memories` and so on), keyed by the name with its `#`. */
+export type ViewMap = Record<string, ViewFile[]>;
 
 /**
  * Substitute ${varName} references in a string from a scope. Unknown
@@ -114,6 +118,12 @@ export function splitAliasKey(p: string): { key: string; rest: string } {
 export type IncludeResolveOptions = {
   /** The resolved alias map (name → ordered base dirs); `#` names are in it too. */
   aliases?: AliasMap;
+  /**
+   * The files each view lists. An include of `#name/<path or glob>` for a name
+   * here selects among those virtual paths and names the real files behind the
+   * ones that match, in the listed order.
+   */
+  views?: ViewMap;
   /** Variable scope for ${var} substitution. */
   scope?: Record<string, string>;
   /** Directory of the including file (for the relative candidate). */
@@ -166,6 +176,8 @@ export type IncludeResolution = {
   namespaceIssue?: NamespaceIssue;
   /** Present when the path starts with a `#` name nothing registered. */
   hashIssue?: string;
+  /** True when the path names a view; a glob over a view may match nothing without being an error. */
+  view?: boolean;
 };
 
 /** The files an include names, and how the search went. */
@@ -180,6 +192,8 @@ export type IncludeFiles = {
   namespaceIssue?: NamespaceIssue;
   /** Why a `#` name failed, when it did. */
   hashIssue?: string;
+  /** True when the path names a view. */
+  view?: boolean;
 };
 
 /** The `?name=value&...` query an include line may end with, after its `.md`. */
@@ -220,7 +234,7 @@ export function resolveInclude(rawPath: string, opts: IncludeResolveOptions): In
 
   const finish = (
     groups: IncludeGroup[],
-    extra: Pick<IncludeResolution, "namespaceIssue" | "hashIssue"> = {}
+    extra: Pick<IncludeResolution, "namespaceIssue" | "hashIssue" | "view"> = {}
   ): IncludeResolution => ({
     groups,
     candidates: [...new Set(groups.flatMap((group) => group.paths))],
@@ -235,6 +249,29 @@ export function resolveInclude(rawPath: string, opts: IncludeResolveOptions): In
     return finish(single(path.normalize(substituted)));
   }
 
+  // A view lists virtual files; the include selects among them by glob or by
+  // exact virtual path and names the real files behind the matches.
+  const views = opts.views ?? {};
+  const viewKey = splitAliasKey(substituted);
+  if (viewKey.key.startsWith("#") && Object.prototype.hasOwnProperty.call(views, viewKey.key)) {
+    const listed = views[viewKey.key]!;
+    const wanted = viewKey.rest;
+    const matched = listed.filter((entry) =>
+      glob ? minimatch(entry.path, wanted, { dot: true }) : entry.path === wanted
+    );
+    const issue =
+      !glob && matched.length === 0
+        ? `The view "${viewKey.key}" lists no file at "${wanted}".\n` +
+          (listed.length > 0
+            ? `It lists:\n${listed.map((entry) => `  ${viewKey.key}/${entry.path}`).join("\n")}`
+            : "It lists no files in this project.")
+        : undefined;
+    return finish(
+      matched.length > 0 ? [{ paths: [...new Set(matched.map((entry) => entry.file))], glob: false }] : [],
+      { view: true, ...(issue === undefined ? {} : { hashIssue: issue }) }
+    );
+  }
+
   const groups: IncludeGroup[] = [];
   let namespaceIssue: NamespaceIssue | undefined;
   let hashIssue: string | undefined;
@@ -245,7 +282,9 @@ export function resolveInclude(rawPath: string, opts: IncludeResolveOptions): In
   if (key && Object.prototype.hasOwnProperty.call(aliases, key)) {
     for (const base of aliases[key]!) groups.push(...single(path.resolve(base, rest)));
   } else if (key.startsWith("#") && rest.length > 0) {
-    const known = Object.keys(aliases).filter((name) => name.startsWith("#"));
+    const known = [...Object.keys(aliases), ...Object.keys(views)].filter((name) =>
+      name.startsWith("#")
+    );
     hashIssue =
       `There is no built-in name "${key}" available here.\n` +
       (known.length > 0
@@ -313,6 +352,7 @@ export function resolveIncludeFiles(rawPath: string, opts: IncludeResolveOptions
     glob: resolution.glob,
     ...(resolution.namespaceIssue === undefined ? {} : { namespaceIssue: resolution.namespaceIssue }),
     ...(resolution.hashIssue === undefined ? {} : { hashIssue: resolution.hashIssue }),
+    ...(resolution.view === true ? { view: true } : {}),
   };
   for (const group of resolution.groups) {
     const found = group.glob
