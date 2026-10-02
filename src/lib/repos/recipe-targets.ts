@@ -2,11 +2,12 @@
  * Turning subscribed recipes into compile targets.
  *
  * A recipe's manifest lists what it contributes: skills, memories, prompts and
- * config layers. Everything but the config layers is compiled exactly the way a
- * project's own `entryGlob` target is: the recipe's directory is the glob root,
- * the static part of each include pattern is the base the output tree mirrors,
- * and the `.tpl.` convention applies unchanged. Nothing about a recipe's files
- * is special once they are on disk.
+ * config layers. Only skills are copied into the project, compiled exactly the
+ * way a project's own `entryGlob` target is: the recipe's directory is the glob
+ * root, the static part of each include pattern is the base the output tree
+ * mirrors, and the `.tpl.` convention applies unchanged. Memories reach an agent
+ * through include lines, never as copied files, and config layers are loaded
+ * rather than written.
  *
  * Two rules decide what is compiled at all:
  *
@@ -14,10 +15,10 @@
  *     only through `depends` is fetched, pinned and addressable from the recipe
  *     that declared it, but its files never enter the project's output; that is
  *     the whole difference between the two dependency kinds.
- *   - A content kind with nowhere to go is skipped, with ONE warning naming the
- *     `recipeOutputs` config key. Only `skills` has a default, because
- *     `.claude/skills` is where every agent looks; sous cannot guess where a
- *     project wants its memories or its prompts.
+ *   - Skills go to `recipes.skills.outputs`, which defaults to
+ *     `.claude/skills` because that is where every agent looks. Prompts have no
+ *     destination yet, so a recipe that publishes them is skipped with ONE
+ *     warning naming the `recipes` config key.
  *
  * A recipe's `config` contents are not handled here. They are config layers, and
  * config layers are loaded before any of this runs; see
@@ -38,8 +39,11 @@ import {
   type LockedRecipeLocation,
 } from "./locked-recipes.js";
 
-/** The content kinds that produce files in a project. `config` is a layer, not a file. */
-export const WRITABLE_CONTENT_KINDS = ["skills", "memories", "prompts"] as const;
+/**
+ * The content kinds whose files are copied into a project. `config` is a layer,
+ * and `memories` are reached by include lines rather than copied.
+ */
+export const WRITABLE_CONTENT_KINDS = ["skills"] as const;
 
 /** One content kind whose files land somewhere in the project. */
 export type WritableContentKind = (typeof WRITABLE_CONTENT_KINDS)[number];
@@ -48,7 +52,7 @@ export type WritableContentKind = (typeof WRITABLE_CONTENT_KINDS)[number];
 export type RecipeTargetOptions = {
   /** The project's `.sous/` directory. */
   sousDir: string;
-  /** The merged project config, read for `recipeOutputs`. */
+  /** The merged project config, read for `recipes.skills.outputs`. */
   settings: Settings;
   /** The resolved settings scope, used to substitute `${var}` in destinations. */
   scope?: VarScope;
@@ -98,7 +102,7 @@ export function destinationsFor(
   kind: WritableContentKind,
   options: RecipeTargetOptions
 ): string[] {
-  const configured = options.settings.recipeOutputs?.[kind];
+  const configured = options.settings.recipes?.[kind]?.outputs;
 
   if (configured === undefined || configured.length === 0) {
     // `.claude/skills` is where every agent looks, so it is worth defaulting.
@@ -113,7 +117,7 @@ export function destinationsFor(
       substituteVarsStrict(
         destination,
         options.scope ?? {},
-        `recipeOutputs.${kind}[${index}]`
+        `recipes.${kind}.outputs[${index}]`
       )
     )
   );
@@ -143,7 +147,7 @@ export function buildRecipeTargets(options: RecipeTargetOptions): RecipeTargets 
   if (locked.length === 0) return result;
 
   const destinationCache = new Map<WritableContentKind, string[]>();
-  const kindsWithNowhereToGo = new Set<WritableContentKind>();
+  let skippedPrompts = false;
   const destinations = new Set<string>();
   const watchDirs = new Set<string>();
 
@@ -158,6 +162,10 @@ export function buildRecipeTargets(options: RecipeTargetOptions): RecipeTargets 
 
     for (const content of manifest.contents) {
       const kind = content.kind;
+      if (kind === "prompts") {
+        skippedPrompts = true;
+        continue;
+      }
       if (!isWritableKind(kind)) continue;
 
       if (!destinationCache.has(kind)) {
@@ -165,10 +173,7 @@ export function buildRecipeTargets(options: RecipeTargetOptions): RecipeTargets 
       }
       const kindDestinations = destinationCache.get(kind)!;
 
-      if (kindDestinations.length === 0) {
-        kindsWithNowhereToGo.add(kind);
-        continue;
-      }
+      if (kindDestinations.length === 0) continue;
 
       for (const destination of kindDestinations) destinations.add(destination);
       if (recipe.linked) watchDirs.add(recipe.dir);
@@ -198,16 +203,10 @@ export function buildRecipeTargets(options: RecipeTargetOptions): RecipeTargets 
     }
   }
 
-  if (kindsWithNowhereToGo.size > 0) {
-    const kinds = [...kindsWithNowhereToGo].sort();
+  if (skippedPrompts) {
     result.warnings.push(
-      `Some subscribed recipes contribute ${kinds.join(" and ")} files, and this ` +
-        `project has nowhere to put them, so they were skipped.\n` +
-        `Name a destination directory for each kind under the 'recipeOutputs' key of ` +
-        `your sous config, for example:\n` +
-        `  recipeOutputs: { ${kinds
-          .map((kind) => `${kind}: ["\${projectRoot}/${kind}"]`)
-          .join(", ")} }`
+      `Some subscribed recipes contribute prompts, and the 'recipes' key of your sous ` +
+        `config has no destination for prompts yet, so they were skipped.`
     );
   }
 

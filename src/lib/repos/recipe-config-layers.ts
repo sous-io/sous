@@ -55,7 +55,7 @@ export const RECIPE_CONFIG_ALLOWED_KEYS = [
   "_aliases",
   "_vars",
   "compilation",
-  "recipeOutputs",
+  "recipes",
   "runtimeContext",
   "store",
   "varMappings",

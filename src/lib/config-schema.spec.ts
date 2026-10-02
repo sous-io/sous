@@ -303,3 +303,47 @@ describe("validateSettings", () => {
     expect(settingsSchema.safeParse({ nope: 1 }).success).toBe(false);
   });
 });
+
+describe("the `recipes` key", () => {
+  /**
+   * `recipes` should accept skill outputs and memory lists written as globs or
+   * as `/.../` regular expressions.
+   *
+   * { recipes: { memories: { first: ["communication/*"], exclude: ["/^x\\//"] } } }
+   * // -> valid
+   */
+  it("should accept skills.outputs and memories.first and exclude", () => {
+    expect(() =>
+      validateSettings(
+        {
+          recipes: {
+            skills: { outputs: ["${projectRoot}/.claude/skills"] },
+            memories: { first: ["communication/*"], exclude: ["/^tool-usage\\//"] },
+          },
+        },
+        CONFIG_PATH
+      )
+    ).not.toThrow();
+  });
+
+  /**
+   * An invalid regular expression should be rejected with the key and the value named.
+   *
+   * { recipes: { memories: { first: ["/(/"] } } }
+   * // -> ConfigError naming recipes.memories.first and "/(/"
+   */
+  it("should reject an invalid regular expression, naming the key and the value", () => {
+    const message = expectRejectMessage({ recipes: { memories: { first: ["/(/"] } } });
+    expect(message).toContain("recipes.memories.first");
+    expect(message).toContain('"/(/"');
+  });
+
+  /**
+   * The removed `recipeOutputs` key should no longer be accepted, and there is no alias.
+   *
+   * { recipeOutputs: { skills: [] } } // -> ConfigError
+   */
+  it("should reject the removed recipeOutputs key", () => {
+    expectRejectMessage({ recipeOutputs: { skills: ["/x"] } });
+  });
+});

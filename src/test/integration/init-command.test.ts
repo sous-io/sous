@@ -134,7 +134,7 @@ describe("sous init in a directory that has never seen sous", () => {
 
       for (const relative of [
         ".sous/sous.config.js",
-        ".sous/memories/AGENTS.md",
+        ".sous/memories/AGENTS.tpl.md",
         ".sous/.env",
         ".sous/.env.local.example",
         ".sous/.gitignore",

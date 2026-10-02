@@ -54,7 +54,7 @@ describe("scaffoldProject()", () => {
    * and report them, relative to the project root, in the order written.
    *
    * await scaffoldProject({ sousDir: "/tmp/my-app/.sous", sousVersion: "0.1.1" });
-   * // -> writes sous.config.js, memories/AGENTS.md, .env, .env.local.example
+   * // -> writes sous.config.js, memories/AGENTS.tpl.md, .env, .env.local.example
    * //    and .gitignore inside .sous/
    */
   it("should write every file a new project needs", async () => {
@@ -113,7 +113,7 @@ describe("scaffoldProject()", () => {
     expect(settings.compilation?.targets?.[0]?.entryPoint).toBe(
       `\${sousDir}/${STARTER_PROMPT_RELATIVE_PATH}`
     );
-    expect(settings.recipeOutputs?.skills).toEqual(["${projectRoot}/.claude/skills"]);
+    expect(settings.recipes?.skills?.outputs).toEqual(["${projectRoot}/.claude/skills"]);
   });
 
   /**

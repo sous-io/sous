@@ -148,23 +148,25 @@ type StoreConfig = {
 };
 
 /**
- * Where the files a subscribed recipe contributes are written, one list of
- * destination directories per content kind. Each destination is `${var}`
- * substituted like any other config path, and a kind may name several so the
- * same recipe feeds more than one agent directory.
+ * What a project does with each content kind its subscribed recipes publish.
  *
- * Only `skills` has a default (`<project root>/.claude/skills`, the project root
- * being the parent of `.sous/`). A kind with no destination is skipped, with one
- * warning naming this config key, because sous cannot guess where a project
- * wants its memories or its prompts.
+ * `skills.outputs` lists the destination directories for recipe skills, each
+ * `${var}` substituted; the default is `<project root>/.claude/skills`, the
+ * project root being the parent of `.sous/`. `memories.first` and
+ * `memories.exclude` are lists of globs, or `/.../` regular expressions, over
+ * `namespace/recipe` keys.
  */
-type RecipeOutputs = {
-  /** Where recipe skill bundles are written. */
-  skills?: string[];
-  /** Where recipe memory files are written. */
-  memories?: string[];
-  /** Where recipe prompt files are written. */
-  prompts?: string[];
+type RecipesConfig = {
+  skills?: {
+    /** Where recipe skill bundles are written. */
+    outputs?: string[];
+  };
+  memories?: {
+    /** Recipes whose memories come first. */
+    first?: string[];
+    /** Recipes whose memories are left out. */
+    exclude?: string[];
+  };
 };
 
 /** Configuration for a launchable tool (e.g. claude, codex). */
@@ -204,9 +206,9 @@ export type Settings = {
   /** Knobs for the machine-wide recipe store. */
   store?: StoreConfig;
   /**
-   * Where the files subscribed recipes contribute are written, per content kind.
+   * What the project does with each content kind its subscribed recipes publish.
    */
-  recipeOutputs?: RecipeOutputs;
+  recipes?: RecipesConfig;
   /**
    * Variable mapping records, keyed by environment variable name, each bound to
    * one recipe variable written as `namespace/recipe/variableName` with an

@@ -19,6 +19,7 @@
 
 import { z } from "zod";
 import { ConfigError } from "./errors.js";
+import { compileRecipeKeyMatcher } from "./repos/recipe-key-matcher.js";
 import { repoUrlSchema, semverRangeSchema } from "./repos/formats/common.js";
 import { REF_KEY_PATTERN, REPO_NAME_PATTERN } from "./repos/formats/patterns.js";
 import type { Settings } from "./settings.js";
@@ -174,27 +175,66 @@ const storeSchema = z
   .strict();
 
 /**
- * Where the files a subscribed recipe contributes are written, one list of
- * destination directories per content kind. Each destination is `${var}`
- * substituted like any other config path, and a kind may name several so the
- * same recipe feeds more than one agent directory (`.claude/skills` and
- * `.codex/skills`, say).
- *
- * Only `skills` has a default: `<project root>/.claude/skills`, the project root
- * being the parent of the discovered `.sous/` directory. A kind with no
- * destination is skipped, with one warning naming this key, because sous cannot
- * guess where a project wants its memories or its prompts. A recipe's `config`
- * contents are not listed here; they are loaded as config layers rather than
- * written anywhere.
+ * One list of recipe keys: each entry is a glob over `namespace/recipe` keys, or
+ * a regular expression written between two slashes (`/^tool-usage\//`). A
+ * regular expression that does not compile is an error naming the key and the
+ * value.
  */
-const recipeOutputsSchema = z
+function recipeKeyListSchema(where: string) {
+  return z.array(z.string()).superRefine((entries, context) => {
+    entries.forEach((entry, index) => {
+      try {
+        compileRecipeKeyMatcher([entry], `${where}[${index}]`);
+      } catch (error) {
+        context.addIssue({
+          code: "custom",
+          path: [index],
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    });
+  });
+}
+
+/**
+ * What a project does with the content kinds the subscribed recipes publish, one
+ * block per kind.
+ *
+ * `skills.outputs` lists the destination directories recipe skill bundles are
+ * written into. Each is `${var}` substituted like any other config path, and
+ * several may be named so the same recipe feeds more than one agent directory
+ * (`.claude/skills` and `.codex/skills`, say). The default is
+ * `<project root>/.claude/skills`, the project root being the parent of the
+ * discovered `.sous/` directory.
+ *
+ * `memories.first` and `memories.exclude` shape which recipe memories an
+ * `@#memories` include pulls in and in what order: recipes matching `first` lead,
+ * and recipes matching `exclude` are left out. Each entry is a glob over
+ * `namespace/recipe` keys, or a regular expression written between two slashes.
+ *
+ * A recipe's `config` contents are not listed here; they are loaded as config
+ * layers rather than written anywhere.
+ */
+const recipesSchema = z
   .object({
     /** Where recipe skill bundles are written. */
-    skills: z.array(z.string()).optional(),
-    /** Where recipe memory files are written. */
-    memories: z.array(z.string()).optional(),
-    /** Where recipe prompt files are written. */
-    prompts: z.array(z.string()).optional(),
+    skills: z
+      .object({
+        /** Destination directories, `${var}` substituted. */
+        outputs: z.array(z.string()).optional(),
+      })
+      .strict()
+      .optional(),
+    /** Which recipe memories an `@#memories` include pulls in, and in what order. */
+    memories: z
+      .object({
+        /** Recipes whose memories come first. */
+        first: recipeKeyListSchema("recipes.memories.first").optional(),
+        /** Recipes whose memories are left out. */
+        exclude: recipeKeyListSchema("recipes.memories.exclude").optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 
@@ -267,8 +307,8 @@ export const settingsSchema = z
       .optional(),
     /** Knobs for the machine-wide recipe store. */
     store: storeSchema.optional(),
-    /** Where the files subscribed recipes contribute are written, per content kind. */
-    recipeOutputs: recipeOutputsSchema.optional(),
+    /** What the project does with each content kind its subscribed recipes publish. */
+    recipes: recipesSchema.optional(),
     /**
      * Variable mapping records, keyed by environment variable name. Each entry
      * binds that name to one recipe variable, which is how an answer is stored
