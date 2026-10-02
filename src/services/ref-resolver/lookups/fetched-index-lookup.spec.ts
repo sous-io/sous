@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { IndexFile } from "../../../lib/repos/formats/index-file.js";
 import type { FetchLike } from "../../../lib/repos/providers/http.js";
 import { candidates, findAll, indexOf, keysOf } from "../../../test/utils/ref-fixtures.js";
+import { locationOf } from "../parts.js";
 import { FetchedIndexLookup } from "./fetched-index-lookup.js";
 
 /** A lookup whose fetcher serves the given repositories, keyed by identity; `"offline"` fails as a network would. */
@@ -69,6 +70,44 @@ describe("FetchedIndexLookup.find()", () => {
     await expect(findAll(lookup, "gitlab://a/b/c/d")).rejects.toThrow(/https:\/\/gitlab.com\/a\/b.*never guesses/s);
     const { lookup: missing } = serving({ "gitlab.com/a/b/c": ["d/x"] });
     await expect(findAll(missing, "gitlab://a/b/c/d")).rejects.toThrow("could not be read");
+  });
+
+  /**
+   * The caller says what the ref being settled is called, so a release can say
+   * "the dependency" and an include can say "the include", and a browser path
+   * is a folder.
+   *
+   * subject "dependency", a browsed ref with an unreachable index // "the dependency reads as a folder in"
+   */
+  it("should name the subject, and say when it is a folder", async () => {
+    const failing = new FetchedIndexLookup({
+      subject: "dependency",
+      fetchIndex: async () => {
+        throw new Error("connection refused");
+      },
+    });
+    await expect(findAll(failing, "gitlab://a/b/c/d")).rejects.toThrow(
+      /the dependency reads as something in the repository at https:\/\/gitlab.com\/a\/b\/c, and its index could not be read, so the release cannot settle what it means/
+    );
+    await expect(findAll(failing, "https://github.com/o/r/tree/main/x")).rejects.toThrow(
+      /the dependency reads as a folder in the repository at https:\/\/github.com\/o\/r/
+    );
+  });
+
+  /**
+   * The index at a location is available to a caller that needs more than the
+   * match, and is fetched once.
+   *
+   * indexAt(location) twice // -> the same index, one fetch
+   */
+  it("should hand out the index at a location, fetched once", async () => {
+    const { lookup, asked } = serving({ "github.com/o/r": ["w/a"] });
+    const located = candidates("github://o/r/w/a").find((ref) => ref.kind === "recipe")!;
+    const location = locationOf(located)!;
+    const first = await lookup.indexAt(location);
+    expect(Object.keys(first.recipes)).toEqual(["w/a"]);
+    expect(await lookup.indexAt(location)).toBe(first);
+    expect(asked).toEqual(["github.com/o/r"]);
   });
 
   /**

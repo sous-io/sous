@@ -56,6 +56,9 @@ describe("location helpers", () => {
       identity: "github.com/o/r",
     });
     expect(locationFromUrl("https://example.com/x")).toBeUndefined();
+    // The URL is kept as the project configured it, which is what a person is shown.
+    expect(locationFromUrl("https://github.com/o/r")!.url).toBe("https://github.com/o/r");
+    expect(locationFromUrl("git@github.com:o/r.git")!.url).toBe("git@github.com:o/r.git");
     expect(locationFor(new GithubProvider(), "github.com", "just-one")).toBeUndefined();
   });
 });

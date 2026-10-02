@@ -27,7 +27,7 @@ import {
 import { formatRef } from "../format.js";
 import { locationOf } from "../parts.js";
 import type { RefLocation, SousRef } from "../types.js";
-import { CatalogMatcher } from "./catalog-matcher.js";
+import { CatalogMatcher, catalogRepoOfIndex } from "./catalog-matcher.js";
 import type { RefLookup, RefMatch } from "./ref-lookup.js";
 
 /** Fetches the index of the repository at a location. */
@@ -41,6 +41,8 @@ export type FetchedIndexLookupOptions = {
   providerOptions?: ProviderOptions;
   /** Replaces the default fetcher, which goes through the provider layer. */
   fetchIndex?: IndexFetcher;
+  /** What the ref being settled is called in an error, such as "dependency". Defaults to "ref". */
+  subject?: string;
 };
 
 /** A failure, in a sentence. */
@@ -74,30 +76,17 @@ export class FetchedIndexLookup implements RefLookup {
     try {
       index = await this.indexAt(location);
     } catch (error) {
+      const subject = this.options.subject ?? "ref";
+      const folder = candidate.kind === "repo" && candidate.browsed !== undefined;
       throw new ConfigError(
-        `the ref reads as something in the repository at ${location.url}, and its index could ` +
-          `not be read, so it cannot be settled. A release never guesses past an index it ` +
-          `could not read.\n  ${describe(error)}`
+        `the ${subject} reads ${folder ? "as a folder in" : "as something in"} the repository ` +
+          `at ${location.url}, and its index could not be read, so the release cannot settle ` +
+          `what it means. A release never guesses past an index it could not read.\n` +
+          `  ${describe(error)}`
       );
     }
 
-    return new CatalogMatcher([
-      {
-        location,
-        namespaces: Object.entries(index.namespaces).map(([name, declared]) => ({
-          name,
-          ...(declared?.description === undefined ? {} : { description: declared.description }),
-        })),
-        recipes: Object.entries(index.recipes).map(([key, recipe]) => {
-          const slash = key.indexOf("/");
-          return {
-            namespace: key.slice(0, slash),
-            name: key.slice(slash + 1),
-            path: recipe.path,
-          };
-        }),
-      },
-    ]).match(candidate);
+    return new CatalogMatcher([catalogRepoOfIndex(index, { location })]).match(candidate);
   }
 
   /**
@@ -133,8 +122,12 @@ export class FetchedIndexLookup implements RefLookup {
     return choices[0]!;
   }
 
-  /** The index at a location, fetched once. */
-  private indexAt(location: RefLocation): Promise<IndexFile> {
+  /**
+   * The index at a location, fetched once per repository.
+   *
+   * @param location - Where the repository lives.
+   */
+  indexAt(location: RefLocation): Promise<IndexFile> {
     let pending = this.indexes.get(location.identity);
     if (pending === undefined) {
       pending = this.fetcher(location);

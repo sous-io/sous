@@ -23,10 +23,10 @@ import { nonInteractiveError } from "../../lib/interactive.js";
 import {
   formatResolvedReference,
   type ResolvedReferenceFacts,
-} from "../../lib/repos/reference-report.js";
+} from "./ref-report.js";
 import { formatParagraph, log } from "../../utils/formatting.js";
 import { askChoice } from "../../utils/prompts.js";
-import { describeRef, refKey, refKindLabel } from "./format.js";
+import { describeRef, refKey, refKindLabel, refSpelling } from "./format.js";
 import { namespaceOf, recipeOf, repoOf } from "./parts.js";
 import type { SousRef } from "./types.js";
 
@@ -162,7 +162,9 @@ export class RefPickerService {
       // The example is a spelling that says more than what was typed, so a
       // ref that is already its own fully qualified name is not offered back
       // unchanged.
-      const example = refKey(matches.find((match) => refKey(match) !== args.search) ?? first);
+      const example = refSpelling(
+        matches.find((match) => refSpelling(match) !== args.search) ?? first
+      );
 
       throw nonInteractiveError({
         prompt: `which '${args.search}' you meant`,

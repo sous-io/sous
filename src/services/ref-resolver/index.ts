@@ -6,6 +6,11 @@
  * text can be one, a pruner per place says which readings count there, a
  * lookup says which exist, `RefResolverService` runs the three in order, and
  * `RefPickerService` settles which meaning a run proceeds with.
+ *
+ * `EnvVarLookup` is not exported here. It reads the variable ladder, which
+ * reaches config discovery, and config discovery reaches this module through
+ * the recipe formats, so exporting it from the barrel would make an import
+ * cycle that fails at load time. Import it from `lookups/env-var-lookup.js`.
  */
 
 export * from "./source.js";
@@ -33,14 +38,17 @@ export * from "./pruners/include-pruner.js";
 export * from "./lookups/ref-lookup.js";
 export * from "./lookups/chained-lookup.js";
 export * from "./lookups/catalog-matcher.js";
+export * from "./lookups/catalog-lookup.js";
 export * from "./lookups/cached-index-lookup.js";
 export * from "./lookups/recorded-dependency-lookup.js";
 export * from "./lookups/fetched-index-lookup.js";
 export * from "./lookups/variable-lookup.js";
-export * from "./lookups/env-var-lookup.js";
 export * from "./ref-resolve-arguments.js";
 export * from "./ref-resolve-result.js";
 export * from "./ref-resolver-service.js";
 export * from "./ref-picker-service.js";
+export * from "./ref-report.js";
+export * from "./named-refs.js";
+export * from "./dependency.js";
 export * from "./ref-helpers.js";
 export * from "./container.js";

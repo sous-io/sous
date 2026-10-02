@@ -77,7 +77,11 @@ export class RefResolverService {
 
   /**
    * Parses a ref, prunes it by where it was written and, when a lookup is
-   * given, narrows it to what exists.
+   * given, narrows it to what exists. When `kinds` is given, readings of other
+   * kinds are set aside first, and so are the matches of other kinds. A browser
+   * URL is the one reading that is a repository until a lookup settles it into
+   * the namespace or recipe it names, so it is kept for a caller that accepts
+   * namespaces or recipes.
    *
    * With a lookup, every kept reading is asked; the exact-spelling matches are
    * kept when there are any, and the case-insensitive ones otherwise; matches
@@ -89,8 +93,30 @@ export class RefResolverService {
    * @throws A ConfigError listing every reason when the place refuses every reading.
    */
   async resolve(args: RefResolveArguments): Promise<RefResolveResult> {
-    const { kept, dropped, warnings, place } = this.prune(args.input, args.from);
-    if (kept.length === 0) throw this.refusal(args.input, place, dropped);
+    let pruned;
+    try {
+      pruned = this.prune(args.input, args.from);
+    } catch (error) {
+      // A text no reading exists for (empty, say) is refused the same way.
+      if (args.refusedIsEmpty) return new RefResolveResult(args.input, [], [], [], true);
+      throw error;
+    }
+    const { dropped, warnings, place } = pruned;
+    if (pruned.kept.length === 0) {
+      if (args.refusedIsEmpty) return new RefResolveResult(args.input, [], dropped, warnings, true);
+      throw this.refusal(args.input, place, dropped);
+    }
+    const kinds = args.kinds;
+    const kept =
+      kinds === undefined
+        ? pruned.kept
+        : pruned.kept.filter(
+            (ref) =>
+              kinds.includes(ref.kind) ||
+              (ref.kind === "repo" &&
+                ref.browsed !== undefined &&
+                (kinds.includes("namespace") || kinds.includes("recipe")))
+          );
 
     const lookup = args.lookup;
     if (lookup === undefined) {
@@ -105,7 +131,11 @@ export class RefResolverService {
 
     const found: Array<{ match: RefMatch; rank: SousRef }> = [];
     for (const candidate of kept) {
-      for (const match of await lookup.find(candidate)) found.push({ match, rank: candidate });
+      for (const match of await lookup.find(candidate)) {
+        if (kinds === undefined || kinds.includes(match.ref.kind)) {
+          found.push({ match, rank: candidate });
+        }
+      }
     }
     const exact = found.filter((entry) => entry.match.exactSpelling);
     const chosen = exact.length > 0 ? exact : found;

@@ -1,7 +1,7 @@
 import type { IndexFile } from "../../../lib/repos/formats/index-file.js";
 import { locationFromUrl } from "../location.js";
 import type { SousRef } from "../types.js";
-import { CatalogMatcher, type CatalogRepo } from "./catalog-matcher.js";
+import { CatalogMatcher, catalogRepoOfIndex, type CatalogRepo } from "./catalog-matcher.js";
 import type { RefLookup, RefMatch } from "./ref-lookup.js";
 
 /** What a `CachedIndexLookup` needs to know beyond the indexes themselves. */
@@ -42,23 +42,7 @@ export class CachedIndexLookup implements RefLookup {
       const url = options.urls?.[name];
       const location = url === undefined ? undefined : locationFromUrl(url);
 
-      repos.push({
-        name,
-        ...(location === undefined ? {} : { location }),
-        namespaces: Object.entries(index.namespaces).map(([namespace, declared]) => ({
-          name: namespace,
-          ...(declared?.description === undefined ? {} : { description: declared.description }),
-        })),
-        recipes: Object.entries(index.recipes).map(([key, recipe]) => {
-          const slash = key.indexOf("/");
-          return {
-            namespace: key.slice(0, slash),
-            name: key.slice(slash + 1),
-            path: recipe.path,
-            ...(recipe.description === undefined ? {} : { description: recipe.description }),
-          };
-        }),
-      });
+      repos.push(catalogRepoOfIndex(index, { name, ...(location === undefined ? {} : { location }) }));
     }
     this.matcher = new CatalogMatcher(repos);
   }

@@ -39,7 +39,8 @@ export function locationFor(
 
 /**
  * Where the repository at a configured URL lives, or undefined when no
- * provider recognizes it.
+ * provider recognizes it. The location's `url` is the URL as the project
+ * configured it, which is what a person is shown.
  *
  * @param url - The repository's URL, as a project's config records it.
  * @param providers - The providers to ask. Defaults to the built-ins.
@@ -53,7 +54,7 @@ export function locationFromUrl(url: string, providers?: RepoProvider[]): RefLoc
       host: canonical.host,
       repoPath: `${canonical.owner}/${canonical.name}`,
       identity: repoIdentity(canonical),
-      url: canonical.httpsUrl,
+      url,
     };
   } catch {
     return undefined;

@@ -8,6 +8,7 @@
  * spelling the catalog publishes.
  */
 
+import type { IndexFile } from "../../../lib/repos/formats/index-file.js";
 import { matchName, type NameMatch } from "../glob.js";
 import { refKey } from "../format.js";
 import type { NamespaceRef, RecipeRef, RefLocation, RepoRef, SousRef } from "../types.js";
@@ -24,6 +25,35 @@ export type CatalogRepo = {
   /** Every recipe it publishes. */
   recipes: Array<{ namespace: string; name: string; description?: string; path?: string }>;
 };
+
+/**
+ * The catalog entry for one repository's index.
+ *
+ * @param index - The repository's index.
+ * @param repo - What the project knows of the repository: its short name and where it lives.
+ */
+export function catalogRepoOfIndex(
+  index: IndexFile,
+  repo: { name?: string; location?: RefLocation } = {}
+): CatalogRepo {
+  return {
+    ...(repo.name === undefined ? {} : { name: repo.name }),
+    ...(repo.location === undefined ? {} : { location: repo.location }),
+    namespaces: Object.entries(index.namespaces).map(([namespace, declared]) => ({
+      name: namespace,
+      ...(declared?.description === undefined ? {} : { description: declared.description }),
+    })),
+    recipes: Object.entries(index.recipes).map(([key, recipe]) => {
+      const slash = key.indexOf("/");
+      return {
+        namespace: key.slice(0, slash),
+        name: key.slice(slash + 1),
+        path: recipe.path,
+        ...(recipe.description === undefined ? {} : { description: recipe.description }),
+      };
+    }),
+  };
+}
 
 /** The weaker of two matches: one folded part makes the whole thing folded. */
 function both(left: NameMatch, right: NameMatch): NameMatch {

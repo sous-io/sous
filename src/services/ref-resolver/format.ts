@@ -74,9 +74,9 @@ export function refIdentity(ref: SousRef): string {
 }
 
 /**
- * Writes the repository qualifier in front of what is named inside it: the
- * provider's canonical locator for a located repository, `name:` for a short
- * name.
+ * Writes the repository qualifier in front of what is named inside it: `name:`
+ * for a repository this project knows by short name (whatever else it knows of
+ * it), and the provider's canonical locator for one known only by location.
  */
 function qualified(
   repo: RepoRef | undefined,
@@ -84,6 +84,7 @@ function qualified(
   providers: RepoProvider[]
 ): string {
   if (repo === undefined) return rest;
+  if (repo.name !== undefined) return rest === "" ? repo.name : `${repo.name}:${rest}`;
   if (repo.location !== undefined) {
     const { host, repoPath } = repo.location;
     const provider = providerById(repo.location.provider, providers);
@@ -92,8 +93,7 @@ function qualified(
     }
     return rest === "" ? repo.location.url : `${repo.location.url}/${rest}`;
   }
-  if (repo.name === undefined) return rest;
-  return rest === "" ? repo.name : `${repo.name}:${rest}`;
+  return rest;
 }
 
 /**
@@ -129,6 +129,30 @@ export function refKindLabel(ref: SousRef): string {
 }
 
 /**
+ * How a ref is written to a person, so they can type it back: its key when a
+ * repository's short name qualifies it, and its canonical locator when only a
+ * location does (a ref that has not been matched to a repository this project
+ * knows by name).
+ *
+ * refSpelling(recipe "task-files" in "sous-recipes") // -> "sous-recipes:workflow/task-files"
+ * refSpelling(a recipe at a located repository)      // -> its canonical locator
+ *
+ * @param ref - Any ref.
+ */
+export function refSpelling(ref: SousRef): string {
+  const repo = ref.kind === "envVar" ? undefined : repoOf(ref);
+  if (repo !== undefined && repo.name === undefined && repo.location !== undefined) {
+    return formatRef(ref);
+  }
+  return refKey(ref);
+}
+
+/** The repository a person is told a ref lives in: its short name, or where it lives. */
+function repoLabel(repo: RepoRef | undefined): string {
+  return repo?.name ?? repo?.location?.url ?? "unknown";
+}
+
+/**
  * Describes one ref in the words a person choosing between several needs: the
  * fully qualified name, and what it actually means.
  *
@@ -136,7 +160,7 @@ export function refKindLabel(ref: SousRef): string {
  */
 export function describeRef(ref: SousRef): string {
   const summary = ref.description === undefined ? "" : `: ${ref.description}`;
-  const key = refKey(ref);
+  const key = refSpelling(ref);
 
   switch (ref.kind) {
     case "repo": {
@@ -146,13 +170,13 @@ export function describeRef(ref: SousRef): string {
     case "namespace":
       return (
         `${key}  (the whole namespace '${ref.name}' in the ` +
-        `repository '${repoPart(ref.repo) ?? "unknown"}')`
+        `repository '${repoLabel(ref.repo)}')`
       );
     case "recipe":
       return (
         `${key}  (the recipe '${ref.name}' in the namespace ` +
         `'${ref.namespace?.name ?? "unknown"}' of the repository ` +
-        `'${repoPart(repoOf(ref)) ?? "unknown"}'${summary})`
+        `'${repoLabel(repoOf(ref))}'${summary})`
       );
     case "recipeFile":
       return `${key}  (the file '${ref.path}' of the recipe '${pathPart(ref.recipe)}'${summary})`;

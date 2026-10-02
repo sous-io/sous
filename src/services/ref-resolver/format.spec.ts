@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { candidates, recipeRef, nsRef, variableOf } from "../../test/utils/ref-fixtures.js";
-import { describeRef, formatRef, refIdentity, refKey, refKindLabel } from "./format.js";
+import {
+  describeRef,
+  formatRef,
+  refIdentity,
+  refKey,
+  refKindLabel,
+  refSpelling,
+} from "./format.js";
 import { variableRefOf } from "./lookups/variable-lookup.js";
 import { locationOf, namesOf, namespaceOf, rangeOf, recipeOf, repoOf } from "./parts.js";
 import type { SousRef } from "./types.js";
@@ -79,6 +86,34 @@ describe("formatRef()", () => {
       "github://o/r/tree/main/x@^1"
     );
     expect(formatRef(reading("file:///x/y", "repo"))).toBe("file:///x/y");
+  });
+});
+
+describe("a known repository with both a short name and a location", () => {
+  /**
+   * A repository this project knows by short name prints with that name,
+   * whatever else it knows of it; one known only by location prints as its
+   * locator, and describes itself by where it lives.
+   *
+   * formatRef(recipe in "mine" at github.com/o/r)  // -> "mine:w/a"
+   * refSpelling(recipe at github.com/o/r)          // -> "github://o/r/w/a"
+   */
+  it("should print the short name first, and the locator when there is none", () => {
+    const located = reading("github://o/r/w/a", "recipe");
+    const known: SousRef = {
+      ...recipeRef("w", "a", "mine"),
+      namespace: { ...nsRef("w", "mine"), repo: { kind: "repo", name: "mine", location: locationOf(located)! } },
+    };
+    expect(formatRef(known)).toBe("mine:w/a");
+    expect(refSpelling(known)).toBe("mine:w/a");
+    expect(refSpelling(located)).toBe("github://o/r/w/a");
+    expect(describeRef(located)).toBe(
+      "github://o/r/w/a  (the recipe 'a' in the namespace 'w' of the repository " +
+        "'https://github.com/o/r')"
+    );
+    expect(describeRef(reading("github://o/r/w", "namespace"))).toBe(
+      "github://o/r/w  (the whole namespace 'w' in the repository 'https://github.com/o/r')"
+    );
   });
 });
 
