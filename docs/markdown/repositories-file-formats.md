@@ -396,7 +396,8 @@ the default stands.
 ### recipes: what each content kind does
 
 One block per content kind a subscribed recipe publishes. A recipe's `config` contents become layers, not files,
-and a recipe's own config layer may set `recipes`.
+and a recipe's own config layer may set `recipes.skills` only; `recipes.memories` chooses what the project
+includes, so it is dropped from a recipe's layer with a warning.
 
 - `recipes.skills.outputs` (`string[]`, default `["<project root>/.claude/skills"]`): the directories recipe skill
   bundles are written into, `${var}` substituted as in any config path. Name several to feed more than one agent.

@@ -933,7 +933,9 @@ already-parsed, already-filtered object is handed to the kernel as an inline
 set only keys that configure the recipe itself, and every other key is dropped with a
 warning naming the recipe and the key. Subscribing to a recipe is not a decision to let it
 choose what the project trusts or what sous runs, so `repos`, `subscriptions`, `tools` and
-`_env` in particular can never come from one. Change the allowlist only in
+`_env` in particular can never come from one. Under `recipes` only `skills` is allowed
+(`RECIPE_CONFIG_ALLOWED_RECIPES_KEYS`); `recipes.memories` configures the project, so it is
+dropped with a warning naming `recipes.memories`. Change the allowlist only in
 `recipe-config-layers.ts`, and keep `docs/markdown/repositories-consuming.md` and
 `docs/markdown/repositories-file-formats.md` in step with it.
 

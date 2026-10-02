@@ -62,6 +62,13 @@ export const RECIPE_CONFIG_ALLOWED_KEYS = [
 ] as const;
 
 /**
+ * The keys under `recipes` a recipe's config layer may set. `recipes.memories`
+ * decides which memories the project includes and in what order, which is the
+ * project's own choice, so a recipe may not set it.
+ */
+export const RECIPE_CONFIG_ALLOWED_RECIPES_KEYS = ["skills"] as const;
+
+/**
  * Plain-language reasons for the refused keys a recipe is most likely to try,
  * so the warning says why rather than only that.
  */
@@ -130,6 +137,27 @@ export function filterRecipeConfigLayer(
   const config: Record<string, unknown> = {};
 
   for (const key of Object.keys(raw)) {
+    if (key === "recipes") {
+      const value = (raw as Record<string, unknown>)[key];
+      const kept: Record<string, unknown> = {};
+      if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+        for (const sub of Object.keys(value)) {
+          if ((RECIPE_CONFIG_ALLOWED_RECIPES_KEYS as readonly string[]).includes(sub)) {
+            kept[sub] = (value as Record<string, unknown>)[sub];
+            continue;
+          }
+          warnings.push(
+            `The recipe ${recipeKey} tried to set 'recipes.${sub}' in a config layer, and sous ` +
+              `removed it before merging anything:\n  ${layerPath}\n` +
+              `That key is not one a recipe may set (it configures the project, not the recipe). ` +
+              `Under 'recipes' a recipe's config layer may set only: ` +
+              `${RECIPE_CONFIG_ALLOWED_RECIPES_KEYS.join(", ")}.`
+          );
+        }
+      }
+      config[key] = kept;
+      continue;
+    }
     if (allowed.has(key)) {
       config[key] = (raw as Record<string, unknown>)[key];
       continue;
