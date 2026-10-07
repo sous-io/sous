@@ -211,7 +211,7 @@ describe("SubscriptionService with a ref written as a location", () => {
    * recipe lives. Nothing is fetched to answer it.
    *
    * service.cachedReferenceRepos()
-   * // -> [{ name: "mine", identity: "github.com/vendor/recipes", recipes: [...] }]
+   * // -> [{ name: "mine", location: { identity: "github.com/vendor/recipes", ... }, recipes: [...] }]
    */
   it("should list the trusted repositories from the cache, with identities", async () => {
     const service = serviceWith({ mine: { url: "https://github.com/vendor/recipes" } });
@@ -220,8 +220,13 @@ describe("SubscriptionService with a ref written as a location", () => {
     expect(before).toEqual([
       {
         name: "mine",
-        url: "https://github.com/vendor/recipes",
-        identity: "github.com/vendor/recipes",
+        location: {
+          provider: "github",
+          host: "github.com",
+          repoPath: "vendor/recipes",
+          identity: "github.com/vendor/recipes",
+          url: "https://github.com/vendor/recipes",
+        },
         namespaces: [],
         recipes: [],
       },
@@ -229,7 +234,7 @@ describe("SubscriptionService with a ref written as a location", () => {
 
     await service.loadIndexes(["mine"]);
     const [after] = service.cachedReferenceRepos();
-    expect(after!.identity).toBe("github.com/vendor/recipes");
+    expect(after!.location!.identity).toBe("github.com/vendor/recipes");
     expect(after!.recipes).toEqual([
       { namespace: "workflow", name: "alpha", path: "recipes/workflow/alpha" },
     ]);

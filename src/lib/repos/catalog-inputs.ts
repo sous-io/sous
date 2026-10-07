@@ -6,7 +6,7 @@
  * deliberately the only place that knows: the subscription service for the
  * trusted repositories and their cached indexes, the lockfile service for what
  * is pinned, the links map and the store for a recipe's own files, and
- * `recipeOutputs` for where a content kind lands.
+ * `recipes` for where a content kind lands.
  *
  * By default nothing here downloads anything: a repository whose index has
  * never been fetched is left out of the catalog and named separately, so a

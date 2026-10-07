@@ -119,7 +119,7 @@ describe("~namespace includes (real compile path)", () => {
     const calls: string[] = [];
     const spied = {
       resolve: (request: Parameters<typeof resolver.resolve>[0]) => {
-        calls.push(request.namespace);
+        calls.push(request.reference);
         return resolver.resolve(request);
       },
     };
@@ -135,17 +135,22 @@ describe("~namespace includes (real compile path)", () => {
   });
 
   /**
-   * A built-in or user alias keeps its meaning even when a recipe namespace
-   * shares its name, because alias bases are tried before the resolver.
+   * `#project` is the project root and `~project` is a recipe namespace named
+   * "project": the two sigils never overlap, so both lines resolve to their own
+   * file. `~project` is no longer an alias for the project root.
    *
-   * With the built-in alias "~project" pointing at a real directory AND a
-   * namespace named "project" in the store, the ALIAS file is inlined.
+   * With the built-in "#project" pointing at a real directory AND a namespace
+   * named "project" in the store, "@#project/..." inlines the directory's file
+   * and "@~project/..." inlines the recipe's.
    */
-  it("should prefer an alias over a namespace of the same name", async () => {
+  it("should keep the # project alias and a ~project namespace apart", async () => {
     tmp = makeTmpDir("ns-inc-");
-    write("shared/recipe/file.md", "ALIAS WINS");
-    write("store/project/recipe/file.md", "NAMESPACE LOSES");
-    const entry = write("project/AGENTS.md", "@~project/recipe/file.md\n");
+    write("shared/recipe/recipe-file.md", "ALIAS FILE");
+    write("store/project/recipe/recipe-file.md", "NAMESPACE FILE");
+    const entry = write(
+      "project/AGENTS.md",
+      "@#project/recipe/recipe-file.md\n\n@~project/recipe/recipe-file.md\n"
+    );
     const dest = at("out/AGENTS.md");
 
     const resolver = new StaticNamespaceResolver({
@@ -154,14 +159,14 @@ describe("~namespace includes (real compile path)", () => {
 
     const compiler = new CompilationService({ namespaceResolver: resolver });
     const ok = await compiler.compile({
-      aliases: { "~project": [at("shared")] },
+      aliases: { "#project": [at("shared")] },
       targets: [{ rootInputPath: entry, outputs: [{ destinationFile: dest }] }],
     });
 
     expect(ok).toBe(true);
     const out = fs.readFileSync(dest, "utf8");
-    expect(out).toContain("ALIAS WINS");
-    expect(out).not.toContain("NAMESPACE LOSES");
+    expect(out).toContain("ALIAS FILE");
+    expect(out).toContain("NAMESPACE FILE");
   });
 
   // -------------------------------------------------------------------------

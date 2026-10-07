@@ -27,23 +27,23 @@ import type { IndexDependency, IndexFile } from "./formats/index-file.js";
 import type { Lockfile } from "./formats/lockfile.js";
 import type { ContentKind, RecipeManifest } from "./formats/recipe-manifest.js";
 import {
-  isNamedReading,
+  CachedIndexLookup,
+  RefResolveArguments,
+  describeRef,
+  isNamedRef,
+  locationOf,
+  namespaceOf,
   namespaceOfKey,
-  parseRef,
-  refKey,
+  repoOf,
+  settleDependency,
+  shortKey,
+  sharedRefResolver,
   splitRecipeKey,
-  type ParsedRef,
-} from "../refs/parse.js";
-import { settleDependency } from "../refs/settle.js";
+  type NamedRef,
+  type RefKind,
+  type SousRef,
+} from "../../services/ref-resolver/index.js";
 import { declarationFor, type DependencyLists } from "./declarations.js";
-import {
-  describeReference,
-  findNamespace,
-  findRecipe,
-  referenceReposFromIndexes,
-  type ReferenceContext,
-  type ReferenceMatch,
-} from "../refs/index.js";
 
 // --- What the catalog reads ---------------------------------------------------------------------
 
@@ -305,8 +305,11 @@ export function listRecipes(inputs: CatalogInputs): RecipeListing[] {
  * @param inputs - The cached indexes, the lockfile and the project's subscriptions.
  * @param ref - The namespace, optionally qualified with `repo:`.
  */
-export function describeNamespace(inputs: CatalogInputs, ref: string): NamespaceDetail {
-  const found = resolveNamespaceRef(inputs, ref);
+export async function describeNamespace(
+  inputs: CatalogInputs,
+  ref: string
+): Promise<NamespaceDetail> {
+  const found = await resolveNamespaceRef(inputs, ref);
   const subscriptions = new Set(inputs.subscriptions);
   const declared = found.repo.index.namespaces[found.namespace]!;
 
@@ -329,8 +332,11 @@ export function describeNamespace(inputs: CatalogInputs, ref: string): Namespace
  * @param inputs - The cached indexes, the lockfile, the subscriptions and the manifest reader.
  * @param ref - The recipe, as `namespace/recipe`, a bare recipe name, or either qualified with `repo:`.
  */
-export function describeRecipe(inputs: CatalogInputs, ref: string): RecipeDetail {
-  const found = resolveRecipeRef(inputs, ref);
+export async function describeRecipe(
+  inputs: CatalogInputs,
+  ref: string
+): Promise<RecipeDetail> {
+  const found = await resolveRecipeRef(inputs, ref);
   const subscriptions = new Set(inputs.subscriptions);
   const listing = recipeListing(found.key, found.repo, inputs, subscriptions);
   const entry = found.repo.index.recipes[found.key]!;
@@ -412,18 +418,18 @@ export function narrowToInstalled(inputs: CatalogInputs): CatalogInputs {
  * @param describe - The lookup to run: `describeNamespace` or `describeRecipe`.
  * @param what - What the ref names, for the error.
  */
-export function describeInstalled<T>(
+export async function describeInstalled<T>(
   inputs: CatalogInputs,
   ref: string,
-  describe: (inputs: CatalogInputs, ref: string) => T,
+  describe: (inputs: CatalogInputs, ref: string) => Promise<T>,
   what: "namespace" | "recipe"
-): T {
+): Promise<T> {
   try {
-    return describe(narrowToInstalled(inputs), ref);
+    return await describe(narrowToInstalled(inputs), ref);
   } catch {
     // The full lookup either explains the ref better (ambiguous, unknown) or
     // proves it is published and simply not installed.
-    describe(inputs, ref);
+    await describe(inputs, ref);
     throw what === "namespace"
       ? new ConfigError(
           `This project has installed no recipe from the namespace '${ref}', so there is ` +
@@ -464,35 +470,39 @@ export type ResolvedRecipeRef = {
  * @param inputs - The cached indexes.
  * @param ref - The namespace, optionally qualified with `repo:`.
  */
-export function resolveNamespaceRef(inputs: CatalogInputs, ref: string): ResolvedNamespace {
-  const { parsed, search } = readCommandLineRef(ref);
+export async function resolveNamespaceRef(
+  inputs: CatalogInputs,
+  ref: string
+): Promise<ResolvedNamespace> {
+  const parsed = readShortRef(ref);
 
-  if (parsed?.recipe !== undefined) {
+  if (parsed?.kind === "recipe") {
     throw new ConfigError(
-      `'${ref}' names the recipe '${parsed.recipe}', not a namespace.\n` +
-        `  The namespace it belongs to is '${parsed.namespace}'.`
+      `'${ref}' names the recipe '${parsed.name}', not a namespace.\n` +
+        `  The namespace it belongs to is '${parsed.namespace!.name}'.`
     );
   }
 
-  const matches = findNamespace(search, referenceContext(inputs));
+  const matches = await findIn(inputs, ref, ["namespace"]);
 
   if (matches.length === 1) {
-    return { repo: repoNamed(inputs, matches[0]!.repo!), namespace: matches[0]!.namespace! };
+    const match = matches[0]!;
+    return { repo: repoNamed(inputs, repoOf(match)!.name!), namespace: namespaceOf(match)!.name };
   }
 
   if (matches.length > 1) throw ambiguousError(ref, "namespace", matches);
 
-  const asRecipe = findRecipe(search, referenceContext(inputs));
-  if (parsed !== undefined && parsed.repo === undefined && asRecipe.length > 0) {
+  const asRecipe = await findIn(inputs, ref, ["recipe"]);
+  if (parsed !== undefined && repoOf(parsed) === undefined && asRecipe.length > 0) {
     throw new ConfigError(
       `No repository this project trusts publishes a namespace called ` +
-        `'${parsed.namespace}'.\n` +
+        `'${parsed.name}'.\n` +
         `  It is the name of a recipe:\n` +
-        asRecipe.map((candidate) => `    ${describeReference(candidate)}`).join("\n")
+        asRecipe.map((candidate) => `    ${describeRef(candidate)}`).join("\n")
     );
   }
 
-  throw unknownError(inputs, ref, "namespace", parsed?.repo);
+  throw unknownError(inputs, ref, "namespace", parsed === undefined ? undefined : repoOf(parsed)?.name);
 }
 
 /**
@@ -503,35 +513,39 @@ export function resolveNamespaceRef(inputs: CatalogInputs, ref: string): Resolve
  * @param inputs - The cached indexes.
  * @param ref - The recipe, as `namespace/recipe`, a bare recipe name, or either qualified with `repo:`.
  */
-export function resolveRecipeRef(inputs: CatalogInputs, ref: string): ResolvedRecipeRef {
-  const { parsed, search } = readCommandLineRef(ref);
-  const context = referenceContext(inputs);
+export async function resolveRecipeRef(
+  inputs: CatalogInputs,
+  ref: string
+): Promise<ResolvedRecipeRef> {
+  const parsed = readShortRef(ref);
 
-  const matches = findRecipe(search, context);
+  const matches = await findIn(inputs, ref, ["recipe"]);
 
   if (matches.length === 1) {
     const match = matches[0]!;
+    const namespace = namespaceOf(match)!.name;
+    const name = (match as { name: string }).name;
     return {
-      repo: repoNamed(inputs, match.repo!),
-      key: `${match.namespace}/${match.recipe}`,
-      namespace: match.namespace!,
-      name: match.recipe!,
+      repo: repoNamed(inputs, repoOf(match)!.name!),
+      key: `${namespace}/${name}`,
+      namespace,
+      name,
     };
   }
 
   if (matches.length > 1) throw ambiguousError(ref, "recipe", matches);
 
-  const asNamespace = findNamespace(search, context);
+  const asNamespace = await findIn(inputs, ref, ["namespace"]);
   if (asNamespace.length > 0) {
     throw new ConfigError(
       `No repository this project trusts publishes a recipe called ` +
-        `'${parsed?.namespace ?? ref}'.\n` +
+        `'${parsed === undefined ? ref : namespaceNameOf(parsed)}'.\n` +
         `  It is the name of a namespace:\n` +
-        asNamespace.map((candidate) => `    ${describeReference(candidate)}`).join("\n")
+        asNamespace.map((candidate) => `    ${describeRef(candidate)}`).join("\n")
     );
   }
 
-  throw unknownError(inputs, ref, "recipe", parsed?.repo);
+  throw unknownError(inputs, ref, "recipe", parsed === undefined ? undefined : repoOf(parsed)?.name);
 }
 
 // --- The pieces ---------------------------------------------------------------------------------
@@ -711,7 +725,7 @@ function dependencyListings(
         const reading = settleDependency(written, {
           ...(resolved === undefined ? {} : { recorded: resolved }),
         });
-        if (reading !== undefined && isNamedReading(reading)) key = refKey(reading);
+        if (reading !== undefined && isNamedRef(reading)) key = shortKey(reading);
       } catch {
         key = written;
       }
@@ -733,45 +747,57 @@ function repoNamed(inputs: CatalogInputs, name: string): CatalogRepo {
   return inputs.repos.find((repo) => repo.name === name)!;
 }
 
-/** This catalog's repositories, in the shape a reference searches. */
-function referenceContext(inputs: CatalogInputs): ReferenceContext {
-  return {
-    repos: referenceReposFromIndexes(
-      inputs.repos.map((repo) => repo.name),
-      new Map(inputs.repos.map((repo) => [repo.name, repo.index])),
-      Object.fromEntries(inputs.repos.map((repo) => [repo.name, repo.url]))
-    ),
-  };
+/**
+ * Every ref in this catalog's repositories that a ref written on the command
+ * line names, of the kinds given, best match first.
+ *
+ * @param inputs - The cached indexes.
+ * @param ref - The ref as typed.
+ * @param kinds - The kinds of ref the caller accepts.
+ */
+async function findIn(
+  inputs: CatalogInputs,
+  ref: string,
+  kinds: readonly RefKind[]
+): Promise<SousRef[]> {
+  const lookup = new CachedIndexLookup(
+    new Map(inputs.repos.map((repo) => [repo.name, repo.index])),
+    {
+      order: inputs.repos.map((repo) => repo.name),
+      urls: Object.fromEntries(inputs.repos.map((repo) => [repo.name, repo.url])),
+    }
+  );
+  const result = await sharedRefResolver().resolve(new RefResolveArguments({ input: ref, lookup, kinds }));
+  return result.refs;
 }
 
 /**
- * A ref from the command line, checked by the one parser, and the spelling to
- * search for: a short ref written back without its version range (the range
- * says which version to use, never which thing is meant), or a location
- * exactly as written, which the search settles through the repository's index.
+ * The namespace or recipe a ref from the command line names by its short form,
+ * checked by the one parser: undefined when the ref names a location instead.
  *
  * @param ref - The ref as typed.
- * @returns The short reading, when the ref was short, and the search term.
  */
-function readCommandLineRef(ref: string): { parsed?: ParsedRef; search: string } {
-  const readings = parseRef(ref);
-  const first = readings[0]!;
-  if (first.location !== undefined || !isNamedReading(first)) return { search: ref.trim() };
-  return {
-    parsed: first,
-    search: first.repo === undefined ? refKey(first) : `${first.repo}:${refKey(first)}`,
-  };
+function readShortRef(ref: string): NamedRef | undefined {
+  const { refs } = sharedRefResolver().parse(ref);
+  return refs.find(
+    (candidate): candidate is NamedRef => isNamedRef(candidate) && locationOf(candidate) === undefined
+  );
+}
+
+/** The name a short ref was written with: its namespace for a namespace, its recipe name otherwise. */
+function namespaceNameOf(ref: NamedRef): string {
+  return ref.kind === "namespace" ? ref.name : ref.namespace!.name;
 }
 
 /** The error a ref that could have meant several things raises. */
 function ambiguousError(
   ref: string,
   what: "namespace" | "recipe",
-  candidates: ReferenceMatch[]
+  candidates: SousRef[]
 ): ConfigError {
   return new ConfigError(
     `'${ref}' names a ${what} in more than one repository this project trusts:\n` +
-      candidates.map((candidate) => `    ${describeReference(candidate)}`).join("\n") +
+      candidates.map((candidate) => `    ${describeRef(candidate)}`).join("\n") +
       `\n  Name the repository as well, as 'repository:${ref}', to say which one you mean.`
   );
 }

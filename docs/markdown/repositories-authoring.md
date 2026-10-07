@@ -68,10 +68,30 @@ contents:
 
 `contents` groups are what a subscribing project receives, one group per kind, each with `include` glob patterns
 relative to the recipe folder (and optional `exclude` patterns). The four kinds are `skills`, `memories`,
-`prompts` and `config`; the kind decides where files land, which the subscriber maps with
-[`recipeOutputs`](repositories-file-formats.md#recipeoutputs-where-the-files-land). Field tables are in the
+`prompts` and `config`; the kind decides what happens to them in the subscriber's project, which the subscriber shapes with
+[`recipes`](repositories-file-formats.md#recipes-what-each-content-kind-does). Field tables are in the
 [recipe manifest](repositories-file-formats.md#sousrecipeyaml-the-recipe-manifest) reference, and recipe
 metadata is the source of truth for the version: never edit `sous.index.json` by hand.
+
+### Shipping memories
+
+A memory is a fragment of an agent's always-loaded instructions. A recipe ships one with a `contents` group of
+`kind: memories`:
+
+```yaml
+contents:
+  - kind: memories
+    include:
+      - memories/**/*.md
+```
+
+Plain `.md` files are copied as they are; a file named `*.tpl.md` renders through LiquidJS with the subscriber's
+answers in scope. The recipe never says where a memory lands. A subscriber includes every memory of every recipe
+it holds directly with one line, `@#memories/**/*.md`, which lists a file at
+`#memories/<namespace>/<recipe>/<path under the pattern's static base>`. A recipe held only through `depends` is
+a library and contributes none. The build warns a subscriber whose output includes none of a memory it
+publishes, so a memory is never silently lost. See
+[Recipe memories](repositories-consuming.md#recipe-memories) for the subscriber's side.
 
 A recipe's files compile exactly the way a project's own `entryGlob` target does, so the
 [`.tpl.` convention](configuration.md#templates-and-the-tpl-convention) applies unchanged inside a recipe. A

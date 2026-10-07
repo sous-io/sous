@@ -14,6 +14,7 @@ import {
   type DiscoveredConfig,
 } from "./config-discovery.js";
 import { ConfigError } from "./errors.js";
+import { sharedHashNames } from "../services/ref-resolver/index.js";
 import { resolveSousHome } from "./sous-home.js";
 import { validateSettings } from "./config-schema.js";
 import { applyRepoDefaults } from "./repos/defaults.js";
@@ -148,23 +149,25 @@ type StoreConfig = {
 };
 
 /**
- * Where the files a subscribed recipe contributes are written, one list of
- * destination directories per content kind. Each destination is `${var}`
- * substituted like any other config path, and a kind may name several so the
- * same recipe feeds more than one agent directory.
+ * What a project does with each content kind its subscribed recipes publish.
  *
- * Only `skills` has a default (`<project root>/.claude/skills`, the project root
- * being the parent of `.sous/`). A kind with no destination is skipped, with one
- * warning naming this config key, because sous cannot guess where a project
- * wants its memories or its prompts.
+ * `skills.outputs` lists the destination directories for recipe skills, each
+ * `${var}` substituted; the default is `<project root>/.claude/skills`, the
+ * project root being the parent of `.sous/`. `memories.first` and
+ * `memories.exclude` are lists of globs, or `/.../` regular expressions, over
+ * `namespace/recipe` keys.
  */
-type RecipeOutputs = {
-  /** Where recipe skill bundles are written. */
-  skills?: string[];
-  /** Where recipe memory files are written. */
-  memories?: string[];
-  /** Where recipe prompt files are written. */
-  prompts?: string[];
+type RecipesConfig = {
+  skills?: {
+    /** Where recipe skill bundles are written. */
+    outputs?: string[];
+  };
+  memories?: {
+    /** Recipes whose memories come first. */
+    first?: string[];
+    /** Recipes whose memories are left out. */
+    exclude?: string[];
+  };
 };
 
 /** Configuration for a launchable tool (e.g. claude, codex). */
@@ -204,9 +207,9 @@ export type Settings = {
   /** Knobs for the machine-wide recipe store. */
   store?: StoreConfig;
   /**
-   * Where the files subscribed recipes contribute are written, per content kind.
+   * What the project does with each content kind its subscribed recipes publish.
    */
-  recipeOutputs?: RecipeOutputs;
+  recipes?: RecipesConfig;
   /**
    * Variable mapping records, keyed by environment variable name, each bound to
    * one recipe variable written as `namespace/recipe/variableName` with an
@@ -820,30 +823,29 @@ function resolveAnswerLayer(
 }
 
 /**
- * Built-in `@include` aliases, always available and reserved (their names begin
- * with `~` so user `_aliases` can never shadow them). Add new entries here as
- * needed; keep names kebab-case.
+ * Built-in `@include` aliases: every `#` name the registry holds
+ * (`sharedHashNames`), each standing for its directories in this project. They
+ * are reserved (user `_aliases` may not start with `#`), so a user alias can
+ * never shadow one.
  *
- * - `~project` → the consuming project's root (`projectRoot`).
+ * - `#project` is the consuming project's root (`projectRoot`).
  *
- * There is exactly one, on purpose. Files that used to be reached through a
- * built-in alias pointing inside the sous package are published as recipes now,
- * and a recipe's files are addressed by its namespace (`@~workflow/task-files/
- * _partials/resume-task.md`), resolved against what the project has pinned. A
- * `~namespace` reference is NOT an alias: it is resolved separately, after the
- * alias map has been tried; see `locked-namespace-resolver.ts`.
+ * Files that used to be reached through a built-in alias pointing inside the
+ * sous package are published as recipes now, and a recipe's files are addressed
+ * by its namespace (`@~workflow/task-files/_partials/resume-task.md`),
+ * resolved against what the project has pinned. A `~` reference is NOT an
+ * alias: it is resolved separately, after the alias map has been tried; see
+ * `locked-namespace-resolver.ts`.
  */
 export function buildBuiltInAliases(scope: VarScope): AliasMap {
-  const builtIns: AliasMap = {};
-  if (scope.projectRoot) builtIns["~project"] = [scope.projectRoot];
-  return builtIns;
+  return sharedHashNames().aliasMap(scope as Record<string, string>);
 }
 
 /**
  * Resolve the full `@include` alias map: built-ins, then the config's
  * `_aliases` block (user entries prepend, so they are tried first and fall
  * through to built-in bases of the same name). User alias names starting
- * with `~` are rejected (reserved).
+ * with `~` or `#` are a ConfigError (reserved).
  *
  * @param settings - The loaded settings (for the `_aliases` block).
  * @param scope - The resolved settings scope (for ${var} substitution + projectRoot).
@@ -853,7 +855,9 @@ export function resolveAliases(settings: Settings, scope: VarScope): AliasMap {
     builtIns: buildBuiltInAliases(scope),
     userAliases: [settings._aliases],
     scope,
-    onError: warning,
+    onError: (message) => {
+      throw new ConfigError(message);
+    },
   });
 }
 
@@ -1002,7 +1006,7 @@ export function resolveCompilation(
 
       /* c8 ignore start */
       // Glob target: expand pattern into one CompilationTarget per matched file, skipping dirs.
-      // A leading alias (`~project/skills/**`) expands to one candidate pattern per alias
+      // A leading alias (`#project/skills/**`) expands to one candidate pattern per alias
       // base; the first base that matches any files wins, mirroring the first-existing-wins
       // rule of @include resolution.
       const rawPattern = substituteVarsStrict(target.entryGlob!, targetScope, `${where}.entryGlob`);

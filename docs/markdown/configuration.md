@@ -47,10 +47,34 @@ are resolved at different stages and never mix.
 
 ## Templates and the `.tpl.` convention
 
-A file's name decides whether sous renders it. A file with `.tpl.` in its name is rendered through
-LiquidJS and lands with that segment stripped, so `SKILL.tpl.md` compiles to `SKILL.md`; a file
-without it is copied verbatim, however much it looks like a template. The convention applies to
-`entryPoint` and `entryGlob` targets alike, and to the files a recipe brings into your project.
+A file's own name decides whether sous renders it, every time. A file with `.tpl.` in its name is rendered
+through LiquidJS and lands with that segment stripped, so `SKILL.tpl.md` compiles to `SKILL.md`; a file
+without it is never rendered, however much it looks like a template, even when a template includes it. A
+`.tpl.` file included from a plain file still renders, by its own name, before its text is placed. The
+convention applies to `entryPoint` and `entryGlob` targets alike, and to the files a recipe brings into your
+project.
+
+## Include syntax
+
+A line holding only `@path` includes that file's content. A path may be:
+
+- relative to the including file (`@sections/context.md`);
+- `${var}` substituted (`@${projectRoot}/prompts/x.md`);
+- home-relative (`@~/notes/private.md`);
+- an alias from `_aliases`, by its first segment (`@myAlias/doc.md`);
+- a name sous or a plugin registers, written with the `#` sigil: `#project` is the project root
+  (`@#project/prompts/intro.md`);
+- a recipe file, written with the `~` sigil and the recipe's namespace (`@~workflow/task-files/_partials/resume.md`);
+- a view: `@#memories/**/*.md` includes every active recipe's memories (see
+  [Recipe memories](repositories-consuming.md#recipe-memories)).
+
+A path may use glob syntax (`*`, `**`, `?`, `[..]`, `{a,b}`) and then includes every file it matches, in bytewise
+path order. The same file may be included in more than one place; a circular include is an error, as is a line
+that looks like an include (`@docs/notes.txt`, `@~workflow/missing`) but cannot be resolved, which fails the
+build naming the file and the line. A line inside a fenced code block is left as written. An alias name may not
+start with `~` or `#`. Reads of recipe files go through the
+[ref resolver](adrs/0013-one-ref-resolver.md); [Including recipe files in your own templates](repositories.md#including-recipe-files-in-your-own-templates)
+has the namespace rules.
 
 ## Composition
 

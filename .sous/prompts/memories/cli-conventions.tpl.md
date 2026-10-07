@@ -17,18 +17,18 @@ holds the mechanism, use it rather than building a second one beside it.
   It raises a changed recipe whose version still equals its last tag; `--bump` chooses how far
   (a patch step by default) and `--no-bump`, which `--ci` implies, makes an unraised change an
   error instead. The rule lives in `buildReleasePlan` (`src/lib/repos/release/plan.ts`).
-- **Every command that takes a reference resolves it through `src/lib/refs/`.** One module
-  decides what a word on the command line names (`findReference` over the `SousScope` list a
-  command accepts, plus the tighter `findRepository`, `findNamespace`, `findRecipe` and
-  `findVariable`), and one settles which meaning a run proceeds with (`pickReference`: one
-  match, a question, `--accept-first`, or the shared non-interactive failure). Any level of
-  qualification is accepted up to the fully qualified name, and so is a location (a URL, an
-  SSH remote, a provider-scheme locator, a URL copied from the browser). Matching tries the
-  exact spelling first, then ignores case; a name that still matches several things is a
-  question. The listing order is the contract. What a reference resolved to is reported by
-  `formatResolvedReference` (`src/lib/repos/reference-report.ts`), which `pickReference` calls:
-  the facts as a key and value list, then one sentence saying why that candidate won. Never
-  resolve a name by walking an index or a definition list in a command.
+- **Every command that takes a reference resolves it through `src/services/ref-resolver/`.**
+  `RefResolverService.resolve` reads what a word on the command line names (over the kinds a
+  command accepts: repository, namespace, recipe, variable, environment variable name), and
+  `RefPickerService` settles which meaning a run proceeds with (one match, a question,
+  `--accept-first`, or the shared non-interactive failure). Any level of qualification is
+  accepted up to the fully qualified name, and so is a location (a URL, an SSH remote, a
+  provider-scheme locator, a URL copied from the browser). Matching tries the exact spelling
+  first, then ignores case; a name that still matches several things is a question. The
+  listing order is the contract. What a reference resolved to is reported by
+  `formatResolvedReference` (`src/services/ref-resolver/ref-report.ts`), which the picker
+  calls: the facts as a key and value list, then one sentence saying why that candidate won.
+  Never resolve a name by walking an index or a definition list in a command.
 - **Never prompt when the terminal is not ours**: `--non-interactive`, a truthy `CI`, or no TTY
   (`src/lib/interactive.ts`). Fail instead, naming both the question that could not be asked and
   the flag that would have answered it, and print the command's help under the error. All of it
@@ -49,14 +49,14 @@ holds the mechanism, use it rather than building a second one beside it.
 - **Variable definitions require `description` and `example`.** The description says, in full
   sentences, what the setting is for, what the default does, and what else is acceptable; the
   prompt itself stays one plain question.
-- **One ref parser, told where the ref came from**: `parseRef(ref, from)` in
-  `src/lib/refs/parse.ts` reads every form and returns every reading; `RefSource`
-  (`src/lib/refs/scopes.ts`) decides which forms a place allows, and a refused form says what
-  to write instead. Never parse a ref, or split a key, anywhere else (`splitRecipeKey` and
-  `namespaceOfKey` wrap it for stored keys). A ref is stored and printed as its published
-  identity (namespace and recipe), never as a folder path. Any spelling that settles to one
-  identity is accepted, including a folder path or a pasted browser URL; host-specific
-  readings belong to each provider's `readLocation`.
+- **One ref resolver, told where the ref came from**: `RefParser` in `src/services/ref-resolver/`
+  reads every form and returns every reading, and the `RefPruner` for the ref's `RefSource` (the
+  place it was written) drops what that place refuses, saying what to write instead. Never
+  parse a ref, or split a key, anywhere else (`splitRecipeKey` and `namespaceOfKey` take stored
+  keys apart). A ref is stored and printed as its published identity (namespace and recipe),
+  never as a folder path. Any spelling that settles to one identity is accepted, including a
+  folder path or a pasted browser URL; host-specific readings belong to each provider's
+  `readLocation`.
 - **One way to show a key and its value**: `showVariable` and `showVariables` in
   `src/utils/formatting.ts`, four spaces in, labels padded so every colon lines up, values in the
   value color, and anything secondary (a location, a provenance) trailing in muted grey rather

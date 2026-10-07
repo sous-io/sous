@@ -5,7 +5,7 @@
  * answers in `.sous/.env` or `.sous/.env.local`. By default it asks only what
  * is unanswered or no longer fits; `--all` asks everything again.
  *
- * The optional name is a reference, resolved through `src/lib/refs/` exactly as
+ * The optional name is a reference, resolved through `src/services/ref-resolver/` exactly as
  * every other command resolves one. It may name a variable, an environment
  * variable that answers one, a recipe, a namespace or a repository, at any
  * level of qualification; naming anything larger than a variable asks every
@@ -38,18 +38,22 @@ import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../base-command.js";
 import { ConfigError } from "../../lib/errors.js";
 import {
-  ALL_SCOPES,
-  SousScope,
-  findNamespace,
-  findReference,
-  findRepository,
-  findVariable,
-  pickReference,
-  referenceContextFromVariables,
-  variableReferenceKey,
-  type ReferenceMatch,
-  type ReferenceRepo,
-} from "../../lib/refs/index.js";
+  ChainedLookup,
+  RefPickArguments,
+  RefResolveArguments,
+  VariableLookup,
+  namespaceOf,
+  recipeOf,
+  refKey,
+  repoOf,
+  sharedRefPicker,
+  sharedRefResolver,
+  variableRefOf,
+  type CatalogRepo,
+  type RefKind,
+  type SousRef,
+} from "../../services/ref-resolver/index.js";
+import { EnvVarLookup } from "../../services/ref-resolver/lookups/env-var-lookup.js";
 import { subscriptionServiceFor } from "../../lib/repos/subscription-service.js";
 import {
   applyProvidedAnswers,
@@ -269,10 +273,10 @@ export default class VarsAsk extends BaseCommand {
     defined: DefinedVariable[],
     ladder: LadderContext,
     selection: Selection,
-    trusted: ReferenceRepo[] = []
+    trusted: CatalogRepo[] = []
   ): Promise<string[] | undefined> {
-    const contextOf = (pool: DefinedVariable[]) =>
-      referenceContextFromVariables(pool, ladder, trusted);
+    const lookupOf = (pool: DefinedVariable[]) =>
+      new ChainedLookup(new VariableLookup(pool, trusted), new EnvVarLookup(pool, ladder));
     const { name, repo, namespace, vars } = selection;
     if (name === undefined && repo === undefined && namespace === undefined && vars === undefined) {
       return undefined;
@@ -281,36 +285,24 @@ export default class VarsAsk extends BaseCommand {
     let pool = defined;
 
     if (repo !== undefined) {
-      const match = await this.pick(findRepository(repo, contextOf(pool)), repo, selection);
-      pool = pool.filter((entry) => entry.recipe.repo === match.repo);
+      const match = await this.pick(repo, lookupOf(pool), ["repo"], selection);
+      pool = pool.filter((entry) => entry.recipe.repo === repoOf(match)?.name);
     }
 
     if (namespace !== undefined) {
-      const match = await this.pick(
-        findNamespace(namespace, contextOf(pool)),
-        namespace,
-        selection
-      );
+      const match = await this.pick(namespace, lookupOf(pool), ["namespace"], selection);
       pool = narrowTo(pool, match);
     }
 
     if (name !== undefined) {
-      const match = await this.pick(
-        findReference(name, ALL_SCOPES, contextOf(pool)),
-        name,
-        selection
-      );
+      const match = await this.pick(name, lookupOf(pool), undefined, selection);
       pool = narrowTo(pool, match);
     }
 
     if (vars !== undefined) {
       const chosen: DefinedVariable[] = [];
       for (const wanted of vars) {
-        const match = await this.pick(
-          findVariable(wanted, contextOf(pool)),
-          wanted,
-          selection
-        );
+        const match = await this.pick(wanted, lookupOf(pool), ["variable", "envVar"], selection);
         chosen.push(...narrowTo(pool, match));
       }
       pool = chosen;
@@ -323,7 +315,7 @@ export default class VarsAsk extends BaseCommand {
       );
     }
 
-    return [...new Set(pool.map(variableReferenceKey))];
+    return [...new Set(pool.map((entry) => refKey(variableRefOf(entry))))];
   }
 
   /**
@@ -331,7 +323,7 @@ export default class VarsAsk extends BaseCommand {
    * indexes alone. A project whose repositories cannot be read this way still
    * answers every other form of reference, so a failure here is an empty list.
    */
-  private trustedRepos(): ReferenceRepo[] {
+  private trustedRepos(): CatalogRepo[] {
     try {
       return subscriptionServiceFor({
         configContext: this.configContext,
@@ -347,38 +339,67 @@ export default class VarsAsk extends BaseCommand {
    * Settles which of the things a reference could have meant this run proceeds
    * with, through the rule every command shares.
    *
-   * @param matches - What the reference could have meant, in listing order.
    * @param search - The reference exactly as it was written.
+   * @param lookup - What the reference is searched in.
+   * @param kinds - The kinds of ref this step accepts; every kind when left out.
    * @param selection - The selection, read for `--accept-first`.
    */
   private async pick(
-    matches: ReferenceMatch[],
     search: string,
+    lookup: ChainedLookup,
+    kinds: readonly RefKind[] | undefined,
     selection: Selection
-  ): Promise<ReferenceMatch> {
-    return pickReference(matches, {
-      search,
-      interactive: this.interactive,
-      acceptFirst: selection.acceptFirst,
-      announce: false,
-      details: [SEE_ALL],
-    });
+  ): Promise<SousRef> {
+    const { refs } = await sharedRefResolver().resolve(
+      new RefResolveArguments({
+        input: search,
+        lookup,
+        refusedIsEmpty: true,
+        ...(kinds === undefined ? {} : { kinds }),
+      })
+    );
+    // A name that answers several variables is one candidate per variable, so
+    // choosing between them is the same question as choosing between variables.
+    const candidates = refs.flatMap((ref) =>
+      ref.kind === "envVar" && (ref.variables?.length ?? 0) > 1
+        ? ref.variables!.map((variable): SousRef => ({ ...ref, variables: [variable] }))
+        : [ref]
+    );
+    return sharedRefPicker().pick(
+      candidates,
+      new RefPickArguments({
+        search,
+        interactive: this.interactive,
+        acceptFirst: selection.acceptFirst,
+        announce: false,
+        details: [SEE_ALL],
+      })
+    );
   }
 }
 
-/** The variables one match covers: a whole repository, namespace, recipe, or one variable. */
-function narrowTo(pool: DefinedVariable[], match: ReferenceMatch): DefinedVariable[] {
+/**
+ * The variables one ref covers: a whole repository, namespace, recipe, or one
+ * variable, or the variable an environment variable name answers.
+ */
+function narrowTo(pool: DefinedVariable[], match: SousRef): DefinedVariable[] {
+  const target = match.kind === "envVar" ? match.variables?.[0] : match;
+  if (target === undefined) return [];
+  const repo = repoOf(target)?.name;
+  const namespace = namespaceOf(target)?.name;
+  const recipe = recipeOf(target)?.name;
+
   return pool.filter((entry) => {
-    if (match.repo !== undefined && entry.recipe.repo !== match.repo) return false;
-    if (match.scope === SousScope.Repository) return true;
+    if (repo !== undefined && entry.recipe.repo !== repo) return false;
+    if (target.kind === "repo") return true;
 
-    if (match.namespace !== undefined && entry.recipe.namespace !== match.namespace) return false;
-    if (match.scope === SousScope.Namespace) return true;
+    if (namespace !== undefined && entry.recipe.namespace !== namespace) return false;
+    if (target.kind === "namespace") return true;
 
-    if (match.recipe !== undefined && entry.recipe.name !== match.recipe) return false;
-    if (match.scope === SousScope.Recipe) return true;
+    if (recipe !== undefined && entry.recipe.name !== recipe) return false;
+    if (target.kind === "recipe") return true;
 
-    return entry.definition.name === match.variable;
+    return target.kind === "variable" && entry.definition.name === target.name;
   });
 }
 

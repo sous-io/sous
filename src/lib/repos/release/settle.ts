@@ -21,26 +21,17 @@
  * naming the spellings that read one way (the `/*` form for the namespace).
  */
 
-import { parseIndexFile, type IndexFile } from "../formats/index-file.js";
-import { INDEX_FILENAME } from "../formats/common.js";
+import type { ProviderOptions, RepoProvider } from "../providers/index.js";
 import {
-  builtInProviders,
-  providerById,
-  type ProviderOptions,
-  type RepoProvider,
-} from "../providers/index.js";
-import {
-  formatRef,
-  isBrowsedReading,
-  isNamedReading,
-  parseRef,
-  refKey,
-  type ParsedRef,
-  type RefLocation,
-  type RefReading,
-} from "../../refs/parse.js";
-import { settleInIndex } from "../../refs/settle.js";
-import { RefSource } from "../../refs/scopes.js";
+  FetchedIndexLookup,
+  RefSource,
+  locationOf,
+  namespaceOf,
+  rangeOf,
+  sharedRefResolver,
+  shortKey,
+  type SousRef,
+} from "../../../services/ref-resolver/index.js";
 import { describeError, type RepoValidation, type ValidationProblem } from "./validate.js";
 
 /** What one dependency settled on. */
@@ -78,8 +69,11 @@ export type SettleOptions = {
  *
  * @param readings - Every reading of the dependency.
  */
-export function needsSettling(readings: RefReading[]): boolean {
-  return readings.length > 1 || readings.some(isBrowsedReading);
+export function needsSettling(readings: SousRef[]): boolean {
+  return (
+    readings.length > 1 ||
+    readings.some((reading) => reading.kind === "repo" && reading.browsed !== undefined)
+  );
 }
 
 /**
@@ -95,19 +89,13 @@ export async function settleDependencyLocations(
   validation: RepoValidation,
   options: SettleOptions = {}
 ): Promise<SettleResult> {
-  const providers = options.providers ?? builtInProviders();
   const settled = new Map<string, SettledDependency>();
   const problems: ValidationProblem[] = [];
-  const indexes = new Map<string, Promise<IndexFile>>();
-
-  const indexOf = (location: RefLocation): Promise<IndexFile> => {
-    let pending = indexes.get(location.identity);
-    if (pending === undefined) {
-      pending = fetchIndexAt(location, providers, options.providerOptions ?? {});
-      indexes.set(location.identity, pending);
-    }
-    return pending;
-  };
+  const lookup = new FetchedIndexLookup({
+    subject: "dependency",
+    ...(options.providers === undefined ? {} : { providers: options.providers }),
+    ...(options.providerOptions === undefined ? {} : { providerOptions: options.providerOptions }),
+  });
 
   for (const recipe of validation.recipes) {
     const declared = [...(recipe.manifest.depends ?? []), ...(recipe.manifest.subscribes ?? [])];
@@ -115,9 +103,9 @@ export async function settleDependencyLocations(
       const trimmed = written.trim();
       if (settled.has(trimmed)) continue;
 
-      let readings: RefReading[];
+      let readings: SousRef[];
       try {
-        readings = parseRef(trimmed, RefSource.Manifest, providers);
+        readings = sharedRefResolver().parse(trimmed, RefSource.Manifest).refs;
       } catch {
         // Validation already reported a dependency that does not parse.
         continue;
@@ -126,7 +114,7 @@ export async function settleDependencyLocations(
 
       const where = `${recipe.path} ('${trimmed}')`;
       try {
-        settled.set(trimmed, await settleOne(trimmed, readings, indexOf, providers));
+        settled.set(trimmed, await settleOne(readings, lookup));
       } catch (error) {
         problems.push({ level: "error", where, message: describeError(error) });
       }
@@ -137,101 +125,30 @@ export async function settleDependencyLocations(
 }
 
 /**
- * Settles one dependency: fetches the index behind each reading, and keeps the
- * one reading that publishes what it names.
+ * Settles one dependency: the one reading whose repository's index publishes
+ * what it names.
  *
- * @param written - The dependency as written.
- * @param readings - Every reading of it.
- * @param indexOf - Fetches (once) the index at a location.
- * @param providers - The providers, for formatting.
+ * @param readings - Every reading of the dependency.
+ * @param lookup - The fetched indexes.
  */
 async function settleOne(
-  written: string,
-  readings: RefReading[],
-  indexOf: (location: RefLocation) => Promise<IndexFile>,
-  providers: RepoProvider[]
+  readings: SousRef[],
+  lookup: FetchedIndexLookup
 ): Promise<SettledDependency> {
-  const found: Array<{ reading: RefReading; settled: ParsedRef[]; index: IndexFile }> = [];
-
-  for (const reading of readings) {
-    const location = reading.location;
-    /* c8 ignore next */
-    if (location === undefined) continue;
-
-    let index: IndexFile;
-    try {
-      index = await indexOf(location);
-    } catch (error) {
-      throw new Error(
-        `the dependency reads ${readings.length === 1 ? "as a folder in" : "as something in"} ` +
-          `the repository at ${location.url}, and its index could not be read, so the release ` +
-          `cannot settle what it means. A release never guesses past an index it could not ` +
-          `read.\n  ${describeError(error)}`
-      );
-    }
-
-    const settled = settleInIndex(reading, {
-      namespaces: Object.keys(index.namespaces),
-      recipes: index.recipes,
-    });
-    if (settled.length > 0) found.push({ reading, settled, index });
-  }
-
-  if (found.length === 0) {
-    throw new Error(
-      `no repository it could name publishes what it names. It was read as:\n` +
-        readings.map((reading) => `    ${formatRef(reading, providers)}`).join("\n")
-    );
-  }
-
-  const choices = found.flatMap((entry) => entry.settled);
-  if (choices.length > 1) {
-    throw new Error(
-      `it names more than one thing, and each of these publishes it:\n` +
-        choices.map((choice) => `    ${formatRef(choice, providers)}`).join("\n") +
-        `\n  Write the one you mean. A namespace is written with '/*' after it, as in ` +
-        `'${spelledOut(choices.find((choice) => choice.recipe === undefined) ?? choices[0]!, providers)}', ` +
-        `and a recipe as its canonical locator above.`
-    );
-  }
-
-  const { index } = found[0]!;
-  const choice = choices[0]!;
+  const { ref: choice } = await lookup.settle(readings);
+  const location = locationOf(choice)!;
+  const index = await lookup.indexAt(location);
+  const namespace = namespaceOf(choice)?.name;
   const keys =
-    choice.recipe === undefined
+    choice.kind === "namespace"
       ? Object.keys(index.recipes)
-          .filter((key) => key.startsWith(`${choice.namespace}/`))
+          .filter((key) => key.startsWith(`${namespace}/`))
           .sort()
-      : [refKey(choice)];
-  const range = "range" in found[0]!.reading ? found[0]!.reading.range : undefined;
+      : [shortKey(choice)];
+  const range = readings.map(rangeOf).find((written) => written !== undefined);
   return {
-    identity: choice.location!.identity,
+    identity: location.identity,
     keys,
     ...(range === undefined ? {} : { range }),
   };
-}
-
-/** A reading spelled so it reads one way: a namespace with `/*` after it. */
-function spelledOut(reading: ParsedRef, providers: RepoProvider[]): string {
-  const written = formatRef(reading, providers);
-  return reading.recipe === undefined && isNamedReading(reading) ? `${written}/*` : written;
-}
-
-/**
- * Fetches and validates the index at a location, through its provider.
- *
- * @param location - Where the repository lives.
- * @param providers - The providers to fetch through.
- * @param options - Testing seams.
- */
-async function fetchIndexAt(
-  location: RefLocation,
-  providers: RepoProvider[],
-  options: ProviderOptions
-): Promise<IndexFile> {
-  const provider = providerById(location.provider, providers);
-  /* c8 ignore next */
-  if (provider === undefined) throw new Error(`sous has no '${location.provider}' provider.`);
-  const fetched = await provider.fetchIndex(provider.canonicalize(location.url), options);
-  return parseIndexFile(JSON.parse(fetched.text), `${location.url}/${INDEX_FILENAME}`);
 }

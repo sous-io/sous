@@ -243,8 +243,8 @@ describe("describeNamespace()", () => {
    * describeNamespace(inputs, "workflow");
    * // -> { namespace: "workflow", recipes: [qa-helper, qa-variables] }
    */
-  it("should describe the namespace and every recipe in it", () => {
-    const detail = describeNamespace(inputs(), "workflow");
+  it("should describe the namespace and every recipe in it", async () => {
+    const detail = await describeNamespace(inputs(), "workflow");
 
     expect(detail.repo).toBe("qa-recipes");
     expect(detail.repoUrl).toBe("/repos/qa-recipes");
@@ -262,8 +262,8 @@ describe("describeNamespace()", () => {
    *
    * describeNamespace(inputs, "workflow");  // -> throws, naming both repositories
    */
-  it("should refuse an ambiguous namespace and list the candidates", () => {
-    expect(() => describeNamespace(inputs({ repos: [primary, secondary] }), "workflow")).toThrow(
+  it("should refuse an ambiguous namespace and list the candidates", async () => {
+    await expect(describeNamespace(inputs({ repos: [primary, secondary] }), "workflow")).rejects.toThrow(
       /qa-recipes:workflow[\s\S]*extras:workflow|extras:workflow[\s\S]*qa-recipes:workflow/
     );
   });
@@ -274,8 +274,8 @@ describe("describeNamespace()", () => {
    *
    * describeNamespace(inputs, "extras:workflow");  // -> the extras namespace
    */
-  it("should resolve a qualified namespace in the repository named", () => {
-    const detail = describeNamespace(inputs({ repos: [primary, secondary] }), "extras:workflow");
+  it("should resolve a qualified namespace in the repository named", async () => {
+    const detail = await describeNamespace(inputs({ repos: [primary, secondary] }), "extras:workflow");
 
     expect(detail.repo).toBe("extras");
     expect(detail.recipes.map((entry) => entry.key)).toEqual([
@@ -315,8 +315,8 @@ describe("describeRecipe()", () => {
    *
    * describeRecipe(inputs, "workflow/qa-variables");
    */
-  it("should describe one recipe from its index and its manifest", () => {
-    const detail = describeRecipe(
+  it("should describe one recipe from its index and its manifest", async () => {
+    const detail = await describeRecipe(
       inputs({
         readManifest: () => manifest,
         destinationsFor: (kind) => (kind === "skills" ? ["/project/.claude/skills"] : []),
@@ -362,8 +362,8 @@ describe("describeRecipe()", () => {
    *
    * describeRecipe({ ...inputs, readManifest: () => undefined }, "workflow/qa-variables");
    */
-  it("should describe a recipe whose manifest cannot be read", () => {
-    const detail = describeRecipe(
+  it("should describe a recipe whose manifest cannot be read", async () => {
+    const detail = await describeRecipe(
       inputs({ readManifest: () => undefined }),
       "workflow/qa-variables"
     );
@@ -383,7 +383,7 @@ describe("describeRecipe()", () => {
    * describeRecipe(inputs with set/house subscribing [workflow], "set/house");
    * // -> workflow/qa-helper and workflow/qa-variables, each declared "workflow", subscribes
    */
-  it("should describe a set's members from what the index records", () => {
+  it("should describe a set's members from what the index records", async () => {
     const declaredBy = { declared: "workflow", kind: "subscribes" };
     const setRepo: CatalogRepo = {
       name: "sets",
@@ -403,7 +403,7 @@ describe("describeRecipe()", () => {
       ),
     };
 
-    const detail = describeRecipe(
+    const detail = await describeRecipe(
       inputs({ repos: [primary, setRepo], readManifest: () => undefined }),
       "set/house"
     );
@@ -425,8 +425,8 @@ describe("describeRecipe()", () => {
    * manifest subscribes [workflow]; index { workflow/qa-helper: 0.1.0 }
    * // -> [{ key: workflow/qa-helper, declared: "workflow", kind: "subscribes" }]
    */
-  it("should answer an older entry's declarations from the manifest", () => {
-    const detail = describeRecipe(
+  it("should answer an older entry's declarations from the manifest", async () => {
+    const detail = await describeRecipe(
       inputs({
         readManifest: () =>
           ({ ...manifest, depends: undefined, subscribes: ["workflow"] }) as RecipeManifest,
@@ -448,8 +448,8 @@ describe("describeRecipe()", () => {
    * With nothing pinned, the latest published version is the one described, and
    * it is labeled as the latest.
    */
-  it("should describe the latest version when nothing is pinned", () => {
-    const detail = describeRecipe(inputs(), "workflow/qa-helper");
+  it("should describe the latest version when nothing is pinned", async () => {
+    const detail = await describeRecipe(inputs(), "workflow/qa-helper");
 
     expect(detail.describing).toBe("0.1.0");
     expect(detail.pinned).toBeUndefined();
@@ -462,8 +462,8 @@ describe("describeRecipe()", () => {
    *
    * describeRecipe(inputs, "qa-pattern");  // -> quality/qa-pattern
    */
-  it("should resolve a one-word recipe name", () => {
-    expect(describeRecipe(inputs(), "qa-pattern").key).toBe("quality/qa-pattern");
+  it("should resolve a one-word recipe name", async () => {
+    expect((await describeRecipe(inputs(), "qa-pattern")).key).toBe("quality/qa-pattern");
   });
 });
 
@@ -474,8 +474,8 @@ describe("resolveNamespaceRef()", () => {
    *
    * resolveNamespaceRef(inputs, "workflow/qa-helper");  // -> throws
    */
-  it("should refuse a ref that names a recipe", () => {
-    expect(() => resolveNamespaceRef(inputs(), "workflow/qa-helper")).toThrow(
+  it("should refuse a ref that names a recipe", async () => {
+    await expect(resolveNamespaceRef(inputs(), "workflow/qa-helper")).rejects.toThrow(
       /names the recipe 'qa-helper', not a namespace/
     );
   });
@@ -486,8 +486,8 @@ describe("resolveNamespaceRef()", () => {
    *
    * resolveNamespaceRef(inputs, "qa-helper");  // -> throws, naming workflow/qa-helper
    */
-  it("should say when a one-word ref is a recipe name", () => {
-    expect(() => resolveNamespaceRef(inputs(), "qa-helper")).toThrow(
+  it("should say when a one-word ref is a recipe name", async () => {
+    await expect(resolveNamespaceRef(inputs(), "qa-helper")).rejects.toThrow(
       /It is the name of a recipe/
     );
   });
@@ -497,8 +497,8 @@ describe("resolveNamespaceRef()", () => {
    * "the name is wrong" reads differently from "the repository was never
    * added".
    */
-  it("should name the repositories searched when nothing matches", () => {
-    expect(() => resolveNamespaceRef(inputs(), "nothing")).toThrow(
+  it("should name the repositories searched when nothing matches", async () => {
+    await expect(resolveNamespaceRef(inputs(), "nothing")).rejects.toThrow(
       /Repositories with an index sous has read: qa-recipes/
     );
   });
@@ -507,8 +507,8 @@ describe("resolveNamespaceRef()", () => {
    * A qualifier naming a repository the project does not trust says exactly
    * that, rather than reporting the namespace as missing.
    */
-  it("should say when the qualifier names an untrusted repository", () => {
-    expect(() => resolveNamespaceRef(inputs(), "nowhere:workflow")).toThrow(
+  it("should say when the qualifier names an untrusted repository", async () => {
+    await expect(resolveNamespaceRef(inputs(), "nowhere:workflow")).rejects.toThrow(
       /trusts no repository called 'nowhere'/
     );
   });
@@ -522,8 +522,8 @@ describe("resolveRecipeRef()", () => {
    * resolveRecipeRef(inputs, "workflow/qa-helper");
    * // -> { repo: "qa-recipes", key: "workflow/qa-helper" }
    */
-  it("should resolve a two-segment ref", () => {
-    const found = resolveRecipeRef(inputs(), "workflow/qa-helper");
+  it("should resolve a two-segment ref", async () => {
+    const found = await resolveRecipeRef(inputs(), "workflow/qa-helper");
 
     expect(found.repo.name).toBe("qa-recipes");
     expect(found.key).toBe("workflow/qa-helper");
@@ -534,18 +534,18 @@ describe("resolveRecipeRef()", () => {
    * A recipe two repositories publish under the same key is ambiguous, and the
    * error lists both qualified refs.
    */
-  it("should refuse an ambiguous recipe key", () => {
-    expect(() =>
+  it("should refuse an ambiguous recipe key", async () => {
+    await expect(
       resolveRecipeRef(inputs({ repos: [primary, secondary] }), "workflow/qa-helper")
-    ).toThrow(/more than one repository/);
+    ).rejects.toThrow(/more than one repository/);
   });
 
   /**
    * A one-word ref that is a namespace name rather than a recipe name is an
    * error naming the namespace it found instead.
    */
-  it("should say when a one-word ref is a namespace name", () => {
-    expect(() => resolveRecipeRef(inputs(), "quality")).toThrow(
+  it("should say when a one-word ref is a namespace name", async () => {
+    await expect(resolveRecipeRef(inputs(), "quality")).rejects.toThrow(
       /It is the name of a namespace/
     );
   });
@@ -560,7 +560,7 @@ describe("linked recipes", () => {
    * listRecipes({ ...inputs, linked: { "qa-recipes": "/work/qa-recipes" } });
    * // -> workflow/qa-variables has linkedPath "/work/qa-recipes"; the others none
    */
-  it("should mark only pinned recipes of a linked repository", () => {
+  it("should mark only pinned recipes of a linked repository", async () => {
     const listings = listRecipes(inputs({ linked: { "qa-recipes": "/work/qa-recipes" } }));
 
     expect(listings.find((entry) => entry.key === "workflow/qa-variables")!.linkedPath).toBe(
@@ -577,8 +577,8 @@ describe("linked recipes", () => {
    * describeRecipe({ ...inputs, linked }, "workflow/qa-variables").linkedPath
    * // -> "/work/qa-recipes"
    */
-  it("should mark a described recipe from a linked repository", () => {
-    const detail = describeRecipe(
+  it("should mark a described recipe from a linked repository", async () => {
+    const detail = await describeRecipe(
       inputs({ linked: { "qa-recipes": "/work/qa-recipes" } }),
       "workflow/qa-variables"
     );
@@ -595,7 +595,7 @@ describe("narrowToInstalled()", () => {
    * listRecipes(narrowToInstalled(inputs)).map((entry) => entry.key);
    * // -> ["workflow/qa-variables"]
    */
-  it("should keep only the pinned recipes and their namespaces", () => {
+  it("should keep only the pinned recipes and their namespaces", async () => {
     const narrowed = narrowToInstalled(inputs({ repos: [primary, secondary] }));
 
     expect(listRecipes(narrowed).map((entry) => `${entry.repo}:${entry.key}`)).toEqual([
@@ -616,7 +616,7 @@ describe("narrowToInstalled()", () => {
    * narrowToInstalled(original);
    * // -> original still lists all three recipes
    */
-  it("should leave the original inputs untouched", () => {
+  it("should leave the original inputs untouched", async () => {
     const original = inputs();
     narrowToInstalled(original);
     expect(Object.keys(original.repos[0]!.index.recipes)).toHaveLength(3);
@@ -630,8 +630,8 @@ describe("describeInstalled()", () => {
    * describeInstalled(inputs, "qa-variables", describeRecipe, "recipe").pinned
    * // -> "0.1.0"
    */
-  it("should describe an installed recipe", () => {
-    const detail = describeInstalled(inputs(), "qa-variables", describeRecipe, "recipe");
+  it("should describe an installed recipe", async () => {
+    const detail = await describeInstalled(inputs(), "qa-variables", describeRecipe, "recipe");
     expect(detail.pinned).toBe("0.1.0");
   });
 
@@ -642,7 +642,7 @@ describe("describeInstalled()", () => {
    * describeInstalled(twoRepos, "workflow/qa-helper", describeRecipe, "recipe").repo
    * // -> "extras", the repository the lockfile pins it from
    */
-  it("should settle an ambiguity in favor of the installed recipe", () => {
+  it("should settle an ambiguity in favor of the installed recipe", async () => {
     const withPin = {
       ...lock,
       recipes: {
@@ -657,7 +657,7 @@ describe("describeInstalled()", () => {
       },
     } as Lockfile;
 
-    const detail = describeInstalled(
+    const detail = await describeInstalled(
       inputs({ repos: [primary, secondary], lock: withPin }),
       "workflow/qa-helper",
       describeRecipe,
@@ -673,13 +673,13 @@ describe("describeInstalled()", () => {
    * describeInstalled(inputs, "quality/qa-pattern", describeRecipe, "recipe")
    * // -> throws: this project has not installed the recipe
    */
-  it("should say when the ref names something that is not installed", () => {
-    expect(() =>
+  it("should say when the ref names something that is not installed", async () => {
+    await expect(
       describeInstalled(inputs(), "quality/qa-pattern", describeRecipe, "recipe")
-    ).toThrow(/has not installed the recipe 'quality\/qa-pattern'/);
-    expect(() =>
+    ).rejects.toThrow(/has not installed the recipe 'quality\/qa-pattern'/);
+    await expect(
       describeInstalled(inputs(), "quality", describeNamespace, "namespace")
-    ).toThrow(/installed no recipe from the namespace 'quality'/);
+    ).rejects.toThrow(/installed no recipe from the namespace 'quality'/);
   });
 
   /**
@@ -689,9 +689,9 @@ describe("describeInstalled()", () => {
    * describeInstalled(inputs, "nothing/here", describeRecipe, "recipe")
    * // -> throws: no repository this project trusts publishes it
    */
-  it("should keep the ordinary error for a ref that names nothing", () => {
-    expect(() =>
+  it("should keep the ordinary error for a ref that names nothing", async () => {
+    await expect(
       describeInstalled(inputs(), "nothing/here", describeRecipe, "recipe")
-    ).toThrow(/No repository this project trusts publishes/);
+    ).rejects.toThrow(/No repository this project trusts publishes/);
   });
 });

@@ -58,27 +58,31 @@ import {
 } from "./formats/lockfile.js";
 import type { RecipeManifest, VariableDefinition } from "./formats/recipe-manifest.js";
 import {
+  CachedIndexLookup,
+  RefPickArguments,
+  RefResolveArguments,
   RefSource,
-  Qualification,
-  SousScope,
+  catalogRepoOfIndex,
+  describeRef,
   formatRef,
-  isNamedReading,
+  isNamedRef,
+  locationFromUrl,
+  locationOf,
   matchNames,
+  namespaceOf,
   namespaceOfKey,
-  parseRef,
-  parseShortRef,
-  refKey,
+  parseNamedRef,
+  rangeOf,
+  repoOf,
+  sharedRefPicker,
+  sharedRefResolver,
+  shortKey,
   splitRecipeKey,
-  type ParsedRef,
-  type RefReading,
-  describeReference,
-  findReference,
-  pickReference,
-  referenceReposFromIndexes,
-  referenceToRef,
-  type ReferenceMatch,
-  type ReferenceRepo,
-} from "../refs/index.js";
+  type CatalogRepo,
+  type NamedRef,
+  type RefKind,
+  type SousRef,
+} from "../../services/ref-resolver/index.js";
 import { describeIndexSearch } from "./ref-search.js";
 import {
   PROJECT_REQUESTER,
@@ -206,10 +210,7 @@ export type SubscriptionServiceOptions = {
   /** How a yes or no question is asked. Injected in tests. */
   ask?: (message: string) => Promise<boolean>;
   /** How a choice between candidate refs is asked. Injected in tests. */
-  choose?: (
-    message: string,
-    candidates: ReferenceMatch[]
-  ) => Promise<ReferenceMatch>;
+  choose?: (message: string, candidates: SousRef[]) => Promise<SousRef>;
   /** The clock, so a recorded timestamp is predictable in tests. */
   now?: () => Date;
 };
@@ -361,7 +362,7 @@ export type RemoveRepoOptions = {
   dryRun?: boolean;
   /**
    * The resolved settings scope, used to work out which output files the
-   * removed recipes wrote. Without it a `recipeOutputs` destination holding a
+   * removed recipes wrote. Without it a `recipes.skills.outputs` destination holding a
    * `${var}` cannot be resolved, and the file list is left out of the report.
    */
   scope?: VarScope;
@@ -457,7 +458,7 @@ export type UpstreamCheckReport = {
 export type UpdateOptions = {
   /**
    * What to update: a repository, a namespace or a recipe, written at any level
-   * of qualification and resolved through `src/lib/refs/`. Left out, every
+   * of qualification and resolved through `src/services/ref-resolver/`. Left out, every
    * subscription is updated.
    */
   ref?: string;
@@ -542,10 +543,7 @@ export class SubscriptionService {
 
   private readonly ask: (message: string) => Promise<boolean>;
 
-  private readonly choose: (
-    message: string,
-    candidates: ReferenceMatch[]
-  ) => Promise<ReferenceMatch>;
+  private readonly choose: (message: string, candidates: SousRef[]) => Promise<SousRef>;
 
   private readonly now: () => Date;
 
@@ -606,7 +604,7 @@ export class SubscriptionService {
         askChoice(
           message,
           candidates.map((candidate) => ({
-            name: describeReference(candidate),
+            name: describeRef(candidate),
             value: candidate,
           }))
         ));
@@ -681,16 +679,16 @@ export class SubscriptionService {
    * this project calls it. A repository whose index has never been fetched can
    * still be named, just not searched inside.
    */
-  cachedReferenceRepos(): ReferenceRepo[] {
+  cachedReferenceRepos(): CatalogRepo[] {
     const repos = this.resolverRepos();
     return Object.keys(repos).map((name) => {
-      const { url, identity } = repos[name]!;
+      const { url } = repos[name]!;
       const index = this.cachedIndex(name);
-      const base =
-        index === undefined
-          ? { name, url, namespaces: [], recipes: [] }
-          : referenceReposFromIndexes([name], new Map([[name, index]]), { [name]: url })[0]!;
-      return { ...base, identity };
+      const location = locationFromUrl(url, this.providers);
+      const known = { name, ...(location === undefined ? {} : { location }) };
+      return index === undefined
+        ? { ...known, namespaces: [], recipes: [] }
+        : catalogRepoOfIndex(index, known);
     });
   }
 
@@ -859,7 +857,7 @@ export class SubscriptionService {
     // step after this works with a fully qualified ref, so what is confirmed
     // is exactly what is installed.
     const { parsed, trusted: trustedForRef } = await this.resolveWrittenRef(options.ref, options);
-    const key = refKey(parsed);
+    const key = shortKey(parsed);
 
     // The last gate before anything is fetched or written: what this will do to
     // the project, in plain sentences, and a question.
@@ -955,23 +953,18 @@ export class SubscriptionService {
   private async resolveWrittenRef(
     written: string,
     options: SubscribeOptions
-  ): Promise<{ parsed: ParsedRef; trusted: string[] }> {
-    const readings = parseRef(written, RefSource.CommandLine, this.providers);
-    const first = readings[0]!;
-    if (first.location === undefined && isNamedReading(first)) {
-      return { parsed: await this.resolveBareRef(first, options), trusted: [] };
+  ): Promise<{ parsed: NamedRef; trusted: string[] }> {
+    const { refs: readings } = sharedRefResolver().parse(written);
+    const short = readings.find(
+      (reading): reading is NamedRef => isNamedRef(reading) && locationOf(reading) === undefined
+    );
+    if (short !== undefined) {
+      return { parsed: await this.resolveBareRef(short, options), trusted: [] };
     }
 
     const trusted = await this.trustLocation(written, readings, options);
     const chosen = await this.pickLocated(written, options.acceptFirst);
-    const range = "range" in first ? first.range : undefined;
-    return {
-      parsed: referenceToRef(chosen, {
-        namespace: chosen.namespace!,
-        ...(range === undefined ? {} : { range }),
-      }),
-      trusted,
-    };
+    return { parsed: chosen, trusted };
   }
 
   /**
@@ -982,46 +975,88 @@ export class SubscriptionService {
    * @param written - The location as written.
    * @param acceptFirst - Whether `--accept-first` was passed.
    */
-  private async pickLocated(written: string, acceptFirst?: boolean): Promise<ReferenceMatch> {
+  private async pickLocated(written: string, acceptFirst?: boolean): Promise<NamedRef> {
     const repoOrder = this.repoSearchOrder();
     const indexes = await this.loadIndexes(repoOrder);
     this.indexesSnapshot = indexes;
 
-    const matches = findReference(
-      written,
-      [SousScope.Namespace, SousScope.Recipe],
-      { repos: this.referenceRepos(repoOrder, indexes) }
-    );
+    const matches = await this.findNamed(written, repoOrder, indexes);
 
-    return pickReference(matches, {
+    return this.pickNamed(matches, {
       search: written.trim(),
-      interactive: this.interactive,
       ...(acceptFirst === undefined ? {} : { acceptFirst }),
       details: [
         `  The repository at that location is trusted, but its index publishes no namespace ` +
           `or recipe there.`,
         `  Run 'sous repo list --latest' to read what it publishes now.`,
       ],
-      write: (message: string) => this.write(message),
-      choose: (message, offered) => this.choose(message, offered),
     });
   }
 
   /**
-   * The trusted repositories as a reference searches them, each carrying its
-   * canonical identity so a location finds it whatever this project calls it.
+   * What a ref names among the trusted repositories' cached indexes, of the
+   * kinds given. Each repository carries the location it lives at, so a ref
+   * written as a location finds it whatever this project calls it.
    *
+   * @param input - The ref exactly as it was written.
    * @param repoOrder - The repositories, in search order.
    * @param indexes - Their indexes.
+   * @param kinds - The kinds of ref this step accepts.
    */
-  private referenceRepos(repoOrder: string[], indexes: Map<string, IndexFile>) {
+  private async findRefs(
+    input: string,
+    repoOrder: string[],
+    indexes: Map<string, IndexFile>,
+    kinds: readonly RefKind[]
+  ): Promise<SousRef[]> {
     const repos = this.resolverRepos();
     const urls: Record<string, string | undefined> = {};
     for (const name of repoOrder) urls[name] = repos[name]?.url;
-    return referenceReposFromIndexes(repoOrder, indexes, urls).map((repo) => ({
-      ...repo,
-      ...(repos[repo.name] === undefined ? {} : { identity: repos[repo.name]!.identity }),
-    }));
+    const lookup = new CachedIndexLookup(indexes, { order: repoOrder, urls });
+    const result = await sharedRefResolver().resolve(
+      new RefResolveArguments({ input, lookup, kinds, refusedIsEmpty: true })
+    );
+    return result.refs;
+  }
+
+  /** What a ref names among the trusted repositories, as a namespace or a recipe. */
+  private async findNamed(
+    input: string,
+    repoOrder: string[],
+    indexes: Map<string, IndexFile>
+  ): Promise<NamedRef[]> {
+    return (await this.findRefs(input, repoOrder, indexes, ["namespace", "recipe"])) as NamedRef[];
+  }
+
+  /**
+   * Settles on one of several refs, the way every command does: one proceeds,
+   * several are chosen between through this service's own prompt, and
+   * `--accept-first` takes the first.
+   *
+   * @param matches - What the ref could have meant, in listing order.
+   * @param args - What the shared picker is told, less this service's own seams.
+   */
+  private async pickRef(
+    matches: SousRef[],
+    args: Omit<ConstructorParameters<typeof RefPickArguments>[0], "interactive" | "write" | "choose">
+  ): Promise<SousRef> {
+    return sharedRefPicker().pick(
+      matches,
+      new RefPickArguments({
+        ...args,
+        interactive: this.interactive,
+        write: (message: string) => this.write(message),
+        choose: (message, offered) => this.choose(message, offered),
+      })
+    );
+  }
+
+  /** `pickRef` for a step that only offers namespaces and recipes. */
+  private async pickNamed(
+    matches: NamedRef[],
+    args: Omit<ConstructorParameters<typeof RefPickArguments>[0], "interactive" | "write" | "choose">
+  ): Promise<NamedRef> {
+    return (await this.pickRef(matches, args)) as NamedRef;
   }
 
   /**
@@ -1039,43 +1074,25 @@ export class SubscriptionService {
    */
   private async trustLocation(
     written: string,
-    readings: RefReading[],
+    readings: SousRef[],
     options: SubscribeOptions
   ): Promise<string[]> {
     const repos = this.resolverRepos();
     const known = new Set(Object.values(repos).map((repo) => repo.identity));
-    const located = readings.filter((reading) => reading.location !== undefined);
-    if (located.some((reading) => known.has(reading.location!.identity))) return [];
+    const located = readings.filter((reading) => locationOf(reading) !== undefined);
+    if (located.some((reading) => known.has(locationOf(reading)!.identity))) return [];
 
     let chosen = located[0]!;
-    const identities = new Set(located.map((reading) => reading.location!.identity));
+    const identities = new Set(located.map((reading) => locationOf(reading)!.identity));
     if (identities.size > 1) {
-      const offered: ReferenceMatch[] = located.map((reading) => ({
-        scope:
-          isNamedReading(reading) && reading.recipe !== undefined
-            ? SousScope.Recipe
-            : SousScope.Namespace,
-        key: formatRef(reading, this.providers),
-        label: formatRef(reading, this.providers),
-        repo: reading.location!.url,
-        ...(isNamedReading(reading) ? { namespace: reading.namespace } : {}),
-        ...(isNamedReading(reading) && reading.recipe !== undefined
-          ? { recipe: reading.recipe }
-          : {}),
-        qualification: Qualification.Full,
-      }));
-      const picked = await pickReference(offered, {
+      chosen = await this.pickRef(located, {
         search: written.trim(),
-        interactive: this.interactive,
         ...(options.acceptFirst === undefined ? {} : { acceptFirst: options.acceptFirst }),
         prompt: `'${written.trim()}' can be read as more than one repository. Which one?`,
-        write: (message: string) => this.write(message),
-        choose: (message, list) => this.choose(message, list),
       });
-      chosen = located[offered.indexOf(picked)]!;
     }
 
-    const location = chosen.location!;
+    const location = locationOf(chosen)!;
     const outcome = await this.trust.confirmTrust(
       [
         {
@@ -1098,8 +1115,8 @@ export class SubscriptionService {
    * Settles what a ref names, reading nothing but the cached indexes.
    *
    * A ref with two segments already says what it names and is handed back
-   * untouched. A ref with one segment is resolved through the shared reference
-   * module (`src/lib/refs/`), over the namespace and recipe scopes only:
+   * untouched. A ref with one segment is resolved through the ref resolver
+   * (`src/services/ref-resolver/`), over namespaces and recipes only:
    * nothing found is an error naming what was searched, one match is used and
    * reported, and several are chosen between. `--accept-first` takes the first
    * match in the documented order; a run that cannot ask fails and says so.
@@ -1108,49 +1125,54 @@ export class SubscriptionService {
    * @param options - The accept-first flag.
    */
   private async resolveBareRef(
-    written: ParsedRef,
+    written: NamedRef,
     options: SubscribeOptions
-  ): Promise<ParsedRef> {
+  ): Promise<NamedRef> {
     // A ref that names a recipe, spelled as it is published, says what it
     // names already. One word, or a spelling in another case, is searched.
-    const search =
-      written.repo === undefined ? refKey(written) : `${written.repo}:${refKey(written)}`;
-    if (written.recipe !== undefined && refKey(written) === refKey(written).toLowerCase()) {
+    const writtenRepo = repoOf(written)?.name;
+    const key = shortKey(written);
+    const search = writtenRepo === undefined ? key : `${writtenRepo}:${key}`;
+    if (written.kind === "recipe" && key === key.toLowerCase()) {
       return written;
     }
 
     const qualifier =
-      written.repo === undefined
+      writtenRepo === undefined
         ? undefined
-        : (matchNames(written.repo, Object.keys(this.currentRepos()))[0] ?? written.repo);
+        : (matchNames(writtenRepo, Object.keys(this.currentRepos()))[0] ?? writtenRepo);
     const repoOrder = this.repoSearchOrder(qualifier);
     const indexes = await this.loadIndexes(repoOrder);
-    if (written.repo === undefined) this.indexesSnapshot = indexes;
+    if (writtenRepo === undefined) this.indexesSnapshot = indexes;
 
-    const context = { repos: referenceReposFromIndexes(repoOrder, indexes) };
-    const matches = findReference(search, [SousScope.Namespace, SousScope.Recipe], context);
+    const lookup = new CachedIndexLookup(indexes, { order: repoOrder });
+    const matches = (
+      await sharedRefResolver().resolve(
+        new RefResolveArguments({ input: search, lookup, kinds: ["namespace", "recipe"] })
+      )
+    ).refs as NamedRef[];
 
     if (matches.length === 0) {
       throw new ConfigError(
         [
-          `Nothing called '${refKey(written)}' was found: no namespace has that name, ` +
+          `Nothing called '${key}' was found: no namespace has that name, ` +
             `and no recipe does either.`,
-          ...describeIndexSearch({ name: refKey(written), repoOrder, indexes }),
-          `  Run 'sous repo search ${refKey(written)}' to look for something like it, or ` +
+          ...describeIndexSearch({ name: key, repoOrder, indexes }),
+          `  Run 'sous repo search ${key}' to look for something like it, or ` +
             `'sous repo add <url>' to add the repository that publishes it.`,
         ].join("\n")
       );
     }
 
-    const chosen = await pickReference(matches, {
+    const chosen = await this.pickNamed(matches, {
       search,
-      interactive: this.interactive,
       ...(options.acceptFirst === undefined ? {} : { acceptFirst: options.acceptFirst }),
-      write: (message: string) => this.write(message),
-      choose: (message, offered) => this.choose(message, offered),
     });
 
-    return referenceToRef(chosen, written);
+    // The range the ref was written with says which version to use, never
+    // which thing is meant, so it is carried over to whatever was chosen.
+    const range = rangeOf(written);
+    return chosen.kind === "recipe" && range !== undefined ? { ...chosen, range } : chosen;
   }
 
   /**
@@ -1207,7 +1229,7 @@ export class SubscriptionService {
    * @param options - The yes and dry-run flags.
    */
   private async confirmSubscription(
-    parsed: ParsedRef,
+    parsed: NamedRef,
     options: SubscribeOptions
   ): Promise<void> {
     const indexes = await this.indexSnapshot();
@@ -1243,7 +1265,7 @@ export class SubscriptionService {
    * @param options - The prerelease flag, for the dependency peek.
    */
   private async subscriptionPlan(
-    parsed: ParsedRef,
+    parsed: NamedRef,
     options: SubscribeOptions,
     indexes: Map<string, IndexFile>
   ): Promise<string[]> {
@@ -1261,12 +1283,12 @@ export class SubscriptionService {
         palette.warning(line)
       );
 
-    if (parsed.recipe === undefined) {
+    if (parsed.kind === "namespace") {
       const published = this.namespaceRecipes(parsed, indexes);
       lines.push(
         ...sentence(
           `Subscribing to '${target}' subscribes this project to the whole ` +
-            `namespace '${parsed.namespace}', which means ${palette.highlight(
+            `namespace '${parsed.name}', which means ${palette.highlight(
               "every recipe in it, including ones published later"
             )}.`
         )
@@ -1279,8 +1301,8 @@ export class SubscriptionService {
     } else {
       lines.push(
         ...sentence(
-          `Subscribing to '${target}' installs the recipe '${parsed.recipe}' from ` +
-            `the namespace '${parsed.namespace}'.`
+          `Subscribing to '${target}' installs the recipe '${parsed.name}' from ` +
+            `the namespace '${namespaceOf(parsed)!.name}'.`
         )
       );
     }
@@ -1344,11 +1366,12 @@ export class SubscriptionService {
    *
    * @param parsed - The fully qualified namespace ref.
    */
-  private namespaceRecipes(parsed: ParsedRef, indexes: Map<string, IndexFile>): string[] {
-    const index = parsed.repo === undefined ? undefined : indexes.get(parsed.repo);
+  private namespaceRecipes(parsed: NamedRef, indexes: Map<string, IndexFile>): string[] {
+    const repo = repoOf(parsed)?.name;
+    const index = repo === undefined ? undefined : indexes.get(repo);
     if (index === undefined) return [];
     return Object.keys(index.recipes)
-      .filter((key) => key.startsWith(`${parsed.namespace}/`))
+      .filter((key) => key.startsWith(`${namespaceOf(parsed)!.name}/`))
       .sort();
   }
 
@@ -1366,7 +1389,7 @@ export class SubscriptionService {
    * @param options - The prerelease flag.
    */
   private async knownUntrustedDependencyRepos(
-    parsed: ParsedRef,
+    parsed: NamedRef,
     options: SubscribeOptions,
     indexes: Map<string, IndexFile>
   ): Promise<string[]> {
@@ -1413,7 +1436,7 @@ export class SubscriptionService {
    * @param options - The prerelease and trust flags.
    */
   private async resolveClosure(
-    parsed: ParsedRef,
+    parsed: NamedRef,
     options: SubscribeOptions
   ): Promise<{
     resolved: ResolvedRecipe[];
@@ -1501,14 +1524,16 @@ export class SubscriptionService {
    * @param keys - The subscription keys in force.
    */
   private async subscriptionKeyFor(written: string, keys: string[]): Promise<string> {
-    const readings = parseRef(written, RefSource.CommandLine, this.providers);
-    const first = readings[0]!;
-    if (first.location === undefined && isNamedReading(first)) {
-      const key = refKey(first);
+    const { refs: readings } = sharedRefResolver().parse(written);
+    const short = readings.find(
+      (reading): reading is NamedRef => isNamedRef(reading) && locationOf(reading) === undefined
+    );
+    if (short !== undefined) {
+      const key = shortKey(short);
       return matchNames(key, new Set(keys))[0] ?? key;
     }
     const chosen = await this.pickLocated(written);
-    return refKey(referenceToRef(chosen, { namespace: chosen.namespace! }));
+    return shortKey(chosen);
   }
 
   /**
@@ -1762,7 +1787,7 @@ export class SubscriptionService {
     for (const key of Object.keys(subscriptions).sort()) {
       let qualifier: string | undefined;
       try {
-        qualifier = parseShortRef(key, RefSource.Config).repo;
+        qualifier = repoOf(parseNamedRef(key, RefSource.Config))?.name;
       } catch {
         // A ref that does not parse cannot name this repository, and reporting
         // it here would bury the removal under an unrelated complaint.
@@ -1921,7 +1946,7 @@ export class SubscriptionService {
    *
    *   - Every trusted repository's index is fetched fresh first. One that
    *     cannot be reached is reported, and its pins stay exactly where they are.
-   *   - The reference, when there is one, is resolved through `src/lib/refs/`
+   *   - The reference, when there is one, is resolved through `src/services/ref-resolver/`
    *     against those indexes, and it narrows which pins may move. Everything
    *     outside it is held at its locked version for as long as its ranges
    *     allow, so dependencies move with the closure and nothing else does.
@@ -2118,34 +2143,31 @@ export class SubscriptionService {
     const urls: Record<string, string | undefined> = {};
     for (const name of repoOrder) urls[name] = repos[name]?.url;
 
-    const matches = findReference(
-      options.ref,
-      [SousScope.Repository, SousScope.Namespace, SousScope.Recipe],
-      { repos: referenceReposFromIndexes(repoOrder, indexes, urls) }
-    );
+    const matches = await this.findRefs(options.ref, repoOrder, indexes, [
+      "repo",
+      "namespace",
+      "recipe",
+    ]);
 
-    const chosen = await pickReference(matches, {
+    const chosen = await this.pickRef(matches, {
       search: options.ref,
-      interactive: this.interactive,
       ...(options.acceptFirst === undefined ? {} : { acceptFirst: options.acceptFirst }),
       details: [
         `  No trusted repository, namespace or recipe has that name.`,
         ...describeIndexSearch({ name: options.ref, repoOrder, indexes }),
       ],
-      write: (message: string) => this.write(message),
-      choose: (message, offered) => this.choose(message, offered),
     });
 
-    switch (chosen.scope) {
-      case SousScope.Repository:
-        return { kind: "repository", repo: chosen.repo! };
-      case SousScope.Namespace:
-        return { kind: "namespace", repo: chosen.repo!, namespace: chosen.namespace! };
+    switch (chosen.kind) {
+      case "repo":
+        return { kind: "repository", repo: chosen.name! };
+      case "namespace":
+        return { kind: "namespace", repo: repoOf(chosen)!.name!, namespace: chosen.name };
       default:
         return {
           kind: "recipe",
-          repo: chosen.repo!,
-          key: `${chosen.namespace!}/${chosen.recipe!}`,
+          repo: repoOf(chosen)!.name!,
+          key: shortKey(chosen as NamedRef),
         };
     }
   }
@@ -2215,9 +2237,9 @@ export class SubscriptionService {
       const entry = subscriptions[key]!;
       let request: RefRequest;
       try {
-        const parsed = parseShortRef(key, RefSource.Config);
         request = {
-          ref: { ...parsed, ...(entry.range === undefined ? {} : { range: entry.range }) },
+          ref: parseNamedRef(key, RefSource.Config),
+          ...(entry.range === undefined ? {} : { range: entry.range }),
           requestedBy: PROJECT_REQUESTER,
           kind: "subscribes",
           ...(entry.prerelease === true ? { prerelease: true } : {}),
@@ -2321,23 +2343,24 @@ export class SubscriptionService {
   ): boolean {
     if (scope.kind === "all") return true;
 
-    let parsed: ParsedRef;
+    let parsed: NamedRef;
     try {
-      parsed = parseShortRef(key, RefSource.Config);
+      parsed = parseNamedRef(key, RefSource.Config);
     } catch {
       return false;
     }
+    const parsedRepo = repoOf(parsed)?.name;
 
-    const closure = lockedClosure(lock, keysHeldBySubscription(lock, refKey(parsed)));
+    const closure = lockedClosure(lock, keysHeldBySubscription(lock, shortKey(parsed)));
     if (closure.some((held) => movable(held, lock.recipes[held]!.repo))) return true;
 
     // Nothing locked reaches the scope, but the subscription may still name it:
     // a namespace subscription gains the recipes a namespace publishes later.
-    if (parsed.repo !== undefined && parsed.repo !== scope.repo) return false;
-    const covered = refKey(parsed);
+    if (parsedRepo !== undefined && parsedRepo !== scope.repo) return false;
+    const covered = shortKey(parsed);
     switch (scope.kind) {
       case "repository":
-        return parsed.repo === scope.repo;
+        return parsedRepo === scope.repo;
       case "namespace":
         return covered === scope.namespace || covered.startsWith(`${scope.namespace}/`);
       case "recipe":
@@ -2368,7 +2391,7 @@ export class SubscriptionService {
   ): Lockfile {
     const coverOf = (key: string): string | undefined => {
       try {
-        return refKey(parseShortRef(key, RefSource.Config));
+        return shortKey(parseNamedRef(key, RefSource.Config));
       } catch {
         return undefined;
       }
@@ -2456,16 +2479,16 @@ export class SubscriptionService {
       .filter((key) => declared[key]?.enabled === false)
       .filter((key) => {
         if (scope.kind === "all") return true;
-        let parsed: ParsedRef;
+        let parsed: NamedRef;
         try {
-          parsed = parseShortRef(key, RefSource.Config);
+          parsed = parseNamedRef(key, RefSource.Config);
         } catch {
           return false;
         }
-        const covered = refKey(parsed);
+        const covered = shortKey(parsed);
         switch (scope.kind) {
           case "repository":
-            return parsed.repo === scope.repo;
+            return repoOf(parsed)?.name === scope.repo;
           case "namespace":
             return covered === scope.namespace || covered.startsWith(`${scope.namespace}/`);
           case "recipe":
@@ -2642,9 +2665,9 @@ export class SubscriptionService {
       const entry = subscriptions[key]!;
       if (this.subscriptionIsLocked(key, entry, before)) continue;
 
-      let parsed: ParsedRef;
+      let parsed: NamedRef;
       try {
-        parsed = parseShortRef(key, RefSource.Config);
+        parsed = parseNamedRef(key, RefSource.Config);
       } catch (error) {
         report.failed.push({ key, reason: describeError(error) });
         continue;
@@ -2653,10 +2676,8 @@ export class SubscriptionService {
       pending.push({
         key,
         request: {
-          ref: {
-            ...parsed,
-            ...(entry.range === undefined ? {} : { range: entry.range }),
-          },
+          ref: parsed,
+          ...(entry.range === undefined ? {} : { range: entry.range }),
           requestedBy: PROJECT_REQUESTER,
           kind: "subscribes",
           ...(entry.prerelease === true ? { prerelease: true } : {}),
@@ -3371,11 +3392,12 @@ export class SubscriptionService {
    */
   private writeSubscriptionEntry(
     key: string,
-    parsed: ParsedRef,
+    parsed: NamedRef,
     options: SubscribeOptions
   ): void {
+    const range = rangeOf(parsed);
     const entry: SubscriptionEntry = {
-      ...(parsed.range === undefined ? {} : { range: parsed.range }),
+      ...(range === undefined ? {} : { range }),
       ...(options.prerelease === true ? { prerelease: true } : {}),
       ...(options.alwaysPull === true ? { alwaysPull: true } : {}),
       addedAt: this.now().toISOString(),
@@ -3513,17 +3535,17 @@ export class SubscriptionService {
     for (const dependency of manifest.depends ?? []) {
       // Every reading counts: a dependency that reads more than one way still
       // declares its range for whichever reading the lockfile settled on.
-      let readings: RefReading[];
+      let readings: SousRef[];
       try {
-        readings = parseRef(dependency, RefSource.Manifest, this.providers);
+        readings = sharedRefResolver().parse(dependency, RefSource.Manifest).refs;
       } catch {
         continue;
       }
       for (const reading of readings) {
-        if (!isNamedReading(reading)) continue;
-        const dependencyKey = refKey(reading);
+        if (!isNamedRef(reading)) continue;
+        const dependencyKey = shortKey(reading);
         if (dependencyKey !== key && dependencyKey !== namespace) continue;
-        return reading.range ?? "*";
+        return rangeOf(reading) ?? "*";
       }
     }
 
@@ -3658,7 +3680,7 @@ export class SubscriptionService {
    * @param options - The indexes to read, and whether prereleases may match.
    */
   async previewSubscription(
-    parsed: ParsedRef,
+    parsed: NamedRef,
     options: PreviewSubscriptionOptions = {}
   ): Promise<SubscriptionPreview> {
     const repos = this.resolverRepos();

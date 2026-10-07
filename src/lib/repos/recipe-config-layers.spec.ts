@@ -12,6 +12,24 @@ import {
  */
 describe("filterRecipeConfigLayer()", () => {
   /**
+   * filterRecipeConfigLayer() should keep `recipes.skills` and drop
+   * `recipes.memories` with a warning naming it, because memories configure
+   * the project, not the recipe.
+   *
+   * filterRecipeConfigLayer("ns/rec", "/l.json", { recipes: { skills: {}, memories: { first: ["a"] } } });
+   * // -> { config: { recipes: { skills: {} } }, warnings: [one naming recipes.memories] }
+   */
+  it("should drop recipes.memories and keep recipes.skills", () => {
+    const result = filterRecipeConfigLayer("ns/rec", "/layer.json", {
+      recipes: { skills: { outputs: ["x"] }, memories: { first: ["a"] } },
+    });
+
+    expect(result.config).toEqual({ recipes: { skills: { outputs: ["x"] } } });
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toContain("recipes.memories");
+  });
+
+  /**
    * filterRecipeConfigLayer() should pass through every key a recipe is allowed
    * to set, unchanged and with no warning.
    *
@@ -21,6 +39,7 @@ describe("filterRecipeConfigLayer()", () => {
   it("should keep every key on the allowlist", () => {
     const raw: Record<string, unknown> = {};
     for (const key of RECIPE_CONFIG_ALLOWED_KEYS) raw[key] = { marker: key };
+    raw.recipes = { skills: { marker: "skills" } };
 
     const result = filterRecipeConfigLayer("ns/rec", "/layer.json", raw);
 

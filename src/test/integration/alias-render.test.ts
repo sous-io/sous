@@ -20,15 +20,15 @@ describe("alias {% render %} resolution (real compile path)", () => {
     return abs;
   }
 
-  it("renders a partial referenced by ~alias from outside the entry tree", async () => {
+  it("renders a partial referenced by #name from outside the entry tree", async () => {
     tmp = makeTmpDir("alias-render-");
     write("lib/partial.md", "RENDERED VIA ALIAS");
-    const entry = write("p/entry.tpl.md", `{% raw %}{% endraw %}{% render "@~lib/partial.md" %}`);
+    const entry = write("p/entry.tpl.md", `{% raw %}{% endraw %}{% render "@#lib/partial.md" %}`);
     const dest = path.join(tmp.path, "out/entry.md");
 
     const compiler = new CompilationService();
     const ok = await compiler.compile({
-      aliases: { "~lib": [path.join(tmp.path, "lib")] },
+      aliases: { "#lib": [path.join(tmp.path, "lib")] },
       includeScope: {},
       targets: [{ rootInputPath: entry, outputs: [{ destinationFile: dest, vars: {} }] }],
     });

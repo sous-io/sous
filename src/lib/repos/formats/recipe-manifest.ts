@@ -22,7 +22,7 @@
  *
  * Every other location form works too (an HTTPS or SSH URL, a browser URL); a
  * short name such as `sous-recipes:` is a consuming project's own label, so it
- * never appears in a published manifest. See `parseRef` with
+ * never appears in a published manifest. See `RefResolverService.parse` with
  * `RefSource.Manifest`.
  */
 
@@ -37,8 +37,7 @@ import {
   semverVersionSchema,
   submissionsSchema,
 } from "./common.js";
-import { parseRef } from "../../refs/parse.js";
-import { RefSource } from "../../refs/scopes.js";
+import { RefSource, sharedRefResolver } from "../../../services/ref-resolver/index.js";
 import { variableDefinitionSchema } from "./variable-definition.js";
 
 // Variable definitions live in their own module, so the index can read them
@@ -56,7 +55,7 @@ export * from "./variable-definition.js";
  */
 const dependencyRefSchema = z.string().superRefine((value, ctx) => {
   try {
-    parseRef(value, RefSource.Manifest);
+    sharedRefResolver().parse(value, RefSource.Manifest);
   } catch (error) {
     ctx.addIssue({ code: "custom", message: (error as Error).message });
   }

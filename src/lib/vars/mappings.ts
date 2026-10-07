@@ -27,8 +27,14 @@ import {
   updateManagedLayer,
 } from "../repos/managed-layer.js";
 import { VARIABLE_NAME_PATTERN } from "../repos/formats/patterns.js";
-import { RefSource } from "../refs/scopes.js";
-import { formatRef, parseShortRef, type ParsedRef } from "../refs/parse.js";
+import {
+  RefSource,
+  formatRef,
+  namespaceOf,
+  parseNamedRef,
+  repoOf,
+  type NamedRef,
+} from "../../services/ref-resolver/index.js";
 import type { DefinedVariable } from "./definition-source.js";
 
 /** File name of the machine-written mapping record layer. */
@@ -85,18 +91,20 @@ export function parseMappingTarget(input: string): MappingTarget {
   // ref part is read by the one ref parser and held to the stored form.
   const slash = trimmed.lastIndexOf("/");
   const variable = slash === -1 ? "" : trimmed.slice(slash + 1);
-  let ref: ParsedRef = { namespace: "" };
+  let ref: NamedRef | undefined;
   try {
-    ref = parseShortRef(trimmed.slice(0, Math.max(slash, 0)), RefSource.CommandLine);
+    ref = parseNamedRef(trimmed.slice(0, Math.max(slash, 0)), RefSource.CommandLine);
   } catch (error) {
     fail((error as Error).message.split("\n")[0]!.replace(/^Invalid ref '[^']*': /, ""));
   }
-  const { repo, namespace, recipe } = ref;
-  if (recipe === undefined || ref.range !== undefined) {
+  if (ref?.kind !== "recipe" || ref.range !== undefined) {
     fail("a target names a namespace, a recipe and a variable, joined by slashes.");
   }
-  if (formatRef(ref) !== formatRef(ref).toLowerCase()) {
-    fail(`the repository, namespace and recipe in '${formatRef(ref)}' must be lowercase.`);
+  const repo = repoOf(ref!)?.name;
+  const namespace = namespaceOf(ref!)!.name;
+  const recipe = ref!.kind === "recipe" ? ref!.name : "";
+  if (formatRef(ref!) !== formatRef(ref!).toLowerCase()) {
+    fail(`the repository, namespace and recipe in '${formatRef(ref!)}' must be lowercase.`);
   }
   if (!VARIABLE_NAME_PATTERN.test(variable)) {
     fail(
@@ -105,7 +113,7 @@ export function parseMappingTarget(input: string): MappingTarget {
     );
   }
 
-  const parsed: MappingTarget = { namespace, recipe: recipe!, variable };
+  const parsed: MappingTarget = { namespace, recipe, variable };
   if (repo !== undefined) parsed.repo = repo;
   return parsed;
 }

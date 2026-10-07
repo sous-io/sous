@@ -93,12 +93,12 @@ export const config = {
     "cli/command-design": { range: "^1" },
   },
 
-  // Where a subscribed recipe's files are written. Only `skills` is named. The
-  // recipes' memories are included by hand, one `@~` line each, in the root
-  // instruction source (.sous/prompts/root/CLAUDE.tpl.md), so a build warns
-  // that memories were skipped; that warning is expected.
-  recipeOutputs: {
-    skills: ["${claudeSkillsDir}"],
+  // What to do with the content the subscribed recipes publish. Skills are
+  // written to the directories named here. The recipes' memories are not
+  // copied anywhere: the root instruction source
+  // (.sous/prompts/root/CLAUDE.tpl.md) includes them.
+  recipes: {
+    skills: { outputs: ["${claudeSkillsDir}"] },
   },
 
   // WHERE THE RECIPE ANSWERS LIVE. Every variable the subscribed recipes ask

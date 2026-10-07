@@ -78,12 +78,12 @@ describe("entryGlob alias resolution", () => {
   });
 
   /**
-   * The built-in ~project alias works as an entryGlob prefix.
+   * The built-in #project alias works as an entryGlob prefix.
    *
-   * ~project points at whatever the projectRoot variable resolves to, so the
+   * #project points at whatever the projectRoot variable resolves to, so the
    * test sets it to a tmp tree.
    */
-  it("should expand the built-in ~project alias via projectRoot", async () => {
+  it("should expand the built-in #project alias via projectRoot", async () => {
     const fakeProject = path.join(tmp.path, "fake-project-root");
     const sharedDir = path.join(fakeProject, "skills", "demo");
     fs.mkdirSync(sharedDir, { recursive: true });
@@ -95,7 +95,7 @@ describe("entryGlob alias resolution", () => {
       compilation: {
         targets: [
           {
-            entryGlob: "~project/skills/**/*",
+            entryGlob: "#project/skills/**/*",
             outputs: [{ destinationDir: outDir }],
           },
         ],

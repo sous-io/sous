@@ -31,17 +31,26 @@ import type { LockKind } from "./formats/lockfile.js";
 import type { RecipeManifest, VariableDefinition } from "./formats/recipe-manifest.js";
 import { indexDependencyLists, type DependencyLists } from "./declarations.js";
 import {
+  CatalogMatcher,
+  RefSource,
+  catalogRepoOfIndex,
   formatRef,
-  isBrowsedReading,
-  isNamedReading,
-  parseRef,
-  refKey,
+  isNamedRef,
+  locationOf,
+  namespaceOf,
+  namespaceRef,
+  rangeOf,
+  recipeRef,
+  repoOf,
+  settleDependency,
+  sharedRefResolver,
+  shortKey,
   splitRecipeKey,
-  type ParsedRef,
-  type RefReading,
-} from "../refs/parse.js";
-import { settleBrowsed, settleDependency, settleInIndex } from "../refs/settle.js";
-import { RefSource } from "../refs/scopes.js";
+  withRepoName,
+  type NamedRef,
+  type RepoRef,
+  type SousRef,
+} from "../../services/ref-resolver/index.js";
 import { shortNameFromIdentity } from "./identity.js";
 import type { IndexDependency } from "./formats/index-file.js";
 
@@ -51,7 +60,12 @@ export const PROJECT_REQUESTER = "project";
 /** One thing to resolve. */
 export type RefRequest = {
   /** The ref, already parsed. */
-  ref: ParsedRef;
+  ref: NamedRef;
+  /**
+   * The version range every recipe of a namespace ref must satisfy, and the
+   * range of a recipe ref that carries none of its own.
+   */
+  range?: string;
   /** Whether prerelease versions may take part in range matching. */
   prerelease?: boolean;
   /**
@@ -209,12 +223,12 @@ type WorkItem = RefRequest & {
     /** The dependency exactly as the manifest wrote it, for messages. */
     written: string;
     /**
-     * A browser path the dependency named, settled through the repository's
-     * index once the project has it. Until then `ref` holds no namespace.
+     * The repository ref a browser path dependency was read as (its location,
+     * its path and the range the manifest wrote), settled through the
+     * repository's index once the project has it. Until then `ref` holds no
+     * namespace.
      */
-    browsed?: string;
-    /** The range the manifest wrote, applied once a browsed path is settled. */
-    range?: string;
+    browsed?: RepoRef;
     /** What the declaring version's index records, for pins once a browsed path is settled. */
     pins?: Record<string, IndexDependency>;
   };
@@ -259,26 +273,25 @@ function dependencyRequest(
     ...(parent.prerelease ? { prerelease: true } : {}),
   };
 
-  if (isBrowsedReading(reading)) {
+  if (reading.kind === "repo" && reading.browsed !== undefined) {
     return {
-      ref: { namespace: "" },
+      ref: namespaceRef(""),
       ...base,
       remote: {
         ...remoteOf(reading, written),
-        browsed: reading.browsed,
-        ...(reading.range === undefined ? {} : { range: reading.range }),
+        browsed: reading,
         ...(parent.dependencies === undefined ? {} : { pins: parent.dependencies }),
       },
     };
   }
   /* c8 ignore next */
-  if (!isNamedReading(reading)) throw unsettledDependencyError(written, parent);
+  if (!isNamedRef(reading)) throw unsettledDependencyError(written, parent);
 
-  const pinned = parent.dependencies?.[refKey(reading)];
+  const pinned = parent.dependencies?.[shortKey(reading)];
   const ref = pinnedRef(reading, pinned);
 
-  if (reading.location === undefined) {
-    return { ref: { ...ref, repo: parent.repo }, ...base };
+  if (locationOf(reading) === undefined) {
+    return { ref: withRepoName(ref, parent.repo), ...base };
   }
 
   const remote = remoteOf(reading, written);
@@ -296,22 +309,19 @@ function dependencyRequest(
  * @param reading - The reading.
  * @param pinned - What the declaring version's index recorded for it.
  */
-function pinnedRef(reading: ParsedRef, pinned: IndexDependency | undefined): ParsedRef {
-  const ref: ParsedRef = { namespace: reading.namespace };
-  if (reading.recipe !== undefined) {
-    ref.recipe = reading.recipe;
-    const range = pinned?.version ?? reading.range ?? pinned?.range;
-    if (range !== undefined) ref.range = range;
-  }
-  return ref;
+function pinnedRef(reading: NamedRef, pinned: IndexDependency | undefined): NamedRef {
+  const namespace = namespaceOf(reading)!.name;
+  if (reading.kind === "namespace") return namespaceRef(namespace);
+  const range = pinned?.version ?? reading.range ?? pinned?.range;
+  return recipeRef(namespace, reading.name, range === undefined ? {} : { range });
 }
 
 /** Where a located reading's repository lives, as a request carries it. */
 function remoteOf(
-  reading: RefReading,
+  reading: SousRef,
   written: string
 ): NonNullable<WorkItem["remote"]> {
-  const location = reading.location!;
+  const location = locationOf(reading)!;
   return {
     identity: location.identity,
     url: location.url,
@@ -327,12 +337,13 @@ function remoteOf(
  * @param reading - One reading of a dependency.
  * @param context - The added repositories and their cached indexes.
  */
-function knownLocally(reading: RefReading, context: ResolveContext): boolean {
-  if (reading.location === undefined) return false;
-  const added = repoNamedByIdentity(context.repos, reading.location.identity);
+function knownLocally(reading: SousRef, context: ResolveContext): boolean {
+  const location = locationOf(reading);
+  if (location === undefined) return false;
+  const added = repoNamedByIdentity(context.repos, location.identity);
   const index = added === undefined ? undefined : context.indexes.get(added);
   if (index === undefined) return false;
-  return settleInIndex(reading, { namespaces: Object.keys(index.namespaces), recipes: index.recipes }).length > 0;
+  return new CatalogMatcher([catalogRepoOfIndex(index, { location })]).match(reading).length > 0;
 }
 
 /**
@@ -343,11 +354,11 @@ function knownLocally(reading: RefReading, context: ResolveContext): boolean {
  * @param parent - The recipe that declared it.
  */
 function unsettledDependencyError(written: string, parent: ResolvedRecipe): ConfigError {
-  const readings = parseRef(written, RefSource.Manifest);
+  const { refs } = sharedRefResolver().parse(written, RefSource.Manifest);
   return new ConfigError(
     `The dependency '${written.trim()}' of the recipe '${parent.key}' can be read ` +
-      `${readings.length} ways, and nothing says which one it means:\n` +
-      readings.map((reading) => `    ${formatRef(reading)}`).join("\n") +
+      `${refs.length} ways, and nothing says which one it means:\n` +
+      refs.map((reading) => `    ${formatRef(reading)}`).join("\n") +
       `\n  A release records which one it settled on in the index; the index of ` +
       `'${parent.repo}' records none for this version. Release the recipe again with this ` +
       `version of sous, or write the dependency so it reads one way, as one of the forms above.`
@@ -362,15 +373,16 @@ function unsettledDependencyError(written: string, parent: ResolvedRecipe): Conf
  */
 function settleBrowsedItem(item: WorkItem, index: IndexFile | undefined): void {
   const remote = item.remote!;
+  const browsed = remote.browsed!;
   const settled =
     index === undefined
       ? []
-      : settleBrowsed(remote.browsed!, {
-          namespaces: Object.keys(index.namespaces),
-          recipes: index.recipes,
-        });
+      : new CatalogMatcher([catalogRepoOfIndex(index, { location: browsed.location })])
+          .match(browsed)
+          .map((match) => match.ref)
+          .filter(isNamedRef);
 
-  let found: ParsedRef | undefined = settled.length === 1 ? settled[0] : undefined;
+  let found: NamedRef | undefined = settled.length === 1 ? settled[0] : undefined;
   if (found === undefined) {
     // The folder may have moved since the release; the key it settled on then
     // is recorded beside the repository it lives in.
@@ -379,7 +391,7 @@ function settleBrowsedItem(item: WorkItem, index: IndexFile | undefined): void {
     );
     if (recorded.length === 1) {
       const { namespace, name } = splitRecipeKey(recorded[0]!);
-      found = { namespace, recipe: name };
+      found = recipeRef(namespace, name);
     }
   }
 
@@ -392,8 +404,9 @@ function settleBrowsedItem(item: WorkItem, index: IndexFile | undefined): void {
     );
   }
 
-  const withRange = { ...found, ...(remote.range === undefined ? {} : { range: remote.range }) };
-  item.ref = { ...pinnedRef(withRange, remote.pins?.[refKey(found)]), repo: item.ref.repo };
+  const withRange =
+    found.kind === "recipe" && browsed.range !== undefined ? { ...found, range: browsed.range } : found;
+  item.ref = withRepoName(pinnedRef(withRange, remote.pins?.[shortKey(found)]), repoOf(item.ref)?.name);
 }
 
 /**
@@ -454,6 +467,11 @@ export async function resolveRefs(
 
   const queue: WorkItem[] = requests.map((request) => ({
     ...request,
+    // A recipe ref that carries no range of its own takes the request's.
+    ref:
+      request.ref.kind === "recipe" && request.ref.range === undefined && request.range !== undefined
+        ? { ...request.ref, range: request.range }
+        : request.ref,
     kind: request.kind ?? "subscribes",
   }));
 
@@ -463,7 +481,7 @@ export async function resolveRefs(
     // A ref naming a repository the project has not added never resolves and
     // never downloads anything; it comes back as a missing repository instead,
     // so the trust layer can ask about it by name.
-    const qualifier = item.ref.repo;
+    const qualifier = repoOf(item.ref)?.name;
     if (qualifier !== undefined && !Object.hasOwn(context.repos, qualifier)) {
       recordMissingRepo(missingRepos, {
         name: qualifier,
@@ -488,11 +506,11 @@ export async function resolveRefs(
         });
         continue;
       }
-      item.ref = { ...item.ref, repo: added };
+      item.ref = withRepoName(item.ref, added);
       if (item.remote.browsed !== undefined) settleBrowsedItem(item, context.indexes.get(added));
     }
 
-    if (item.ref.recipe === undefined) {
+    if (item.ref.kind === "namespace") {
       queue.push(...expandNamespace(item, context));
       continue;
     }
@@ -677,10 +695,10 @@ function dependencyTargets(
   } catch {
     return [];
   }
-  const { namespace } = item.ref;
-  return item.ref.recipe === undefined
+  const namespace = namespaceOf(item.ref)!.name;
+  return item.ref.kind === "namespace"
     ? [...resolved.keys()].filter((entry) => entry.startsWith(`${namespace}/`))
-    : [refKey(item.ref)];
+    : [shortKey(item.ref)];
 }
 
 /**
@@ -725,8 +743,9 @@ function recordMissingRepo(into: Map<string, MissingRepo>, missing: MissingRepo)
  * @param context - The cached indexes and added repositories.
  */
 function expandNamespace(item: WorkItem, context: ResolveContext): WorkItem[] {
-  const { namespace } = item.ref;
-  const qualifier = item.ref.repo;
+  const namespace = namespaceOf(item.ref)!.name;
+  const qualifier = repoOf(item.ref)?.name;
+  const requestedRange = item.range;
   const expanded: WorkItem[] = [];
   const seen = new Set<string>();
   let namespaceFound = false;
@@ -741,17 +760,15 @@ function expandNamespace(item: WorkItem, context: ResolveContext): WorkItem[] {
       if (seen.has(key)) continue;
       seen.add(key);
       expanded.push({
-        ref: {
-          namespace,
-          recipe: key.slice(namespace.length + 1),
+        // A namespace ref cannot carry a range when it is WRITTEN, but a
+        // namespace subscription entry can carry one, and a caller builds the
+        // request from that entry. When it does, the range applies to every
+        // recipe in the namespace; that is how the built-in `core`
+        // subscription stays pinned to the running sous version.
+        ref: recipeRef(namespace, key.slice(namespace.length + 1), {
           ...(qualifier === undefined ? {} : { repo: qualifier }),
-          // A namespace ref cannot carry a range when it is WRITTEN, but a
-          // namespace subscription entry can carry one, and a caller builds the
-          // request from that entry. When it does, the range applies to every
-          // recipe in the namespace; that is how the built-in `core`
-          // subscription stays pinned to the running sous version.
-          ...(item.ref.range === undefined ? {} : { range: item.ref.range }),
-        },
+          ...(requestedRange === undefined ? {} : { range: requestedRange }),
+        }),
         requestedBy: item.requestedBy,
         kind: item.kind,
         ...(item.prerelease === undefined ? {} : { prerelease: item.prerelease }),
@@ -777,8 +794,8 @@ function resolveRecipeRef(
   context: ResolveContext,
   resolved: Map<string, ResolvedRecipe>
 ): ResolvedRecipe {
-  const key = refKey(item.ref);
-  const qualifier = item.ref.repo;
+  const key = shortKey(item.ref);
+  const qualifier = repoOf(item.ref)?.name;
 
   const candidates: Array<{ repo: string; index: IndexFile }> = [];
   for (const [repoName, index] of context.indexes) {
@@ -802,7 +819,7 @@ function resolveRecipeRef(
   }
 
   const ranges = [...(previous?.ranges ?? [])];
-  const range = item.ref.range ?? "*";
+  const range = rangeOf(item.ref) ?? "*";
   if (!ranges.some((known) => known.range === range && known.requestedBy === item.requestedBy)) {
     ranges.push({ range, requestedBy: item.requestedBy });
   }
@@ -937,7 +954,7 @@ function unknownRefError(
   // When the ref said WHICH repository, the useful answer is what that
   // repository does publish: a dependency that names something it has never
   // heard of is almost always a typo or a recipe that was renamed.
-  const named = item.ref.repo;
+  const named = repoOf(item.ref)?.name;
   const index = named === undefined ? undefined : context.indexes.get(named);
   const publishes =
     index === undefined
@@ -964,8 +981,9 @@ function unknownRefError(
  * @param repos - The repositories that publish it.
  */
 function ambiguousRefError(item: WorkItem, repos: string[]): ConfigError {
-  const key = refKey(item.ref);
-  const range = item.ref.range === undefined ? "" : `@${item.ref.range}`;
+  const key = shortKey(item.ref);
+  const itemRange = rangeOf(item.ref);
+  const range = itemRange === undefined ? "" : `@${itemRange}`;
   const qualified = repos.map((repo) => `    ${repo}:${key}${range}`).join("\n");
   const asker =
     item.requestedBy === PROJECT_REQUESTER

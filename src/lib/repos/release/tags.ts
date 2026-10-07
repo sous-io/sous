@@ -16,7 +16,7 @@ import os from "node:os";
 import path from "node:path";
 import { runGit, type RunOptions } from "../providers/git.js";
 import { RECIPE_KEY_PATTERN } from "../formats/patterns.js";
-import { splitRecipeKey } from "../../refs/parse.js";
+import { splitRecipeKey } from "../../../services/ref-resolver/index.js";
 
 /** One release tag, taken apart into the recipe it publishes. */
 export type RecipeTag = {

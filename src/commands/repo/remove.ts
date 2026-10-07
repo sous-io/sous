@@ -105,7 +105,7 @@ export default class RepoRemove extends BaseCommand {
       yes: flags.yes,
       dryRun,
       // The output files a removed recipe wrote can only be named once the
-      // `recipeOutputs` destinations have had their variables substituted.
+      // `recipes.skills.outputs` destinations have had their variables substituted.
       scope: resolveRootScope(this.settings, this.configContext),
     });
 
