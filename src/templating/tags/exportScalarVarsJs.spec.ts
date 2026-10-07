@@ -1,6 +1,7 @@
 import { Liquid } from "liquidjs";
 import { describe, it, expect, beforeEach } from "vitest";
 import { registerExportScalarVarsJsTag } from "./exportScalarVarsJs.js";
+import { setSecretNames } from "../lib/secret-scope.js";
 
 describe("registerExportScalarVarsJsTag()", () => {
   let engine: Liquid;
@@ -77,5 +78,37 @@ describe("registerExportScalarVarsJsTag()", () => {
       obj: { a: 1 },
     });
     expect(parseExport(result)).toEqual({});
+  });
+
+  /**
+   * A variable a recipe declared secret is left out of the export entirely,
+   * whatever it is called, because runtime code would read a mask as a value.
+   *
+   * setSecretNames(engine, ["deployKey"]);
+   * // { deployKey: "abc123", owner: "luke" } -> { owner: "luke" }
+   */
+  it("should leave out a variable a recipe declared secret", () => {
+    setSecretNames(engine, ["deployKey"]);
+    const result = engine.parseAndRenderSync("{% exportScalarVarsJs %}", {
+      deployKey: "abc123",
+      owner: "luke",
+    });
+    expect(parseExport(result)).toEqual({ owner: "luke" });
+    expect(result).not.toContain("abc123");
+  });
+
+  /**
+   * A variable that very probably holds a secret is left out with no
+   * declaration: a secret-sounding name, or a value in a known token format.
+   *
+   * // { githubToken: "x1", someUrl: "https://u:p@db.example" } -> {}
+   */
+  it("should leave out a variable that very probably holds a secret", () => {
+    const result = engine.parseAndRenderSync("{% exportScalarVarsJs %}", {
+      githubToken: "x1",
+      someUrl: "https://u:p@db.example",
+      maxTokens: 4096,
+    });
+    expect(parseExport(result)).toEqual({ maxTokens: 4096 });
   });
 });

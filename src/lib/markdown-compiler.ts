@@ -68,6 +68,12 @@ export type CompilationConfig = {
   views?: ViewMap;
   /** Variable scope for `${var}` substitution in `@include` paths. */
   includeScope?: Record<string, string>;
+  /**
+   * Every variable name a recipe declares `secret: true`. The tags that dump a
+   * whole scope hide these (and anything that very probably is a secret); a
+   * template that names one explicitly still renders it.
+   */
+  secretVariables?: string[];
 };
 
 export type CompilationServiceOptions = {
@@ -209,6 +215,8 @@ export class CompilationService {
   private numberFormatter: Intl.NumberFormat;
   private aliases: AliasMap;
   private includeScope: Record<string, string>;
+  /** Every variable name a recipe declares secret, for the scope-dumping tags. */
+  private secretVariables: string[];
   private namespaceResolver?: NamespaceResolver;
   /**
    * `.tpl.` outputs that were written without a variable scope, so LiquidJS never
@@ -232,6 +240,7 @@ export class CompilationService {
     this.numberFormatter = new Intl.NumberFormat("en-US");
     this.aliases = {};
     this.includeScope = {};
+    this.secretVariables = [];
     this.namespaceResolver = options.namespaceResolver;
     this.unrenderedTemplates = [];
   }
@@ -535,6 +544,7 @@ export class CompilationService {
       scope: { ...this.includeScope, ...vars },
       namespaceResolver: this.namespaceResolver,
       fromFile,
+      secretVariables: this.secretVariables,
     });
     try {
       return await engine.parseAndRender(content, vars);
@@ -700,9 +710,13 @@ ${taskFileContents}
       // A rendered output depends on its variables as much as on its source: a
       // changed answer or `_vars` value with the same template must re-render,
       // so the variable scope is part of a `.tpl.` output's source hash. A
-      // verbatim copy hashes its content alone.
+      // verbatim copy hashes its content alone. The secret names are part of it
+      // too, because they decide what a scope-dumping tag hides.
       const srcHash = rendersAnything && output.vars
-        ? hashContent(`${contentHash}\n${stableVarsFingerprint(output.vars)}`)
+        ? hashContent(
+            `${contentHash}\n${stableVarsFingerprint(output.vars)}\n` +
+              `secrets:${JSON.stringify([...this.secretVariables].sort())}`
+          )
         : contentHash;
 
       // Skip if content is unchanged and file already exists (unless --rebuild)
@@ -859,6 +873,7 @@ ${taskFileContents}
       this.views = config.views ?? {};
       this.includedFilesSeen = new Set();
       this.includeScope = config.includeScope ?? {};
+      this.secretVariables = config.secretVariables ?? [];
 
       this.initializeEncoder();
 

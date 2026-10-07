@@ -17,3 +17,4 @@ export * from "./ask.js";
 export * from "./report.js";
 export * from "./preanswers.js";
 export * from "./question-plan.js";
+export * from "./secrets.js";

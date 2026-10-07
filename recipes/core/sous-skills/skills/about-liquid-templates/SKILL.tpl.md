@@ -205,7 +205,10 @@ Sous plugin; a Sous plugin comes only from sous's built-ins or an npm-style modu
 
 **`showVars`**: dumps all variables currently in scope as a fenced JSON block.
 Useful during development to see exactly what variables are available at a given point
-in a template. Remove before finalizing.
+in a template. Remove before finalizing. A secret prints as `(hidden)`: a variable a
+recipe declares `secret: true`, or one that very probably is a secret by its name
+(`githubToken`, `OPENAI_API_KEY`) or its format (a GitHub token, a private key block). A
+template that names a secret explicitly, as in `{% raw %}{{ apiToken }}{% endraw %}`, still renders it.
 
 **`getFiles`**: globs files under a root directory and assigns the resulting array to a
 template variable. It renders nothing; present the results yourself with a `for` loop.
@@ -238,7 +241,8 @@ render paths relative to the root instead of bare file names:
 
 **`exportScalarVarsJs`**: emits every in-scope scalar variable (string, finite number,
 boolean) as an ES module default export, keys sorted. Objects, arrays, `null` and
-non-finite numbers are skipped. Use it to compile a settings module that runtime code
+non-finite numbers are skipped, and so is every secret (the same ones `showVars` hides),
+since runtime code would read a mask as a real value. Use it to compile a settings module that runtime code
 imports, rather than re-deriving project configuration:
 
 {% raw %}
@@ -294,7 +298,8 @@ project's variables change.
 
 ## Available Variables
 
-The following variables are in scope at compile time in this project:
+The following variables are in scope at compile time in this project (secrets show as
+`(hidden)`):
 
 {% showVars %}
 

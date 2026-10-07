@@ -23,6 +23,11 @@
  *     is something to tell the user about, not a reason to refuse to build the
  *     rest of the project.
  *
+ * Alongside them comes `secrets`: every name some definition declares
+ * `secret: true`. The tags that dump a whole scope (`{% showVars %}`,
+ * `{% exportScalarVarsJs %}`) read it so a secret answer never lands in
+ * compiled output unless a template names it explicitly.
+ *
  * A definition's `default` counts as an answer of last resort: the
  * description a publisher writes promises what the default does, and a
  * template rendering an empty string instead would break that promise.
@@ -49,6 +54,8 @@ export interface RecipeAnswers {
   byRecipe: Map<string, VarScope>;
   /** Every required definition that nothing answered and that has no default. */
   unanswered: DefinedVariable[];
+  /** Every variable name some definition declares `secret: true`, answered or not. */
+  secrets: Set<string>;
 }
 
 /** How the answers are resolved. */
@@ -76,7 +83,7 @@ export interface RecipeAnswerOptions {
 
 /** The empty result, for a project that locks nothing. */
 export function noRecipeAnswers(): RecipeAnswers {
-  return { merged: {}, byRecipe: new Map(), unanswered: [] };
+  return { merged: {}, byRecipe: new Map(), unanswered: [], secrets: new Set() };
 }
 
 /**
@@ -103,6 +110,7 @@ export function resolveRecipeAnswers(options: RecipeAnswerOptions): RecipeAnswer
   for (const defined of definitions) {
     const value = answerFor(defined, context);
     const name = defined.definition.name;
+    if (defined.definition.secret) result.secrets.add(name);
 
     if (value === undefined) {
       if (defined.definition.required) result.unanswered.push(defined);

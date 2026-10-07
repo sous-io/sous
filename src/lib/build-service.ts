@@ -118,13 +118,15 @@ export function resolveRecipeTargets(
 
   const missing = unansweredWarning(resolved, rootScope);
   if (missing !== undefined) recipes.warnings.push(missing);
-  return recipes;
+  return { ...recipes, secretVariables: [...resolved.secrets] };
 }
 
 /**
  * Adds the recipe targets to a project's own compilation config. A project with
  * no compilation block of its own still compiles its recipes, so the config is
- * created when there is none and there is something to compile.
+ * created when there is none and there is something to compile. The names the
+ * recipes declare secret go onto the config either way, because a project's own
+ * template may dump the scope too.
  *
  * @param config - The project's own compilation config, or null when it has none.
  * @param recipes - The targets the subscribed recipes contribute.
@@ -137,15 +139,17 @@ export function withRecipeTargets(
   settings: Settings,
   rootScope: Record<string, string>
 ): CompilationConfig | null {
-  if (recipes.targets.length === 0) return config;
+  const secrets = recipes.secretVariables?.length ? { secretVariables: recipes.secretVariables } : {};
+  if (recipes.targets.length === 0) return config === null ? null : { ...config, ...secrets };
   if (config === null) {
     return {
       targets: recipes.targets,
       aliases: resolveAliases(settings, rootScope),
       includeScope: rootScope,
+      ...secrets,
     };
   }
-  return { ...config, targets: [...config.targets, ...recipes.targets] };
+  return { ...config, targets: [...config.targets, ...recipes.targets], ...secrets };
 }
 
 /**

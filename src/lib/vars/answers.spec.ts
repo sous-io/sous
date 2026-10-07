@@ -247,7 +247,7 @@ describe("unansweredWarning()", () => {
    */
   it("should return undefined when nothing is unanswered", () => {
     expect(
-      unansweredWarning({ merged: {}, byRecipe: new Map(), unanswered: [] })
+      unansweredWarning({ merged: {}, byRecipe: new Map(), unanswered: [], secrets: new Set() })
     ).toBeUndefined();
   });
 
@@ -307,7 +307,7 @@ describe("resolveRootScope() with recipe answers", () => {
 
   /** Answers already resolved, as a build hands them in. */
   function answers(merged: Record<string, string>, byRecipe: Record<string, Record<string, string>> = {}) {
-    return { merged, byRecipe: new Map(Object.entries(byRecipe)), unanswered: [] };
+    return { merged, byRecipe: new Map(Object.entries(byRecipe)), unanswered: [], secrets: new Set() };
   }
 
   /**

@@ -341,6 +341,22 @@ name in `_vars`, for instance `taskFileDir: "${sousDir}/../${taskFileRoot}"`.
 
 The `_env` block is still the way to reach any environment variable no recipe asks about.
 
+### Secrets stay out of scope dumps
+
+A secret renders only where a template names it, as in `{{ apiToken }}`. The two tags that print the whole
+scope leave secrets out: `{% showVars %}` prints `(hidden)` in place of the value, and
+`{% exportScalarVarsJs %}` drops the variable, because runtime code importing the module would read a mask
+as a real value. Both treat a variable as a secret when either holds:
+
+- A recipe declares it `secret: true`.
+- It very probably is one, by a thin check that needs no declaration: a name whose last words say so
+  (`githubToken`, `OPENAI_API_KEY`, `dbPassword`, `clientSecret`) holding more than a number or a switch, or
+  a value in a widely used token format (a GitHub or GitLab token, an AWS access key id, a private key block,
+  a JSON Web Token, a URL carrying a password).
+
+So `serviceApiKey: "abc123"` in `_vars` is hidden from a dump, while `maxTokens: "4096"` and
+`requireToken: "true"` still show.
+
 ## Where to go next
 
 - [Consuming recipes](repositories-consuming.md): subscribing, building, and what lands where
