@@ -74,6 +74,11 @@ export type RecipeTargets = {
   watchDirs: string[];
   /** Complete, plain-language sentences a build should print before it compiles. */
   warnings: string[];
+  /**
+   * Every variable name a recipe declares `secret: true`, which the scope-dumping
+   * template tags hide. Set by the build from the resolved answers.
+   */
+  secretVariables?: string[];
 };
 
 /**

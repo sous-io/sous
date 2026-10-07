@@ -19,9 +19,7 @@ import {
   type DefiningRecipe,
 } from "./definition-source.js";
 import { constraintBullets } from "./validate.js";
-
-/** What the value column shows for a secret whose answer is known. */
-export const HIDDEN_VALUE = "(hidden)";
+import { HIDDEN_VALUE } from "./secrets.js";
 
 /** What the value column shows for a variable nothing has answered. */
 export const UNANSWERED_VALUE = "(unanswered)";

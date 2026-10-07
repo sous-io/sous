@@ -3,6 +3,7 @@ import path from "node:path";
 import { Liquid, type FS } from "liquidjs";
 import filterRegistrars from "./filters/index.js";
 import tagRegistrars from "./tags/index.js";
+import { setSecretNames } from "./lib/secret-scope.js";
 import { resolveInclude, type AliasMap } from "../lib/include-resolver.js";
 import {
   formatNamespaceProblem,
@@ -23,6 +24,12 @@ export type EngineAliasOptions = {
    * resolves them against, which is enough to locate the owning recipe.
    */
   fromFile?: string;
+  /**
+   * The variable names a recipe declared `secret: true`. `{% showVars %}` and
+   * `{% exportScalarVarsJs %}` hide them, along with anything that very probably
+   * is a secret.
+   */
+  secretVariables?: Iterable<string>;
 };
 
 /**
@@ -120,5 +127,6 @@ export function createLiquidEngine(roots: string[], aliasOpts: EngineAliasOption
     register(engine);
   }
 
+  setSecretNames(engine, aliasOpts.secretVariables ?? []);
   return engine;
 }

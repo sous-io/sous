@@ -1662,11 +1662,20 @@ Registered automatically by `createLiquidEngine()`:
 
 | Name | Kind | Purpose |
 |------|------|---------|
-| `{% raw %}{% showVars %}{% endraw %}` | tag | Dump all in-scope vars as a fenced JSON block (dev aid) |
-| `{% raw %}{% exportScalarVarsJs %}{% endraw %}` | tag | Emit in-scope scalars (string/finite-number/boolean) as `export default {...};`, keys sorted. For compiling a `settings.tpl.mjs` that runtime code imports. Skips objects, arrays, null, functions, NaN/Infinity. |
+| `{% raw %}{% showVars %}{% endraw %}` | tag | Dump all in-scope vars as a fenced JSON block (dev aid); a secret prints as `(hidden)` |
+| `{% raw %}{% exportScalarVarsJs %}{% endraw %}` | tag | Emit in-scope scalars (string/finite-number/boolean) as `export default {...};`, keys sorted. For compiling a `settings.tpl.mjs` that runtime code imports. Skips objects, arrays, null, functions, NaN/Infinity, and every secret. |
 | `{% raw %}{% getFiles <var> root="..." include="..." exclude="..." import="..." %}{% endraw %}` | tag | Glob files under `root`; assign `[{path,dir,relPath,name}]` to `<var>` (renders nothing; use a `{% raw %}{% for %}{% endraw %}`). `include`/`exclude` are comma-separated globs; attrs accept quoted strings or scope vars. Optional `import="<export>"` dynamically imports each file and attaches that export (e.g. `import="meta"` → `file.meta`); files that fail to import or lack the export are dropped. Requires the async render path. |
 | `{% raw %}{% listFiles root="..." include="..." exclude="..." relative="true" %}{% endraw %}` | tag | Convenience counterpart to `getFiles`: globs and renders a markdown bullet list of file names (or relative paths) inline. Glob-only. |
 | `bulletList` | filter | Convert an array to a markdown bullet list |
+
+**Secrets in a scope dump.** Both scope-dumping tags hide secrets: a name some
+recipe definition declares `secret: true` (`RecipeAnswers.secrets` in `vars/answers.ts`,
+carried as `secretVariables` on `RecipeTargets`, then `CompilationConfig`, then the engine
+option, and read by the tags through `templating/lib/secret-scope.ts`), or anything the thin
+heuristic in `src/lib/vars/secrets.ts` (`looksLikeSecret`: name endings and well-known token
+formats) recognizes. `showVars` prints `HIDDEN_VALUE`; `exportScalarVarsJs` drops the entry.
+A `.tpl.` output's source hash covers the secret names too. Guarded by
+`src/test/integration/secret-answers.test.ts`.
 
 The glob core (`globFiles`, `parseGlobList`) lives in `src/templating/lib/glob-files.ts`
 and is shared by both file tags; it uses the `glob` package (matching `entryGlob`).
