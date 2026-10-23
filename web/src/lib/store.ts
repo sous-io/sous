@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import { api, type CatalogRecipe, type PreviewBuild, type RenderResult, type WorkspaceInfo } from "./api"
+import { api, type VarFact, type CatalogRecipe, type PreviewBuild, type RenderResult, type WorkspaceInfo } from "./api"
 import { SEED_PROPOSALS, type Proposal } from "@/mock/data"
 
 export type Page = "home" | "editor" | "context" | "variables" | "config" | "recipes" | "build" | "proposals"
@@ -29,6 +29,8 @@ type State = {
   catalog: CatalogRecipe[] | null
   /** Variable names sous sets itself (sousRootPath and so on). */
   builtins: string[]
+  /** The variables report, by name, loaded in the background. */
+  varFacts: Record<string, VarFact>
   loadError: string | null
   page: Page
   mode: Mode
@@ -71,6 +73,7 @@ export const useStore = create<State>((set, get) => ({
   building: false,
   catalog: null,
   builtins: [],
+  varFacts: {},
   loadError: null,
   page: "editor",
   mode: "rendered",
@@ -94,6 +97,7 @@ export const useStore = create<State>((set, get) => ({
       get().rebuild()
       api.recipes().then((catalog) => set({ catalog })).catch(() => {})
       api.builtins().then((builtins) => set({ builtins })).catch(() => {})
+      api.variables().then((facts) => set({ varFacts: Object.fromEntries(facts.map((f) => [f.name, f])) })).catch(() => {})
     } catch (error) {
       set({ loadError: (error as Error).message })
     }

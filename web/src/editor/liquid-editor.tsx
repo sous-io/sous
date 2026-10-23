@@ -8,6 +8,7 @@ import { tags as t } from "@lezer/highlight"
 import { api } from "@/lib/api"
 import { useStore } from "@/lib/store"
 import { liquidCompletion } from "./liquid-complete"
+import { variableHover } from "./liquid-hover"
 import { activeRegion, liquidPreview, previewState, setError, setIncludes, setMode, setOriginal, setRegions } from "./liquid-preview"
 
 const markdownStyle = HighlightStyle.define([
@@ -102,6 +103,10 @@ export function LiquidEditor({ fileId, visible }: Props) {
           syntaxHighlighting(markdownStyle),
           theme,
           keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
+          variableHover(
+            () => useStore.getState().docs[fileId]?.vars ?? {},
+            () => useStore.getState().varFacts,
+          ),
           liquidCompletion(
             () => useStore.getState().docs[fileId]?.vars ?? {},
             () =>

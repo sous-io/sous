@@ -475,3 +475,11 @@ body { overflow: hidden; }
 .cm-include-chip-error { color: var(--destructive); border-color: color-mix(in oklch, var(--destructive) 50%, transparent); background: color-mix(in oklch, var(--destructive) 10%, transparent); font-weight: 600; cursor: help; }
 .cm-include-broken { background: color-mix(in oklch, var(--destructive) 8%, transparent); box-shadow: inset 3px 0 0 var(--destructive); }
 .cm-include-broken .cm-include-line { color: var(--destructive); text-decoration: wavy underline var(--destructive); }
+
+/* ---- variable hover ---- */
+.cm-tooltip.cm-tooltip-hover:has(.cm-var-hover) { background: var(--popover) !important; border: 1px solid var(--border) !important; border-radius: 8px; box-shadow: 0 12px 32px -10px rgb(0 0 0 / 0.45); }
+.cm-var-hover { padding: 8px 10px; max-width: 380px; font-size: 12px; display: grid; gap: 3px; }
+.cm-var-hover-name { font-family: 'Geist Mono Variable', monospace; font-weight: 600; color: var(--cm-liquid); }
+.cm-var-hover-value { font-family: 'Geist Mono Variable', monospace; color: var(--foreground); word-break: break-all; }
+.cm-var-hover-from { color: var(--muted-foreground); font-size: 11px; }
+.cm-var-hover-desc { color: var(--muted-foreground); font-size: 11px; border-top: 1px solid var(--border); padding-top: 4px; margin-top: 2px; font-family: 'Geist Variable', sans-serif; }
