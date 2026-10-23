@@ -27,6 +27,8 @@ type State = {
   build: PreviewBuild | null
   building: boolean
   catalog: CatalogRecipe[] | null
+  /** Variable names sous sets itself (sousRootPath and so on). */
+  builtins: string[]
   loadError: string | null
   page: Page
   mode: Mode
@@ -68,6 +70,7 @@ export const useStore = create<State>((set, get) => ({
   build: null,
   building: false,
   catalog: null,
+  builtins: [],
   loadError: null,
   page: "editor",
   mode: "rendered",
@@ -90,6 +93,7 @@ export const useStore = create<State>((set, get) => ({
       await get().open("sample")
       get().rebuild()
       api.recipes().then((catalog) => set({ catalog })).catch(() => {})
+      api.builtins().then((builtins) => set({ builtins })).catch(() => {})
     } catch (error) {
       set({ loadError: (error as Error).message })
     }

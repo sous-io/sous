@@ -8,7 +8,7 @@ import path from "node:path";
 import type http from "node:http";
 import { Flags } from "@oclif/core";
 import { BaseCommand } from "../base-command.js";
-import { CLI_ROOT } from "../lib/settings.js";
+import { buildAutoVars, CLI_ROOT } from "../lib/settings.js";
 import { createServer } from "../lib/serve/server.js";
 import { loadWorkspace } from "../lib/serve/workspace.js";
 import { variableReport, type VarFact } from "../lib/serve/var-report.js";
@@ -79,6 +79,11 @@ export default class Serve extends BaseCommand {
     const base = server.listeners("request") as ((req: http.IncomingMessage, res: http.ServerResponse) => void)[];
     server.removeAllListeners("request");
     server.on("request", (req: http.IncomingMessage, res: http.ServerResponse) => {
+      if (req.url?.startsWith("/api/builtins")) {
+        res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify([...Object.keys(buildAutoVars(this.configContext)), "sousTemplatePath", "sousTemplateDir"]));
+        return;
+      }
       if (req.url?.startsWith("/api/drift")) {
         if (req.headers["x-sous-token"] !== token) {
           res.writeHead(401, { "content-type": "application/json" });

@@ -52,6 +52,7 @@ export type RenderResult = {
   errorPos?: number
   ms: number
   tokens: number
+  uses?: string[]
 }
 
 export type OutputInfo = {
@@ -141,6 +142,7 @@ export const api = {
   build: (rerun = false) => call<PreviewBuild>("/api/build", rerun ? { method: "POST" } : undefined),
   variables: () => call<VarFact[]>("/api/variables"),
   recipes: () => call<CatalogRecipe[]>("/api/recipes"),
+  builtins: () => call<string[]>("/api/builtins"),
   drift: (id: string) => call<{ drift: Drift | null }>(`/api/drift?id=${encodeURIComponent(id)}`),
   output: (path: string) => call<{ content: string }>(`/api/output?path=${encodeURIComponent(path)}`),
 }

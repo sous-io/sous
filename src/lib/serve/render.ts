@@ -42,6 +42,8 @@ export type RenderResult = {
   ms: number;
   /** Tokens in `output`. */
   tokens: number;
+  /** The scope variables the template reads (LiquidJS static analysis), when it could tell. */
+  uses?: string[];
 };
 
 const ALWAYS_BLOCKS = new Set(["if", "unless", "for", "case", "capture", "raw", "comment", "tablerow"]);
@@ -250,5 +252,15 @@ export async function renderTemplate(
   }
   output += rendered.slice(cursor);
 
-  return done({ regions, output, segments });
+  let uses: string[] | undefined;
+  try {
+    const assigned = new Set(
+      [...source.matchAll(/\{%-?\s*(?:assign|capture|getFiles|for)\s+([A-Za-z_]\w*)/g)].map((m) => m[1])
+    );
+    uses = engine.globalVariablesSync(source).filter((name) => !assigned.has(name));
+  } catch {
+    // Some custom tags can't be analysed; the list is then unknown.
+  }
+
+  return done({ regions, output, segments, uses });
 }
