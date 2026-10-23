@@ -274,7 +274,7 @@ function FirstRunTip() {
     }
   }
   return (
-    <div className="absolute right-[calc(38%+16px)] bottom-4 z-20 w-80 rounded-xl border border-liquid/40 bg-popover p-4 text-sm shadow-2xl">
+    <div className="absolute right-4 bottom-4 z-20 w-80 rounded-xl border border-liquid/40 bg-popover p-4 text-sm shadow-2xl">
       <div className="mb-2 flex items-center gap-2 font-semibold">
         <SparklesIcon className="size-4 text-liquid" /> Templates, rendered live
       </div>
@@ -286,7 +286,7 @@ function FirstRunTip() {
           <b className="text-foreground">Click a section</b> to edit its Liquid. <Kbd>Esc</Kbd> renders it again.
         </li>
         <li>
-          <b className="text-foreground">Send changes</b> turns your edits into a pull request on the recipe's repository.
+          <b className="text-foreground">Edit anything.</b> The header's send button then turns your edits into a pull request.
         </li>
         <li>
           <Kbd>Ctrl</Kbd> <Kbd>K</Kbd> opens any file or command.
@@ -359,7 +359,7 @@ export function EditorArea() {
           <div className="relative min-h-0 flex-1">
             <FirstRunTip />
             <ResizablePanelGroup orientation="horizontal">
-              <ResizablePanel defaultSize="62%" minSize="30%" className="bg-surface-editor">
+              <ResizablePanel defaultSize="66%" minSize="30%" className="bg-surface-editor">
                 {tabs.map((id) =>
                   docs[id] ? <LiquidEditor key={id} fileId={id} visible={id === activeId} /> : null,
                 )}
@@ -367,7 +367,7 @@ export function EditorArea() {
               {showOutput && (
                 <>
                   <ResizableHandle />
-                  <ResizablePanel defaultSize="38%" minSize="20%">
+                  <ResizablePanel defaultSize="34%" minSize="20%">
                     <Inspector fileId={file.id} />
                   </ResizablePanel>
                 </>

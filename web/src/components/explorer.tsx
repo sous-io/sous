@@ -316,7 +316,7 @@ export function Explorer() {
               <FolderIcon /> <span className="hidden @[230px]:inline">Files</span>
             </TabsTrigger>
             <TabsTrigger value="output" title="What each output file is built from">
-              <FileOutputIcon /> <span className="hidden @[230px]:inline">Outputs</span>
+              <FileOutputIcon /> <span className="hidden @[230px]:inline">Built</span>
             </TabsTrigger>
           </TabsList>
         </Tabs>

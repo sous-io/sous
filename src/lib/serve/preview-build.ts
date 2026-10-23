@@ -10,6 +10,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { get_encoding, type Tiktoken } from "tiktoken";
+import { parse as parseYaml } from "yaml";
 import { CompilationService, resolveOutputPath, type CompilationTarget } from "../markdown-compiler.js";
 import { quietly, type Workspace } from "./workspace.js";
 
@@ -125,10 +126,19 @@ export async function runPreviewBuild(workspace: Workspace): Promise<PreviewBuil
         const built = fs.existsSync(output.destinationFile!) ? fs.readFileSync(output.destinationFile!, "utf8") : null;
         const onDisk = fs.existsSync(real) ? fs.readFileSync(real, "utf8") : null;
         if (built !== null) contents.set(rel, built);
-        const front = built?.match(/^---\n([\s\S]*?)\n---/)?.[1] ?? "";
-        const skillName = front.match(/^name:\s*(.+)$/m)?.[1]?.trim();
-        const descMatch = front.match(/^description:\s*(>|\|)?\s*\n?((?:[ \t]+.*\n?)+|.*)$/m);
-        const description = descMatch ? descMatch[2].replace(/\s+/g, " ").trim() : undefined;
+        // Agents read a skill's frontmatter name and description up front.
+        let skillName: string | undefined;
+        let description: string | undefined;
+        const front = built?.match(/^---\n([\s\S]*?)\n---/)?.[1];
+        if (front) {
+          try {
+            const meta = parseYaml(front) as Record<string, unknown>;
+            if (typeof meta?.name === "string") skillName = meta.name;
+            if (typeof meta?.description === "string") description = meta.description.replace(/\s+/g, " ").trim();
+          } catch {
+            // Frontmatter that isn't YAML has no description an agent can read.
+          }
+        }
         outputs.push({
           output: rel,
           entryId,

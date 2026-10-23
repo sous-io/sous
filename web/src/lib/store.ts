@@ -77,7 +77,7 @@ export const useStore = create<State>((set, get) => ({
   loadError: null,
   page: "editor",
   mode: "rendered",
-  showOutput: true,
+  showOutput: typeof window === "undefined" || window.innerWidth >= 1200,
   tabs: [],
   activeId: null,
   docs: {},

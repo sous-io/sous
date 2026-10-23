@@ -152,8 +152,8 @@ function DiffOutput({ fileId }: { fileId: string }) {
     return (
       <div className="m-4 rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
         <FileDiffIcon className="mx-auto mb-2 size-5 opacity-60" />
-        The output is the same as what's on disk.
-        <div className="mt-1 text-xs">Edit the template, or try a variable value, to see what changes for your agent.</div>
+        {doc.render.error ? "Can't compare until the template renders again." : "Nothing changes yet: the output is the same as before your edits."}
+        <div className="mt-1 text-xs">Edit the template, or try another variable value, to see what changes for your agent.</div>
       </div>
     )
   }
@@ -229,7 +229,10 @@ function OutputTab({ fileId, file }: { fileId: string; file?: WorkspaceFile }) {
           ) : null}
           {view === "raw" && "Click a highlighted piece to jump to the Liquid that wrote it."}
           {view === "preview" && "The output as markdown, the way a person would read it."}
-          {view === "diff" && "What your edits change in the output, compared with what's on disk."}
+          {view === "diff" &&
+            (Object.keys(doc.overrides).length
+              ? "What your edits and tried values change in the output."
+              : "What your edits change in the output, compared with before you edited.")}
         </div>
         {view === "raw" && <RawOutput fileId={fileId} />}
         {view === "preview" && <PreviewOutput fileId={fileId} />}
@@ -428,7 +431,7 @@ export function Inspector({ fileId }: { fileId: string }) {
       <div className="flex h-9 shrink-0 items-center border-b px-2">
         <TabsList variant="line" className="h-8">
           <TabsTrigger value="output">
-            <EyeIcon /> Output
+            <EyeIcon /> Result
           </TabsTrigger>
           <TabsTrigger value="vars">
             <VariableIcon /> Variables
@@ -438,7 +441,7 @@ export function Inspector({ fileId }: { fileId: string }) {
             <BoxesIcon /> Used by
             {usedCount !== undefined && <span className="text-[10px] text-muted-foreground">{usedCount}</span>}
           </TabsTrigger>
-          <TabsTrigger value="history">
+          <TabsTrigger value="history" title="History of this file (mock)" aria-label="History">
             <HistoryIcon />
           </TabsTrigger>
         </TabsList>

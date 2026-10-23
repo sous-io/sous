@@ -63,7 +63,7 @@ function Header() {
   const openContribute = useStore((s) => s.openContribute)
   const setPaletteOpen = useStore((s) => s.setPaletteOpen)
   const unsent = unsentIds(docs)
-  const openProposals = proposals.filter((p) => p.stage !== "released").length
+  const openProposals = proposals.filter((p) => p.stage !== "released" && !(p as { example?: boolean }).example).length
 
   const toggleTheme = () => {
     const dark = document.documentElement.classList.toggle("dark")
@@ -99,6 +99,8 @@ function Header() {
         {NAV.map(({ page: p, label, icon: Icon }) => (
           <button
             key={p}
+            title={label}
+            aria-label={label}
             onClick={() => setPage(p)}
             className={cn(
               "flex h-7 items-center gap-1.5 rounded-lg px-2 text-[13px] font-medium whitespace-nowrap transition-all",
@@ -187,7 +189,7 @@ function Palette() {
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen} className="sm:max-w-2xl">
-      <Command>
+      <Command key={open ? "open" : "closed"}>
         <CommandInput placeholder="Open a file, or run a command…" />
         <CommandList className="max-h-[60vh]">
           <CommandEmpty>Nothing matches.</CommandEmpty>
@@ -196,7 +198,7 @@ function Palette() {
               <CommandItem key={c.label} value={`> ${c.label}`} onSelect={() => run(c.run)}>
                 <c.icon className="text-brand" />
                 <span>{c.label}</span>
-                <span className="ml-auto text-xs text-muted-foreground">{c.hint}</span>
+                <span className="ml-auto w-44 shrink-0 text-right text-xs text-muted-foreground">{c.hint}</span>
               </CommandItem>
             ))}
           </CommandGroup>
@@ -243,6 +245,47 @@ export default function App() {
     load()
   }, [load])
 
+  // The page (and the open file) live in the URL, so back, forward and reload work.
+  useEffect(() => {
+    if (!workspace) return
+    const fromHash = () => {
+      const m = window.location.hash.match(/^#\/(\w+)(?:\?file=([^&]+))?/)
+      const state = useStore.getState()
+      if (m && NAV.some((n) => n.page === m[1])) {
+        if (m[2] && m[2] !== state.activeId) state.open(decodeURIComponent(m[2]))
+        else if (m[1] !== state.page) state.setPage(m[1] as Page)
+        return
+      }
+      // No page in the URL: a first visit lands on Home, later ones in the editor.
+      let seen = false
+      try {
+        seen = localStorage.getItem("sous-visited") === "1" || localStorage.getItem("sous-tip-seen") === "1"
+        localStorage.setItem("sous-visited", "1")
+      } catch {
+        seen = true
+      }
+      if (!seen) state.setPage("home")
+    }
+    fromHash()
+    {
+      const s = useStore.getState()
+      const hash = s.page === "editor" && s.activeId ? `#/editor?file=${encodeURIComponent(s.activeId)}` : `#/${s.page}`
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}${hash}`)
+    }
+    window.addEventListener("hashchange", fromHash)
+    window.addEventListener("popstate", fromHash)
+    const unsubscribe = useStore.subscribe((s, prev) => {
+      if (s.page === prev.page && s.activeId === prev.activeId) return
+      const hash = s.page === "editor" && s.activeId ? `#/editor?file=${encodeURIComponent(s.activeId)}` : `#/${s.page}`
+      if (window.location.hash !== hash) window.history.pushState(null, "", `${window.location.pathname}${window.location.search}${hash}`)
+    })
+    return () => {
+      window.removeEventListener("hashchange", fromHash)
+      window.removeEventListener("popstate", fromHash)
+      unsubscribe()
+    }
+  }, [workspace])
+
   if (loadError) {
     return (
       <div className="grid h-full place-items-center p-8 text-center">
@@ -270,11 +313,11 @@ export default function App() {
         <main className="min-h-0 flex-1">
           {page === "editor" && (
             <ResizablePanelGroup orientation="horizontal">
-              <ResizablePanel defaultSize="20%" minSize="12%" maxSize="40%">
+              <ResizablePanel defaultSize="18%" minSize="12%" maxSize="40%">
                 <Explorer />
               </ResizablePanel>
               <ResizableHandle />
-              <ResizablePanel defaultSize="80%">
+              <ResizablePanel defaultSize="82%">
                 <EditorArea />
               </ResizablePanel>
             </ResizablePanelGroup>

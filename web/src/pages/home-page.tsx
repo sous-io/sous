@@ -78,7 +78,7 @@ export function HomePage() {
   const unanswered = vars?.filter((v) => v.recipe && v.value === null) ?? []
   const unsent = unsentIds(docs)
   const changed = changedIds(docs)
-  const openProposals = proposals.filter((p) => p.stage !== "released")
+  const openProposals = proposals.filter((p) => p.stage !== "released" && !(p as { example?: boolean }).example)
 
   const attention: Attention[] = []
   for (const o of failed) {

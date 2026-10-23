@@ -127,10 +127,32 @@ export function findRegions(source: string, engine: Liquid): Omit<Region, "rende
   return regions;
 }
 
+/** LiquidJS's messages for the common mistakes, in plain words. */
+function plainError(message: string): string {
+  const m = message.replace(/\s+/g, " ").trim();
+  const rules: [RegExp, (x: RegExpMatchArray) => string][] = [
+    [/expected filter name/i, () => "A | needs a filter name after it, such as upcase."],
+    [/output ".*" not closed/i, () => "This {{ has no closing }}."],
+    [/tag "?(end\w+)"? not found/i, (x) => `This {% ${x[1]} %} has no opening tag to close.`],
+    [/tag "?\{%-?\s*(\w+)[^"]*?"? not closed/i, (x) => (["if", "unless", "for", "case", "capture", "raw", "comment"].includes(x[1]) ? `This {% ${x[1]} %} has no matching {% end${x[1]} %}.` : "This {% has no closing %}.")],
+    [/tag .* not closed/i, () => "This {% has no closing %}."],
+    [/undefined filter:?\s*(\w+)/i, (x) => `There's no filter called ${x[1]}.`],
+    [/tag "?(\w+)"? not found/i, (x) => `There's no tag called ${x[1]}.`],
+    [/unexpected "?(end\w+)"?/i, (x) => `This {% ${x[1]} %} has no opening tag to close.`],
+    [/expected "?(\w+)"? \(?(?:to be|token)?/i, () => m],
+  ];
+  for (const [re, say] of rules) {
+    const x = m.match(re);
+    if (x) return say(x);
+  }
+  return m;
+}
+
 function describeError(error: unknown, source: string): { error: string; errorPos?: number } {
-  const message = (error as Error).message ?? String(error);
-  const at = message.match(/line:(\d+), col:(\d+)/);
-  if (!at) return { error: message };
+  const raw = (error as Error).message ?? String(error);
+  const message = plainError(raw);
+  const at = raw.match(/line:(\d+), col:(\d+)/);
+  if (!at) return { error: message.replace(/,?\s*line:\d+, col:\d+/, "") };
   const lines = source.split("\n");
   const line = Number(at[1]);
   const col = Number(at[2]);

@@ -174,7 +174,7 @@ class InlineWidget extends WidgetType {
     const el = document.createElement("span")
     el.className =
       `cm-liquid-rendered cm-liquid-${region.kind} ${opts.marks}` + (opts.fresh ? " cm-liquid-fresh" : "") + (opts.error ? " cm-liquid-error" : "")
-    el.dataset.src = opts.error ? `⚠ ${opts.error}` : region.head
+    el.title = opts.error ? `⚠ ${opts.error}` : `${region.head} · click to edit`
     if (region.rendered === "") {
       el.classList.add("cm-liquid-empty")
       el.textContent = region.kind === "output" ? `∅ ${region.label}` : inner(region.head)
@@ -323,6 +323,29 @@ class ResultBar extends WidgetType {
   }
 }
 
+/** The live result of an inline section being edited, shown at the end of its line. */
+class InlineResult extends WidgetType {
+  constructor(
+    readonly text: string,
+    readonly error: string | null,
+  ) {
+    super()
+  }
+  eq(other: InlineResult) {
+    return other.text === this.text && other.error === this.error
+  }
+  toDOM(): HTMLElement {
+    const el = document.createElement("span")
+    el.className = "cm-liquid-inline-result" + (this.error ? " cm-liquid-inline-result-error" : "")
+    el.textContent = this.error ? `⚠ ${this.error}` : `→ ${this.text === "" ? "(nothing)" : this.text.replace(/\n/g, " ⏎ ")}`
+    el.title = this.error ? this.error : "What this section renders to"
+    return el
+  }
+  ignoreEvent() {
+    return true
+  }
+}
+
 const activeMark = Decoration.mark({ class: "cm-liquid-active" })
 const activeErrorMark = Decoration.mark({ class: "cm-liquid-active cm-liquid-active-error" })
 const sourceMark = Decoration.mark({ class: "cm-liquid-source" })
@@ -365,6 +388,7 @@ function buildDecorations(state: EditorState): DecorationSet {
         ranges.push(Decoration.widget({ widget: new ResultBar(region.rendered, err), block: true, side: 1 }).range(region.to))
       } else {
         ranges.push((err ? activeErrorMark : activeMark).range(region.from, region.to))
+        ranges.push(Decoration.widget({ widget: new InlineResult(region.rendered, err), side: 1 }).range(state.doc.lineAt(region.to).to))
       }
       return
     }
@@ -623,7 +647,6 @@ export function liquidPreview(callbacks: PreviewCallbacks): Extension {
   return [
     previewState,
     decorations,
-    inlineResultTooltip,
     changeState,
     changeGutter,
     includeField(callbacks.onOpenFile),

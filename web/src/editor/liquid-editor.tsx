@@ -29,7 +29,7 @@ const markdownStyle = HighlightStyle.define([
 ])
 
 const theme = EditorView.theme({
-  "&": { height: "100%", fontSize: "13.5px", backgroundColor: "transparent", color: "var(--foreground)" },
+  "&": { height: "100%", fontSize: "13px", backgroundColor: "transparent", color: "var(--foreground)" },
   ".cm-scroller": { fontFamily: "'Geist Mono Variable', ui-monospace, monospace", lineHeight: "1.65" },
   ".cm-content": { padding: "16px 0 40vh", caretColor: "var(--foreground)", minWidth: "0" },
   ".cm-line": { padding: "0 24px 0 12px" },
@@ -103,6 +103,15 @@ export function LiquidEditor({ fileId, visible }: Props) {
           syntaxHighlighting(markdownStyle),
           theme,
           keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
+          // Close Liquid delimiters as they're typed: {{ → {{ | }}, {% → {% | %}.
+          EditorView.inputHandler.of((v, from, to, text) => {
+            const prev = v.state.doc.sliceString(from - 1, from)
+            if (prev !== "{" || (text !== "{" && text !== "%")) return false
+            const close = text === "{" ? "}}" : "%}"
+            if (v.state.doc.sliceString(to, to + 3).trim().startsWith(close)) return false
+            v.dispatch({ changes: { from, to, insert: `${text}  ${close}` }, selection: { anchor: from + 2 } })
+            return true
+          }),
           variableHover(
             () => useStore.getState().docs[fileId]?.vars ?? {},
             () => useStore.getState().varFacts,
