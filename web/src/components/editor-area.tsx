@@ -229,7 +229,7 @@ function StatusBar({ fileId }: { fileId: string | null }) {
       {active && (
         <span className="text-liquid">
           Editing <span className="font-mono">{active.kind === "output" ? `{{ ${active.label} }}` : `{% ${active.label} %}`}</span>{" "}
-          — move the cursor out to re-render
+          — Esc or click outside to re-render
         </span>
       )}
       <span className="ml-auto">{file?.isTpl ? "Markdown + Liquid" : "Markdown"}</span>

@@ -2,7 +2,7 @@ import { create } from "zustand"
 import { api, type CatalogRecipe, type PreviewBuild, type RenderResult, type WorkspaceInfo } from "./api"
 import { SEED_PROPOSALS, type Proposal } from "@/mock/data"
 
-export type Page = "home" | "editor" | "context" | "variables" | "recipes" | "build" | "proposals"
+export type Page = "home" | "editor" | "context" | "variables" | "config" | "recipes" | "build" | "proposals"
 export type Mode = "rendered" | "source"
 
 export type OpenDoc = {

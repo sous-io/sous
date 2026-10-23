@@ -1,5 +1,6 @@
 import { useEffect } from "react"
 import {
+  SlidersHorizontalIcon,
   BotIcon,
   HouseIcon,
   BoxesIcon,
@@ -36,6 +37,7 @@ import { Explorer } from "@/components/explorer"
 import { RecipesPage } from "@/pages/recipes-page"
 import { VariablesPage } from "@/pages/variables-page"
 import { HomePage } from "@/pages/home-page"
+import { ConfigPage } from "@/pages/config-page"
 import { BuildPage, ContextPage } from "@/pages/build-context"
 import { ProposalsPage } from "@/pages/proposals"
 import { unsentIds, useStore, type Page } from "@/lib/store"
@@ -46,6 +48,7 @@ const NAV: { page: Page; label: string; icon: typeof SquarePenIcon }[] = [
   { page: "editor", label: "Editor", icon: SquarePenIcon },
   { page: "context", label: "Agent view", icon: BotIcon },
   { page: "variables", label: "Variables", icon: VariableIcon },
+  { page: "config", label: "Config", icon: SlidersHorizontalIcon },
   { page: "recipes", label: "Recipes", icon: BoxesIcon },
   { page: "build", label: "Build", icon: HammerIcon },
   { page: "proposals", label: "Proposals", icon: GitPullRequestArrowIcon },
@@ -80,12 +83,12 @@ function Header() {
         </div>
         <div className="leading-tight">
           <div className="text-[15px] font-bold tracking-tight">sous</div>
-          <div className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">studio</div>
+          <div className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase max-[1400px]:hidden">studio</div>
         </div>
         {workspace && (
           <div className="ml-2 flex items-center gap-2 rounded-lg border bg-background/60 py-1 pr-2 pl-2.5">
             <span className="text-sm font-medium">{workspace.projectName}</span>
-            <span className="flex max-w-44 items-center gap-1 truncate rounded-md bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground max-[1200px]:hidden">
+            <span className="flex max-w-44 items-center gap-1 truncate rounded-md bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground max-[1600px]:hidden">
               <GitBranchIcon className="size-3" />
               {workspace.branch}
             </span>
@@ -98,13 +101,13 @@ function Header() {
             key={p}
             onClick={() => setPage(p)}
             className={cn(
-              "flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium transition-all",
+              "flex h-7 items-center gap-1.5 rounded-lg px-2 text-[13px] font-medium whitespace-nowrap transition-all",
               page === p
                 ? "bg-card text-foreground shadow-sm ring-1 ring-border"
                 : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
             )}
           >
-            <Icon className={cn("size-3.5", page === p && "text-brand")} /> <span className="max-[1380px]:hidden">{label}</span>
+            <Icon className={cn("size-3.5", page === p && "text-brand")} /> <span className="whitespace-nowrap max-[1280px]:hidden">{label}</span>
             {p === "proposals" && openProposals > 0 && (
               <span className="ml-0.5 rounded-full bg-brand-soft px-1.5 text-[10px] font-semibold text-brand">{openProposals}</span>
             )}
@@ -112,9 +115,9 @@ function Header() {
         ))}
       </nav>
       <div className="ml-auto flex items-center gap-2">
-        <Button size="sm" variant="outline" className="w-60 justify-start bg-background/60 text-muted-foreground max-[1380px]:w-auto" onClick={() => setPaletteOpen(true)}>
-          <SearchIcon /> <span className="max-[1380px]:hidden">Open a file…</span>
-          <span className="ml-auto flex gap-0.5 max-[1380px]:hidden">
+        <Button size="sm" variant="outline" className="w-52 justify-start bg-background/60 text-muted-foreground max-[1540px]:w-auto" onClick={() => setPaletteOpen(true)}>
+          <SearchIcon /> <span className="max-[1540px]:hidden">Open a file…</span>
+          <span className="ml-auto flex gap-0.5 max-[1540px]:hidden">
             <Kbd>Ctrl</Kbd>
             <Kbd>K</Kbd>
           </span>
@@ -279,6 +282,7 @@ export default function App() {
           {page === "home" && <HomePage />}
           {page === "context" && <ContextPage />}
           {page === "variables" && <VariablesPage />}
+          {page === "config" && <ConfigPage />}
           {page === "recipes" && <RecipesPage />}
           {page === "build" && <BuildPage />}
           {page === "proposals" && <ProposalsPage />}

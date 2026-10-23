@@ -14,6 +14,7 @@ import { loadWorkspace } from "../lib/serve/workspace.js";
 import { variableReport, type VarFact } from "../lib/serve/var-report.js";
 import { readCatalog } from "../lib/serve/catalog.js";
 import { findDrift } from "../lib/serve/drift.js";
+import { configReport } from "../lib/serve/config-layers.js";
 import { lastPreviewBuild } from "../lib/serve/preview-build.js";
 import { heading, log, showCommandVars } from "../utils/formatting.js";
 
@@ -79,6 +80,23 @@ export default class Serve extends BaseCommand {
     const base = server.listeners("request") as ((req: http.IncomingMessage, res: http.ServerResponse) => void)[];
     server.removeAllListeners("request");
     server.on("request", (req: http.IncomingMessage, res: http.ServerResponse) => {
+      if (req.url?.startsWith("/api/config")) {
+        if (req.headers["x-sous-token"] !== token) {
+          res.writeHead(401, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: "Missing or wrong token" }));
+          return;
+        }
+        configReport(this.discovered, workspace.projectRoot, this.settings)
+          .then((report) => {
+            res.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+            res.end(JSON.stringify(report));
+          })
+          .catch((error: Error) => {
+            res.writeHead(500, { "content-type": "application/json" });
+            res.end(JSON.stringify({ error: error.message }));
+          });
+        return;
+      }
       if (req.url?.startsWith("/api/builtins")) {
         res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
         res.end(JSON.stringify([...Object.keys(buildAutoVars(this.configContext)), "sousTemplatePath", "sousTemplateDir"]));

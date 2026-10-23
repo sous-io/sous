@@ -98,6 +98,11 @@ export type CatalogRecipe = {
   proposalsInstead?: string
 }
 
+export type ConfigReport = {
+  layers: { path: string; display: string; kind: string; changes: { key: string; value: string; was?: string }[]; text?: string }[]
+  settings: { key: string; value: string; layer: string }[]
+}
+
 export type Drift = { output: string; built: string; disk: string; simulated: boolean }
 
 export type PreviewBuild = {
@@ -143,6 +148,7 @@ export const api = {
   variables: () => call<VarFact[]>("/api/variables"),
   recipes: () => call<CatalogRecipe[]>("/api/recipes"),
   builtins: () => call<string[]>("/api/builtins"),
+  config: () => call<ConfigReport>("/api/config"),
   drift: (id: string) => call<{ drift: Drift | null }>(`/api/drift?id=${encodeURIComponent(id)}`),
   output: (path: string) => call<{ content: string }>(`/api/output?path=${encodeURIComponent(path)}`),
 }
