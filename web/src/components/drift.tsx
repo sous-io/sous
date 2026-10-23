@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { api, type Drift } from "@/lib/api"
+import { useTour } from "@/components/tour"
 import { useStore } from "@/lib/store"
 
 type Edit = {
@@ -60,7 +61,16 @@ export function useDrift(fileId: string | null) {
   return drift
 }
 
+function tourSeen(): boolean {
+  try {
+    return localStorage.getItem("sous-tour-done") === "1" || localStorage.getItem("sous-tip-seen") === "1"
+  } catch {
+    return true
+  }
+}
+
 export function DriftBanner({ fileId }: { fileId: string }) {
+  const tourStep = useTour((s) => s.step)
   const drift = useDrift(fileId)
   const doc = useStore((s) => s.docs[fileId])
   const [open, setOpen] = useState(false)
@@ -70,6 +80,8 @@ export function DriftBanner({ fileId }: { fileId: string }) {
     [drift, doc?.original, doc?.originalRender],
   )
   if (!drift || dismissed || edits.length === 0) return null
+  // On the sample, the (simulated) hand edits wait for the tour's step about them, or for the tour to be done.
+  if (drift.simulated && ((tourStep !== null && tourStep < 5) || (tourStep === null && !tourSeen()))) return null
 
   return (
     <>

@@ -123,8 +123,7 @@ export function LiquidEditor({ fileId, visible }: Props) {
           ]),
           // Close Liquid delimiters as they're typed: {{ → {{ | }}, {% → {% | %}.
           EditorView.inputHandler.of((v, from, to, text) => {
-            if (text === " " && from === to && v.state.doc.sliceString(from, from + 1) === " " && /\{[{%]-?$/.test(v.state.doc.sliceString(from - 3, from))) {
-              v.dispatch({ selection: { anchor: from + 1 } })
+            if (text === " " && from === to && v.state.doc.sliceString(from, from + 1) === " " && /\{[{%]-? $/.test(v.state.doc.sliceString(from - 4, from))) {
               return true
             }
             const prev = v.state.doc.sliceString(from - 1, from)

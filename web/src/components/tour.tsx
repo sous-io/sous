@@ -101,7 +101,14 @@ export const useTour = create<{ step: number | null; start: () => void; stop: ()
     }
     set({ step: 0 })
   },
-  stop: () => set({ step: null }),
+  stop: () => {
+    try {
+      localStorage.setItem("sous-tour-done", "1")
+    } catch {
+      // Shown again next time.
+    }
+    set({ step: null })
+  },
   go: (step) => set({ step }),
 }))
 

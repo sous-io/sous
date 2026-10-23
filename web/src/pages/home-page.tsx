@@ -265,7 +265,7 @@ export function HomePage() {
               {
                 icon: GitPullRequestArrowIcon,
                 title: "Propose a fix upstream",
-                body: "Open any recipe file, fix a word, and press Review changes. Sous drafts the pull request.",
+                body: "Open any recipe file, fix a word, and press the Review button in the header. Sous drafts the pull request.",
                 run: () => {
                   const f = files.find((x) => x.display.endsWith("about-speaking-plainly/SKILL.tpl.md")) ?? files.find((x) => x.origin.kind === "recipe")
                   if (f) open(f.id)

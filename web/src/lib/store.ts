@@ -143,6 +143,11 @@ export const useStore = create<State>((set, get) => ({
     const { tabs, docs } = get()
     set({ activeId: id, page: "editor", tabs: tabs.includes(id) ? tabs : [...tabs, id] })
     if (docs[id]) return
+    if (!get().workspace?.files.some((f) => f.id === id)) {
+      set((s) => ({ tabs: s.tabs.filter((t) => t !== id), activeId: s.tabs.find((t) => t !== id) ?? null }))
+      toast.error("There's no file with that link in this project.", { duration: 4000 })
+      return
+    }
     let payload: Awaited<ReturnType<typeof api.file>>
     try {
       payload = await api.file(id)

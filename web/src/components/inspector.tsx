@@ -358,7 +358,9 @@ function UsedByTab({ file }: { file?: WorkspaceFile }) {
       <div className="space-y-3 p-3">
         <p className="text-xs text-muted-foreground">
           {outputs.length === 0
-            ? "No output includes this file, so editing it changes nothing an agent reads."
+            ? file.origin.kind === "sample"
+              ? "The sample isn't part of the build, so no real output includes it. Its hand-edit banner uses a simulated built copy."
+              : "No output includes this file, so editing it changes nothing an agent reads."
             : `${outputs.length} output file${outputs.length === 1 ? "" : "s"} include this file${file.role === "partial" ? ", so an edit here changes all of them" : ""}. Together they hold ${total.toLocaleString()} tokens.`}
         </p>
         {outputs.map((o) => {

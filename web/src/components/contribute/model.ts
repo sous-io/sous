@@ -385,9 +385,19 @@ export function describeEdits(a: string, b: string): string[] {
       const was = removed[0].trim()
       const now = added[0].trim()
       // An appended sentence reads better as what was added.
-      if (now.startsWith(was)) out.push(`Adds “${clip(now.slice(was.length))}”${under}`)
-      else if (was.startsWith(now)) out.push(`Removes “${clip(was.slice(now.length))}”${under}`)
-      else out.push(`Rewords “${clip(was, 50)}” as “${clip(now, 50)}”${under}`)
+      // Quote only what changed: strip the text both versions share at the start and end.
+      let pre = 0
+      while (pre < was.length && pre < now.length && was[pre] === now[pre]) pre++
+      let suf = 0
+      while (suf < was.length - pre && suf < now.length - pre && was[was.length - 1 - suf] === now[now.length - 1 - suf]) suf++
+      // Widen to whole words.
+      while (pre > 0 && /\S/.test(was[pre - 1])) pre--
+      while (suf > 0 && /\S/.test(was[was.length - suf])) suf--
+      const oldPart = was.slice(pre, was.length - suf).trim()
+      const newPart = now.slice(pre, now.length - suf).trim()
+      if (!oldPart && newPart) out.push(`Adds “${clip(newPart)}”${under}`)
+      else if (oldPart && !newPart) out.push(`Removes “${clip(oldPart)}”${under}`)
+      else out.push(`Rewords “${clip(oldPart, 60)}” as “${clip(newPart, 60)}”${under}`)
     } else if (added.length && !removed.length) {
       out.push(`Adds “${clip(added[0])}”${added.length > 1 ? ` and ${added.length - 1} more line${added.length === 2 ? "" : "s"}` : ""}${under}`)
     } else if (removed.length && !added.length) {
