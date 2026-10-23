@@ -103,7 +103,7 @@ function Breadcrumb({ file }: { file: WorkspaceFile }) {
   return (
     <div className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
       {parts.map((p, i) => (
-        <span key={i} className="flex min-w-0 items-center gap-1">
+        <span key={i} className={cn("flex min-w-0 items-center gap-1", i < parts.length - 3 && "max-[1350px]:hidden")}>
           {i > 0 && <ChevronRightIcon className="size-3 shrink-0 opacity-60" />}
           <span className={cn("truncate", i === parts.length - 1 && "font-medium text-foreground")}>{p}</span>
         </span>
@@ -228,8 +228,8 @@ function StatusBar({ fileId }: { fileId: string | null }) {
         </span>
       )}
       {doc && (
-        <span title="Tokens in this file's output">
-          {doc.render.tokens.toLocaleString()} tokens
+        <span title="Tokens in this file's own output, before @include lines are filled in">
+          {doc.render.tokens.toLocaleString()} tokens in this file
           {delta !== 0 && (
             <b className={cn("ml-1", delta > 0 ? "text-warning" : "text-success")}>
               ({delta > 0 ? "+" : ""}

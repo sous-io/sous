@@ -298,9 +298,9 @@ function VariablesTab({ fileId }: { fileId: string }) {
               <div key={k} className={cn("px-3 py-1.5", overridden && "bg-warning/8")}>
                 <div className="flex items-center gap-1.5">
                   <span className="font-mono font-medium text-liquid">{k}</span>
-                  {used.has(k) && (
+                  {used.has(k) && used.size < entries.length / 2 && (
                     <Badge variant="secondary" className="h-4 px-1 text-[9px]">
-                      used here
+                      in this file
                     </Badge>
                   )}
                   {overridden && (
