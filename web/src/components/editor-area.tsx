@@ -222,7 +222,11 @@ function StatusBar({ fileId }: { fileId: string | null }) {
             <ZapIcon className="size-3 text-success" /> Rendered in {doc.render.ms} ms
           </span>
         ))}
-      {doc && file?.isTpl && <span>{doc.render.regions.length} Liquid sections</span>}
+      {doc && file?.isTpl && (
+        <span title="Alt+↓ and Alt+↑ jump between sections">
+          {doc.render.regions.length} Liquid sections <span className="opacity-60">· Alt+↑↓ to jump</span>
+        </span>
+      )}
       {doc && (
         <span title="Tokens in this file's output">
           {doc.render.tokens.toLocaleString()} tokens

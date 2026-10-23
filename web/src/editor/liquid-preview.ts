@@ -650,6 +650,29 @@ export function liquidPreview(callbacks: PreviewCallbacks): Extension {
     Prec.high(
       keymap.of([
         {
+          // Jump to the next / previous Liquid section and open it.
+          key: "Alt-ArrowDown",
+          run(view) {
+            const { regions } = view.state.field(previewState)
+            const pos = view.state.selection.main.head
+            const next = regions.find((r) => r.from > pos)
+            if (!next) return false
+            view.dispatch({ selection: { anchor: caretFor(view.state, next) }, scrollIntoView: true })
+            return true
+          },
+        },
+        {
+          key: "Alt-ArrowUp",
+          run(view) {
+            const { regions } = view.state.field(previewState)
+            const pos = view.state.selection.main.head
+            const prev = [...regions].reverse().find((r) => r.to < pos)
+            if (!prev) return false
+            view.dispatch({ selection: { anchor: caretFor(view.state, prev) }, scrollIntoView: true })
+            return true
+          },
+        },
+        {
           key: "Escape",
           run(view) {
             if (completionStatus(view.state)) return false
