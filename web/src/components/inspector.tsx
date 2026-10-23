@@ -1,7 +1,7 @@
 // The right-hand panel of the editor: what the open file builds, the
 // variables it renders with (and what-if values), where it is used, history.
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { diffLines } from "diff"
 import DOMPurify from "dompurify"
 import { marked } from "marked"
@@ -53,8 +53,31 @@ function RawOutput({ fileId }: { fileId: string }) {
   }
   pieces.push({ text: output.slice(cursor) })
 
+  const pre = useRef<HTMLPreElement>(null)
+  // Follow the editor: show the output of the section being edited, or at the top of the editor.
+  useEffect(() => {
+    pre.current?.querySelector('[data-active="true"]')?.scrollIntoView({ block: "nearest", behavior: "smooth" })
+  }, [active])
+  useEffect(() => {
+    const onTop = (e: Event) => {
+      const { fileId: id, index, atTop } = (e as CustomEvent<{ fileId: string; index: number; atTop: boolean }>).detail
+      if (id !== fileId || !pre.current) return
+      const viewport = pre.current.closest("[data-slot=scroll-area-viewport]") as HTMLElement | null
+      if (!viewport) return
+      if (atTop || index < 0) {
+        viewport.scrollTo({ top: 0, behavior: "smooth" })
+        return
+      }
+      const el = pre.current.querySelector(`[data-region="${index}"]`) as HTMLElement | null
+      if (el)
+        viewport.scrollTo({ top: el.getBoundingClientRect().top - viewport.getBoundingClientRect().top + viewport.scrollTop - 24, behavior: "smooth" })
+    }
+    window.addEventListener("sous-editor-top", onTop)
+    return () => window.removeEventListener("sous-editor-top", onTop)
+  }, [fileId])
+
   return (
-    <pre className="px-4 pb-24 font-mono text-[12.5px] leading-relaxed whitespace-pre-wrap">
+    <pre ref={pre} className="relative px-4 pb-24 font-mono text-[12.5px] leading-relaxed whitespace-pre-wrap">
       {pieces.map((p, i) =>
         p.region === undefined ? (
           <PlainOutput key={i} text={p.text} />
@@ -62,6 +85,7 @@ function RawOutput({ fileId }: { fileId: string }) {
           <span
             key={i}
             className="output-segment"
+            data-region={p.region}
             data-active={active !== null && regions[p.region]?.from === active.from}
             title={regions[p.region]?.head}
             onClick={() => jumpTo(fileId, p.region!)}

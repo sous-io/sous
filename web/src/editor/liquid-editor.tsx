@@ -54,6 +54,8 @@ function openInclude(line: string) {
   if (candidates[0]) open(candidates[0].id)
 }
 
+let scrollTimer: number | undefined
+
 // One editor is mounted per open tab (hidden when inactive), so each file keeps
 // its cursor and undo history.
 type Props = { fileId: string; visible: boolean }
@@ -112,6 +114,19 @@ export function LiquidEditor({ fileId, visible }: Props) {
             const source = update.state.doc.toString()
             useStore.getState().edit(fileId, source)
             scheduleRender(source)
+          }),
+          EditorView.domEventHandlers({
+            scroll(_event, v) {
+              // Tell the output pane which section is at the top, so it can follow.
+              window.clearTimeout(scrollTimer)
+              scrollTimer = window.setTimeout(() => {
+                const top = v.lineBlockAtHeight(v.scrollDOM.scrollTop).from
+                const regions = v.state.field(previewState).regions
+                const index = regions.findIndex((r) => r.to >= top)
+                window.dispatchEvent(new CustomEvent("sous-editor-top", { detail: { fileId, index, atTop: v.scrollDOM.scrollTop < 8 } }))
+              }, 60)
+              return false
+            },
           }),
           EditorView.updateListener.of((update) => {
             if (update.selectionSet || update.focusChanged) {
