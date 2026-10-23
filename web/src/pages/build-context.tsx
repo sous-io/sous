@@ -28,6 +28,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { api, type OutputInfo } from "@/lib/api"
+import { SkillGuess } from "@/components/skill-guess"
 import { useStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
@@ -338,6 +339,8 @@ export function ContextPage() {
             ))}
           </div>
         </section>
+
+        <SkillGuess skills={skills} onOpen={setSelected} />
 
         <section className="space-y-3">
           <h2 className="flex items-center gap-2 text-sm font-semibold">
