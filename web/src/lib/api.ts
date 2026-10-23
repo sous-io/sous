@@ -66,6 +66,18 @@ export type OutputInfo = {
   descriptionTokens?: number
 }
 
+export type VarFact = {
+  name: string
+  recipe?: string
+  description?: string
+  type?: string
+  secret: boolean
+  value: string | null
+  answeredBy?: string
+  envName?: string
+  usedIn: string[]
+}
+
 export type PreviewBuild = {
   outputs: OutputInfo[]
   usedBy: Record<string, string[]>
@@ -106,6 +118,7 @@ export const api = {
   render: (id: string, source: string, overrides?: Record<string, string>) =>
     call<RenderResult>("/api/render", { method: "POST", body: JSON.stringify({ id, source, overrides }) }),
   build: (rerun = false) => call<PreviewBuild>("/api/build", rerun ? { method: "POST" } : undefined),
+  variables: () => call<VarFact[]>("/api/variables"),
   output: (path: string) => call<{ content: string }>(`/api/output?path=${encodeURIComponent(path)}`),
 }
 

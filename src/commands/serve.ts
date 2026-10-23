@@ -11,6 +11,7 @@ import { BaseCommand } from "../base-command.js";
 import { CLI_ROOT } from "../lib/settings.js";
 import { createServer } from "../lib/serve/server.js";
 import { loadWorkspace } from "../lib/serve/workspace.js";
+import { variableReport, type VarFact } from "../lib/serve/var-report.js";
 import { heading, log, showCommandVars } from "../utils/formatting.js";
 
 function openBrowser(url: string): void {
@@ -69,6 +70,32 @@ export default class Serve extends BaseCommand {
     const token = process.env.SOUS_SERVE_TOKEN ?? crypto.randomBytes(16).toString("hex");
     const distDir = path.join(CLI_ROOT, "web", "dist");
     const server = createServer(workspace, distDir, token);
+
+    // Routes added here rather than in server.ts: they need the command's settings.
+    let variables: Promise<VarFact[]> | null = null;
+    const base = server.listeners("request") as ((req: http.IncomingMessage, res: http.ServerResponse) => void)[];
+    server.removeAllListeners("request");
+    server.on("request", (req: http.IncomingMessage, res: http.ServerResponse) => {
+      if (req.url?.startsWith("/api/variables")) {
+        if (req.headers["x-sous-token"] !== token) {
+          res.writeHead(401, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: "Missing or wrong token" }));
+          return;
+        }
+        variables ??= variableReport(workspace, this.settings, this.configContext, this.shellEnv);
+        variables
+          .then((facts) => {
+            res.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+            res.end(JSON.stringify(facts));
+          })
+          .catch((error: Error) => {
+            res.writeHead(500, { "content-type": "application/json" });
+            res.end(JSON.stringify({ error: error.message }));
+          });
+        return;
+      }
+      for (const handler of base) handler(req, res);
+    });
     const port = await listen(server, flags.port, 10);
     const url = `http://127.0.0.1:${port}/?token=${token}`;
 
