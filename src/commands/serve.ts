@@ -13,6 +13,8 @@ import { createServer } from "../lib/serve/server.js";
 import { loadWorkspace } from "../lib/serve/workspace.js";
 import { variableReport, type VarFact } from "../lib/serve/var-report.js";
 import { readCatalog } from "../lib/serve/catalog.js";
+import { findDrift } from "../lib/serve/drift.js";
+import { lastPreviewBuild } from "../lib/serve/preview-build.js";
 import { heading, log, showCommandVars } from "../utils/formatting.js";
 
 function openBrowser(url: string): void {
@@ -77,6 +79,25 @@ export default class Serve extends BaseCommand {
     const base = server.listeners("request") as ((req: http.IncomingMessage, res: http.ServerResponse) => void)[];
     server.removeAllListeners("request");
     server.on("request", (req: http.IncomingMessage, res: http.ServerResponse) => {
+      if (req.url?.startsWith("/api/drift")) {
+        if (req.headers["x-sous-token"] !== token) {
+          res.writeHead(401, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: "Missing or wrong token" }));
+          return;
+        }
+        const id = new URL(req.url, "http://127.0.0.1").searchParams.get("id") ?? "";
+        const build = lastPreviewBuild();
+        (build ? findDrift(workspace, build, id) : Promise.resolve(null))
+          .then((drift) => {
+            res.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+            res.end(JSON.stringify({ drift }));
+          })
+          .catch((error: Error) => {
+            res.writeHead(500, { "content-type": "application/json" });
+            res.end(JSON.stringify({ error: error.message }));
+          });
+        return;
+      }
       if (req.url?.startsWith("/api/recipes")) {
         if (req.headers["x-sous-token"] !== token) {
           res.writeHead(401, { "content-type": "application/json" });

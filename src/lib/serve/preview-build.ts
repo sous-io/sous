@@ -57,6 +57,12 @@ function kindOf(output: string): OutputInfo["kind"] {
 }
 
 const contents = new Map<string, string>();
+let last: PreviewBuild | null = null;
+
+/** The most recent preview build, if one has finished. */
+export function lastPreviewBuild(): PreviewBuild | null {
+  return last;
+}
 
 /** The built text of one output from the last preview build. */
 export function previewContent(output: string): string | undefined {
@@ -143,10 +149,11 @@ export async function runPreviewBuild(workspace: Workspace): Promise<PreviewBuil
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 
-  return {
+  last = {
     outputs,
     usedBy,
     ms: Math.round(performance.now() - started),
     builtAt: new Date().toISOString(),
   };
+  return last;
 }

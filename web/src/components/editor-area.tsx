@@ -26,6 +26,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Kbd } from "@/components/ui/kbd"
 import { LiquidEditor } from "@/editor/liquid-editor"
 import { Inspector, useActiveRegion } from "@/components/inspector"
+import { DriftBanner } from "@/components/drift"
 import type { Region, WorkspaceFile } from "@/lib/api"
 import { useStore, type Mode } from "@/lib/store"
 import { cn } from "@/lib/utils"
@@ -336,6 +337,7 @@ export function EditorArea() {
             </div>
           </div>
           <OriginBanner file={file} />
+          <DriftBanner fileId={file.id} />
           <div className="relative min-h-0 flex-1">
             <FirstRunTip />
             <ResizablePanelGroup orientation="horizontal">

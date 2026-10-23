@@ -97,6 +97,8 @@ export type CatalogRecipe = {
   proposalsInstead?: string
 }
 
+export type Drift = { output: string; built: string; disk: string; simulated: boolean }
+
 export type PreviewBuild = {
   outputs: OutputInfo[]
   usedBy: Record<string, string[]>
@@ -139,6 +141,7 @@ export const api = {
   build: (rerun = false) => call<PreviewBuild>("/api/build", rerun ? { method: "POST" } : undefined),
   variables: () => call<VarFact[]>("/api/variables"),
   recipes: () => call<CatalogRecipe[]>("/api/recipes"),
+  drift: (id: string) => call<{ drift: Drift | null }>(`/api/drift?id=${encodeURIComponent(id)}`),
   output: (path: string) => call<{ content: string }>(`/api/output?path=${encodeURIComponent(path)}`),
 }
 
