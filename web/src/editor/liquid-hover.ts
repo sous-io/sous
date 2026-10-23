@@ -19,7 +19,33 @@ export function variableHover(getVars: () => Record<string, string>, getFacts: (
     while (end < text.length && /[\w]/.test(text[end])) end++
     const name = text.slice(start, end)
     const vars = getVars()
-    if (!name || !(name in vars)) return null
+    if (!name) return null
+    if (!(name in vars)) {
+      // Set by this template itself: show where.
+      const doc = view.state.doc.toString()
+      const set = new RegExp(`\\{%-?\\s*(assign|capture|for|getFiles)\\s+${name}\\b[^%]*%\\}`).exec(doc)
+      if (!set) return null
+      return {
+        pos: line.from + start,
+        end: line.from + end,
+        above: true,
+        create: () => {
+          const dom = document.createElement("div")
+          dom.className = "cm-var-hover"
+          const head = document.createElement("div")
+          head.className = "cm-var-hover-name"
+          head.textContent = name
+          const from = document.createElement("div")
+          from.className = "cm-var-hover-from"
+          from.textContent = `Set in this file, on line ${view.state.doc.lineAt(set.index).number}:`
+          const code = document.createElement("div")
+          code.className = "cm-var-hover-value"
+          code.textContent = set[0].length > 120 ? set[0].slice(0, 120) + "…" : set[0]
+          dom.append(head, from, code)
+          return { dom }
+        },
+      }
+    }
     const fact = getFacts()[name]
     return {
       pos: line.from + start,
