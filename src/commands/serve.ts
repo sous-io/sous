@@ -16,6 +16,7 @@ import { readCatalog } from "../lib/serve/catalog.js";
 import { findDrift } from "../lib/serve/drift.js";
 import { configReport } from "../lib/serve/config-layers.js";
 import { resolveIncludes } from "../lib/serve/includes.js";
+import { startLive } from "../lib/serve/live.js";
 import { lastPreviewBuild } from "../lib/serve/preview-build.js";
 import { heading, log, showCommandVars } from "../utils/formatting.js";
 
@@ -80,7 +81,19 @@ export default class Serve extends BaseCommand {
     let variables: Promise<VarFact[]> | null = null;
     const base = server.listeners("request") as ((req: http.IncomingMessage, res: http.ServerResponse) => void)[];
     server.removeAllListeners("request");
+    const live = startLive(workspace);
     server.on("request", (req: http.IncomingMessage, res: http.ServerResponse) => {
+      if (req.url?.startsWith("/api/events")) {
+        // EventSource can't send headers, so this one route takes the token in the URL.
+        const given = new URL(req.url, "http://127.0.0.1").searchParams.get("token");
+        if (given !== token) {
+          res.writeHead(401);
+          res.end();
+          return;
+        }
+        live.handle(req, res);
+        return;
+      }
       if (req.url?.startsWith("/api/includes") && req.method === "POST") {
         if (req.headers["x-sous-token"] !== token) {
           res.writeHead(401, { "content-type": "application/json" });

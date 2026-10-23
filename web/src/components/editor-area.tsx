@@ -188,12 +188,12 @@ function OriginBanner({ file }: { file: WorkspaceFile }) {
         project
       </Badge>
       <span className="text-muted-foreground">
-        A file in this project. Changes are committed to <b className="text-foreground">{branch}</b>.
+        A file in this project. Your edits are saved here, on <b className="text-foreground">{branch}</b>.
       </span>
       {usedChip}
       {changed && (
         <Button size="xs" variant="outline" className="ml-auto" onClick={() => openContribute(file.id)}>
-          <GitPullRequestArrowIcon /> Commit &amp; open PR
+          <GitPullRequestArrowIcon /> Review &amp; save
         </Button>
       )}
     </div>
@@ -356,6 +356,25 @@ export function EditorArea() {
             </div>
           </div>
           <OriginBanner file={file} />
+          {doc.diskChanged !== undefined && (
+            <div className="flex items-center gap-2 border-b bg-warning/12 px-4 py-1.5 text-xs">
+              <TriangleAlertIcon className="size-3.5 shrink-0 text-warning" />
+              <span>
+                <b>This file changed on disk</b> while you were editing it.{" "}
+                <span className="text-muted-foreground">Someone (or an agent) saved a new version.</span>
+              </span>
+              <Button size="xs" className="ml-auto" onClick={() => useStore.getState().reloadFromDisk(file.id)}>
+                Reload from disk
+              </Button>
+              <Button
+                size="xs"
+                variant="ghost"
+                onClick={() => useStore.setState((s) => ({ docs: { ...s.docs, [file.id]: { ...s.docs[file.id], diskChanged: undefined } } }))}
+              >
+                Keep mine
+              </Button>
+            </div>
+          )}
           <DriftBanner fileId={file.id} />
           <UndeclaredBanner file={file} />
           <div className="relative min-h-0 flex-1">

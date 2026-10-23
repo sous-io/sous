@@ -143,12 +143,26 @@ function Header() {
             "No changes yet"
           )}
         </Button>
+        <LiveDot />
         <Button size="icon-sm" variant="ghost" onClick={toggleTheme} title="Light or dark">
           <SunIcon className="hidden dark:block" />
           <MoonIcon className="dark:hidden" />
         </Button>
       </div>
     </header>
+  )
+}
+
+function LiveDot() {
+  const live = useStore((s) => s.live)
+  return (
+    <span
+      className="flex items-center gap-1.5 px-1 text-[11px] text-muted-foreground"
+      title={live.up ? `Watching ${live.watching} files on disk; changes show up here as they happen` : "Not connected to sous serve"}
+    >
+      <span className={cn("size-2 rounded-full", live.up ? "animate-pulse bg-success" : "bg-muted-foreground/40")} />
+      <span className="max-[1400px]:hidden">{live.up ? "Live" : "Offline"}</span>
+    </span>
   )
 }
 

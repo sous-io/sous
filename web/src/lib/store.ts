@@ -1,4 +1,5 @@
 import { create } from "zustand"
+import { toast } from "sonner"
 import { api, type VarFact, type CatalogRecipe, type PreviewBuild, type RenderResult, type WorkspaceInfo } from "./api"
 import { SEED_PROPOSALS, type Proposal } from "@/mock/data"
 
@@ -20,6 +21,8 @@ export type OpenDoc = {
   proposedIn?: string
   /** The text as it was when it was last sent. */
   proposedContent?: string
+  /** The file changed on disk while you had edits open: what's on disk now. */
+  diskChanged?: string
 }
 
 type State = {
@@ -31,6 +34,9 @@ type State = {
   builtins: string[]
   /** The variables report, by name, loaded in the background. */
   varFacts: Record<string, VarFact>
+  /** Whether the live connection to `sous serve` is up, and how many files it watches. */
+  live: { up: boolean; watching: number }
+  reloadFromDisk: (id: string) => void
   loadError: string | null
   page: Page
   mode: Mode
@@ -74,6 +80,14 @@ export const useStore = create<State>((set, get) => ({
   catalog: null,
   builtins: [],
   varFacts: {},
+  live: { up: false, watching: 0 },
+  reloadFromDisk: (id) => {
+    const doc = get().docs[id]
+    if (!doc?.diskChanged) return
+    const text = doc.diskChanged
+    set((s) => ({ docs: { ...s.docs, [id]: { ...doc, original: text, current: text, diskChanged: undefined, rendering: true } } }))
+    api.render(id, text).then((render) => set((s) => ({ docs: { ...s.docs, [id]: { ...s.docs[id], render, originalRender: render, rendering: false } } })))
+  },
   loadError: null,
   page: "editor",
   mode: "rendered",
@@ -98,6 +112,7 @@ export const useStore = create<State>((set, get) => ({
       api.recipes().then((catalog) => set({ catalog })).catch(() => {})
       api.builtins().then((builtins) => set({ builtins })).catch(() => {})
       api.variables().then((facts) => set({ varFacts: Object.fromEntries(facts.map((f) => [f.name, f])) })).catch(() => {})
+      connectLive(set, get)
     } catch (error) {
       set({ loadError: (error as Error).message })
     }
@@ -179,6 +194,41 @@ export const useStore = create<State>((set, get) => ({
     }),
   jumpTo: (id, region) => set({ jump: { id, region, nonce: Date.now() } }),
 }))
+
+/** Listens to `sous serve` for files changing on disk. */
+function connectLive(set: (p: Partial<State> | ((s: State) => Partial<State>)) => void, get: () => State) {
+  let token = ""
+  try {
+    token = new URLSearchParams(window.location.search).get("token") ?? sessionStorage.getItem("sous-token") ?? ""
+  } catch {
+    token = new URLSearchParams(window.location.search).get("token") ?? ""
+  }
+  const events = new EventSource(`/api/events?token=${encodeURIComponent(token)}`)
+  events.onerror = () => set({ live: { ...get().live, up: false } })
+  events.onmessage = async (message) => {
+    const event = JSON.parse(message.data) as { type: string; id?: string; path?: string; watching?: number }
+    if (event.type === "hello") set({ live: { up: true, watching: event.watching ?? 0 } })
+    if (event.type === "build") api.build().then((build) => set({ build })).catch(() => {})
+    if (event.type === "source" && event.id) {
+      const doc = get().docs[event.id]
+      if (!doc) return
+      const payload = await api.file(event.id)
+      if (payload.content === doc.original) return
+      if (doc.current === doc.original) {
+        // Not edited here: take the new text from disk.
+        set((s) => ({
+          docs: {
+            ...s.docs,
+            [event.id!]: { ...doc, original: payload.content, current: payload.content, render: payload.render, originalRender: payload.render },
+          },
+        }))
+        toast(`${event.path} changed on disk, and was reloaded.`)
+      } else {
+        set((s) => ({ docs: { ...s.docs, [event.id!]: { ...s.docs[event.id!], diskChanged: payload.content } } }))
+      }
+    }
+  }
+}
 
 /** Ids of changed files with edits that no proposal carries yet: never sent, or edited since. */
 export function unsentIds(docs: Record<string, OpenDoc>): string[] {
