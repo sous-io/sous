@@ -136,7 +136,7 @@ function OriginBanner({ file }: { file: WorkspaceFile }) {
         <GitPullRequestArrowIcon className="size-3.5 text-success" />
         <span>
           Proposed in <b>#{proposal?.number}</b> “{proposal?.title}”.{" "}
-          {more ? "You've edited it since; Send changes adds the new edits to it." : "Edit it again to add to the same proposal."}
+          {more ? "You've edited it since; Propose adds the new edits to it." : "Edit it again to add to the same proposal."}
         </span>
         {more && (
           <Button size="xs" className="ml-auto" onClick={() => openContribute(file.id)}>
@@ -163,7 +163,7 @@ function OriginBanner({ file }: { file: WorkspaceFile }) {
         {usedChip}
         {changed && (
           <Button size="xs" className="ml-auto" onClick={() => openContribute(file.id)}>
-            <GitPullRequestArrowIcon /> Propose upstream
+            <GitPullRequestArrowIcon /> Propose
           </Button>
         )}
       </div>

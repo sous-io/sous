@@ -67,7 +67,7 @@ const STEPS: Step[] = [
     page: "editor",
     file: "sample",
     target: "[data-tour=send]",
-    title: "Send it upstream",
+    title: "Propose it upstream",
     body: "Edit a recipe file and this button turns your edits into a pull request: checks, diff against upstream, version raise and description, in one dialog.",
   },
   {

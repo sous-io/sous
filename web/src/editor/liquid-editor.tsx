@@ -111,7 +111,7 @@ export function LiquidEditor({ fileId, visible }: Props) {
                 const f = useStore.getState().workspace?.files.find((x) => x.id === fileId)
                 toast(
                   f?.origin.kind === "recipe"
-                    ? "Recipe edits stay in this tab until you propose them: press Send in the header."
+                    ? "Recipe edits stay in this tab until you propose them: press Review changes in the header."
                     : "Saving to disk is turned off in this proof of concept. Your edit stays in this tab.",
                 )
                 return true

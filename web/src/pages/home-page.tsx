@@ -109,8 +109,8 @@ export function HomePage() {
       tone: "warning",
       icon: GitPullRequestArrowIcon,
       title: `${unsent.length} edited file${unsent.length === 1 ? "" : "s"} not sent yet`,
-      detail: "Your edits only live in this tab. Send them upstream, or they're gone when you close it.",
-      action: { label: "Send changes", run: () => openContribute() },
+      detail: "Your edits only live in this tab. Propose them upstream, or they're gone when you close it.",
+      action: { label: "Review changes", run: () => openContribute() },
     })
   }
   for (const r of updates) {
@@ -177,7 +177,7 @@ export function HomePage() {
               </Button>
               {unsent.length > 0 && (
                 <Button variant="outline" onClick={() => openContribute()}>
-                  <GitPullRequestArrowIcon /> Send {unsent.length} change{unsent.length === 1 ? "" : "s"}
+                  <GitPullRequestArrowIcon /> Review {unsent.length} change{unsent.length === 1 ? "" : "s"}
                 </Button>
               )}
             </div>
@@ -264,8 +264,8 @@ export function HomePage() {
               },
               {
                 icon: GitPullRequestArrowIcon,
-                title: "Send a fix upstream",
-                body: "Open any recipe file, fix a word, and press Send changes. Sous drafts the pull request.",
+                title: "Propose a fix upstream",
+                body: "Open any recipe file, fix a word, and press Review changes. Sous drafts the pull request.",
                 run: () => {
                   const f = files.find((x) => x.display.endsWith("about-speaking-plainly/SKILL.tpl.md")) ?? files.find((x) => x.origin.kind === "recipe")
                   if (f) open(f.id)

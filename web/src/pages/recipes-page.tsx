@@ -137,7 +137,7 @@ function RecipeCard({ r }: { r: CatalogRecipe }) {
                       // Nothing edited yet: start where an edit happens, in the recipe's files.
                       setFilter(`${r.namespace}/${r.name}/`)
                       setPage("editor")
-                      toast(`Edit any file of ${r.namespace}/${r.name}, then press Send in the header to propose it.`)
+                      toast(`Edit any file of ${r.namespace}/${r.name}, then press Review changes in the header to propose it.`)
                     }}
                   >
                     <GitPullRequestArrowIcon /> {r.acceptsProposals ? "Contribute" : "Contribute (to sous)"}

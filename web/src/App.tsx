@@ -137,11 +137,10 @@ function Header() {
           <GitPullRequestArrowIcon />
           {unsent.length ? (
             <>
-              Send changes
-              <span className="rounded-full bg-primary-foreground/20 px-1.5 text-[11px]">{unsent.length}</span>
+              Review {unsent.length} change{unsent.length === 1 ? "" : "s"}
             </>
           ) : (
-            "Nothing to send"
+            "No changes yet"
           )}
         </Button>
         <Button size="icon-sm" variant="ghost" onClick={toggleTheme} title="Light or dark">
@@ -176,7 +175,7 @@ function Palette() {
   }
   const state = useStore.getState
   const commands: { label: string; hint: string; icon: typeof SquarePenIcon; run: () => void }[] = [
-    { label: "Send changes upstream", hint: "Open the send dialog", icon: GitPullRequestArrowIcon, run: () => state().openContribute() },
+    { label: "Review and propose changes", hint: "Open the review dialog", icon: GitPullRequestArrowIcon, run: () => state().openContribute() },
     { label: "Take the tour", hint: "One minute, ten stops", icon: SquarePenIcon, run: () => useTour.getState().start() },
     { label: "Show rendered Liquid", hint: "Editor mode", icon: SquarePenIcon, run: () => state().setMode("rendered") },
     { label: "Show template source", hint: "Editor mode", icon: FileCode2Icon, run: () => state().setMode("source") },
