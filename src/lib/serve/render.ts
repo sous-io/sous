@@ -22,6 +22,12 @@ export type Region = {
   label: string;
   /** Source text of the opening tag (or the whole output), e.g. `{% if x == "y" %}`. */
   head: string;
+  /** For if/unless/case/for blocks: each branch's tag text (a for's body is "body"). */
+  branches?: string[];
+  /** How many times each branch ran (a for's body count is its number of loops). */
+  ran?: number[];
+  /** Where each branch's content starts in the source (not sent to the browser). */
+  branchPoints?: number[];
   rendered: string;
 };
 
@@ -40,6 +46,13 @@ export type RenderResult = {
 
 const ALWAYS_BLOCKS = new Set(["if", "unless", "for", "case", "capture", "raw", "comment", "tablerow"]);
 
+/** Where a branch's content starts: after the tag, and after the whitespace a `-%}` trims. */
+function branchStart(source: string, token: TagToken): number {
+  let pos = token.end;
+  if (token.getText().endsWith("-%}")) while (pos < source.length && /\s/.test(source[pos])) pos++;
+  return pos;
+}
+
 export function findRegions(source: string, engine: Liquid): Omit<Region, "rendered">[] {
   const tokens = new Tokenizer(source, engine.options.operators).readTopLevelTokens(engine.options);
   const closers = new Set(
@@ -48,7 +61,9 @@ export function findRegions(source: string, engine: Liquid): Omit<Region, "rende
   const isBlock = (name: string) => ALWAYS_BLOCKS.has(name) || closers.has(name);
 
   const regions: Omit<Region, "rendered">[] = [];
-  const stack: { name: string; begin: number; head: string }[] = [];
+  const stack: { name: string; begin: number; head: string; branches: string[]; points: number[] }[] = [];
+  const BRANCHING = new Set(["if", "unless", "case", "for", "tablerow"]);
+  const INTERMEDIATE = new Set(["elsif", "else", "when"]);
 
   for (const token of tokens) {
     if (token.kind === TokenKind.Output) {
@@ -72,15 +87,35 @@ export function findRegions(source: string, engine: Liquid): Omit<Region, "rende
         const top = stack.pop()!;
         if (top.name === open) {
           if (stack.length === 0) {
-            regions.push({ from: top.begin, to: token.end, kind: "block", label: open, head: top.head });
+            const branching = BRANCHING.has(open) && top.points.length > 0;
+            regions.push({
+              from: top.begin,
+              to: token.end,
+              kind: "block",
+              label: open,
+              head: top.head,
+              ...(branching ? { branches: top.branches, branchPoints: top.points } : {}),
+            });
           }
           break;
         }
       }
       continue;
     }
+    if (INTERMEDIATE.has(name) && stack.length === 1 && BRANCHING.has(stack[0].name)) {
+      stack[0].branches.push(token.getText());
+      stack[0].points.push(branchStart(source, token));
+      continue;
+    }
     if (isBlock(name)) {
-      stack.push({ name, begin: token.begin, head: token.getText() });
+      const opens = stack.length === 0 && BRANCHING.has(name) && name !== "case";
+      stack.push({
+        name,
+        begin: token.begin,
+        head: token.getText(),
+        branches: opens ? [name === "for" || name === "tablerow" ? "body" : token.getText()] : [],
+        points: opens ? [branchStart(source, token)] : [],
+      });
       continue;
     }
     if (stack.length === 0) {
@@ -150,12 +185,19 @@ export async function renderTemplate(
   const start = (i: number) => `⁣S${nonce}:${i}⁣`;
   const end = (i: number) => `⁣E${nonce}:${i}⁣`;
 
+  const branch = (i: number, b: number) => `\u2063B${nonce}:${i}:${b}\u2063`;
+  const inserts: { pos: number; text: string }[] = [];
+  found.forEach((region, i) => {
+    inserts.push({ pos: region.from, text: start(i) });
+    region.branchPoints?.forEach((p, b) => inserts.push({ pos: p, text: branch(i, b) }));
+    inserts.push({ pos: region.to, text: end(i) });
+  });
   let marked = "";
   let last = 0;
-  found.forEach((region, i) => {
-    marked += source.slice(last, region.from) + start(i) + source.slice(region.from, region.to) + end(i);
-    last = region.to;
-  });
+  for (const ins of inserts) {
+    marked += source.slice(last, ins.pos) + ins.text;
+    last = ins.pos;
+  }
   marked += source.slice(last);
 
   let rendered: string;
@@ -181,9 +223,13 @@ export async function renderTemplate(
   rendered = maskSecrets(rendered, secrets);
 
   // Cut the rendered text at the markers, building the clean output as we go.
-  const regions: Region[] = found.map((r) => ({ ...r, rendered: "" }));
+  const regions: Region[] = found.map(({ branchPoints, ...r }) => ({
+    ...r,
+    rendered: "",
+    ...(branchPoints ? { ran: branchPoints.map(() => 0) } : {}),
+  }));
   const segments: RenderResult["segments"] = [];
-  const markerPattern = new RegExp(`⁣([SE])${nonce}:(\\d+)⁣`, "g");
+  const markerPattern = new RegExp(`\u2063([SEB])${nonce}:(\\d+)(?::(\\d+))?\u2063`, "g");
   let output = "";
   let cursor = 0;
   const openAt = new Map<number, number>();
@@ -191,7 +237,10 @@ export async function renderTemplate(
     output += rendered.slice(cursor, match.index);
     cursor = match.index! + match[0].length;
     const index = Number(match[2]);
-    if (match[1] === "S") {
+    if (match[1] === "B") {
+      const ran = regions[index].ran;
+      if (ran) ran[Number(match[3])]++;
+    } else if (match[1] === "S") {
       openAt.set(index, output.length);
     } else {
       const begin = openAt.get(index) ?? output.length;

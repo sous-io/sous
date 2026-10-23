@@ -40,6 +40,8 @@ export type Region = {
   label: string
   head: string
   rendered: string
+  branches?: string[]
+  ran?: number[]
 }
 
 export type RenderResult = {

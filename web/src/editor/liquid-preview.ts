@@ -100,8 +100,20 @@ function caretFor(state: EditorState, region: Region): number {
   return Math.max(region.from, pos)
 }
 
-/** "+1 hidden branch" for an if/unless/case block with branches that didn't run. */
+/** What a branching block did with these values: "×5" for a loop, "else · 1 other" for an if. */
 function branchNote(state: EditorState, region: Region): string | null {
+  if (region.ran && region.branches) {
+    if (region.label === "for" || region.label === "tablerow") {
+      const loops = region.ran[0] ?? 0
+      const elseRan = region.ran.length > 1 && region.ran[1] > 0
+      return elseRan ? "empty: else ran" : `×${loops}`
+    }
+    const taken = region.ran.findIndex((n) => n > 0)
+    const others = region.branches.length - (taken === -1 ? 0 : 1)
+    if (taken === -1) return `no branch ran${region.branches.length > 1 ? ` · ${region.branches.length} hidden` : ""}`
+    const label = taken === 0 && region.label !== "case" ? "first branch" : inner(region.branches[taken])
+    return others > 0 ? `showing ${label} · ${others} hidden` : null
+  }
   if (!["if", "unless", "case"].includes(region.label)) return null
   const src = state.doc.sliceString(region.from, region.to)
   const branches = (src.match(/\{%-?\s*(elsif|else|when)\b/g) ?? []).length
