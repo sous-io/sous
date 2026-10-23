@@ -15,8 +15,11 @@ export type OpenDoc = {
   rendering: boolean
   /** Variable values tried out for this file only (never saved). */
   overrides: Record<string, string>
-  /** Set once the edit has been proposed upstream (mock). */
+  /** The proposal (mock) this file's edits were sent in, if any. Edits made after
+   * that are additions to the same proposal, until it is merged. */
   proposedIn?: string
+  /** The text as it was when it was last sent. */
+  proposedContent?: string
 }
 
 type State = {
@@ -133,7 +136,7 @@ export const useStore = create<State>((set, get) => ({
       return { tabs, activeId }
     }),
   edit: (id, source) =>
-    set((s) => ({ docs: { ...s.docs, [id]: { ...s.docs[id], current: source, proposedIn: undefined } } })),
+    set((s) => ({ docs: { ...s.docs, [id]: { ...s.docs[id], current: source } } })),
   setRender: (id, source, render) =>
     set((s) => {
       const doc = s.docs[id]
@@ -146,18 +149,25 @@ export const useStore = create<State>((set, get) => ({
   setRendering: (id, rendering) =>
     set((s) => (s.docs[id] ? { docs: { ...s.docs, [id]: { ...s.docs[id], rendering } } } : {})),
   revert: (id) =>
-    set((s) => ({ docs: { ...s.docs, [id]: { ...s.docs[id], current: s.docs[id].original, proposedIn: undefined } } })),
+    set((s) => ({
+      docs: { ...s.docs, [id]: { ...s.docs[id], current: s.docs[id].original, proposedIn: undefined, proposedContent: undefined } },
+    })),
   openContribute: (focus = null) => set({ contributeOpen: true, contributeFocus: focus }),
   closeContribute: () => set({ contributeOpen: false }),
   setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
   addProposal: (proposal, fileIds) =>
     set((s) => {
       const docs = { ...s.docs }
-      for (const id of fileIds) if (docs[id]) docs[id] = { ...docs[id], proposedIn: proposal.id }
+      for (const id of fileIds) if (docs[id]) docs[id] = { ...docs[id], proposedIn: proposal.id, proposedContent: docs[id].current }
       return { proposals: [proposal, ...s.proposals], docs }
     }),
   jumpTo: (id, region) => set({ jump: { id, region, nonce: Date.now() } }),
 }))
+
+/** Ids of changed files with edits that no proposal carries yet: never sent, or edited since. */
+export function unsentIds(docs: Record<string, OpenDoc>): string[] {
+  return changedIds(docs).filter((id) => docs[id].proposedContent !== docs[id].current)
+}
 
 /** Ids of open files whose text differs from what is on disk. */
 export function changedIds(docs: Record<string, OpenDoc>): string[] {

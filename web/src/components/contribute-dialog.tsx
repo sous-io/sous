@@ -31,7 +31,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Kbd } from "@/components/ui/kbd"
 import type { WorkspaceFile } from "@/lib/api"
-import { changedIds, useStore, type OpenDoc } from "@/lib/store"
+import { unsentIds, useStore, type OpenDoc } from "@/lib/store"
 import { cn } from "@/lib/utils"
 import { bump, contributionBranch, type Proposal } from "@/mock/data"
 
@@ -496,7 +496,7 @@ export function ContributeDialog() {
 
   useEffect(() => {
     if (!open || !workspace) return
-    const ids = changedIds(docs).filter((id) => !docs[id].proposedIn)
+    const ids = unsentIds(docs)
     const groups = groupChanges(workspace.files, ids, workspace.branch, workspace.projectName)
     setFrozen(groups)
     const focusFile = workspace.files.find((f) => f.id === focus)

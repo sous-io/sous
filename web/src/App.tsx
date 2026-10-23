@@ -35,7 +35,7 @@ import { Explorer } from "@/components/explorer"
 import { RecipesPage, VariablesPage } from "@/pages/overview-pages"
 import { BuildPage, ContextPage } from "@/pages/build-context"
 import { ProposalsPage } from "@/pages/proposals"
-import { changedIds, useStore, type Page } from "@/lib/store"
+import { unsentIds, useStore, type Page } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
 const NAV: { page: Page; label: string; icon: typeof SquarePenIcon }[] = [
@@ -55,7 +55,7 @@ function Header() {
   const proposals = useStore((s) => s.proposals)
   const openContribute = useStore((s) => s.openContribute)
   const setPaletteOpen = useStore((s) => s.setPaletteOpen)
-  const unsent = changedIds(docs).filter((id) => !docs[id].proposedIn)
+  const unsent = unsentIds(docs)
   const openProposals = proposals.filter((p) => p.stage !== "released").length
 
   const toggleTheme = () => document.documentElement.classList.toggle("dark")
