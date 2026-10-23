@@ -27,6 +27,7 @@ import { Kbd } from "@/components/ui/kbd"
 import { LiquidEditor } from "@/editor/liquid-editor"
 import { Inspector, useActiveRegion } from "@/components/inspector"
 import { DriftBanner } from "@/components/drift"
+import { ShareRecipeButton } from "@/components/share-recipe"
 import { UndeclaredBanner } from "@/components/undeclared"
 import type { Region, WorkspaceFile } from "@/lib/api"
 import { useStore, type Mode } from "@/lib/store"
@@ -327,6 +328,7 @@ export function EditorArea() {
                   <TooltipContent>Discard my changes to this file</TooltipContent>
                 </Tooltip>
               )}
+              <ShareRecipeButton file={file} />
               {file.isTpl && (
                 <ToggleGroup
                   value={[mode]}

@@ -160,7 +160,7 @@ function PrRow({ pr }: { pr: MyPr }) {
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11.5px] text-muted-foreground">
           <span className={cn("rounded-full px-1.5 py-px text-[10.5px] font-semibold", s.chip)}>{s.label}</span>
-          <span className="flex max-w-48 items-center gap-1 truncate font-mono text-[11px]" title={pr.branch}>
+          <span className="flex max-w-44 items-center gap-1 truncate font-mono text-[11px]" title={pr.branch}>
             <GitBranchIcon className="size-3 shrink-0" />
             <span className="truncate">{pr.branch}</span>
           </span>
@@ -202,8 +202,9 @@ function RepoCard({ r: repo, filter }: { r: MyPrsRepo; filter: Filter }) {
   const r = { ...repo, prs: repo.prs.filter((p) => matches(p, filter)) }
   const live = r.prs.filter((p) => p.state === "open" || p.state === "draft")
   const rest = r.prs.filter((p) => p.state !== "open" && p.state !== "draft")
-  const merged = r.prs.filter((p) => p.state === "merged").length
-  const sous = r.prs.filter((p) => p.madeWithSous).length
+  const liveAll = repo.prs.filter((p) => p.state === "open" || p.state === "draft").length
+  const merged = repo.prs.filter((p) => p.state === "merged").length
+  const sous = repo.prs.filter((p) => p.madeWithSous).length
   const shownRest = all ? rest : rest.slice(0, Math.max(0, FOLD - live.length))
   const hidden = rest.length - shownRest.length
   return (
@@ -226,7 +227,7 @@ function RepoCard({ r: repo, filter }: { r: MyPrsRepo; filter: Filter }) {
           </div>
           {r.ok && repo.prs.length > 0 && (
             <div className="mt-0.5 text-[11.5px] text-muted-foreground">
-              {live.length ? <b className="font-medium text-success">{live.length} open</b> : "none open"} · {merged} merged
+              {liveAll ? <b className="font-medium text-success">{liveAll} open</b> : "nothing open"} · {merged} merged
               {repo.prs.length >= 20 ? " · your latest 20" : ""}
               {sous ? ` · ${sous} made with sous` : ""}
             </div>
@@ -325,15 +326,16 @@ export function MyPullRequests() {
         <div className="min-w-0 flex-1">
           <h2 className="flex items-center gap-2 text-sm font-semibold">
             Your pull requests on GitHub
-            <span className="flex items-center gap-1 rounded-full bg-success/12 px-1.5 py-px text-[10px] font-semibold tracking-wide text-success uppercase">
-              <span className="size-1.5 rounded-full bg-success" /> live
-            </span>
+            {data?.gh.signedIn && (
+              <span className="flex items-center gap-1 rounded-full bg-success/12 px-1.5 py-px text-[10px] font-semibold tracking-wide text-success uppercase">
+                <span className="size-1.5 rounded-full bg-success" /> live
+              </span>
+            )}
           </h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
             {data?.gh.signedIn ? (
               <>
-                By <b className="font-medium text-foreground">@{data.gh.account}</b> on the repositories this project uses
-                {all.length ? ` · ${openCount} open of ${all.length}` : ""} · refreshed {ago(data.at)}
+                By <b className="font-medium text-foreground">@{data.gh.account}</b> on the repos this project uses · {ago(data.at)}
               </>
             ) : (
               "Read with gh pr list, on the repositories this project uses. Nothing here writes to GitHub."

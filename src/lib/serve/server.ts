@@ -92,6 +92,10 @@ export function createServer(workspace: Workspace, distDir: string, token: strin
           const ids = (url.searchParams.get("ids") ?? "").split(",").filter(Boolean);
           return sendJson(res, 200, await contributeInfo(workspace, ids));
         }
+        if (url.pathname === "/api/my-prs") {
+          const { myPrs } = await import("./contribute-info.js");
+          return sendJson(res, 200, await myPrs(workspace, url.searchParams.has("fresh")));
+        }
         if (url.pathname === "/api/build") {
           if (req.method === "POST") build = runPreviewBuild(workspace);
           return sendJson(res, 200, await build);

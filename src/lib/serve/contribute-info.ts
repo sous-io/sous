@@ -363,3 +363,145 @@ export function scanSecrets(
   }
   return { hits };
 }
+
+/**
+ * The signed-in account's pull requests on every repository this project draws
+ * from: each recipe repository, plus the project's own. Read-only (`gh pr list`).
+ *
+ * GET /api/my-prs
+ */
+export type MyPr = {
+  number: number;
+  title: string;
+  state: "open" | "draft" | "merged" | "closed";
+  branch: string;
+  url: string;
+  createdAt: string;
+  updatedAt: string;
+  mergedAt: string | null;
+  review: "approved" | "changes" | "required" | null;
+  checks: { passing: number; failing: number; pending: number; skipped: number };
+  additions: number;
+  deletions: number;
+  changedFiles: number;
+  madeWithSous: boolean;
+};
+
+export type MyPrsRepo = {
+  key: string;
+  owner: string;
+  repo: string;
+  role: "recipes" | "project";
+  ok: boolean;
+  error?: string;
+  prs: MyPr[];
+};
+
+export type MyPrs = { gh: GhStatus; repos: MyPrsRepo[]; ms: number; at: string };
+
+type GhPr = {
+  number: number;
+  title: string;
+  state: string;
+  isDraft: boolean;
+  headRefName: string;
+  url: string;
+  createdAt: string;
+  updatedAt: string;
+  mergedAt: string | null;
+  reviewDecision: string;
+  additions: number;
+  deletions: number;
+  changedFiles: number;
+  statusCheckRollup: { conclusion?: string; status?: string; state?: string }[] | null;
+};
+
+function checkSummary(rollup: GhPr["statusCheckRollup"]): MyPr["checks"] {
+  const out = { passing: 0, failing: 0, pending: 0, skipped: 0 };
+  for (const c of rollup ?? []) {
+    // CheckRun has status+conclusion; StatusContext has state.
+    const v = String(c.conclusion || c.state || c.status || "").toUpperCase();
+    if (v === "SUCCESS" || v === "NEUTRAL") out.passing++;
+    else if (v === "SKIPPED" || v === "CANCELLED" || v === "STALE") out.skipped++;
+    else if (["FAILURE", "ERROR", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE"].includes(v)) out.failing++;
+    else out.pending++;
+  }
+  return out;
+}
+
+function parseRemote(url: string): { owner: string; repo: string } | null {
+  const m = /github\.com[:/]([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/.exec(url.trim());
+  return m ? { owner: m[1], repo: m[2] } : null;
+}
+
+export async function myPrs(workspace: Workspace, fresh = false): Promise<MyPrs> {
+  if (fresh) cache.delete("my-prs");
+  return cached("my-prs", async () => {
+    const started = Date.now();
+    const repos = new Map<string, { owner: string; repo: string; role: MyPrsRepo["role"] }>();
+    for (const f of workspace.files) {
+      if (f.origin.kind !== "recipe" || f.origin.host !== "github.com") continue;
+      repos.set(`${f.origin.owner}/${f.origin.repo}`, { owner: f.origin.owner, repo: f.origin.repo, role: "recipes" });
+    }
+    const remote = await run("git", ["remote", "get-url", "origin"], 2000, workspace.projectRoot);
+    let own = remote.ok ? parseRemote(remote.stdout) : null;
+    if (!own) {
+      const v = workspace.files.map((f) => f.vars?.githubRepo).find((x) => typeof x === "string") as string | undefined;
+      const m = v ? /([\w.-]+)\/([\w.-]+)$/.exec(v.replace(/\.git$/, "")) : null;
+      if (m) own = { owner: m[1], repo: m[2] };
+    }
+    if (own) repos.set(`${own.owner}/${own.repo}`, { ...own, role: "project" });
+
+    const gh = await ghStatus("github.com");
+    const fields =
+      "number,title,state,isDraft,headRefName,url,createdAt,updatedAt,reviewDecision,statusCheckRollup,mergedAt,additions,deletions,changedFiles";
+    const list = await Promise.all(
+      [...repos.values()].map(async (r): Promise<MyPrsRepo> => {
+        const key = `${r.owner}/${r.repo}`;
+        if (!gh.signedIn) return { key, ...r, ok: false, error: "gh is not signed in", prs: [] };
+        const res = await run(
+          "gh",
+          ["pr", "list", "--repo", key, "--author", "@me", "--state", "all", "--limit", "20", "--json", fields],
+          10000
+        );
+        if (!res.ok) return { key, ...r, ok: false, error: res.stderr.split("\n").find((l) => l.trim()) ?? "gh pr list failed", prs: [] };
+        let raw: GhPr[] = [];
+        try {
+          raw = JSON.parse(res.stdout) as GhPr[];
+        } catch {
+          return { key, ...r, ok: false, error: "Couldn't read gh's answer", prs: [] };
+        }
+        const prs = raw.map(
+          (p): MyPr => ({
+            number: p.number,
+            title: p.title,
+            state:
+              p.state === "MERGED" ? "merged" : p.state === "CLOSED" ? "closed" : p.isDraft ? "draft" : "open",
+            branch: p.headRefName,
+            url: p.url,
+            createdAt: p.createdAt,
+            updatedAt: p.updatedAt,
+            mergedAt: p.mergedAt || null,
+            review:
+              p.reviewDecision === "APPROVED"
+                ? "approved"
+                : p.reviewDecision === "CHANGES_REQUESTED"
+                  ? "changes"
+                  : p.reviewDecision === "REVIEW_REQUIRED"
+                    ? "required"
+                    : null,
+            checks: checkSummary(p.statusCheckRollup),
+            additions: p.additions,
+            deletions: p.deletions,
+            changedFiles: p.changedFiles,
+            madeWithSous: p.headRefName.startsWith("sous/edit-"),
+          })
+        );
+        return { key, ...r, ok: true, prs };
+      })
+    );
+    // Recipe repositories first; they're what the GUI sends to.
+    list.sort((a, b) => (a.role === b.role ? a.key.localeCompare(b.key) : a.role === "recipes" ? -1 : 1));
+    return { gh, repos: list, ms: Date.now() - started, at: new Date().toISOString() };
+  });
+}
