@@ -465,7 +465,7 @@ body { overflow: hidden; }
 
 /* ---- @include chips ---- */
 .cm-include-chip {
-  margin-left: 10px; padding: 0 7px; border-radius: 999px;
+  margin-left: 10px; padding: 0 7px; border-radius: 999px; white-space: nowrap;
   font-size: 11px; color: var(--cm-include);
   border: 1px solid color-mix(in oklch, var(--cm-include) 40%, transparent);
   background: color-mix(in oklch, var(--cm-include) 8%, transparent);

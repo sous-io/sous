@@ -102,7 +102,19 @@ export function LiquidEditor({ fileId, visible }: Props) {
           syntaxHighlighting(markdownStyle),
           theme,
           keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
-          liquidCompletion(() => useStore.getState().docs[fileId]?.vars ?? {}),
+          liquidCompletion(
+            () => useStore.getState().docs[fileId]?.vars ?? {},
+            () =>
+              (useStore.getState().workspace?.files ?? []).flatMap((f) => {
+                if (f.id === fileId || !f.display.endsWith(".md")) return []
+                const plain = (p: string) => p.replace(/\.tpl\.md$/, ".md")
+                if (f.origin.kind === "recipe")
+                  return [{ label: `~${f.origin.namespace}/${f.origin.recipe}/${plain(f.origin.recipePath)}`, detail: "recipe file" }]
+                if (f.origin.kind === "project" && f.display.startsWith(".sous/"))
+                  return [{ label: `\${sousDir}/${plain(f.display.slice(".sous/".length))}`, detail: "this project" }]
+                return []
+              }),
+          ),
           liquidPreview({
             onLeaveRegion: () => {
               if (pending.current && view.current) renderNow(view.current.state.doc.toString())

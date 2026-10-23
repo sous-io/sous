@@ -20,6 +20,7 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { RepoAvatar } from "@/components/contribute/avatar"
+import { MyPullRequests } from "@/components/proposals/my-prs"
 import { useStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
 import type { Proposal, ProposalStage } from "@/mock/data"
@@ -223,15 +224,24 @@ export function ProposalsPage() {
     <ScrollArea className="h-full">
       <div className="mx-auto max-w-3xl space-y-7 p-8">
         <div className="space-y-1">
-          <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
-            Proposals
-            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">simulated</span>
-          </h1>
+          <h1 className="text-xl font-semibold tracking-tight">Proposals</h1>
           <p className="text-sm text-muted-foreground">
-            Changes you sent upstream, and where each one is. When one is released, move this project to it from here. The number on the tab counts the
-            ones in progress.
+            Changes you sent upstream, and where each one is. Your real pull requests come first, straight from GitHub; below them are the ones the
+            Send dialog simulated in this session.
           </p>
         </div>
+        <MyPullRequests />
+        <div className="flex items-center gap-3 pt-2">
+          <div className="h-px flex-1 bg-border" />
+          <span className="flex items-center gap-1.5 rounded-full border border-dashed px-2.5 py-1 text-[11px] text-muted-foreground">
+            <FlaskConicalIcon className="size-3" /> Simulated in this session · not on GitHub
+          </span>
+          <div className="h-px flex-1 bg-border" />
+        </div>
+        <p className="-mt-4 text-center text-xs text-muted-foreground">
+          What Send would open, tracked from opened to released. When one is released, move this project to it from here. The number on the tab
+          counts the ones in progress.
+        </p>
         {examplesOnly && (
           <div className="flex items-center gap-3 rounded-xl border border-dashed p-4">
             <span className="grid size-9 place-items-center rounded-full bg-brand/12 text-brand">

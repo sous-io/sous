@@ -48,10 +48,21 @@ const FILTERS: [string, string][] = [
   ["json", "As JSON"],
 ]
 
-export function liquidCompletion(getVars: () => Record<string, string>): Extension {
+export type IncludeTarget = { label: string; detail: string }
+
+export function liquidCompletion(getVars: () => Record<string, string>, getIncludes: () => IncludeTarget[] = () => []): Extension {
   const source = (context: CompletionContext): CompletionResult | null => {
     const line = context.state.doc.lineAt(context.pos)
     const before = line.text.slice(0, context.pos - line.from)
+
+    // An include line: `@` at the start of a line.
+    if (/^@[^\s]*$/.test(before)) {
+      return {
+        from: line.from + 1,
+        options: getIncludes().map((t) => ({ label: t.label, type: "text", detail: t.detail, info: `Includes this file here at build time.` })),
+        validFor: /^[^\s]*$/,
+      }
+    }
     const openOut = before.lastIndexOf("{{")
     const openTag = before.lastIndexOf("{%")
     const closeOut = before.lastIndexOf("}}")
