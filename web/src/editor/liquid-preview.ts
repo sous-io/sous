@@ -22,6 +22,7 @@ import {
   type ViewUpdate,
 } from "@codemirror/view"
 import { completionStatus } from "@codemirror/autocomplete"
+import { syntaxTree } from "@codemirror/language"
 import { diffLines } from "diff"
 import type { Region } from "@/lib/api"
 
@@ -133,7 +134,20 @@ function onActivate(el: HTMLElement, view: EditorView, caret: number) {
   })
 }
 
-type WidgetOpts = { fresh: boolean; caret: number; error: string | null; note: string | null; line: string }
+type WidgetOpts = { fresh: boolean; caret: number; error: string | null; note: string | null; line: string; marks: string }
+
+/** CSS classes for the markdown a section sits inside (heading, bold, inline code), so its output matches. */
+function contextMarks(state: EditorState, pos: number): string {
+  const marks: string[] = []
+  for (let node: ReturnType<ReturnType<typeof syntaxTree>["resolveInner"]> | null = syntaxTree(state).resolveInner(pos, 1); node; node = node.parent) {
+    const n = node.name
+    if (n === "InlineCode") marks.push("cm-in-code")
+    else if (n === "StrongEmphasis") marks.push("cm-in-strong")
+    else if (n === "Emphasis") marks.push("cm-in-em")
+    else if (/^(ATX|Setext)Heading(\d)$/.test(n)) marks.push(`cm-in-h${n.slice(-1)}`)
+  }
+  return marks.join(" ")
+}
 
 /** An `{{ output }}` or inline tag inside a line: just its rendered text. */
 class InlineWidget extends WidgetType {
@@ -150,7 +164,8 @@ class InlineWidget extends WidgetType {
       other.region.from === this.region.from &&
       other.region.head === this.region.head &&
       other.opts.fresh === this.opts.fresh &&
-      other.opts.error === this.opts.error
+      other.opts.error === this.opts.error &&
+      other.opts.marks === this.opts.marks
     )
   }
 
@@ -158,7 +173,7 @@ class InlineWidget extends WidgetType {
     const { region, opts } = this
     const el = document.createElement("span")
     el.className =
-      `cm-liquid-rendered cm-liquid-${region.kind}` + (opts.fresh ? " cm-liquid-fresh" : "") + (opts.error ? " cm-liquid-error" : "")
+      `cm-liquid-rendered cm-liquid-${region.kind} ${opts.marks}` + (opts.fresh ? " cm-liquid-fresh" : "") + (opts.error ? " cm-liquid-error" : "")
     el.dataset.src = opts.error ? `⚠ ${opts.error}` : region.head
     if (region.rendered === "") {
       el.classList.add("cm-liquid-empty")
@@ -359,6 +374,7 @@ function buildDecorations(state: EditorState): DecorationSet {
       error: err,
       note: block ? branchNote(state, region) : null,
       line: String(state.doc.lineAt(region.from).number),
+      marks: block ? "" : contextMarks(state, region.from),
     }
     if (block) {
       ranges.push(Decoration.replace({ widget: new BlockWidget(region, opts), block: true }).range(region.from, region.to))

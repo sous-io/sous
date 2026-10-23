@@ -453,3 +453,12 @@ body { overflow: hidden; }
   background: var(--popover) !important; border: 1px solid var(--border) !important; border-radius: 8px;
   padding: 6px 10px !important; font-size: 12px; max-width: 320px; color: var(--popover-foreground);
 }
+
+/* Output of a section inside markdown styling takes that styling. */
+.cm-in-code { color: var(--cm-code); }
+.cm-in-strong { font-weight: 700; }
+.cm-in-em { font-style: italic; }
+.cm-in-h1 { font-size: 1.45em; font-weight: 700; }
+.cm-in-h2 { font-size: 1.25em; font-weight: 700; }
+.cm-in-h3 { font-size: 1.1em; font-weight: 650; }
+.cm-in-h4, .cm-in-h5, .cm-in-h6 { font-weight: 650; }
