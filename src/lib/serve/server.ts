@@ -14,6 +14,7 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { renderTemplate } from "./render.js";
+import { previewContent, runPreviewBuild, type PreviewBuild } from "./preview-build.js";
 import type { Workspace } from "./workspace.js";
 
 const MIME: Record<string, string> = {
@@ -47,6 +48,7 @@ export function maskVars(vars: Record<string, string>, secretNames: string[]): R
 
 export function createServer(workspace: Workspace, distDir: string, token: string): http.Server {
   const fileById = new Map(workspace.files.map((f) => [f.id, f]));
+  let build: Promise<PreviewBuild> = runPreviewBuild(workspace);
 
   return http.createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
@@ -75,10 +77,24 @@ export function createServer(workspace: Workspace, distDir: string, token: strin
           });
         }
         if (url.pathname === "/api/render" && req.method === "POST") {
-          const { id, source } = JSON.parse(await readBody(req)) as { id: string; source: string };
+          const { id, source, overrides } = JSON.parse(await readBody(req)) as {
+            id: string;
+            source: string;
+            overrides?: Record<string, string>;
+          };
           const file = fileById.get(id);
           if (!file) return sendJson(res, 404, { error: "No such file" });
-          return sendJson(res, 200, await renderTemplate(workspace, file, source));
+          return sendJson(res, 200, await renderTemplate(workspace, file, source, overrides));
+        }
+        if (url.pathname === "/api/build") {
+          if (req.method === "POST") build = runPreviewBuild(workspace);
+          return sendJson(res, 200, await build);
+        }
+        if (url.pathname === "/api/output") {
+          await build;
+          const content = previewContent(url.searchParams.get("path") ?? "");
+          if (content === undefined) return sendJson(res, 404, { error: "No such output" });
+          return sendJson(res, 200, { content });
         }
         return sendJson(res, 404, { error: "Unknown endpoint" });
       } catch (error) {

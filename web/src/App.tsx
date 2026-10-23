@@ -1,5 +1,6 @@
 import { useEffect } from "react"
 import {
+  BotIcon,
   BoxesIcon,
   ChefHatIcon,
   FileCode2Icon,
@@ -31,13 +32,15 @@ import { Kbd } from "@/components/ui/kbd"
 import { ContributeDialog } from "@/components/contribute-dialog"
 import { EditorArea } from "@/components/editor-area"
 import { Explorer } from "@/components/explorer"
-import { BuildPage, RecipesPage, VariablesPage } from "@/pages/overview-pages"
+import { RecipesPage, VariablesPage } from "@/pages/overview-pages"
+import { BuildPage, ContextPage } from "@/pages/build-context"
 import { ProposalsPage } from "@/pages/proposals"
 import { changedIds, useStore, type Page } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
 const NAV: { page: Page; label: string; icon: typeof SquarePenIcon }[] = [
   { page: "editor", label: "Editor", icon: SquarePenIcon },
+  { page: "context", label: "Agent view", icon: BotIcon },
   { page: "variables", label: "Variables", icon: VariableIcon },
   { page: "recipes", label: "Recipes", icon: BoxesIcon },
   { page: "build", label: "Build", icon: HammerIcon },
@@ -229,6 +232,7 @@ export default function App() {
               </ResizablePanel>
             </ResizablePanelGroup>
           )}
+          {page === "context" && <ContextPage />}
           {page === "variables" && <VariablesPage />}
           {page === "recipes" && <RecipesPage />}
           {page === "build" && <BuildPage />}

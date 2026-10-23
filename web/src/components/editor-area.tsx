@@ -25,6 +25,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Kbd } from "@/components/ui/kbd"
 import { LiquidEditor } from "@/editor/liquid-editor"
+import { Inspector, useActiveRegion } from "@/components/inspector"
 import type { Region, WorkspaceFile } from "@/lib/api"
 import { useStore, type Mode } from "@/lib/store"
 import { cn } from "@/lib/utils"
@@ -111,6 +112,13 @@ function OriginBanner({ file }: { file: WorkspaceFile }) {
   const openContribute = useStore((s) => s.openContribute)
   const changed = doc && doc.current !== doc.original
   const o = file.origin
+  const usedBy = useStore((s) => s.build?.usedBy[file.id]?.length ?? 0)
+  const usedChip =
+    file.role === "partial" && usedBy > 0 ? (
+      <span className="shrink-0 rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-medium text-brand" title="See the Used by tab">
+        included in {usedBy} outputs
+      </span>
+    ) : null
 
   if (doc?.proposedIn) {
     const proposal = useStore.getState().proposals.find((p) => p.id === doc.proposedIn)
@@ -137,6 +145,7 @@ function OriginBanner({ file }: { file: WorkspaceFile }) {
           From <b className="text-foreground">{o.namespace}/{o.recipe}</b> {o.version} in {o.owner}/{o.repo}.{" "}
           {changed ? "You changed it; send the change upstream when you're ready." : "Edit freely: sous keeps a copy for you to propose upstream."}
         </span>
+        {usedChip}
         {changed && (
           <Button size="xs" className="ml-auto" onClick={() => openContribute(file.id)}>
             <GitPullRequestArrowIcon /> Propose upstream
@@ -164,6 +173,7 @@ function OriginBanner({ file }: { file: WorkspaceFile }) {
       <span className="text-muted-foreground">
         A file in this project. Changes are committed to <b className="text-foreground">{branch}</b>.
       </span>
+      {usedChip}
       {changed && (
         <Button size="xs" variant="outline" className="ml-auto" onClick={() => openContribute(file.id)}>
           <GitPullRequestArrowIcon /> Commit &amp; open PR
@@ -173,147 +183,11 @@ function OriginBanner({ file }: { file: WorkspaceFile }) {
   )
 }
 
-function OutputPane({ fileId }: { fileId: string }) {
-  const doc = useStore((s) => s.docs[fileId])
-  const jumpTo = useStore((s) => s.jumpTo)
-  const file = useFile(fileId)
-  const [active, setActive] = useState<Region | null>(null)
-  const [filter, setFilter] = useState("")
-
-  useEffect(() => {
-    const onActive = (e: Event) => setActive((e as CustomEvent<Region | null>).detail)
-    window.addEventListener("sous-active-region", onActive)
-    return () => window.removeEventListener("sous-active-region", onActive)
-  }, [])
-
-  if (!doc) return null
-  const { output, segments, regions } = doc.render
-
-  // Split the output into plain text and clickable pieces that came from a Liquid section.
-  const pieces: { text: string; region?: number }[] = []
-  let cursor = 0
-  for (const seg of [...segments].sort((a, b) => a.start - b.start)) {
-    if (seg.start < cursor) continue
-    if (seg.start > cursor) pieces.push({ text: output.slice(cursor, seg.start) })
-    if (seg.end > seg.start) pieces.push({ text: output.slice(seg.start, seg.end), region: seg.region })
-    cursor = seg.end
-  }
-  pieces.push({ text: output.slice(cursor) })
-
-  const vars = Object.entries(doc.vars).filter(([k, v]) => `${k} ${v}`.toLowerCase().includes(filter.toLowerCase()))
-
-  return (
-    <Tabs defaultValue="output" className="h-full gap-0">
-      <div className="flex h-9 items-center border-b px-2">
-        <TabsList variant="line" className="h-8">
-          <TabsTrigger value="output">
-            <EyeIcon /> Output
-          </TabsTrigger>
-          <TabsTrigger value="vars">Variables</TabsTrigger>
-          <TabsTrigger value="history">
-            <HistoryIcon /> History
-          </TabsTrigger>
-        </TabsList>
-      </div>
-      <TabsContent value="output" className="min-h-0">
-        <ScrollArea className="h-full">
-          <div className="px-4 pt-3 pb-1 text-[11px] text-muted-foreground">
-            {file?.outputs.length ? (
-              <>
-                Builds <span className="font-mono text-foreground">{file.outputs[0]}</span>
-                {file.outputs.length > 1 && ` and ${file.outputs.length - 1} more`}.{" "}
-              </>
-            ) : null}
-            Click a highlighted piece to jump to the Liquid that wrote it.
-          </div>
-          <pre className="px-4 pb-24 font-mono text-[12.5px] leading-relaxed whitespace-pre-wrap">
-            {pieces.map((p, i) =>
-              p.region === undefined ? (
-                <span key={i}>{p.text}</span>
-              ) : (
-                <span
-                  key={i}
-                  className="output-segment"
-                  data-active={
-                    active !== null && regions[p.region]?.from === active.from && regions[p.region]?.to === active.to
-                  }
-                  title={`${regions[p.region]?.kind === "output" ? "{{ " : "{% "}${regions[p.region]?.label}${regions[p.region]?.kind === "output" ? " }}" : " %}"}`}
-                  onClick={() => jumpTo(fileId, p.region!)}
-                >
-                  {p.text}
-                </span>
-              ),
-            )}
-          </pre>
-        </ScrollArea>
-      </TabsContent>
-      <TabsContent value="vars" className="min-h-0">
-        <div className="border-b p-2">
-          <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter variables…" className="h-7 text-xs" />
-        </div>
-        <ScrollArea className="h-[calc(100%-45px)]">
-          <div className="divide-y text-xs">
-            {vars.map(([k, v]) => (
-              <div key={k} className="px-3 py-1.5">
-                <div className="font-mono font-medium text-liquid">{k}</div>
-                <div className="truncate font-mono text-muted-foreground" title={v}>
-                  {v === "" ? <i>(empty)</i> : v}
-                </div>
-              </div>
-            ))}
-          </div>
-        </ScrollArea>
-      </TabsContent>
-      <TabsContent value="history" className="min-h-0 p-3">
-        <MockHistory file={file} />
-      </TabsContent>
-    </Tabs>
-  )
-}
-
-function MockHistory({ file }: { file?: WorkspaceFile }) {
-  const items =
-    file?.origin.kind === "recipe"
-      ? [
-          { v: file.origin.version, what: "Released", when: "2 weeks ago" },
-          { v: "", what: "Reworded the opening paragraph (#188)", when: "3 weeks ago" },
-          { v: "", what: "Added an example for nested includes (#171)", when: "1 month ago" },
-        ]
-      : [
-          { v: "", what: "Last commit touching this file", when: "yesterday" },
-          { v: "", what: "Created", when: "2 months ago" },
-        ]
-  return (
-    <div className="space-y-3 text-xs">
-      <Badge variant="outline" className="text-[10px]">
-        mock
-      </Badge>
-      {items.map((it, i) => (
-        <div key={i} className="flex gap-2">
-          <div className="mt-1 size-2 shrink-0 rounded-full bg-muted-foreground/50" />
-          <div>
-            <div>
-              {it.v && <b className="mr-1">{it.v}</b>}
-              {it.what}
-            </div>
-            <div className="text-muted-foreground">{it.when}</div>
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
 function StatusBar({ fileId }: { fileId: string | null }) {
   const doc = useStore((s) => (fileId ? s.docs[fileId] : undefined))
   const file = useFile(fileId)
-  const [active, setActive] = useState<Region | null>(null)
-
-  useEffect(() => {
-    const onActive = (e: Event) => setActive((e as CustomEvent<Region | null>).detail)
-    window.addEventListener("sous-active-region", onActive)
-    return () => window.removeEventListener("sous-active-region", onActive)
-  }, [])
+  const active = useActiveRegion()
+  const delta = doc ? doc.render.tokens - doc.originalRender.tokens : 0
 
   return (
     <div className="flex h-6 shrink-0 items-center gap-4 border-t bg-sidebar px-3 text-[11px] text-muted-foreground">
@@ -333,6 +207,20 @@ function StatusBar({ fileId }: { fileId: string | null }) {
           </span>
         ))}
       {doc && file?.isTpl && <span>{doc.render.regions.length} Liquid sections</span>}
+      {doc && (
+        <span title="Tokens in this file's output">
+          {doc.render.tokens.toLocaleString()} tokens
+          {delta !== 0 && (
+            <b className={cn("ml-1", delta > 0 ? "text-warning" : "text-success")}>
+              ({delta > 0 ? "+" : ""}
+              {delta})
+            </b>
+          )}
+        </span>
+      )}
+      {doc && Object.keys(doc.overrides).length > 0 && (
+        <span className="text-warning">trying {Object.keys(doc.overrides).length} other value(s)</span>
+      )}
       {active && (
         <span className="text-liquid">
           Editing <span className="font-mono">{active.kind === "output" ? `{{ ${active.label} }}` : `{% ${active.label} %}`}</span>{" "}
@@ -412,7 +300,7 @@ export function EditorArea() {
                 <>
                   <ResizableHandle />
                   <ResizablePanel defaultSize="38%" minSize="20%">
-                    <OutputPane fileId={file.id} />
+                    <Inspector fileId={file.id} />
                   </ResizablePanel>
                 </>
               )}

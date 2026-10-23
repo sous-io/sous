@@ -61,7 +61,7 @@ export function LiquidEditor({ fileId, visible }: Props) {
     const { setRendering, setRender } = useStore.getState()
     setRendering(fileId, true)
     api
-      .render(fileId, source)
+      .render(fileId, source, useStore.getState().docs[fileId]?.overrides)
       .then((result) => setRender(fileId, source, result))
       .catch((error) => setRender(fileId, source, { ...useStore.getState().docs[fileId].render, error: error.message }))
   }

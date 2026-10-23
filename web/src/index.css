@@ -341,3 +341,20 @@ body { overflow: hidden; }
   box-shadow: 0 6px 20px -6px rgb(0 0 0 / 0.4);
   pointer-events: none;
 }
+
+/* ---- markdown preview ---- */
+.md-preview { font-size: 14px; line-height: 1.65; color: var(--foreground); }
+.md-preview h1 { font-size: 1.6em; font-weight: 700; margin: 0.4em 0 0.5em; letter-spacing: -0.01em; }
+.md-preview h2 { font-size: 1.3em; font-weight: 700; margin: 1.3em 0 0.5em; padding-bottom: 0.25em; border-bottom: 1px solid var(--border); }
+.md-preview h3 { font-size: 1.1em; font-weight: 650; margin: 1.2em 0 0.4em; }
+.md-preview p, .md-preview ul, .md-preview ol, .md-preview table, .md-preview pre, .md-preview blockquote { margin: 0.6em 0; }
+.md-preview ul { list-style: disc; padding-left: 1.4em; }
+.md-preview ol { list-style: decimal; padding-left: 1.4em; }
+.md-preview code { font-family: 'Geist Mono Variable', monospace; font-size: 0.88em; background: var(--muted); padding: 0.1em 0.35em; border-radius: 4px; }
+.md-preview pre { background: var(--muted); padding: 0.8em 1em; border-radius: 8px; overflow-x: auto; }
+.md-preview pre code { background: none; padding: 0; }
+.md-preview table { border-collapse: collapse; font-size: 0.92em; }
+.md-preview th, .md-preview td { border: 1px solid var(--border); padding: 0.3em 0.7em; }
+.md-preview th { background: var(--muted); font-weight: 600; }
+.md-preview blockquote { border-left: 3px solid var(--brand); padding-left: 1em; color: var(--muted-foreground); }
+.md-preview a { color: var(--cm-link); text-decoration: underline; }

@@ -1,8 +1,8 @@
 import { create } from "zustand"
-import { api, type RenderResult, type WorkspaceInfo } from "./api"
+import { api, type PreviewBuild, type RenderResult, type WorkspaceInfo } from "./api"
 import { SEED_PROPOSALS, type Proposal } from "@/mock/data"
 
-export type Page = "editor" | "variables" | "recipes" | "build" | "proposals"
+export type Page = "editor" | "context" | "variables" | "recipes" | "build" | "proposals"
 export type Mode = "rendered" | "source"
 
 export type OpenDoc = {
@@ -10,13 +10,19 @@ export type OpenDoc = {
   current: string
   vars: Record<string, string>
   render: RenderResult
+  /** The render of the file as it is on disk, for the rendered-output diff. */
+  originalRender: RenderResult
   rendering: boolean
+  /** Variable values tried out for this file only (never saved). */
+  overrides: Record<string, string>
   /** Set once the edit has been proposed upstream (mock). */
   proposedIn?: string
 }
 
 type State = {
   workspace: WorkspaceInfo | null
+  build: PreviewBuild | null
+  building: boolean
   loadError: string | null
   page: Page
   mode: Mode
@@ -32,6 +38,8 @@ type State = {
   jump: { id: string; region: number; nonce: number } | null
 
   load: () => Promise<void>
+  rebuild: () => Promise<void>
+  setOverride: (id: string, name: string, value: string | null) => void
   setPage: (page: Page) => void
   setMode: (mode: Mode) => void
   toggleOutput: () => void
@@ -50,6 +58,8 @@ type State = {
 
 export const useStore = create<State>((set, get) => ({
   workspace: null,
+  build: null,
+  building: false,
   loadError: null,
   page: "editor",
   mode: "rendered",
@@ -68,9 +78,29 @@ export const useStore = create<State>((set, get) => ({
       const workspace = await api.workspace()
       set({ workspace })
       await get().open("sample")
+      get().rebuild()
     } catch (error) {
       set({ loadError: (error as Error).message })
     }
+  },
+  rebuild: async () => {
+    set({ building: true })
+    try {
+      const build = await api.build(get().build !== null)
+      set({ build })
+    } finally {
+      set({ building: false })
+    }
+  },
+  setOverride: (id, name, value) => {
+    const doc = get().docs[id]
+    if (!doc) return
+    const overrides = { ...doc.overrides }
+    if (value === null) delete overrides[name]
+    else overrides[name] = value
+    set((s) => ({ docs: { ...s.docs, [id]: { ...doc, overrides, rendering: true } } }))
+    const source = doc.current
+    api.render(id, source, overrides).then((render) => get().setRender(id, source, render))
   },
   setPage: (page) => set({ page }),
   setMode: (mode) => set({ mode }),
@@ -88,7 +118,9 @@ export const useStore = create<State>((set, get) => ({
           current: payload.content,
           vars: payload.vars,
           render: payload.render,
+          originalRender: payload.render,
           rendering: false,
+          overrides: {},
         },
       },
     }))

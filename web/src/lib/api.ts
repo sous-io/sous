@@ -48,6 +48,28 @@ export type RenderResult = {
   segments: { start: number; end: number; region: number }[]
   error?: string
   ms: number
+  tokens: number
+}
+
+export type OutputInfo = {
+  output: string
+  entryId: string
+  sources: string[]
+  tokens: number
+  bytes: number
+  status: "up-to-date" | "stale" | "missing" | "failed"
+  error?: string
+  kind: "instructions" | "skill" | "reference" | "memory" | "other"
+  skillName?: string
+  description?: string
+  descriptionTokens?: number
+}
+
+export type PreviewBuild = {
+  outputs: OutputInfo[]
+  usedBy: Record<string, string[]>
+  ms: number
+  builtAt: string
 }
 
 export type FilePayload = {
@@ -80,8 +102,10 @@ async function call<T>(url: string, init?: RequestInit): Promise<T> {
 export const api = {
   workspace: () => call<WorkspaceInfo>("/api/workspace"),
   file: (id: string) => call<FilePayload>(`/api/file?id=${encodeURIComponent(id)}`),
-  render: (id: string, source: string) =>
-    call<RenderResult>("/api/render", { method: "POST", body: JSON.stringify({ id, source }) }),
+  render: (id: string, source: string, overrides?: Record<string, string>) =>
+    call<RenderResult>("/api/render", { method: "POST", body: JSON.stringify({ id, source, overrides }) }),
+  build: (rerun = false) => call<PreviewBuild>("/api/build", rerun ? { method: "POST" } : undefined),
+  output: (path: string) => call<{ content: string }>(`/api/output?path=${encodeURIComponent(path)}`),
 }
 
 export function repoKey(origin: FileOrigin): string {

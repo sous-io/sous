@@ -84,12 +84,18 @@ function originOf(file: string, projectRoot: string, storeRoot: string): FileOri
 }
 
 /** Runs `fn` with console output swallowed (the compiler logs as it goes). */
-async function quietly<T>(fn: () => Promise<T>): Promise<T> {
+export async function quietly<T>(fn: () => Promise<T>, sink?: string[]): Promise<T> {
   const saved = { log: console.log, warn: console.warn, error: console.error, write: process.stdout.write };
-  console.log = () => {};
-  console.warn = () => {};
-  console.error = () => {};
-  process.stdout.write = (() => true) as typeof process.stdout.write;
+  const keep = (...args: unknown[]) => {
+    sink?.push(args.map(String).join(" "));
+  };
+  console.log = keep;
+  console.warn = keep;
+  console.error = keep;
+  process.stdout.write = ((chunk: unknown) => {
+    keep(chunk);
+    return true;
+  }) as typeof process.stdout.write;
   try {
     return await fn();
   } finally {

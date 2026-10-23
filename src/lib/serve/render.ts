@@ -12,6 +12,7 @@ import path from "node:path";
 import { Tokenizer, TagToken, TokenKind, type Liquid } from "liquidjs";
 import { createLiquidEngine } from "../../templating/init-liquid-engine.js";
 import type { Workspace, WorkspaceFile } from "./workspace.js";
+import { countTokens } from "./preview-build.js";
 
 export type Region = {
   from: number;
@@ -31,6 +32,8 @@ export type RenderResult = {
   segments: { start: number; end: number; region: number }[];
   error?: string;
   ms: number;
+  /** Tokens in `output`. */
+  tokens: number;
 };
 
 const ALWAYS_BLOCKS = new Set(["if", "unless", "for", "case", "capture", "raw", "comment", "tablerow"]);
@@ -96,17 +99,22 @@ function maskSecrets(text: string, secrets: string[]): string {
 export async function renderTemplate(
   workspace: Workspace,
   file: WorkspaceFile,
-  source: string
+  source: string,
+  overrides: Record<string, string> = {}
 ): Promise<RenderResult> {
   const started = performance.now();
-  const done = (r: Omit<RenderResult, "ms">): RenderResult => ({ ...r, ms: Math.round((performance.now() - started) * 10) / 10 });
+  const done = (r: Omit<RenderResult, "ms" | "tokens">): RenderResult => ({
+    ...r,
+    ms: Math.round((performance.now() - started) * 10) / 10,
+    tokens: countTokens(r.output),
+  });
 
   if (!file.isTpl) {
     return done({ regions: [], output: source, segments: [] });
   }
 
   const dir = path.dirname(file.path);
-  const vars = { ...file.vars, sousTemplatePath: file.path, sousTemplateDir: dir };
+  const vars = { ...file.vars, ...overrides, sousTemplatePath: file.path, sousTemplateDir: dir };
   const { compilation } = workspace;
   const engine = createLiquidEngine([dir], {
     aliases: compilation.aliases,
