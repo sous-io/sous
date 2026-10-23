@@ -32,6 +32,7 @@ import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { Kbd } from "@/components/ui/kbd"
 import { ContributeDialog } from "@/components/contribute-dialog"
+import { Tour, useTour } from "@/components/tour"
 import { EditorArea } from "@/components/editor-area"
 import { Explorer } from "@/components/explorer"
 import { RecipesPage } from "@/pages/recipes-page"
@@ -126,6 +127,7 @@ function Header() {
         </Button>
         <Button
           size="sm"
+          data-tour="send"
           onClick={() => openContribute()}
           variant={unsent.length ? "default" : "outline"}
           disabled={unsent.length === 0}
@@ -175,6 +177,7 @@ function Palette() {
   const state = useStore.getState
   const commands: { label: string; hint: string; icon: typeof SquarePenIcon; run: () => void }[] = [
     { label: "Send changes upstream", hint: "Open the send dialog", icon: GitPullRequestArrowIcon, run: () => state().openContribute() },
+    { label: "Take the tour", hint: "One minute, ten stops", icon: SquarePenIcon, run: () => useTour.getState().start() },
     { label: "Show rendered Liquid", hint: "Editor mode", icon: SquarePenIcon, run: () => state().setMode("rendered") },
     { label: "Show template source", hint: "Editor mode", icon: FileCode2Icon, run: () => state().setMode("source") },
     { label: "Check the build again", hint: "Rebuild into a temporary folder", icon: HammerIcon, run: () => state().rebuild() },
@@ -334,6 +337,7 @@ export default function App() {
       <ContributeDialog />
       <Palette />
       <Toaster position="bottom-right" />
+      <Tour />
     </TooltipProvider>
   )
 }

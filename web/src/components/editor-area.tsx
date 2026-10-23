@@ -28,6 +28,7 @@ import { LiquidEditor } from "@/editor/liquid-editor"
 import { Inspector, useActiveRegion } from "@/components/inspector"
 import { DriftBanner } from "@/components/drift"
 import { ShareRecipeButton } from "@/components/share-recipe"
+import { useTour } from "@/components/tour"
 import { UndeclaredBanner } from "@/components/undeclared"
 import type { Region, WorkspaceFile } from "@/lib/api"
 import { useStore, type Mode } from "@/lib/store"
@@ -257,6 +258,7 @@ function StatusBar({ fileId }: { fileId: string | null }) {
 
 /** A one-time tip for a new user; dismissed for good once closed. */
 function FirstRunTip() {
+  const tourStep = useTour((s) => s.step)
   const [show, setShow] = useState(() => {
     try {
       return localStorage.getItem("sous-tip-seen") !== "1"
@@ -264,7 +266,7 @@ function FirstRunTip() {
       return true
     }
   })
-  if (!show) return null
+  if (!show || tourStep !== null) return null
   const close = () => {
     setShow(false)
     try {

@@ -21,6 +21,8 @@ import {
   VariableIcon,
 } from "lucide-react"
 import { toast } from "sonner"
+import { MapIcon } from "lucide-react"
+import { useTour } from "@/components/tour"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { api, type VarFact } from "@/lib/api"
@@ -167,6 +169,9 @@ export function HomePage() {
               <Button onClick={() => open("sample")}>
                 <SparklesIcon /> Try the live Liquid editor
               </Button>
+              <Button variant="outline" onClick={() => useTour.getState().start()}>
+                <MapIcon /> Take the 1-minute tour
+              </Button>
               <Button variant="outline" onClick={() => setPage("context")}>
                 <BotIcon /> See what your agent reads
               </Button>
@@ -209,7 +214,7 @@ export function HomePage() {
           />
         </div>
 
-        <section className="space-y-3">
+        <section className="space-y-3" data-tour="attention">
           <h2 className="flex items-center gap-2 text-sm font-semibold">
             Needs attention
             <span className="rounded-full bg-muted px-2 text-[11px] font-medium text-muted-foreground">{attention.length}</span>

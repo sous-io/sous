@@ -73,7 +73,7 @@ export function DriftBanner({ fileId }: { fileId: string }) {
 
   return (
     <>
-      <div className="flex items-center gap-2 border-b bg-warning/10 px-4 py-1.5 text-xs">
+      <div className="flex items-center gap-2 border-b bg-warning/10 px-4 py-1.5 text-xs" data-tour="drift">
         <HandIcon className="size-3.5 shrink-0 text-warning" />
         <span className="min-w-0 truncate">
           <b>

@@ -427,13 +427,13 @@ export function Inspector({ fileId }: { fileId: string }) {
   const overrideCount = Object.keys(doc.overrides).length
 
   return (
-    <Tabs defaultValue="output" className="h-full gap-0">
+    <Tabs defaultValue="output" className="h-full gap-0" data-tour="inspector">
       <div className="flex h-9 shrink-0 items-center border-b px-2">
         <TabsList variant="line" className="h-8">
           <TabsTrigger value="output">
             <EyeIcon /> Result
           </TabsTrigger>
-          <TabsTrigger value="vars">
+          <TabsTrigger value="vars" data-tour="tab-vars">
             <VariableIcon /> Variables
             {overrideCount > 0 && <span className="size-1.5 rounded-full bg-warning" />}
           </TabsTrigger>

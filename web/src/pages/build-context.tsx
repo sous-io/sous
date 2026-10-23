@@ -277,7 +277,7 @@ export function ContextPage() {
           </p>
         </div>
 
-        <Card className="overflow-hidden">
+        <Card className="overflow-hidden" data-tour="context-hero">
           <CardContent className="space-y-4">
             <div className="flex flex-wrap items-end gap-x-10 gap-y-3">
               <div>
