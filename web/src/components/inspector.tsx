@@ -57,7 +57,7 @@ function RawOutput({ fileId }: { fileId: string }) {
     <pre className="px-4 pb-24 font-mono text-[12.5px] leading-relaxed whitespace-pre-wrap">
       {pieces.map((p, i) =>
         p.region === undefined ? (
-          <span key={i}>{p.text}</span>
+          <PlainOutput key={i} text={p.text} />
         ) : (
           <span
             key={i}
@@ -71,6 +71,31 @@ function RawOutput({ fileId }: { fileId: string }) {
         ),
       )}
     </pre>
+  )
+}
+
+const INCLUDE_LINE = /^@[~#a-zA-Z0-9_.${}*?[][\w\-/.:${}*?[\],!~#%+^()]*\.md\S*$/
+
+/** Output text, with `@include` lines shown as what they are: placeholders the build fills in. */
+function PlainOutput({ text }: { text: string }) {
+  if (!text.includes("@")) return <span>{text}</span>
+  const lines = text.split("\n")
+  return (
+    <>
+      {lines.map((line, i) => (
+        <span key={i}>
+          {INCLUDE_LINE.test(line.trim()) ? (
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-[var(--cm-include)]/60 bg-muted/50 px-1.5 text-[11px] text-[var(--cm-include)]" title="sous build replaces this line with the file's contents">
+              ⤷ {line.trim().replace(/^@/, "").split("/").slice(-2).join("/")}
+              <span className="text-muted-foreground">included here at build</span>
+            </span>
+          ) : (
+            line
+          )}
+          {i < lines.length - 1 ? "\n" : ""}
+        </span>
+      ))}
+    </>
   )
 }
 

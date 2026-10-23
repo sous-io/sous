@@ -238,6 +238,50 @@ function StatusBar({ fileId }: { fileId: string | null }) {
   )
 }
 
+/** A one-time tip for a new user; dismissed for good once closed. */
+function FirstRunTip() {
+  const [show, setShow] = useState(() => {
+    try {
+      return localStorage.getItem("sous-tip-seen") !== "1"
+    } catch {
+      return true
+    }
+  })
+  if (!show) return null
+  const close = () => {
+    setShow(false)
+    try {
+      localStorage.setItem("sous-tip-seen", "1")
+    } catch {
+      // Shown again next time.
+    }
+  }
+  return (
+    <div className="absolute right-[calc(38%+16px)] bottom-4 z-20 w-80 rounded-xl border border-liquid/40 bg-popover p-4 text-sm shadow-2xl">
+      <div className="mb-2 flex items-center gap-2 font-semibold">
+        <SparklesIcon className="size-4 text-liquid" /> Templates, rendered live
+      </div>
+      <ul className="space-y-1.5 text-xs text-muted-foreground">
+        <li>
+          <b className="text-foreground">Purple is Liquid.</b> You see what it renders to with this project's variables.
+        </li>
+        <li>
+          <b className="text-foreground">Click a section</b> to edit its Liquid. <Kbd>Esc</Kbd> renders it again.
+        </li>
+        <li>
+          <b className="text-foreground">Send changes</b> turns your edits into a pull request on the recipe's repository.
+        </li>
+        <li>
+          <Kbd>Ctrl</Kbd> <Kbd>K</Kbd> opens any file or command.
+        </li>
+      </ul>
+      <Button size="sm" className="mt-3 w-full" onClick={close}>
+        Got it
+      </Button>
+    </div>
+  )
+}
+
 export function EditorArea() {
   const activeId = useStore((s) => s.activeId)
   const tabs = useStore((s) => s.tabs)
@@ -292,7 +336,8 @@ export function EditorArea() {
             </div>
           </div>
           <OriginBanner file={file} />
-          <div className="min-h-0 flex-1">
+          <div className="relative min-h-0 flex-1">
+            <FirstRunTip />
             <ResizablePanelGroup orientation="horizontal">
               <ResizablePanel defaultSize="62%" minSize="30%" className="bg-surface-editor">
                 {tabs.map((id) =>

@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import type { WorkspaceFile } from "@/lib/api"
+import type { PreviewBuild, WorkspaceFile } from "@/lib/api"
 import { changedIds, useStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
 import { MOCK_UPDATES } from "@/mock/data"
@@ -30,6 +30,7 @@ type Node = {
   hint?: string
   badge?: string
   fileId?: string
+  status?: string
   children: Node[]
 }
 
@@ -119,10 +120,19 @@ function byRecipe(files: WorkspaceFile[]): Node[] {
   return [samples, project, ...repos.values()].map(sortTree)
 }
 
-function byOutput(files: WorkspaceFile[]): Node[] {
+function byOutput(files: WorkspaceFile[], build: PreviewBuild | null): Node[] {
   const root = makeNode("o:root", "Outputs", { icon: "output" })
+  const info = new Map(build?.outputs.map((o) => [o.output, o]) ?? [])
   for (const f of files) {
-    for (const out of f.outputs) addPath(root, out.split("/"), { fileId: f.id, hint: `from ${f.display}` })
+    for (const out of f.outputs) {
+      const o = info.get(out)
+      addPath(root, out.split("/"), {
+        fileId: f.id,
+        hint: `from ${f.display}${o ? ` · ${o.tokens.toLocaleString()} tokens · ${o.status}` : ""}`,
+        badge: o ? (o.status === "failed" ? "fails" : o.tokens >= 1000 ? `${(o.tokens / 1000).toFixed(1)}k` : String(o.tokens)) : undefined,
+        status: o?.status,
+      })
+    }
   }
   return sortTree(root).children
 }
@@ -191,6 +201,16 @@ function TreeNode({ node, depth, forceOpen }: { node: Node; depth: number; force
         <span className="w-3.5" />
         <Icon className={cn("size-3.5 shrink-0", isTpl ? "text-liquid" : "text-muted-foreground")} />
         <span className="truncate">{node.name}</span>
+        {node.badge && (
+          <span
+            className={cn(
+              "ml-auto shrink-0 rounded px-1 font-mono text-[10px] tabular-nums",
+              node.status === "failed" ? "bg-destructive/15 text-destructive" : "text-muted-foreground",
+            )}
+          >
+            {node.badge}
+          </span>
+        )}
         {changed && (
           <span
             className={cn("ml-auto size-2 shrink-0 rounded-full", doc.proposedIn ? "bg-success" : "bg-warning")}
@@ -237,7 +257,7 @@ function TreeNode({ node, depth, forceOpen }: { node: Node; depth: number; force
           className={cn(
             "truncate",
             depth === 0 && "text-[12px] font-semibold text-muted-foreground",
-            depth === 0 && !/[./]/.test(node.name) && "text-[11px] tracking-wider uppercase",
+            depth === 0 && (node.icon === "project" || node.icon === "sample") && "text-[11px] tracking-wider uppercase",
             node.icon === "recipe" && "font-medium",
           )}
         >
@@ -263,6 +283,7 @@ function TreeNode({ node, depth, forceOpen }: { node: Node; depth: number; force
 
 export function Explorer() {
   const workspace = useStore((s) => s.workspace)
+  const build = useStore((s) => s.build)
   const docs = useStore((s) => s.docs)
   const open = useStore((s) => s.open)
   const [view, setView] = useState("recipe")
@@ -274,9 +295,9 @@ export function Explorer() {
     () => ({
       file: byFile(files, workspace?.projectRoot ?? ""),
       recipe: byRecipe(files),
-      output: byOutput(files),
+      output: byOutput(files, build),
     }),
-    [files, workspace?.projectRoot],
+    [files, workspace?.projectRoot, build],
   )
   const nodes = filterTree(trees[view as keyof typeof trees], query, fileMap)
   const changed = changedIds(docs)

@@ -160,6 +160,19 @@ function Palette() {
     return () => window.removeEventListener("keydown", onKey)
   }, [setOpen])
 
+  const run = (fn: () => void) => {
+    fn()
+    setOpen(false)
+  }
+  const state = useStore.getState
+  const commands: { label: string; hint: string; icon: typeof SquarePenIcon; run: () => void }[] = [
+    { label: "Send changes upstream", hint: "Open the send dialog", icon: GitPullRequestArrowIcon, run: () => state().openContribute() },
+    { label: "Show rendered Liquid", hint: "Editor mode", icon: SquarePenIcon, run: () => state().setMode("rendered") },
+    { label: "Show template source", hint: "Editor mode", icon: FileCode2Icon, run: () => state().setMode("source") },
+    { label: "Check the build again", hint: "Rebuild into a temporary folder", icon: HammerIcon, run: () => state().rebuild() },
+    ...NAV.map((n) => ({ label: `Go to ${n.label}`, hint: "Page", icon: n.icon, run: () => state().setPage(n.page) })),
+    { label: "Switch light or dark", hint: "Theme", icon: SunIcon, run: () => document.querySelector<HTMLButtonElement>("[title='Light or dark']")?.click() },
+  ]
   const groups = [
     { heading: "Samples", items: files.filter((f) => f.origin.kind === "sample") },
     { heading: "This project", items: files.filter((f) => f.origin.kind === "project") },
@@ -169,28 +182,46 @@ function Palette() {
   return (
     <CommandDialog open={open} onOpenChange={setOpen} className="sm:max-w-2xl">
       <Command>
-      <CommandInput placeholder="Find a source or output file…" />
-      <CommandList>
-        <CommandEmpty>No file matches.</CommandEmpty>
-        {groups.map((g) => (
-          <CommandGroup key={g.heading} heading={g.heading}>
-            {g.items.map((f) => (
-              <CommandItem
-                key={f.id}
-                value={`${f.display} ${f.outputs.join(" ")}`}
-                onSelect={() => {
-                  openFile(f.id)
-                  setOpen(false)
-                }}
-              >
-                <FileCode2Icon className="text-liquid" />
-                <span className="truncate">{f.display}</span>
-                {f.outputs[0] && <span className="ml-auto truncate text-xs text-muted-foreground">→ {f.outputs[0]}</span>}
+        <CommandInput placeholder="Open a file, or run a command…" />
+        <CommandList className="max-h-[60vh]">
+          <CommandEmpty>Nothing matches.</CommandEmpty>
+          <CommandGroup heading="Commands">
+            {commands.map((c) => (
+              <CommandItem key={c.label} value={`> ${c.label}`} onSelect={() => run(c.run)}>
+                <c.icon className="text-brand" />
+                <span>{c.label}</span>
+                <span className="ml-auto text-xs text-muted-foreground">{c.hint}</span>
               </CommandItem>
             ))}
           </CommandGroup>
-        ))}
-      </CommandList>
+          {groups.map((g) => (
+            <CommandGroup key={g.heading} heading={g.heading}>
+              {g.items.map((f) => (
+                <CommandItem key={f.id} value={`${f.display} ${f.outputs.join(" ")}`} onSelect={() => run(() => openFile(f.id))}>
+                  <FileCode2Icon className="text-liquid" />
+                  <span className="truncate">{f.display}</span>
+                  {f.outputs[0] && (
+                    <span className="ml-auto max-w-[45%] truncate text-right text-xs text-muted-foreground" style={{ direction: "rtl" }}>
+                      → {f.outputs[0]}
+                    </span>
+                  )}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          ))}
+        </CommandList>
+        <div className="flex items-center gap-3 border-t px-3 py-2 text-[11px] text-muted-foreground">
+          <span>
+            <Kbd>↵</Kbd> open
+          </span>
+          <span>
+            <Kbd>↑</Kbd> <Kbd>↓</Kbd> move
+          </span>
+          <span>
+            <Kbd>Esc</Kbd> close
+          </span>
+          <span className="ml-auto">Searches source paths and the outputs they build</span>
+        </div>
       </Command>
     </CommandDialog>
   )
