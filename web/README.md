@@ -1,10 +1,14 @@
 # sous serve: web editor (proof of concept)
 
 `sous serve` starts a local web server for the current project and opens a browser-based
-editor for every source file sous reads. This folder is the editor's frontend (React, Vite,
-Tailwind and shadcn/ui); the server side is in `src/commands/serve.ts` and `src/lib/serve/`.
+GUI for it. The centrepiece is an editor that shows every `.tpl.md` file rendered with the
+project's real variables, with each Liquid section editable in place. Around it are pages
+for the agent's context, variables, config, recipes, the build, and sending edits upstream.
 
-This is a proof of concept: nothing is saved, and only the editor works.
+This folder is the frontend (React, Vite, Tailwind and shadcn/ui). The server side is in
+`src/commands/serve.ts` and `src/lib/serve/`.
+
+This is a proof of concept. Nothing is saved to disk, and nothing is sent anywhere.
 
 ## Running It
 
@@ -15,50 +19,121 @@ npm --prefix web run build
 ./bin/sous serve --no-launch  # prints the URL only
 ```
 
-`--port <n>` picks the port (default 4777; the next free port is used if it is taken). The
-server listens on 127.0.0.1 only, and every API call needs the random token in the printed
-URL, because the API returns variable values.
+- `--port <n>` picks the port. The default is 4777, and the next free port is used if it's
+  taken.
+- The server listens on 127.0.0.1 only.
+- Every API call needs the random token in the printed URL, because the API returns
+  variable values. `SOUS_SERVE_TOKEN` sets the token yourself.
 
-## What Works
+## What Is Real
 
-- Every source file sous reads (compile targets and the partials they include), from this
-  project and from its recipes, in three trees: by recipe (repo › namespace › recipe › file),
-  by file on disk, and by output file.
-- `.tpl.md` files open with each top-level Liquid section shown as its rendered output, using
-  this project's real variables. Put the cursor in a section to see and edit its Liquid; it
-  re-renders about 250 ms after typing stops, and immediately when the cursor leaves it or the
-  editor loses focus. **Source** mode shows the plain file.
-- The output pane shows the whole rendered file. Click a highlighted piece to jump to the
-  Liquid that wrote it.
-- A Liquid error keeps the last good render on screen and shows the error in the status bar.
-- Edits stay in the browser tab. The diffs in the contribute dialog are computed from them.
+Everything below reads the real project, the real recipe store (`~/.sous/cache`), and sous's
+own code.
+
+**Editor**
+- **Three trees** over every source file sous reads (compile targets and the partials they
+  include):
+  - by source: repository › namespace › recipe › file;
+  - by file on disk;
+  - by output file, with token counts and status.
+- **Rendered Liquid.** Each top-level Liquid section shows its output, rendered by sous's own
+  Liquid engine with this project's variables.
+  - Inline values take the heading, bold or code styling around them.
+  - Blocks are drawn as cards that say which branch ran (`showing else · 1 hidden`) or how
+    many times a loop ran (`×5`).
+- **Editing a section.** Click a section to edit its Liquid. The cursor lands inside the
+  expression.
+  - While you edit, a bar shows what the section renders to, live.
+  - `Esc`, or clicking outside, renders it again.
+- **Errors.** A Liquid error marks the broken section. The last good output stays on screen,
+  marked out of date.
+- **Autocomplete.** After `{{ ` it offers the variables, with their values. After `{% ` it
+  offers tags, including sous's `listFiles` and `getFiles`. After `|` it offers filters.
+- **Gutter and file furniture.**
+  - Change bars mark the lines you edited.
+  - Cards show the range of lines they replace.
+  - YAML frontmatter is drawn as a muted block.
+  - `Ctrl`+click on an `@include` line opens the included file.
+- **Source mode** shows the plain file.
+- **The inspector panel:**
+  - **Output:** the whole rendered file, as Text (click a piece to jump to the Liquid that
+    wrote it), Preview (rendered markdown), or What changed (a diff of the output against the
+    file on disk).
+  - **Variables:** every variable, with the ones this file uses listed first. Click a value to
+    try another one; only the preview changes.
+  - **Used by:** every output that includes this file, with token counts.
+- **Hand-edit rescue.** A banner appears when a built output was edited by hand, and moves
+  each edit into the template. For the sample file the on-disk copy is simulated; for real
+  outputs it compares a fresh build with the file on disk.
+- **Undeclared variables.** A banner warns when a recipe file reads a variable that its
+  recipe (and the recipes it depends on) doesn't declare. This uses LiquidJS static analysis
+  against `sous.recipe.yaml`.
+
+**Pages**
+- **Home:** the project at a glance, and what needs attention: failing outputs, unanswered
+  variables, recipe updates, unsent edits, and outputs not built yet.
+- **Agent view:** what Claude reads at the start of a session (instructions plus the skill
+  menu) and what it reads only when needed, in tokens, from a fresh build.
+- **Variables:** what `sous vars list` reports, for each variable:
+  - who asks for it;
+  - its value;
+  - which environment variable and file answered it;
+  - the files that use it.
+- **Config:** the config layers in merge order, what each one sets, and which file set each
+  final value.
+- **Recipes:** the recipes this project uses and the others in your store, with
+  descriptions, contents, variables, dependencies, and the updates already in your store.
+- **Build:** what `sous build` would write right now, compared with what is on disk. It is
+  built into a temporary folder in about 0.6 seconds.
+- **Send changes,** up to the Propose button:
+  - grouping by destination;
+  - `gh` sign-in and push access;
+  - the commit at the head of upstream's main branch;
+  - the 3-way merge onto upstream;
+  - the version raise, counted from upstream;
+  - core recipes routed to sous-io/sous;
+  - the "make it generic" scan for your own values and secrets;
+  - the three diffs.
+
+The `Ctrl`+`K` palette opens any file and runs any command.
+
+## What Is Simulated
+
+- **Sending:** link, commit, push, fork, and opening the pull request. The PR number is
+  invented.
+- **The proposals' later states,** "Update this project", and subscribing to a recipe.
+- **The editor's History tab.**
 
 The sample file `poc-samples/liquid-showcase.tpl.md` exists only in the server's memory. It
-shows blocks, loops, `capture` and sous's `listFiles` tag, which real recipe templates rarely use.
-
-## What Is Mocked
-
-- **Sending changes** (the "Send N changes" button): one proposal per place the edits came
-  from. A recipe repository gets a pull request with a version raise, a title and
-  description (with a mocked "Write it with Claude"), and the `sous repo contribute` commands
-  it stands for. Project files get a commit and a pull request. The progress steps and the
-  pull request are simulated.
-- **Proposals**: tracks each proposal from opened to released, then offers the update.
-- **Variables**: the values are real; the "Set in" column is invented.
-- **Recipes**: the list is real; the "update available" badges are invented.
-- **Build**: the output list is real; its status and the Rebuild button are simulated.
-- **History** tab in the editor.
+shows blocks, loops, `capture` and `listFiles`, which real recipe templates rarely use.
 
 ## How Rendering Works
 
 The editor's document is always the template source. For each render, the server:
 
 1. Splits the template into top-level Liquid sections with the LiquidJS tokenizer: an
-   `{{ output }}`, an inline tag, or a whole block from its opening tag to its matching end tag.
-2. Wraps each section in invisible markers, renders the whole file once with sous's own Liquid
-   engine (aliases, `{% render %}` paths, custom tags), and cuts the output at the markers.
-3. Returns each section's position and rendered text. The editor draws the rendered text over
-   every section except the one the cursor is in.
+   `{{ output }}`, an inline tag, or a whole block from its opening tag to its matching end
+   tag.
+2. Wraps each section in invisible markers. It also adds a marker at the start of each branch
+   of an `if`, `case` or `for`.
+3. Renders the whole file once, then cuts the output at the markers. Each section's output and
+   position come back, along with which branches ran and how many times.
 
 Rendering the whole file at once keeps `{% assign %}` and `{% capture %}` working across
-sections. The markers can change whitespace inside a section that uses `{%-`/`-%}` trimming.
+sections. Markers sit after any whitespace a `-%}` trims, so the output matches a real build.
+
+## Server Endpoints
+
+| Endpoint | What it returns |
+|---|---|
+| `GET /api/workspace` | Project, branch, files |
+| `GET /api/file?id=` | A file's text, its variables, and a first render |
+| `POST /api/render` | A render of edited text, optionally with tried-out variable values |
+| `GET`/`POST /api/build` | The preview build (`POST` runs it again) |
+| `GET /api/output?path=` | One output's built text |
+| `GET /api/variables` | The variables report |
+| `GET /api/config` | The config layers |
+| `GET /api/recipes` | The recipe store catalog |
+| `GET /api/drift?id=` | Hand edits to a file's output |
+| `GET /api/builtins` | Variable names sous sets itself |
+| `GET /api/contribute-info?ids=` | Everything the Send dialog checks |
