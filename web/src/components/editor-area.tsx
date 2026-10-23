@@ -77,7 +77,10 @@ function FileTabs() {
               className="ml-1 grid size-4 place-items-center rounded hover:bg-muted"
             >
               {changed ? (
-                <span className="size-2 rounded-full bg-warning group-hover:hidden" />
+                <span
+                  className={cn("size-2 rounded-full group-hover:hidden", doc.proposedContent === doc.current ? "bg-success" : "bg-warning")}
+                  title={doc.proposedContent === doc.current ? "Sent in a proposal" : "Changed, not sent yet"}
+                />
               ) : null}
               <XIcon className={cn("size-3", changed ? "hidden group-hover:block" : "opacity-0 group-hover:opacity-100")} />
             </button>
@@ -125,13 +128,20 @@ function OriginBanner({ file }: { file: WorkspaceFile }) {
 
   if (doc?.proposedIn) {
     const proposal = useStore.getState().proposals.find((p) => p.id === doc.proposedIn)
+    const more = doc.proposedContent !== doc.current
     return (
       <div className="flex items-center gap-2 border-b bg-success/10 px-4 py-1.5 text-xs">
         <GitPullRequestArrowIcon className="size-3.5 text-success" />
         <span>
-          Proposed in <b>#{proposal?.number}</b> “{proposal?.title}”. Keep editing to add to it.
+          Proposed in <b>#{proposal?.number}</b> “{proposal?.title}”.{" "}
+          {more ? "You've edited it since; Send changes adds the new edits to it." : "Edit it again to add to the same proposal."}
         </span>
-        <Button size="xs" variant="ghost" className="ml-auto" onClick={() => useStore.getState().setPage("proposals")}>
+        {more && (
+          <Button size="xs" className="ml-auto" onClick={() => openContribute(file.id)}>
+            <GitPullRequestArrowIcon /> Add to #{proposal?.number}
+          </Button>
+        )}
+        <Button size="xs" variant="outline" className={more ? "" : "ml-auto"} onClick={() => useStore.getState().setPage("proposals")}>
           Track it
         </Button>
       </div>

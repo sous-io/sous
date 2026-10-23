@@ -213,7 +213,7 @@ function TreeNode({ node, depth, forceOpen }: { node: Node; depth: number; force
         )}
         {changed && (
           <span
-            className={cn("ml-auto size-2 shrink-0 rounded-full", doc.proposedIn ? "bg-success" : "bg-warning")}
+            className={cn("ml-auto size-2 shrink-0 rounded-full", doc.proposedContent === doc.current ? "bg-success" : "bg-warning")}
           />
         )}
       </button>
@@ -344,7 +344,7 @@ export function Explorer() {
                   className="flex w-full items-center gap-1.5 truncate rounded px-2 py-0.5 text-left text-xs hover:bg-accent"
                 >
                   <span
-                    className={cn("size-1.5 rounded-full", docs[id].proposedIn ? "bg-success" : "bg-warning")}
+                    className={cn("size-1.5 rounded-full", docs[id].proposedContent === docs[id].current ? "bg-success" : "bg-warning")}
                   />
                   <span className="truncate">{fileMap.get(id)?.display}</span>
                 </button>

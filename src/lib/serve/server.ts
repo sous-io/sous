@@ -86,6 +86,12 @@ export function createServer(workspace: Workspace, distDir: string, token: strin
           if (!file) return sendJson(res, 404, { error: "No such file" });
           return sendJson(res, 200, await renderTemplate(workspace, file, source, overrides));
         }
+        if (url.pathname === "/api/contribute-info") {
+          const { contributeInfo, scanSecrets } = await import("./contribute-info.js");
+          if (req.method === "POST") return sendJson(res, 200, scanSecrets(workspace, JSON.parse(await readBody(req)).added ?? {}));
+          const ids = (url.searchParams.get("ids") ?? "").split(",").filter(Boolean);
+          return sendJson(res, 200, await contributeInfo(workspace, ids));
+        }
         if (url.pathname === "/api/build") {
           if (req.method === "POST") build = runPreviewBuild(workspace);
           return sendJson(res, 200, await build);
