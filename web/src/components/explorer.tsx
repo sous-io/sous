@@ -18,10 +18,9 @@ import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import type { PreviewBuild, WorkspaceFile } from "@/lib/api"
+import type { CatalogRecipe, PreviewBuild, WorkspaceFile } from "@/lib/api"
 import { changedIds, useStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
-import { MOCK_UPDATES } from "@/mock/data"
 
 type Node = {
   key: string
@@ -78,7 +77,7 @@ function byFile(files: WorkspaceFile[], projectRoot: string): Node[] {
   return [samples, project, store].map(sortTree)
 }
 
-function byRecipe(files: WorkspaceFile[]): Node[] {
+function byRecipe(files: WorkspaceFile[], catalog: CatalogRecipe[] | null): Node[] {
   const project = makeNode("r:project", "This project", { icon: "project" })
   const samples = makeNode("r:sample", "POC samples", { icon: "sample" })
   const repos = new Map<string, Node>()
@@ -107,11 +106,12 @@ function byRecipe(files: WorkspaceFile[]): Node[] {
     const recipeKey = `${nsKey}/${o.recipe}`
     let recipe = ns.children.find((c) => c.key === recipeKey)
     if (!recipe) {
-      const update = MOCK_UPDATES[`${o.namespace}/${o.recipe}`]
+      const latest = catalog?.find((r) => r.namespace === o.namespace && r.name === o.recipe && r.repo === `${o.owner}/${o.repo}`)?.latest
+      const update = latest && latest !== o.version ? latest : undefined
       recipe = makeNode(recipeKey, o.recipe, {
         icon: "recipe",
         badge: o.version,
-        hint: update ? `${o.version} → ${update} available (mock)` : o.version,
+        hint: update ? `${o.version} → ${update} is in your recipe store` : o.version,
       })
       ns.children.push(recipe)
     }
@@ -268,7 +268,7 @@ function TreeNode({ node, depth, forceOpen }: { node: Node; depth: number; force
             {node.badge}
           </span>
         )}
-        {node.icon === "recipe" && node.hint?.includes("available") && (
+        {node.icon === "recipe" && node.hint?.includes("recipe store") && (
           <span className="size-1.5 shrink-0 rounded-full bg-recipe" title={node.hint} />
         )}
       </CollapsibleTrigger>
@@ -284,20 +284,22 @@ function TreeNode({ node, depth, forceOpen }: { node: Node; depth: number; force
 export function Explorer() {
   const workspace = useStore((s) => s.workspace)
   const build = useStore((s) => s.build)
+  const catalog = useStore((s) => s.catalog)
   const docs = useStore((s) => s.docs)
   const open = useStore((s) => s.open)
   const [view, setView] = useState("recipe")
-  const [query, setQuery] = useState("")
+  const query = useStore((s) => s.explorerFilter)
+  const setQuery = useStore((s) => s.setExplorerFilter)
 
   const files = workspace?.files ?? []
   const fileMap = useMemo(() => new Map(files.map((f) => [f.id, f])), [files])
   const trees = useMemo(
     () => ({
       file: byFile(files, workspace?.projectRoot ?? ""),
-      recipe: byRecipe(files),
+      recipe: byRecipe(files, catalog),
       output: byOutput(files, build),
     }),
-    [files, workspace?.projectRoot, build],
+    [files, workspace?.projectRoot, build, catalog],
   )
   const nodes = filterTree(trees[view as keyof typeof trees], query, fileMap)
   const changed = changedIds(docs)

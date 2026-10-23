@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import { api, type PreviewBuild, type RenderResult, type WorkspaceInfo } from "./api"
+import { api, type CatalogRecipe, type PreviewBuild, type RenderResult, type WorkspaceInfo } from "./api"
 import { SEED_PROPOSALS, type Proposal } from "@/mock/data"
 
 export type Page = "editor" | "context" | "variables" | "recipes" | "build" | "proposals"
@@ -26,6 +26,7 @@ type State = {
   workspace: WorkspaceInfo | null
   build: PreviewBuild | null
   building: boolean
+  catalog: CatalogRecipe[] | null
   loadError: string | null
   page: Page
   mode: Mode
@@ -36,6 +37,9 @@ type State = {
   contributeOpen: boolean
   contributeFocus: string | null
   paletteOpen: boolean
+  /** Text the explorer filters its trees by. */
+  explorerFilter: string
+  setExplorerFilter: (filter: string) => void
   proposals: Proposal[]
   /** Region index the output pane asked the editor to jump to. */
   jump: { id: string; region: number; nonce: number } | null
@@ -63,6 +67,7 @@ export const useStore = create<State>((set, get) => ({
   workspace: null,
   build: null,
   building: false,
+  catalog: null,
   loadError: null,
   page: "editor",
   mode: "rendered",
@@ -73,6 +78,8 @@ export const useStore = create<State>((set, get) => ({
   contributeOpen: false,
   contributeFocus: null,
   paletteOpen: false,
+  explorerFilter: "",
+  setExplorerFilter: (explorerFilter) => set({ explorerFilter }),
   proposals: SEED_PROPOSALS,
   jump: null,
 
@@ -82,6 +89,7 @@ export const useStore = create<State>((set, get) => ({
       set({ workspace })
       await get().open("sample")
       get().rebuild()
+      api.recipes().then((catalog) => set({ catalog })).catch(() => {})
     } catch (error) {
       set({ loadError: (error as Error).message })
     }

@@ -78,6 +78,23 @@ export type VarFact = {
   usedIn: string[]
 }
 
+export type CatalogRecipe = {
+  key: string
+  repo: string
+  namespace: string
+  name: string
+  description?: string
+  versions: string[]
+  latest: string
+  using?: string
+  kinds: string[]
+  variables: { name: string; description?: string; secret?: boolean; required?: boolean }[]
+  depends: string[]
+  files: number
+  acceptsProposals: boolean
+  proposalsInstead?: string
+}
+
 export type PreviewBuild = {
   outputs: OutputInfo[]
   usedBy: Record<string, string[]>
@@ -119,6 +136,7 @@ export const api = {
     call<RenderResult>("/api/render", { method: "POST", body: JSON.stringify({ id, source, overrides }) }),
   build: (rerun = false) => call<PreviewBuild>("/api/build", rerun ? { method: "POST" } : undefined),
   variables: () => call<VarFact[]>("/api/variables"),
+  recipes: () => call<CatalogRecipe[]>("/api/recipes"),
   output: (path: string) => call<{ content: string }>(`/api/output?path=${encodeURIComponent(path)}`),
 }
 

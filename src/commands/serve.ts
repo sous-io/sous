@@ -12,6 +12,7 @@ import { CLI_ROOT } from "../lib/settings.js";
 import { createServer } from "../lib/serve/server.js";
 import { loadWorkspace } from "../lib/serve/workspace.js";
 import { variableReport, type VarFact } from "../lib/serve/var-report.js";
+import { readCatalog } from "../lib/serve/catalog.js";
 import { heading, log, showCommandVars } from "../utils/formatting.js";
 
 function openBrowser(url: string): void {
@@ -76,6 +77,16 @@ export default class Serve extends BaseCommand {
     const base = server.listeners("request") as ((req: http.IncomingMessage, res: http.ServerResponse) => void)[];
     server.removeAllListeners("request");
     server.on("request", (req: http.IncomingMessage, res: http.ServerResponse) => {
+      if (req.url?.startsWith("/api/recipes")) {
+        if (req.headers["x-sous-token"] !== token) {
+          res.writeHead(401, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: "Missing or wrong token" }));
+          return;
+        }
+        res.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+        res.end(JSON.stringify(readCatalog(workspace)));
+        return;
+      }
       if (req.url?.startsWith("/api/variables")) {
         if (req.headers["x-sous-token"] !== token) {
           res.writeHead(401, { "content-type": "application/json" });
