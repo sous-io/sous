@@ -59,7 +59,13 @@ export function liquidCompletion(getVars: () => Record<string, string>, getInclu
     if (/^@[^\s]*$/.test(before)) {
       return {
         from: line.from + 1,
-        options: getIncludes().map((t) => ({ label: t.label, type: "text", detail: t.detail, info: `Includes this file here at build time.` })),
+        options: getIncludes().map((t) => ({
+          label: t.label,
+          type: "text",
+          detail: t.detail,
+          info: `Includes this file here at build time.`,
+          boost: t.detail === "this project" ? 10 : 0,
+        })),
         validFor: /^[^\s]*$/,
       }
     }

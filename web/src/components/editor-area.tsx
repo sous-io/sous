@@ -124,7 +124,7 @@ function OriginBanner({ file }: { file: WorkspaceFile }) {
   const usedChip =
     file.role === "partial" && usedBy > 0 ? (
       <span className="shrink-0 rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-medium text-brand" title="See the Used by tab">
-        included in {usedBy} outputs
+        included in {usedBy} output{usedBy === 1 ? "" : "s"}
       </span>
     ) : null
 
@@ -213,6 +213,11 @@ function StatusBar({ fileId }: { fileId: string | null }) {
           <span className="flex items-center gap-1">
             <LoaderIcon className="size-3 animate-spin" /> Rendering…
           </span>
+        ) : doc.render.warning && !doc.render.error ? (
+          <span className="flex min-w-0 items-center gap-1 text-warning">
+            <TriangleAlertIcon className="size-3 shrink-0" />
+            <span className="truncate">{doc.render.warning}</span>
+          </span>
         ) : doc.render.error ? (
           <span className="flex min-w-0 items-center gap-1 text-destructive">
             <TriangleAlertIcon className="size-3 shrink-0" />
@@ -223,7 +228,7 @@ function StatusBar({ fileId }: { fileId: string | null }) {
             <ZapIcon className="size-3 text-success" /> Rendered in {doc.render.ms} ms
           </span>
         ))}
-      {doc && file?.isTpl && (
+      {doc && file?.isTpl && doc.render.regions.length > 0 && (
         <span title="Alt+↓ and Alt+↑ jump between sections">
           {doc.render.regions.length} Liquid sections <span className="opacity-60">· Alt+↑↓ to jump</span>
         </span>

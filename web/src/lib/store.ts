@@ -143,7 +143,14 @@ export const useStore = create<State>((set, get) => ({
     const { tabs, docs } = get()
     set({ activeId: id, page: "editor", tabs: tabs.includes(id) ? tabs : [...tabs, id] })
     if (docs[id]) return
-    const payload = await api.file(id)
+    let payload: Awaited<ReturnType<typeof api.file>>
+    try {
+      payload = await api.file(id)
+    } catch {
+      set((s) => ({ tabs: s.tabs.filter((t) => t !== id), activeId: s.tabs.find((t) => t !== id) ?? null }))
+      toast.error("That file isn't in this project any more.")
+      return
+    }
     set((s) => ({
       docs: {
         ...s.docs,
@@ -213,13 +220,14 @@ function connectLive(set: (p: Partial<State> | ((s: State) => Partial<State>)) =
       const doc = get().docs[event.id]
       if (!doc) return
       const payload = await api.file(event.id)
-      if (payload.content === doc.original) return
-      if (doc.current === doc.original) {
+      const now = get().docs[event.id]
+      if (!now || payload.content === now.original) return
+      if (now.current === now.original) {
         // Not edited here: take the new text from disk.
         set((s) => ({
           docs: {
             ...s.docs,
-            [event.id!]: { ...doc, original: payload.content, current: payload.content, render: payload.render, originalRender: payload.render },
+            [event.id!]: { ...now, original: payload.content, current: payload.content, render: payload.render, originalRender: payload.render },
           },
         }))
         toast(`${event.path} changed on disk, and was reloaded.`)

@@ -139,6 +139,8 @@ function Header() {
             <>
               Review {unsent.length} change{unsent.length === 1 ? "" : "s"}
             </>
+          ) : Object.values(docs).some((d) => d.current !== d.original) ? (
+            "All changes proposed"
           ) : (
             "No changes yet"
           )}
@@ -205,7 +207,10 @@ function Palette() {
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen} className="sm:max-w-2xl">
-      <Command key={open ? "open" : "closed"}>
+      <Command
+        key={open ? "open" : "closed"}
+        filter={(value, search) => (value.toLowerCase().includes(search.toLowerCase().trim()) ? 1 : 0)}
+      >
         <CommandInput placeholder="Open a file, or run a command…" />
         <CommandList className="max-h-[60vh]">
           <CommandEmpty>Nothing matches.</CommandEmpty>
@@ -260,6 +265,18 @@ export default function App() {
   useEffect(() => {
     load()
   }, [load])
+
+  // A reload or a closed tab would lose unsent edits: ask first.
+  useEffect(() => {
+    const onUnload = (e: BeforeUnloadEvent) => {
+      if (unsentIds(useStore.getState().docs).length > 0) {
+        e.preventDefault()
+        e.returnValue = ""
+      }
+    }
+    window.addEventListener("beforeunload", onUnload)
+    return () => window.removeEventListener("beforeunload", onUnload)
+  }, [])
 
   // The page (and the open file) live in the URL, so back, forward and reload work.
   useEffect(() => {

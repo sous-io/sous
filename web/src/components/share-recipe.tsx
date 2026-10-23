@@ -3,7 +3,8 @@
 // manifest, the generic version of the file and the project change are real
 // text computed from the file and this project's variables.
 
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
+import { nextPrNumber, useJustSent } from "@/components/contribute/model"
 import { BrainIcon, CheckIcon, LoaderIcon, PackagePlusIcon, SparklesIcon, WandSparklesIcon } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
@@ -54,15 +55,10 @@ function ShareRecipeDialog({ file, onClose }: { file: WorkspaceFile; onClose: ()
   const [namespace, setNamespace] = useState(namespaces.includes("workflow") ? "workflow" : (namespaces[0] ?? "workflow"))
   const [name, setName] = useState(slug(isSkill ? (file.display.split("/").slice(-2)[0] ?? base) : base))
   const [kind, setKind] = useState<"memories" | "skills">(isSkill ? "skills" : "memories")
-  const [description, setDescription] = useState(() => {
-    const firstPara = (doc?.current ?? "")
-      .replace(/^---[\s\S]*?---\n/, "")
-      .split("\n\n")
-      .map((p) => p.replace(/^#+\s.*$/m, "").trim())
-      .find((p) => p.length > 30)
-    return firstPara ? firstPara.replace(/\s+/g, " ").slice(0, 240) : `What ${name} teaches an agent.`
-  })
+  // Written by you: it's what other people read when they decide whether to subscribe.
+  const [description, setDescription] = useState("")
   const [phase, setPhase] = useState<"edit" | "sending" | "done">("edit")
+  const sentId = useRef<string | null>(null)
   const taken = catalog.some((r) => r.namespace === namespace && r.name === name)
   const [step, setStep] = useState(0)
 
@@ -73,6 +69,8 @@ function ShareRecipeDialog({ file, onClose }: { file: WorkspaceFile; onClose: ()
     return Object.entries(vars)
       // Only values that look specific to this project: paths, names, IDs. Plain words like "always" are left alone.
       .filter(([k, v]) => v.length >= 5 && v !== "••••••" && !k.startsWith("sous") && !/^[a-z-]+$/.test(v) && text.includes(v))
+      // A value that only appears as part of a package name (@owner/name) isn't this project's own.
+      .filter(([, v]) => text.split(v).slice(0, -1).some((before) => !before.endsWith("@")))
       .filter(([, v], i, all) => all.findIndex(([, w]) => w === v) === i)
       .sort((a, b) => b[1].length - a[1].length)
       .slice(0, 6)
@@ -81,9 +79,11 @@ function ShareRecipeDialog({ file, onClose }: { file: WorkspaceFile; onClose: ()
 
   const generic = useMemo(() => {
     let text = doc?.current ?? ""
-    for (const [k, v] of found) if (replace[k]) text = text.split(v).join(`{{ ${k} }}`)
+    // Replace the value everywhere except where it's part of a package name (@owner/name).
+    for (const [k, v] of found) if (replace[k]) text = text.replace(new RegExp(`(?<!@)${v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "g"), `{{ ${k} }}`)
     return text
   }, [doc, found, replace])
+  const localIncludes = (doc?.current ?? "").split("\n").filter((l) => /^@(\$\{sousDir\}|\$\{projectRoot\}|#project|\.\.?\/)/.test(l.trim()))
   const fileName = kind === "skills" ? `skills/${name}/SKILL.tpl.md` : `memories/${name}.tpl.md`
   const manifest = [
     `# ${namespace}/${name}`,
@@ -94,7 +94,7 @@ function ShareRecipeDialog({ file, onClose }: { file: WorkspaceFile; onClose: ()
     "version: 0.1.0",
     "",
     "description: >-",
-    ...description.match(/.{1,74}(\s|$)/g)!.map((l) => `  ${l.trim()}`),
+    ...((description || "TODO: what this recipe teaches an agent.").match(/.{1,74}(\s|$)/g) ?? []).map((l) => `  ${l.trim()}`),
     "",
     "contents:",
     `  - kind: ${kind}`,
@@ -132,7 +132,7 @@ function ShareRecipeDialog({ file, onClose }: { file: WorkspaceFile; onClose: ()
         const proposal: Proposal = {
           id: `share-${Date.now()}`,
           repo: `github.com/${repo}`,
-          number: 250 + Math.floor(Math.random() * 30),
+          number: nextPrNumber(`github.com/${repo}`, useStore.getState().proposals.filter((x) => x.repo === `github.com/${repo}`).map((x) => x.number)),
           title: `${namespace}/${name}: new recipe`,
           branch: contributionBranch(),
           recipes: [{ name: `${namespace}/${name}`, from: "new", to: "0.1.0" }],
@@ -141,6 +141,7 @@ function ShareRecipeDialog({ file, onClose }: { file: WorkspaceFile; onClose: ()
           openedAt: "just now",
           draft: false,
         }
+        sentId.current = proposal.id
         addProposal(proposal, [])
         setPhase("done")
       }
@@ -205,8 +206,21 @@ function ShareRecipeDialog({ file, onClose }: { file: WorkspaceFile; onClose: ()
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">Description</Label>
-                  <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} className="text-xs" />
+                  <Textarea
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    rows={4}
+                    className="text-xs"
+                    placeholder="One or two sentences: what this teaches an agent, and when a project would want it."
+                  />
                 </div>
+                {localIncludes.length > 0 && (
+                  <p className="rounded-lg border border-warning/40 bg-warning/8 p-2 text-xs text-warning">
+                    This file includes {localIncludes.length} file{localIncludes.length === 1 ? "" : "s"} from your own project ({localIncludes[0].trim()}
+                    {localIncludes.length > 1 ? ", …" : ""}). Projects that subscribe won't have {localIncludes.length === 1 ? "it" : "them"}: share those
+                    files too, or inline them.
+                  </p>
+                )}
                 <div className="space-y-2">
                   <Label className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <WandSparklesIcon className="size-3.5 text-liquid" /> Make it generic
@@ -276,7 +290,7 @@ function ShareRecipeDialog({ file, onClose }: { file: WorkspaceFile; onClose: ()
                 <span className="text-xs text-muted-foreground">
                   Proposes <b className="text-foreground">{`${namespace}/${name}`}</b> 0.1.0 to {repo}.
                 </span>
-                <Button className="ml-auto" onClick={send} disabled={!name || !namespace || taken}>
+                <Button className="ml-auto" onClick={send} disabled={!name || !namespace || taken || description.trim().length < 10} title={description.trim().length < 10 ? "Add a description first" : undefined}>
                   <PackagePlusIcon /> Propose new recipe
                 </Button>
               </div>
@@ -315,6 +329,7 @@ function ShareRecipeDialog({ file, onClose }: { file: WorkspaceFile; onClose: ()
                       size="sm"
                       onClick={() => {
                         onClose()
+                        useJustSent.getState().set(sentId.current)
                         setPage("proposals")
                       }}
                     >

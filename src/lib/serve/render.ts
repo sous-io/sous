@@ -44,6 +44,9 @@ export type RenderResult = {
   tokens: number;
   /** The scope variables the template reads (LiquidJS static analysis), when it could tell. */
   uses?: string[];
+  /** A mistake that doesn't stop rendering, such as a filter name that doesn't exist. */
+  warning?: string;
+  warningPos?: number;
 };
 
 const ALWAYS_BLOCKS = new Set(["if", "unless", "for", "case", "capture", "raw", "comment", "tablerow"]);
@@ -284,5 +287,26 @@ export async function renderTemplate(
     // Some custom tags can't be analysed; the list is then unknown.
   }
 
-  return done({ regions, output, segments, uses });
+  // LiquidJS passes an unknown filter's input through unchanged; say so instead.
+  let warning: string | undefined;
+  let warningPos: number | undefined;
+  const known = (engine as unknown as { filters: Record<string, unknown> }).filters ?? {};
+  for (const block of source.matchAll(/\{\{[\s\S]*?\}\}|\{%[\s\S]*?%\}/g)) {
+    const text = block[0].replace(/"[^"]*"|'[^']*'/g, (m) => " ".repeat(m.length));
+    for (const m of text.matchAll(/\|\s*([A-Za-z_]\w*)?/g)) {
+      if (text[m.index! + 1] === "|" || text[m.index! - 1] === "|") continue;
+      const name = m[1];
+      if (!name) {
+        warning = "A | needs a filter name after it, such as upcase.";
+        warningPos = block.index! + m.index!;
+      } else if (!(name in known)) {
+        warning = `There's no filter called ${name}, so it does nothing.`;
+        warningPos = block.index! + m.index! + m[0].indexOf(name);
+      }
+      if (warning) break;
+    }
+    if (warning) break;
+  }
+
+  return done({ regions, output, segments, uses, warning, warningPos });
 }

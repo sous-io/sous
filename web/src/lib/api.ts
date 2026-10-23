@@ -53,6 +53,8 @@ export type RenderResult = {
   ms: number
   tokens: number
   uses?: string[]
+  warning?: string
+  warningPos?: number
 }
 
 export type OutputInfo = {

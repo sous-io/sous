@@ -55,7 +55,15 @@ function Diff({ before = "", after = "" }: { before?: string; after?: string }) 
         }
         return (
           <div key={i} className={cn("px-3 whitespace-pre-wrap", p.added ? "diff-add" : "diff-del")}>
-            {p.value.replace(/\n$/, "")}
+            {p.value
+              .replace(/\n$/, "")
+              .split("\n")
+              .map((line, j) => (
+                <div key={j} className="flex gap-2">
+                  <span className={cn("w-3 shrink-0 select-none", p.added ? "text-success" : "text-destructive")}>{p.added ? "+" : "−"}</span>
+                  <span className="min-w-0">{line || " "}</span>
+                </div>
+              ))}
           </div>
         )
       })}
@@ -135,7 +143,9 @@ export function UpdatePreview({ recipe, onClose }: { recipe: CatalogRecipe; onCl
           </div>
         </ScrollArea>
         <div className="flex items-center gap-3 border-t px-6 py-3">
-          <code className="rounded bg-muted px-2 py-1 font-mono text-[11px]">sous subscription update {recipe.repo.split("/")[1]}</code>
+          <code className="rounded bg-muted px-2 py-1 font-mono text-[11px]">
+            sous subscription update {recipe.namespace}/{recipe.name}
+          </code>
           <Button
             className="ml-auto"
             onClick={() => {

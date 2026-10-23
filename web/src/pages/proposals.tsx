@@ -230,8 +230,11 @@ export function ProposalsPage() {
     if (justSentId) top.current?.scrollIntoView({ block: "start" })
     return () => useJustSent.getState().set(null)
   }, [justSentId])
-  const justSent = proposals.filter((p) => p.id === justSentId)
-  const rest = proposals.filter((p) => p.id !== justSentId)
+  // The example cards only fill an empty page: once you've sent something, they go.
+  const anyReal = proposals.some((p) => !p.example)
+  const visible = anyReal ? proposals.filter((p) => !p.example) : proposals
+  const justSent = visible.filter((p) => p.id === justSentId)
+  const rest = visible.filter((p) => p.id !== justSentId)
   const progress = rest.filter((p) => p.stage !== "released")
   const available = rest.filter((p) => p.stage === "released" && !p.updated)
   const done = rest.filter((p) => p.stage === "released" && p.updated)
@@ -242,7 +245,9 @@ export function ProposalsPage() {
       <style>{FLASH}</style>
       <div ref={top} className="mx-auto max-w-3xl space-y-7 p-8">
         <div className="space-y-1">
-          <h1 className="text-xl font-semibold tracking-tight">Proposals</h1>
+          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
+            <GitPullRequestArrowIcon className="size-6 text-success" /> Proposals
+          </h1>
           <p className="text-sm text-muted-foreground">
             What you proposed upstream, and where each one is, from opened to released. When one is released, move this project to it from here.
             {open > 0 && ` ${open} in progress.`}

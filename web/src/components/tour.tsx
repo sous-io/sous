@@ -45,6 +45,7 @@ const STEPS: Step[] = [
     page: "editor",
     file: "sample",
     target: "[data-tour=inspector]",
+    before: click("[data-tour=tab-output]"),
     title: "The result, side by side",
     body: "Text, a markdown Preview, and What changed: a diff of what your agent will read. Click a highlighted piece to jump to the Liquid that wrote it.",
   },
@@ -78,11 +79,13 @@ const STEPS: Step[] = [
   },
   {
     page: "recipes",
+    target: "[data-tour=recipes-head]",
     title: "Recipes",
     body: "The recipes this project uses and the others already downloaded, read from each recipe's sous.recipe.yaml, with updates ready to apply.",
   },
   {
     page: "proposals",
+    target: "h1",
     title: "Your pull requests",
     body: "Your real pull requests on these repositories, live from GitHub, and the ones you sent from here. Ctrl+K opens any file or command from anywhere.",
   },
@@ -123,8 +126,13 @@ export function Tour() {
       setRect(null)
       return
     }
+    let scrolled = false
     const find = () => {
       const el = document.querySelector(current.target!)
+      if (el && !scrolled) {
+        el.scrollIntoView({ block: "nearest" })
+        scrolled = true
+      }
       setRect(el ? el.getBoundingClientRect() : null)
     }
     find()

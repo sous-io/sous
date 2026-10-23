@@ -108,7 +108,7 @@ function RecipeCard({ r }: { r: CatalogRecipe }) {
           </Tooltip>
         )}
       </div>
-      <div className="mt-4 flex items-center gap-2 border-t pt-3">
+      <div className="mt-4 flex flex-wrap items-center gap-2 border-t pt-3">
         {r.using ? (
           <>
             <Button
@@ -134,7 +134,13 @@ function RecipeCard({ r }: { r: CatalogRecipe }) {
                     variant="ghost"
                     className="ml-auto"
                     onClick={() => {
-                      const unsent = Object.entries(useStore.getState().docs).some(([, d]) => d.current !== d.original && d.proposedContent !== d.current)
+                      const { docs, workspace } = useStore.getState()
+                      const mine = new Set(
+                        (workspace?.files ?? [])
+                          .filter((f) => f.origin.kind === "recipe" && f.origin.namespace === r.namespace && f.origin.recipe === r.name)
+                          .map((f) => f.id),
+                      )
+                      const unsent = Object.entries(docs).some(([id, d]) => mine.has(id) && d.current !== d.original && d.proposedContent !== d.current)
                       if (unsent) return openContribute()
                       // Nothing edited yet: start where an edit happens, in the recipe's files.
                       setFilter(`${r.namespace}/${r.name}/`)
@@ -182,7 +188,7 @@ export function RecipesPage() {
   return (
     <ScrollArea className="h-full">
       <div className="mx-auto max-w-6xl space-y-6 p-8">
-        <div className="flex items-end gap-4">
+        <div className="flex items-end gap-4" data-tour="recipes-head">
           <div className="space-y-1">
             <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
               <PackageIcon className="size-6 text-recipe" /> Recipes

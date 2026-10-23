@@ -8,7 +8,9 @@ import { SearchIcon, SparklesIcon } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import type { OutputInfo } from "@/lib/api"
 
-const STOP = new Set("a an the and or to of for in on with this that it is are be when you your i me my we our use using how what do does can should".split(" "))
+const STOP = new Set(
+  "a an the and or to of for in on with this that it is are be when you your i me my we our use using how what do does can should write make add get need want new".split(" "),
+)
 
 function words(text: string): string[] {
   return text

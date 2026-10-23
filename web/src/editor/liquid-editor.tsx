@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react"
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands"
 import { markdown } from "@codemirror/lang-markdown"
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language"
-import { EditorState } from "@codemirror/state"
+import { EditorState, Transaction } from "@codemirror/state"
 import { drawSelection, EditorView, highlightActiveLine, keymap, lineNumbers } from "@codemirror/view"
 import { tags as t } from "@lezer/highlight"
 import { toast } from "sonner"
@@ -30,10 +30,10 @@ const markdownStyle = HighlightStyle.define([
 ])
 
 const theme = EditorView.theme({
-  "&": { height: "100%", fontSize: "13px", backgroundColor: "transparent", color: "var(--foreground)" },
+  "&": { height: "100%", fontSize: "12.75px", backgroundColor: "transparent", color: "var(--foreground)" },
   ".cm-scroller": { fontFamily: "'Geist Mono Variable', ui-monospace, monospace", lineHeight: "1.65" },
   ".cm-content": { padding: "16px 0 40vh", caretColor: "var(--foreground)", minWidth: "0" },
-  ".cm-line": { padding: "0 24px 0 12px" },
+  ".cm-line": { padding: "0 14px 0 10px" },
   ".cm-gutters": { backgroundColor: "transparent", border: "none", color: "var(--muted-foreground)", opacity: "0.55" },
   ".cm-activeLine": { backgroundColor: "color-mix(in oklch, var(--foreground) 4%, transparent)" },
   ".cm-activeLineGutter": { backgroundColor: "transparent", color: "var(--foreground)" },
@@ -112,7 +112,7 @@ export function LiquidEditor({ fileId, visible }: Props) {
                 toast(
                   f?.origin.kind === "recipe"
                     ? "Recipe edits stay in this tab until you propose them: press Review changes in the header."
-                    : "Saving to disk is turned off in this proof of concept. Your edit stays in this tab.",
+                    : "To save, press Review & save in the banner above (saving is simulated in this proof of concept).",
                 )
                 return true
               },
@@ -123,6 +123,10 @@ export function LiquidEditor({ fileId, visible }: Props) {
           ]),
           // Close Liquid delimiters as they're typed: {{ → {{ | }}, {% → {% | %}.
           EditorView.inputHandler.of((v, from, to, text) => {
+            if (text === " " && from === to && v.state.doc.sliceString(from, from + 1) === " " && /\{[{%]-?$/.test(v.state.doc.sliceString(from - 3, from))) {
+              v.dispatch({ selection: { anchor: from + 1 } })
+              return true
+            }
             const prev = v.state.doc.sliceString(from - 1, from)
             if (prev !== "{" || (text !== "{" && text !== "%")) return false
             const close = text === "{" ? "}}" : "%}"
@@ -212,17 +216,23 @@ export function LiquidEditor({ fileId, visible }: Props) {
       }).catch(() => {})
     }
     const error = doc.render.error ? { message: doc.render.error, pos: doc.render.errorPos ?? null } : null
-    v.dispatch({ effects: doc.render.error ? [setError.of(error)] : [setRegions.of(doc.render.regions), setError.of(null)] })
+    const warning = doc.render.warning ? { message: doc.render.warning, pos: doc.render.warningPos ?? null } : null
+    v.dispatch({ effects: doc.render.error ? [setError.of(error)] : [setRegions.of(doc.render.regions), setError.of(warning)] })
   }, [doc?.render, doc?.rendering])
 
-  // Revert (or any outside change to the text) replaces the editor's text.
+  // Revert (or any outside change to the text) replaces the editor's text, outside undo history.
   useEffect(() => {
     const v = view.current
     if (!v || !doc) return
     if (v.state.doc.toString() !== doc.current) {
-      v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: doc.current } })
+      v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: doc.current }, annotations: Transaction.addToHistory.of(false) })
     }
   }, [doc?.current])
+
+  // The change bars compare with the text on disk, which a save or a reload replaces.
+  useEffect(() => {
+    if (view.current && doc) view.current.dispatch({ effects: setOriginal.of(doc.original) })
+  }, [doc?.original])
 
   useEffect(() => {
     view.current?.dispatch({ effects: setMode.of(mode) })

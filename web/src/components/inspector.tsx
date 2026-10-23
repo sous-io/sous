@@ -430,7 +430,7 @@ export function Inspector({ fileId }: { fileId: string }) {
     <Tabs defaultValue="output" className="h-full gap-0" data-tour="inspector">
       <div className="flex h-9 shrink-0 items-center border-b px-2">
         <TabsList variant="line" className="h-8">
-          <TabsTrigger value="output">
+          <TabsTrigger value="output" data-tour="tab-output">
             <EyeIcon /> Result
           </TabsTrigger>
           <TabsTrigger value="vars" data-tour="tab-vars">
@@ -449,8 +449,14 @@ export function Inspector({ fileId }: { fileId: string }) {
       {failed && (
         <div className="flex gap-2 border-b bg-destructive/8 px-3 py-2 text-[11px] text-destructive">
           <CircleAlertIcon className="mt-0.5 size-3.5 shrink-0" />
-          <span className="whitespace-pre-wrap">
-            <b>sous build fails for this file:</b> {failed.error}
+          <span className="min-w-0">
+            <b>sous build fails for this file.</b> {failed.error?.split("\n")[0]}
+            {failed.error?.includes("\n") && (
+              <details className="mt-1 text-destructive/80">
+                <summary className="cursor-pointer">Details</summary>
+                <pre className="mt-1 font-mono text-[10px] whitespace-pre-wrap">{failed.error.split("\n").slice(1).join("\n")}</pre>
+              </details>
+            )}
           </span>
         </div>
       )}
