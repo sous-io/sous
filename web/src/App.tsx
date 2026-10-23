@@ -58,50 +58,68 @@ function Header() {
   const toggleTheme = () => document.documentElement.classList.toggle("dark")
 
   return (
-    <header className="flex h-12 shrink-0 items-center gap-3 border-b px-3">
-      <div className="flex items-center gap-2">
-        <div className="grid size-7 place-items-center rounded-md bg-primary text-primary-foreground">
-          <ChefHatIcon className="size-4" />
+    <header className="relative flex h-13 shrink-0 items-center gap-3 border-b bg-sidebar px-3">
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-brand/50 to-transparent" />
+      <div className="flex items-center gap-2.5">
+        <div className="grid size-8 place-items-center rounded-lg bg-gradient-to-br from-brand to-brand-2 text-white shadow-[var(--shadow-glow)]">
+          <ChefHatIcon className="size-[18px]" />
         </div>
-        <span className="font-semibold">sous</span>
+        <div className="leading-tight">
+          <div className="text-[15px] font-bold tracking-tight">sous</div>
+          <div className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">studio</div>
+        </div>
         {workspace && (
-          <>
-            <span className="text-muted-foreground">/</span>
-            <span className="text-sm">{workspace.projectName}</span>
-            <Badge variant="outline" className="gap-1 font-mono text-[11px]">
+          <div className="ml-2 flex items-center gap-2 rounded-lg border bg-background/60 py-1 pr-2 pl-2.5">
+            <span className="text-sm font-medium">{workspace.projectName}</span>
+            <span className="flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
               <GitBranchIcon className="size-3" />
               {workspace.branch}
-            </Badge>
-          </>
+            </span>
+          </div>
         )}
       </div>
-      <nav className="ml-4 flex items-center gap-0.5">
+      <nav className="ml-3 flex items-center gap-0.5 rounded-xl border bg-background/50 p-1">
         {NAV.map(({ page: p, label, icon: Icon }) => (
-          <Button
+          <button
             key={p}
-            size="sm"
-            variant={page === p ? "secondary" : "ghost"}
             onClick={() => setPage(p)}
-            className={cn(page !== p && "text-muted-foreground")}
-          >
-            <Icon /> {label}
-            {p === "proposals" && openProposals > 0 && (
-              <span className="ml-0.5 rounded-full bg-muted px-1.5 text-[10px] text-foreground">{openProposals}</span>
+            className={cn(
+              "flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium transition-all",
+              page === p
+                ? "bg-card text-foreground shadow-sm ring-1 ring-border"
+                : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
             )}
-          </Button>
+          >
+            <Icon className={cn("size-3.5", page === p && "text-brand")} /> {label}
+            {p === "proposals" && openProposals > 0 && (
+              <span className="ml-0.5 rounded-full bg-brand-soft px-1.5 text-[10px] font-semibold text-brand">{openProposals}</span>
+            )}
+          </button>
         ))}
       </nav>
       <div className="ml-auto flex items-center gap-2">
-        <Button size="sm" variant="outline" className="w-56 justify-start text-muted-foreground" onClick={() => setPaletteOpen(true)}>
+        <Button size="sm" variant="outline" className="w-60 justify-start bg-background/60 text-muted-foreground" onClick={() => setPaletteOpen(true)}>
           <SearchIcon /> Open a file…
           <span className="ml-auto flex gap-0.5">
             <Kbd>Ctrl</Kbd>
             <Kbd>K</Kbd>
           </span>
         </Button>
-        <Button size="sm" onClick={() => openContribute()} variant={unsent.length ? "default" : "outline"}>
+        <Button
+          size="sm"
+          onClick={() => openContribute()}
+          variant={unsent.length ? "default" : "outline"}
+          className={cn("font-semibold", unsent.length > 0 && "shadow-[var(--shadow-glow)]")}
+        >
           <GitPullRequestArrowIcon />
-          {unsent.length ? `Send ${unsent.length} change${unsent.length === 1 ? "" : "s"}` : "No changes"}
+          {unsent.length ? (
+            <>
+              Send changes
+              <span className="rounded-full bg-primary-foreground/20 px-1.5 text-[11px]">{unsent.length}</span>
+            </>
+          ) : (
+            "No changes yet"
+          )}
         </Button>
         <Button size="icon-sm" variant="ghost" onClick={toggleTheme} title="Light or dark">
           <SunIcon className="hidden dark:block" />
@@ -152,7 +170,7 @@ function Palette() {
                   setOpen(false)
                 }}
               >
-                <FileCode2Icon className="text-[var(--cm-liquid)]" />
+                <FileCode2Icon className="text-liquid" />
                 <span className="truncate">{f.display}</span>
                 {f.outputs[0] && <span className="ml-auto truncate text-xs text-muted-foreground">→ {f.outputs[0]}</span>}
               </CommandItem>

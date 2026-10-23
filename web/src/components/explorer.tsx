@@ -171,15 +171,16 @@ function TreeNode({ node, depth, forceOpen }: { node: Node; depth: number; force
         style={pad}
         className={cn(
           "flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-[13px] hover:bg-accent",
-          activeId === node.fileId && "bg-accent font-medium text-accent-foreground",
+          activeId === node.fileId &&
+            "relative bg-brand-soft font-medium text-foreground before:absolute before:inset-y-1 before:left-0 before:w-0.5 before:rounded-full before:bg-brand",
         )}
       >
         <span className="w-3.5" />
-        <Icon className={cn("size-3.5 shrink-0", isTpl ? "text-[var(--cm-liquid)]" : "text-muted-foreground")} />
+        <Icon className={cn("size-3.5 shrink-0", isTpl ? "text-liquid" : "text-muted-foreground")} />
         <span className="truncate">{node.name}</span>
         {changed && (
           <span
-            className={cn("ml-auto size-2 shrink-0 rounded-full", doc.proposedIn ? "bg-emerald-500" : "bg-amber-500")}
+            className={cn("ml-auto size-2 shrink-0 rounded-full", doc.proposedIn ? "bg-success" : "bg-warning")}
           />
         )}
       </button>
@@ -200,24 +201,41 @@ function TreeNode({ node, depth, forceOpen }: { node: Node; depth: number; force
       <CollapsibleTrigger
         style={pad}
         title={node.hint}
-        className="flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-[13px] hover:bg-accent"
+        className={cn(
+          "flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-[13px] hover:bg-accent",
+          depth === 0 && "mt-2 py-1.5",
+        )}
       >
         <ChevronRightIcon className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", isOpen && "rotate-90")} />
         <Icon
           className={cn(
             "size-3.5 shrink-0",
-            node.icon === "repo" || node.icon === "recipe" ? "text-sky-500" : "text-muted-foreground",
-            node.icon === "sample" && "text-[var(--cm-liquid)]",
+            node.icon === "repo" || node.icon === "recipe" || node.icon === "namespace"
+              ? "text-recipe"
+              : node.icon === "project"
+                ? "text-project"
+                : node.icon === "sample"
+                  ? "text-sample"
+                  : "text-muted-foreground",
+            node.icon === "namespace" && "opacity-70",
           )}
         />
-        <span className={cn("truncate", depth === 0 && "font-medium")}>{node.name}</span>
+        <span
+          className={cn(
+            "truncate",
+            depth === 0 && "text-[11px] font-semibold tracking-wider text-muted-foreground uppercase",
+            node.icon === "recipe" && "font-medium",
+          )}
+        >
+          {node.name}
+        </span>
         {node.badge && (
           <span className="ml-auto shrink-0 rounded bg-muted px-1 font-mono text-[10px] text-muted-foreground">
             {node.badge}
           </span>
         )}
         {node.icon === "recipe" && node.hint?.includes("available") && (
-          <span className="size-1.5 shrink-0 rounded-full bg-sky-500" title={node.hint} />
+          <span className="size-1.5 shrink-0 rounded-full bg-recipe" title={node.hint} />
         )}
       </CollapsibleTrigger>
       <CollapsibleContent>
@@ -278,8 +296,8 @@ export function Explorer() {
       <ScrollArea className="min-h-0 flex-1">
         <div className="p-1.5">
           {changed.length > 0 && (
-            <div className="mb-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-1">
-              <div className="flex items-center gap-1.5 px-2 py-1 text-[11px] font-semibold tracking-wide text-amber-600 uppercase dark:text-amber-400">
+            <div className="mb-2 rounded-md border border-warning/35 bg-warning/8 p-1">
+              <div className="flex items-center gap-1.5 px-2 py-1 text-[11px] font-semibold tracking-wide text-warning uppercase">
                 <BookOpenIcon className="size-3" /> Changed ({changed.length})
               </div>
               {changed.map((id) => (
@@ -289,7 +307,7 @@ export function Explorer() {
                   className="flex w-full items-center gap-1.5 truncate rounded px-2 py-0.5 text-left text-xs hover:bg-accent"
                 >
                   <span
-                    className={cn("size-1.5 rounded-full", docs[id].proposedIn ? "bg-emerald-500" : "bg-amber-500")}
+                    className={cn("size-1.5 rounded-full", docs[id].proposedIn ? "bg-success" : "bg-warning")}
                   />
                   <span className="truncate">{fileMap.get(id)?.display}</span>
                 </button>

@@ -62,7 +62,7 @@ export function VariablesPage() {
             <TableBody>
               {rows.map(([k, v]) => (
                 <TableRow key={k}>
-                  <TableCell className="font-mono text-xs text-[var(--cm-liquid)]">{k}</TableCell>
+                  <TableCell className="font-mono text-xs text-liquid">{k}</TableCell>
                   <TableCell className="max-w-md truncate font-mono text-xs" title={v}>
                     {v}
                   </TableCell>
@@ -109,9 +109,9 @@ export function RecipesPage() {
               <Card key={r.name} size="sm">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-sm">
-                    <PackageIcon className="size-4 text-sky-500" /> {r.name}
+                    <PackageIcon className="size-4 text-recipe" /> {r.name}
                     <span className="font-mono text-xs font-normal text-muted-foreground">{r.version}</span>
-                    {update && <Badge className="ml-auto bg-sky-500/15 text-sky-600 dark:text-sky-400">{update} available</Badge>}
+                    {update && <Badge className="ml-auto bg-recipe/15 text-recipe">{update} available</Badge>}
                   </CardTitle>
                   <CardDescription>
                     {r.repo} · {r.files} template{r.files === 1 ? "" : "s"}
@@ -184,7 +184,7 @@ export function BuildPage() {
                   <TableCell className="font-mono text-xs">{o.out}</TableCell>
                   <TableCell className="max-w-sm truncate font-mono text-xs text-muted-foreground">{o.from}</TableCell>
                   <TableCell>
-                    <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+                    <span className="flex items-center gap-1 text-xs text-success">
                       <CheckCircle2Icon className="size-3.5" /> up to date
                     </span>
                   </TableCell>

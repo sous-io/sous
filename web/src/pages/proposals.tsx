@@ -29,8 +29,8 @@ function Timeline({ stage }: { stage: ProposalStage }) {
             <div
               className={cn(
                 "grid size-6 place-items-center rounded-full border text-[10px]",
-                i < at && "border-emerald-500 bg-emerald-500 text-white",
-                i === at && "border-[var(--cm-liquid)] text-[var(--cm-liquid)]",
+                i < at && "border-success bg-success text-white",
+                i === at && "border-liquid text-liquid",
                 i > at && "text-muted-foreground",
               )}
             >
@@ -38,7 +38,7 @@ function Timeline({ stage }: { stage: ProposalStage }) {
             </div>
             <span className={cn("text-[11px] whitespace-nowrap", i > at && "text-muted-foreground")}>{s.label}</span>
           </div>
-          {i < STAGES.length - 1 && <div className={cn("mx-1 mb-4 h-px flex-1", i < at ? "bg-emerald-500" : "bg-border")} />}
+          {i < STAGES.length - 1 && <div className={cn("mx-1 mb-4 h-px flex-1", i < at ? "bg-success" : "bg-border")} />}
         </div>
       ))}
     </div>
@@ -65,7 +65,7 @@ function ProposalCard({ p }: { p: Proposal }) {
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-start gap-3">
-          <GitPullRequestArrowIcon className="mt-0.5 size-4 shrink-0 text-emerald-500" />
+          <GitPullRequestArrowIcon className="mt-0.5 size-4 shrink-0 text-success" />
           <div className="min-w-0 flex-1">
             <CardTitle className="text-sm">
               {p.title}{" "}

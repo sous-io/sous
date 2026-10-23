@@ -43,7 +43,7 @@ function FileTabs() {
   const close = useStore((s) => s.close)
 
   return (
-    <div className="flex h-9 shrink-0 items-end overflow-x-auto border-b bg-muted/30">
+    <div className="flex h-9 shrink-0 items-end overflow-x-auto border-b bg-sidebar">
       {tabs.map((id) => {
         const f = files.find((x) => x.id === id)
         const doc = docs[id]
@@ -55,11 +55,13 @@ function FileTabs() {
             onClick={() => open(id)}
             className={cn(
               "group flex h-full cursor-pointer items-center gap-1.5 border-r px-3 text-xs",
-              activeId === id ? "bg-background text-foreground" : "text-muted-foreground hover:bg-background/60",
+              activeId === id
+                ? "bg-surface-editor text-foreground shadow-[inset_0_2px_0_var(--brand)]"
+                : "text-muted-foreground hover:bg-accent/50",
             )}
           >
             {f?.isTpl ? (
-              <FileCode2Icon className="size-3.5 text-[var(--cm-liquid)]" />
+              <FileCode2Icon className="size-3.5 text-liquid" />
             ) : (
               <FileIcon className="size-3.5" />
             )}
@@ -72,7 +74,7 @@ function FileTabs() {
               className="ml-1 grid size-4 place-items-center rounded hover:bg-muted"
             >
               {changed ? (
-                <span className="size-2 rounded-full bg-amber-500 group-hover:hidden" />
+                <span className="size-2 rounded-full bg-warning group-hover:hidden" />
               ) : null}
               <XIcon className={cn("size-3", changed ? "hidden group-hover:block" : "opacity-0 group-hover:opacity-100")} />
             </button>
@@ -113,8 +115,8 @@ function OriginBanner({ file }: { file: WorkspaceFile }) {
   if (doc?.proposedIn) {
     const proposal = useStore.getState().proposals.find((p) => p.id === doc.proposedIn)
     return (
-      <div className="flex items-center gap-2 border-b bg-emerald-500/8 px-4 py-1.5 text-xs">
-        <GitPullRequestArrowIcon className="size-3.5 text-emerald-500" />
+      <div className="flex items-center gap-2 border-b bg-success/10 px-4 py-1.5 text-xs">
+        <GitPullRequestArrowIcon className="size-3.5 text-success" />
         <span>
           Proposed in <b>#{proposal?.number}</b> “{proposal?.title}”. Keep editing to add to it.
         </span>
@@ -127,8 +129,8 @@ function OriginBanner({ file }: { file: WorkspaceFile }) {
 
   if (o.kind === "recipe") {
     return (
-      <div className="flex items-center gap-2 border-b bg-sky-500/6 px-4 py-1.5 text-xs">
-        <Badge variant="outline" className="h-5 border-sky-500/40 text-sky-600 dark:text-sky-400">
+      <div className="flex items-center gap-2 border-b bg-recipe/8 px-4 py-1.5 text-xs">
+        <Badge variant="outline" className="h-5 border-recipe/40 text-recipe">
           recipe
         </Badge>
         <span className="truncate text-muted-foreground">
@@ -145,8 +147,8 @@ function OriginBanner({ file }: { file: WorkspaceFile }) {
   }
   if (o.kind === "sample") {
     return (
-      <div className="flex items-center gap-2 border-b bg-[var(--cm-liquid-bg)] px-4 py-1.5 text-xs">
-        <SparklesIcon className="size-3.5 text-[var(--cm-liquid)]" />
+      <div className="flex items-center gap-2 border-b bg-liquid-soft px-4 py-1.5 text-xs">
+        <SparklesIcon className="size-3.5 text-liquid" />
         <span className="text-muted-foreground">
           A sample template, rendered with <b className="text-foreground">this project's real variables</b>. Click a
           highlighted section to edit its Liquid; move out of it to re-render.
@@ -155,8 +157,8 @@ function OriginBanner({ file }: { file: WorkspaceFile }) {
     )
   }
   return (
-    <div className="flex items-center gap-2 border-b bg-muted/30 px-4 py-1.5 text-xs">
-      <Badge variant="outline" className="h-5">
+    <div className="flex items-center gap-2 border-b bg-project/8 px-4 py-1.5 text-xs">
+      <Badge variant="outline" className="h-5 border-project/40 text-project">
         project
       </Badge>
       <span className="text-muted-foreground">
@@ -253,7 +255,7 @@ function OutputPane({ fileId }: { fileId: string }) {
           <div className="divide-y text-xs">
             {vars.map(([k, v]) => (
               <div key={k} className="px-3 py-1.5">
-                <div className="font-mono font-medium text-[var(--cm-liquid)]">{k}</div>
+                <div className="font-mono font-medium text-liquid">{k}</div>
                 <div className="truncate font-mono text-muted-foreground" title={v}>
                   {v === "" ? <i>(empty)</i> : v}
                 </div>
@@ -314,7 +316,7 @@ function StatusBar({ fileId }: { fileId: string | null }) {
   }, [])
 
   return (
-    <div className="flex h-6 shrink-0 items-center gap-4 border-t bg-muted/40 px-3 text-[11px] text-muted-foreground">
+    <div className="flex h-6 shrink-0 items-center gap-4 border-t bg-sidebar px-3 text-[11px] text-muted-foreground">
       {doc &&
         (doc.rendering ? (
           <span className="flex items-center gap-1">
@@ -327,12 +329,12 @@ function StatusBar({ fileId }: { fileId: string | null }) {
           </span>
         ) : (
           <span className="flex items-center gap-1">
-            <ZapIcon className="size-3 text-emerald-500" /> Rendered in {doc.render.ms} ms
+            <ZapIcon className="size-3 text-success" /> Rendered in {doc.render.ms} ms
           </span>
         ))}
       {doc && file?.isTpl && <span>{doc.render.regions.length} Liquid sections</span>}
       {active && (
-        <span className="text-[var(--cm-liquid)]">
+        <span className="text-liquid">
           Editing <span className="font-mono">{active.kind === "output" ? `{{ ${active.label} }}` : `{% ${active.label} %}`}</span>{" "}
           — move the cursor out to re-render
         </span>
@@ -401,7 +403,7 @@ export function EditorArea() {
           <OriginBanner file={file} />
           <div className="min-h-0 flex-1">
             <ResizablePanelGroup orientation="horizontal">
-              <ResizablePanel defaultSize="62%" minSize="30%">
+              <ResizablePanel defaultSize="62%" minSize="30%" className="bg-surface-editor">
                 {tabs.map((id) =>
                   docs[id] ? <LiquidEditor key={id} fileId={id} visible={id === activeId} /> : null,
                 )}

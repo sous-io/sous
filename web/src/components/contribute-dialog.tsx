@@ -278,7 +278,7 @@ function GroupPanel({ group, onProposed }: { group: Group; onProposed: () => voi
     return (
       <div className="space-y-4 p-6">
         <div className="flex items-center gap-2 text-sm font-medium">
-          <FlaskConicalIcon className="size-4 text-[var(--cm-liquid)]" /> POC samples are not real files
+          <FlaskConicalIcon className="size-4 text-liquid" /> POC samples are not real files
         </div>
         <p className="text-sm text-muted-foreground">
           The sample template lives only in this server's memory, so there is nowhere to send it. Edit a recipe file
@@ -303,9 +303,9 @@ function GroupPanel({ group, onProposed }: { group: Group; onProposed: () => voi
             <li key={i} className="flex items-start gap-2.5 text-sm">
               <span className="mt-0.5">
                 {i < progress ? (
-                  <CheckIcon className="size-4 text-emerald-500" />
+                  <CheckIcon className="size-4 text-success" />
                 ) : i === progress ? (
-                  <LoaderIcon className="size-4 animate-spin text-[var(--cm-liquid)]" />
+                  <LoaderIcon className="size-4 animate-spin text-liquid" />
                 ) : (
                   <CircleIcon className="size-4 text-muted-foreground/40" />
                 )}
@@ -318,9 +318,9 @@ function GroupPanel({ group, onProposed }: { group: Group; onProposed: () => voi
           ))}
         </ol>
         {result && (
-          <div className="space-y-3 rounded-lg border border-emerald-500/40 bg-emerald-500/5 p-4">
+          <div className="space-y-3 rounded-lg border border-success/40 bg-success/8 p-4">
             <div className="flex items-center gap-2 text-sm font-medium">
-              <GitPullRequestArrowIcon className="size-4 text-emerald-500" />
+              <GitPullRequestArrowIcon className="size-4 text-success" />
               Pull request #{result.number} opened{result.draft ? " as a draft" : ""}
               <Badge variant="outline" className="ml-1 text-[10px]">
                 mock
@@ -383,7 +383,7 @@ function GroupPanel({ group, onProposed }: { group: Group; onProposed: () => voi
                 <ChevronDownIcon className="size-3.5 -rotate-90 text-muted-foreground transition-transform group-data-[panel-open]:rotate-0" />
                 <span className="truncate font-mono text-xs">{f.display}</span>
                 <span className="ml-auto shrink-0 font-mono text-xs">
-                  <span className="text-emerald-500">+{s.added}</span> <span className="text-red-500">−{s.removed}</span>
+                  <span className="text-success">+{s.added}</span> <span className="text-red-500">−{s.removed}</span>
                 </span>
               </CollapsibleTrigger>
               <CollapsibleContent className="pt-1.5">
@@ -401,7 +401,7 @@ function GroupPanel({ group, onProposed }: { group: Group; onProposed: () => voi
             const kind = bumps[r.name] ?? "patch"
             return (
               <div key={r.name} className="flex items-center gap-3 text-sm">
-                <PackageIcon className="size-4 text-sky-500" />
+                <PackageIcon className="size-4 text-recipe" />
                 <span className="font-medium">{r.name}</span>
                 <span className="font-mono text-xs text-muted-foreground">
                   {r.version} → <b className="text-foreground">{bump(r.version, kind)}</b>
@@ -433,7 +433,7 @@ function GroupPanel({ group, onProposed }: { group: Group; onProposed: () => voi
         <div className="flex items-center">
           <Label className="text-xs tracking-wide text-muted-foreground uppercase">Title and description</Label>
           <Button size="xs" variant="ghost" className="ml-auto" onClick={draftWithClaude} disabled={writing}>
-            <SparklesIcon className="text-[var(--cm-liquid)]" /> {writing ? "Writing…" : "Write it with Claude"}
+            <SparklesIcon className="text-liquid" /> {writing ? "Writing…" : "Write it with Claude"}
           </Button>
         </div>
         <Input value={title} onChange={(e) => setTitle(e.target.value)} />
@@ -548,7 +548,7 @@ export function ContributeDialog() {
                         {g.files.length} file{g.files.length === 1 ? "" : "s"}
                       </span>
                     </span>
-                    {done.has(g.key) && <CheckIcon className="size-4 text-emerald-500" />}
+                    {done.has(g.key) && <CheckIcon className="size-4 text-success" />}
                   </button>
                 )
               })}

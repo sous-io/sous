@@ -29,7 +29,7 @@ const markdownStyle = HighlightStyle.define([
 const theme = EditorView.theme({
   "&": { height: "100%", fontSize: "13.5px", backgroundColor: "transparent", color: "var(--foreground)" },
   ".cm-scroller": { fontFamily: "'Geist Mono Variable', ui-monospace, monospace", lineHeight: "1.65" },
-  ".cm-content": { padding: "16px 0 40vh", caretColor: "var(--foreground)" },
+  ".cm-content": { padding: "16px 0 40vh", caretColor: "var(--foreground)", minWidth: "0" },
   ".cm-line": { padding: "0 24px 0 12px" },
   ".cm-gutters": { backgroundColor: "transparent", border: "none", color: "var(--muted-foreground)", opacity: "0.55" },
   ".cm-activeLine": { backgroundColor: "color-mix(in oklch, var(--foreground) 4%, transparent)" },

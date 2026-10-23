@@ -38,6 +38,7 @@ export type Region = {
   to: number
   kind: "output" | "tag" | "block"
   label: string
+  head: string
   rendered: string
 }
 

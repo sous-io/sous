@@ -60,7 +60,24 @@ export function activeRegion(state: EditorState): number {
   return regions.findIndex((r) => sel.to >= r.from && sel.from < r.to)
 }
 
-class RenderedWidget extends WidgetType {
+/** `{% if x %}` -> `if x`; `{{ a | b }}` -> `a | b`. */
+function inner(head: string): string {
+  return head.replace(/^\{[{%]-?\s*/, "").replace(/\s*-?[}%]\}$/, "")
+}
+
+function onActivate(el: HTMLElement, view: EditorView, region: Region) {
+  el.addEventListener("mousedown", (event) => {
+    event.preventDefault()
+    // Focus first: focusing reads the DOM selection and would move the cursor.
+    view.focus()
+    view.dispatch({ selection: { anchor: region.from }, scrollIntoView: true })
+    // The focus change reads the DOM selection a moment later; set it again after that.
+    window.setTimeout(() => view.dispatch({ selection: { anchor: region.from } }), 0)
+  })
+}
+
+/** An `{{ output }}` or inline tag inside a line: just its rendered text. */
+class InlineWidget extends WidgetType {
   constructor(
     readonly region: Region,
     readonly fresh: boolean,
@@ -68,11 +85,11 @@ class RenderedWidget extends WidgetType {
     super()
   }
 
-  eq(other: RenderedWidget): boolean {
+  eq(other: InlineWidget): boolean {
     return (
       other.region.rendered === this.region.rendered &&
       other.region.from === this.region.from &&
-      other.region.label === this.region.label &&
+      other.region.head === this.region.head &&
       other.fresh === this.fresh
     )
   }
@@ -81,23 +98,83 @@ class RenderedWidget extends WidgetType {
     const { region } = this
     const el = document.createElement("span")
     el.className = `cm-liquid-rendered cm-liquid-${region.kind}` + (this.fresh ? " cm-liquid-fresh" : "")
-    el.title = `${region.kind === "output" ? `{{ ${region.label} }}` : `{% ${region.label} %}`} — click to edit the Liquid source`
-
+    el.dataset.src = region.head
     if (region.rendered === "") {
       el.classList.add("cm-liquid-empty")
-      el.textContent = region.kind === "output" ? `∅ ${region.label}` : `${region.label}`
+      el.textContent = region.kind === "output" ? `∅ ${region.label}` : inner(region.head)
     } else {
       el.textContent = region.rendered
     }
+    onActivate(el, view, region)
+    return el
+  }
 
-    el.addEventListener("mousedown", (event) => {
-      event.preventDefault()
-      // Focus first: focusing reads the DOM selection and would move the cursor.
-      view.focus()
-      view.dispatch({ selection: { anchor: region.from }, scrollIntoView: true })
-      // The focus change reads the DOM selection a moment later; set it again after that.
-      window.setTimeout(() => view.dispatch({ selection: { anchor: region.from } }), 0)
-    })
+  ignoreEvent(): boolean {
+    return true
+  }
+}
+
+const QUIET_TAGS = new Set(["assign", "capture", "comment", "#", "getFiles", "increment", "decrement"])
+
+/** A section that fills whole lines: a card with its opening tag and its output. */
+class BlockWidget extends WidgetType {
+  constructor(
+    readonly region: Region,
+    readonly fresh: boolean,
+  ) {
+    super()
+  }
+
+  eq(other: BlockWidget): boolean {
+    return (
+      other.region.rendered === this.region.rendered &&
+      other.region.from === this.region.from &&
+      other.region.head === this.region.head &&
+      other.fresh === this.fresh
+    )
+  }
+
+  get estimatedHeight(): number {
+    return -1
+  }
+
+  toDOM(view: EditorView): HTMLElement {
+    const { region } = this
+    const body = region.rendered.replace(/^[ \t]*\n/, "").replace(/\n[ \t]*$/, "")
+    const quiet = body.trim() === "" && (QUIET_TAGS.has(region.label) || region.kind === "tag")
+
+    const el = document.createElement("div")
+    el.className = `cm-liquid-card${quiet ? " cm-liquid-card-quiet" : ""}${this.fresh ? " cm-liquid-fresh" : ""}`
+
+    const head = document.createElement("div")
+    head.className = "cm-liquid-card-head"
+    const chip = document.createElement("span")
+    chip.className = "cm-liquid-chip"
+    chip.textContent = region.kind === "output" ? "{{ }}" : region.label
+    const code = document.createElement("code")
+    const rest = region.kind === "output" ? inner(region.head) : inner(region.head).slice(region.label.length).trim()
+    code.textContent = rest
+    head.append(chip, code)
+    if (!quiet) {
+      const hint = document.createElement("span")
+      hint.className = "cm-liquid-card-hint"
+      hint.textContent = "click to edit"
+      head.append(hint)
+    }
+    el.append(head)
+
+    if (!quiet) {
+      const content = document.createElement("div")
+      content.className = "cm-liquid-card-body"
+      if (body.trim() === "") {
+        content.classList.add("cm-liquid-card-empty")
+        content.textContent = "renders nothing here"
+      } else {
+        content.textContent = body
+      }
+      el.append(content)
+    }
+    onActivate(el, view, region)
     return el
   }
 
@@ -108,6 +185,13 @@ class RenderedWidget extends WidgetType {
 
 const activeMark = Decoration.mark({ class: "cm-liquid-active" })
 const sourceMark = Decoration.mark({ class: "cm-liquid-source" })
+
+/** True when the region starts at a line start and ends at a line end. */
+function fillsLines(state: EditorState, region: Region): boolean {
+  const first = state.doc.lineAt(region.from)
+  const last = state.doc.lineAt(region.to)
+  return region.from === first.from && region.to === last.to
+}
 
 function buildDecorations(state: EditorState): DecorationSet {
   const { regions, mode, fresh } = state.field(previewState)
@@ -121,8 +205,12 @@ function buildDecorations(state: EditorState): DecorationSet {
       ranges.push(sourceMark.range(region.from, region.to))
     } else if (index === active) {
       ranges.push(activeMark.range(region.from, region.to))
+    } else if (fillsLines(state, region) && (region.kind !== "output" || region.rendered.includes("\n"))) {
+      ranges.push(
+        Decoration.replace({ widget: new BlockWidget(region, fresh.has(index)), block: true }).range(region.from, region.to),
+      )
     } else {
-      ranges.push(Decoration.replace({ widget: new RenderedWidget(region, fresh.has(index)) }).range(region.from, region.to))
+      ranges.push(Decoration.replace({ widget: new InlineWidget(region, fresh.has(index)) }).range(region.from, region.to))
     }
   })
   return Decoration.set(ranges, true)

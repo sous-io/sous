@@ -19,6 +19,8 @@ export type Region = {
   kind: "output" | "tag" | "block";
   /** Tag name, or the variable expression for an output. */
   label: string;
+  /** Source text of the opening tag (or the whole output), e.g. `{% if x == "y" %}`. */
+  head: string;
   rendered: string;
 };
 
@@ -41,12 +43,18 @@ export function findRegions(source: string, engine: Liquid): Omit<Region, "rende
   const isBlock = (name: string) => ALWAYS_BLOCKS.has(name) || closers.has(name);
 
   const regions: Omit<Region, "rendered">[] = [];
-  const stack: { name: string; begin: number }[] = [];
+  const stack: { name: string; begin: number; head: string }[] = [];
 
   for (const token of tokens) {
     if (token.kind === TokenKind.Output) {
       if (stack.length === 0) {
-        regions.push({ from: token.begin, to: token.end, kind: "output", label: (token as unknown as { content: string }).content.trim() });
+        regions.push({
+          from: token.begin,
+          to: token.end,
+          kind: "output",
+          label: (token as unknown as { content: string }).content.trim(),
+          head: token.getText(),
+        });
       }
       continue;
     }
@@ -59,7 +67,7 @@ export function findRegions(source: string, engine: Liquid): Omit<Region, "rende
         const top = stack.pop()!;
         if (top.name === open) {
           if (stack.length === 0) {
-            regions.push({ from: top.begin, to: token.end, kind: "block", label: open });
+            regions.push({ from: top.begin, to: token.end, kind: "block", label: open, head: top.head });
           }
           break;
         }
@@ -67,11 +75,11 @@ export function findRegions(source: string, engine: Liquid): Omit<Region, "rende
       continue;
     }
     if (isBlock(name)) {
-      stack.push({ name, begin: token.begin });
+      stack.push({ name, begin: token.begin, head: token.getText() });
       continue;
     }
     if (stack.length === 0) {
-      regions.push({ from: token.begin, to: token.end, kind: "tag", label: name });
+      regions.push({ from: token.begin, to: token.end, kind: "tag", label: name, head: token.getText() });
     }
   }
   return regions;
