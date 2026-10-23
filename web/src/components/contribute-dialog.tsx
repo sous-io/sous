@@ -15,16 +15,26 @@ import { RepoAvatar } from "./contribute/avatar"
 import { groupChanges, lineStats, useContributeInfo, type Group } from "./contribute/model"
 import { ProposalSheet } from "./contribute/sheet"
 
-function GroupCard({ g, selected, done, onClick }: { g: Group; selected: boolean; done: boolean; onClick: () => void }) {
+function GroupCard({ g, selected, done, frozen, onClick }: { g: Group; selected: boolean; done: boolean; frozen?: { added: number; removed: number }; onClick: () => void }) {
   const docs = useStore((s) => s.docs)
-  const stats = g.files.reduce(
+  const live = g.files.reduce(
     (acc, f) => {
-      const s = docs[f.id] ? lineStats(docs[f.id].original, docs[f.id].current) : { added: 0, removed: 0 }
+      const d = docs[f.id]
+      // Edits that go into an open proposal count from what was last sent.
+      const s = d ? lineStats(d.proposedIn ? (d.proposedContent ?? d.original) : d.original, d.current) : { added: 0, removed: 0 }
       return { added: acc.added + s.added, removed: acc.removed + s.removed }
     },
     { added: 0, removed: 0 },
   )
-  const action = g.kind === "project" ? "saved to disk" : g.kind === "sample" ? "nowhere to send" : g.kind === "core" ? "pull request · core recipes" : "pull request"
+  const stats = frozen ?? live
+  const action =
+    g.kind === "project"
+      ? done ? "saved" : "save in this project"
+      : g.kind === "sample"
+        ? "nowhere to send"
+        : g.kind === "core"
+          ? done ? "proposed · core recipes" : "propose · core recipes"
+          : done ? "proposed" : "propose as a pull request"
   return (
     <button
       onClick={onClick}
@@ -60,6 +70,20 @@ function GroupCard({ g, selected, done, onClick }: { g: Group; selected: boolean
   )
 }
 
+/** "1 proposal to sous-io/sous-recipes, and 1 file to save in this project." */
+function summaryLine(groups: Group[]): string {
+  const parts: string[] = []
+  for (const g of groups) {
+    const n = g.files.length
+    const files = `${n} file${n === 1 ? "" : "s"}`
+    if (g.kind === "pr" || g.kind === "core") parts.push(`a proposal to ${g.title} (${files})`)
+    else if (g.kind === "project") parts.push(`${files} to save in this project`)
+  }
+  if (!parts.length) return "Your edits, checked and ready to go where they belong."
+  const list = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`
+  return `${list[0].toUpperCase()}${list.slice(1)}.`
+}
+
 export function ContributeDialog() {
   const open = useStore((s) => s.contributeOpen)
   const focus = useStore((s) => s.contributeFocus)
@@ -72,12 +96,15 @@ export function ContributeDialog() {
   // The files are frozen while the dialog is open, so a finished proposal stays on screen.
   const [ids, setIds] = useState<string[]>([])
   const [done, setDone] = useState<Set<string>>(new Set())
+  // Line counts of saved groups, kept after the save makes them the file on disk.
+  const [frozen, setFrozen] = useState<Record<string, { added: number; removed: number }>>({})
 
   useEffect(() => {
     if (!open || !workspace) return
     const next = unsentIds(docs)
     setIds(next)
     setDone(new Set())
+    setFrozen({})
     load(next)
     const groups = groupChanges(workspace.files, next, workspace.projectName, null)
     const focusGroup = groups.find((g) => g.files.some((f) => f.id === focus))
@@ -106,9 +133,9 @@ export function ContributeDialog() {
             <span className="grid size-12 place-items-center rounded-full bg-muted">
               <PencilLineIcon className="size-5 text-muted-foreground" />
             </span>
-            <DialogTitle className="mt-4 text-base">No changes to send</DialogTitle>
+            <DialogTitle className="mt-4 text-base">Nothing to propose or save</DialogTitle>
             <DialogDescription className="mt-1.5 text-sm">
-              Edit any file and it shows up here. Recipe edits become a pull request to the recipe's repository; your project's own files are saved to disk.
+              Edit any file and it shows up here. You propose recipe edits to the recipe's repository as a pull request; you save your project's own files to disk.
             </DialogDescription>
             <Button className="mt-5" variant="outline" onClick={close}>
               Back to the editor
@@ -118,13 +145,10 @@ export function ContributeDialog() {
           <>
             <DialogHeader className="border-b px-6 py-3.5">
               <DialogTitle className="flex items-center gap-2 text-[15px]">
-                <GitPullRequestArrowIcon className="size-4 text-brand" /> Send your changes
+                <GitPullRequestArrowIcon className="size-4 text-brand" /> Review your changes
               </DialogTitle>
               <DialogDescription className="text-xs">
-                {single
-                  ? "Your edits, checked and ready to go where they belong."
-                  : `Your edits go to ${groups.length} places. Each one gets its own proposal.`}{" "}
-                The checks and diffs are real; sending is simulated.
+                {summaryLine(groups)} The checks and diffs are real; proposing and saving are simulated.
               </DialogDescription>
             </DialogHeader>
             <div className="flex min-h-0 flex-1">
@@ -132,7 +156,7 @@ export function ContributeDialog() {
                 <div className="w-68 shrink-0 space-y-1 overflow-y-auto border-r bg-muted/30 p-2">
                   <div className="px-2.5 pt-1.5 pb-1 text-[11px] font-medium text-muted-foreground">Where your edits go</div>
                   {groups.map((g) => (
-                    <GroupCard key={g.key} g={g} selected={group?.key === g.key} done={done.has(g.key)} onClick={() => setSelected(g.key)} />
+                    <GroupCard key={g.key} g={g} selected={group?.key === g.key} done={done.has(g.key)} frozen={frozen[g.key]} onClick={() => setSelected(g.key)} />
                   ))}
                 </div>
               )}
@@ -141,7 +165,10 @@ export function ContributeDialog() {
                   <ProposalSheet
                     key={`${group.key}:${group.kind}`}
                     group={group}
-                    onDone={() => setDone((d) => new Set(d).add(group.key))}
+                    onDone={(_, stats) => {
+                      setDone((d) => new Set(d).add(group.key))
+                      if (stats) setFrozen((f) => ({ ...f, [group.key]: stats }))
+                    }}
                     next={nextUp ? { label: nextUp.kind === "project" ? `save ${nextUp.files.length} file${nextUp.files.length === 1 ? "" : "s"} in this project` : `propose to ${nextUp.title}`, go: () => setSelected(nextUp.key) } : undefined}
                   />
                 )}

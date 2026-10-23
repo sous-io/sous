@@ -51,6 +51,7 @@ export function FileChange({
   defaultOpen,
   baseBranch,
   canExclude,
+  sent,
 }: {
   file: WorkspaceFile
   doc: OpenDoc
@@ -60,6 +61,8 @@ export function FileChange({
   defaultOpen: boolean
   baseBranch: string
   canExclude: boolean
+  /** Adding to an open proposal: the text as last pushed, and that proposal's number. */
+  sent?: { content: string; number: number }
 }) {
   const [open, setOpen] = useState(defaultOpen)
   const hasUpstream = merge.state !== "no-upstream" && file.origin.kind === "recipe"
@@ -73,7 +76,7 @@ export function FileChange({
   useEffect(() => {
     if (!chosen.current) setTabState(hasUpstream ? "upstream" : "pinned")
   }, [hasUpstream])
-  const s = lineStats(doc.original, doc.current)
+  const s = sent ? lineStats(sent.content, doc.current) : lineStats(doc.original, doc.current)
   const version = file.origin.kind === "recipe" ? file.origin.version : null
 
   return (
@@ -98,6 +101,7 @@ export function FileChange({
             {merge.state === "conflict" && (
               <span className="rounded-full bg-warning/15 px-1.5 py-px font-sans text-[10px] text-warning">conflicts with {baseBranch}</span>
             )}
+            {sent && <span className="font-sans text-[10px] text-muted-foreground">new since #{sent.number}</span>}
             <span className="text-success">+{s.added}</span>
             <span className="text-destructive">−{s.removed}</span>
           </span>
@@ -108,7 +112,28 @@ export function FileChange({
           Left out. It stays as an unsent edit in sous serve.
         </div>
       )}
-      {open && included && (
+      {open && included && sent && (
+        <div className="space-y-2.5 border-t px-3 pt-2.5 pb-3">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 text-[11.5px] font-medium">
+              <span className="size-1.5 rounded-full bg-brand" /> New in this push
+            </div>
+            <DiffView a={sent.content} b={doc.current} />
+          </div>
+          <details className="group">
+            <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[11.5px] text-muted-foreground hover:text-foreground">
+              <ChevronRightIcon className="size-3.5 transition-transform group-open:rotate-90" /> Already in #{sent.number}
+              <span className="font-mono text-[10.5px]">
+                (+{lineStats(doc.original, sent.content).added} −{lineStats(doc.original, sent.content).removed})
+              </span>
+            </summary>
+            <div className="mt-1.5 opacity-60 grayscale">
+              <DiffView a={doc.original} b={sent.content} />
+            </div>
+          </details>
+        </div>
+      )}
+      {open && included && !sent && (
         <div className="space-y-2 border-t px-3 pt-2 pb-3">
           <div className="flex items-center gap-1">
             {(

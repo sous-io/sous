@@ -19,7 +19,9 @@ import {
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { useEffect, useRef } from "react"
 import { RepoAvatar } from "@/components/contribute/avatar"
+import { useJustSent } from "@/components/contribute/model"
 import { MyPullRequests } from "@/components/proposals/my-prs"
 import { useStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
@@ -68,7 +70,9 @@ function update(p: Proposal, patch: Partial<Proposal>) {
   useStore.setState((s) => ({ proposals: s.proposals.map((x) => (x.id === p.id ? { ...x, ...patch } : x)) }))
 }
 
-function ProposalCard({ p }: { p: Proposal }) {
+const FLASH = `@keyframes sous-flash { 0%, 35% { box-shadow: 0 0 0 3px var(--brand), 0 10px 40px -12px var(--brand) } 100% { box-shadow: 0 0 0 0 transparent } }`
+
+function ProposalCard({ p, flash }: { p: Proposal; flash?: boolean }) {
   const repoName = p.repo.split("/").pop() ?? p.repo
   const ownerRepo = p.repo.replace(/^[^/]+\//, "")
   const owner = ownerRepo.split("/")[0]
@@ -108,7 +112,10 @@ function ProposalCard({ p }: { p: Proposal }) {
               : { text: `Released: ${versions || "it"} is out.`, icon: SparklesIcon, tone: "text-success" }
 
   return (
-    <div className={cn("overflow-hidden rounded-xl border bg-card shadow-xs", p.stage === "released" && !p.updated && "border-success/40")}>
+    <div
+      className={cn("overflow-hidden rounded-xl border bg-card shadow-xs", p.stage === "released" && !p.updated && "border-success/40", flash && "border-brand/60")}
+      style={flash ? { animation: "sous-flash 2.4s ease-out forwards" } : undefined}
+    >
       <div className="flex items-start gap-3.5 p-4 pb-3">
         <RepoAvatar owner={owner} className="size-9 shrink-0" />
         <div className="min-w-0 flex-1">
@@ -196,18 +203,18 @@ function ProposalCard({ p }: { p: Proposal }) {
   )
 }
 
-function Section({ title, hint, items }: { title: string; hint: string; items: Proposal[] }) {
+function Section({ title, hint, items, flash }: { title: string; hint: string; items: Proposal[]; flash?: boolean }) {
   if (!items.length) return null
   return (
     <section className="space-y-3">
       <div className="flex items-baseline gap-2">
-        <h2 className="text-sm font-semibold">{title}</h2>
+        <h2 className={cn("text-sm font-semibold", flash && "text-brand")}>{title}</h2>
         <span className="text-xs text-muted-foreground">
-          {items.length} · {hint}
+          {hint}
         </span>
       </div>
       {items.map((p) => (
-        <ProposalCard key={p.id} p={p} />
+        <ProposalCard key={p.id} p={p} flash={flash} />
       ))}
     </section>
   )
@@ -216,40 +223,39 @@ function Section({ title, hint, items }: { title: string; hint: string; items: P
 export function ProposalsPage() {
   const proposals = useStore((s) => s.proposals)
   const setPage = useStore((s) => s.setPage)
-  const progress = proposals.filter((p) => p.stage !== "released")
-  const available = proposals.filter((p) => p.stage === "released" && !p.updated)
-  const done = proposals.filter((p) => p.stage === "released" && p.updated)
+  const justSentId = useJustSent((s) => s.id)
+  const top = useRef<HTMLDivElement>(null)
+  // "Just sent" lasts for this visit to the page.
+  useEffect(() => {
+    if (justSentId) top.current?.scrollIntoView({ block: "start" })
+    return () => useJustSent.getState().set(null)
+  }, [justSentId])
+  const justSent = proposals.filter((p) => p.id === justSentId)
+  const rest = proposals.filter((p) => p.id !== justSentId)
+  const progress = rest.filter((p) => p.stage !== "released")
+  const available = rest.filter((p) => p.stage === "released" && !p.updated)
+  const done = rest.filter((p) => p.stage === "released" && p.updated)
   const examplesOnly = proposals.length > 0 && proposals.every((p) => p.example)
+  const open = proposals.filter((p) => !p.example && p.stage !== "released").length
   return (
     <ScrollArea className="h-full">
-      <div className="mx-auto max-w-3xl space-y-7 p-8">
+      <style>{FLASH}</style>
+      <div ref={top} className="mx-auto max-w-3xl space-y-7 p-8">
         <div className="space-y-1">
           <h1 className="text-xl font-semibold tracking-tight">Proposals</h1>
           <p className="text-sm text-muted-foreground">
-            Changes you sent upstream, and where each one is. Your real pull requests come first, straight from GitHub; below them are the ones the
-            Send dialog simulated in this session.
+            What you proposed upstream, and where each one is, from opened to released. When one is released, move this project to it from here.
+            {open > 0 && ` ${open} in progress.`}
           </p>
         </div>
-        <MyPullRequests />
-        <div className="flex items-center gap-3 pt-2">
-          <div className="h-px flex-1 bg-border" />
-          <span className="flex items-center gap-1.5 rounded-full border border-dashed px-2.5 py-1 text-[11px] text-muted-foreground">
-            <FlaskConicalIcon className="size-3" /> Simulated in this session · not on GitHub
-          </span>
-          <div className="h-px flex-1 bg-border" />
-        </div>
-        <p className="-mt-4 text-center text-xs text-muted-foreground">
-          What Send would open, tracked from opened to released. When one is released, move this project to it from here. The number on the tab
-          counts the ones in progress.
-        </p>
         {examplesOnly && (
           <div className="flex items-center gap-3 rounded-xl border border-dashed p-4">
             <span className="grid size-9 place-items-center rounded-full bg-brand/12 text-brand">
               <PencilLineIcon className="size-4" />
             </span>
             <div className="text-sm">
-              <div className="font-medium">You haven't sent anything yet</div>
-              <div className="text-xs text-muted-foreground">Edit a recipe file and send it; it shows up here. The cards below are examples.</div>
+              <div className="font-medium">You haven't proposed anything yet</div>
+              <div className="text-xs text-muted-foreground">Edit a recipe file and propose it; it shows up here. The cards below are examples.</div>
             </div>
             <Button size="sm" variant="outline" className="ml-auto" onClick={() => setPage("editor")}>
               Back to the editor
@@ -258,12 +264,20 @@ export function ProposalsPage() {
         )}
         {proposals.length === 0 && (
           <div className="rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground">
-            Nothing yet. Edit a recipe file and send it; it shows up here.
+            Nothing yet. Edit a recipe file and propose it; it shows up here.
           </div>
         )}
+        <Section title="Just sent" hint="simulated: what Propose would open" items={justSent} flash />
         <Section title="In progress" hint="waiting on checks, review or the release" items={progress} />
         <Section title="Released, update available" hint="the new version is out" items={available} />
         <Section title="Done" hint="this project uses the release" items={done} />
+        {proposals.length > 0 && (
+          <p className="-mt-3 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <FlaskConicalIcon className="size-3" /> The cards above are simulated in this session, not on GitHub. Your real pull requests are below.
+          </p>
+        )}
+        <div className="h-px bg-border" />
+        <MyPullRequests />
       </div>
     </ScrollArea>
   )

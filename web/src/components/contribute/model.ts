@@ -283,8 +283,14 @@ export function suggestRaise(files: { f: WorkspaceFile; doc: OpenDoc }[], declar
     if (undeclared) return { kind: "minor", reason: `you use a new variable, ${undeclared}, so it needs declaring as an optional variable` }
     if (fresh.length) return { kind: "minor", reason: `you now use the variable ${fresh[0]} here` }
   }
+  // A section is new only when the number of headings goes up. A heading whose
+  // text changed in place (one removed, one added) is wording.
+  const headingRe = /^#{1,6}\s+\S/
   for (const { doc } of files) {
-    const heading = addedLines(doc.original, doc.current).find((l) => /^#{1,6}\s+\S/.test(l.text))
+    const before = doc.original.split("\n").filter((l) => headingRe.test(l)).length
+    const after = doc.current.split("\n").filter((l) => headingRe.test(l)).length
+    if (after <= before) continue
+    const heading = addedLines(doc.original, doc.current).find((l) => headingRe.test(l.text))
     if (heading) return { kind: "minor", reason: `you added a section, “${heading.text.replace(/^#+\s*/, "")}”` }
   }
   let added = 0
@@ -340,22 +346,89 @@ export function defaultTitle(group: Group, files: WorkspaceFile[]): string {
   return `${recipe}: improve ${what}`
 }
 
-/** What a Claude-written description would look like, built from the real diff. */
+// ---- What the change does, in words (built from the diff, never invented) ------------------
+
+const HEADING = /^(#{1,6})\s+(.+?)\s*#*\s*$/
+
+function clip(text: string, n = 80): string {
+  const t = text.trim().replace(/\s+/g, " ")
+  return t.length > n ? t.slice(0, n - 1) + "…" : t
+}
+
+/** The heading a line sits under, counting up from a 1-based line number. */
+function sectionAt(lines: string[], line: number): string | null {
+  for (let i = Math.min(line, lines.length) - 1; i >= 0; i--) {
+    const m = HEADING.exec(lines[i])
+    if (m) return m[2]
+  }
+  return null
+}
+
+/** One plain sentence per changed spot: "Adds “…” under “Jargon”". */
+export function describeEdits(a: string, b: string): string[] {
+  const patch = structuredPatch("a", "b", a, b, "", "", { context: 0 })
+  const lines = b.split("\n")
+  const out: string[] = []
+  for (const h of patch.hunks) {
+    const added = h.lines.filter((l) => l.startsWith("+")).map((l) => l.slice(1)).filter((l) => l.trim())
+    const removed = h.lines.filter((l) => l.startsWith("-")).map((l) => l.slice(1)).filter((l) => l.trim())
+    if (!added.length && !removed.length) continue
+    const hAdd = added.length === 1 ? HEADING.exec(added[0]) : null
+    const hDel = removed.length === 1 ? HEADING.exec(removed[0]) : null
+    if (hAdd && hDel) {
+      out.push(`Renames the section “${clip(hDel[2], 50)}” to “${clip(hAdd[2], 50)}”`)
+      continue
+    }
+    const section = sectionAt(lines, h.newStart)
+    const under = section ? ` under “${clip(section, 40)}”` : ""
+    if (added.length === 1 && removed.length === 1) {
+      const was = removed[0].trim()
+      const now = added[0].trim()
+      // An appended sentence reads better as what was added.
+      if (now.startsWith(was)) out.push(`Adds “${clip(now.slice(was.length))}”${under}`)
+      else if (was.startsWith(now)) out.push(`Removes “${clip(was.slice(now.length))}”${under}`)
+      else out.push(`Rewords “${clip(was, 50)}” as “${clip(now, 50)}”${under}`)
+    } else if (added.length && !removed.length) {
+      out.push(`Adds “${clip(added[0])}”${added.length > 1 ? ` and ${added.length - 1} more line${added.length === 2 ? "" : "s"}` : ""}${under}`)
+    } else if (removed.length && !added.length) {
+      out.push(`Removes “${clip(removed[0])}”${removed.length > 1 ? ` and ${removed.length - 1} more line${removed.length === 2 ? "" : "s"}` : ""}${under}`)
+    } else {
+      out.push(`Rewrites ${Math.max(added.length, removed.length)} lines${under}`)
+    }
+  }
+  return out
+}
+
+function whatChanges(files: { f: WorkspaceFile; a: string; b: string }[]): string[] {
+  const many = files.length > 1
+  return files.flatMap(({ f, a, b }) => describeEdits(a, b).map((d) => (many ? `- \`${shortName(f)}\`: ${d}.` : `- ${d}.`)))
+}
+
+/** The description the sheet starts with: the plain facts, so one click can propose. */
+export function defaultBody(files: { f: WorkspaceFile; doc: OpenDoc }[]): string {
+  return ["## What changes", "", ...whatChanges(files.map(({ f, doc }) => ({ f, a: doc.original, b: doc.current }))), "", "Checked in `sous serve` with my project's variables."].join("\n")
+}
+
+/** A short commit message for edits added to an open proposal: what changed since the last push. */
+export function commitMessage(files: { f: WorkspaceFile; doc: OpenDoc }[]): string {
+  const said = files.flatMap(({ f, doc }) => describeEdits(doc.proposedContent ?? doc.original, doc.current).map((d) => (files.length > 1 ? `${shortName(f)}: ${d}` : d)))
+  if (!said.length) return "Follow-up edits"
+  return said.length === 1 ? said[0] : `${said[0]} (and ${said.length - 1} more)`
+}
+
+/** What "Write it with Claude" produces in this mock: built from the diff. The why is left to you. */
 export function claudeBody(files: { f: WorkspaceFile; doc: OpenDoc }[]): string {
-  const added = files.flatMap(({ doc }) => addedLines(doc.original, doc.current).map((l) => l.text.trim()).filter(Boolean))
-  const removedCount = files.reduce((n, { doc }) => n + lineStats(doc.original, doc.current).removed, 0)
-  const names = files.map(({ f }) => `\`${shortName(f)}\``).join(", ")
+  const names = [...new Set(files.map(({ f }) => `\`${shortName(f)}\``))].join(", ")
   return [
-    "## Why",
-    "",
-    `Agents following ${names} were missing guidance they needed, so they guessed. This says it outright.`,
-    "",
     "## What changes",
     "",
-    ...(added.length
-      ? added.slice(0, 3).map((l) => `- Adds: “${l.length > 90 ? l.slice(0, 90) + "…" : l}”`)
-      : ["- Removes text that no longer applies."]),
-    ...(removedCount ? [`- Rewrites or removes ${removedCount} line${removedCount === 1 ? "" : "s"}.`] : []),
+    `In ${names}:`,
+    "",
+    ...whatChanges(files.map(({ f, doc }) => ({ f, a: doc.original, b: doc.current }))),
+    "",
+    "## Why",
+    "",
+    "Why: …",
     "",
     "## How I checked it",
     "",
@@ -473,3 +546,49 @@ export function relTime(iso: string | undefined): string {
   if (s < 86400 * 1.5) return `${Math.round(s / 3600)} hours ago`
   return `${Math.round(s / 86400)} days ago`
 }
+
+// ---- Pull request numbers (from /api/my-prs) and the "Just sent" card -------------------------
+
+type NumbersState = {
+  /** Highest known issue or PR number, by "owner/repo". */
+  latest: Record<string, number>
+  loaded: boolean
+  load: () => Promise<void>
+}
+
+export const usePrNumbers = create<NumbersState>((set, get) => ({
+  latest: {},
+  loaded: false,
+  load: async () => {
+    if (get().loaded) return
+    try {
+      const data = await call<{ repos: { key: string; latestNumber?: number; prs: { number: number }[] }[] }>("/api/my-prs")
+      const latest: Record<string, number> = {}
+      for (const r of data.repos) {
+        const n = Math.max(r.latestNumber ?? 0, ...r.prs.map((p) => p.number))
+        if (n > 0) latest[r.key.toLowerCase()] = n
+      }
+      set({ latest, loaded: true })
+    } catch {
+      set({ loaded: true })
+    }
+  },
+}))
+
+/** The number GitHub would give the next pull request, past any simulated in this session. */
+export function nextPrNumber(groupKey: string, taken: number[]): number {
+  const ownerRepo = groupKey.replace(/^[^/]+\//, "").toLowerCase()
+  let base = usePrNumbers.getState().latest[ownerRepo]
+  if (base === undefined) {
+    // Unknown (gh offline): guess once, then count up from the guess.
+    base = 40 + Math.floor(Math.random() * 20)
+    usePrNumbers.setState((s) => ({ latest: { ...s.latest, [ownerRepo]: base! } }))
+  }
+  return Math.max(base, ...taken) + 1
+}
+
+/** The proposal "Track it" should pin at the top of Proposals, briefly highlighted. */
+export const useJustSent = create<{ id: string | null; set: (id: string | null) => void }>((set) => ({
+  id: null,
+  set: (id) => set({ id }),
+}))

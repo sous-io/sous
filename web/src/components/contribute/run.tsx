@@ -8,7 +8,7 @@ import type { WorkspaceFile } from "@/lib/api"
 import { useStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
 import type { Proposal } from "@/mock/data"
-import type { Group, Step } from "./model"
+import { lineStats, nextPrNumber, useJustSent, type Group, type Step } from "./model"
 import { RepoAvatar } from "./avatar"
 
 const STYLE = `
@@ -131,14 +131,22 @@ export function RunView(props: {
   baseBranch: string
   recipes: { name: string; from: string; to: string }[]
   addTo?: Proposal
-  onDone: (p: Proposal | null) => void
+  onDone: (p: Proposal | null, stats?: { added: number; removed: number }) => void
   next?: { label: string; go: () => void }
 }) {
   const { group, steps, files, title, body, draft, branch, headRepo, recipes, addTo, onDone, next } = props
   const [at, setAt] = useState(0)
   const [result, setResult] = useState<Proposal | null>(null)
   const [keep, setKeep] = useState<"keep" | "released">("keep")
+  const [choosing, setChoosing] = useState(false)
   const [saved, setSaved] = useState(false)
+  // What was saved, counted before the save makes it the file on disk.
+  const [fileStats] = useState(() => {
+    const docs = useStore.getState().docs
+    const base = (id: string) => (addTo && docs[id].proposedIn === addTo.id ? (docs[id].proposedContent ?? docs[id].original) : docs[id].original)
+    return files.map((f) => ({ f, ...(docs[f.id] ? lineStats(base(f.id), docs[f.id].current) : { added: 0, removed: 0 }) }))
+  })
+  const totals = fileStats.reduce((a, x) => ({ added: a.added + x.added, removed: a.removed + x.removed }), { added: 0, removed: 0 })
   const finished = at >= steps.length
 
   useEffect(() => {
@@ -158,7 +166,7 @@ export function RunView(props: {
         for (const id of ids) if (docs[id]) docs[id] = { ...docs[id], original: docs[id].current, originalRender: docs[id].render }
         return { docs }
       })
-      onDone(null)
+      onDone(null, totals)
       return
     }
     if (addTo) {
@@ -169,13 +177,19 @@ export function RunView(props: {
         return { proposals: s.proposals.map((p) => (p.id === addTo.id ? updated : p)), docs }
       })
       setResult(updated)
-      onDone(updated)
+      onDone(updated, totals)
       return
     }
     const proposal: Proposal = {
       id: `p-${Date.now()}`,
       repo: group.key,
-      number: 231 + Math.floor(Math.random() * 12),
+      number: nextPrNumber(
+        group.key,
+        useStore
+          .getState()
+          .proposals.filter((p) => !p.example && p.repo === group.key)
+          .map((p) => p.number),
+      ),
       title,
       branch,
       recipes: group.kind === "pr" ? recipes : [],
@@ -191,13 +205,14 @@ export function RunView(props: {
     }
     useStore.getState().addProposal(proposal, ids)
     setResult(proposal)
-    onDone(proposal)
+    onDone(proposal, totals)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [finished])
 
   const chooseBuild = (v: "keep" | "released") => {
     setKeep(v)
     if (!result) return
+    setChoosing(false)
     useStore.setState((s) => ({ proposals: s.proposals.map((p) => (p.id === result.id ? { ...p, keptLocal: v === "keep" } : p)) }))
     if (v === "released") toast("Your build uses the released recipes again", { description: "Your edits come back when the release that carries them is out. (Simulated.)" })
   }
@@ -207,15 +222,11 @@ export function RunView(props: {
   return (
     <div className="space-y-6 px-7 pt-6 pb-8">
       <style>{STYLE}</style>
-      {!finished || group.kind === "project" ? (
+      {!finished ? (
         <>
           <div className="space-y-1">
             <div className="flex items-center gap-2 text-lg font-semibold tracking-tight">
-              {finished ? (
-                <>
-                  <CheckIcon className="size-5 text-success" /> Saved
-                </>
-              ) : group.kind === "project" ? (
+              {group.kind === "project" ? (
                 "Saving…"
               ) : addTo ? (
                 `Adding to #${addTo.number}…`
@@ -224,13 +235,59 @@ export function RunView(props: {
               )}
             </div>
             <p className="text-xs text-muted-foreground">
-              <span className="mr-1.5 rounded bg-muted px-1 py-px text-[10px] tracking-wide uppercase">simulated</span>
+              <span className="mr-1.5 inline-block rounded bg-muted px-1 py-px text-[10px] tracking-wide uppercase">simulated</span>{" "}
               Nothing is written or sent in this proof of concept. Click a step to see what sous would run.
             </p>
           </div>
           <StepList steps={steps} at={at} />
-          {finished && next && <NextUp next={next} />}
         </>
+      ) : group.kind === "project" ? (
+        <div className="space-y-6" style={{ animation: "sous-rise .35s ease-out" }}>
+          <div className="flex flex-col items-center pt-4 text-center">
+            <BigCheck />
+            <div className="mt-4 text-xl font-semibold tracking-tight">
+              Saved {files.length} file{files.length === 1 ? "" : "s"}
+            </div>
+            <div className="mt-1 text-sm text-muted-foreground">
+              in {group.title}
+              {(() => {
+                const outs = [...new Set(files.flatMap((f) => f.outputs))]
+                return outs.length ? (
+                  <>
+                    {" "}
+                    · rebuilt{" "}
+                    <span className="font-mono text-[12.5px] text-foreground">
+                      {outs.slice(0, 2).map((o) => o.split("/").pop()).join(", ")}
+                      {outs.length > 2 ? ` and ${outs.length - 2} more` : ""}
+                    </span>
+                  </>
+                ) : (
+                  " · rebuilt the files your agent reads"
+                )
+              })()}
+            </div>
+            <span className="mt-2 rounded bg-muted px-1 py-px text-[10px] tracking-wide text-muted-foreground uppercase">simulated</span>
+          </div>
+          <div className="mx-auto max-w-lg divide-y overflow-hidden rounded-xl border bg-card">
+            {fileStats.map(({ f, added, removed }) => (
+              <div key={f.id} className="flex items-center gap-2.5 px-3.5 py-2">
+                <CheckIcon className="size-3.5 shrink-0 text-success" strokeWidth={3} />
+                <span className="min-w-0 flex-1 truncate font-mono text-xs">
+                  <span className="text-muted-foreground">{f.display.split("/").slice(0, -1).join("/")}/</span>
+                  {f.display.split("/").pop()}
+                </span>
+                <span className="shrink-0 font-mono text-[11px]">
+                  <span className="text-success">+{added}</span> <span className="text-destructive">−{removed}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="text-center text-xs text-muted-foreground">Git is yours: commit {files.length === 1 ? "it" : "them"} whenever you like.</p>
+          <div className="flex items-center gap-4">
+            <StepList steps={steps} at={at} collapsed />
+            {next && <div className="ml-auto"><NextUp next={next} /></div>}
+          </div>
+        </div>
       ) : (
         <div className="relative space-y-6" style={{ animation: "sous-rise .35s ease-out" }}>
           <Confetti />
@@ -274,59 +331,66 @@ export function RunView(props: {
                 <CopyIcon /> Copy link
               </Button>
               <Button
-                variant="ghost"
+                variant="outline"
                 onClick={() => {
+                  if (result) useJustSent.getState().set(result.id)
                   useStore.getState().closeContribute()
                   useStore.getState().setPage("proposals")
                 }}
               >
-                Track it in Proposals
+                Track it in Proposals <ArrowRightIcon />
               </Button>
             </div>
             <span className="mt-2 rounded bg-muted px-1 py-px text-[10px] tracking-wide text-muted-foreground uppercase">simulated</span>
           </div>
 
           {!addTo && (
-            <div className="rounded-xl border bg-card p-4">
-              <div className="text-[13px] font-semibold">Your build, until this is released</div>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                {(
-                  [
-                    {
-                      key: "keep",
-                      icon: HardDriveIcon,
-                      title: "Keep my edits on this machine",
-                      text: "Sous stays linked to the checkout, so your agent gets your edit now. Builds say so. Teammates and CI don't get it.",
-                    },
-                    {
-                      key: "released",
-                      icon: RotateCcwIcon,
-                      title: "Go back to the released version",
-                      text: "Your edits leave your build until the release that carries them is out.",
-                    },
-                  ] as const
-                ).map((o) => (
-                  <button
-                    key={o.key}
-                    onClick={() => chooseBuild(o.key)}
-                    className={cn(
-                      "flex items-start gap-3 rounded-lg border p-3 text-left transition-all",
-                      keep === o.key ? "border-brand bg-brand/6 ring-1 ring-brand" : "hover:bg-muted/40",
-                    )}
-                  >
-                    <span className={cn("mt-0.5 grid size-4 shrink-0 place-items-center rounded-full border", keep === o.key && "border-brand")}>
-                      {keep === o.key && <span className="size-2 rounded-full bg-brand" />}
-                    </span>
-                    <span>
-                      <span className="flex items-center gap-1.5 text-[13px] font-medium">
-                        <o.icon className="size-3.5 text-muted-foreground" /> {o.title}
+            <div className="mx-auto max-w-xl space-y-2">
+              <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
+                {keep === "keep" ? <HardDriveIcon className="size-3.5" /> : <RotateCcwIcon className="size-3.5" />}
+                {keep === "keep"
+                  ? "Your build keeps your edits on this machine until the release is out."
+                  : "Your build uses the released version until this is released."}
+                <button className="text-brand hover:underline" onClick={() => setChoosing(!choosing)}>
+                  {choosing ? "close" : "change"}
+                </button>
+              </p>
+              {choosing && (
+                <div className="grid gap-2 sm:grid-cols-2" style={{ animation: "sous-rise .2s ease-out" }}>
+                  {(
+                    [
+                      {
+                        key: "keep",
+                        icon: HardDriveIcon,
+                        title: "Keep my edits on this machine",
+                        text: "Sous stays linked to the checkout, so your agent gets your edit now. Teammates and CI don't get it.",
+                      },
+                      {
+                        key: "released",
+                        icon: RotateCcwIcon,
+                        title: "Go back to the released version",
+                        text: "Your edits leave your build until the release that carries them is out.",
+                      },
+                    ] as const
+                  ).map((o) => (
+                    <button
+                      key={o.key}
+                      onClick={() => chooseBuild(o.key)}
+                      className={cn(
+                        "flex items-start gap-2.5 rounded-lg border p-2.5 text-left transition-all",
+                        keep === o.key ? "border-brand bg-brand/6 ring-1 ring-brand" : "hover:bg-muted/40",
+                      )}
+                    >
+                      <o.icon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+                      <span>
+                        <span className="block text-[12.5px] font-medium">{o.title}</span>
+                        <span className="mt-0.5 block text-[11.5px] leading-relaxed text-muted-foreground">{o.text}</span>
                       </span>
-                      <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">{o.text}</span>
-                    </span>
-                  </button>
-                ))}
-              </div>
-              <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
+                    </button>
+                  ))}
+                </div>
+              )}
+              <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
                 <GitMergeIcon className="size-3.5" /> When it's merged and released, sous serve offers to move this project to the new version.
               </p>
             </div>

@@ -33,7 +33,8 @@ import {
   addedLines,
   changelogFor,
   claudeBody,
-  lineStats,
+  commitMessage,
+  defaultBody,
   defaultTitle,
   genericHits,
   mergeOntoUpstream,
@@ -43,6 +44,7 @@ import {
   stepsFor,
   targetVersion,
   useContributeInfo,
+  usePrNumbers,
   type Group,
   type VersionPlan,
 } from "./model"
@@ -177,7 +179,7 @@ function Markdown({ text }: { text: string }) {
   )
 }
 
-export function ProposalSheet({ group, onDone, next }: { group: Group; onDone: (p: Proposal | null) => void; next?: { label: string; go: () => void } }) {
+export function ProposalSheet({ group, onDone, next }: { group: Group; onDone: (p: Proposal | null, stats?: { added: number; removed: number }) => void; next?: { label: string; go: () => void } }) {
   const docs = useStore((s) => s.docs)
   const proposals = useStore((s) => s.proposals)
   const projectName = useStore((s) => s.workspace?.projectName ?? "this project")
@@ -196,23 +198,18 @@ export function ProposalSheet({ group, onDone, next }: { group: Group; onDone: (
   const [mode, setMode] = useState<"add" | "new">(openProposal ? "add" : "new")
   const addTo = mode === "add" ? openProposal : undefined
 
-  const [title, setTitle] = useState(() => openProposal?.title ?? defaultTitle(group, group.files))
-  // Prefilled with the plain facts, so one click can propose; "Write it with Claude" improves it.
-  const [body, setBody] = useState(
-    () =>
-      openProposal?.description ??
-      [
-        "## What changes",
-        "",
-        ...group.files.map((f) => {
-          const d = docs[f.id]
-          const st = d ? lineStats(d.original, d.current) : { added: 0, removed: 0 }
-          return `- \`${f.display}\`: ${st.added} line${st.added === 1 ? "" : "s"} added, ${st.removed} removed.`
-        }),
-        "",
-        "Checked in `sous serve` with my project's variables.",
-      ].join("\n"),
-  )
+  const freshTitle = () => defaultTitle(group, group.files)
+  // Prefilled with the plain facts from the diff, so one click can propose; "Write it with Claude" adds structure.
+  const freshBody = () => defaultBody(group.files.filter((f) => docs[f.id]).map((f) => ({ f, doc: docs[f.id] })))
+  const [title, setTitle] = useState(() => (openProposal ? openProposal.title : freshTitle()))
+  const [body, setBody] = useState(() => (openProposal ? (openProposal.description ?? freshBody()) : freshBody()))
+  // Adding to an open proposal: one commit message, and the PR description only if you ask.
+  const [commit, setCommit] = useState(() => commitMessage(group.files.filter((f) => docs[f.id]).map((f) => ({ f, doc: docs[f.id] }))))
+  const [editDesc, setEditDesc] = useState(false)
+  const loadNumbers = usePrNumbers((s) => s.load)
+  useEffect(() => {
+    if (group.kind === "pr" || group.kind === "core") loadNumbers()
+  }, [group.kind, loadNumbers])
   const [undoBody, setUndoBody] = useState<string | null>(null)
   const [descTab, setDescTab] = useState<"write" | "preview">("write")
   const [writing, setWriting] = useState(false)
@@ -482,10 +479,11 @@ export function ProposalSheet({ group, onDone, next }: { group: Group; onDone: (
 
   const blocked = checks.some((c) => c.state === "stop")
   const needsBody = !addTo && (group.kind === "pr" || group.kind === "core")
+  const sentOf = (id: string) => (addTo && docs[id]?.proposedIn === addTo.id && docs[id]?.proposedContent != null ? docs[id].proposedContent! : null)
   const canPush = group.kind === "core" ? (info?.recipes[group.recipes[0]?.name]?.redirect?.canPush ?? null) : (repoInfo?.canPush ?? null)
   const headRepo = canPush === false ? `${info?.gh.account ?? "you"}/${group.repo}` : group.title
   const changelog = changelogFor(group, plans, bumps, baseBranch)
-  const missing = !title.trim() ? "a title" : needsBody && !body.trim() ? "a description" : files.length === 0 ? "a file" : null
+  const missing = addTo && !commit.trim() ? "a commit message" : !title.trim() ? "a title" : needsBody && !body.trim() ? "a description" : files.length === 0 ? "a file" : null
 
   const steps = stepsFor({
     group,
@@ -496,7 +494,7 @@ export function ProposalSheet({ group, onDone, next }: { group: Group; onDone: (
     headSha: repoInfo?.head?.sha,
     plans,
     bumps,
-    title,
+    title: addTo ? commit : title,
     draft,
     fileCount: files.length,
     addTo: addTo ? { number: addTo.number, branch: addTo.branch } : undefined,
@@ -541,8 +539,8 @@ export function ProposalSheet({ group, onDone, next }: { group: Group; onDone: (
         group={group}
         steps={steps}
         files={files}
-        title={title}
-        body={body}
+        title={addTo && !editDesc ? addTo.title : title}
+        body={addTo && !editDesc ? (addTo.description ?? body) : body}
         draft={draft}
         branch={addTo?.branch ?? branch}
         headRepo={headRepo}
@@ -581,7 +579,7 @@ export function ProposalSheet({ group, onDone, next }: { group: Group; onDone: (
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-lg font-semibold tracking-tight">
-                {group.kind === "project" ? `Save to ${group.title}` : addTo ? `Add to #${addTo.number}` : `Propose to ${group.title}`}
+                {group.kind === "project" ? `Save in ${group.title}` : addTo ? `Propose to #${addTo.number}` : `Propose to ${group.title}`}
               </h2>
               {group.kind === "core" && <span className="rounded-full bg-brand/12 px-2 py-0.5 text-[11px] font-medium text-brand">core recipe</span>}
             </div>
@@ -589,12 +587,20 @@ export function ProposalSheet({ group, onDone, next }: { group: Group; onDone: (
               {group.kind === "project"
                 ? "These are your project's own files. Sous saves them; there's nothing to propose."
                 : addTo
-                  ? `“${addTo.title}” is still open, so these edits go into it instead of a second pull request.`
+                  ? `“${addTo.title}” is still open, so these edits go in as a new commit on it instead of a second pull request.`
                   : "You decide what, why and how big. Sous does the checkout, branch, commit, push and pull request."}
             </p>
             {openProposal && (
-              <button className="mt-1 text-xs text-brand hover:underline" onClick={() => setMode(mode === "add" ? "new" : "add")}>
-                {mode === "add" ? "Start a new proposal instead" : `Add to #${openProposal.number} instead`}
+              <button
+                className="mt-1 text-xs text-brand hover:underline"
+                onClick={() => {
+                  const toNew = mode === "add"
+                  setMode(toNew ? "new" : "add")
+                  setTitle(toNew ? freshTitle() : openProposal.title)
+                  setBody(toNew ? freshBody() : (openProposal.description ?? freshBody()))
+                }}
+              >
+                {mode === "add" ? "Start a new proposal instead" : `Propose to #${openProposal.number} instead`}
               </button>
             )}
           </div>
@@ -674,26 +680,35 @@ export function ProposalSheet({ group, onDone, next }: { group: Group; onDone: (
                 }}
                 defaultOpen={group.files.length <= 2}
                 baseBranch={baseBranch}
+                sent={sentOf(f.id) != null ? { content: sentOf(f.id)!, number: addTo!.number } : undefined}
               />
             ))}
           </div>
         </Section>
 
-        {group.kind === "pr" && plans.length > 0 && (
-          <Section n={++n} title="New version">
-            <div className="space-y-2">
-              {plans.map((p) => (
-                <VersionRow key={p.recipe} plan={p} kind={bumps[p.recipe] ?? p.suggested} onChange={(k) => setBumps({ ...bumps, [p.recipe]: k })} />
-              ))}
-              <p className={cn("px-1 text-[11px] text-muted-foreground", plans.every((p) => p.alreadyRaised) && "hidden")}>
-                Patch: wording or a fix. Minor: something new that changes nothing existing. Major: something that breaks what subscribers have.
+        {group.kind !== "project" && addTo && (
+          <Section
+            n={++n}
+            title="Commit message"
+            aside={
+              !editDesc && (
+                <button className="text-xs text-brand hover:underline" onClick={() => setEditDesc(true)}>
+                  Edit the pull request's description
+                </button>
+              )
+            }
+          >
+            <div className="space-y-1.5">
+              <Input value={commit} onChange={(e) => setCommit(e.target.value)} className="text-[13px]" aria-label="Commit message" />
+              <p className="px-1 text-[11px] text-muted-foreground">
+                Added to #{addTo.number} as one commit. Its title and description stay as they are{editDesc ? " unless you change them below" : ""}.
               </p>
             </div>
           </Section>
         )}
 
-        {group.kind !== "project" && (
-          <Section n={++n} title="Title and description">
+        {group.kind !== "project" && (!addTo || editDesc) && (
+          <Section n={++n} title={addTo ? `Title and description of #${addTo.number}` : "Title and description"}>
             <div className="space-y-2">
               <Input value={title} onChange={(e) => setTitle(e.target.value)} className="font-medium" aria-label="Title" />
               <div className="overflow-hidden rounded-lg border focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30">
@@ -757,6 +772,19 @@ export function ProposalSheet({ group, onDone, next }: { group: Group; onDone: (
           </Section>
         )}
 
+        {group.kind === "pr" && plans.length > 0 && (
+          <Section n={++n} title="New version">
+            <div className="space-y-2">
+              {plans.map((p) => (
+                <VersionRow key={p.recipe} plan={p} kind={bumps[p.recipe] ?? p.suggested} onChange={(k) => setBumps({ ...bumps, [p.recipe]: k })} />
+              ))}
+              <p className={cn("px-1 text-[11px] text-muted-foreground", plans.every((p) => p.alreadyRaised) && "hidden")}>
+                Patch: wording or a fix. Minor: something new that changes nothing existing. Major: something that breaks what subscribers have.
+              </p>
+            </div>
+          </Section>
+        )}
+
         {group.kind !== "project" && (
           <details className="group">
             <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
@@ -812,7 +840,7 @@ export function ProposalSheet({ group, onDone, next }: { group: Group; onDone: (
             {group.kind === "project"
               ? `Save ${files.length} file${files.length === 1 ? "" : "s"}`
               : addTo
-                ? `Add ${files.length} change${files.length === 1 ? "" : "s"} to #${addTo.number}`
+                ? `Propose ${files.length} change${files.length === 1 ? "" : "s"} to #${addTo.number}`
                 : `Propose ${files.length} change${files.length === 1 ? "" : "s"}`}
             <span className="ml-1 rounded bg-white/18 px-1 font-mono text-[10px]">Ctrl ↵</span>
           </Button>

@@ -395,6 +395,8 @@ export type MyPrsRepo = {
   ok: boolean;
   error?: string;
   prs: MyPr[];
+  /** The newest issue or pull request number on the repository, by anyone. */
+  latestNumber?: number;
 };
 
 export type MyPrs = { gh: GhStatus; repos: MyPrsRepo[]; ms: number; at: string };
@@ -459,11 +461,12 @@ export async function myPrs(workspace: Workspace, fresh = false): Promise<MyPrs>
       [...repos.values()].map(async (r): Promise<MyPrsRepo> => {
         const key = `${r.owner}/${r.repo}`;
         if (!gh.signedIn) return { key, ...r, ok: false, error: "gh is not signed in", prs: [] };
-        const res = await run(
-          "gh",
-          ["pr", "list", "--repo", key, "--author", "@me", "--state", "all", "--limit", "20", "--json", fields],
-          10000
-        );
+        const [res, latest] = await Promise.all([
+          run("gh", ["pr", "list", "--repo", key, "--author", "@me", "--state", "all", "--limit", "20", "--json", fields], 10000),
+          // Issues and pull requests share one counter, so the newest of either is the one to beat.
+          run("gh", ["api", `repos/${key}/issues?state=all&per_page=1`, "--jq", ".[0].number"], 8000),
+        ]);
+        const latestNumber = latest.ok ? Number.parseInt(latest.stdout.trim(), 10) || undefined : undefined;
         if (!res.ok) return { key, ...r, ok: false, error: res.stderr.split("\n").find((l) => l.trim()) ?? "gh pr list failed", prs: [] };
         let raw: GhPr[] = [];
         try {
@@ -497,7 +500,7 @@ export async function myPrs(workspace: Workspace, fresh = false): Promise<MyPrs>
             madeWithSous: p.headRefName.startsWith("sous/edit-"),
           })
         );
-        return { key, ...r, ok: true, prs };
+        return { key, ...r, ok: true, prs, latestNumber };
       })
     );
     // Recipe repositories first; they're what the GUI sends to.
