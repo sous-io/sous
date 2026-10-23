@@ -5,6 +5,7 @@ import { HighlightStyle, syntaxHighlighting } from "@codemirror/language"
 import { EditorState } from "@codemirror/state"
 import { drawSelection, EditorView, highlightActiveLine, keymap, lineNumbers } from "@codemirror/view"
 import { tags as t } from "@lezer/highlight"
+import { toast } from "sonner"
 import { api } from "@/lib/api"
 import { useStore } from "@/lib/store"
 import { liquidCompletion } from "./liquid-complete"
@@ -102,7 +103,24 @@ export function LiquidEditor({ fileId, visible }: Props) {
           markdown(),
           syntaxHighlighting(markdownStyle),
           theme,
-          keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
+          keymap.of([
+            {
+              key: "Mod-s",
+              preventDefault: true,
+              run: () => {
+                const f = useStore.getState().workspace?.files.find((x) => x.id === fileId)
+                toast(
+                  f?.origin.kind === "recipe"
+                    ? "Recipe edits stay in this tab until you propose them: press Send in the header."
+                    : "Saving to disk is turned off in this proof of concept. Your edit stays in this tab.",
+                )
+                return true
+              },
+            },
+            ...defaultKeymap,
+            ...historyKeymap,
+            indentWithTab,
+          ]),
           // Close Liquid delimiters as they're typed: {{ → {{ | }}, {% → {% | %}.
           EditorView.inputHandler.of((v, from, to, text) => {
             const prev = v.state.doc.sliceString(from - 1, from)

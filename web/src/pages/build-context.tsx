@@ -155,7 +155,9 @@ export function BuildPage() {
       <div className="mx-auto max-w-6xl space-y-5 p-8">
         <div className="flex items-end gap-4">
           <div className="space-y-1">
-            <h1 className="text-2xl font-bold tracking-tight">Build</h1>
+            <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
+              <HammerIcon className="size-6 text-brand" /> Build
+            </h1>
             <p className="text-sm text-muted-foreground">
               What <code className="rounded bg-muted px-1">sous build</code> would write right now, compared with what's on disk. Built
               into a temporary folder in {build.ms} ms; nothing in your project was touched.

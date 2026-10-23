@@ -123,7 +123,7 @@ export function VariablesPage() {
                             </div>
                             {f.envName && (
                               <p className="text-muted-foreground">
-                                Answered by <code className="rounded bg-muted px-1 font-mono text-foreground">{f.envName}</code> ({f.answeredBy}).
+                                Set by <code className="rounded bg-muted px-1 font-mono text-foreground">{f.envName}</code> in {f.answeredBy?.replace(/ \(.*\)$/, "")}.
                               </p>
                             )}
                             <p className="text-muted-foreground">

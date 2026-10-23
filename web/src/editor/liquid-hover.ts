@@ -38,7 +38,7 @@ export function variableHover(getVars: () => Record<string, string>, getFacts: (
         if (fact?.answeredBy || fact?.recipe) {
           const from = document.createElement("div")
           from.className = "cm-var-hover-from"
-          from.textContent = [fact.recipe ? `asked for by ${fact.recipe}` : null, fact.answeredBy ? `set by ${fact.envName ? `${fact.envName}, ` : ""}${fact.answeredBy}` : null]
+          from.textContent = [fact.recipe ? `asked for by ${fact.recipe}` : null, fact.answeredBy ? `set in ${fact.answeredBy}` : null]
             .filter(Boolean)
             .join(" · ")
           dom.append(from)

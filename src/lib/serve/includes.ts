@@ -52,7 +52,10 @@ export function resolveIncludes(workspace: Workspace, file: WorkspaceFile, sourc
       const why = resolution.namespaceIssue
         ? formatNamespaceProblem(resolution.namespaceIssue)
         : resolution.hashIssue ?? `Nothing exists at ${resolution.candidates.slice(0, 2).map((c) => path.relative(workspace.projectRoot, c)).join(" or ")}.`;
-      error = `${resolution.glob ? "Matches no files" : "Not found"}. ${why.replace(/\s+/g, " ").trim()}`;
+      const hash = /no built-in name "(#[\w-]+)"[\s\S]*?Available names: ([^\n]+)/.exec(why);
+      error = hash
+        ? `${hash[1]} isn't a name sous knows in this project (it knows ${hash[2].replace(/\.$/, "")})`
+        : `${resolution.glob ? "Matches no files" : "No such file"}. ${why.replace(/\s+/g, " ").trim()}`;
     }
     results.push({ line: index + 1, reference, glob: resolution.glob, files, error });
   });

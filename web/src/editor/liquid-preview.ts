@@ -586,7 +586,7 @@ class IncludeChip extends WidgetType {
     const el = document.createElement("span")
     el.className = `cm-include-chip${info.error ? " cm-include-chip-error" : ""}`
     if (info.error) {
-      el.textContent = `⚠ ${info.error.replace(/^(Matches no files|Not found)\. /, "").split(". ")[0].slice(0, 70)}: the build fails here`
+      el.textContent = `⚠ ${info.error.replace(/^(Matches no files|No such file)\. /, "").split(". ")[0].slice(0, 80)}, so the build fails`
       el.title = info.error
     } else if (info.files.length === 1) {
       el.textContent = `→ ${info.files[0].display.split("/").slice(-2).join("/")}`

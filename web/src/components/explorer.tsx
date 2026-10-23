@@ -111,7 +111,7 @@ function byRecipe(files: WorkspaceFile[], catalog: CatalogRecipe[] | null): Node
       recipe = makeNode(recipeKey, o.recipe, {
         icon: "recipe",
         badge: o.version,
-        hint: update ? `${o.version} → ${update} is in your recipe store` : o.version,
+        hint: update ? `${o.version} → ${update} is downloaded, not applied yet` : o.version,
       })
       ns.children.push(recipe)
     }
@@ -268,7 +268,7 @@ function TreeNode({ node, depth, forceOpen }: { node: Node; depth: number; force
             {node.badge}
           </span>
         )}
-        {node.icon === "recipe" && node.hint?.includes("recipe store") && (
+        {node.icon === "recipe" && node.hint?.includes("not applied") && (
           <span className="size-1.5 shrink-0 rounded-full bg-recipe" title={node.hint} />
         )}
       </CollapsibleTrigger>

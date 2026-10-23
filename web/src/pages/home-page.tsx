@@ -116,7 +116,7 @@ export function HomePage() {
       key: `update-${r.key}`,
       tone: "info",
       icon: ArrowUpCircleIcon,
-      title: `${r.namespace}/${r.name} ${r.latest} is in your recipe store`,
+      title: `${r.namespace}/${r.name} ${r.latest} is downloaded but not applied`,
       detail: `This project uses ${r.using}.`,
       action: { label: "See recipes", run: () => setPage("recipes") },
     })
@@ -190,7 +190,7 @@ export function HomePage() {
             onClick={() => setPage("build")}
           />
           <Stat icon={BotIcon} label="Session start" value={build ? `${(startTokens / 1000).toFixed(1)}k` : "…"} sub="tokens read up front" tone="text-brand" onClick={() => setPage("context")} />
-          <Stat icon={PackageIcon} label="Recipes" value={catalog ? String(used.length) : "…"} sub={updates.length ? `${updates.length} update in store` : "all current"} tone="text-recipe" onClick={() => setPage("recipes")} />
+          <Stat icon={PackageIcon} label="Recipes" value={catalog ? String(used.length) : "…"} sub={updates.length ? `${updates.length} update ready` : "all current"} tone="text-recipe" onClick={() => setPage("recipes")} />
           <Stat
             icon={VariableIcon}
             label="Variables"

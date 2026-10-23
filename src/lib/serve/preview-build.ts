@@ -112,7 +112,13 @@ export async function runPreviewBuild(workspace: Workspace): Promise<PreviewBuil
       // eslint-disable-next-line no-control-regex
       const plain = log.join("\n").replace(/\u001b\[[0-9;]*m/g, "");
       const errorAt = plain.search(/Error:/);
-      const error = errorAt >= 0 ? plain.slice(errorAt).split("\n").slice(0, 4).map((l) => l.trim()).filter(Boolean).join("\n") : undefined;
+      let error = errorAt >= 0 ? plain.slice(errorAt).split("\n").slice(0, 4).map((l) => l.trim()).filter(Boolean).join("\n") : undefined;
+      if (error) {
+        const inc = /Include (?:matched no files|not found): (@\S+)/.exec(error);
+        const hash = /no built-in name "(#[\w-]+)"[\s\S]*?Available names: ([^\n]+)/.exec(error);
+        if (inc) error = `The include ${inc[1]} ${hash ? `uses ${hash[1]}, which isn't a name sous knows in this project` : "points at nothing"}.\n${error.replace(/^Error:\s*/, "")}`;
+        else error = error.replace(/^Error:\s*/, "");
+      }
 
       const sources = [entryId];
       for (const file of compiler.includedFiles()) {

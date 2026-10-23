@@ -59,13 +59,14 @@ function RecipeCard({ r }: { r: CatalogRecipe }) {
             <span>{r.repo}</span>
             {update && (
               <Badge className="h-5 gap-1 bg-recipe/15 text-recipe">
-                <ArrowUpCircleIcon className="size-3" /> {update} in your store
+                <ArrowUpCircleIcon className="size-3" /> {update} downloaded
               </Badge>
             )}
           </div>
         </div>
       </div>
-      <p className="mt-3 line-clamp-3 flex-1 text-[13px] text-muted-foreground">{r.description ?? "No description."}</p>
+      <p className="mt-3 line-clamp-3 text-[13px] leading-5 text-muted-foreground">{r.description ?? "No description."}</p>
+      <div className="flex-1" />
       <div className="mt-3 flex flex-wrap gap-1.5">
         {r.kinds.map((k) => {
           const Icon = KIND_ICON[k] ?? BookOpenIcon
@@ -83,7 +84,7 @@ function RecipeCard({ r }: { r: CatalogRecipe }) {
             <TooltipTrigger
               render={
                 <Badge variant="outline" className="cursor-help gap-1 font-normal">
-                  <VariableIcon className="size-3" /> asks {r.variables.length}
+                  <VariableIcon className="size-3" /> {r.variables.length} question{r.variables.length === 1 ? "" : "s"}
                 </Badge>
               }
             />
@@ -97,7 +98,7 @@ function RecipeCard({ r }: { r: CatalogRecipe }) {
             <TooltipTrigger
               render={
                 <Badge variant="outline" className="cursor-help gap-1 font-normal">
-                  <LinkIcon className="size-3" /> needs {r.depends.length}
+                  <LinkIcon className="size-3" /> uses {r.depends.length} recipe{r.depends.length === 1 ? "" : "s"}
                 </Badge>
               }
             />
@@ -126,7 +127,19 @@ function RecipeCard({ r }: { r: CatalogRecipe }) {
             <Tooltip>
               <TooltipTrigger
                 render={
-                  <Button size="xs" variant="ghost" className="ml-auto" onClick={() => openContribute()}>
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    className="ml-auto"
+                    onClick={() => {
+                      const unsent = Object.entries(useStore.getState().docs).some(([, d]) => d.current !== d.original && d.proposedContent !== d.current)
+                      if (unsent) return openContribute()
+                      // Nothing edited yet: start where an edit happens, in the recipe's files.
+                      setFilter(`${r.namespace}/${r.name}/`)
+                      setPage("editor")
+                      toast(`Edit any file of ${r.namespace}/${r.name}, then press Send in the header to propose it.`)
+                    }}
+                  >
                     <GitPullRequestArrowIcon /> {r.acceptsProposals ? "Contribute" : "Contribute (to sous)"}
                   </Button>
                 }
@@ -172,7 +185,7 @@ export function RecipesPage() {
               <PackageIcon className="size-6 text-recipe" /> Recipes
             </h1>
             <p className="text-sm text-muted-foreground">
-              The recipes this project uses, and the others already in your recipe store. Read from each recipe's{" "}
+              The recipes this project uses, and the others already downloaded to this machine. Read from each recipe's{" "}
               <code className="rounded bg-muted px-1">sous.recipe.yaml</code>.
             </p>
           </div>
@@ -188,7 +201,7 @@ export function RecipesPage() {
               <b>
                 {updates.length} update{updates.length === 1 ? "" : "s"}
               </b>{" "}
-              already in your store: {updates.map((r) => `${r.namespace}/${r.name} ${r.using} → ${r.latest}`).join(", ")}.
+              downloaded but not applied yet: {updates.map((r) => `${r.namespace}/${r.name} ${r.using} → ${r.latest}`).join(", ")}.
             </span>
           </div>
         )}
@@ -205,7 +218,7 @@ export function RecipesPage() {
         {available.length > 0 && (
           <section className="space-y-3">
             <h2 className="text-sm font-semibold">
-              In your store, not used here <span className="font-normal text-muted-foreground">({available.length})</span>
+              Downloaded, not used here <span className="font-normal text-muted-foreground">({available.length})</span>
             </h2>
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {available.map((r) => (

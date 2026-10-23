@@ -6,7 +6,7 @@
  */
 import fs from "node:fs";
 import { loadProjectDefinitions } from "../vars/definition-source.js";
-import { diagnoseVariable, loadLadderContext, RUNG_LABELS, SOURCE_LABELS } from "../vars/ladder.js";
+import { diagnoseVariable, loadLadderContext } from "../vars/ladder.js";
 import { definingRecipeKey } from "../vars/definition-source.js";
 import type { ConfigContext, Settings } from "../settings.js";
 import type { Workspace } from "./workspace.js";
@@ -49,7 +49,7 @@ export async function variableReport(
         secret: Boolean(def.secret),
         value: resolved ? (def.secret ? "••••••" : String(resolved.value)) : null,
         answeredBy: resolved
-          ? `${RUNG_LABELS[resolved.source.rung]}, ${SOURCE_LABELS[resolved.source.file] ?? resolved.source.file}`
+          ? `${resolved.source.file === "shell" ? "your shell" : resolved.source.file} (${resolved.source.envName})`
           : undefined,
         envName: resolved?.source.envName,
         usedIn: [],
@@ -68,7 +68,7 @@ export async function variableReport(
       name,
       secret: secret.has(name),
       value: secret.has(name) ? "••••••" : value,
-      answeredBy: name.startsWith("sous") || name === "projectRoot" ? "built in to sous" : "the project's config (_vars)",
+      answeredBy: name.startsWith("sous") || name === "projectRoot" ? "built in to sous" : "sous.config.js (_vars)",
       usedIn: [],
     });
   }
