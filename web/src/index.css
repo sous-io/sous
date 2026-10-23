@@ -435,3 +435,21 @@ body { overflow: hidden; }
 .cm-change-deleted { width: 0; height: 0; border-left: 4px solid var(--destructive); border-top: 4px solid transparent; border-bottom: 4px solid transparent; margin-top: -4px; }
 .cm-range-number { font-size: 10px; opacity: 0.8; display: block; padding-top: 6px; }
 .cm-liquid-fresh { animation-duration: 1.4s !important; }
+
+/* ---- autocomplete ---- */
+.cm-tooltip.cm-tooltip-autocomplete {
+  background: var(--popover) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 8px;
+  box-shadow: 0 12px 32px -10px rgb(0 0 0 / 0.45);
+  overflow: hidden;
+}
+.cm-tooltip-autocomplete > ul { font-family: 'Geist Mono Variable', monospace !important; font-size: 12px; max-height: 18em !important; }
+.cm-tooltip-autocomplete > ul > li { padding: 3px 10px !important; color: var(--popover-foreground); }
+.cm-tooltip-autocomplete > ul > li[aria-selected] { background: var(--brand-soft) !important; color: var(--foreground) !important; }
+.cm-completionDetail { color: var(--muted-foreground); font-style: normal !important; margin-left: 1em; }
+.cm-completionIcon { opacity: 0.7; }
+.cm-tooltip.cm-completionInfo {
+  background: var(--popover) !important; border: 1px solid var(--border) !important; border-radius: 8px;
+  padding: 6px 10px !important; font-size: 12px; max-width: 320px; color: var(--popover-foreground);
+}

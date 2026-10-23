@@ -7,6 +7,7 @@ import { drawSelection, EditorView, highlightActiveLine, keymap, lineNumbers } f
 import { tags as t } from "@lezer/highlight"
 import { api } from "@/lib/api"
 import { useStore } from "@/lib/store"
+import { liquidCompletion } from "./liquid-complete"
 import { activeRegion, liquidPreview, previewState, setError, setMode, setOriginal, setRegions } from "./liquid-preview"
 
 const markdownStyle = HighlightStyle.define([
@@ -99,6 +100,7 @@ export function LiquidEditor({ fileId, visible }: Props) {
           syntaxHighlighting(markdownStyle),
           theme,
           keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
+          liquidCompletion(() => useStore.getState().docs[fileId]?.vars ?? {}),
           liquidPreview({
             onLeaveRegion: () => {
               if (pending.current && view.current) renderNow(view.current.state.doc.toString())

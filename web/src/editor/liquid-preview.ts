@@ -21,6 +21,7 @@ import {
   type Tooltip,
   type ViewUpdate,
 } from "@codemirror/view"
+import { completionStatus } from "@codemirror/autocomplete"
 import { diffLines } from "diff"
 import type { Region } from "@/lib/api"
 
@@ -552,6 +553,7 @@ export function liquidPreview(callbacks: PreviewCallbacks): Extension {
         {
           key: "Escape",
           run(view) {
+            if (completionStatus(view.state)) return false
             const index = activeRegion(view.state)
             if (index === -1) return false
             const region = view.state.field(previewState).regions[index]
