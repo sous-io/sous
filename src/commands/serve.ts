@@ -17,6 +17,7 @@ import { findDrift } from "../lib/serve/drift.js";
 import { configReport } from "../lib/serve/config-layers.js";
 import { resolveIncludes } from "../lib/serve/includes.js";
 import { startLive } from "../lib/serve/live.js";
+import { recipeDiff } from "../lib/serve/recipe-diff.js";
 import { lastPreviewBuild } from "../lib/serve/preview-build.js";
 import { heading, log, showCommandVars } from "../utils/formatting.js";
 
@@ -136,6 +137,24 @@ export default class Serve extends BaseCommand {
       if (req.url?.startsWith("/api/builtins")) {
         res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
         res.end(JSON.stringify([...Object.keys(buildAutoVars(this.configContext)), "sousTemplatePath", "sousTemplateDir"]));
+        return;
+      }
+      if (req.url?.startsWith("/api/recipe-diff")) {
+        if (req.headers["x-sous-token"] !== token) {
+          res.writeHead(401, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: "Missing or wrong token" }));
+          return;
+        }
+        const q = new URL(req.url, "http://127.0.0.1").searchParams;
+        recipeDiff(workspace, q.get("key") ?? "", q.get("from") ?? "", q.get("to") ?? "")
+          .then((files) => {
+            res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+            res.end(JSON.stringify(files));
+          })
+          .catch((error: Error) => {
+            res.writeHead(400, { "content-type": "application/json" });
+            res.end(JSON.stringify({ error: error.message }));
+          });
         return;
       }
       if (req.url?.startsWith("/api/drift")) {

@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { api, type CatalogRecipe } from "@/lib/api"
+import { UpdatePreview } from "@/components/update-preview"
 import { useStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
@@ -33,6 +34,7 @@ function RecipeCard({ r }: { r: CatalogRecipe }) {
   const setFilter = useStore((s) => s.setExplorerFilter)
   const openContribute = useStore((s) => s.openContribute)
   const update = r.using && r.using !== r.latest ? r.latest : null
+  const [preview, setPreview] = useState(false)
 
   return (
     <div
@@ -120,8 +122,8 @@ function RecipeCard({ r }: { r: CatalogRecipe }) {
               <FolderSearchIcon /> Browse files
             </Button>
             {update && (
-              <Button size="xs" onClick={() => toast.success(`Would run: sous subscription update ${r.repo.split("/")[1]} (simulated)`)}>
-                <ArrowUpCircleIcon /> Update to {update}
+              <Button size="xs" onClick={() => setPreview(true)}>
+                <ArrowUpCircleIcon /> See what {update} changes
               </Button>
             )}
             <Tooltip>
@@ -155,6 +157,7 @@ function RecipeCard({ r }: { r: CatalogRecipe }) {
           </Button>
         )}
       </div>
+      {preview && <UpdatePreview recipe={r} onClose={() => setPreview(false)} />}
     </div>
   )
 }
