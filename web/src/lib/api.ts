@@ -47,6 +47,7 @@ export type RenderResult = {
   output: string
   segments: { start: number; end: number; region: number }[]
   error?: string
+  errorPos?: number
   ms: number
   tokens: number
 }

@@ -31,6 +31,8 @@ export type RenderResult = {
   /** Where each region's output sits inside `output`. */
   segments: { start: number; end: number; region: number }[];
   error?: string;
+  /** Offset in the source where the error is, when the message says. */
+  errorPos?: number;
   ms: number;
   /** Tokens in `output`. */
   tokens: number;
@@ -88,6 +90,18 @@ export function findRegions(source: string, engine: Liquid): Omit<Region, "rende
   return regions;
 }
 
+function describeError(error: unknown, source: string): { error: string; errorPos?: number } {
+  const message = (error as Error).message ?? String(error);
+  const at = message.match(/line:(\d+), col:(\d+)/);
+  if (!at) return { error: message };
+  const lines = source.split("\n");
+  const line = Number(at[1]);
+  const col = Number(at[2]);
+  let pos = 0;
+  for (let i = 0; i < line - 1 && i < lines.length; i++) pos += lines[i].length + 1;
+  return { error: message.replace(/,?\s*line:\d+, col:\d+/, "").replace(/\s+$/, ""), errorPos: Math.min(pos + col - 1, source.length) };
+}
+
 function maskSecrets(text: string, secrets: string[]): string {
   let out = text;
   for (const secret of secrets) {
@@ -129,7 +143,7 @@ export async function renderTemplate(
   try {
     found = findRegions(source, engine);
   } catch (error) {
-    return done({ regions: [], output: source, segments: [], error: (error as Error).message });
+    return done({ regions: [], output: source, segments: [], ...describeError(error, source) });
   }
 
   const nonce = Math.random().toString(36).slice(2, 8);
@@ -148,11 +162,18 @@ export async function renderTemplate(
   try {
     rendered = await engine.parseAndRender(marked, vars);
   } catch (error) {
+    // Parse the unmarked source again, so a syntax error's line and column are right.
+    let described = describeError(error, source);
+    try {
+      engine.parse(source);
+    } catch (parseError) {
+      described = describeError(parseError, source);
+    }
     return done({
       regions: found.map((r) => ({ ...r, rendered: "" })),
       output: source,
       segments: [],
-      error: (error as Error).message,
+      ...described,
     });
   }
 

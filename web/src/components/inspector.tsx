@@ -162,6 +162,14 @@ function OutputTab({ fileId, file }: { fileId: string; file?: WorkspaceFile }) {
           )}
         </span>
       </div>
+      {doc.render.error && (
+        <div className="flex items-center gap-2 border-b bg-destructive/10 px-3 py-1.5 text-[11px] text-destructive">
+          <CircleAlertIcon className="size-3.5 shrink-0" />
+          <span>
+            <b>Out of date.</b> The template doesn't render ({doc.render.error}), so this is the last good output.
+          </span>
+        </div>
+      )}
       <ScrollArea className="min-h-0 flex-1">
         <div className="px-4 pt-3 pb-1 text-[11px] text-muted-foreground">
           {file?.outputs.length ? (

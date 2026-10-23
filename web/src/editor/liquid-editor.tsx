@@ -7,7 +7,7 @@ import { drawSelection, EditorView, highlightActiveLine, keymap, lineNumbers } f
 import { tags as t } from "@lezer/highlight"
 import { api } from "@/lib/api"
 import { useStore } from "@/lib/store"
-import { activeRegion, liquidPreview, previewState, setMode, setRegions } from "./liquid-preview"
+import { activeRegion, liquidPreview, previewState, setError, setMode, setOriginal, setRegions } from "./liquid-preview"
 
 const markdownStyle = HighlightStyle.define([
   { tag: t.heading1, fontSize: "1.45em", fontWeight: "700" },
@@ -40,6 +40,18 @@ const theme = EditorView.theme({
   "&.cm-focused": { outline: "none" },
   ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--foreground)", borderLeftWidth: "2px" },
 })
+
+/** Opens the file an `@include` line names, matched by the end of its path. */
+function openInclude(line: string) {
+  const { workspace, open } = useStore.getState()
+  const wanted = line.replace(/^@/, "").replace(/\?.*$/, "").replace(/\$\{[^}]+\}\/?/g, "").replace(/^[~#][^/]*\//, "")
+  const tail = wanted.split("/").filter((p) => p && !p.includes("*")).slice(-2).join("/")
+  const candidates = (workspace?.files ?? []).filter((f) => {
+    const p = f.path.replace(/\.tpl\./, ".")
+    return tail && (p.endsWith("/" + tail) || f.path.endsWith("/" + tail))
+  })
+  if (candidates[0]) open(candidates[0].id)
+}
 
 // One editor is mounted per open tab (hidden when inactive), so each file keeps
 // its cursor and undo history.
@@ -91,6 +103,7 @@ export function LiquidEditor({ fileId, visible }: Props) {
             onLeaveRegion: () => {
               if (pending.current && view.current) renderNow(view.current.state.doc.toString())
             },
+            onOpenInclude: (line) => openInclude(line),
           }),
           EditorView.updateListener.of((update) => {
             if (!update.docChanged) return
@@ -112,7 +125,9 @@ export function LiquidEditor({ fileId, visible }: Props) {
 
     const v = new EditorView({ state, parent: host.current })
     view.current = v
-    v.dispatch({ effects: [setRegions.of(doc.render.regions), setMode.of(useStore.getState().mode)] })
+    v.dispatch({
+      effects: [setRegions.of(doc.render.regions), setMode.of(useStore.getState().mode), setOriginal.of(doc.original)],
+    })
 
     return () => {
       window.clearTimeout(timer.current)
@@ -127,9 +142,9 @@ export function LiquidEditor({ fileId, visible }: Props) {
   useEffect(() => {
     const v = view.current
     if (!v || !doc) return
-    if (v.state.doc.toString() === doc.current && !doc.rendering && !doc.render.error) {
-      v.dispatch({ effects: setRegions.of(doc.render.regions) })
-    }
+    if (v.state.doc.toString() !== doc.current || doc.rendering) return
+    const error = doc.render.error ? { message: doc.render.error, pos: doc.render.errorPos ?? null } : null
+    v.dispatch({ effects: doc.render.error ? [setError.of(error)] : [setRegions.of(doc.render.regions), setError.of(null)] })
   }, [doc?.render, doc?.rendering])
 
   // Revert (or any outside change to the text) replaces the editor's text.

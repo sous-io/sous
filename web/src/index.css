@@ -249,10 +249,12 @@ body { overflow: hidden; }
 .diff-del { background: var(--diff-del); }
 
 /* ---- Liquid cards (sections that fill whole lines) ---- */
+.cm-liquid-card-wrap, .cm-liquid-bar-wrap { padding: 0 24px 0 12px; }
+.cm-liquid-card-wrap { padding-top: 4px; padding-bottom: 4px; }
 .cm-liquid-card {
-  margin: 4px 24px 4px 12px;
+  margin: 0;
   min-width: 0;
-  max-width: calc(100% - 36px);
+  max-width: 100%;
   box-sizing: border-box;
   border: 1px solid var(--cm-liquid-border);
   border-left: 3px solid var(--cm-liquid);
@@ -358,3 +360,78 @@ body { overflow: hidden; }
 .md-preview th { background: var(--muted); font-weight: 600; }
 .md-preview blockquote { border-left: 3px solid var(--brand); padding-left: 1em; color: var(--muted-foreground); }
 .md-preview a { color: var(--cm-link); text-decoration: underline; }
+
+/* ---- editing, errors, change bars, frontmatter ---- */
+.cm-liquid-rendered[data-src]:hover::after { content: attr(data-src) "   ✎ click to edit"; }
+.cm-liquid-rendered.cm-liquid-error[data-src]:hover::after { content: attr(data-src); color: var(--destructive); border-color: var(--destructive); }
+.cm-liquid-rendered:hover { box-shadow: inset 0 -2px 0 var(--cm-liquid); }
+.cm-liquid-error {
+  background: color-mix(in oklch, var(--destructive) 14%, transparent) !important;
+  box-shadow: inset 0 -2px 0 var(--destructive) !important;
+  text-decoration: wavy underline var(--destructive);
+  text-underline-offset: 4px;
+}
+.cm-liquid-card-error { border-color: color-mix(in oklch, var(--destructive) 60%, transparent); border-left-color: var(--destructive); background: color-mix(in oklch, var(--destructive) 7%, transparent); }
+.cm-liquid-card-errmsg { margin-left: auto; color: var(--destructive); font-weight: 600; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cm-liquid-card-note {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--muted-foreground);
+  border: 1px dashed var(--border);
+  border-radius: 999px;
+  padding: 0 7px;
+}
+.cm-liquid-card-hint { color: var(--cm-liquid); font-weight: 600; }
+
+.cm-liquid-open-line {
+  background: color-mix(in oklch, var(--cm-liquid) 9%, transparent);
+  box-shadow: inset 3px 0 0 var(--cm-liquid);
+}
+.cm-liquid-open-error { background: color-mix(in oklch, var(--destructive) 8%, transparent); box-shadow: inset 3px 0 0 var(--destructive); }
+.cm-liquid-editbar {
+  display: flex; align-items: center; gap: 8px;
+  margin: 6px 0 0 0; padding: 3px 10px;
+  font-size: 11px; color: var(--cm-liquid);
+  background: color-mix(in oklch, var(--cm-liquid) 16%, transparent);
+  border-radius: 8px 8px 0 0;
+  box-shadow: inset 3px 0 0 var(--cm-liquid);
+  font-weight: 600;
+}
+.cm-liquid-editbar-keys { margin-left: auto; font-weight: 400; color: var(--muted-foreground); }
+.cm-liquid-editbar kbd { font-family: inherit; font-size: 10px; border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; background: var(--background); color: var(--foreground); }
+.cm-liquid-resultbar {
+  margin: 0 0 6px 0; padding: 4px 10px 6px;
+  border-radius: 0 0 8px 8px;
+  background: color-mix(in oklch, var(--cm-liquid) 5%, var(--background));
+  box-shadow: inset 3px 0 0 var(--cm-liquid);
+  border-top: 1px dashed color-mix(in oklch, var(--cm-liquid) 35%, transparent);
+}
+.cm-liquid-resultbar-label { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--cm-liquid); }
+.cm-liquid-resultbar-body { white-space: pre-wrap; color: var(--foreground); opacity: 0.9; max-height: 14em; overflow: auto; }
+.cm-liquid-resultbar-error { box-shadow: inset 3px 0 0 var(--destructive); }
+.cm-liquid-resultbar-error .cm-liquid-resultbar-label, .cm-liquid-resultbar-error .cm-liquid-resultbar-body { color: var(--destructive); }
+.cm-liquid-active-error { background: color-mix(in oklch, var(--destructive) 14%, transparent) !important; outline-color: var(--destructive) !important; }
+.cm-liquid-error-line { background: color-mix(in oklch, var(--destructive) 10%, transparent); box-shadow: inset 3px 0 0 var(--destructive); }
+
+.cm-tooltip.cm-liquid-inline-result { background: var(--cm-liquid) !important; border: none !important; }
+.cm-tooltip.cm-liquid-inline-result-error { background: var(--destructive) !important; }
+.cm-liquid-inline-result {
+  font-size: 11.5px; padding: 2px 8px; border-radius: 6px;
+  background: var(--cm-liquid); color: white; font-weight: 600;
+  max-width: 480px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  box-shadow: 0 6px 18px -6px rgb(0 0 0 / 0.5);
+}
+.dark .cm-liquid-inline-result { color: oklch(0.2 0.03 290); }
+.cm-liquid-inline-result-error { background: var(--destructive); color: white !important; }
+
+.cm-frontmatter { background: color-mix(in oklch, var(--muted) 70%, transparent); }
+.cm-frontmatter, .cm-frontmatter * { font-size: 12px !important; font-weight: 400 !important; color: var(--muted-foreground); font-style: normal !important; }
+.cm-frontmatter-first { border-radius: 8px 8px 0 0; padding-top: 2px; }
+.cm-frontmatter-last { border-radius: 0 0 8px 8px; padding-bottom: 2px; }
+
+.cm-change-gutter { width: 4px; padding: 0 1px; }
+.cm-change-gutter .cm-gutterElement { padding: 0 !important; }
+.cm-change-added { width: 3px; height: 100%; background: var(--success); border-radius: 2px; }
+.cm-change-deleted { width: 0; height: 0; border-left: 4px solid var(--destructive); border-top: 4px solid transparent; border-bottom: 4px solid transparent; margin-top: -4px; }
+.cm-range-number { font-size: 10px; opacity: 0.8; display: block; padding-top: 6px; }
+.cm-liquid-fresh { animation-duration: 1.4s !important; }

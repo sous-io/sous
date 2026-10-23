@@ -143,7 +143,7 @@ export const useStore = create<State>((set, get) => ({
       if (!doc || doc.current !== source) return {}
       // A template that fails to render (often half-typed Liquid) keeps the last
       // good render on screen, with the error alongside it.
-      const next = render.error ? { ...doc.render, error: render.error, ms: render.ms } : render
+      const next = render.error ? { ...doc.render, error: render.error, errorPos: render.errorPos, ms: render.ms } : render
       return { docs: { ...s.docs, [id]: { ...doc, render: next, rendering: false } } }
     }),
   setRendering: (id, rendering) =>
