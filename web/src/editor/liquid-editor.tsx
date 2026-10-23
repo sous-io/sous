@@ -38,6 +38,7 @@ const theme = EditorView.theme({
     backgroundColor: "color-mix(in oklch, var(--cm-liquid) 30%, transparent) !important",
   },
   "&.cm-focused": { outline: "none" },
+  ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--foreground)", borderLeftWidth: "2px" },
 })
 
 // One editor is mounted per open tab (hidden when inactive), so each file keeps
