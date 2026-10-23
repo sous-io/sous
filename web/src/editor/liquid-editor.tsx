@@ -8,7 +8,7 @@ import { tags as t } from "@lezer/highlight"
 import { api } from "@/lib/api"
 import { useStore } from "@/lib/store"
 import { liquidCompletion } from "./liquid-complete"
-import { activeRegion, liquidPreview, previewState, setError, setMode, setOriginal, setRegions } from "./liquid-preview"
+import { activeRegion, liquidPreview, previewState, setError, setIncludes, setMode, setOriginal, setRegions } from "./liquid-preview"
 
 const markdownStyle = HighlightStyle.define([
   { tag: t.heading1, fontSize: "1.45em", fontWeight: "700" },
@@ -108,6 +108,7 @@ export function LiquidEditor({ fileId, visible }: Props) {
               if (pending.current && view.current) renderNow(view.current.state.doc.toString())
             },
             onOpenInclude: (line) => openInclude(line),
+            onOpenFile: (id) => useStore.getState().open(id),
           }),
           EditorView.updateListener.of((update) => {
             if (!update.docChanged) return
@@ -160,6 +161,12 @@ export function LiquidEditor({ fileId, visible }: Props) {
     const v = view.current
     if (!v || !doc) return
     if (v.state.doc.toString() !== doc.current || doc.rendering) return
+    if (doc.current.includes("@")) {
+      const source = doc.current
+      api.includes(fileId, source).then((infos) => {
+        if (view.current && view.current.state.doc.toString() === source) view.current.dispatch({ effects: setIncludes.of(infos) })
+      }).catch(() => {})
+    }
     const error = doc.render.error ? { message: doc.render.error, pos: doc.render.errorPos ?? null } : null
     v.dispatch({ effects: doc.render.error ? [setError.of(error)] : [setRegions.of(doc.render.regions), setError.of(null)] })
   }, [doc?.render, doc?.rendering])

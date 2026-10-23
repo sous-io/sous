@@ -15,6 +15,7 @@ import { variableReport, type VarFact } from "../lib/serve/var-report.js";
 import { readCatalog } from "../lib/serve/catalog.js";
 import { findDrift } from "../lib/serve/drift.js";
 import { configReport } from "../lib/serve/config-layers.js";
+import { resolveIncludes } from "../lib/serve/includes.js";
 import { lastPreviewBuild } from "../lib/serve/preview-build.js";
 import { heading, log, showCommandVars } from "../utils/formatting.js";
 
@@ -80,6 +81,28 @@ export default class Serve extends BaseCommand {
     const base = server.listeners("request") as ((req: http.IncomingMessage, res: http.ServerResponse) => void)[];
     server.removeAllListeners("request");
     server.on("request", (req: http.IncomingMessage, res: http.ServerResponse) => {
+      if (req.url?.startsWith("/api/includes") && req.method === "POST") {
+        if (req.headers["x-sous-token"] !== token) {
+          res.writeHead(401, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: "Missing or wrong token" }));
+          return;
+        }
+        const chunks: Buffer[] = [];
+        req.on("data", (c: Buffer) => chunks.push(c));
+        req.on("end", () => {
+          try {
+            const { id, source } = JSON.parse(Buffer.concat(chunks).toString("utf8")) as { id: string; source: string };
+            const file = workspace.files.find((f) => f.id === id);
+            const result = file ? resolveIncludes(workspace, file, source) : [];
+            res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+            res.end(JSON.stringify(result));
+          } catch (error) {
+            res.writeHead(500, { "content-type": "application/json" });
+            res.end(JSON.stringify({ error: (error as Error).message }));
+          }
+        });
+        return;
+      }
       if (req.url?.startsWith("/api/config")) {
         if (req.headers["x-sous-token"] !== token) {
           res.writeHead(401, { "content-type": "application/json" });

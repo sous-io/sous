@@ -149,6 +149,11 @@ export const api = {
   recipes: () => call<CatalogRecipe[]>("/api/recipes"),
   builtins: () => call<string[]>("/api/builtins"),
   config: () => call<ConfigReport>("/api/config"),
+  includes: (id: string, source: string) =>
+    call<{ line: number; reference: string; glob: boolean; files: { id?: string; display: string }[]; error?: string }[]>("/api/includes", {
+      method: "POST",
+      body: JSON.stringify({ id, source }),
+    }),
   drift: (id: string) => call<{ drift: Drift | null }>(`/api/drift?id=${encodeURIComponent(id)}`),
   output: (path: string) => call<{ content: string }>(`/api/output?path=${encodeURIComponent(path)}`),
 }

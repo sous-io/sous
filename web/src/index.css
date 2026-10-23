@@ -462,3 +462,16 @@ body { overflow: hidden; }
 .cm-in-h2 { font-size: 1.25em; font-weight: 700; }
 .cm-in-h3 { font-size: 1.1em; font-weight: 650; }
 .cm-in-h4, .cm-in-h5, .cm-in-h6 { font-weight: 650; }
+
+/* ---- @include chips ---- */
+.cm-include-chip {
+  margin-left: 10px; padding: 0 7px; border-radius: 999px;
+  font-size: 11px; color: var(--cm-include);
+  border: 1px solid color-mix(in oklch, var(--cm-include) 40%, transparent);
+  background: color-mix(in oklch, var(--cm-include) 8%, transparent);
+  vertical-align: 1px;
+}
+.cm-include-chip:hover { background: color-mix(in oklch, var(--cm-include) 18%, transparent); }
+.cm-include-chip-error { color: var(--destructive); border-color: color-mix(in oklch, var(--destructive) 50%, transparent); background: color-mix(in oklch, var(--destructive) 10%, transparent); font-weight: 600; cursor: help; }
+.cm-include-broken { background: color-mix(in oklch, var(--destructive) 8%, transparent); box-shadow: inset 3px 0 0 var(--destructive); }
+.cm-include-broken .cm-include-line { color: var(--destructive); text-decoration: wavy underline var(--destructive); }

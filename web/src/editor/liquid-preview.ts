@@ -542,11 +542,81 @@ function highlighter(decorator: MatchDecorator) {
   )
 }
 
+// ---- @include lines: where each one points, and the ones the build fails on ----
+
+export type IncludeInfo = { line: number; reference: string; glob: boolean; files: { id?: string; display: string }[]; error?: string }
+export const setIncludes = StateEffect.define<IncludeInfo[]>()
+
+class IncludeChip extends WidgetType {
+  constructor(
+    readonly info: IncludeInfo,
+    readonly open: (id: string) => void,
+  ) {
+    super()
+  }
+  eq(other: IncludeChip) {
+    return JSON.stringify(other.info) === JSON.stringify(this.info)
+  }
+  toDOM(): HTMLElement {
+    const { info } = this
+    const el = document.createElement("span")
+    el.className = `cm-include-chip${info.error ? " cm-include-chip-error" : ""}`
+    if (info.error) {
+      el.textContent = `⚠ ${info.error.replace(/^(Matches no files|Not found)\. /, "").split(". ")[0].slice(0, 70)}: the build fails here`
+      el.title = info.error
+    } else if (info.files.length === 1) {
+      el.textContent = `→ ${info.files[0].display.split("/").slice(-2).join("/")}`
+      el.title = `Includes ${info.files[0].display}. Click to open it.`
+    } else {
+      el.textContent = `→ ${info.files.length} files`
+      el.title = info.files.map((f) => f.display).join("\n")
+    }
+    const target = info.files.find((f) => f.id)?.id
+    if (target) {
+      el.style.cursor = "pointer"
+      el.addEventListener("mousedown", (e) => {
+        e.preventDefault()
+        this.open(target)
+      })
+    }
+    return el
+  }
+  ignoreEvent() {
+    return true
+  }
+}
+
+const brokenInclude = Decoration.line({ class: "cm-include-broken" })
+
+function includeField(open: (id: string) => void) {
+  return StateField.define<{ infos: IncludeInfo[]; deco: DecorationSet }>({
+    create: () => ({ infos: [], deco: Decoration.none }),
+    update(value, tr) {
+      let infos = value.infos
+      for (const e of tr.effects) if (e.is(setIncludes)) infos = e.value
+      if (infos === value.infos && !tr.docChanged) return value
+      const doc = tr.state.doc
+      const ranges: Range<Decoration>[] = []
+      for (const info of infos) {
+        if (info.line > doc.lines) continue
+        const line = doc.line(info.line)
+        if (!line.text.trim().startsWith("@")) continue
+        if (info.error) ranges.push(brokenInclude.range(line.from))
+        ranges.push(Decoration.widget({ widget: new IncludeChip(info, open), side: 1 }).range(line.to))
+      }
+      return { infos, deco: Decoration.set(ranges, true) }
+    },
+    provide: (field) => EditorView.decorations.from(field, (v) => v.deco),
+  })
+}
+
 export type PreviewCallbacks = {
   /** Called when the cursor leaves a region, or the editor loses focus. */
   onLeaveRegion: () => void
   /** Called on Ctrl/Cmd+click on an `@include` line, with the line's text. */
   onOpenInclude: (line: string) => void
+  /** Opens a workspace file by id. */
+  onOpenFile: (id: string) => void
 }
 
 export function liquidPreview(callbacks: PreviewCallbacks): Extension {
@@ -556,6 +626,7 @@ export function liquidPreview(callbacks: PreviewCallbacks): Extension {
     inlineResultTooltip,
     changeState,
     changeGutter,
+    includeField(callbacks.onOpenFile),
     cardLineNumbers,
     highlighter(liquidSyntax),
     highlighter(includeSyntax),
