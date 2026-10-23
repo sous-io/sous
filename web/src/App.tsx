@@ -1,6 +1,7 @@
 import { useEffect } from "react"
 import {
   BotIcon,
+  HouseIcon,
   BoxesIcon,
   ChefHatIcon,
   FileCode2Icon,
@@ -34,12 +35,14 @@ import { EditorArea } from "@/components/editor-area"
 import { Explorer } from "@/components/explorer"
 import { RecipesPage } from "@/pages/recipes-page"
 import { VariablesPage } from "@/pages/variables-page"
+import { HomePage } from "@/pages/home-page"
 import { BuildPage, ContextPage } from "@/pages/build-context"
 import { ProposalsPage } from "@/pages/proposals"
 import { unsentIds, useStore, type Page } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
 const NAV: { page: Page; label: string; icon: typeof SquarePenIcon }[] = [
+  { page: "home", label: "Home", icon: HouseIcon },
   { page: "editor", label: "Editor", icon: SquarePenIcon },
   { page: "context", label: "Agent view", icon: BotIcon },
   { page: "variables", label: "Variables", icon: VariableIcon },
@@ -273,6 +276,7 @@ export default function App() {
               </ResizablePanel>
             </ResizablePanelGroup>
           )}
+          {page === "home" && <HomePage />}
           {page === "context" && <ContextPage />}
           {page === "variables" && <VariablesPage />}
           {page === "recipes" && <RecipesPage />}
