@@ -108,6 +108,7 @@ function Breadcrumb({ file }: { file: WorkspaceFile }) {
 
 function OriginBanner({ file }: { file: WorkspaceFile }) {
   const doc = useStore((s) => s.docs[file.id])
+  useStore((s) => s.mode)
   const branch = useStore((s) => s.workspace?.branch)
   const openContribute = useStore((s) => s.openContribute)
   const changed = doc && doc.current !== doc.original
@@ -159,8 +160,10 @@ function OriginBanner({ file }: { file: WorkspaceFile }) {
       <div className="flex items-center gap-2 border-b bg-liquid-soft px-4 py-1.5 text-xs">
         <SparklesIcon className="size-3.5 text-liquid" />
         <span className="text-muted-foreground">
-          A sample template, rendered with <b className="text-foreground">this project's real variables</b>. Click a
-          highlighted section to edit its Liquid; move out of it to re-render.
+          A sample template, rendered with <b className="text-foreground">this project's real variables</b>.{" "}
+          {useStore.getState().mode === "source"
+            ? "This is the plain source. Switch to Rendered to see each Liquid section's output."
+            : "Click any highlighted section to edit its Liquid; press Esc or click outside to re-render."}
         </span>
       </div>
     )

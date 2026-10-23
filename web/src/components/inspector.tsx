@@ -230,6 +230,14 @@ function VariablesTab({ fileId }: { fileId: string }) {
       </div>
       <ScrollArea className="min-h-0 flex-1">
         <div className="divide-y text-xs">
+          {entries.length === 0 && (
+            <div className="p-6 text-center text-muted-foreground">
+              No variable matches “{filter}”.{" "}
+              <button className="text-brand underline" onClick={() => setFilter("")}>
+                Clear
+              </button>
+            </div>
+          )}
           {entries.map(([k, v]) => {
             const overridden = k in doc.overrides
             const value = overridden ? doc.overrides[k] : v

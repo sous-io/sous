@@ -58,7 +58,14 @@ function Header() {
   const unsent = unsentIds(docs)
   const openProposals = proposals.filter((p) => p.stage !== "released").length
 
-  const toggleTheme = () => document.documentElement.classList.toggle("dark")
+  const toggleTheme = () => {
+    const dark = document.documentElement.classList.toggle("dark")
+    try {
+      localStorage.setItem("sous-theme", dark ? "dark" : "light")
+    } catch {
+      // The theme just isn't remembered.
+    }
+  }
 
   return (
     <header className="relative flex h-13 shrink-0 items-center gap-3 border-b bg-sidebar px-3">
@@ -74,7 +81,7 @@ function Header() {
         {workspace && (
           <div className="ml-2 flex items-center gap-2 rounded-lg border bg-background/60 py-1 pr-2 pl-2.5">
             <span className="text-sm font-medium">{workspace.projectName}</span>
-            <span className="flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
+            <span className="flex max-w-44 items-center gap-1 truncate rounded-md bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground max-[1200px]:hidden">
               <GitBranchIcon className="size-3" />
               {workspace.branch}
             </span>
@@ -93,7 +100,7 @@ function Header() {
                 : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
             )}
           >
-            <Icon className={cn("size-3.5", page === p && "text-brand")} /> {label}
+            <Icon className={cn("size-3.5", page === p && "text-brand")} /> <span className="max-[1380px]:hidden">{label}</span>
             {p === "proposals" && openProposals > 0 && (
               <span className="ml-0.5 rounded-full bg-brand-soft px-1.5 text-[10px] font-semibold text-brand">{openProposals}</span>
             )}
@@ -101,9 +108,9 @@ function Header() {
         ))}
       </nav>
       <div className="ml-auto flex items-center gap-2">
-        <Button size="sm" variant="outline" className="w-60 justify-start bg-background/60 text-muted-foreground" onClick={() => setPaletteOpen(true)}>
-          <SearchIcon /> Open a file…
-          <span className="ml-auto flex gap-0.5">
+        <Button size="sm" variant="outline" className="w-60 justify-start bg-background/60 text-muted-foreground max-[1380px]:w-auto" onClick={() => setPaletteOpen(true)}>
+          <SearchIcon /> <span className="max-[1380px]:hidden">Open a file…</span>
+          <span className="ml-auto flex gap-0.5 max-[1380px]:hidden">
             <Kbd>Ctrl</Kbd>
             <Kbd>K</Kbd>
           </span>
@@ -112,7 +119,9 @@ function Header() {
           size="sm"
           onClick={() => openContribute()}
           variant={unsent.length ? "default" : "outline"}
-          className={cn("font-semibold", unsent.length > 0 && "shadow-[var(--shadow-glow)]")}
+          disabled={unsent.length === 0}
+          title={unsent.length === 0 ? "Edit any file to start a proposal" : undefined}
+          className={cn("shrink-0 font-semibold", unsent.length > 0 && "shadow-[var(--shadow-glow)]")}
         >
           <GitPullRequestArrowIcon />
           {unsent.length ? (
@@ -121,7 +130,7 @@ function Header() {
               <span className="rounded-full bg-primary-foreground/20 px-1.5 text-[11px]">{unsent.length}</span>
             </>
           ) : (
-            "No changes yet"
+            "Nothing to send"
           )}
         </Button>
         <Button size="icon-sm" variant="ghost" onClick={toggleTheme} title="Light or dark">
@@ -159,7 +168,7 @@ function Palette() {
   return (
     <CommandDialog open={open} onOpenChange={setOpen} className="sm:max-w-2xl">
       <Command>
-      <CommandInput placeholder="Find a source file…" />
+      <CommandInput placeholder="Find a source or output file…" />
       <CommandList>
         <CommandEmpty>No file matches.</CommandEmpty>
         {groups.map((g) => (

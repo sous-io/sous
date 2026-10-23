@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   BookOpenIcon,
   ChevronRightIcon,
@@ -143,6 +143,10 @@ function filterTree(nodes: Node[], query: string, files: Map<string, WorkspaceFi
     .filter((n): n is Node => n !== null)
 }
 
+function containsFile(node: Node, id: string): boolean {
+  return node.fileId === id || node.children.some((c) => containsFile(c, id))
+}
+
 const ICONS = {
   repo: GitBranchIcon,
   namespace: FolderIcon,
@@ -158,6 +162,14 @@ function TreeNode({ node, depth, forceOpen }: { node: Node; depth: number; force
   const docs = useStore((s) => s.docs)
   const open = useStore((s) => s.open)
   const [expanded, setExpanded] = useState(depth < 1 || node.icon === "sample")
+  const holdsActive = useMemo(() => !node.fileId && activeId !== null && containsFile(node, activeId), [node, activeId])
+  useEffect(() => {
+    if (holdsActive) setExpanded(true)
+  }, [holdsActive])
+  const rowRef = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    if (node.fileId && node.fileId === activeId) rowRef.current?.scrollIntoView({ block: "nearest" })
+  }, [activeId, node.fileId])
   const pad = { paddingLeft: 8 + depth * 12 }
 
   if (node.fileId) {
@@ -167,6 +179,7 @@ function TreeNode({ node, depth, forceOpen }: { node: Node; depth: number; force
     const Icon = isTpl ? FileCode2Icon : FileIcon
     const row = (
       <button
+        ref={rowRef}
         onClick={() => open(node.fileId!)}
         style={pad}
         className={cn(
@@ -223,7 +236,8 @@ function TreeNode({ node, depth, forceOpen }: { node: Node; depth: number; force
         <span
           className={cn(
             "truncate",
-            depth === 0 && "text-[11px] font-semibold tracking-wider text-muted-foreground uppercase",
+            depth === 0 && "text-[12px] font-semibold text-muted-foreground",
+            depth === 0 && !/[./]/.test(node.name) && "text-[11px] tracking-wider uppercase",
             node.icon === "recipe" && "font-medium",
           )}
         >
@@ -268,18 +282,18 @@ export function Explorer() {
   const changed = changedIds(docs)
 
   return (
-    <div className="flex h-full flex-col bg-sidebar">
+    <div className="@container flex h-full flex-col bg-sidebar">
       <div className="space-y-2 border-b p-2">
         <Tabs value={view} onValueChange={(v) => setView(v as string)}>
           <TabsList className="w-full">
             <TabsTrigger value="recipe" title="Repository › namespace › recipe › file">
-              <PackageIcon /> Recipes
+              <PackageIcon /> <span className="hidden @[230px]:inline">Sources</span>
             </TabsTrigger>
             <TabsTrigger value="file" title="Where each file is on disk">
-              <FolderIcon /> Files
+              <FolderIcon /> <span className="hidden @[230px]:inline">Files</span>
             </TabsTrigger>
             <TabsTrigger value="output" title="What each output file is built from">
-              <FileOutputIcon /> Outputs
+              <FileOutputIcon /> <span className="hidden @[230px]:inline">Outputs</span>
             </TabsTrigger>
           </TabsList>
         </Tabs>
