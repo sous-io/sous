@@ -246,6 +246,15 @@ function Loading() {
 export function ContextPage() {
   const { build } = useBuild()
   const [selected, setSelected] = useState<OutputInfo | null>(null)
+  // An instructions file that fails to build has no output to count; its template's own text stands in, labelled.
+  const [templateTokens, setTemplateTokens] = useState<Record<string, number>>({})
+  useEffect(() => {
+    for (const o of build?.outputs ?? []) {
+      if (o.kind === "instructions" && o.status === "failed" && templateTokens[o.entryId] === undefined) {
+        api.file(o.entryId).then((p) => setTemplateTokens((t) => ({ ...t, [o.entryId]: p.render.tokens }))).catch(() => {})
+      }
+    }
+  }, [build])
   if (!build) return <Loading />
 
   const instructions = build.outputs.filter((o) => o.kind === "instructions")
@@ -332,7 +341,9 @@ export function ContextPage() {
                   </span>
                 </div>
                 <div className="mt-2 text-xs text-muted-foreground">
-                  {o.status === "failed" ? o.error?.split("\n")[0] : `${o.tokens.toLocaleString()} tokens · built from ${o.sources.length} files`}
+                  {o.status === "failed"
+                    ? `${o.error?.split("\n")[0] ?? "It fails to build."}${templateTokens[o.entryId] !== undefined ? ` Its template alone is ${templateTokens[o.entryId].toLocaleString()} tokens, before includes.` : ""}`
+                    : `${o.tokens.toLocaleString()} tokens · built from ${o.sources.length} files`}
                   {o.output.includes("/") && " · only when working in " + o.output.split("/").slice(0, -1).join("/") + "/"}
                 </div>
               </button>
