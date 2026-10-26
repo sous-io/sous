@@ -24,6 +24,10 @@ import {
 } from "./git-clone.js";
 import { isConfigError } from "../errors.js";
 import { makeTmpDir, type TmpDir } from "../../test/utils/tmp.js";
+import { LF_CHECKOUT_OPTIONS } from "./store/hash.js";
+
+/** The line-ending options every clone carries, as they appear in a joined command. */
+const LF = LF_CHECKOUT_OPTIONS.join(" ");
 
 /** Builds a runner that answers from a table of command lines, recording every call. */
 function fakeRunner(
@@ -320,12 +324,12 @@ describe("cloneRepo()", () => {
    * directory first so git is never asked to write somewhere that is missing.
    *
    * cloneRepo("https://x/y", "/tmp/a/b");
-   * // -> git clone --depth 1 -- https://x/y /tmp/a/b
+   * // -> git clone --config core.autocrlf=false --config core.eol=lf --depth 1 -- https://x/y /tmp/a/b
    */
   it("should run a shallow clone and create the parent directory", () => {
     const dest = path.join(tmp.path, "nested", "repo");
     const runner = fakeRunner({
-      [`clone --depth 1 -- https://x/y ${dest}`]: { status: 0 },
+      [`clone ${LF} --depth 1 -- https://x/y ${dest}`]: { status: 0 },
     });
 
     const result = cloneRepo("https://x/y", dest, { runner });
@@ -333,6 +337,7 @@ describe("cloneRepo()", () => {
     expect(runner.calls).toHaveLength(1);
     expect(runner.calls[0]!.args).toEqual([
       "clone",
+      ...LF_CHECKOUT_OPTIONS,
       "--depth",
       "1",
       "--",
@@ -353,11 +358,11 @@ describe("cloneRepo()", () => {
   it("should retry the full history when a shallow clone is refused", () => {
     const dest = path.join(tmp.path, "repo");
     const runner = fakeRunner({
-      [`clone --depth 1 -- https://x/y ${dest}`]: {
+      [`clone ${LF} --depth 1 -- https://x/y ${dest}`]: {
         status: 128,
         stderr: "fatal: remote transport reported error",
       },
-      [`clone -- https://x/y ${dest}`]: { status: 0 },
+      [`clone ${LF} -- https://x/y ${dest}`]: { status: 0 },
     });
 
     const result = cloneRepo("https://x/y", dest, { runner });
@@ -370,15 +375,21 @@ describe("cloneRepo()", () => {
    * cloneRepo should omit --depth when asked for a full clone with depth 0.
    *
    * cloneRepo("https://x/y", dest, { depth: 0 });
-   * // -> git clone -- https://x/y <dest>
+   * // -> git clone --config core.autocrlf=false --config core.eol=lf -- https://x/y <dest>
    */
   it("should clone the full history when depth is zero", () => {
     const dest = path.join(tmp.path, "repo");
-    const runner = fakeRunner({ [`clone -- https://x/y ${dest}`]: { status: 0 } });
+    const runner = fakeRunner({ [`clone ${LF} -- https://x/y ${dest}`]: { status: 0 } });
 
     const result = cloneRepo("https://x/y", dest, { runner, depth: 0 });
 
-    expect(runner.calls[0]!.args).toEqual(["clone", "--", "https://x/y", dest]);
+    expect(runner.calls[0]!.args).toEqual([
+      "clone",
+      ...LF_CHECKOUT_OPTIONS,
+      "--",
+      "https://x/y",
+      dest,
+    ]);
     expect(result).toEqual({ depth: 0, fellBackToFullClone: false });
   });
 
@@ -412,8 +423,8 @@ describe("cloneRepo()", () => {
   it("should carry git's message into the error when a clone fails", () => {
     const dest = path.join(tmp.path, "repo");
     const runner = fakeRunner({
-      [`clone --depth 1 -- https://x/y ${dest}`]: { status: 128 },
-      [`clone -- https://x/y ${dest}`]: {
+      [`clone ${LF} --depth 1 -- https://x/y ${dest}`]: { status: 128 },
+      [`clone ${LF} -- https://x/y ${dest}`]: {
         status: 128,
         stderr: "fatal: repository 'https://x/y' not found",
       },

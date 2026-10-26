@@ -9,6 +9,7 @@ import path from "node:path";
 import { fetchSubtree, runGit, tryCommand, type CommandRunner } from "./git.js";
 import { isConfigError } from "../../errors.js";
 import { makeTmpDir } from "../../../test/utils/tmp.js";
+import { LF_CHECKOUT_OPTIONS } from "../store/hash.js";
 
 /** Builds a runner that answers every call with the same result. */
 function fixedRunner(result: { code: number; stdout?: string; stderr?: string }): CommandRunner {
@@ -114,6 +115,9 @@ describe("fetchSubtree()", () => {
     expect(calls[0]).toEqual(
       expect.arrayContaining(["clone", "--depth", "1", "--filter=blob:none", "--sparse"])
     );
+    // The subtree is hashed against its pin, so the checkout must keep the
+    // committed line endings even where git is set to convert them.
+    expect(calls[0]!.join(" ")).toContain(LF_CHECKOUT_OPTIONS.join(" "));
     // The URL and the destination sit after `--`, so neither can ever be read as
     // an option, whatever they start with.
     expect(calls[0]!.slice(-3)).toEqual([

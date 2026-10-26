@@ -335,6 +335,12 @@ const LINK_BRANCH_EXPORTS = [
   "tryFetchUpstream",
 ];
 
+/**
+ * The line-ending fix: the `git clone` options that keep a checkout's bytes the
+ * committed ones, so a recipe hashes the same on Windows as where it was published.
+ */
+const LINE_ENDING_EXPORTS = ["LF_CHECKOUT_OPTIONS"];
+
 describe("the repos barrel", () => {
   /**
    * The barrel exposes exactly the documented surface: nothing missing, and
@@ -353,6 +359,7 @@ describe("the repos barrel", () => {
       ...UPDATE_EXPORTS,
       ...SUBMIT_LIFECYCLE_EXPORTS,
       ...LINK_BRANCH_EXPORTS,
+      ...LINE_ENDING_EXPORTS,
     ].sort();
     expect(Object.keys(repos).sort()).toEqual(expected);
   });

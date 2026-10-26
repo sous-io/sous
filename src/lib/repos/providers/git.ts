@@ -14,6 +14,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { ConfigError } from "../../errors.js";
+import { LF_CHECKOUT_OPTIONS } from "../store/hash.js";
 
 /** What a finished subprocess reports back. */
 export type CommandResult = {
@@ -174,6 +175,9 @@ export async function fetchSubtree(options: {
         "1",
         "--filter=blob:none",
         "--sparse",
+        // The fetched subtree is hashed against its pin, so its bytes must be the
+        // committed ones whatever this machine's line-ending settings are.
+        ...LF_CHECKOUT_OPTIONS,
         "--branch",
         tag,
         // Everything after this is a path or a URL, never an option, whatever it

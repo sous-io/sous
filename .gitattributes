@@ -1,0 +1,4 @@
+# Check text files out with LF on every platform. Sous hashes recipe files
+# byte for byte, so a CRLF checkout (Git for Windows' default) changes every
+# recipe's content hash and fails its pin.
+* text=auto eol=lf

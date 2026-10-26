@@ -16,6 +16,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { ConfigError } from "../errors.js";
+import { LF_CHECKOUT_OPTIONS } from "./store/hash.js";
 
 /** What one git invocation produced. */
 export type GitResult = {
@@ -211,15 +212,20 @@ export function cloneRepo(
   const depth = options.depth ?? 1;
   const runner = options.runner ?? runGit;
 
+  // A linked checkout is hashed when its recipes are released or compiled, so
+  // it keeps the committed bytes whatever this machine's line-ending settings are.
   if (depth > 0) {
-    const shallow = runner(["clone", "--depth", String(depth), "--", url, destDir], {});
+    const shallow = runner(
+      ["clone", ...LF_CHECKOUT_OPTIONS, "--depth", String(depth), "--", url, destDir],
+      {}
+    );
     if (shallow.status === 0) return { depth, fellBackToFullClone: false };
     // git leaves the destination behind on some failures; clear it so the retry
     // is not refused by its own leftovers.
     fs.rmSync(destDir, { recursive: true, force: true });
   }
 
-  runGitOrThrow(["clone", "--", url, destDir], {
+  runGitOrThrow(["clone", ...LF_CHECKOUT_OPTIONS, "--", url, destDir], {
     runner: options.runner,
     what: `Cloning ${url}`,
   });

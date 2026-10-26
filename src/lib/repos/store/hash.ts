@@ -35,6 +35,23 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { STORE_ENTRY_FILENAME } from "../formats/common.js";
 
+/**
+ * `git clone` options that check files out exactly as they were committed.
+ *
+ * A content hash is over raw bytes, and Git for Windows installs with
+ * `core.autocrlf=true` by default, which rewrites every text file to CRLF on
+ * checkout. A recipe published with LF then hashed differently on such a
+ * machine and failed its own pin. `--config` also writes these into the
+ * clone's own `.git/config`, so later checkouts in a linked working copy keep
+ * the same bytes.
+ */
+export const LF_CHECKOUT_OPTIONS = [
+  "--config",
+  "core.autocrlf=false",
+  "--config",
+  "core.eol=lf",
+] as const;
+
 /** Directory name never included in a content hash. */
 const GIT_DIR_NAME = ".git";
 
