@@ -83,6 +83,23 @@ export function localRepoPath(url: string): string | undefined {
   return path.isAbsolute(trimmed) ? path.normalize(trimmed) : undefined;
 }
 
+/**
+ * A local repository's parent directory as its identity spells it. The identity
+ * is split on `/` and becomes directories under the store and the index cache,
+ * so on Windows the separators turn into `/` and the drive loses its colon,
+ * which may not appear inside a Windows path. Elsewhere the directory is
+ * returned unchanged.
+ *
+ * identityOwner("C:\\Users\\me"); // -> "C/Users/me" on Windows
+ * identityOwner("/home/me");      // -> "/home/me"
+ *
+ * @param directory - An absolute directory.
+ */
+function identityOwner(directory: string): string {
+  if (path.sep !== "\\") return directory;
+  return directory.split(path.sep).join("/").replace(/^([A-Za-z]):/, "$1");
+}
+
 /** A URL that names its scheme, such as `https://` or `ssh://`. */
 const SCHEME_PATTERN = /^[a-z][a-z0-9+.-]*:\/\//i;
 
@@ -290,7 +307,7 @@ export class LocalProvider extends ProviderBase {
 
     return {
       host: "localhost",
-      owner: path.dirname(directory),
+      owner: identityOwner(path.dirname(directory)),
       name: path.basename(directory),
       httpsUrl: directory,
       sshUrl: pathToFileURL(directory).href,
