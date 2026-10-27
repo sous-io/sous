@@ -22,6 +22,7 @@ import { globSync } from "glob";
 import { compareBytewise } from "../../services/ref-resolver/index.js";
 import { realPathInside } from "../include-resolver.js";
 import { inferGlobBase } from "../markdown-compiler.js";
+import { toGlobPattern } from "../glob-pattern.js";
 import { compileRecipeKeyMatcher } from "./recipe-key-matcher.js";
 import {
   listLockedRecipes,
@@ -137,9 +138,11 @@ export function listMemories(options: MemoryListingOptions): MemoryFile[] {
     const mine = new Map<string, MemoryFile>();
     for (const content of manifest.contents) {
       if (content.kind !== "memories") continue;
-      const ignore = (content.exclude ?? []).map((pattern) => path.join(recipe.dir, pattern));
+      const ignore = (content.exclude ?? []).map((pattern) =>
+        toGlobPattern(path.join(recipe.dir, pattern))
+      );
       for (const include of content.include) {
-        const pattern = path.join(recipe.dir, include);
+        const pattern = toGlobPattern(path.join(recipe.dir, include));
         const base = inferGlobBase(pattern);
         for (const file of globSync(pattern, { absolute: true, ignore, dot: true })) {
           if (!isFile(file)) continue;

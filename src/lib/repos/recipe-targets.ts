@@ -30,6 +30,7 @@ import path from "node:path";
 import { globSync } from "glob";
 import type { CompilationTarget } from "../markdown-compiler.js";
 import { inferGlobBase } from "../markdown-compiler.js";
+import { toGlobPattern } from "../glob-pattern.js";
 import type { Settings, VarScope } from "../settings.js";
 import { normalizeConfigPath, substituteVarsStrict } from "../settings.js";
 import type { ContentKind } from "./formats/recipe-manifest.js";
@@ -186,11 +187,11 @@ export function buildRecipeTargets(options: RecipeTargetOptions): RecipeTargets 
       const recipeScope = options.scopeFor?.(recipe) ?? options.scope ?? {};
 
       const ignore = (content.exclude ?? []).map((pattern) =>
-        path.join(recipe.dir, pattern)
+        toGlobPattern(path.join(recipe.dir, pattern))
       );
 
       for (const include of content.include) {
-        const pattern = path.join(recipe.dir, include);
+        const pattern = toGlobPattern(path.join(recipe.dir, include));
         const matched = globSync(pattern, { absolute: true, ignore }).filter(isFile);
         const globBase = normalizeConfigPath(inferGlobBase(pattern));
 

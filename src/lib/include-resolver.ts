@@ -4,6 +4,7 @@ import { globSync } from "glob";
 import { minimatch } from "minimatch";
 import { compareBytewise, hasGlob, type ViewFile } from "../services/ref-resolver/index.js";
 import { expandHome } from "./config-discovery.js";
+import { toGlobPattern } from "./glob-pattern.js";
 import type {
   NamespaceResolution,
   NamespaceResolver,
@@ -382,7 +383,9 @@ export function resolveInclude(rawPath: string, opts: IncludeResolveOptions): In
  * @param pattern - An absolute glob pattern.
  */
 function expandPattern(pattern: string): string[] {
-  return globSync(pattern, { absolute: true, nodir: true, dot: true }).sort(compareBytewise);
+  return globSync(toGlobPattern(pattern), { absolute: true, nodir: true, dot: true }).sort(
+    compareBytewise
+  );
 }
 
 /**

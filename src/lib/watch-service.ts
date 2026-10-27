@@ -2,6 +2,7 @@ import chokidar from "chokidar";
 import { minimatch } from "minimatch";
 import path from "node:path";
 import type { WatchConfig } from "./settings.js";
+import { toGlobPattern } from "./glob-pattern.js";
 import { log } from "../utils/formatting.js";
 
 /** Milliseconds to wait after a change before triggering a rebuild. */
@@ -98,7 +99,7 @@ export class WatchService {
       }
 
       const isExactFile = files.includes(filePath);
-      const matchesGlob = globs.some(g => minimatch(filePath, g));
+      const matchesGlob = globs.some(g => minimatch(filePath, toGlobPattern(g)));
 
       if (isExactFile || matchesGlob) {
         schedule({ type: "partial", filePath });

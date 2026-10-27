@@ -247,7 +247,9 @@ async function main() {
     async loadConfigs(globPattern) {
       const where = `loadConfigs(${JSON.stringify(globPattern)}) in ${currentFile}`;
       const pattern = resolveBuilderPath(globPattern, where);
-      const matches = globSync(pattern, { absolute: true })
+      // glob reads `\` as an escape, so a Windows path is handed over with `/`
+      // separators (see src/lib/glob-pattern.ts; this file stays plain JS).
+      const matches = globSync(pattern.split(path.sep).join("/"), { absolute: true })
         .filter((p) => fs.statSync(p).isFile())
         .sort(bytewiseCompare);
       for (const match of matches) {

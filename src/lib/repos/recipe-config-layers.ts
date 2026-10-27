@@ -27,6 +27,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { globSync } from "glob";
 import { parse as parseYaml } from "yaml";
+import { toGlobPattern } from "../glob-pattern.js";
 import { parseJsoncText } from "./load-manifest.js";
 import { listLockedRecipes, readRecipeManifestIn } from "./locked-recipes.js";
 
@@ -224,11 +225,11 @@ export function listRecipeConfigLayers(
       if (content.kind !== "config") continue;
 
       const ignore = (content.exclude ?? []).map((pattern) =>
-        path.join(recipe.dir, pattern)
+        toGlobPattern(path.join(recipe.dir, pattern))
       );
 
       for (const include of content.include) {
-        for (const filePath of globSync(path.join(recipe.dir, include), {
+        for (const filePath of globSync(toGlobPattern(path.join(recipe.dir, include)), {
           absolute: true,
           ignore,
         })) {

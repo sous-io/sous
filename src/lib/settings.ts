@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { globSync } from "glob";
 import { inferGlobBase, type CompilationConfig, type CompilationTarget, type ResolvedRuntimeContext } from "./markdown-compiler.js";
 import { buildAliasMap, resolveAliasPrefix, type AliasMap } from "./include-resolver.js";
+import { toGlobPattern } from "./glob-pattern.js";
 import {
   CONFD_DIR_NAME,
   ENV_DEFAULTS_NAME,
@@ -1010,7 +1011,7 @@ export function resolveCompilation(
       // base; the first base that matches any files wins, mirroring the first-existing-wins
       // rule of @include resolution.
       const rawPattern = substituteVarsStrict(target.entryGlob!, targetScope, `${where}.entryGlob`);
-      const patternCandidates = resolveAliasPrefix(rawPattern, aliases);
+      const patternCandidates = resolveAliasPrefix(rawPattern, aliases).map(toGlobPattern);
       let pattern = patternCandidates[0];
       let matchedFiles: string[] = [];
       for (const candidate of patternCandidates) {
