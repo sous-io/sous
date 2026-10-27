@@ -207,7 +207,9 @@ describe("installs", () => {
         "0.2.18"
       );
       fs.mkdirSync(path.join(project, "node_modules", "@sous-io"), { recursive: true });
-      fs.symlinkSync(stored, underModules(path.join(project, "node_modules")), "dir");
+      // A junction on Windows, where a directory symlink needs elevated rights;
+      // the type is ignored elsewhere.
+      fs.symlinkSync(stored, underModules(path.join(project, "node_modules")), "junction");
       fs.mkdirSync(path.join(project, "packages", "app"), { recursive: true });
 
       const info = await findProjectInstallInfo(path.join(project, "packages", "app"));

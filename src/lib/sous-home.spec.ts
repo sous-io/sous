@@ -32,7 +32,7 @@ describe("sous-home", () => {
      */
     it("should use an absolute SOUS_HOME as given", () => {
       expect(resolveSousHome({ SOUS_HOME: "/opt/sous-home" })).toBe(
-        path.normalize("/opt/sous-home")
+        path.resolve("/opt/sous-home")
       );
     });
 
@@ -72,7 +72,7 @@ describe("sous-home", () => {
      */
     it("should normalize the resolved path", () => {
       expect(resolveSousHome({ SOUS_HOME: "/opt/a/../sous-home" })).toBe(
-        path.normalize("/opt/sous-home")
+        path.resolve("/opt/sous-home")
       );
     });
 
@@ -85,7 +85,7 @@ describe("sous-home", () => {
       const previous = process.env.SOUS_HOME;
       try {
         process.env.SOUS_HOME = "/opt/late-binding";
-        expect(resolveSousHome()).toBe(path.normalize("/opt/late-binding"));
+        expect(resolveSousHome()).toBe(path.resolve("/opt/late-binding"));
       } finally {
         if (previous === undefined) delete process.env.SOUS_HOME;
         else process.env.SOUS_HOME = previous;
@@ -103,7 +103,7 @@ describe("sous-home", () => {
      */
     it("should return the cache directory inside the user-level directory", () => {
       expect(resolveStoreRoot({ SOUS_HOME: "/opt/sous-home" })).toBe(
-        path.join("/opt/sous-home", STORE_DIR_NAME)
+        path.resolve("/opt/sous-home", STORE_DIR_NAME)
       );
     });
   });
@@ -118,7 +118,7 @@ describe("sous-home", () => {
      */
     it("should return the repos directory inside the user-level directory", () => {
       expect(resolveGlobalReposDir({ SOUS_HOME: "/opt/sous-home" })).toBe(
-        path.join("/opt/sous-home", GLOBAL_REPOS_DIR_NAME)
+        path.resolve("/opt/sous-home", GLOBAL_REPOS_DIR_NAME)
       );
     });
   });
@@ -132,7 +132,7 @@ describe("sous-home", () => {
      */
     it("should return the machine-wide links map path", () => {
       expect(resolveGlobalLinksPath({ SOUS_HOME: "/opt/sous-home" })).toBe(
-        path.join("/opt/sous-home", GLOBAL_LINKS_FILENAME)
+        path.resolve("/opt/sous-home", GLOBAL_LINKS_FILENAME)
       );
     });
   });

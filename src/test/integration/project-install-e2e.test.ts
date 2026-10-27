@@ -71,10 +71,13 @@ describe("hand-off to the project's own install", () => {
     // runs the suite under the latest npm while the test job runs the bundled one.
     const packDir = path.join(tmp.path, "pack");
     fs.mkdirSync(packDir);
+    // On Windows npm is a .cmd shim, which Node only runs through a shell, and
+    // the shell needs the destination quoted.
+    const isWindows = process.platform === "win32";
     const pack = spawnSync(
-      process.platform === "win32" ? "npm.cmd" : "npm",
-      ["pack", "--pack-destination", packDir],
-      { cwd: repoRoot, encoding: "utf8" }
+      isWindows ? "npm.cmd" : "npm",
+      ["pack", "--pack-destination", isWindows ? `"${packDir}"` : packDir],
+      { cwd: repoRoot, encoding: "utf8", shell: isWindows }
     );
     if (pack.status !== 0) {
       throw new Error(`npm pack failed:\n${pack.stderr}`);
@@ -89,17 +92,27 @@ describe("hand-off to the project's own install", () => {
     projectRoot = path.join(tmp.path, "project");
     projectCopy = path.join(projectRoot, "node_modules", "@sous-io", "sous");
     fs.mkdirSync(projectCopy, { recursive: true });
+    // Paths are handed to tar relative and with `/`: the GNU tar Git ships on
+    // Windows reads the `C:` of an absolute path as a remote host.
     const untar = spawnSync(
       "tar",
-      ["-xzf", path.join(packDir, filename), "--strip-components=1", "-C", projectCopy],
-      { encoding: "utf8" }
+      [
+        "-xzf",
+        `pack/${filename}`,
+        "--strip-components=1",
+        "-C",
+        path.relative(tmp.path, projectCopy).split(path.sep).join("/"),
+      ],
+      { cwd: tmp.path, encoding: "utf8" }
     );
     if (untar.status !== 0) {
       throw new Error(`tar failed:\n${untar.stderr}`);
     }
 
-    // Its dependencies are the repository's; relabel its version.
-    fs.symlinkSync(path.join(repoRoot, "node_modules"), path.join(projectCopy, "node_modules"), "dir");
+    // Its dependencies are the repository's; relabel its version. The link is a
+    // junction on Windows, where a directory symlink needs elevated rights; the
+    // type is ignored elsewhere.
+    fs.symlinkSync(path.join(repoRoot, "node_modules"), path.join(projectCopy, "node_modules"), "junction");
     const pkgFile = path.join(projectCopy, "package.json");
     const pkg = JSON.parse(fs.readFileSync(pkgFile, "utf8")) as Record<string, unknown>;
     pkg.version = PROJECT_VERSION;

@@ -145,7 +145,7 @@ describe("sous init in a directory that has never seen sous", () => {
         expect(fs.existsSync(path.join(project, relative)), relative).toBe(true);
       }
 
-      expect(init.stdout).toContain("wrote .sous/sous.config.js");
+      expect(init.stdout).toContain(`wrote ${path.join(".sous", "sous.config.js")}`);
       expect(init.stdout).not.toContain("package.json");
       expect(init.stdout).toContain(`pinned: core/sous-skills at version ${SOUS_VERSION}`);
 
@@ -269,7 +269,7 @@ describe("sous init in a directory that has never seen sous", () => {
 
       const init = sous(project, ["init", "--dry-run"]);
       expect(init.status, init.stdout + init.stderr).toBe(0);
-      expect(init.stdout).toContain("would write .sous/sous.config.js");
+      expect(init.stdout).toContain(`would write ${path.join(".sous", "sous.config.js")}`);
       expect(listTree(project)).toEqual([]);
     },
     CLI_TIMEOUT

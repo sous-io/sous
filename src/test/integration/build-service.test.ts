@@ -556,8 +556,9 @@ describe("BuildService", () => {
         name: "Test Project",
         _vars: { stateFilePath: "${sousDir}/proj-state.json" },
       };
+      // The var is substituted as written, so its `/` stays as typed.
       expect(resolveStateFilePath(settings, configContext)).toBe(
-        path.join(tmp.path, "proj-state.json")
+        `${tmp.path}/proj-state.json`
       );
     });
   });

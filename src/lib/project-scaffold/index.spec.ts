@@ -61,11 +61,11 @@ describe("scaffoldProject()", () => {
     const result = await scaffoldProject({ sousDir, sousVersion: SOUS_VERSION });
 
     expect(result.files).toEqual([
-      ".sous/sous.config.js",
-      `.sous/${STARTER_PROMPT_RELATIVE_PATH}`,
-      ".sous/.env",
-      ".sous/.env.local.example",
-      ".sous/.gitignore",
+      path.join(".sous", "sous.config.js"),
+      path.join(".sous", STARTER_PROMPT_RELATIVE_PATH),
+      path.join(".sous", ".env"),
+      path.join(".sous", ".env.local.example"),
+      path.join(".sous", ".gitignore"),
     ]);
     for (const relative of result.files) {
       expect(fs.existsSync(path.join(projectRoot, relative))).toBe(true);

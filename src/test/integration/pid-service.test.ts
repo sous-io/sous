@@ -32,7 +32,7 @@ describe("PidService", () => {
      */
     it("should return the sousDir-relative path when sousDir is provided", () => {
       const result = service.getFilePath({ sousDir: "/proj/.sous" });
-      expect(result).toBe("/proj/.sous/sous.pid");
+      expect(result).toBe(path.join("/proj/.sous", "sous.pid"));
     });
 
     /**
