@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { makeTmpDir, type TmpDir } from "../utils/tmp.js";
@@ -109,7 +109,7 @@ describe("sous repo link branch flags and upstream report", () => {
     fs.writeFileSync(
       path.join(sousDir, "sous.config.json"),
       JSON.stringify(
-        { name: "link-branches", repos: { "demo-recipes": { url: `file://${bareRepo}` } } },
+        { name: "link-branches", repos: { "demo-recipes": { url: pathToFileURL(bareRepo).href } } },
         null,
         2
       ),
