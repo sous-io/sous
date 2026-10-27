@@ -247,6 +247,23 @@ async function hasTag(
   return found !== undefined;
 }
 
+/**
+ * A local repository's parent directory spelled as an identity owner: segments
+ * joined with `/`, and a Windows drive (`C:`) turned into a plain `c` segment.
+ * The identity becomes directories under the store and the index cache, where
+ * a `\` would not split and a `:` cannot appear in a Windows file name. A POSIX
+ * path comes back unchanged.
+ *
+ * identityOwner("C:\\Users\\me"); // -> "/C/Users/me" (on Windows)
+ * identityOwner("/home/me");      // -> "/home/me"
+ *
+ * @param directory - The absolute parent directory.
+ */
+function identityOwner(directory: string): string {
+  const slashed = directory.split(path.sep).join("/");
+  return slashed.replace(/^([A-Za-z]):/, "/$1");
+}
+
 /** The repository that a local provider call is reading. */
 function repoDirectory(repo: CanonicalRepo): string {
   return repo.httpsUrl;
@@ -290,7 +307,7 @@ export class LocalProvider extends ProviderBase {
 
     return {
       host: "localhost",
-      owner: path.dirname(directory),
+      owner: identityOwner(path.dirname(directory)),
       name: path.basename(directory),
       httpsUrl: directory,
       sshUrl: pathToFileURL(directory).href,

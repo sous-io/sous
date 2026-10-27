@@ -93,6 +93,8 @@ function readJsonc(filePath: string): Record<string, unknown> {
  * The path segments of the canonical identity the `local` provider gives a
  * repository on this machine. The store and the index cache are machine-wide,
  * so they file everything under this rather than under a project's short name.
+ * A Windows drive (`C:`) becomes a plain `c` segment, since a `:` cannot appear
+ * in a directory name there.
  */
 function identitySegments(repoPath: string): string[] {
   return [
@@ -100,7 +102,7 @@ function identitySegments(repoPath: string): string[] {
     ...repoPath
       .split(path.sep)
       .filter((segment) => segment.length > 0)
-      .map((segment) => segment.toLowerCase()),
+      .map((segment) => segment.toLowerCase().replace(/^([a-z]):$/, "$1")),
   ];
 }
 
