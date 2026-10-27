@@ -53,13 +53,17 @@ describe("a recipe reference that tries to leave its recipe", () => {
    * A link inside a recipe that points outside it is refused, for a glob and for
    * an exact path.
    *
-   * a/b/link.md -> ../../outside.md; @~a/b/*.md -> escapes-recipe
+   * a/b/link -> ../../outside; @~a/b/link/*.md -> escapes-recipe
+   *
+   * The link is to a directory, made as a junction on Windows, because a file
+   * link there needs administrator rights or developer mode. Other platforms
+   * ignore the "junction" type and make an ordinary link.
    */
   it("should refuse a file reached through a link that leaves the recipe", () => {
     write("r/a/b/one.md");
-    const outside = write("outside.md");
-    fs.symlinkSync(outside, path.join(tmp.path, "r/a/b/link.md"));
-    for (const ref of ["~a/b/*.md", "~a/b/link.md"]) {
+    write("outside/secret.md");
+    fs.symlinkSync(path.join(tmp.path, "outside"), path.join(tmp.path, "r/a/b/link"), "junction");
+    for (const ref of ["~a/b/*/*.md", "~a/b/link/*.md", "~a/b/link/secret.md"]) {
       const out = resolveIncludeFiles(ref, {
         baseDir: tmp.path,
         namespaceResolver: resolver(),

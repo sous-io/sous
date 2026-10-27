@@ -59,11 +59,11 @@ describe("config-discovery", () => {
      * in turn, ending at the filesystem root.
      *
      * candidateDirs("/a/b/c");
-     * // -> ["/a/b/c", "/a/b", "/a", "/"]
+     * // -> ["/a/b/c", "/a/b", "/a", "/"] (each resolved, so "D:\a\b\c" ... "D:\" on Windows)
      */
     it("should list the start dir then every parent up to the root", () => {
       const dirs = candidateDirs("/a/b/c");
-      expect(dirs).toEqual(["/a/b/c", "/a/b", "/a", "/"]);
+      expect(dirs).toEqual(["/a/b/c", "/a/b", "/a", "/"].map((dir) => path.resolve(dir)));
     });
 
     /**
@@ -72,7 +72,7 @@ describe("config-discovery", () => {
      * candidateDirs("/"); // -> ["/"]
      */
     it("should return just the root when given the root", () => {
-      expect(candidateDirs("/")).toEqual(["/"]);
+      expect(candidateDirs("/")).toEqual([path.resolve("/")]);
     });
 
     /**
