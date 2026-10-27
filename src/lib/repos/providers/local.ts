@@ -83,6 +83,25 @@ export function localRepoPath(url: string): string | undefined {
   return path.isAbsolute(trimmed) ? path.normalize(trimmed) : undefined;
 }
 
+/**
+ * A directory spelled as an identity's owner path: its segments joined with `/`.
+ * The identity becomes directories in the store and the index cache, split on
+ * `/`, so a Windows path would otherwise land there as one segment holding its
+ * drive colon and backslashes. A drive (`C:`) or UNC (`\\server\share`) root
+ * becomes plain segments. A POSIX path comes back unchanged.
+ *
+ * identityOwnerPath("/home/me");        // -> "/home/me"
+ * identityOwnerPath("C:\\Users\\me");  // -> "/C/Users/me" (on Windows)
+ *
+ * @param directory - An absolute, normalized directory.
+ */
+function identityOwnerPath(directory: string): string {
+  const { root } = path.parse(directory);
+  const rootSegments = root.split(/[\\/]/).map((segment) => segment.replace(/:$/, ""));
+  const segments = [...rootSegments, ...directory.slice(root.length).split(path.sep)];
+  return "/" + segments.filter((segment) => segment.length > 0).join("/");
+}
+
 /** A URL that names its scheme, such as `https://` or `ssh://`. */
 const SCHEME_PATTERN = /^[a-z][a-z0-9+.-]*:\/\//i;
 
@@ -290,7 +309,7 @@ export class LocalProvider extends ProviderBase {
 
     return {
       host: "localhost",
-      owner: path.dirname(directory),
+      owner: identityOwnerPath(path.dirname(directory)),
       name: path.basename(directory),
       httpsUrl: directory,
       sshUrl: pathToFileURL(directory).href,
