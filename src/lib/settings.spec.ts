@@ -576,7 +576,7 @@ describe("resolveEnvScope()", () => {
     };
     const context = { sousDir: "/proj/.sous", configPath: "/proj/.sous/sous.config.js" };
     expect(() => resolveEnvScope(settings, context)).toThrow(
-      /\/proj\/\.sous\/\.env\.local/
+      path.join("/proj/.sous", ".env.local")
     );
   });
 
@@ -843,7 +843,7 @@ describe("resolveWatchConfig()", () => {
       },
     };
     const result = resolveWatchConfig(settings, resolveRootScope(settings));
-    expect(result.files).toEqual(["/proj/AGENTS.md"]);
+    expect(result.files).toEqual([path.normalize("/proj/AGENTS.md")]);
     expect(result.globs).toEqual([]);
   });
 
@@ -864,7 +864,7 @@ describe("resolveWatchConfig()", () => {
       },
     };
     const result = resolveWatchConfig(settings, resolveRootScope(settings));
-    expect(result.globs).toEqual(["/proj/skills/**/*.md"]);
+    expect(result.globs).toEqual([path.normalize("/proj/skills/**/*.md")]);
     expect(result.files).toEqual([]);
   });
 
@@ -891,7 +891,7 @@ describe("resolveWatchConfig()", () => {
       },
     };
     const result = resolveWatchConfig(settings, {});
-    expect(result.files).toEqual(["/same/file.md"]);
+    expect(result.files).toEqual([path.normalize("/same/file.md")]);
   });
 
   /**
@@ -917,7 +917,7 @@ describe("resolveWatchConfig()", () => {
       },
     };
     const result = resolveWatchConfig(settings, {});
-    expect(result.globs).toEqual(["/skills/**/*.md"]);
+    expect(result.globs).toEqual([path.normalize("/skills/**/*.md")]);
   });
 
   /**
@@ -943,8 +943,8 @@ describe("resolveWatchConfig()", () => {
       },
     };
     const result = resolveWatchConfig(settings, {});
-    expect(result.files).toEqual(["/file.md"]);
-    expect(result.globs).toEqual(["/skills/**/*.md"]);
+    expect(result.files).toEqual([path.normalize("/file.md")]);
+    expect(result.globs).toEqual([path.normalize("/skills/**/*.md")]);
   });
 
   /**
@@ -983,7 +983,7 @@ describe("resolveWatchConfig()", () => {
       },
     };
     const result = resolveWatchConfig(settings, resolveRootScope(settings));
-    expect(result.files).toEqual(["/proj/prompts/A.md"]);
+    expect(result.files).toEqual([path.normalize("/proj/prompts/A.md")]);
   });
 
   /**
@@ -999,7 +999,7 @@ describe("resolveWatchConfig()", () => {
       },
     };
     const result = resolveWatchConfig(settings, resolveRootScope(settings));
-    expect(result.globs).toEqual(["/proj/skills/**/*.md"]);
+    expect(result.globs).toEqual([path.normalize("/proj/skills/**/*.md")]);
   });
 });
 
@@ -1038,7 +1038,7 @@ describe("resolveCompilation()", () => {
     };
     const result = resolveCompilation(settings, resolveRootScope(settings));
     expect(result).not.toBeNull();
-    expect(result!.targets[0].rootInputPath).toBe("/proj/AGENTS.md");
+    expect(result!.targets[0].rootInputPath).toBe(path.normalize("/proj/AGENTS.md"));
   });
 
   /**
@@ -1061,7 +1061,7 @@ describe("resolveCompilation()", () => {
       },
     };
     const result = resolveCompilation(settings, resolveRootScope(settings));
-    expect(result!.targets[0].outputs[0].destinationFile).toBe("/proj/out.md");
+    expect(result!.targets[0].outputs[0].destinationFile).toBe(path.normalize("/proj/out.md"));
   });
 
   /**
@@ -1084,7 +1084,7 @@ describe("resolveCompilation()", () => {
       },
     };
     const result = resolveCompilation(settings, resolveRootScope(settings));
-    expect(result!.targets[0].outputs[0].destinationDir).toBe("/proj/dist");
+    expect(result!.targets[0].outputs[0].destinationDir).toBe(path.normalize("/proj/dist"));
   });
 
   /**
@@ -1153,7 +1153,7 @@ describe("resolveCompilation()", () => {
     };
     const result = resolveCompilation(settings, resolveRootScope(settings));
     expect(result!.targets[0].outputs).toHaveLength(1);
-    expect(result!.targets[0].outputs[0].destinationFile).toBe("/out.md");
+    expect(result!.targets[0].outputs[0].destinationFile).toBe(path.normalize("/out.md"));
   });
 
   /**
@@ -1335,8 +1335,8 @@ describe("resolveCompilation()", () => {
       },
     };
     const result = resolveCompilation(settings, { sousDir: "/proj/.sous" });
-    expect(result!.targets[0].rootInputPath).toBe("/proj/.sous/AGENTS.md");
-    expect(result!.targets[0].outputs[0].destinationFile).toBe("/proj/AGENTS.md");
+    expect(result!.targets[0].rootInputPath).toBe(path.normalize("/proj/.sous/AGENTS.md"));
+    expect(result!.targets[0].outputs[0].destinationFile).toBe(path.normalize("/proj/AGENTS.md"));
   });
 
   /**
@@ -1367,9 +1367,10 @@ describe("resolveCompilation()", () => {
     };
     const result = resolveCompilation(settings, { sousDir: "/proj/.sous" });
     const destinationDir = result!.targets[0].outputs[0].destinationDir!;
-    expect(destinationDir).toBe("/proj/.claude/skills");
+    expect(destinationDir).toBe(path.normalize("/proj/.claude/skills"));
     // The property prune relies on: a written file's path is prefixed by destinationDir.
-    expect("/proj/.claude/skills/about-sous/SKILL.md".startsWith(destinationDir + "/")).toBe(true);
+    const written = path.join("/proj/.claude/skills", "about-sous", "SKILL.md");
+    expect(written.startsWith(destinationDir + path.sep)).toBe(true);
   });
 });
 

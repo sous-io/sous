@@ -177,7 +177,7 @@ describe("StateService.getFilePath()", () => {
    */
   it("should derive the path from sousDir when stateFilePath is not set", () => {
     const result = service.getFilePath({ sousDir: "/proj/.sous" });
-    expect(result).toBe("/proj/.sous/sous.state.json");
+    expect(result).toBe(path.join("/proj/.sous", "sous.state.json"));
   });
 
   /**

@@ -1,3 +1,4 @@
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   BASIC_FACT_LABELS,
@@ -137,7 +138,7 @@ describe("recipeLink()", () => {
   it("should show a filesystem path for a local repository", () => {
     expect(recipeLink(recipe({ url: "/srv/recipes", path: "workflow/task-files" }))).toEqual({
       text: "workflow/task-files",
-      detail: "/srv/recipes/workflow/task-files",
+      detail: path.join("/srv/recipes", "workflow/task-files"),
     });
     expect(recipeLink(recipe({ dir: "/store/workflow/task-files/1.2.0" }))).toEqual({
       text: "workflow/task-files",
