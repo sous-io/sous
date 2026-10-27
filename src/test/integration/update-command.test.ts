@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { makeTmpDir, type TmpDir } from "../utils/tmp.js";
+import { writeFakeCommand } from "../utils/fake-command.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const binPath = path.join(repoRoot, "bin", "run.js");
@@ -32,7 +33,7 @@ let globalRoot: string;
 /**
  * Runs `sous <args...>` through the real published bin, asynchronously so the
  * registry this process serves can answer it. `npm`, `pnpm` and `yarn` are
- * shell scripts at the front of PATH: npm answers `root -g` with a global root
+ * fakes at the front of PATH: npm answers `root -g` with a global root
  * in the temp tree and records every other call, and the other two are not
  * installed. Standard input is not a terminal, so no question can be asked.
  */
@@ -73,10 +74,24 @@ function flat(text: string): string {
   return text.replace(/\x1b\[[0-9;]*m/g, "").replace(/\s+/g, " ");
 }
 
-/** Writes an executable shell script. */
-function writeScript(file: string, lines: string[]): void {
-  fs.writeFileSync(file, ["#!/bin/sh", ...lines, ""].join("\n"), "utf8");
-  fs.chmodSync(file, 0o755);
+/**
+ * Writes a fake package manager into the fake bin. `lines` see its arguments
+ * as `args`, print with `say` and add a line to the call record with `record`.
+ */
+function writeScript(name: string, lines: string[]): void {
+  writeFakeCommand(
+    fakeBin,
+    name,
+    "shell",
+    [
+      'const fs = require("node:fs");',
+      "const args = process.argv.slice(2);",
+      "const say = (text) => fs.writeSync(1, text);",
+      "const record = (line) => fs.appendFileSync(process.env.FAKE_CALLS, `${line}\\n`);",
+      ...lines,
+      "",
+    ].join("\n")
+  );
 }
 
 /** Writes a package.json into `dir`, creating it. */
@@ -100,18 +115,18 @@ describe("the sous update command", () => {
     globalRoot = path.join(tmp.path, "npm-global", "lib", "node_modules");
     fs.mkdirSync(fakeBin, { recursive: true });
 
-    writeScript(path.join(fakeBin, "npm"), [
-      'if [ "$1" = "root" ]; then echo "$FAKE_GLOBAL_ROOT"; exit 0; fi',
-      'printf "npm %s @ %s\\n" "$*" "$PWD" >> "$FAKE_CALLS"',
-      "exit 0",
+    writeScript("npm", [
+      'if (args[0] === "root") say(`${process.env.FAKE_GLOBAL_ROOT}\\n`);',
+      'else record(`npm ${args.join(" ")} @ ${process.cwd()}`);',
     ]);
-    writeScript(path.join(fakeBin, "pnpm"), ["exit 127"]);
+    writeScript("pnpm", ["process.exitCode = 127;"]);
     // Yarn has no global install here; every other call is recorded, with the
     // hand-off switch a build would run under.
-    writeScript(path.join(fakeBin, "yarn"), [
-      'if [ "$1" = "global" ]; then exit 127; fi',
-      'printf "yarn %s @ %s SOUS_NO_DELEGATE=%s\\n" "$*" "$PWD" "$SOUS_NO_DELEGATE" >> "$FAKE_CALLS"',
-      "exit 0",
+    writeScript("yarn", [
+      'if (args[0] === "global") process.exitCode = 127;',
+      "else record(",
+      '  `yarn ${args.join(" ")} @ ${process.cwd()} SOUS_NO_DELEGATE=${process.env.SOUS_NO_DELEGATE ?? ""}`',
+      ");",
     ]);
 
     server = http.createServer((_request, response) => {

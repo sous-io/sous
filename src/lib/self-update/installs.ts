@@ -361,7 +361,8 @@ async function globalRoot(manager: GlobalManager, run: CommandRunner): Promise<s
   const query = GLOBAL_ROOT_QUERIES[manager];
   let output: string;
   try {
-    const result = await run(manager, query.args, {});
+    // On Windows the managers are `.cmd` shims, which only the shell finds.
+    const result = await run(manager, query.args, { shell: process.platform === "win32" });
     if (result.code !== 0) return undefined;
     output = result.stdout.trim().split(/\r?\n/).pop()?.trim() ?? "";
   } catch {
