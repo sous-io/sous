@@ -157,12 +157,14 @@ describe("listMemories() with links", () => {
    * A memory whose real path is outside its recipe's directory is skipped with
    * one warning naming it; ordinary memories stay.
    *
-   * memories/leak.md links to a file outside the recipe -> only memories/m.md is listed
+   * memories/leak links to a folder outside the recipe -> only memories/m.md is listed
    */
   it("should skip a memory that is a link leading out of its recipe, with a warning", () => {
-    const one = recipe("c/one");
+    const one = recipe("c/one", { include: ["memories/**/*.md"] });
     write("outside/secret.md", "secret");
-    fs.symlinkSync(path.join(tmp.path, "outside/secret.md"), path.join(one.dir, "memories", "leak.md"));
+    // A junction, which Windows lets anyone make where a file symlink needs a
+    // privilege. Elsewhere the type is ignored and it is an ordinary symlink.
+    fs.symlinkSync(path.join(tmp.path, "outside"), path.join(one.dir, "memories", "leak"), "junction");
     const warnings: string[] = [];
     const listed = listMemories({
       sousDir: tmp.path,
@@ -171,6 +173,6 @@ describe("listMemories() with links", () => {
     });
     expect(listed.map((entry) => entry.path)).toEqual(["c/one/m.md"]);
     expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toContain("leak.md");
+    expect(warnings[0]).toContain(path.join("leak", "secret.md"));
   });
 });

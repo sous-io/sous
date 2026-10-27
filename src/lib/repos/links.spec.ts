@@ -51,7 +51,7 @@ describe("resolveSousHomeDir()", () => {
    * resolveSousHomeDir({});                         // -> "<os.homedir()>/.sous"
    */
   it("should use SOUS_HOME when set, and ~/.sous otherwise", () => {
-    expect(resolveSousHomeDir({ SOUS_HOME: "/opt/sous" })).toBe("/opt/sous");
+    expect(resolveSousHomeDir({ SOUS_HOME: "/opt/sous" })).toBe(path.resolve("/opt/sous"));
     expect(resolveSousHomeDir({})).toBe(path.join(os.homedir(), ".sous"));
   });
 
@@ -88,8 +88,8 @@ describe("resolveSousHomeDir()", () => {
    */
   it("should place the global links file and repos directory inside the home", () => {
     const env = { SOUS_HOME: "/opt/sous" };
-    expect(globalLinksPath(env)).toBe(path.join("/opt/sous", "sous.links.json"));
-    expect(globalReposDir(env)).toBe(path.join("/opt/sous", "repos"));
+    expect(globalLinksPath(env)).toBe(path.join(path.resolve("/opt/sous"), "sous.links.json"));
+    expect(globalReposDir(env)).toBe(path.join(path.resolve("/opt/sous"), "repos"));
   });
 
   /**

@@ -10,6 +10,9 @@ let tmp: TmpDir;
 let sousDir: string;
 let recipeDir: string;
 
+/** An absolute project root that is never touched on disk (`D:\a\project` on Windows). */
+const projectRoot = path.resolve("/a/project");
+
 /** Writes a file, creating its parent directories. */
 function write(filePath: string, contents: string): void {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -67,7 +70,7 @@ describe("projectRootFor()", () => {
    * projectRootFor("/a/project/.sous"); // -> "/a/project"
    */
   it("should return the parent of the .sous directory", () => {
-    expect(projectRootFor("/a/project/.sous")).toBe("/a/project");
+    expect(projectRootFor(path.join(projectRoot, ".sous"))).toBe(projectRoot);
   });
 });
 
@@ -106,8 +109,11 @@ describe("destinationsFor()", () => {
     });
 
     expect(
-      destinationsFor("skills", { sousDir, settings, scope: { root: "/a/project" } })
-    ).toEqual(["/a/project/.claude/skills", "/a/project/.codex/skills"]);
+      destinationsFor("skills", { sousDir, settings, scope: { root: projectRoot } })
+    ).toEqual([
+      path.join(projectRoot, ".claude", "skills"),
+      path.join(projectRoot, ".codex", "skills"),
+    ]);
   });
 });
 

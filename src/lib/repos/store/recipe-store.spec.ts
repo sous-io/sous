@@ -210,16 +210,20 @@ describe("RecipeStore", () => {
      * Copying through a link would put bytes the repository does not own into
      * the store and make the entry differ from machine to machine.
      *
-     * // source holds alias.md -> SKILL.md
-     * put(key, source);  // -> the store has SKILL.md and no alias.md
+     * // source holds alias -> docs
+     * put(key, source);  // -> the store has SKILL.md and docs, and no alias
      */
     it("should skip symlinks rather than storing what they point at", async () => {
       const { store } = makeStore();
       const source = makeSource();
-      fs.symlinkSync(path.join(source, "SKILL.md"), path.join(source, "alias.md"));
+      write(source, "docs/a.md", "beta");
+      // A junction, which Windows lets anyone make where a file symlink needs a
+      // privilege; Node reports it as a symbolic link, and elsewhere it is one.
+      fs.symlinkSync(path.join(source, "docs"), path.join(source, "alias"), "junction");
 
       await store.put(key, source);
-      expect(fs.existsSync(path.join(store.entryDir(key), "alias.md"))).toBe(false);
+      expect(fs.existsSync(path.join(store.entryDir(key), "alias"))).toBe(false);
+      expect(fs.existsSync(path.join(store.entryDir(key), "docs", "a.md"))).toBe(true);
       expect(
         fs.readFileSync(path.join(store.entryDir(key), "SKILL.md"), "utf8")
       ).toBe("alpha");
@@ -474,7 +478,7 @@ describe("RecipeStore", () => {
      */
     it("should root the store at the user-level cache directory", () => {
       const store = RecipeStore.fromEnv({ SOUS_HOME: "/opt/sous-home" });
-      expect(store.root).toBe(path.join("/opt/sous-home", "cache"));
+      expect(store.root).toBe(path.join(path.resolve("/opt/sous-home"), "cache"));
     });
   });
 });

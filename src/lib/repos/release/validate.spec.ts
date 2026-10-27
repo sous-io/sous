@@ -126,29 +126,33 @@ describe("validateRepo()", () => {
    * file that is simply missing for everyone who installs the recipe. It is
    * refused at release time rather than surfacing later as a puzzling absence.
    *
-   * // recipes/core/example/link.md -> ../../../outside.md
+   * // recipes/core/example/link -> ../../../outside
    * validateRepo(repo);  // -> an error naming the link
    */
   it("should refuse a recipe folder that publishes a symbolic link", () => {
     writeRepoManifest(["core"], ["recipes/core/example"]);
     writeRecipe("recipes/core/example", "core", "example");
-    write("outside.md", "bytes this recipe does not own");
+    write("outside/other.md", "bytes this recipe does not own");
+    // Junctions, which Windows lets anyone make where a file symlink needs a
+    // privilege. Elsewhere the type is ignored and they are ordinary symlinks.
     fs.symlinkSync(
-      path.join(tmp.path, "outside.md"),
-      path.join(tmp.path, "recipes/core/example/link.md")
+      path.join(tmp.path, "outside"),
+      path.join(tmp.path, "recipes/core/example/link"),
+      "junction"
     );
     write("recipes/core/example/nested/real.md", "a real file");
     fs.symlinkSync(
-      path.join(tmp.path, "outside.md"),
-      path.join(tmp.path, "recipes/core/example/nested/deep.md")
+      path.join(tmp.path, "outside"),
+      path.join(tmp.path, "recipes/core/example/nested/deep"),
+      "junction"
     );
 
     const result = validateRepo(tmp.path);
 
     expect(hasErrors(result.problems)).toBe(true);
     expect(errorsIn(result.problems).map((entry) => entry.where).sort()).toEqual([
-      "recipes/core/example/link.md",
-      "recipes/core/example/nested/deep.md",
+      "recipes/core/example/link",
+      "recipes/core/example/nested/deep",
     ]);
     expect(errorsIn(result.problems)[0]!.message).toMatch(/symbolic link/);
   });
