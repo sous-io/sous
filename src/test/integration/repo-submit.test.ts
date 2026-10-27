@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { makeTmpDir, type TmpDir } from "../utils/tmp.js";
 import { commitAll, git, initRepo, writeFile } from "../utils/git-repo.js";
+import { fakeCommandEnv, writeFakeCommand } from "../utils/fake-command.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const binPath = path.join(repoRoot, "bin", "run.js");
@@ -31,6 +32,7 @@ let ghState: string;
 function runSousIn(cwd: string, ...args: string[]): RunResult {
   const childEnv: NodeJS.ProcessEnv = {
     ...process.env,
+    ...fakeCommandEnv(fakeBin),
     PATH: `${fakeBin}${path.delimiter}${process.env.PATH}`,
     SOUS_HOME: path.join(tmp.path, "sous-home"),
     FAKE_GH_STATE: ghState,
@@ -102,7 +104,7 @@ function openProposal(branch: string, state = "OPEN"): Record<string, unknown> {
  * These tests drive `sous repo submit` end to end through the real CLI. Git is
  * real, and pushes go to a bare repository in the temp tree (the origin's push
  * URL points there, while its fetch URL still names GitHub so the GitHub
- * provider handles it); the GitHub CLI is a shell script on PATH whose answers
+ * provider handles it); the GitHub CLI is a fake on PATH whose answers
  * come from files the tests write. Nothing reaches a network.
  */
 describe("sous repo submit, over a proposal's life", () => {
@@ -114,25 +116,26 @@ describe("sous repo submit, over a proposal's life", () => {
     ghState = path.join(tmp.path, "gh-state");
     fs.mkdirSync(ghState, { recursive: true });
 
-    fs.mkdirSync(fakeBin, { recursive: true });
-    const gh = path.join(fakeBin, "gh");
-    fs.writeFileSync(
-      gh,
+    writeFakeCommand(
+      fakeBin,
+      "gh",
+      "direct",
       [
-        "#!/bin/sh",
-        'printf "%s\\n" "$*" >> "$FAKE_GH_STATE/calls.log"',
-        'if [ "$1" = "auth" ]; then exit 0; fi',
-        'if [ "$1" = "api" ] && [ "$2" = "user" ]; then echo contributor; exit 0; fi',
-        'if [ "$1" = "api" ]; then echo true; exit 0; fi',
-        'if [ "$1" = "pr" ] && [ "$2" = "list" ]; then cat "$FAKE_GH_STATE/list.json"; exit 0; fi',
-        'if [ "$1" = "pr" ] && [ "$2" = "view" ]; then cat "$FAKE_GH_STATE/view.json"; exit 0; fi',
-        'echo "https://github.com/owner/recipes/pull/7"',
-        "exit 0",
+        'const fs = require("node:fs");',
+        'const path = require("node:path");',
+        "const state = process.env.FAKE_GH_STATE;",
+        "const [first, second] = process.argv.slice(2);",
+        "const say = (text) => fs.writeSync(1, text);",
+        'fs.appendFileSync(path.join(state, "calls.log"), `${process.argv.slice(2).join(" ")}\\n`);',
+        'if (first === "auth") {',
+        '} else if (first === "api" && second === "user") say("contributor\\n");',
+        'else if (first === "api") say("true\\n");',
+        'else if (first === "pr" && second === "list") say(fs.readFileSync(path.join(state, "list.json"), "utf8"));',
+        'else if (first === "pr" && second === "view") say(fs.readFileSync(path.join(state, "view.json"), "utf8"));',
+        'else say("https://github.com/owner/recipes/pull/7\\n");',
         "",
-      ].join("\n"),
-      "utf8"
+      ].join("\n")
     );
-    fs.chmodSync(gh, 0o755);
     setProposal(undefined);
 
     const init = spawnSync(

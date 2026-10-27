@@ -28,7 +28,14 @@ export type CommandResult = {
 export type CommandRunner = (
   command: string,
   args: string[],
-  options: { cwd?: string }
+  options: {
+    cwd?: string;
+    /**
+     * Start the command through the shell. Only for a fixed command line: it
+     * is how Windows finds a `.cmd` shim such as npm's.
+     */
+    shell?: boolean;
+  }
 ) => Promise<CommandResult>;
 
 /**
@@ -38,13 +45,14 @@ export type CommandRunner = (
  *
  * @param command - The executable to run.
  * @param args - Its arguments, already split.
- * @param options - Optional working directory.
+ * @param options - Optional working directory, and whether to start it through the shell.
  */
 export const spawnCommand: CommandRunner = (command, args, options = {}) =>
   new Promise<CommandResult>((resolve) => {
     const child = spawn(command, args, {
       cwd: options.cwd,
       stdio: ["ignore", "pipe", "pipe"],
+      shell: options.shell === true,
     });
 
     let stdout = "";

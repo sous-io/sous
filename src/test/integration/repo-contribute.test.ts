@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { makeTmpDir, type TmpDir } from "../utils/tmp.js";
 import { commitAll, git, writeFile } from "../utils/git-repo.js";
+import { fakeCommandEnv, writeFakeCommand } from "../utils/fake-command.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const binPath = path.join(repoRoot, "bin", "run.js");
@@ -36,6 +37,7 @@ let ghState: string;
 function runSousIn(cwd: string, ...args: string[]): RunResult {
   const childEnv: NodeJS.ProcessEnv = {
     ...process.env,
+    ...fakeCommandEnv(fakeBin),
     PATH: `${fakeBin}${path.delimiter}${process.env.PATH}`,
     SOUS_HOME: path.join(root, "sous-home"),
     FAKE_GH_STATE: ghState,
@@ -92,7 +94,7 @@ function checkout(): string {
  * the project trusts and what the contribution clones, so nothing reaches a
  * network. For the submission, the checkout's origin is pointed at a GitHub
  * address for fetching (so the GitHub provider handles it) while pushes go to a
- * local bare repository, and the GitHub CLI is a shell script on PATH. The
+ * local bare repository, and the GitHub CLI is a fake on PATH. The
  * tests share one project and run in order.
  */
 describe("sous repo contribute", () => {
@@ -105,25 +107,24 @@ describe("sous repo contribute", () => {
     fakeBin = path.join(root, "bin");
     ghState = path.join(root, "gh-state");
     fs.mkdirSync(ghState, { recursive: true });
-    fs.mkdirSync(fakeBin, { recursive: true });
-
-    const gh = path.join(fakeBin, "gh");
-    fs.writeFileSync(
-      gh,
+    writeFakeCommand(
+      fakeBin,
+      "gh",
+      "direct",
       [
-        "#!/bin/sh",
-        'printf "%s\\n" "$*" >> "$FAKE_GH_STATE/calls.log"',
-        'if [ "$1" = "auth" ]; then exit 0; fi',
-        'if [ "$1" = "api" ] && [ "$2" = "user" ]; then echo contributor; exit 0; fi',
-        'if [ "$1" = "api" ]; then echo true; exit 0; fi',
-        'if [ "$1" = "pr" ] && [ "$2" = "list" ]; then echo "[]"; exit 0; fi',
-        'echo "https://github.com/owner/recipes/pull/7"',
-        "exit 0",
+        'const fs = require("node:fs");',
+        'const path = require("node:path");',
+        "const [first, second] = process.argv.slice(2);",
+        "const say = (text) => fs.writeSync(1, text);",
+        'fs.appendFileSync(path.join(process.env.FAKE_GH_STATE, "calls.log"), `${process.argv.slice(2).join(" ")}\\n`);',
+        'if (first === "auth") {',
+        '} else if (first === "api" && second === "user") say("contributor\\n");',
+        'else if (first === "api") say("true\\n");',
+        'else if (first === "pr" && second === "list") say("[]\\n");',
+        'else say("https://github.com/owner/recipes/pull/7\\n");',
         "",
-      ].join("\n"),
-      "utf8"
+      ].join("\n")
     );
-    fs.chmodSync(gh, 0o755);
 
     // The recipe repository, released so it publishes an index with real tags.
     const init = runSousIn(root, "repo", "init", author, "--name", "demo-recipes", "--namespace", "demo");
