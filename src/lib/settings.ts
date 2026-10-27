@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { globSync } from "glob";
 import { inferGlobBase, type CompilationConfig, type CompilationTarget, type ResolvedRuntimeContext } from "./markdown-compiler.js";
 import { buildAliasMap, resolveAliasPrefix, type AliasMap } from "./include-resolver.js";
@@ -329,7 +329,9 @@ export async function loadSettingsWithLayers(
 
   const attempts: { label: string; args: string[] }[] = [
     { label: "node", args: [CONFIG_KERNEL_PATH] },
-    { label: "tsx", args: ["--import", tsxPath, CONFIG_KERNEL_PATH] },
+    // `--import` takes a module specifier, so the path goes as a file:// URL:
+    // a bare Windows path reads as a URL whose scheme is the drive letter.
+    { label: "tsx", args: ["--import", pathToFileURL(tsxPath).href, CONFIG_KERNEL_PATH] },
   ];
 
   const failures: { label: string; message: string }[] = [];
