@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { makeTmpDir, type TmpDir } from "../../../test/utils/tmp.js";
 import {
@@ -14,9 +15,15 @@ import { GithubProvider } from "./github.js";
 import { supportsSubmit } from "./provider.js";
 import { builtInProviders, detectProvider, requireProvider } from "./index.js";
 import type { CommandResult, CommandRunner } from "./git.js";
+import { repoIdentity } from "../identity.js";
 
 let tmp: TmpDir;
 let repoDir: string;
+
+/** An absolute directory that is never touched on disk (`D:\home\me\recipes` on Windows). */
+const homeRecipes = path.resolve("/home/me/recipes");
+/** The same directory as a `file://` URL. */
+const homeRecipesUrl = pathToFileURL(homeRecipes).href;
 
 /** A runner that answers every command as though git were not a repository here. */
 const notAGitRepo: CommandRunner = async (): Promise<CommandResult> => ({
@@ -45,8 +52,8 @@ describe("localRepoPath()", () => {
    * localRepoPath("/home/me/recipes");        // -> "/home/me/recipes"
    */
   it("should accept both the file URL and the bare absolute path", () => {
-    expect(localRepoPath("file:///home/me/recipes")).toBe("/home/me/recipes");
-    expect(localRepoPath("/home/me/recipes")).toBe("/home/me/recipes");
+    expect(localRepoPath(homeRecipesUrl)).toBe(homeRecipes);
+    expect(localRepoPath(homeRecipes)).toBe(homeRecipes);
   });
 
   /**
@@ -73,8 +80,8 @@ describe("LocalProvider", () => {
    * detectProvider("https://github.com/o/r")?.id;       // -> "github"
    */
   it("should claim local paths only", () => {
-    expect(detectProvider("/home/me/recipes")?.id).toBe("local");
-    expect(detectProvider("file:///home/me/recipes")?.id).toBe("local");
+    expect(detectProvider(homeRecipes)?.id).toBe("local");
+    expect(detectProvider(homeRecipesUrl)?.id).toBe("local");
     expect(detectProvider("https://github.com/owner/repo")?.id).toBe("github");
     expect(detectProvider("https://gitlab.com/group/repo")?.id).toBe("gitlab");
   });
@@ -99,10 +106,25 @@ describe("LocalProvider", () => {
    * // -> { httpsUrl: "/home/me/recipes", sshUrl: "file:///home/me/recipes", ... }
    */
   it("should canonicalize a local path into its directory and file URL", () => {
-    const repo = new LocalProvider().canonicalize("/home/me/recipes");
-    expect(repo.httpsUrl).toBe("/home/me/recipes");
-    expect(repo.sshUrl).toBe("file:///home/me/recipes");
+    const repo = new LocalProvider().canonicalize(homeRecipes);
+    expect(repo.httpsUrl).toBe(homeRecipes);
+    expect(repo.sshUrl).toBe(homeRecipesUrl);
     expect(repo.name).toBe("recipes");
+  });
+
+  /**
+   * canonicalize should give a local repository an identity made only of plain
+   * directory names, because the store splits the identity on `/` into the
+   * folders it keeps the recipes in. A Windows path keeps neither its `\`
+   * separators nor its drive's colon.
+   *
+   * repoIdentity(canonicalize("/home/me/recipes")); // -> "localhost/home/me/recipes"
+   * repoIdentity(canonicalize("D:\\home\\me\\recipes")); // -> "localhost/d/home/me/recipes"
+   */
+  it("should give a local repository an identity of plain directory names", () => {
+    const identity = repoIdentity(new LocalProvider().canonicalize(homeRecipes));
+    expect(identity).toMatch(/^localhost(\/[^/\\:]+)+$/);
+    expect(identity.endsWith("/home/me/recipes")).toBe(true);
   });
 
   /**

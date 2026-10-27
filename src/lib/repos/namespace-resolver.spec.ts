@@ -7,7 +7,8 @@ import {
   type NamespaceResolution,
 } from "./namespace-resolver.js";
 
-const STORE = "/store/recipes";
+// Absolute on every platform (`D:\store\recipes` on Windows), as a real store root is.
+const STORE = path.resolve("/store/recipes");
 
 /** A resolver holding two namespaces, with one recipe declaring a dependency on another. */
 function makeResolver(overrides: {
