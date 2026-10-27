@@ -452,11 +452,16 @@ describe("include globs and the # sigil (real compile path)", () => {
     expect(log).toContain("Include not found");
   });
 
-  /** An exact spelling wins over a case-insensitive one when both exist. */
+  /**
+   * An exact spelling wins over a case-insensitive one when both exist. The
+   * exact one is written last: on a case-insensitive filesystem (Windows,
+   * macOS) the two spellings are one directory, and the include must still
+   * find the exact one's content.
+   */
   it("should prefer the exact spelling of a recipe name", async () => {
     tmp = makeTmpDir("inc-glob-");
-    write("store/alpha/thing/f.md", "LOWER");
     write("store/alpha/Thing/f.md", "UPPER");
+    write("store/alpha/thing/f.md", "LOWER");
     const resolver = new StaticNamespaceResolver({
       recipes: { "alpha/thing": at("store/alpha/thing") },
     });
