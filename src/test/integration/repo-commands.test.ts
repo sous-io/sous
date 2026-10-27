@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import YAML from "yaml";
@@ -88,7 +88,7 @@ describe("sous repo init / link / unlink", () => {
     bareRepo = path.join(root, "origin.git");
     // A file:// URL, because the config schema's `url` field is a real URL and a
     // bare filesystem path is not one. git clones it exactly like any remote.
-    bareRepoUrl = `file://${bareRepo}`;
+    bareRepoUrl = pathToFileURL(bareRepo).href;
     projectRoot = path.join(root, "project");
     sousDir = path.join(projectRoot, ".sous");
     sousHome = path.join(root, "sous-home");
