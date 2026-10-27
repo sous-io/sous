@@ -248,6 +248,23 @@ async function hasTag(
 }
 
 /** The repository that a local provider call is reading. */
+/**
+ * A local repository's parent directory as the owner part of its identity:
+ * `/`-separated, and with a Windows drive's colon dropped. The identity is split
+ * on `/` into the store's directory names, so a `\` would leave whole paths in
+ * one name and `d:` is not a name Windows allows. A no-op on POSIX.
+ *
+ * identityOwner("D:\\srv\\team"); // -> "D/srv/team" on Windows
+ *
+ * @param parent - The repository directory's absolute parent.
+ */
+function identityOwner(parent: string): string {
+  return parent
+    .split(path.sep)
+    .join("/")
+    .replace(/^([A-Za-z]):/, "$1");
+}
+
 function repoDirectory(repo: CanonicalRepo): string {
   return repo.httpsUrl;
 }
@@ -290,7 +307,7 @@ export class LocalProvider extends ProviderBase {
 
     return {
       host: "localhost",
-      owner: path.dirname(directory),
+      owner: identityOwner(path.dirname(directory)),
       name: path.basename(directory),
       httpsUrl: directory,
       sshUrl: pathToFileURL(directory).href,
