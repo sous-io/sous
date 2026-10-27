@@ -247,6 +247,22 @@ async function hasTag(
   return found !== undefined;
 }
 
+/**
+ * A local directory spelled the way an owner path is spelled on a host: with
+ * forward slashes, and with a Windows drive letter turned into a plain first
+ * segment. The owner becomes directories in the store and the index cache,
+ * where a backslash or a drive's colon cannot go. A POSIX path is unchanged.
+ *
+ * ownerPath("/home/me");         // -> "/home/me"
+ * ownerPath("C:\\Users\\me");    // -> "/C/Users/me" (on Windows)
+ *
+ * @param directory - An absolute directory.
+ */
+function ownerPath(directory: string): string {
+  const slashed = directory.split(path.sep).join("/");
+  return slashed.replace(/^([A-Za-z]):(?=\/|$)/, "/$1");
+}
+
 /** The repository that a local provider call is reading. */
 function repoDirectory(repo: CanonicalRepo): string {
   return repo.httpsUrl;
@@ -290,7 +306,7 @@ export class LocalProvider extends ProviderBase {
 
     return {
       host: "localhost",
-      owner: path.dirname(directory),
+      owner: ownerPath(path.dirname(directory)),
       name: path.basename(directory),
       httpsUrl: directory,
       sshUrl: pathToFileURL(directory).href,
