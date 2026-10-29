@@ -1,0 +1,117 @@
+import type { BuildOptions, BuiltConfig } from "./config.js";
+import type { EntityReader } from "./entities.js";
+import type { EventFor, EventPayload } from "./events.js";
+import type { IntentCatalog, IntentRequest, SubmitOptions } from "./intents.js";
+import type { JsonObject } from "./json.js";
+import type { Prompter } from "./prompter.js";
+import type { IntentInput, IntentName, IntentResult } from "./registry.js";
+import type { Reporter } from "./reporter.js";
+import type { ServiceReader } from "./services.js";
+import type { Timings } from "./timing.js";
+
+/**
+ * The project a sous process serves: the one found from its working directory (S1). Its root is the
+ * directory holding the `.sous/` directory the config file was found in (S6).
+ */
+export interface ProjectInfo {
+    /** The project root. */
+    readonly root: string;
+    /** The `.sous/` directory. */
+    readonly sousDir: string;
+    /** The config file, when one was found. */
+    readonly configPath: string | undefined;
+    /** The `conf.d` directory. */
+    readonly confDir: string;
+}
+
+/** The environment variables sous was started with. Read them here, never from `process.env` (S6). */
+export type Environment = Readonly<Record<string, string | undefined>>;
+
+/** The application the engine runs: sous itself, or another tool built on the engine. */
+export interface AppInfo {
+    readonly name: string;
+    readonly version: string;
+}
+
+/** The chain a context belongs to. */
+export interface ChainInfo {
+    /** Counts chains in this process. */
+    readonly id: number;
+    /** The intent the chain was submitted with. */
+    readonly intent: string;
+    readonly parallel: boolean;
+}
+
+/** One loaded plugin, as front ends and `plugins show` see it. */
+export interface PluginInfo {
+    readonly name: string;
+    readonly version: string | undefined;
+    /** Whether it is active in the current config. */
+    readonly active: boolean;
+    readonly builtIn: boolean;
+    /** The plugin that brought it in, or `plugins.load`. */
+    readonly loadedBy: string | undefined;
+    /** What it registered, for `plugins show` (G4). */
+    readonly registrations: ReadonlyArray<{ readonly kind: string; readonly name: string }>;
+}
+
+/**
+ * The engine, as plugins see it: what front ends and background intents use.
+ */
+export interface EngineHandle {
+    /** The config as of the latest rebuild. */
+    readonly config: BuiltConfig;
+    /** The application name and version. */
+    readonly app: AppInfo;
+    /** The intents front ends generate commands and tools from. */
+    readonly intents: IntentCatalog;
+    /** Every timing so far (`--timings`). */
+    readonly timings: Timings;
+    /** Where engine-level messages go (budget warnings, build warnings). */
+    readonly reporter: Reporter;
+    /** Sets where engine-level messages go; messages kept so far are sent there first. */
+    setReporter(reporter: Reporter): void;
+    /** Submits a chain; resolves with the intent's result. */
+    submit<N extends IntentName>(request: IntentRequest<N>, options?: SubmitOptions): Promise<IntentResult<N>>;
+    /** Builds a separate "what if" config, never replacing the real one (C7). */
+    buildConfig(options?: BuildOptions): Promise<BuiltConfig>;
+    /** Every loaded plugin. */
+    plugins(): PluginInfo[];
+    /** Resolves when every background intent has returned. */
+    whenBackgroundIntentsReturn(): Promise<void>;
+}
+
+/**
+ * What a handler, a listener or an entity method gets (`ctx`). Inside a chain, `run` starts another
+ * intent as part of the same chain.
+ */
+export interface Context {
+    /** The plugin whose code was given this context. */
+    readonly plugin: string;
+    /** The config this chain started with (for a background intent, the latest). */
+    readonly config: BuiltConfig;
+    readonly entities: EntityReader;
+    readonly services: ServiceReader;
+    /** Where this chain's output goes: the front end that submitted it. */
+    readonly reporter: Reporter;
+    /** Where this chain's questions go: the front end that submitted it. */
+    readonly prompter: Prompter;
+    readonly project: ProjectInfo | undefined;
+    readonly env: Environment;
+    /** The front end's global argument values (`debug`, `logLevel`, plugin-added ones). */
+    readonly globals: Readonly<Record<string, unknown>>;
+    /** The chain, or `undefined` outside one (a background intent). */
+    readonly chain: ChainInfo | undefined;
+    readonly engine: EngineHandle;
+    /** This plugin's own options from `plugins.options`. */
+    options<T = JsonObject>(): T | undefined;
+    /**
+     * Runs an intent as part of this chain, immediately, and returns its result (C10). Outside a
+     * chain it submits a new chain instead.
+     */
+    run<N extends IntentName>(intent: N, input?: IntentInput<N> | Record<string, unknown>): Promise<IntentResult<N>>;
+    /** Fires an event and waits for every listener (C17). */
+    emit<N extends string>(name: N, payload?: EventPayload<N>): Promise<EventFor<N>>;
+    /** Says this chain changed the config, so it is rebuilt before the next chain starts. */
+    configChanged(): void;
+}
