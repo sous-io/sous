@@ -5,6 +5,8 @@
  */
 
 import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";
+import { defineEntityKinds, registerPartA } from "./part-a/index.js";
+import { registerPartB } from "./part-b/index.js";
 import "./types.js";
 
 /** The plugin's name. */
@@ -25,16 +27,11 @@ export const recipesPlugin: PluginDefinition = definePlugin({
         "@sous-io/plugin-host": "^0.2.34",
     },
 
-    register(sous) {
-        // TODO(plugin-recipes): a stub until the plugin is written. It must register:
-        //   - entity kinds: repository-host, active-recipe (define)
-        //   - contributors: recipes.core, recipes.fetch (adds active-recipe entities), recipes.config-layers, recipes.plugins
-        //   - services: recipes.trust, recipes.active, recipes.resolver, recipes.lock (config); recipes.store, recipes.index-cache, recipes.declarations (singleton); recipes.links (config); compiler.namespace-resolver (config, the implementation)
-        //   - ref-lookup entities: cached index, fetched index, lockfile, recorded dependencies
-        //   - intents: repo.add, repo.remove, repo.trust, repo.list, repo.search, repo.gc, repo.link, repo.unlink, subscription.add/remove/enable/disable/list/update, recipe.update, lock.rebuild, lock.show, namespace.list, namespace.show, recipe.list, recipe.show
-        //   - events: recipes.fetched, recipes.locked
-        //   - config-key entities: repos, subscriptions, store
-        void sous;
+    async register(sous) {
+        // Part B first, so the entity kinds it defines win; part A defines any it left out.
+        await registerPartB(sous);
+        defineEntityKinds(sous);
+        registerPartA(sous);
     },
 });
 

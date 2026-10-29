@@ -312,3 +312,33 @@ Ported to `packages/plugin-config-files` (`src/env/*.spec.ts`, `src/loader.spec.
   repository entry's concern (plugin-recipes); checking a path holds a repo manifest needs
   `formats.manifests`. `looksLikeLocalPath()` and `resolveRepoArgument()` now take `cwd` and `home`
   instead of reading `process.cwd()` and the home directory (S6, rule 6).
+
+## plugin-recipes, part A: `src/lib/repos/{trust,catalog,declarations,locked-recipes}.spec.ts`, `store/recipe-store.spec.ts`, parts of `subscription-service.spec.ts` → `packages/plugin-recipes/src/part-a/**/*.spec.ts`
+
+- **TrustService "should fail hard in a non-interactive run"**: expected a `NonInteractiveError`
+  whose message listed every repository and the `sous repo add … --trust` commands. Now the error
+  names `--yes` as the flag that answers the question, and the repositories and commands are its
+  `details` (spelled `--yes`). Why: questions go through the chain's `Prompter` (L3, L4).
+- **TrustService "should write the trust notice before asking"**: expected the colored notice on
+  the console. Now the notice is reported as `notice` lines through the chain's reporter, and only
+  its wording is checked. Why: services never print (L3); plugin-cli owns the look.
+- **SubscriptionService unsubscribe "written in the project's own config"**: expected a
+  `ConfigError` saying to remove it by hand. Now a `SousError` that also names
+  `sous subscription disable <ref>`. Why: S2 adds `subscription enable` and `disable`.
+- **SubscriptionService re-reading `conf.d/510-subscriptions.jsonc`**: tests that relied on 510
+  overriding a later layer are not ported; a later layer's `enabled: false` now wins, and
+  `subscription enable` warns that it does. Why: S4, problem 4; S2, "Sous always reads the built
+  config".
+- **RecipeStore gc**: the report now carries `dryRun`, and `maxBytes` and `keep` default to
+  `store.maxBytes` and this project's pins. Why: plugin-recipes' contract (`StoreGcReport`,
+  `StoreGcOptions`).
+- **catalog `describeRecipe` and `describeNamespace`**: took a ref string and resolved it inside.
+  Now they take the repository and key already found; matching a ref is `findInCatalog`, over
+  readings from `refs.resolver`. `contents[].destinations` is `[]`: where a kind lands is the skills
+  and memories plugins' concern. Why: S6 ("refs and repos"; recipe targets move to plugin-skills and
+  plugin-memories).
+- **locked-recipes `listLockedRecipes`**: not ported. Which recipes are active is the
+  `active-recipe` entities part B's `recipes.fetch` adds; `recipes.active` lists them and says why
+  each other locked recipe is skipped (S4, 3 and 4).
+- **update-plan.spec (`formatUpdatePlan`)**: not ported here; it is a view (S6, "Misfiled
+  Modules"). `recipe.update` returns the plan as data.

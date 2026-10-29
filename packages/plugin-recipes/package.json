@@ -23,16 +23,18 @@
   },
   "dependencies": {
     "@sous-io/plugin-api": "workspace:*",
+    "@sous-io/plugin-compiler": "workspace:*",
     "@sous-io/plugin-confd": "workspace:*",
     "@sous-io/plugin-formats": "workspace:*",
+    "@sous-io/plugin-git": "workspace:*",
+    "@sous-io/plugin-host": "workspace:*",
     "@sous-io/plugin-refs": "workspace:*",
     "@sous-io/plugin-variables": "workspace:*",
-    "@sous-io/plugin-git": "workspace:*",
-    "@sous-io/plugin-compiler": "workspace:*",
-    "@sous-io/plugin-host": "workspace:*"
+    "semver": "^7.8.5"
   },
   "devDependencies": {
-    "@sous-io/core": "workspace:*"
+    "@sous-io/core": "workspace:*",
+    "@types/semver": "^7.8.0"
   },
   "engines": {
     "node": ">=22"
