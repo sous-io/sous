@@ -1,3 +1,4 @@
+import { isSousError } from "@sous-io/plugin-api";
 import type { CliViewEntity } from "../types.js";
 import { renderResult } from "./show.js";
 
@@ -39,15 +40,39 @@ const DOMAINS: ReadonlyArray<{ load: () => Promise<ViewModule>; intents: readonl
     { load: () => import("./domains/authoring.js"), intents: ["repo.release", "repo.submit", "repo.contribute", "repo.init"] },
 ];
 
-/** The views plugin-cli adds, one `cli-view` entity per intent it knows how to show. */
+/** Intents whose built-in view shows a plain text result too. */
+const TEXT_RESULTS = new Set(["version"]);
+
+/**
+ * The views plugin-cli adds, one `cli-view` entity per intent it knows how to show. A result that is
+ * not the shape a view expects (a plugin replaced the intent with its own) prints as it would with
+ * no view: text as it is, anything else as JSON. A view's own `SousError` (a `config get` of a
+ * missing path) still fails the command.
+ */
 export const BUILT_IN_VIEWS: readonly CliViewEntity[] = DOMAINS.flatMap(({ load, intents }) =>
     intents.map(
         (intent): CliViewEntity => ({
             id: intent,
             render: async (result, view) => {
+                if ((typeof result !== "object" || result === null) && !TEXT_RESULTS.has(intent)) {
+                    return renderResult(result);
+                }
+
                 const render = (await load()).views[intent];
 
-                return render ? render(result, view) : renderResult(result);
+                if (!render) {
+                    return renderResult(result);
+                }
+
+                try {
+                    return await render(result, view);
+                } catch (error) {
+                    if (isSousError(error)) {
+                        throw error;
+                    }
+
+                    return renderResult(result);
+                }
             },
         }),
     ),

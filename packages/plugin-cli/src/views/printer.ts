@@ -296,7 +296,7 @@ export class Printer {
     table<Row extends Record<string, unknown>>(columns: TableColumn[], rows: Row[], options: TableOptions<Row> = {}): this {
         const pad = " ".repeat(options.indent ?? 0);
 
-        this.lines.push(...this.formatTable(columns, rows, options).map((line) => `${pad}${line}`));
+        this.lines.push(...this.formatTable(columns, rows, options).flatMap((line) => line.split("\n").map((part) => `${pad}${part}`)));
 
         return this;
     }

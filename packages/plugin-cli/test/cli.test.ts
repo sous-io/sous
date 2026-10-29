@@ -349,11 +349,15 @@ describe("the CLI front end", () => {
             expect(run.stderr).toMatch(/intent:repo\.secret\s+1 call/);
         });
 
-        /** `sous --version` prints the version alone; the `version` intent can say more. */
+        /**
+         * `sous --version` prints `v` and the version, as before the refactor; the `version` intent
+         * can say more, and `--json` gives its plain result.
+         */
         it("should print the version", async () => {
-            expect((await runCli([], ["--version"])).stdout).toBe("9.8.7\n");
-            expect((await runCli([], ["version"])).stdout).toBe("9.8.7\n");
-            expect(JSON.parse((await runCli([], ["version", "--verbose"])).stdout)).toEqual({ name: "sous", version: "9.8.7" });
+            expect((await runCli([], ["--version"])).stdout).toBe("v9.8.7\n");
+            expect((await runCli([], ["version"])).stdout).toBe("v9.8.7\n");
+            expect((await runCli([], ["--version", "--verbose"])).stdout).toMatch(/^v9\.8\.7\n {4}Package : sous\n/);
+            expect(JSON.parse((await runCli([], ["version", "--verbose", "--json"])).stdout)).toEqual({ name: "sous", version: "9.8.7" });
         });
     });
 

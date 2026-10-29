@@ -34,11 +34,11 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
     try {
         const tree = engine.config.services.get("cli.commands") as CommandTree;
         const specs = globalSpecs(engine.config.entities.list("cli-global-argument"));
-        const line = parseLine(argv, tree, specs, engine.app.name);
+        const line = parseLine(versionArgv(argv, tree), tree, specs, engine.app.name);
         const level = thresholdOf(line.globals);
 
         debug = line.globals.debug === true;
-        reporter = new TerminalReporter(io.stderr, level);
+        reporter = new TerminalReporter(io.stderr, level, createStyle(colorEnabled(io.stderr, env)));
         engine.setReporter(reporter);
 
         for (const warning of tree.warnings) {
@@ -50,7 +50,7 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
                 io.stdout.write(renderHelp(line.node, { appName: engine.app.name, globals: specs }));
                 break;
             case "version":
-                io.stdout.write(`${engine.app.version}\n`);
+                io.stdout.write(`v${engine.app.version}\n`);
                 break;
             case "error":
                 io.stderr.write(`Error: ${line.message}\n${line.details.map((detail) => `  ${detail}\n`).join("")}`);
@@ -111,6 +111,18 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
         io.stderr.write(`${view.lines.join("\n")}\n`);
         io.setExitCode(view.exitCode);
     }
+}
+
+/**
+ * `sous --version --verbose`, as before the refactor, runs the `version` intent with `--verbose`,
+ * so it prints the package, platform and Node build too.
+ */
+function versionArgv(argv: readonly string[], tree: CommandTree): readonly string[] {
+    if (argv[0] === "--version" && argv.length > 1 && argv.slice(1).every((token) => token === "--verbose") && tree.root.children.get("version")?.command) {
+        return ["version", "--verbose"];
+    }
+
+    return argv;
 }
 
 /** The threshold `--debug` and `--log-level` ask for (C61); `--debug` means `--log-level debug`. */

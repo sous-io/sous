@@ -58,4 +58,26 @@ describe("TerminalReporter", () => {
         new TerminalReporter(quiet, "error").progress({ label: "x", finished: true });
         expect(quiet.written).toEqual([]);
     });
+
+    /**
+     * A resolved reference (plugin-refs reports its facts with the reason) is shown as before the
+     * refactor (ref-report.ts): the facts lined up, a blank line, then the reason.
+     */
+    it("should show a resolved reference's facts above the reason", () => {
+        const out = stream();
+        const facts = { search: "git", resolvedTo: "github.com/acme/recipes/workflow/git", kind: "recipe", namespace: "workflow", repository: "acme" };
+
+        new TerminalReporter(out).note("'git' named one recipe, and nothing else, so that is what is being used.", facts);
+
+        expect(out.written.join("")).toBe(
+            [
+                "    Resolved to: github.com/acme/recipes/workflow/git",
+                "    Namespace  : workflow",
+                "    Repository : acme",
+                "",
+                "  'git' named one recipe, and nothing else, so that is what is being used.",
+                "",
+            ].join("\n"),
+        );
+    });
 });
