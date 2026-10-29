@@ -11,6 +11,8 @@
  */
 
 import type { Prompter, Reporter } from "@sous-io/plugin-api";
+import type {} from "@sous-io/plugin-confd/types";
+import type {} from "@sous-io/plugin-recipes/types";
 import type { EnvFileKind } from "@sous-io/plugin-config-files/types";
 import type { VariableDefinition, VariableScalar } from "@sous-io/plugin-formats/types";
 import type { VariableRef } from "@sous-io/plugin-refs/types";
@@ -28,6 +30,10 @@ export interface DefiningRecipe {
     readonly name: string;
     readonly version: string;
     readonly url?: string;
+    /** The repository's canonical identity, when known, so a ref written as a location matches it. */
+    readonly identity?: string;
+    /** True when the project subscribed to this recipe itself, not through another recipe. */
+    readonly direct?: boolean;
     /** The recipe's path in its repository. */
     readonly path?: string;
     /** The directory holding its files. */
@@ -272,6 +278,10 @@ export interface VarsShowInput {
 /** What `vars.show` shows: one variable, with how it was answered. */
 export interface VariableDetail extends VariableListing {
     readonly diagnosis: AnswerDiagnosis;
+    /** One sentence per constraint, as `constraintBullets` writes them. */
+    readonly constraints: readonly string[];
+    /** Why the answer in scope does not fit the definition, when it does not. */
+    readonly problem?: string;
     readonly mapping?: { readonly envName: string; readonly target: string };
 }
 

@@ -94,3 +94,43 @@ Every change to an old test during the refactor: the test, what it expected, wha
   a section with aligned variables. Why: services do not format terminal output (L3); the wording is kept.
 - **`src/test/e2e/watch-loop.test.ts` → `test/chokidar.test.ts`**: the real-chokidar test now checks
   `chokidarWatcher` itself (a change arrives; nothing after `close()`).
+
+## plugin-recipe-answers: `src/lib/vars/*.spec.ts` → `packages/plugin-recipe-answers`
+
+- **`ladder.spec.ts`, every test**: expected an answer's `source.file` to be `".env"` or
+  `".env.local"`. Now expects `"shared"` or `"local"`. Why: the contract's `AnswerSourceFile` is
+  `"shell"` or an `EnvFileKind` (plugin-config-files names the files). `recordAnswerInContext` and
+  `lookupEnvName` are now `Ladder.record` and `Ladder.lookup`; same expectations otherwise.
+- **`preanswers.spec.ts`, "parseAnswerPair()", "loadAnswersFile()", "applyProvidedAnswers()"**:
+  expected `ConfigError`s with the explanation in the message. Now expect `InputError`s (exit code 2)
+  on `vars.ask`, with the same lines in `details`. Why: the contract says
+  `recipe-answers.preanswers` throws an `InputError` for a malformed or unknown answer. The YAML and
+  JSONC file tests now read JSON (and a `.env` file), since parsing YAML and JSONC is
+  plugin-formats' `formats.manifests.readFile`, stood in here. "should resolve a relative answers
+  file against the given directory": now resolves against `PWD` (services never read
+  `process.cwd()`, S6 rule 6). `applyProvidedAnswers` is now `storeGivenAnswers`, same expectations,
+  with a secret's value shown as `(hidden)` in the result.
+- **`definition-source.spec.ts`, "StaticDefinitionSource" and "loadProjectDefinitions()"**: expected
+  definitions read from the lockfile and the store on disk. Now `definitionsFromRecipes` reads the
+  `active-recipe` entities plugin-recipes adds. Why: only active recipes count (S4, 3), and reading
+  the lockfile and store is plugin-recipes' concern (S6). "loadDefinitionsFile()": the YAML file
+  is now JSON (see above); the invalid-definition test expects the stand-in parser's issue in
+  `details`.
+- **`mappings.spec.ts`, "writeMappingRecord()" (comments kept, the old `.json` layer migrated, an
+  interrupted write, a missing file)**: dropped here. Now `MappingsService.set`/`remove` are tested
+  against a stand-in `confd.managed`. Why: surgical, atomic edits to `conf.d/5xx` files are
+  plugin-confd's concern (S6, `confd.managed`). Reading the old `520-var-mappings.json` name is
+  not carried over.
+- **`answers.spec.ts`, "resolveRootScope() with recipe answers"**: dropped here. Why: `_vars` and
+  `_env` winning over answers is plugin-variables' scope resolution; this plugin now gives the
+  answers as a `variable-source` entity (tested in `test/plugin.test.ts`). "should read answers from
+  the project when none are handed in" is now the engine test "should give a build its answers".
+  The rest expect the same values, with `byRecipe` a plain object instead of a `Map`.
+- **`ask.spec.ts`, "basicViewLines()", "questionHint()", "nameChoices()", "fileChoices() and
+  committedFileWarning()"**: dropped. Why: they test the terminal view and the Tab "advanced view",
+  which are presentation (S6: views move to plugin-cli) and cannot be expressed through the
+  `Prompter` interface. "askLeadIn()" and "recipeOpeningLine()" are unchanged.
+- **Asking without a terminal** (no old unit test; `askForMissing`'s behavior): was a
+  `ConfigError` listing the environment names. Now a `NonInteractiveError` (exit code 2) naming
+  `--answer <name>=<value>`, with the same names in `details`. Why: L4, and front ends recognize the
+  non-interactive kind.
