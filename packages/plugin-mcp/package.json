@@ -22,10 +22,13 @@
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "@sous-io/plugin-api": "workspace:*"
   },
   "devDependencies": {
-    "@sous-io/core": "workspace:*"
+    "@sous-io/core": "workspace:*",
+    "@sous-io/plugin-cli": "workspace:*",
+    "zod": "^4.4.3"
   },
   "engines": {
     "node": ">=22"
