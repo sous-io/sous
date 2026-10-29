@@ -134,3 +134,55 @@ Every change to an old test during the refactor: the test, what it expected, wha
   `ConfigError` listing the environment names. Now a `NonInteractiveError` (exit code 2) naming
   `--answer <name>=<value>`, with the same names in `details`. Why: L4, and front ends recognize the
   non-interactive kind.
+
+## plugin-refs: `src/services/ref-resolver/**/*.spec.ts` and `src/lib/repos/identity.spec.ts` → `packages/plugin-refs`
+
+Every case runs against the services of a real build (`refs.*`) with stand-in `repository-host`
+entities for GitHub, GitLab and local (`test/fixtures.ts`) and a stand-in catalog `ref-lookup`
+(`test/catalog-lookup.ts`, today's `CatalogMatcher`), instead of the Inversify container and the
+built-in providers.
+
+- **`parser/ref-parser.spec.ts` "should raise an error that quotes the input and says why"**: expected
+  `parse()` to throw. Now `refs.parser.parse()` returns no readings with the reasons, and
+  `parseError()` (used by `refs.resolver`) builds the same `Invalid ref '...': ...` message; the
+  syntax reminder moved from the message into `details`. Why: the S6 contract returns a
+  `RefParseResult`; throwing is the resolver's job.
+- **Location messages naming the hosts**: expected "sous ships these: github, gitlab". Now expects
+  "sous has these: github, gitlab". Why: hosts are `repository-host` entities any plugin may add, so
+  sous no longer ships a fixed list (S6, "refs and repos").
+- **`hash-names.spec.ts`**: expected `ProjectHashName.bases({ projectRoot })`, a `HashNameRegistry`
+  that sorts names, refuses a name registered twice and builds an alias map. Now `#project` is a
+  `hash-name` entity whose bases are `ctx.project.root` (empty outside a project); an invalid name or
+  a name with both `bases` and `view` fails the build through the kind's schema; two plugins adding
+  one id follow core's rule (the later one wins); the alias and view maps belong to the compiler.
+  Why: S6 makes `#` names an entity kind, and the project root has one definition (ruled 2026-10-25).
+- **`ref-picker-service.spec.ts`**: expected the facts written as aligned lines through `write`, and
+  `choose` called for several matches. Now expects one `notice` through the chain's `Reporter` whose
+  message is the closing sentence and whose details are the facts, the choice asked through the
+  `Prompter` with `answeredBy: "--accept-first"`, and a `NonInteractiveError` (naming
+  `--accept-first`, the candidates in `details`) when the prompter cannot ask. Why: L3 and L4; the
+  layout of the facts is plugin-cli's view (`ref-report.ts` moves there, with its spec).
+- **`ref-resolver-service.spec.ts`**: lookups are `ref-lookup` entities or the request's
+  `extraLookups`, not a `lookup` argument; `RefResolveResult` helpers (`isUnique`, `first()`) are gone
+  (the contract's `RefResolution` is plain data). "should refuse a lookup that cannot answer
+  synchronously" expected a throw; now a lookup without `findSync` is skipped by `resolveSync` (the
+  contract says so). `inspect()` is gone; the same facts come from `resolveSync` with
+  `refusedIsEmpty` and `lookups: false`. "should name a place no pruner speaks for" now uses an
+  unknown place name instead of an empty container.
+- **`named-refs.spec.ts`**: ported to `refs.format` (`parseNamedRef`, `splitRecipeKey`,
+  `namespaceOfKey`, `namespaceRef`, `recipeRef`). `withRepoName` and `isNamedRef` are not in the
+  contract and their cases are dropped.
+- **`ref-helpers.spec.ts`**: `isValidRef` and `getRefsInString` became `refs.resolver.isValid` and
+  `findInString`; `getFirstRef` and `pruneRefs` are not in the contract and their cases are dropped.
+  The location cases moved to `refs.locations` (`fromUrl`, `locationFor`, which now throws instead of
+  returning `undefined`).
+- **`glob.spec.ts`**: `hasGlob` belongs to `host.globs` (S6), and `matchName`/`matchNames` to the
+  lookups in plugin-recipes; only `isGlobName` and `splitSegments` stay here.
+- **`ref-search.spec.ts`**: the repository and location cases are ported to `test/search.test.ts`.
+  The variable and environment-variable cases move with `VariableLookup` and `EnvVarLookup` to
+  plugin-recipe-answers (S6, "vars and refs").
+- **Not ported here**: `container.spec.ts` (no container), `dependency.spec.ts` and the lookup specs
+  (`cached-index`, `fetched-index`, `recorded-dependency`, `chained-lookup`, `variable`, `env-var`):
+  their code moves to plugin-recipes and plugin-recipe-answers as `ref-lookup` entities.
+- **`lib/repos/identity.spec.ts`**: unchanged cases, now for `repositoryIdentity`, `identitySegments`
+  and `shortNameFromIdentity` in `locations/identity.ts`.

@@ -23,10 +23,12 @@
   },
   "dependencies": {
     "@sous-io/plugin-api": "workspace:*",
-    "@sous-io/plugin-host": "workspace:*"
+    "@sous-io/plugin-host": "workspace:*",
+    "semver": "^7.8.5"
   },
   "devDependencies": {
-    "@sous-io/core": "workspace:*"
+    "@sous-io/core": "workspace:*",
+    "@types/semver": "^7.8.0"
   },
   "engines": {
     "node": ">=22"

@@ -152,8 +152,11 @@ export interface RefSplitterEntity {
     id: string;
     /** Where it runs among the others: lowest first. Built-ins: query 10, range 20, location 30, qualifier 40, env var 50, name/path 60. */
     order: number;
-    /** Advances one reading. A finished reading must be returned as it is. */
-    split(state: PartialRef): PartialRef[];
+    /**
+     * Advances one reading. A finished reading must be returned as it is. `ctx` is the parser's own
+     * context, for a splitter that reads entities (the location splitter reads `repository-host`).
+     */
+    split(state: PartialRef, ctx: ServiceContext): PartialRef[];
 }
 
 /** Every reading of one written ref. */
@@ -204,7 +207,7 @@ export interface RefPrunerEntity {
     /** What the place is called in a sentence: `in an include line`. */
     place: string;
     /** Splits the readings into those allowed and those refused; throws a `ConfigError` for a reading that must fail at once. */
-    prune(candidates: readonly SousRef[], input: string): RefPruneResult;
+    prune(candidates: readonly SousRef[], input: string, ctx: ServiceContext): RefPruneResult;
 }
 
 /** One thing a candidate reading turned out to name. */
@@ -252,6 +255,11 @@ export interface RefResolveRequest {
     kinds?: readonly RefKind[];
     /** Which `ref-lookup` entities narrow the readings to what exists. Default `true`. */
     lookups?: RefLookupSelection;
+    /**
+     * Lookups the caller holds itself, such as a release's fetched index, asked before the selected
+     * entities. Any given turns lookups on even when `lookups` is `false`.
+     */
+    extraLookups?: readonly RefLookupEntity[];
     /** True when a ref the place refuses in every reading names nothing instead of throwing. */
     refusedIsEmpty?: boolean;
 }
@@ -427,18 +435,28 @@ export interface RepositoryLocator {
 
 /** Repository locations (`github://...`) and canonical identity (S6, `refs.locations`). */
 export interface RefsLocations {
-    /** The location a URL or locator names, or `undefined` when no host reads it. */
-    fromUrl(url: string): RefLocation | undefined;
-    /** The location of a repository a host reads. */
+    /**
+     * The location a repository URL or locator names, or `undefined` when no host reads it.
+     * `provider` names the host outright, for a self-hosted instance no host recognizes.
+     */
+    fromUrl(url: string, provider?: string): RefLocation | undefined;
+    /** The location of a repository a host reads; throws a `ConfigError` when the host is unknown or cannot read it. */
     locationFor(provider: string, host: string, repoPath: string): RefLocation;
-    /** The canonical form of a URL; throws a `ConfigError` naming the hosts known when none reads it. */
-    canonicalize(url: string): CanonicalRepository;
+    /**
+     * The canonical form of a URL; throws a `ConfigError` naming the hosts known when none reads it.
+     * `provider` names the host outright; it is refused only when a different host plainly owns the URL.
+     */
+    canonicalize(url: string, provider?: string): CanonicalRepository;
     /** The canonical identity of a URL: `github.com/sous-io/sous-recipes`. */
-    identity(url: string): string;
+    identity(url: string, provider?: string): string;
     /** The identity of a canonical repository. */
     identityOf(repository: CanonicalRepository): string;
     /** The host that reads a URL, or `undefined`. */
     hostFor(url: string): RepositoryLocator | undefined;
+    /** The host with an id, or `undefined`. */
+    host(id: string): RepositoryLocator | undefined;
+    /** A short name made from an identity, for a repository a project has not named yet. */
+    shortName(identity: string): string;
     /** Every host known, in plugin order. */
     hosts(): RepositoryLocator[];
 }
