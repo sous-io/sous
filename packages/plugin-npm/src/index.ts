@@ -5,6 +5,7 @@
  */
 
 import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";
+import { npmManager } from "./manager.js";
 import "./types.js";
 
 /** The plugin's name. */
@@ -21,12 +22,11 @@ export const npmPlugin: PluginDefinition = definePlugin({
     },
 
     register(sous) {
-        // TODO(plugin-npm): a stub until the plugin is written. It must register:
-        //   - entity: package-manager `npm`
-        void sous;
+        sous.entities.add("package-manager", npmManager);
     },
 });
 
 export default npmPlugin;
 
+export { npmManager } from "./manager.js";
 export type * from "./types.js";

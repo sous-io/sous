@@ -5,6 +5,7 @@
  */
 
 import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";
+import { pnpmManager } from "./manager.js";
 import "./types.js";
 
 /** The plugin's name. */
@@ -21,12 +22,11 @@ export const pnpmPlugin: PluginDefinition = definePlugin({
     },
 
     register(sous) {
-        // TODO(plugin-pnpm): a stub until the plugin is written. It must register:
-        //   - entity: package-manager `pnpm`
-        void sous;
+        sous.entities.add("package-manager", pnpmManager);
     },
 });
 
 export default pnpmPlugin;
 
+export { pnpmManager } from "./manager.js";
 export type * from "./types.js";

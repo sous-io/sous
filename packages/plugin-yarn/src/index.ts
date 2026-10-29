@@ -5,6 +5,8 @@
  */
 
 import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";
+import { yarnManager } from "./manager.js";
+import { yarnPnpLocator } from "./pnp.js";
 import "./types.js";
 
 /** The plugin's name. */
@@ -21,12 +23,13 @@ export const yarnPlugin: PluginDefinition = definePlugin({
     },
 
     register(sous) {
-        // TODO(plugin-yarn): a stub until the plugin is written. It must register:
-        //   - entities: package-manager `yarn`, plugin-locator `yarn-pnp`
-        void sous;
+        sous.entities.add("package-manager", yarnManager);
+        sous.entities.add("plugin-locator", yarnPnpLocator);
     },
 });
 
 export default yarnPlugin;
 
+export { isBerry, yarnManager } from "./manager.js";
+export { PNP_FILE, yarnPnpLocator } from "./pnp.js";
 export type * from "./types.js";
