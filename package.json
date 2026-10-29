@@ -48,7 +48,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "vitest run --config vitest.e2e.config.ts"
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "test:legacy": "vitest run --project legacy",
+    "test:packages": "vitest run --project documents --project plugin-api --project core --project plugin-cli --project sous",
+    "typecheck:packages": "pnpm -r --filter \"./packages/*\" typecheck",
+    "build:packages": "pnpm --filter @sous-io/plugin-api build && pnpm --filter @sous-io/sous-next build"
   },
   "dependencies": {
     "@inquirer/core": "^11.1.7",
@@ -75,7 +79,8 @@
     "@vitest/coverage-v8": "^4.1.0",
     "memfs": "^4.56.11",
     "typescript": "^5",
-    "vitest": "^4.1.0"
+    "vitest": "^4.1.0",
+    "esbuild": "^0.27.4"
   },
   "oclif": {
     "bin": "sous",
@@ -143,5 +148,6 @@
   },
   "engines": {
     "node": ">=22"
-  }
+  },
+  "packageManager": "pnpm@10.33.0"
 }
