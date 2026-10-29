@@ -186,3 +186,89 @@ built-in providers.
   their code moves to plugin-recipes and plugin-recipe-answers as `ref-lookup` entities.
 - **`lib/repos/identity.spec.ts`**: unchanged cases, now for `repositoryIdentity`, `identitySegments`
   and `shortNameFromIdentity` in `locations/identity.ts`.
+
+## plugin-config-files and plugin-confd: config discovery, the config kernel, env files, managed layers
+
+Ported to `packages/plugin-config-files` (`src/env/*.spec.ts`, `src/loader.spec.ts`,
+`test/main-config.test.ts`, `test/config-set.test.ts`) and `packages/plugin-confd`
+(`src/managed.spec.ts`, `test/confd-files.test.ts`).
+
+- **`src/lib/env-local.spec.ts`, `src/lib/env-file.spec.ts`**: unchanged except imports
+  (`parseEnvLocal` is now `parseEnv`; the env type is `MutableEnvironment`, not `NodeJS.ProcessEnv`).
+- **`config-discovery.spec.ts` "should throw ConfigError listing every file when multiple primaries
+  exist"**: expected a `ConfigError`. Now the first name in the search order is read and sous warns
+  (`main-config.test.ts`, "should warn when a .sous directory holds several main config files").
+  Why: L6 (report, never forbid).
+- **`config-discovery.spec.ts` "should throw when a conf.d layer's baseName collides…", "…differ only by
+  extension", `assertUniqueLayerBaseNames()`**: expected a `ConfigError`. Now both files are read and
+  sous warns (`confd-files.test.ts`, "should warn about files that differ only in their extension").
+  Why: L6.
+- **`config-discovery.spec.ts` "should find sous.config.yaml (and CONFIG_FILE_NAMES lists yaml, not
+  yml)"**: now `.yml`, `.ts` and `.mts` are main config names too, tried first to last as
+  `ts, mts, js, mjs, jsonc, json, yaml, yml` (the order `packages/sous` uses). Why: S2 (`.ts` files
+  are imported in-process), the robustness principle.
+- **`config-discovery.spec.ts` `candidateDirs`, `discoverConfig`, `resolveConfigFlag`, `expandHome`,
+  `formatNotFoundMessage`**: not ported here. Finding the project is `packages/sous`' (`findProject`).
+- **`config-kernel.test.ts` "runs a configure() export that mutates currentConfig by reference" and the
+  other `configure(cfg, builder)` cases**: unchanged in behavior. `configure` now gets the builder
+  (S2); the old style still works because the first argument also reads and writes a copy of the
+  config, whose changes become patches.
+- **`config-kernel.test.ts` "supports builder.env()…"**: set `process.env`. Now passes the variable
+  in the engine's environment. Why: S6, rule 6 (services never read `process.env`).
+- **`config-kernel.test.ts` "validates the MERGED result… The primary config file is named in the
+  message"**: now the message names the file that set the unknown key (`conf.d/20-typo.json`), from
+  the builder's record of who set what. Why: S2, "Where a value came from".
+- **`config-kernel.test.ts` "reports a .js configure() throw once, without the spurious tsx
+  require-cycle artifact"**: now just expects one error naming the file; there is no second attempt
+  under tsx. Why: S2, "No child process".
+- **`config-kernel.test.ts` trace-mode snapshots**: not ported. `BuiltConfig.layers()` and
+  `contributions()` replace them (core), shown by plugin-inspect.
+- **`settings.spec.ts` "loadSettings() flat-schema guard"**: the migration steps moved from the
+  message to the error's `details`; the message names the file.
+- **`managed-layer.spec.ts` "should return an empty object when the layer does not exist"**: now
+  `confd.managed.read()` gives `undefined`. Why: the contract (`ConfdManaged.read`).
+- **`managed-layer.spec.ts` "should insert new keys in sorted position" and the sorted keys of
+  `writeManagedLayer`**: dropped. A new key is added at the end of its object. Why: edits go through
+  the documents package (S2), whose `setKey` appends; the order a person gave is still kept.
+- **`managed-layer.spec.ts` "should treat removing a key from a layer that does not exist as done"**:
+  expected the empty file to be written with its header. Now no file is written. Why: nothing changed.
+- **`managed-layer.spec.ts` "should honor an explicit conf.d directory", `removeManagedLayer`**: not
+  ported. The conf.d directory comes from `ProjectInfo.confDir`; the contract has no remove.
+- **`config-inspect.spec.ts`**: not ported. Path syntax is the documents package's `parsePath`; the
+  JSON views belong to plugin-cli and plugin-inspect.
+
+## plugin-init and plugin-update
+
+- **`lib/project-scaffold/index.spec.ts`** (now `plugin-init/test/init.test.ts`, run through the
+  `init` handler): the scaffolded config no longer holds `_vars.projectRoot` (sous sets it; setting it
+  is an error) or `recipes.skills.outputs` with `.claude/skills` (skill targets come from plugins), so
+  "should write a config that loads through the real settings loader" now reads the config back
+  through `config-files.loader` and expects the starter target, no `_vars`, and no `.claude`. The
+  `json` format writes `sous.config.jsonc` (with comments) instead of `sous.config.json`, so its
+  `$schema` case reads the commented file. "should refuse to overwrite any file it would write" now
+  expects the existing file to be kept and listed in `kept` (the contract has `kept`); the refusal
+  stays only for a `.sous/` holding a primary config. Files are reported as absolute paths, the
+  package.json outcomes are `already-declared` / `added` / `no-package-json` (were `present` / `added`
+  / `absent`), the sous-managed ignore block comes from `host.gitignore`, and the sous directories get
+  their READMEs from `host.directories`.
+- **`lib/self-update/versions.spec.ts`** (now `plugin-update/test/versions.test.ts`): only the import
+  path and 4-space indentation changed.
+- **`lib/self-update/registry.spec.ts`** (now `test/registry.test.ts`): the fetch is `host.http.get`,
+  not an injected `fetch`, so the stand-in is an http service. Failure messages are now the first line
+  of the `ConfigError` with the hints in its `details` ("answered 404 Failed for <url>" with the
+  registry hint in `details`; a failed request is "Could not read the list of published ... versions
+  from <url>" with the reason in `details`). The abort-signal case is gone with the signal: the
+  timeout is the `timeoutMs` passed to `host.http`.
+- **`lib/self-update/plan.spec.ts`** (now `test/plan.test.ts`): installs carry a `package-manager`
+  entity instead of an agent name, so the commands in the expectations come from stand-in entities
+  with the flags the real plugins plan. The Yarn Berry case no longer asserts yarn's own flags (that
+  is plugin-yarn). "unsupported-manager" no longer carries a `manualCommand` and its message no longer
+  names the manager: no plugin claims such a project, so sous does not know its name or its `add`
+  command.
+- **`lib/self-update/installs.spec.ts`** (now `test/installs.test.ts`): detection moved to the
+  package-manager plugins (S6), so `projectManager()`, `isWorkspaceRoot()`, `yarnLockVersion()` and
+  the Plug'n'Play location cases are not ported here (they belong to plugin-npm, plugin-pnpm and
+  plugin-yarn). The `findProjectInstallInfo` and `findGlobalInstalls` cases now drive stand-in entities
+  (`detect`, `installed`) instead of fake command runners and real lockfiles. `declaredDependency()`
+  and `classifyRunning()` cases are unchanged.
+- **`commands/update.ts`'s flow** had no spec; `test/update.test.ts` is new.
