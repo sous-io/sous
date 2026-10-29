@@ -34,3 +34,10 @@ Every change to an old test during the refactor: the test, what it expected, wha
 - **"buildRecipeTargets() should produce one target per contributed file"**: `rootInputPath` is now
   `entryPoint` and the destination is `${projectRoot}/...` from a configured output or skill target;
   otherwise the same (one target per file, `globBase` the include's static base).
+
+## plugin-formats
+
+- src/lib/repos/formats/lockfile.spec.ts, "should derive a missing identity from a hosted repository url" and "... from a local path": expected the parser to fill in `identity` through a provider; now expect it left missing (renamed "should leave a missing identity missing" and "should accept a local path url with no identity"). Why: parsing a lockfile never works out an identity (S6, refs, formats and repos); `recipes.lock` does it after parsing.
+- src/lib/repos/formats/recipe-manifest.spec.ts, the four dependency-ref tests (consumer-side qualifier, local locator, bad ref, range on a namespace): expected the real ref parser inside the schema; now pass a stand-in `DependencyRefChecker` to `parseRecipeManifest`. Why: formats receives the ref check from `refs.resolver` instead of importing the ref resolver.
+- src/lib/repos/store/hash.spec.ts: unchanged, plus new cases for case-insensitive `equal` and `isHash`. `hashesEqual` now ignores case (the `formats.recipe-hash` contract).
+- Other formats specs and load-manifest.spec.ts: import paths and the `isConfigError` source only.
