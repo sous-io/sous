@@ -13,6 +13,8 @@ export interface OrderResult<T> {
     readonly order: T[];
     /** Contributors whose declarations could not all be met, because they form a cycle. */
     readonly cycle: string[];
+    /** For each contributor id, the ids its `before` and `after` declarations put ahead of it. */
+    readonly predecessors: ReadonlyMap<string, ReadonlySet<string>>;
 }
 
 /**
@@ -61,7 +63,13 @@ export function sortContributors<T extends Orderable>(items: readonly T[]): Orde
         order.push(next);
     }
 
-    return { order, cycle };
+    const predecessors = new Map<string, Set<string>>();
+
+    for (const [item, deps] of incoming) {
+        predecessors.set(item.id, new Set([...deps].map((dep) => dep.id)));
+    }
+
+    return { order, cycle, predecessors };
 }
 
 function matching<T extends Orderable>(items: readonly T[], pattern: string, self: T): T[] {

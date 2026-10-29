@@ -186,14 +186,21 @@ export class ConfigBuild {
     }
 
     private async runStage(stage: number): Promise<void> {
-        const limit = this.host.limitsFrom(this.computeView(undefined).config).configPasses;
+        for (let pass = 1; ; pass++) {
+            // The limit is read on every pass, since the config being built may set it (C51).
+            const limit = this.host.limitsFrom(this.computeView(undefined).config).configPasses;
 
-        for (let pass = 1; pass <= limit; pass++) {
+            if (pass > limit) {
+                throw this.notSettled(stage, limit);
+            }
+
             let ran = false;
 
             await this.host.timer.measure("config.pass", `${stage}.${pass}`, undefined, async () => {
-                for (const entry of this.sorted(stage)) {
-                    if (await this.runIfNeeded(entry, stage, pass)) {
+                const { order, predecessors } = this.sortStage(stage);
+
+                for (const entry of order) {
+                    if (await this.runIfNeeded(entry, stage, pass, predecessors)) {
                         ran = true;
                     }
                 }
@@ -211,11 +218,13 @@ export class ConfigBuild {
                 return;
             }
         }
-
-        throw this.notSettled(stage, limit);
     }
 
     private sorted(stage: number): ContributorEntry[] {
+        return this.sortStage(stage).order;
+    }
+
+    private sortStage(stage: number) {
         const result = sortContributors(this.contributors().filter((entry) => this.stageOf(entry) === stage));
 
         if (result.cycle.length > 0) {
@@ -230,10 +239,15 @@ export class ConfigBuild {
             }
         }
 
-        return result.order;
+        return result;
     }
 
-    private async runIfNeeded(entry: ContributorEntry, stage: number, pass: number): Promise<boolean> {
+    private async runIfNeeded(
+        entry: ContributorEntry,
+        stage: number,
+        pass: number,
+        predecessors: ReadonlyMap<string, ReadonlySet<string>>,
+    ): Promise<boolean> {
         const record = this.records.get(entry.id);
 
         if (record && record.verifiedAt === this.version) {
@@ -246,7 +260,7 @@ export class ConfigBuild {
         if (record) {
             change = firstChangedRead(record.reads, view);
 
-            if (!change) {
+            if (!change && !this.isOvertaken(record, predecessors)) {
                 record.verifiedAt = this.version;
 
                 return false;
@@ -257,6 +271,49 @@ export class ConfigBuild {
         await this.runContributor(entry, view, stage, pass, record);
 
         return true;
+    }
+
+    /**
+     * Whether a contributor that this one's `before` and `after` declarations put ahead of it (directly
+     * or through others) now applies after it, and changes the same paths. Patches apply in the order
+     * contributors last ran, so when such a contributor re-ran and this one did not, its patch would
+     * land on top, against the declared order, which is what decides who wins (S2, "Order and
+     * stages"). Re-running this one puts its patch back on top. Name order alone never does this, so a
+     * file that re-runs after a plugin's change still lands on top (S2, rule 3).
+     */
+    private isOvertaken(record: ContributorRecord, predecessors: ReadonlyMap<string, ReadonlySet<string>>): boolean {
+        const ahead = new Set<string>();
+        const visit = (id: string): void => {
+            for (const dep of predecessors.get(id) ?? []) {
+                if (!ahead.has(dep)) {
+                    ahead.add(dep);
+                    visit(dep);
+                }
+            }
+        };
+
+        visit(record.entry.id);
+
+        if (ahead.size === 0 || record.primitives.length === 0) {
+            return false;
+        }
+
+        const position = this.order.indexOf(record.entry.id);
+        const ownTargets = record.primitives.map(primitiveTarget);
+
+        for (const id of this.order.slice(position + 1)) {
+            if (!ahead.has(id)) {
+                continue;
+            }
+
+            const later = this.records.get(id)!;
+
+            if (later.primitives.some((patch) => ownTargets.some((target) => pathsOverlap(primitiveTarget(patch), target)))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private async runContributor(
