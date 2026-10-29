@@ -24,5 +24,6 @@
   "devDependencies": {},
   "engines": {
     "node": ">=22"
-  }
+  },
+  "sideEffects": false
 }

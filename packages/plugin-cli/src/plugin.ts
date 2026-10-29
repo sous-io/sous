@@ -1,0 +1,133 @@
+import { definePlugin, jsonSchema, LOG_LEVELS, type PluginDefinition } from "@sous-io/plugin-api";
+import { CommandTree, type CommandPicks } from "./command-tree.js";
+import { viewError } from "./errors.js";
+import { runCommandLine } from "./front-end.js";
+import { type CliIo, processIo } from "./io.js";
+import { canPrompt } from "./terminal-prompter.js";
+import type { CliGlobalArgumentEntity, CliGroupEntity } from "./types.js";
+
+/** The plugin's name. */
+export const CLI_PLUGIN_NAME = "@sous-io/plugin-cli";
+
+/** Options for {@link createCliPlugin}. */
+export interface CliPluginOptions {
+    /** Where the CLI reads and writes. Default: the process's streams. */
+    io?: () => CliIo;
+}
+
+/** The global arguments plugin-cli adds itself (S1, "Log levels"; C61, C52). */
+export const BUILT_IN_GLOBAL_ARGUMENTS: readonly CliGlobalArgumentEntity[] = [
+    {
+        id: "debug",
+        schema: jsonSchema<boolean>({ type: "boolean", default: false }),
+        description: "Show every message, debug ones included (the same as --log-level debug).",
+    },
+    {
+        id: "log-level",
+        schema: jsonSchema<string>({ type: "string", enum: [...LOG_LEVELS] }),
+        description: "Show messages at this level and above.",
+        valueName: "level",
+    },
+    {
+        id: "timings",
+        schema: jsonSchema<boolean>({ type: "boolean", default: false }),
+        description: "Print every timing when the command finishes.",
+    },
+    {
+        id: "non-interactive",
+        schema: jsonSchema<boolean>({ type: "boolean", default: false }),
+        description: "Never ask a question; fail with the flag that answers it instead.",
+    },
+];
+
+/**
+ * The CLI front end (S6, `plugin-cli`): commands generated from every intent's declaration, on
+ * Node's `util.parseArgs` (S1, "The CLI foundation"), with terminal output and prompts.
+ */
+export function createCliPlugin(options: CliPluginOptions = {}): PluginDefinition {
+    const io = options.io ?? processIo;
+
+    return definePlugin({
+        name: CLI_PLUGIN_NAME,
+        version: "0.2.34",
+        description: "The command-line front end, generated from intents.",
+
+        register(sous) {
+            sous.entities.define(
+                "cli-global-argument",
+                jsonSchema({
+                    type: "object",
+                    properties: { id: { type: "string" }, description: { type: "string" }, short: { type: "string" }, valueName: { type: "string" }, hidden: { type: "boolean" } },
+                    required: ["id", "schema", "description"],
+                }),
+                { description: "An argument every command accepts." },
+            );
+            sous.entities.define(
+                "cli-group",
+                jsonSchema({
+                    type: "object",
+                    properties: {
+                        id: { type: "string" },
+                        command: { type: "array", items: { type: "string" } },
+                        summary: { type: "string" },
+                        description: { type: "string" },
+                        hidden: { type: "boolean" },
+                    },
+                    required: ["id", "command", "summary"],
+                }),
+                { description: "The help of a command group." },
+            );
+
+            for (const argument of BUILT_IN_GLOBAL_ARGUMENTS) {
+                sous.entities.add("cli-global-argument", argument);
+            }
+
+            sous.entities.add("config-key", {
+                id: "cli",
+                description: "CLI settings: cli.pick.\"<command words>\": \"<plugin>\" picks between two commands claiming the same words.",
+                schema: jsonSchema({ type: "object", properties: { pick: { type: "object", additionalProperties: { type: "string" }, default: {} } } }),
+            });
+
+            sous.services.add(
+                "cli.commands",
+                (config, ctx) =>
+                    CommandTree.build(
+                        sous.engine.intents.list(),
+                        ctx.entities.list("cli-group") as CliGroupEntity[],
+                        (config.get("cli.pick") ?? {}) as CommandPicks,
+                    ),
+                { lifetime: "config" },
+            );
+            sous.services.add("cli.interactivity", () => ({ canPrompt: (globals) => canPrompt(io(), sous.env, globals) }), {
+                lifetime: "singleton",
+            });
+            sous.services.add("cli.errors", () => ({ view: (error, viewOptions) => viewError(error, viewOptions) }), {
+                lifetime: "singleton",
+            });
+
+            sous.intents.add({
+                intent: "version",
+                summary: "Print the version",
+                input: jsonSchema<{ verbose?: boolean }>({
+                    type: "object",
+                    properties: { verbose: { type: "boolean", default: false, description: "Also print the application name." } },
+                }),
+                parallel: true,
+                agent: { tool: "sous_version", usage: "Call this to learn which sous version serves this project." },
+                handle: (input, ctx) => {
+                    const { name, version } = ctx.engine.app;
+
+                    return input.verbose ? { name, version } : version;
+                },
+            });
+
+            sous.frontEnds.add({
+                id: "cli",
+                start: (engine, argv) => runCommandLine(engine, argv, { io: io(), env: sous.env }),
+            });
+        },
+    });
+}
+
+/** The plugin, using the process's own streams. */
+export const cliPlugin: PluginDefinition = createCliPlugin();

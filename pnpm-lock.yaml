@@ -121,6 +121,9 @@ importers:
       '@sous-io/core':
         specifier: workspace:*
         version: link:../core
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
 
   packages/sous:
     dependencies:
@@ -137,6 +140,9 @@ importers:
         specifier: workspace:*
         version: link:../plugin-cli
     devDependencies:
+      esbuild:
+        specifier: ^0.27.4
+        version: 0.27.4
       zod:
         specifier: ^4.4.3
         version: 4.4.3
