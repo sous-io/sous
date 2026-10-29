@@ -138,9 +138,8 @@ two readings that both publish what is named fail it too, naming the spellings t
 
 ### Ref forms
 
-Every place a ref is written reads it with one ref resolver (`src/services/ref-resolver/`): a parser that
-returns every reading of the text, a pruner for the place that drops the readings the place refuses, and a
-lookup that keeps the readings that exist. These forms are recognized everywhere; the table after them says
+Every place a ref is written reads it the same way: sous lists every way the text can be read, drops the
+readings that place does not accept, and keeps the ones that name something that exists. These forms are recognized everywhere; the table after them says
 which each place allows. A refused form is an error saying what to write there instead.
 
 | Form | Example | Names |
@@ -385,7 +384,7 @@ store:                     # every value is a default you can change
   freshnessSeconds: 300    # how long a fetched index stays fresh
   watchPollSeconds: 300    # how often watch mode polls upstream
 recipes:                   # what each content kind a subscribed recipe publishes does
-  skills: { outputs: ["${projectRoot}/.codex/skills"] }   # added to the agent plugins' skill targets
+  skills: { outputs: ["${projectRoot}/.codex/skills"] }   # added to the skills directories agent plugins name
   memories: { first: ["communication/*"], exclude: ["tool-usage/automated-browser-tasks"] }
 varMappings:
   QA_SERVICE_TOKEN: workflow/qa-variables/qaServiceToken
@@ -412,9 +411,9 @@ output files, and a recipe's own config file may set `recipes.skills` only; `rec
 includes, so it is dropped from a recipe's layer with a warning.
 
 - `recipes.skills.outputs` (`string[]`, default none): your own directories recipe skill bundles are written
-  into, besides every skill target an agent plugin adds. `${var}` is substituted as in any config path. The
-  built-in Claude Code plugin adds `<project root>/.claude/skills`, so skills land there with no setting. With no
-  skill target and no entry here, skills go nowhere, and the build says why. `${projectRoot}` is set by sous;
+  into, besides every skills directory a plugin for an agent tool names. `${var}` is substituted as in any config path. The
+  built-in Claude Code plugin adds `<project root>/.claude/skills`, so skills land there with no setting. When no
+  plugin names a skills directory and this list is empty, skills go nowhere, and the build says why. `${projectRoot}` is set by sous;
   setting `projectRoot` in any `_vars` is an error.
 - `recipes.memories.first` (`string[]`, default none): recipes whose memories lead the `#memories` view. An entry
   is a glob over `namespace/recipe` keys (`communication/*`), or a regular expression written between two slashes

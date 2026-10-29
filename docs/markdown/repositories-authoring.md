@@ -125,9 +125,9 @@ requires:
         sous-plugin-claude-code: "^1.0.0"
 ```
 
-`sous subscription add` refuses a recipe whose required plugin is missing or outside the range, and
-offers to install it (`--install-plugins` does that without asking). How a plugin is written is in
-[S1](architecture/specifications/S1-engine.md), under "Plugins".
+A subscriber is offered the missing plugin when they subscribe; see
+[Subscribe to a recipe](repositories-consuming.md#subscribe-to-a-recipe). How a plugin is written is in
+[the engine specification](architecture/specifications/S1-engine.md), under "Plugins".
 
 ## Declare the variables a recipe needs
 

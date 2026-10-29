@@ -112,17 +112,10 @@ recorded in its canonical form, `namespace/recipe`.
 The whole dependency closure resolves before anything is downloaded, and only then is anything
 written; an install is whole or not at all.
 
-| Flag | What it does |
-|------|--------------|
-| `-y, --yes` | Answer yes to both questions this command can ask: the subscribe confirmation, and the trust question for a repository it has to add |
-| `--accept-first` | When a ref matches several things, take the first one listed |
-| `--answer <name>=<value>` | Answer one question ahead of time. Repeat it per answer, or read a whole file of them with `--answers-file <path>` |
-| `--always-pull` | Install a newer in-range version whenever one exists, rather than holding the locked one |
-| `--dry-run` | Print what would be installed, writing and downloading nothing |
-| `--install-plugins` | Install the npm sous plugins the recipe requires, through the project's package manager, without asking |
-| `--no-build` | Record the subscription without rebuilding the project |
-| `--prerelease` | Let prerelease versions take part in version range matching |
-| `--non-interactive` | Never ask; fail instead, naming the flag that would have answered |
+A few flags change how it runs: `--yes` answers yes to the subscribe confirmation and the trust
+question, `--answer <name>=<value>` answers a recipe's question ahead of time, `--dry-run` prints what
+would be installed without writing or downloading anything, and `--non-interactive` fails instead of
+asking, naming the flag that would have answered. `sous subscription add --help` lists every flag.
 
 A recipe may require sous plugins from npm, each with a version range. When a required plugin is
 missing or outside its range, `sous subscription add` refuses the recipe; run interactively, it offers
@@ -182,10 +175,10 @@ like `workflow/qa-helper` above, is fetched and pinned but stays out of your out
 
 Recipe files compile under the [`.tpl.` convention](configuration.md#templates-and-the-tpl-convention): a file
 with `.tpl.` in its name is rendered through LiquidJS and loses `.tpl.` on the way out, and anything else is copied
-verbatim. Skills are written to every skill target an agent plugin adds, and to the directories you name
+verbatim. Skills are written to every skills directory a plugin for an agent tool names, and to the directories you name
 under the [`recipes`](repositories-file-formats.md#recipes-what-each-content-kind-does) config key. The
 Claude Code plugin built into sous adds `<project root>/.claude/skills`, so that is where skills land unless
-you disable it. To add a destination of your own:
+you disable that plugin (see [Plugins](configuration.md#plugins)). To add a destination of your own:
 
 ```js
 recipes: {
@@ -195,8 +188,8 @@ recipes: {
 }
 ```
 
-`projectRoot` is set by sous (the directory holding `.sous/`), so you never define it. With no skill target
-and no destination of your own, skills go nowhere, and the build says so and how to fix it. Written skills are tracked
+`projectRoot` is set by sous (the directory holding `.sous/`), so you never define it. When no plugin names a skills directory
+and you name none, skills go nowhere, and the build says so and how to fix it. Written skills are tracked
 like every other file sous writes, so `sous prune` removes what an unsubscribed recipe used to write and
 `sous clear` removes all of it; neither reaches into a linked checkout.
 
@@ -232,12 +225,10 @@ When a build finds a memory an active recipe publishes that no include of any ou
 or the view) and `exclude` does not name, it warns, naming the memory and the line to add. Subscribing alone
 includes nothing, and the warning is how that is never silent.
 
-?> In sous 1.0 memories also have **memory targets**: the instruction file an agent reads in every
-session, added by that agent's plugin (`CLAUDE.md` for the built-in Claude Code plugin). For each memory
-target, sous adds a compilation target holding one `@` include line per selected memory, after
-`recipes.memories` and the target's own filter. How that file and an instruction file your own templates
-write fit together is not settled yet; see the "Memories" section of
-[S6](architecture/specifications/S6-concerns-and-owners.md).
+?> In sous 1.0 an agent's plugin can also name the instruction file that agent reads in every session
+(`CLAUDE.md` for the Claude Code plugin built into sous). Sous then writes that file with one `@` include
+line for each memory `recipes.memories` selects, so the memories reach the agent without a line of your own.
+How that file and an instruction file your own templates write fit together is still being decided.
 
 ## Answer the questions
 
@@ -418,8 +409,8 @@ Skipped tool-usage/automated-browser-tasks: its subscription is switched off (co
 Pruned 4 outputs it had written.
 ```
 
-The `$if` object is a config expression; see
-[S5](architecture/specifications/S5-config-expressions.md).
+The `$if` object is a config expression, decided each time sous builds the config; see
+[Config expressions](configuration.md#config-expressions).
 
 ## Restore a fresh clone
 

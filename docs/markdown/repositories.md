@@ -288,7 +288,7 @@ $ sous build
   ✓ /home/me/my-project/.claude/skills/start-task/SKILL.md (~1,996 tokens)
 ```
 
-Skills go to `<project root>/.claude/skills`, the skill target of the built-in Claude Code plugin, and the
+Skills go to `<project root>/.claude/skills`, the skills directory the built-in Claude Code plugin names, and the
 [`recipes`](repositories-file-formats.md#recipes-what-each-content-kind-does) block adds destinations of
 your own. Memories are not copied as files; one include line in your instruction source pulls them in (see
 [Recipe memories](repositories-consuming.md#recipe-memories)).

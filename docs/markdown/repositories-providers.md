@@ -4,10 +4,9 @@ A **provider** is everything sous knows about one kind of repository host. It is
 a host-specific fact is allowed to live, so every command above it (add, subscribe, build,
 release, submit) talks about repositories in the same terms whatever host they live on.
 
-Sous ships three, each a built-in plugin (`plugin-github`, `plugin-gitlab` and `plugin-local`) that adds
-one `repository-host` entity: `github`, `gitlab` and `local`. A plugin of your own can add another. This page covers how one is chosen for a URL,
-what a URL becomes once a provider has taken it apart, how private repositories authenticate,
-what each provider can do when you propose a change, and what writing a fourth one involves.
+Sous ships three providers, `github`, `gitlab` and `local`, and a sous plugin can add another. This
+page covers how a provider is chosen for a URL, what a URL becomes once a provider has taken it apart, how private repositories authenticate,
+what each provider can do when you propose a change, and what adding another one involves.
 
 ## What a provider answers
 
@@ -133,8 +132,8 @@ absolute directory, because that is what git is given when a recipe is fetched.
 whose scheme is the provider's identifier: `github://sous-io/sous-recipes/workflow/sat@^1.1`. A
 first segment containing a dot is read as the host, so `gitlab://gitlab.example.com/group/project/-/ns/recipe`
 addresses a self-hosted instance; without one, the provider's public host is assumed. Where a
-repository path ends, and what a browser URL's path looks like, is each provider's own rule (its
-`readLocation`), so a URL copied from either host's file view works too. `local://` is refused,
+repository path ends, and what a browser URL's path looks like, is each provider's own rule, so a URL
+copied from either host's file view works too. `local://` is refused,
 because a path on your disk is not a published location. Every form is in
 [Ref forms](repositories-file-formats.md#ref-forms).
 
@@ -307,16 +306,13 @@ one repository's resolution at a working copy without changing what your project
 
 ## Adding a provider
 
-A provider is a sous plugin that adds a `repository-host` entity. The entity holds everything host-specific:
-recognizing and taking apart URLs, its read strategies and token sources, and, when it supports them,
-proposing changes and the CI workflow `sous repo init` writes. Nothing outside the host plugins knows a
-host's name, and a plugin can also add a read strategy to an existing host, for example for a host with its
-own authentication. The plugin interface is in [S1](architecture/specifications/S1-engine.md), and the
-`repository-host` kind is owned by `plugin-recipes` (see
-[S6](architecture/specifications/S6-concerns-and-owners.md)).
+A provider is a sous plugin. It holds everything specific to its host: recognizing and taking apart the
+host's URLs, the ways it reads an index and where it finds a token, and, when it supports them, proposing
+changes and the CI workflow `sous repo init` writes. Nothing else in sous knows a host's name. A plugin can
+also add a way of reading to an existing provider, for example for a host with its own sign-in.
 
-?> The exact shape of a `repository-host` entity is not published yet; it is settled as the 1.0 refactor
-lands.
+?> The exact interface a provider plugin implements is not published yet; it is settled as sous 1.0
+lands. The plugin design is in [the engine specification](architecture/specifications/S1-engine.md).
 
 ## Where to go next
 
