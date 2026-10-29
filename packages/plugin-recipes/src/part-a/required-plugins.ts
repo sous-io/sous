@@ -1,7 +1,7 @@
 /**
- * The npm plugins a recipe requires (S1, "Recipes that require npm plugins"). `subscription add`
+ * The npm plugins a recipe requires. `subscription add`
  * refuses a recipe whose required plugin is missing or outside its range. Run interactively, it
- * offers to install the plugin; `--install-plugins` installs it without asking (L4). Installing is
+ * offers to install the plugin; `--install-plugins` installs it without asking, so an agent can too. Installing is
  * plugin-update's `plugins.install` intent, run through `ctx.run`.
  *
  * ```yaml

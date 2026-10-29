@@ -85,7 +85,7 @@ export type ChainOutcome = Extract<RepositoryReadOutcome, { ok: true }> & { read
 const ATTEMPT_LABEL_WIDTH = 19;
 
 /**
- * The combined error, worded as S4 ("When everything fails") prints it. The whole text is the
+ * The combined error, worded as the architecture spec on reading repositories prints it. The whole text is the
  * message, so the command layer's `Error: ` prefix gives exactly:
  *
  * ```text

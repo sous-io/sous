@@ -11,99 +11,15 @@
  */
 
 import { ConfigError } from "@sous-io/plugin-api";
-import type { CanonicalRepository, LocationReading } from "@sous-io/plugin-refs/types";
+import { buildCanonicalRepository, defaultLocator, normalizeRepoUrl, readingsAfterRepository, splitRepoUrl, withoutGitSuffix } from "@sous-io/plugin-refs";
+import type { CanonicalRepository } from "@sous-io/plugin-refs/types";
 
-/** The parts of a repository URL every host needs. */
-export interface RepositoryUrlParts {
-    /** The host, lowercased: `gitlab.com`. */
-    host: string;
-    /** Every path segment before the last: `acme/platform`. */
-    owner: string;
-    /** The last segment, without `.git`. */
-    name: string;
-}
+// Taking a URL apart is plugin-refs' (`refs.locations` owns locations); these are its helpers,
+// re-exported so a host plugin needs only this package.
+export { normalizeRepoUrl, readingsAfterRepository, splitRepoUrl, withoutGitSuffix };
 
-/** The words a host's file view puts between a repository and a path. */
-const BROWSE_WORDS = new Set(["tree", "blob"]);
-
-/**
- * A segment without a `.git` suffix.
- *
- * ```ts
- * withoutGitSuffix("recipes.git"); // "recipes"
- * ```
- */
-export function withoutGitSuffix(segment: string): string {
-    return segment.replace(/\.git$/i, "");
-}
-
-/**
- * A URL trimmed, without trailing slashes or a trailing `.git`.
- *
- * ```ts
- * normalizeRepoUrl(" https://github.com/o/r.git/ "); // "https://github.com/o/r"
- * ```
- */
-export function normalizeRepoUrl(url: string): string {
-    let value = url.trim();
-
-    while (value.endsWith("/")) {
-        value = value.slice(0, -1);
-    }
-
-    if (value.endsWith(".git")) {
-        value = value.slice(0, -4);
-    }
-
-    return value;
-}
-
-/**
- * The host, owner and name of a repository URL, or `undefined` when it names no repository.
- *
- * ```ts
- * splitRepoUrl("git@gitlab.com:acme/platform/recipes.git");
- * // { host: "gitlab.com", owner: "acme/platform", name: "recipes" }
- * ```
- */
-export function splitRepoUrl(url: string): RepositoryUrlParts | undefined {
-    const normalized = normalizeRepoUrl(url);
-
-    if (normalized.length === 0) {
-        return undefined;
-    }
-
-    let host: string;
-    let repoPath: string;
-
-    const scp = /^(?:([^@\s/]+)@)?([^@\s/:]+):(.+)$/.exec(normalized);
-
-    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(normalized)) {
-        let parsed: URL;
-
-        try {
-            parsed = new URL(normalized);
-        } catch {
-            return undefined;
-        }
-
-        host = parsed.host.toLowerCase();
-        repoPath = parsed.pathname.replace(/^\/+/, "");
-    } else if (scp !== null) {
-        host = scp[2]!.toLowerCase();
-        repoPath = scp[3]!.replace(/^\/+/, "");
-    } else {
-        return undefined;
-    }
-
-    const segments = repoPath.split("/").filter((segment) => segment.length > 0);
-
-    if (segments.length < 2 || host.length === 0) {
-        return undefined;
-    }
-
-    return { host, owner: segments.slice(0, -1).join("/"), name: segments[segments.length - 1]! };
-}
+/** The parts of a repository URL every host needs: what {@link splitRepoUrl} gives. */
+export type RepositoryUrlParts = NonNullable<ReturnType<typeof splitRepoUrl>>;
 
 /**
  * The canonical form of a hosted repository: its HTTPS and SSH clone URLs.
@@ -114,13 +30,7 @@ export function splitRepoUrl(url: string): RepositoryUrlParts | undefined {
  * ```
  */
 export function canonicalRepository(host: string, owner: string, name: string): CanonicalRepository {
-    return {
-        host,
-        owner,
-        name,
-        httpsUrl: `https://${host}/${owner}/${name}.git`,
-        sshUrl: `git@${host}:${owner}/${name}.git`,
-    };
+    return buildCanonicalRepository(host, owner, name);
 }
 
 /**
@@ -133,30 +43,6 @@ export function invalidRepoUrl(hostId: string, url: string, example: string): Co
     return new ConfigError(`'${url}' is not a ${hostId} repository URL that sous can read.`, {
         details: [`A repository URL names an owner and a repository, as in 'https://${example}/owner/repository'.`],
     });
-}
-
-/**
- * Every reading of the segments after a repository: what they name and, when they start with
- * `tree/` or `blob/`, the browser path they could also be. A leading `-` (GitLab's separator) is
- * dropped first.
- *
- * ```ts
- * readingsAfterRepository("o/r", ["tree", "main", "recipes", "workflow"]);
- * // [{ repoPath: "o/r", browsed: "main/recipes/workflow" },
- * //  { repoPath: "o/r", named: ["tree", "main", "recipes", "workflow"] }]
- * ```
- */
-export function readingsAfterRepository(repoPath: string, rest: readonly string[]): LocationReading[] {
-    const after = rest[0] === "-" ? rest.slice(1) : [...rest];
-    const readings: LocationReading[] = [];
-
-    if (after.length >= 2 && BROWSE_WORDS.has(after[0]!.toLowerCase())) {
-        readings.push({ repoPath, browsed: after.slice(1).join("/") });
-    }
-
-    readings.push({ repoPath, named: after });
-
-    return readings;
 }
 
 /**
@@ -177,6 +63,10 @@ export function formatHostedLocator(
     rest: string,
     separator = "/",
 ): string {
+    if (separator === "/") {
+        return defaultLocator(scheme, defaultHost, host, repoPath, rest);
+    }
+
     const where = host === defaultHost ? repoPath : `${host}/${repoPath}`;
 
     return `${scheme}://${where}${rest.length === 0 ? "" : `${separator}${rest}`}`;

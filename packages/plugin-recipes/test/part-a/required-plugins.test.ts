@@ -1,5 +1,5 @@
 /**
- * The npm plugins a recipe requires (S1, "Recipes that require npm plugins"), on a real engine: the
+ * The npm plugins a recipe requires, on a real engine: the
  * recipe is put in the store, its manifest's `requires` read, and an unmet requirement refused or
  * installed through `plugins.install` (`--install-plugins`, or a yes at the prompt).
  */

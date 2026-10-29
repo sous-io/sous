@@ -1,5 +1,5 @@
 /**
- * The repository indexes as `ref-lookup` entities (S6, "refs and repos"; ported from
+ * The repository indexes as `ref-lookup` entities (ported from
  * `src/services/ref-resolver/lookups/cached-index-lookup.ts`, `fetched-index-lookup.ts` and
  * `catalog-matcher.ts`):
  *

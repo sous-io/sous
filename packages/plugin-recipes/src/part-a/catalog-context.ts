@@ -15,6 +15,7 @@ import type { SousRef } from "@sous-io/plugin-refs/types";
 import type { BrowsingFlags, CachedIndex } from "../types.js";
 import { findInCatalog, narrowToInstalled, type CatalogInputs, type CatalogMatch, type CatalogRepo, type RecipeLocation } from "./catalog.js";
 import { isBuiltInEntry } from "./defaults.js";
+import { destinationsFor } from "./destinations.js";
 import { emptyLockfile } from "./lock-holds.js";
 import { enabledSubscriptions, trustedRepos } from "./project.js";
 import { describeError } from "./util.js";
@@ -30,7 +31,7 @@ export interface CatalogContext {
     readonly sources: ReadonlyMap<string, CachedIndex>;
 }
 
-type Reader = Pick<Context, "config" | "services">;
+type Reader = Pick<Context, "config" | "services"> & Partial<Pick<Context, "entities" | "project">>;
 
 /** The trusted repositories in the order a one-word ref searches them: built-in first, then config order. */
 export function repoSearchOrder(ctx: Pick<Context, "config">): string[] {
@@ -112,6 +113,7 @@ export async function loadCatalog(ctx: Reader, flags: BrowsingFlags = {}): Promi
         lock,
         subscriptions: Object.keys(enabledSubscriptions(ctx.config)).sort(),
         linked,
+        ...(ctx.entities === undefined ? {} : { destinationsFor: (kind: string) => destinationsFor({ entities: ctx.entities!, config: ctx.config, project: ctx.project }, kind) }),
         ...(declarations === undefined
             ? {}
             : {

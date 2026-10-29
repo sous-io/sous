@@ -106,7 +106,7 @@ export const recipeContentSchema = extensibleObject({
 
 // --- Recipe plugins and requirements -----------------------------------------------------------
 
-/** The plugin a recipe ships: one bundled file, and optionally its types (S1; C39, C40, C48). */
+/** The plugin a recipe ships: one bundled file, and optionally its types, loaded while the config is built. */
 export const recipePluginSchema = extensibleObject({
   /** The bundle, relative to the recipe folder: `plugin/index.js`. */
   bundle: relativePathSchema("the plugin bundle"),
@@ -114,7 +114,7 @@ export const recipePluginSchema = extensibleObject({
   types: relativePathSchema("the plugin types file").optional(),
 });
 
-/** What a recipe needs that is not a recipe: npm plugins, each with a version range (S1). */
+/** What a recipe needs that is not a recipe: npm plugins, each with a version range. */
 export const recipeRequirementsSchema = extensibleObject({
   plugins: z
     .record(

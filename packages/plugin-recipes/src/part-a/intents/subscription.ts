@@ -264,7 +264,7 @@ export async function addSubscription(input: SubscriptionAddInput, ctx: Context)
     };
 
     // Before anything is written: a recipe requiring a plugin that is not installed is refused,
-    // unless it is installed now (S1, "Recipes that require npm plugins").
+    // unless it is installed now.
     const installed = await ensureRequiredPlugins(current, closure.resolved, input, input.ref.trim());
     const installFollowUp = installed === undefined ? [] : [installed];
 

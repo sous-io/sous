@@ -480,4 +480,4 @@ plugins in `test/support/standins.ts`. Expectations are otherwise unchanged, exc
 
 - Expected: `--provider` is an option flag whose choices include `github`, `gitlab` and `local`.
 - Expects now: `--provider` is a string flag.
-- Why: `--provider` now takes the id of any loaded `repository-host` entity, a plugin's own host included (L7). The hosts load after `repo.add`'s input schema is fixed, so the schema cannot list them; `repo.add` checks the value against the loaded hosts and names them when it is not one. `github`, `gitlab` and `local` work as before.
+- Why: `--provider` now takes the id of any loaded `repository-host` entity, a plugin's own host included (L7, the more versatile choice). The hosts load after `repo.add`'s input schema is fixed, so the schema cannot list them; `repo.add` checks the value against the loaded hosts and names them when it is not one. `github`, `gitlab` and `local` work as before.
