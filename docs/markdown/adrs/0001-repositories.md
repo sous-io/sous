@@ -2,6 +2,16 @@
 
 **Status:** Accepted, 2026-09-10.
 
+!> **Superseded in part by the 1.0 architecture (2026-10-29):** repository providers become host
+plugins (`plugin-github`, `plugin-gitlab`, `plugin-local`), each adding a `repository-host` entity
+that any plugin can add to; reading a repository no longer needs `gh` or `glab`, only proposing a
+change does; the managed `conf.d` files are edited key by key and every config file is a
+contributor to one in-process config build; and a recipe may ship code that runs (a sous plugin),
+which trust now also gates. "Plugin code that subscribes at config time was rejected" no longer
+holds: a plugin, a recipe's included, may change the config. See
+[S2](../architecture/specifications/S2-config-building.md), [S4](../architecture/specifications/S4-private-gitlab-and-switched-off-subscriptions.md) and
+[S6](../architecture/specifications/S6-concerns-and-owners.md).
+
 This is the permanent decision record for the initial version of the repositories system. It
 records what was decided and why; the living answer to "how does it work right now?" is the
 [Repositories](repositories.md) documentation, and the process record, including the

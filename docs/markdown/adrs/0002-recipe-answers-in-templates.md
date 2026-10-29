@@ -2,6 +2,13 @@
 
 **Status:** Accepted, 2026-09-13.
 
+!> **Superseded in part by the 1.0 architecture (2026-10-29):** `projectRoot` is no longer a
+convention in `_vars`. Sous sets it as an auto-variable (the directory holding `.sous/`), and
+setting it in any `_vars` is an error. Recipe answers reach the scope as a `variable-source`
+entity that `plugin-recipe-answers` adds, and config expressions may read them everywhere except
+under `subscriptions` and `repos`. See [S6](../architecture/specifications/S6-concerns-and-owners.md) ("The published
+package: `sous`") and [S2](../architecture/specifications/S2-config-building.md) ("Recipe answers").
+
 This record amends [ADR 0001](0001-repositories.md). It records only the delta from that design:
 one piece of it that was designed but not built, the decisions made while building it, and two
 corrections to what 0001 describes. Everything 0001 says otherwise stands. The living answer to

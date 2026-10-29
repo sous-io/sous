@@ -2,6 +2,12 @@
 
 **Status:** Accepted, 2026-09-15.
 
+!> **Superseded in part by the 1.0 architecture (2026-10-29):** there is no `BaseCommand`,
+`requiresConfig` or `adoptConfig`, and no oclif. `sous init` is the `init` intent of `plugin-init`,
+and its first build runs the same `build` intent every front end uses. The scaffold no longer
+writes `projectRoot`, which sous now sets itself. See [S1](../architecture/specifications/S1-engine.md) ("Intents", "Front
+Ends") and [S6](../architecture/specifications/S6-concerns-and-owners.md).
+
 This record stands on its own; it amends nothing in [ADR 0001](0001-repositories.md) or
 [ADR 0002](0002-recipe-answers-in-templates.md), and everything both say still holds. The living
 answer to "how does it work right now?" is the `sous init` entry in the

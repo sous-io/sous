@@ -2,6 +2,15 @@
 
 **Status:** Accepted, 2026-10-02.
 
+!> **Superseded in part by the 1.0 architecture (2026-10-29):** the ref services are no longer
+bound in an Inversify container under `REF_TOKENS`; splitters, pruners, lookups, `#` names and
+repository hosts are entities plugins add (`plugin-refs`, `plugin-recipes`, `plugin-memories`).
+`recipes.skills.outputs` has no built-in default: the built-in Claude Code plugin adds the
+`.claude/skills` skill target, and without one skills go nowhere, with a message. Memories are
+also placed by `memory-target` entities, which `plugin-memories` turns into compilation targets.
+The config kernel is gone, though config values still pass through JSON. See
+[S6](../architecture/specifications/S6-concerns-and-owners.md) ("Shared building blocks", "Skills", "Memories").
+
 This record supersedes [ADR 0008](0008-one-ref-parser.md) (one ref parser, told where the ref came
 from), and amends [ADR 0005](0005-first-project-follow-ups.md) in one place: its line saying that
 whether Liquid inside an included file renders is decided by the entry point. The living answers are
