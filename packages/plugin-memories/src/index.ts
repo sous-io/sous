@@ -5,6 +5,13 @@
  */
 
 import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";
+import type {} from "@sous-io/plugin-host/types";
+import type {} from "@sous-io/plugin-recipes/types";
+import type {} from "@sous-io/plugin-refs/types";
+import { memoriesHashName } from "./hash-name.js";
+import { memoriesSettingsSchema, memoryTargetSchema } from "./schemas.js";
+import { MemoriesSelectionService } from "./selection.js";
+import { targetsContributor } from "./targets.js";
 import "./types.js";
 
 /** The plugin's name. */
@@ -23,16 +30,31 @@ export const memoriesPlugin: PluginDefinition = definePlugin({
     },
 
     register(sous) {
-        // TODO(plugin-memories): a stub until the plugin is written. It must register:
-        //   - entity kind: memory-target (define)
-        //   - contributor: memories.targets (a compilation target per memory target; a pointer-file entity per target read in any directory)
-        //   - service: memories.selection (config)
-        //   - entity: hash-name `memories` (a view)
-        //   - config-key entity: recipes.memories
-        void sous;
+        sous.entities.define("memory-target", memoryTargetSchema, {
+            description: "A file a harness reads into every session, built from the selected recipe memories.",
+        });
+
+        sous.entities.add("config-key", {
+            id: "recipes.memories",
+            schema: memoriesSettingsSchema,
+            description: "Which recipe memories go to memory targets and the #memories view, and in what order.",
+        });
+
+        sous.entities.add("hash-name", memoriesHashName);
+
+        sous.services.add("memories.selection", (config, ctx) => new MemoriesSelectionService(config, ctx), {
+            lifetime: "config",
+        });
+
+        sous.config.contribute(targetsContributor(PLUGIN_NAME, sous.services));
     },
 });
 
 export default memoriesPlugin;
+
+export { compileRecipeKeyMatcher, isRegexSpelling } from "./key-matcher.js";
+export { dependencyOrder, recipeMemories, selectMemories, viewPath } from "./listing.js";
+export type { ExcludedMemory, MemoryGlobs, MemoryRecipe, MemorySelectionResult } from "./listing.js";
+export { compilationTargetId, defaultFormat, destinationFile, TARGETS_CONTRIBUTOR } from "./targets.js";
 
 export type * from "./types.js";

@@ -22,14 +22,17 @@
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
+    "@sous-io/documents": "workspace:*",
     "@sous-io/plugin-api": "workspace:*",
     "@sous-io/plugin-compiler": "workspace:*",
+    "@sous-io/plugin-host": "workspace:*",
     "@sous-io/plugin-recipes": "workspace:*",
-    "@sous-io/plugin-refs": "workspace:*",
-    "@sous-io/plugin-host": "workspace:*"
+    "@sous-io/plugin-refs": "workspace:*"
   },
   "devDependencies": {
-    "@sous-io/core": "workspace:*"
+    "@sous-io/core": "workspace:*",
+    "glob": "^13.0.6",
+    "minimatch": "^10.2.4"
   },
   "engines": {
     "node": ">=22"
