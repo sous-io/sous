@@ -561,3 +561,41 @@ describe("the recipe submissions block", () => {
     expect(manifest.submissions).toEqual({ allowed: false, instead: "Edit it upstream." });
   });
 });
+
+describe("the recipe plugin and requires blocks", () => {
+  it("should accept a plugin bundle with its types and the npm plugins a recipe requires", () => {
+    const manifest = parseRecipeManifest(
+      {
+        ...validManifest(),
+        plugin: { bundle: "plugin/index.js", types: "plugin/index.d.ts" },
+        requires: { plugins: { "sous-plugin-extra": "^1.2.0" } },
+      },
+      SOURCE
+    );
+
+    expect(manifest.plugin).toEqual({ bundle: "plugin/index.js", types: "plugin/index.d.ts" });
+    expect(manifest.requires).toEqual({ plugins: { "sous-plugin-extra": "^1.2.0" } });
+  });
+
+  it("should accept a plugin without types", () => {
+    const manifest = parseRecipeManifest({ ...validManifest(), plugin: { bundle: "plugin/index.js" } }, SOURCE);
+
+    expect(manifest.plugin).toEqual({ bundle: "plugin/index.js" });
+  });
+
+  it("should refuse a plugin with no bundle", () => {
+    expect(expectRejectMessage({ ...validManifest(), plugin: { types: "plugin/index.d.ts" } })).toMatch(/plugin\.bundle/);
+  });
+
+  it("should refuse a plugin bundle with an absolute path", () => {
+    expect(expectRejectMessage({ ...validManifest(), plugin: { bundle: "/etc/plugin.js" } })).toMatch(/must be relative/);
+  });
+
+  it("should refuse an unknown key inside plugin", () => {
+    expect(expectRejectMessage({ ...validManifest(), plugin: { bundle: "plugin/index.js", entry: "x" } })).toMatch(/entry/);
+  });
+
+  it("should refuse a required plugin with an empty version range", () => {
+    expect(expectRejectMessage({ ...validManifest(), requires: { plugins: { "sous-plugin-extra": "" } } })).toMatch(/version range/);
+  });
+});

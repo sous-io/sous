@@ -104,6 +104,26 @@ export const recipeContentSchema = extensibleObject({
   exclude: z.array(relativePathSchema("an exclude pattern", true)).optional(),
 });
 
+// --- Recipe plugins and requirements -----------------------------------------------------------
+
+/** The plugin a recipe ships: one bundled file, and optionally its types (S1; C39, C40, C48). */
+export const recipePluginSchema = extensibleObject({
+  /** The bundle, relative to the recipe folder: `plugin/index.js`. */
+  bundle: relativePathSchema("the plugin bundle"),
+  /** Its `.d.ts`, relative to the recipe folder, copied to `.sous/types/`. */
+  types: relativePathSchema("the plugin types file").optional(),
+});
+
+/** What a recipe needs that is not a recipe: npm plugins, each with a version range (S1). */
+export const recipeRequirementsSchema = extensibleObject({
+  plugins: z
+    .record(
+      z.string().min(1, "a plugin name must not be empty"),
+      z.string().min(1, "a version range must not be empty")
+    )
+    .optional(),
+});
+
 // --- The manifest -------------------------------------------------------------------------------
 
 /**
@@ -177,6 +197,10 @@ export function createRecipeManifestSchema(check: DependencyRefChecker = acceptA
       });
     })
     .optional(),
+  /** The plugin this recipe ships, loaded while the config is built. */
+  plugin: recipePluginSchema.optional(),
+  /** What this recipe needs that is not a recipe. */
+  requires: recipeRequirementsSchema.optional(),
   });
 }
 

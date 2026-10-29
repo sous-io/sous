@@ -8,7 +8,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { JsonObject } from "@sous-io/plugin-api";
+import { definePlugin, type JsonObject } from "@sous-io/plugin-api";
 import { cleanTemp, fakeHost, fakeUrl, hashOf, indexFile, startEngine, tempDir, writeLockfile, writeRecipe, type FakeHostCalls, type FakeRepo } from "./helpers.js";
 
 const URL = fakeUrl("acme", "recipes");
@@ -85,6 +85,8 @@ describe("recipes.fetch", () => {
         expect(active[0]).toMatchObject({ repo: "acme", identity: IDENTITY, version: "1.0.0", source: "store", kind: "subscribes" });
         expect(fs.existsSync(path.join(active[0].dir, "sous.recipe.yaml"))).toBe(true);
         expect(calls.fetches).toHaveLength(1);
+        // The store root was made self-describing while the config was built.
+        expect(fs.existsSync(path.join(home, "cache", "README.md"))).toBe(true);
     });
 
     it("should find a download already in the store on the next run, fetching nothing", async () => {
@@ -204,5 +206,30 @@ describe("recipes.plugins", () => {
         });
 
         expect(engine.config.get("alphaLoaded")).toBeUndefined();
+    });
+});
+
+describe("recipes.core", () => {
+    it("should seed the packaged core recipe into the store while the config is built", async () => {
+        const packageRoot = tempDir();
+
+        writeRecipe(path.join(packageRoot, "recipes", "core", "sous-skills"), { namespace: "core", name: "sous-skills", version: "9.9.9" }, { "skills/core.md": "# core\n" });
+
+        const packaged = definePlugin({
+            name: "test-package",
+            register(sous) {
+                sous.services.replace(
+                    "host.package",
+                    () => ({ identity: () => ({ name: "@sous-io/sous", version: "9.9.9", root: packageRoot, realRoot: packageRoot, bin: undefined }) }),
+                    { lifetime: "singleton" },
+                );
+            },
+        });
+
+        const { reporter } = await startEngine({ root, home, data: () => ({ repos: { acme: { url: URL } } }), hosts: [fakeHost([repo], calls)], plugins: [packaged] });
+
+        expect(reporter.at("warning").join("\n")).not.toMatch(/core recipe was not seeded|host\.directories/);
+        expect(fs.existsSync(path.join(home, "cache", "github.com", "sous-io", "sous-recipes", "core", "sous-skills", "9.9.9", ".sous.entry.json"))).toBe(true);
+        expect(fs.existsSync(path.join(home, "cache", "README.md"))).toBe(true);
     });
 });
