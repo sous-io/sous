@@ -12,15 +12,15 @@ npm test
 ```
 
 Node 22 is expected (see `.nvmrc`), and `package.json` requires `>=22`. `npm run build`
-compiles TypeScript to `dist/` and is also the typecheck.
+compiles TypeScript to `dist/` and is also the typecheck. `npm run test:watch` reruns tests
+as you edit, and `npm run test:coverage` adds a coverage report.
 
 ?> Sous 1.0 is being rebuilt as a pnpm workspace: a small engine (`packages/core`) and a package
 per plugin, bundled by esbuild into `@sous-io/sous`. Until that work lands, the commands in this
 section describe the pre-1.0 layout. Read the [laws](docs/markdown/architecture/laws.md),
 [goals](docs/markdown/architecture/goals.md) and
 [specifications](docs/markdown/architecture/specifications/README.md) before changing how sous
-is built; they rank above every other document. `npm run test:watch` reruns tests
-as you edit, and `npm run test:coverage` adds a coverage report.
+is built; they rank above every other document.
 
 `npm test` runs the unit and integration suites. The watch-mode end-to-end tests are
 separate because they spawn real processes and watch real files: run them with
