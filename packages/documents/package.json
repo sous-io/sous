@@ -1,0 +1,28 @@
+{
+  "name": "@sous-io/documents",
+  "version": "0.2.34",
+  "description": "Surgical JSON, JSONC and YAML editing, expressed as primitive patches",
+  "type": "module",
+  "license": "Apache-2.0",
+  "private": true,
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "jsonc-parser": "^3.3.1",
+    "yaml": "^2.9.0",
+    "@sous-io/plugin-api": "workspace:*"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=22"
+  }
+}
