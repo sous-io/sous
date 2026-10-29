@@ -44,10 +44,9 @@ to; `--verbose` announces every hand-off and adds where both installs are. Set
 To update, run `sous update`. It updates the global install, the project's own install, or both
 (whichever this directory has), through the package manager that installed each one (npm, pnpm or
 Yarn), and asks before each one. By default each install moves to the newest version in its current
-major; `--major` goes past it, `--version <version|range|tag>` picks one (a downgrade included),
-`--global` and `--project` narrow the run, `--yes` answers every question and `--dry-run` only
-prints the plan. After a project update, the new copy builds the project, so its lockfile moves to
-the new version too.
+major; `--major` goes past it and `--version <version|range|tag>` picks one (a downgrade included).
+`sous update --help` lists the rest. After a project update, the new copy builds the project, so its
+lockfile moves to the new version too.
 
 ```bash
 sous update --dry-run     # show what would be installed where, and install nothing
@@ -140,7 +139,8 @@ Useful commands:
 | `sous plugins show` | List every plugin and what it registered |
 | `sous mcp` | Serve every sous command as an MCP tool, for agents |
 
-Every command also accepts `--log-level <level>`, `--debug` and `--timings`.
+`sous <command> --help` lists a command's flags, and the [command reference](docs/markdown/commands.md)
+describes every command.
 
 ## How it works
 
@@ -209,8 +209,8 @@ pass through JSON, so functions, `RegExp`, `Date` and `undefined` do not survive
     200-skills.yaml       # adds compilation targets
 ```
 
-Each file is a contributor to one config build, which runs inside sous's own process. Recipes and
-plugins contribute too, and your own files always re-run after them, so a value you set wins.
+Recipes and plugins can change the config too, and your own files are always applied again after
+them, so a value you set wins.
 `sous config get <path> --layers` lists every change to a value, in order, with what made it.
 
 A JSON, JSONC or YAML file can decide a value when sous loads it, with a config expression:
@@ -244,9 +244,9 @@ export function configure(config) {
 ```
 
 A file named `*.patch.json` or `*.patch.jsonl` holds raw patch operations instead, for people who
-know how the config build works. The rules are in
-[S2: Building the Config](docs/markdown/architecture/specifications/S2-config-building.md) and
-[S5: Config Expressions](docs/markdown/architecture/specifications/S5-config-expressions.md).
+know how the config build works. The full rules are in
+[Layers and merging](docs/markdown/config-layers.md) and
+[Config expressions](docs/markdown/configuration.md#config-expressions).
 
 ## Plugins
 
@@ -279,8 +279,8 @@ or from recipes in repositories you trust. The `plugins` config key decides whic
 - `discover` is `"dependencies"` (the default: built-ins, the project's `package.json`
   dependencies and `load`) or `"scan"`, which also looks for installed plugins.
 
-`sous plugins show` lists every plugin and what it registered. How plugins work is in
-[S1: The Engine](docs/markdown/architecture/specifications/S1-engine.md).
+`sous plugins show` lists every plugin and what it adds. How plugins work is in
+[the engine's design](docs/markdown/architecture/specifications/S1-engine.md).
 
 ## Locating the config
 

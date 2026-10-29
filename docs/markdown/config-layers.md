@@ -2,23 +2,13 @@
 
 Sous builds one config for a project from many sources: the primary `sous.config.*` file, each
 file in `conf.d/`, the config files recipes ship, the entries sous adds itself (the official
-repository and the `core` subscription), and any plugin that changes the config. Each source is a
-**contributor**: a named piece of code that changes the config through a builder object. Sous runs
-the contributors in-process, in one loop, before any command does its work, and again after a
-command that changed the config.
+repository and the `core` subscription), and any plugin that changes the config. Sous combines
+them all before any command does its work, and again after a command that changed the config.
 
-?> Before 1.0, a separate child process (the config kernel) loaded and merged the files, with no
-way for plugins to take part. That process is gone. The design is in
-[S2: Building the Config](architecture/specifications/S2-config-building.md).
+## Which files are read
 
-## Config files are contributors
-
-- `plugin-config-files` adds one contributor for the primary `sous.config.*` file, named
-  `config-files.main`.
-- `plugin-confd` adds one contributor per file directly inside `conf.d/` (non-recursive), named after
-  the file: `confd/610-mac.jsonc`.
-- Recipe config files, the built-in entries and the environment come in the same way, from the
-  plugins that own them.
+- The primary `sous.config.*` file in `.sous/`.
+- Every file directly inside `conf.d/` (not its subdirectories).
 
 A `.json`, `.jsonc` or `.yaml` file is parsed; a `.js`, `.mjs` or `.ts` file is imported in
 the sous process itself. A `.jsonc` file is JSON with comments: line comments, block comments and
@@ -26,21 +16,19 @@ trailing commas are all allowed in it. A file is read from disk once per build.
 
 ## Load order, and why your files win
 
-The `conf.d/` files keep their order: they are sorted BYTEWISE by filename, and each one's
-contributor runs after the file before it, the first one after the primary config:
+The `conf.d/` files are applied in order after the primary config, sorted BYTEWISE by filename:
 
 ```text
-each pass:  plugins … → sous.config.* → confd/500-repos → confd/510-subscriptions → confd/610-mac
+plugins and recipes → sous.config.* → conf.d/500-repos → conf.d/510-subscriptions → conf.d/610-mac
 ```
 
 The sort is locale-independent and stable, but it is not numeric: `10-a.json` sorts before
 `2-b.json` because the character `1` precedes `2`. Zero-pad numeric prefixes (`02-`, `10-`) when
 ordering matters.
 
-Your files land last. Each config file is applied as one merge at the root of the config, so its
-contributor reads the whole config and re-runs whenever anything else changes it. Its change then
-lands on top again. So when a plugin, or a recipe's config file, sets a key that your
-`sous.config.*` or a `conf.d` file also sets, your value wins.
+Your files land last. Whenever a plugin or a recipe's config file changes the config, sous applies
+your `sous.config.*` and `conf.d` files again on top of it. So when a plugin or a recipe sets a key
+that one of your files also sets, your value wins:
 
 ```js
 // .sous/sous.config.js (excerpt)
@@ -51,34 +39,20 @@ export const config = {
 };
 ```
 
-```text
-a plugin's contributor sets includeSourceComments = true, which changes the config
-→ the sous.config.* contributor re-runs after it; its merge lands on top: false
-result: false. In a project whose files don't set it: true.
-```
+If a plugin sets `compilation.includeSourceComments` to `true`, the result is still `false`. In a
+project whose files do not set it, the result is `true`.
 
-## How the loop runs
-
-1. Every contributor runs once. Each one is given the config made from every other contributor's
-   latest change, without its own, so no contributor has to guard against applying itself twice.
-2. Every read a contributor makes is recorded. A contributor runs again only when a key or entity it
-   read has changed since its last run.
-3. Plugins listed in the `plugins` key are loaded after each pass, and their contributors join the
-   next pass.
-4. The loop ends when nothing anyone read has changed and no new contributor or plugin appeared. A
-   config that never settles (10 passes, for example) is a `ConfigError` naming the values that kept
-   changing and the contributors they came from.
-5. Validation runs last, after values resolve.
-
-A config whose contributors read nothing that later changes settles in one pass.
+Sous repeats this until nothing changes. A file that is applied again never doubles its own array
+items. A config that never settles (two files that keep changing a value the other reads, for
+example) stops sous with a `ConfigError` naming the values that kept changing and where each change
+came from. Validation runs last, after variables resolve.
 
 ## Merge semantics
 
-A config file is merged key by key into the config the earlier contributors built:
+A config file is merged key by key into the config built so far:
 
 - plain object + plain object: recurse
-- array + array: CONCATENATE, existing items first, the file's second. No dedupe. Each contributor's
-  latest change is applied once per pass, so a file that re-runs never doubles its own array items.
+- array + array: CONCATENATE, existing items first, the file's second. Duplicates are kept.
 - anything else (scalar, mixed types, null): the later file replaces
 - an own `__proto__`, `constructor`, or `prototype` key in file data is skipped
 
@@ -95,7 +69,7 @@ written as a string `/.../`. [Config expressions](configuration.md#config-expres
 
 A `.js`, `.mjs` or `.ts` config file may export plain data (`export const config = {...}`, or a
 default export that is an object), which is merged like a JSON file. It may also export
-`configure(config)`, which is given the builder, like any plugin's contributor:
+`configure(config)`, which is given a builder object for changing the config:
 
 ```js
 // .sous/conf.d/620-no-diagrams.js
@@ -104,10 +78,11 @@ export function configure(config) {
 }
 ```
 
-`configure` runs again whenever its contributor re-runs, so it must give the same result for the
-same input. When a `.js` file changes on disk during watch mode, it is imported again.
+`configure` runs again whenever sous applies the file again, so it must give the same result for
+the same input. When a `.js` file changes on disk during watch mode, it is imported again.
 
-The builder's operations, at least:
+Some of the builder's operations (the full list, with each one's documentation, is the `DocumentNode`
+type in `packages/plugin-api/src/node.ts`):
 
 ```js
 const node = config.atPath("compilation.targets");
@@ -144,14 +119,14 @@ node.dedupe();
 config.root().merge(data);
 ```
 
-?> Sous 0.2.x passed `configure(currentConfig, builder)` a mutable config and a different builder
-(`builder.merge`, `builder.loadConfig`, `builder.loadConfigs`, `builder.env`). The 1.0 contract is the
-one above, from [S2](architecture/specifications/S2-config-building.md#config-files); whether the old
-helpers survive is not settled there.
+?> A `configure(currentConfig, builder)` written for sous 0.2.x, which changes `currentConfig` in
+place and calls the old builder (`builder.merge`, `builder.loadConfig`, `builder.loadConfigs`,
+`builder.env`), keeps working. Sous records what it changed like any other change.
 
 ## Patches
 
-Every change a contributor makes ends up as primitive operations, each called a patch:
+Every change to the config, from a file, a recipe or a plugin, ends up as primitive operations,
+each called a patch:
 
 | `op` | What it does |
 | --- | --- |
@@ -163,12 +138,12 @@ Every change a contributor makes ends up as primitive operations, each called a 
 | `removeIndex` | removes one item from an array |
 
 Every other builder operation is built from these. `removeWhere` above, for example, records one
-`removeIndex` per matching item. `sous config show --layers` shows both: each operation a
-contributor ran, and the patches it made.
+`removeIndex` per matching item. `sous config show --layers` shows both: each operation a file or
+plugin ran, and the patches it made.
 
 ### Patch files
 
-A file of raw patches is a contributor too, in `conf.d/` or beside `sous.config.*`:
+A file of raw patches can sit in `conf.d/` or beside `sous.config.*`:
 
 - A `.patch.json` file holds one patch, unless its top-level object has a single key, `$patches`,
   holding an array: then each item is a patch.
@@ -192,8 +167,8 @@ A file of raw patches is a contributor too, in `conf.d/` or beside `sous.config.
 ```
 
 !> An index written in a patch file is never recomputed: `removeIndex 7` removes whatever is at
-index 7 at that point. Use patch files for arrays only when you know the order the contributors run
-in. Key and path operations have no such catch.
+index 7 at that point. Use patch files for arrays only when you know the order the files, recipes and
+plugins before it apply in. Key and path operations have no such catch.
 
 ## Failure behavior
 
@@ -201,12 +176,11 @@ Any config file failure (a JSON/YAML parse error, an import error, a `configure`
 with a `ConfigError` naming the file. There is no warn-and-skip; a broken file never silently drops
 out of the config.
 
-## The managed 5xx band
+## The managed 5xx layer band
 
 `conf.d/500-*` through `conf.d/599-*` is reserved for files the sous CLI writes on your behalf.
 They are `.jsonc`, and each one opens with a header comment saying what it holds. They are ordinary
-contributors: no code treats one of them as special, and sous always reads the built config, never
-one file on its own.
+config files, merged like any other: sous always reads the built config, never one file on its own.
 
 **Sous edits these files by key; you may edit them too.** A write rewrites only the bytes of the
 entry that changes, so your comments, your key order and your formatting survive it, and repeated

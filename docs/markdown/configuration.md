@@ -79,16 +79,15 @@ A path may use glob syntax (`*`, `**`, `?`, `[..]`, `{a,b}`) and then includes e
 path order. The same file may be included in more than one place; a circular include is an error, as is a line
 that looks like an include (`@docs/notes.txt`, `@~workflow/missing`) but cannot be resolved, which fails the
 build naming the file and the line. A line inside a fenced code block is left as written. An alias name may not
-start with `~` or `#`. Reads of recipe files go through the
-[ref resolver](adrs/0013-one-ref-resolver.md); [Including recipe files in your own templates](repositories.md#including-recipe-files-in-your-own-templates)
+start with `~` or `#`. [Including recipe files in your own templates](repositories.md#including-recipe-files-in-your-own-templates)
 has the namespace rules.
 
 ## Composition
 
 The primary config is optionally extended by drop-in files: every `*.js|mjs|ts|json|jsonc|yaml`
 file directly inside `.sous/conf.d/` is applied after the primary config, in filename order, and
-merged over it. Each file, the primary config included, is a contributor to one config-building
-loop, alongside recipe config files and plugins; your own files always land last, so they win. A
+merged over it. Recipes and plugins can change the config too, and your own files are always
+applied again after them, so a value you set wins. A
 `.js`, `.mjs` or `.ts` file can also change the config through a `configure()` function, and a
 `.patch.json` or `.patch.jsonl` file holds raw edits. [Layers and merging](config-layers.md) covers
 the full semantics.
@@ -123,7 +122,7 @@ On a Mac, `enabled` is `false`. Elsewhere the condition is false and there is no
 is dropped and the subscription stays on. An expression may appear at any depth, including inside
 arrays. An object mixing a reserved key with any other key is an error, so a typo such as `"$iff"`
 never passes through as config. The full rules are in
-[S5: Config Expressions](architecture/specifications/S5-config-expressions.md).
+[the design of config expressions](architecture/specifications/S5-config-expressions.md).
 
 ## Plugins
 
@@ -158,24 +157,27 @@ There is no separate bootstrap config and no `"sous"` key in `package.json`.
 }
 ```
 
-Two more keys belong to the engine:
+Two more keys settle what plugins do:
 
-- `services.replace` picks the winner when two plugins replace the same service:
-  `"services": { "replace": { "git.runner": "sous-plugin-fast-git" } }`. Sous warns on every run
-  that the other plugin may not work as expected.
-- `budgets` changes the time budget of any stage or plugin call; a budget set to `false` turns its
-  warning off. `--timings` on any command prints every timing.
+- `services.replace` picks the winner when two plugins both take over the same piece of sous's
+  work. Each piece has a name, such as `git.runner` (how sous runs git), and two plugins replacing
+  the same one stops sous with an error until you choose one:
+  `"services": { "replace": { "git.runner": "sous-plugin-fast-git" } }`. Sous then warns on every
+  run that the other plugin may not work as expected.
+- `budgets` changes how long a step may take before sous warns that it is slow; a budget set to
+  `false` turns that warning off. `--timings` on any command prints how long every step took.
 
-`sous plugins show` lists every plugin and what it registered. Recipes may ship plugins too; see
-[S1: Where plugins come from](architecture/specifications/S1-engine.md#where-plugins-come-from).
+`sous plugins show` lists every plugin and what it adds. Recipes may ship plugins too; see
+[where plugins come from](architecture/specifications/S1-engine.md#where-plugins-come-from).
 
 ## Where to go next
 
 - [Discovery and overrides](config-discovery.md): how sous finds the config, and the flags and
   environment variables that override it
-- [Layers and merging](config-layers.md): contributors, `conf.d/` ordering, merge semantics, the
-  `configure()` contract, patch files
-- [Variables](config-variables.md): the `${var}` scope chain, auto-vars (`projectRoot` among them), fixpoint resolution
+- [Layers and merging](config-layers.md): the order files apply in, how values merge, the
+  `configure()` function, patch files
+- [Variables](config-variables.md): where `${var}` values come from, the variables sous sets
+  (`projectRoot` among them), and variables that refer to other variables
 - [Inspecting and validating](config-inspection.md): the `sous config` commands and the
   validation pipeline
 

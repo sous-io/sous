@@ -43,8 +43,8 @@ hijacks resolution. Error messages name the source that was actually set (`--sou
 ## Locating the conf.d directory
 
 Precedence: `--sous-confd <path>` flag, then `SOUS_CONFD` env var, then the default
-`<sousDir>/conf.d`. An override flows everywhere the default would: finding the `conf.d` files, the
-duplicate-baseName check, and watch-mode reload.
+`<sousDir>/conf.d`. An override applies everywhere the default would: finding the `conf.d` files,
+the check for file names that differ only by extension (below), and reloading in watch mode.
 
 ## Env file layering
 
@@ -71,11 +71,11 @@ All are hard `ConfigError`s; sous never guesses:
 - **No config found**: the error lists every directory checked during the walk and names the two
   fixes: run `sous init` in the project's root directory, which writes the config and everything
   else a first build needs, or pass `--config <path>`.
-- **Multiple primary configs**: two or more of `sous.config.js|mjs|json|jsonc|yaml` in the same
+- **Multiple primary configs**: two or more of `sous.config.js|mjs|ts|json|jsonc|yaml` in the same
   `.sous/` is an error naming every candidate.
-- **Duplicate baseNames**: any two loaded files (primary or conf.d) whose names differ
-  only by extension is an error naming both files, because their merge order would otherwise
-  depend on extension. `500-repos.json` and `500-repos.jsonc` collide for the same reason, which
+- **Names that differ only by extension**: any two loaded files (primary or conf.d) whose names
+  differ only by extension is an error naming both files, because their merge order would
+  otherwise depend on the extension. `500-repos.json` and `500-repos.jsonc` collide for the same reason, which
   is what keeps a file sous is migrating to `.jsonc` from being loaded twice.
 
 ## Interaction with `sous launch` pass-through

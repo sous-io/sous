@@ -58,31 +58,31 @@ shell environment, `.sous/.env.local`, or `.sous/.env` (first writer wins, in th
 mapped env var that is not set anywhere is a hard `ConfigError` telling you which file to define
 it in.
 
-## Variables and the config-building loop
+## Variables set in a later file
 
-Variables resolve inside the same loop that builds the config
-([Layers and merging](config-layers.md#how-the-loop-runs)). Every variable a config expression reads
-is recorded, and the file's contributor re-runs when that variable's resolved value changes, so a
-variable set in a later file still reaches an expression in an earlier one:
+A [config expression](configuration.md#config-expressions) always sees a variable's final value,
+even when a later file sets it. Sous notes every variable an expression reads, and when that
+variable's value changes, it applies the file again
+([Layers and merging](config-layers.md#load-order-and-why-your-files-win)):
 
 ```text
 Files: sous.config (machineRole: laptop) → 610-browser ($if machineRole == 'laptop') → 700-ci (machineRole: ci)
 
-Pass 1   610-browser reads machineRole → "laptop" → enabled: true; 700-ci then sets "ci"
-Pass 2   610-browser re-runs: machineRole now resolves to "ci" → enabled: false
-Pass 3   nothing it read changed → done
+610-browser reads machineRole → "laptop" → enabled: true; 700-ci then sets "ci"
+610-browser is applied again: machineRole is now "ci" → enabled: false
+nothing it read changed → done
 ```
 
 A variable still unknown when the config settles is an error naming it.
 
-## Fixpoint resolution
+## Variables that refer to other variables
 
-Each `_vars` block resolves by a fixpoint loop, not top-to-bottom: every round re-scans the
-still-unresolved entries and finalizes any whose `${refs}` all resolve, repeating until a round
-finalizes nothing. Declaration order therefore never matters; `{ file: "${root}/x", root:
+A variable may refer to others in the same `_vars` block, in any order. Sous resolves every entry
+whose `${refs}` are all known, then tries the rest again, until nothing more resolves. Declaration
+order therefore never matters; `{ file: "${root}/x", root:
 "/data" }` resolves as readily as the reverse.
 
-If entries remain unresolved when progress stops, that is a hard `ConfigError`. The message
+If entries remain unresolved at the end, that is a hard `ConfigError`. The message
 separates:
 
 - **Cycles**: entries that reference each other (members are named), and
