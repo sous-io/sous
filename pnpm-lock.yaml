@@ -653,15 +653,9 @@ importers:
       '@sous-io/plugin-variables':
         specifier: workspace:*
         version: link:../plugin-variables
-      jsonc-parser:
-        specifier: ^3.3.1
-        version: 3.3.1
       semver:
         specifier: ^7.8.5
         version: 7.8.5
-      yaml:
-        specifier: ^2.9.0
-        version: 2.9.0
     devDependencies:
       '@sous-io/core':
         specifier: workspace:*
