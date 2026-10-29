@@ -5,7 +5,8 @@
  */
 
 import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";
-import "./types.js";
+import { createGithubHost } from "./host.js";
+import type { GithubPluginOptions } from "./types.js";
 
 /** The plugin's name. */
 export const PLUGIN_NAME = "@sous-io/plugin-github";
@@ -22,12 +23,22 @@ export const githubPlugin: PluginDefinition = definePlugin({
     },
 
     register(sous) {
-        // TODO(plugin-github): a stub until the plugin is written. It must register:
-        //   - entity: repository-host `github` (read strategies, token sources, pull requests, the GitHub Actions workflow)
-        void sous;
+        // A contributor, not a fixed entity, because the options name more GitHub hosts.
+        sous.config.contribute({
+            id: "github/repository-host",
+            before: ["@sous-io/plugin-recipes"],
+
+            contribute(config) {
+                config.addEntity("repository-host", createGithubHost(config.options<GithubPluginOptions>() ?? {}));
+            },
+        });
     },
 });
 
 export default githubPlugin;
+
+export { buildReleaseWorkflow, GITHUB_WORKFLOW_PATH, githubWorkflowFiles } from "./ci.js";
+export { GH } from "./gh.js";
+export { createGithubHost, githubApiFileUrl, githubRawFileUrl, GITHUB_HOST, GITHUB_TOKEN_VARIABLES, readGithubLocation } from "./host.js";
 
 export type * from "./types.js";

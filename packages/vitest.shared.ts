@@ -11,6 +11,8 @@ const packagesDir = import.meta.dirname;
 const sourceAliases: Record<string, string> = {
     "@sous-io/core": path.join(packagesDir, "core/src/index.ts"),
     "@sous-io/documents": path.join(packagesDir, "documents/src/index.ts"),
+    "@sous-io/repository-hosts/testing": path.join(packagesDir, "repository-hosts/src/testing.ts"),
+    "@sous-io/repository-hosts": path.join(packagesDir, "repository-hosts/src/index.ts"),
     ...pluginAliases(),
 };
 

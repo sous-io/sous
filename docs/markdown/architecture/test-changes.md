@@ -272,3 +272,43 @@ Ported to `packages/plugin-config-files` (`src/env/*.spec.ts`, `src/loader.spec.
   (`detect`, `installed`) instead of fake command runners and real lockfiles. `declaredDependency()`
   and `classifyRunning()` cases are unchanged.
 - **`commands/update.ts`'s flow** had no spec; `test/update.test.ts` is new.
+
+## plugin-github, plugin-gitlab, plugin-local: `src/lib/repos/providers/*.spec.ts`, ported to `packages/plugin-{github,gitlab,local}` and `packages/repository-hosts`
+
+- **GitlabProvider "should read the index from the instance's raw endpoint"**: expected
+  `https://<host>/<group>/<repo>/-/raw/HEAD/sous.index.json`. Now expects the API address with the
+  whole project path encoded, `https://<host>/api/v4/projects/<group>%2F<sub>%2F<repo>/repository/files/sous.index.json/raw?ref=HEAD`
+  (`plugin-gitlab/src/host.spec.ts`, "should use the API address with the project path encoded").
+  Why: S4, problem 1.
+- **findGitlabToken() "should prefer GITLAB_TOKEN and fall back to the glab command line tool"**:
+  expected `glab auth token`, and any non-empty output taken as the token. Now expects
+  `glab config get token --host <host>`, tried after `git credential fill`, only when glab is
+  installed, and output accepted only as one line with no whitespace; help text printed with exit 0
+  is refused. Why: S4, problem 2 and "Token sources".
+- **findGithubToken() "should prefer GITHUB_TOKEN and fall back to the gh command line tool"**:
+  expected `gh auth token`. Now expects `GITHUB_TOKEN`, then `GH_TOKEN`, then `git credential fill`,
+  then `gh auth token --hostname <host>`, with the same one-line check. Why: S4, "Token sources"; the
+  contract adds `GH_TOKEN`.
+- **GithubProvider "should read the index from the raw host…" / "should send GITHUB_TOKEN as a bearer
+  token"**: expected the raw host, with the token on it when one was found. Now a token is sent to
+  the contents API (`api.github.com/repos/<o>/<r>/contents/sous.index.json?ref=HEAD`), and the raw
+  host is asked only with no token. Why: S4's strategy order (HTTP with token, then without); the
+  API is the documented way to read a private file with a token, and sends an ETag.
+- **GithubProvider/GitlabProvider "should raise a ConfigError when the host answers with an error"**:
+  expected a `ConfigError` from one fetch. Now one `RepositoryReadError` lists every strategy tried
+  and the fixes. Why: S4, "When everything fails".
+- **LocalProvider "should explain a directory that publishes no index"**: expected one message about
+  a directory with no index and no git. Now the same facts come as the attempts of one read error
+  (`working tree: the working tree has no sous.index.json`, `git: not a git repository …`). Why: the
+  local host reads through read strategies like every host (S4).
+- **ProviderBase write-path refusals ("should refuse every write-path call…", "providers without the
+  proposals feature")**: expected a `ConfigError` from calling `fork` etc. on the local provider. Now
+  the local entity has no such methods (`proposeChange` is `undefined`). Why: the contract makes
+  write-path methods optional, present only on hosts with `submit`/`proposals`.
+- **GitlabProvider features**: expected `["fetch", "submit"]`. Now `["fetch", "submit", "proposals"]`,
+  with `glab mr list/view/update`. Why: plugin-gitlab's contract.
+- **`requireProvider()`, `builtInProviders()`, `detectProvider()` and `assertLocalRepoDirectory()`
+  tests**: not ported. Why: choosing a host for a URL is `refs.locations` (plugin-refs) and the
+  repository entry's concern (plugin-recipes); checking a path holds a repo manifest needs
+  `formats.manifests`. `looksLikeLocalPath()` and `resolveRepoArgument()` now take `cwd` and `home`
+  instead of reading `process.cwd()` and the home directory (S6, rule 6).

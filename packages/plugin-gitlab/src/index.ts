@@ -5,7 +5,8 @@
  */
 
 import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";
-import "./types.js";
+import { createGitlabHost } from "./host.js";
+import type { GitlabPluginOptions } from "./types.js";
 
 /** The plugin's name. */
 export const PLUGIN_NAME = "@sous-io/plugin-gitlab";
@@ -22,12 +23,22 @@ export const gitlabPlugin: PluginDefinition = definePlugin({
     },
 
     register(sous) {
-        // TODO(plugin-gitlab): a stub until the plugin is written. It must register:
-        //   - entity: repository-host `gitlab` (S4's API address and glab token)
-        void sous;
+        // A contributor, not a fixed entity, because the options name more GitLab hosts.
+        sous.config.contribute({
+            id: "gitlab/repository-host",
+            before: ["@sous-io/plugin-recipes"],
+
+            contribute(config) {
+                config.addEntity("repository-host", createGitlabHost(config.options<GitlabPluginOptions>() ?? {}));
+            },
+        });
     },
 });
 
 export default gitlabPlugin;
+
+export { buildGitlabPipeline, gitlabCiFiles, GITLAB_CI_PATH } from "./ci.js";
+export { GLAB } from "./glab.js";
+export { createGitlabHost, gitlabFileUrl, GITLAB_HOST, GITLAB_TOKEN_VARIABLES, readGitlabLocation } from "./host.js";
 
 export type * from "./types.js";

@@ -5,6 +5,7 @@
  */
 
 import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";
+import { createLocalHost } from "./host.js";
 import "./types.js";
 
 /** The plugin's name. */
@@ -22,12 +23,13 @@ export const localPlugin: PluginDefinition = definePlugin({
     },
 
     register(sous) {
-        // TODO(plugin-local): a stub until the plugin is written. It must register:
-        //   - entity: repository-host `local`
-        void sous;
+        sous.entities.add("repository-host", createLocalHost());
     },
 });
 
 export default localPlugin;
+
+export { createLocalHost, LOCAL_HOST } from "./host.js";
+export { expandHomePath, localRepoPath, looksLikeLocalPath, resolveRepoArgument } from "./paths.js";
 
 export type * from "./types.js";
