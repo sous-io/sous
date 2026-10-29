@@ -189,12 +189,12 @@ describe("the CLI front end", () => {
             const plugin = definePlugin({
                 name: "p",
                 register(sous) {
-                    sous.intents.add({ intent: "vars.list", summary: "List", handle: () => 1 });
-                    sous.intents.add({ intent: "vars.show", summary: "Show", handle: () => 1 });
+                    sous.intents.add({ intent: "things.list", summary: "List", handle: () => 1 });
+                    sous.intents.add({ intent: "things.show", summary: "Show", handle: () => 1 });
                 },
             });
 
-            expect((await runCli([plugin], ["--help"])).stdout).toMatch(/vars\s+2 commands/);
+            expect((await runCli([plugin], ["--help"])).stdout).toMatch(/things\s+2 commands/);
         });
 
         /**
@@ -409,5 +409,47 @@ describe("the CLI front end", () => {
 
             expect(run.stderr).toContain('Warning: p added a "not-a-kind" entity, but no plugin defines that kind.');
         });
+    });
+});
+
+describe("built-in groups, globals and help intent", () => {
+    const commandPlugin = definePlugin({
+        name: "p",
+        register(sous) {
+            sous.intents.add({ intent: "config.show", summary: "Show the config", cli: { aliases: [["configs", "show"]] }, handle: () => "shown" });
+        },
+    });
+
+    /** The plural group word shows the group's help, and is not listed at the root. */
+    it("should answer to a group's plural word", async () => {
+        const run = await runCli([commandPlugin], ["configs", "--help"]);
+
+        expect(run.stdout.startsWith("Inspect the merged configuration")).toBe(true);
+        expect(run.stdout).toMatch(/show\s+Show the config/);
+        expect((await runCli([commandPlugin], ["--help"])).stdout).not.toMatch(/^\s+configs\s/m);
+        expect((await runCli([commandPlugin], ["configs", "show"])).stdout).toBe("shown\n");
+    });
+
+    /** `sous help <words>` prints what `--help` prints. */
+    it("should print help for the words after help", async () => {
+        const viaHelp = await runCli([commandPlugin], ["help", "config", "show"]);
+        const viaFlag = await runCli([commandPlugin], ["config", "show", "--help"]);
+
+        expect(viaHelp.stdout).toBe(viaFlag.stdout);
+        expect((await runCli([commandPlugin], ["help"])).stdout).toContain("Commands:");
+        expect((await runCli([commandPlugin], ["help", "confg"])).stderr).toContain('There is no command "confg".');
+    });
+
+    /** Every global argument of the old CLI parses on any command. */
+    it("should accept the old global arguments", async () => {
+        const plugin = definePlugin({
+            name: "g",
+            register(sous) {
+                sous.intents.add({ intent: "g", summary: "G", handle: (_i, ctx) => ctx.globals });
+            },
+        });
+        const run = await runCli([plugin], ["g", "-c", "x.json", "--sous-dir", "d", "--sous-confd", "c", "--sous-config", "y"]);
+
+        expect(JSON.parse(run.stdout)).toMatchObject({ config: "x.json", "sous-dir": "d", "sous-confd": "c", "sous-config": "y" });
     });
 });

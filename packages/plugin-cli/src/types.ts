@@ -45,6 +45,11 @@ export interface CliGroupEntity {
     description?: string;
     /** Keeps the group out of its parent's help. */
     hidden?: boolean;
+    /**
+     * Other words for the whole group (`repos` for `repo`). Each one runs the same commands and shows
+     * the same help, and stays out of the parent's help.
+     */
+    aliases?: ReadonlyArray<readonly string[]>;
 }
 
 /** Whether this run may ask questions (S6, `cli.interactivity`). */
@@ -81,6 +86,7 @@ declare module "@sous-io/plugin-api" {
     }
 
     interface SousIntents {
+        help: { input: { command?: string[] }; result: string };
         version: { input: { verbose?: boolean }; result: string | { name: string; version: string } };
     }
 }

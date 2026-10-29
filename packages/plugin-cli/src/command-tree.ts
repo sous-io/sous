@@ -86,6 +86,7 @@ export class CommandTree {
         }
 
         markCanonical(tree.root);
+        tree.shareAliasedGroups(groups);
 
         return tree;
     }
@@ -123,6 +124,36 @@ export class CommandTree {
         visit(this.root);
 
         return [...found];
+    }
+
+    /**
+     * Makes each alias word of a group (`repos`) show the group's own commands and help, without
+     * listing it in the parent's help.
+     */
+    private shareAliasedGroups(groups: readonly CliGroupEntity[]): void {
+        for (const group of groups) {
+            const canonical = this.find(group.command);
+
+            if (canonical.used !== group.command.length) {
+                continue;
+            }
+
+            for (const alias of group.aliases ?? []) {
+                const node = this.ensure(alias);
+
+                node.group ??= group;
+                node.canonical = false;
+
+                for (const [word, child] of canonical.node.children) {
+                    if (child.canonical) {
+                        node.children.set(word, child);
+                    }
+                }
+
+                node.command ??= canonical.node.command;
+                node.viaAlias ||= canonical.node.command !== undefined;
+            }
+        }
     }
 
     private pick(key: string, list: Array<{ command: Command; viaAlias: boolean }>, picks: CommandPicks): { command: Command; viaAlias: boolean } {

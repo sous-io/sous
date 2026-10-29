@@ -2,6 +2,8 @@ import { definePlugin, jsonSchema, LOG_LEVELS, type PluginDefinition } from "@so
 import { CommandTree, type CommandPicks } from "./command-tree.js";
 import { viewError } from "./errors.js";
 import { runCommandLine } from "./front-end.js";
+import { BUILT_IN_GROUPS } from "./groups.js";
+import { helpIntent } from "./help-intent.js";
 import { type CliIo, processIo } from "./io.js";
 import { canPrompt } from "./terminal-prompter.js";
 import type { CliGlobalArgumentEntity, CliGroupEntity } from "./types.js";
@@ -17,6 +19,31 @@ export interface CliPluginOptions {
 
 /** The global arguments plugin-cli adds itself (S1, "Log levels"; C61, C52). */
 export const BUILT_IN_GLOBAL_ARGUMENTS: readonly CliGlobalArgumentEntity[] = [
+    {
+        id: "config",
+        short: "c",
+        schema: jsonSchema<string>({ type: "string" }),
+        description: "Path to a sous config file (or a directory containing one). Overrides .sous/ discovery.",
+        valueName: "path",
+    },
+    {
+        id: "sous-config",
+        schema: jsonSchema<string>({ type: "string" }),
+        description: "Alias of --config: path to a sous config file (or a directory containing one).",
+        valueName: "path",
+    },
+    {
+        id: "sous-dir",
+        schema: jsonSchema<string>({ type: "string" }),
+        description: "Path to the .sous directory to use (overrides walk-up discovery).",
+        valueName: "path",
+    },
+    {
+        id: "sous-confd",
+        schema: jsonSchema<string>({ type: "string" }),
+        description: "Path to the conf.d drop-in layer directory (overrides <sousDir>/conf.d).",
+        valueName: "path",
+    },
     {
         id: "debug",
         schema: jsonSchema<boolean>({ type: "boolean", default: false }),
@@ -88,6 +115,10 @@ export function createCliPlugin(options: CliPluginOptions = {}): PluginDefinitio
                 schema: jsonSchema({ type: "object", properties: { pick: { type: "object", additionalProperties: { type: "string" }, default: {} } } }),
             });
 
+            for (const group of BUILT_IN_GROUPS) {
+                sous.entities.add("cli-group", group);
+            }
+
             sous.services.add(
                 "cli.commands",
                 (config, ctx) =>
@@ -105,6 +136,7 @@ export function createCliPlugin(options: CliPluginOptions = {}): PluginDefinitio
                 lifetime: "singleton",
             });
 
+            sous.intents.add(helpIntent);
             sous.intents.add({
                 intent: "version",
                 summary: "Print the version",

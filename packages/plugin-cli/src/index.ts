@@ -10,6 +10,8 @@ export { CommandTree } from "./command-tree.js";
 export type { Command, CommandNode, CommandPicks } from "./command-tree.js";
 export { argumentsFromSchema, convertValue } from "./flags.js";
 export type { CommandArguments, FlagSpec, PositionalSpec, ValueKind } from "./flags.js";
+export { BUILT_IN_GROUPS } from "./groups.js";
+export { helpIntent } from "./help-intent.js";
 export { globalSpecs } from "./globals.js";
 export { renderHelp } from "./help.js";
 export { processIo } from "./io.js";
