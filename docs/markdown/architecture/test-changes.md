@@ -455,3 +455,17 @@ plugins in `test/support/standins.ts`. Expectations are otherwise unchanged, exc
 - **`src/test/integration/repo-contribute.test.ts`, `repo-submit.test.ts`**: covered by
   `contribute.spec.ts` (through a stand-in intent runner) and `submit.spec.ts`; the `gh` stand-in script
   is now a stand-in host entity.
+
+## plugin-recipes, part B: `src/lib/repos/{lock-service,resolver,freshness,core-recipe,seed,links,git-clone,locked-recipe-lookup,namespace-resolver,recipe-config-layers}.spec.ts`, `providers/index-cache.spec.ts` → `packages/plugin-recipes/src/part-b/**/*.spec.ts`
+
+- **lock-service "diff … lines"**: expected `diff().lines`. Now the lines come from `describeLockDiff(diff)`. Why: the contract's `LockDiff` has no `lines`; wording is presentation.
+- **lock-service "restore … throws when the index does not offer the version"**: expected a throw. Now the failure is listed in `RestoreReport.failed`. Why: the contract's `RestoreReport` has `failed`.
+- **lock-service restore with no keys**: expected every pin restored. Now only the pins in force here (reached from the subscriptions switched on, S4, 3). Why: S4, 3 and 5; a switched-off subscription downloads nothing on this machine.
+- **resolver `missingManifests`**: now `unreadable`. Why: the contract's name for it.
+- **index-cache, seed and core-recipe "warns …"**: expected a console warning. Now a `problem` field on a stale lookup, an `onMismatch` callback, or `skippedBecause`. Why: L3, services never print.
+- **core-recipe tests about the repository's own lockfile pin and the npm `files` list**: not ported. Why: they belong to the published package, not the plugin.
+- **namespace-resolver "should refuse a recipe the project does not subscribe to" (`projectScope`)**: dropped. Now project templates may address every active recipe. Why: the real resolver never set `projectScope`; only active recipes (S4, 3) are known.
+- **`formatNamespaceProblem()` tests**: not ported here. Why: describing a failed include belongs to plugin-compiler (S6).
+- **git-clone `repoNameFromUrl`**: dropped (no such function now). **"recognize clonable forms"**: split into `looksLikeRepoUrl` (URL and SCP forms) and `looksLikeLocalPath` (paths). Why: the link intent tells paths and URLs apart before either is used.
+- **links `applyManagedIgnoreBlock`**: not ported. Why: the managed `.gitignore` block belongs to `host.gitignore` (plugin-host); `ensureLocalFilesIgnored` is tested through it.
+- **recipe-config-layers "listRecipeConfigLayers reads the lockfile and store"**: now `readRecipeConfigLayers` reads the `active-recipe` entities. Why: the `recipes.fetch` contributor locates recipes; layers come only from active ones.
