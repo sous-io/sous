@@ -140,6 +140,7 @@ interface Setup {
     failing?: string[];
     missing?: boolean;
     services?: Record<string, unknown>;
+    entities?: Record<string, Array<{ id: string }>>;
 }
 
 function setup(options: Setup = {}) {
@@ -161,7 +162,11 @@ function setup(options: Setup = {}) {
     };
     const data = options.data ?? { repos: { r: { url: "https://github.com/acme/r" } }, subscriptions: {} };
     const reader = serviceReader(services);
-    const config: BuiltConfig = builtConfig(data, { services, ...(options.layers === undefined ? {} : { layers: options.layers }) });
+    const config: BuiltConfig = builtConfig(data, {
+        services,
+        ...(options.layers === undefined ? {} : { layers: options.layers }),
+        ...(options.entities === undefined ? {} : { entities: options.entities }),
+    });
 
     services["recipes.trust"] = new Trust(config, reader);
 
@@ -418,6 +423,23 @@ describe("repo intents", () => {
             message: "'nowhere' is not a repository host sous knows.",
             details: [expect.stringContaining("gitea, github, gitlab, local")],
         });
+    });
+
+    /** A typed path is checked by the host that reads it, which explains a path mistake. */
+    it("should let the host of a typed path check it before anything is written", async () => {
+        const checked: Array<[string, string]> = [];
+        const local = {
+            id: "local",
+            checkTypedPath: (typed: string, resolved: string) => {
+                checked.push([typed, resolved]);
+                throw new Error(`The directory '${typed}' is not a sous repository.`);
+            },
+        };
+        const { config, managed } = setup({ data: { repos: {}, subscriptions: {} }, entities: { "repository-host": [local] } });
+
+        await expect(addRepo({ url: "/tmp", provider: "local", yes: true }, context(config))).rejects.toThrow(/is not a sous repository/);
+        expect(checked).toEqual([["/tmp", "/tmp"]]);
+        expect(managed.files["500-repos.jsonc"]).toBeUndefined();
     });
 
     /** A name already used by a different repository is refused. */

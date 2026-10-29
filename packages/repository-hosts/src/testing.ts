@@ -276,6 +276,7 @@ export function standInPlugins(options: Record<string, unknown> = {}): PluginDef
         }),
         definePlugin({ name: "@sous-io/plugin-host", version, register() {} }),
         definePlugin({ name: "@sous-io/plugin-git", version, register() {} }),
+        definePlugin({ name: "@sous-io/plugin-formats", version, register() {} }),
     ];
 }
 

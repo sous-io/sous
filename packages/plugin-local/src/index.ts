@@ -20,6 +20,7 @@ export const localPlugin: PluginDefinition = definePlugin({
         "@sous-io/plugin-recipes": "^0.2.34",
         "@sous-io/plugin-host": "^0.2.34",
         "@sous-io/plugin-git": "^0.2.34",
+        "@sous-io/plugin-formats": "^0.2.34",
     },
 
     register(sous) {
@@ -30,6 +31,7 @@ export const localPlugin: PluginDefinition = definePlugin({
 export default localPlugin;
 
 export { createLocalHost, LOCAL_HOST } from "./host.js";
+export { assertLocalRepoDirectory } from "./repo-directory.js";
 export { expandHomePath, localRepoPath, looksLikeLocalPath, resolveRepoArgument } from "./paths.js";
 
 export type * from "./types.js";

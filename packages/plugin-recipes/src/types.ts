@@ -240,6 +240,12 @@ export interface RepositoryHostEntity extends RepositoryLocator {
     readStrategies: readonly RepositoryReadStrategy[];
     /** The token sources, tried in order. */
     tokenSources?: readonly RepositoryTokenSource[];
+    /**
+     * Checks a path typed for a repository on this machine before it is added, throwing a
+     * `ConfigError` that explains a path mistake (nothing there, a file, no repository manifest).
+     * Hosts of local paths provide it.
+     */
+    checkTypedPath?(typed: string, resolved: string, ctx: RepositoryHostContext): void | Promise<void>;
     /** Fetches one recipe's subtree at one tag into a directory, never the whole repository. */
     fetchRecipeTree(repository: CanonicalRepository, recipePath: string, tag: string, destination: string, ctx: RepositoryHostContext): Promise<void>;
     /** What it calls a proposal: `pull request`, `merge request`. */

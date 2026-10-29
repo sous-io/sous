@@ -21,6 +21,7 @@ import { ConfigError } from "@sous-io/plugin-api";
 import type { RepositoryHostContext, RepositoryReadStrategy } from "@sous-io/plugin-recipes/types";
 import { copyRecipeTree, fetchRecipeTree, formatHostedLocator, gitFailureReason, type CanonicalRepository } from "@sous-io/repository-hosts";
 import { localRepoPath } from "./paths.js";
+import { assertLocalRepoDirectory } from "./repo-directory.js";
 import type { LocalRepositoryHost } from "./types.js";
 
 /** The host every local repository is filed under. */
@@ -123,6 +124,8 @@ export function createLocalHost(): LocalRepositoryHost {
         },
 
         readStrategies: [fileStrategy, gitStrategy],
+
+        checkTypedPath: (typed, resolved, ctx) => assertLocalRepoDirectory(typed, resolved, ctx.services.get("formats.manifests")),
 
         fetchRecipeTree: (repository, recipePath, tag, destination, ctx) => fetchLocalRecipeTree(repository, recipePath, tag, destination, ctx),
     };

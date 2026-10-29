@@ -512,6 +512,9 @@ importers:
       '@sous-io/plugin-api':
         specifier: workspace:*
         version: link:../plugin-api
+      '@sous-io/plugin-formats':
+        specifier: workspace:*
+        version: link:../plugin-formats
       '@sous-io/plugin-git':
         specifier: workspace:*
         version: link:../plugin-git

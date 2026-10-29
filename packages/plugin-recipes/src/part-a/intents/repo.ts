@@ -61,7 +61,14 @@ export async function addRepo(input: RepoAddInput, ctx: Context): Promise<RepoAd
     if (looksLikeLocalPath(typed)) {
         url = resolveLocalPath(typed, ctx.env.PWD ?? ctx.project?.root ?? process.cwd(), ctx.env.HOME);
 
-        if (!fs.existsSync(url) || !fs.statSync(url).isDirectory()) {
+        // The host that reads the path explains a path mistake (plugin-local: nothing there, a
+        // file, no repository manifest); without one, sous checks only that it is a directory.
+        const id = input.provider ?? locations.hostFor(url)?.id;
+        const host = ctx.entities.list("repository-host").find((entry) => entry.id === id);
+
+        if (host?.checkTypedPath !== undefined) {
+            await host.checkTypedPath(typed, url, ctx);
+        } else if (!fs.existsSync(url) || !fs.statSync(url).isDirectory()) {
             throw new SousError(`'${typed}' is not a directory on this machine, so it cannot be added as a repository.`, {
                 details: [`Sous looked at ${url}.`],
             });
