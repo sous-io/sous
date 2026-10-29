@@ -558,7 +558,7 @@ export class Engine {
             const own = pluginPrefix(record.name);
 
             for (const registration of record.registrations) {
-                if (!["service", "intent", "service replacement"].includes(registration.kind) || !registration.name.includes(".")) {
+                if (!["service", "intent"].includes(registration.kind) || !registration.name.includes(".")) {
                     continue;
                 }
 
@@ -612,6 +612,23 @@ export class Engine {
         for (const key of CORE_CONFIG_KEYS) {
             this.entityRegistry.add("config-key", key, CORE_PLUGIN);
         }
+    }
+
+    /**
+     * The services plugin code reaches through `sous.services`: the current config's, or, while the
+     * config is being built (or a plugin registers), the ones of every loaded plugin, since which
+     * plugins are active is only known once the build ends. Only singletons can be used then.
+     */
+    private directServices(): ServiceContainer {
+        if (!this.serviceHost.building() && this.registering === 0) {
+            return this.current.services as ServiceContainer;
+        }
+
+        const config = Object.create(this.current, {
+            isActive: { value: (plugin: string) => plugin === CORE_PLUGIN || this.plugins.get(plugin) !== undefined },
+        }) as BuiltConfigImpl;
+
+        return new ServiceContainer({ ...this.serviceHost, building: () => true }, { config, entities: this.current.entities });
     }
 
     private kindNames(): string[] {
@@ -761,8 +778,8 @@ export class Engine {
         wrapService: (name: string, wrapper: ServiceWrapper<unknown>, record: PluginRecord) => {
             this.services.addWrapper(name, wrapper, record.name);
         },
-        getService: (name: string) => this.current.services.get(name),
-        hasService: (name: string) => this.current.services.has(name),
+        getService: (name: string) => this.directServices().get(name),
+        hasService: (name: string) => this.directServices().has(name),
         defineEntityKind: (kind: string, schema: SousSchema, options: EntityKindOptions, record: PluginRecord) => {
             this.entityRegistry.define(kind, schema, record.name, options);
         },

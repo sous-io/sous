@@ -76,20 +76,25 @@ export type KnownEventName = (keyof AllEvents & string) | `${KnownIntent}.${"bef
 
 type CustomOrAny<N extends string> = N extends keyof AllEvents ? CustomEvent<AllEvents[N]> : AnyEvent;
 
-/** The event object a listener for one exact name receives. */
-export type EventFor<N extends string> = N extends `${infer I}.before`
-    ? I extends KnownIntent
-        ? IntentBeforeEvent<I>
-        : CustomOrAny<N>
-    : N extends `${infer I}.after`
+/**
+ * The event object a listener for one exact name receives. An intent's three events are typed from
+ * `SousIntents`; for an intent no plugin declared, the input and result are `unknown`.
+ */
+export type EventFor<N extends string> = N extends keyof AllEvents
+    ? CustomEvent<AllEvents[N]>
+    : N extends `${infer I}.before`
       ? I extends KnownIntent
-          ? IntentAfterEvent<I>
-          : CustomOrAny<N>
-      : N extends `${infer I}.error`
+          ? IntentBeforeEvent<I>
+          : IntentBeforeEvent<I, unknown>
+      : N extends `${infer I}.after`
         ? I extends KnownIntent
-            ? IntentErrorEvent<I>
-            : CustomOrAny<N>
-        : CustomOrAny<N>;
+            ? IntentAfterEvent<I>
+            : IntentAfterEvent<I, unknown, unknown>
+        : N extends `${infer I}.error`
+          ? I extends KnownIntent
+              ? IntentErrorEvent<I>
+              : IntentErrorEvent<I, unknown, unknown>
+          : CustomOrAny<N>;
 
 /** Turns a wildcard pattern into a template literal type: `build.*` becomes `build.${string}`. */
 export type PatternTemplate<P extends string> = P extends `${infer A}*${infer B}` ? `${A}${string}${PatternTemplate<B>}` : P;
