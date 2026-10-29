@@ -127,8 +127,10 @@ function tokenMap(specs: readonly FlagSpec[]): Map<string, FlagSpec> {
             map.set(`--no-${spec.name}`, spec);
         }
 
-        if (spec.short) {
-            map.set(`-${spec.short}`, spec);
+        for (const letter of [spec.short, ...spec.shorts]) {
+            if (letter) {
+                map.set(`-${letter}`, spec);
+            }
         }
     }
 
@@ -152,6 +154,8 @@ function runParseArgs(args: string[], flags: readonly FlagSpec[]): RawParse {
         help: { type: "boolean", short: "h" },
         version: { type: "boolean" },
     };
+    const used = new Set(["h", ...flags.flatMap((flag) => (flag.short ? [flag.short] : []))]);
+    const extraNames = new Map<string, string[]>();
 
     for (const flag of flags) {
         const option = {
@@ -162,18 +166,36 @@ function runParseArgs(args: string[], flags: readonly FlagSpec[]): RawParse {
 
         options[flag.name] = option;
 
+        const names = [...flag.aliases];
+
         for (const alias of flag.aliases) {
             options[alias] = { type: option.type, multiple: option.multiple };
         }
+
+        for (const letter of flag.shorts) {
+            if (used.has(letter)) {
+                continue;
+            }
+
+            used.add(letter);
+            names.push(`\u0000${flag.name}:${letter}`);
+            options[`\u0000${flag.name}:${letter}`] = { type: option.type, multiple: option.multiple, short: letter };
+        }
+
+        extraNames.set(flag.name, names);
     }
 
     try {
         const { values, positionals } = parseArgs({ args, options, strict: true, allowPositionals: true, allowNegative: true });
 
         for (const flag of flags) {
-            for (const alias of flag.aliases) {
+            for (const alias of extraNames.get(flag.name) ?? []) {
                 if (values[alias] !== undefined && values[flag.name] === undefined) {
                     values[flag.name] = values[alias];
+                }
+
+                if (alias.startsWith("\u0000")) {
+                    delete values[alias];
                 }
             }
         }

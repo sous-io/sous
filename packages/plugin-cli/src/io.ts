@@ -20,6 +20,11 @@ export interface CliIo {
     readonly stdin: InputStream;
     /** Sets the process's exit code; the CLI never calls `process.exit`. */
     setExitCode(code: number): void;
+    /**
+     * Stops the run the way Ctrl+C does (watch mode's Q key). Default: nothing; the process's own
+     * streams send itself `SIGINT`, which stops watch mode.
+     */
+    interrupt?(): void;
 }
 
 /** The process's own streams. */
@@ -30,6 +35,9 @@ export function processIo(): CliIo {
         stdin: process.stdin,
         setExitCode(code) {
             process.exitCode = code;
+        },
+        interrupt() {
+            process.kill(process.pid, "SIGINT");
         },
     };
 }

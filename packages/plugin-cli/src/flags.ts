@@ -10,8 +10,16 @@ export interface FlagSpec {
     readonly field: string;
     /** The long name, without dashes: `install-plugins`. */
     readonly name: string;
+    /** More long names, without dashes. */
     readonly aliases: readonly string[];
+    /** The one-letter short form help shows first, without the dash. */
     readonly short: string | undefined;
+    /**
+     * More one-letter short forms: one-letter `aliases`, and `-y` and `-f` for a flag also spelled
+     * `--yes` or `--force` (the confirmation flag of today's CLI answers to all four). The parser
+     * drops any another flag of the command already uses.
+     */
+    readonly shorts: readonly string[];
     readonly kind: ValueKind;
     /** True for array fields: the flag may be given more than once. */
     readonly multiple: boolean;
@@ -52,12 +60,16 @@ export function argumentsFromSchema(schema: JsonSchema | undefined, cli: CliSect
     for (const [field, property] of Object.entries(properties)) {
         const options = cli.flags?.[field] ?? {};
         const { kind, multiple } = kindOf(property);
+        const name = toKebab(field);
+        const aliases = (options.aliases ?? []).filter((alias) => alias.length > 1);
+        const shorts = extraShorts(kind, [name, ...aliases], options).filter((letter) => letter !== options.short);
 
         flags.push({
             field,
-            name: toKebab(field),
-            aliases: options.aliases ?? [],
-            short: options.short,
+            name,
+            aliases,
+            short: options.short ?? shorts[0],
+            shorts: options.short ? shorts : shorts.slice(1),
             kind,
             multiple,
             description: property.description,
@@ -84,6 +96,25 @@ export function argumentsFromSchema(schema: JsonSchema | undefined, cli: CliSect
     });
 
     return { flags, positionals };
+}
+
+/** Letters a flag also answers to, besides its declared `short`. */
+const CONFIRMATION_SHORTS: Readonly<Record<string, string>> = { yes: "y", force: "f" };
+
+function extraShorts(kind: ValueKind, names: readonly string[], options: { aliases?: readonly string[] }): string[] {
+    const letters = (options.aliases ?? []).filter((alias) => alias.length === 1);
+
+    if (kind === "boolean") {
+        for (const name of names) {
+            const letter = CONFIRMATION_SHORTS[name];
+
+            if (letter) {
+                letters.push(letter);
+            }
+        }
+    }
+
+    return [...new Set(letters)];
 }
 
 function kindOf(property: JsonSchema): { kind: ValueKind; multiple: boolean } {

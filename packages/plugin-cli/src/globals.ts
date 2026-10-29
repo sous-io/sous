@@ -19,6 +19,7 @@ export function globalSpecs(entities: readonly CliGlobalArgumentEntity[]): Globa
             name: entity.id,
             aliases: [],
             short: entity.short,
+            shorts: [],
             kind,
             multiple: type === "array",
             description: entity.description,

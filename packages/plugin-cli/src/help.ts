@@ -150,6 +150,11 @@ function valueName(flag: FlagSpec): string {
 
 function flagText(flag: FlagSpec): string {
     const parts = [flag.description ?? ""];
+    const others = [...flag.shorts.map((letter) => `-${letter}`), ...flag.aliases.map((alias) => `--${alias}`)];
+
+    if (others.length > 0) {
+        parts.push(`(also ${others.join(", ")})`);
+    }
 
     if (flag.choices && flag.choices.length > 0) {
         parts.push(`One of: ${flag.choices.map(String).join(", ")}.`);

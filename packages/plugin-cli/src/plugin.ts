@@ -6,6 +6,7 @@ import { BUILT_IN_GROUPS } from "./groups.js";
 import { helpIntent } from "./help-intent.js";
 import { type CliIo, processIo } from "./io.js";
 import { canPrompt } from "./terminal-prompter.js";
+import { BUILT_IN_VIEWS } from "./views/built-ins.js";
 import type { CliGlobalArgumentEntity, CliGroupEntity } from "./types.js";
 
 /** The plugin's name. */
@@ -61,6 +62,11 @@ export const BUILT_IN_GLOBAL_ARGUMENTS: readonly CliGlobalArgumentEntity[] = [
         description: "Print every timing when the command finishes.",
     },
     {
+        id: "json",
+        schema: jsonSchema<boolean>({ type: "boolean", default: false }),
+        description: "Print the result as JSON instead of the formatted view.",
+    },
+    {
         id: "non-interactive",
         schema: jsonSchema<boolean>({ type: "boolean", default: false }),
         description: "Never ask a question; fail with the flag that answers it instead.",
@@ -105,6 +111,12 @@ export function createCliPlugin(options: CliPluginOptions = {}): PluginDefinitio
                 { description: "The help of a command group." },
             );
 
+            sous.entities.define(
+                "cli-view",
+                jsonSchema({ type: "object", properties: { id: { type: "string" } }, required: ["id", "render"] }),
+                { description: "How the CLI shows one intent's result; the id is the intent's name." },
+            );
+
             for (const argument of BUILT_IN_GLOBAL_ARGUMENTS) {
                 sous.entities.add("cli-global-argument", argument);
             }
@@ -117,6 +129,10 @@ export function createCliPlugin(options: CliPluginOptions = {}): PluginDefinitio
 
             for (const group of BUILT_IN_GROUPS) {
                 sous.entities.add("cli-group", group);
+            }
+
+            for (const view of BUILT_IN_VIEWS) {
+                sous.entities.add("cli-view", view);
             }
 
             sous.services.add(

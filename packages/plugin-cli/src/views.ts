@@ -1,23 +1,6 @@
 import type { TimingEntry } from "@sous-io/plugin-api";
 
-/**
- * How a result is printed: nothing for `undefined` or `null`, text as it is, anything else as JSON.
- */
-export function renderResult(result: unknown): string | undefined {
-    if (result === undefined || result === null) {
-        return undefined;
-    }
-
-    if (typeof result === "string") {
-        return result.endsWith("\n") ? result : `${result}\n`;
-    }
-
-    if (typeof result === "number" || typeof result === "boolean" || typeof result === "bigint") {
-        return `${String(result)}\n`;
-    }
-
-    return `${JSON.stringify(result, null, 2)}\n`;
-}
+export { renderResult } from "./views/show.js";
 
 /**
  * Every timing of the run, for `--timings` (C52): one line per key, slowest total first.

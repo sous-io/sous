@@ -1,4 +1,4 @@
-import { type EngineHandle, type Environment, isLogLevel, type LogLevel, type Reporter } from "@sous-io/plugin-api";
+import { type EngineHandle, type Environment, isLogLevel, type LogLevel, type Reporter, type SubmitOptions } from "@sous-io/plugin-api";
 import type { CommandTree } from "./command-tree.js";
 import { viewError } from "./errors.js";
 import { globalSpecs } from "./globals.js";
@@ -7,7 +7,11 @@ import type { CliIo } from "./io.js";
 import { parseLine } from "./parse.js";
 import { canPrompt, TerminalPrompter } from "./terminal-prompter.js";
 import { TerminalReporter } from "./terminal-reporter.js";
-import { renderResult, renderTimings } from "./views.js";
+import { renderTimings } from "./views.js";
+import { renderBanner } from "./views/banner.js";
+import { showResult } from "./views/show.js";
+import { colorEnabled, createStyle } from "./views/style.js";
+import { listenForWatchKeys, startedWatching, WATCH_KEYS_HINT } from "./watch-keys.js";
 
 /** What the CLI front end needs besides the engine. */
 export interface CliRunOptions {
@@ -54,19 +58,44 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
                 break;
             case "run": {
                 const prompter = new TerminalPrompter(io.stdin, io.stderr, canPrompt(io, env, line.globals));
+                const intent = line.command.intent;
+                const submitOptions = { reporter, prompter, globals: line.globals };
+                const show = async (result: unknown) => {
+                    const shown = await showResult(intent, result, { entities: engine.config.entities, stdout: io.stdout, env, input: line.input, globals: line.globals });
 
-                try {
-                    const result = await engine.submit({ intent: line.command.intent, input: line.input }, { reporter, prompter, globals: line.globals });
-                    const text = renderResult(result);
-
-                    if (text !== undefined) {
-                        io.stdout.write(text);
+                    if (shown.stdout) {
+                        io.stdout.write(shown.stdout);
                     }
-                } catch (error) {
+
+                    if (shown.stderr) {
+                        io.stderr.write(shown.stderr);
+                    }
+
+                    if (shown.exitCode !== undefined && shown.exitCode !== 0) {
+                        io.setExitCode(shown.exitCode);
+                    }
+                };
+                const fail = (error: unknown) => {
                     const view = viewError(error, { debug, command: line.command });
 
                     io.stderr.write(`${view.lines.join("\n")}\n`);
                     io.setExitCode(view.exitCode);
+                };
+
+                if (io.stderr.isTTY === true && line.globals.json !== true && engine.config.entities.has("cli-view", intent)) {
+                    io.stderr.write(renderBanner(createStyle(colorEnabled(io.stderr, env))));
+                }
+
+                try {
+                    const result = await engine.submit({ intent, input: line.input }, submitOptions);
+
+                    await show(result);
+
+                    if (startedWatching(result)) {
+                        await watchUntilStopped(engine, io, intent, line.input, submitOptions, show, fail);
+                    }
+                } catch (error) {
+                    fail(error);
                 }
 
                 break;
@@ -93,4 +122,54 @@ export function thresholdOf(globals: Readonly<Record<string, unknown>>): LogLeve
     const level = globals["log-level"];
 
     return isLogLevel(level) ? level : "info";
+}
+
+/**
+ * Watch mode's keys, while it runs (as before the refactor): Q or Ctrl+C stops it, and any other key
+ * submits the command again without `--watch`, a full rebuild. Resolves when watch mode has stopped.
+ */
+async function watchUntilStopped(
+    engine: EngineHandle,
+    io: CliIo,
+    intent: string,
+    input: Readonly<Record<string, unknown>>,
+    submitOptions: SubmitOptions,
+    show: (result: unknown) => Promise<void>,
+    fail: (error: unknown) => void,
+): Promise<void> {
+    if (io.stdin.isTTY !== true) {
+        await engine.whenBackgroundIntentsReturn();
+
+        return;
+    }
+
+    io.stderr.write(`${WATCH_KEYS_HINT}\n`);
+
+    let rebuilding: Promise<void> | undefined;
+    const stop = listenForWatchKeys(io.stdin, {
+        quit: () => {
+            stop();
+            io.interrupt?.();
+        },
+        rebuild: () => {
+            if (rebuilding) {
+                return;
+            }
+
+            io.stderr.write("Manual rebuild triggered.\n");
+            rebuilding = engine
+                .submit({ intent, input: { ...input, watch: false } }, submitOptions)
+                .then(show, fail)
+                .finally(() => {
+                    rebuilding = undefined;
+                });
+        },
+    });
+
+    try {
+        await engine.whenBackgroundIntentsReturn();
+        await rebuilding;
+    } finally {
+        stop();
+    }
 }
