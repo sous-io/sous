@@ -22,6 +22,8 @@ export type ReleaseBump = "patch" | "minor" | "major" | "prerelease";
 /** One problem validation found. */
 export interface ReleaseProblem {
     readonly level: "error" | "warning";
+    /** Where it was found: a repository-relative file, with a field path when there is one, or a flag. */
+    readonly where: string;
     /** The recipe, `namespace/recipe`, or `undefined` for the repository. */
     readonly recipe?: string;
     readonly file?: string;
@@ -47,7 +49,12 @@ export interface ReleasePlanEntry {
 
 /** `repo.release`. */
 export interface RepoReleaseInput {
-    /** Validates and plans, writing nothing; fails when a release is due (for CI). */
+    /** The repository, or any directory inside it; default the working directory. */
+    directory?: string;
+    /**
+     * Validates and regenerates the index in memory, writing nothing; fails on a problem or on a change
+     * to a recipe that takes no proposals, and reports index drift as what merging changes (for CI).
+     */
     check?: boolean;
     /** Runs as CI does: no questions, tags pushed. */
     ci?: boolean;
@@ -81,12 +88,22 @@ export interface RepoReleaseResult {
     readonly tagged: string[];
     readonly pushed: boolean;
     readonly dryRun: boolean;
+    /** Whether a release commit was made. */
+    readonly committed?: boolean;
+    /** Recipes the plan left alone, and why. */
+    readonly skipped?: ReadonlyArray<{ readonly key: string; readonly reason: string }>;
+    /** With `--check`: how the committed index differs from the regenerated one. */
+    readonly drift?: readonly string[];
+    /** True when the person declined the plan; nothing was written. */
+    readonly cancelled?: boolean;
 }
 
 /** `repo.submit`: proposes the changes in a linked checkout. */
 export interface RepoSubmitInput {
-    /** The repository; default the one the working directory is inside. */
+    /** The linked repository to propose from, when run inside a project; default the one the working directory is inside. */
     repo?: string;
+    /** The directory to start from; default the working directory. */
+    directory?: string;
     title?: string;
     body?: string;
     branch?: string;
@@ -95,6 +112,13 @@ export interface RepoSubmitInput {
     /** Commits uncommitted changes first. */
     commit?: boolean;
     draft?: boolean;
+    /**
+     * The branch to continue on when the branch's proposal was already merged; answers that question
+     * ahead of time (L4). `--yes` generates one instead.
+     */
+    nextBranch?: string;
+    /** When the repository named matches several, takes the first one listed. */
+    acceptFirst?: boolean;
     yes?: boolean;
     dryRun?: boolean;
 }
@@ -112,6 +136,27 @@ export interface RepoSubmitResult {
     readonly proposal?: ProposalSummary;
     readonly status?: ProposalStatus;
     readonly dryRun: boolean;
+    /** How it ended. */
+    readonly outcome: "created" | "updated" | "unchanged" | "status" | "cancelled";
+    /** The `repository-host` the proposal went to. */
+    readonly host?: string;
+    /** What the host calls a proposal: `pull request`, `merge request`. */
+    readonly proposalNoun: string;
+    /** The branch the proposal targets. */
+    readonly baseBranch?: string;
+    /** The remote the branch was (or would be) pushed to: `origin`, or `fork`. */
+    readonly pushedTo?: string;
+    /** The branch's proposal as it stood before this run, when it had one. */
+    readonly previous?: ProposalSummary;
+    readonly title?: string;
+    /** The paths committed with `--commit`. */
+    readonly committedPaths?: readonly string[];
+    /** The changelog appended to the proposal, as Markdown. */
+    readonly changelog?: string;
+    /** Recipes the change touches that take no proposals. */
+    readonly refusing: ReadonlyArray<{ readonly key: string; readonly path: string; readonly instead?: string }>;
+    /** Every step that completed, in order. */
+    readonly completed: readonly string[];
 }
 
 /** `repo.contribute`: link, submit and unlink in one go; runs `repo.link`, `repo.submit`, `repo.unlink`. */
@@ -122,7 +167,10 @@ export interface RepoContributeInput extends CheckoutFlags {
     finish?: boolean;
     /** Links machine-wide. */
     global?: boolean;
-    /** Submits straight after linking. */
+    /**
+     * With `--finish`: submits what no proposal carries yet without asking (`true`), or finishes without
+     * submitting it (`false`, `--no-submit`). Unset, the person is asked.
+     */
     submit?: boolean;
     title?: string;
     body?: string;
@@ -143,6 +191,14 @@ export interface RepoContributeResult {
     readonly submit?: RepoSubmitResult;
     readonly unlink?: RepoUnlinkResult;
     readonly dryRun: boolean;
+    /** The repository's short name. */
+    readonly repo: string;
+    /** Each step, as the command line that runs it. */
+    readonly steps: readonly string[];
+    /** Every step that completed, in order. */
+    readonly completed: readonly string[];
+    /** With `--finish`: why the branch has, or has not, something to submit. */
+    readonly verdict?: string;
 }
 
 /** `repo.init`: scaffolds a recipe repository. */

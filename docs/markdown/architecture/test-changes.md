@@ -405,3 +405,53 @@ config (`compilation.targets`); an output's variables are its `_vars`, an alias 
   `registerShowVarsTag(engine)` and the rest are shims in `test/liquid.ts` that register the
   `liquid-tag`/`liquid-filter` entities. The "very probably a secret" cases use a stand-in of
   `variables.secrets`. `src/templating/init-liquid-engine.spec.ts` went to plugin-liquid (see above).
+
+## plugin-authoring: `src/lib/repos/release/*.spec.ts`, `src/lib/repos/contribute.spec.ts`, `src/lib/repos/scaffold/index.spec.ts`, `src/test/integration/repo-{release,submit,contribute}.test.ts` → `packages/plugin-authoring`
+
+Every module now takes the owners it uses (`git.runner`, the format parsers, `formats.recipe-hash`,
+`refs.*`, `variables.names`, `repository-host` entities) as one bundle, so the specs call
+`validateRepo(tools, dir)`, `buildIndex(tools, git, options)` and so on, with stand-ins of those
+plugins in `test/support/standins.ts`. Expectations are otherwise unchanged, except:
+
+- **`git-state.spec.ts` → `src/shared/git.spec.ts`**: "isCommittedAndUnchanged() should be true only for
+  a tracked path with no pending changes" is not ported: nothing used the function. "hasCommitIdentity()"
+  fails through a stand-in `GitRunner` instead of a `CommandRunner`.
+- **`index-builder.spec.ts` "readIndexFile() should throw a readable error for an index that does not
+  validate"**: expected the message to match `/repo index/`; now `/sous\.index\.json/`. The wording is
+  the index parser's (plugin-formats), which names the file.
+- **`settle.spec.ts`**: indexes are served by an injected index reader instead of a fake `fetch` behind
+  the old providers; reading through a host is tested on its own (`readIndexThroughHost()`, new). "should
+  fail on a tie, naming the /* form" expected the canonical spellings `gitlab://a/b/c/-/d/*` and
+  `gitlab://a/b/-/c/d`; it now checks the `/*` form and the "each of these publishes it" list, since the
+  canonical spellings are plugin-refs' to write.
+- **`submit-service.spec.ts` → `src/submit/submit.spec.ts`**: the provider is a stand-in
+  `repository-host` entity, the questions a `Prompter`, notices and warnings a `BufferedReporter`. Result
+  fields renamed by the contract: `provider` → `host`, `usedFork` → `fromFork`, `url` →
+  `proposal.url`, `committed` (paths) → `committedPaths`, `changelog` is the rendered Markdown (so
+  "should say so when there is no upstream branch" checks for "could not compare this change" instead of
+  `changelog.compared === false`). "should refuse a new proposal without a title when nothing can ask"
+  expected `/needs a title/`; it now expects `/--title/`, the flag the non-interactive error names (L4).
+  "should spawn nothing but git of its own accord" now holds by construction (host commands are entity
+  methods) and only checks that git ran.
+- **`submit-questions.spec.ts`**: not ported as such; the questions are asked through the chain's
+  `Prompter` with `answeredBy` (`--title`, `--body`, `--yes`, `--next-branch`), covered by
+  `submit.spec.ts`. `--next-branch <name>` (new) answers the "continue on a new branch" question.
+- **`submit-checkout.spec.ts` → `src/submit/checkout.spec.ts`**: rewritten against a `recipes.links`
+  stand-in. "should use a clone that is no longer linked, and say so" is not ported: where `repo link`
+  clones is plugin-recipes' concern, and `recipes.links` does not expose it.
+- **`contribute.spec.ts` → `src/contribute/{contribute,pending}.spec.ts`**: steps are intents run with
+  `ctx.run` rather than oclif argv, so `startStep`/`submitStep`/`unlinkStep` are checked by their input
+  and by `commandLine()`. "locatorArgs()" is not ported: chained intents share the chain's config, so
+  the config-locating flags no longer need passing on.
+- **`scaffold/index.spec.ts` → `src/scaffold/scaffold.spec.ts`**: "should write every file a new
+  repository needs" expected `.github/workflows/sous-release.yml`; with no host named or found it now
+  expects no CI file. "should write a release workflow that checks pull requests and publishes merges" is
+  replaced by "should write the CI files of the host it is given" (and two tests for picking the host):
+  the workflow is plugin-github's (`scaffoldFiles`, G8).
+- **`src/test/integration/repo-release.test.ts` → `src/release/release.spec.ts`**: the same cases through
+  the handler instead of a child process, each on its own repository. "should accept --non-interactive and
+  refuse to publish, naming --yes" is covered by "should refuse to publish with nothing to ask and no
+  --yes". The `repo submit` cases are in `submit.spec.ts`.
+- **`src/test/integration/repo-contribute.test.ts`, `repo-submit.test.ts`**: covered by
+  `contribute.spec.ts` (through a stand-in intent runner) and `submit.spec.ts`; the `gh` stand-in script
+  is now a stand-in host entity.
