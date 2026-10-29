@@ -22,10 +22,13 @@
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
-    "@sous-io/plugin-api": "workspace:*"
+    "@sous-io/plugin-api": "workspace:*",
+    "@sous-io/plugin-confd": "workspace:*",
+    "@sous-io/plugin-variables": "workspace:*"
   },
   "devDependencies": {
-    "@sous-io/core": "workspace:*"
+    "@sous-io/core": "workspace:*",
+    "@sous-io/plugin-host": "workspace:*"
   },
   "engines": {
     "node": ">=22"

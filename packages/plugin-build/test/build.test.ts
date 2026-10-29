@@ -357,3 +357,63 @@ describe("the intents' CLI declarations", () => {
         expect(intents.get("build.watch")?.definition.background).toBe(true);
     });
 });
+
+/** Ported from src/test/integration/memories-warning.test.ts: the check moved from the old build service. */
+describe("the unincluded-memory warning", () => {
+    const memory = { recipe: "communication/tone", name: "tone.md", path: "/does/not/exist/tone.md" };
+
+    /**
+     * A full build whose compile read no memory file warns once, naming the file.
+     *
+     * compile read nothing -> "1 memory ... is not included in any output"
+     */
+    it("should warn after a full build when no output includes a memory", async () => {
+        const h = await harness({
+            world: (world) => {
+                world.memories = [memory];
+                world.compileResult = () => ({ ok: true, outputs: [], problems: [], included: [], durationMs: 1 });
+            },
+        });
+
+        await h.run("build");
+
+        const text = h.reporter.at("warning").join("\n");
+
+        expect(text).toContain("1 memory published by your subscribed recipes is not included in any output");
+        expect(text).toContain("communication/tone: memories/tone.md");
+    });
+
+    /**
+     * A memory the compile read is silent, and so is a partial build or a failed compile.
+     *
+     * compile read tone.md -> no warning
+     */
+    it("should stay silent when the memory was included, the build was partial, or the compile failed", async () => {
+        const included = await harness({
+            world: (world) => {
+                world.memories = [memory];
+                world.compileResult = () => ({ ok: true, outputs: [], problems: [], included: [memory.path], durationMs: 1 });
+            },
+        });
+        const partial = await harness({
+            world: (world) => {
+                world.memories = [memory];
+                world.compileResult = () => ({ ok: true, outputs: [], problems: [], included: [], durationMs: 1 });
+            },
+        });
+        const failed = await harness({
+            world: (world) => {
+                world.memories = [memory];
+                world.compileResult = () => ({ ok: false, outputs: [], problems: [], included: [], durationMs: 1 });
+            },
+        });
+
+        await included.run("build");
+        await partial.run("build", { changedFiles: ["a.md"] });
+        await failed.run("build");
+
+        for (const h of [included, partial, failed]) {
+            expect(h.reporter.at("warning").join("\n")).not.toContain("not included in any output");
+        }
+    });
+});

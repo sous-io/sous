@@ -166,6 +166,9 @@ importers:
       '@sous-io/plugin-host':
         specifier: workspace:*
         version: link:../plugin-host
+      '@sous-io/plugin-memories':
+        specifier: workspace:*
+        version: link:../plugin-memories
       '@sous-io/plugin-recipe-answers':
         specifier: workspace:*
         version: link:../plugin-recipe-answers
@@ -474,10 +477,19 @@ importers:
       '@sous-io/plugin-api':
         specifier: workspace:*
         version: link:../plugin-api
+      '@sous-io/plugin-confd':
+        specifier: workspace:*
+        version: link:../plugin-confd
+      '@sous-io/plugin-variables':
+        specifier: workspace:*
+        version: link:../plugin-variables
     devDependencies:
       '@sous-io/core':
         specifier: workspace:*
         version: link:../core
+      '@sous-io/plugin-host':
+        specifier: workspace:*
+        version: link:../plugin-host
 
   packages/plugin-liquid:
     dependencies:

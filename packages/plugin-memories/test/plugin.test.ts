@@ -228,7 +228,7 @@ describe("the #memories view", () => {
         const view = built.entities.get("hash-name", "memories") as HashNameEntity;
         const ctx = { services: built.services, entities: built.entities, config: built, scope: {} } as unknown as HashNameContext;
 
-        expect(view.bases?.(ctx)).toEqual([]);
+        expect(view.bases).toBeUndefined();
         expect(view.view?.(ctx)).toEqual([
             { path: "z/base/m.md", file: path.join(base.dir, "memories/m.md") },
             { path: "a/app/m.md", file: path.join(app.dir, "memories/m.md") },

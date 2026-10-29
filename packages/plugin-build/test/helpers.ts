@@ -28,6 +28,7 @@ import type {
     WrittenFile,
     WriteOptions,
 } from "@sous-io/plugin-compiler/types";
+import type { Memory } from "@sous-io/plugin-memories/types";
 import type { DefinedVariable } from "@sous-io/plugin-recipe-answers/types";
 import type {
     ActiveRecipeEntity,
@@ -71,6 +72,8 @@ export interface World {
     active: ActiveRecipeEntity[];
     skipped: SkippedRecipe[];
     links: Record<string, ResolvedLink>;
+    // memories
+    memories: Memory[];
     // recipe-answers
     unanswered: DefinedVariable[];
     // git
@@ -101,6 +104,7 @@ export function newWorld(root: string): World {
         active: [],
         skipped: [],
         links: {},
+        memories: [],
         unanswered: [],
         branch: "main",
     };
@@ -312,6 +316,14 @@ export function standIns(world: World): PluginDefinition[] {
         }));
     });
 
+    const memories = plugin("@sous-io/plugin-memories", (sous) => {
+        sous.services.add("memories.selection", () => ({
+            selected: () => world.memories,
+            forTarget: () => world.memories,
+            excluded: () => [],
+        }));
+    });
+
     const config = plugin("test-config", (sous) => {
         sous.config.contribute({
             id: "test-config",
@@ -323,7 +335,7 @@ export function standIns(world: World): PluginDefinition[] {
         });
     });
 
-    return [host, variables, git, compiler, recipes, answers, config];
+    return [host, variables, git, compiler, recipes, answers, memories, config];
 }
 
 /** An engine with plugin-build and the stand-ins, its config built. */

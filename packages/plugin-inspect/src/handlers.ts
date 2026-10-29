@@ -3,6 +3,7 @@
  * decides how it looks. Secrets are hidden everywhere (G4).
  */
 
+import "@sous-io/plugin-variables/types";
 import {
     NotFoundError,
     type ConfigKeyEntity,
@@ -13,7 +14,7 @@ import {
     type TimingEntry,
 } from "@sous-io/plugin-api";
 import { readRawConfigFiles } from "./raw.js";
-import { HIDDEN, isSecretKey, redactLayer, redactValue } from "./redact.js";
+import { KEY_NAME_POLICY, redactLayer, redactUnder, redactValue, servicePolicy, type SecretPolicy } from "./redact.js";
 import type {
     ConfigGetInput,
     ConfigGetResult,
@@ -25,18 +26,25 @@ import type {
     TimingsShowInput,
 } from "./types.js";
 
+/** The secret policy: `variables.secrets` when it is loaded, else the key-name rule. */
+function policyOf(ctx: Context): SecretPolicy {
+    return ctx.services.has("variables.secrets") ? servicePolicy(ctx.services.get("variables.secrets")) : KEY_NAME_POLICY;
+}
+
 /** Every change to a path, in order, with secrets hidden. */
-function layersOf(ctx: Context, path: string): LayerView[] {
-    return ctx.config.layers(path).map((layer) => redactLayer(layer));
+function layersOf(ctx: Context, path: string, policy: SecretPolicy): LayerView[] {
+    return ctx.config.layers(path).map((layer) => redactLayer(layer, policy));
 }
 
 /** `config.show`: the evaluated config, and with `layers` or `raw`, where it came from. */
 export async function configShow(input: ConfigShowInput, ctx: Context): Promise<ConfigShowResult> {
+    const policy = policyOf(ctx);
+
     return {
-        config: redactValue(ctx.config.value() as JsonObject),
+        config: redactValue(ctx.config.value() as JsonObject, policy),
         passes: ctx.config.passes,
-        ...(input.layers === true ? { layers: layersOf(ctx, "") } : {}),
-        ...(input.raw === true ? { raw: await readRawConfigFiles(ctx.project) } : {}),
+        ...(input.layers === true ? { layers: layersOf(ctx, "", policy) } : {}),
+        ...(input.raw === true ? { raw: await readRawConfigFiles(ctx.project, ctx.services, policy) } : {}),
     };
 }
 
@@ -45,15 +53,16 @@ export async function configGet(input: ConfigGetInput, ctx: Context): Promise<Co
     const exists = ctx.config.has(input.path);
     const value = exists ? ctx.config.get<JsonValue>(input.path) : undefined;
     const lastKey = input.path.split(/[.[\]"]+/).filter((part) => part !== "").pop() ?? "";
-    const shown = value === undefined ? undefined : isSecretKey(lastKey) ? HIDDEN : redactValue(value);
+    const policy = policyOf(ctx);
+    const shown = value === undefined ? undefined : redactUnder(lastKey, value, policy);
 
     return {
         path: input.path,
         exists,
         value: shown,
         passes: ctx.config.passes,
-        ...(input.layers === true ? { layers: layersOf(ctx, input.path) } : {}),
-        ...(input.raw === true ? { raw: await readRawConfigFiles(ctx.project) } : {}),
+        ...(input.layers === true ? { layers: layersOf(ctx, input.path, policy) } : {}),
+        ...(input.raw === true ? { raw: await readRawConfigFiles(ctx.project, ctx.services, policy) } : {}),
     };
 }
 

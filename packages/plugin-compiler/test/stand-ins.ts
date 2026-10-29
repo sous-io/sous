@@ -150,6 +150,7 @@ export function variablesStandIn(options: { secrets?: string[] } = {}): PluginDe
         register(sous) {
             sous.entities.add("config-key", { id: "_vars", schema: jsonSchema({ type: "object" }) });
             sous.entities.add("config-key", { id: "_env", schema: jsonSchema({ type: "object" }) });
+            sous.entities.add("config-key", { id: "_recipeVars", schema: jsonSchema({ type: "object" }) });
             sous.services.add(
                 "variables.resolver",
                 (config, ctx): VariablesResolver => {
@@ -166,6 +167,11 @@ export function variablesStandIn(options: { secrets?: string[] } = {}): PluginDe
                     const scope = (request: ScopeRequest = {}): VarScope => {
                         let out: VarScope = resolveBlock(block(config.get("_vars")), auto);
                         const level = request.level ?? "root";
+
+                        // Stand-in for a recipe's own variables: `_recipeVars` maps a scope key to a block.
+                        if (request.scopeKey !== undefined) {
+                            out = resolveBlock(block(block(config.get("_recipeVars"))[request.scopeKey]), out);
+                        }
 
                         if (level !== "root") {
                             out = resolveBlock(block(config.get(["compilation", "_vars"])), out);

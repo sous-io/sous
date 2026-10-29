@@ -11,7 +11,6 @@ export const memoriesHashName: HashNameEntity = {
     id: "memories",
     description:
         "the memories of every active recipe, listed in dependency order as #memories/<namespace>/<recipe>/<path>.",
-    bases: () => [],
     view: (ctx) =>
         ctx.services
             .get("memories.selection")

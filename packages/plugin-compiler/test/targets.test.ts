@@ -86,6 +86,37 @@ describe("entryGlob targets", () => {
     });
 });
 
+describe("targets a plugin adds for a file of a recipe (what plugin-skills does)", () => {
+    /**
+     * An entryPoint target with a `globBase` mirrors the file's path under the base into a
+     * destinationDir, and its `origin.recipe` selects that recipe's own variables for the output
+     * path and for the template.
+     *
+     * entryPoint skills/demo/SKILL.tpl.md, globBase skills, recipe ns/r (who = R)
+     *     // -> out/R/demo/SKILL.md, containing "by R"
+     */
+    it("should honour globBase on an entryPoint and pass the recipe's variables through origin.recipe", async () => {
+        project = makeProject();
+        project.write("skills/demo/SKILL.tpl.md", "by {{ who }}");
+        const { result } = await compileOnce(project, {
+            targets: [
+                {
+                    id: "skills/ns/r/demo/SKILL.tpl.md",
+                    entryPoint: project.at("skills/demo/SKILL.tpl.md"),
+                    globBase: project.at("skills"),
+                    origin: { plugin: "p", recipe: "ns/r" },
+                    outputs: [{ destinationDir: "${projectRoot}/out/${who}" }],
+                },
+            ],
+        }, {}, { config: { _recipeVars: { "ns/r": { who: "R" } } } });
+
+        expect(errorsOf(result)).toBe("");
+        expect(project.read("out/R/demo/SKILL.md")).toBe("by R");
+        // `included` lists every file read, as real paths: plugin-build checks memories against it.
+        expect(result.included).toContain(project.at("skills/demo/SKILL.tpl.md"));
+    });
+});
+
 describe("outputs", () => {
     /** `${var}` in an entry point and a destination comes from the target's and the output's variables. */
     it("should substitute variables in entryPoint, destinationFile and destinationDir", async () => {

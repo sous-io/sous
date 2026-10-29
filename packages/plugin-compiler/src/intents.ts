@@ -143,6 +143,7 @@ export async function compile(input: CompileInput, ctx: Context, runtime: Compil
             ok: errors === 0 && (!strict || allProblems.every((problem) => problem.level !== "warning")),
             outputs: result.outputs,
             problems: allProblems,
+            included: [...result.included],
             durationMs: performance.now() - started,
         };
     } finally {

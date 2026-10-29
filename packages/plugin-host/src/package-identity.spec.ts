@@ -25,6 +25,13 @@ describe("host.package", () => {
         expect(identity).toEqual({ name: "@sous-io/sous", version: "1.2.3", root: dir, realRoot: dir, bin: undefined });
     });
 
+    /** The package is found under its final name and under the name it has while packages/sous is not yet renamed. */
+    it.each(["@sous-io/sous", "@sous-io/sous-next"])("should find the package named %s by default", (name) => {
+        writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name, version: "1.0.0" }));
+
+        expect(createPackage({ startDir: dir, bin: undefined }).identity()).toMatchObject({ name, root: dir });
+    });
+
     /** Links are followed for the real root. */
     it("should give the real root of a linked install", () => {
         const real = path.join(dir, "real");

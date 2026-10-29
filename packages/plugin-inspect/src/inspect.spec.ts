@@ -3,6 +3,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createEngine } from "@sous-io/core";
 import { definePlugin, jsonSchema, type PluginDefinition, type ProjectInfo } from "@sous-io/plugin-api";
+import { hostPlugin } from "@sous-io/plugin-host";
+import { variablesPlugin } from "@sous-io/plugin-variables";
+import { readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import inspectPlugin from "./index.js";
 import { HIDDEN, redactText } from "./redact.js";
@@ -23,6 +26,34 @@ const demo = definePlugin({
                 config.atPath("demo").merge({ count: 2, apiToken: "s3cr3t", list: [1, 2] });
             },
         });
+    },
+});
+
+/** Stands in for plugin-confd: lists the `conf.d` files of the project in name order. */
+const confdStandIn = definePlugin({
+    name: "confd-stand-in",
+    version: "1.0.0",
+    register(sous) {
+        sous.services.add(
+            "confd.files",
+            (_config, ctx) =>
+                ({
+                    directory: () => ctx.project?.confDir,
+                    list: () =>
+                        ctx.project === undefined
+                            ? []
+                            : readdirSync(ctx.project.confDir)
+                                  .sort()
+                                  .map((name) => ({
+                                      name,
+                                      path: path.join(ctx.project!.confDir, name),
+                                      format: "jsonc",
+                                      contributor: `confd/${name}`,
+                                      managed: false,
+                                  })),
+                }) as never,
+            { lifetime: "singleton" },
+        );
     },
 });
 
@@ -70,7 +101,7 @@ describe("config.show", () => {
             sousDir,
             configPath: path.join(sousDir, "sous.config.jsonc"),
             confDir,
-        });
+        }, [confdStandIn]);
 
         expect(result.raw.map((f: any) => f.contributor)).toEqual(["config-files.main", "confd/510-a.jsonc", "confd/620-b.jsonc"]);
         expect(result.raw[0].text).not.toContain("hunter2");
@@ -174,5 +205,33 @@ describe("redactText()", () => {
         expect(out).toContain('"name": "x"');
         expect(out).toContain(`"apiKey": "${HIDDEN}",`);
         expect(out).not.toContain("abc");
+    });
+});
+
+describe("the secret policy", () => {
+    /**
+     * With plugin-variables loaded, a value in a known token format is hidden under any name, and
+     * a plain value under a secret-sounding name (a flag) is not.
+     */
+    it("should use variables.secrets when it is loaded", async () => {
+        const token = "ghp_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8";
+        const tokens = definePlugin({
+            name: "tokens",
+            version: "1.0.0",
+            register(sous) {
+                sous.config.contribute({
+                    id: "tokens/main",
+                    contribute(config) {
+                        config.atPath("demo").merge({ note: token, tokenCount: 3, apiToken: "s3cr3t", useToken: "true" });
+                    },
+                });
+            },
+        });
+        const result = await run("config.show", {}, undefined, [hostPlugin, variablesPlugin, tokens]);
+
+        expect(result.config.demo.note).toBe(HIDDEN);
+        expect(result.config.demo.apiToken).toBe(HIDDEN);
+        expect(result.config.demo.tokenCount).toBe(3);
+        expect(result.config.demo.useToken).toBe("true");
     });
 });

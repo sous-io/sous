@@ -1,11 +1,12 @@
 import fs from "node:fs";
+import "@sous-io/plugin-memories/types";
 import path from "node:path";
 import { ConfigError, type Context, NotFoundError, SousError } from "@sous-io/plugin-api";
-import type { CompilerPruneResult, WrittenFile } from "@sous-io/plugin-compiler/types";
+import type { CompileResult, CompilerPruneResult, WrittenFile } from "@sous-io/plugin-compiler/types";
 import type { SkippedRecipe } from "@sous-io/plugin-recipes/types";
 import { projectLabel } from "./pid.js";
 import { NO_CHANGE, NOTHING_RESTORED } from "./prepare.js";
-import { linkedReposMessage, prunedForSkippedLine, reportPrepared, skippedLine } from "./report.js";
+import { linkedReposMessage, prunedForSkippedLine, reportPrepared, skippedLine, unincludedMemoriesMessage } from "./report.js";
 import type {
     BuildInput,
     BuildPrepareResult,
@@ -78,6 +79,10 @@ export async function build(input: BuildInput, ctx: Context): Promise<BuildResul
             ...(partial ? { changedFiles: input.changedFiles } : {}),
         });
         ok = compiled.ok;
+
+        if (!partial) {
+            warnUnincludedMemories(ctx, compiled);
+        }
     }
 
     let pruned: CompilerPruneResult | undefined;
@@ -141,6 +146,10 @@ export async function compile(input: CompileCommandInput, ctx: Context): Promise
         ...(dryRun ? { dryRun: true } : {}),
         ...(partial ? { changedFiles: input.changedFiles } : {}),
     });
+    if (!partial) {
+        warnUnincludedMemories(ctx, compiled);
+    }
+
     const watching = input.watch === true;
 
     if (watching) {
@@ -153,6 +162,36 @@ export async function compile(input: CompileCommandInput, ctx: Context): Promise
     }
 
     return { ok: compiled.ok, compiled, ...(runtimeContext ? { runtimeContext } : {}), dryRun, watching };
+}
+
+/**
+ * After a full compile that went cleanly, warns about memories no output read. Only a full compile
+ * knows every route an include can take, so a partial one (watch mode) and a failed one say nothing.
+ */
+function warnUnincludedMemories(ctx: Context, compiled: CompileResult): void {
+    if (!compiled.ok || compiled.included === undefined || !ctx.services.has("memories.selection")) {
+        return;
+    }
+
+    const included = new Set(compiled.included);
+    const missing = ctx.services
+        .get("memories.selection")
+        .selected()
+        .filter((memory) => !included.has(realPath(memory.path)));
+    const message = unincludedMemoriesMessage(missing);
+
+    if (message !== undefined) {
+        ctx.reporter.warning(message);
+    }
+}
+
+/** The path with symbolic links resolved, or the path itself when it cannot be read. */
+function realPath(file: string): string {
+    try {
+        return fs.realpathSync(file);
+    } catch {
+        return file;
+    }
 }
 
 /**

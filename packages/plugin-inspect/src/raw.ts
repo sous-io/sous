@@ -2,17 +2,14 @@
  * Config files as written, for `--raw` (S2, "What `sous config show` and `get` Print").
  */
 
-import { readdir, readFile } from "node:fs/promises";
-import path from "node:path";
-import type { ProjectInfo } from "@sous-io/plugin-api";
-import { redactText } from "./redact.js";
+import { readFile } from "node:fs/promises";
+import type { ProjectInfo, ServiceReader } from "@sous-io/plugin-api";
+import "@sous-io/plugin-confd/types";
+import { KEY_NAME_POLICY, redactText, type SecretPolicy } from "./redact.js";
 import type { RawConfigFile } from "./types.js";
 
 /** The contributor of the main config file. */
 const MAIN_CONTRIBUTOR = "config-files.main";
-
-/** Files in `conf.d` that are not config. */
-const IGNORED = /^\.|~$|\.(bak|orig|swp)$/;
 
 /** Reads a file, or `undefined` when it cannot be read. */
 async function tryRead(file: string): Promise<string | undefined> {
@@ -23,8 +20,17 @@ async function tryRead(file: string): Promise<string | undefined> {
     }
 }
 
+/** The `conf.d` files, from `confd.files` when it is there. */
+function confdFiles(services: ServiceReader): Array<{ contributor: string; path: string }> {
+    return services.has("confd.files") ? services.get("confd.files").list() : [];
+}
+
 /** The main config file, then each `conf.d` file in name order, as written, with secrets hidden. */
-export async function readRawConfigFiles(project: ProjectInfo | undefined): Promise<RawConfigFile[]> {
+export async function readRawConfigFiles(
+    project: ProjectInfo | undefined,
+    services: ServiceReader,
+    policy: SecretPolicy = KEY_NAME_POLICY,
+): Promise<RawConfigFile[]> {
     if (project === undefined) {
         return [];
     }
@@ -35,26 +41,15 @@ export async function readRawConfigFiles(project: ProjectInfo | undefined): Prom
         const text = await tryRead(project.configPath);
 
         if (text !== undefined) {
-            files.push({ contributor: MAIN_CONTRIBUTOR, path: project.configPath, text: redactText(text) });
+            files.push({ contributor: MAIN_CONTRIBUTOR, path: project.configPath, text: redactText(text, policy) });
         }
     }
 
-    let names: string[] = [];
-
-    try {
-        const entries = await readdir(project.confDir, { withFileTypes: true });
-
-        names = entries.filter((entry) => entry.isFile() && !IGNORED.test(entry.name)).map((entry) => entry.name);
-    } catch {
-        // No conf.d directory.
-    }
-
-    for (const name of names.sort()) {
-        const file = path.join(project.confDir, name);
-        const text = await tryRead(file);
+    for (const file of confdFiles(services)) {
+        const text = await tryRead(file.path);
 
         if (text !== undefined) {
-            files.push({ contributor: `confd/${name}`, path: file, text: redactText(text) });
+            files.push({ contributor: file.contributor, path: file.path, text: redactText(text, policy) });
         }
     }
 

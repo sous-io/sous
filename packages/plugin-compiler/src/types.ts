@@ -338,6 +338,8 @@ export interface CompileResult {
     readonly ok: boolean;
     readonly outputs: CompiledOutput[];
     readonly problems: CompileProblem[];
+    /** Every file the compile read, as real paths: sources and everything they include. */
+    readonly included?: string[];
     readonly durationMs: number;
 }
 

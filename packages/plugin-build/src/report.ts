@@ -3,6 +3,7 @@
  * chain's `Reporter` (L3); the front end decides how it looks.
  */
 
+import type { Memory } from "@sous-io/plugin-memories/types";
 import type { Reporter } from "@sous-io/plugin-api";
 import type { DefinedVariable } from "@sous-io/plugin-recipe-answers/types";
 import type { LockDiff, ResolvedLink, RestoreReport, SkippedRecipe } from "@sous-io/plugin-recipes/types";
@@ -10,6 +11,24 @@ import type { BuildPrepareResult } from "./types.js";
 
 /** The bullet lists use. */
 export const BULLET = "•";
+
+/** The warning for memories no output included, or `undefined` when there are none. */
+export function unincludedMemoriesMessage(missing: readonly Memory[]): string | undefined {
+    if (missing.length === 0) {
+        return undefined;
+    }
+
+    const one = missing.length === 1;
+
+    return (
+        `${missing.length} ${one ? "memory" : "memories"} published by your subscribed recipes ${one ? "is" : "are"} ` +
+        `not included in any output, so no agent will read ${one ? "it" : "them"}:\n` +
+        missing.map((memory) => `${BULLET} ${memory.recipe}: memories/${memory.name}`).join("\n") +
+        `\nTo include every memory, add the line "@#memories/**/*.md" to your project's instruction ` +
+        `source (the file your AGENTS.md or CLAUDE.md is built from). To leave a recipe's memories out on purpose, ` +
+        `list the recipe in "recipes.memories.exclude" in your sous config.`
+    );
+}
 
 /** The lines announcing linked repositories, or none. */
 export function linkedReposMessage(links: Readonly<Record<string, ResolvedLink>>): string | undefined {

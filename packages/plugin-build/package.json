@@ -26,6 +26,7 @@
     "@sous-io/plugin-compiler": "workspace:*",
     "@sous-io/plugin-git": "workspace:*",
     "@sous-io/plugin-host": "workspace:*",
+    "@sous-io/plugin-memories": "workspace:*",
     "@sous-io/plugin-recipe-answers": "workspace:*",
     "@sous-io/plugin-recipes": "workspace:*",
     "@sous-io/plugin-variables": "workspace:*",
