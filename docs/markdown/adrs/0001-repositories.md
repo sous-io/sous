@@ -2,15 +2,16 @@
 
 **Status:** Accepted, 2026-09-10.
 
-!> **Superseded in part by the 1.0 architecture (2026-10-29):** repository providers become host
-plugins (`plugin-github`, `plugin-gitlab`, `plugin-local`), each adding a `repository-host` entity
-that any plugin can add to; reading a repository no longer needs `gh` or `glab`, only proposing a
-change does; the managed `conf.d` files are edited key by key and every config file is a
-contributor to one in-process config build; and a recipe may ship code that runs (a sous plugin),
-which trust now also gates. "Plugin code that subscribes at config time was rejected" no longer
-holds: a plugin, a recipe's included, may change the config. See
-[S2](../architecture/specifications/S2-config-building.md), [S4](../architecture/specifications/S4-private-gitlab-and-switched-off-subscriptions.md) and
-[S6](../architecture/specifications/S6-concerns-and-owners.md).
+!> **Superseded in part by the 1.0 architecture (2026-10-29):** each repository host (GitHub,
+GitLab, a local folder) is now a plugin, and any plugin can add another. Reading a repository no
+longer needs `gh` or `glab`; only proposing a change does. The `conf.d` files sous manages are
+edited key by key, and every config file is one input to a single config build inside the sous
+process. A recipe may now ship a sous plugin, which is code that runs, so trust now gates code as
+well as content. The line "Plugin code that subscribes at config time was rejected" no longer
+holds: a plugin, including one a recipe ships, may change the config. See
+[ADR 0014](0014-plugin-engine.md), [ADR 0015](0015-config-from-contributors.md),
+[ADR 0017](0017-recipes-ship-plugins.md) and
+[Private GitLab Repositories and Switched-Off Subscriptions](../architecture/specifications/S4-private-gitlab-and-switched-off-subscriptions.md).
 
 This is the permanent decision record for the initial version of the repositories system. It
 records what was decided and why; the living answer to "how does it work right now?" is the

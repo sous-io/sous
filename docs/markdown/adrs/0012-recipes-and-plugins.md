@@ -2,10 +2,9 @@
 
 **Status:** Accepted, 2026-09-29. Superseded by [ADR 0017](0017-recipes-ship-plugins.md).
 
-!> **Superseded in whole by the 1.0 architecture (2026-10-29):** recipes may ship sous plugins,
-as one bundled file each, loaded only from trusted repositories, and may require plugins from npm.
-See [ADR 0017](0017-recipes-ship-plugins.md) and [S1](../architecture/specifications/S1-engine.md) ("Where plugins come
-from").
+!> **Superseded in whole by the 1.0 architecture (2026-10-29):** recipes may ship sous plugins, as
+one bundled file each, loaded only from trusted repositories, and may require plugins from npm. See
+[ADR 0017](0017-recipes-ship-plugins.md).
 
 This record stands on its own; it amends nothing in [ADR 0001](0001-repositories.md) through
 [ADR 0011](0011-self-update.md), and everything they say still holds. There is no living

@@ -2,23 +2,22 @@
 
 **Status:** Accepted, 2026-10-29.
 
-This record summarizes a decision of the 1.0 architecture. The source of truth is
-[S2: Building the Config](../architecture/specifications/S2-config-building.md), with config
-expressions in [S5: Config Expressions](../architecture/specifications/S5-config-expressions.md).
-Where this record and those files disagree, they win. It replaces how config layers are discovered
-and merged before 1.0, described on [Layers and merging](../config-layers.md).
+This record summarizes a decision of the 1.0 architecture. The details are in
+[Building the Config](../architecture/specifications/S2-config-building.md). Where this record and
+that file disagree, it wins. It replaces the way config layers are found and merged before 1.0,
+described on [Layers and merging](../config-layers.md).
 
 ## Context
 
-Before 1.0, config resolution is spread over six places: discovery in `BaseCommand.init` and
-`config-discovery.ts`; the merge in a separate child process, `config-kernel.mjs`, started with
-`spawnSync` on every load (once under plain Node, then again under tsx); recipe config layers read
-and filtered before the merge; built-in entries added after it; variables resolved later, once per
-caller; and a second read of `conf.d/510-subscriptions.jsonc` that let the managed file override a
-later layer. Plugins needed a way to change the config too, and an earlier plan gave them a
-separate bootstrap config read before everything else.
+Before 1.0, working out the config is spread over several places: the files are found in one,
+merged in a separate child process started on every run, recipe layers and built-in entries are
+added before and after the merge, variables are resolved later by each caller, and the managed
+subscriptions file is read a second time, which lets it override a later layer.
 
-The maintainer ruled how a contributor's change is recorded:
+Plugins also needed a way to change the config. An earlier plan gave them a separate bootstrap
+config, read before everything else.
+
+The maintainer ruled how a plugin's change to the config is recorded:
 
 > "I think config contributors should basically return a "patch" to the config, not the modified
 > config itself. If a contributor comes up in the loop again, it should be provided the config
@@ -36,45 +35,42 @@ and that the bootstrap config should go:
 
 ## Decision
 
-- **One loop builds the config, in-process.** Every source of config is a contributor: the
-  `sous.config.*` file (`plugin-config-files`), each `conf.d` file (`plugin-confd`, one contributor
-  per file), recipe config layers, the built-in entries, the environment, and any plugin. The config
-  kernel child process goes away; `.json`, `.jsonc` and `.yaml` files are parsed, `.js` and `.ts`
-  files are imported in the main process.
-- **A contributor never edits the config.** It is given a builder; every change it makes is recorded
-  as its patch, and every read is recorded too. It sees the config made from every other
-  contributor's latest patch, without its own, so it never has to make itself idempotent.
-- **A contributor re-runs only when something it read changed**, and the loop ends when nothing
-  anyone read has changed and no new contributor or plugin appeared. Going over the pass limit is an
-  error naming the values that kept changing.
-- **The user's files win** because they monitor the whole config and re-run after any change, so
-  their patches land on top. Among themselves they keep the old order: `sous.config.*`, then the
-  `conf.d` files in file order.
-- **Plugins load inside the loop.** The `plugins` key is ordinary config; after each pass the engine
-  loads what it lists. There is no bootstrap section.
-- **Every change is a primitive patch**: `setKey`, `deleteKey`, `renameKey`, `setIndex`,
-  `insertAt`, `removeIndex`. Every other builder operation (`appendValue`, `removeWhere`, a merge) is
-  a helper made of them. Patches serialize to JSON, so a set of changes can be saved, sent, previewed
-  and applied later. Users may write raw patches in `.patch.json` and `.patch.jsonl` files.
-- **No `setDefault`.** A plugin's defaults for its own keys live in the schema it registers for
-  them; a plugin suggesting a value for another plugin's key uses an ordinary set, and the user's
-  files still win.
-- **Contributors may declare `before`, `after` and a `stage`** (a number, default `0`), for speed and,
-  rarely, to run after everything else.
-- **Config expressions** (`$if`, `$elseif`, `$else`, `$expr`) are evaluated inside each file's
-  contributor, so a variable they read is a recorded read like any other.
-- **Sous always reads the built config.** No code treats one config file as special; managed files
-  are edited key by key by intents, never by contributors.
-- **One package edits documents surgically** (`documents`), keeping comments, key order and
-  formatting. The config builder is built on it, and so are sous's edits to its managed `conf.d`
-  files.
+- **One loop builds the config, in the main process.** Every source of config is a
+  **contributor**, a piece of code that adds to the config: each config file, the recipe config
+  layers, the built-in entries, the environment and any plugin. There is no child process; `.js`
+  and `.ts` config files are imported.
+- **A contributor never edits the config directly.** It works through a builder that records each
+  change as its **patch** and records each value it reads. It sees the config made from every other
+  contributor's latest patch, without its own, so running it twice never applies its change twice.
+- **A contributor runs again only when something it read has changed.** The loop ends when nothing
+  read has changed and no new contributor or plugin appeared. A loop that does not settle within a
+  limit is an error naming the values that kept changing.
+- **The user's files win.** A config file reads the whole config, so it runs again after any change
+  and its patch lands on top. Among themselves the user's files keep their order from before 1.0.
+- **Plugins load inside the loop.** After each pass the engine loads any new plugin the `plugins`
+  key lists. There is no bootstrap config.
+- **Every change is made of a few primitive operations** (set, delete or rename a key; set, insert
+  or remove an array item). Every other builder operation is a helper that produces them. They
+  serialize to JSON, so a set of changes can be saved, sent, previewed and applied later, and users
+  may write them by hand in patch files.
+- **There is no `setDefault`.** A plugin's defaults for its own keys live in the schema it
+  registers. A plugin suggesting a value for another plugin's key just sets it, and the user's files
+  still win.
+- **A contributor may ask to run before or after another, or in a later stage**, which is rarely
+  needed.
+- **Config expressions** ([ADR 0020](0020-config-expressions.md)) are evaluated inside each file's
+  contributor, so a variable an expression reads is recorded like any other read.
+- **Sous always reads the built config.** No code treats one config file as special. The files sous
+  manages are edited key by key by the commands that change them, never by contributors.
+- **One package edits documents in place**, keeping comments, key order and formatting. The config
+  builder and sous's edits to its managed files both use it.
 
 ## Consequences
 
-- A later `conf.d` file can switch off a subscription that `510-subscriptions.jsonc` lists, which
-  it could not before 1.0.
+- A later `conf.d` file can switch off a subscription that the managed subscriptions file lists.
+  Before 1.0 it could not.
 - `sous config show --layers` and `sous config get --layers` show each contributor's change to a
-  value, in order, with the helper operations and the primitive patches they made.
-- A `.js` config file is imported, not run in a child process; when it changes on disk in watch
-  mode it is imported again under a new URL, a small leak per reload.
-- A config whose contributors read nothing that later changes settles in one pass.
+  value, in order.
+- A `.js` config file that changes in watch mode is imported again under a new URL, since Node cannot
+  unload a module; each reload leaks a little memory.
+- A config whose contributors read nothing that later changes is built in one pass.
