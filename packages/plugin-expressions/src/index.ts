@@ -4,7 +4,9 @@
  * S6, "Shared building blocks (expressions.evaluator, expression-language)". The contract other plugins code against is `./types.ts`.
  */
 
-import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";
+import { definePlugin, jsonSchema, type PluginDefinition } from "@sous-io/plugin-api";
+import { createEvaluator } from "./evaluator.js";
+import { createLiquidLanguage } from "./liquid-language.js";
 import "./types.js";
 
 /** The plugin's name. */
@@ -21,15 +23,33 @@ export const expressionsPlugin: PluginDefinition = definePlugin({
     },
 
     register(sous) {
-        // TODO(plugin-expressions): a stub until the plugin is written. It must register:
-        //   - service: expressions.evaluator (config)
-        //   - entity kind: expression-language (define)
-        //   - entity: expression-language `liquid` (evalValueSync; variables listed without running)
-        //   - listener: config.built, turning unsettled() into a ConfigError naming each expression
-        void sous;
+        sous.entities.define(
+            "expression-language",
+            jsonSchema({
+                type: "object",
+                properties: { id: { type: "string" }, description: { type: "string" }, runsCode: { type: "boolean" } },
+                required: ["id", "variables", "evaluate"],
+            }),
+            { description: "A language config expressions are written in, named after $expr: or expr:." },
+        );
+        sous.entities.add("expression-language", createLiquidLanguage());
+
+        const evaluator = createEvaluator({ services: sous.services, entities: sous.entities, project: sous.project });
+
+        // A singleton: the config-file contributors use it while the config is built, when core
+        // refuses every other lifetime.
+        sous.services.add("expressions.evaluator", () => evaluator, { lifetime: "singleton" });
+
+        // Once the config has settled, an expression still unknown is an error (S5, "Errors" 6).
+        sous.on("config.built", () => evaluator.settle());
     },
 });
 
 export default expressionsPlugin;
 
+export { createEvaluator, isTruthy, toJson } from "./evaluator.js";
+export type { Evaluator, EvaluatorDeps } from "./evaluator.js";
+export { ExpressionError } from "./errors.js";
+export { compareBytes, hasExpressions, isExpressionObject, isReservedKey, parseReservedKey } from "./keys.js";
+export { createLiquidLanguage, LIQUID_LANGUAGE } from "./liquid-language.js";
 export type * from "./types.js";

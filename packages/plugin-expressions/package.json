@@ -24,10 +24,12 @@
   "dependencies": {
     "@sous-io/plugin-api": "workspace:*",
     "@sous-io/plugin-liquid": "workspace:*",
-    "@sous-io/plugin-variables": "workspace:*"
+    "@sous-io/plugin-variables": "workspace:*",
+    "liquidjs": "^10.25.0"
   },
   "devDependencies": {
-    "@sous-io/core": "workspace:*"
+    "@sous-io/core": "workspace:*",
+    "@sous-io/plugin-host": "workspace:*"
   },
   "engines": {
     "node": ">=22"

@@ -7,7 +7,7 @@
  * Other plugins import this file type-only.
  */
 
-import type { ConfigBuilder, Environment, JsonValue, ProjectInfo } from "@sous-io/plugin-api";
+import type { ConfigBuilder, EntityReader, Environment, JsonValue, ProjectInfo, ServiceReader } from "@sous-io/plugin-api";
 import type { VarScope } from "@sous-io/plugin-variables/types";
 
 /** What an expression can read (S5, "What an Expression Can Read"). */
@@ -38,6 +38,15 @@ export interface ExpressionLanguageContext {
     readonly file: string;
     /** The key path of the expression, for errors. */
     readonly path: string;
+    /** The environment, as the contributor sees it. */
+    readonly env?: Environment;
+    /**
+     * Entities as the contributor sees them: reads go through the builder, so the file is
+     * evaluated again when they change (a Liquid filter added in a later pass).
+     */
+    readonly entities?: EntityReader;
+    /** Services usable while the config is built (singletons). */
+    readonly services?: ServiceReader;
 }
 
 /** An `expression-language` entity (S5, "Expression Languages"): Liquid is the default and the first. */
