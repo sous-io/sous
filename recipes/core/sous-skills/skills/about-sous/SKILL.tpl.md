@@ -64,19 +64,16 @@ trust question reads only its index.
 
 Subscribing decides what is switched on, not what is safe. A recipe is active when the
 project subscribes to it, directly or through its namespace, or when an active recipe
-lists it under `subscribes`, and only an active recipe registers entry points of its own
-(output files, skills, tool hooks, tool plugins and Sous plugins). A recipe held only through
-`depends` is a library: an active recipe may include, call or import its files, but it registers
-nothing itself.
+lists it under `subscribes`. Only an active recipe adds anything to the project: output files,
+skills, tool hooks, tool plugins (such as a Claude Code plugin) and Sous plugins (code that
+extends sous itself). A recipe held only through `depends` is a library: an active recipe may
+include, call or import its files, but it adds nothing to the project itself.
 
-A recipe may ship a Sous plugin (code that extends sous itself), as one self-contained bundled
-file, and may require plugins from npm. Sous loads a recipe's plugin while it builds the config,
-and only from a trusted repository. `sous plugins show` lists every loaded plugin and what it
-registered.
-
-> "recipes can provide sous plugins."
->
->   -- **Luke Chavers** in an agent session (2026-10-25)
+A recipe's Sous plugin runs inside sous while sous builds the project's config, with the user's
+own permissions, so it is code from that recipe's repository like any other. A recipe may also
+require plugins from npm; `sous subscription add` refuses it while one is missing or outside
+its version range, and offers to install it. Run `sous plugins show` to list every loaded plugin
+and what it added.
 
 ## Sous's Own Documentation
 

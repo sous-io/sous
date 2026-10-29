@@ -49,13 +49,14 @@ The fields in that example:
   `sous repo search`.
 - `contents` is what a subscriber receives: one group per kind (`skills`, `memories`, `prompts` or
   `config`), each with `include` globs and optional `exclude` globs, relative to the recipe folder.
-  The subscribing project and its agent plugins decide where skills land; memories reach its
-  instruction files as described in "Shipping Memories" below, and nothing takes prompts yet. A
-  `config` file joins the project's config as one more contributor, and the project's own config
-  files re-run after it, so the project always wins. It MUST be `.json`, `.jsonc`, `.yaml` or
+  The subscribing project decides where skills land (its config, and the Sous plugin for each
+  coding agent it uses, such as the built-in Claude Code plugin); memories reach its instruction
+  files as described in "Shipping Memories" below, and nothing takes prompts yet. A `config` file
+  is added to the project's config, and the project's own config files are applied after it, so
+  the project always wins. It MUST be `.json`, `.jsonc`, `.yaml` or
   `.yml`, and every key outside `_aliases`, `_vars`, `compilation`, `plugins`, `recipes`,
   `runtimeContext`, `store` and `varMappings` is dropped with a warning. Its `_vars` MUST NOT set
-  `projectRoot`, which sous sets itself; setting it is an error. A recipe that only bundles others
+  `projectRoot`, which sous sets itself (to the directory holding `.sous/`); setting it is an error. A recipe that only bundles others
   may leave `contents` out.
 - `plugin` and `requires` are described in "Shipping Sous Plugins" below.
 - `depends`, `subscribes` and `variables` are described below; `submissions` is in
@@ -159,12 +160,9 @@ repository, and a published manifest is read everywhere.
 
 ## Shipping Sous Plugins
 
-A recipe MAY ship a Sous plugin (code that extends sous itself), and MAY install tool plugins (a
-plugin for a coding agent tool, such as a Claude Code plugin).
-
-> "recipes can provide sous plugins."
->
->   -- **Luke Chavers** in an agent session (2026-10-25)
+A recipe MAY ship a Sous plugin (code that extends sous itself, for example to add a Liquid
+filter), and MAY install tool plugins (a plugin for a coding agent tool, such as a Claude Code
+plugin).
 
 A recipe's plugin is ONE self-contained bundled file, since sous never runs `npm install` for a
 recipe; the same holds for every helper script a recipe ships. A `.d.ts` file beside it is
@@ -179,7 +177,7 @@ plugin:
 
 Sous loads the plugin while it builds the subscriber's config, and only from a trusted
 repository: nothing inside a repository runs before it is trusted. A recipe held only through
-`depends` is a library and registers nothing, its plugin included.
+`depends` is a library and adds nothing to the subscriber, so its plugin NEVER loads.
 
 A recipe can also require plugins from npm, each with a version range:
 
@@ -190,9 +188,9 @@ requires:
 ```
 
 `sous subscription add` refuses such a recipe while a required plugin is missing or outside its
-range; run interactively it offers to install it, and `--install-plugins` installs it without
-asking. A build fails when a subscribed recipe's requirement is broken, naming the plugin and the
-command that installs it.
+version range. Run in a terminal, it offers to install the plugin; `--install-plugins` installs it
+without asking. If a required plugin later goes missing, the build fails and names the plugin and
+the command that installs it.
 
 ## Shipping Memories
 
@@ -201,9 +199,9 @@ group of `kind: memories`, for example `include: [memories/**/*.md]`. A plain `.
 as it is; name a file `*.tpl.md` when it needs the subscriber's answers. The recipe never says where
 a memory lands. A subscribing project can include the memories of every recipe it holds directly
 with one line, `@#memories/**/*.md`, at the virtual path `#memories/<namespace>/<recipe>/<path>`
-(the path being relative to the pattern's static base). Agent plugins may also declare the
-instruction file their tool reads (Claude Code's `CLAUDE.md`, for example), and sous then adds the
-active recipes' memories to that file itself. A recipe held only through `depends` is a library and
+(the path being relative to the pattern's static base). The Sous plugin for a coding agent may
+also name the instruction file that agent reads (`CLAUDE.md` for Claude Code, for example), and
+sous then adds the active recipes' memories to that file itself. A recipe held only through `depends` is a library and
 contributes none, and the subscriber's build warns about a published memory no output includes.
 
 ## Includes and Partials

@@ -81,4 +81,4 @@ Standard filters available in all `.tpl.` files. Chained with `|`.
 |:-------|:------------|
 | `bulletList` | Convert array to markdown bullet list (`- item` per line) |
 
-Plugins may add more filters; `sous plugins show` lists them.
+Sous plugins may add more filters; run `sous plugins show` to list them.

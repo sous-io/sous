@@ -22,11 +22,11 @@ primary config (`sous.config.js|mjs|json|yaml`), optionally extended by `conf.d/
 One config describes one project; every setting lives at the top level of a single flat object.
 There is no user-level config, no multi-project map and no separate bootstrap config.
 
-The config is built in sous's own process by **contributors**. Each config file is one
-contributor, and so is each plugin or subscribed recipe that changes the config. A contributor
-records its changes as a patch; sous re-runs a contributor only when something it read changed,
-until nothing changes. The primary config and the `conf.d/` files always re-run last, in file
-order, so the project's own files win over any plugin or recipe.
+Plugins and subscribed recipes may change the config too. The primary config and the `conf.d/`
+files are always applied after them, in file order, so the project's own files win over any plugin
+or recipe. Sous may apply a file more than once while it builds the config, so a JS config's
+`configure()` MUST give the same result every time it runs for the same input (no counters, no
+writes to disk).
 
 Configs use `${var}` syntax, resolved until every value settles (declaration order never
 matters); `sous*`-prefixed names and `projectRoot` are auto-variables sous sets itself.
@@ -49,7 +49,7 @@ Read these files for anything beyond this page; do not guess and do not search t
 - `{{ sousRootPath }}/docs/markdown/config-discovery.md`: how sous finds the config; flag/env
   precedence; env-file layering; discovery errors
 - `{{ sousRootPath }}/docs/markdown/config-layers.md`: how the files combine; the JS
-  `configure()` contract; the builder API; patch files; the managed 5xx band
+  `configure()` contract; the builder API; patch files; the 5xx band the sous CLI writes
 - `{{ sousRootPath }}/docs/markdown/config-variables.md`: the scope chain; auto-vars; how values
   settle; error anatomy; `stateFilePath`/`pidFilePath`
 - `{{ sousRootPath }}/docs/markdown/config-inspection.md`: the validation pipeline; the JSON
@@ -67,19 +67,23 @@ prefer the on-disk copies.
 - Hand-written config belongs in the primary file or your own `conf.d/` layers. Never
   hand-edit `conf.d/500-*` through `conf.d/599-*`; that band is reserved for layers the sous
   CLI writes.
-- The top-level `recipes` key says what the project does with each content kind its subscribed
-  recipes publish. Skills go to every skill target an agent plugin adds (the built-in Claude Code
-  plugin adds `.claude/skills`) and to every directory in `recipes.skills.outputs`; with neither,
-  the build skips them and says why. `recipes.memories.first` and `recipes.memories.exclude`
-  (globs over `namespace/recipe`, or `/regex/` strings) order and filter the recipe memories.
-- The `plugins` key decides which Sous plugins load: `load` adds plugins `package.json` does not
-  list, `disabled` stops any plugin loading (built-ins included), `options` holds each plugin's
-  own options by plugin name, and `discover` (`"dependencies"` by default, or `"scan"`) says how
-  sous looks for installed plugins. Run `sous plugins show` to see what loaded.
-- A JSON, JSONC or YAML config value may be a config expression (`$if`, `$elseif`, `$else`,
-  `$expr`), decided when sous builds the config, for example to switch a subscription off on one
-  platform. A `conf.d/*.patch.json` or `*.patch.jsonl` file holds raw patch operations instead of
-  config data; write one only if you know how the builder applies patches.
+- The top-level `recipes` key says what the project does with each kind of content its
+  subscribed recipes publish. Skills go to every skills directory an agent plugin adds (the
+  built-in Claude Code plugin adds `.claude/skills`) and to every directory listed in
+  `recipes.skills.outputs`; with neither, the build skips the skills and says why.
+  `recipes.memories.first` and `recipes.memories.exclude` (globs over `namespace/recipe`, or
+  `/regex/` strings) order and filter the recipe memories.
+- The `plugins` key decides which Sous plugins (packages that extend sous itself) load, beyond
+  the built-ins and those listed in the project's `package.json`, and holds each plugin's own
+  options. `configuration.md` above documents its fields. Run `sous plugins show` to see which
+  plugins loaded and what each added.
+- A value in a JSON, JSONC or YAML config may be a config expression (`$if`, `$elseif`, `$else`,
+  `$expr`), worked out when sous builds the config, for example to switch a subscription off on
+  one platform. See `configuration.md` above for the syntax.
+- A `conf.d/*.patch.json` or `*.patch.jsonl` file holds raw edit operations (for example, remove
+  an array item) instead of config data. Read the "Patch files" section of `config-layers.md`
+  above before writing one: an array index in a patch file is NEVER recomputed, so it can hit the
+  wrong item if anything else changes that array.
 - Any config problem halts sous with a ConfigError naming the offending file; fix the named
   file rather than working around it.
 - Configs use `${var}`; template files use LiquidJS double-brace syntax. The two resolve at

@@ -196,9 +196,10 @@ wins**; if none exist, the build errors listing every path tried:
 
 ## Custom Tags
 
-The tags below are built into sous. A Sous plugin can add more tags and filters (as `liquid-tag`
-and `liquid-filter` entities), and so can a recipe that ships a plugin; config expressions can use
-the filters too. `sous plugins show` lists what each loaded plugin added.
+The tags below are built into sous. A Sous plugin (a package that extends sous itself, which a
+subscribed recipe may also ship) can add more tags and filters, and config expressions (`$if`,
+`$expr`) can use the filters too. Run `sous plugins show` to list the tags and filters each loaded
+plugin added before using one that is not documented here.
 
 **`showVars`**: dumps all variables currently in scope as a fenced JSON block.
 Useful during development to see exactly what variables are available at a given point
