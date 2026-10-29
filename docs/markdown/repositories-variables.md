@@ -330,6 +330,9 @@ empty string, and the build says so before it compiles, naming each such variabl
 it, and `sous vars ask` as the way to answer. The build still succeeds; an unanswered question is
 something to tell you about, not a reason to refuse the rest of the project.
 
+A variable declared only by recipes that are not built on this machine, because their subscription is
+switched off, is neither asked by `sous vars ask` nor required by the build.
+
 ?> Two recipes may ask the same question. Their shared answer renders in both, and in your own templates.
 When the recipe-scoped name gives one of them a different answer, that recipe's own files render its own
 answer while everything else, your templates included, renders the first definition's; `sous vars show`
@@ -337,7 +340,8 @@ tells you which names are in play.
 
 An answer is laid in exactly as it is stored: a path stays the string you typed, relative or absolute, and a
 number stays text. A template that needs an absolute path from a relative answer composes one under another
-name in `_vars`, for instance `taskFileDir: "${sousDir}/../${taskFileRoot}"`.
+name in `_vars`, for instance `taskFileDir: "${projectRoot}/${taskFileRoot}"`. `projectRoot` is set by sous
+(the directory holding `.sous/`); setting it in any `_vars` is an error.
 
 The `_env` block is still the way to reach any environment variable no recipe asks about.
 

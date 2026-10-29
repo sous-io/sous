@@ -119,9 +119,16 @@ written; an install is whole or not at all.
 | `--answer <name>=<value>` | Answer one question ahead of time. Repeat it per answer, or read a whole file of them with `--answers-file <path>` |
 | `--always-pull` | Install a newer in-range version whenever one exists, rather than holding the locked one |
 | `--dry-run` | Print what would be installed, writing and downloading nothing |
+| `--install-plugins` | Install the npm sous plugins the recipe requires, through the project's package manager, without asking |
 | `--no-build` | Record the subscription without rebuilding the project |
 | `--prerelease` | Let prerelease versions take part in version range matching |
 | `--non-interactive` | Never ask; fail instead, naming the flag that would have answered |
+
+A recipe may require sous plugins from npm, each with a version range. When a required plugin is
+missing or outside its range, `sous subscription add` refuses the recipe; run interactively, it offers
+to install the plugin, and `--install-plugins` does that without asking. A build fails when a
+subscribed recipe's requirement breaks later, for example after the plugin was removed, and the
+message names the plugin and the command that installs it.
 
 ?> `sous subscribe` and `sous unsubscribe` are accepted spellings of these two commands, and every
 topic answers to both spellings of its name (`sous subscriptions add`, `sous repos list`).
@@ -175,10 +182,21 @@ like `workflow/qa-helper` above, is fetched and pinned but stays out of your out
 
 Recipe files compile under the [`.tpl.` convention](configuration.md#templates-and-the-tpl-convention): a file
 with `.tpl.` in its name is rendered through LiquidJS and loses `.tpl.` on the way out, and anything else is copied
-verbatim. Skills are written to the directories named by the
-[`recipes`](repositories-file-formats.md#recipes-what-each-content-kind-does) config key; for example
-`recipes: { skills: { outputs: ["${projectRoot}/.claude/skills", "${projectRoot}/.codex/skills"] } }`. The
-default is `<project root>/.claude/skills`, because that is where every agent looks. Written skills are tracked
+verbatim. Skills are written to every skill target an agent plugin adds, and to the directories you name
+under the [`recipes`](repositories-file-formats.md#recipes-what-each-content-kind-does) config key. The
+Claude Code plugin built into sous adds `<project root>/.claude/skills`, so that is where skills land unless
+you disable it. To add a destination of your own:
+
+```js
+recipes: {
+  skills: {
+    outputs: ["${projectRoot}/.codex/skills"],
+  },
+}
+```
+
+`projectRoot` is set by sous (the directory holding `.sous/`), so you never define it. With no skill target
+and no destination of your own, skills go nowhere, and the build says so and how to fix it. Written skills are tracked
 like every other file sous writes, so `sous prune` removes what an unsubscribed recipe used to write and
 `sous clear` removes all of it; neither reaches into a linked checkout.
 
@@ -213,6 +231,13 @@ A glob narrows the view as it does any path: `@#memories/communication/**/*.md` 
 When a build finds a memory an active recipe publishes that no include of any output reached (by exact path, glob
 or the view) and `exclude` does not name, it warns, naming the memory and the line to add. Subscribing alone
 includes nothing, and the warning is how that is never silent.
+
+?> In sous 1.0 memories also have **memory targets**: the instruction file an agent reads in every
+session, added by that agent's plugin (`CLAUDE.md` for the built-in Claude Code plugin). For each memory
+target, sous adds a compilation target holding one `@` include line per selected memory, after
+`recipes.memories` and the target's own filter. How that file and an instruction file your own templates
+write fit together is not settled yet; see the "Memories" section of
+[S6](architecture/specifications/S6-concerns-and-owners.md).
 
 ## Answer the questions
 
@@ -353,6 +378,48 @@ The `core` subscription is an ordinary config entry, explained under
 there is no entry to delete: the one sous provides comes back on the next run, so only a recorded
 opt-out outlives it. `sous subscription add core` clears it again. If you remove `core`, make sure
 something else tells your agents not to edit generated files.
+
+## Switch a subscription off on one machine
+
+A subscription stays in the config with `enabled: false`, so the opt-out is visible. A switched-off
+subscription is not built: the recipes reached only through it are skipped, the outputs they wrote are
+pruned, and their variables are neither asked nor required. Their pins stay in the committed lockfile,
+so switching a recipe off on your machine never removes it for anyone else.
+
+```bash
+sous subscription disable tool-usage/automated-browser-tasks
+sous subscription enable tool-usage/automated-browser-tasks
+```
+
+Both edit `.sous/conf.d/510-subscriptions.jsonc` by key. To switch one off only on some machines, write
+`enabled` in a `conf.d` file of your own that sorts after 510; a later file wins over the managed one:
+
+```jsonc
+// .sous/conf.d/610-mac.jsonc
+{
+    "subscriptions": {
+        "tool-usage/automated-browser-tasks": {
+            "enabled": {
+                "$if": {
+                    "expr": "host.platform == 'darwin'",
+                    "then": false
+                }
+            }
+        }
+    }
+}
+```
+
+The build prints one line per skipped recipe, saying why:
+
+```text
+$ sous build
+Skipped tool-usage/automated-browser-tasks: its subscription is switched off (conf.d/610-mac.jsonc).
+Pruned 4 outputs it had written.
+```
+
+The `$if` object is a config expression; see
+[S5](architecture/specifications/S5-config-expressions.md).
 
 ## Restore a fresh clone
 

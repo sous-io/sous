@@ -25,7 +25,8 @@ before fetching anything and asks about all of them in one question, listing eac
 that requires it; declining any of them stops the whole install.
 
 !> Trusting a repository trusts every namespace and recipe in it, including ones published later.
-Trusting alone runs nothing; subscribing to something inside it can run scripts on this machine.
+Trusting alone runs nothing; subscribing to something inside it can run scripts on this machine,
+and a sous plugin a recipe ships runs inside sous itself.
 See [Trust](repositories.md#trust).
 
 ## A ref that names more than one thing
@@ -329,6 +330,31 @@ active, so a project needing its own store can say `SOUS_HOME=~/caches/sous-home
 `.sous/.env.local`. A bare or whitespace-only value counts as unset, and a leading `~` expands;
 compare [Discovery and overrides](config-discovery.md), where `SOUS_CONFIG`, `SOUS_DIR` and
 `SOUS_CONFD` are read from the real environment only.
+
+## A private repository sous cannot read
+
+```text
+Error: could not read gitlab.com/acme/private-recipes.
+  HTTP with token      no token found (GITLAB_TOKEN unset; git has no stored credential for gitlab.com)
+  HTTP without token   302 to sign-in page: the repository is private
+  git                  Permission denied (publickey)
+Fix one of these:
+  export GITLAB_TOKEN=<a token with read_repository>
+  set up git access to gitlab.com (an SSH key, or a credential helper)
+```
+
+Sous tried every way it has to read the repository, and each line says why that one failed. Any one fix
+is enough: a token in the environment, or git access to the host. `gh` and `glab` are not needed to read.
+The order sous tries, and where it finds a token, are under
+[Private repositories](repositories-providers.md#private-repositories).
+
+## A recipe that requires a plugin
+
+A recipe may require a sous plugin from npm, with a version range. `sous subscription add` refuses such a
+recipe while the plugin is missing or outside the range, and a build fails when a subscribed recipe's
+requirement breaks later, for example after the plugin was removed from `package.json`. Both messages name
+the plugin and the command that installs it. Run that command, or rerun the subscribe with
+`--install-plugins`, which installs it through the project's package manager without asking.
 
 ## Where to go next
 
