@@ -1,4 +1,4 @@
-import { createInterface } from "node:readline/promises";
+import { createInterface, type Interface } from "node:readline";
 import {
     type ChoiceQuestion,
     type ConfirmQuestion,
@@ -14,6 +14,11 @@ import type { InputStream, OutputStream } from "./io.js";
  * (L4): otherwise every question fails with a `NonInteractiveError` naming the flag that answers it.
  */
 export class TerminalPrompter implements Prompter {
+    private reader: Interface | undefined;
+    private readonly lines: string[] = [];
+    private readonly waiting: Array<(line: string | undefined) => void> = [];
+    private closed = false;
+
     constructor(
         private readonly input: InputStream,
         private readonly output: OutputStream,
@@ -25,7 +30,7 @@ export class TerminalPrompter implements Prompter {
 
         for (;;) {
             const suffix = question.default !== undefined ? ` (${question.default})` : "";
-            const answer = (await this.ask(`${question.message}${suffix} `)).trim() || question.default || "";
+            const answer = (await this.ask(`${question.message}${suffix} `, question)).trim() || question.default || "";
             const problem = question.validate?.(answer);
 
             if (!problem) {
@@ -45,7 +50,7 @@ export class TerminalPrompter implements Prompter {
 
         for (;;) {
             const fallback = question.defaultIndex !== undefined ? ` (${question.defaultIndex + 1})` : "";
-            const answer = (await this.ask(`Pick a number${fallback}: `)).trim();
+            const answer = (await this.ask(`Pick a number${fallback}: `, question)).trim();
             const index = answer === "" && question.defaultIndex !== undefined ? question.defaultIndex : Number(answer) - 1;
             const choice = question.choices[index];
 
@@ -63,7 +68,7 @@ export class TerminalPrompter implements Prompter {
         const hint = question.default === true ? "[Y/n]" : question.default === false ? "[y/N]" : "[y/n]";
 
         for (;;) {
-            const answer = (await this.ask(`${question.message} ${hint} `)).trim().toLowerCase();
+            const answer = (await this.ask(`${question.message} ${hint} `, question)).trim().toLowerCase();
 
             if (answer === "" && question.default !== undefined) {
                 return question.default;
@@ -87,14 +92,53 @@ export class TerminalPrompter implements Prompter {
         }
     }
 
-    private async ask(prompt: string): Promise<string> {
-        const readline = createInterface({ input: this.input, output: this.output as NodeJS.WritableStream, terminal: false });
+    /** Writes the prompt and waits for the next line; one reader serves every question. */
+    private ask(prompt: string, question: QuestionBase): Promise<string> {
+        this.output.write(prompt);
 
-        try {
-            return await readline.question(prompt);
-        } finally {
-            readline.close();
+        const buffered = this.lines.shift();
+
+        if (buffered !== undefined) {
+            return Promise.resolve(buffered);
         }
+
+        const ended = () => new NonInteractiveError(question.message, question.answeredBy, { details: ["Standard input ended before it was answered."] });
+
+        if (this.closed) {
+            return Promise.reject(ended());
+        }
+
+        this.reader ??= this.openReader();
+        this.reader.resume();
+
+        return new Promise((resolve, reject) => this.waiting.push((line) => (line === undefined ? reject(ended()) : resolve(line))));
+    }
+
+    private openReader(): Interface {
+        const reader = createInterface({ input: this.input, terminal: false });
+
+        reader.on("line", (line) => {
+            const next = this.waiting.shift();
+
+            if (next) {
+                next(line);
+            } else {
+                this.lines.push(line);
+            }
+
+            if (this.waiting.length === 0) {
+                reader.pause();
+            }
+        });
+        reader.on("close", () => {
+            this.closed = true;
+
+            for (const next of this.waiting.splice(0)) {
+                next(undefined);
+            }
+        });
+
+        return reader;
     }
 }
 
