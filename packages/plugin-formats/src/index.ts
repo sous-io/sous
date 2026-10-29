@@ -2,13 +2,34 @@
  * plugin-formats: One parser per on-disk format, reading manifests, and the recipe content hash.
  *
  * S6, "Shared building blocks (formats.*)". The contract other plugins code against is `./types.ts`.
+ * Parsing is pure: a lockfile never gets an identity worked out here (`recipes.lock` does that after
+ * parsing), and the only service `plugin-formats` reads is `refs.resolver`, for the refs in a manifest.
  */
 
-import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";
+import { definePlugin, type PluginDefinition, type ServiceContext } from "@sous-io/plugin-api";
+import { createManifests } from "./manifests.js";
+import {
+  createRecipeManifestFormat,
+  indexFileFormat,
+  linksMapFormat,
+  lockfileFormat,
+  repoManifestFormat,
+  storeEntryFormat,
+  variableDefinitionFormat,
+} from "./parsers.js";
+import { recipeHash } from "./recipe-hash.js";
+import "@sous-io/plugin-refs/types";
 import "./types.js";
 
 /** The plugin's name. */
 export const PLUGIN_NAME = "@sous-io/plugin-formats";
+
+/** Checks a manifest ref with `refs.resolver`, read when first needed. */
+function manifestRefChecker(ctx: ServiceContext): (ref: string) => void {
+    return (ref) => {
+        ctx.services.get("refs.resolver").parse(ref, "manifest");
+    };
+}
 
 /** The plugin. */
 export const formatsPlugin: PluginDefinition = definePlugin({
@@ -20,12 +41,52 @@ export const formatsPlugin: PluginDefinition = definePlugin({
     },
 
     register(sous) {
-        // TODO(plugin-formats): a stub until the plugin is written. It must register:
-        //   - services (singleton): formats.lockfile, formats.recipe-manifest, formats.repo-manifest, formats.index-file, formats.links-map, formats.store-entry, formats.variable-definition, formats.manifests, formats.recipe-hash
-        void sous;
+        const once = { lifetime: "singleton" } as const;
+
+        sous.services.add("formats.lockfile", () => lockfileFormat, once);
+        sous.services.add("formats.repo-manifest", () => repoManifestFormat, once);
+        sous.services.add("formats.index-file", () => indexFileFormat, once);
+        sous.services.add("formats.links-map", () => linksMapFormat, once);
+        sous.services.add("formats.store-entry", () => storeEntryFormat, once);
+        sous.services.add("formats.variable-definition", () => variableDefinitionFormat, once);
+        sous.services.add("formats.recipe-hash", () => recipeHash, once);
+        sous.services.add("formats.recipe-manifest", (_config, ctx) => createRecipeManifestFormat(manifestRefChecker(ctx)), once);
+        sous.services.add("formats.manifests", (_config, ctx) => createManifests({ checkRef: manifestRefChecker(ctx) }), once);
     },
 });
 
 export default formatsPlugin;
 
+export { createManifests, parseManifestText, readManifestFile } from "./manifests.js";
+export type { ManifestsDeps } from "./manifests.js";
+export {
+    createRecipeManifestFormat,
+    indexFileFormat,
+    linksMapFormat,
+    lockfileFormat,
+    repoManifestFormat,
+    storeEntryFormat,
+    variableDefinitionFormat,
+} from "./parsers.js";
+export { hashDirectory, hashDirectorySync, hashesEqual, isContentHash, recipeHash } from "./recipe-hash.js";
+export { mergeLinksMaps } from "./formats/links-map.js";
+export { storeEntryKey } from "./formats/store-entry.js";
+export {
+    INDEX_CACHE_DIRNAME,
+    INDEX_FILENAME,
+    LINKS_FILENAME,
+    LOCKFILE_FILENAME,
+    MANIFEST_EXTENSIONS,
+    RECIPE_MANIFEST_BASENAME,
+    REPO_MANIFEST_BASENAME,
+    STORE_ENTRY_FILENAME,
+    CONTENT_HASH_PATTERN,
+    KEBAB_NAME_PATTERN,
+    RECIPE_KEY_PATTERN,
+    REF_KEY_PATTERN,
+    REPO_IDENTITY_PATTERN,
+    VARIABLE_NAME_PATTERN,
+    ENV_VAR_NAME_PATTERN,
+} from "./formats/common.js";
+export type { DependencyRefChecker } from "./formats/recipe-manifest.js";
 export type * from "./types.js";
