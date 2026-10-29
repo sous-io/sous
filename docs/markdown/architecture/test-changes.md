@@ -66,3 +66,31 @@ Every change to an old test during the refactor: the test, what it expected, wha
 - **names.spec "deriveEnvName()"**: `deriveEnvName` is gone; the test checks `sharedName`, which was
   the same function. **secrets.spec "isSecretVariable()"**: now `isSecret`. Why: the
   `variables.names` and `variables.secrets` contracts name them so.
+
+## plugin-build: build, watch and PID tests, ported to `packages/plugin-build`
+
+- **`src/test/watch/watch-service.test.ts` → `src/watch/watcher.spec.ts`**: expected a 300 ms
+  debounce and, for several files changed in one window, one call with only the most recent event.
+  Now the window is `watch.debounceMs` (default 200, from the plugin-build contract) and the batch
+  holds every file changed in it, each once; a full-rebuild path makes the whole batch full. Why:
+  watch mode now submits one `build` chain per batch with `changedFiles`, so no change is dropped.
+  The "ignored pattern passed to chokidar" test is gone: the state and PID files are ignored by
+  path (`classifyChange`), whatever the state file is called.
+- **`src/test/watch/compile-watch.test.ts` → `test/watch.test.ts`**: expected `startConfigReloadWatch`
+  callbacks (`rebuild`, `reloadConfig`). Now expects `build.watch` to submit `build`/`compile` chains,
+  and a full rebuild to rebuild the engine config (its `buildNumber` grows) and restart the watcher.
+  Why: S1 makes watch mode a background intent submitting chains; the engine rebuilds the config.
+  A changed source no longer drops while a rebuild runs: it is queued for the next chain.
+- **`src/test/integration/pid-service.test.ts` → `src/pid.spec.ts`**: `acquire()` and `release()`
+  became the `BuildPid` contract (`read`, `isRunning`, `write`, `remove`); the "already running"
+  error is tested in `test/build.test.ts` and `test/watch.test.ts`. Same path rules.
+- **`src/test/integration/build-service.test.ts` → `test/build.test.ts`**: the tests that check
+  written files, the state file and pruning on disk belong to plugin-compiler now (`compiler.compile`,
+  `compiler.prune`, `compiler.state`). plugin-build's tests check that `build` runs those intents with
+  the right input and in the right order, with compiler stand-ins. `resolveStateFilePath()` tests moved
+  with the state file to plugin-compiler.
+- **`src/lib/build-preparation.spec.ts` → `src/report.spec.ts`**: "newer versions" is now one note,
+  `Newer versions published:` followed by `  <key>: <to> (this project pins <from>)` lines, instead of
+  a section with aligned variables. Why: services do not format terminal output (L3); the wording is kept.
+- **`src/test/e2e/watch-loop.test.ts` → `test/chokidar.test.ts`**: the real-chokidar test now checks
+  `chokidarWatcher` itself (a change arrives; nothing after `close()`).

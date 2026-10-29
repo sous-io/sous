@@ -43,7 +43,7 @@ export interface RuntimeContextSettings {
 
 /** The watcher's PID file (S6, `build.pid`). */
 export interface BuildPid {
-    /** Where it is (`_vars.pidFilePath`, or `.sous/.watch.pid`). */
+    /** Where it is (`_vars.pidFilePath`, or `.sous/sous.pid` as before the refactor). */
     path(): string;
     /** The PID recorded, or `undefined`. */
     read(): number | undefined;
@@ -114,6 +114,11 @@ export interface BuildInput {
     strict?: boolean;
     /** Keeps building on every change (starts `build.watch`). */
     watch?: boolean;
+    /**
+     * Only the targets whose sources include one of these files, preparing nothing (watch mode's
+     * partial rebuild). Agent addition: watch mode needs a way to ask for one.
+     */
+    changedFiles?: string[];
 }
 
 /** The result of `build`. */
@@ -134,6 +139,8 @@ export interface CompileCommandInput {
     rebuild?: boolean;
     dryRun?: boolean;
     watch?: boolean;
+    /** Only the targets whose sources include one of these files (agent addition, as on `build`). */
+    changedFiles?: string[];
 }
 
 /** The result of `compile`. */
@@ -170,6 +177,13 @@ export interface BuildWatchInput {
     strict?: boolean;
     /** Overrides `watch.pollSeconds`. */
     pollSeconds?: number;
+    /**
+     * Agent addition: the flags of the `build` or `compile` that started watch mode, passed on to
+     * every chain it submits, as before the refactor.
+     */
+    rebuild?: boolean;
+    noPrune?: boolean;
+    dryRun?: boolean;
 }
 
 /** The result of `build.watch`, when it stops. */

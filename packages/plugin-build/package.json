@@ -24,13 +24,17 @@
   "dependencies": {
     "@sous-io/plugin-api": "workspace:*",
     "@sous-io/plugin-compiler": "workspace:*",
-    "@sous-io/plugin-recipes": "workspace:*",
-    "@sous-io/plugin-recipe-answers": "workspace:*",
     "@sous-io/plugin-git": "workspace:*",
-    "@sous-io/plugin-host": "workspace:*"
+    "@sous-io/plugin-host": "workspace:*",
+    "@sous-io/plugin-recipe-answers": "workspace:*",
+    "@sous-io/plugin-recipes": "workspace:*",
+    "@sous-io/plugin-variables": "workspace:*",
+    "chokidar": "^5.0.0",
+    "semver": "^7.8.5"
   },
   "devDependencies": {
-    "@sous-io/core": "workspace:*"
+    "@sous-io/core": "workspace:*",
+    "@types/semver": "^7.8.0"
   },
   "engines": {
     "node": ">=22"
