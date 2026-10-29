@@ -469,3 +469,9 @@ plugins in `test/support/standins.ts`. Expectations are otherwise unchanged, exc
 - **git-clone `repoNameFromUrl`**: dropped (no such function now). **"recognize clonable forms"**: split into `looksLikeRepoUrl` (URL and SCP forms) and `looksLikeLocalPath` (paths). Why: the link intent tells paths and URLs apart before either is used.
 - **links `applyManagedIgnoreBlock`**: not ported. Why: the managed `.gitignore` block belongs to `host.gitignore` (plugin-host); `ensureLocalFilesIgnored` is tested through it.
 - **recipe-config-layers "listRecipeConfigLayers reads the lockfile and store"**: now `readRecipeConfigLayers` reads the `active-recipe` entities. Why: the `recipes.fetch` contributor locates recipes; layers come only from active ones.
+
+## packages/plugin-memories/test/plugin.test.ts, "the #memories view"
+
+- Expected: `view.bases(ctx)` returns `[]`.
+- Expects now: `view.bases` is undefined.
+- Why: plugin-refs' hash-name schema refuses a name with both `bases` and `view`, so the `#memories` entity has only `view`. Without this, an engine with every built-in plugin failed to start.
