@@ -24,7 +24,8 @@
   "dependencies": {
     "@sous-io/plugin-api": "workspace:*",
     "@sous-io/plugin-compiler": "workspace:*",
-    "@sous-io/plugin-recipes": "workspace:*"
+    "@sous-io/plugin-recipes": "workspace:*",
+    "glob": "^13.0.6"
   },
   "devDependencies": {
     "@sous-io/core": "workspace:*"
