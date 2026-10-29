@@ -22,10 +22,12 @@
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
+    "@sous-io/documents": "workspace:*",
     "@sous-io/plugin-api": "workspace:*",
     "@sous-io/plugin-expressions": "workspace:*",
+    "@sous-io/plugin-host": "workspace:*",
     "@sous-io/plugin-variables": "workspace:*",
-    "@sous-io/plugin-host": "workspace:*"
+    "tsx": "^4.21.0"
   },
   "devDependencies": {
     "@sous-io/core": "workspace:*"

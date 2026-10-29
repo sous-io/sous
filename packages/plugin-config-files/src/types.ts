@@ -72,6 +72,23 @@ export interface ConfigFilesLoader {
     findPatches(directory: string, baseName?: string): string[];
     /** Forgets what was read, so the next build reads every file again (watch mode). */
     forget(path?: string): void;
+    /**
+     * Applies one file through a builder, the one way every config file is applied (L2): data is
+     * evaluated (S5) and merged at the root, a module's `configure` runs, a patch file's patches are
+     * applied. Errors name the file. (Added beside the contract S6 names, so `plugin-confd` applies
+     * its files the same way without importing this plugin's code.)
+     */
+    contribute(file: LoadedConfigFile, config: ConfigBuilder, options?: ContributeOptions): Promise<void>;
+    /** A file's name for messages: relative to `.sous/` when it lies inside it (`conf.d/610-mac.jsonc`). */
+    label(path: string): string;
+}
+
+/** Options for applying one file. */
+export interface ContributeOptions {
+    /** The file's name in messages. Default: its path relative to `.sous/`. */
+    label?: string;
+    /** True for a recipe's config file: expression languages that run code are refused (S5). */
+    fromRecipe?: boolean;
 }
 
 // ---------------------------------------------------------------------------------------------
