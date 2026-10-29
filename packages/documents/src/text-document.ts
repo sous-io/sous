@@ -26,6 +26,8 @@ export class TextDocument extends BaseDocument {
     private text: string;
     private readonly yaml: Document | undefined;
     private readonly layout: TextLayout;
+    /** Whether any YAML edit was made; until one is, the original text is given back byte for byte. */
+    private yamlEdited = false;
 
     constructor(text: string, readonly format: DocumentFormat) {
         super();
@@ -48,7 +50,12 @@ export class TextDocument extends BaseDocument {
 
     /** The edited text. */
     override toString(): string {
-        return this.yaml === undefined ? this.text : this.yaml.toString();
+        if (this.yaml === undefined || !this.yamlEdited) {
+            return this.text;
+        }
+
+        // The yaml package reprints the whole document; flow collections keep their tight padding.
+        return this.yaml.toString({ flowCollectionPadding: false });
     }
 
     protected readAt(path: readonly PathSegment[]): JsonValue | undefined {
@@ -70,6 +77,7 @@ export class TextDocument extends BaseDocument {
 
         if (this.yaml !== undefined) {
             editYaml(this.yaml, patch);
+            this.yamlEdited = true;
         } else {
             this.text = editJsoncText(this.text, patch, before, after, this.layout);
         }
