@@ -296,6 +296,11 @@ function checkObject(
     }
 
     for (const [name, propertySchema] of Object.entries(properties)) {
+        // A missing optional property is fine; required ones were reported above.
+        if (value[name] === undefined && propertySchema.default === undefined) {
+            continue;
+        }
+
         const checked = check(propertySchema, value[name], [...path, name], issues);
 
         if (checked !== undefined) {
