@@ -5,6 +5,9 @@
  */
 
 import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";
+import type {} from "@sous-io/plugin-host/types";
+import { claudeHarness } from "./harness.js";
+import { targetsContributor } from "./targets.js";
 import "./types.js";
 
 /** The plugin's name. */
@@ -23,12 +26,15 @@ export const claudeCodePlugin: PluginDefinition = definePlugin({
     },
 
     register(sous) {
-        // TODO(plugin-claude-code): a stub until the plugin is written. It must register:
-        //   - entities: harness `claude`, skill-target `claude-code` (.claude/skills), memory-target `claude-code` (CLAUDE.md, any-directory)
-        void sous;
+        sous.entities.add("harness", claudeHarness);
+        sous.config.contribute(targetsContributor);
     },
 });
 
 export default claudeCodePlugin;
 
 export type * from "./types.js";
+
+export { claudeHarness } from "./harness.js";
+export { contributeTargets, SKILLS_DIRECTORY, MEMORY_FILE } from "./targets.js";
+export { finalText, parseStream, transcriptEntries } from "./transcript.js";
