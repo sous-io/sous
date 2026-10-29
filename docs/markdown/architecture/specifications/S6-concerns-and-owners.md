@@ -3,20 +3,20 @@
 **Status:** Accepted on 2026-10-29. From now on, a
 change to this specification is recorded under "Changes".
 
-**Serves:** G1 (encapsulation), G2 (a plugin system), G3 (versatility, always), G5
-(boundaries obvious and enforceable), G6 (testability), G7 (the plugin interface is the only outside
-promise), G8 (features for one agent tool are additions).
+**Serves:** G1 (strong encapsulation), G2 (a plugin system), G3 (versatility, always), G5
+(obvious, enforceable boundaries), G6 (testability), G7 (any combination of sous's parts
+inside the monorepo), G8 (works without any one agent tool).
 
-**Shaped by:** L1 (one owner per concern), L2 (one implementation), L3 (services never print, prompt
-or exit), L4 (no prompt without a flag), L5 (everything timed).
+**Shaped by:** L1 (one owner per concern), L2 (one implementation per concern), L3 (services never
+print, prompt or exit), L4 (every prompt has a flag), L5 (everything is timed).
 
 ## What This Specifies
 
 Every concern sous handles, the one owner of each, and the package the owner lives in. Sous is a
 small engine, `core`, and a set of plugins; nearly every concern lives in a plugin. For each plugin
 this specification names the services, intents, entities and events it defines, and the plugins it
-depends on. It also says where each concern's code lives before the refactor, so the one-sweep
-refactor (S3) knows what each owner replaces, and how the new boundaries remove the import cycles
+depends on. It also says where each concern's code lives before the refactor, so the refactor,
+done in one sweep (S3, packaging and releases), knows what each owner replaces, and how the new boundaries remove the import cycles
 and misfiled modules the code has today.
 
 ## What Is Settled and What Is Not
@@ -25,8 +25,9 @@ Ruled by the user:
 
 - Core holds only the engine (see "Core"). The CLI, MCP, skills, recipes, repositories, package
   managers and Claude Code are all plugins (2026-10-28).
-- The rules for owners below, with rule 7 now about intents, since an intent is written once and
-  every front end calls it (2026-10-25, 2026-10-28).
+- The rules for owners below (2026-10-25). Rule 7 (a user-facing operation is written once) was
+  restated on 2026-10-28 to be about intents, since an intent is written once and every front end
+  calls it.
 - Every package is kept, one per concern (2026-10-25).
 - Today's `src/lib/vars/` becomes two packages, `plugin-variables` and `plugin-recipe-answers`
   (2026-10-25).
@@ -47,7 +48,7 @@ each change under "Changes". Everything else marked "agent suggestion" waits for
   is replaced".
 - **Owner**: the one service, intent or entity kind that handles a concern. Other code asks the
   owner; it never redoes the work or reads the owner's files itself.
-- **Contributor, intent, event, service, entity**: the five kinds of things the engine knows (S1):
+- **Contributor, intent, event, service, entity**: the five kinds of things the engine knows (S1, the engine):
   - a **contributor** changes the config while it is built;
   - an **intent** is a step a user or another plugin asks for, with a typed input and a result;
   - an **event** lets plugins react to anything;
@@ -76,10 +77,11 @@ owned by `plugin-compiler`). A few intents keep the name users already type, suc
 
 ## Rules for Owners
 
-Accepted by the user (2026-10-25), with rules 1 to 3 and 7 restated for the engine:
+Accepted by the user (2026-10-25). Rules 1 to 3 (how owners are registered, typed and defined) and
+rule 7 (one intent per operation) were later restated for the engine:
 
 1. **Owners are registered through the engine.** A service is registered with `sous.services.add`
-   and a lifetime (`singleton`, `config` or `factory`, S1); `core` may build its service registry on
+   and a lifetime (`singleton`, `config` or `factory`; see S1, the engine); `core` may build its service registry on
    Inversify. An intent is registered with `sous.intents.add`, and an entity kind with
    `sous.entities.define`.
 2. **Each plugin declares its own types.** A plugin adds its services, intents, events and entity
@@ -88,10 +90,11 @@ Accepted by the user (2026-10-25), with rules 1 to 3 and 7 restated for the engi
    lets `plugin-compiler` use a namespace resolver that `plugin-recipes` implements, without either
    importing the other's code.
 3. **The plugin that owns a concept defines its entity kind.** Any plugin may add entities of that
-   kind; contributors read them through the config builder (S1).
+   kind; contributors read them through the config builder (S1, the engine).
 4. **A sub-concern lives in its parent's package**, unless another package uses it on its own. Then
    it moves down to a package both can depend on.
-5. **No plugin depends on a tool-specific or host-specific plugin** (G8). A fact about Claude Code,
+5. **No plugin depends on a tool-specific or host-specific plugin** (G8, works without any one
+   agent tool). A fact about Claude Code,
    GitHub, GitLab, npm, pnpm or Yarn lives only in that plugin, reached through an entity.
 6. **Services never print, prompt, exit or read `process.env` or `process.cwd()` directly.** They
    report through a `Reporter`, ask through a `Prompter`, read the environment through `ctx.env`
@@ -132,12 +135,12 @@ export default definePlugin({
 ## Packages
 
 Four packages are not plugins. Every other package is a built-in plugin, private and bundled into
-`@sous-io/sous` (S3). Agent suggestions are marked.
+`@sous-io/sous` (S3, packaging and releases). Agent suggestions are marked.
 
 | Package | Holds |
 | --- | --- |
 | `core` | the engine (see "Core") |
-| `documents` | surgical editing of JSON, JSONC and YAML documents, keeping comments, key order and formatting (S2, "The Document-Editing Package"); the config builder is built on it, and plugins reach it through the `documents.editor` service |
+| `documents` | surgical editing of JSON, JSONC and YAML documents, keeping comments, key order and formatting (see "The Document-Editing Package" in S2, config building); the config builder is built on it, and plugins reach it through the `documents.editor` service |
 | `plugin-api` | `definePlugin`, the empty `SousServices`, `SousIntents`, `SousEvents` and `SousEntities` interfaces, the `Reporter` and `Prompter` interfaces, the error classes |
 | `sous` | the published package: the bin, the hand-off to a project's own sous, finding the project, the list of built-in plugins, the bundle |
 | `plugin-host` (agent decision, which the user may overrule) | the machine sous runs on: running processes, HTTP, globs and paths, sous home, sous's own self-describing directories, the sous block in `.gitignore`, package identity |
@@ -146,7 +149,7 @@ Four packages are not plugins. Every other package is a built-in plugin, private
 | `plugin-formats` | one parser per on-disk format, and the recipe content hash |
 | `plugin-variables` | `${var}` substitution, `_vars` resolution, auto-variables (`projectRoot` among them), variable names, which values are secret |
 | `plugin-liquid` | building a configured LiquidJS engine, and the Liquid tags and filters plugins add |
-| `plugin-expressions` | config expressions (S5) and the expression languages plugins add |
+| `plugin-expressions` | config expressions (S5, config expressions) and the expression languages plugins add |
 | `plugin-config-files` | `sous.config.*` as a contributor, setting one value from the command line, the `.env` files |
 | `plugin-confd` | the `conf.d` files, one contributor per file, and surgical edits to the managed `conf.d/5xx` files |
 | `plugin-recipes` | repositories, trust, subscriptions, the lockfile, the store, the index cache, freshness, links and checkouts, the core recipe, the catalog, downloading during config building, recipe config layers, loading plugins recipes ship |
@@ -167,16 +170,16 @@ Four packages are not plugins. Every other package is a built-in plugin, private
 | `plugin-claude-code` | everything sous knows about Claude Code: its `harness`, `skill-target` and `memory-target` entities |
 
 Codex, and every other agent tool, is a separately installed plugin. A web front end, such as the
-one `sous serve` would start, is a plugin of the same shape as `plugin-mcp` (S1, "Front ends").
+one `sous serve` would start, is a plugin of the same shape as `plugin-mcp` (see "Front ends" in S1, the engine).
 
 `plugin-claude-code` is the Sous plugin that teaches sous about Claude Code. It is not the
-Sous-provided Claude Code plugin S3 describes, which is a Claude Code plugin that defers to the
+Sous-provided Claude Code plugin that S3 (packaging and releases) describes, which is a Claude Code plugin that defers to the
 installed `sous`.
 
 ## Dependency Direction
 
 Plugins reach each other only through the engine, by name; at compile time they import each other's
-types only. What orders them is `dependsOn`, which sous checks at load (S1). The `dependsOn` graph
+types only. What orders them is `dependsOn`, which sous checks at load (S1, the engine). The `dependsOn` graph
 has no cycles: a plugin depends only on plugins on lower rows (agent suggestion):
 
 ```text
@@ -234,16 +237,17 @@ Reading the diagram:
 
 - `plugin-compiler` does not depend on `plugin-recipes`, `plugin-recipe-answers` or
   `plugin-config-files`. It compiles whatever compilation targets the config holds, with a scope and
-  a namespace resolver, so a front end can render with it alone (G7).
+  a namespace resolver, so a front end can render with it alone (G7, any combination of sous's parts
+  inside the monorepo).
 - `plugin-config-files` does not depend on the features above it. They change the config through
   their own contributors, and add their keys as `config-key` entities.
 - `plugin-refs` depends on nothing but `plugin-host`.
 - `plugin-recipe-answers` depends on `plugin-recipes`, never the other way.
 - `plugin-skills` and `plugin-memories` only add compilation targets; they write nothing.
-- `plugin-claude-code` sits on top: nothing depends on it (G8).
+- `plugin-claude-code` sits on top: nothing depends on it (G8, works without any one agent tool).
 
 A test in the workspace checks `dependsOn` against the type imports on every run, so an undeclared
-dependency fails the build (G5).
+dependency fails the build (G5, obvious, enforceable boundaries).
 
 ## The Concerns
 
@@ -253,7 +257,7 @@ today's commands.
 
 ### The engine: `core`
 
-Ruled 2026-10-28: core holds only the engine. The details of each part are in S1.
+Ruled 2026-10-28: core holds only the engine. The details of each part are in S1 (the engine).
 
 | Concern | Owner |
 | --- | --- |
@@ -264,7 +268,7 @@ Ruled 2026-10-28: core holds only the engine. The details of each part are in S1
 | Events: `on`, `once`, `off`, `emit`, wildcards, regular expressions, priorities | the event bus |
 | Services: lifetimes, wrapping, replacing, and `services.replace` | the service registry |
 | Entities: defining kinds, adding entries, reads through the builder | the entity registry |
-| Finding loops, and the time budgets (L5) | the engine's monitors |
+| Finding loops, and the time budgets (L5, everything is timed) | the engine's monitors |
 | What each plugin registered, wrapped or replaced, for `plugins show` | the ledger |
 | The project and the environment, handed to every `ctx` | `ctx.project`, `ctx.env` |
 
@@ -303,8 +307,8 @@ root is the parent of the directory holding that file, as `sousDir` is defined t
 | --- | --- |
 | Declaring a plugin | `definePlugin` |
 | The interfaces plugins add their types to | `SousServices`, `SousIntents`, `SousEvents`, `SousEntities` |
-| Reporting progress, notes and warnings (L3) | the `Reporter` interface |
-| Asking a question (L3, L4) | the `Prompter` interface |
+| Reporting progress, notes and warnings (L3, services never print, prompt or exit) | the `Reporter` interface |
+| Asking a question (L3, services never print, prompt or exit; L4, every prompt has a flag) | the `Prompter` interface |
 | The error classes every plugin throws | `SousError`, `ConfigError`, `NonInteractiveError` |
 
 ```ts
@@ -315,7 +319,7 @@ export interface Reporter {
 }
 
 export interface Prompter {
-    // Each question names the flag or argument that answers it without a prompt (L4).
+    // Each question names the flag or argument that answers it without a prompt (L4: every prompt has a flag).
     // A prompter that cannot ask throws NonInteractiveError naming that flag.
     askValue(question: ValueQuestion): Promise<string>;
     askChoice<T>(question: ChoiceQuestion<T>): Promise<T>;
@@ -323,7 +327,7 @@ export interface Prompter {
 }
 ```
 
-A front end hands its own `Reporter` and `Prompter` over with each chain it submits (S1).
+A front end hands its own `Reporter` and `Prompter` over with each chain it submits (S1, the engine).
 
 ### The machine: `plugin-host`
 
@@ -381,18 +385,16 @@ for (const target of config.entities("memory-target")) {
 | Which values are secret, and hiding them | `variables.secrets` | `plugin-variables` | service, config |
 | Building a LiquidJS engine with every tag and filter | `liquid.engine` | `plugin-liquid` | service, factory |
 | Liquid tags and filters plugins add | `liquid-tag`, `liquid-filter` | `plugin-liquid` | entity kinds |
-| Which expression languages exist, Liquid first (S5) | `expression-language` | `plugin-expressions` | entity kind |
-| Evaluating config expressions inside each layer, before it merges (S2, S5) | `expressions.evaluator` | `plugin-expressions` | service, used by the config-file contributors |
+| Which expression languages exist, Liquid first (S5, config expressions) | `expression-language` | `plugin-expressions` | entity kind |
+| Evaluating config expressions inside each layer, before it merges (S2, config building; S5, config expressions) | `expressions.evaluator` | `plugin-expressions` | service, used by the config-file contributors |
 
-`variables.resolver` is used by the config files (S2) and by the compiler (per-target and per-output
+`variables.resolver` is used by the config files (S2, config building) and by the compiler (per-target and per-output
 scopes), so it lives below both. `plugin-recipe-answers` adds the recipe answers as a
-`variable-source` entity, so config expressions can read answers (S2, "Recipe answers") without
+`variable-source` entity, so config expressions can read answers (see "Recipe answers" in S2, config building) without
 `plugin-variables` knowing recipes exist.
 
-Ruled 2026-10-29: config expressions see every `liquid-filter` entity plugins add. A filter that does
-not exist yet gives `undefined` for that pass and is tried again on the next; if it still does not
-exist once the config settles, that is an error naming it. A filter used in the config must give the
-same result for the same input, like every contributor.
+Ruled 2026-10-29: config expressions can use every `liquid-filter` entity plugins add. S5 (config
+expressions), "Expression Languages", says how a filter that is not loaded yet is handled.
 
 ### Config files: `plugin-config-files` and `plugin-confd`
 
@@ -403,13 +405,13 @@ same result for the same input, like every contributor.
 | Setting one value from the command line | `config.set` | `plugin-config-files` | intent |
 | Reading and writing `.sous/.env` and `.sous/.env.local` | `config-files.env` | `plugin-config-files` | service, singleton; adds to `ctx.env` |
 | Finding the `conf.d` files, one contributor per file (`confd/<file name>`) | `confd.files` | `plugin-confd` | contributor per file |
-| Reading patch files (`.patch.json`, `.patch.jsonl`) as contributors, in `conf.d` and beside `sous.config.*` (S2, "Patch files") | `confd.files`, `config-files.main` | `plugin-confd`, `plugin-config-files` | contributor per file |
-| Surgical edits to the managed `conf.d/5xx` files (S2) | `confd.managed` | `plugin-confd` | service, config |
+| Reading patch files (`.patch.json`, `.patch.jsonl`) as contributors, in `conf.d` and beside `sous.config.*` (see "Patch files" in S2, config building) | `confd.files`, `config-files.main` | `plugin-confd`, `plugin-config-files` | contributor per file |
+| Surgical edits to the managed `conf.d/5xx` files (S2, config building) | `confd.managed` | `plugin-confd` | service, config |
 
 The `sous.config.*` contributor and each `conf.d` contributor apply their file as one merge at the
 root, so each monitors the whole config automatically; any change in a pass re-runs them and their
 patches land on top. Each `conf.d` contributor runs `after` the file before it, the first one after
-`config-files.main`, so the files keep today's order (S2, "Order and stages"). `plugin-confd` uses `plugin-config-files`' loader to read each
+`config-files.main`, so the files keep today's order (see "Order and stages" in S2, config building). `plugin-confd` uses `plugin-config-files`' loader to read each
 file.
 
 ### Recipes: `plugin-recipes`
@@ -418,11 +420,11 @@ The name is an agent decision, which the user may overrule; the concern is every
 
 | Concern | Owner | Kind |
 | --- | --- | --- |
-| Hosts of recipe repositories, each with its read strategies and token sources (S4) | `repository-host` | entity kind |
+| Hosts of recipe repositories, each with its read strategies and token sources (S4, private GitLab and switched-off subscriptions) | `repository-host` | entity kind |
 | Adding and removing repositories (`conf.d/500`) | `repo.add`, `repo.remove` | intents |
 | Trust: which repositories the project accepts recipes from; nothing inside an untrusted repository runs | `recipes.trust` | service, config; `repo.trust` intent |
 | Subscriptions (`conf.d/510`) | `subscription.add`, `.remove`, `.enable`, `.disable`, `.list` | intents |
-| Which recipes are active on this machine: reached from the subscriptions in force (S4) | `recipes.active` | service, config |
+| Which recipes are active on this machine: reached from the subscriptions in force (S4, private GitLab and switched-off subscriptions) | `recipes.active` | service, config |
 | Resolving subscriptions to versions, and keeping only what is reachable | `recipes.resolver` | service, config |
 | The lockfile | `recipes.lock` | service, config; `lock.rebuild` intent |
 | Downloading what subscribed recipes need, during config building, cached | `recipes.fetch` | contributor |
@@ -456,7 +458,7 @@ ctx.reporter.note(`Removing ${input.repository} deletes ${files.length} built fi
 | The answer ladder: where an answer comes from, in order | `recipe-answers.ladder` | service, config |
 | The answers a build uses, per recipe | `recipe-answers.answers` | service, config; adds a `variable-source` entity |
 | Asking for missing answers | `vars.ask` | intent; asks through the chain's `Prompter` |
-| Answers given up front, by file or flag (L4) | `recipe-answers.preanswers` | service, factory |
+| Answers given up front, by file or flag (L4, every prompt has a flag) | `recipe-answers.preanswers` | service, factory |
 | Variable mapping records (`conf.d/520`) | `vars.map` | intent; `recipe-answers.mappings` service |
 | Checking an answer against its definition, with a time-limited regex | `recipe-answers.validator` | service, singleton |
 | Ref lookups over variables | `ref-lookup` entities | entities |
@@ -514,7 +516,8 @@ A compilation target may give its source as `content`, a template string, instea
 | The user's own destinations (`recipes.skills.outputs`) | `config-key` entity | entity |
 
 With no `skill-target` and no configured destination, skills go nowhere, and the build says why and
-how to fix it. Core has no default destination (ruled 2026-10-25, G8):
+how to fix it. Core has no default destination (ruled 2026-10-25, to serve G8, works
+without any one agent tool):
 
 ```text
 Skipped the skills of 3 recipes: nothing says where skills go.
@@ -582,7 +585,7 @@ sous.entities.add("harness", {
 });
 ```
 
-A tool written under `tools` in the config launches with no plugin at all (G8).
+A tool written under `tools` in the config launches with no plugin at all (G8, works without any one agent tool).
 
 ### Authoring: `plugin-authoring`
 
@@ -621,7 +624,7 @@ they share one plugin.
 
 | Concern | Owner | Package | Kind |
 | --- | --- | --- | --- |
-| Turning argv into an intent: the command tree, groups, aliases, flags, `--help`, completion and "did you mean", generated from every intent's declaration, on Node's `util.parseArgs` (S1) | `cli.commands` | `plugin-cli` | service, config |
+| Turning argv into an intent: the command tree, groups, aliases, flags, `--help`, completion and "did you mean", generated from every intent's declaration, on Node's `util.parseArgs` (S1, the engine) | `cli.commands` | `plugin-cli` | service, config |
 | Arguments every command accepts, and command groups' help | `cli-global-argument`, `cli-group` | `plugin-cli` | entity kinds |
 | `--debug` and `--log-level <level>` | `cli-global-argument` entities | `plugin-cli` | entities |
 | Whether a prompt is possible in this run | `cli.interactivity` | `plugin-cli` | service, singleton |
@@ -668,13 +671,13 @@ refactor.
 | `plugin-pnpm` | a `package-manager` entity: the same for pnpm |
 | `plugin-yarn` | a `package-manager` entity: the same for Yarn, plus Yarn Plug'n'Play's resolver for plugin lookup |
 | `plugin-github` | a `repository-host` entity: reading indexes, the token (`GITHUB_TOKEN`, then `gh`), proposing changes, the CI workflow for a scaffold |
-| `plugin-gitlab` | a `repository-host` entity: the same for GitLab, with S4's fixes to the index address and the token |
+| `plugin-gitlab` | a `repository-host` entity: the same for GitLab, with the fixes S4 (private GitLab and switched-off subscriptions) makes to the index address and the token |
 | `plugin-local` | a `repository-host` entity: a repository on disk |
 | `plugin-claude-code` | a `harness` (`claude`), a `skill-target` (`.claude/skills`) and a `memory-target` (`CLAUDE.md`) |
 
 ## Where Each Setting Goes
 
-S2 leaves open where aliases, tools, compilation and watch settings are resolved once they leave the
+S2 (config building) leaves open where aliases, tools, compilation and watch settings are resolved once they leave the
 config files. Each is a `config-key` entity added by the plugin that uses it, which reads the built
 config through `ctx.config`. None of them reads a config file.
 
@@ -689,7 +692,7 @@ config through `ctx.config`. None of them reads a config file.
 
 ## Where Each Concern Lives Before the Refactor
 
-What each owner replaces. Every file named here is removed or emptied by the refactor (L2); none of
+What each owner replaces. Every file named here is removed or emptied by the refactor (L2, one implementation per concern); none of
 these code paths survives beside its new owner.
 
 | Concern | Files before the refactor |
@@ -763,7 +766,7 @@ these code paths survives beside its new owner.
 
 ### Duplicate implementations today
 
-Each is two implementations of one concern (L2). The refactor keeps one.
+Each is two implementations of one concern (L2, one implementation per concern). The refactor keeps one.
 
 | Concern | The copies |
 | --- | --- |
@@ -773,7 +776,7 @@ Each is two implementations of one concern (L2). The refactor keeps one.
 | Running git | `src/lib/repos/providers/git.ts`, `src/lib/repos/git-clone.ts` |
 | The project root | the seven places in the table above |
 | Assembling what to compile | `runProjectBuild` in `src/lib/build-service.ts`, and the copy in `src/commands/compile.ts` |
-| Reading subscriptions | the merged config, and `SubscriptionService` re-reading `conf.d/510-subscriptions.jsonc` (S2, S4) |
+| Reading subscriptions | the merged config, and `SubscriptionService` re-reading `conf.d/510-subscriptions.jsonc` (S2, config building; S4, private GitLab and switched-off subscriptions) |
 | Variable definitions | the definition sources in `src/lib/vars/definition-source.ts`, and the list `SubscriptionService` builds by hand |
 
 ## Import Cycles Before the Refactor, and How the Plugins Break Them
@@ -910,7 +913,7 @@ Today services import presentation, and presentation imports services: about twe
 imports the error classes.
 
 After: presentation lives only in the front-end plugins. Services report through the chain's
-`Reporter` and ask through its `Prompter` (L3). The sous-directory helper moves to `plugin-host`.
+`Reporter` and ask through its `Prompter` (L3, services never print, prompt or exit). The sous-directory helper moves to `plugin-host`.
 
 ### repos and authoring
 

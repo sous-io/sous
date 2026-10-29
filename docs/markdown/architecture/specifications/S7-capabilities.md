@@ -110,7 +110,7 @@ The rules for the list:
 
 - **C45.** A user can do from the web GUI, the CLI or an agent through MCP anything the other two can
   do.
-- **C46.** A user can answer every prompt with a flag or an argument instead (L4).
+- **C46.** A user can answer every prompt with a flag or an argument instead (L4, every prompt has a flag).
 - **C47.** A user can load plugins the project's `package.json` does not list, and disable any
   plugin, built-ins included.
 - **C48.** A user can add functionality, plugins included, through a project-level recipe.

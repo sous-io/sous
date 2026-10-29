@@ -5,7 +5,7 @@ change to this specification is recorded under "Changes".
 
 **Serves:** G3 (versatility, always), G4 (predictable and observable).
 
-**Related:** S1 (the engine), S2 (building the config, which decides when expressions are evaluated).
+**Related:** S1 (the engine), S2 (config building, which decides when expressions are evaluated).
 
 ## What This Specifies
 
@@ -26,11 +26,11 @@ Every rule below is marked as ruled by the user (quoted), decided in the plannin
 
 ## Who Owns What
 
-- Building the config (S2) decides when expressions are evaluated: inside each config file's
-  contributor, before its values go into its patch, with the file re-evaluated whenever a variable
-  it read changes.
+- Config building (S2) decides when expressions are evaluated: each config file's contributor (the
+  code that adds that file to the config) evaluates them before it adds the file's values, and
+  evaluates the file again whenever a variable it read changes.
 - `plugin-expressions` owns which expression languages exist. Each language is an
-  `expression-language` entity (S1); Liquid is the first and the default. A plugin can add a
+  `expression-language` entity (an object of a kind a plugin defines; see S1, the engine); Liquid is the first and the default. A plugin can add a
   language by adding an entity.
 
 ```ts
@@ -78,8 +78,8 @@ loading the config, and the result takes its place.
 
 5. **Nesting.** Decided: a `then` value, an `$else` value or an array item may itself be an
    expression object, evaluated the same way. Only the chosen branch is evaluated, so an expression
-   in a branch that was not chosen cannot fail the load. Reads inside a chosen nested branch are
-   tracked like any other (S2).
+   in a branch that was not chosen cannot fail the load. A variable read inside a chosen nested branch is
+   tracked like any other read, so a change to it re-evaluates the file (S2, config building).
 
 ```jsonc
 {
@@ -109,8 +109,8 @@ loading the config, and the result takes its place.
   lists).
 - `env.<NAME>`: environment variables, after the env files load.
 - Variables, by their bare name, as a template reads them (`machineRole == 'laptop'`). Decided: an
-  expression sees the `_vars` of every level that contains it (S2, "Variable scopes").
-- Recipe answers, except in an expression under `subscriptions` or `repos` (S2, "Recipe answers").
+  expression sees the `_vars` of every level that contains it (see "Variable scopes" in S2, config building).
+- Recipe answers, except in an expression under `subscriptions` or `repos` (see "Recipe answers" in S2, config building).
 
 ## Expression Languages
 
@@ -159,8 +159,8 @@ An expression is a string evaluated in a language. Liquid is the default and, fo
       unknown variable does, and is evaluated again on the next pass.
     - If the filter still does not exist once the config has settled, that is an error naming it.
     - A filter used in a config expression must give the same result for the same input, like every
-      contributor (S2). One that reads the clock or the network can stop the config from settling,
-      and loop detection (S1) names the expression.
+      contributor (S2, config building). One that reads the clock or the network can stop the config
+      from settling, and the engine's loop detection (S1, the engine) names the expression.
 
     ```jsonc
     {
@@ -174,7 +174,7 @@ An expression is a string evaluated in a language. Liquid is the default and, fo
 
 5. A recipe's config file may use Liquid, but no language that runs code. (Accepted 2026-10-25.) Sous
    runs nothing inside a repository until the repository is trusted, and code a recipe runs comes as
-   a bundled plugin (S1). A recipe's config file stays data, so a `js` expression language is not
+   a bundled plugin (S1, the engine). A recipe's config file stays data, so a `js` expression language is not
    allowed in it.
 
 ## `$expr`: a Computed Value
@@ -411,7 +411,8 @@ of a `then` inside a branch (unless it is itself an expression object; see "Nest
 
 ## What Sous Writes
 
-Sous's edits to the files it manages are surgical (S2). So:
+Sous edits the files it manages surgically, changing only the keys it means to and keeping
+everything else, comments included (S2, config building). So:
 
 1. `sous subscription disable <ref>` and `enable <ref>` replace the whole `enabled` value, expression
    included, with `false` or `true`.
@@ -481,8 +482,8 @@ its key path:
 4. An empty qualifier, or an unknown language.
 5. An expression Liquid cannot parse, or one that fails while evaluating.
 6. A variable still unknown when the load settles.
-7. A config that does not settle within the pass limit (S2).
-8. An expression under `subscriptions` or `repos` that reads a recipe answer (S2).
+7. A config that does not settle within the pass limit (S2, config building).
+8. An expression under `subscriptions` or `repos` that reads a recipe answer (S2, config building).
 
 ## Full Examples
 
