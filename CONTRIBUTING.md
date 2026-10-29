@@ -12,7 +12,14 @@ npm test
 ```
 
 Node 22 is expected (see `.nvmrc`), and `package.json` requires `>=22`. `npm run build`
-compiles TypeScript to `dist/` and is also the typecheck. `npm run test:watch` reruns tests
+compiles TypeScript to `dist/` and is also the typecheck.
+
+?> Sous 1.0 is being rebuilt as a pnpm workspace: a small engine (`packages/core`) and a package
+per plugin, bundled by esbuild into `@sous-io/sous`. Until that work lands, the commands in this
+section describe the pre-1.0 layout. Read the [laws](docs/markdown/architecture/laws.md),
+[goals](docs/markdown/architecture/goals.md) and
+[specifications](docs/markdown/architecture/specifications/README.md) before changing how sous
+is built; they rank above every other document. `npm run test:watch` reruns tests
 as you edit, and `npm run test:coverage` adds a coverage report.
 
 `npm test` runs the unit and integration suites. The watch-mode end-to-end tests are
@@ -23,7 +30,8 @@ Run the CLI from a clone without installing it globally with `./bin/sous <comman
 `npm link` once to get `sous` on your PATH.
 
 This repo configures its own agent skills with sous, from `.sous/sous.config.js`. Running
-`./bin/sous build` compiles them into `.claude/skills/`, which is gitignored build output.
+`./bin/sous build` compiles them into `.claude/skills/` (the skill target the built-in Claude
+Code plugin adds), which is gitignored build output.
 That is optional for contributing, but it is the fastest way to confirm a change to the
 compiler or the shared prompts does what you expect.
 

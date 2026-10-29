@@ -122,4 +122,6 @@ $ sous update --global --yes
 - Look up a command in the [command reference](commands.md)
 - Work out what an error is telling you in [repositories troubleshooting](repositories-troubleshooting.md)
 - Read the [design principles](design-principles.md) that constrain every feature
+- Read the [1.0 architecture](architecture/laws.md): the laws, goals and specifications sous 1.0 is
+  built to, starting with [the engine](architecture/specifications/S1-engine.md)
 - Read the [source on GitHub](https://github.com/sous-io/sous)
