@@ -109,11 +109,46 @@ describe("readThroughChain", () => {
         } catch (error) {
             const failure = (error as IndexReadError).failure;
 
-            expect((error as Error).message).toBe("Could not read fake.test/acme/recipes.");
+            expect((error as Error).message.split("\n")[0]).toBe("could not read fake.test/acme/recipes.");
             expect(failure.attempts.map((attempt) => attempt.reason)).toEqual(["302 to sign-in page", "Permission denied (publickey)"]);
             expect(failure.fixes).toEqual(["provide a token through GITLAB_TOKEN", "set up git access to fake.test (an SSH key, or a credential helper)"]);
-            expect((error as IndexReadError).details.join("\n")).toContain("Permission denied (publickey)");
+            expect((error as Error).message).toContain("Permission denied (publickey)");
         }
+    });
+
+    it("should word the combined error exactly as S4 does, through the hosts' find and fix methods", async () => {
+        const sources: RepositoryTokenSource[] = [
+            { id: "env", label: "GITLAB_TOKEN", token: async () => undefined, find: async () => ({ missing: "GITLAB_TOKEN unset" }), fix: () => "export GITLAB_TOKEN=<a token with read_repository>" },
+            { id: "git-credential", label: "git credential fill", token: async () => undefined, find: async (repository) => ({ missing: `git has no stored credential for ${repository.host}` }) },
+            // Not installed: says nothing.
+            { id: "glab", label: "glab", token: async () => undefined, find: async () => ({ missing: undefined }) },
+        ];
+        const git: RepositoryReadStrategy = {
+            ...strategy("git", "Permission denied (publickey)"),
+            label: "git",
+            fix: (repository) => `set up git access to ${repository.host} (an SSH key, or a credential helper)`,
+        };
+        const read = readOf(
+            [
+                { ...strategy("http-token", "ok", { usesToken: true }), label: "HTTP with token" },
+                { ...strategy("http", "302 to sign-in page: the repository is private"), label: "HTTP without token" },
+                git,
+            ],
+            sources,
+        );
+        const failure = readThroughChain({ ...read, identity: "gitlab.com/acme/private-recipes", repository: { ...read.repository, host: "gitlab.com" } }, memory, ctx);
+
+        await expect(failure).rejects.toThrow(
+            [
+                "could not read gitlab.com/acme/private-recipes.",
+                "  HTTP with token      no token found (GITLAB_TOKEN unset; git has no stored credential for gitlab.com)",
+                "  HTTP without token   302 to sign-in page: the repository is private",
+                "  git                  Permission denied (publickey)",
+                "Fix one of these:",
+                "  export GITLAB_TOKEN=<a token with read_repository>",
+                "  set up git access to gitlab.com (an SSH key, or a credential helper)",
+            ].join("\n"),
+        );
     });
 
     it("should count a strategy that throws as a failed attempt", async () => {

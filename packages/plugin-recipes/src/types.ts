@@ -100,6 +100,14 @@ export interface RepositoryTokenSource {
     /** For the error that lists each attempt. */
     label: string;
     token(repository: CanonicalRepository, ctx: RepositoryHostContext): Promise<RepositoryToken | undefined>;
+    /**
+     * Like `token`, but saying why there is none (`GITLAB_TOKEN unset`), for the error that lists
+     * each attempt. `missing: undefined` says nothing (a CLI that is not installed). Optional:
+     * without it, the error says the source found none.
+     */
+    find?(repository: CanonicalRepository, ctx: RepositoryHostContext): Promise<{ readonly token: RepositoryToken } | { readonly missing: string | undefined }>;
+    /** One command that would make this source work: `export GITLAB_TOKEN=<a token with read_repository>`. */
+    fix?(repository: CanonicalRepository): string | undefined;
 }
 
 /** One file to read from a repository. */
@@ -129,6 +137,8 @@ export interface RepositoryReadStrategy {
     /** True when it needs a token; it is skipped when none is found. */
     usesToken?: boolean;
     read(request: RepositoryReadRequest, ctx: RepositoryHostContext): Promise<RepositoryReadOutcome>;
+    /** One line that would make this strategy work: `set up git access to gitlab.com (an SSH key, or a credential helper)`. */
+    fix?(repository: CanonicalRepository): string | undefined;
 }
 
 /** Whether the host's command line tool is signed in. */

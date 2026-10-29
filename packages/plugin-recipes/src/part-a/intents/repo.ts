@@ -35,7 +35,7 @@ import { planSubscriptionRemoval, writeSubscriptionRemoval } from "../subscripti
 import { describeError, nowIso, proposeRepoName, REPO_NAME_PATTERN, sortBytewise } from "../util.js";
 import { dryRun, inputSchema, latest, latestFlag, installed, noBuild, yes, yesFlag, yesFlagNoTrust } from "./schema.js";
 
-/** The hosts today's CLI names for `--provider`; a plugin may add more. */
+/** The hosts built in for `--provider`; any loaded `repository-host` entity's id is accepted too. */
 export const BUILT_IN_PROVIDERS = ["github", "gitlab", "local"] as const;
 
 /** Whether what was typed is a path on this machine rather than a URL. */
@@ -68,7 +68,13 @@ export async function addRepo(input: RepoAddInput, ctx: Context): Promise<RepoAd
         }
     }
 
-    const canonical = locations.canonicalize(url);
+    if (input.provider !== undefined && locations.host(input.provider) === undefined) {
+        throw new SousError(`'${input.provider}' is not a repository host sous knows.`, {
+            details: [`The hosts loaded now: ${sortBytewise(locations.hosts().map((host) => host.id)).join(", ") || "none"}. A plugin can add another.`],
+        });
+    }
+
+    const canonical = locations.canonicalize(url, input.provider);
     const provider = input.provider ?? locations.hostFor(url)?.id ?? "unknown";
     const name = input.name ?? canonical.name.toLowerCase();
 
@@ -483,7 +489,11 @@ export function registerRepoIntents(sous: Sous): void {
             {
                 url: { type: "string", description: "The repository's URL, or a path on this machine" },
                 name: { type: "string", description: "The short name refs use for it; default from the URL" },
-                provider: { type: "string", enum: [...BUILT_IN_PROVIDERS], description: "The repository host, when the URL does not give it away" },
+                provider: {
+                    type: "string",
+                    minLength: 1,
+                    description: `The repository host, when the URL does not give it away: ${BUILT_IN_PROVIDERS.join(", ")}, or any host a plugin adds`,
+                },
                 yes,
                 dryRun,
             },

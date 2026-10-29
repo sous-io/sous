@@ -109,6 +109,8 @@ export class PartBRuntime {
             entities: this.entities,
             project: this.host.project,
             env: this.host.env,
+            // `Sous` carries no working directory; a host method only runs commands in it.
+            cwd: this.host.project?.root ?? process.cwd(),
             reporter,
             ...(signal === undefined ? {} : { signal }),
         };

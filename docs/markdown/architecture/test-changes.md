@@ -475,3 +475,9 @@ plugins in `test/support/standins.ts`. Expectations are otherwise unchanged, exc
 - Expected: `view.bases(ctx)` returns `[]`.
 - Expects now: `view.bases` is undefined.
 - Why: plugin-refs' hash-name schema refuses a name with both `bases` and `view`, so the `#memories` entity has only `view`. Without this, an engine with every built-in plugin failed to start.
+
+## packages/sous/test/fixtures/command-inventory.json, `repo add --provider`
+
+- Expected: `--provider` is an option flag whose choices include `github`, `gitlab` and `local`.
+- Expects now: `--provider` is a string flag.
+- Why: `--provider` now takes the id of any loaded `repository-host` entity, a plugin's own host included (L7). The hosts load after `repo.add`'s input schema is fixed, so the schema cannot list them; `repo.add` checks the value against the loaded hosts and names them when it is not one. `github`, `gitlab` and `local` work as before.

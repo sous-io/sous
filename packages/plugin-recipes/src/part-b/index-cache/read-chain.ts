@@ -81,12 +81,37 @@ export interface ChainRead {
 /** What a successful read gave, and how. */
 export type ChainOutcome = Extract<RepositoryReadOutcome, { ok: true }> & { readonly strategy: string };
 
+/** The column an attempt's reason starts in, after its strategy's label. */
+const ATTEMPT_LABEL_WIDTH = 19;
+
+/**
+ * The combined error, worded as S4 ("When everything fails") prints it. The whole text is the
+ * message, so the command layer's `Error: ` prefix gives exactly:
+ *
+ * ```text
+ * Error: could not read gitlab.com/acme/private-recipes.
+ *   HTTP with token      no token found (GITLAB_TOKEN unset; git has no stored credential for gitlab.com)
+ *   HTTP without token   302 to sign-in page: the repository is private
+ *   git                  Permission denied (publickey)
+ * Fix one of these:
+ *   export GITLAB_TOKEN=<a token with read_repository>
+ *   set up git access to gitlab.com (an SSH key, or a credential helper)
+ * ```
+ */
+export function formatReadFailure(failure: IndexReadFailure): string {
+    const lines = [`could not read ${failure.repo}.`, ...failure.attempts.map((attempt) => `  ${attempt.strategy.padEnd(ATTEMPT_LABEL_WIDTH)}  ${attempt.reason}`)];
+
+    if (failure.fixes.length > 0) {
+        lines.push("Fix one of these:", ...failure.fixes.map((fix) => `  ${fix}`));
+    }
+
+    return lines.join("\n");
+}
+
 /** The error a read throws when every strategy failed; it carries the failure. */
 export class IndexReadError extends ConfigError {
     constructor(readonly failure: IndexReadFailure) {
-        super(`Could not read ${failure.repo}.`, {
-            details: [...failure.attempts.map((attempt) => `${attempt.strategy.padEnd(20)} ${attempt.reason}`), "Fix one of these:", ...failure.fixes.map((fix) => `  ${fix}`)],
-        });
+        super(formatReadFailure(failure));
     }
 }
 
@@ -160,6 +185,21 @@ async function findToken(read: ChainRead, ctx: RepositoryHostContext): Promise<{
 
     for (const source of read.host.tokenSources ?? []) {
         try {
+            if (source.find !== undefined) {
+                const lookup = await source.find(read.repository, ctx);
+
+                if ("token" in lookup && lookup.token.value.length > 0) {
+                    return { found: lookup.token, tried };
+                }
+
+                // A source that says nothing (a CLI that is not installed) is left out of the error.
+                if ("missing" in lookup && lookup.missing !== undefined) {
+                    tried.push(lookup.missing);
+                }
+
+                continue;
+            }
+
             const found = await source.token(read.repository, ctx);
 
             if (found !== undefined && found.value.length > 0) {
@@ -175,10 +215,30 @@ async function findToken(read: ChainRead, ctx: RepositoryHostContext): Promise<{
     return { tried };
 }
 
-/** The fixes the error names: a token from a source the host reads, or git access. */
-function fixesFor(read: ChainRead): string[] {
+/**
+ * The fixes the error names: each token source's and read strategy's own `fix`, in chain order.
+ * A host that names none gets the general ones: a token from a source it reads, or git access.
+ */
+export function fixesFor(read: Pick<ChainRead, "host" | "repository">): string[] {
     const fixes: string[] = [];
+    const add = (fix: string | undefined): void => {
+        if (fix !== undefined && fix.length > 0 && !fixes.includes(fix)) {
+            fixes.push(fix);
+        }
+    };
     const sources = read.host.tokenSources ?? [];
+
+    for (const source of sources) {
+        add(safely(() => source.fix?.(read.repository)));
+    }
+
+    for (const strategy of read.host.readStrategies) {
+        add(safely(() => strategy.fix?.(read.repository)));
+    }
+
+    if (fixes.length > 0) {
+        return fixes;
+    }
 
     if (sources.length > 0) {
         fixes.push(`provide a token through ${sources.map((source) => source.label).join(", or ")}`);
@@ -187,6 +247,15 @@ function fixesFor(read: ChainRead): string[] {
     fixes.push(`set up git access to ${read.repository.host} (an SSH key, or a credential helper)`);
 
     return fixes;
+}
+
+/** A host's answer, or `undefined` when it throws: a fix line never fails the error it explains. */
+function safely(make: () => string | undefined): string | undefined {
+    try {
+        return make();
+    } catch {
+        return undefined;
+    }
 }
 
 /** A copy of an object with its keys sorted. */

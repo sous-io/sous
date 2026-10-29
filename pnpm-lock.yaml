@@ -672,6 +672,9 @@ importers:
       '@sous-io/core':
         specifier: workspace:*
         version: link:../core
+      '@sous-io/plugin-update':
+        specifier: workspace:*
+        version: link:../plugin-update
       '@types/semver':
         specifier: ^7.8.0
         version: 7.8.0

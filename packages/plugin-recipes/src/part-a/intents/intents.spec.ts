@@ -127,6 +127,8 @@ const locations = {
         return { host, owner, name, httpsUrl: url, sshUrl: "" };
     },
     hostFor: () => ({ id: "github" }),
+    hosts: () => [{ id: "github" }, { id: "gitlab" }, { id: "local" }, { id: "gitea" }],
+    host: (id: string) => (["github", "gitlab", "local", "gitea"].includes(id) ? { id } : undefined),
 };
 
 interface Setup {
@@ -405,6 +407,17 @@ describe("repo intents", () => {
 
         expect(result).toMatchObject({ name: "acme", provider: "github", alreadyTrusted: false, namespaces: ["a"], recipeCount: 1 });
         expect((managed.files["500-repos.jsonc"] as { repos: Record<string, unknown> }).repos.acme).toMatchObject({ url: "https://github.com/acme/acme", addedBy: "user" });
+    });
+
+    /** --provider takes any loaded repository-host id, a plugin's own included. */
+    it("should accept a provider a plugin adds, and refuse one no plugin provides", async () => {
+        const { config } = setup({ data: { repos: {}, subscriptions: {} }, indexes: { acme: index({ "a/b": ["1.0.0"] }) } });
+
+        expect(await addRepo({ url: "https://git.example/acme/acme", provider: "gitea", yes: true }, context(config))).toMatchObject({ provider: "gitea" });
+        await expect(addRepo({ url: "https://git.example/acme/acme", provider: "nowhere", yes: true }, context(config))).rejects.toMatchObject({
+            message: "'nowhere' is not a repository host sous knows.",
+            details: [expect.stringContaining("gitea, github, gitlab, local")],
+        });
     });
 
     /** A name already used by a different repository is refused. */

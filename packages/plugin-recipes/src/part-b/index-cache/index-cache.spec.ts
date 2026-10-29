@@ -144,7 +144,7 @@ describe("IndexCacheCore", () => {
         const lookup = await core.get(target);
 
         expect(lookup.source).toBe("stale");
-        expect(lookup.problem).toBe("Could not read fake.test/acme/recipes.");
+        expect(lookup.problem?.split("\n")[0]).toBe("could not read fake.test/acme/recipes.");
         expect(lookup.failure?.attempts).toEqual([{ strategy: "HTTP", reason: "404 not found" }]);
         expect(core.readMeta(IDENTITY)?.lastCheckedAt).toBe(now.toISOString());
         expect(core.isFresh(IDENTITY, 300)).toBe(true);

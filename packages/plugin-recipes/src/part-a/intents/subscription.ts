@@ -37,6 +37,7 @@ import { askFollowUp, buildFollowUp } from "../followups.js";
 import { applyResolution, keysHeldBySubscription, PROJECT_HOLDER, type LockRepoInput } from "../lock-holds.js";
 import { configuredSubscriptions, contributorLabel, managedContributor, setSubscriptionEnabled, SUBSCRIPTIONS_LAYER, trustedRepos, writeSubscriptionEntry } from "../project.js";
 import { isShortNamed, planSubscriptionRemoval, subscriptionKeyFor, writeSubscriptionRemoval } from "../subscriptions.js";
+import { ensureRequiredPlugins } from "../required-plugins.js";
 import { needUrlError } from "../trust.js";
 import { describeUpdateScope, isEmptyUpdate, planUpdate } from "../update-plan.js";
 import { describeError, nowIso, proposeRepoName, sortBytewise } from "../util.js";
@@ -262,8 +263,17 @@ export async function addSubscription(input: SubscriptionAddInput, ctx: Context)
         dryRun: input.dryRun === true,
     };
 
+    // Before anything is written: a recipe requiring a plugin that is not installed is refused,
+    // unless it is installed now (S1, "Recipes that require npm plugins").
+    const installed = await ensureRequiredPlugins(current, closure.resolved, input, input.ref.trim());
+    const installFollowUp = installed === undefined ? [] : [installed];
+
     if (input.dryRun === true) {
-        return { ...result, diff: lockService.diff(before, after), followUps: [{ intent: "vars.ask", skipped: "--dry-run" }, { intent: "build", skipped: "--dry-run" }] };
+        return {
+            ...result,
+            diff: lockService.diff(before, after),
+            followUps: [...installFollowUp, { intent: "vars.ask", skipped: "--dry-run" }, { intent: "build", skipped: "--dry-run" }],
+        };
     }
 
     const range = written.ref.kind === "recipe" ? written.ref.range : undefined;
@@ -283,7 +293,7 @@ export async function addSubscription(input: SubscriptionAddInput, ctx: Context)
 
     const asking = closure.resolved.filter((recipe) => (recipe.variables ?? []).length > 0).map((recipe) => recipe.key);
 
-    return { ...result, diff, followUps: [await askFollowUp(ctx, input, asking), await buildFollowUp(ctx, input)] };
+    return { ...result, diff, followUps: [...installFollowUp, await askFollowUp(ctx, input, asking), await buildFollowUp(ctx, input)] };
 }
 
 /** Writes the lockfile and fires `recipes.locked`. */

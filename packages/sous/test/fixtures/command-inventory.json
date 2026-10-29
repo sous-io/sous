@@ -482,12 +482,7 @@
         },
         {
           "name": "provider",
-          "type": "option",
-          "options": [
-            "github",
-            "gitlab",
-            "local"
-          ]
+          "type": "string"
         },
         {
           "name": "yes",
