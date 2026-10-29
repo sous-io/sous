@@ -4,6 +4,10 @@ Every command the `sous` CLI ships, with its arguments, its own flags and one ex
 terminal: `sous <command> --help`, or `sous help <command>`. Flags that mean the same thing everywhere are
 explained once, below, and only named under the commands that take them.
 
+Each command is generated from an intent: a step a plugin registers, with a typed input. Its flags come from the
+intent's input, so every input a command takes is a flag, and the same intents are the tools `sous mcp` offers
+an agent. A plugin can add commands of its own, which appear here in `sous --help` like the built-in ones.
+
 ## Flags that locate the configuration
 
 | Flag | What it does |
@@ -11,7 +15,7 @@ explained once, below, and only named under the commands that take them.
 | `-c, --config <path>` | A sous config file, or a directory holding one. Overrides `.sous/` discovery |
 | `--sous-config <path>` | Alias of `--config` |
 | `--sous-dir <path>` | The `.sous` directory to use, overriding walk-up discovery |
-| `--sous-confd <path>` | The `conf.d/` drop-in layer directory, overriding `<sousDir>/conf.d` |
+| `--sous-confd <path>` | The `conf.d/` drop-in directory, overriding `<sousDir>/conf.d` |
 
 Every command that works on a project takes these four. `SOUS_CONFIG`, `SOUS_DIR` and `SOUS_CONFD` do the same;
 a flag beats its variable, and both beat walk-up discovery. See [Discovery and overrides](config-discovery.md).
@@ -41,6 +45,19 @@ Help has four spellings. `sous --help` prints the root screen; `sous repo add --
 `sous help repo add` all print that one command's. `sous help` alone lists the topics and commands, and
 `sous --version` prints the version alone, as `v1.2.3`; `sous --version --verbose` adds the package name, where
 it is installed, the platform and the Node build under it.
+
+## Flags that control output
+
+Every command accepts these:
+
+| Flag | What it does |
+|------|--------------|
+| `--log-level <level>` | Show messages at this level and above: `debug`, `info`, `notice`, `warning`, `error`, `critical`, `alert` or `emergency` |
+| `--debug` | The same as `--log-level debug`. Among other things, it shows each config contributor that would have re-run in a finished config stage, and why it did not |
+| `--timings` | Print how long every stage, contributor, intent and plugin call took |
+
+Sous warns on standard error when a stage or a plugin call goes over its time budget, so a warning never mixes
+with `--json` output. The `budgets` config key changes a budget, and `false` turns its warning off.
 
 ## Flags that browse
 
@@ -87,6 +104,11 @@ instructions; `-y, --yes` answers it ahead of time, and a run with no terminal f
 
 Example: `sous init --format json`
 
+?> This describes what `sous init` writes in sous 0.2.x. In 1.0, agent plugins add memory targets (the built-in
+Claude Code plugin adds `CLAUDE.md`), and sous compiles the active recipes' memories into each target itself
+([S6, Memories](architecture/specifications/S6-concerns-and-owners.md#memories-plugin-memories)). The config no
+longer writes `projectRoot` by hand. Exactly which starter files 1.0's `sous init` writes is not settled.
+
 ### `sous build`
 Compiles this project's outputs, then removes the ones its config no longer produces. It is compile plus prune,
 and the command you want almost always. Takes `--dry-run`.
@@ -95,7 +117,7 @@ and the command you want almost always. Takes `--dry-run`.
 - `--rebuild`: ignore cached hashes and reprocess every output.
 - `--strict`: treat compile warnings as errors (a `.tpl.` file copied without being rendered, a git branch the
   runtime context could not read).
-- `-w, --watch`: rebuild on every change to a source file, a config layer or a linked checkout.
+- `-w, --watch`: rebuild on every change to a source file, a config file or a linked checkout.
 
 Before it compiles, a build prepares the project's recipes: it seeds the core recipe, pins any subscription the
 lockfile does not pin yet, restores whatever the store on this machine is missing, and checks upstream for the
@@ -110,6 +132,19 @@ target had an error is not written, so the copy from the last good build stays i
 A build also warns about every memory an active recipe publishes that no output includes, naming the line to add
 (`@#memories/**/*.md`) and the `recipes.memories.exclude` opt-out; see
 [Recipe memories](repositories-consuming.md#recipe-memories).
+
+A build compiles only the recipes reached from subscriptions switched on on this machine. Each recipe it skips
+gets one line saying why, and the outputs it had written are pruned:
+
+```text
+$ sous build
+Skipped tool-usage/automated-browser-tasks: its subscription is switched off (conf.d/610-mac.jsonc).
+Pruned 4 outputs it had written.
+```
+
+Skills go to every place an agent plugin says its harness reads them (the built-in Claude Code plugin says
+`.claude/skills`) and to every path in `recipes.skills.outputs`. With neither, the build skips them and says how
+to fix it.
 
 A build also lists each recipe this project uses that has a newer version within the range
 declared for it, beside the version pinned. It moves no pin; only always-pull moves one. The build reads upstream
@@ -134,7 +169,8 @@ Deletes every file and directory sous has written for the project, and asks firs
 confirmation ahead of time. Example: `sous clear --force`
 
 ### `sous launch TOOL...`
-Builds this project's outputs, then starts a coding agent configured under `tools` in its config. A build that
+Builds this project's outputs, then starts a coding agent: one an agent plugin provides (the built-in Claude Code
+plugin provides `claude`), or one configured under `tools` in the config, which needs no plugin. A build that
 fails starts nothing and exits `1`. `--no-build` launches without building; `--continuous` restarts the agent
 whenever it exits.
 
@@ -171,27 +207,61 @@ version. A project config this copy cannot load is one warning, not a stop. Take
 
 Example: `sous update --version next --dry-run`
 
+### `sous mcp`
+Starts an MCP server for this project, for any agent tool that speaks MCP. Its tools are the same intents the CLI's
+commands run, so an agent can do through it anything the CLI can. A question a command would ask at a terminal is
+asked through MCP elicitation instead. The server serves the project it started in for its whole life, even when
+the agent changes directories. Example, in an agent tool's MCP settings:
+
+```json
+{
+    "mcpServers": {
+        "sous": {
+            "command": "npx",
+            "args": ["sous", "mcp"]
+        }
+    }
+}
+```
+
+### `sous plugins show`
+Lists every plugin loaded for this project, and everything each one registered, wrapped or replaced: services,
+intents, listeners, entities and options. Example:
+
+```text
+$ sous plugins show
+sous-plugin-remote-config
+  replaces           git.runner
+plugin-claude-code (built in)
+  entities           harness: claude    skill-target: claude-code    memory-target: claude-code
+  listeners          build.after
+plugin-gitlab (built in)
+  entities           repository-host: gitlab
+```
+
 ### `sous help [COMMAND]`
 Prints the help for sous, or for one command or topic. Works from any directory, including one with no config
 above it. Example: `sous help repo add`
 
 ## config
 
-Inspects the merged configuration. `show` and `get` write machine-readable output to standard out and route the
+Inspects the built configuration. `show` and `get` write machine-readable output to standard out and route the
 header and any error block to standard error, so a pipeline survives a broken config. See
 [Inspecting and validating](config-inspection.md).
 
 ### `sous config show`
-Prints the merged config (every `conf.d` layer merged, before variable resolution) as JSON.
-Example: `sous config show | jq .compilation`
+Prints the built config as JSON, with config expressions evaluated: what sous will do on this machine. `--layers`
+shows each contributor's change in order, down to the primitive patches; `--raw` prints each config file as
+written. Example: `sous config show | jq .compilation`
 
 ### `sous config get PATH`
 Prints one value by dot-path, with `[n]` for array indices; a scalar prints raw, and an object or array prints
-as pretty JSON. `--layers` adds one `old -> new` line per config layer that changed the value.
+as pretty JSON. `--layers` lists every contributor that changed the value, in order, with what it wrote and,
+for a config expression, what it evaluated to.
 Example: `sous config get compilation.targets[0].entryPoint --layers`
 
 ### `sous config validate`
-Validates the merged config: the schema first, then full variable resolution, which is what surfaces reference
+Validates the built config: the schema first, then full variable resolution, which is what surfaces reference
 cycles and undefined `${var}` references. Example: `sous config validate`
 
 ## repo
@@ -382,6 +452,10 @@ began recording questions there is named instead.
 - `--answer <name>=<value>`: answer one question ahead of time. Repeat it for each answer.
 - `--answers-file <path>`: read the same pairs from a YAML or JSON file. An `--answer` wins over the file.
 
+- `--install-plugins`: install any plugin the recipe requires (`requires.plugins` in its manifest) through the
+  project's package manager, without asking. Without it, a missing or out-of-range required plugin is refused,
+  and asked about at a terminal.
+
 Example: `sous subscription add workflow/task-files@^1.2.0 --answer apiUrl=https://api.example.com`
 
 ### `sous subscription remove REF`
@@ -401,6 +475,12 @@ and `--answers-file`, and `--dry-run`, which fetches the indexes but downloads n
 - `--accept-first`: when `REF` matches several things, take the first one listed.
 
 Example: `sous subscription update workflow/task-files`
+
+### `sous subscription disable REF`, `sous subscription enable REF`
+Switch a subscription off or back on, by setting its `enabled` key in `conf.d/510-subscriptions.jsonc`. The edit
+is surgical: it replaces only that key, including a config expression you wrote there, and keeps the rest of the
+file as it is. A switched-off subscription keeps its pins in the lockfile, so it stays on for everyone whose
+config does not switch it off. Example: `sous subscription disable tool-usage/automated-browser-tasks`
 
 ### `sous subscription list`
 Lists the subscriptions this project declares, switched-off ones included, with the range each resolves within,
@@ -512,7 +592,8 @@ $ sous subscription add workflow --non-interactive
 No expected failure prints a stack trace. A failure sous did not expect prints the message and one more sentence
 asking you to set `SOUS_DEBUG=1` and run the command again. Set `SOUS_DEBUG` to anything but `0`, `false`, `no`
 or `off` and every reported failure prints its stack to standard error underneath the message:
-`SOUS_DEBUG=1 sous build`. The one other thing it changes is that every hand-off to a project's own install
+`SOUS_DEBUG=1 sous build`. `--debug` shows debug-level messages; see
+[Flags that control output](#flags-that-control-output). The one other thing `SOUS_DEBUG` changes is that every hand-off to a project's own install
 announces itself in full, not only one between different versions; `--verbose` does the same.
 
 `SOUS_NO_DELEGATE` is the other environment variable every command reads. Set it the same way and the copy of

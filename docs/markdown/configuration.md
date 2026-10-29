@@ -7,7 +7,7 @@ user-level config (nothing is read from `~/.sous`) and no multi-project map.
 ## The config file
 
 Exactly one primary config lives inside `.sous/`: `sous.config.js`, `sous.config.mjs`,
-`sous.config.json`, `sous.config.jsonc`, or `sous.config.yaml`. Two or more candidates is an
+`sous.config.ts`, `sous.config.json`, `sous.config.jsonc`, or `sous.config.yaml`. Two or more candidates is an
 error, never a silent first-match. A typical config:
 
 ```js
@@ -16,8 +16,7 @@ export const config = {
   name: "My Project",                  // optional display name
   _env: { userHome: "HOME" },          // map config vars from env vars (top-level only)
   _vars: {
-    projectRoot: "${sousDir}/..",      // ${sousDir} is the discovered .sous/ dir
-    docsDir: "${projectRoot}/docs",    // declaration order never matters
+    docsDir: "${projectRoot}/docs",    // projectRoot is set by sous; order never matters
   },
   _aliases: { myDocs: "${docsDir}" },  // extra @include bases (optional)
   compilation: {
@@ -37,6 +36,14 @@ export const config = {
   },
 };
 ```
+
+`${projectRoot}` is the directory that holds `.sous/`. Sous sets it, and setting `projectRoot` in any
+`_vars` block is an error; see [Variables](config-variables.md#auto-vars).
+
+The `.claude/skills` target above compiles the project's own skills. Skills from subscribed recipes
+need no target of their own: the built-in Claude Code plugin sends them to `.claude/skills`, and
+`recipes.skills.outputs` adds destinations of your own (see
+[Consuming recipes](repositories-consuming.md)).
 
 A JSON config may set `"$schema"` to bind the `sous.config.schema.json` artifact shipped with
 sous for editor autocompletion; sous accepts and ignores the key. `sous init --format json`
@@ -78,26 +85,105 @@ has the namespace rules.
 
 ## Composition
 
-The primary config is optionally extended by drop-in layers: every `*.js|mjs|json|jsonc|yaml` file
-directly inside `.sous/conf.d/` is loaded after the primary config and deep-merged over it. A
-`.js`/`.mjs` config or layer can also compose programmatically through a `configure()` function.
-[Layers and merging](config-layers.md) covers the full semantics.
+The primary config is optionally extended by drop-in files: every `*.js|mjs|ts|json|jsonc|yaml`
+file directly inside `.sous/conf.d/` is applied after the primary config, in filename order, and
+merged over it. Each file, the primary config included, is a contributor to one config-building
+loop, alongside recipe config files and plugins; your own files always land last, so they win. A
+`.js`, `.mjs` or `.ts` file can also change the config through a `configure()` function, and a
+`.patch.json` or `.patch.jsonl` file holds raw edits. [Layers and merging](config-layers.md) covers
+the full semantics.
+
+## Config expressions
+
+A value in a JSON, JSONC or YAML config file may be an expression object, decided when sous builds
+the config instead of when the file is written. The reserved keys are `$expr`, `$if`, `$elseif` and
+`$else` (each `$if` and `$elseif` may carry a `:<name>` qualifier, and `$expr` a `:<language>` one).
+Liquid is the expression language. An expression can read `host.platform`, `env.<NAME>`, variables
+by their bare name, and recipe answers (except under `subscriptions` and `repos`).
+
+A subscription switched off on a Mac only:
+
+```jsonc
+// conf.d/610-mac.jsonc
+{
+    "subscriptions": {
+        "tool-usage/automated-browser-tasks": {
+            "enabled": {
+                "$if": {
+                    "expr": "host.platform == 'darwin'",
+                    "then": false
+                }
+            }
+        }
+    }
+}
+```
+
+On a Mac, `enabled` is `false`. Elsewhere the condition is false and there is no `$else`, so the key
+is dropped and the subscription stays on. An expression may appear at any depth, including inside
+arrays. An object mixing a reserved key with any other key is an error, so a typo such as `"$iff"`
+never passes through as config. The full rules are in
+[S5: Config Expressions](architecture/specifications/S5-config-expressions.md).
+
+## Plugins
+
+Sous is a small engine plus plugins; the CLI, recipes, the compiler, skills, memories, Claude Code
+support and the package-manager and repository-host integrations are all built-in plugins. Which
+plugins load is an ordinary config key, so it may be set in any config file, a recipe's included.
+There is no separate bootstrap config and no `"sous"` key in `package.json`.
+
+- `plugins.discover` (`"dependencies" | "scan" = "dependencies"`): `"dependencies"` loads the
+  built-ins, the plugins in the project's `package.json` dependencies (and the workspace root's) and
+  those under `load`; `"scan"` also looks for installed plugins through the package managers.
+- `plugins.load` (`string[]`): plugins to load though `package.json` does not list them.
+- `plugins.disabled` (`string[]`): plugins never to load, built-ins included.
+- `plugins.options` (`Record<string, object>`): each plugin's own options, keyed by plugin name.
+
+```jsonc
+// .sous/sous.config.jsonc
+{
+    "plugins": {
+        "load": [
+            "sous-plugin-bun"
+        ],
+        "disabled": [
+            "sous-plugin-old-thing"
+        ],
+        "options": {
+            "sous-plugin-claude-code": {
+                "model": "opus"
+            }
+        }
+    }
+}
+```
+
+Two more keys belong to the engine:
+
+- `services.replace` picks the winner when two plugins replace the same service:
+  `"services": { "replace": { "git.runner": "sous-plugin-fast-git" } }`. Sous warns on every run
+  that the other plugin may not work as expected.
+- `budgets` changes the time budget of any stage or plugin call; a budget set to `false` turns its
+  warning off. `--timings` on any command prints every timing.
+
+`sous plugins show` lists every plugin and what it registered. Recipes may ship plugins too; see
+[S1: Where plugins come from](architecture/specifications/S1-engine.md#where-plugins-come-from).
 
 ## Where to go next
 
 - [Discovery and overrides](config-discovery.md): how sous finds the config, and the flags and
   environment variables that override it
-- [Layers and merging](config-layers.md): `conf.d/` ordering, merge semantics, the JS
-  `configure()` contract
-- [Variables](config-variables.md): the `${var}` scope chain, auto-vars, fixpoint resolution
+- [Layers and merging](config-layers.md): contributors, `conf.d/` ordering, merge semantics, the
+  `configure()` contract, patch files
+- [Variables](config-variables.md): the `${var}` scope chain, auto-vars (`projectRoot` among them), fixpoint resolution
 - [Inspecting and validating](config-inspection.md): the `sous config` commands and the
   validation pipeline
 
 ## Rules of the road
 
-- Hand-written config belongs in the primary file or your own `conf.d/` layers. The
-  `conf.d/500-*` through `conf.d/599-*` band is reserved for layers the sous CLI itself writes.
+- Hand-written config belongs in the primary file or your own `conf.d/` files. The
+  `conf.d/500-*` through `conf.d/599-*` band is reserved for files the sous CLI itself writes.
   Sous edits those by key, so you may edit them too and your comments, key order and formatting
-  survive; put a layer of your own outside the band.
+  survive; put a file of your own outside the band.
 - Any config problem halts sous with a `ConfigError` naming the offending file; there is no
   warn-and-continue.
