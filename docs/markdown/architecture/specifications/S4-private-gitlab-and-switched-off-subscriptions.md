@@ -64,7 +64,7 @@ Reading sous.index.json from a repository
   ETag, and whether it serves a public project without a token.
 - Each repository provider registers its read strategies, so a plugin can add one (for a host with
   its own authentication, for example).
-- Every attempt is timed (L5).
+- Every attempt is timed (L5, everything timed).
 
 ### Token sources, tried in order
 
@@ -141,8 +141,9 @@ Pruned 4 outputs it had written.
 
 ## 4. A later config layer cannot switch off a subscription the managed layer lists
 
-Before the refactor, the subscription code re-reads `conf.d/510-subscriptions.jsonc` after the merge
-and spreads each entry over the merged entry whole:
+Sous writes the project's subscriptions into a config layer of its own,
+`conf.d/510-subscriptions.jsonc`, called the managed layer. Before the refactor, the subscription
+code re-reads that file after the merge and spreads each entry over the merged entry whole:
 
 ```ts
 const merged: Record<string, SubscriptionEntry> = {
@@ -154,8 +155,8 @@ const merged: Record<string, SubscriptionEntry> = {
 So a layer sorting after 510 that sets
 `{ "tool-usage/automated-browser-tasks": { enabled: false } }` has no effect.
 
-Fix: S2's ruling that sous always reads the merged config removes the re-read. After a command writes
-a managed layer, the config is reloaded.
+Fix: S2 (config building) rules that sous always reads the merged config, which removes the
+re-read. After a command writes a managed layer, the config is reloaded.
 
 ## Related, Not Proposed
 

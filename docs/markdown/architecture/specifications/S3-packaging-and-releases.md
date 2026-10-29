@@ -20,46 +20,18 @@ The refactor is done in one sweep, not one concern at a time. It ships as sous 1
 
 Sous becomes a pnpm workspace. Each concern gets its own package, created as part of moving that
 concern into its owner. Four packages are not plugins; every other package is a built-in plugin
-(S6):
+(see S6, concerns and owners):
 
 ```text
 packages/
-    core/                     the engine: config building, the chain scheduler, events, services,
-                              entities, plugin loading, loop detection, budgets
+    core/                     the engine
     documents/                surgical JSON, JSONC and YAML editing; the config builder is built on it
-    plugin-api/               definePlugin, the empty type interfaces, Reporter, Prompter, errors
+    plugin-api/               the plugin interface (see "The Plugin Interface")
     sous/                     the published package: the bin, the built-in plugin list, the bundle
-
-    plugin-host/              processes, HTTP, globs, sous home, sous's own directories
-    plugin-git/
-    plugin-refs/
-    plugin-formats/
-    plugin-variables/
-    plugin-liquid/
-    plugin-expressions/
-    plugin-config-files/      sous.config.*
-    plugin-confd/             the conf.d files
-    plugin-recipes/
-    plugin-recipe-answers/
-    plugin-compiler/
-    plugin-build/
-    plugin-skills/
-    plugin-memories/
-    plugin-harnesses/
-    plugin-authoring/
-    plugin-init/
-    plugin-update/
-    plugin-inspect/
-    plugin-cli/
-    plugin-mcp/
-    plugin-npm/
-    plugin-pnpm/
-    plugin-yarn/
-    plugin-github/
-    plugin-gitlab/
-    plugin-local/
-    plugin-claude-code/
+    plugin-<concern>/         one package per built-in plugin
 ```
+
+S6 (concerns and owners), section "Packages", lists every package and what it holds.
 
 A built-in plugin reaches another only through the engine: services, intents, events and entities,
 looked up by name. At compile time it may import another plugin's types, and nothing else:
@@ -73,8 +45,7 @@ import type {} from "@sous-io/plugin-compiler/types";
 import { StateFile } from "@sous-io/plugin-compiler/src/state-file.js";
 ```
 
-S6 says what each package holds. Every package is kept, one per concern, even when it is small
-(ruled 2026-10-25).
+Every package is kept, one per concern, even when it is small (ruled 2026-10-25).
 
 ## What Users Install
 
@@ -107,9 +78,9 @@ Decided for the plugin:
     ```
 
 2. The plugin's hooks call tools on the running MCP server (`"type": "mcp_tool"`) instead of
-   starting the CLI on every event, so they never pay the CLI's start-up time (G9), and each hook is
-   one call into sous. Every hook's behavior exists as an MCP tool, built on the same services the
-   CLI uses (L3).
+   starting the CLI on every event, so they never pay the CLI's start-up time (G9, very fast), and
+   each hook is one call into sous. Every hook's behavior exists as an MCP tool, built on the same services the
+   CLI uses (L3, services never print, prompt or exit).
 
     ```json
     {
@@ -178,9 +149,8 @@ The plugin interface is its own published package, `@sous-io/plugin-api`. It hol
 the empty interfaces every plugin adds its own types to (`SousServices`, `SousIntents`,
 `SousEvents`, `SousEntities`), the `Reporter` and `Prompter` interfaces, and the error classes. Each
 plugin declares the types of its own services, intents, events and entities in its own package
-(S6). A plugin depends on it, and
-declares `@sous-io/sous` as a peer dependency, so the package manager warns when the project's sous
-is older than the plugin expects:
+(see S6, concerns and owners). A plugin depends on it, and declares `@sous-io/sous` as a peer
+dependency, so the package manager warns when the project's sous is older than the plugin expects:
 
 ```jsonc
 {
@@ -195,8 +165,8 @@ is older than the plugin expects:
 ```
 
 Sous passes everything a plugin uses into `register(sous)` and each `ctx`, so a plugin imports only
-types and `definePlugin` from `@sous-io/plugin-api`. A second copy of that package in a project then does no
-harm (agent suggestion).
+types and `definePlugin` from `@sous-io/plugin-api`. A second copy of that package in a project then
+does no harm (suggested by an agent).
 
 ## Breaking Changes
 
@@ -206,8 +176,8 @@ harm (agent suggestion).
 ## The Source Is TypeScript
 
 Ruled 2026-10-29: sous's source stays TypeScript. Plugins see each other's services, intents, events
-and entities with full types through TypeScript declaration merging (S1), which would otherwise mean
-writing `.d.ts` files by hand. The bundler compiles it ahead of time, so users run plain JavaScript,
+and entities with full types through TypeScript declaration merging (see S1, the engine), which
+would otherwise mean writing `.d.ts` files by hand. The bundler compiles it ahead of time, so users run plain JavaScript,
 and plugin authors may write their plugins in either language.
 
 ## Open Questions
