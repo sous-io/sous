@@ -112,6 +112,78 @@ importers:
 
   packages/plugin-api: {}
 
+  packages/plugin-authoring:
+    dependencies:
+      '@sous-io/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@sous-io/plugin-formats':
+        specifier: workspace:*
+        version: link:../plugin-formats
+      '@sous-io/plugin-git':
+        specifier: workspace:*
+        version: link:../plugin-git
+      '@sous-io/plugin-recipes':
+        specifier: workspace:*
+        version: link:../plugin-recipes
+      '@sous-io/plugin-refs':
+        specifier: workspace:*
+        version: link:../plugin-refs
+      '@sous-io/plugin-variables':
+        specifier: workspace:*
+        version: link:../plugin-variables
+    devDependencies:
+      '@sous-io/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/plugin-build:
+    dependencies:
+      '@sous-io/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@sous-io/plugin-compiler':
+        specifier: workspace:*
+        version: link:../plugin-compiler
+      '@sous-io/plugin-git':
+        specifier: workspace:*
+        version: link:../plugin-git
+      '@sous-io/plugin-host':
+        specifier: workspace:*
+        version: link:../plugin-host
+      '@sous-io/plugin-recipe-answers':
+        specifier: workspace:*
+        version: link:../plugin-recipe-answers
+      '@sous-io/plugin-recipes':
+        specifier: workspace:*
+        version: link:../plugin-recipes
+    devDependencies:
+      '@sous-io/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/plugin-claude-code:
+    dependencies:
+      '@sous-io/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@sous-io/plugin-harnesses':
+        specifier: workspace:*
+        version: link:../plugin-harnesses
+      '@sous-io/plugin-host':
+        specifier: workspace:*
+        version: link:../plugin-host
+      '@sous-io/plugin-memories':
+        specifier: workspace:*
+        version: link:../plugin-memories
+      '@sous-io/plugin-skills':
+        specifier: workspace:*
+        version: link:../plugin-skills
+    devDependencies:
+      '@sous-io/core':
+        specifier: workspace:*
+        version: link:../core
+
   packages/plugin-cli:
     dependencies:
       '@sous-io/plugin-api':
@@ -125,6 +197,433 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
 
+  packages/plugin-compiler:
+    dependencies:
+      '@sous-io/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@sous-io/plugin-host':
+        specifier: workspace:*
+        version: link:../plugin-host
+      '@sous-io/plugin-liquid':
+        specifier: workspace:*
+        version: link:../plugin-liquid
+      '@sous-io/plugin-refs':
+        specifier: workspace:*
+        version: link:../plugin-refs
+      '@sous-io/plugin-variables':
+        specifier: workspace:*
+        version: link:../plugin-variables
+    devDependencies:
+      '@sous-io/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/plugin-confd:
+    dependencies:
+      '@sous-io/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@sous-io/plugin-config-files':
+        specifier: workspace:*
+        version: link:../plugin-config-files
+      '@sous-io/plugin-expressions':
+        specifier: workspace:*
+        version: link:../plugin-expressions
+      '@sous-io/plugin-host':
+        specifier: workspace:*
+        version: link:../plugin-host
+      '@sous-io/plugin-variables':
+        specifier: workspace:*
+        version: link:../plugin-variables
+    devDependencies:
+      '@sous-io/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/plugin-config-files:
+    dependencies:
+      '@sous-io/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@sous-io/plugin-expressions':
+        specifier: workspace:*
+        version: link:../plugin-expressions
+      '@sous-io/plugin-host':
+        specifier: workspace:*
+        version: link:../plugin-host
+      '@sous-io/plugin-variables':
+        specifier: workspace:*
+        version: link:../plugin-variables
+    devDependencies:
+      '@sous-io/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/plugin-expressions:
+    dependencies:
+      '@sous-io/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@sous-io/plugin-liquid':
+        specifier: workspace:*
+        version: link:../plugin-liquid
+      '@sous-io/plugin-variables':
+        specifier: workspace:*
+        version: link:../plugin-variables
+    devDependencies:
+      '@sous-io/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/plugin-formats:
+    dependencies:
+      '@sous-io/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@sous-io/plugin-refs':
+        specifier: workspace:*
+        version: link:../plugin-refs
+    devDependencies:
+      '@sous-io/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/plugin-git:
+    dependencies:
+      '@sous-io/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@sous-io/plugin-host':
+        specifier: workspace:*
+        version: link:../plugin-host
+    devDependencies:
+      '@sous-io/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/plugin-github:
+    dependencies:
+      '@sous-io/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@sous-io/plugin-git':
+        specifier: workspace:*
+        version: link:../plugin-git
+      '@sous-io/plugin-host':
+        specifier: workspace:*
+        version: link:../plugin-host
+      '@sous-io/plugin-recipes':
+        specifier: workspace:*
+        version: link:../plugin-recipes
+    devDependencies:
+      '@sous-io/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/plugin-gitlab:
+    dependencies:
+      '@sous-io/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@sous-io/plugin-git':
+        specifier: workspace:*
+        version: link:../plugin-git
+      '@sous-io/plugin-host':
+        specifier: workspace:*
+        version: link:../plugin-host
+      '@sous-io/plugin-recipes':
+        specifier: workspace:*
+        version: link:../plugin-recipes
+    devDependencies:
+      '@sous-io/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/plugin-harnesses:
+    dependencies:
+      '@sous-io/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@sous-io/plugin-build':
+        specifier: workspace:*
+        version: link:../plugin-build
+      '@sous-io/plugin-host':
+        specifier: workspace:*
+        version: link:../plugin-host
+    devDependencies:
+      '@sous-io/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/plugin-host:
+    dependencies:
+      '@sous-io/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+    devDependencies:
+      '@sous-io/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/plugin-init:
+    dependencies:
+      '@sous-io/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@sous-io/plugin-build':
+        specifier: workspace:*
+        version: link:../plugin-build
+      '@sous-io/plugin-config-files':
+        specifier: workspace:*
+        version: link:../plugin-config-files
+      '@sous-io/plugin-host':
+        specifier: workspace:*
+        version: link:../plugin-host
+    devDependencies:
+      '@sous-io/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/plugin-inspect:
+    dependencies:
+      '@sous-io/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+    devDependencies:
+      '@sous-io/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/plugin-liquid:
+    dependencies:
+      '@sous-io/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@sous-io/plugin-host':
+        specifier: workspace:*
+        version: link:../plugin-host
+      liquidjs:
+        specifier: ^10.25.0
+        version: 10.25.0
+    devDependencies:
+      '@sous-io/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/plugin-local:
+    dependencies:
+      '@sous-io/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@sous-io/plugin-git':
+        specifier: workspace:*
+        version: link:../plugin-git
+      '@sous-io/plugin-host':
+        specifier: workspace:*
+        version: link:../plugin-host
+      '@sous-io/plugin-recipes':
+        specifier: workspace:*
+        version: link:../plugin-recipes
+    devDependencies:
+      '@sous-io/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/plugin-mcp:
+    dependencies:
+      '@sous-io/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+    devDependencies:
+      '@sous-io/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/plugin-memories:
+    dependencies:
+      '@sous-io/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@sous-io/plugin-compiler':
+        specifier: workspace:*
+        version: link:../plugin-compiler
+      '@sous-io/plugin-host':
+        specifier: workspace:*
+        version: link:../plugin-host
+      '@sous-io/plugin-recipes':
+        specifier: workspace:*
+        version: link:../plugin-recipes
+      '@sous-io/plugin-refs':
+        specifier: workspace:*
+        version: link:../plugin-refs
+    devDependencies:
+      '@sous-io/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/plugin-npm:
+    dependencies:
+      '@sous-io/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@sous-io/plugin-host':
+        specifier: workspace:*
+        version: link:../plugin-host
+      '@sous-io/plugin-update':
+        specifier: workspace:*
+        version: link:../plugin-update
+    devDependencies:
+      '@sous-io/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/plugin-pnpm:
+    dependencies:
+      '@sous-io/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@sous-io/plugin-host':
+        specifier: workspace:*
+        version: link:../plugin-host
+      '@sous-io/plugin-update':
+        specifier: workspace:*
+        version: link:../plugin-update
+    devDependencies:
+      '@sous-io/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/plugin-recipe-answers:
+    dependencies:
+      '@sous-io/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@sous-io/plugin-confd':
+        specifier: workspace:*
+        version: link:../plugin-confd
+      '@sous-io/plugin-config-files':
+        specifier: workspace:*
+        version: link:../plugin-config-files
+      '@sous-io/plugin-formats':
+        specifier: workspace:*
+        version: link:../plugin-formats
+      '@sous-io/plugin-recipes':
+        specifier: workspace:*
+        version: link:../plugin-recipes
+      '@sous-io/plugin-refs':
+        specifier: workspace:*
+        version: link:../plugin-refs
+      '@sous-io/plugin-variables':
+        specifier: workspace:*
+        version: link:../plugin-variables
+    devDependencies:
+      '@sous-io/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/plugin-recipes:
+    dependencies:
+      '@sous-io/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@sous-io/plugin-compiler':
+        specifier: workspace:*
+        version: link:../plugin-compiler
+      '@sous-io/plugin-confd':
+        specifier: workspace:*
+        version: link:../plugin-confd
+      '@sous-io/plugin-formats':
+        specifier: workspace:*
+        version: link:../plugin-formats
+      '@sous-io/plugin-git':
+        specifier: workspace:*
+        version: link:../plugin-git
+      '@sous-io/plugin-host':
+        specifier: workspace:*
+        version: link:../plugin-host
+      '@sous-io/plugin-refs':
+        specifier: workspace:*
+        version: link:../plugin-refs
+      '@sous-io/plugin-variables':
+        specifier: workspace:*
+        version: link:../plugin-variables
+    devDependencies:
+      '@sous-io/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/plugin-refs:
+    dependencies:
+      '@sous-io/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@sous-io/plugin-host':
+        specifier: workspace:*
+        version: link:../plugin-host
+    devDependencies:
+      '@sous-io/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/plugin-skills:
+    dependencies:
+      '@sous-io/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@sous-io/plugin-compiler':
+        specifier: workspace:*
+        version: link:../plugin-compiler
+      '@sous-io/plugin-recipes':
+        specifier: workspace:*
+        version: link:../plugin-recipes
+    devDependencies:
+      '@sous-io/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/plugin-update:
+    dependencies:
+      '@sous-io/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@sous-io/plugin-host':
+        specifier: workspace:*
+        version: link:../plugin-host
+    devDependencies:
+      '@sous-io/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/plugin-variables:
+    dependencies:
+      '@sous-io/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@sous-io/plugin-host':
+        specifier: workspace:*
+        version: link:../plugin-host
+    devDependencies:
+      '@sous-io/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/plugin-yarn:
+    dependencies:
+      '@sous-io/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@sous-io/plugin-host':
+        specifier: workspace:*
+        version: link:../plugin-host
+      '@sous-io/plugin-update':
+        specifier: workspace:*
+        version: link:../plugin-update
+    devDependencies:
+      '@sous-io/core':
+        specifier: workspace:*
+        version: link:../core
+
   packages/sous:
     dependencies:
       '@sous-io/core':
@@ -136,9 +635,93 @@ importers:
       '@sous-io/plugin-api':
         specifier: workspace:*
         version: link:../plugin-api
+      '@sous-io/plugin-authoring':
+        specifier: workspace:*
+        version: link:../plugin-authoring
+      '@sous-io/plugin-build':
+        specifier: workspace:*
+        version: link:../plugin-build
+      '@sous-io/plugin-claude-code':
+        specifier: workspace:*
+        version: link:../plugin-claude-code
       '@sous-io/plugin-cli':
         specifier: workspace:*
         version: link:../plugin-cli
+      '@sous-io/plugin-compiler':
+        specifier: workspace:*
+        version: link:../plugin-compiler
+      '@sous-io/plugin-confd':
+        specifier: workspace:*
+        version: link:../plugin-confd
+      '@sous-io/plugin-config-files':
+        specifier: workspace:*
+        version: link:../plugin-config-files
+      '@sous-io/plugin-expressions':
+        specifier: workspace:*
+        version: link:../plugin-expressions
+      '@sous-io/plugin-formats':
+        specifier: workspace:*
+        version: link:../plugin-formats
+      '@sous-io/plugin-git':
+        specifier: workspace:*
+        version: link:../plugin-git
+      '@sous-io/plugin-github':
+        specifier: workspace:*
+        version: link:../plugin-github
+      '@sous-io/plugin-gitlab':
+        specifier: workspace:*
+        version: link:../plugin-gitlab
+      '@sous-io/plugin-harnesses':
+        specifier: workspace:*
+        version: link:../plugin-harnesses
+      '@sous-io/plugin-host':
+        specifier: workspace:*
+        version: link:../plugin-host
+      '@sous-io/plugin-init':
+        specifier: workspace:*
+        version: link:../plugin-init
+      '@sous-io/plugin-inspect':
+        specifier: workspace:*
+        version: link:../plugin-inspect
+      '@sous-io/plugin-liquid':
+        specifier: workspace:*
+        version: link:../plugin-liquid
+      '@sous-io/plugin-local':
+        specifier: workspace:*
+        version: link:../plugin-local
+      '@sous-io/plugin-mcp':
+        specifier: workspace:*
+        version: link:../plugin-mcp
+      '@sous-io/plugin-memories':
+        specifier: workspace:*
+        version: link:../plugin-memories
+      '@sous-io/plugin-npm':
+        specifier: workspace:*
+        version: link:../plugin-npm
+      '@sous-io/plugin-pnpm':
+        specifier: workspace:*
+        version: link:../plugin-pnpm
+      '@sous-io/plugin-recipe-answers':
+        specifier: workspace:*
+        version: link:../plugin-recipe-answers
+      '@sous-io/plugin-recipes':
+        specifier: workspace:*
+        version: link:../plugin-recipes
+      '@sous-io/plugin-refs':
+        specifier: workspace:*
+        version: link:../plugin-refs
+      '@sous-io/plugin-skills':
+        specifier: workspace:*
+        version: link:../plugin-skills
+      '@sous-io/plugin-update':
+        specifier: workspace:*
+        version: link:../plugin-update
+      '@sous-io/plugin-variables':
+        specifier: workspace:*
+        version: link:../plugin-variables
+      '@sous-io/plugin-yarn':
+        specifier: workspace:*
+        version: link:../plugin-yarn
     devDependencies:
       esbuild:
         specifier: ^0.27.4

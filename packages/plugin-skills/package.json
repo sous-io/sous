@@ -1,0 +1,35 @@
+{
+  "name": "@sous-io/plugin-skills",
+  "version": "0.2.34",
+  "description": "Skills: where they come from, the skill-target entity, and the compilation targets for them.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "private": true,
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./types": {
+      "source": "./src/types.ts",
+      "types": "./dist/types.d.ts",
+      "default": "./dist/types.js"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@sous-io/plugin-api": "workspace:*",
+    "@sous-io/plugin-compiler": "workspace:*",
+    "@sous-io/plugin-recipes": "workspace:*"
+  },
+  "devDependencies": {
+    "@sous-io/core": "workspace:*"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

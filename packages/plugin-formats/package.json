@@ -1,0 +1,34 @@
+{
+  "name": "@sous-io/plugin-formats",
+  "version": "0.2.34",
+  "description": "One parser per on-disk format, reading manifests, and the recipe content hash.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "private": true,
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./types": {
+      "source": "./src/types.ts",
+      "types": "./dist/types.d.ts",
+      "default": "./dist/types.js"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@sous-io/plugin-api": "workspace:*",
+    "@sous-io/plugin-refs": "workspace:*"
+  },
+  "devDependencies": {
+    "@sous-io/core": "workspace:*"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

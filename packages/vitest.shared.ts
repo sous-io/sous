@@ -1,3 +1,4 @@
+import { readdirSync } from "node:fs";
 import path from "node:path";
 import type { ViteUserConfig } from "vitest/config";
 
@@ -10,9 +11,25 @@ const packagesDir = import.meta.dirname;
 const sourceAliases: Record<string, string> = {
     "@sous-io/core": path.join(packagesDir, "core/src/index.ts"),
     "@sous-io/documents": path.join(packagesDir, "documents/src/index.ts"),
-    "@sous-io/plugin-api": path.join(packagesDir, "plugin-api/src/index.ts"),
-    "@sous-io/plugin-cli": path.join(packagesDir, "plugin-cli/src/index.ts"),
+    ...pluginAliases(),
 };
+
+/**
+ * Every `packages/plugin-*` package, by its `@sous-io/plugin-*` name: its root and its `types`
+ * entry, each resolved to source.
+ */
+function pluginAliases(): Record<string, string> {
+    const aliases: Record<string, string> = {};
+
+    for (const entry of readdirSync(packagesDir, { withFileTypes: true })) {
+        if (entry.isDirectory() && entry.name.startsWith("plugin-")) {
+            aliases[`@sous-io/${entry.name}/types`] = path.join(packagesDir, entry.name, "src/types.ts");
+            aliases[`@sous-io/${entry.name}`] = path.join(packagesDir, entry.name, "src/index.ts");
+        }
+    }
+
+    return aliases;
+}
 
 /**
  * The vitest config every package shares: specs co-located under src/ and
