@@ -276,12 +276,15 @@ export interface WriteOptions {
     source: string;
     /** The hash of the source, recorded in the state file. */
     sourceHash?: string;
+    /** The target it came from. A write with no target and an `origin.plugin` is that plugin's own file: prune leaves it, clear removes it. */
     target?: string;
     origin?: CompilationOrigin;
     /** Writes nothing. */
     dryRun?: boolean;
     /** Writes even when the content is unchanged. */
     force?: boolean;
+    /** The file mode to give it (a copied source's own). Default: `0o755` for `.sh`, otherwise left as it is. */
+    mode?: number;
 }
 
 /**

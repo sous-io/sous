@@ -23,13 +23,18 @@
   },
   "dependencies": {
     "@sous-io/plugin-api": "workspace:*",
+    "@sous-io/plugin-host": "workspace:*",
     "@sous-io/plugin-liquid": "workspace:*",
     "@sous-io/plugin-refs": "workspace:*",
     "@sous-io/plugin-variables": "workspace:*",
-    "@sous-io/plugin-host": "workspace:*"
+    "liquidjs": "^10.25.0",
+    "tiktoken": "^1.0.22",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@sous-io/core": "workspace:*"
+    "@sous-io/core": "workspace:*",
+    "glob": "^13.0.6",
+    "minimatch": "^10.2.4"
   },
   "engines": {
     "node": ">=22"

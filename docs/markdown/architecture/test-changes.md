@@ -342,3 +342,66 @@ Ported to `packages/plugin-config-files` (`src/env/*.spec.ts`, `src/loader.spec.
   each other locked recipe is skipped (S4, 3 and 4).
 - **update-plan.spec (`formatUpdatePlan`)**: not ported here; it is a view (S6, "Misfiled
   Modules"). `recipe.update` returns the plan as data.
+
+## plugin-compiler: compiling, includes, the state file, tags and filters, prune, ported to `packages/plugin-compiler`
+
+Every compile test now goes through a real engine and `compiler.compile`, with targets in the
+config (`compilation.targets`); an output's variables are its `_vars`, an alias is `_aliases` or a
+`hash-name` entity, the include scope is `_vars`, and the namespace resolver is the
+`compiler.namespace-resolver` service. Messages are read from the chain's reporter, not `console`.
+
+- **`src/test/integration/compilation.test.ts` → `test/compilation.test.ts`**:
+  - "should warn and name the file when a .tpl. source is written with no vars", "should fail the
+    compile for an unrendered .tpl. file when strict is set", "should not warn when the output has an
+    empty vars object", "should not warn for a non-.tpl. source written with no vars": removed. They
+    expected a `WITHOUT BEING RENDERED` warning for an output with no `vars`. Why: every output now
+    renders with its scope (the old code said a config build could never reach this; only hand-built
+    `CompilationConfig`s could), so the warning and its tripwire are gone.
+  - "should treat a warning as an error in strict mode and carry on" and "should leave a warning a
+    warning without strict mode": expected the unrendered-template warning. Now use the other
+    compile warning, an `entryGlob` that matches nothing. Why: the old warning no longer exists. An
+    empty glob was a plain printed warning before; it is now a compile warning, so `strict` fails on it.
+  - "should error when includeSourceComments is a non-boolean value": expected a `must be a boolean`
+    message from the compile. Now expects building the config to fail naming
+    `compilation.includeSourceComments`. Why: the `compilation` key's schema checks it (S2, C4).
+    "should not error when includeSourceComments is present but undefined" is covered by the default.
+  - "should write a state file…" and "should record newly created output directories…": now also
+    expect each entry's `target` and `origin`, and every directory level created. Why: the state file
+    records which recipe each file came from (S6).
+  - The circular include test expected only "does not throw"; it now also expects the compile to fail
+    with `Circular dependency detected`.
+- **`src/lib/markdown-compiler.spec.ts` → `src/paths.spec.ts`**: the `inferGlobBase` tests are gone:
+  it is `host.globs.staticBase` (S6, "repos and the compiler"), tested in plugin-host. The
+  `destinationDir`/`globBase` tests check `resolveOutputPath` directly.
+- **`src/lib/include-resolver.spec.ts` → `src/includes.spec.ts`**: unchanged expectations, through
+  adapters over `planInclude`/`resolveIncludeFiles`. "substituteVars()" is gone: `${var}` substitution
+  is plugin-variables' (S6). The `~/` test passes the home directory in instead of setting
+  `process.env.HOME`. `buildAliasMap` takes a `substitute` function instead of a scope.
+- **`src/lib/include-resolver.containment.spec.ts` → `src/includes.containment.spec.ts`**: unchanged;
+  the resolver is the test-only static one in `test/namespace-resolver.ts` (S6, "Misfiled Modules").
+- **`src/lib/state.spec.ts` → `src/state.spec.ts`, `src/writer.spec.ts`**: `hashFile`,
+  `recordDirCreation` and `didSousCreateDir` are gone (the writer records directories itself);
+  `StateService.load()` gives an empty state instead of `null` for a missing or broken file;
+  `deleteTrackedFiles` is `compiler.writer`'s `remove()`, which also refuses untracked files.
+  `getFilePath()` falling back to `process.cwd()` is gone (services never read it, S6 rule 6); the path
+  tests are in `test/prune.test.ts`.
+- **`src/test/integration/build-service.test.ts` (prune, `resolveStateFilePath`) → `test/prune.test.ts`**:
+  same expectations through `compiler.prune`. A prune now counts outputs file by file, so a glob
+  target's output whose source is gone is pruned too (before, any file under an active
+  `destinationDir` was kept).
+- **`src/test/integration/{include-globs,alias-includes,alias-render,namespace-includes,get-files-tag}.test.ts`
+  → `test/includes.test.ts`**: same expectations. `#lib` aliases are `hash-name` entities. "should
+  refuse a user alias that starts with # or ~" now expects the config build to fail (the `_aliases`
+  schema). "should resolve a repo-qualified, differently cased recipe reference" and "should prefer the
+  exact spelling of a recipe name"'s case rules are the namespace resolver's (plugin-recipes): the
+  first is not ported; the second runs against the static test resolver.
+- **`src/test/integration/entry-glob-aliases.test.ts` → `test/targets.test.ts`**: same, except
+  "should expand alias entryGlobs in the watch config" (plugin-build's watch settings) is not ported,
+  and `#project` comes from plugin-refs' `hash-name` entity, not a `_vars.projectRoot` override.
+- **`resolveCompilation()` in `src/lib/settings.spec.ts` → `test/targets.test.ts`**: "should throw when
+  a target has both…/neither…" now expect the config build to fail (the schema); "should return null
+  when project has no compilation config" now expects the schema's defaults.
+- **`src/templating/{tags,filters,lib}/*.spec.ts` → `src/liquid/*.spec.ts`**: unchanged expectations;
+  `registerShowVarsTag(engine)` and the rest are shims in `test/liquid.ts` that register the
+  `liquid-tag`/`liquid-filter` entities. The "very probably a secret" cases use a stand-in of
+  `variables.secrets`. `src/templating/init-liquid-engine.spec.ts` went to plugin-liquid (see above).
