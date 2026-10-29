@@ -6,12 +6,15 @@
  * Other plugins import this file type-only.
  */
 
-import type { Environment, JsonValue, PathInput, ProjectInfo } from "@sous-io/plugin-api";
+import type { ConfigBuilder, Environment, JsonValue, PathInput, ProjectInfo } from "@sous-io/plugin-api";
 
 /** A variable scope: names to string values. */
 export type VarScope = Readonly<Record<string, string>>;
 
-/** The variables sous sets itself (S6: `projectRoot` among them). Setting one in `_vars` is an error. */
+/**
+ * The variables sous sets itself (S6: `projectRoot` among them). Setting one in `_vars` or `_env` is
+ * an error. `projectRoot`, `sousDir`, `sousConfigPath` and `sousConfDir` exist only inside a project.
+ */
 export type AutoVariableName =
     | "projectRoot"
     | "sousDir"
@@ -71,8 +74,14 @@ export interface ScopeRequest {
     output?: number;
     /** A named scope from the `variable-source` entities (`namespace/recipe`), laid over the root. */
     scopeKey?: string;
-    /** More values laid over the result, as an inner level would be. */
+    /** More values laid over the result, as an inner level would be: a `_vars` block, resolved over it. */
     extra?: VarScope;
+    /**
+     * Leaves out what cannot be resolved yet (a `${name}` no one sets, an unset `_env` variable)
+     * instead of throwing, so it reads as `undefined` for this pass (S2). Default: `false` for a
+     * built config (`scope()`, or `scopeIn` given a `BuiltConfig`), `true` for any other view.
+     */
+    partial?: boolean;
 }
 
 /** Which variables a scope's value came from, for `--layers` and errors. */
@@ -98,14 +107,29 @@ export interface VariablesResolver {
     normalizePath(value: string): string;
     /** Resolves one `_vars` block over an inherited scope, values referring to each other in any order. */
     resolveBlock(block: Readonly<Record<string, string>>, inherited: VarScope, context: string): Record<string, string>;
-    /** The auto-variables for this project and environment. */
-    autoVariables(): Record<AutoVariableName, string>;
-    /** The scope at a level of the built config. */
+    /** The auto-variables for this project and environment. The project ones are missing outside a project. */
+    autoVariables(): Partial<Record<AutoVariableName, string>>;
+    /** Whether sous sets this name itself, so no `_vars` or `_env` may. */
+    isAutoVariable(name: string): name is AutoVariableName;
+    /** The scope at a level of the latest built config. */
     scope(request?: ScopeRequest): VarScope;
-    /** The same, over any config view, for code that runs while the config is built. */
-    scopeIn(config: ConfigLookup, request?: ScopeRequest): VarScope;
+    /**
+     * The same, over any config view. While the config is built, pass the contributor's
+     * `ConfigBuilder` itself: every `_vars`, `_env` and `variable-source` read then goes through it
+     * and is recorded, so the contributor re-runs when a variable it read changes (S2, "Config
+     * expressions are part of the same loop").
+     */
+    scopeIn(config: ConfigLookup | ConfigBuilder, request?: ScopeRequest): VarScope;
     /** Where each value of a scope came from. */
     origins(request?: ScopeRequest): Record<string, ScopeOrigin>;
+    /** The same, over any config view. */
+    originsIn(config: ConfigLookup | ConfigBuilder, request?: ScopeRequest): Record<string, ScopeOrigin>;
+    /**
+     * The scope request for a value at a config path: the levels that contain it (S2, "Variable
+     * scopes"). `compilation.targets[2].outputs[0].destinationDir` gives the output level; anything
+     * outside `compilation` gives the root.
+     */
+    requestAt(path: PathInput): ScopeRequest;
 }
 
 /** Variable names and their spellings (S6, `variables.names`). */

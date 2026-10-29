@@ -22,6 +22,7 @@
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
+    "@sous-io/documents": "workspace:*",
     "@sous-io/plugin-api": "workspace:*",
     "@sous-io/plugin-host": "workspace:*"
   },

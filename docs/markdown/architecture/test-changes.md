@@ -41,3 +41,28 @@ Every change to an old test during the refactor: the test, what it expected, wha
 - src/lib/repos/formats/recipe-manifest.spec.ts, the four dependency-ref tests (consumer-side qualifier, local locator, bad ref, range on a namespace): expected the real ref parser inside the schema; now pass a stand-in `DependencyRefChecker` to `parseRecipeManifest`. Why: formats receives the ref check from `refs.resolver` instead of importing the ref resolver.
 - src/lib/repos/store/hash.spec.ts: unchanged, plus new cases for case-insensitive `equal` and `isHash`. `hashesEqual` now ignores case (the `formats.recipe-hash` contract).
 - Other formats specs and load-manifest.spec.ts: import paths and the `isConfigError` source only.
+
+## plugin-variables: `src/lib/settings.spec.ts`, `src/lib/include-resolver.spec.ts`, `src/lib/vars/names.spec.ts`, `src/lib/vars/secrets.spec.ts` → `packages/plugin-variables`
+
+- **substituteVars(), findUnresolvedVars(), substituteVarsStrict()** (settings.spec) and
+  **substituteVars()** (include-resolver.spec): ported to `src/substitute.spec.ts` as `substitute`,
+  `references` and `substituteStrict`. The two `substituteVars` tests are now one (L2). The strict
+  error tests expected "raw value", the in-scope names and `.sous/.env.local` in `message`; now they
+  expect them in `message` plus `details`. Why: plugin-api errors carry the fix lines as `details`.
+- **resolveScope()**: ported to `src/resolve-block.spec.ts` (`resolveBlock`). "should warn when a var
+  uses the reserved sous* namespace" expected a `console.warn`; now `test/plugin.test.ts` expects a
+  `warning` through the builder's reporter. Why: services never print (L3). New: setting
+  `projectRoot` (or any auto-variable) is an error (S6, "The published package").
+- **buildAutoVars()**: now `test/plugin.test.ts` "auto-variables". With a project it expects
+  `projectRoot` too, and `sousConfDir`; without one, still only `sousHome`, `sousRootPath`,
+  `sousVersion`. Values come from `host.package` and `host.sous-home` stand-ins, not the real package.
+  Why: S6 adds `projectRoot` as an auto-variable; package identity belongs to plugin-host.
+- **resolveEnvScope()**: expected reads from `process.env` (`vi.stubEnv`); now the engine's `env`.
+  Why: services read the environment through `ctx.env` (S6, rule 6).
+- **resolveRootScope() "should allow root _vars to reference env-mapped vars"**: set
+  `_vars.projectRoot` from `${codeBase}`. Now the same chain uses other names ("should lay sources,
+  _env and _vars over the auto-variables in order"), and setting `projectRoot` is tested as an error.
+  Why: S6 rules that sous sets `projectRoot`.
+- **names.spec "deriveEnvName()"**: `deriveEnvName` is gone; the test checks `sharedName`, which was
+  the same function. **secrets.spec "isSecretVariable()"**: now `isSecret`. Why: the
+  `variables.names` and `variables.secrets` contracts name them so.
