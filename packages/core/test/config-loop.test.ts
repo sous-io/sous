@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ConfigError, LoopError, type PatchSet } from "@sous-io/plugin-api";
-import { deserializePatchSet, serializePatchSet } from "@sous-io/documents";
+import { deserializePatchSet, parsePatchFile, serializePatchSet } from "@sous-io/documents";
 import { contributorsPlugin, keysPlugin, makeEngine, plugin, userKeys } from "./helpers.js";
 
 describe("the config loop", () => {
@@ -642,5 +642,93 @@ describe("the config loop", () => {
 
         await second.engine.buildConfig();
         expect(optionsSeen.at(-1)).toEqual({ model: "opus" });
+    });
+    /**
+     * Every change goes through the builder and is recorded as primitives, in one patch set named
+     * for the contributor; a helper's primitives are grouped under its name, and removeWhere removes
+     * from the highest index down. The builder has no setDefault (S2, "Patches"; "No setDefault").
+     */
+    it("should record changes as primitives in a patch set named for the contributor (S2 Patches)", async () => {
+        let hasSetDefault: boolean | undefined;
+        const { engine } = makeEngine([
+            keysPlugin("compilation"),
+            contributorsPlugin("p", [
+                {
+                    id: "1-targets",
+                    contribute: (config) =>
+                        config.atPath("compilation.targets").set([{ id: "diagrams" }, { id: "a" }, { id: "diagrams" }, { id: "b" }, { id: "diagrams" }]),
+                },
+                {
+                    id: "2-confd/620-no-diagrams.js",
+                    contribute: (config) => {
+                        hasSetDefault = "setDefault" in config.atPath("compilation") || "setDefault" in config;
+                        config.atPath("compilation.targets").removeWhere((target) => target.id === "diagrams");
+                    },
+                },
+            ]),
+        ]);
+
+        const built = await engine.buildConfig();
+        const patches = built.contributions().find((c) => c.contributor === "2-confd/620-no-diagrams.js")!.patches;
+
+        expect(hasSetDefault).toBe(false);
+        expect(patches).toEqual({
+            name: "2-confd/620-no-diagrams.js",
+            patches: [
+                {
+                    name: "removeWhere",
+                    path: "compilation.targets",
+                    patches: [
+                        { op: "removeIndex", path: "compilation.targets", index: 4 },
+                        { op: "removeIndex", path: "compilation.targets", index: 2 },
+                        { op: "removeIndex", path: "compilation.targets", index: 0 },
+                    ],
+                },
+            ],
+        });
+        expect(built.get("compilation.targets")).toEqual([{ id: "a" }, { id: "b" }]);
+    });
+
+    /**
+     * Patch files (a .patch.json with one patch, one with a single $patches key, and a .patch.jsonl
+     * with one patch per line) are contributors whose operations come from the file (C77).
+     */
+    it("should apply the three patch-file forms through the builder (C77)", async () => {
+        const files = [
+            ["720-my-special-thing.patch.json", "json", `{
+    "$patches": [
+        { "op": "setKey", "path": "compilation", "key": "overwriteUntracked", "value": false },
+        { "op": "deleteKey", "path": "tools", "key": "codex" }
+    ]
+}`],
+            ["721-my-list-of-things.patch.jsonl", "jsonl", `// .sous/conf.d/721-my-list-of-things.patch.jsonl
+{"op": "insertAt", "path": "compilation.targets", "index": 0, "value": {"id": "first", "entryPoint": "a.tpl.md"}}
+{"op": "setKey", "path": "_vars", "key": "machineRole", "value": "laptop"}`],
+            ["722-one-thing.patch.json", "json", `{ "op": "setKey", "path": "_vars", "key": "editor", "value": "vim" }`],
+        ] as const;
+        let previous = "700-base";
+        const contributors = [
+            {
+                id: "700-base",
+                contribute: (config: import("@sous-io/plugin-api").ConfigBuilder) =>
+                    config.root().merge({ compilation: { overwriteUntracked: true, targets: [{ id: "second" }] }, tools: { codex: {}, claude: {} } }),
+            },
+            ...files.map(([name, kind, text]) => {
+                const after = [previous];
+
+                previous = name;
+
+                return { id: name, after, contribute: (config: import("@sous-io/plugin-api").ConfigBuilder) => config.apply(parsePatchFile(text, kind, name)) };
+            }),
+        ];
+        const { engine } = makeEngine([keysPlugin("compilation", "tools", "_vars"), contributorsPlugin("plugin-confd", contributors)]);
+
+        const built = await engine.buildConfig();
+
+        expect(userKeys(built.value())).toEqual({
+            compilation: { overwriteUntracked: false, targets: [{ id: "first", entryPoint: "a.tpl.md" }, { id: "second" }] },
+            tools: { claude: {} },
+            _vars: { machineRole: "laptop", editor: "vim" },
+        });
     });
 });
