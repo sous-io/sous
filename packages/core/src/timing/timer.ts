@@ -59,23 +59,37 @@ export class Timer implements Timings {
         this.deferred ??= [];
     }
 
-    /** Re-checks what was held back against the current budgets, and reports it. */
+    /**
+     * Re-checks what was held back against the current budgets, and reports it. Only the outermost
+     * level that went over is reported (the build, else a stage, else a pass, else each call), so one
+     * slow contributor gives one warning, which names it (S1, "Timing and Budgets").
+     */
     releaseDeferred(): void {
         const held = this.deferred ?? [];
 
         this.deferred = undefined;
 
-        for (const over of held) {
-            const budget = this.budgetFor(over.category, over.name);
+        const over: OverBudget[] = [];
 
-            if (budget !== false && over.ms > budget) {
-                const entry = this.table.get(over.key);
+        for (const item of held) {
+            const budget = this.budgetFor(item.category, item.name);
+
+            if (budget !== false && item.ms > budget) {
+                const entry = this.table.get(item.key);
 
                 if (entry) {
                     entry.overBudget += 1;
                 }
 
-                this.onOverBudget({ ...over, budgetMs: budget }, held);
+                over.push({ ...item, budgetMs: budget });
+            }
+        }
+
+        const outermost = Math.min(...over.map((item) => levelOf(item.category)));
+
+        for (const item of over) {
+            if (levelOf(item.category) === outermost) {
+                this.onOverBudget(item, held);
             }
         }
     }
@@ -162,6 +176,12 @@ export class Timer implements Timings {
     private toEntry(entry: MutableEntry): TimingEntry {
         return { ...entry, budgetMs: this.budgets.budgetFor(entry.category, entry.key) };
     }
+}
+
+const LEVELS: Partial<Record<TimingCategory, number>> = { "config.build": 0, "config.stage": 1, "config.pass": 2 };
+
+function levelOf(category: TimingCategory): number {
+    return LEVELS[category] ?? 3;
 }
 
 function isPromiseLike(value: unknown): value is PromiseLike<unknown> {

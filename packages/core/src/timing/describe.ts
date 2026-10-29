@@ -12,7 +12,7 @@ import type { OverBudget } from "./timer.js";
 export function describeOverBudget(over: OverBudget, batch: readonly OverBudget[]): string {
     const lines = [`${subject(over)} took ${ms(over.ms)} (budget ${ms(over.budgetMs)}).`];
 
-    if (over.category === "config.build") {
+    if (over.category === "config.build" || over.category === "config.stage" || over.category === "config.pass") {
         const slowest = [...batch].filter((item) => item.category === "contributor").sort((a, b) => b.ms - a.ms)[0];
 
         if (slowest) {
