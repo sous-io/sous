@@ -57,8 +57,8 @@ Or run it from a clone (useful when developing sous itself):
 ```bash
 git clone git@github.com:sous-io/sous.git
 cd sous
-npm install
-npm link
+pnpm install
+./bin/sous --version      # builds the bundle on first use; link bin/sous onto your PATH to use it anywhere
 ```
 
 Then set up a project:
