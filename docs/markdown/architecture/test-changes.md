@@ -1147,3 +1147,63 @@ in `test/support/standins.ts`. Expectations are otherwise unchanged, except for 
     did.
 - The old CLI tests in `config-commands.test.ts`, `multi-source-e2e.test.ts` and
   `overrides-e2e.test.ts` were not changed.
+
+## Switch-over: setup (init, update, the hand-off)
+
+### `sous init`, through the CLI
+
+- **File:** `packages/sous/test/integration/init-command.test.ts`
+- **Before:** "should set the project up" expected `pinned: core/sous-skills at version X` on
+  standard output. "should write a JSON config" expected `--format json` to write
+  `.sous/sous.config.json` and read its `$schema` with `JSON.parse`.
+- **Now:** the `pinned:` line is looked for on standard output and standard error together. The JSON
+  case expects `.sous/sous.config.jsonc` and reads `$schema` out of the text.
+- **Why:** the first build reports its progress (the lockfile pins among it) on standard error, as
+  every build now does. The `json` format writes JSON with comments under the `.jsonc` name (see
+  "plugin-init" above).
+
+### `sous init`, the plugin tests
+
+- **File:** `packages/plugin-init/test/init.test.ts`, `packages/plugin-init/test/index.test.ts`
+- **Before:** five cases assumed the default format was `json` (`sous.config.jsonc`), and the format
+  list was `["json", "js"]`. "should keep files that already exist" and "should write nothing on a dry
+  run" expected the handler to report "Kept ..." and "Nothing was written".
+- **Now:** the cases about the JSON config pass `format: "json"`; the failed-build case looks for
+  `sous.config.js`; the format list is `["js", "json"]`. The two notices are no longer expected from
+  the handler: the `init` view prints the files written, kept or planned (relative to the project,
+  as `wrote .sous/sous.config.js` and `[Dry Run] would write ...`) and the dry run notice.
+- **Why:** `js` (`sous.config.js`) is the default again, as in the old CLI. The file list moved to the
+  view so it reaches standard output in the old wording.
+
+### `sous update`, through the CLI
+
+- **File:** `packages/sous/test/integration/update-command.test.ts`
+- **Before:** with no terminal, expected `Error: Sous has to ask "Update the global install from
+  0.2.30 to 0.2.34?"` and `pass '--yes'`.
+- **Now:** expects `Error: sous needed to ask "Update the global install from 0.2.30 to 0.2.34?"` and
+  `Pass --yes`.
+- **Why:** a question that cannot be asked is one error for every command now (plugin-api's
+  `NonInteractiveError`), with that wording. The exit code (1) and what it names are the same.
+
+### `update`, the plugin tests
+
+- **File:** `packages/plugin-update/test/update.test.ts`, `test/helpers.ts`
+- **Before:** expected the handler to report "Nothing was installed" (dry run) and "There is no
+  install of sous here", and the build result to be exactly `{ result, directory, exitCode }`.
+- **Now:** those two messages are printed by the `update` view (the handler reports only each command
+  as it runs, failures, and the plan a question is about); the build result also holds the command
+  that ran. The stand-in context has an `engine` with `configError`. New: a case for a config this
+  copy could not load (`configProblem` in the result).
+- **Why:** the view prints the old layout on standard output (command variables with the registry,
+  the plans, the commands that ran, the summary), so the handler no longer repeats it.
+
+### The `init` and `update` views
+
+- **File:** `packages/plugin-cli/src/views/domains/setup.spec.ts`
+- **Before:** the `init` dry run printed only the `package.json` notice; with no plans `update`
+  printed nothing; "Then builds" said only "yes".
+- **Now:** the `init` view lists the files (`wrote`, `kept`, `[Dry Run] would write`) and the dry run
+  notice; `update` opens with the command variables, says when there is nothing to update, names the
+  build directory ("yes with the new copy, in /p"), shows the commands that ran, and warns about a
+  config it could not load. New cases cover the warning, the notices and a Plug'n'Play location.
+- **Why:** the old commands printed all of this on standard output.

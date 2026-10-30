@@ -68,6 +68,7 @@ describe("initView()", () => {
         const text = flat(await initView(initResult, context("init")));
 
         expect(text).toContain("▶ Setting up the project:");
+        expect(text).toContain("wrote .sous/sous.config.jsonc");
         expect(text).toContain("added @sous-io/sous 0.2.34 to devDependencies in package.json");
         expect(text).toContain("[build view]");
         expect(text).toContain("▶ What was set up:");
@@ -79,22 +80,25 @@ describe("initView()", () => {
         expect(text.indexOf("[build view]")).toBeLessThan(text.indexOf("What was set up"));
     });
 
-    /** With no package.json, there is no "Dependency" row and no setup section. */
+    /** With no package.json, there is no "Dependency" row; a file kept as it was is listed. */
     it("should leave out the dependency row without a package.json", async () => {
-        const text = await initView({ ...initResult, packageJson: { kind: "no-package-json" }, build: undefined }, context("init"));
+        const text = await initView({ ...initResult, packageJson: { kind: "no-package-json" }, kept: ["/p/.sous/.env"], build: undefined }, context("init"));
 
         expect(text).not.toContain("package.json");
-        expect(text).not.toContain("Setting up the project");
+        expect(text).toContain("kept .sous/.env, which already exists");
         expect(text).toContain("What was set up");
     });
 
-    /** A dry run only says what it would add; the handler already said what it would write. */
-    it("should print only the would-add notice in a dry run", async () => {
-        const text = await initView({ ...initResult, dryRun: true, build: undefined }, context("init"));
+    /** A dry run says what it would write and add, and that nothing was written. */
+    it("should print only what would be written in a dry run", async () => {
+        const text = await initView({ ...initResult, files: ["/p/.sous/sous.config.jsonc", "/p/package.json"], dryRun: true, build: undefined }, context("init"));
 
+        expect(text).toContain("[Dry Run] would write .sous/sous.config.jsonc");
+        expect(text).not.toContain("would write package.json");
         expect(text).toContain("[Dry Run] would add @sous-io/sous 0.2.34 to devDependencies in package.json");
+        expect(text).toContain("[Dry Run] Nothing was written.");
         expect(text).not.toContain("What was set up");
-        expect(await initView({ ...initResult, packageJson: { kind: "no-package-json" }, dryRun: true }, context("init"))).toBe("");
+        expect(await initView({ ...initResult, files: [], packageJson: { kind: "no-package-json" }, dryRun: true }, context("init"))).toBe("");
     });
 });
 
@@ -107,10 +111,12 @@ describe("updateView()", () => {
                 { plan: projectPlan, result: "planned" },
             ],
             notices: [],
+            registry: "https://registry.npmjs.org/@sous-io%2fsous",
             failed: false,
         };
         const text = flat(updateView(result, context("update")));
 
+        expect(text).toContain("Registry : https://registry.npmjs.org/@sous-io%2fsous");
         expect(text).toContain("▶ Update plan:");
         expect(text).toContain("➔ Global install:");
         expect(text).toContain("Command : npm i -g @sous-io/sous@0.2.34");
@@ -118,7 +124,7 @@ describe("updateView()", () => {
         expect(text).toContain("Package manager: yarn@berry assumed");
         expect(text).toContain("Installed : 0.2.18");
         expect(text).toContain("Command : yarn add -D -E @sous-io/sous@0.2.34 in /p");
-        expect(text).toContain("Then builds : yes");
+        expect(text).toContain("Then builds : no the project has no sous config");
         expect(text).toContain("Nothing was installed.");
     });
 
@@ -137,19 +143,25 @@ describe("updateView()", () => {
                 { plan: projectPlan, result: "updated" },
             ],
             notices: [],
-            build: { result: "built", directory: "/p" },
+            buildDirectory: "/p",
+            build: { result: "built", directory: "/p", command: { command: "node", args: ["/p/node_modules/@sous-io/sous/bin/run.js", "build"], cwd: "/p" } },
             failed: false,
         };
         const text = flat(updateView(result, context("update")));
 
+        expect(text).toContain("Then builds : yes with the new copy, in /p");
+        expect(text).toContain("Running: yarn add -D -E @sous-io/sous@0.2.34 in /p");
+        expect(text).toContain("▶ Building the project:");
+        expect(text).toContain("Running: node /p/node_modules/@sous-io/sous/bin/run.js build in /p");
+        expect(text).toContain("The global install was left at 0.2.30.");
         expect(text).toContain("▶ Summary:");
         expect(text).toContain("Global install : skipped left at 0.2.30");
         expect(text).toContain("Project install: updated to 0.2.34 from 0.2.18");
         expect(text).toContain("Project build : succeeded in /p");
     });
 
-    /** Several global installs are told apart by their manager; nothing to update prints nothing. */
-    it("should name the manager of each of several global installs, and print nothing with no installs", () => {
+    /** Several global installs are told apart by their manager; nothing to update says so. */
+    it("should name the manager of each of several global installs, and say when there is nothing to update", () => {
         const result: UpdateResultShape = {
             outcomes: [
                 { plan: globalPlan, result: "current" },
@@ -162,7 +174,36 @@ describe("updateView()", () => {
 
         expect(text).toContain("Global install (npm) : up to date at 0.2.30");
         expect(text).toContain("Global install (pnpm): failed pnpm exited with code 3");
-        expect(updateView({ outcomes: [], notices: [], failed: false }, context("update"))).toBe("");
+        expect(flat(updateView({ outcomes: [], notices: [], failed: false }, context("update")))).toContain("There is no install of sous here that sous can update.");
+    });
+
+    /** A config this copy could not load is a warning first; a notice says what to run by hand. */
+    it("should warn about a config it could not load, and list what it cannot update", () => {
+        const text = flat(
+            updateView(
+                {
+                    outcomes: [],
+                    notices: [{ message: "This sous was run through npx.", location: "/cache/sous", manualCommand: { command: "npm", args: ["i", "-g", "@sous-io/sous"] } }],
+                    configProblem: { configPath: "/p/.sous/sous.config.json", message: "The config is not valid (1 problem).\n  futureSetting: Not a known config key" },
+                    failed: false,
+                },
+                context("update"),
+            ),
+        );
+
+        expect(text).toContain("WARNING:");
+        expect(text).toContain("Sous could not load the project config at /p/.sous/sous.config.json, so this command carries on without it.");
+        expect(text).toContain("futureSetting: Not a known config key");
+        expect(text).toContain("▶ Not updated:");
+        expect(text).toContain("Run by hand: npm i -g @sous-io/sous");
+    });
+
+    /** A Yarn Plug'n'Play install is located by its .pnp.cjs, and the plan says why. */
+    it("should say a Plug'n'Play install keeps no node_modules copy", () => {
+        const plan = { ...projectPlan, location: "/p/.pnp.cjs", pnpRoot: "/p" };
+        const text = flat(updateView({ outcomes: [{ plan, result: "planned" }], notices: [], failed: false }, context("update")));
+
+        expect(text).toContain("Location : /p/.pnp.cjs Yarn Plug'n'Play, which keeps no node_modules copy");
     });
 });
 

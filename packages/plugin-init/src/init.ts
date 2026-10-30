@@ -68,14 +68,7 @@ export async function handle(input: InitInput, ctx: Context): Promise<InitResult
 
     const scaffold = await scaffoldProject(ctx, { root, format, name, dryRun });
 
-    for (const file of scaffold.files) {
-        ctx.reporter.note(`${dryRun ? "Would write" : "Wrote"} ${file}`);
-    }
-
-    for (const file of scaffold.kept) {
-        ctx.reporter.note(`Kept ${file}, which already exists.`);
-    }
-
+    // The files written, kept and planned are in the result, which the front end shows.
     const result = {
         root,
         sousDir: scaffold.sousDir,
@@ -86,13 +79,7 @@ export async function handle(input: InitInput, ctx: Context): Promise<InitResult
         dryRun,
     };
 
-    if (dryRun) {
-        ctx.reporter.note("Nothing was written. Run the same command without '--dry-run' to set the project up.");
-
-        return result;
-    }
-
-    if (input.noBuild) {
+    if (dryRun || input.noBuild) {
         return result;
     }
 

@@ -14,16 +14,19 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { ConfigError, InputError, type Context } from "@sous-io/plugin-api";
+import { ConfigError, InputError, SousError, type Context } from "@sous-io/plugin-api";
 import "@sous-io/plugin-host/types";
 import { discoverInstalls, readPackageJson, realpathOr } from "./installs.js";
 import { buildUpdatePlans, type PlannedUpdate } from "./plan.js";
-import { fetchPublishedVersions } from "./registry.js";
-import type { InstallScope, PlannedCommand, UpdateInput, UpdateNotice, UpdateOutcome, UpdatePlan, UpdateResult } from "./types.js";
+import { fetchPublishedVersions, registryUrl } from "./registry.js";
+import type { InstallScope, PlannedCommand, UpdateInput, UpdateOutcome, UpdatePlan, UpdateResult } from "./types.js";
 import type { VersionRequest } from "./versions.js";
 
 /** The environment variable that keeps the invoked copy running instead of handing off to a project copy. */
 export const NO_DELEGATE_ENV = "SOUS_NO_DELEGATE";
+
+/** The flag spellings a question that cannot be asked names. */
+const YES_FLAG = "--yes (also -y, --force)";
 
 /** A command as a person would type it. */
 export function formatCommand(command: PlannedCommand): string {
@@ -114,6 +117,8 @@ export function binEntryOf(pkg: Record<string, unknown> | undefined): string | u
 
 /** Runs one command with the terminal handed to it, and returns its exit code. */
 async function execute(ctx: Context, command: PlannedCommand, env = ctx.env): Promise<number> {
+    ctx.reporter.note(`Running: ${formatCommand(command)}${command.cwd === undefined ? "" : ` (in ${command.cwd})`}`);
+
     const result = await ctx.services.get("host.processes").runInteractive(command.command, command.args, {
         ...(command.cwd === undefined ? {} : { cwd: command.cwd }),
         env,
@@ -138,8 +143,6 @@ async function buildProject(plan: PlannedUpdate, directory: string | undefined, 
     if (directory === undefined) {
         return { result: "no-config" };
     }
-
-    ctx.reporter.note("Building the project with the new copy.");
 
     let command: PlannedCommand;
 
@@ -167,34 +170,48 @@ async function buildProject(plan: PlannedUpdate, directory: string | undefined, 
                 (plan.pnpRoot === undefined ? "" : PNP_BUILD_HINT),
         );
 
-        return { result: "failed", directory, exitCode };
+        return { result: "failed", directory, command, exitCode };
     }
 
-    return { result: "built", directory, exitCode };
+    return { result: "built", directory, command, exitCode };
 }
 
 /** What a failed build under Yarn Plug'n'Play adds: sous cannot run from inside Yarn's zip cache. */
 const PNP_BUILD_HINT =
     " Under Yarn Plug'n'Play, sous runs only from an unpacked copy: if the error above is 'EBADF: bad file descriptor', add \"dependenciesMeta\": { \"@sous-io/sous\": { \"unplugged\": true } } to package.json, then run 'yarn install'.";
 
-/** Reports what a notice says, and the command to run by hand. */
-function reportNotice(notice: UpdateNotice, ctx: Context): void {
-    ctx.reporter.warning(notice.message, {
-        ...(notice.location === undefined ? {} : { location: notice.location }),
-        ...(notice.manualCommand === undefined ? {} : { runByHand: formatCommand(notice.manualCommand) }),
-    });
+/** The project config this copy could not load, from the engine's failed config build. */
+function configProblemOf(ctx: Context): UpdateResult["configProblem"] {
+    const error = ctx.engine.configError;
 
-    if (notice.manualCommand !== undefined) {
-        ctx.reporter.note(`Run by hand: ${formatCommand(notice.manualCommand)}`);
+    if (error === undefined) {
+        return undefined;
     }
+
+    const message = error instanceof Error ? error.message : String(error);
+    const details = error instanceof SousError ? error.details : [];
+    const configPath = ctx.project?.configPath;
+
+    return { ...(configPath === undefined ? {} : { configPath }), message: [message, ...details.map((detail) => `  ${detail}`)].join("\n") };
 }
 
-/** Runs the intent. */
+/** The question for one plan, numbered when there are several. */
+function questionText(plan: UpdatePlan, title: string, index: number, count: number): string {
+    return count > 1 ? `${questionFor(plan, title)} (${index} of ${count})` : questionFor(plan, title);
+}
+
+/**
+ * Runs the intent. While it runs it reports only what has to be seen as it happens: each command
+ * just before it runs (its own output follows), a failure, and the plan a question is about. The
+ * result holds the rest (the plans, the notices, the summary), which the front end shows.
+ */
 export async function handle(input: UpdateInput, ctx: Context): Promise<UpdateResult> {
     checkInput(input);
 
     const dryRun = input.dryRun === true;
     const only: InstallScope | undefined = input.global ? "global" : input.project ? "project" : undefined;
+    const registry = registryUrl(ctx.env);
+    const configProblem = configProblemOf(ctx);
     const metadata = await fetchPublishedVersions(ctx.services.get("host.http"), ctx.env);
     const discovery = await discoverInstalls({ cwd: ctx.cwd, ownRoot: ctx.services.get("host.package").identity().realRoot }, ctx);
     const { plans, notices } = buildUpdatePlans(discovery, metadata, {
@@ -202,19 +219,20 @@ export async function handle(input: UpdateInput, ctx: Context): Promise<UpdateRe
         ...(only === undefined ? {} : { only }),
         ...(input.prerelease === undefined ? {} : { prerelease: input.prerelease }),
     });
-
-    for (const notice of notices) {
-        reportNotice(notice, ctx);
-    }
-
+    const projectPlan = plans.find((plan) => plan.scope === "project" && plan.projectRoot !== undefined);
+    const buildDirectory = projectPlan?.projectRoot === undefined ? undefined : buildDirFor(projectPlan.projectRoot, ctx);
+    const base = {
+        registry,
+        notices,
+        ...(buildDirectory === undefined ? {} : { buildDirectory }),
+        ...(configProblem === undefined ? {} : { configProblem }),
+    };
     const outcomes: UpdateOutcome[] = [];
     let build: UpdateResult["build"];
     let failed = false;
 
     if (plans.length === 0) {
-        ctx.reporter.note("There is no install of sous here that sous can update.");
-
-        return { outcomes, notices, failed };
+        return { ...base, outcomes, failed };
     }
 
     const actionable = plans.filter((plan) => plan.direction !== "current");
@@ -223,36 +241,34 @@ export async function handle(input: UpdateInput, ctx: Context): Promise<UpdateRe
     for (const plan of plans) {
         const title = planTitle(plan, globalCount);
 
-        ctx.reporter.note(`${title}: ${plan.installed} at ${plan.location}, through ${plan.manager}${plan.managerAssumed ? " (assumed)" : ""}.`);
-
         if (plan.direction === "current") {
-            ctx.reporter.note(`${plan.installed} is already the version this update chooses.`);
             outcomes.push({ plan, result: "current" });
             continue;
         }
-
-        ctx.reporter.note(`Will install ${plan.target}${plan.direction === "downgrade" ? ` (a downgrade from ${plan.installed})` : ""}: ${formatCommand(plan.command)}`);
 
         if (dryRun) {
             outcomes.push({ plan, result: "planned" });
             continue;
         }
 
-        const proceed =
-            input.yes === true ||
-            (await ctx.prompter.confirm({
-                message: `${questionFor(plan, title)} (${actionable.indexOf(plan) + 1} of ${actionable.length})`,
+        let proceed = input.yes === true;
+
+        if (!proceed) {
+            if (ctx.prompter.interactive) {
+                ctx.reporter.note(`${title}: ${plan.installed} at ${plan.location}, through ${plan.manager}${plan.managerAssumed ? " (assumed)" : ""}. Will install ${plan.target}: ${formatCommand(plan.command)}`);
+            }
+
+            proceed = await ctx.prompter.confirm({
+                message: questionText(plan, title, actionable.indexOf(plan) + 1, actionable.length),
                 default: true,
-                answeredBy: "--yes (also -y, --force) to update every install listed",
-            }));
+                answeredBy: YES_FLAG,
+            });
+        }
 
         if (!proceed) {
             outcomes.push({ plan, result: "declined" });
-            ctx.reporter.note(`The ${title.toLowerCase()} was left at ${plan.installed}.`);
             continue;
         }
-
-        ctx.reporter.note(`Running ${formatCommand(plan.command)}`);
 
         const exitCode = await execute(ctx, plan.command);
 
@@ -264,10 +280,9 @@ export async function handle(input: UpdateInput, ctx: Context): Promise<UpdateRe
         }
 
         outcomes.push({ plan, result: "updated", exitCode });
-        ctx.reporter.note(`The ${title.toLowerCase()} is now at ${plan.target}.`);
 
         if (plan.scope === "project" && plan.projectRoot !== undefined) {
-            build = await buildProject(plan, buildDirFor(plan.projectRoot, ctx), input, ctx);
+            build = await buildProject(plan, buildDirectory, input, ctx);
 
             if (build.result === "failed" || build.result === "no-bin") {
                 failed = true;
@@ -275,9 +290,7 @@ export async function handle(input: UpdateInput, ctx: Context): Promise<UpdateRe
         }
     }
 
-    if (dryRun) {
-        ctx.reporter.note("Nothing was installed. Run the same command without '--dry-run' to update.");
-    }
+    const result: UpdateResult = { ...base, outcomes, ...(build === undefined ? {} : { build }), failed };
 
     // The CLI turns an error into exit code 1, as `sous update` always did when a step failed.
     if (failed) {
@@ -286,7 +299,7 @@ export async function handle(input: UpdateInput, ctx: Context): Promise<UpdateRe
         });
     }
 
-    return { outcomes, notices, ...(build === undefined ? {} : { build }), failed };
+    return result;
 }
 
 /** One line saying what became of a plan. */

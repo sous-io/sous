@@ -87,6 +87,8 @@ export interface RecordingOptions {
     managers: PackageManagerEntity[];
     /** The registry's answer body, or a status. */
     registry?: { status?: number; body?: string };
+    /** The error of a failed config build, as the engine would hold it. */
+    configError?: unknown;
     /** The answers the prompter gives, in order; omitted means it cannot ask. */
     answers?: unknown[];
     /** The exit code each command gives, in order; default 0. */
@@ -142,6 +144,7 @@ export function recordingContext(options: RecordingOptions): { ctx: Context; rec
             return process.cwd();
         },
         run: async (intent: string, input: unknown) => options.onRun?.(intent, input),
+        engine: { configError: options.configError },
     } as unknown as Context;
 
     return { ctx, recorded, prompter };

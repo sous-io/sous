@@ -60,14 +60,16 @@ function inZip(location: string): boolean {
  */
 export function pnpInstalled(projectRoot: string): InstalledPackage[] {
     const file = findPnpFile(projectRoot);
-    const api = file === undefined ? undefined : loadPnp(file);
 
-    if (api === undefined) return [];
+    if (file === undefined) return [];
 
-    const locator = api.findPackageLocator(`${projectRoot}/`);
-    const info = locator === null ? null : api.getPackageInformation(locator);
+    const api = loadPnp(file);
+    const locator = api?.findPackageLocator(`${projectRoot}/`) ?? null;
+    const info = locator === null ? null : (api?.getPackageInformation(locator) ?? null);
 
-    if (info === null) return [];
+    // A resolver that cannot be loaded (or does not know the project) still leaves the declared
+    // dependencies and the versions yarn.lock resolved them to.
+    if (api === undefined || info === null) return lockfileInstalled(projectRoot, file);
 
     const declaring = readPackageJson(projectRoot);
     const installed: InstalledPackage[] = [];
@@ -95,6 +97,93 @@ export function pnpInstalled(projectRoot: string): InstalledPackage[] {
     }
 
     return installed;
+}
+
+/**
+ * The packages a Plug'n'Play project declares, at the versions the `yarn.lock` beside `.pnp.cjs`
+ * resolves them to, for when the resolver itself cannot be asked. Each one's location is the
+ * `.pnp.cjs` file, since no copy of it is on disk; a version the lockfile does not hold is
+ * `unknown`.
+ */
+export function lockfileInstalled(projectRoot: string, pnpFile: string): InstalledPackage[] {
+    const declaring = readPackageJson(projectRoot);
+    let lockfile = "";
+
+    try {
+        lockfile = fs.readFileSync(path.join(path.dirname(pnpFile), "yarn.lock"), "utf8");
+    } catch {
+        // No lockfile: every version is unknown.
+    }
+
+    const names = new Set<string>();
+
+    for (const section of ["devDependencies", "dependencies"] as const) {
+        const block = declaring?.[section];
+
+        if (block !== null && typeof block === "object") {
+            for (const name of Object.keys(block as Record<string, unknown>)) names.add(name);
+        }
+    }
+
+    return [...names].sort().flatMap((name) => {
+        const declared = declaredIn(declaring, name);
+
+        if (declared === undefined) return [];
+
+        return [
+            {
+                name,
+                version: yarnLockVersion(lockfile, name, declared.range) ?? "unknown",
+                location: pnpFile,
+                realPath: realpathOr(pnpFile),
+                isSousPlugin: false,
+                declared,
+            },
+        ];
+    });
+}
+
+/**
+ * The version a Yarn Berry `yarn.lock` resolves a package's declared `range` to. Each entry opens
+ * with an unindented key listing its descriptors (`"name@npm:1.2.3", "name@npm:^1.2.0":`) and holds
+ * an indented `version:`. When no descriptor matches the range exactly but every entry for the
+ * package holds the same version, that version is the answer.
+ */
+export function yarnLockVersion(lockfile: string, name: string, range: string): string | undefined {
+    const prefix = `${name}@`;
+    const wanted = new Set([`${prefix}${range}`, `${prefix}npm:${range}`]);
+    const entries: Array<{ descriptors: string[]; version?: string }> = [];
+    let entry: { descriptors: string[]; version?: string } | undefined;
+
+    for (const line of lockfile.split(/\r?\n/)) {
+        if (/^[^\s#].*:$/.test(line)) {
+            const descriptors = line
+                .slice(0, -1)
+                .split(",")
+                .map((part) => part.trim().replace(/^"|"$/g, ""))
+                .filter((descriptor) => descriptor.startsWith(prefix));
+
+            entry = descriptors.length > 0 ? { descriptors } : undefined;
+
+            if (entry !== undefined) entries.push(entry);
+
+            continue;
+        }
+
+        const version = /^\s+version:\s*"?([^"\s]+)"?\s*$/.exec(line);
+
+        if (entry !== undefined && version !== null && entry.version === undefined) {
+            entry.version = version[1];
+        }
+    }
+
+    const exact = entries.find((candidate) => candidate.descriptors.some((descriptor) => wanted.has(descriptor)));
+
+    if (exact !== undefined) return exact.version;
+
+    const versions = new Set(entries.flatMap((candidate) => candidate.version ?? []));
+
+    return versions.size === 1 ? [...versions][0] : undefined;
 }
 
 /** Whether a specifier names a package rather than a path or URL. */

@@ -61,17 +61,33 @@ export interface UpdatePlanShape {
     readonly direction: "upgrade" | "downgrade" | "current";
     readonly declaredIn?: { readonly section: string; readonly range: string };
     readonly command: PlannedCommandShape;
+    readonly pnpRoot?: string;
+}
+
+/** Something an update could not do itself, and how to do it by hand. */
+export interface UpdateNoticeShape {
+    readonly message: string;
+    readonly location?: string;
+    readonly manualCommand?: PlannedCommandShape;
 }
 
 /** The result of `update`. */
 export interface UpdateResultShape {
+    readonly registry?: string;
     readonly outcomes: ReadonlyArray<{
         readonly plan: UpdatePlanShape;
         readonly result: "updated" | "failed" | "declined" | "current" | "planned";
         readonly exitCode?: number;
     }>;
-    readonly notices: readonly unknown[];
-    readonly build?: { readonly result: "built" | "failed" | "skipped" | "no-config" | "no-bin"; readonly directory?: string; readonly exitCode?: number };
+    readonly notices: readonly UpdateNoticeShape[];
+    readonly buildDirectory?: string;
+    readonly configProblem?: { readonly configPath?: string; readonly message: string };
+    readonly build?: {
+        readonly result: "built" | "failed" | "skipped" | "no-config" | "no-bin";
+        readonly directory?: string;
+        readonly command?: PlannedCommandShape;
+        readonly exitCode?: number;
+    };
     readonly failed: boolean;
 }
 
@@ -90,12 +106,20 @@ export interface PluginsInstallResultShape {
 // ---------------------------------------------------------------------------------------------
 
 /**
- * `sous init`: the `package.json` change, the first build's report, then what was set up.
+ * `sous init`: the files written (or, in a dry run, that would be), the `package.json` change, the
+ * first build's report, then what was set up. Files are shown relative to the project root, as
+ * today's CLI showed them.
  *
  * ```text
+ * ▶ Setting up the project:
+ *
+ *     wrote .sous/sous.config.js
+ *     wrote .sous/memories/AGENTS.tpl.md
+ *     added @sous-io/sous 0.2.34 to devDependencies in package.json
+ *
  * ▶ What was set up:
  *
- *     Config        : /p/.sous/sous.config.jsonc
+ *     Config        : /p/.sous/sous.config.js
  *     Prompt source : /p/.sous/memories/AGENTS.tpl.md
  *     ...
  * ```
@@ -103,11 +127,29 @@ export interface PluginsInstallResultShape {
 export async function initView(result: InitResultShape, view: CliViewContext): Promise<string> {
     const out = view.printer();
     const added = result.packageJson.kind === "added" ? result.packageJson : undefined;
+    const packageJsonFile = path.join(result.root, "package.json");
+    const files = result.files.filter((file) => !(added && file === packageJsonFile));
+
+    if (files.length > 0 || result.kept.length > 0 || added) {
+        out.section("Setting up the project");
+    }
+
+    for (const file of files) {
+        const relative = path.relative(result.root, file) || file;
+
+        if (result.dryRun) {
+            out.dryRunNotice(`would write ${relative}`);
+        } else {
+            out.log(`  wrote ${relative}`);
+        }
+    }
+
+    for (const file of result.kept) {
+        out.log(`  kept ${path.relative(result.root, file) || file}, which already exists`);
+    }
 
     if (added) {
         const what = `${SOUS_PACKAGE_NAME} ${added.range} to devDependencies in package.json`;
-
-        out.section("Setting up the project");
 
         if (result.dryRun) {
             out.dryRunNotice(`would add ${what}`);
@@ -117,7 +159,14 @@ export async function initView(result: InitResultShape, view: CliViewContext): P
     }
 
     if (result.dryRun) {
-        return out.empty ? "" : out.footer().text();
+        if (out.empty) {
+            return "";
+        }
+
+        out.blank();
+        out.dryRunNotice("Nothing was written. Run the same command without '--dry-run' to set the project up.");
+
+        return out.footer().text();
     }
 
     const build = result.build === undefined ? "" : await view.render("build", result.build);
@@ -164,36 +213,126 @@ function dependencyRow(outcome: PackageJsonOutcomeShape): VariableEntry[] {
 // ---------------------------------------------------------------------------------------------
 
 /**
- * `sous update`: in a dry run, every install's plan; otherwise the summary, one line per install
- * and one for the build. Notices and each step's progress were reported while it ran.
+ * `sous update`, laid out as today's command printed it: a warning for a project config this copy
+ * could not load, the registry, the installs it cannot update, then each install's facts. A dry
+ * run ends there; a real run adds the commands that ran and the summary. The commands were also
+ * reported as they ran, since their own output follows them.
+ *
+ * ```text
+ * ▶ Updating:
+ *
+ * ➔ Global install
+ *     Location        : /usr/lib/node_modules/@sous-io/sous
+ *     Package manager : npm
+ *     Installed       : 0.2.30
+ *     Will install    : 0.2.34
+ *     Running         : npm i -g @sous-io/sous@0.2.34
+ *
+ * ▶ Summary:
+ *
+ *     Global install: updated to 0.2.34 from 0.2.30
+ * ```
  */
 export function updateView(result: UpdateResultShape, view: CliViewContext): string {
     const out = view.printer();
     const plans = result.outcomes.map((outcome) => outcome.plan);
     const globalCount = plans.filter((plan) => plan.scope === "global").length;
-    const dryRun = result.outcomes.some((outcome) => outcome.result === "planned");
+    const dryRun = view.input.dryRun === true || result.outcomes.some((outcome) => outcome.result === "planned");
+    const noBuild = view.input.noBuild === true;
+
+    if (result.configProblem !== undefined) {
+        const where = result.configProblem.configPath === undefined ? "the project config" : `the project config at ${result.configProblem.configPath}`;
+
+        out.warning(`Sous could not load ${where}, so this command carries on without it.\n\nThe error was:\n${result.configProblem.message}`);
+    }
+
+    out.subheading("Command Variables", "$");
+    out.variables(commandVariables(result, view));
+
+    if (result.notices.length > 0) {
+        out.section("Not updated");
+
+        for (const notice of result.notices) {
+            out.note(notice.message, { indent: 2 });
+
+            const facts: VariableEntry[] = [];
+
+            if (notice.location !== undefined) {
+                facts.push({ label: "Location", value: notice.location });
+            }
+
+            if (notice.manualCommand !== undefined) {
+                facts.push(commandFact("Run by hand", notice.manualCommand));
+            }
+
+            out.variables(facts);
+            out.blank();
+        }
+    }
 
     if (plans.length === 0) {
-        return "";
+        out.blank();
+        out.note("There is no install of sous here that sous can update.", { indent: 2 });
+
+        return out.footer().text();
+    }
+
+    out.heading(dryRun ? "Update plan" : "Updating");
+
+    for (const outcome of result.outcomes) {
+        const plan = outcome.plan;
+
+        out.subheading(planTitle(plan, globalCount));
+        out.variables(planFacts(plan, { dryRun, noBuild, buildDirectory: result.buildDirectory }));
+
+        if (outcome.result === "updated" || outcome.result === "failed") {
+            out.blank();
+            out.variables([commandFact("Running", plan.command)]);
+        }
+
+        if (outcome.result === "declined") {
+            out.blank();
+            out.log(`  The ${planTitle(plan, globalCount).toLowerCase()} was left at ${plan.installed}.`);
+        }
     }
 
     if (dryRun) {
-        out.heading("Update plan");
-
-        for (const plan of plans) {
-            out.subheading(planTitle(plan, globalCount));
-            out.variables(planFacts(plan, view.input.noBuild === true));
-        }
-
         out.blank();
         out.dryRunNotice("Nothing was installed. Run the same command without '--dry-run' to update.");
 
         return out.footer().text();
     }
 
+    if (result.build?.command !== undefined) {
+        out.section("Building the project");
+        out.variables([commandFact("Running", result.build.command)]);
+    }
+
     printSummary(out, result, globalCount);
 
     return out.footer().text();
+}
+
+/** The block `sous update` opens with: where it ran, which installs, which version, the registry. */
+function commandVariables(result: UpdateResultShape, view: CliViewContext): VariableEntry[] {
+    const input = view.input;
+    const installs = input.global === true ? "global only" : input.project === true ? "project only" : "global and project";
+    const version =
+        typeof input.version === "string"
+            ? input.version
+            : input.major === true
+              ? "the newest published, whatever its major version"
+              : "the newest in each install's major version";
+    const prereleases = input.prerelease === undefined ? "counted when the installed version is one" : input.prerelease === true ? "counted" : "not counted";
+
+    return [
+        ...(view.cwd === undefined ? [] : [{ label: "Directory", value: view.cwd }]),
+        { label: "Installs", value: installs },
+        { label: "Version", value: version },
+        { label: "Prereleases", value: prereleases },
+        ...(result.registry === undefined ? [] : [{ label: "Registry", value: result.registry }]),
+        { label: "Dry Run", value: input.dryRun === true },
+    ];
 }
 
 /** "Global install", "Global install (pnpm)" when there are several, or "Project install". */
@@ -214,15 +353,19 @@ function commandFact(label: string, command: PlannedCommandShape): VariableEntry
     return command.cwd === undefined ? { label, value: formatCommand(command) } : { label, value: formatCommand(command), detail: `in ${command.cwd}` };
 }
 
-/** The facts of one plan, as a dry run shows them. */
-function planFacts(plan: UpdatePlanShape, noBuild: boolean): VariableEntry[] {
+/** The facts of one plan; the command is shown only in a dry run (a real run shows what ran). */
+function planFacts(plan: UpdatePlanShape, context: { dryRun: boolean; noBuild: boolean; buildDirectory: string | undefined }): VariableEntry[] {
     const facts: VariableEntry[] = [];
 
     if (plan.projectRoot !== undefined) {
         facts.push({ label: "Project", value: plan.projectRoot });
     }
 
-    facts.push({ label: "Location", value: plan.location });
+    facts.push(
+        plan.pnpRoot === undefined
+            ? { label: "Location", value: plan.location }
+            : { label: "Location", value: plan.location, detail: "Yarn Plug'n'Play, which keeps no node_modules copy" },
+    );
     facts.push(
         plan.managerAssumed
             ? { label: "Package manager", value: plan.manager, detail: "assumed, because the project's files name no package manager" }
@@ -246,13 +389,28 @@ function planFacts(plan: UpdatePlanShape, noBuild: boolean): VariableEntry[] {
             ? { label: "Will install", value: plan.target, detail: `a downgrade from ${plan.installed}` }
             : { label: "Will install", value: plan.target },
     );
-    facts.push(commandFact("Command", plan.command));
+    if (context.dryRun) {
+        facts.push(commandFact("Command", plan.command));
+    }
 
     if (plan.scope === "project") {
-        facts.push(noBuild ? { label: "Then builds", value: "no", detail: "--no-build was passed" } : { label: "Then builds", value: "yes", detail: "with the new copy" });
+        facts.push(buildFact(context.noBuild, context.buildDirectory));
     }
 
     return facts;
+}
+
+/** Whether a project update is followed by a build, and where. */
+function buildFact(noBuild: boolean, buildDirectory: string | undefined): VariableEntry {
+    if (noBuild) {
+        return { label: "Then builds", value: "no", detail: "--no-build was passed" };
+    }
+
+    if (buildDirectory === undefined) {
+        return { label: "Then builds", value: "no", detail: "the project has no sous config" };
+    }
+
+    return { label: "Then builds", value: "yes", detail: `with the new copy, in ${buildDirectory}` };
 }
 
 function printSummary(out: Printer, result: UpdateResultShape, globalCount: number): void {

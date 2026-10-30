@@ -207,8 +207,8 @@ describe("the sous update command", () => {
 
       expect(result.status).toBe(1);
       const printed = flat(result.stdout + result.stderr);
-      expect(printed).toContain('Error: Sous has to ask "Update the global install from 0.2.30 to 0.2.34?"');
-      expect(printed).toContain("pass '--yes'");
+      expect(printed).toContain('Error: sous needed to ask "Update the global install from 0.2.30 to 0.2.34?"');
+      expect(printed).toContain("Pass --yes");
       expect(takeCalls()).toEqual([]);
     },
     CLI_TIMEOUT

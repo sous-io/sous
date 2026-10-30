@@ -52,7 +52,7 @@ describe("init", () => {
      */
     it("should write every file a new project needs", async () => {
         const { ctx } = initContext();
-        const result = await handle({ directory: projectRoot, noBuild: true }, ctx);
+        const result = await handle({ directory: projectRoot, format: "json", noBuild: true }, ctx);
 
         expect(result).toMatchObject({ root: projectRoot, sousDir, configPath: path.join(sousDir, "sous.config.jsonc"), dryRun: false, kept: [] });
         expect(result.files.every((file) => path.isAbsolute(file))).toBe(true);
@@ -76,7 +76,7 @@ describe("init", () => {
     it("should write a config without projectRoot or a skills directory", async () => {
         const { ctx } = initContext();
 
-        await handle({ directory: projectRoot, noBuild: true }, ctx);
+        await handle({ directory: projectRoot, format: "json", noBuild: true }, ctx);
 
         const jsonc = fs.readFileSync(path.join(sousDir, "sous.config.jsonc"), "utf8");
         const loaded = await initContext().ctx.services.get("config-files.loader").load(path.join(sousDir, "sous.config.jsonc"));
@@ -96,13 +96,13 @@ describe("init", () => {
         const other = path.join(tmp, "other");
 
         fs.mkdirSync(other);
-        await handle({ directory: other, name: "Other Project", noBuild: true }, initContext().ctx);
+        await handle({ directory: other, name: "Other Project", format: "json", noBuild: true }, initContext().ctx);
         expect(fs.readFileSync(path.join(other, ".sous/sous.config.jsonc"), "utf8")).toContain('"name": "Other Project"');
     });
 
     /** The json format should be bound to the shipped schema for this sous version through $schema. */
     it("should bind the JSONC config to the schema for this version", async () => {
-        await handle({ directory: projectRoot, noBuild: true }, initContext({ version: "0.1.1" }).ctx);
+        await handle({ directory: projectRoot, format: "json", noBuild: true }, initContext({ version: "0.1.1" }).ctx);
 
         const parsed = await initContext().ctx.services.get("config-files.loader").load(path.join(sousDir, "sous.config.jsonc"));
 
@@ -154,16 +154,15 @@ describe("init", () => {
 
         fs.writeFileSync(envPath, "TEAM=us\n");
 
-        const { ctx, recorded } = initContext();
+        const { ctx } = initContext();
         const result = await handle({ directory: projectRoot, noBuild: true }, ctx);
 
         expect(result.kept).toEqual([envPath]);
         expect(result.files).not.toContain(envPath);
         expect(fs.readFileSync(envPath, "utf8")).toBe("TEAM=us\n");
-        expect(recorded.reporter.at("notice").join("\n")).toContain(`Kept ${envPath}`);
     });
 
-    /** A dry run should plan everything, write nothing, run no build and say so. */
+    /** A dry run should plan everything, write nothing and run no build (the view says so). */
     it("should write nothing on a dry run", async () => {
         const { ctx, recorded } = initContext();
         const result = await handle({ directory: projectRoot, dryRun: true }, ctx);
@@ -172,7 +171,6 @@ describe("init", () => {
         expect(result.files).toHaveLength(5);
         expect(fs.existsSync(sousDir)).toBe(false);
         expect(recorded.runs).toEqual([]);
-        expect(recorded.reporter.at("notice").join("\n")).toMatch(/Nothing was written/);
     });
 
     /** An existing .sous/.gitignore keeps its own lines and gains the sous-managed block once. */
@@ -300,7 +298,7 @@ describe("init build", () => {
         const { ctx } = initContext({ build: { ok: false } });
 
         await expect(handle({ directory: projectRoot }, ctx)).rejects.toThrow(/set up, but the first build failed/);
-        expect(fs.existsSync(path.join(sousDir, "sous.config.jsonc"))).toBe(true);
+        expect(fs.existsSync(path.join(sousDir, "sous.config.js"))).toBe(true);
     });
 });
 

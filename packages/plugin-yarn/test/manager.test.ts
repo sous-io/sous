@@ -128,6 +128,37 @@ describe("yarn installed", () => {
         expect(found[1]).toMatchObject({ name: "zipped", version: "2.0.0", isSousPlugin: false });
     });
 
+    /**
+     * A `.pnp.cjs` whose resolver cannot be loaded still leaves the declared packages, at the
+     * versions yarn.lock resolved them to, each located at the `.pnp.cjs` file.
+     */
+    it("should fall back to yarn.lock when the resolver cannot be loaded", async () => {
+        write("package.json", JSON.stringify({ devDependencies: { "@sous-io/sous": "0.2.18" }, dependencies: { other: "^1.0.0" } }));
+        write(".pnp.cjs", "// stub\n");
+        write("yarn.lock", '__metadata:\n  version: 8\n\n"@sous-io/sous@npm:0.2.18":\n  version: 0.2.18\n');
+
+        const found = await yarnManager.installed("project", dir, context(""));
+
+        expect(found).toEqual([
+            {
+                name: "@sous-io/sous",
+                version: "0.2.18",
+                location: path.join(dir, ".pnp.cjs"),
+                realPath: path.join(dir, ".pnp.cjs"),
+                isSousPlugin: false,
+                declared: { section: "devDependencies", range: "0.2.18" },
+            },
+            {
+                name: "other",
+                version: "unknown",
+                location: path.join(dir, ".pnp.cjs"),
+                realPath: path.join(dir, ".pnp.cjs"),
+                isSousPlugin: false,
+                declared: { section: "dependencies", range: "^1.0.0" },
+            },
+        ]);
+    });
+
     /** Classic's global dir has node_modules below it. */
     it("should find the global root through yarn global dir", async () => {
         const seen: string[][] = [];

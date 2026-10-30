@@ -89,6 +89,8 @@ export interface UpdatePlan {
     readonly direction: VersionDirection;
     readonly declaredIn?: { readonly section: DependencySection; readonly range: string };
     readonly command: PlannedCommand;
+    /** Set only for a Yarn Plug'n'Play project: the directory holding `.pnp.cjs` (then `location`). */
+    readonly pnpRoot?: string;
 }
 
 /** Something an update could not do itself, and how to do it by hand. */
@@ -124,11 +126,32 @@ export interface UpdateOutcome {
     readonly exitCode?: number;
 }
 
+/** The build that follows a project update. */
+export interface UpdateBuild {
+    readonly result: "built" | "failed" | "skipped" | "no-config" | "no-bin";
+    readonly directory?: string;
+    /** The command that ran the new copy's build. */
+    readonly command?: PlannedCommand;
+    readonly exitCode?: number;
+}
+
 /** The result of `update`. */
 export interface UpdateResult {
+    /** The registry URL the published versions were read from. */
+    readonly registry: string;
     readonly outcomes: readonly UpdateOutcome[];
     readonly notices: readonly UpdateNotice[];
-    readonly build?: { readonly result: "built" | "failed" | "skipped" | "no-config" | "no-bin"; readonly directory?: string; readonly exitCode?: number };
+    /**
+     * Where a build after the project update runs (or would run): the directory holding the
+     * project's sous config. Unset when the project has no config, or no project install is planned.
+     */
+    readonly buildDirectory?: string;
+    /**
+     * The project config this copy could not load, when there is one: the update ran without it,
+     * since the new copy may be the one that understands it.
+     */
+    readonly configProblem?: { readonly configPath?: string; readonly message: string };
+    readonly build?: UpdateBuild;
     readonly failed: boolean;
 }
 

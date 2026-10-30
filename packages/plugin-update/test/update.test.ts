@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { NonInteractiveError } from "@sous-io/plugin-api";
+import { ConfigError, NonInteractiveError } from "@sous-io/plugin-api";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { binEntryOf, handle, requestOf } from "../src/update.js";
 import { fakeManager, installedPackage, recordingContext } from "./helpers.js";
@@ -95,7 +95,6 @@ describe("update handler", () => {
             ["project", "0.2.34", "planned"],
         ]);
         expect(recorded.commands).toEqual([]);
-        expect(recorded.reporter.at("notice").join("\n")).toMatch(/Nothing was installed/);
         expect(result.notices.map((notice) => notice.kind)).toEqual(["unknown-location"]);
     });
 
@@ -116,7 +115,7 @@ describe("update handler", () => {
         ]);
         expect(recorded.runs[2]).toMatchObject({ cwd: dir, env: { SOUS_NO_DELEGATE: "1" } });
         expect(result.outcomes.map((outcome) => outcome.result)).toEqual(["updated", "updated"]);
-        expect(result.build).toEqual({ result: "built", directory: dir, exitCode: 0 });
+        expect(result.build).toMatchObject({ result: "built", directory: dir, exitCode: 0, command: { args: [expect.stringContaining("run.js"), "build"], cwd: dir } });
     });
 
     /** --no-build and a project without a config both skip the build, saying why. */
@@ -210,11 +209,32 @@ describe("update handler", () => {
     it("should say when there is no install to update", async () => {
         process.chdir(dir);
 
-        const { ctx, recorded } = recordingContext({ managers: [fakeManager({ id: "npm", detect: undefined })], registry: REGISTRY, ownRoot: dir });
+        const { ctx } = recordingContext({ managers: [fakeManager({ id: "npm", detect: undefined })], registry: REGISTRY, ownRoot: dir });
         const result = await handle({ yes: true }, ctx);
 
         expect(result.outcomes).toEqual([]);
-        expect(recorded.reporter.at("notice").join("\n")).toMatch(/no install of sous here/);
+        expect(result.registry).toMatch(/@sous-io%2fsous$/);
+    });
+
+    /**
+     * A project config this copy could not load does not stop the update (the new copy may be the
+     * one that understands it); the result names the config and the error, for the front end to warn.
+     */
+    it("should carry on past a config it could not load, naming it in the result", async () => {
+        process.chdir(dir);
+
+        const configPath = path.join(dir, ".sous", "sous.config.json");
+        const configError = new ConfigError("The config is not valid (1 problem).", { details: ["futureSetting: Not a known config key"] });
+        const { ctx } = recordingContext({
+            managers: [fakeManager({ id: "npm", detect: undefined })],
+            registry: REGISTRY,
+            ownRoot: dir,
+            configError,
+            project: { root: dir, sousDir: path.join(dir, ".sous"), configPath } as never,
+        });
+        const result = await handle({ yes: true }, ctx);
+
+        expect(result.configProblem).toEqual({ configPath, message: "The config is not valid (1 problem).\n  futureSetting: Not a known config key" });
     });
 
     /** A registry that cannot be read stops the update before anything runs. */
