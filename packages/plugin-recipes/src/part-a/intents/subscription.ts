@@ -483,57 +483,125 @@ export async function listSubscriptions(input: BrowsingFlags, ctx: Context): Pro
 
 // --- subscription.update ----------------------------------------------------------------------------
 
-/** The lines reported before the update question. */
+/** The plan, as the lines reported before the update question, worded as before the refactor. */
 export function updatePlanLines(plan: RecipeUpdatePlan): string[] {
     const lines: string[] = [];
+    const scope = describeUpdateScope(plan.scope);
 
     if (isEmptyUpdate(plan)) {
-        lines.push(`Nothing to update: every pin in ${describeUpdateScope(plan.scope)} is already the newest version its range allows.`);
+        lines.push(`Nothing to update: every pin in ${scope} is already the newest published version its range allows.`);
     } else {
-        lines.push(`Updating ${describeUpdateScope(plan.scope)} changes the lockfile:`);
+        lines.push(`Updating ${scope} changes the lockfile:`, "");
 
-        for (const change of plan.diff.updated) {
-            lines.push(`  ${change.key}: ${change.from} → ${change.to}`);
-        }
-
-        for (const change of plan.diff.added) {
-            lines.push(`  ${change.key}: added at ${change.to}`);
-        }
-
-        for (const change of plan.diff.removed) {
-            lines.push(`  ${change.key}: removed (was ${change.from})`);
+        if (plan.diff.unchanged) {
+            lines.push("  • No pin moves until the repositories below are trusted and read.");
+        } else {
+            for (const change of describeDiff(plan.diff)) {
+                lines.push(`  • ${change}`);
+            }
         }
     }
 
-    for (const missing of plan.missingRepos) {
-        lines.push(`A newer version needs ${missing.name}${missing.url === undefined ? "" : ` at ${missing.url}`}, which this project does not trust yet.`);
+    if (plan.missingRepos.length > 0) {
+        lines.push(
+            "",
+            `A newer version needs ${plan.missingRepos.length === 1 ? "a repository" : "repositories"} this project does not trust yet. You are asked about each one by name before anything is fetched from it:`,
+            "",
+        );
+
+        for (const missing of plan.missingRepos) {
+            const where = missing.url === undefined ? "" : ` at ${missing.url}`;
+
+            lines.push(`  • ${missing.name}${where}, needed by ${missing.requiredBy.map((entry) => entry.requestedBy).join(", ")}`);
+        }
     }
 
-    for (const variable of plan.newVariables) {
-        lines.push(`${variable.recipe} asks a new question: ${variable.name}.`);
+    if (plan.newVariables.length > 0 || plan.unreadable.length > 0) {
+        lines.push("", "Questions the new versions ask that nothing answers yet:", "");
+
+        for (const variable of plan.newVariables) {
+            lines.push(`  ${variable.recipe} asks ${variable.name}: answer it with --answer ${variable.name}=<value>`);
+        }
+
+        if (plan.unreadable.length > 0) {
+            lines.push(
+                `  Not on this machine yet, and their repository's index does not record their questions, so they cannot be listed: ${plan.unreadable.join(", ")}. A dry run downloads nothing; run this command again without '--dry-run' to install them and be asked.`,
+            );
+        }
+    }
+
+    const notes: string[] = [];
+
+    if (plan.unreadable.length > 0) {
+        notes.push(`A dry run downloads no recipe, so the dependencies of the versions not on this machine yet, and not described by their index, are not shown: ${plan.unreadable.join(", ")}.`);
     }
 
     for (const entry of plan.unreachable) {
-        lines.push(`The index of '${entry.repo}' could not be read, so its pins stay where they are. ${entry.reason.split("\n")[0]}`);
+        notes.push(`The index of '${entry.repo}' could not be fetched, so its pins stay where they are. ${firstLine(entry.reason)}`);
     }
 
     for (const entry of plan.failed) {
-        lines.push(`The subscription to '${entry.key}' could not be resolved, so its pins stay where they are. ${entry.reason.split("\n")[0]}`);
+        notes.push(`The subscription to '${entry.key}' could not be resolved, so its pins stay where they are. ${firstLine(entry.reason)}`);
     }
 
     for (const repo of plan.linked) {
-        lines.push(`The repository '${repo}' is linked to a working copy, so builds keep reading that checkout until it is unlinked.`);
+        notes.push(`The repository '${repo}' is linked to a working copy, so builds keep reading that checkout until it is unlinked; the pins above take effect then.`);
     }
 
     for (const entry of plan.builtIn) {
-        lines.push(`The subscription to '${entry.key}' is one sous provides itself, and stays at ${entry.version ?? "the version"} this sous ships.`);
+        notes.push(
+            `The subscription to '${entry.key}' is one sous provides itself, and it stays at ${entry.version === undefined ? "the version" : `version ${entry.version}, the version`} this installation of sous ships.`,
+        );
     }
 
     if (plan.switchedOff.length > 0) {
-        lines.push(`Switched off, so left alone: ${plan.switchedOff.join(", ")}.`);
+        notes.push(`Switched off, so left alone: ${plan.switchedOff.join(", ")}.`);
+    }
+
+    if (notes.length > 0) {
+        lines.push("", ...notes.map((note) => `• ${note}`));
     }
 
     return lines;
+}
+
+/** The first line of a message, trimmed. */
+function firstLine(text: string): string {
+    return (text.split("\n")[0] ?? "").trim();
+}
+
+/**
+ * A lockfile change as lines, one per change, worded as the lockfile report words them.
+ *
+ * ```ts
+ * describeDiff(diff); // -> ["Updating workflow/a from version 1.0.0 to version 1.1.0"]
+ * ```
+ */
+export function describeDiff(diff: LockDiff): string[] {
+    const byKey = (left: { key: string }, right: { key: string }) => (left.key < right.key ? -1 : left.key > right.key ? 1 : 0);
+
+    return [
+        ...diff.reposAdded.map((name) => `Repository added: ${name}`),
+        ...[...diff.added].sort(byKey).map((change) => `Adding ${change.key} version ${change.to}`),
+        ...[...diff.updated].sort(byKey).map((change) => `Updating ${change.key} from version ${change.from} to version ${change.to}`),
+        ...[...diff.removed].sort(byKey).map((change) => `Removing ${change.key}, which nothing needs any more`),
+        ...diff.reposRemoved.map((name) => `Repository no longer needed: ${name}`),
+    ];
+}
+
+/** The recipes a planned lockfile pins under some keys, in the shape downloading takes. */
+function plannedRecipes(lockfile: Lockfile, keys: readonly string[]): ResolvedRecipe[] {
+    return keys.flatMap((key) => {
+        const entry = lockfile.recipes[key];
+        const identity = entry === undefined ? undefined : lockfile.repos[entry.repo]?.identity;
+        const slash = key.indexOf("/");
+
+        if (entry === undefined || identity === undefined || slash < 0) {
+            return [];
+        }
+
+        return [{ key, namespace: key.slice(0, slash), name: key.slice(slash + 1), repo: entry.repo, identity, version: entry.version, hash: entry.hash, tag: "", path: "", kind: entry.kind, requestedBy: entry.requestedBy, ranges: [], prerelease: false }];
+    });
 }
 
 /** `subscription.update`: plans with `recipe.update`, asks once, trusts what a newer version needs, then writes the lockfile. */
@@ -541,10 +609,15 @@ export async function updateSubscriptions(input: SubscriptionUpdateInput, ctx: C
     const planInput: RecipeUpdateInput = { ...(input.ref === undefined ? {} : { ref: input.ref }), ...(input.acceptFirst === undefined ? {} : { acceptFirst: input.acceptFirst }) };
     let plan = await ctx.run("recipe.update", planInput);
     const base = { trusted: [] as string[], dryRun: input.dryRun === true };
+    const tried = new Set<string>();
 
-    for (const line of updatePlanLines(plan)) {
-        ctx.reporter.note(line);
+    // The index does not always say what a new version depends on: download those versions and plan
+    // again, so their dependencies are in the plan. A dry run downloads nothing.
+    while (input.dryRun !== true && (await downloadUnreadable(ctx, plannedRecipes(plan.lockfile, plan.unreadable), plan.unreadable, tried))) {
+        plan = await planUpdate(planInput, ctx);
     }
+
+    ctx.reporter.note(updatePlanLines(plan).join("\n"));
 
     if (isEmptyUpdate(plan)) {
         return { ...base, plan, applied: false, nothingToUpdate: true, followUps: [] };
@@ -579,6 +652,10 @@ export async function updateSubscriptions(input: SubscriptionUpdateInput, ctx: C
         ctx.configChanged();
         current = await refreshed(ctx);
         plan = await planUpdate(planInput, current);
+
+        while (await downloadUnreadable(current, plannedRecipes(plan.lockfile, plan.unreadable), plan.unreadable, tried)) {
+            plan = await planUpdate(planInput, current);
+        }
     }
 
     await writeLock(current, plan.lockfile);

@@ -80,7 +80,14 @@ async function freshIndexes(ctx: Context): Promise<{ indexes: Map<string, IndexF
 
     for (const name of repoSearchOrder(ctx)) {
         try {
-            indexes.set(name, (await cache.get(name, { latest: true })).index);
+            const read = await cache.get(name, { latest: true });
+
+            // Upstream failed and the cached copy came back instead: plan with it, and say so.
+            if (read.source === "stale") {
+                unreachable.push({ repo: name, reason: (read as { problem?: string }).problem ?? "The repository could not be reached." });
+            }
+
+            indexes.set(name, read.index);
         } catch (error) {
             unreachable.push({ repo: name, reason: describeError(error) });
 
