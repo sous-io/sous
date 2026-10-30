@@ -1410,3 +1410,31 @@ tests had been written against the first new layout, and were brought in line:
   answered. Without the narrowing, `vars.ask` also asked other recipes' unanswered questions (a fresh
   project's core `skillsRoot`), so `subscription add` failed with no terminal. `within` narrows
   without asking optional questions, as naming a recipe does.
+
+## Switch-over: the old unit tests that went with src/
+
+Every test file under `src/` was checked against the packages before `src/` was deleted (150 files).
+139 were ported; the port of each is recorded above, package by package. The cases a few ports were
+missing were added during the switch-over: the project-install hand-off
+(`packages/sous/src/hand-off.spec.ts`), the config flag forms of the old base command
+(`packages/sous/src/project.spec.ts`), the per-file Liquid rendering cases
+(`packages/plugin-compiler/test/compilation.test.ts`), masking a secret answer
+(`packages/plugin-cli/src/terminal-prompter.spec.ts`), and the `repos`, `subscriptions` and `store`
+config-key checks (`packages/plugin-recipes`).
+
+These were deleted with nothing to port, because the code they tested has no counterpart:
+
+- `src/services/ref-resolver/container.spec.ts`: the old dependency-injection container is gone.
+- `src/services/ref-resolver/lookups/chained-lookup.spec.ts`: there is no chain object; the resolver
+  asks each `ref-lookup` entity in turn (covered by `plugin-refs/src/resolver.spec.ts`).
+- `src/lib/repos/index.spec.ts`: it checked what the old `repos` module exported.
+- `src/utils/flags.spec.ts`: the oclif `confirmationFlag` helper; flags with several aliases and
+  short forms are tested in plugin-cli.
+- `src/lib/repos/store/settings.spec.ts`: `resolveStoreSettings` is gone; the store settings are
+  schema defaults of plugin-recipes' config keys.
+- `src/utils/choice-prompt.spec.ts` and `src/utils/confirm-prompt.spec.ts`: the arrow-key picker and
+  its Tab "advanced view" are gone; choosing and confirming are tested in
+  `plugin-cli/src/terminal-prompter.spec.ts`.
+- Parts of ported files that tested oclif plumbing, the config kernel subprocess and tsx (in
+  `src/base-command.spec.ts`, `src/test/integration/config-kernel.test.ts`), and the Tab advanced
+  view (in `vars-ask` and `self-update`).
