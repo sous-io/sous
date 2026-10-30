@@ -127,11 +127,14 @@ describe("RecipeStore", () => {
         const source = makeSource();
 
         write(source, ".git/HEAD", "ref");
-        fs.symlinkSync(path.join(source, "SKILL.md"), path.join(source, "link.md"));
+        write(source, "docs/a.md", "beta");
+        // A junction on Windows, where a file symlink needs elevated rights; the type is ignored elsewhere.
+        fs.symlinkSync(path.join(source, "docs"), path.join(source, "link"), "junction");
         await store.put(key, source);
 
         expect(fs.existsSync(path.join(store.entryDir(key), ".git"))).toBe(false);
-        expect(fs.existsSync(path.join(store.entryDir(key), "link.md"))).toBe(false);
+        expect(fs.existsSync(path.join(store.entryDir(key), "link"))).toBe(false);
+        expect(fs.existsSync(path.join(store.entryDir(key), "docs", "a.md"))).toBe(true);
     });
 
     /** A hash that does not match the pin writes nothing. */

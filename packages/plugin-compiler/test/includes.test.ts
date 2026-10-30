@@ -327,10 +327,14 @@ describe("include globs and the # sigil", () => {
         expect(log).toContain("Include not found");
     });
 
+    /**
+     * The exact spelling is written last: on a case-insensitive filesystem (Windows, macOS) the two
+     * spellings are one directory, and the include must still find the exact one's content.
+     */
     it("should prefer the exact spelling of a recipe name", async () => {
         project = makeProject();
-        write("store/alpha/thing/f.md", "LOWER");
         write("store/alpha/Thing/f.md", "UPPER");
+        write("store/alpha/thing/f.md", "LOWER");
         const resolver = new StaticNamespaceResolver({ recipes: { "alpha/thing": at("store/alpha/thing") } });
         const { output } = await compileEntry(write("project/ENTRY.md", "@~alpha/thing/f.md\n"), { resolver });
 

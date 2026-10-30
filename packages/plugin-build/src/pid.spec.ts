@@ -16,7 +16,7 @@ describe("PidFile", () => {
          * new PidFile({ project: { sousDir: "/p/.sous" } }).path(); // -> "/p/.sous/sous.pid"
          */
         it("should return the sousDir-relative path when there is a project", () => {
-            expect(new PidFile({ project: projectAt("/p"), cwd: "/elsewhere" }).path()).toBe("/p/.sous/sous.pid");
+            expect(new PidFile({ project: projectAt("/p"), cwd: "/elsewhere" }).path()).toBe(path.join("/p", ".sous", "sous.pid"));
         });
 
         /**
@@ -34,7 +34,7 @@ describe("PidFile", () => {
          * new PidFile({ project: undefined, cwd: "/work" }).path(); // -> "/work/sous.pid"
          */
         it("should fall back to the working directory when there is no project", () => {
-            expect(new PidFile({ project: undefined, cwd: "/work" }).path()).toBe("/work/sous.pid");
+            expect(new PidFile({ project: undefined, cwd: "/work" }).path()).toBe(path.join("/work", "sous.pid"));
         });
     });
 

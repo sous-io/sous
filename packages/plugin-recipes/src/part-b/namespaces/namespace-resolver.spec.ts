@@ -6,8 +6,9 @@ import { cleanTemp, startEngine, tempDir } from "../../../test/part-b/helpers.js
 import type { ActiveRecipeEntity } from "../../types.js";
 import { ActiveNamespaceResolver } from "./namespace-resolver.js";
 
-const STORE = "/store";
-const PROJECT_FILE = "/project/prompts/AGENTS.md";
+// Absolute on every platform (`D:\store` on Windows), as a real store root is.
+const STORE = path.resolve("/store");
+const PROJECT_FILE = path.resolve("/project/prompts/AGENTS.md");
 
 let refs: RefsResolver;
 
@@ -84,13 +85,13 @@ describe("ActiveNamespaceResolver", () => {
     });
 
     it("should give the deepest recipe holding a file as the including recipe", () => {
-        const outer = recipe("outer/one", ["project"], "acme", "/store/outer");
-        const inner = recipe("inner/two", ["project"], "acme", "/store/outer/nested");
+        const outer = recipe("outer/one", ["project"], "acme", path.join(STORE, "outer"));
+        const inner = recipe("inner/two", ["project"], "acme", path.join(STORE, "outer", "nested"));
         const resolver = makeResolver([outer, inner]);
 
-        expect(resolver.includingRecipe("/store/outer/nested/x.md")).toBe("inner/two");
-        expect(resolver.includingRecipe("/store/outer/x.md")).toBe("outer/one");
-        expect(resolver.includingRecipe("/project/x.md")).toBeNull();
+        expect(resolver.includingRecipe(path.join(STORE, "outer", "nested", "x.md"))).toBe("inner/two");
+        expect(resolver.includingRecipe(path.join(STORE, "outer", "x.md"))).toBe("outer/one");
+        expect(resolver.includingRecipe(path.resolve("/project/x.md"))).toBeNull();
     });
 
     it("should refuse references containing '.' or '..' segments", () => {

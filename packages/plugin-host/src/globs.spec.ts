@@ -147,7 +147,8 @@ describe("files and containment", () => {
 
     /** The real path comes back when inside; a missing file in a good directory still counts as inside. */
     it("should give the real path inside a root", () => {
-        symlinkSync(path.join(root, "outside"), path.join(root, "docs", "escape"));
+        // A junction on Windows, where a directory symlink needs elevated rights; the type is ignored elsewhere.
+        symlinkSync(path.join(root, "outside"), path.join(root, "docs", "escape"), "junction");
         const docs = path.join(root, "docs");
 
         expect(hostGlobs.realPathInside(path.join(docs, "a.md"), docs)).toBe(path.join(docs, "a.md"));

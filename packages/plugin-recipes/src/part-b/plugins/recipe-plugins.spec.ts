@@ -49,11 +49,12 @@ describe("pluginBundleOf()", () => {
     });
 
     it("should refuse a bundle that is a link leading out of the recipe", () => {
-        const outside = path.join(tempDir(), "evil.js");
-        const active = recipe("workflow/alpha", { bundle: "plugin/link.js" });
+        const outside = tempDir();
+        const active = recipe("workflow/alpha", { bundle: "plugin/link/evil.js" });
 
-        fs.writeFileSync(outside, "export default {}");
-        fs.symlinkSync(outside, path.join(active.dir, "plugin/link.js"));
+        fs.writeFileSync(path.join(outside, "evil.js"), "export default {}");
+        // A junction on Windows, where a file symlink needs elevated rights; the type is ignored elsewhere.
+        fs.symlinkSync(outside, path.join(active.dir, "plugin/link"), "junction");
 
         expect(pluginBundleOf(active)).toMatchObject({ problem: expect.stringContaining("outside its own files") });
     });

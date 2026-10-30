@@ -67,7 +67,8 @@ describe("pnpm installed", () => {
     it("should list project packages, following links", async () => {
         write("package.json", JSON.stringify({ dependencies: { plug: "^1.0.0" } }));
         write("node_modules/.pnpm/plug@1.2.3/node_modules/plug/package.json", JSON.stringify({ version: "1.2.3", keywords: ["sous-plugin"] }));
-        fs.symlinkSync(path.join(dir, "node_modules/.pnpm/plug@1.2.3/node_modules/plug"), path.join(dir, "node_modules/plug"));
+        // A junction on Windows, where a directory symlink needs elevated rights; the type is ignored elsewhere.
+        fs.symlinkSync(path.join(dir, "node_modules/.pnpm/plug@1.2.3/node_modules/plug"), path.join(dir, "node_modules/plug"), "junction");
 
         const found = await pnpmManager.installed("project", dir, context(""));
 

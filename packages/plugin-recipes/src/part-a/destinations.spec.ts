@@ -1,8 +1,11 @@
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { builtConfig } from "../../test/part-a/helpers.js";
 import { destinationsFor } from "./destinations.js";
 
-const project = { root: "/project", sousDir: "/project/.sous", configPath: undefined, confDir: "/project/.sous/conf.d" };
+/** An absolute project root that is never touched on disk (`D:\project` on Windows). */
+const root = path.resolve("/project");
+const project = { root, sousDir: path.join(root, ".sous"), configPath: undefined, confDir: path.join(root, ".sous", "conf.d") };
 
 function contextWith(entities: Record<string, Array<{ id: string } & Record<string, unknown>>>, data: Record<string, unknown> = {}) {
     const config = builtConfig(data as never, { entities });
@@ -17,13 +20,13 @@ describe("destinationsFor()", () => {
             { recipes: { skills: { outputs: ["${projectRoot}/more-skills"] } } },
         );
 
-        expect(destinationsFor(ctx, "skills")).toEqual(["${projectRoot}/more-skills", "/abs/skills", "/project/.claude/skills"]);
+        expect(destinationsFor(ctx, "skills")).toEqual(["${projectRoot}/more-skills", "/abs/skills", path.join(root, ".claude", "skills")]);
     });
 
     it("should list every memory target's file", () => {
         const ctx = contextWith({ "memory-target": [{ id: "claude-code", fileName: "CLAUDE.md" }, { id: "codex", fileName: "AGENTS.md", directory: "docs" }] });
 
-        expect(destinationsFor(ctx, "memories")).toEqual(["/project/CLAUDE.md", "/project/docs/AGENTS.md"]);
+        expect(destinationsFor(ctx, "memories")).toEqual([path.join(root, "CLAUDE.md"), path.join(root, "docs", "AGENTS.md")]);
     });
 
     it("should list nothing when no plugin adds a target, and nothing for config layers", () => {

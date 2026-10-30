@@ -23,7 +23,7 @@ afterEach(() => {
     fs.rmSync(tmp, { recursive: true, force: true });
 });
 
-/** Every file under `root`, relative to it, sorted, so two snapshots compare. */
+/** Every file under `root`, relative to it with `/` separators on every platform, sorted, so two snapshots compare. */
 function listTree(root: string): string[] {
     const found: string[] = [];
     const walk = (directory: string): void => {
@@ -33,7 +33,7 @@ function listTree(root: string): string[] {
             if (entry.isDirectory()) {
                 walk(full);
             } else {
-                found.push(path.relative(root, full));
+                found.push(path.relative(root, full).split(path.sep).join("/"));
             }
         }
     };

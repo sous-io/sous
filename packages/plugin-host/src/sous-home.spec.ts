@@ -19,10 +19,10 @@ describe("resolveSousHomePaths()", () => {
         });
     });
 
-    /** An absolute SOUS_HOME is used as given. */
+    /** An absolute SOUS_HOME is used as given (on Windows it gains the current drive). */
     it("should use an absolute SOUS_HOME", () => {
-        expect(resolveSousHomePaths({ SOUS_HOME: "/opt/sous-home" }).root).toBe(path.normalize("/opt/sous-home"));
-        expect(resolveSousHomePaths({ SOUS_HOME: "/opt/sous-home" }).store).toBe(path.normalize("/opt/sous-home/cache"));
+        expect(resolveSousHomePaths({ SOUS_HOME: "/opt/sous-home" }).root).toBe(path.resolve("/opt/sous-home"));
+        expect(resolveSousHomePaths({ SOUS_HOME: "/opt/sous-home" }).store).toBe(path.resolve("/opt/sous-home", "cache"));
     });
 
     /** A leading tilde is expanded; `~user` is not. */
@@ -52,10 +52,10 @@ describe("createSousHome()", () => {
         const home = createSousHome(() => env);
 
         env.SOUS_HOME = "/first";
-        expect(home.paths().root).toBe(path.normalize("/first"));
+        expect(home.paths().root).toBe(path.resolve("/first"));
         env.SOUS_HOME = "/second";
-        expect(home.paths().root).toBe(path.normalize("/second"));
-        expect(home.resolve("cache", "x")).toBe(path.normalize("/second/cache/x"));
-        expect(home.paths({ SOUS_HOME: "/given" }).root).toBe(path.normalize("/given"));
+        expect(home.paths().root).toBe(path.resolve("/second"));
+        expect(home.resolve("cache", "x")).toBe(path.resolve("/second", "cache", "x"));
+        expect(home.paths({ SOUS_HOME: "/given" }).root).toBe(path.resolve("/given"));
     });
 });

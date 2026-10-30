@@ -265,14 +265,16 @@ describe("recipes.memories", () => {
      * A memory that is a link out of its recipe is reported once, as a warning, however often the
      * contributor runs.
      *
-     * leak.md -> one warning
+     * leak/secret.md -> one warning
      */
     it("should warn once about a memory that leads out of its recipe", async () => {
-        const one = recipe(tmp.path, "c/one");
-        const secret = path.join(tmp.path, "secret.md");
+        const one = recipe(tmp.path, "c/one", { include: ["memories/**/*.md"] });
+        const outside = path.join(tmp.path, "outside");
 
-        fs.writeFileSync(secret, "secret");
-        fs.symlinkSync(secret, path.join(one.dir, "memories", "leak.md"));
+        fs.mkdirSync(outside);
+        fs.writeFileSync(path.join(outside, "secret.md"), "secret");
+        // A junction on Windows, where a file symlink needs elevated rights; the type is ignored elsewhere.
+        fs.symlinkSync(outside, path.join(one.dir, "memories", "leak"), "junction");
 
         const { engine, reporter } = makeEngine([one], [targets({ id: "t", fileName: "T.md" })]);
 
@@ -282,6 +284,6 @@ describe("recipes.memories", () => {
         const warnings = reporter.messages.filter((message) => message.level === "warning");
 
         expect(warnings).toHaveLength(1);
-        expect(warnings[0]?.message).toContain("leak.md");
+        expect(warnings[0]?.message).toContain(path.join("leak", "secret.md"));
     });
 });

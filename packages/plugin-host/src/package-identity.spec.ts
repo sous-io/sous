@@ -39,7 +39,8 @@ describe("host.package", () => {
 
         mkdirSync(real);
         writeFileSync(path.join(real, "package.json"), JSON.stringify({ name: "@sous-io/sous", version: "1.0.0" }));
-        symlinkSync(real, link);
+        // A junction on Windows, where a directory symlink needs elevated rights; the type is ignored elsewhere.
+        symlinkSync(real, link, "junction");
 
         const identity = createPackage({ startDir: link, bin: undefined }).identity();
 
