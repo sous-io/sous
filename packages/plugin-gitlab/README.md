@@ -1,11 +1,26 @@
 # @sous-io/plugin-gitlab
 
-A repository-host entity for GitLab, with S4's fixes to the index address and the token.
+Lets sous read recipe repositories hosted on GitLab, sign in with a token, and propose changes as merge requests.
 
-- **Specified in:** S6, "Host and package-manager plugins".
-- **Capabilities (S7):** S4 read strategies and token sources.
-- **Depends on:** `plugin-recipes`, `plugin-host`, `plugin-git`.
-- **Contract:** `src/types.ts` declares every service, intent, event, entity kind and config key this
-  plugin owns. Other plugins import it type-only: `import type {} from "@sous-io/plugin-gitlab/types";`.
-- **Built on:** `@sous-io/repository-hosts` (shared URL parsing, token sources, read strategies).
-  `recipes.index-cache` tries the strategies in order and remembers what worked.
+It adds no commands. Its options (`plugins.options."@sous-io/plugin-gitlab"`) are described in `src/types.ts`.
+
+## Using it from another plugin
+
+```ts
+import type {} from "@sous-io/plugin-gitlab/types";
+
+const gitlab = ctx.entities.get("repository-host", "gitlab");
+```
+
+## Where things are
+
+- `src/host.ts`: the repository host.
+- `src/proposals.ts`: opening and following merge requests.
+- `src/ci.ts`: the release pipeline a new repository gets.
+- `src/glab.ts`: calling the `glab` tool.
+
+## Testing
+
+```bash
+pnpm --filter @sous-io/plugin-gitlab test
+```

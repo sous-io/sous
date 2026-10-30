@@ -1,9 +1,24 @@
 # @sous-io/plugin-npm
 
-A package-manager entity for npm.
+Lets sous detect npm and install plugins with it.
 
-- **Specified in:** S6, "Host and package-manager plugins".
-- **Capabilities (S7):** C5.
-- **Depends on:** `plugin-update`, `plugin-host`.
-- **Contract:** `src/types.ts` declares every service, intent, event, entity kind and config key this
-  plugin owns. Other plugins import it type-only: `import type {} from "@sous-io/plugin-npm/types";`.
+It adds no commands.
+
+## Using it from another plugin
+
+```ts
+import type {} from "@sous-io/plugin-npm/types";
+
+const npm = ctx.entities.get("package-manager", "npm");
+```
+
+## Where things are
+
+- `src/manager.ts`: the package manager.
+- `src/node-modules.ts`: finding installed packages.
+
+## Testing
+
+```bash
+pnpm --filter @sous-io/plugin-npm test
+```

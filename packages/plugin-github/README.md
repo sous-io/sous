@@ -1,11 +1,26 @@
 # @sous-io/plugin-github
 
-A repository-host entity for GitHub: reading indexes, the token, proposing changes, the CI workflow.
+Lets sous read recipe repositories hosted on GitHub, sign in with a token, and propose changes as pull requests.
 
-- **Specified in:** S6, "Host and package-manager plugins".
-- **Capabilities (S7):** S4 read strategies and token sources.
-- **Depends on:** `plugin-recipes`, `plugin-host`, `plugin-git`.
-- **Contract:** `src/types.ts` declares every service, intent, event, entity kind and config key this
-  plugin owns. Other plugins import it type-only: `import type {} from "@sous-io/plugin-github/types";`.
-- **Built on:** `@sous-io/repository-hosts` (shared URL parsing, token sources, read strategies).
-  `recipes.index-cache` tries the strategies in order and remembers what worked.
+It adds no commands. Its options (`plugins.options."@sous-io/plugin-github"`) are described in `src/types.ts`.
+
+## Using it from another plugin
+
+```ts
+import type {} from "@sous-io/plugin-github/types";
+
+const github = ctx.entities.get("repository-host", "github");
+```
+
+## Where things are
+
+- `src/host.ts`: the repository host.
+- `src/proposals.ts`: opening and following pull requests.
+- `src/ci.ts`: the release workflow a new repository gets.
+- `src/gh.ts`: calling the `gh` tool.
+
+## Testing
+
+```bash
+pnpm --filter @sous-io/plugin-github test
+```

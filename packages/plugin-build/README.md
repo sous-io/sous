@@ -1,11 +1,33 @@
 # @sous-io/plugin-build
 
-The build, compile, prune and clear intents, preparing for a build, watch mode, the PID file, the runtime context file.
+Builds a project: compiles its outputs, removes the ones the config no longer produces, and can keep rebuilding while files change.
 
-- **Specified in:** S6, "Build: plugin-build".
-- **Capabilities (S7):** C10 (build runs compiler, recipe and answer intents by name), C13 (build.watch,
-  a background intent submitting chains), C59 / S4 problem 3 (one line per skipped recipe).
-- **Depends on:** `plugin-compiler`, `plugin-recipes`, `plugin-recipe-answers`, `plugin-git`, `plugin-host`,
-  `plugin-variables` (for `${var}` in `runtimeContext`, `watch.paths` and `_vars.pidFilePath`).
-- **Contract:** `src/types.ts` declares every service, intent, event, entity kind and config key this
-  plugin owns. Other plugins import it type-only: `import type {} from "@sous-io/plugin-build/types";`.
+It adds these commands:
+
+| Command | Does |
+| --- | --- |
+| `sous build` | prepares recipes, compiles every target and prunes; `--watch` keeps building on changes |
+| `sous compile` | compiles the targets only, without preparing or pruning |
+| `sous prune` | removes outputs the config no longer produces |
+| `sous clear` | deletes every file and directory sous wrote for the project |
+
+## Using it from another plugin
+
+```ts
+import type {} from "@sous-io/plugin-build/types";
+
+const result = await ctx.run("build", { dryRun: true });
+```
+
+## Where things are
+
+- `src/index.ts`: registers the intents, services and config keys.
+- `src/build.ts`, `src/prepare.ts`: the build and its preparation step.
+- `src/watch/`: watch mode.
+- `src/pid.ts`, `src/runtime-context.ts`: the PID file and the runtime context file.
+
+## Testing
+
+```bash
+pnpm --filter @sous-io/plugin-build test
+```

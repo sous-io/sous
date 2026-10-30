@@ -1,9 +1,24 @@
 # @sous-io/plugin-pnpm
 
-A package-manager entity for pnpm.
+Lets sous detect pnpm and install plugins with it.
 
-- **Specified in:** S6, "Host and package-manager plugins".
-- **Capabilities (S7):** C5.
-- **Depends on:** `plugin-update`, `plugin-host`.
-- **Contract:** `src/types.ts` declares every service, intent, event, entity kind and config key this
-  plugin owns. Other plugins import it type-only: `import type {} from "@sous-io/plugin-pnpm/types";`.
+It adds no commands.
+
+## Using it from another plugin
+
+```ts
+import type {} from "@sous-io/plugin-pnpm/types";
+
+const pnpm = ctx.entities.get("package-manager", "pnpm");
+```
+
+## Where things are
+
+- `src/manager.ts`: the package manager.
+- `src/index.ts`: registration.
+
+## Testing
+
+```bash
+pnpm --filter @sous-io/plugin-pnpm test
+```

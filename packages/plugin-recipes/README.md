@@ -1,9 +1,35 @@
 # @sous-io/plugin-recipes
 
-Repositories, trust, subscriptions, the lockfile, the store, the index cache, links, the core recipe, the catalog and recipe plugins.
+Manages the recipes a project uses: which repositories it trusts, which recipes it subscribes to, the lockfile, and the local store of downloaded recipes.
 
-- **Specified in:** S6, "Recipes: plugin-recipes".
-- **Capabilities (S7):** C39, C40, C48, C59, C60.
-- **Depends on:** `plugin-confd`, `plugin-formats`, `plugin-refs`, `plugin-variables`, `plugin-git`, `plugin-compiler`, `plugin-host`.
-- **Contract:** `src/types.ts` declares every service, intent, event, entity kind and config key this
-  plugin owns. Other plugins import it type-only: `import type {} from "@sous-io/plugin-recipes/types";`.
+It adds these commands:
+
+| Command | Does |
+| --- | --- |
+| `sous repo add|remove|trust|list|search|gc|link|unlink` | work with recipe repositories |
+| `sous subscription add|remove|enable|disable|list|update` | choose which recipes the project uses (`sous subscribe` also works) |
+| `sous recipe list|show|update` | browse and update recipes |
+| `sous namespace list|show` | browse a repository's namespaces |
+| `sous lock show|rebuild` | see or rebuild the lockfile |
+
+## Using it from another plugin
+
+```ts
+import type {} from "@sous-io/plugin-recipes/types";
+
+const active = ctx.services.get("recipes.active").list();
+await ctx.run("subscription.add", { ref: "workflow/task-files" });
+```
+
+## Where things are
+
+- `src/part-a/`: subscriptions, trust, the lockfile and the store.
+- `src/part-b/`: fetching, resolving, links and the core recipe.
+- `src/part-a/intents/`, `src/part-b/index.ts`: the commands.
+- `src/types.ts`: every service and intent.
+
+## Testing
+
+```bash
+pnpm --filter @sous-io/plugin-recipes test
+```

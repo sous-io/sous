@@ -1,9 +1,26 @@
 # @sous-io/plugin-skills
 
-Skills: where they come from, the skill-target entity, and the compilation targets for them.
+Chooses which recipe skills reach the places agents read them from, such as `.claude/skills`.
 
-- **Specified in:** S6, "Skills: plugin-skills".
-- **Capabilities (S7):** C42, C57.
-- **Depends on:** `plugin-compiler`, `plugin-recipes`.
-- **Contract:** `src/types.ts` declares every service, intent, event, entity kind and config key this
-  plugin owns. Other plugins import it type-only: `import type {} from "@sous-io/plugin-skills/types";`.
+It adds no commands.
+
+## Using it from another plugin
+
+```ts
+import type {} from "@sous-io/plugin-skills/types";
+
+const sources = ctx.services.get("skills.sources").list();
+```
+
+## Where things are
+
+- `src/sources.ts`: where skills come from.
+- `src/targets.ts`: the compilation targets for skill folders.
+- `src/skill-target.ts`: the `skill-target` entity.
+- `src/settings.ts`: the `recipes.skills` config key.
+
+## Testing
+
+```bash
+pnpm --filter @sous-io/plugin-skills test
+```

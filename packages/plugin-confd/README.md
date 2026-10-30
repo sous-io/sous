@@ -1,9 +1,26 @@
 # @sous-io/plugin-confd
 
-The conf.d files, one contributor per file, and surgical edits to the managed conf.d/5xx files.
+Reads a project's `conf.d` files as config layers, and lets other plugins edit the managed ones.
 
-- **Specified in:** S6, "Config files: plugin-config-files and plugin-confd".
-- **Capabilities (S7):** C59, C70, C77.
-- **Depends on:** `plugin-config-files`, `plugin-expressions`, `plugin-variables`, `plugin-host`.
-- **Contract:** `src/types.ts` declares every service, intent, event, entity kind and config key this
-  plugin owns. Other plugins import it type-only: `import type {} from "@sous-io/plugin-confd/types";`.
+It adds no commands. The managed layer names (such as `520-var-mappings.jsonc`) are listed in `src/types.ts`.
+
+## Using it from another plugin
+
+```ts
+import type {} from "@sous-io/plugin-confd/types";
+
+const managed = ctx.services.get("confd.managed");
+await managed.set("520-var-mappings.jsonc", "varMappings.MY_VAR", "workflow/x.name");
+```
+
+## Where things are
+
+- `src/files.ts`: finds and orders the files, one config layer per file.
+- `src/managed.ts`: edits to the files sous manages.
+- `src/index.ts`: registers the layers and services.
+
+## Testing
+
+```bash
+pnpm --filter @sous-io/plugin-confd test
+```

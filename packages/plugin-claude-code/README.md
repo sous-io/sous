@@ -1,9 +1,25 @@
 # @sous-io/plugin-claude-code
 
-Everything sous knows about Claude Code: its harness, skill-target and memory-target entities.
+Teaches sous about Claude Code: where its skills and memory files go, and how to run it.
 
-- **Specified in:** S6, "Host and package-manager plugins (plugin-claude-code)".
-- **Capabilities (S7):** C41, C42, C43, C56.
-- **Depends on:** `plugin-skills`, `plugin-memories`, `plugin-harnesses`, `plugin-host`.
-- **Contract:** `src/types.ts` declares every service, intent, event, entity kind and config key this
-  plugin owns. Other plugins import it type-only: `import type {} from "@sous-io/plugin-claude-code/types";`.
+It adds no commands. `sous launch claude` works because of it.
+
+## Using it from another plugin
+
+```ts
+import type {} from "@sous-io/plugin-claude-code/types";
+
+const harness = ctx.entities.get("harness", "claude");
+```
+
+## Where things are
+
+- `src/harness.ts`: the Claude Code harness.
+- `src/targets.ts`: the skill and memory targets it adds to the config.
+- `src/transcript.ts`: reading a headless run's output.
+
+## Testing
+
+```bash
+pnpm --filter @sous-io/plugin-claude-code test
+```

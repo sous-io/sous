@@ -1,9 +1,27 @@
 # @sous-io/plugin-host
 
-The machine sous runs on: processes, HTTP, globs and paths, sous home, self-describing directories, the .gitignore block, package identity.
+Gives plugins the machine sous runs on: starting programs, HTTP, file globs, sous's home folder, the `.gitignore` block and the package's own identity.
 
-- **Specified in:** S6, "The machine: plugin-host".
-- **Capabilities (S7):** C44 (pointer files).
-- **Depends on:** nothing.
-- **Contract:** `src/types.ts` declares every service, intent, event, entity kind and config key this
-  plugin owns. Other plugins import it type-only: `import type {} from "@sous-io/plugin-host/types";`.
+It adds no commands.
+
+## Using it from another plugin
+
+```ts
+import type {} from "@sous-io/plugin-host/types";
+
+const { stdout } = await ctx.services.get("host.processes").run("node", ["--version"]);
+const isTs = ctx.services.get("host.globs").isMatch("src/a.ts", "**/*.ts");
+```
+
+## Where things are
+
+- `src/processes.ts`, `src/http.ts`: running programs and HTTP.
+- `src/globs.ts`: glob matching and path checks.
+- `src/sous-home.ts`, `src/gitignore.ts`: the home folder and `.gitignore` block.
+- `src/directories.ts`: folders that explain themselves to an agent.
+
+## Testing
+
+```bash
+pnpm --filter @sous-io/plugin-host test
+```

@@ -1,9 +1,31 @@
 # @sous-io/plugin-update
 
-Updating sous itself, installing plugins a recipe requires, the package-manager entity, scanning for installed plugins.
+Updates sous itself, and installs the npm plugins a recipe needs.
 
-- **Specified in:** S6, "Project setup and updates: plugin-init, plugin-update".
-- **Capabilities (S7):** C5, C47.
-- **Depends on:** `plugin-host`.
-- **Contract:** `src/types.ts` declares every service, intent, event, entity kind and config key this
-  plugin owns. Other plugins import it type-only: `import type {} from "@sous-io/plugin-update/types";`.
+It adds these commands:
+
+| Command | Does |
+| --- | --- |
+| `sous update` | updates sous globally and in this project, with the package manager that installed each copy |
+| `sous plugins install` | installs npm plugins through the project's package manager |
+
+## Using it from another plugin
+
+```ts
+import type {} from "@sous-io/plugin-update/types";
+
+await ctx.run("update", { dryRun: true });
+```
+
+## Where things are
+
+- `src/update.ts`, `src/plan.ts`: the update and its plan.
+- `src/plugins-install.ts`: installing plugins.
+- `src/scan.ts`: finding installed plugins.
+- `src/registry.ts`: asking the npm registry for versions.
+
+## Testing
+
+```bash
+pnpm --filter @sous-io/plugin-update test
+```

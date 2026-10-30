@@ -1,9 +1,27 @@
 # @sous-io/plugin-expressions
 
-Config expressions (S5) and the expression languages plugins add.
+Lets config values be written as expressions, such as a Liquid template, and works out their values while the config is built.
 
-- **Specified in:** S6, "Shared building blocks (expressions.evaluator, expression-language)".
-- **Capabilities (S7):** C36, C54, C55.
-- **Depends on:** `plugin-liquid`, `plugin-variables`.
-- **Contract:** `src/types.ts` declares every service, intent, event, entity kind and config key this
-  plugin owns. Other plugins import it type-only: `import type {} from "@sous-io/plugin-expressions/types";`.
+It adds no commands. Other plugins add languages as `expression-language` entities.
+
+## Using it from another plugin
+
+```ts
+import type {} from "@sous-io/plugin-expressions/types";
+
+const evaluator = ctx.services.get("expressions.evaluator");
+const languages = evaluator.languages();
+```
+
+## Where things are
+
+- `src/evaluator.ts`: evaluates a config layer.
+- `src/parse.ts`: recognizes expression values.
+- `src/liquid-language.ts`: the built-in Liquid language.
+- `src/index.ts`: registration.
+
+## Testing
+
+```bash
+pnpm --filter @sous-io/plugin-expressions test
+```

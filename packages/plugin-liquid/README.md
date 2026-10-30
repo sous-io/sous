@@ -1,9 +1,25 @@
 # @sous-io/plugin-liquid
 
-A configured LiquidJS engine, and the Liquid tags and filters plugins add.
+Provides the Liquid template engine that sous uses for templates and config expressions, and lets plugins add tags and filters.
 
-- **Specified in:** S6, "Shared building blocks (liquid.engine, liquid-tag, liquid-filter)".
-- **Capabilities (S7):** C36.
-- **Depends on:** `plugin-host`.
-- **Contract:** `src/types.ts` declares every service, intent, event, entity kind and config key this
-  plugin owns. Other plugins import it type-only: `import type {} from "@sous-io/plugin-liquid/types";`.
+It adds no commands.
+
+## Using it from another plugin
+
+```ts
+import type {} from "@sous-io/plugin-liquid/types";
+
+const liquid = ctx.services.get("liquid.engine").create();
+const text = await liquid.parseAndRender("Hello {{ name }}", { name: "sous" });
+```
+
+## Where things are
+
+- `src/engine.ts`: builds the engine from the registered tags and filters.
+- `src/entity-schemas.ts`: what a tag or filter entity looks like.
+
+## Testing
+
+```bash
+pnpm --filter @sous-io/plugin-liquid test
+```

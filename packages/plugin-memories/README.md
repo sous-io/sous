@@ -1,9 +1,26 @@
 # @sous-io/plugin-memories
 
-Memories: selecting them, the memory-target entity, the compilation targets for them, the #memories name.
+Chooses which recipe memories reach the memory files agents read, such as `CLAUDE.md`.
 
-- **Specified in:** S6, "Memories: plugin-memories".
-- **Capabilities (S7):** C43, C44.
-- **Depends on:** `plugin-compiler`, `plugin-recipes`, `plugin-refs`, `plugin-host`.
-- **Contract:** `src/types.ts` declares every service, intent, event, entity kind and config key this
-  plugin owns. Other plugins import it type-only: `import type {} from "@sous-io/plugin-memories/types";`.
+It adds no commands.
+
+## Using it from another plugin
+
+```ts
+import type {} from "@sous-io/plugin-memories/types";
+
+const memories = ctx.services.get("memories.selection").forTarget("claude");
+```
+
+## Where things are
+
+- `src/selection.ts`: picks the memories.
+- `src/targets.ts`: the compilation targets for memory files.
+- `src/hash-name.ts`: the `#memories` name.
+- `src/schemas.ts`: the `recipes.memories` config key.
+
+## Testing
+
+```bash
+pnpm --filter @sous-io/plugin-memories test
+```

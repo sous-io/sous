@@ -1,9 +1,29 @@
 # @sous-io/plugin-init
 
-Scaffolding a project's .sous/ (sous init).
+Sets a folder up as a sous project: writes `.sous/` with a starter config, then runs the first build.
 
-- **Specified in:** S6, "Project setup and updates: plugin-init, plugin-update".
-- **Capabilities (S7):** C46.
-- **Depends on:** `plugin-build`, `plugin-config-files`, `plugin-host`.
-- **Contract:** `src/types.ts` declares every service, intent, event, entity kind and config key this
-  plugin owns. Other plugins import it type-only: `import type {} from "@sous-io/plugin-init/types";`.
+It adds these commands:
+
+| Command | Does |
+| --- | --- |
+| `sous init [directory]` | creates `.sous/`; `--no-build` skips the first build, `--dry-run` writes nothing |
+
+## Using it from another plugin
+
+```ts
+import type {} from "@sous-io/plugin-init/types";
+
+await ctx.run("init", { dryRun: true });
+```
+
+## Where things are
+
+- `src/init.ts`: the `init` intent.
+- `src/scaffold.ts`, `src/templates.ts`: the files it writes.
+- `src/package-json.ts`: the `package.json` change.
+
+## Testing
+
+```bash
+pnpm --filter @sous-io/plugin-init test
+```

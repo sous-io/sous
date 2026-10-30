@@ -1,9 +1,30 @@
 # @sous-io/plugin-config-files
 
-sous.config.* as a contributor, config.set, and the .env files.
+Reads `sous.config.*` and the `.env` files, and writes single values back into the config file.
 
-- **Specified in:** S6, "Config files: plugin-config-files and plugin-confd".
-- **Capabilities (S7):** C1, C70, C74, C77.
-- **Depends on:** `plugin-expressions`, `plugin-variables`, `plugin-host`.
-- **Contract:** `src/types.ts` declares every service, intent, event, entity kind and config key this
-  plugin owns. Other plugins import it type-only: `import type {} from "@sous-io/plugin-config-files/types";`.
+It adds these commands:
+
+| Command | Does |
+| --- | --- |
+| `sous config set <path> <value>` | sets one value in a config file, keeping the rest of the file as written |
+
+## Using it from another plugin
+
+```ts
+import type {} from "@sous-io/plugin-config-files/types";
+
+await ctx.run("config.set", { path: "compilation.includeSourceComments", value: "true" });
+```
+
+## Where things are
+
+- `src/loader.ts`: reads each config file format.
+- `src/set.ts`: the `config.set` intent.
+- `src/env/`: the `.env` files.
+- `src/index.ts`: registers the layer, services and keys.
+
+## Testing
+
+```bash
+pnpm --filter @sous-io/plugin-config-files test
+```

@@ -1,9 +1,29 @@
 # @sous-io/plugin-mcp
 
-The sous mcp front end: tools generated from intents, MCP logging and elicitation.
+Lets AI agents use sous directly over MCP: each intent becomes a tool.
 
-- **Specified in:** S6, "Front ends: plugin-cli, plugin-mcp".
-- **Capabilities (S7):** C8, C16, C45, C46.
-- **Depends on:** nothing.
-- **Contract:** `src/types.ts` declares every service, intent, event, entity kind and config key this
-  plugin owns. Other plugins import it type-only: `import type {} from "@sous-io/plugin-mcp/types";`.
+It adds these commands:
+
+| Command | Does |
+| --- | --- |
+| `sous mcp` | serves this project's intents as MCP tools; `mcp.include` and `mcp.exclude` in the config choose which |
+
+## Using it from another plugin
+
+```ts
+import type {} from "@sous-io/plugin-mcp/types";
+
+const tools = ctx.services.get("mcp.tools").list();
+```
+
+## Where things are
+
+- `src/tools.ts`: turns intents into tools.
+- `src/server.ts`: the MCP server.
+- `src/reporter.ts`, `src/prompter.ts`: progress and questions sent to the agent.
+
+## Testing
+
+```bash
+pnpm --filter @sous-io/plugin-mcp test
+```

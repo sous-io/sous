@@ -1,43 +1,27 @@
 # @sous-io/plugin-variables
 
-${var} substitution, _vars resolution, auto-variables, variable names and secrets.
+Fills in `${var}` references in config and recipe text, and hides secret values when they are shown.
 
-- **Specified in:** S6, "Shared building blocks (variables.*, variable-source)".
-- **Capabilities (S7):** none of its own; S2 "Variable scopes".
-- **Depends on:** `plugin-host` (`host.package`, `host.sous-home` for the auto-variables).
-- **Contract:** `src/types.ts` declares every service, intent, event, entity kind and config key this
-  plugin owns. Other plugins import it type-only: `import type {} from "@sous-io/plugin-variables/types";`.
+It adds no commands. To read variables while a config is being built, use `scopeIn(config, ...)` so the config re-runs when a variable changes; see `src/types.ts`.
 
-## What it registers
-
-| Name | Kind | Notes |
-| --- | --- | --- |
-| `variables.resolver` | service, singleton | A singleton so contributors can use it while the config is built |
-| `variables.names` | service, singleton | |
-| `variables.secrets` | service, config | Declared names come from `variable-source` entities |
-| `variable-source` | entity kind | Values between the auto-variables and `_env` |
-| `_vars`, `_env` | `config-key` entities | Auto-variable names are refused |
-| `variables/reserved-names` | contributor | Warns about `_vars` names starting with `sous` |
-
-## Reading variables while the config is built
-
-Pass the contributor's builder itself, so every read is recorded and the contributor re-runs when a
-variable it read changes (S2, "Config expressions are part of the same loop"):
+## Using it from another plugin
 
 ```ts
-sous.config.contribute({
-    id: "my-plugin/defaults",
+import type {} from "@sous-io/plugin-variables/types";
 
-    contribute(config) {
-        const vars = sous.services.get("variables.resolver").scopeIn(config, { level: "root" });
-
-        // A variable not known yet in this pass is undefined, never an error.
-        if (vars.machineRole === "laptop") {
-            config.atPath("my.enabled").set(true);
-        }
-    },
-});
+const vars = ctx.services.get("variables.resolver");
+const text = vars.substitute("Hello ${name}", vars.scope());
 ```
 
-After the build, `scope({ level: "output", target: 1, output: 0 })` gives a level of the built config,
-and is strict: an unresolved value or an unset `_env` variable is a `ConfigError`.
+## Where things are
+
+- `src/resolver.ts`, `src/substitute.ts`: substitution.
+- `src/scope.ts`: which variables are visible where.
+- `src/auto.ts`: variables sous provides itself.
+- `src/secrets.ts`: hiding secrets.
+
+## Testing
+
+```bash
+pnpm --filter @sous-io/plugin-variables test
+```
