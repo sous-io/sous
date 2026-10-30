@@ -98,6 +98,54 @@ describe("seedCoreRecipe", () => {
         expect(cache.isFresh(OFFICIAL_REPO_IDENTITY)).toBe(false);
     });
 
+    /** A stamp vouching for the stored copy means the store is not asked (and so the copy is not hashed again). */
+    it("should take the stored copy from the stamp when it vouches for it, and record a full check otherwise", async () => {
+        const recorded: string[] = [];
+        let vouched: StoreEntry | undefined;
+        const stamp = {
+            read: () => vouched,
+            write: (_key: StoreKey, entry: StoreEntry) => {
+                recorded.push(entry.hash);
+                vouched = entry;
+            },
+        };
+        const options = { store, cache, version: "0.2.34", packagedDir: packaged, stamp };
+
+        await seedCoreRecipe(options);
+        expect(recorded).toEqual([hashDirectorySync(packaged)]);
+
+        let asked = 0;
+        const get = store.get.bind(store);
+
+        store.get = async (key) => {
+            asked += 1;
+
+            return get(key);
+        };
+
+        const report = await seedCoreRecipe(options);
+
+        expect(report).toMatchObject({ seeded: false, alreadyPresent: true, hash: hashDirectorySync(packaged) });
+        expect(asked).toBe(0);
+        expect(recorded).toHaveLength(1);
+    });
+
+    /** The description is read only when something needs it. */
+    it("should not ask for the description when the stand-in index is already in place", async () => {
+        let asked = 0;
+        const description = () => {
+            asked += 1;
+
+            return "Core skills.";
+        };
+
+        await seedCoreRecipe({ store, cache, version: "0.2.34", packagedDir: packaged, description });
+        expect(asked).toBe(1);
+
+        await seedCoreRecipe({ store, cache, version: "0.2.34", packagedDir: packaged, description });
+        expect(asked).toBe(1);
+    });
+
     it("should do nothing on a second run", async () => {
         await seed();
         const text = fs.readFileSync(cache.indexPath(OFFICIAL_REPO_IDENTITY), "utf8");

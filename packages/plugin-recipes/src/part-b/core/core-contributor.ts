@@ -14,12 +14,14 @@
  * The `core` subscription is added only while the built-in repository is switched on.
  */
 
+import fs from "node:fs";
 import type { ContributorDefinition } from "@sous-io/plugin-api";
 import { CONTRIBUTORS, CORE_NAMESPACE, OFFICIAL_REPO_NAME } from "../constants.js";
 import type { PartBRuntime } from "../runtime.js";
 import { messageOf } from "../support.js";
 import { builtInCoreSubscription, builtInRepoEntry, packagedCoreRecipeDir } from "./core-recipe.js";
 import { seedCoreRecipe, type SeedReport } from "./seed.js";
+import { createSeedStamp } from "./seed-stamp.js";
 
 /** Seeds once per process; later passes and builds reuse the answer. */
 export class CoreSeeder {
@@ -41,6 +43,22 @@ export class CoreSeeder {
         return this.seeding;
     }
 
+    /**
+     * The packaged manifest's `description`, read without checking the manifest: it is decoration,
+     * and checking it costs more than everything else seeding does on a run that changes nothing.
+     */
+    private packagedDescription(dir: string): string | undefined {
+        try {
+            const manifests = this.runtime.services.get("formats.manifests");
+            const file = manifests.find(dir, "recipe");
+            const parsed = file === undefined ? undefined : (manifests.parseText(fs.readFileSync(file, "utf8"), file) as { description?: unknown } | undefined);
+
+            return typeof parsed?.description === "string" ? parsed.description : undefined;
+        } catch {
+            return undefined;
+        }
+    }
+
     private async run(): Promise<SeedReport> {
         let packaged: { version: string; dir: string | undefined };
 
@@ -50,21 +68,18 @@ export class CoreSeeder {
             return { seeded: false, alreadyPresent: false, wroteIndex: false, version: "", skippedBecause: `Sous could not work out its own version, so the core recipe was not seeded. ${messageOf(error)}` };
         }
 
-        let description: string | undefined;
-
-        try {
-            description = packaged.dir === undefined ? undefined : (await this.runtime.services.get("formats.manifests").readRecipe(packaged.dir))?.manifest.description;
-        } catch {
-            description = undefined;
-        }
+        const { dir } = packaged;
+        const store = this.runtime.services.get("recipes.store");
 
         try {
             return await seedCoreRecipe({
-                store: this.runtime.services.get("recipes.store"),
+                store,
                 cache: this.runtime.indexCore(),
                 version: packaged.version,
-                packagedDir: packaged.dir,
-                ...(description === undefined ? {} : { description }),
+                packagedDir: dir,
+                // Read only when a stand-in index is written or the overlay adds the version: most runs need neither.
+                ...(dir === undefined ? {} : { description: () => this.packagedDescription(dir) }),
+                stamp: createSeedStamp({ storeRoot: store.root, entryDir: (key) => store.entryDir(key) }),
                 onMismatch: (published, local) =>
                     this.runtime.host.reporter.warning(
                         `The repository '${OFFICIAL_REPO_NAME}' publishes version ${packaged.version} of the core recipe with different contents from the copy inside this installation, so sous uses the published one. Published: ${published}. Packaged: ${local}. Reinstalling sous brings the two back into line.`,

@@ -80,8 +80,8 @@ export interface CoreIndexOverlayOptions {
     version: string;
     /** The packaged copy's hash, or a function working it out on first use. */
     hash: string | (() => string | undefined);
-    /** The packaged recipe's description. */
-    description?: string;
+    /** The packaged recipe's description, or a function giving it, asked only when the overlay adds the version. */
+    description?: string | (() => string | undefined);
     /** Told once when upstream publishes this version with different contents. */
     onMismatch?: (published: string, packaged: string) => void;
 }
@@ -121,7 +121,7 @@ export function coreIndexOverlay(options: CoreIndexOverlayOptions): IndexOverlay
             return index;
         }
 
-        const description = recipe?.description ?? options.description;
+        const description = recipe?.description ?? (typeof options.description === "function" ? options.description() : options.description);
 
         return {
             ...index,

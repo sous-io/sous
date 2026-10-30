@@ -165,6 +165,38 @@ describe("repo.link and repo.unlink", () => {
         expect(text).toMatch(/Branch\s*: main/);
     });
 
+    /** What was done, the links map, and how a reused checkout compares with upstream, as the old command printed them. */
+    it("should show what was done and how the checkout compares with upstream", async () => {
+        const { text } = await show("repo.link", {
+            repo: "acme",
+            path: "/src/acme",
+            origin: "clone",
+            scope: "project",
+            cloned: false,
+            branch: "main",
+            trusted: [],
+            dryRun: false,
+            notes: ["Reused the checkout already at /src/acme; nothing was cloned."],
+            recordedIn: "/p/.sous/sous.links.json",
+            upstream: { upstream: "origin/main", merged: true, behind: 1 },
+        });
+
+        expect(text).toContain("Reused the checkout already at /src/acme");
+        expect(text).toMatch(/Recorded in\s*: \/p\/.sous\/sous.links.json/);
+        expect(text).toMatch(/Merged into origin\/main\s*: yes/);
+        expect(text).toMatch(/Behind origin\/main\s*: 1 commit\b/);
+        expect(text).toContain("nothing in the checkout was changed");
+    });
+
+    /** A dry run lists what it would do. */
+    it("should list what a dry run would do", async () => {
+        const link = await show("repo.link", { repo: "acme", path: "/src/acme", origin: "clone", scope: "project", cloned: false, trusted: [], dryRun: true, wouldDo: ["would link 'acme' to /src/acme"] });
+        const unlink = await show("repo.unlink", { repo: "acme", path: "/src/acme", scope: "global", removedCheckout: false, dryRun: true, followUps: [], wouldDo: ["the checkout itself would be left where it is"] });
+
+        expect(link.text).toContain("[Dry Run] would link 'acme' to /src/acme");
+        expect(unlink.text).toContain("[Dry Run] the checkout itself would be left where it is");
+    });
+
     it("should show the unlinked checkout, the pin update and the build", async () => {
         const entities2 = context("repo.unlink");
         const output = await views["repo.unlink"]!(

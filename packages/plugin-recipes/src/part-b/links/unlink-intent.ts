@@ -198,7 +198,7 @@ async function newerVersions(name: string, ctx: Context): Promise<UnlinkPublishe
     const newer: Array<{ key: string; from: string; to: string }> = [];
 
     try {
-        const index = (await withDeadline((signal) => ctx.services.get("recipes.index-cache").get(name, { signal }), NEWER_VERSION_CHECK_TIMEOUT_MS)).index;
+        const index = (await withDeadline((signal) => ctx.services.get("recipes.index-cache").get(name, { signal, latest: true }), NEWER_VERSION_CHECK_TIMEOUT_MS)).index;
         const lockfile = ctx.services.get("recipes.lock").read();
         const subscriptions = ctx.config.get<Record<string, SubscriptionEntry>>("subscriptions") ?? {};
 

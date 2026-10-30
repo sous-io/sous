@@ -17,6 +17,7 @@ import { CORE_NAMESPACE, CORE_RECIPE_KEY, CORE_RECIPE_NAME, CORE_RECIPE_PATH, OF
 import type { IndexCacheCore } from "../index-cache/index-cache.js";
 import { messageOf } from "../support.js";
 import { CORE_NAMESPACE_DESCRIPTION, coreIndexOverlay } from "./core-recipe.js";
+import type { SeedStamp } from "./seed-stamp.js";
 
 /** The note the stand-in index carries in `$comment`, by which sous recognizes its own placeholder. */
 export const SEED_INDEX_COMMENT =
@@ -31,8 +32,10 @@ export interface SeedOptions {
     readonly version: string;
     /** The packaged recipe's directory, or `undefined` when the package lacks it. */
     readonly packagedDir: string | undefined;
-    /** The packaged recipe's description, for the stand-in index. */
-    readonly description?: string;
+    /** The packaged recipe's description, for the stand-in index; a function is asked only when one is needed. */
+    readonly description?: string | (() => string | undefined);
+    /** Remembers the last full check of the stored copy, so an unchanged copy is not hashed again. */
+    readonly stamp?: SeedStamp;
     readonly now?: () => Date;
     /** Told once when upstream publishes this version with other contents. */
     readonly onMismatch?: (published: string, packaged: string) => void;
@@ -65,27 +68,35 @@ export async function seedCoreRecipe(options: SeedOptions): Promise<SeedReport> 
     }
 
     try {
-        const existing = await options.store.get(key);
-        let entry: StoreEntry;
+        let entry = options.stamp?.read(key);
         let seeded = false;
 
-        if (existing === undefined) {
-            entry = await options.store.put(key, options.packagedDir);
-            seeded = true;
-        } else {
-            entry = existing.entry;
+        if (entry === undefined) {
+            // The full check: the store hashes its copy and drops a damaged one.
+            const existing = await options.store.get(key);
+
+            if (existing === undefined) {
+                entry = await options.store.put(key, options.packagedDir);
+                seeded = true;
+            } else {
+                entry = existing.entry;
+            }
+
+            options.stamp?.write(key, entry);
         }
+
+        const description = lazyDescription(options.description);
 
         options.cache.setOverlay(
             coreIndexOverlay({
                 version,
                 hash: entry.hash,
-                ...(options.description === undefined ? {} : { description: options.description }),
+                description,
                 ...(options.onMismatch === undefined ? {} : { onMismatch: options.onMismatch }),
             }),
         );
 
-        const wroteIndex = writeSeedIndex(options.cache, version, entry.hash, (options.now ?? (() => new Date()))(), options.description);
+        const wroteIndex = writeSeedIndex(options.cache, version, entry.hash, (options.now ?? (() => new Date()))(), description);
 
         return { seeded, alreadyPresent: !seeded, wroteIndex, version, hash: entry.hash };
     } catch (error) {
@@ -99,8 +110,44 @@ export async function seedCoreRecipe(options: SeedOptions): Promise<SeedReport> 
     }
 }
 
+/** Whether the file is sous's own stand-in index, and offers `version`. Read as plain JSON, unchecked. */
+function isSeedIndexFor(file: string, version: string): boolean {
+    try {
+        const raw = JSON.parse(fs.readFileSync(file, "utf8")) as { $comment?: unknown; recipes?: Record<string, { versions?: Record<string, unknown> }> };
+
+        return raw.$comment === SEED_INDEX_COMMENT && raw.recipes?.[CORE_RECIPE_KEY]?.versions?.[version] !== undefined;
+    } catch {
+        return false;
+    }
+}
+
+/** The description as a function asked at most once. */
+function lazyDescription(description: SeedOptions["description"]): () => string | undefined {
+    if (typeof description !== "function") {
+        return () => description;
+    }
+
+    let asked = false;
+    let answer: string | undefined;
+
+    return () => {
+        if (!asked) {
+            asked = true;
+            answer = description();
+        }
+
+        return answer;
+    };
+}
+
 /** Writes the stand-in index, unless the cache holds one a repository published. True when written. */
-function writeSeedIndex(cache: IndexCacheCore, version: string, hash: StoreEntry["hash"], now: Date, description: string | undefined): boolean {
+function writeSeedIndex(cache: IndexCacheCore, version: string, hash: StoreEntry["hash"], now: Date, describe: () => string | undefined): boolean {
+    // sous's own stand-in for this version, already in place: nothing to do, and no need to check it
+    // in full, which is most of what this costs on a run that changes nothing.
+    if (isSeedIndexFor(cache.indexPath(OFFICIAL_REPO_IDENTITY), version)) {
+        return false;
+    }
+
     // Nothing cached (or a copy that no longer parses), or sous's own stand-in for another version: write.
     const existing = cache.readRaw(OFFICIAL_REPO_IDENTITY);
 
@@ -109,6 +156,7 @@ function writeSeedIndex(cache: IndexCacheCore, version: string, hash: StoreEntry
     }
 
     const timestamp = now.toISOString();
+    const description = describe();
     const index: IndexFile = {
         $comment: SEED_INDEX_COMMENT,
         formatVersion: 1,
