@@ -228,3 +228,123 @@ describe("plugin info and names", () => {
         expect(reporter.at("warning")).toEqual([]);
     });
 });
+
+/** A project at `root`, as the CLI's project discovery would find it. */
+function projectAt(root: string) {
+    return { root, sousDir: `${root}/.sous`, configPath: `${root}/.sous/sous.config.js`, confDir: `${root}/.sous/conf.d` };
+}
+
+describe("intents that require a project", () => {
+    const needsProject = plugin("p", (sous) => {
+        sous.intents.add({ intent: "p.build", requiresProject: true, handle: () => "built" });
+        sous.intents.add({ intent: "p.anywhere", handle: () => "ran" });
+    });
+
+    /**
+     * Run outside a project, an intent with `requiresProject` fails with the old CLI's message
+     * before its handler runs; one without it runs.
+     *
+     * engine.submit({ intent: "p.build" })   // no project -> ConfigError "No sous config found."
+     */
+    it("should fail outside a project with 'No sous config found.'", async () => {
+        const { engine } = makeEngine([needsProject], { cwd: "/nowhere/here" });
+
+        await engine.buildConfig();
+
+        const failure = engine.submit({ intent: "p.build" });
+
+        await expect(failure).rejects.toBeInstanceOf(ConfigError);
+        await expect(failure).rejects.toThrow("No sous config found.");
+        await expect(failure).rejects.toMatchObject({ details: expect.arrayContaining(["    /nowhere/here/.sous/", "  1. Set the project up: run 'sous init' in its root directory, or"]) });
+        await expect(engine.submit({ intent: "p.anywhere" })).resolves.toBe("ran");
+    });
+
+    /** Inside a project, it runs as usual. */
+    it("should run inside a project", async () => {
+        const { engine } = makeEngine([needsProject], { project: projectAt("/work/app") });
+
+        await engine.buildConfig();
+
+        await expect(engine.submit({ intent: "p.build" })).resolves.toBe("built");
+    });
+});
+
+describe("ctx.refreshConfig({ locateProjectFrom })", () => {
+    /**
+     * After an intent sets a project up, a refresh that locates it from that directory makes the
+     * engine serve it: `engine.project`, `ctx.project` and intents that require a project.
+     *
+     * await ctx.refreshConfig({ locateProjectFrom: "/work/new" });   // the engine now serves /work/new
+     */
+    it("should take the project found there, using the locateProject option", async () => {
+        const asked: string[] = [];
+        const { engine } = makeEngine(
+            [
+                plugin("p", (sous) => {
+                    sous.intents.add({ intent: "p.needs", requiresProject: true, handle: (_input, ctx) => ctx.project?.root });
+                    sous.intents.add({
+                        intent: "p.init",
+                        async handle(_input, ctx) {
+                            const before = ctx.project?.root;
+
+                            await ctx.refreshConfig({ locateProjectFrom: "/work/new" });
+
+                            return { before, after: ctx.project?.root, needs: await ctx.run("p.needs" as never) };
+                        },
+                    });
+                }),
+            ],
+            {
+                locateProject: (directory) => {
+                    asked.push(directory);
+
+                    return directory === "/work/new" ? projectAt("/work/new") : undefined;
+                },
+            },
+        );
+
+        await engine.buildConfig();
+
+        await expect(engine.submit({ intent: "p.init" })).resolves.toEqual({ before: undefined, after: "/work/new", needs: "/work/new" });
+        expect(asked).toEqual(["/work/new"]);
+        expect(engine.project?.root).toBe("/work/new");
+    });
+
+    /** Where nothing is found, the engine keeps the project it had. */
+    it("should keep the current project when none is found there", async () => {
+        const { engine } = makeEngine(
+            [
+                plugin("p", (sous) => {
+                    sous.intents.add({
+                        intent: "p.init",
+                        async handle(_input, ctx) {
+                            await ctx.refreshConfig({ locateProjectFrom: "/empty" });
+
+                            return ctx.project?.root;
+                        },
+                    });
+                }),
+            ],
+            { project: projectAt("/work/app"), locateProject: () => undefined },
+        );
+
+        await engine.buildConfig();
+
+        await expect(engine.submit({ intent: "p.init" })).resolves.toBe("/work/app");
+    });
+});
+
+describe("config.built listeners", () => {
+    /** An error a config.built listener throws fails the build; it is not swallowed. */
+    it("should fail the build when a config.built listener throws", async () => {
+        const { engine } = makeEngine([
+            plugin("p", (sous) => {
+                sous.on("config.built", () => {
+                    throw new SousError("The listener failed.");
+                });
+            }),
+        ]);
+
+        await expect(engine.buildConfig()).rejects.toThrow("The listener failed.");
+    });
+});
