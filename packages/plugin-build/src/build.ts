@@ -61,6 +61,8 @@ export async function build(input: BuildInput, ctx: Context): Promise<BuildResul
         if (!prepared.locked.unchanged && !dryRun) {
             if (ctx.chain && !ctx.chain.parallel) {
                 await ctx.refreshConfig();
+                // What is skipped was worked out before the new pins were fetched: work it out again.
+                prepared = { ...prepared, skipped: ctx.services.get("recipes.active").skipped() };
             } else {
                 ctx.reporter.note("The lockfile changed while preparing; the recipes it now pins are compiled from the next build on.");
             }

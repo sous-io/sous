@@ -216,6 +216,11 @@ export function skippedLine(skipped: SkippedRecipeShape): string {
         case "repository-disabled":
             return `Skipped ${skipped.key}: its repository is switched off${where}.`;
         default: {
+            // A message that names the recipe already is a whole line.
+            if (skipped.message.startsWith("Skipped ")) {
+                return skipped.message;
+            }
+
             const message = skipped.message.replace(/\.$/u, "");
 
             return `Skipped ${skipped.key}: ${message.length === 0 ? message : message[0]!.toLowerCase() + message.slice(1)}.`;
