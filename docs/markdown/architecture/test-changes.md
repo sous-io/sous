@@ -1285,3 +1285,14 @@ tests had been written against the first new layout, and were brought in line:
 - **Now:** it holds `.gitignore`, `CLAUDE.md` and `README.md`; the `AGENTS.md` check is gone.
 - **Why:** pointer files now come from plugins: each harness that reads its memory file in any directory adds
   one. Claude Code (`CLAUDE.md`) is the only built-in harness that does, so no `AGENTS.md` is written.
+
+### `src/test/integration/per-file-rendering.test.ts` (10 cases)
+
+- **File:** `packages/plugin-compiler/test/compilation.test.ts`, "per-file Liquid rendering"
+- **Before:** drove the old `CompilationService` class, read its console output, and called `includedFiles()`.
+- **Now:** run `compiler.compile` with the real Liquid, variables and host plugins; an output's variables are its
+  `_vars`; "unchanged" is read from the result's `action`, and the files read from its `included`. Nine cases
+  check the same things. The tenth, "should name a .tpl. child that could not render for lack of vars", now checks
+  that such a child renders (an unknown variable gives an empty value) with no warning.
+- **Why:** the old class is gone, and every output now has the project's variables, so the unrendered `.tpl.`
+  warning was removed (see "Unrendered `.tpl.` warnings" above).

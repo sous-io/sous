@@ -440,3 +440,194 @@ describe("compiler.compile", () => {
         });
     });
 });
+
+/**
+ * Ported from `src/test/integration/per-file-rendering.test.ts`: every `.tpl.` file renders as Liquid
+ * by its own name, and no other file ever does, whichever file includes it. These run with the real
+ * Liquid, variables and host plugins.
+ */
+describe("per-file Liquid rendering", () => {
+    /** Compiles one entry to `out/OUT.md` with the given output variables; returns the result and the output. */
+    async function render(entry: string, vars: Record<string, string> = { who: "world" }, input: { rebuild?: boolean } = { rebuild: true }) {
+        const dest = project.at("out", "OUT.md");
+        const { result, compiler } = await compileOnce(
+            project,
+            { targets: [{ entryPoint: entry, outputs: [{ destinationFile: dest, _vars: vars }] }] },
+            input,
+            { real: true },
+        );
+
+        return { result, compiler, output: fs.existsSync(dest) ? fs.readFileSync(dest, "utf8") : "" };
+    }
+
+    /**
+     * A `.tpl.` child renders even though its host is a plain file; the host's own text is copied verbatim.
+     *
+     * ENTRY.md "plain {{ who }}" + @child.tpl.md "hi {{ who }}" // -> "plain {{ who }}" and "hi world"
+     */
+    it("should render a .tpl. child in a plain host and leave the host literal", async () => {
+        project = makeProject();
+        const entry = project.write("ENTRY.md", "plain {{ who }}\n\n@child.tpl.md\n");
+        project.write("child.tpl.md", "hi {{ who }}");
+
+        const { result, output } = await render(entry);
+
+        expect(result.ok, errorsOf(result)).toBe(true);
+        expect(output).toContain("plain {{ who }}");
+        expect(output).toContain("hi world");
+    });
+
+    /**
+     * A plain child of a `.tpl.` host stays literal; the host renders.
+     *
+     * ENTRY.tpl.md "host {{ who }}" + @child.md "kid {{ who }}" // -> "host world" and "kid {{ who }}"
+     */
+    it("should leave a plain child literal inside a .tpl. host", async () => {
+        project = makeProject();
+        const entry = project.write("ENTRY.tpl.md", "host {{ who }}\n\n@child.md\n");
+        project.write("child.md", "kid {{ who }}");
+
+        const { result, output } = await render(entry);
+
+        expect(result.ok, errorsOf(result)).toBe(true);
+        expect(output).toContain("host world");
+        expect(output).toContain("kid {{ who }}");
+    });
+
+    /**
+     * The name of the file found decides, not the spelling of the include.
+     *
+     * @x.md (only x.tpl.md exists) -> rendered; @y.tpl.md (only y.md exists) -> literal
+     */
+    it("should decide by the resolved file name, including through a .tpl. twin", async () => {
+        project = makeProject();
+        const entry = project.write("ENTRY.md", "@x.md\n\n@y.tpl.md\n");
+        project.write("x.tpl.md", "x {{ who }}");
+        project.write("y.md", "y {{ who }}");
+
+        const { result, output } = await render(entry);
+
+        expect(result.ok, errorsOf(result)).toBe(true);
+        expect(output).toContain("x world");
+        expect(output).toContain("y {{ who }}");
+    });
+
+    /**
+     * An include line inside a condition of a `.tpl.` host appears only when the condition holds.
+     *
+     * {% if who == "world" %}@a.md{% endif %} and {% if who == "nobody" %}@b.md{% endif %} // -> A only
+     */
+    it("should honor a condition around an include line", async () => {
+        project = makeProject();
+        const entry = project.write("ENTRY.tpl.md", '{% if who == "world" %}\n@a.md\n{% endif %}\n{% if who == "nobody" %}\n@b.md\n{% endif %}\n');
+        project.write("a.md", "AAA");
+        project.write("b.md", "BBB");
+
+        const { result, output } = await render(entry);
+
+        expect(result.ok, errorsOf(result)).toBe(true);
+        expect(output).toContain("AAA");
+        expect(output).not.toContain("BBB");
+    });
+
+    /**
+     * Nothing renders twice: a value holding Liquid syntax comes out as that text.
+     *
+     * who = "{{ again }}"; child.tpl.md "{{ who }}" included by ENTRY.tpl.md // -> "{{ again }}"
+     */
+    it("should not render a rendered child again", async () => {
+        project = makeProject();
+        const entry = project.write("ENTRY.tpl.md", "@child.tpl.md\n");
+        project.write("child.tpl.md", "{{ who }}");
+
+        const { result, output } = await render(entry, { who: "{{ again }}" });
+
+        expect(result.ok, errorsOf(result)).toBe(true);
+        expect(output.trim()).toBe("{{ again }}");
+    });
+
+    /**
+     * A child's own includes expand inside it, and each renders by its own name.
+     *
+     * ENTRY.md -> mid.tpl.md -> leaf.md, with Liquid in all three // -> mid rendered, leaf literal
+     */
+    it("should expand a child's includes before putting it in place", async () => {
+        project = makeProject();
+        const entry = project.write("ENTRY.md", "@mid.tpl.md\n");
+        project.write("mid.tpl.md", "mid {{ who }}\n@leaf.md\n");
+        project.write("leaf.md", "leaf {{ who }}");
+
+        const { output } = await render(entry);
+
+        expect(output).toContain("mid world");
+        expect(output).toContain("leaf {{ who }}");
+    });
+
+    /**
+     * A file may be included twice and renders each time.
+     *
+     * @c.tpl.md twice -> "c world" twice
+     */
+    it("should render a file included more than once each time", async () => {
+        project = makeProject();
+        const entry = project.write("ENTRY.md", "@c.tpl.md\n\n@c.tpl.md\n");
+        project.write("c.tpl.md", "c {{ who }}");
+
+        const { output } = await render(entry);
+
+        expect(output.match(/c world/g)).toHaveLength(2);
+    });
+
+    /**
+     * The source hash covers every included file and the variables: changing a `.tpl.` child of a
+     * plain host, or a variable, renders again; changing nothing leaves the output alone.
+     *
+     * first build, unchanged build -> "unchanged"; edit child -> rewritten; new value -> rewritten
+     */
+    it("should render again when an included child or a variable changes", async () => {
+        project = makeProject();
+        const entry = project.write("ENTRY.md", "@child.tpl.md\n");
+        const child = project.write("child.tpl.md", "v1 {{ who }}");
+
+        expect((await render(entry, { who: "world" }, {})).output).toContain("v1 world");
+        expect((await render(entry, { who: "world" }, {})).result.outputs[0]?.action).toBe("unchanged");
+
+        fs.writeFileSync(child, "v2 {{ who }}");
+        expect((await render(entry, { who: "world" }, {})).output).toContain("v2 world");
+        expect((await render(entry, { who: "moon" }, {})).output).toContain("v2 moon");
+    });
+
+    /**
+     * An output that sets no variables still renders a `.tpl.` child: every output has the
+     * project's variables now, so the old "written without being rendered" warning is gone.
+     *
+     * output without _vars, child.tpl.md "[{{ who }}]" in a plain host -> "[]", no warning
+     */
+    it("should render a .tpl. child for an output that sets no variables", async () => {
+        project = makeProject();
+        const entry = project.write("ENTRY.md", "@child.tpl.md\n");
+        project.write("child.tpl.md", "[{{ who }}]");
+        const dest = project.at("out", "OUT.md");
+
+        const { result, compiler } = await compileOnce(project, { targets: [{ entryPoint: entry, outputs: [{ destinationFile: dest }] }] }, {}, { real: true });
+
+        expect(result.ok, errorsOf(result)).toBe(true);
+        expect(fs.readFileSync(dest, "utf8")).toContain("[]");
+        expect(compiler.output()).not.toContain("WITHOUT BEING RENDERED");
+    });
+
+    /**
+     * The compile reports every file it read, for the unincluded-memory check.
+     *
+     * compile ENTRY.md that includes a.md -> included has both
+     */
+    it("should report every file the compile read", async () => {
+        project = makeProject();
+        const entry = project.write("ENTRY.md", "@a.md\n");
+        const a = project.write("a.md", "A");
+
+        const { result } = await render(entry, {});
+
+        expect(result.included).toEqual(expect.arrayContaining([fs.realpathSync(a), fs.realpathSync(entry)]));
+    });
+});
