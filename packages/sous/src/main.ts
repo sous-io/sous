@@ -1,10 +1,12 @@
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { type Budget, createEngine, DEFAULT_BUDGETS, type Engine } from "@sous-io/core";
 import type { Environment, ProjectInfo, TimingCategory } from "@sous-io/plugin-api";
 import { isSousError } from "@sous-io/plugin-api";
 import { projectEnvironment } from "@sous-io/plugin-config-files";
 import { BUILT_IN_PLUGINS } from "./built-ins.js";
 import { findProject, locateProject, readOverrides } from "./project.js";
+import { loadsOnlyBuiltIns, recordStartupFact, startupKey } from "./startup-fact.js";
 
 declare const __SOUS_VERSION__: string | undefined;
 
@@ -67,8 +69,30 @@ export async function main(argv: readonly string[], options: MainOptions): Promi
         locateProject: (directory) => findProject(directory, overrides.confDir),
     });
 
+    const key = startupKey(project, options.env, sousVersion(), fileURLToPath(import.meta.url));
+    let quiet = false;
+
+    // Help, the version and shell completion read only what the built-in plugins registered, so they
+    // do not wait for the config build when the last build loaded no other plugin (and, when it did,
+    // the build's over-budget warning is not printed above their answer).
+    await engine.loadBuiltInsOnly();
+
+    if (hasFrontEnd(engine, "cli")) {
+        if (!engine.frontEnd("cli").needsConfig(argv)) {
+            if (loadsOnlyBuiltIns(project, options.env, key)) {
+                await engine.frontEnd("cli").start(argv);
+                await engine.whenBackgroundIntentsReturn();
+
+                return;
+            }
+
+            quiet = true;
+        }
+    }
+
     try {
-        await engine.buildConfig();
+        await engine.buildConfig(quiet ? { reportBudgets: false } : {});
+        recordStartupFact(project, options.env, key, engine.pluginInfo().every((plugin) => plugin.builtIn));
     } catch (error) {
         // A failed build still reaches the CLI when the partial config has it: the CLI reports the
         // error for every command except one that can run without the config (`sous update`).

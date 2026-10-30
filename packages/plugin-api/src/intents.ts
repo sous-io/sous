@@ -104,6 +104,12 @@ export interface IntentDefinition<N extends string = string, S extends SousSchem
      */
     toleratesConfigErrors?: boolean;
     /**
+     * `boolean = false`. It reads nothing from the config's values, only from what the built-in
+     * plugins registered (the command tree, the version), so the front end may run it before the
+     * config is built, when the project loads no plugin beyond the built-in ones.
+     */
+    runsWithoutConfig?: boolean;
+    /**
      * It works on a project, so it fails, before it runs, when sous was started outside one: the
      * error says no sous config was found and how to set a project up.
      */

@@ -88,7 +88,6 @@ describe("messages about preparing", () => {
         newer: [],
         checkedUpstream: false,
         skipped: [],
-        skippedLines: [],
         unanswered: [],
         ...overrides,
     });

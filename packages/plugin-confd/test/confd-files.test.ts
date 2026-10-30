@@ -1,6 +1,6 @@
 /**
  * The `conf.d` files in a real engine, with the real plugin-config-files: one contributor per file,
- * applied by the number its name starts with (90000 plus it), after `sous.config.*` (90000). Ported from the old config kernel's
+ * applied by the number its name starts with (90000 plus it), after `sous.config.*` (89900). Ported from the old config kernel's
  * integration test and the conf.d parts of config discovery's spec.
  */
 
@@ -72,7 +72,7 @@ describe("conf.d order", () => {
         const contributions = (await engine.buildConfig()).contributions().filter((c) => c.contributor.startsWith("confd/") || c.contributor === "config-files.main");
 
         expect(contributions.map((c) => [c.contributor, c.applyOrder])).toEqual([
-            ["config-files.main", 90000],
+            ["config-files.main", 89900],
             ["confd/499-before.json", 90499],
             ["confd/500-repos.json", 90500],
             ["confd/local.json", 90500],
@@ -227,6 +227,28 @@ describe("conf.d problems", () => {
     });
 });
 
+describe("conf.d numbers and names", () => {
+    /** A number above 9999 counts as 9999, and a debug report names the file, the number read and the number used. */
+    it("should hold a leading number at 9999 and report it at debug level", async () => {
+        project.write("sous.config.json", "{}");
+        project.write("conf.d/12345-big.json", "{}");
+
+        const { engine, reporter } = makeEngine(project.info());
+        const built = await engine.buildConfig();
+
+        expect(built.contributions().find((c) => c.contributor === "confd/12345-big.json")?.applyOrder).toBe(99999);
+        expect(reporter.at("debug").join("\n")).toMatch(/12345-big\.json.*12345.*9999/);
+    });
+
+    /** A main config file and a conf.d file sit in different directories, so they may share a base name. */
+    it("should allow a conf.d file to share a base name with the main config file", async () => {
+        project.write("sous.config.json", JSON.stringify({ _vars: { a: "main" } }));
+        project.write("conf.d/sous.config.json", JSON.stringify({ _vars: { b: "confd" } }));
+
+        expect((await build())._vars).toEqual({ a: "main", b: "confd" });
+    });
+});
+
 describe("conf.d files changing between builds", () => {
     /** A file added after the plugin loaded joins the next build. */
     it("should pick up conf.d files added after the first build", async () => {
@@ -285,7 +307,7 @@ describe("the user's files apply last", () => {
     });
 
     /** A plugin with the highest number below the user's files still applies before them. */
-    it("should apply the user's files after a plugin at apply order 89999", async () => {
+    it("should apply the user's files after a plugin at apply order 89899", async () => {
         project.write("sous.config.json", JSON.stringify({ _vars: { a: "main" } }));
         project.write("conf.d/000-mine.json", JSON.stringify({ _vars: { b: "mine" } }));
 
@@ -294,7 +316,7 @@ describe("the user's files apply last", () => {
             register(sous) {
                 sous.config.contribute({
                     id: "late",
-                    applyOrder: 89999,
+                    applyOrder: 89899,
                     contribute: (config) => config.root().merge({ _vars: { a: "plugin", b: "plugin" } }),
                 });
             },
@@ -331,7 +353,7 @@ describe("the user's files apply last", () => {
     /**
      * The config-building spec's example: a variable set in a later file. 610 reads machineRole
      * as "laptop" in pass 1; 700 then sets "ci"; 610 re-runs and sees "ci". Patches apply in
-     * apply order (sous.config.* at 90000, 700 at 90700) and a re-run never moves one, so 700
+     * apply order (sous.config.* at 89900, 700 at 90700) and a re-run never moves one, so 700
      * always applies after sous.config.* and the build settles on "ci".
      */
     it("should re-run a file when a variable it read changes in a later file", async () => {

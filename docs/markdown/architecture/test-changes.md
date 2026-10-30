@@ -1585,6 +1585,33 @@ Changes made when every message moved onto a level and a style (`BaseReporter`).
   - **Now:** expects a `list` style notice whose details items are `acme/jira moved from 1.0.0 to 1.2.0.`
   - **Why:** the indentation and bullet are the reporter's job.
 
+### core and plugin-confd (apply order)
+
+- **"should order contributors by name, before and after"** (`core/test/order-and-stages.test.ts`)
+  - **Before:** contributors without an `applyOrder` sat at 0, so `zz-early` (declared before `confd/500`) could not move and `confd/500` moved after it.
+  - **Now:** the default is 2000, so `zz-early` moves to 1999 and runs before every contributor left at the default.
+  - **Why:** the default `applyOrder` changed from 0 to 2000.
+- **"should settle when a file reads a variable a later file sets"** (`core/test/order-and-stages.test.ts`) and **"should apply a file with no leading number at 90500"** (`plugin-confd/test/confd-files.test.ts`)
+  - **Before / now:** `sous.config.*` is at 89900 instead of 90000.
+  - **Why:** `sous.config.*` and its patch files apply at 89900.
+- **"should apply the user's files after a plugin at apply order 89999"** (`plugin-confd/test/confd-files.test.ts`)
+  - **Before / now:** the plugin sits at 89899 (the test is renamed to match), the highest number below `sous.config.*`.
+  - **Why:** 89899 is now the highest plugin number that still applies before the user's files.
+
+### plugin-inspect
+
+- **"should give each layer its apply orders"** (`src/inspect.spec.ts`)
+  - **Before:** expected declared and actual apply orders `[0, 0]` and `[0, 1]`.
+  - **Now:** `[2000, 2000]` and `[2000, 2001]`.
+  - **Why:** the default `applyOrder` is 2000.
+
+### plugin-config-files
+
+- **"should warn when a .sous directory holds several main config files"** (`test/main-config.test.ts`)
+  - **Before:** the first file was read and sous warned.
+  - **Now:** renamed "should fail when ..."; the build fails with a `ConfigError` naming both files.
+  - **Why:** two files in one directory with the same base name are an error.
+
 ### plugin-recipes
 
 - **"recipe.update and subscription.update should plan an update without writing"** (`src/part-a/intents/intents.spec.ts`)
@@ -1597,3 +1624,10 @@ Changes made when every message moved onto a level and a style (`BaseReporter`).
   - **Before:** the fake config recorded `log(level, message)`.
   - **Now:** it records `warn(message)`.
   - **Why:** a `ConfigBuilder` is a reporter; the contributor calls `config.warn`.
+
+### plugin-cli (build view)
+
+- **"should print nothing for a build.prepare that changed nothing"**, **"should show new and moved pins, restored recipes and newer versions"** and **"should warn about unanswered variables and list skipped recipes"** (`src/views/domains/build.spec.ts`)
+  - **Before:** the view for `build.prepare` printed the lockfile, restore, newer-version, unanswered-variable and skipped-recipe facts.
+  - **Now:** removed. The view no longer exists; `build.prepare` is internal and plugin-build's `reportPrepared` (`src/report.ts`, covered by `src/report.spec.ts`) is the only reporter of those facts.
+  - **Why:** the view was a second copy of that reporting. `BuildPrepareResult` lost `skippedLines` and `unansweredWarning` with it.

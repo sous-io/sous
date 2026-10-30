@@ -64,10 +64,14 @@ export class Timer implements Timings {
      * level that went over is reported (the build, else a stage, else a pass, else each call), so one
      * slow contributor gives one warning, which names it.
      */
-    releaseDeferred(): void {
+    releaseDeferred(report = true): void {
         const held = this.deferred ?? [];
 
         this.deferred = undefined;
+
+        if (!report) {
+            return;
+        }
 
         const over: OverBudget[] = [];
 

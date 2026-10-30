@@ -134,8 +134,8 @@ describe("config.show", () => {
         const demo = result.layers.find((l: any) => l.contributor === "demo/main");
         const moved = result.layers.find((l: any) => l.contributor === "a-fixups");
 
-        expect([demo.applyOrder, demo.actualApplyOrder]).toEqual([0, 0]);
-        expect([moved.applyOrder, moved.actualApplyOrder]).toEqual([0, 1]);
+        expect([demo.applyOrder, demo.actualApplyOrder]).toEqual([2000, 2000]);
+        expect([moved.applyOrder, moved.actualApplyOrder]).toEqual([2000, 2001]);
     });
 });
 

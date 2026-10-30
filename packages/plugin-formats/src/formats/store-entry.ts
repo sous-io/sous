@@ -49,6 +49,12 @@ export const storeEntrySchema = z.strictObject({
   lastAccessAt: isoTimestampSchema,
   /** Total size of the entry's files, so the store can be capped without a rescan. */
   sizeBytes: byteCountSchema,
+  /**
+   * A digest of the name, size and modification time of every file in the entry, taken
+   * when the content hash last matched. While the files still produce this digest, the
+   * entry is not re-hashed on read. Absent until the first verified read.
+   */
+  statFingerprint: z.string().min(1).optional(),
 });
 
 /** A validated store entry marker. */

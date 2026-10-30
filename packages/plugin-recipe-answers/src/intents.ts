@@ -6,6 +6,7 @@
 import { type Context, ConfigError, InputError, type IntentDefinition, jsonSchema, LogLevel } from "@sous-io/plugin-api";
 import type { EnvFileKind } from "@sous-io/plugin-config-files/types";
 import { askForMissing, type AnswerStore, storeGivenAnswers } from "./ask.js";
+import { resolveEnvFile } from "./env-file.js";
 import { namesVariable, recipeKey } from "./definitions.js";
 import type { Ladder } from "./ladder.js";
 import { VAR_MAPPINGS_FILE } from "./mappings.js";
@@ -106,9 +107,17 @@ export async function handleAsk(input: VarsAskInput, ctx: Context): Promise<Vars
     const dryRun = input.dryRun === true;
     const hidden = hiddenValue(ctx.services);
 
+    const store = storeFor(ctx);
+    const root = ctx.project?.root ?? ctx.cwd ?? ".";
+    const envFile =
+        input.envFile === undefined
+            ? undefined
+            : resolveEnvFile(input.envFile, { shared: store.envPath("shared"), local: store.envPath("local") }, root, ctx.cwd ?? root);
+
     ctx.reporter.variables([
         { label: "Definitions", value: definitionsLabel(input.file) },
         { label: "Asking", value: describeSelection(input) },
+        ...(envFile === undefined ? [] : [{ label: "Env file", value: store.envPath(envFile) }]),
     ]);
 
     if (dryRun) {
@@ -134,7 +143,7 @@ export async function handleAsk(input: VarsAskInput, ctx: Context): Promise<Vars
 
     const ladder = ladderFor(ctx);
     const only = await resolveSelection(variables, ladder, input, ctx);
-    const run = { prompter: ctx.prompter, reporter: ctx.reporter, store: storeFor(ctx), hidden, dryRun };
+    const run = { prompter: ctx.prompter, reporter: ctx.reporter, store, hidden, dryRun, ...(envFile === undefined ? {} : { envFile }), yes: input.yes === true };
 
     // Answers given up front are checked and stored before anything is asked, so what is left is
     // what nobody answered.
@@ -254,6 +263,8 @@ export const varsIntents: IntentDefinition[] = [
                 dryRun: { type: "boolean", default: false, description: "Report what would be asked and written, without writing anything" },
                 answer: { type: "array", items: { type: "string" }, description: "Answer a variable ahead of its question, as <name>=<value>. Repeat it for each answer" },
                 answersFile: { type: "string", description: "Read answers from a YAML, JSON or .env file of name: value pairs" },
+                envFile: { type: "string", description: "Write every answer of this run to this env file: .sous/.env (committed) or .sous/.env.local (this machine only)" },
+                yes: { type: "boolean", default: false, description: "Answer yes to storing a secret or machine-specific answer in the committed .sous/.env" },
             },
             additionalProperties: false,
         }),
@@ -272,9 +283,10 @@ export const varsIntents: IntentDefinition[] = [
                 "sous vars ask --file ./questions.yaml",
                 "sous vars ask --answer apiUrl=https://api.example.com",
                 "sous vars ask --answers-file ./answers.yaml",
+                "sous vars ask --env-file .env.local",
             ],
             // `within` is how subscribing asks for the recipes it installed; not a flag for people.
-            flags: { within: { hidden: true } },
+            flags: { within: { hidden: true }, yes: { short: "y", aliases: ["force"] } },
         },
         agent: {
             usage: "Pass every answer with `answer` (name=value pairs) or `answersFile`; questions cannot be asked through MCP unless the client supports elicitation.",

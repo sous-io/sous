@@ -16,5 +16,5 @@ export { DEFAULT_LIMITS } from "./limits.js";
 export type { Limits } from "./limits.js";
 export { DEFAULT_BUDGETS } from "./timing/budgets.js";
 export type { Budget } from "./timing/budgets.js";
-export { applyOrderKey, MAX_APPLY_ORDER, MIN_APPLY_ORDER, sortContributors } from "./config/order.js";
+export { applyOrderKey, DEFAULT_APPLY_ORDER, MAX_APPLY_ORDER, MIN_APPLY_ORDER, sortContributors } from "./config/order.js";
 export { CORE_PLUGIN, matchesWildcard, pluginPrefix } from "./util/names.js";

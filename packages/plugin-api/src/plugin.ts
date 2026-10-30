@@ -59,6 +59,12 @@ export interface FrontEndDefinition {
     id: string;
     /** Takes over after the config is built: turns its input into submitted chains. */
     start(engine: EngineHandle, argv: readonly string[]): void | Promise<void>;
+    /**
+     * Whether `argv` needs the built config (`boolean = true`). It is asked on the config of the
+     * built-in plugins' registrations alone; `false` lets the application start the front end without
+     * building the config when the project loads no further plugin.
+     */
+    needsConfig?(engine: EngineHandle, argv: readonly string[]): boolean;
 }
 
 /** `sous.intents`. */

@@ -145,6 +145,27 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
     }
 }
 
+/**
+ * Whether a command line needs the built config: not when it asks for help or the version, or runs
+ * an intent that declares `runsWithoutConfig` (shell completion). A line that does not parse
+ * (a command only a later plugin adds, say) needs it.
+ */
+export function commandLineNeedsConfig(engine: EngineHandle, argv: readonly string[]): boolean {
+    const tree = engine.config.services.get("cli.commands") as CommandTree;
+    const specs = globalSpecs(engine.config.entities.list("cli-global-argument"));
+    const line = parseLine(versionArgv(argv, tree), tree, specs, engine.app.name);
+
+    switch (line.kind) {
+        case "help":
+        case "version":
+            return false;
+        case "run":
+            return engine.intents.get(line.command.intent)?.definition.runsWithoutConfig !== true;
+        default:
+            return true;
+    }
+}
+
 /** Reports an error as a problem (`Error: ` and what is under it) and sets the exit code. */
 function reportError(reporter: Reporter, error: unknown, options: { debug?: boolean; command?: Command }, io: CliIo): void {
     const parts = describeError(error, { ...options, debug: false });

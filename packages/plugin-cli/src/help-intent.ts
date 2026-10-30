@@ -17,6 +17,7 @@ export const helpIntent: IntentDefinition = {
     }),
     cli: { positional: ["command"], examples: ["sous help repo add"] },
     parallel: true,
+    runsWithoutConfig: true,
     handle: (rawInput, ctx) => {
         const input = rawInput as { command?: string[] };
         const tree = ctx.services.get("cli.commands") as CommandTree;

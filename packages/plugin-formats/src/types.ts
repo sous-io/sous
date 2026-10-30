@@ -298,6 +298,8 @@ export interface StoreEntry {
     fetchedAt: string;
     lastAccessAt: string;
     sizeBytes: number;
+    /** A digest of every file's name, size and modification time when the hash last matched. */
+    statFingerprint?: string;
 }
 
 // ---------------------------------------------------------------------------------------------

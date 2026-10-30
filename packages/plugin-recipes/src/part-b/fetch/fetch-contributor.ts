@@ -156,57 +156,63 @@ async function activeRecipes(
     const store = config.atPath("store").get<Partial<StoreSettings>>();
     const result: ActiveRecipes = { active: [], downloaded: [], failed: [] };
 
-    for (const key of reached) {
-        const entry = lockfile.recipes[key];
-        const { namespace, name } = splitStoredKey(key);
-        const locked = lockfile.repos[entry.repo];
-        const identity = locked?.identity ?? (locked === undefined ? undefined : runtime.tryIdentity(locked.url, hosts)) ?? entry.repo;
-        const base = { id: key, namespace, name, repo: entry.repo, identity, version: entry.version, hash: entry.hash, kind: entry.kind, requestedBy: [...entry.requestedBy] };
+    // Every recipe is looked up at once (a read of the store or a download), then listed in the order reached.
+    const settled = await Promise.all(
+        reached.map(async (key): Promise<{ active?: ActiveRecipeEntity; downloaded?: { key: string; version: string; dir: string }; failed?: { key: string; reason: string } }> => {
+            const entry = lockfile.recipes[key];
+            const { namespace, name } = splitStoredKey(key);
+            const locked = lockfile.repos[entry.repo];
+            const identity = locked?.identity ?? (locked === undefined ? undefined : runtime.tryIdentity(locked.url, hosts)) ?? entry.repo;
+            const base = { id: key, namespace, name, repo: entry.repo, identity, version: entry.version, hash: entry.hash, kind: entry.kind, requestedBy: [...entry.requestedBy] };
 
-        try {
-            const link = links[entry.repo];
+            try {
+                const link = links[entry.repo];
 
-            if (link !== undefined) {
-                let map = linked.get(link.path);
+                if (link !== undefined) {
+                    let map = linked.get(link.path);
 
-                if (map === undefined) {
-                    map = mapLinkedRecipes(link.path, manifests);
-                    linked.set(link.path, map);
+                    if (map === undefined) {
+                        map = mapLinkedRecipes(link.path, manifests);
+                        linked.set(link.path, map);
+                    }
+
+                    const found = (await map).get(key);
+
+                    if (found !== undefined) {
+                        return { active: { ...base, dir: found.dir, source: "link", manifest: found.manifest } };
+                    }
                 }
 
-                const found = (await map).get(key);
-
-                if (found !== undefined) {
-                    result.active.push({ ...base, dir: found.dir, source: "link", manifest: found.manifest });
-                    continue;
+                if (locked === undefined) {
+                    throw new Error(`the lockfile does not say where the repository '${entry.repo}' lives`);
                 }
+
+                const provider = repos[entry.repo]?.provider;
+                const outcome = await ensureInStore(
+                    { key, entry, repo: entry.repo, url: locked.url, identity, ...(provider === undefined ? {} : { provider }) },
+                    {
+                        store: services.get("recipes.store"),
+                        cache: runtime.indexCore(),
+                        hosts,
+                        context: runtime.hostContext(),
+                        ...(store?.freshnessSeconds === undefined ? {} : { freshnessSeconds: store.freshnessSeconds }),
+                    },
+                );
+                const manifest = await readManifest(manifests, outcome.dir, key);
+
+                const active: ActiveRecipeEntity = { ...base, dir: outcome.dir, source: key === CORE_RECIPE_KEY && identity === OFFICIAL_REPO_IDENTITY ? "core" : "store", manifest };
+
+                return outcome.downloaded ? { active, downloaded: { key, version: entry.version, dir: outcome.dir } } : { active };
+            } catch (error) {
+                return { failed: { key, reason: messageOf(error) } };
             }
+        }),
+    );
 
-            if (locked === undefined) {
-                throw new Error(`the lockfile does not say where the repository '${entry.repo}' lives`);
-            }
-
-            const provider = repos[entry.repo]?.provider;
-            const outcome = await ensureInStore(
-                { key, entry, repo: entry.repo, url: locked.url, identity, ...(provider === undefined ? {} : { provider }) },
-                {
-                    store: services.get("recipes.store"),
-                    cache: runtime.indexCore(),
-                    hosts,
-                    context: runtime.hostContext(),
-                    ...(store?.freshnessSeconds === undefined ? {} : { freshnessSeconds: store.freshnessSeconds }),
-                },
-            );
-            const manifest = await readManifest(manifests, outcome.dir, key);
-
-            result.active.push({ ...base, dir: outcome.dir, source: key === CORE_RECIPE_KEY && identity === OFFICIAL_REPO_IDENTITY ? "core" : "store", manifest });
-
-            if (outcome.downloaded) {
-                result.downloaded.push({ key, version: entry.version, dir: outcome.dir });
-            }
-        } catch (error) {
-            result.failed.push({ key, reason: messageOf(error) });
-        }
+    for (const one of settled) {
+        if (one.active !== undefined) result.active.push(one.active);
+        if (one.downloaded !== undefined) result.downloaded.push(one.downloaded);
+        if (one.failed !== undefined) result.failed.push(one.failed);
     }
 
     return result;

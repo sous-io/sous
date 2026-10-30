@@ -1,6 +1,6 @@
 # @sous-io/plugin-config-files
 
-Reads `sous.config.*` and the `.env` files, and writes single values back into the config file. `sous.config.*` and the patch files beside it apply at apply order 90000, after every plugin's contributor and before the `conf.d` files.
+Reads `sous.config.*` and the `.env` files, and writes single values back into the config file. `sous.config.*` and the patch files beside it apply at apply order 89900, after every plugin's contributor and before the `conf.d` files.
 
 It adds these commands:
 

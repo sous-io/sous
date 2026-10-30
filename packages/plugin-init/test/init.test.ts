@@ -123,6 +123,14 @@ describe("init", () => {
         expect(text).toMatch(/^\/\/ The primary sous config for my-app\./);
     });
 
+    /** Both spellings of the JSONC format should write sous.config.jsonc. */
+    it.each(["jsonc", "json"] as const)("should write sous.config.jsonc for --format %s", async (format) => {
+        await handle({ directory: projectRoot, format, noBuild: true }, initContext().ctx);
+
+        expect(fs.existsSync(path.join(sousDir, "sous.config.jsonc"))).toBe(true);
+        expect(fs.existsSync(path.join(sousDir, "sous.config.js"))).toBe(false);
+    });
+
     /** A format that is not offered is refused. */
     it("should refuse an unknown format", async () => {
         await expect(handle({ directory: projectRoot, format: "yaml" as never }, initContext().ctx)).rejects.toThrow(/not valid/);

@@ -104,6 +104,7 @@ export const completionIntent: IntentDefinition = {
     }),
     cli: { positional: ["shell"], examples: ['eval "$(sous completion bash)"', "sous completion fish | source"] },
     parallel: true,
+    runsWithoutConfig: true,
     handle: (rawInput, ctx) => completionScript((rawInput as { shell: CompletionShell }).shell, ctx.engine.app.name),
 };
 
@@ -117,6 +118,7 @@ export const completeIntent: IntentDefinition = {
     }),
     cli: { command: [COMPLETE_COMMAND], positional: ["words"], hidden: true },
     parallel: true,
+    runsWithoutConfig: true,
     handle: (rawInput, ctx) => {
         const tree = ctx.services.get("cli.commands") as CommandTree;
         const globals = globalSpecs(ctx.entities.list("cli-global-argument")).filter((spec) => !spec.hidden);

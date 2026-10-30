@@ -178,7 +178,7 @@ Rules:
    doubled. A contributor that re-runs keeps its place: re-running replaces its patch, and never
    moves it.
 3. The user's files win because they apply last: the `sous.config.*` contributor has apply order
-   90000 and each `conf.d` contributor 90000 plus the number its file name starts with, higher than
+   89900 and each `conf.d` contributor 90000 plus the number its file name starts with, higher than
    any plugin's contributor uses, so their patches apply after every plugin's. They monitor the
    whole config, so any change in a pass re-runs them, and they see it (see "Order and stages").
 4. A contributor re-runs only when a key or entity it read has changed since its last run. The
@@ -204,7 +204,8 @@ pass 3:  nothing anyone read changed → done
 
 ### Order and stages
 
-**`applyOrder`** is a whole number from 0 to 99999 on a contributor, default `0`. Within a stage,
+**`applyOrder`** is a whole number from 0 to 99999 on a contributor, default `2000`, so a plugin can apply before (a lower number) or after (a higher
+one) a contributor that declares none. Within a stage,
 patches apply from the lowest number to the highest, so when two contributors set the same key,
 the one with the higher number applies after the other and wins, however often either re-runs.
 Contributors with the same number apply in id order (bytewise). Any other value is refused when
@@ -235,7 +236,7 @@ When a number and a `before` or `after` disagree, `before` and `after` win. Each
 5. Declarations that form a cycle are still broken by name order, and sous warns once, naming them.
 
 Patches apply sorted by one key: the actual apply order padded with zeros to six digits, followed
-by the contributor id, compared bytewise (`090000config-files.main`, `090610confd/610-mac.jsonc`,
+by the contributor id, compared bytewise (`089900config-files.main`, `090610confd/610-mac.jsonc`,
 `100000late-fixups`). Six digits leave room for an actual apply order past 99999.
 
 **`"*"`** in `after` means every contributor that does not itself declare `after: ["*"]`, so a
@@ -269,12 +270,13 @@ export default definePlugin({
 ```
 
 **The user's files apply last.** `plugin-config-files` adds a contributor for `sous.config.*`, with
-apply order 90000, and one for each patch file beside it, with the same number (their ids,
+apply order 89900, and one for each patch file beside it, with the same number (their ids,
 `config-files/<file name>`, sort after `config-files.main`). `plugin-confd` adds one contributor per
 `conf.d` file, with apply order 90000 plus the number the file's name starts with
 (`500-repos.jsonc` applies at 90500, `610-browser.jsonc` at 90610); a name that starts with no
-number gets 90500, and a number too large is held at 99999. Each `conf.d` contributor also declares
-`after` the `sous.config.*` contributors, so a `000-` file still applies after them. Plugins use
+number gets 90500, and a number above 9999 counts as 9999 (apply order 99999), with a `debug` report
+naming the file, the number read and the number used. A `conf.d` contributor declares no `after`:
+its number alone puts it after `sous.config.*` (89900), even for a `000-` file. Plugins use
 lower numbers, so the user's patches apply after theirs. Each applies its file as one merge at the
 root, so each monitors the whole config automatically (rule 7 of "The Builder"). Any change in a
 pass, by any plugin, re-runs them, so they see it. Re-running costs little, since the files are
@@ -291,15 +293,14 @@ bytewise file-name order of today, and files with the same number apply in id or
 for (const file of listConfdFiles(project)) {
     sous.config.contribute({
         id: `confd/${file.name}`,
-        applyOrder: confdApplyOrder(file.name),        // 90000 + leading number, or 90500
-        after: ["config-files.main", "config-files/*"],
+        applyOrder: confdApplyOrder(file.name),        // 90000 + leading number (at most 9999), or 90500
         contribute: (config) => config.root().merge(file.data),
     });
 }
 ```
 
 ```text
-each pass:  plugins (0…89999) → sous.config.* (90000) → confd/500-repos (90500)
+each pass:  plugins (0…89899) → sous.config.* (89900) → confd/500-repos (90500)
             → confd/510-subscriptions (90510) → confd/610-mac (90610)
 ```
 
@@ -322,7 +323,7 @@ compilation: {
 
 ```text
 acme's contributor sets includeSourceComments = true, which changes the config
-→ the sous.config.* contributor re-runs; it applies after acme (90000 against 0), so its merge wins: false
+→ the sous.config.* contributor re-runs; it applies after acme (89900 against 2000), so its merge wins: false
 result: false. In a project whose files don't set it: true.
 ```
 
@@ -766,6 +767,42 @@ previewed or dry-run before it is written.
 None.
 
 ## Changes
+
+### 2026-10-30: Walk of apply order; same base name fails in one directory
+
+Rulings by Luke in an agent session (2026-10-30).
+
+On the number for `sous.config.*`:
+
+> "3, but give it 89900"
+
+On a long number at the start of a `conf.d` file name:
+
+> "option 1"
+
+On the default `applyOrder`:
+
+> "2"
+
+On two files that share a base name:
+
+> "we should fail if two files in the same _directory_ have the same base name."
+
+**What changed.** `sous.config.*` and its patch files apply at 89900 (was 90000). A `conf.d` file
+no longer declares `after` the `sous.config.*` contributors; its number alone (90000 plus the
+number its name starts with, 90500 with none) orders it, and `confd.files` stays at 90000. The
+number at the start of a `conf.d` file name counts as at most 9999 (apply order 99999), and a
+`debug` report names the file, the number read and the number used. The default `applyOrder` is
+2000 (was 0), so a plugin can apply before a contributor that declares none; a `before` still stops
+at 0. Two config files in one directory that share a base name (the name without its final
+extension) fail the build with a `ConfigError` naming both files: this covers `conf.d` files
+(unchanged) and now also two main config files in `.sous/` (was a warning that read the first). A
+main config file and a `conf.d` file may share a base name, since they sit in different
+directories.
+
+**Why.** Putting `sous.config.*` below every `conf.d` number makes the `after` declaration
+unnecessary, and a cap keeps every file inside the number range. A default of 2000 leaves room
+below it for contributors that must apply before the plugins that declare none.
 
 ### 2026-10-30: Contributors declare an apply order; the user's files use numbers instead of `"*"`
 

@@ -111,6 +111,8 @@ export interface StartableFrontEnd {
     readonly id: string;
     readonly plugin: string;
     start(argv: readonly string[]): Promise<void>;
+    /** Whether `argv` needs the built config; asked on the config of the built-in plugins alone. */
+    needsConfig(argv: readonly string[]): boolean;
 }
 
 interface RebuildTrigger {
@@ -254,6 +256,39 @@ export class Engine {
     }
 
     /**
+     * Loads the built-in plugins and makes a config of what they registered the current one,
+     * without building the real config: their intents, entities and front ends are all there, and
+     * no contributor ran. A later {@link buildConfig} replaces it. For a command that needs no
+     * config values (see `runsWithoutConfig`) when the project loads no other plugin.
+     */
+    async loadBuiltInsOnly(): Promise<void> {
+        const active = new Map<string, ActivePlugin>();
+        const add = (record: PluginRecord): void => {
+            if (active.has(record.name)) {
+                return;
+            }
+
+            active.set(record.name, { record, stageShift: 0 });
+
+            for (const child of record.children) {
+                const childRecord = this.plugins.get(child);
+
+                if (childRecord) {
+                    add(childRecord);
+                }
+            }
+        };
+
+        for (const record of await this.loadBuiltIns()) {
+            add(record);
+        }
+
+        const entities = new EntitySnapshot(this.entityRegistry.registeredEntities(() => true), () => this.kindNames());
+
+        this.current = this.makeBuilt({ buildNumber: 0, whatIf: false, config: deepFreeze({}), entities, records: [], active, passes: 0, hash: "" });
+    }
+
+    /**
      * Builds the real config, replacing the current one, and fires `config.built`. When a
      * `config.built` listener runs an intent that changes the config, the config is rebuilt, up to
      * the rebuild limits.
@@ -266,7 +301,7 @@ export class Engine {
         }
 
         try {
-            const built = await this.buildAndSettle();
+            const built = await this.buildAndSettle(options.reportBudgets !== false);
 
             this.failure = undefined;
 
@@ -284,14 +319,14 @@ export class Engine {
     }
 
     /** Builds the real config, then fires `config.built`, rebuilding while its listeners change the config. */
-    private async buildAndSettle(): Promise<BuiltConfigImpl> {
+    private async buildAndSettle(reportBudgets = true): Promise<BuiltConfigImpl> {
         const seen = new Map<string, number>();
         let changing = 0;
         let repeating = 0;
         const triggers: RebuildTrigger[] = [];
 
         for (let rebuild = 0; ; rebuild++) {
-            const built = await this.buildOnce(false, []);
+            const built = await this.buildOnce(false, [], reportBudgets);
 
             this.current = built;
 
@@ -377,6 +412,7 @@ export class Engine {
             start: async (argv) => {
                 await found.definition.start(this.handle, argv);
             },
+            needsConfig: (argv) => found.definition.needsConfig?.(this.handle, argv) ?? true,
         };
     }
 
@@ -430,7 +466,7 @@ export class Engine {
         return built;
     }
 
-    private async buildOnce(whatIf: boolean, extra: readonly ContributorDefinition[]): Promise<BuiltConfigImpl> {
+    private async buildOnce(whatIf: boolean, extra: readonly ContributorDefinition[], reportBudgets = true): Promise<BuiltConfigImpl> {
         const buildNumber = ++this.buildCounter;
         const label = whatIf ? `what-if #${buildNumber}` : "config";
 
@@ -485,7 +521,7 @@ export class Engine {
                 this.timer.setBudgets(built.get<Record<string, unknown>>("budgets"));
             }
 
-            this.timer.releaseDeferred();
+            this.timer.releaseDeferred(reportBudgets);
         }
     }
 

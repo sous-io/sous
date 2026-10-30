@@ -49,6 +49,10 @@ export interface AskRun {
     /** What a hidden value prints as. */
     readonly hidden: string;
     readonly dryRun: boolean;
+    /** The env file every answer of this run goes to (`--env-file`); unset means each answer's own. */
+    readonly envFile?: EnvFileKind;
+    /** `--yes`: the committed file may receive a secret or machine-specific answer without asking. */
+    readonly yes?: boolean;
 }
 
 /** How the questions are picked. */
@@ -164,6 +168,33 @@ export function nonInteractiveError(pending: ReadonlyArray<{ variable: DefinedVa
     return error;
 }
 
+/** The warning for a secret or machine-specific answer headed for the committed env file. */
+export function committedFileWarning(variable: DefinedVariable, file: string): string {
+    const why = variable.definition.secret ? "declared this variable a secret" : "declared this variable machine-specific";
+
+    return (
+        `${recipeKey(variable.recipe)} ${why}, and ${file} is committed to git. An answer stored there enters your ` +
+        `project's git history, is pushed with every clone, and is visible to everyone who can read the repository.`
+    );
+}
+
+/**
+ * Where an answer goes: the run's `--env-file` when it has one, else the file given. Returns
+ * false when the answer would reach the committed file against its recipe's wishes and the
+ * person answering declined (or `--yes` was not passed and nobody can be asked).
+ */
+async function allowedFile(variable: DefinedVariable, file: EnvFileKind, run: AskRun): Promise<boolean> {
+    if (file !== "shared" || run.envFile !== "shared" || answerFileFor(variable.definition) !== "local" || run.yes === true) {
+        return true;
+    }
+
+    const name = ENV_FILE_NAMES.shared;
+
+    run.reporter.warning(committedFileWarning(variable, `.sous/${name}`));
+
+    return run.prompter.confirm({ message: `Store this answer in .sous/${name} anyway?`, answeredBy: "--yes", default: false });
+}
+
 /** Checks a value against a variable's definition, naming its recipe. */
 function check(variable: DefinedVariable, value: string) {
     return validateAnswer(variable.definition, value, { recipe: recipeKey(variable.recipe) });
@@ -186,8 +217,9 @@ export async function storeGivenAnswers(applicable: readonly ApplicableAnswer[],
         keys.add(entry.target.key);
 
         const existing = ladder.resolve(entry.target);
-        const fallback: StoragePlan = { file: answerFileFor(entry.target.definition), envName: ladder.bareName(entry.target) };
-        const plan: StoragePlan = existing === undefined || existing.source.file === "shell" ? fallback : { file: existing.source.file, envName: existing.source.envName };
+        const fallback: StoragePlan = { file: run.envFile ?? answerFileFor(entry.target.definition), envName: ladder.bareName(entry.target) };
+        const plan: StoragePlan =
+            run.envFile === undefined && existing !== undefined && existing.source.file !== "shell" ? { file: existing.source.file, envName: existing.source.envName } : fallback;
         const slot = `${plan.file}:${plan.envName}`;
 
         if (written.has(slot)) {
@@ -195,6 +227,10 @@ export async function storeGivenAnswers(applicable: readonly ApplicableAnswer[],
         }
 
         written.add(slot);
+
+        if (!(await allowedFile(entry.target, plan.file, run))) {
+            continue;
+        }
 
         const outcome = run.dryRun ? "not written" : ladder.lookupIn(plan.file, plan.envName) === undefined ? "appended" : "updated";
 
@@ -370,7 +406,13 @@ async function askByType(definition: VariableDefinition, variable: DefinedVariab
 async function runQuestion(question: PlannedQuestion, place: { index: number; total: number }, ladder: Ladder, run: AskRun, report: AskReport): Promise<void> {
     const { variable } = question;
     const { definition } = variable;
-    const plan: StoragePlan = { file: answerFileFor(definition), envName: ladder.bareName(variable) };
+    const plan: StoragePlan = { file: run.envFile ?? answerFileFor(definition), envName: ladder.bareName(variable) };
+
+    if (!(await allowedFile(variable, plan.file, run))) {
+        report.skipped.push({ variable, reason: `not stored in .sous/${ENV_FILE_NAMES.shared}, which is committed to git` });
+
+        return;
+    }
 
     run.reporter.question({
         index: place.index,

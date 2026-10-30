@@ -1,7 +1,6 @@
 import type { Context } from "@sous-io/plugin-api";
 import type { LockDiff, RecipesLock, ResolvedRecipe, ResolveResult, RestoreReport, SubscriptionEntry } from "@sous-io/plugin-recipes/types";
 import semver from "semver";
-import { skippedLine, unansweredWarning } from "./report.js";
 import type { BuildPrepareInput, BuildPrepareResult } from "./types.js";
 
 /** The lockfile, as `recipes.lock` reads it. */
@@ -117,7 +116,6 @@ export async function prepare(input: BuildPrepareInput, ctx: Context): Promise<B
 
     const skipped = active.skipped();
     const unanswered = ctx.services.get("recipe-answers.answers").get().unanswered;
-    const warning = unansweredWarning(unanswered);
     const result: BuildPrepareResult = {
         seeded,
         locked,
@@ -125,9 +123,7 @@ export async function prepare(input: BuildPrepareInput, ctx: Context): Promise<B
         newer,
         checkedUpstream,
         skipped,
-        skippedLines: skipped.map(skippedLine),
         unanswered,
-        ...(warning === undefined ? {} : { unansweredWarning: warning }),
     };
 
     await ctx.emit("build.prepared", result);

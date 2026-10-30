@@ -231,6 +231,7 @@ advanced view draws, and the ladder table above. The name may be bare or the ful
 | `sous vars ask --all` | Asks every variable again, including the ones already answered |
 | `sous vars ask --accept-first` | When the name matches several things, takes the first one listed |
 | `sous vars ask --file <path>` | Reads definitions from a standalone definitions file |
+| `sous vars ask --env-file <file>` | Stores every answer of the run in `.sous/.env` (committed) or `.sous/.env.local` (this machine only); any spelling that names one is accepted, and a secret or machine-specific variable sent to the committed file needs a yes (`--yes`) |
 | `sous vars ask --answer <name>=<value>` | Answers one question ahead of time; repeat it for each answer |
 | `sous vars ask --answers-file <path>` | Reads answers from a YAML or JSON file of `name: value` pairs |
 | `sous vars ask --dry-run` | Reports what would be asked and written, without writing anything |

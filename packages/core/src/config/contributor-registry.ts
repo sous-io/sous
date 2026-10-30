@@ -1,5 +1,5 @@
 import { type ContributorDefinition, SousError } from "@sous-io/plugin-api";
-import { MAX_APPLY_ORDER, MIN_APPLY_ORDER } from "./order.js";
+import { DEFAULT_APPLY_ORDER, MAX_APPLY_ORDER, MIN_APPLY_ORDER } from "./order.js";
 
 /** A contributor, with the plugin that added it and its resolved order declarations. */
 export interface ContributorEntry {
@@ -65,7 +65,7 @@ export function toEntry(
         throw new SousError(`${plugin}'s contributor "${definition.id}" declares a stage that is not a number.`);
     }
 
-    const applyOrder = definition.applyOrder ?? 0;
+    const applyOrder = definition.applyOrder ?? DEFAULT_APPLY_ORDER;
 
     if (!Number.isInteger(applyOrder) || applyOrder < MIN_APPLY_ORDER || applyOrder > MAX_APPLY_ORDER) {
         throw new SousError(

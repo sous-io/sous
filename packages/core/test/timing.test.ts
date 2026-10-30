@@ -42,6 +42,40 @@ describe("timing and budgets", () => {
     });
 
     /**
+     * A front end that only prints text builds with `reportBudgets: false`: the build is still
+     * timed, but no warning is printed.
+     */
+    it("should keep the over-budget warning back when the build asks for no budget reports", async () => {
+        const clock = manualClock();
+        const { engine, reporter } = makeEngine([contributorsPlugin("p", [{ id: "slow", contribute: () => clock.advance(610) }])], { now: clock.now });
+
+        await engine.buildConfig({ reportBudgets: false });
+
+        expect(reporter.at("warning")).toEqual([]);
+        expect(engine.timings.get("contributor:slow")).toMatchObject({ count: 1, totalMs: 610 });
+    });
+
+    /**
+     * `loadBuiltInsOnly()` makes a config of what the built-in plugins registered, with no
+     * contributor run, so a front end and its intents are reachable before the real build.
+     */
+    it("should reach the built-in plugins' intents without building the config", async () => {
+        let contributed = 0;
+        const { engine } = makeEngine([
+            contributorsPlugin("p", [{ id: "counts", contribute: () => void (contributed += 1) }]),
+        ]);
+
+        await engine.loadBuiltInsOnly();
+
+        expect(engine.pluginInfo().find((info) => info.name === "p")?.active).toBe(true);
+        expect(contributed).toBe(0);
+
+        await engine.buildConfig();
+
+        expect(contributed).toBeGreaterThan(0);
+    });
+
+    /**
      * Budgets change under the budgets config key, by category or by "category:name"; false turns a
      * warning off; the config's budgets apply to its own build.
      */

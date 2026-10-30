@@ -14,7 +14,7 @@
  * entry in a sibling temporary directory and renames it into place.
  */
 
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { ConfigError } from "@sous-io/plugin-api";
@@ -26,6 +26,9 @@ export const STORE_ENTRY_FILENAME = ".sous.entry.json";
 
 /** The index cache's directory, a sibling of the entries inside the store root. */
 export const INDEX_CACHE_DIRNAME = "_indexes";
+
+/** How old a last-access stamp must be before a read refreshes it. */
+const ACCESS_GRANULARITY_MS = 24 * 60 * 60 * 1000;
 
 const TEMP_PREFIX = ".sous-tmp-";
 const GIT_DIR_NAME = ".git";
@@ -209,20 +212,62 @@ export class RecipeStore implements RecipesStore {
         }
 
         const dir = this.entryDir(key);
-        const actual = await this.deps.hashDirectory(dir);
+        const fingerprint = await this.statFingerprint(dir);
 
-        if (!this.deps.hashesEqual(actual, entry.hash)) {
-            await this.remove(key);
-            this.deps.warn?.(`The cached copy of ${formatStoreKey(key)} did not match its recorded content hash, so it was removed and will be fetched again.`);
+        // The files are read and hashed only when their names, sizes or modification times differ
+        // from the last verified read; an edit inside the store still changes at least one of them.
+        if (entry.statFingerprint === undefined || entry.statFingerprint !== fingerprint) {
+            const actual = await this.deps.hashDirectory(dir);
 
-            return undefined;
+            if (!this.deps.hashesEqual(actual, entry.hash)) {
+                await this.remove(key);
+                this.deps.warn?.(`The cached copy of ${formatStoreKey(key)} did not match its recorded content hash, so it was removed and will be fetched again.`);
+
+                return undefined;
+            }
         }
 
-        const touched: StoreEntry = { ...entry, lastAccessAt: new Date().toISOString() };
+        // The marker is rewritten only to record a new fingerprint, or when the last access is a
+        // day old (`gc` orders by day, so a finer stamp would only cost a write on every run).
+        const now = new Date();
+        const stale = now.getTime() - Date.parse(entry.lastAccessAt) >= ACCESS_GRANULARITY_MS || Number.isNaN(Date.parse(entry.lastAccessAt));
+
+        if (!stale && entry.statFingerprint === fingerprint) {
+            return { dir, entry };
+        }
+
+        const touched: StoreEntry = { ...entry, statFingerprint: fingerprint, lastAccessAt: stale ? now.toISOString() : entry.lastAccessAt };
 
         await fs.writeFile(path.join(dir, STORE_ENTRY_FILENAME), this.deps.stringifyEntry(touched), "utf8");
 
         return { dir, entry: touched };
+    }
+
+    /** A digest of the relative path, size and modification time of every file under an entry, the marker excluded. */
+    private async statFingerprint(dir: string): Promise<string> {
+        const lines: string[] = [];
+        const walk = async (current: string, prefix: string): Promise<void> => {
+            const children = await fs.readdir(current, { withFileTypes: true });
+
+            await Promise.all(
+                children.map(async (child) => {
+                    const relative = prefix === "" ? child.name : `${prefix}/${child.name}`;
+
+                    if (child.isDirectory()) {
+                        lines.push(`d ${relative}`);
+                        await walk(path.join(current, child.name), relative);
+                    } else if (!(prefix === "" && child.name === STORE_ENTRY_FILENAME)) {
+                        const stats = await fs.lstat(path.join(current, child.name));
+
+                        lines.push(`f ${relative} ${stats.size} ${stats.mtimeMs}`);
+                    }
+                }),
+            );
+        };
+
+        await walk(dir, "");
+
+        return createHash("sha1").update(lines.sort().join("\n")).digest("hex");
     }
 
     async has(key: StoreKey): Promise<boolean> {

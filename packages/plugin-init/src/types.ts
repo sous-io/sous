@@ -9,7 +9,7 @@
 import type { BuildResult } from "@sous-io/plugin-build/types";
 
 /** The config file formats `init` writes. */
-export type InitConfigFormat = "js" | "json";
+export type InitConfigFormat = "js" | "jsonc" | "json";
 
 /** What `init` did to the project's `package.json`. */
 export type PackageJsonOutcome =

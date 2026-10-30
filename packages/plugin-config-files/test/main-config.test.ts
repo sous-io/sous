@@ -109,16 +109,16 @@ describe("sous.config.* data files", () => {
         await expect(engine.buildConfig()).resolves.toBeDefined();
     });
 
-    /** Two main config files: the first is read, and sous warns (report, never forbid). */
-    it("should warn when a .sous directory holds several main config files", async () => {
+    /** Two main config files share the base name `sous.config`, so the build fails and names both. */
+    it("should fail when a .sous directory holds several main config files", async () => {
         project.write("sous.config.json", JSON.stringify({ name: "json" }));
         project.write("sous.config.yaml", "name: yaml\n");
 
-        const { engine, reporter } = makeEngine(project.info(), [configFilesPlugin]);
-        const config = await engine.buildConfig();
+        const { engine } = makeEngine(project.info(), [configFilesPlugin]);
+        const error = (await engine.buildConfig().catch((caught: unknown) => caught)) as { message: string; details: string[] };
 
-        expect(config.get("name")).toBe("json");
-        expect(reporter.at("warning").join("\n")).toMatch(/2 main config files/);
+        expect(error.message).toMatch(/Duplicate config file baseName 'sous\.config'/);
+        expect(error.details.join("\n")).toMatch(/sous\.config\.json[\s\S]*sous\.config\.yaml/);
     });
 
     /** The config keys this plugin owns are checked: `version` must be 1. */

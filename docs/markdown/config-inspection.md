@@ -31,7 +31,7 @@ tooling. A JSON config can bind it:
 ```
 
 The `$schema` key is accepted at the top level and ignored by sous itself. A config written by
-`sous init --format json` binds it to the same artifact as published on GitHub for the running
+`sous init --format jsonc` binds it to the same artifact as published on GitHub for the running
 version, so an editor resolves it without a path into the installed package; point it at the
 package-local copy instead when the editor should work offline.
 

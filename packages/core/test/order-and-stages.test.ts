@@ -31,7 +31,7 @@ describe("order and stages", () => {
 
         await engine.buildConfig();
 
-        expect(order).toEqual(["z-skills", "zz-early", "claude-code/defaults", "confd/500", "confd/610", "claude-code/late-fixups"]);
+        expect(order).toEqual(["zz-early", "confd/500", "confd/610", "z-skills", "claude-code/defaults", "claude-code/late-fixups"]);
     });
 
     /**
@@ -81,7 +81,7 @@ describe("order and stages", () => {
 
     /**
      * The config-building spec's machineRole example, with stand-ins for the user's files (root
-     * merges with the apply orders the file plugins give them: 90000 for sous.config.*, 90000 plus
+     * merges with the apply orders the file plugins give them: 89900 for sous.config.*, 90000 plus
      * the leading number for a conf.d file): 610 reads machineRole, which 700 sets. Patches apply
      * in that order and a re-run does not move a patch, so sous.config.* and 700 never trade
      * places and the build settles with 700's value.
@@ -90,7 +90,7 @@ describe("order and stages", () => {
         const { engine } = makeEngine([
             keysPlugin("_vars", "browser"),
             contributorsPlugin("files", [
-                { id: "config-files.main", applyOrder: 90000, contribute: (config) => config.root().merge({ _vars: { machineRole: "laptop" } }) },
+                { id: "config-files.main", applyOrder: 89900, contribute: (config) => config.root().merge({ _vars: { machineRole: "laptop" } }) },
                 {
                     id: "confd/610-browser",
                     applyOrder: 90610,

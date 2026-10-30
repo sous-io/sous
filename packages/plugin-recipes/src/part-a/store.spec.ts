@@ -166,6 +166,26 @@ describe("RecipeStore", () => {
         expect(fs.existsSync(store.entryDir(key))).toBe(false);
     });
 
+    /** A read after a verified one does not hash again, yet an edit of the same size is still caught. */
+    it("should re-hash only when the files' stats changed", async () => {
+        const { store, warnings } = makeStore();
+        const file = path.join(store.entryDir(key), "SKILL.md");
+
+        await store.put(key, makeSource());
+        expect((await store.get(key))?.entry.statFingerprint).toBeDefined();
+
+        const marker = fs.readFileSync(path.join(store.entryDir(key), ".sous.entry.json"), "utf8");
+
+        expect(await store.get(key)).toBeDefined();
+        expect(fs.readFileSync(path.join(store.entryDir(key), ".sous.entry.json"), "utf8")).toBe(marker);
+
+        fs.writeFileSync(file, "ALPHA");
+        fs.utimesSync(file, new Date(), new Date(Date.now() + 5000));
+
+        expect(await store.get(key)).toBeUndefined();
+        expect(warnings[0]).toMatch(/did not match its recorded content hash/);
+    });
+
     /** An unreadable marker counts as absent, with a warning. */
     it("should treat an unreadable marker as absent", async () => {
         const { store, warnings } = makeStore();

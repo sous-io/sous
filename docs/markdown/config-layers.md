@@ -18,7 +18,7 @@ trailing commas are all allowed in it. A file is read from disk once per build.
 
 The `conf.d/` files are applied after the primary config, in the order of the number each name
 starts with. Files with the same number are applied in filename order (bytewise, the same on every
-machine), and a file whose name starts with no number is applied as if it were numbered 500:
+machine), and a file whose name starts with no number is applied as if it were numbered 500; a number above 9999 counts as 9999:
 
 ```text
 plugins and recipes → sous.config.* → conf.d/500-repos → conf.d/510-subscriptions → conf.d/610-mac

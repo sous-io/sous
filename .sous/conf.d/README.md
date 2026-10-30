@@ -1,6 +1,6 @@
 # conf.d: drop-in configuration layers
 
-Every `.js`, `.mjs`, `.json`, `.jsonc` or `.yaml` file directly inside this directory is a configuration layer. Sous loads them after the project's main `sous.config.*` file, in filename order, and merges each one over what came before it.
+Every `.js`, `.mjs`, `.json`, `.jsonc` or `.yaml` file directly inside this directory is a configuration layer. Sous loads them after the project's main `sous.config.*` file, in the order of the number their names start with (highest last), and merges each one over what came before it. A file whose name starts with no number is applied after the files numbered up to 499 and before those numbered 501 and up.
 
 Layers numbered 500 through 599 are written by sous itself (for example `500-repos.jsonc`, recording the repositories this project trusts). Sous edits those files by key, so your comments, key order and formatting survive; it never touches the main config or any layer outside that band.
 

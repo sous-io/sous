@@ -1,7 +1,7 @@
 import { definePlugin, jsonSchema, LOG_LEVELS, type PluginDefinition } from "@sous-io/plugin-api";
 import { CommandTree, type CommandPicks } from "./command-tree.js";
 import { viewError } from "./errors.js";
-import { runCommandLine } from "./front-end.js";
+import { commandLineNeedsConfig, runCommandLine } from "./front-end.js";
 import { BUILT_IN_GROUPS } from "./groups.js";
 import { completeIntent, completionIntent } from "./completion.js";
 import { helpIntent } from "./help-intent.js";
@@ -164,6 +164,7 @@ export function createCliPlugin(options: CliPluginOptions = {}): PluginDefinitio
                     properties: { verbose: { type: "boolean", default: false, description: "Also print the package, where it is installed, the platform and the Node build." } },
                 }),
                 parallel: true,
+                runsWithoutConfig: true,
                 agent: { tool: "sous_version", usage: "Call this to learn which sous version serves this project." },
                 handle: (input, ctx) => {
                     const { name, version } = ctx.engine.app;
@@ -185,6 +186,7 @@ export function createCliPlugin(options: CliPluginOptions = {}): PluginDefinitio
             sous.frontEnds.add({
                 id: "cli",
                 start: (engine, argv) => runCommandLine(engine, argv, { io: io(), env: sous.env, cwd: process.cwd(), project: () => sous.project }),
+                needsConfig: (engine, argv) => commandLineNeedsConfig(engine, argv),
             });
         },
     });

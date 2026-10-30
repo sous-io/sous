@@ -6,7 +6,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { type ConfigBuilder, type ContributorDefinition, definePlugin, jsonSchema, type PluginDefinition, type Sous } from "@sous-io/plugin-api";
+import { type ConfigBuilder, ConfigError, type ContributorDefinition, definePlugin, jsonSchema, type PluginDefinition, type Sous } from "@sous-io/plugin-api";
 import { EnvFilesService } from "./env/service.js";
 import { ConfigFilesLoaderImpl, mainCandidates } from "./loader.js";
 import { MAIN_CONFIG_BASE_NAME } from "./names.js";
@@ -28,7 +28,7 @@ export const PATCH_CONTRIBUTOR_PREFIX = "config-files/";
  * number, so the user's files apply after them and win; `conf.d` files use 90000 plus the number
  * their names start with, so they apply after these.
  */
-export const MAIN_APPLY_ORDER = 90000;
+export const MAIN_APPLY_ORDER = 89900;
 
 /** The plugin. */
 export const configFilesPlugin: PluginDefinition = definePlugin({
@@ -164,9 +164,12 @@ function mainContributor(loader: ConfigFilesLoaderImpl): ContributorDefinition {
 
             if (config.contributor.run === 1) {
                 if (candidates.length > 1) {
-                    config.warn(
-                        `${project.sousDir} holds ${candidates.length} main config files (${candidates.map((c) => path.basename(c)).join(", ")}); only ${path.basename(file)} is read. Move the others into conf.d or delete them.`,
-                    );
+                    throw new ConfigError(`Duplicate config file baseName '${MAIN_CONFIG_BASE_NAME}':`, {
+                        details: [
+                            ...candidates.map((candidate) => `  ${candidate}`),
+                            "Two config files in one directory must not share a name once the final extension is removed. Delete or rename one of them.",
+                        ],
+                    });
                 }
 
                 // A file is read from disk once per build.

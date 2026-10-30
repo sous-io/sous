@@ -1,4 +1,4 @@
-import { BufferedReporter, NonInteractiveError, nullReporter, ReportEntryStyle, type Prompter, scriptedPrompter } from "@sous-io/plugin-api";
+import { BufferedReporter, NonInteractiveError, nonInteractivePrompter, nullReporter, ReportEntryStyle, type Prompter, scriptedPrompter } from "@sous-io/plugin-api";
 import type { EnvFileKind } from "@sous-io/plugin-config-files/types";
 import { describe, expect, it } from "vitest";
 import { ladder, silentPrompter, variable } from "../test/stand-ins.js";
@@ -36,8 +36,13 @@ function run(prompter: Prompter = silentPrompter, dryRun = false, reporter = nul
 }
 
 /** Stores answers given up front. */
-async function give(variables: DefinedVariable[], answers: Record<string, string>, subject: Ladder, dryRun = false) {
-    const given = run(silentPrompter, dryRun);
+async function give(variables: DefinedVariable[], answers: Record<string, string>, subject: Ladder, dryRun = false, envFile?: EnvFileKind) {
+    const given = run(envFile === undefined ? silentPrompter : nonInteractivePrompter, dryRun);
+
+    if (envFile !== undefined) {
+        Object.assign(given.run, { envFile });
+    }
+
     const provided = Object.entries(answers).map(([name, value]) => ({ name, value, from: "--answer" }));
     const result = await storeGivenAnswers(matchAnswers(provided, variables), subject, given.run);
 
@@ -280,5 +285,57 @@ describe("askSummary()", () => {
     /** A run with nothing to do should say so. */
     it("should say when everything is answered", () => {
         expect(askSummary({ inherited: [], answered: [], skipped: [], dryRun: false }, "(hidden)")).toEqual(["Every variable in play already has an answer that fits its definition."]);
+    });
+});
+
+describe("--env-file", () => {
+    /** Every answer of the run should go to the chosen file, whatever its recipe prefers. */
+    it("should store every answer in the chosen file", async () => {
+        const prompter = scriptedPrompter(["https://typed.example.com"]);
+        const { run: io, store } = run(prompter);
+
+        await askForMissing([variable()], ladder(), {}, { ...io, envFile: "local" });
+
+        expect(store.answers).toEqual([["local", "SOUS_VAR_API_URL", "https://typed.example.com"]]);
+    });
+
+    /** A secret headed for the committed file should warn with facts and ask first. */
+    it("should warn and confirm before a secret goes to the committed file", async () => {
+        const prompter = scriptedPrompter([true, "s3cret"]);
+        const reporter = new BufferedReporter();
+        const { run: io, store } = run(prompter, false, reporter);
+
+        await askForMissing([variable({ secret: true })], ladder(), {}, { ...io, envFile: "shared" });
+
+        expect(reporter.at("warning")[0]).toContain("declared this variable a secret, and .sous/.env is committed to git");
+        expect(store.answers).toEqual([["shared", "SOUS_VAR_API_URL", "s3cret"]]);
+    });
+
+    /** Declining the confirmation should leave the variable unanswered. */
+    it("should not store the answer when the confirmation is declined", async () => {
+        const { run: io, store } = run(scriptedPrompter([false]));
+        const report = await askForMissing([variable({ secret: true })], ladder(), {}, { ...io, envFile: "shared" });
+
+        expect(store.answers).toEqual([]);
+        expect(report.skipped).toHaveLength(1);
+    });
+
+    /** --yes should store without asking. */
+    it("should not ask when --yes was passed", async () => {
+        const prompter = scriptedPrompter(["s3cret"]);
+        const { run: io, store } = run(prompter);
+
+        await askForMissing([variable({ secret: true })], ladder(), {}, { ...io, envFile: "shared", yes: true });
+
+        expect(prompter.asked).toHaveLength(1);
+        expect(store.answers).toHaveLength(1);
+    });
+
+    /** Without a terminal and without --yes, an answer given by flag should fail naming --yes. */
+    it("should fail naming --yes when nobody can be asked", async () => {
+        const error = await give([variable({ secret: true })], { apiUrl: "x" }, ladder(), false, "shared").catch((e) => e);
+
+        expect(error).toBeInstanceOf(NonInteractiveError);
+        expect(error.message).toContain("--yes");
     });
 });

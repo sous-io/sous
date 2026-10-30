@@ -31,6 +31,9 @@ export const EVERY_CONTRIBUTOR = "*";
 export const MIN_APPLY_ORDER = 0;
 export const MAX_APPLY_ORDER = 99999;
 
+/** The apply order of a contributor that declares none. */
+export const DEFAULT_APPLY_ORDER = 2000;
+
 /**
  * The text patches are sorted by: the actual apply order padded to six digits, then the id. Six
  * digits leave room for an actual apply order pushed past 99999.
@@ -55,7 +58,7 @@ interface Reason {
  * Orders contributors by apply order, adjusted by their `before` and `after` declarations. A
  * name in either list matches a contributor id or a plugin name, exactly or as a wildcard.
  *
- * Each contributor declares an apply order (default 0); higher numbers apply later, and equal
+ * Each contributor declares an apply order (default 2000); higher numbers apply later, and equal
  * numbers apply in id order (bytewise). When a number and a `before` or `after` disagree, `before`
  * and `after` win: a contributor declaring `after` moves to one past the contributor it must
  * follow, one declaring `before` to one less than the contributor it must precede (never less than 0),

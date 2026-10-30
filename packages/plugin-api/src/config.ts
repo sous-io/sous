@@ -37,7 +37,7 @@ export interface Contribution {
     readonly contributor: string;
     readonly plugin: string;
     readonly stage: number;
-    /** Its declared apply order, 0 to 99999 (default 0). */
+    /** Its declared apply order, 0 to 99999 (default 2000). */
     readonly applyOrder: number;
     /**
      * Its apply order once `before` and `after` are met: the declared one, or moved to one past
@@ -140,10 +140,10 @@ export interface ContributorDefinition {
     /** Its config stage; stages run lowest first. Default `0`, shifted for plugins loaded during a stage. */
     stage?: number;
     /**
-     * Where its patch applies within its stage: a whole number from 0 to 99999, default `0`. Higher
+     * Where its patch applies within its stage: a whole number from 0 to 99999, default `2000`. Higher
      * numbers apply later, so when two contributors set one key, the one with the higher number
      * applies after the other and wins; equal numbers apply in id order. The user's files use
-     * 90000 and up, so they apply after every plugin's contributor. `before` and `after` win over
+     * 89900 and up, so they apply after every plugin's contributor. `before` and `after` win over
      * the number: a contributor that must apply after another is moved to one past it (see
      * `Contribution.actualApplyOrder`). Any other number is refused when the contributor is added.
      */
@@ -168,4 +168,10 @@ export interface ContributorDefinition {
 export interface BuildOptions {
     /** More contributors for this build only ("what if" builds). */
     extraContributors?: readonly ContributorDefinition[];
+    /**
+     * `reportBudgets` (`boolean = true`): `false` keeps the build's over-budget warning from being
+     * printed. A front end passes it for a command that only prints text (help, version, completion),
+     * where the warning is noise above the answer. The build is still timed (`--timings`).
+     */
+    reportBudgets?: boolean;
 }

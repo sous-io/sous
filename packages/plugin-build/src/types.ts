@@ -97,12 +97,8 @@ export interface BuildPrepareResult {
     readonly checkedUpstream: boolean;
     /** Locked recipes not built on this machine, and why. */
     readonly skipped: SkippedRecipe[];
-    /** One finished sentence per entry of `skipped`, in the same order (`skippedLine`), for front ends that list them. */
-    readonly skippedLines: readonly string[];
     /** Required variables with no answer. */
     readonly unanswered: readonly DefinedVariable[];
-    /** The finished warning about `unanswered`, or `undefined` when everything is answered. */
-    readonly unansweredWarning?: UnansweredWarning;
 }
 
 /** The warning for required variables nothing answered. */
