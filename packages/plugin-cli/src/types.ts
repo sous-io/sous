@@ -101,6 +101,8 @@ export interface CliViewContext {
      * name them, such as the "Command Variables" block; `undefined` outside a project.
      */
     readonly project?: ProjectInfo;
+    /** The project's name, as its config's `name` gives it. */
+    readonly projectName?: string;
     /** The directory the command was run from. */
     readonly cwd?: string;
 }

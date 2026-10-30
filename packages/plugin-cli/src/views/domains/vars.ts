@@ -5,6 +5,7 @@
  * `VariableDetail`), declared here structurally so plugin-cli depends on no other plugin.
  */
 
+import { projectVariables } from "../command-variables.js";
 import path from "node:path";
 import type { CliViewContext, CliViewEntity } from "../../types.js";
 import type { Printer, VariableEntry } from "../printer.js";
@@ -415,17 +416,9 @@ export function formatAskReport(out: Printer, report: ViewAskResult): string[] {
  *     Definitions: questions.yaml
  * ```
  */
-export function renderCommandVariables(out: Printer, view: Pick<CliViewContext, "input" | "project">): void {
+export function renderCommandVariables(out: Printer, view: Pick<CliViewContext, "input" | "project" | "projectName">): void {
     const file = view.input.file;
-    const entries: Record<string, unknown> = {};
-
-    if (view.project !== undefined) {
-        entries.Project = path.basename(view.project.root);
-
-        if (view.project.configPath !== undefined) {
-            entries.Config = view.project.configPath;
-        }
-    }
+    const entries: Record<string, unknown> = projectVariables(view);
 
     entries.Definitions = typeof file === "string" ? file : "the project's subscribed recipes";
     out.subheading("Command Variables", "$");

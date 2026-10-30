@@ -21,6 +21,8 @@ export interface ShowOptions {
     readonly globals: Readonly<Record<string, unknown>>;
     /** The project the command ran on, when there is one. */
     readonly project?: ProjectInfo;
+    /** The project's name, as its config's `name` gives it. */
+    readonly projectName?: string;
     /** The directory the command was run from. */
     readonly cwd?: string;
 }
@@ -57,6 +59,7 @@ export function viewContext(intent: string, options: ShowOptions): CliViewContex
         columns,
         isTTY,
         project: options.project,
+        projectName: options.projectName,
         cwd: options.cwd,
         printer: () => new Printer(style, columns, isTTY),
         render: async (other, result, input = {}) => {

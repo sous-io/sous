@@ -10,6 +10,7 @@
  * what preparing did, laid out as today's `src/lib/build-preparation.ts` did.
  */
 
+import { projectVariables } from "../command-variables.js";
 import type { CliViewContext, CliViewEntity, CliViewOutput } from "../../types.js";
 import type { Printer } from "../printer.js";
 import { BULLET } from "../text.js";
@@ -81,8 +82,30 @@ export interface LaunchResultShape {
  * `build` and `compile`: the progress was reported as it happened, so a clean build prints nothing
  * more, and a failed one exits 1 (as `sous build` and `sous compile` did).
  */
-export function buildView(result: BuildResultShape): CliViewOutput {
-    return result.ok ? undefined : { exitCode: 1 };
+export function buildView(result: BuildResultShape, view: CliViewContext): CliViewOutput {
+    const entries: Record<string, unknown> = projectVariables(view);
+
+    for (const [label, flag] of [["Rebuild", "rebuild"], ["Dry Run", "dry-run"], ["No Compile", "no-compile"], ["No Prune", "no-prune"]] as const) {
+        if (view.input[flag] === true || view.input[camel(flag)] === true) {
+            entries[label] = true;
+        }
+    }
+
+    if (Object.keys(entries).length === 0) {
+        return result.ok ? undefined : { exitCode: 1 };
+    }
+
+    const out = view.printer();
+
+    out.subheading("Command Variables", "$");
+    out.variables(entries);
+
+    return result.ok ? out.text() : { stdout: out.text(), exitCode: 1 };
+}
+
+/** `dry-run` as an input key: `dryRun`. */
+function camel(flag: string): string {
+    return flag.replace(/-([a-z])/g, (_match, letter: string) => letter.toUpperCase());
 }
 
 /** Nothing to add: the intent reported everything while it ran (`prune`, `clear`, `build.watch`, `launch`). */

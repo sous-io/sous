@@ -90,6 +90,7 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
                         input: line.input,
                         globals: line.globals,
                         project: options.project?.(),
+                        projectName: projectNameOf(engine),
                         cwd: options.cwd,
                     });
 
@@ -244,4 +245,11 @@ async function watchUntilStopped(
     } finally {
         stop();
     }
+}
+
+/** The config's `name`, when it is a string. */
+function projectNameOf(engine: EngineHandle): string | undefined {
+    const name = engine.config.get("name");
+
+    return typeof name === "string" && name.trim() !== "" ? name : undefined;
 }
