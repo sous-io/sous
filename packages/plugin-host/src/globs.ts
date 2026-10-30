@@ -51,7 +51,26 @@ export function compareBytewise(left: string, right: string): number {
 
 /** A path with `/` separators. */
 export function toPosix(value: string): string {
-    return path.sep === "/" ? value : value.split(path.sep).join("/");
+    return toGlobPattern(value);
+}
+
+/**
+ * A path, or a pattern built from one with `path.join` or `path.resolve`, written with `/`.
+ *
+ * glob and minimatch read `\` as an escape character, never as a separator, so on Windows a
+ * pattern built from a path matched nothing, without an error. Where `/` is already the separator
+ * the pattern is returned as it is, so its own escapes keep working.
+ *
+ * ```ts
+ * toGlobPattern("C:\\recipes\\skills\\**\\*", "\\"); // "C:/recipes/skills/**\/*"
+ * toGlobPattern("/recipes/skills/**\/*");               // unchanged on Linux and macOS
+ * ```
+ *
+ * @param value - A path or a glob pattern.
+ * @param separator - The platform's separator; only tests pass it.
+ */
+export function toGlobPattern(value: string, separator: string = path.sep): string {
+    return separator === "/" ? value : value.split(separator).join("/");
 }
 
 /** Whether `child` is `parent` or inside it, comparing resolved paths as text. */
@@ -85,9 +104,9 @@ function realPathOfMaybeMissing(target: string): string | undefined {
     }
 }
 
-/** Reads the patterns option into the list `glob` wants. */
+/** Reads the patterns option into the list `glob` wants, each written with `/`. */
 function toList(patterns: string | readonly string[]): string[] {
-    return typeof patterns === "string" ? [patterns] : [...patterns];
+    return (typeof patterns === "string" ? [patterns] : [...patterns]).map((pattern) => toGlobPattern(pattern));
 }
 
 /** What `glob` is told, from our options. */
@@ -97,7 +116,7 @@ function globOptions(options: GlobOptions) {
         dot: options.dot ?? false,
         absolute: options.absolute ?? false,
         nodir: options.onlyFiles ?? true,
-        ignore: options.ignore === undefined ? undefined : [...options.ignore],
+        ignore: options.ignore === undefined ? undefined : toList(options.ignore),
         follow: options.followSymlinks ?? true,
     };
 }
@@ -120,7 +139,9 @@ export const hostGlobs: HostGlobs = {
     isMatch(candidate, pattern, options: GlobMatchOptions = {}) {
         const matcher = { dot: options.dot ?? false, nocase: options.nocase ?? false };
 
-        return toList(pattern).some((single) => minimatch(candidate, single, matcher));
+        const posix = toGlobPattern(candidate);
+
+        return toList(pattern).some((single) => minimatch(posix, single, matcher));
     },
 
     hasGlob,

@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { hostGlobs } from "./globs.js";
+import { hostGlobs, toGlobPattern } from "./globs.js";
 
 describe("staticBase()", () => {
     /** The static prefix before the first glob segment is the base (ported from inferGlobBase). */
@@ -62,6 +62,18 @@ describe("isMatch()", () => {
     });
 });
 
+describe("toGlobPattern()", () => {
+    /** A Windows path's backslashes become `/`, which glob reads as a separator instead of an escape. */
+    it("should write a Windows path-built pattern with forward slashes", () => {
+        expect(toGlobPattern(path.win32.join("C:\\recipes", "skills", "**", "*.md"), "\\")).toBe("C:/recipes/skills/**/*.md");
+    });
+
+    /** Where `/` is the separator, a backslash is a pattern's own escape and stays. */
+    it("should leave a pattern alone where the separator is a forward slash", () => {
+        expect(toGlobPattern("/recipes/\\[draft\\]/*.md", "/")).toBe("/recipes/\\[draft\\]/*.md");
+    });
+});
+
 describe("files and containment", () => {
     let root: string;
 
@@ -69,7 +81,9 @@ describe("files and containment", () => {
         root = mkdtempSync(path.join(tmpdir(), "host-globs-"));
         mkdirSync(path.join(root, "docs", "deep"), { recursive: true });
         mkdirSync(path.join(root, "outside"));
-        for (const file of ["docs/b.md", "docs/B.md", "docs/a.md", "docs/deep/c.md", "docs/.dot.md"]) {
+        // Z.md sorts before a.md bytewise. Its name differs from every other by more than case, so the
+        // files stay apart on a case-insensitive filesystem.
+        for (const file of ["docs/b.md", "docs/Z.md", "docs/a.md", "docs/deep/c.md", "docs/.dot.md"]) {
             writeFileSync(path.join(root, file), "x");
         }
     });
@@ -80,13 +94,25 @@ describe("files and containment", () => {
     it("should match files in bytewise order", async () => {
         const matches = await hostGlobs.match("docs/**/*.md", { cwd: root });
 
-        expect(matches).toEqual(["docs/B.md", "docs/a.md", "docs/b.md", "docs/deep/c.md"]);
+        expect(matches).toEqual(["docs/Z.md", "docs/a.md", "docs/b.md", "docs/deep/c.md"]);
         expect(hostGlobs.matchSync("docs/**/*.md", { cwd: root })).toEqual(matches);
+    });
+
+    /**
+     * A pattern built from a path with `path.join` matches on every platform, including Windows,
+     * where it is written with `\\` and glob would read each one as an escape.
+     */
+    it("should match a pattern built from a path, and ignore one built the same way", async () => {
+        const pattern = path.join(root, "docs", "**", "*.md");
+        const ignore = [path.join(root, "docs", "deep", "**")];
+
+        expect(hostGlobs.matchSync(pattern, { absolute: true, ignore })).toEqual([path.join(root, "docs", "Z.md"), path.join(root, "docs", "a.md"), path.join(root, "docs", "b.md")]);
+        expect(hostGlobs.isMatch(path.join("docs", "deep", "c.md"), path.join("docs", "**", "*.md"))).toBe(true);
     });
 
     /** Dot files, absolute paths and ignores follow their options. */
     it("should honour dot, absolute and ignore", async () => {
-        expect(await hostGlobs.match("docs/*.md", { cwd: root, dot: true, ignore: ["docs/b.md"] })).toEqual(["docs/.dot.md", "docs/B.md", "docs/a.md"]);
+        expect(await hostGlobs.match("docs/*.md", { cwd: root, dot: true, ignore: ["docs/b.md"] })).toEqual(["docs/.dot.md", "docs/Z.md", "docs/a.md"]);
         expect(await hostGlobs.match("docs/a.md", { cwd: root, absolute: true })).toEqual([path.join(root, "docs/a.md")]);
         expect(await hostGlobs.match(["docs/a.md", "docs/b.md"], { cwd: root })).toEqual(["docs/a.md", "docs/b.md"]);
     });
@@ -107,8 +133,9 @@ describe("files and containment", () => {
 
     /** A link that leads out of the directory is outside once links are followed. */
     it("should follow links with realPath", () => {
-        symlinkSync(path.join(root, "outside"), path.join(root, "docs", "escape"));
-        symlinkSync(path.join(root, "docs", "deep"), path.join(root, "docs", "within"));
+        // Junctions on Windows, where a directory symlink needs elevated rights; the type is ignored elsewhere.
+        symlinkSync(path.join(root, "outside"), path.join(root, "docs", "escape"), "junction");
+        symlinkSync(path.join(root, "docs", "deep"), path.join(root, "docs", "within"), "junction");
         const escape = path.join(root, "docs", "escape");
         const within = path.join(root, "docs", "within");
         const docs = path.join(root, "docs");

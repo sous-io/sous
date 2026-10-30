@@ -61,7 +61,7 @@ export default hostPlugin;
 
 export { createDirectories, DEFAULT_POINTER_LINE, README_FILENAME, renderReadme } from "./directories.js";
 export { applyManagedBlock, createGitignore, IGNORE_BLOCK_END, IGNORE_BLOCK_START, readManagedBlock } from "./gitignore.js";
-export { compareBytewise, hasGlob, hostGlobs, staticBase, toPosix } from "./globs.js";
+export { compareBytewise, hasGlob, hostGlobs, staticBase, toGlobPattern, toPosix } from "./globs.js";
 export { createHttp, DEFAULT_HTTP_TIMEOUT_MS, HttpError } from "./http.js";
 export { createPackage, SOUS_PACKAGE_NAMES } from "./package-identity.js";
 export { createProcesses, NOT_FOUND_EXIT_CODE, ProcessError } from "./processes.js";
