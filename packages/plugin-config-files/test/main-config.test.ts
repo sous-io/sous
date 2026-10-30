@@ -359,7 +359,7 @@ export function configure(cfg) { cfg._vars.readBack = cfg._vars.seed + "-seen"; 
     });
 });
 
-describe("the user's file lands on top", () => {
+describe("the user's file applies last", () => {
     /**
      * A plugin sets a key; the user's file sets it too; the user's value wins, with no special
      * operation (the worked example).
@@ -452,8 +452,8 @@ describe("patch files beside sous.config.*", () => {
         expect((await build())._vars).toEqual({ machineRole: "laptop", other: "x" });
     });
 
-    /** A patch file keeps landing on top when a plugin changes the key it sets. */
-    it("should keep a patch file's value on top of a plugin's", async () => {
+    /** A patch file keeps applying after a plugin that changes the key it sets, so it wins. */
+    it("should keep a patch file's value winning over a plugin's", async () => {
         project.write("sous.config.patch.json", JSON.stringify({ op: "setKey", path: "", key: "name", value: "patched" }));
 
         const late = definePlugin({

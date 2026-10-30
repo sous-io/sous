@@ -99,7 +99,14 @@ export class BuiltConfigImpl implements BuiltConfig {
         for (const record of this.data.records) {
             walk(record.patchSet, [], (patch, helpers) => {
                 if (pathsOverlap(primitiveTarget(patch), target)) {
-                    layers.push({ contributor: record.entry.id, plugin: record.entry.plugin, patch, helpers });
+                    layers.push({
+                        contributor: record.entry.id,
+                        plugin: record.entry.plugin,
+                        patch,
+                        helpers,
+                        applyOrder: record.entry.applyOrder,
+                        actualApplyOrder: record.actualApplyOrder,
+                    });
                 }
             });
         }
@@ -112,6 +119,8 @@ export class BuiltConfigImpl implements BuiltConfig {
             contributor: record.entry.id,
             plugin: record.entry.plugin,
             stage: record.stage,
+            applyOrder: record.entry.applyOrder,
+            actualApplyOrder: record.actualApplyOrder,
             patches: record.patchSet,
             runs: record.runs,
         }));

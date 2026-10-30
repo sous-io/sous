@@ -24,10 +24,11 @@ export const MAIN_CONTRIBUTOR = "config-files.main";
 export const PATCH_CONTRIBUTOR_PREFIX = "config-files/";
 
 /**
- * `*` in `after`: after every contributor that is not one of the user's files, in its stage. The
- * user's files declare it, then their own chain, so their patches land on top.
+ * The apply order of `sous.config.*` and its patch files. Every plugin's contributor uses a lower
+ * number, so the user's files apply after them and win; `conf.d` files use 90000 plus the number
+ * their names start with, so they apply after these.
  */
-export const EVERY_CONTRIBUTOR = "*";
+export const MAIN_APPLY_ORDER = 90000;
 
 /** The plugin. */
 export const configFilesPlugin: PluginDefinition = definePlugin({
@@ -48,15 +49,11 @@ export const configFilesPlugin: PluginDefinition = definePlugin({
 
         sous.config.contribute(mainContributor(loader));
 
-        // The patch files beside sous.config.*, each after the one before.
+        // The patch files beside sous.config.*, in name order. They share its apply order, and their
+        // ids (`config-files/…`) sort after `config-files.main` and in file-name order.
         if (sous.project !== undefined) {
-            let previous = MAIN_CONTRIBUTOR;
-
             for (const file of loader.findPatches(sous.project.sousDir, MAIN_CONFIG_BASE_NAME)) {
-                const id = `${PATCH_CONTRIBUTOR_PREFIX}${path.basename(file)}`;
-
-                sous.config.contribute(fileContributor(loader, file, id, [EVERY_CONTRIBUTOR, previous]));
-                previous = id;
+                sous.config.contribute(fileContributor(loader, file, `${PATCH_CONTRIBUTOR_PREFIX}${path.basename(file)}`));
             }
         }
 
@@ -144,13 +141,13 @@ function createLoader(sous: Sous): ConfigFilesLoaderImpl {
 
 /**
  * `config-files.main`: `sous.config.*` as one merge at the root, so it monitors the whole config and
- * re-runs whenever anything changes; declared after every other contributor, its patch lands on top
- * whatever a plugin set.
+ * re-runs whenever anything changes; its apply order puts its patch after every plugin's, so it
+ * wins whatever a plugin set.
  */
 function mainContributor(loader: ConfigFilesLoaderImpl): ContributorDefinition {
     return {
         id: MAIN_CONTRIBUTOR,
-        after: [EVERY_CONTRIBUTOR],
+        applyOrder: MAIN_APPLY_ORDER,
         async contribute(config) {
             const project = config.project;
 
@@ -183,14 +180,14 @@ function mainContributor(loader: ConfigFilesLoaderImpl): ContributorDefinition {
 }
 
 /** A contributor that applies one file, read once per build. A file that is gone contributes nothing. */
-export function fileContributor(loader: ConfigFilesLoaderImpl, file: string, id: string, after: readonly string[]): ContributorDefinition {
+export function fileContributor(loader: ConfigFilesLoaderImpl, file: string, id: string): ContributorDefinition {
     const format = loader.formatOf(path.basename(file));
     const isPatch = format === "patch-json" || format === "patch-jsonl";
 
     return {
         id,
-        after,
-        // A patch file reads nothing, so it watches everything to keep landing on top.
+        applyOrder: MAIN_APPLY_ORDER,
+        // A patch file reads nothing, so it watches everything to re-apply after every change.
         ...(isPatch ? { monitors: [""] } : {}),
         async contribute(config) {
             if (config.contributor.run === 1) {

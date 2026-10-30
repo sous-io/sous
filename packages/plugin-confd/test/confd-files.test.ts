@@ -1,6 +1,6 @@
 /**
  * The `conf.d` files in a real engine, with the real plugin-config-files: one contributor per file,
- * each after the one before, the first after `sous.config.*`. Ported from the old config kernel's
+ * applied by the number its name starts with (90000 plus it), after `sous.config.*` (90000). Ported from the old config kernel's
  * integration test and the conf.d parts of config discovery's spec.
  */
 
@@ -36,13 +36,48 @@ describe("conf.d order", () => {
         expect((await build())._aliases.order).toEqual(["primary", "a", "b"]);
     });
 
-    /** Bytewise, not numeric: `10-early` sorts before `2-late`. */
-    it("should sort conf.d bytewise, so 10- loads before 2-", async () => {
+    /**
+     * A file applies at 90000 plus the number its name starts with, so `2-` (90002) applies before
+     * `10-` (90010). Names whose numbers have the same length keep the bytewise order.
+     */
+    it("should apply conf.d files by the number their names start with", async () => {
         project.write("sous.config.json", JSON.stringify({ _aliases: { order: ["primary"] } }));
         project.write("conf.d/2-late.json", JSON.stringify({ _aliases: { order: ["two"] } }));
         project.write("conf.d/10-early.json", JSON.stringify({ _aliases: { order: ["ten"] } }));
 
-        expect((await build())._aliases.order).toEqual(["primary", "ten", "two"]);
+        expect((await build())._aliases.order).toEqual(["primary", "two", "ten"]);
+    });
+
+    /** Today's names keep today's order: numbers of one length, ties by name, and `000-` still after sous.config.*. */
+    it("should keep today's order for files numbered the usual way", async () => {
+        project.write("sous.config.json", JSON.stringify({ _aliases: { order: ["primary"] } }));
+
+        for (const name of ["000-first", "500-repos", "510-subscriptions", "610-a-mac", "610-b-browser", "700-ci"]) {
+            project.write(`conf.d/${name}.json`, JSON.stringify({ _aliases: { order: [name] } }));
+        }
+
+        expect((await build())._aliases.order).toEqual(["primary", "000-first", "500-repos", "510-subscriptions", "610-a-mac", "610-b-browser", "700-ci"]);
+    });
+
+    /** A file whose name starts with no number applies at 90500, between 499 and 501, ties by name. */
+    it("should apply a file with no leading number at 90500", async () => {
+        const { engine } = makeEngine(project.info());
+
+        project.write("sous.config.json", "{}");
+        project.write("conf.d/499-before.json", "{}");
+        project.write("conf.d/500-repos.json", "{}");
+        project.write("conf.d/local.json", "{}");
+        project.write("conf.d/501-after.json", "{}");
+
+        const contributions = (await engine.buildConfig()).contributions().filter((c) => c.contributor.startsWith("confd/") || c.contributor === "config-files.main");
+
+        expect(contributions.map((c) => [c.contributor, c.applyOrder])).toEqual([
+            ["config-files.main", 90000],
+            ["confd/499-before.json", 90499],
+            ["confd/500-repos.json", 90500],
+            ["confd/local.json", 90500],
+            ["confd/501-after.json", 90501],
+        ]);
     });
 
     /** A later file wins for a scalar. */
@@ -234,7 +269,7 @@ describe("conf.d files changing between builds", () => {
     });
 });
 
-describe("the user's files land on top", () => {
+describe("the user's files apply last", () => {
     /** A plugin's value gives way to a conf.d file, even when the plugin sorts after it. */
     it("should let a conf.d file win over a plugin's value", async () => {
         project.write("conf.d/610-mine.json", JSON.stringify({ compilation: { includeSourceComments: false } }));
@@ -247,6 +282,27 @@ describe("the user's files land on top", () => {
         });
 
         expect((await build({ extra: [acme] })).compilation.includeSourceComments).toBe(false);
+    });
+
+    /** A plugin with the highest number below the user's files still applies before them. */
+    it("should apply the user's files after a plugin at apply order 89999", async () => {
+        project.write("sous.config.json", JSON.stringify({ _vars: { a: "main" } }));
+        project.write("conf.d/000-mine.json", JSON.stringify({ _vars: { b: "mine" } }));
+
+        const late = definePlugin({
+            name: "late",
+            register(sous) {
+                sous.config.contribute({
+                    id: "late",
+                    applyOrder: 89999,
+                    contribute: (config) => config.root().merge({ _vars: { a: "plugin", b: "plugin" } }),
+                });
+            },
+        });
+
+        const value = await build({ extra: [late] });
+
+        expect(value._vars).toEqual({ a: "main", b: "mine" });
     });
 
     /**
@@ -274,9 +330,9 @@ describe("the user's files land on top", () => {
 
     /**
      * The config-building spec's example: a variable set in a later file. 610 reads machineRole
-     * as "laptop" in pass 1; 700 then sets "ci"; 610 re-runs and sees "ci". Patches apply in the
-     * sorted order and a re-run never moves one, so sous.config.* stays under 700 and the build
-     * settles.
+     * as "laptop" in pass 1; 700 then sets "ci"; 610 re-runs and sees "ci". Patches apply in
+     * apply order (sous.config.* at 90000, 700 at 90700) and a re-run never moves one, so 700
+     * always applies after sous.config.* and the build settles on "ci".
      */
     it("should re-run a file when a variable it read changes in a later file", async () => {
         project.write("sous.config.json", JSON.stringify({ _vars: { machineRole: "laptop" } }));
@@ -318,8 +374,8 @@ describe("patch files in conf.d", () => {
         expect(value.name).toBe("patched");
     });
 
-    /** A patch file's value stays on top when a plugin changes the key later. */
-    it("should keep a patch file on top of a plugin that sorts after it", async () => {
+    /** A patch file's value wins over a plugin whose name sorts after it. */
+    it("should apply a patch file after a plugin whose name sorts after it", async () => {
         project.write("conf.d/722-one-thing.patch.json", JSON.stringify({ op: "setKey", path: "", key: "name", value: "patched" }));
 
         const late = definePlugin({

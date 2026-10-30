@@ -16,19 +16,20 @@ trailing commas are all allowed in it. A file is read from disk once per build.
 
 ## Load order, and why your files win
 
-The `conf.d/` files are applied in order after the primary config, sorted BYTEWISE by filename:
+The `conf.d/` files are applied after the primary config, in the order of the number each name
+starts with. Files with the same number are applied in filename order (bytewise, the same on every
+machine), and a file whose name starts with no number is applied as if it were numbered 500:
 
 ```text
 plugins and recipes → sous.config.* → conf.d/500-repos → conf.d/510-subscriptions → conf.d/610-mac
 ```
 
-The sort is locale-independent and stable, but it is not numeric: `10-a.json` sorts before
-`2-b.json` because the character `1` precedes `2`. Zero-pad numeric prefixes (`02-`, `10-`) when
-ordering matters.
+Give every file a number of the same length (three digits, as the files sous writes have) so the
+order is obvious from a directory listing.
 
-Your files land last. Whenever a plugin or a recipe's config file changes the config, sous applies
-your `sous.config.*` and `conf.d` files again on top of it. So when a plugin or a recipe sets a key
-that one of your files also sets, your value wins:
+Your files are applied last, after every plugin and recipe. Whenever a plugin or a recipe's config
+file changes the config, sous applies your `sous.config.*` and `conf.d` files again after it. So
+when a plugin or a recipe sets a key that one of your files also sets, your value wins:
 
 ```js
 // .sous/sous.config.js (excerpt)

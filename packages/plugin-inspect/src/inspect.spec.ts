@@ -121,6 +121,22 @@ describe("config.show", () => {
         expect(result.raw.map((f: any) => f.contributor)).toEqual(["config-files.main", "confd/510-a.jsonc", "confd/620-b.jsonc"]);
         expect(result.raw[0].text).not.toContain("hunter2");
     });
+    /** --layers names each contributor's declared apply order and the one it applied at. */
+    it("should give each layer its apply orders", async () => {
+        const fixups = definePlugin({
+            name: "fixups",
+            version: "1.0.0",
+            register(sous) {
+                sous.config.contribute({ id: "a-fixups", after: ["demo/main"], contribute: (config) => config.atPath("demo.count").setValue(3) });
+            },
+        });
+        const result = await run("config.show", { layers: true }, EMPTY_PROJECT, [fixups]);
+        const demo = result.layers.find((l: any) => l.contributor === "demo/main");
+        const moved = result.layers.find((l: any) => l.contributor === "a-fixups");
+
+        expect([demo.applyOrder, demo.actualApplyOrder]).toEqual([0, 0]);
+        expect([moved.applyOrder, moved.actualApplyOrder]).toEqual([0, 1]);
+    });
 });
 
 describe("config.get", () => {

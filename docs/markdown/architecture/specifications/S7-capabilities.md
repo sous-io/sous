@@ -144,8 +144,8 @@ The rules for the list:
 - **C64.** A plugin loaded during a config stage has its declared stages counted from that stage.
 - **C65.** A contributor can declare `before` and `after`, naming plugins, contributor ids or
   wildcards, and a plugin can declare them as the default for all its contributors.
-- **C66.** A contributor can monitor the whole config, so any change re-runs it and its patch lands on
-  top.
+- **C66.** A contributor can monitor the whole config, so any change re-runs it and its patch is
+  applied again, in its place.
 - **C67.** A plugin can report at any of the eight log levels.
 - **C68.** An intent can declare its CLI command path, aliases (across groups too), positional
   arguments, examples and whether it is hidden, and, for agents, its tool name, how to use it, when
@@ -169,7 +169,21 @@ The rules for the list:
   `$patches` key) or a `.patch.jsonl` file (one per line), in `conf.d` or beside `sous.config.*`.
 - **C78.** A user can see each helper operation and the primitive operations it made, per
   contributor (`sous config show --layers`).
+- **C79.** A contributor can declare an apply order, a whole number from 0 to 99999, so its patch
+  applies after every contributor with a lower number and wins over them; a number outside that
+  range is refused when the contributor is registered.
+- **C80.** A contributor's `before` and `after` win over apply orders that disagree with them: sous
+  moves its actual apply order to one past (or one less than) the contributor it must apply after
+  (or before), cascading, and logs each move at the `debug` level, naming both contributors and
+  both numbers.
+- **C81.** A user's `conf.d` files apply in the order of the number their names start with, after
+  `sous.config.*` and every plugin.
+- **C82.** A user can see each contributor's declared and actual apply order
+  (`sous config show --layers`).
 
 ## Changes
 
-None yet.
+### 2026-10-30: Apply orders
+
+C79 to C82 added, from Luke's approval of apply orders (S2, config building, "Changes",
+2026-10-30). C66 reworded to describe the apply order with "applied", not a stack.

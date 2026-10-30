@@ -1438,3 +1438,14 @@ These were deleted with nothing to port, because the code they tested has no cou
 - Parts of ported files that tested oclif plumbing, the config kernel subprocess and tsx (in
   `src/base-command.spec.ts`, `src/test/integration/config-kernel.test.ts`), and the Tab advanced
   view (in `vars-ask` and `self-update`).
+
+## plugin-confd (apply order)
+
+### "should sort conf.d bytewise, so 10- loads before 2-"
+
+Now "should apply conf.d files by the number their names start with", in
+`packages/plugin-confd/test/confd-files.test.ts`. It expected `10-early.json` to apply before
+`2-late.json` (bytewise); it now expects `2-late.json` (apply order 90002) before `10-early.json`
+(90010). Luke ruled on 2026-10-30 that each `conf.d` file applies at 90000 plus the number its name
+starts with, and that the numbers in conf.d names do not differ in length, so real projects keep
+their order.

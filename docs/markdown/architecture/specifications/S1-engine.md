@@ -731,7 +731,10 @@ plugin:
 1. `dependsOn` names the plugins a plugin needs, with version ranges. Sous stops before any intent
    runs when a needed plugin is missing, or loaded at a version outside the range, and names it.
 2. `before` and `after` sit on contributors (see S2, config building). A plugin may declare them
-   too, as the default for every contributor it adds. They only affect speed.
+   too, as the default for every contributor it adds. With each contributor's `applyOrder` (a
+   number from 0 to 99999, default 0), they decide the order contributors run and their patches
+   apply in: lower numbers apply first, and when a number and a `before` or `after` disagree,
+   `before` and `after` win. When two contributors set one key, the one applied last wins.
 3. A plugin may bring in other plugins as its own dependencies. Users can set their options or
    disable them by name, like any other plugin.
 
@@ -812,6 +815,12 @@ Warning: building the config took 840ms (budget 200ms).
 None. (The name `plugin-recipes` is an agent decision the user may overrule.)
 
 ## Changes
+
+### 2026-10-30: Contributors declare an apply order
+
+"Dependencies and order", rule 2: `before` and `after` no longer "only affect speed"; with the new
+`applyOrder` they decide which contributor's patch applies last and wins. Approved by Luke ("yes,
+do it", 2026-10-30); the details are in S2 (config building), "Order and stages" and its "Changes".
 
 ### 2026-10-29: Engine fixes found while the plugins were built
 

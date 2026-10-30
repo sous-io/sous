@@ -45,6 +45,23 @@ export default definePlugin({
 
 A contributor re-runs when something it read changes, so it must give the same result for the same input.
 
+### Which contributor wins
+
+When two contributors set the same key, the one whose patch applies last wins. Patches apply by `applyOrder`, a whole number from 0 to 99999 (default 0): lower numbers apply first, and equal numbers apply in id order. The user's config files use 90000 and up, so they apply after every plugin and win.
+
+`before` and `after` name contributors, plugins or wildcards (`"*"` means every other contributor). They win over the number: a contributor declared `after` another is moved to one past it, and the move is logged at the `debug` level. `sous config show --layers` shows each contributor's number, and the one it moved to.
+
+```ts
+sous.config.contribute({
+    id: "diagrams/fixups",
+    applyOrder: 500,                    // after plugins left at 0
+    after: ["@sous-io/plugin-skills"],  // and after every contributor of plugin-skills, whatever its number
+    contribute(config) {
+        config.atPath("diagrams.enabled").setValue(true);
+    },
+});
+```
+
 ## Typed access to another plugin
 
 Add your plugin's names to the interfaces in this package (declaration merging), and another plugin gets them typed. To use a plugin's names, import its types file with no runtime cost and list it in `dependsOn`:

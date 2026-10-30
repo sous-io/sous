@@ -233,17 +233,17 @@ describe("the config loop", () => {
 
     /**
      * A contributor that applies data with one merge at the root reads the whole tree, so any change by
-     * anyone re-runs it; declared `after: ["*"]`, as the user's files are, its patch lands on top
-     *.
+     * anyone re-runs it; with a higher apply order, as the user's files have, its patch applies
+     * after the plugin's, so it wins.
      */
-    it("should re-run a root merge after any change and land it on top", async () => {
+    it("should re-run a root merge after any change and apply it last", async () => {
         let runs = 0;
         const { engine } = makeEngine([
             keysPlugin("a", "b"),
             contributorsPlugin("p", [
                 {
                     id: "1-file",
-                    after: ["*"],
+                    applyOrder: 90000,
                     contribute(config) {
                         runs += 1;
                         config.root().merge({ a: "user", b: "file" });

@@ -85,8 +85,8 @@ has the namespace rules.
 ## Composition
 
 The primary config is optionally extended by drop-in files: every `*.js|mjs|ts|json|jsonc|yaml`
-file directly inside `.sous/conf.d/` is applied after the primary config, in filename order, and
-merged over it. Recipes and plugins can change the config too, and your own files are always
+file directly inside `.sous/conf.d/` is applied after the primary config, in the order of the
+number its name starts with (`500-repos.jsonc` before `610-mac.jsonc`), and merged into it. Recipes and plugins can change the config too, and your own files are always
 applied again after them, so a value you set wins. A
 `.js`, `.mjs` or `.ts` file can also change the config through a `configure()` function, and a
 `.patch.json` or `.patch.jsonl` file holds raw edits. [Layers and merging](config-layers.md) covers

@@ -86,7 +86,7 @@ export function builtConfig(
             const key = Array.isArray(path) ? path.join(".") : String(path);
 
             return (options.layers?.[key] ?? []).map(
-                (contributor): ConfigLayer => ({ contributor, plugin: "test", patch: { op: "setKey", path: "", key: "x", value: null } as never, helpers: [] }),
+                (contributor): ConfigLayer => ({ contributor, plugin: "test", patch: { op: "setKey", path: "", key: "x", value: null } as never, helpers: [], applyOrder: 0, actualApplyOrder: 0 }),
             );
         },
         contributions: () => [],

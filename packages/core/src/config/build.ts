@@ -36,6 +36,8 @@ export interface ContributorRecord {
     readonly entities: readonly StoredEntity[];
     readonly reads: readonly Read[];
     readonly runs: number;
+    /** Its apply order once `before` and `after` are met, as its stage was last sorted. */
+    actualApplyOrder: number;
     /** The build version at which its reads were last known to be current. */
     verifiedAt: number;
 }
@@ -99,8 +101,8 @@ interface Trigger {
  *
  * Within a pass, contributors run in sorted order; each one runs when it is new or when something it
  * read would now read differently, and sees every other contributor's latest patches, applied from
- * an empty config in the sorted order: earlier stages first, and within a stage the order of name,
- * `before` and `after`. A contributor that re-runs keeps its place, so the order is stable and the
+ * an empty config in the sorted order: earlier stages first, and within a stage by actual apply
+ * order (the declared `applyOrder`, moved where `before` and `after` require), then by id. A contributor that re-runs keeps its place, so the order is stable and the
  * build settles.
  */
 export class ConfigBuild {
@@ -116,6 +118,8 @@ export class ConfigBuild {
     private currentStage = 0;
     private registeredCache: { version: number; entities: StoredEntity[] } | undefined;
     private cycleWarned = new Set<string>();
+    private readonly adjustmentsLogged = new Set<string>();
+    private readonly actualApplyOrders = new Map<string, number>();
 
     constructor(
         private readonly host: BuildHost,
@@ -156,7 +160,7 @@ export class ConfigBuild {
         return {
             config: (view.config ?? {}) as JsonObject,
             entities: view.entities,
-            records: this.applyOrder().map((id) => this.records.get(id)!),
+            records: this.patchOrder().map((id) => this.records.get(id)!),
             active: this.active,
             passes: this.passes,
             problems,
@@ -173,7 +177,7 @@ export class ConfigBuild {
         return {
             config: (view.config ?? {}) as JsonObject,
             entities: view.entities,
-            records: this.applyOrder().map((id) => this.records.get(id)!),
+            records: this.patchOrder().map((id) => this.records.get(id)!),
             active: this.active,
             passes: this.passes,
         };
@@ -254,6 +258,23 @@ export class ConfigBuild {
             }
         }
 
+        for (const message of result.adjustments) {
+            if (!this.adjustmentsLogged.has(message)) {
+                this.adjustmentsLogged.add(message);
+                this.host.log("debug", message);
+            }
+        }
+
+        for (const [id, actual] of result.actualApplyOrder) {
+            this.actualApplyOrders.set(id, actual);
+
+            const record = this.records.get(id);
+
+            if (record) {
+                record.actualApplyOrder = actual;
+            }
+        }
+
         return result;
     }
 
@@ -328,6 +349,7 @@ export class ConfigBuild {
             entities: builder.addedEntities,
             reads: builder.reads,
             runs,
+            actualApplyOrder: this.actualApplyOrders.get(entry.id) ?? entry.applyOrder,
             verifiedAt: -1,
         });
         this.version += 1;
@@ -338,7 +360,7 @@ export class ConfigBuild {
      * The ids of every contributor that has run, in the order their patches apply: by stage, then
      * by each stage's sorted order. Re-running never moves a contributor.
      */
-    private applyOrder(): string[] {
+    private patchOrder(): string[] {
         const contributors = this.contributors();
 
         if (this.orderCache?.version === this.version && this.orderCache.contributors === contributors.length) {
@@ -370,13 +392,13 @@ export class ConfigBuild {
 
     /**
      * The config and entities made from every contributor's latest patch except `exclude`'s,
-     * applied to an empty config in the sorted order (see {@link applyOrder}).
+     * applied to an empty config in the sorted order (see {@link patchOrder}).
      */
     computeView(exclude: string | undefined, onProblem?: (problem: PatchProblem, contributor: string) => void): View {
         let config: JsonValue | undefined = {};
         const entities: StoredEntity[] = [...this.registeredEntities()];
 
-        for (const id of this.applyOrder()) {
+        for (const id of this.patchOrder()) {
             if (id === exclude) {
                 continue;
             }
@@ -544,7 +566,7 @@ export class ConfigBuild {
 
     /** The contributor that last wrote a path, optionally only among those in one stage. */
     private writerOf(path: readonly PathSegment[], stage?: number): ContributorRecord | undefined {
-        const order = this.applyOrder();
+        const order = this.patchOrder();
 
         for (let index = order.length - 1; index >= 0; index--) {
             const record = this.records.get(order[index]!)!;

@@ -306,13 +306,16 @@ function rawFiles(out: Printer, files: readonly RawConfigFile[]): void {
 }
 
 /**
- * `config show --layers`: each contributor, then the helpers around each change and the change
- * itself, indented under them.
+ * `config show --layers`: each contributor with its apply order, then the helpers around each
+ * change and the change itself, indented under them. When `before` or `after` moved the
+ * contributor, both numbers show.
  *
  * ```text
- * confd/620-no-diagrams.js
- *   removeWhere compilation.targets
+ * conf.d/620-no-diagrams.js (confd/620-no-diagrams.js, @sous-io/plugin-confd, apply order 90620)
+ *   removeWhere
  *     removeIndex compilation.targets[7]
+ * claude-code/late-fixups (plugin-claude-code, apply order 0, moved to 90621)
+ *   setKey compilation.overwriteUntracked = false
  * ```
  */
 function layerTree(out: Printer, layers: readonly LayerView[]): void {
@@ -324,7 +327,9 @@ function layerTree(out: Printer, layers: readonly LayerView[]): void {
         if (layer.contributor !== contributor) {
             contributor = layer.contributor;
             open = [];
-            out.log(`${style.value(layer.source ?? layer.contributor)} ${style.muted(`(${layer.source ? `${layer.contributor}, ` : ""}${layer.plugin})`)}`);
+            const details = [...(layer.source ? [layer.contributor] : []), layer.plugin, ...applyOrderText(layer)];
+
+            out.log(`${style.value(layer.source ?? layer.contributor)} ${style.muted(`(${details.join(", ")})`)}`);
         }
 
         let depth = 0;
@@ -343,6 +348,13 @@ function layerTree(out: Printer, layers: readonly LayerView[]): void {
         out.log(`${"  ".repeat(layer.helpers.length + 1)}${describePatch(layer.patch, style.muted)}`);
         annotationLines(out, layer, "  ".repeat(layer.helpers.length + 2));
     }
+}
+
+/** `apply order 50`, or `apply order 10, moved to 51` when `before` or `after` moved it. */
+function applyOrderText(layer: LayerView): string[] {
+    return layer.actualApplyOrder === layer.applyOrder
+        ? [`apply order ${layer.applyOrder}`]
+        : [`apply order ${layer.applyOrder}, moved to ${layer.actualApplyOrder}`];
 }
 
 /**

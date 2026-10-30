@@ -1,9 +1,9 @@
 /**
  * The `recipes.core` contributor: the repository and subscription every project gets without
- * asking, added underneath what the project's files say, and the store seeded with the core recipe
+ * asking, applied before what the project's files say, and the store seeded with the core recipe
  * the package ships.
  *
- * It runs before the user's files, and they merge on top field by field, so the shortest opt-out
+ * It applies before the user's files, and they merge after it field by field, so the shortest opt-out
  * is a complete entry:
  *
  * ```jsonc

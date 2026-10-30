@@ -17,14 +17,20 @@ import "./types.js";
 /** The plugin's name. */
 export const PLUGIN_NAME = "@sous-io/plugin-confd";
 
-/** The contributor of `sous.config.*`, which the first `conf.d` file runs after. */
+/** The contributor of `sous.config.*`, which every `conf.d` file applies after. */
 const MAIN_CONTRIBUTOR = "config-files.main";
 
-/** The patch files beside `sous.config.*`, which also run before `conf.d`. */
+/** The patch files beside `sous.config.*`, which also apply before `conf.d`. */
 const MAIN_PATCH_CONTRIBUTORS = "config-files/*";
 
-/** `*` in `after`: after every contributor that is not one of the user's files, so the files' patches land on top. */
-const EVERY_CONTRIBUTOR = "*";
+/** The apply order of `sous.config.*`; a `conf.d` file adds the number its name starts with. */
+const USER_FILES_APPLY_ORDER = 90000;
+
+/** The apply order of a `conf.d` file whose name does not start with a number. */
+const UNNUMBERED_APPLY_ORDER = 90500;
+
+/** The highest apply order a contributor may declare. */
+const MAX_APPLY_ORDER = 99999;
 
 /** The id of the contributor that looks for `conf.d` files added since the plugin loaded. */
 export const SCAN_CONTRIBUTOR = "confd.files";
@@ -48,27 +54,24 @@ export const confdPlugin: PluginDefinition = definePlugin({
         const loader = () => sous.services.get("config-files.loader");
         const added = new Set<string>();
 
-        /** Adds a contributor for each file not added yet, each after the file before it. */
+        /** Adds a contributor for each file not added yet. */
         const addContributors = (files: readonly ConfdFile[]): void => {
-            let previous: readonly string[] = [MAIN_CONTRIBUTOR, MAIN_PATCH_CONTRIBUTORS];
-
             for (const file of files) {
                 if (!added.has(file.contributor)) {
                     added.add(file.contributor);
-                    sous.config.contribute(fileContributor(sous, file, [EVERY_CONTRIBUTOR, ...previous]));
+                    sous.config.contribute(fileContributor(sous, file));
                 }
-
-                previous = [file.contributor];
             }
         };
 
         addContributors(listConfdFiles(confDir(), loader(), compare));
 
         // Files added later (watch mode, an intent that creates one) join the next pass; a file that
-        // is gone contributes nothing. Reads nothing, so it runs once per build.
+        // is gone contributes nothing. Reads nothing, so it runs once per build; it applies nothing,
+        // and runs with the user's files.
         sous.config.contribute({
             id: SCAN_CONTRIBUTOR,
-            after: [EVERY_CONTRIBUTOR, MAIN_CONTRIBUTOR],
+            applyOrder: USER_FILES_APPLY_ORDER,
             contribute(config) {
                 const files = listConfdFiles(confDir(), loader(), compare);
 
@@ -103,16 +106,36 @@ export const confdPlugin: PluginDefinition = definePlugin({
 });
 
 /**
- * One `conf.d` file as a contributor: its data as one merge at the root, so it monitors the whole
- * config and lands on top, or its patches. The file is read once per build.
+ * The apply order of a `conf.d` file: 90000 plus the number its name starts with
+ * (`610-browser.jsonc` applies at 90610), or 90500 when it starts with none, and never more than
+ * 99999. Every plugin's contributor uses a lower number, so the user's files apply after them and
+ * win; files with the same number apply in name order.
+ *
+ * ```ts
+ * confdApplyOrder("500-repos.jsonc");   // 90500
+ * confdApplyOrder("local.jsonc");       // 90500
+ * ```
  */
-function fileContributor(sous: Sous, file: ConfdFile, after: readonly string[]): ContributorDefinition {
+export function confdApplyOrder(name: string): number {
+    const leading = /^\d+/.exec(name)?.[0];
+
+    return leading === undefined ? UNNUMBERED_APPLY_ORDER : Math.min(MAX_APPLY_ORDER, USER_FILES_APPLY_ORDER + Number(leading));
+}
+
+/**
+ * One `conf.d` file as a contributor: its data as one merge at the root, so it monitors the whole
+ * config, or its patches. Its apply order puts it after every plugin's contributor, and its `after`
+ * after `sous.config.*` and its patch files even when its name starts with `000`. The file is read
+ * once per build.
+ */
+function fileContributor(sous: Sous, file: ConfdFile): ContributorDefinition {
     const isPatch = file.format === "patch-json" || file.format === "patch-jsonl";
 
     return {
         id: contributorId(file.name),
-        after,
-        // A patch file reads nothing, so it watches everything to keep landing on top.
+        applyOrder: confdApplyOrder(file.name),
+        after: [MAIN_CONTRIBUTOR, MAIN_PATCH_CONTRIBUTORS],
+        // A patch file reads nothing, so it watches everything to re-apply after every change.
         ...(isPatch ? { monitors: [""] } : {}),
         async contribute(config) {
             const loader = sous.services.get("config-files.loader");

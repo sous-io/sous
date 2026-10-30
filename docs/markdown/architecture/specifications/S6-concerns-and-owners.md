@@ -409,8 +409,9 @@ expressions), "Expression Languages", says how a filter that is not loaded yet i
 | Surgical edits to the managed `conf.d/5xx` files (S2, config building) | `confd.managed` | `plugin-confd` | service, config |
 
 The `sous.config.*` contributor and each `conf.d` contributor apply their file as one merge at the
-root, so each monitors the whole config automatically; any change in a pass re-runs them and their
-patches land on top. Each `conf.d` contributor runs `after` the file before it, the first one after
+root, so each monitors the whole config automatically; any change in a pass re-runs them. Their
+apply orders put their patches after every plugin's: `sous.config.*` at 90000, each `conf.d` file at
+90000 plus the number its name starts with (90500 without one), each also `after`
 `config-files.main`, so the files keep today's order (see "Order and stages" in S2, config building). `plugin-confd` uses `plugin-config-files`' loader to read each
 file.
 

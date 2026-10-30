@@ -74,12 +74,14 @@ describe("the config views", () => {
             value: "demo-mac",
             passes: 2,
             layers: [
-                { contributor: "config-files/sous.config.jsonc", plugin: "p", patch: { op: "setKey", path: "", key: "name", value: "demo" }, helpers: [] },
+                { contributor: "config-files/sous.config.jsonc", plugin: "p", patch: { op: "setKey", path: "", key: "name", value: "demo" }, helpers: [], applyOrder: 0, actualApplyOrder: 0 },
                 {
                     contributor: "confd/610-mac.jsonc",
                     plugin: "p",
                     patch: { op: "setKey", path: "", key: "name", value: "demo-mac" },
                     helpers: [],
+                    applyOrder: 0,
+                    actualApplyOrder: 0,
                     annotations: { expression: "host.platform == 'darwin'" },
                 },
             ],
@@ -119,6 +121,8 @@ describe("the config views", () => {
                     source: "sous.config.json",
                     patch: { op: "setKey", path: "", key: "name", value: "primary-name" },
                     helpers: [],
+                    applyOrder: 0,
+                    actualApplyOrder: 0,
                     change: { to: "primary-name" },
                 },
                 {
@@ -127,6 +131,8 @@ describe("the config views", () => {
                     source: "conf.d/10-override.json",
                     patch: { op: "setKey", path: "", key: "name", value: "overridden-name" },
                     helpers: [],
+                    applyOrder: 0,
+                    actualApplyOrder: 0,
                     change: { from: "primary-name", to: "overridden-name" },
                 },
             ],
@@ -142,7 +148,10 @@ describe("the config views", () => {
         );
     });
 
-    /** `config show --layers` nests each change under the helpers that made it. */
+    /**
+     * `config show --layers` nests each change under the helpers that made it, and names each
+     * contributor's apply order, with the number it moved to when `before` or `after` moved it.
+     */
     it("should show the whole config's layers as a tree", async () => {
         const result = {
             config: {},
@@ -153,15 +162,27 @@ describe("the config views", () => {
                     plugin: "@sous-io/plugin-confd",
                     patch: { op: "removeIndex", path: "compilation.targets", index: 7 },
                     helpers: ["removeWhere"],
+                    applyOrder: 90620,
+                    actualApplyOrder: 90620,
+                },
+                {
+                    contributor: "late-fixups",
+                    plugin: "plugin-x",
+                    patch: { op: "setKey", path: "compilation", key: "overwriteUntracked", value: false },
+                    helpers: [],
+                    applyOrder: 0,
+                    actualApplyOrder: 90621,
                 },
             ],
         };
 
         expect(await show("config.show", result)).toBe(
             [
-                "confd/620-no-diagrams.js (@sous-io/plugin-confd)",
+                "confd/620-no-diagrams.js (@sous-io/plugin-confd, apply order 90620)",
                 "  removeWhere",
                 "    removeIndex compilation.targets[7]",
+                "late-fixups (plugin-x, apply order 0, moved to 90621)",
+                "  setKey compilation.overwriteUntracked = false",
                 "result  settled after 1 pass",
                 "",
             ].join("\n"),

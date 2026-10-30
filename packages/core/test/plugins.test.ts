@@ -404,7 +404,7 @@ describe("plugin lifecycle", () => {
     /**
      * A plugin loaded partway through takes its sorted place among the contributors, not the end of
      * the list, and its patch applies in that place, so b-z-writer, declared after it,
-     * stays on top without re-running.
+     * still applies after it, and wins, without re-running.
      */
     it("should sort a newly loaded plugin's contributors into place", async () => {
         const order: string[] = [];

@@ -1,6 +1,6 @@
 /**
  * The `recipes.config-layers` contributor: `config` content of the active recipes the project
- * subscribes to, merged into the config as defaults the project's own files land on top of.
+ * subscribes to, merged into the config as defaults; the project's own files apply after them and win.
  *
  * A recipe layer is JSON, JSONC or YAML only: sous must read what a repository publishes without
  * running any of it, so a `.js` or `.ts` layer from a recipe is refused. Only the keys on the

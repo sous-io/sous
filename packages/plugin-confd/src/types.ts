@@ -1,7 +1,7 @@
 /**
  * The contract of plugin-confd: the `conf.d` files,
- * one contributor per file (`confd/<file name>`, each `after` the one before, the first after
- * `config-files.main`), patch files in `conf.d`, and surgical edits to the managed `conf.d/5xx`
+ * one contributor per file (`confd/<file name>`, applied at 90000 plus the number its name starts
+ * with, or 90500 for a name with none, and after `config-files.main`), patch files in `conf.d`, and surgical edits to the managed `conf.d/5xx`
  * files. Managed files are edited key by key, by intents, never by contributors.
  *
  * Other plugins import this file type-only.

@@ -1,7 +1,7 @@
 /**
  * Finding the `conf.d` files: every file sous reads directly inside `conf.d`
- * (not in folders below it), in bytewise order of their names, so `10-` sorts before `2-` on every
- * machine, as `conf.d` sorts today.
+ * (not in folders inside it), listed in bytewise order of their names on every machine. They
+ * apply by the number their names start with (see `confdApplyOrder` in `index.ts`).
  */
 
 import fs from "node:fs";

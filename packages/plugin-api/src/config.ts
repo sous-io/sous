@@ -26,6 +26,10 @@ export interface ConfigLayer {
     readonly patch: Patch;
     /** The patch sets around it, outermost first, after the contributor's own: `["removeWhere"]`. */
     readonly helpers: readonly string[];
+    /** The contributor's declared apply order. */
+    readonly applyOrder: number;
+    /** Its apply order once `before` and `after` are met; it may pass 99999. */
+    readonly actualApplyOrder: number;
 }
 
 /** One contributor's part in a build. */
@@ -33,6 +37,13 @@ export interface Contribution {
     readonly contributor: string;
     readonly plugin: string;
     readonly stage: number;
+    /** Its declared apply order, 0 to 99999 (default 0). */
+    readonly applyOrder: number;
+    /**
+     * Its apply order once `before` and `after` are met: the declared one, or moved to one past
+     * (or one less than) a contributor it must apply after (or before). It may pass 99999.
+     */
+    readonly actualApplyOrder: number;
     /** Its latest patch set. */
     readonly patches: PatchSet;
     /** How many times it ran in this build. */
@@ -55,7 +66,7 @@ export interface BuiltConfig extends ConfigReader {
     readonly services: ServiceReader;
     /** Every change to a path, or anything inside it or around it, in the order it was applied. */
     layers(path: PathInput): ConfigLayer[];
-    /** Every contributor's part, in the order their patches apply: the sorted order, earlier stages first. */
+    /** Every contributor's part, in the order their patches apply: earlier stages first, then by actual apply order and id. */
     contributions(): Contribution[];
 }
 
@@ -128,9 +139,24 @@ export interface ContributorDefinition {
     id: string;
     /** Its config stage; stages run lowest first. Default `0`, shifted for plugins loaded during a stage. */
     stage?: number;
-    /** Plugins, contributor ids or wildcards this one runs before. Default: its plugin's `before`. */
+    /**
+     * Where its patch applies within its stage: a whole number from 0 to 99999, default `0`. Higher
+     * numbers apply later, so when two contributors set one key, the one with the higher number
+     * applies after the other and wins; equal numbers apply in id order. The user's files use
+     * 90000 and up, so they apply after every plugin's contributor. `before` and `after` win over
+     * the number: a contributor that must apply after another is moved to one past it (see
+     * `Contribution.actualApplyOrder`). Any other number is refused when the contributor is added.
+     */
+    applyOrder?: number;
+    /**
+     * Plugins, contributor ids or wildcards this one runs and applies before. `"*"` means every
+     * contributor that does not itself declare `before: ["*"]`. Default: its plugin's `before`.
+     */
     before?: readonly string[];
-    /** Plugins, contributor ids or wildcards this one runs after. Default: its plugin's `after`. */
+    /**
+     * Plugins, contributor ids or wildcards this one runs and applies after. `"*"` means every
+     * contributor that does not itself declare `after: ["*"]`. Default: its plugin's `after`.
+     */
     after?: readonly string[];
     /** More to watch than it reads; a change to any re-runs it. */
     monitors?: readonly Monitor[];

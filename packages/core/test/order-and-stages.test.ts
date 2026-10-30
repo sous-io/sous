@@ -4,9 +4,10 @@ import { contributorsPlugin, keysPlugin, makeEngine, plugin, userKeys } from "./
 
 describe("order and stages", () => {
     /**
-     * Contributors run in name order, adjusted by before and after, which may name a plugin, a
-     * contributor id or a wildcard; a plugin's declarations are the default for its contributors, and a
-     * contributor's own replace them.
+     * Contributors run by apply order and then name, adjusted by before and after, which may name a
+     * plugin, a contributor id or a wildcard; a plugin's declarations are the default for its
+     * contributors, and a contributor's own replace them. Each `after` moves its contributor to one
+     * past the one it follows, so claude-code/defaults (moved to 1) runs after zz-early (still 0).
      */
     it("should order contributors by name, before and after", async () => {
         const order: string[] = [];
@@ -30,7 +31,7 @@ describe("order and stages", () => {
 
         await engine.buildConfig();
 
-        expect(order).toEqual(["z-skills", "claude-code/defaults", "zz-early", "confd/500", "confd/610", "claude-code/late-fixups"]);
+        expect(order).toEqual(["z-skills", "zz-early", "claude-code/defaults", "confd/500", "confd/610", "claude-code/late-fixups"]);
     });
 
     /**
@@ -79,26 +80,27 @@ describe("order and stages", () => {
     });
 
     /**
-     * The config-building spec's machineRole example, with stand-ins for the user's files (root merges declared after *,
-     * chained in file order): 610 reads machineRole, which 700 sets. Patches apply in the sorted
-     * order and a re-run does not move a patch, so sous.config.* and 700 never trade places and the
-     * build settles with 700's value.
+     * The config-building spec's machineRole example, with stand-ins for the user's files (root
+     * merges with the apply orders the file plugins give them: 90000 for sous.config.*, 90000 plus
+     * the leading number for a conf.d file): 610 reads machineRole, which 700 sets. Patches apply
+     * in that order and a re-run does not move a patch, so sous.config.* and 700 never trade
+     * places and the build settles with 700's value.
      */
     it("should settle when a file reads a variable a later file sets (the machineRole example)", async () => {
         const { engine } = makeEngine([
             keysPlugin("_vars", "browser"),
             contributorsPlugin("files", [
-                { id: "config-files.main", after: ["*"], contribute: (config) => config.root().merge({ _vars: { machineRole: "laptop" } }) },
+                { id: "config-files.main", applyOrder: 90000, contribute: (config) => config.root().merge({ _vars: { machineRole: "laptop" } }) },
                 {
                     id: "confd/610-browser",
-                    after: ["*", "config-files.main"],
+                    applyOrder: 90610,
                     contribute(config) {
                         const role: unknown = config.atPath("_vars.machineRole").get();
 
                         config.root().merge({ browser: role === "laptop" ? "on" : "off" });
                     },
                 },
-                { id: "confd/700-ci", after: ["*", "confd/610-browser"], contribute: (config) => config.root().merge({ _vars: { machineRole: "ci" } }) },
+                { id: "confd/700-ci", applyOrder: 90700, contribute: (config) => config.root().merge({ _vars: { machineRole: "ci" } }) },
             ]),
             contributorsPlugin("plugin-y", [{ id: "zzz-plugin", contribute: (config) => config.atPath("_vars.fromPlugin").setValue(true) }]),
         ]);
@@ -130,9 +132,9 @@ describe("order and stages", () => {
 
     /**
      * When two contributors set one key, the one declared after wins, even when the earlier one re-runs
-     * later in the build and would otherwise land on top.
+     * later in the build.
      */
-    it("should keep a contributor declared after on top when the earlier one re-runs", async () => {
+    it("should keep a contributor declared after winning when the earlier one re-runs", async () => {
         const { engine } = makeEngine([
             keysPlugin("value", "trigger"),
             contributorsPlugin("p", [
