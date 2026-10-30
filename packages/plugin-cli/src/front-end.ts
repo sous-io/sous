@@ -40,7 +40,10 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
         const specs = globalSpecs(engine.config.entities.list("cli-global-argument"));
         const line = parseLine(versionArgv(argv, tree), tree, specs, engine.app.name);
         const level = thresholdOf(line.globals);
-        const json = line.globals.json === true;
+        // A background intent (`sous mcp`) owns standard output while it runs, so every message goes
+        // to standard error, as under --json.
+        const ownsStdout = line.kind === "run" && engine.intents.get(line.command.intent)?.definition.background === true;
+        const json = line.globals.json === true || ownsStdout;
 
         debug = debug || line.globals.debug === true;
         reporter = new TerminalReporter({ stdout: io.stdout, stderr: io.stderr, threshold: level, env, json });
@@ -144,9 +147,15 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
 
 /** Reports an error as a problem (`Error: ` and what is under it) and sets the exit code. */
 function reportError(reporter: Reporter, error: unknown, options: { debug?: boolean; command?: Command }, io: CliIo): void {
-    const parts = describeError(error, options);
+    const parts = describeError(error, { ...options, debug: false });
 
     reporter.problem(parts.summary, parts.details.length === 0 ? {} : { cause: parts.details.join("\n") }, LogLevel.Error);
+
+    // Stack frames are shown exactly as given: wrapping would split a frame from its location.
+    if (options.debug && error instanceof Error && error.stack) {
+        reporter.text(error.stack.split("\n").slice(1).join("\n"), LogLevel.Error);
+    }
+
     io.setExitCode(parts.exitCode);
 }
 

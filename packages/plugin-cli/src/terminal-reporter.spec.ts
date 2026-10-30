@@ -166,8 +166,42 @@ describe("TerminalReporter", () => {
         reporter.table([{ key: "name", header: "Name" }], [{ name: "a" }, { name: "b" }], { title: "Repos", rowNotes: [undefined, "careful"] });
         reporter.table([{ key: "name", header: "Name" }], [], { empty: "No repositories are added." });
 
-        expect(stdout.text).toContain("➔ Repos:\n  Name\n  ----\n  a\n  b\n  careful\n");
+        expect(stdout.text).toContain("➔ Repos:\n  Name\n  ----\n  a\n  b\n    careful\n");
         expect(stdout.text).toContain("No repositories are added.");
+    });
+
+    /** A styled entry at warning level or above opens with the level's literal prefix, so it reads as a warning. */
+    it("should mark a styled entry at warning level or above with its level", () => {
+        const { stderr, stdout, reporter } = make();
+
+        reporter.list(["a", "b"], { title: "Unanswered variables" }, "warning");
+        reporter.list(["c"], { title: "Fine" }, "info");
+        reporter.table([{ key: "name", header: "Name" }], [{ name: "x" }], undefined, "error");
+
+        expect(stderr.text).toContain("Warning: Unanswered variables\n");
+        expect(stderr.text).toContain("Error: ");
+        expect(stdout.text).not.toContain("Warning:");
+    });
+
+    /** A table is indented two spaces under its heading, titled or not. */
+    it("should indent a table without a title", () => {
+        const { stdout, reporter } = make();
+
+        reporter.table([{ key: "name", header: "Name" }], [{ name: "a" }]);
+
+        expect(stdout.text).toContain("  Name\n  ----\n  a\n");
+    });
+
+    /** Two terminal streams are one screen: a warning on one and a block on the other are separated by a blank line. */
+    it("should share spacing between two terminal streams", () => {
+        const out = stream(true, 100);
+        const err = stream(true, 100);
+        const reporter = new TerminalReporter({ stdout: out, stderr: err, color: false, columns: 100 });
+
+        reporter.warn("careful");
+        reporter.commandVariables([{ label: "Dry Run", value: "false" }]);
+
+        expect(out.text.split("\n")[0]!.trim()).toBe("");
     });
 
     /** A tree nests two spaces per level, with the detail after the label. */

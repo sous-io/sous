@@ -169,11 +169,9 @@ describe("the config views", () => {
 
         const shown = (await show("config.show", result)).stdout;
 
-        expect(shown).toContain("confd/620-no-diagrams.js (@sous-io/plugin-confd, apply order 90620)");
-        expect(shown).toContain("removeWhere > removeIndex compilation.targets[7]");
-        expect(shown).toContain("late-fixups (plugin-x, apply order 0, moved to 90621)");
-        expect(shown).toContain("setKey compilation.overwriteUntracked = false");
-        expect(shown).toContain("settled after 1 pass");
+        expect(shown).toContain("  • confd/620-no-diagrams.js @sous-io/plugin-confd, apply order 90620\n    • removeWhere\n      • removeIndex compilation.targets[7]\n");
+        expect(shown).toContain("  • late-fixups plugin-x, apply order 0, moved to 90621\n    • setKey compilation.overwriteUntracked = false\n");
+        expect(shown).toMatch(/result: settled after 1 pass/);
         expect(shown.indexOf("confd/620")).toBeLessThan(shown.indexOf("late-fixups"));
     });
 

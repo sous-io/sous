@@ -342,10 +342,16 @@ describe("compiler.compile", () => {
         project = makeProject();
         const entry = project.write("entry.md", "# Doc\n@docs/notes.txt\n@alice thanks\n");
 
-        const { result } = await compileOnce(project, single(entry, project.at("out.md")));
+        const { result, compiler } = await compileOnce(project, single(entry, project.at("out.md")));
 
         expect(result.ok).toBe(false);
-        expect(errorsOf(result)).toContain(`Malformed include line: @docs/notes.txt\n  in file: ${entry}, line 2`);
+        expect(errorsOf(result)).toContain("Malformed include line: @docs/notes.txt");
+        expect(result.problems[0]).toMatchObject({ level: "error", file: entry, line: 2 });
+        expect(compiler.reporter.messages.find((entry) => entry.style === "problem")).toMatchObject({
+            level: "error",
+            message: expect.stringContaining("Malformed include line: @docs/notes.txt"),
+            details: { subject: entry, line: 2 },
+        });
         expect(errorsOf(result)).not.toContain("@alice");
     });
 

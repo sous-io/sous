@@ -26,22 +26,51 @@ export interface TerminalReporterOptions {
     readonly json?: boolean;
 }
 
-/** One stream, with what is needed to lay out and space what is written to it. */
-class Sink {
-    readonly layout: Layout;
+/** What decides the blank lines between entries: shared by two streams that are the same terminal. */
+class Spacing {
     /** How many blank lines end what was written so far. */
     blanks = 0;
     /** Whether anything was written yet. */
     wrote = false;
     /** How many blank lines the next entry should have above it. */
     pending = 0;
+}
+
+/** One stream, with what is needed to lay out and space what is written to it. */
+class Sink {
+    readonly layout: Layout;
 
     constructor(
         readonly stream: ReporterStream,
         color: boolean,
         columns: number,
+        readonly spacing: Spacing,
     ) {
         this.layout = new Layout(createStyle(color), columns, stream.isTTY === true);
+    }
+
+    get blanks(): number {
+        return this.spacing.blanks;
+    }
+
+    set blanks(value: number) {
+        this.spacing.blanks = value;
+    }
+
+    get wrote(): boolean {
+        return this.spacing.wrote;
+    }
+
+    set wrote(value: boolean) {
+        this.spacing.wrote = value;
+    }
+
+    get pending(): number {
+        return this.spacing.pending;
+    }
+
+    set pending(value: number) {
+        this.spacing.pending = value;
     }
 }
 
@@ -88,8 +117,11 @@ export class TerminalReporter extends BaseReporter {
         super(options.threshold ?? LogLevel.Info);
 
         const env = options.env ?? {};
+        // Two terminal streams are one screen, so they share the count of blank lines.
+        const shared = new Spacing();
+        const sameScreen = options.stdout.isTTY === true && options.stderr.isTTY === true;
         const sinkOf = (stream: ReporterStream) =>
-            new Sink(stream, options.color ?? colorEnabled(stream, env), options.columns ?? (stream.isTTY === true ? terminalColumns(stream) : terminalColumns(undefined)));
+            new Sink(stream, options.color ?? colorEnabled(stream, env), options.columns ?? (stream.isTTY === true ? terminalColumns(stream) : terminalColumns(undefined)), sameScreen ? shared : new Spacing());
 
         this.err = sinkOf(options.stderr);
         this.out = options.json === true ? this.err : sinkOf(options.stdout);

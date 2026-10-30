@@ -149,7 +149,7 @@ function expandTarget(
         transforms: target.transforms ?? [],
         ...(target.origin === undefined ? {} : { origin: target.origin }),
     };
-    const outputsFor = (unit: { source: string; globBase?: string }) => resolveOutputs(target, index, unit, env, scopeKey, toPath);
+    const outputsFor = (unit: { source: string; globBase?: string }) => resolveOutputs(target, index, unit, env, scopeKey, toPath, problems);
 
     if (target.content !== undefined) {
         const source = path.join(env.projectRoot, target.id!);
@@ -194,14 +194,19 @@ function expandTarget(
     return files.map((source) => ({ ...base, source, label: source, globBase, outputs: outputsFor({ source, globBase }) }));
 }
 
-/** A target's outputs for one source: `_if` applied, destinations substituted. */
-function resolveOutputs(
+/**
+ * A target's outputs for one source: `_if` applied, destinations substituted. When several outputs
+ * resolve to the same file, the first one is kept; a dropped one that has different transforms is
+ * reported as a warning in `problems`, so it is never lost silently.
+ */
+export function resolveOutputs(
     target: CompilationTarget,
     targetIndex: number,
     unit: { source: string; globBase?: string },
     env: ExpandEnvironment,
     scopeKey: string | undefined,
     toPath: (value: string, context: string, scope?: VarScope) => string,
+    problems: CompileProblem[] = [],
 ): UnitOutput[] {
     const outputs: UnitOutput[] = [];
 
@@ -219,8 +224,26 @@ function resolveOutputs(
         };
         const destination = resolveOutputPath(unit, resolved);
 
-        if (destination !== undefined) {
-            outputs.push({ index, destination, vars, transforms: output.transforms ?? [] });
+        if (destination === undefined) {
+            return;
+        }
+
+        const transforms = output.transforms ?? [];
+        const kept = outputs.find((existing) => existing.destination === destination);
+
+        if (kept === undefined) {
+            outputs.push({ index, destination, vars, transforms });
+
+            return;
+        }
+
+        if (JSON.stringify(kept.transforms) !== JSON.stringify(transforms)) {
+            problems.push({
+                level: "warning",
+                message: `Outputs ${kept.index} and ${index} of target ${targetName(target, targetIndex)} both write ${destination}, with different transforms. Only output ${kept.index} is used.`,
+                target: targetName(target, targetIndex),
+                file: destination,
+            });
         }
     });
 

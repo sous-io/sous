@@ -270,8 +270,9 @@ describe("the sous update command", () => {
       const result = await runSous(project, "update", "--project", "--yes");
 
       expect(result.status).toBe(0);
-      const printed = flat(result.stdout);
-      expect(printed).toContain("WARNING:");
+      // Warnings go to stderr, the plan and progress to stdout.
+      const printed = flat(result.stdout + result.stderr);
+      expect(printed).toContain("Warning:");
       expect(printed).toContain(
         `Sous could not load the project config at ${configPath}, so this command carries on without it.`
       );
@@ -308,7 +309,7 @@ describe("the sous update command", () => {
       const result = await runSous(app, "update", "--project", "--yes");
 
       expect(result.status).toBe(0);
-      expect(flat(result.stdout)).toContain("Sous could not load the project config at");
+      expect(flat(result.stderr)).toContain("Sous could not load the project config at");
       expect(takeCalls()).toEqual([
         `npm i -D -E @sous-io/sous@0.2.34 @ ${project}`,
         `project-copy build @ ${app} SOUS_NO_DELEGATE=1`,
@@ -347,7 +348,7 @@ describe("the sous update command", () => {
       );
       expect(plan).toContain("Package manager: yarn@berry");
       expect(plan).toContain("Installed : 0.2.18");
-      expect(plan).toContain("Command : yarn add -D -E @sous-io/sous@0.2.34");
+      expect(plan).toContain("Would run: yarn add -D -E @sous-io/sous@0.2.34");
       expect(takeCalls()).toEqual([]);
 
       const result = await runSous(project, "update", "--project", "--yes");
@@ -391,7 +392,7 @@ describe("the sous update command", () => {
       const result = await runSous(outside(), "update", "--dry-run");
 
       expect(result.status).toBe(0);
-      expect(flat(result.stdout)).toContain("Command : npm i -g @sous-io/sous@0.2.34");
+      expect(flat(result.stdout)).toContain("Would run: npm i -g @sous-io/sous@0.2.34");
       expect(flat(result.stdout)).toContain("Nothing was installed.");
       expect(takeCalls()).toEqual([]);
     },

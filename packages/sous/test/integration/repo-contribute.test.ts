@@ -193,7 +193,7 @@ describe("sous repo contribute", () => {
 
       expect(result.status, result.output).toBe(0);
       expect(result.output).toContain("sous repo link demo-recipes --latest --generate-branch");
-      expect(result.output).toContain("no step was run");
+      expect(result.output).toContain("No step was run");
       expect(projectLinks()).toEqual({});
     },
     CLI_TIMEOUT
@@ -279,9 +279,9 @@ describe("sous repo contribute", () => {
 
       const planned = runSous("repo", "contribute", "demo-recipes", "--finish", "--dry-run");
       expect(planned.status, planned.output).toBe(0);
-      expect(planned.output).toContain("would ask whether to submit it");
+      expect(planned.output).toContain("Would ask whether to submit it");
       expect(planned.output).toContain("sous repo submit demo-recipes");
-      expect(planned.output).toContain("no step was run");
+      expect(planned.output).toContain("No step was run");
 
       const result = runSous("repo", "contribute", "demo-recipes", "--finish");
 

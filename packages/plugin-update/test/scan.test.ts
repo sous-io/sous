@@ -11,7 +11,7 @@ async function scan(options: { discover?: string; load?: string[]; project?: boo
     const config = {
         project: options.project === false ? undefined : { root: "/p", sousDir: "/p/.sous", configPath: undefined, confDir: "/p/.sous/conf.d" },
         entities: () => options.managers,
-        log: (_level: string, message: string) => logs.push(message),
+        warn: (message: string) => logs.push(message),
         atPath: (path: string): Partial<DocumentNode> => ({
             valueOr: ((fallback: unknown) => nodes[path] ?? fallback) as DocumentNode["valueOr"],
             append: (item: unknown) => void appended.push(item),

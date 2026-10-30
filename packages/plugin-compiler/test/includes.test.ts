@@ -9,7 +9,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { HashNameEntity } from "@sous-io/plugin-refs/types";
-import type { NamespaceResolver } from "../src/types.js";
+import type { CompileProblem, NamespaceResolver } from "../src/types.js";
 import { makeCompiler, makeProject, type TestProject } from "./helpers.js";
 import { StaticNamespaceResolver } from "./namespace-resolver.js";
 
@@ -26,7 +26,7 @@ const at = (rel: string) => project.at(rel);
 async function compileEntry(
     entry: string,
     options: { resolver?: NamespaceResolver; aliases?: Record<string, string[]>; includeScope?: Record<string, string>; vars?: Record<string, string> } = {},
-): Promise<{ ok: boolean; output: string; log: string }> {
+): Promise<{ ok: boolean; output: string; log: string; problems: CompileProblem[] }> {
     const dest = at("out/OUT.md");
     const aliases = options.aliases ?? {};
     const hashNames: HashNameEntity[] = Object.entries(aliases)
@@ -50,7 +50,7 @@ async function compileEntry(
     });
     const result = await compiler.compile();
 
-    return { ok: result.ok, output: fs.existsSync(dest) ? fs.readFileSync(dest, "utf8") : "", log: compiler.output() };
+    return { ok: result.ok, output: fs.existsSync(dest) ? fs.readFileSync(dest, "utf8") : "", log: compiler.output(), problems: result.problems };
 }
 
 /** Two recipes with memories, and a library with none. */
@@ -176,22 +176,23 @@ describe("include globs and the # sigil", () => {
 
     it("should fail the build on a malformed include line", async () => {
         project = makeProject();
-        const { ok, log, output } = await compileEntry(write("p/ENTRY.md", "top\n\n@docs/notes.txt\n"));
+        const entry = write("p/ENTRY.md", "top\n\n@docs/notes.txt\n");
+        const { ok, log, output, problems } = await compileEntry(entry);
 
         expect(ok).toBe(false);
         expect(output).toBe("");
         expect(log).toContain("Malformed include line: @docs/notes.txt");
-        expect(log).toContain("line 3");
+        expect(problems[0]).toMatchObject({ level: "error", file: entry, line: 3 });
         expect(log).toContain("ENTRY.md");
     });
 
     it("should name the included file of a malformed include line", async () => {
         project = makeProject();
-        write("p/inner.md", "ok\n@~/bad path.md\n@broken/\n");
-        const { ok, log } = await compileEntry(write("p/ENTRY.md", "@inner.md\n"));
+        const inner = write("p/inner.md", "ok\n@~/bad path.md\n@broken/\n");
+        const { ok, problems } = await compileEntry(write("p/ENTRY.md", "@inner.md\n"));
 
         expect(ok).toBe(false);
-        expect(log).toContain("inner.md, line 3");
+        expect(problems[0]).toMatchObject({ file: inner, line: 3 });
     });
 
     it("should pass a prose line that starts with @ through as text", async () => {

@@ -1449,3 +1449,151 @@ Now "should apply conf.d files by the number their names start with", in
 (90010). Luke ruled on 2026-10-30 that each `conf.d` file applies at 90000 plus the number its name
 starts with, and that the numbers in conf.d names do not differ in length, so real projects keep
 their order.
+
+## plugin-cli reporter
+
+All changed because output now goes through the reporter: `debug`, `info` and `notice` to standard
+output, `warning` and above to standard error, a command's output closed by two blank lines, and
+text wrapped to the terminal width.
+
+### "should draw tables, row notes, and the empty sentence"
+
+- **File:** `packages/plugin-cli/src/terminal-reporter.spec.ts`
+- **Before:** a row note sat at the same indent as its row (`  careful`).
+- **Now:** the note sits two spaces deeper than its row (`    careful`).
+- **Why:** the reporter indents a row note under its row; the facts are unchanged.
+
+### "should show the whole config's layers as a tree"
+
+- **File:** `packages/plugin-cli/src/views/domains/inspect.spec.ts`
+- **Before:** one-line labels such as `confd/620-no-diagrams.js (@sous-io/plugin-confd, apply order 90620)` and `removeWhere > removeIndex ...`.
+- **Now:** the exact `reporter.tree` output: bullets nested two spaces per level, the detail after the label with no parentheses, and `result: settled after 1 pass`.
+- **Why:** `layerTree` reports a tree, and the reporter draws it. Every fact is still shown.
+
+### "should warn about a config it could not load, and list what it cannot update"
+
+- **File:** `packages/plugin-cli/src/views/domains/setup.spec.ts`
+- **Before:** the sentence was matched as one line.
+- **Now:** whitespace is collapsed before matching.
+- **Why:** the warning is wrapped to the terminal width, so the sentence spans two lines.
+
+### "should report an alias clash naming both plugins"
+
+- **File:** `packages/plugin-cli/test/cli.test.ts`
+- **Before:** the error sentence was matched as one line.
+- **Now:** whitespace is collapsed before matching.
+- **Why:** the error is wrapped to the terminal width.
+
+### "should filter messages by --log-level and --debug"
+
+- **File:** `packages/plugin-cli/test/cli.test.ts`
+- **Before:** standard output was exactly the two message lines.
+- **Now:** the same two lines, then the closing blank lines.
+- **Why:** the reporter ends a command's output with blank lines.
+
+### "should fail a question it cannot ask, naming the flag"
+
+- **File:** `packages/plugin-cli/test/cli.test.ts`
+- **Before:** the regular expression required each sentence of the error on exact lines.
+- **Now:** it allows any whitespace between the sentences and before `USAGE`.
+- **Why:** the error is wrapped and the help follows with the reporter's spacing. The same words are shown.
+
+### "should show warnings kept from building the config"
+
+- **File:** `packages/plugin-cli/test/cli.test.ts`
+- **Before:** standard error contained `Warning: p added a "not-a-kind" entity, ...` on one line.
+- **Now:** it contains the `WARNING:` banner and, with whitespace collapsed, the same sentence.
+- **Why:** a plain warning is drawn with the banner, and the sentence is wrapped.
+
+## sous integration tests (reporter)
+
+All in `packages/sous/test/integration/`. They run the bundled CLI, so they see the reporter's
+drawing: glyphs and `(would write)` style suffixes, `Would run:` and `No step was run.` sentences
+with a capital letter, and warnings on standard error.
+
+### "should print stack frames when SOUS_DEBUG is set" (`help-and-flags.test.ts`)
+
+- **Before / now:** the test is unchanged. The code changed: `reportError` in
+  `packages/plugin-cli/src/front-end.ts` passed the stack frames inside the problem's cause, so the
+  reporter wrapped each frame and split `at name` from its `(file:line:column)`.
+- **Why:** a stack frame must stay on one line. The frames are now printed with `reporter.text`
+  (shown exactly as given) after the problem.
+
+### "should set the project up so that the next build succeeds" (`init-command.test.ts`)
+
+- **Before:** standard output contained `wrote .sous/sous.config.js`.
+- **Now:** it contains `✓ .sous/sous.config.js`.
+- **Why:** a written file is an `operation` entry, drawn as a check mark and the path.
+
+### "should add sous to an existing package.json as a devDependency" (`init-command.test.ts`)
+
+- **Before:** `added @sous-io/sous 0.2.37 to devDependencies in package.json`.
+- **Now:** `package.json (added @sous-io/sous 0.2.37 to devDependencies)`.
+- **Why:** the reporter draws the file entry with its detail in parentheses.
+
+### "should write nothing on a dry run" (`init-command.test.ts`)
+
+- **Before:** `would write .sous/sous.config.js`.
+- **Now:** `.sous/sous.config.js (would write)`.
+- **Why:** the reporter draws a `would-write` operation as the path followed by the action.
+
+### "should resolve a recipe to its repository and print the step without running it" and "should fail naming --submit and --no-submit when it cannot ask" (`repo-contribute.test.ts`)
+
+- **Before:** `no step was run` and `would ask whether to submit it`.
+- **Now:** `No step was run` and `Would ask whether to submit it`.
+- **Why:** the reporter's dry-run line is a sentence after the `[Dry Run]` prefix, so it starts with a capital.
+
+### "should warn about a config it cannot load and still update and build" and "should build where the rejected config is, inside the project" (`update-command.test.ts`)
+
+- **Before:** the warning was read from standard output and the first test expected `WARNING:`.
+- **Now:** the warning is read from standard error (`Warning:` in the first test).
+- **Why:** warnings and above go to standard error; the reporter's warning prefix is `Warning:`.
+
+### "should update and build a Yarn Plug'n'Play project through Yarn" and "should install nothing in a dry run" (`update-command.test.ts`)
+
+- **Before:** the plan showed `Command : yarn add -D -E @sous-io/sous@0.2.34` (and the `npm i -g` form).
+- **Now:** `Would run: yarn add -D -E @sous-io/sous@0.2.34` (and `Would run: npm i -g ...`).
+- **Why:** a dry-run command is a `command` entry with `dryRun`, drawn as `Would run:`.
+
+## reporter
+
+Changes made when every message moved onto a level and a style (`BaseReporter`).
+
+### plugin-compiler
+
+- **"should report a malformed include line with its file and line"** (`test/compilation.test.ts`)
+  - **Before:** expected the text `Malformed include line: @docs/notes.txt\n  in file: <entry>, line 2`.
+  - **Now:** expects the message text, a problem record with `file` and `line: 2`, and a `problem` style entry whose details hold `subject` (the file) and `line`.
+  - **Why:** the file and line travel as details; the terminal reporter decides how to print them.
+- **"should fail the build on a malformed include line"** and **"should name the included file of a malformed include line"** (`test/includes.test.ts`)
+  - **Before:** expected `line 3` and `inner.md, line 3` in the joined log text.
+  - **Now:** expect the problem record to carry `file` (the entry, or the included file) and `line: 3`.
+  - **Why:** same as above; the log text no longer holds a "file, line" sentence.
+- **"should name a content target by its id in errors"** (`test/targets.test.ts`)
+  - **Before:** expected `in file: generated/x` in the error text.
+  - **Now:** expects the error text `Include not found: @missing.md` and a problem entry with details `subject: "generated/x"`, `line: 1`.
+  - **Why:** the target id is the problem's subject, not part of the text.
+
+### plugin-build
+
+- **"reportUnanswered() should list each unanswered variable and say how to answer"** (`src/report.spec.ts`)
+  - **Before:** the plain message ended at the last item.
+  - **Now:** the message also ends with `Run 'sous vars ask' to answer it.` (the list's footer, which stays in details).
+  - **Why:** a list entry's plain message includes its footer.
+- **"should rebuild when polling upstream moves a pin"** (`test/watch.test.ts`)
+  - **Before:** expected one notice text holding the reason and an indented line.
+  - **Now:** expects a `list` style notice whose details items are `acme/jira moved from 1.0.0 to 1.2.0.`
+  - **Why:** the indentation and bullet are the reporter's job.
+
+### plugin-recipes
+
+- **"recipe.update and subscription.update should plan an update without writing"** (`src/part-a/intents/intents.spec.ts`)
+  - **Before / now:** test unchanged; its fake `refs.format` (`test/part-a/helpers.ts`, `shortRefs`) gained `recipeRef`.
+  - **Why:** `plannedQuestionsOf` builds a recipe ref through `refs.format.recipeRef`, which the fake lacked.
+
+### plugin-update
+
+- **"update.scan contributor should skip other managers and report a failing one"** (`test/scan.test.ts`)
+  - **Before:** the fake config recorded `log(level, message)`.
+  - **Now:** it records `warn(message)`.
+  - **Why:** a `ConfigBuilder` is a reporter; the contributor calls `config.warn`.

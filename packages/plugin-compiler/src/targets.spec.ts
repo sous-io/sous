@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { yieldToConfigTargets, type CompileUnit } from "./targets.js";
+import type { CompilationTarget, CompileProblem } from "./types.js";
+import { resolveOutputs, yieldToConfigTargets, type CompileUnit } from "./targets.js";
 
 /** A unit writing the given files, with the given origin. */
 function unit(name: string, destinations: string[], origin?: CompileUnit["origin"]): CompileUnit {
@@ -39,5 +40,46 @@ describe("yieldToConfigTargets", () => {
         const memories = unit("memories/claude-code", ["/project/CLAUDE.md"], { plugin: "@sous-io/plugin-memories" });
 
         expect(yieldToConfigTargets([mine, recipe, memories])).toEqual([mine, recipe, memories]);
+    });
+});
+
+describe("resolveOutputs", () => {
+    const env = { resolver: { scope: () => ({}) } } as unknown as Parameters<typeof resolveOutputs>[3];
+    /** Spells `${claudeSkillsDir}` the way the project's config would, so two spellings reach one path. */
+    const toPath = (value: string) => value.replace("${claudeSkillsDir}", "/project/.claude/skills");
+    const target = (outputs: CompilationTarget["outputs"]): CompilationTarget => ({ id: "skills", entryPoint: "/project/a.md", outputs }) as CompilationTarget;
+
+    it("keeps the first of two outputs that resolve to the same file", () => {
+        const problems: CompileProblem[] = [];
+        const outputs = resolveOutputs(
+            target([{ destinationDir: "/project/.claude/skills" }, { destinationDir: "${claudeSkillsDir}" }]),
+            0,
+            { source: "/project/a.md", globBase: "/project" },
+            env,
+            undefined,
+            toPath,
+            problems,
+        );
+
+        expect(outputs.map((output) => [output.index, output.destination])).toEqual([[0, "/project/.claude/skills/a.md"]]);
+        expect(problems).toEqual([]);
+    });
+
+    it("warns when the dropped output has different transforms", () => {
+        const problems: CompileProblem[] = [];
+        const outputs = resolveOutputs(
+            target([{ destinationDir: "/project/.claude/skills" }, { destinationDir: "${claudeSkillsDir}", transforms: ["strip"] }]),
+            0,
+            { source: "/project/a.md", globBase: "/project" },
+            env,
+            undefined,
+            toPath,
+            problems,
+        );
+
+        expect(outputs).toHaveLength(1);
+        expect(problems).toEqual([
+            expect.objectContaining({ level: "warning", target: "skills", file: "/project/.claude/skills/a.md", message: expect.stringContaining("Outputs 0 and 1") }),
+        ]);
     });
 });

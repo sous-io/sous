@@ -75,6 +75,45 @@ const ACTIONS: Record<OperationAction, { glyph: string; word: string; keepNote: 
  * @param state - Updated as operations and steps open and close.
  */
 export function renderEntry(layout: Layout, state: RenderState, level: LogLevel, message: string, details: ReportDetails | undefined, style: ReportEntryStyle): Rendered {
+    const rendered = renderStyled(layout, state, level, message, details, style);
+
+    return LEVEL_MARKED.has(style) || level === "debug" ? rendered : markLevel(layout, level, rendered);
+}
+
+/** Styles that show their own level (an operation by its glyph) or are not text about a problem: the shared level marking skips them. */
+const LEVEL_MARKED = new Set<ReportEntryStyle>([
+    ReportEntryStyle.Plain,
+    ReportEntryStyle.Problem,
+    ReportEntryStyle.Text,
+    ReportEntryStyle.Data,
+    ReportEntryStyle.Banner,
+    ReportEntryStyle.Progress,
+    ReportEntryStyle.Question,
+    ReportEntryStyle.Operation,
+]);
+
+/**
+ * At warning level and above, opens a styled entry's first line with the level's literal prefix in
+ * the level's color (`Warning: `, `Error: `), so the entry reads as what it is with color off too.
+ */
+function markLevel(layout: Layout, level: LogLevel, rendered: Rendered): Rendered {
+    const prefix = LEVEL_PREFIX[level];
+    const at = rendered.lines.findIndex((line) => line.trim() !== "");
+
+    if (prefix === undefined || at < 0) {
+        return rendered;
+    }
+
+    const line = rendered.lines[at]!;
+    const indent = line.length - line.trimStart().length;
+    const lines = [...rendered.lines];
+
+    lines[at] = `${line.slice(0, indent)}${levelPaint(layout, level)(prefix)}${line.slice(indent)}`;
+
+    return { ...rendered, lines, gapBefore: Math.max(rendered.gapBefore ?? 0, 1) };
+}
+
+function renderStyled(layout: Layout, state: RenderState, level: LogLevel, message: string, details: ReportDetails | undefined, style: ReportEntryStyle): Rendered {
     const colors = layout.style;
     const body = BODY_INDENT + (state.step ? BODY_INDENT : 0);
     const pad = (count: number) => " ".repeat(count);
@@ -324,7 +363,7 @@ function tableEntry(layout: Layout, table: TableDetails): Rendered {
 
     const notes = table.rowNotes;
     const lines = layout.tableLines([...table.columns], [...table.rows], {
-        indent: table.title === undefined ? 0 : 2,
+        indent: 2,
         ...(notes === undefined ? {} : { rowNote: (_row: Record<string, unknown>, index: number) => (notes[index] === undefined ? undefined : layout.style.muted(`  ${notes[index]}`)) }),
     });
 

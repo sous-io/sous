@@ -295,7 +295,7 @@ describe("the CLI front end", () => {
             const run = await runCli([namespacesPlugin, other], ["ns", "list"]);
 
             expect(run.exitCode).toBe(1);
-            expect(run.stderr).toContain(
+            expect(run.stderr.replace(/\s+/g, " ")).toContain(
                 'Error: Two commands claim "ns list": intent "namespace.list" (sous-plugin-namespaces) and intent "other.list" (sous-plugin-other).',
             );
             expect(run.stderr).toContain('cli.pick."ns list": "sous-plugin-namespaces"');
@@ -321,7 +321,7 @@ describe("the CLI front end", () => {
             const normal = await runCli([loudPlugin], ["loud"]);
 
             expect(normal.stdout).not.toContain("a debug message");
-            expect(normal.stdout).toBe("  a info message\n  a notice message\n");
+            expect(normal.stdout).toMatch(/^ {2}a info message\n {2}a notice message\n\s*$/);
             expect(normal.stderr).toContain("a warning message");
             expect(normal.stderr).toContain("Error: a error message");
             expect(normal.stderr).toContain("Critical: a critical message");
@@ -382,7 +382,7 @@ describe("the CLI front end", () => {
 
             expect(run.exitCode).toBe(1);
             expect(run.stderr).toMatch(
-                /^Error: sous needed to ask "Remove the 3 files listed above\?" but cannot ask questions in this run. Pass --yes to answer it ahead of time.\n {2}Why: neither input nor output is a terminal\.\n\n.*\n\nUSAGE\n {2}\$ sous prune/s,
+                /^Error: sous needed to ask "Remove the 3 files listed above\?" but cannot ask questions in this run\.\s+Pass --yes to answer it ahead of time\.\s+Why: neither input nor output is a terminal\..*USAGE\s+\$ sous prune/s,
             );
         });
 
@@ -425,7 +425,8 @@ describe("the CLI front end", () => {
 
             const run = await runCli([plugin], ["noop"]);
 
-            expect(run.stderr).toContain('Warning: p added a "not-a-kind" entity, but no plugin defines that kind.');
+            expect(run.stderr).toContain("WARNING:");
+            expect(run.stderr.replace(/\s+/g, " ")).toContain('p added a "not-a-kind" entity, but no plugin defines that kind.');
         });
     });
 });

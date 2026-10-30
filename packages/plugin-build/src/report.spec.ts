@@ -64,7 +64,7 @@ describe("reportUnanswered()", () => {
                 level: "warning",
                 style: ReportEntryStyle.List,
                 message:
-                    "1 required recipe variable has no answer, so the templates that use it render an empty value:\n  - jiraKey (asked by acme/jira)",
+                    "1 required recipe variable has no answer, so the templates that use it render an empty value:\n  - jiraKey (asked by acme/jira)\nRun 'sous vars ask' to answer it.",
                 details: {
                     title: "1 required recipe variable has no answer, so the templates that use it render an empty value:",
                     footer: "Run 'sous vars ask' to answer it.",

@@ -202,7 +202,7 @@ describe("updateView()", () => {
             { intent: "update" },
         );
 
-        expect(text).toContain("Sous could not load the project config at /p/.sous/sous.config.json, so this command carries on without it.");
+        expect(text.replace(/\s+/g, " ")).toContain("Sous could not load the project config at /p/.sous/sous.config.json, so this command carries on without it.");
         expect(text).toContain("futureSetting: Not a known config key");
         expect(text).toContain("Not updated");
         expect(text).toMatch(fact("Run by hand", "npm i -g @sous-io/sous"));

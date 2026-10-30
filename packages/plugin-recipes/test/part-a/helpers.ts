@@ -247,6 +247,12 @@ export function shortRefs(): { resolver: RefsResolver; format: RefsFormat } {
         },
         namespaceOfKey: (stored: string) => stored.split("/")[0]!,
         parseNamedRef: (input: string) => read(input).find((ref) => ref.kind === (input.includes("/") ? "recipe" : "namespace")) as NamedRef,
+        recipeRef: (namespace: string, name: string, options: { repo?: string; range?: string } = {}) => ({
+            kind: "recipe",
+            name,
+            namespace: { kind: "namespace", name: namespace, ...(options.repo === undefined ? {} : { repo: { kind: "repo", name: options.repo } }) },
+            ...(options.range === undefined ? {} : { range: options.range }),
+        }),
         partsOf: (ref: SousRef) => ({ ...(ref.kind === "namespace" && ref.repo ? { repo: ref.repo } : {}) }),
     } as unknown as RefsFormat;
 

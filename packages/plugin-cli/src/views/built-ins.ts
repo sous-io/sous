@@ -1,4 +1,4 @@
-import { isSousError } from "@sous-io/plugin-api";
+import { BufferedReporter, isSousError } from "@sous-io/plugin-api";
 import type { CliViewEntity } from "../types.js";
 import { reportResult } from "./show.js";
 
@@ -64,8 +64,16 @@ export const BUILT_IN_VIEWS: readonly CliViewEntity[] = DOMAINS.flatMap(({ load,
                     return reportResult(view.reporter, result);
                 }
 
+                // The view reports into a buffer, so a view that fails halfway leaves nothing behind
+                // and the fallback below is the only output.
+                const buffer = new BufferedReporter();
+
                 try {
-                    return await render(result, view);
+                    const output = await render(result, { ...view, reporter: buffer });
+
+                    buffer.flushTo(view.reporter);
+
+                    return output;
                 } catch (error) {
                     if (isSousError(error)) {
                         throw error;

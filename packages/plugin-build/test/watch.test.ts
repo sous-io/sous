@@ -196,7 +196,11 @@ describe("build.watch", () => {
         await session.poll();
 
         await vi.waitFor(() => expect(h.world.compileCalls).toHaveLength(1));
-        expect(h.reporter.at("notice").join("\n")).toContain("A newer recipe version arrived upstream.\n  acme/jira moved from 1.0.0 to 1.2.0.");
+        expect(h.reporter.messages.find((entry) => entry.message.startsWith("A newer recipe version arrived upstream."))).toMatchObject({
+            level: "notice",
+            style: "list",
+            details: { items: ["acme/jira moved from 1.0.0 to 1.2.0."] },
+        });
 
         await session.stop();
         await done;
