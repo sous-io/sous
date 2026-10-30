@@ -5,6 +5,7 @@
  * in stand-ins for plugins that are not written yet.
  */
 
+import path from "node:path";
 import type { Context, EntityReader, Environment, Prompter, Reporter } from "@sous-io/plugin-api";
 import type {
     FormatParser,
@@ -21,6 +22,9 @@ import type { RefsFormat, RefsLocations, RefsPicker, RefsResolver } from "@sous-
 import type { VariablesNames } from "@sous-io/plugin-variables/types";
 
 /** Everything authoring uses from other plugins. */
+/** The folder of a project's `.sous/` that `sous repo link` clones checkouts into. */
+const PROJECT_REPOS_DIRNAME = "repos";
+
 export interface AuthoringTools {
     readonly git: GitRunner;
     readonly manifests: FormatsManifests;
@@ -44,6 +48,11 @@ export interface AuthoringTools {
     hostContext(): RepositoryHostContext;
     /** The links service, when plugin-recipes is active and a project is open. */
     links(): RecipesLinks | undefined;
+    /**
+     * The directories `sous repo link` clones checkouts into: the project's, then the machine-wide
+     * one. Either is left out when it cannot be worked out.
+     */
+    cloneDirectories(): string[];
     /** The ref picker, when plugin-refs is active. */
     picker(): RefsPicker | undefined;
 }
@@ -127,5 +136,18 @@ export function toolsFrom(ctx: Context): AuthoringTools {
         }),
         links: () => (ctx.project !== undefined && services.has("recipes.links") ? services.get("recipes.links") : undefined),
         picker: () => (services.has("refs.picker") ? services.get("refs.picker") : undefined),
+        cloneDirectories: () => {
+            const directories: string[] = [];
+
+            if (ctx.project !== undefined) {
+                directories.push(path.join(ctx.project.sousDir, PROJECT_REPOS_DIRNAME));
+            }
+
+            if (services.has("host.sous-home")) {
+                directories.push(services.get("host.sous-home").paths(ctx.env).repos);
+            }
+
+            return directories;
+        },
     };
 }

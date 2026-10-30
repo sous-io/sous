@@ -3,7 +3,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { scriptedPrompter } from "@sous-io/plugin-api";
 import type { ResolvedLink } from "@sous-io/plugin-recipes/types";
-import { makeTmpDir, writeFile, type TmpDir } from "../../test/support/git-repo.js";
+import { git, initRepo, makeTmpDir, writeFile, type TmpDir } from "../../test/support/git-repo.js";
 import { memoryLinks, testTools } from "../../test/support/standins.js";
 import { findSubmitCheckout } from "./checkout.js";
 
@@ -68,6 +68,32 @@ describe("findSubmitCheckout()", () => {
         const found = await findSubmitCheckout(testTools({ links, prompter: scriptedPrompter(["b"]) }), project, undefined);
 
         expect(found).toMatchObject({ repo: "b", reason: "You chose it." });
+    });
+
+    /**
+     * A repository no longer linked, whose checkout `sous repo link` cloned is still where it clones
+     * them, is proposed from that checkout, with a note saying why.
+     */
+    it("should use the checkout sous cloned earlier when the repository is no longer linked", async () => {
+        const clones = path.join(tmp.path, "clones");
+        const root = path.join(clones, "acme", "recipes");
+
+        writeFile(root, "sous.repo.yaml", "formatVersion: 1\nname: recipes\nnamespaces: {}\nrecipes: []\n");
+        initRepo(root);
+        git(root, "remote", "add", "origin", "git@github.com:acme/recipes.git");
+
+        const url = "https://github.com/acme/recipes";
+        const known = [
+            {
+                kind: "repo" as const,
+                name: "team-recipes",
+                location: { provider: "github", host: "github.com", repoPath: "acme/recipes", identity: "github.com/acme/recipes", url },
+            },
+        ];
+        const tools = testTools({ links: memoryLinks(), known: known as never, cloneDirectories: [clones] });
+        const found = await findSubmitCheckout(tools, project, "team-recipes");
+
+        expect(found).toEqual({ rootDir: root, repo: "team-recipes", reason: "Sous cloned 'team-recipes' into this checkout earlier." });
     });
 
     /** A link whose checkout is gone has no working copy to propose from. */

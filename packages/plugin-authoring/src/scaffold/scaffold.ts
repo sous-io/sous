@@ -96,8 +96,8 @@ export async function scaffoldRepo(tools: AuthoringTools, input: RepoInitInput, 
 
     if (host === undefined) {
         reporter.note(
-            "No repository host was named or found from a git remote, so no CI workflow was written. Pass '--host <id>' " +
-                "(such as 'github' or 'gitlab') to add the one your host runs.",
+            "No repository host was named or found from a git remote, and no plugin adds GitHub's, so no CI workflow was " +
+                "written. Pass '--host <id>' (such as 'gitlab') to add the one your host runs.",
         );
     }
 
@@ -142,9 +142,12 @@ function planFiles(tools: AuthoringTools, context: ScaffoldContext): ScaffoldFil
     ];
 }
 
+/** The host a scaffold writes CI for when none is named or found: today's command always wrote GitHub's. */
+const DEFAULT_HOST = "github";
+
 /**
  * The host whose files the scaffold gets: the one named, else the one reading the directory's
- * `origin` remote, else none.
+ * `origin` remote, else GitHub when a plugin adds it, else none.
  */
 async function chooseHost(tools: AuthoringTools, directory: string, named: string | undefined): Promise<RepositoryHostEntity | undefined> {
     if (named !== undefined) {
@@ -161,13 +164,10 @@ async function chooseHost(tools: AuthoringTools, directory: string, named: strin
         return host;
     }
 
-    if (!fs.existsSync(directory)) {
-        return undefined;
-    }
+    const url = fs.existsSync(directory) ? await tools.git.remoteUrl(directory, "origin").catch(() => undefined) : undefined;
+    const found = url === undefined ? undefined : hostForUrl(tools, url);
 
-    const url = await tools.git.remoteUrl(directory, "origin").catch(() => undefined);
-
-    return url === undefined ? undefined : hostForUrl(tools, url);
+    return found ?? tools.entities.get("repository-host", DEFAULT_HOST);
 }
 
 /** Refuses to scaffold over an existing repository unless asked; any other directory is fine. */

@@ -48,11 +48,22 @@ export async function findSubmitCheckout(tools: AuthoringTools, cwd: string, rep
         );
     }
 
-    const name = await resolveRepoName(tools, links, repo, acceptFirst);
+    const { name, url } = await resolveRepoName(tools, links, repo, acceptFirst);
     const link = links.get(name);
 
     if (link === undefined) {
-        throw noWorkingCopy(name, `It is not linked in this project.`);
+        const leftover = url === undefined ? undefined : await leftoverCheckout(tools, url);
+
+        if (leftover !== undefined) {
+            tools.reporter.note(
+                `'${name}' is not linked in this project, so builds read its published versions; the checkout sous cloned ` +
+                    `for it is still at ${leftover}, and the change is proposed from there.`,
+            );
+
+            return { rootDir: leftover, repo: name, reason: `Sous cloned '${name}' into this checkout earlier.` };
+        }
+
+        throw noWorkingCopy(name, `It is not linked in this project, and no checkout of it is where 'sous repo link' clones one.`);
     }
 
     if (!fs.existsSync(link.path)) {
@@ -62,10 +73,15 @@ export async function findSubmitCheckout(tools: AuthoringTools, cwd: string, rep
     return { rootDir: link.path, repo: name, reason: `'${name}' is linked to this checkout.` };
 }
 
-/** The short name a written repository ref means: a linked name as written, else what refs resolves. */
-async function resolveRepoName(tools: AuthoringTools, links: RecipesLinks, written: string, acceptFirst: boolean): Promise<string> {
+/** The short name a written repository ref means (a linked name as written, else what refs resolves), and its URL when known. */
+async function resolveRepoName(
+    tools: AuthoringTools,
+    links: RecipesLinks,
+    written: string,
+    acceptFirst: boolean,
+): Promise<{ readonly name: string; readonly url?: string }> {
     if (links.get(written) !== undefined) {
-        return written;
+        return { name: written };
     }
 
     const { refs } = await tools.refs.resolve({ input: written, kinds: ["repo"], refusedIsEmpty: true });
@@ -81,7 +97,92 @@ async function resolveRepoName(tools: AuthoringTools, links: RecipesLinks, writt
         throw new ConfigError(`No repository this project uses is called '${written}'.\n${details.join("\n")}`);
     }
 
-    return match.name;
+    const url = match.location?.url ?? configuredUrl(tools, match.name);
+
+    return { name: match.name, ...(url === undefined ? {} : { url }) };
+}
+
+/** The URL the project's config gives a repository, or `undefined`. */
+function configuredUrl(tools: AuthoringTools, name: string): string | undefined {
+    try {
+        const repos = tools.hostContext().config?.get("repos") as Record<string, { url?: unknown } | undefined> | undefined;
+        const url = repos?.[name]?.url;
+
+        return typeof url === "string" ? url : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+/**
+ * A checkout `sous repo link` cloned for the repository and that is still on disk though the link is
+ * gone: `<clone directory>/<owner>/<name>`, whose `origin` is the same repository.
+ */
+async function leftoverCheckout(tools: AuthoringTools, url: string): Promise<string | undefined> {
+    const slug = repoSlugFromUrl(url);
+
+    if (slug === undefined) {
+        return undefined;
+    }
+
+    for (const base of tools.cloneDirectories()) {
+        const directory = path.join(base, slug.owner, slug.name);
+
+        if (!fs.existsSync(path.join(directory, ".git"))) {
+            continue;
+        }
+
+        const remote = await tools.git.remoteUrl(directory, "origin").catch(() => undefined);
+
+        if (remote !== undefined && normalizeRemoteUrl(remote) === normalizeRemoteUrl(url)) {
+            return directory;
+        }
+    }
+
+    return undefined;
+}
+
+/**
+ * A remote URL without scheme, user, port, `.git` or trailing slashes, lowercased, so two spellings of
+ * one repository compare equal. The same reading `sous repo link` uses to name its clones.
+ *
+ * ```ts
+ * normalizeRemoteUrl("git@github.com:sous-io/sous.git"); // "github.com/sous-io/sous"
+ * ```
+ */
+export function normalizeRemoteUrl(url: string): string {
+    let value = url.trim();
+    const scp = /^(?:[^@/]+@)?([^/:]+):(?!\/\/)(.+)$/.exec(value);
+
+    if (scp !== null) {
+        value = `${scp[1]}/${scp[2]}`;
+    } else {
+        value = value
+            .replace(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//, "")
+            .replace(/^[^/]*@/, "")
+            .replace(/^([^/]+):\d+/, "$1");
+    }
+
+    return value.replace(/\/+$/, "").replace(/\.git$/i, "").toLowerCase();
+}
+
+/** The owner and name `sous repo link` clones a URL under, or `undefined` when the URL has too few parts. */
+export function repoSlugFromUrl(url: string): { readonly owner: string; readonly name: string } | undefined {
+    const segments = normalizeRemoteUrl(url)
+        .split("/")
+        .filter((segment) => segment.length > 0);
+
+    if (segments.length < 2) {
+        return undefined;
+    }
+
+    const sanitize = (segment: string) => {
+        const cleaned = segment.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^\.+/, "");
+
+        return cleaned.length > 0 ? cleaned : "repo";
+    };
+
+    return { owner: sanitize(segments.length >= 3 ? segments[segments.length - 2]! : "repos"), name: sanitize(segments[segments.length - 1]!) };
 }
 
 /** With no argument inside a project: the one linked repository, or a choice between several. */

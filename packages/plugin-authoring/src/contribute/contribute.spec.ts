@@ -211,7 +211,7 @@ describe("runContribute()", () => {
         }) as IntentRunner;
 
         await expect(runContribute(tools(), { ref: "sous-recipes", finish: true }, failing)).rejects.toThrow(
-            /repo\.unlink broke[\s\S]*What had already been done:\n {4}Looked for work/,
+            /repo\.unlink broke[\s\S]*Failed step: [\s\S]*had completed before it[^\n]*\n {4}Looked for work/,
         );
     });
 

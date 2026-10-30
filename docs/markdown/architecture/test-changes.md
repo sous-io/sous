@@ -1105,3 +1105,24 @@ in `test/support/standins.ts`. Expectations are otherwise unchanged, except for 
   "Invalid variable definitions file at …".
 - **Why:** the plugin now words these errors as the old CLI did, which the old CLI tests check. The
   engine in `plugin.test.ts` is also given a project, since the vars commands now need one, as before.
+
+## Switch-over: authoring (repo release, repo submit, repo contribute)
+
+- **Tests:** `packages/sous/test/integration/repo-release.test.ts` and `repo-submit.test.ts`, every
+  assertion about what a run printed.
+  - **Before:** they read standard output alone (`result.stdout`).
+  - **Now:** they read both streams together (`result.output`, standard output then standard error).
+  - **Why:** the new CLI reports a command's progress (the checks, the plan, each step, what to do
+    next) through the reporter, which writes to standard error so it never mixes with `--json`
+    output. The old CLI printed the same lines on standard output. The words are unchanged.
+- **Test:** `repo-contribute.test.ts`, "should link the repository on a generated branch".
+  - **Before:** exactly one banner in the output.
+  - **Now:** at most one banner.
+  - **Why:** the new CLI prints the banner only on a terminal, and the test runs with none. What the
+    test guards (a chained run never prints a second banner) still holds.
+- **Test:** `plugin-authoring/src/contribute/contribute.spec.ts`, "should say which steps completed
+  when one fails".
+  - **Before:** the failure said "this step failed" and "What had already been done:".
+  - **Now:** it says "The contribution stopped", "Failed step: ..." and "These steps had completed
+    before it, and no later step ran:", as the old command did.
+  - **Why:** the new wording was brought back to the old command's, which the old CLI test checks.

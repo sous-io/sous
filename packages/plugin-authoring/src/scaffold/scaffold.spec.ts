@@ -250,6 +250,14 @@ describe("scaffoldRepo()", () => {
     expect(result.files).toContain(".github/workflows/sous-release.yml");
   });
 
+  /** With no --host and no remote, GitHub's CI is written, as today's command always did. */
+  it("should write GitHub's CI files when no host is named or found", async () => {
+    const result = await scaffoldRepo({ directory: target, sousVersion: SOUS_VERSION }, [workflowHost()]);
+
+    expect(result.host).toBe("github");
+    expect(result.files).toContain(".github/workflows/sous-release.yml");
+  });
+
   /** A host nobody adds is a readable error naming the hosts there are. */
   it("should refuse a host no plugin adds", async () => {
     await expect(scaffoldRepo({ directory: target, sousVersion: SOUS_VERSION, host: "bitbucket" }, [workflowHost()])).rejects.toThrow(

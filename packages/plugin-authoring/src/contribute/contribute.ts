@@ -414,9 +414,13 @@ async function runStep<N extends StepIntent>(tools: AuthoringTools, step: Contri
 
         return result;
     } catch (error) {
+        const done =
+            completed.length === 0
+                ? "  No step had completed before it, and no later step ran."
+                : `  These steps had completed before it, and no later step ran:\n${completed.map((entry) => `    ${entry}`).join("\n")}`;
+
         throw new ConfigError(
-            `${step.running}: this step failed.\n\n  ${describeError(error)}\n\n  What had already been done:\n` +
-                (completed.length === 0 ? "    nothing" : completed.map((entry) => `    ${entry}`).join("\n")),
+            `The contribution stopped: a step failed.\n\n  ${describeError(error)}\n\n  Failed step: ${step.running}\n${done}`,
             { cause: error },
         );
     }

@@ -91,6 +91,8 @@ export const authoringPlugin: PluginDefinition = definePlugin({
                 "carries yet (repo submit), then unlinks and updates the pins (repo unlink --update).",
             input: contributeInput,
             changesConfig: true,
+            // It links and unlinks in a project, so it needs one.
+            requiresProject: true,
             cli: {
                 aliases: [
                     ["repos", "contribute"],

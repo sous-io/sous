@@ -10,7 +10,12 @@ import { binPath } from "../utils/sous-bin.js";
 /** Per-test timeout: each test boots the real CLI (tsx + oclif) in a subprocess. */
 const CLI_TIMEOUT = 60_000;
 
-type RunResult = { stdout: string; stderr: string; status: number | null };
+/**
+ * What one run printed. `output` is both streams together: the new CLI reports a
+ * command's progress (the plan, each step, what to do next) on standard error,
+ * where the old one printed it on standard output.
+ */
+type RunResult = { stdout: string; stderr: string; output: string; status: number | null };
 
 let tmp: TmpDir;
 let recipeRepo: string;
@@ -46,7 +51,12 @@ function runSousIn(cwd: string, ...args: string[]): RunResult {
     encoding: "utf8",
     env: childEnv,
   });
-  return { stdout: result.stdout, stderr: result.stderr, status: result.status };
+  return {
+    stdout: result.stdout,
+    stderr: result.stderr,
+    output: result.stdout + result.stderr,
+    status: result.status,
+  };
 }
 
 /** Runs sous from inside the recipe repository. */
@@ -168,7 +178,7 @@ describe("sous repo submit, over a proposal's life", () => {
       commitAll(recipeRepo, "contribute a skill");
 
       const result = runSous("repo", "submit", "--branch", "add-a-skill");
-      const output = result.stdout + result.stderr;
+      const output = result.output;
 
       expect(result.status).toBe(1);
       expect(output).toContain("'--title' and '--body'");
@@ -197,9 +207,9 @@ describe("sous repo submit, over a proposal's life", () => {
         "It adds a contributed skill."
       );
 
-      expect(result.status, result.stdout + result.stderr).toBe(0);
-      expect(result.stdout).toContain("The pull request that was opened");
-      expect(result.stdout).toContain("What merging this changes");
+      expect(result.status, result.output).toBe(0);
+      expect(result.output).toContain("The pull request that was opened");
+      expect(result.output).toContain("What merging this changes");
       expect(remoteBranches()).toContain("add-a-skill");
       const calls = takeGhCalls();
       expect(calls).toContain("pr create");
@@ -220,9 +230,9 @@ describe("sous repo submit, over a proposal's life", () => {
 
       const result = runSous("repo", "submit");
 
-      expect(result.status, result.stdout + result.stderr).toBe(0);
-      expect(result.stdout).toContain("nothing new to send");
-      expect(result.stdout).toContain("review required");
+      expect(result.status, result.output).toBe(0);
+      expect(result.output).toContain("nothing new to send");
+      expect(result.output).toContain("review required");
       expect(takeGhCalls()).not.toContain("pr create");
     },
     CLI_TIMEOUT
@@ -240,8 +250,8 @@ describe("sous repo submit, over a proposal's life", () => {
 
       const result = runSous("repo", "submit", "--title", "Add a better skill");
 
-      expect(result.status, result.stdout + result.stderr).toBe(0);
-      expect(result.stdout).toContain("was updated");
+      expect(result.status, result.output).toBe(0);
+      expect(result.output).toContain("was updated");
       const calls = takeGhCalls();
       expect(calls).toContain("pr edit 7");
       expect(calls).toContain("Add a better skill");
@@ -264,10 +274,10 @@ describe("sous repo submit, over a proposal's life", () => {
 
       const result = runSous("repo", "submit", "--status", "--branch", "add-a-skill");
 
-      expect(result.status, result.stdout + result.stderr).toBe(0);
-      expect(result.stdout).toContain("State");
-      expect(result.stdout).toContain("open");
-      expect(result.stdout).toContain("1 passed, 0 failed");
+      expect(result.status, result.output).toBe(0);
+      expect(result.output).toContain("State");
+      expect(result.output).toContain("open");
+      expect(result.output).toContain("1 passed, 0 failed");
       expect(git(bareRemote, "rev-parse", "add-a-skill")).toBe(before);
     },
     CLI_TIMEOUT
@@ -287,13 +297,13 @@ describe("sous repo submit, over a proposal's life", () => {
 
       const refused = runSous("repo", "submit", "--title", "Follow up", "--body", "More.");
       expect(refused.status).toBe(1);
-      expect(refused.stdout + refused.stderr).toContain("--yes");
+      expect(refused.output).toContain("--yes");
 
       takeGhCalls();
       const result = runSous("repo", "submit", "--yes", "--title", "Follow up", "--body", "More.");
 
-      expect(result.status, result.stdout + result.stderr).toBe(0);
-      expect(result.stdout).toContain("was merged");
+      expect(result.status, result.output).toBe(0);
+      expect(result.output).toContain("was merged");
       expect(git(recipeRepo, "rev-parse", "--abbrev-ref", "HEAD")).toMatch(/^sous\/submit-/);
       expect(takeGhCalls()).toContain("pr create");
     },
@@ -313,8 +323,8 @@ describe("sous repo submit, over a proposal's life", () => {
 
       const result = runSous("repo", "submit", "--title", "Try again", "--body", "Again.");
 
-      expect(result.status, result.stdout + result.stderr).toBe(0);
-      expect(result.stdout).toContain("closed without being merged");
+      expect(result.status, result.output).toBe(0);
+      expect(result.output).toContain("closed without being merged");
       expect(takeGhCalls()).toContain("pr create");
       expect(git(recipeRepo, "rev-parse", "--abbrev-ref", "HEAD")).toBe(branch);
     },
@@ -346,7 +356,7 @@ describe("sous repo submit, over a proposal's life", () => {
         "Sous commits this."
       );
 
-      expect(result.status, result.stdout + result.stderr).toBe(0);
+      expect(result.status, result.output).toBe(0);
       expect(git(recipeRepo, "status", "--porcelain")).toBe("");
       const message = git(recipeRepo, "log", "-1", "--format=%B");
       expect(message).toMatch(/^Commit it for me\n\nSous commits this\.\n\n## What merging this changes/);
@@ -381,10 +391,10 @@ describe("sous repo submit, over a proposal's life", () => {
 
       const result = runSousIn(project, "repo", "submit", "test-repo", "--status");
 
-      expect(result.status, result.stdout + result.stderr).toBe(0);
-      expect(result.stdout).toContain(recipeRepo);
-      expect(result.stdout).toContain("'test-repo' is linked to this checkout");
-      expect(result.stdout).toContain("has no pull request");
+      expect(result.status, result.output).toBe(0);
+      expect(result.output).toContain(recipeRepo);
+      expect(result.output).toContain("'test-repo' is linked to this checkout");
+      expect(result.output).toContain("has no pull request");
     },
     CLI_TIMEOUT
   );
@@ -408,7 +418,7 @@ describe("sous repo submit, over a proposal's life", () => {
       git(recipeRepo, "update-ref", "refs/remotes/origin/main", "HEAD");
 
       const clean = runSous("repo", "release", "--check");
-      expect(clean.stdout + clean.stderr).not.toContain("does not take proposed changes");
+      expect(clean.output).not.toContain("does not take proposed changes");
 
       git(recipeRepo, "checkout", "--quiet", "-b", "touch-declined");
       writeFile(recipeRepo, "recipes/core/example/skills/declined.md", "declined\n");
@@ -417,8 +427,8 @@ describe("sous repo submit, over a proposal's life", () => {
       const result = runSous("repo", "release", "--check");
 
       expect(result.status).toBe(1);
-      expect(result.stdout + result.stderr).toContain("does not take proposed changes");
-      expect(result.stdout + result.stderr).toMatch(/Propose it\s+upstream\./);
+      expect(result.output).toContain("does not take proposed changes");
+      expect(result.output).toMatch(/Propose it\s+upstream\./);
     },
     CLI_TIMEOUT
   );

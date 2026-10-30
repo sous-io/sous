@@ -366,11 +366,11 @@ export async function submitRepo(
     let description = blankToUndefined(input.body);
 
     if (needsText && title === undefined) {
-        title = (await askText(tools, "What is the title of this proposal?", "--title")).trim();
+        title = (await askText(tools, "What is the title of this proposal?")).trim();
     }
 
     if (needsText && description === undefined) {
-        description = (await askText(tools, "Describe the change: what it does, and why.", "--body")).trim();
+        description = (await askText(tools, "Describe the change: what it does, and why.")).trim();
     }
 
     if (needsText && (title === undefined || title.length === 0)) {
@@ -622,10 +622,11 @@ function indexEditedError(restore: string): ConfigError {
     );
 }
 
-async function askText(tools: AuthoringTools, message: string, flag: string): Promise<string> {
+/** Asks for the proposal's title or description. Without a terminal, the failure names both flags, since both are needed. */
+async function askText(tools: AuthoringTools, message: string): Promise<string> {
     return tools.prompter.askValue({
         message,
-        answeredBy: `${flag} (a new proposal, and a commit sous makes for you, need a title and a description written by you)`,
+        answeredBy: "'--title' and '--body' (a new proposal, and a commit sous makes for you, both need a title and a description written by you)",
         validate: (answer) => (answer.trim().length > 0 ? undefined : "An answer is required."),
     });
 }

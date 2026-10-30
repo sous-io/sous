@@ -619,6 +619,8 @@ export interface TestToolsOptions {
     known?: SousRef[];
     sousVersion?: string;
     git?: GitRunner;
+    /** Where `sous repo link` would have cloned checkouts. */
+    cloneDirectories?: string[];
 }
 
 /** Authoring's tools, built from the stand-ins. */
@@ -653,5 +655,6 @@ export function testTools(options: TestToolsOptions = {}): AuthoringTools & { re
         hostContext: () => ({ reporter }) as never,
         links: () => options.links,
         picker: () => refsPicker,
+        cloneDirectories: () => options.cloneDirectories ?? [],
     };
 }
