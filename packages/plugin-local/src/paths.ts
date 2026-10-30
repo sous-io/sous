@@ -51,6 +51,32 @@ export function localRepoPath(url: string): string | undefined {
 }
 
 /**
+ * A directory written as the owner part of a local repository's identity: its segments joined
+ * with `/`, starting with `/`.
+ *
+ * The store and the index cache split an identity on `/` into directory names. A Windows path
+ * would otherwise land there as one name holding backslashes and a drive colon, which Windows
+ * refuses, so no local repository could be read. A drive (`C:`) or UNC (`\\server\share`) root
+ * becomes plain segments. A POSIX path comes back unchanged.
+ *
+ * ```ts
+ * identityOwnerPath("/home/me");                     // "/home/me"
+ * identityOwnerPath("C:\\Users\\me", path.win32);    // "/C/Users/me"
+ * identityOwnerPath("\\\\srv\\team\\x", path.win32); // "/srv/team/x"
+ * ```
+ *
+ * @param directory - An absolute, normalized directory.
+ * @param paths - The platform's path functions; only tests pass them.
+ */
+export function identityOwnerPath(directory: string, paths: path.PlatformPath = path): string {
+    const { root } = paths.parse(directory);
+    const rootSegments = root.split(/[\\/]/).map((segment) => segment.replace(/:$/, ""));
+    const segments = [...rootSegments, ...directory.slice(root.length).split(paths.sep)];
+
+    return `/${segments.filter((segment) => segment.length > 0).join("/")}`;
+}
+
+/**
  * A leading `~` expanded to a home directory. Only `~` and `~/...` are expanded.
  *
  * ```ts

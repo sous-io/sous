@@ -20,7 +20,7 @@ import { pathToFileURL } from "node:url";
 import { ConfigError } from "@sous-io/plugin-api";
 import type { RepositoryHostContext, RepositoryReadStrategy } from "@sous-io/plugin-recipes/types";
 import { copyRecipeTree, fetchRecipeTree, formatHostedLocator, gitFailureReason, type CanonicalRepository } from "@sous-io/repository-hosts";
-import { localRepoPath } from "./paths.js";
+import { identityOwnerPath, localRepoPath } from "./paths.js";
 import { assertLocalRepoDirectory } from "./repo-directory.js";
 import type { LocalRepositoryHost } from "./types.js";
 
@@ -116,7 +116,7 @@ export function createLocalHost(): LocalRepositoryHost {
 
             return {
                 host: LOCAL_HOST,
-                owner: path.dirname(directory),
+                owner: identityOwnerPath(path.dirname(directory)),
                 name: path.basename(directory),
                 httpsUrl: directory,
                 sshUrl: pathToFileURL(directory).href,

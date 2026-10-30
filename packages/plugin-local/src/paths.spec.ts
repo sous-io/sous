@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { expandHomePath, localRepoPath, looksLikeLocalPath, resolveRepoArgument } from "./paths.js";
+import { expandHomePath, identityOwnerPath, localRepoPath, looksLikeLocalPath, resolveRepoArgument } from "./paths.js";
 
 let cwd: string;
 const home = "/home/me";
@@ -35,6 +35,27 @@ describe("localRepoPath()", () => {
         expect(localRepoPath("https://github.com/o/r")).toBeUndefined();
         expect(localRepoPath("../recipes")).toBeUndefined();
         expect(localRepoPath("")).toBeUndefined();
+    });
+});
+
+describe("identityOwnerPath()", () => {
+    /**
+     * A local repository's owner becomes directories in the store and the index cache, so a Windows
+     * directory is written with `/` and its drive or UNC root as plain segments: a name holding
+     * `C:` or a backslash cannot be created there.
+     *
+     * identityOwnerPath("C:\\Users\\me", path.win32); // -> "/C/Users/me"
+     */
+    it("should write a Windows directory as slash-separated segments", () => {
+        expect(identityOwnerPath("C:\\Users\\me\\recipes", path.win32)).toBe("/C/Users/me/recipes");
+        expect(identityOwnerPath("D:\\", path.win32)).toBe("/D");
+        expect(identityOwnerPath("\\\\server\\share\\team", path.win32)).toBe("/server/share/team");
+    });
+
+    /** A POSIX directory is already in that form. */
+    it("should leave a POSIX directory unchanged", () => {
+        expect(identityOwnerPath("/home/me", path.posix)).toBe("/home/me");
+        expect(identityOwnerPath("/", path.posix)).toBe("/");
     });
 });
 

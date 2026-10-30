@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { GitCloneOptions } from "@sous-io/plugin-git/types";
 import { fakeGit, hostContext, readWith } from "@sous-io/repository-hosts/testing";
 import { createLocalHost } from "./host.js";
+import { identityOwnerPath } from "./paths.js";
 
 const host = createLocalHost();
 let root: string;
@@ -50,7 +51,8 @@ describe("the local host", () => {
 
         expect(host.canonicalize(pathToFileURL(directory).href)).toEqual({
             host: "localhost",
-            owner: root,
+            // The owner is written with `/` whatever the platform, since it becomes directories.
+            owner: identityOwnerPath(root),
             name: "recipes",
             httpsUrl: directory,
             sshUrl: pathToFileURL(directory).href,
