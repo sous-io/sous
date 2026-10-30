@@ -26,6 +26,8 @@ export class TerminalPrompter implements Prompter {
         private readonly input: InputStream,
         private readonly output: OutputStream,
         readonly interactive: boolean,
+        /** Why this run cannot ask, quoted in the error a question raises (see {@link whyCannotPrompt}). */
+        private readonly reason?: string,
     ) {}
 
     async askValue(question: ValueQuestion): Promise<string> {
@@ -91,7 +93,7 @@ export class TerminalPrompter implements Prompter {
 
     private refuseUnlessInteractive(question: QuestionBase): void {
         if (!this.interactive) {
-            throw new NonInteractiveError(question.message, question.answeredBy);
+            throw new NonInteractiveError(question.message, question.answeredBy, this.reason === undefined ? {} : { details: [`Why: ${this.reason}.`] });
         }
     }
 
@@ -217,7 +219,43 @@ export function canPrompt(
     env: Readonly<Record<string, string | undefined>>,
     globals: Readonly<Record<string, unknown>> = {},
 ): boolean {
-    const ci = env.CI !== undefined && env.CI !== "" && env.CI !== "0" && env.CI.toLowerCase() !== "false";
+    return whyCannotPrompt(io, env, globals) === undefined;
+}
 
-    return Boolean(io.stdin.isTTY && io.stdout.isTTY) && !ci && globals["non-interactive"] !== true;
+/**
+ * Why this run cannot ask questions, as a plain phrase, or `undefined` when it can. The error a
+ * question raises quotes it, as the CLI before 1.0 did: "sous cannot ask" is baffling on its own
+ * when only `CI=1` in the shell made it true.
+ *
+ * ```ts
+ * whyCannotPrompt(io, { CI: "true" });   // "the 'CI' environment variable is set to 'true'"
+ * ```
+ */
+export function whyCannotPrompt(
+    io: { stdin: { isTTY?: boolean }; stdout: { isTTY?: boolean } },
+    env: Readonly<Record<string, string | undefined>>,
+    globals: Readonly<Record<string, unknown>> = {},
+): string | undefined {
+    if (globals["non-interactive"] === true) {
+        return "the '--non-interactive' flag was passed";
+    }
+
+    const ci = env.CI;
+
+    if (ci !== undefined && !["", "0", "false"].includes(ci.trim().toLowerCase())) {
+        return `the 'CI' environment variable is set to '${ci}'`;
+    }
+
+    const stdin = io.stdin.isTTY === true;
+    const stdout = io.stdout.isTTY === true;
+
+    if (!stdin && !stdout) {
+        return "neither input nor output is a terminal";
+    }
+
+    if (!stdin) {
+        return "input is not a terminal";
+    }
+
+    return stdout ? undefined : "output is not a terminal";
 }

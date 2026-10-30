@@ -375,7 +375,7 @@ describe("the CLI front end", () => {
 
             expect(run.exitCode).toBe(1);
             expect(run.stderr).toMatch(
-                /^Error: sous needed to ask "Remove the 3 files listed above\?" but cannot ask questions in this run. Pass --yes to answer it ahead of time.\n\n.*\n\nUSAGE\n {2}\$ sous prune/s,
+                /^Error: sous needed to ask "Remove the 3 files listed above\?" but cannot ask questions in this run. Pass --yes to answer it ahead of time.\n {2}Why: neither input nor output is a terminal\.\n\n.*\n\nUSAGE\n {2}\$ sous prune/s,
             );
         });
 

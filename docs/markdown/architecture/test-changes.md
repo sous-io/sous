@@ -1385,3 +1385,18 @@ tests had been written against the first new layout, and were brought in line:
   states a newer version as `<key>: <to> this project pins <from>`; `subscription.list` returns
   `latest`; the `vars.ask` after subscribing is no longer narrowed to the new recipe. Each follows
   the old CLI's output.
+
+### "should fail a question it cannot ask, naming the flag"
+
+- **File:** `packages/plugin-cli/test/cli.test.ts`
+- **Before:** the error line was followed directly by the command's help.
+- **Now:** a `Why: …` line comes between them ("Why: neither input nor output is a terminal.").
+- **Why:** the old CLI said why it could not ask (for example "the 'CI' environment variable is set
+  to 'true'"), and the old `repositories` test checks for it.
+
+### The plugin-inspect specs
+
+- **File:** `packages/plugin-inspect/src/inspect.spec.ts`
+- **Before:** ran the config intents in an engine with no project.
+- **Now:** in an engine with an empty project.
+- **Why:** `config show`, `get` and `validate` now require a project, as the old commands did.

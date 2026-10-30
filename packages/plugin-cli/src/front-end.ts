@@ -6,7 +6,7 @@ import { globalSpecs } from "./globals.js";
 import { renderHelp } from "./help.js";
 import type { CliIo } from "./io.js";
 import { parseLine } from "./parse.js";
-import { canPrompt, TerminalPrompter } from "./terminal-prompter.js";
+import { canPrompt, TerminalPrompter, whyCannotPrompt } from "./terminal-prompter.js";
 import { TerminalReporter } from "./terminal-reporter.js";
 import { renderTimings } from "./views.js";
 import { renderBanner } from "./views/banner.js";
@@ -77,7 +77,7 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
                 break;
             }
             case "run": {
-                const prompter = new TerminalPrompter(io.stdin, io.stderr, canPrompt(io, env, line.globals));
+                const prompter = new TerminalPrompter(io.stdin, io.stderr, canPrompt(io, env, line.globals), whyCannotPrompt(io, env, line.globals));
                 const intent = line.command.intent;
                 const submitOptions = { reporter, prompter, globals: line.globals, ...(options.cwd === undefined ? {} : { cwd: options.cwd }) };
                 // A background intent (`sous mcp`) owns standard output while it runs; its result is not printed.
