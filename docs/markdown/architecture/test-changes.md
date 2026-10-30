@@ -1006,3 +1006,75 @@ in `test/support/standins.ts`. Expectations are otherwise unchanged, except for 
   own host, which is the more versatile choice. The hosts load after `repo.add`'s input schema is
   fixed, so the schema cannot list them; `repo.add` checks the value against the loaded hosts and names
   them when it is not one. `github`, `gitlab` and `local` work as before.
+
+## Switch-over: the old CLI tests
+
+### Where the old CLI tests went
+
+- **File:** `src/test/integration/*.test.ts` (every test that runs the CLI as a process) →
+  `packages/sous/test/integration/`; their helpers → `packages/sous/test/utils/`; the recipe-repository
+  fixture → `packages/sous/test/fixtures/recipe-repos/`.
+- **Before:** each test ran `bin/run.js`, the old oclif CLI, and imported a few helpers from `src/lib`
+  (the version, the gitignore markers, the file-format parsers, the managed-layer reader, the store
+  hash).
+- **Now:** each test runs the bundled bin, built once per test run by `test/global-setup.ts` (into a
+  directory of its own, so test runs side by side never overwrite each other's bin). The helpers come
+  from the packages (`@sous-io/plugin-formats` for the hash and the parsers, plugin-host for the
+  gitignore markers) or from small files in `test/utils/` (`package-info.ts` for the version,
+  `managed-layer.ts` for reading a `conf.d` layer). `whole-build.test.ts` works out a local
+  repository's identity itself instead of calling the old provider code. The `env` objects are typed
+  as `NodeJS.ProcessEnv`, since the package type-checks its tests and the old repository did not.
+- **Why:** these tests are the safety net of the switch-over, and the old code they reached into is
+  deleted. `SOUS_BUDGETS=off` is set for them: time-budget warnings would make the output they check
+  depend on how busy the machine is.
+
+### "should print the version" (the bin test)
+
+- **File:** `packages/sous/test/bin.test.ts`
+- **Before:** expected the output to start with a digit.
+- **Now:** accepts a leading `v`.
+- **Why:** sous prints `v0.2.34`, as the old CLI did.
+
+### findProject()
+
+- **File:** `packages/sous/src/project.spec.ts`
+- **Before:** "should accept a .sous directory without a config file" expected a bare `.sous/` to be a
+  project.
+- **Now:** "should pass over a .sous directory without a config file, and a .sous file": discovery
+  keeps walking up past a `.sous/` that holds no config file, as the old CLI did. New tests cover
+  `--config`, `SOUS_CONFIG`, `SOUS_DIR` and `--sous-confd`.
+- **Why:** the user-level sous directory (`~/.sous`) has no config file and is not a project; the old
+  rule kept it from being taken for one.
+
+### projectRoot in _vars
+
+- **File:** `packages/plugin-variables/test/plugin.test.ts` ("should refuse projectRoot in the root
+  _vars"), `packages/plugin-variables/src/resolve-block.spec.ts`
+- **Before:** `_vars.projectRoot: "${sousDir}/.."` failed the build.
+- **Now:** a value other than the one sous sets is refused when the scope resolves; writing it the way
+  sous sets it is accepted and ignored. A new test covers the accepted case.
+- **Why:** every config the old `sous init` wrote holds that line, and so do the old CLI tests'
+  fixtures; refusing it would break every existing project.
+
+### Contributors that read sous.entities directly
+
+- **File:** `packages/core/test/config-loop.test.ts`
+- **Before:** "should warn when a contributor reads sous.entities directly" expected a warning.
+- **Now:** "should note, at the debug level, ..." expects a debug message and no warning.
+- **Why:** the note is for the plugin's author. As a warning it printed on every command (the recipe
+  store's setup reads the pointer-file entities), which users can do nothing about.
+
+### The contributor budget
+
+- **File:** `packages/core/test/timing.test.ts`
+- **Before:** a contributor's default budget was 50ms.
+- **Now:** 100ms.
+- **Why:** the built-in core-recipe contributor measured 50–80ms on ordinary runs, so 50ms warned on
+  nearly every command.
+
+### package-identity: the package name
+
+- **File:** `packages/plugin-host/src/package-identity.spec.ts`
+- **Before:** found the package under `@sous-io/sous` and `@sous-io/sous-next`.
+- **Now:** only `@sous-io/sous`.
+- **Why:** packages/sous is now the published `@sous-io/sous`; the temporary name is gone.
