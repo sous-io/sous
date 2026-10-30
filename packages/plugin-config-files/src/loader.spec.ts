@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { makeProject, standInGlobs, type TestProject } from "../test/helpers.js";
 import { ConfigFilesLoaderImpl, mainCandidates } from "./loader.js";
@@ -171,6 +172,30 @@ describe("load()", () => {
 
         expect(urls[0]).toBe(urls[1]);
         expect(urls[2]).toMatch(/\?sous-reload=1$/);
+    });
+
+    /**
+     * A TypeScript config is imported by its file:// URL, never by its bare path: on Windows a path
+     * such as `D:\\project\\sous.config.ts` reads as a URL whose scheme is the drive letter, and
+     * Node refuses it.
+     */
+    it("should import a TypeScript config by its file URL", async () => {
+        const urls: string[] = [];
+        const importing = new ConfigFilesLoaderImpl({
+            project: project.info(),
+            globs: () => standInGlobs,
+            evaluator: () => undefined,
+            pathVariables: () => ({}),
+            importModule: async (url) => {
+                urls.push(url);
+
+                return { config: { name: "typed" } };
+            },
+        });
+        const file = project.write("sous.config.ts", "export const config = { name: \"typed\" };");
+
+        expect(await importing.load(file)).toMatchObject({ kind: "module", format: "ts" });
+        expect(urls).toEqual([pathToFileURL(file).href]);
     });
 
     /** A file of a kind sous does not read is an error naming it. */
