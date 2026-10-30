@@ -145,5 +145,20 @@ export interface Context {
      * }
      * ```
      */
-    refreshConfig(): Promise<BuiltConfig>;
+    refreshConfig(options?: RefreshConfigOptions): Promise<BuiltConfig>;
+}
+
+/** Options for `ctx.refreshConfig()`. */
+export interface RefreshConfigOptions {
+    /**
+     * Where to look for the project before rebuilding, for an intent that has just set one up
+     * (`sous init`). The engine takes the project found at or above this directory when it differs
+     * from the one it serves; without a project there, nothing changes.
+     *
+     * ```ts
+     * await writeProjectFiles(root);
+     * await ctx.refreshConfig({ locateProjectFrom: root });   // the build below serves `root`
+     * ```
+     */
+    locateProjectFrom?: string;
 }

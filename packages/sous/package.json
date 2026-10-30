@@ -1,24 +1,52 @@
 {
-  "name": "@sous-io/sous-next",
+  "name": "@sous-io/sous",
   "version": "0.2.34",
-  "description": "The published sous package: the bin, the built-in plugin list and the bundle",
+  "description": "Compiles AI coding agent configuration (CLAUDE.md, skills, memories) from LiquidJS templates",
   "type": "module",
   "license": "Apache-2.0",
-  "private": true,
-  "exports": {
-    ".": {
-      "source": "./src/index.ts",
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    }
+  "author": "Luke Chavers",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sous-io/sous.git",
+    "directory": "packages/sous"
   },
+  "homepage": "https://sous.io",
+  "bugs": "https://github.com/sous-io/sous/issues",
+  "keywords": [
+    "cli",
+    "ai",
+    "agents",
+    "claude",
+    "claude-code",
+    "codex",
+    "prompts",
+    "skills",
+    "templates",
+    "liquidjs"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "bin": {
+    "sous": "./dist/bin.js"
+  },
+  "files": [
+    "dist/bin.js",
+    "recipes",
+    "docs/markdown/*.md",
+    "sous.config.schema.json"
+  ],
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p .",
-    "build": "node scripts/bundle.mjs"
+    "build": "node scripts/bundle.mjs",
+    "prepack": "node scripts/bundle.mjs && node scripts/pack-files.mjs copy",
+    "postpack": "node scripts/pack-files.mjs clean"
   },
   "dependencies": {
-    "@sous-io/plugin-api": "workspace:*",
+    "@sous-io/plugin-api": "workspace:*"
+  },
+  "devDependencies": {
     "@sous-io/core": "workspace:*",
     "@sous-io/documents": "workspace:*",
     "@sous-io/plugin-cli": "workspace:*",
@@ -49,19 +77,11 @@
     "@sous-io/plugin-github": "workspace:*",
     "@sous-io/plugin-gitlab": "workspace:*",
     "@sous-io/plugin-local": "workspace:*",
-    "@sous-io/plugin-claude-code": "workspace:*"
-  },
-  "devDependencies": {
+    "@sous-io/plugin-claude-code": "workspace:*",
     "zod": "^4.4.3",
     "esbuild": "^0.27.4"
   },
   "engines": {
     "node": ">=22"
-  },
-  "bin": {
-    "sous": "./dist/bin.js"
-  },
-  "files": [
-    "dist"
-  ]
+  }
 }

@@ -38,7 +38,7 @@ describe("timing and budgets", () => {
         expect(reporter.at("warning")).toEqual([
             "building the config took 611ms (budget 200ms).\n  confd/530-team.js took 610ms of that.\n  See every timing with --timings.",
         ]);
-        expect(engine.timings.get("contributor:confd/530-team.js")).toMatchObject({ count: 1, totalMs: 610, maxMs: 610, overBudget: 1, budgetMs: 50 });
+        expect(engine.timings.get("contributor:confd/530-team.js")).toMatchObject({ count: 1, totalMs: 610, maxMs: 610, overBudget: 1, budgetMs: 100 });
     });
 
     /**

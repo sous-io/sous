@@ -1,0 +1,17 @@
+# The sibling. It exists to be depended on: 'workflow/qa-variables' names it as
+# a bare ref, and includes the partial in this folder from one of its templates.
+
+formatVersion: 1
+
+namespace: workflow
+name: qa-helper
+version: 0.1.0
+
+description: >-
+  The small recipe the variable showcase depends on, holding the shared review
+  steps its template includes.
+
+contents:
+  - kind: skills
+    include:
+      - skills/**/*.md

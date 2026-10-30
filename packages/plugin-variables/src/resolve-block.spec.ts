@@ -126,6 +126,19 @@ describe("resolveBlock()", () => {
         expect(failure({ sousDir: "/x" }).text).toContain("sous sets itself");
     });
 
+    /**
+     * A block that writes `projectRoot` as sous sets it, as every config written before it became an
+     * auto-variable does, is accepted; the entry is ignored.
+     *
+     * resolveBlock({ projectRoot: "${sousDir}/.." }, { sousDir: "/p/.sous", projectRoot: "/p" }, …)  // fine
+     */
+    it("should accept a block that restates projectRoot as sous sets it", () => {
+        const result = resolveBlock({ projectRoot: "${sousDir}/..", out: "${projectRoot}/OUT.md" }, { sousDir: "/p/.sous", projectRoot: "/p" }, "_vars");
+
+        expect(result.scope).toEqual({ sousDir: "/p/.sous", projectRoot: "/p", out: "/p/OUT.md" });
+        expect(failure({ projectRoot: "/elsewhere" }, { projectRoot: "/p" }).text).toContain("sous sets itself");
+    });
+
     /** With `partial`, entries that cannot resolve yet are left out, and auto-variable names ignored. */
     it("should leave out what cannot resolve yet when partial", () => {
         const result = resolveBlock({ a: "${later}", b: "ok", projectRoot: "/x" }, { projectRoot: "/p" }, "_vars", {

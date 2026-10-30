@@ -5,6 +5,9 @@ import path from "node:path";
 import * as esbuild from "esbuild";
 
 const packageDir = path.resolve(import.meta.dirname, "..");
+// The output file: dist/bin.js, or the path given as the first argument (the tests bundle into a
+// directory of their own, so two test runs never overwrite each other's bin).
+const outfile = process.argv[2] === undefined ? path.join(packageDir, "dist/bin.js") : path.resolve(process.argv[2]);
 const { version } = JSON.parse(readFileSync(path.join(packageDir, "package.json"), "utf8"));
 
 await esbuild.build({
@@ -13,7 +16,7 @@ await esbuild.build({
     platform: "node",
     target: "node22",
     format: "esm",
-    outfile: path.join(packageDir, "dist/bin.js"),
+    outfile,
     external: ["@sous-io/plugin-api"],
     conditions: ["source"],
     mainFields: ["module", "main"],

@@ -637,7 +637,7 @@ describe("the config loop", () => {
      * Reading sous.entities directly while the config is built warns, since the contributor would not
      * re-run when they change (S2, "The Builder", rule 6).
      */
-    it("should warn when a contributor reads sous.entities directly", async () => {
+    it("should note, at the debug level, when a contributor reads sous.entities directly", async () => {
         const { engine, reporter } = makeEngine([
             plugin("p", (sous) => {
                 sous.config.contribute({ id: "sneaky", contribute: () => void sous.entities.list("config-key") });
@@ -646,7 +646,8 @@ describe("the config loop", () => {
 
         await engine.buildConfig();
 
-        expect(reporter.at("warning").join("\n")).toContain('The contributor "sneaky" read sous.entities directly');
+        expect(reporter.at("warning").join("\n")).not.toContain("sous.entities");
+        expect(reporter.at("debug").join("\n")).toContain('The contributor "sneaky" read sous.entities directly');
     });
 
     /**

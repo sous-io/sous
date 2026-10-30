@@ -8,6 +8,7 @@ import type {
     JsonObject,
     Prompter,
     ProjectInfo,
+    RefreshConfigOptions,
     Reporter,
 } from "@sous-io/plugin-api";
 import type { BuiltConfigImpl } from "./config/built-config.js";
@@ -75,7 +76,7 @@ export interface CallHost {
     /** Says the config must be rebuilt before the next chain (for calls outside a chain). */
     markConfigChanged(): void;
     /** Rebuilds the config for the rest of a series chain. */
-    refreshConfig(call: CallState): Promise<BuiltConfig>;
+    refreshConfig(call: CallState, options?: RefreshConfigOptions): Promise<BuiltConfig>;
 }
 
 /**
@@ -97,7 +98,9 @@ export function createContext(host: CallHost, call: CallState, plugin: string): 
         },
         reporter: call.reporter,
         prompter: call.prompter,
-        project: host.project,
+        get project() {
+            return host.project;
+        },
         env: host.env,
         globals: call.globals,
         cwd: call.cwd,
@@ -108,7 +111,7 @@ export function createContext(host: CallHost, call: CallState, plugin: string): 
         },
         run: ((intent: string, input?: unknown) => host.run(intent, input, call)) as Context["run"],
         emit: ((name: string, payload?: EventPayload<string>) => host.emitCustom(name, payload, call)) as Context["emit"],
-        refreshConfig: () => host.refreshConfig(call),
+        refreshConfig: (options?: RefreshConfigOptions) => host.refreshConfig(call, options),
         configChanged(): void {
             if (call.chain) {
                 call.chain.changedConfig = true;

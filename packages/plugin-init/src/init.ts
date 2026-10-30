@@ -100,7 +100,7 @@ export async function handle(input: InitInput, ctx: Context): Promise<InitResult
     ctx.configChanged();
 
     if (ctx.chain !== undefined && !ctx.chain.parallel) {
-        await ctx.refreshConfig();
+        await ctx.refreshConfig({ locateProjectFrom: root });
     }
 
     const build = await ctx.run("build", {});

@@ -21,7 +21,7 @@ export type PackageJsonOutcome =
 export interface InitInput {
     /** The project root. Default the working directory. */
     directory?: string;
-    /** Default `json` (written as `sous.config.jsonc`). */
+    /** Default `js` (written as `sous.config.js`), as before 1.0; `json` writes `sous.config.jsonc`. */
     format?: InitConfigFormat;
     /** The project's display name. */
     name?: string;

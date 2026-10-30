@@ -111,8 +111,6 @@ export const config = {
   // scope on its own, so nothing below has to name them; `_vars` is only for
   // what this config needs that no recipe asks about.
   _vars: {
-    projectRoot: repoRoot,
-
     // Where this repository's own skill sources live, for the projectSkills
     // target above. The recipes learn the same path from the `skillsRoot`
     // answer in `.sous/.env`; this entry is the target's, so the target reads

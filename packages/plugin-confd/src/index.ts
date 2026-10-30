@@ -41,7 +41,8 @@ export const confdPlugin: PluginDefinition = definePlugin({
     },
 
     register(sous) {
-        const confDir = sous.project?.confDir;
+        // Read on each use: `sous init` sets a project up after the engine started without one.
+        const confDir = (): string | undefined => sous.project?.confDir;
         const compare = (left: string, right: string): number => sous.services.get("host.globs").compareBytewise(left, right);
         const loader = () => sous.services.get("config-files.loader");
         const added = new Set<string>();
@@ -60,7 +61,7 @@ export const confdPlugin: PluginDefinition = definePlugin({
             }
         };
 
-        addContributors(listConfdFiles(confDir, loader(), compare));
+        addContributors(listConfdFiles(confDir(), loader(), compare));
 
         // Files added later (watch mode, an intent that creates one) join the next pass; a file that
         // is gone contributes nothing. Reads nothing, so it runs once per build.
@@ -68,7 +69,7 @@ export const confdPlugin: PluginDefinition = definePlugin({
             id: SCAN_CONTRIBUTOR,
             after: [EVERY_CONTRIBUTOR, MAIN_CONTRIBUTOR],
             contribute(config) {
-                const files = listConfdFiles(confDir, loader(), compare);
+                const files = listConfdFiles(confDir(), loader(), compare);
 
                 for (const group of duplicateBaseNames(files.map((file) => file.name))) {
                     config.log(
@@ -81,12 +82,12 @@ export const confdPlugin: PluginDefinition = definePlugin({
             },
         });
 
-        sous.services.add("confd.files", () => new ConfdFilesImpl(confDir, loader(), compare), { lifetime: "config" });
+        sous.services.add("confd.files", () => new ConfdFilesImpl(confDir(), loader(), compare), { lifetime: "config" });
         sous.services.add(
             "confd.managed",
             (_config, ctx) =>
                 new ConfdManagedImpl({
-                    confDir,
+                    confDir: confDir(),
                     ensureDirectory: async (directory) => {
                         if (ctx.services.has("host.directories")) {
                             await ctx.services.get("host.directories").ensureKnown("confd", directory);

@@ -1,0 +1,31 @@
+# The repo manifest: what this repository publishes.
+#
+# This repository exists to exercise the sous repositories system during manual
+# quality assurance. Nothing in it is meant for real use.
+
+formatVersion: 1
+
+name: qa-recipes
+
+description: >-
+  A throwaway repository of recipes used to walk the sous repositories system by
+  hand: every variable type, a sibling dependency, a remote dependency, and a
+  regular expression that deliberately runs too long.
+
+contribute: Open an issue on the sous repository; nothing here is maintained.
+
+namespaces:
+  workflow:
+    description: >-
+      Recipes about how work moves through a project, including the variable
+      showcase the question flow is walked with.
+  quality:
+    description: >-
+      Recipes that exercise the edges: a pathological pattern, and a dependency
+      named by location in another repository.
+
+recipes:
+  - recipes/workflow/qa-variables
+  - recipes/workflow/qa-helper
+  - recipes/quality/qa-pattern
+  - recipes/quality/qa-remote-dep

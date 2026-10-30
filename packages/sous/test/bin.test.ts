@@ -1,11 +1,11 @@
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 
 const packageDir = path.resolve(import.meta.dirname, "..");
-const bin = path.join(packageDir, "dist", "bin.js");
+const bin = inject("sousBin");
 const samplePlugin = path.join(packageDir, "test", "fixtures", "diagrams-plugin.mjs");
 let project: string;
 
@@ -21,12 +21,7 @@ function sous(args: string[], env: Record<string, string> = {}) {
 }
 
 beforeAll(() => {
-    // The bundle keeps @sous-io/plugin-api outside (S3), so its compiled copy must exist too.
-    execFileSync(process.execPath, [path.join(packageDir, "..", "..", "node_modules", "typescript", "bin", "tsc"), "-p", "tsconfig.build.json"], {
-        cwd: path.join(packageDir, "..", "plugin-api"),
-    });
-    execFileSync(process.execPath, [path.join(packageDir, "scripts", "bundle.mjs")]);
-
+    // The bundle is built by test/global-setup.ts.
     project = mkdtempSync(path.join(tmpdir(), "sous-bin-"));
     mkdirSync(path.join(project, ".sous"));
 }, 60_000);
@@ -77,9 +72,9 @@ describe("the sous bin, end to end", () => {
         expect(run.stderr).toContain('Error: There is no command "diagrams rendr".\n  Did you mean "diagrams render"?');
     });
 
-    /** --version prints the package version. */
+    /** --version prints the package version with a leading "v", as the old CLI did: `v0.2.34`. */
     it("should print the version", () => {
-        expect(sous(["--version"]).stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
+        expect(sous(["--version"]).stdout.trim()).toMatch(/^v?\d+\.\d+\.\d+/);
     });
 
     /** A plugin that cannot be found stops the build, before any intent runs, with exit code 1. */

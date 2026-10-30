@@ -105,7 +105,9 @@ export function createSousApi(host: SousApiHost, record: PluginRecord): Sous {
 
     return {
         plugin: { name: record.name, version: record.version },
-        project: host.project,
+        get project() {
+            return host.project;
+        },
         env: host.env,
         reporter: host.reporter,
         engine: host.handle,

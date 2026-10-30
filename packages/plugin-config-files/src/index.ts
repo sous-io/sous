@@ -115,7 +115,10 @@ export const configFilesPlugin: PluginDefinition = definePlugin({
 /** The loader, wired to the services it uses, each looked up when needed. */
 function createLoader(sous: Sous): ConfigFilesLoaderImpl {
     return new ConfigFilesLoaderImpl({
-        project: sous.project,
+        // Read on each use: `sous init` sets a project up after the engine started without one.
+        get project() {
+            return sous.project;
+        },
         globs: () => sous.services.get("host.globs"),
         evaluator: () => (sous.services.has("expressions.evaluator") ? sous.services.get("expressions.evaluator") : undefined),
         pathVariables: () => {

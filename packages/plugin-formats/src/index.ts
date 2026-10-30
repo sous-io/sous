@@ -6,7 +6,7 @@
  * parsing), and the only service `plugin-formats` reads is `refs.resolver`, for the refs in a manifest.
  */
 
-import { definePlugin, type PluginDefinition, type ServiceContext } from "@sous-io/plugin-api";
+import { definePlugin, SousError, type PluginDefinition, type ServiceContext } from "@sous-io/plugin-api";
 import { createManifests } from "./manifests.js";
 import {
   createRecipeManifestFormat,
@@ -24,10 +24,26 @@ import "./types.js";
 /** The plugin's name. */
 export const PLUGIN_NAME = "@sous-io/plugin-formats";
 
-/** Checks a manifest ref with `refs.resolver`, read when first needed. */
+/**
+ * Checks a manifest ref with `refs.resolver`, read when first needed. While the config is being
+ * built (a recipe fetched by a contributor), `refs.resolver` cannot be made yet, so the check is
+ * skipped there; the refs are read through `refs.resolver` again when they are used.
+ */
 function manifestRefChecker(ctx: ServiceContext): (ref: string) => void {
     return (ref) => {
-        ctx.services.get("refs.resolver").parse(ref, "manifest");
+        let resolver;
+
+        try {
+            resolver = ctx.services.get("refs.resolver");
+        } catch (error) {
+            if (error instanceof SousError && error.message.includes("cannot be used while the config is being built")) {
+                return;
+            }
+
+            throw error;
+        }
+
+        resolver.parse(ref, "manifest");
     };
 }
 

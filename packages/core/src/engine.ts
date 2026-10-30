@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import path from "node:path";
 import { deepFreeze, stableStringify } from "@sous-io/documents";
 import {
     type AppInfo,
@@ -30,6 +31,7 @@ import {
     PluginError,
     type PluginInfo,
     type ProjectInfo,
+    type RefreshConfigOptions,
     type Reporter,
     type ServiceFactory,
     type ServiceOptions,
@@ -71,6 +73,11 @@ import { stableKey } from "./util/stable.js";
 export interface EngineOptions {
     /** The project this process serves (S1). */
     project?: ProjectInfo;
+    /**
+     * Finds the project at or above a directory, for `ctx.refreshConfig({ locateProjectFrom })`
+     * after an intent sets a project up. Without it, the engine's project never changes.
+     */
+    locateProject?: (directory: string) => ProjectInfo | undefined;
     /** The environment variables; `ctx.env`. Default: none. */
     env?: Environment;
     /** Where plugin specifiers resolve from when there is no project. Default: the process's directory. */
@@ -121,7 +128,6 @@ interface BuildFailure {
 export class Engine {
     /** The engine as plugins see it. */
     readonly handle: EngineHandle;
-    readonly project: ProjectInfo | undefined;
     readonly env: Environment;
     readonly app: AppInfo;
 
@@ -157,8 +163,17 @@ export class Engine {
     private readonly apiHost: SousApiHost;
     private readonly callHost: CallHost;
 
+    /** The project this process serves; `ctx.refreshConfig({ locateProjectFrom })` may change it. */
+    get project(): ProjectInfo | undefined {
+        return this.currentProject;
+    }
+
+    private currentProject: ProjectInfo | undefined;
+    private readonly locateProject: ((directory: string) => ProjectInfo | undefined) | undefined;
+
     constructor(options: EngineOptions) {
-        this.project = options.project;
+        this.currentProject = options.project;
+        this.locateProject = options.locateProject;
         this.env = Object.freeze({ ...(options.env ?? {}) });
         this.app = options.app ?? { name: "sous", version: "0.0.0" };
         this.cwd = options.cwd ?? options.project?.root ?? process.cwd();
@@ -183,11 +198,15 @@ export class Engine {
         this.scheduler = new Scheduler(async () => {
             await this.buildConfig();
         });
+        const engine = this;
+
         this.serviceHost = {
             registry: this.services,
             timer: this.timer,
             singletons: this.singletons,
-            project: this.project,
+            get project() {
+                return engine.project;
+            },
             env: this.env,
             cwd: this.cwd,
             building: () => this.realBuilds > 0 || this.contributorStack.length > 0,
@@ -832,7 +851,9 @@ export class Engine {
 
         return {
         handle: this.handle,
-        project: this.project,
+        get project() {
+            return engine.project;
+        },
         env: this.env,
         get reporter(): Reporter {
             return engine.reporterImpl;
@@ -867,10 +888,12 @@ export class Engine {
         entitiesForDirectRead: (record: PluginRecord) => {
             const contributor = this.contributorStack.at(-1);
 
+            // A note for the plugin's author, not its user: shown at the debug level only.
             if (contributor) {
                 this.warnOnce(
                     `The contributor "${contributor}" read sous.entities directly while the config was being built (${record.name}). ` +
                         "Read entities through the builder (config.entities), or the contributor will not re-run when they change.",
+                    "debug",
                 );
             }
 
@@ -976,7 +999,7 @@ export class Engine {
      * Rebuilds the config in the middle of a series chain (`ctx.refreshConfig()`): the rest of the
      * chain uses the new config and its services.
      */
-    private async refreshChainConfig(call: CallState): Promise<BuiltConfig> {
+    private async refreshChainConfig(call: CallState, options: RefreshConfigOptions = {}): Promise<BuiltConfig> {
         const chain = call.chain;
 
         if (call.mode !== "chain" || !chain) {
@@ -995,6 +1018,14 @@ export class Engine {
             throw new SousError(`ctx.refreshConfig() cannot be used in a parallel chain (${chain.intent}).`, {
                 details: ["Other chains may be using the config. Declare the intent as a series one, or call ctx.configChanged() instead."],
             });
+        }
+
+        if (options.locateProjectFrom !== undefined && this.locateProject) {
+            const found = this.locateProject(options.locateProjectFrom);
+
+            if (found && found.root !== this.currentProject?.root) {
+                this.currentProject = found;
+            }
         }
 
         const built = (await this.buildConfig()) as BuiltConfigImpl;
@@ -1040,6 +1071,10 @@ export class Engine {
         const definition = info.definition;
         const limits = config.limits;
         const depth = countFrames(call.frame, "intent") + 1;
+
+        if (definition.requiresProject === true && this.currentProject === undefined) {
+            throw noProjectError(call.cwd ?? this.cwd);
+        }
 
         if (depth > limits.runDepth) {
             throw new LoopError("runDepth", `Intents are nested ${depth} deep, past the limit of ${limits.runDepth}.`, {
@@ -1143,9 +1178,13 @@ export class Engine {
     }
 
     private createCallHost(): CallHost {
+        const engine = this;
+
         return {
         handle: this.handle,
-        project: this.project,
+        get project() {
+            return engine.project;
+        },
         env: this.env,
         latestConfig: () => this.current,
         run: (intent: string, input: unknown, call: CallState) => {
@@ -1164,7 +1203,7 @@ export class Engine {
         },
         emitCustom: (name: string, payload: unknown, call: CallState) => this.emitCustom(name, payload, call),
         markConfigChanged: () => this.scheduler.markDirty(),
-        refreshConfig: (call: CallState) => this.refreshChainConfig(call),
+        refreshConfig: (call: CallState, options?: RefreshConfigOptions) => this.refreshChainConfig(call, options),
         };
     }
 
@@ -1265,10 +1304,14 @@ export class Engine {
         this.reporterImpl.warning(describeOverBudget(over, batch));
     }
 
-    private warnOnce(message: string): void {
+    private warnOnce(message: string, level: "warning" | "debug" = "warning"): void {
         if (!this.warnedOnce.has(message)) {
             this.warnedOnce.add(message);
-            this.reporterImpl.warning(message);
+            if (level === "debug") {
+                this.reporterImpl.log("debug", message);
+            } else {
+                this.reporterImpl.warning(message);
+            }
         }
     }
 
@@ -1342,3 +1385,30 @@ function messageOf(error: unknown): string {
 }
 
 export { WHAT_IF_PLUGIN };
+
+/**
+ * The error for an intent that needs a project, run outside one. It names the directories sous
+ * looked in, as the CLI before 1.0 did.
+ */
+function noProjectError(cwd: string): ConfigError {
+    const looked: string[] = [];
+
+    for (let dir = path.resolve(cwd); looked.length < 8; dir = path.dirname(dir)) {
+        looked.push(`    ${path.join(dir, ".sous")}/`);
+
+        if (path.dirname(dir) === dir) {
+            break;
+        }
+    }
+
+    return new ConfigError("No sous config found.", {
+        details: [
+            `Starting at ${cwd}, sous walked up looking for a .sous/ directory holding a sous.config file.`,
+            "Checked:",
+            ...looked,
+            "To fix this, either:",
+            "  1. Set the project up: run 'sous init' in its root directory, or",
+            "  2. Pass the config explicitly: sous <command> --config <path>",
+        ],
+    });
+}

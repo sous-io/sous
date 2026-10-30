@@ -3,6 +3,7 @@
  * order.
  */
 
+import path from "node:path";
 import { ConfigError } from "@sous-io/plugin-api";
 import { isAutoVariable } from "./auto.js";
 import { references, substitute } from "./substitute.js";
@@ -55,7 +56,7 @@ export function resolveBlock(
         }
 
         if (isAutoVariable(key)) {
-            if (options.partial) {
+            if (options.partial || restatesAutoVariable(key, value, inherited)) {
                 continue;
             }
 
@@ -90,6 +91,23 @@ export function resolveBlock(
     }
 
     return { scope, resolved, pending: [...waiting] };
+}
+
+/**
+ * Whether a block's entry for an auto-variable only says again what sous sets, such as
+ * `projectRoot: "${sousDir}/.."`, which every config written before `projectRoot` became an
+ * auto-variable holds. Such an entry is accepted and ignored.
+ */
+function restatesAutoVariable(name: string, value: unknown, inherited: VarScope): boolean {
+    const own = inherited[name];
+
+    if (own === undefined || typeof value !== "string") {
+        return false;
+    }
+
+    const written = substitute(value, inherited);
+
+    return written === own || (references(written).length === 0 && path.resolve(written) === path.resolve(own));
 }
 
 /** The error for a block that sets a variable sous sets itself. */

@@ -1,0 +1,14 @@
+# Operating system and editor leftovers
+.DS_Store
+Thumbs.db
+*.swp
+
+# Dependencies, if a recipe ever needs any
+node_modules/
+
+# Machine-local sous files, written when this repository is used from a project
+.sous/sous.state.json
+.sous/sous.pid
+.sous/sous.links.json
+.sous/repos/
+.sous/.env.local

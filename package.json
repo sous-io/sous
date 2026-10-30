@@ -1,7 +1,7 @@
 {
-  "name": "@sous-io/sous",
+  "name": "sous-workspace",
   "version": "0.2.34",
-  "description": "Compiles AI coding agent configuration (CLAUDE.md, skills, memories) from LiquidJS templates",
+  "description": "The sous monorepo: the published @sous-io/sous lives in packages/sous",
   "type": "module",
   "license": "Apache-2.0",
   "author": "Luke Chavers",
@@ -11,33 +11,6 @@
   },
   "homepage": "https://sous.io",
   "bugs": "https://github.com/sous-io/sous/issues",
-  "keywords": [
-    "cli",
-    "ai",
-    "agents",
-    "claude",
-    "claude-code",
-    "codex",
-    "prompts",
-    "skills",
-    "templates",
-    "liquidjs"
-  ],
-  "publishConfig": {
-    "access": "public"
-  },
-  "bin": {
-    "sous": "./bin/run.js"
-  },
-  "files": [
-    "bin/run.js",
-    "src",
-    "!src/**/*.spec.ts",
-    "!src/test",
-    "recipes",
-    "docs/markdown/*.md",
-    "sous.config.schema.json"
-  ],
   "scripts": {
     "build": "tsc",
     "sous:build": "./bin/sous build --rebuild",
@@ -52,7 +25,7 @@
     "test:legacy": "vitest run --project legacy",
     "test:packages": "vitest run --project documents --project plugin-api --project core --project plugin-cli --project sous",
     "typecheck:packages": "pnpm -r --filter \"./packages/*\" typecheck",
-    "build:packages": "pnpm --filter @sous-io/plugin-api build && pnpm --filter @sous-io/sous-next build"
+    "build:packages": "pnpm --filter @sous-io/plugin-api build && pnpm --filter @sous-io/sous build"
   },
   "dependencies": {
     "@inquirer/core": "^11.1.7",
@@ -149,5 +122,6 @@
   "engines": {
     "node": ">=22"
   },
-  "packageManager": "pnpm@10.33.0"
+  "packageManager": "pnpm@10.33.0",
+  "private": true
 }

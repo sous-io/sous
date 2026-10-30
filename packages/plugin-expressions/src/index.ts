@@ -34,7 +34,14 @@ export const expressionsPlugin: PluginDefinition = definePlugin({
         );
         sous.entities.add("expression-language", createLiquidLanguage());
 
-        const evaluator = createEvaluator({ services: sous.services, entities: sous.entities, project: sous.project });
+        const evaluator = createEvaluator({
+            services: sous.services,
+            entities: sous.entities,
+            // Read on each use: `sous init` sets a project up after the engine started without one.
+            get project() {
+                return sous.project;
+            },
+        });
 
         // A singleton: the config-file contributors use it while the config is built, when core
         // refuses every other lifetime.

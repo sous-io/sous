@@ -60,14 +60,22 @@ describe("auto-variables", () => {
     });
 
     /**
-     * Setting `projectRoot` in the root `_vars` is an error saying sous sets it.
+     * Setting `projectRoot` in the root `_vars` to anything but the value sous gives it is an error
+     * saying sous sets it. Restating it as sous sets it (`${sousDir}/..`, which configs written
+     * before it was an auto-variable hold) is accepted.
      *
-     * { "_vars": { "projectRoot": "${sousDir}/.." } }  // ConfigError
+     * { "_vars": { "projectRoot": "/elsewhere" } }  // ConfigError
      */
     it("should refuse projectRoot in the root _vars, saying sous sets it", async () => {
-        const { engine } = engineWith({ contributors: [file("sous.config", { _vars: { projectRoot: "${sousDir}/.." } })] });
+        const { engine } = engineWith({ contributors: [file("sous.config", { _vars: { projectRoot: "/elsewhere" } })] });
+        const config = await engine.buildConfig();
 
-        await expect(engine.buildConfig()).rejects.toSatisfy((error) => /projectRoot.*set by sous/s.test(errorText(error)));
+        expect(() => config.services.get("variables.resolver").scope({ level: "root" })).toThrow(/projectRoot.*sous sets itself/);
+
+        const restated = engineWith({ contributors: [file("sous.config", { _vars: { projectRoot: "${sousDir}/.." } })] });
+        const restatedConfig = await restated.engine.buildConfig();
+
+        expect(restatedConfig.services.get("variables.resolver").scope({ level: "root" }).projectRoot).toBeDefined();
     });
 
     /** The same for `_env`, and for any other auto-variable. */

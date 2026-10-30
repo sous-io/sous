@@ -28,7 +28,9 @@ function variableMap(what: string): SousSchema<Record<string, string> | undefine
                 const issues: Issue[] = [];
 
                 for (const [name, item] of Object.entries(value)) {
-                    if (isAutoVariable(name)) {
+                    // `projectRoot` may be written the way configs before it was an auto-variable
+                    // wrote it; resolving the block refuses a value other than the one sous sets.
+                    if (isAutoVariable(name) && name !== "projectRoot") {
                         issues.push({
                             message: `"${name}" is set by sous; it cannot be set here. Remove it: \${${name}} always holds the value sous gives it.`,
                             path: [name],

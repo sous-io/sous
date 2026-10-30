@@ -1,9 +1,10 @@
 import { readFileSync } from "node:fs";
-import { createEngine } from "@sous-io/core";
-import type { Environment } from "@sous-io/plugin-api";
+import { type Budget, createEngine, DEFAULT_BUDGETS, type Engine } from "@sous-io/core";
+import type { Environment, ProjectInfo, TimingCategory } from "@sous-io/plugin-api";
 import { isSousError } from "@sous-io/plugin-api";
+import { projectEnvironment } from "@sous-io/plugin-config-files";
 import { BUILT_IN_PLUGINS } from "./built-ins.js";
-import { findProject } from "./project.js";
+import { findProject, locateProject, readOverrides } from "./project.js";
 
 declare const __SOUS_VERSION__: string | undefined;
 
@@ -29,14 +30,33 @@ export interface MainOptions {
 /**
  * The whole of the bin (S1, "The Shape"): find the project, start the engine with the built-in
  * plugins, build the config, and hand argv to the CLI front end.
+ *
+ * The project is found from `--config`/`-c`/`--sous-config`/`--sous-dir`/`--sous-confd` and their
+ * `SOUS_*` variables when given, else by walking up from the working directory; the project's
+ * `.env` files fill in the environment before the engine starts. `SOUS_BUDGETS=off` turns every
+ * time-budget warning off (the test suites set it, since busy test machines run slow).
  */
 export async function main(argv: readonly string[], options: MainOptions): Promise<void> {
+    const overrides = readOverrides(argv, options.env, options.cwd);
+    let project: ProjectInfo | undefined;
+
+    try {
+        project = locateProject(options.cwd, overrides);
+    } catch (error) {
+        options.stderr.write(`Error: ${error instanceof Error ? error.message : String(error)}\n`);
+        options.setExitCode(1);
+
+        return;
+    }
+
     const engine = createEngine({
-        project: findProject(options.cwd),
-        env: options.env,
+        project,
+        env: projectEnvironment(project, options.env),
         cwd: options.cwd,
         app: { name: "sous", version: sousVersion() },
         builtIns: BUILT_IN_PLUGINS,
+        budgets: budgetsOff(options.env.SOUS_BUDGETS) ? noBudgets() : undefined,
+        locateProject: (directory) => findProject(directory, overrides.confDir),
     });
 
     try {
@@ -65,8 +85,18 @@ export async function main(argv: readonly string[], options: MainOptions): Promi
     await engine.whenBackgroundIntentsReturn();
 }
 
+/** Whether `SOUS_BUDGETS` turns the time budgets off. */
+function budgetsOff(value: string | undefined): boolean {
+    return ["0", "false", "no", "off"].includes((value ?? "").trim().toLowerCase());
+}
+
+/** Every timing category with its warning turned off. */
+function noBudgets(): Partial<Record<TimingCategory, Budget>> {
+    return Object.fromEntries(Object.keys(DEFAULT_BUDGETS).map((category) => [category, false])) as Partial<Record<TimingCategory, Budget>>;
+}
+
 /** Whether an active plugin adds a front end. */
-function hasFrontEnd(engine: ReturnType<typeof createEngine>, id: string): boolean {
+function hasFrontEnd(engine: Engine, id: string): boolean {
     try {
         engine.frontEnd(id);
 

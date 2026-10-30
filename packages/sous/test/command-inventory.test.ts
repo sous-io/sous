@@ -41,7 +41,7 @@ const inventory = JSON.parse(readFileSync(path.join(import.meta.dirname, "fixtur
  * rule: additions are free). Plugins that carry the commands are not all written yet, so this runs
  * only in the final full check:
  *
- *     SOUS_CHECK_INVENTORY=1 pnpm --filter @sous-io/sous-next exec vitest run test/command-inventory.test.ts
+ *     SOUS_CHECK_INVENTORY=1 pnpm --filter @sous-io/sous exec vitest run test/command-inventory.test.ts
  */
 describe.skipIf(process.env.SOUS_CHECK_INVENTORY !== "1")("the command inventory", () => {
     let tree: CommandTree;

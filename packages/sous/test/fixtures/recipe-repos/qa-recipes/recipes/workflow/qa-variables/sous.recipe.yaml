@@ -1,0 +1,141 @@
+# The variable showcase. Subscribing to this recipe walks the whole question
+# flow: one variable of every type sous supports, one secret, one machine-local
+# answer, and a skill template that includes a file from a sibling recipe.
+
+formatVersion: 1
+
+namespace: workflow
+name: qa-variables
+version: 0.1.0
+
+description: >-
+  One question of every kind sous can ask, so the question flow can be walked
+  end to end in a single subscription.
+
+# A sibling in this same repository, named by a bare ref. Its files stay out of
+# a subscriber's output, and the skill template below includes one of them.
+depends:
+  - workflow/qa-helper
+
+contents:
+  - kind: skills
+    include:
+      - skills/**/*.md
+
+variables:
+  - name: qaAgentName
+    type: string
+    prompt: What name should agents sign their review notes with?
+    description: >-
+      Every note this recipe's skills leave behind is signed, so a person
+      reading the repository later can tell which agent wrote it. The default
+      signs notes as the reviewing agent with no further detail, which suits a
+      project where one agent does the reviewing. Any short label works, such as
+      a team name or a person's name.
+    example: Review Bot
+    default: Reviewing Agent
+    required: true
+    scope: shared
+
+  - name: qaTaskRoot
+    type: path
+    prompt: Where should the review notes be stored?
+    description: >-
+      This recipe writes one review note per branch, and this setting is the
+      directory those notes are read from and written to. The default keeps them
+      inside the project's .sous directory, which is already there and already
+      partly ignored by git. Any local path works, either relative to the
+      project root or absolute.
+    example: ~/qa-notes
+    default: .sous/qa-notes
+    required: true
+    scope: shared
+
+  - name: qaDashboardUrl
+    type: url
+    prompt: Which dashboard should review notes link back to?
+    description: >-
+      A finished review note ends with a link to wherever your team watches the
+      build, so the reader can check the current state without hunting for it.
+      There is no default, because no two teams share a dashboard. Any URL works
+      and nothing is ever requested from it; sous only stores the address.
+    example: https://ci.example.com/teams/platform
+    required: true
+    scope: shared
+
+  - name: qaParallelAgents
+    type: number
+    prompt: How many review agents may run at once?
+    description: >-
+      Reviews are split across several agents, and this is the ceiling on how
+      many of them run at the same time. The default of two is slow but easy to
+      follow while you are reading the output. Anything from one to eight is
+      accepted; one makes the run strictly sequential.
+    example: 4
+    default: 2
+    required: true
+    scope: shared
+    validate:
+      min: 1
+      max: 8
+
+  - name: qaReviewDepth
+    type: enum
+    prompt: How deep should a review go?
+    description: >-
+      Depth decides how much of the change a review reads: only what changed, or
+      the surrounding code as well. The default, standard, reads the change and
+      the files it touches. Choose light for a quick pass over the diff alone,
+      or thorough to follow every caller of what changed.
+    example: thorough
+    default: standard
+    required: true
+    scope: shared
+    validate:
+      enum:
+        - light
+        - standard
+        - thorough
+
+  - name: qaPublishNotes
+    type: boolean
+    prompt: Should finished review notes be committed?
+    description: >-
+      A finished note can either stay on your machine or be committed with the
+      change it reviews. The default is no, which keeps notes out of git until
+      you decide you want them there. Answer yes on a project where the review
+      trail belongs in the history alongside the code.
+    example: true
+    default: false
+    required: true
+    scope: shared
+
+  - name: qaScratchDir
+    type: path
+    prompt: Where should a review keep its working files?
+    description: >-
+      A run writes partial output, logs and diffs somewhere before it assembles
+      the final note. This is a machine-specific answer, so it is stored in the
+      gitignored env file rather than the committed one. The default uses a
+      directory under the system temporary directory, and any local path with
+      room to spare works.
+    example: /var/tmp/qa-review
+    default: /tmp/qa-review
+    required: false
+    scope: local
+
+  - name: qaServiceToken
+    type: string
+    env: QA_SERVICE_TOKEN
+    prompt: What is this project's review service token?
+    description: >-
+      The review service is called once per run and authenticates with a token
+      issued per project. There is no default, because a token belongs to one
+      person on one machine. Create one under Settings, then Tokens; it is
+      stored in the gitignored env file and hidden everywhere sous prints it.
+    example: qa_0123456789abcdef0123
+    required: false
+    secret: true
+    scope: local
+    validate:
+      minLength: 20

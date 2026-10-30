@@ -25,7 +25,7 @@ export const ENV_DEFAULTS_NAME = ".env";
 export const ENV_LOCAL_NAME = ".env.local";
 
 /** The config formats `sous init` can write. The first one is the default. */
-export const INIT_CONFIG_FORMATS = ["json", "js"] as const satisfies readonly InitConfigFormat[];
+export const INIT_CONFIG_FORMATS = ["js", "json"] as const satisfies readonly InitConfigFormat[];
 
 /** The file name each format is written under. */
 export const CONFIG_FILE_NAMES: Readonly<Record<InitConfigFormat, string>> = {

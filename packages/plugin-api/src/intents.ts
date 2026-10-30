@@ -98,6 +98,11 @@ export interface IntentDefinition<N extends string = string, S extends SousSchem
      * with that error.
      */
     toleratesConfigErrors?: boolean;
+    /**
+     * It works on a project, so it fails, before it runs, when sous was started outside one: the
+     * error says no sous config was found and how to set a project up.
+     */
+    requiresProject?: boolean;
     /** Only callable through `ctx.run`; neither the CLI nor MCP shows it. */
     internal?: boolean;
     /** How the CLI shows it. */

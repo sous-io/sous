@@ -7,7 +7,7 @@ import { PluginError } from "@sous-io/plugin-api";
 import type { HostPackage, PackageIdentity } from "./types.js";
 
 /** The package names the installed sous may have. */
-export const SOUS_PACKAGE_NAMES: readonly string[] = ["@sous-io/sous", "@sous-io/sous-next"];
+export const SOUS_PACKAGE_NAMES: readonly string[] = ["@sous-io/sous"];
 
 /** Where to look. */
 export interface PackageIdentityOptions {

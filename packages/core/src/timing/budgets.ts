@@ -9,7 +9,7 @@ export const DEFAULT_BUDGETS: Readonly<Record<TimingCategory, number>> = Object.
     "config.stage": 200,
     "config.pass": 100,
     "config.validate": 50,
-    contributor: 50,
+    contributor: 100,
     "plugin.load": 100,
     "plugin.register": 20,
     chain: 30_000,
