@@ -40,6 +40,31 @@ describe("parseLine()", () => {
         expect(parseLine(["repo", "add", "--", "--weird"], tree, globals)).toMatchObject({ kind: "run", input: { url: "--weird" } });
     });
 
+    /**
+     * A passThrough command hands every token it does not know to its last positional, in order,
+     * and everything after `--` as it is; its own flags and the global ones still parse.
+     *
+     * launch dump --no-build --model=opus -p x --resume -- -c  // -> tool: ["dump", "--model=opus", "--resume", "-c"]
+     */
+    it("should pass unknown tokens through for a passThrough command", () => {
+        const launch = CommandTree.build(
+            [
+                info(
+                    "launch",
+                    { type: "object", properties: { tool: { type: "array", items: { type: "string" } }, noBuild: { type: "boolean" } } },
+                    { positional: ["tool"], passThrough: true },
+                ),
+            ],
+            [],
+        );
+
+        expect(parseLine(["launch", "dump", "--no-build", "--model=opus", "-p", "x", "--resume", "--", "-c"], launch, globals)).toMatchObject({
+            kind: "run",
+            input: { tool: ["dump", "--model=opus", "--resume", "-c"], noBuild: true },
+            globals: { profile: "x" },
+        });
+    });
+
     /** A global argument's value is converted by its schema type, and a bad one is an error. */
     it("should convert global argument values, rejecting bad ones", () => {
         expect(parseLine(["build", "--jobs", "4"], tree, globals)).toMatchObject({ kind: "run", globals: { jobs: 4 } });
@@ -63,7 +88,7 @@ describe("parseLine()", () => {
     /** An unknown command with nothing close gives no suggestion; extra words after a command suggest a subcommand. */
     it("should explain unknown commands, with suggestions only when something is close", () => {
         expect(parseLine(["zzzzzzzz"], tree, globals)).toMatchObject({ kind: "error", message: 'There is no command "zzzzzzzz".', details: [] });
-        expect(parseLine(["build", "extra"], tree, globals)).toMatchObject({ kind: "error", details: [] });
+        expect(parseLine(["build", "extra"], tree, globals)).toMatchObject({ kind: "error", message: "Unexpected argument: extra", details: ['"sous build" takes no arguments.'] });
     });
 
     /** Any other parse problem is reported as it is. */

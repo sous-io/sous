@@ -47,7 +47,7 @@ describe("SousError", () => {
      */
     it("should describe unaskable questions and cancellations", () => {
         expect(new NonInteractiveError("Sure?", undefined).message).toBe('sous needed to ask "Sure?" but cannot ask questions in this run.');
-        expect(new NonInteractiveError("Sure?", "--yes")).toMatchObject({ question: "Sure?", answeredBy: "--yes", exitCode: 2 });
+        expect(new NonInteractiveError("Sure?", "--yes")).toMatchObject({ question: "Sure?", answeredBy: "--yes", exitCode: 1 });
         expect(new CancelledError("build", "no").message).toBe('"build" was cancelled: no');
         expect(new CancelledError("build", "no", "guard")).toMatchObject({ target: "build", reason: "no", cancelledBy: "guard" });
     });

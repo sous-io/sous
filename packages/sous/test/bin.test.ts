@@ -58,10 +58,10 @@ describe("the sous bin, end to end", () => {
         const command = sous(["diagrams", "render", "--help"]);
 
         expect(command.stdout).toContain("Render every diagram to SVG");
-        expect(command.stdout).toContain("Usage:\n  sous diagrams render [<only>] [flags]");
+        expect(command.stdout).toContain("USAGE\n  $ sous diagrams render [ONLY] [flags]");
         expect(command.stdout).toMatch(/--scale <number>\s+How much to scale each diagram Default: 1\./);
         expect(command.stdout).toMatch(/--dry-run\s+Print the plan and change nothing/);
-        expect(command.stdout).toContain("Aliases:\n  sous render");
+        expect(command.stdout).toContain("ALIASES\n  $ sous render");
     });
 
     /** A mistyped command fails with exit code 2 and a suggestion. */

@@ -85,14 +85,21 @@ describe("the CLI front end", () => {
             expect(run.stderr).toContain('Error: --priority takes a whole number, not "high".');
         });
 
-        /** Input the schema rejects names the flag or argument, not the input field. */
-        it("should report schema problems by flag and argument name", async () => {
-            const run = await runCli([reposPlugin], ["repo", "add", "--mode", "maybe"]);
+        /**
+         * A value outside a flag's choices, and a missing required argument, are usage errors in the
+         * old CLI's words, followed by the command's help.
+         */
+        it("should report a bad choice and a missing argument in the old CLI's words", async () => {
+            const choice = await runCli([reposPlugin], ["repo", "add", "x", "--mode", "maybe"]);
 
-            expect(run.exitCode).toBe(2);
-            expect(run.stderr).toContain('Error: The input to "repo.add" is not valid.');
-            expect(run.stderr).toMatch(/<url>: /);
-            expect(run.stderr).toMatch(/--mode: /);
+            expect(choice.exitCode).toBe(2);
+            expect(choice.stderr).toContain("Error: Expected --mode=maybe to be one of: trusted, untrusted\n");
+            expect(choice.stderr).toContain("USAGE\n  $ sous repo add URL [flags]");
+
+            const missing = await runCli([reposPlugin], ["repo", "add"]);
+
+            expect(missing.exitCode).toBe(2);
+            expect(missing.stderr).toMatch(/^Error: Missing 1 required arg:\n {2}url/);
         });
 
         /** Too many positional arguments is an error that says what was extra. */
@@ -100,7 +107,7 @@ describe("the CLI front end", () => {
             const run = await runCli([namespacesPlugin], ["namespace", "list", "a", "b"]);
 
             expect(run.exitCode).toBe(2);
-            expect(run.stderr).toContain('"sous namespace list" takes at most 1 argument, but was also given "b".');
+            expect(run.stderr).toContain('Error: Unexpected argument: b\n  "sous namespace list" takes at most 1 argument.');
         });
 
         /** A value given both as a positional and as its flag is an error. */
@@ -154,7 +161,7 @@ describe("the CLI front end", () => {
         it("should list commands, groups and global flags at the root", async () => {
             const run = await runCli([namespacesPlugin, reposPlugin], ["--help"]);
 
-            expect(run.stdout).toContain("Usage:\n  sous <command>");
+            expect(run.stdout).toContain("USAGE\n  $ sous COMMAND");
             expect(run.stdout).toMatch(/namespace\s+Browse the namespaces the trusted repositories publish/);
             expect(run.stdout).toMatch(/repo\s+Manage the recipe repositories this project trusts/);
             expect(run.stdout).toMatch(/--debug\s+Show every message/);
@@ -170,7 +177,7 @@ describe("the CLI front end", () => {
         it("should show help when given no arguments", async () => {
             const run = await runCli([reposPlugin], []);
 
-            expect(run.stdout).toContain("Commands:");
+            expect(run.stdout).toContain("COMMANDS");
             expect(run.exitCode).toBeUndefined();
         });
 
@@ -205,19 +212,19 @@ describe("the CLI front end", () => {
             const run = await runCli([namespacesPlugin], ["ns", "list", "--help"]);
 
             expect(run.stdout).toContain("List the namespaces in your subscribed repositories");
-            expect(run.stdout).toContain("Usage:\n  sous namespace list [<repository>] [flags]");
-            expect(run.stdout).toMatch(/<repository>\s+Only this repository/);
+            expect(run.stdout).toContain("USAGE\n  $ sous namespace list [REPOSITORY] [flags]");
+            expect(run.stdout).toMatch(/REPOSITORY\s+Only this repository/);
             expect(run.stdout).toMatch(/--json\s+Print JSON/);
-            expect(run.stdout).toContain("Aliases:\n  sous namespaces list\n  sous ns list\n  sous list namespaces");
-            expect(run.stdout).toContain("Examples:\n  sous ns list github.com/sous-io/sous-recipes");
+            expect(run.stdout).toContain("ALIASES\n  $ sous namespaces list\n  $ sous ns list\n  $ sous list namespaces");
+            expect(run.stdout).toContain("EXAMPLES\n  $ sous ns list github.com/sous-io/sous-recipes");
 
             const repo = await runCli([reposPlugin], ["repo", "add", "-h"]);
 
-            expect(repo.stdout).toContain("Usage:\n  sous repo add <url> [flags]\n  sous repo add <command>");
+            expect(repo.stdout).toContain("USAGE\n  $ sous repo add URL [flags]\n  $ sous repo add COMMAND");
             expect(repo.stdout).toMatch(/--mode <choice>\s+Whether to trust it One of: trusted, untrusted. Default: "trusted"./);
             expect(repo.stdout).toMatch(/--tags <value>\s+Tags to give it Default: \[\]. May be given more than once./);
             expect(repo.stdout).toMatch(/-y, --yes\s+Add it without asking/);
-            expect(repo.stdout).toMatch(/alternate\s+Add an alternate location/);
+            expect(repo.stdout).toMatch(/repo add alternate\s+Add an alternate location/);
         });
 
         /** `--help` never loads a lazy handler (G9). */
@@ -263,14 +270,14 @@ describe("the CLI front end", () => {
             const run = await runCli([reposPlugin], ["repo", "add", "x", "--priorty", "2"]);
 
             expect(run.exitCode).toBe(2);
-            expect(run.stderr).toContain("Error: There is no flag --priorty. Did you mean --priority?");
+            expect(run.stderr).toContain("Error: Nonexistent flag: --priorty\n  Did you mean --priority?");
         });
 
         /** A string flag with no value says it needs one. */
         it("should say when a flag needs a value", async () => {
             const run = await runCli([reposPlugin], ["repo", "add", "x", "--name"]);
 
-            expect(run.stderr).toContain("--name needs a value.");
+            expect(run.stderr).toContain("Error: Flag --name expects a value");
         });
 
         /**
@@ -366,9 +373,9 @@ describe("the CLI front end", () => {
         it("should fail a question it cannot ask, naming the flag", async () => {
             const run = await runCli([askingPlugin], ["prune"]);
 
-            expect(run.exitCode).toBe(2);
-            expect(run.stderr).toBe(
-                'Error: sous needed to ask "Remove the 3 files listed above?" but cannot ask questions in this run. Pass --yes to answer it ahead of time.\n',
+            expect(run.exitCode).toBe(1);
+            expect(run.stderr).toMatch(
+                /^Error: sous needed to ask "Remove the 3 files listed above\?" but cannot ask questions in this run. Pass --yes to answer it ahead of time.\n\n.*\n\nUSAGE\n {2}\$ sous prune/s,
             );
         });
 
@@ -440,7 +447,7 @@ describe("built-in groups, globals and help intent", () => {
         const viaFlag = await runCli([commandPlugin], ["config", "show", "--help"]);
 
         expect(viaHelp.stdout).toBe(viaFlag.stdout);
-        expect((await runCli([commandPlugin], ["help"])).stdout).toContain("Commands:");
+        expect((await runCli([commandPlugin], ["help"])).stdout).toContain("TOPICS");
         expect((await runCli([commandPlugin], ["help", "confg"])).stderr).toContain('There is no command "confg".');
     });
 

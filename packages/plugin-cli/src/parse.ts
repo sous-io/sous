@@ -8,8 +8,16 @@ import { suggest } from "./words.js";
 export type ParsedLine =
     | { kind: "help"; node: CommandNode; globals: Record<string, unknown> }
     | { kind: "version"; globals: Record<string, unknown> }
-    | { kind: "run"; command: Command; input: Record<string, unknown>; globals: Record<string, unknown> }
-    | { kind: "error"; message: string; details: string[]; node: CommandNode; globals: Record<string, unknown> };
+    | { kind: "run"; command: Command; node: CommandNode; input: Record<string, unknown>; globals: Record<string, unknown> }
+    | {
+          kind: "error";
+          message: string;
+          details: string[];
+          node: CommandNode;
+          globals: Record<string, unknown>;
+          /** True when the command's help should follow the message: the command was found, but not its flags or arguments. */
+          showHelp?: boolean;
+      };
 
 /**
  * Turns argv into a command and its input (S1, "The CLI foundation"), on Node's `util.parseArgs`:
@@ -56,15 +64,20 @@ export function parseLine(argv: readonly string[], tree: CommandTree, globalSpec
 
     const command = node.command;
     const flags = command ? mergeFlags(command.flags, globalSpecs) : [...globalSpecs];
-    const parsed = runParseArgs(rest, flags);
+    const passThrough = command?.info.definition.cli?.passThrough === true ? splitPassThrough(rest, flags) : undefined;
+    const parsed = runParseArgs(passThrough?.own ?? rest, flags);
+
+    if (passThrough) {
+        parsed.positionals = passThrough.passed;
+    }
     const globals = collectValues(globalSpecs, parsed.values);
 
     if (parsed.error) {
-        return { kind: "error", message: parsed.error, details: [], node, globals: globals.values };
+        return { kind: "error", message: parsed.error.message, details: parsed.error.details, node, globals: globals.values, showHelp: true };
     }
 
     if (globals.error) {
-        return { kind: "error", message: globals.error, details: [], node, globals: globals.values };
+        return { kind: "error", message: globals.error, details: [], node, globals: globals.values, showHelp: true };
     }
 
     if (parsed.values.help === true) {
@@ -94,10 +107,10 @@ export function parseLine(argv: readonly string[], tree: CommandTree, globalSpec
         };
     }
 
-    const input = collectValues(command.flags, parsed.values);
+    const input = collectValues(command.flags, parsed.values, true);
 
     if (input.error) {
-        return { kind: "error", message: input.error, details: [], node, globals: globals.values };
+        return { kind: "error", message: input.error, details: [], node, globals: globals.values, showHelp: true };
     }
 
     const positional = assignPositionals(command, parsed.positionals, input.values, appName);
@@ -108,13 +121,20 @@ export function parseLine(argv: readonly string[], tree: CommandTree, globalSpec
         return {
             kind: "error",
             message: positional.error,
-            details: options.length > 0 ? [`Did you mean "${[...node.path, options[0]].join(" ")}"?`] : [],
+            details: [...(positional.details ?? []), ...(options.length > 0 ? [`Did you mean "${[...node.path, options[0]].join(" ")}"?`] : [])],
             node,
             globals: globals.values,
+            showHelp: true,
         };
     }
 
-    return { kind: "run", command, input: input.values, globals: globals.values };
+    const missing = missingRequired(command, input.values);
+
+    if (missing) {
+        return { kind: "error", ...missing, node, globals: globals.values, showHelp: true };
+    }
+
+    return { kind: "run", command, node, input: input.values, globals: globals.values };
 }
 
 function tokenMap(specs: readonly FlagSpec[]): Map<string, FlagSpec> {
@@ -137,6 +157,52 @@ function tokenMap(specs: readonly FlagSpec[]): Map<string, FlagSpec> {
     return map;
 }
 
+/**
+ * For a `passThrough` command: splits its arguments into the flags it knows (with their values),
+ * and everything else in the order typed, plus every token after the first `--` as it is.
+ *
+ * ```ts
+ * splitPassThrough(["claude", "--no-build", "--model", "opus", "--", "-c"], flags);
+ * // -> { own: ["--no-build"], passed: ["claude", "--model", "opus", "-c"] }
+ * ```
+ */
+function splitPassThrough(args: readonly string[], flags: readonly FlagSpec[]): { own: string[]; passed: string[] } {
+    const known = tokenMap(flags);
+    const own: string[] = [];
+    const passed: string[] = [];
+
+    for (const flag of flags) {
+        for (const alias of flag.aliases) {
+            known.set(`--${alias}`, flag);
+        }
+    }
+
+    for (let index = 0; index < args.length; index++) {
+        const token = args[index]!;
+
+        if (token === "--") {
+            passed.push(...args.slice(index + 1));
+            break;
+        }
+
+        const name = token.split("=")[0]!;
+        const spec = known.get(name);
+
+        if (!token.startsWith("-") || token === "-" || (spec === undefined && !["-h", "--help", "--version"].includes(name))) {
+            passed.push(token);
+            continue;
+        }
+
+        own.push(token);
+
+        if (spec && spec.kind !== "boolean" && !token.includes("=") && index + 1 < args.length) {
+            own.push(args[++index]!);
+        }
+    }
+
+    return { own, passed };
+}
+
 function mergeFlags(own: readonly FlagSpec[], globals: readonly FlagSpec[]): FlagSpec[] {
     const names = new Set(own.flatMap((flag) => [flag.name, ...flag.aliases]));
 
@@ -146,7 +212,7 @@ function mergeFlags(own: readonly FlagSpec[], globals: readonly FlagSpec[]): Fla
 interface RawParse {
     values: Record<string, unknown>;
     positionals: string[];
-    error?: string;
+    error?: { message: string; details: string[] };
 }
 
 function runParseArgs(args: string[], flags: readonly FlagSpec[]): RawParse {
@@ -188,6 +254,17 @@ function runParseArgs(args: string[], flags: readonly FlagSpec[]): RawParse {
     try {
         const { values, positionals } = parseArgs({ args, options, strict: true, allowPositionals: true, allowNegative: true });
 
+        // With allowNegative, Node reads `--no-build` as `build: false` even when `no-build` is a
+        // flag of its own. Give the value back to that flag when no `build` flag exists.
+        for (const flag of flags) {
+            const positive = flag.name.startsWith("no-") ? flag.name.slice(3) : undefined;
+
+            if (flag.kind === "boolean" && positive !== undefined && options[positive] === undefined && values[positive] !== undefined) {
+                values[flag.name] = !values[positive];
+                delete values[positive];
+            }
+        }
+
         for (const flag of flags) {
             for (const alias of extraNames.get(flag.name) ?? []) {
                 if (values[alias] !== undefined && values[flag.name] === undefined) {
@@ -206,28 +283,57 @@ function runParseArgs(args: string[], flags: readonly FlagSpec[]): RawParse {
     }
 }
 
-function describeParseError(error: unknown, flags: readonly FlagSpec[]): string {
+/** Node's parse error, in the words the CLI used before the refactor: `Nonexistent flag: --nope`. */
+function describeParseError(error: unknown, flags: readonly FlagSpec[]): { message: string; details: string[] } {
     const message = error instanceof Error ? error.message : String(error);
     const unknown = /Unknown option '(-{1,2}[^']+)'/.exec(message)?.[1];
 
     if (unknown) {
         const names = flags.flatMap((flag) => [`--${flag.name}`, ...flag.aliases.map((alias) => `--${alias}`)]);
         const options = suggest(unknown, [...names, "--help"]);
-        const hint = options.length > 0 ? ` Did you mean ${options.join(" or ")}?` : "";
 
-        return `There is no flag ${unknown}.${hint}`;
+        return { message: `Nonexistent flag: ${unknown}`, details: options.length > 0 ? [`Did you mean ${options.join(" or ")}?`] : [] };
     }
 
     const missingValue = /Option '(-{1,2}[^' ]+)(?: [^']*)?' argument missing/.exec(message)?.[1];
 
     if (missingValue) {
-        return `${missingValue} needs a value.`;
+        return { message: `Flag ${missingValue} expects a value`, details: [] };
     }
 
-    return message.replace(/\. To specify a positional argument.*$/, ".");
+    return { message: message.replace(/\. To specify a positional argument.*$/, "."), details: [] };
 }
 
-function collectValues(specs: readonly FlagSpec[], values: Record<string, unknown>): { values: Record<string, unknown>; error?: string } {
+/**
+ * The required arguments and flags the command line left out, worded as before the refactor:
+ *
+ * ```text
+ * Missing 1 required arg:
+ *   ref  What to subscribe to
+ * ```
+ */
+function missingRequired(command: Command, input: Record<string, unknown>): { message: string; details: string[] } | undefined {
+    const args = command.positionals.filter((spec) => spec.required && input[spec.field] === undefined);
+
+    if (args.length > 0) {
+        const width = Math.max(...args.map((spec) => spec.name.length));
+
+        return {
+            message: `Missing ${args.length} required arg${args.length === 1 ? "" : "s"}:`,
+            details: args.map((spec) => (spec.description ? `${spec.name.padEnd(width)}  ${spec.description}` : spec.name)),
+        };
+    }
+
+    const flag = command.flags.find((spec) => spec.required && input[spec.field] === undefined && !command.positionals.some((p) => p.field === spec.field));
+
+    return flag ? { message: `Missing required flag --${flag.name}`, details: [] } : undefined;
+}
+
+/**
+ * Converts each flag's raw values by its kind. With `checkChoices`, a value outside a flag's choices
+ * is an error (global arguments skip it: an unknown `--log-level` falls back to `info`).
+ */
+function collectValues(specs: readonly FlagSpec[], values: Record<string, unknown>, checkChoices = false): { values: Record<string, unknown>; error?: string } {
     const out: Record<string, unknown> = {};
 
     for (const spec of specs) {
@@ -252,6 +358,10 @@ function collectValues(specs: readonly FlagSpec[], values: Record<string, unknow
                 return { values: out, error: result.error };
             }
 
+            if (checkChoices && spec.choices && spec.choices.length > 0 && !spec.choices.includes(result.value)) {
+                return { values: out, error: `Expected --${spec.name}=${String(item)} to be one of: ${spec.choices.map(String).join(", ")}` };
+            }
+
             converted.push(result.value);
         }
 
@@ -261,7 +371,7 @@ function collectValues(specs: readonly FlagSpec[], values: Record<string, unknow
     return { values: out };
 }
 
-function assignPositionals(command: Command, positionals: readonly string[], input: Record<string, unknown>, appName: string): { error?: string } {
+function assignPositionals(command: Command, positionals: readonly string[], input: Record<string, unknown>, appName: string): { error?: string; details?: string[] } {
     let index = 0;
 
     for (const spec of command.positionals) {
@@ -294,7 +404,7 @@ function assignPositionals(command: Command, positionals: readonly string[], inp
         const extra = positionals[index]!;
         const words = [appName, ...command.path].join(" ");
 
-        return { error: `"${words}" takes ${command.positionals.length === 0 ? "no arguments" : `at most ${command.positionals.length} argument${command.positionals.length === 1 ? "" : "s"}`}, but was also given "${extra}".` };
+        return { error: `Unexpected argument: ${extra}`, details: [`"${words}" takes ${command.positionals.length === 0 ? "no arguments" : `at most ${command.positionals.length} argument${command.positionals.length === 1 ? "" : "s"}`}.`] };
     }
 
     return {};

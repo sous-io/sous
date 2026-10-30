@@ -11,7 +11,7 @@ describe("viewError()", () => {
      */
     it("should show a sous error's message, details and exit code", () => {
         expect(viewError(new SousError("Broken.", { details: ["Fix it."], exitCode: 4 }))).toEqual({ lines: ["Error: Broken.", "  Fix it."], exitCode: 4 });
-        expect(viewError(new NonInteractiveError("Go?", "--yes")).exitCode).toBe(2);
+        expect(viewError(new NonInteractiveError("Go?", "--yes")).exitCode).toBe(1);
     });
 
     /** Any other error shows its message with exit code 1; a thrown string works too. */

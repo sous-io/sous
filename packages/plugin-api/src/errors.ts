@@ -90,10 +90,8 @@ export class NonInteractiveError extends SousError {
     constructor(question: string, answeredBy: string | undefined, options: SousErrorOptions = {}) {
         const fix = answeredBy ? ` Pass ${answeredBy} to answer it ahead of time.` : "";
 
-        super(`sous needed to ask "${question}" but cannot ask questions in this run.${fix}`, {
-            exitCode: 2,
-            ...options,
-        });
+        // Exit code 1, as before the refactor: only a command line the CLI could not parse exits 2.
+        super(`sous needed to ask "${question}" but cannot ask questions in this run.${fix}`, options);
         this.question = question;
         this.answeredBy = answeredBy;
     }

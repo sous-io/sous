@@ -3,6 +3,7 @@ import { CommandTree, type CommandPicks } from "./command-tree.js";
 import { viewError } from "./errors.js";
 import { runCommandLine } from "./front-end.js";
 import { BUILT_IN_GROUPS } from "./groups.js";
+import { completeIntent, completionIntent } from "./completion.js";
 import { helpIntent } from "./help-intent.js";
 import { type CliIo, processIo } from "./io.js";
 import { canPrompt } from "./terminal-prompter.js";
@@ -153,6 +154,8 @@ export function createCliPlugin(options: CliPluginOptions = {}): PluginDefinitio
             });
 
             sous.intents.add(helpIntent);
+            sous.intents.add(completionIntent);
+            sous.intents.add(completeIntent);
             sous.intents.add({
                 intent: "version",
                 summary: "Print the version",

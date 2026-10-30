@@ -10,6 +10,8 @@ export { CommandTree } from "./command-tree.js";
 export type { Command, CommandNode, CommandPicks } from "./command-tree.js";
 export { argumentsFromSchema, convertValue } from "./flags.js";
 export type { CommandArguments, FlagSpec, PositionalSpec, ValueKind } from "./flags.js";
+export { COMPLETE_COMMAND, COMPLETION_SHELLS, completeIntent, completeWords, completionIntent, completionScript } from "./completion.js";
+export type { CompletionShell } from "./completion.js";
 export { BUILT_IN_GROUPS } from "./groups.js";
 export { helpIntent } from "./help-intent.js";
 export { globalSpecs } from "./globals.js";

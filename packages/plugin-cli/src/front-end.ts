@@ -1,5 +1,6 @@
-import { type EngineHandle, type Environment, isLogLevel, type LogLevel, type ProjectInfo, type Reporter, type SubmitOptions } from "@sous-io/plugin-api";
+import { type EngineHandle, type Environment, isLogLevel, isSousErrorOfKind, SousError, type LogLevel, type ProjectInfo, type Reporter, type SubmitOptions } from "@sous-io/plugin-api";
 import type { CommandTree } from "./command-tree.js";
+import { COMPLETE_COMMAND } from "./completion.js";
 import { viewError } from "./errors.js";
 import { globalSpecs } from "./globals.js";
 import { renderHelp } from "./help.js";
@@ -31,7 +32,8 @@ export interface CliRunOptions {
 export async function runCommandLine(engine: EngineHandle, argv: readonly string[], options: CliRunOptions): Promise<void> {
     const { io, env } = options;
     let reporter: Reporter = new TerminalReporter(io.stderr, "info");
-    let debug = false;
+    // `SOUS_DEBUG` asks for stack traces, as before the refactor, without changing the log level.
+    let debug = debugRequested(env);
 
     engine.setReporter(reporter);
 
@@ -41,7 +43,7 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
         const line = parseLine(versionArgv(argv, tree), tree, specs, engine.app.name);
         const level = thresholdOf(line.globals);
 
-        debug = line.globals.debug === true;
+        debug = debug || line.globals.debug === true;
         reporter = new TerminalReporter(io.stderr, level, createStyle(colorEnabled(io.stderr, env)));
         engine.setReporter(reporter);
 
@@ -62,10 +64,18 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
             case "version":
                 io.stdout.write(`v${engine.app.version}\n`);
                 break;
-            case "error":
-                io.stderr.write(`Error: ${line.message}\n${line.details.map((detail) => `  ${detail}\n`).join("")}`);
-                io.setExitCode(2);
+            case "error": {
+                const view = viewError(new SousError(line.message, { details: line.details, exitCode: 2 }), { debug });
+
+                io.stderr.write(`${view.lines.join("\n")}\n`);
+
+                if (line.showHelp) {
+                    io.stderr.write(`\n${renderHelp(line.node, { appName: engine.app.name, globals: specs })}`);
+                }
+
+                io.setExitCode(view.exitCode);
                 break;
+            }
             case "run": {
                 const prompter = new TerminalPrompter(io.stdin, io.stderr, canPrompt(io, env, line.globals));
                 const intent = line.command.intent;
@@ -99,6 +109,13 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
                     const view = viewError(error, { debug, command: line.command });
 
                     io.stderr.write(`${view.lines.join("\n")}\n`);
+
+                    // A question that could not be asked, or input the command could not take, is
+                    // answered by the command's flags, so its help follows (as before the refactor).
+                    if (wantsHelp(error)) {
+                        io.stderr.write(`\n${renderHelp(line.node, { appName: engine.app.name, globals: specs })}`);
+                    }
+
                     io.setExitCode(view.exitCode);
                 };
 
@@ -136,11 +153,31 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
     }
 }
 
+/** Values of `SOUS_DEBUG` that mean "not set"; anything else asks for stack traces. */
+const DEBUG_OFF = new Set(["", "0", "false", "no", "off"]);
+
+/** True when `SOUS_DEBUG` is set to something other than an "off" value. */
+export function debugRequested(env: Environment): boolean {
+    const raw = env.SOUS_DEBUG;
+
+    return raw !== undefined && !DEBUG_OFF.has(raw.trim().toLowerCase());
+}
+
+/** True for the errors the command's own help helps with: bad input, and a question no one could answer. */
+function wantsHelp(error: unknown): boolean {
+    return isSousErrorOfKind(error, "input") || isSousErrorOfKind(error, "non-interactive");
+}
+
 /**
  * `sous --version --verbose`, as before the refactor, runs the `version` intent with `--verbose`,
  * so it prints the package, platform and Node build too.
  */
 function versionArgv(argv: readonly string[], tree: CommandTree): readonly string[] {
+    // The completion scripts pass the words typed so far, flags included, as plain arguments.
+    if (argv[0] === COMPLETE_COMMAND) {
+        return [COMPLETE_COMMAND, "--", ...argv.slice(1)];
+    }
+
     if (argv[0] === "--version" && argv.length > 1 && argv.slice(1).every((token) => token === "--verbose") && tree.root.children.get("version")?.command) {
         return ["version", "--verbose"];
     }
