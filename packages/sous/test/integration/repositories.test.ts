@@ -5,9 +5,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { parse as parseJsonc } from "jsonc-parser";
 import { makeTmpDir, type TmpDir } from "../utils/tmp.js";
 import { buildFixtureRepo } from "../utils/fixture-repo.js";
-import { discoverConfig } from "../../lib/config-discovery.js";
-import { loadSettings } from "../../lib/settings.js";
-import { SubscriptionService } from "../../lib/repos/subscription-service.js";
+import { runInProcess } from "../utils/in-process.js";
 
 import { binPath } from "../utils/sous-bin.js";
 
@@ -324,17 +322,18 @@ describe("the repositories consumer surface", () => {
 
       // Every directory sous created for itself explains itself: the layer
       // directory, the store root and the index cache each carry a README with
-      // two one-line pointers to it.
+      // a one-line pointer to it. (The pointer files come from the harnesses
+      // now, and only Claude Code adds one.)
       for (const directory of [
         path.join(sousDir, "conf.d"),
         sousHome,
         storeRoot,
         path.join(storeRoot, "_indexes"),
       ]) {
-        for (const name of ["README.md", "AGENTS.md", "CLAUDE.md"]) {
+        for (const name of ["README.md", "CLAUDE.md"]) {
           expect(fs.existsSync(path.join(directory, name))).toBe(true);
         }
-        expect(fs.readFileSync(path.join(directory, "AGENTS.md"), "utf8")).toBe(
+        expect(fs.readFileSync(path.join(directory, "CLAUDE.md"), "utf8")).toBe(
           "Read `./README.md` for information about this directory.\n"
         );
       }
@@ -394,30 +393,23 @@ describe("the repositories consumer surface", () => {
    * writes nothing at all.
    *
    * The trust question needs a terminal, which a spawned process does not have,
-   * so this drives the service in process with the answers injected.
+   * so this runs the intent in process with the answers scripted.
    */
   it(
     "should ask about an untrusted repository a dependency needs, by its location",
     async () => {
-      const discovered = discoverConfig(projectRoot);
-      expect(discovered).not.toBeNull();
-      const settings = await loadSettings(discovered!);
-
-      const printed: string[] = [];
-      const service = new SubscriptionService({
-        sousDir,
-        settings,
-        env: { ...process.env, SOUS_HOME: sousHome },
-        interactive: true,
-        write: (line) => printed.push(line),
-        // The plan is accepted; the repository is not.
-        ask: async (message) => message === "Proceed?",
-      });
-
-      await expect(service.subscribe({ ref: "workflow/needs-vendor" })).rejects.toThrow(
-        /trust was declined/
+      // The plan is accepted; the repository is not.
+      const run = await runInProcess(
+        projectRoot,
+        { SOUS_HOME: sousHome },
+        "subscription.add",
+        { ref: "workflow/needs-vendor" },
+        (message) => message.startsWith("Subscribe to ")
       );
 
+      expect(run.error?.message).toMatch(/trust was declined/);
+
+      const printed = run.printed;
       const notice = printed.join("\n");
       expect(notice).toContain("vendor-recipes");
       expect(notice).toContain("https://github.com/sous-io/vendor-recipes");
@@ -916,7 +908,8 @@ describe("the repositories consumer surface", () => {
 
       const result = sous(projectRoot, "build");
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain("Restoring recipes");
+      // A build reports what it restored as it goes, on standard error.
+      expect(result.stdout + result.stderr).toContain("Restoring recipes");
 
       const skill = path.join(projectRoot, ".claude", "skills", "task-files", "SKILL.md");
       expect(fs.readFileSync(skill, "utf8")).toContain("A skill from the fixture repo.");
@@ -1048,7 +1041,8 @@ describe("the repositories consumer surface", () => {
       const result = sous(projectRoot, "subscribe", "daily", "--yes");
 
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain("fixtures:formatter/daily");
+      // What the ref resolved to is reported as the run goes, on standard error.
+      expect(result.stdout + result.stderr).toContain("fixtures:formatter/daily");
 
       const lock = readJson(path.join(sousDir, "sous.lock.json"));
       const recipes = lock.recipes as Record<string, { repo: string }>;
@@ -1106,7 +1100,7 @@ describe("the repositories consumer surface", () => {
       );
 
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain("fixtures:formatter");
+      expect(result.stdout + result.stderr).toContain("fixtures:formatter");
 
       const subscriptions = readJsonc(
         path.join(sousDir, "conf.d", "510-subscriptions.jsonc")
@@ -1151,30 +1145,12 @@ describe("the repositories consumer surface", () => {
    * subscription record, nothing downloaded.
    *
    * The question needs a terminal, which a spawned process does not have, so
-   * this one drives the service in process with the answer injected. The plan
+   * this one runs the intent in process with the answer scripted. The plan
    * it printed and the question it asked are the same ones the command shows.
    */
   it(
     "should write nothing when the confirmation is declined",
     async () => {
-      const discovered = discoverConfig(projectRoot);
-      expect(discovered).not.toBeNull();
-      const settings = await loadSettings(discovered!);
-
-      const asked: string[] = [];
-      const printed: string[] = [];
-      const service = new SubscriptionService({
-        sousDir,
-        settings,
-        env: { ...process.env, SOUS_HOME: sousHome },
-        interactive: true,
-        write: (line) => printed.push(line),
-        ask: async (message) => {
-          asked.push(message);
-          return false;
-        },
-      });
-
       const lockPath = path.join(sousDir, "sous.lock.json");
       const lockBefore = fs.readFileSync(lockPath, "utf8");
       const subscriptionsPath = path.join(
@@ -1184,11 +1160,19 @@ describe("the repositories consumer surface", () => {
       );
       const subscriptionsBefore = fs.readFileSync(subscriptionsPath, "utf8");
 
-      await expect(
-        service.subscribe({ ref: "workflow/needs-partials" })
-      ).rejects.toThrow(/declined/);
+      const run = await runInProcess(
+        projectRoot,
+        { SOUS_HOME: sousHome },
+        "subscription.add",
+        { ref: "workflow/needs-partials" },
+        () => false
+      );
 
-      expect(asked).toEqual(["Proceed?"]);
+      expect(run.error?.message).toMatch(/declined/);
+
+      const asked = run.asked;
+      const printed = run.printed;
+      expect(asked).toEqual(["Subscribe to 'workflow/needs-partials'?"]);
       expect(printed.join("\n")).toContain("compiled into this project");
       expect(fs.readFileSync(lockPath, "utf8")).toBe(lockBefore);
       expect(fs.readFileSync(subscriptionsPath, "utf8")).toBe(subscriptionsBefore);
@@ -1241,7 +1225,8 @@ describe("the repositories consumer surface", () => {
         "--yes"
       );
       expect(added.status, added.stdout + added.stderr).toBe(0);
-      expect(added.stdout).toContain("Building the project");
+      // The build reports as it goes, on standard error.
+      expect(added.stdout + added.stderr).toContain("Building the project");
       expect(fs.existsSync(skill)).toBe(true);
 
       const removed = sous(
@@ -1251,7 +1236,7 @@ describe("the repositories consumer surface", () => {
         "workflow/needs-partials"
       );
       expect(removed.status, removed.stdout + removed.stderr).toBe(0);
-      expect(removed.stdout).toContain("Building the project");
+      expect(removed.stdout + removed.stderr).toContain("Building the project");
       expect(fs.existsSync(skill)).toBe(false);
     },
     CLI_TIMEOUT
@@ -1286,7 +1271,7 @@ describe("the repositories consumer surface", () => {
         "--no-build"
       );
       expect(added.status, added.stdout + added.stderr).toBe(0);
-      expect(added.stdout).not.toContain("Building the project");
+      expect(added.stdout + added.stderr).not.toContain("Building the project");
       expect(fs.existsSync(skill)).toBe(false);
 
       // A build of its own still writes it, which is what gives the removal
@@ -1302,7 +1287,7 @@ describe("the repositories consumer surface", () => {
         "--no-build"
       );
       expect(removed.status, removed.stdout + removed.stderr).toBe(0);
-      expect(removed.stdout).not.toContain("Building the project");
+      expect(removed.stdout + removed.stderr).not.toContain("Building the project");
       expect(fs.existsSync(skill)).toBe(true);
 
       // And the ordinary build the message pointed at prunes it.

@@ -208,19 +208,29 @@ export async function pickMatch(
     search: string,
     acceptFirst: boolean | undefined,
     none: () => Error,
+    options: { announce?: boolean } = {},
 ): Promise<CatalogMatch> {
     if (matches.length === 0) {
         throw none();
     }
 
-    if (matches.length === 1 || acceptFirst === true) {
-        return matches[0]!;
+    const exact = matches.filter((match) => match.exact);
+    const settled = matches.length === 1 ? matches[0] : acceptFirst === true ? undefined : exact.length === 1 ? exact[0] : undefined;
+
+    // With `announce`, what the ref settled on is reported through the picker, which says why.
+    if (options.announce === true && (settled !== undefined || acceptFirst === true)) {
+        const candidates = settled === undefined ? matches : [settled];
+        const picked = await ctx.services.get("refs.picker").pick(candidates.map((match) => match.ref), { search, ...(acceptFirst === undefined ? {} : { acceptFirst }) }, ctx);
+
+        return candidates.find((match) => match.ref === picked) ?? candidates[0]!;
     }
 
-    const exact = matches.filter((match) => match.exact);
+    if (settled !== undefined) {
+        return settled;
+    }
 
-    if (exact.length === 1) {
-        return exact[0]!;
+    if (acceptFirst === true) {
+        return matches[0]!;
     }
 
     const picked = await ctx.services

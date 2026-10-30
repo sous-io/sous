@@ -70,10 +70,18 @@ export function registerPartA(sous: Sous): void {
     // the pointer files (AGENTS.md, CLAUDE.md); once the config is built, they are added beside its
     // README, and beside the sous home's. Nothing already there is touched.
     sous.on("config.built", async (_event, ctx) => {
-        const root = ctx.services.get("host.sous-home").paths(ctx.env).store;
+        if (!ctx.services.has("host.directories")) {
+            return;
+        }
 
-        if (fs.existsSync(root) && ctx.services.has("host.directories")) {
-            await ctx.services.get("host.directories").ensureKnown("store", root);
+        const paths = ctx.services.get("host.sous-home").paths(ctx.env);
+        const directories = ctx.services.get("host.directories");
+
+        if (fs.existsSync(paths.indexCache)) {
+            // Explains the store root and the sous home as well.
+            await directories.ensureKnown("index-cache", paths.indexCache);
+        } else if (fs.existsSync(paths.store)) {
+            await directories.ensureKnown("store", paths.store);
         }
     });
 

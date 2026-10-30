@@ -37,6 +37,7 @@ import { askFollowUp, buildFollowUp } from "../followups.js";
 import { applyResolution, keysHeldBySubscription, PROJECT_HOLDER, type LockRepoInput } from "../lock-holds.js";
 import { configuredSubscriptions, contributorLabel, managedContributor, setSubscriptionEnabled, SUBSCRIPTIONS_LAYER, trustedRepos, writeSubscriptionEntry } from "../project.js";
 import { isShortNamed, planSubscriptionRemoval, subscriptionKeyFor, writeSubscriptionRemoval } from "../subscriptions.js";
+import { checkProvidedAnswers } from "../provided-answers.js";
 import { planQuestions } from "../questions.js";
 import { ensureRequiredPlugins, recipeDirectory } from "../required-plugins.js";
 import { needUrlError } from "../trust.js";
@@ -173,7 +174,7 @@ async function pickNamed(ctx: Context, catalog: CatalogContext, readings: readon
                 `Run 'sous repo search ${input.ref.trim()}' to look for something like it, or 'sous repo add <url>' to add the repository that publishes it.`,
             ],
         });
-    });
+    }, { announce: true });
 
     return match.ref.kind === "recipe" && written.kind === "recipe" && written.range !== undefined ? { ...match.ref, range: written.range } : match.ref;
 }
@@ -310,6 +311,9 @@ export async function addSubscription(input: SubscriptionAddInput, ctx: Context)
     const installed = await ensureRequiredPlugins(current, closure.resolved, input, input.ref.trim());
     const installFollowUp = installed === undefined ? [] : [installed];
 
+    // An answer given up front that names nothing, or does not fit, fails before anything is written.
+    await checkProvidedAnswers(current, closure.resolved, input, input.dryRun !== true);
+
     if (input.dryRun === true) {
         return {
             ...result,
@@ -334,7 +338,8 @@ export async function addSubscription(input: SubscriptionAddInput, ctx: Context)
     ctx.configChanged();
     await rebuild(current);
 
-    const asking = closure.resolved.filter((recipe) => (recipe.variables ?? []).length > 0).map((recipe) => recipe.key);
+    // A recipe whose index does not record its questions may ask some, so vars.ask runs for it too.
+    const asking = closure.resolved.filter((recipe) => recipe.variables === undefined || recipe.variables.length > 0).map((recipe) => recipe.key);
 
     return { ...result, diff, followUps: [...installFollowUp, await askFollowUp(ctx, input, asking), await buildFollowUp(ctx, input)] };
 }

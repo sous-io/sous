@@ -94,7 +94,14 @@ export interface RecipeDetailShape {
 
 /** The questions some recipes would ask (plugin-recipes' `PlannedQuestions`). */
 export interface QuestionPlanShape {
-    readonly questions: ReadonlyArray<{ readonly recipe: string; readonly definition: VariableShape; readonly storedAs?: string; readonly answered: boolean }>;
+    readonly questions: ReadonlyArray<{
+        readonly recipe: string;
+        readonly definition: VariableShape;
+        readonly storedAs?: string;
+        readonly storagePath?: string;
+        readonly answered: boolean;
+        readonly answeredFrom?: string;
+    }>;
     readonly unreadable: readonly string[];
 }
 
@@ -653,12 +660,18 @@ export function writeQuestionPlan(out: Printer, plan: QuestionPlanShape, options
                 ...factIf("about", variable.description ? firstSentence(variable.description) : undefined),
                 ...(variable.example === undefined ? [] : [{ label: "example", lines: [String(variable.example)] }]),
                 ...factIf("stored-as", question.storedAs),
-                ...(variable.secret === true ? [{ label: "secret", lines: ["yes, stored in the local answers file"] }] : []),
+                ...factIf("storage-path", question.storagePath),
                 {
                     label: "answered",
-                    lines: [question.answered ? "yes" : variable.required === false ? "no, and an answer is optional" : "no, and this recipe requires an answer"],
+                    lines: [
+                        question.answered
+                            ? `yes${question.answeredFrom === undefined ? "" : `, from ${question.answeredFrom}`}`
+                            : variable.required === false
+                              ? "no, and an answer is optional"
+                              : "no, and this recipe requires an answer",
+                    ],
                 },
-                ...(options.answerHints && !question.answered ? [{ label: "answer-with", lines: [`--answer ${variable.name}=<value>`] }] : []),
+                ...(options.answerHints ? [{ label: "answer-with", lines: [`--answer ${variable.name}=<value>`] }] : []),
             ];
             const labelWidth = Math.max(...facts.map((fact) => fact.label.length));
 

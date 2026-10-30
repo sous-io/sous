@@ -942,8 +942,12 @@ export interface PlannedQuestion {
     readonly definition: VariableDefinition;
     /** The environment name the answer is stored as. */
     readonly storedAs?: string;
+    /** The env file the answer is written to. */
+    readonly storagePath?: string;
     /** True when an answer is in scope already. */
     readonly answered: boolean;
+    /** Where the answer in scope comes from, in words, when there is one. */
+    readonly answeredFrom?: string;
 }
 
 /** The questions some recipes would ask, before anything is downloaded. */
