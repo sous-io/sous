@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/plugin-github",
-  "version": "0.2.34",
+  "version": "0.2.37",
   "description": "A repository-host entity for GitHub: reading indexes, the token, proposing changes, the CI workflow.",
   "type": "module",
   "license": "Apache-2.0",

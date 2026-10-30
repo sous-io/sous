@@ -20,6 +20,16 @@ function write(root: string, relative: string, contents: string): void {
   fs.writeFileSync(target, contents);
 }
 
+/**
+ * Links a directory. The links in these tests are directory links made as
+ * junctions: Windows lets anyone make a junction, where a file symlink needs a
+ * privilege, and Node reports a junction as a symbolic link all the same.
+ * Other platforms ignore the type and make an ordinary symlink.
+ */
+function linkDir(target: string, linkPath: string): void {
+  fs.symlinkSync(target, linkPath, "junction");
+}
+
 afterEach(() => {
   while (tmpDirs.length > 0) tmpDirs.pop()!.cleanup();
 });
@@ -163,16 +173,16 @@ describe("hashDirectory()", () => {
    * the same published version then hashed differently on two machines and
    * failed its own pin on every install. Links contribute nothing at all.
    *
-   * // a tree with a link, and the same tree without it
+   * // a tree with alias -> docs, and the same tree without the link
    * hashDirectory(withLink) === hashDirectory(withoutLink);  // -> true
    */
   it("should hash a tree containing a symlink the same as one without it", async () => {
     const dir = tmp();
-    write(dir, "a.md", "alpha");
-    fs.symlinkSync(path.join(dir, "a.md"), path.join(dir, "link.md"));
+    write(dir, "docs/a.md", "alpha");
+    linkDir(path.join(dir, "docs"), path.join(dir, "alias"));
 
     const plain = tmp();
-    write(plain, "a.md", "alpha");
+    write(plain, "docs/a.md", "alpha");
 
     expect(await hashDirectory(dir)).toBe(await hashDirectory(plain));
   });
@@ -191,11 +201,11 @@ describe("hashDirectory()", () => {
 
     const present = tmp();
     write(present, "a.md", "alpha");
-    fs.symlinkSync(path.join(target, "outside.md"), path.join(present, "link.md"));
+    linkDir(target, path.join(present, "link"));
 
     const dangling = tmp();
     write(dangling, "a.md", "alpha");
-    fs.symlinkSync(path.join(dangling, "nothing-is-here.md"), path.join(dangling, "link.md"));
+    linkDir(path.join(dangling, "nothing-is-here"), path.join(dangling, "link"));
 
     expect(await hashDirectory(present)).toBe(await hashDirectory(dangling));
   });
@@ -212,7 +222,7 @@ describe("hashDirectory()", () => {
 
     const dir = tmp();
     write(dir, "a.md", "alpha");
-    fs.symlinkSync(outside, path.join(dir, "linked"));
+    linkDir(outside, path.join(dir, "linked"));
 
     const plain = tmp();
     write(plain, "a.md", "alpha");

@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/plugin-mcp",
-  "version": "0.2.34",
+  "version": "0.2.37",
   "description": "The sous mcp front end: tools generated from intents, MCP logging and elicitation.",
   "type": "module",
   "license": "Apache-2.0",

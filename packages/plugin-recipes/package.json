@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/plugin-recipes",
-  "version": "0.2.34",
+  "version": "0.2.37",
   "description": "Repositories, trust, subscriptions, the lockfile, the store, the index cache, links, the core recipe, the catalog and recipe plugins.",
   "type": "module",
   "license": "Apache-2.0",

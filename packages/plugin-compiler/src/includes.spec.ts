@@ -73,10 +73,17 @@ function makeTmpDir(): TmpDir {
     return { path: dir, cleanup: () => fs.rmSync(dir, { recursive: true, force: true }) };
 }
 
+/**
+ * An absolute path as this platform spells it, so expected values match what
+ * `path.resolve` gives: unchanged on POSIX, on the current drive with `\`
+ * separators on Windows ("/proj" -> "D:\proj").
+ */
+const abs = (p: string): string => path.resolve(p);
+
 describe("resolveAliasPrefix()", () => {
   const aliases = {
-    "#project": ["/proj-root"],
-    team: ["/team/prompts", "/proj-root"],
+    "#project": [abs("/proj-root")],
+    team: [abs("/team/prompts"), abs("/proj-root")],
   };
 
   it("returns an absolute path unchanged as the sole candidate", () => {
@@ -89,21 +96,21 @@ describe("resolveAliasPrefix()", () => {
 
   it("expands an alias to one candidate per base, in base order", () => {
     expect(resolveAliasPrefix("team/skills/**/*", aliases)).toEqual([
-      "/team/prompts/skills/**/*",
-      "/proj-root/skills/**/*",
+      abs("/team/prompts/skills/**/*"),
+      abs("/proj-root/skills/**/*"),
     ]);
   });
 
   it("expands a built-in # alias", () => {
     expect(resolveAliasPrefix("#project/skills/**/*", aliases)).toEqual([
-      "/proj-root/skills/**/*",
+      abs("/proj-root/skills/**/*"),
     ]);
   });
 
   it("accepts the colon separator", () => {
     expect(resolveAliasPrefix("team:skills/**/*", aliases)).toEqual([
-      "/team/prompts/skills/**/*",
-      "/proj-root/skills/**/*",
+      abs("/team/prompts/skills/**/*"),
+      abs("/proj-root/skills/**/*"),
     ]);
   });
 });
@@ -126,11 +133,11 @@ describe("templateTwin()", () => {
    * Example: "/a/x.md" -> "/a/x.tpl.md"; "/a/x.tpl.md" -> "/a/x.md".
    */
   it("should swap a path between its plain and .tpl. spellings", () => {
-    expect(templateTwin("/a/x.md")).toBe("/a/x.tpl.md");
-    expect(templateTwin("/a/x.tpl.md")).toBe("/a/x.md");
-    expect(templateTwin("/a/settings.tpl.mjs")).toBe("/a/settings.mjs");
-    expect(templateTwin("/a/README")).toBeUndefined();
-    expect(templateTwin("/a/.env")).toBeUndefined();
+    expect(templateTwin(abs("/a/x.md"))).toBe(abs("/a/x.tpl.md"));
+    expect(templateTwin(abs("/a/x.tpl.md"))).toBe(abs("/a/x.md"));
+    expect(templateTwin(abs("/a/settings.tpl.mjs"))).toBe(abs("/a/settings.mjs"));
+    expect(templateTwin(abs("/a/README"))).toBeUndefined();
+    expect(templateTwin(abs("/a/.env"))).toBeUndefined();
   });
 });
 
@@ -150,54 +157,54 @@ describe("splitAliasKey()", () => {
 });
 
 describe("resolveIncludeCandidates()", () => {
-  const baseDir = "/proj/memories/tools";
+  const baseDir = abs("/proj/memories/tools");
 
   it("returns a substituted absolute path as the sole candidate", () => {
     const out = resolveIncludeCandidates("${sousRootPath}/shared/x.md", {
-      scope: { sousRootPath: "/opt/sous" },
+      scope: { sousRootPath: abs("/opt/sous") },
       baseDir,
     });
-    expect(out).toEqual(withTwins(["/opt/sous/shared/x.md"]));
+    expect(out).toEqual(withTwins([abs("/opt/sous/shared/x.md")]));
   });
 
   it("resolves an alias to its base, then the relative fallback", () => {
     const out = resolveIncludeCandidates("#project/memories/x.md", {
-      aliases: { "#project": ["/proj-root"] },
+      aliases: { "#project": [abs("/proj-root")] },
       baseDir,
     });
     expect(out).toEqual(withTwins([
-      "/proj-root/memories/x.md",
-      "/proj/memories/tools/#project/memories/x.md",
+      abs("/proj-root/memories/x.md"),
+      abs("/proj/memories/tools/#project/memories/x.md"),
     ]));
   });
 
   it("tries multiple alias bases in order, then relative", () => {
     const out = resolveIncludeCandidates("stuff/one.md", {
-      aliases: { stuff: ["/etc/stuff", "/var/stuff"] },
+      aliases: { stuff: [abs("/etc/stuff"), abs("/var/stuff")] },
       baseDir,
     });
     expect(out).toEqual(withTwins([
-      "/etc/stuff/one.md",
-      "/var/stuff/one.md",
-      "/proj/memories/tools/stuff/one.md",
+      abs("/etc/stuff/one.md"),
+      abs("/var/stuff/one.md"),
+      abs("/proj/memories/tools/stuff/one.md"),
     ]));
   });
 
   it("augment case: alias miss falls through to a real relative dir of the same name", () => {
     // @stuff/one.md with alias stuff→/etc/stuff: check /etc/stuff/one.md, then ./stuff/one.md
     const out = resolveIncludeCandidates("stuff/one.md", {
-      aliases: { stuff: ["/etc/stuff"] },
-      baseDir: "/proj",
+      aliases: { stuff: [abs("/etc/stuff")] },
+      baseDir: abs("/proj"),
     });
-    expect(out).toEqual(withTwins(["/etc/stuff/one.md", "/proj/stuff/one.md"]));
+    expect(out).toEqual(withTwins([abs("/etc/stuff/one.md"), abs("/proj/stuff/one.md")]));
   });
 
   it("accepts the colon separator for aliases", () => {
     const out = resolveIncludeCandidates("#project:memories/x.md", {
-      aliases: { "#project": ["/proj-root"] },
+      aliases: { "#project": [abs("/proj-root")] },
       baseDir,
     });
-    expect(out[0]).toBe("/proj-root/memories/x.md");
+    expect(out[0]).toBe(abs("/proj-root/memories/x.md"));
   });
 
   /**
@@ -205,22 +212,22 @@ describe("resolveIncludeCandidates()", () => {
    * to the one absolute path under $HOME and nothing else is tried.
    */
   it("should expand a leading ~/ to the home directory as the sole candidate", () => {
-    const out = resolveIncludeCandidates("~/notes/x.md", { aliases: {}, baseDir, home: "/home/someone" });
-    expect(out).toEqual(withTwins(["/home/someone/notes/x.md"]));
+    const out = resolveIncludeCandidates("~/notes/x.md", { aliases: {}, baseDir, home: abs("/home/someone") });
+    expect(out).toEqual(withTwins([abs("/home/someone/notes/x.md")]));
   });
 
   /** A `#name` first segment is an alias, never the home directory. */
   it("should leave a #name first segment to the alias rules", () => {
     const out = resolveIncludeCandidates("#project/x.md", {
-      aliases: { "#project": ["/proj"] },
+      aliases: { "#project": [abs("/proj")] },
       baseDir,
     });
-    expect(out).toEqual(withTwins(["/proj/x.md", "/proj/memories/tools/#project/x.md"]));
+    expect(out).toEqual(withTwins([abs("/proj/x.md"), abs("/proj/memories/tools/#project/x.md")]));
   });
 
   it("treats an unregistered first segment as purely relative", () => {
     const out = resolveIncludeCandidates("nope/x.md", { aliases: {}, baseDir });
-    expect(out).toEqual(withTwins(["/proj/memories/tools/nope/x.md"]));
+    expect(out).toEqual(withTwins([abs("/proj/memories/tools/nope/x.md")]));
   });
 
   it("substitutes vars before alias splitting", () => {
@@ -229,16 +236,16 @@ describe("resolveIncludeCandidates()", () => {
       aliases: { docs: ["/d"] },
       baseDir,
     });
-    expect(out).toEqual(withTwins(["/d/x.md", "/proj/memories/tools/docs/x.md"]));
+    expect(out).toEqual(withTwins([abs("/d/x.md"), abs("/proj/memories/tools/docs/x.md")]));
   });
 
   it("de-duplicates identical candidates", () => {
     // alias base resolves to the same place as the relative fallback
     const out = resolveIncludeCandidates("x/one.md", {
-      aliases: { x: ["/proj/memories/tools/x"] },
+      aliases: { x: [abs("/proj/memories/tools/x")] },
       baseDir,
     });
-    expect(out).toEqual(withTwins(["/proj/memories/tools/x/one.md"]));
+    expect(out).toEqual(withTwins([abs("/proj/memories/tools/x/one.md")]));
   });
 });
 
@@ -281,11 +288,11 @@ describe("buildAliasMap()", () => {
 });
 
 describe("resolveInclude() with a namespace resolver", () => {
-  const baseDir = "/proj/prompts";
+  const baseDir = abs("/proj/prompts");
 
   /** Builds a resolver that records every request and answers from a fixed table. */
   function makeSpyResolver(
-    answer: NamespaceResolution = { kind: "candidates", candidates: ["/store/ns/recipe/x.md"] }
+    answer: NamespaceResolution = { kind: "candidates", candidates: [abs("/store/ns/recipe/x.md")] }
   ) {
     const calls: NamespaceRequest[] = [];
     const resolver: NamespaceResolver = {
@@ -312,7 +319,9 @@ describe("resolveInclude() with a namespace resolver", () => {
       fromFile: "/proj/prompts/AGENTS.md",
     });
 
-    expect(out.candidates).toEqual(withTwins(["/store/ns/recipe/x.md", "/proj/prompts/~ns/recipe/x.md"]));
+    expect(out.candidates).toEqual(
+      withTwins([abs("/store/ns/recipe/x.md"), abs("/proj/prompts/~ns/recipe/x.md")])
+    );
     expect(out.namespaceIssue).toBeUndefined();
     expect(calls).toEqual([
       { reference: "ns/recipe/x.md", fromFile: "/proj/prompts/AGENTS.md" },
@@ -330,16 +339,16 @@ describe("resolveInclude() with a namespace resolver", () => {
   it("should treat ~project as a namespace and never as the project alias", () => {
     const { resolver, calls } = makeSpyResolver({
       kind: "candidates",
-      candidates: ["/store/project/recipe/x.md"],
+      candidates: [abs("/store/project/recipe/x.md")],
     });
     const out = resolveInclude("~project/recipe/x.md", {
-      aliases: { "#project": ["/proj-root"] },
+      aliases: { "#project": [abs("/proj-root")] },
       namespaceResolver: resolver,
       baseDir,
     });
 
-    expect(out.candidates[0]).toBe("/store/project/recipe/x.md");
-    expect(out.candidates).not.toContain("/proj-root/recipe/x.md");
+    expect(out.candidates[0]).toBe(abs("/store/project/recipe/x.md"));
+    expect(out.candidates).not.toContain(abs("/proj-root/recipe/x.md"));
     expect(calls[0]?.reference).toBe("project/recipe/x.md");
   });
 
@@ -353,7 +362,7 @@ describe("resolveInclude() with a namespace resolver", () => {
     const out = resolveInclude("shared/x.md", { namespaceResolver: resolver, baseDir });
 
     expect(calls).toEqual([]);
-    expect(out.candidates).toEqual(withTwins(["/proj/prompts/shared/x.md"]));
+    expect(out.candidates).toEqual(withTwins([abs("/proj/prompts/shared/x.md")]));
   });
 
   /**
@@ -379,7 +388,7 @@ describe("resolveInclude() with a namespace resolver", () => {
       fromFile: "/proj/prompts/AGENTS.md",
       resolution: unknown,
     });
-    expect(out.candidates).toEqual(withTwins(["/proj/prompts/~ns/recipe/x.md"]));
+    expect(out.candidates).toEqual(withTwins([abs("/proj/prompts/~ns/recipe/x.md")]));
   });
 
   /**
@@ -388,7 +397,7 @@ describe("resolveInclude() with a namespace resolver", () => {
    */
   it("should behave like a plain alias path when no resolver is supplied", () => {
     const out = resolveInclude("~ns/recipe/x.md", { baseDir });
-    expect(out.candidates).toEqual(withTwins(["/proj/prompts/~ns/recipe/x.md"]));
+    expect(out.candidates).toEqual(withTwins([abs("/proj/prompts/~ns/recipe/x.md")]));
     expect(out.namespaceIssue).toBeUndefined();
   });
 
@@ -417,7 +426,7 @@ describe("splitIncludeQuery()", () => {
 });
 
 describe("resolveInclude() with globs and # names", () => {
-  const baseDir = "/proj/prompts";
+  const baseDir = abs("/proj/prompts");
 
   /**
    * A glob path is a glob group with no `.tpl.` twin; the flag says so.
@@ -427,8 +436,8 @@ describe("resolveInclude() with globs and # names", () => {
   it("should mark a glob path and skip its template twin", () => {
     const out = resolveInclude("notes/*.md", { baseDir });
     expect(out.glob).toBe(true);
-    expect(out.candidates).toEqual(["/proj/prompts/notes/*.md"]);
-    expect(out.groups).toEqual([{ paths: ["/proj/prompts/notes/*.md"], glob: true }]);
+    expect(out.candidates).toEqual([abs("/proj/prompts/notes/*.md")]);
+    expect(out.groups).toEqual([{ paths: [abs("/proj/prompts/notes/*.md")], glob: true }]);
   });
 
   /**
@@ -472,16 +481,19 @@ describe("resolveIncludeFiles()", () => {
   /**
    * A glob names every file it matches, in bytewise path order.
    *
-   * resolveIncludeFiles("m/*.md") // -> m/B.md, m/a.md, m/b.md (uppercase sorts first)
+   * resolveIncludeFiles("m/*.md") // -> m/B.md, m/a.md, m/c.md (uppercase sorts first)
+   *
+   * The names differ by more than case, so they are three files on a
+   * case-insensitive filesystem (Windows, macOS) too.
    */
   it("should return every glob match in bytewise order", () => {
     tmp = makeTmpDir();
-    write("m/b.md");
+    write("m/c.md");
     write("m/a.md");
     write("m/B.md");
     write("m/skip.txt");
     const out = resolveIncludeFiles("m/*.md", { baseDir: tmp.path });
-    expect(out.files.map((f) => path.basename(f))).toEqual(["B.md", "a.md", "b.md"]);
+    expect(out.files.map((f) => path.basename(f))).toEqual(["B.md", "a.md", "c.md"]);
     expect(out.glob).toBe(true);
   });
 
@@ -512,8 +524,8 @@ describe("resolveIncludeFiles()", () => {
       baseDir: tmp.path,
     });
     expect(out.files.map((f) => path.relative(tmp.path, f))).toEqual([
-      "root/deep/two.md",
-      "root/one.md",
+      path.join("root", "deep", "two.md"),
+      path.join("root", "one.md"),
     ]);
     const braces = resolveIncludeFiles("root/{one,deep/two}.md", { baseDir: tmp.path });
     expect(braces.files).toHaveLength(2);

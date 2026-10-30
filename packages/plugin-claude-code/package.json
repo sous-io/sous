@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/plugin-claude-code",
-  "version": "0.2.34",
+  "version": "0.2.37",
   "description": "Everything sous knows about Claude Code: its harness, skill-target and memory-target entities.",
   "type": "module",
   "license": "Apache-2.0",

@@ -20,6 +20,13 @@ let repo: string;
 /** The sous version recorded as the index generator in these tests. */
 const GENERATOR = "1.2.3";
 
+/**
+ * Per-test timeout: each test drives a real git repository, dozens of git
+ * processes, and starting a process is slow enough on Windows to pass the
+ * 5 second default when the suite runs in parallel.
+ */
+const GIT_TIMEOUT = 30_000;
+
 beforeEach(() => {
   tmp = makeTmpDir("sous-release-index-");
   repo = tmp.path;
@@ -64,7 +71,7 @@ function saveIndex(text: string): void {
   fs.writeFileSync(indexFilePath(repo), text, "utf8");
 }
 
-describe("buildIndex()", () => {
+describe("buildIndex()", { timeout: GIT_TIMEOUT }, () => {
   /**
    * A version with no tag is not published, and the index schema requires a tag
    * on every version entry, so the version is left out of the index and
@@ -472,7 +479,7 @@ function editIndex(edit: (index: Record<string, any>) => void): void {
   commitAll(repo, "edit the index");
 }
 
-describe("buildIndex() and published dependencies", () => {
+describe("buildIndex() and published dependencies", { timeout: GIT_TIMEOUT }, () => {
   const HOUSE = "subscribes:\n  - workflow\n  - tools/gamma\n";
 
   /** What each member of the set records: the version, and the entry naming it. */

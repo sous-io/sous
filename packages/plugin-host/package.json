@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/plugin-host",
-  "version": "0.2.34",
+  "version": "0.2.37",
   "description": "The machine sous runs on: processes, HTTP, globs and paths, sous home, self-describing directories, the .gitignore block, package identity.",
   "type": "module",
   "license": "Apache-2.0",

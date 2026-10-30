@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/plugin-update",
-  "version": "0.2.34",
+  "version": "0.2.37",
   "description": "Updating sous itself, installing plugins a recipe requires, the package-manager entity, scanning for installed plugins.",
   "type": "module",
   "license": "Apache-2.0",

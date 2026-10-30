@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/plugin-config-files",
-  "version": "0.2.34",
+  "version": "0.2.37",
   "description": "sous.config.* as a contributor, config.set, and the .env files.",
   "type": "module",
   "license": "Apache-2.0",

@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/plugin-cli",
-  "version": "0.2.34",
+  "version": "0.2.37",
   "description": "The sous command-line front end, generated from intents",
   "type": "module",
   "license": "Apache-2.0",

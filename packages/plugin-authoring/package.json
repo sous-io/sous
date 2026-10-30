@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/plugin-authoring",
-  "version": "0.2.34",
+  "version": "0.2.37",
   "description": "Releasing, submitting and contributing to recipe repositories, and scaffolding one.",
   "type": "module",
   "license": "Apache-2.0",

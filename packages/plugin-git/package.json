@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/plugin-git",
-  "version": "0.2.34",
+  "version": "0.2.37",
   "description": "The one git runner.",
   "type": "module",
   "license": "Apache-2.0",

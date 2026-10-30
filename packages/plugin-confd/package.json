@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/plugin-confd",
-  "version": "0.2.34",
+  "version": "0.2.37",
   "description": "The conf.d files, one contributor per file, and surgical edits to the managed conf.d/5xx files.",
   "type": "module",
   "license": "Apache-2.0",

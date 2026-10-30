@@ -77,9 +77,11 @@ describe("hand-off to the project's own install", () => {
     if (bundle.status !== 0) {
       throw new Error(`bundling the project copy failed:\n${bundle.stderr}`);
     }
-    fs.symlinkSync(path.join(packageDir, "node_modules"), path.join(projectCopy, "node_modules"), "dir");
+    // The links are junctions on Windows, where a directory symlink needs elevated rights; the type
+    // is ignored elsewhere.
+    fs.symlinkSync(path.join(packageDir, "node_modules"), path.join(projectCopy, "node_modules"), "junction");
     // The packaged core recipe, which `npm pack` copies in from the repository root.
-    fs.symlinkSync(path.join(packageDir, "..", "..", "recipes"), path.join(projectCopy, "recipes"), "dir");
+    fs.symlinkSync(path.join(packageDir, "..", "..", "recipes"), path.join(projectCopy, "recipes"), "junction");
     const pkg = JSON.parse(fs.readFileSync(path.join(packageDir, "package.json"), "utf8")) as Record<string, unknown>;
     pkg.version = PROJECT_VERSION;
     fs.writeFileSync(path.join(projectCopy, "package.json"), JSON.stringify(pkg, null, 2));

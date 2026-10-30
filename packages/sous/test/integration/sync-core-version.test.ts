@@ -213,7 +213,9 @@ describe("sync-core-version", () => {
       const after = readLockfile(lockfilePath);
 
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain("Pinned core in .sous/sous.lock.json at version 0.2.0, from 0.1.1");
+      expect(result.stdout).toContain(
+        `Pinned core in ${path.join(".sous", "sous.lock.json")} at version 0.2.0, from 0.1.1`
+      );
       expect(after.recipes["core/sous-skills"]!.version).toBe("0.2.0");
       expect(after.recipes["core/sous-skills"]!.hash).toBe(
         await hashDirectory(path.join(fixtureRoot, CORE_DIR))

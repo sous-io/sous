@@ -129,7 +129,9 @@ describe("hand-off", () => {
     it("should report the invoked install itself as same, through a symlink", () => {
       const project = path.join(tmp.path, "project");
       fs.mkdirSync(path.join(project, "node_modules", "@sous-io"), { recursive: true });
-      fs.symlinkSync(ownRoot, copyPathIn(project), "dir");
+      // A junction on Windows, where a directory symlink needs elevated rights;
+      // the type is ignored elsewhere.
+      fs.symlinkSync(ownRoot, copyPathIn(project), "junction");
 
       expect(findProjectInstall(project, ownRoot)).toEqual({
         same: true,
@@ -186,7 +188,9 @@ describe("hand-off", () => {
       const project = path.join(tmp.path, "project");
       const stored = writePackage(path.join(tmp.path, "store", "sous"));
       fs.mkdirSync(path.join(project, "node_modules", "@sous-io"), { recursive: true });
-      fs.symlinkSync(stored, copyPathIn(project), "dir");
+      // A junction on Windows, where a directory symlink needs elevated rights;
+      // the type is ignored elsewhere.
+      fs.symlinkSync(stored, copyPathIn(project), "junction");
       fs.mkdirSync(path.join(project, "src"));
       expect(findProjectCopy(path.join(project, "src"))).toBe(copyPathIn(project));
       expect(findProjectCopy(path.join(tmp.path, "store"))).toBeUndefined();

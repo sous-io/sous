@@ -349,7 +349,9 @@ describe("the browsing commands", () => {
       expect(text).toContain("SOUS_VAR_QA_DASHBOARD_URL");
       expect(text).toContain("QA_SERVICE_TOKEN");
       expect(text).toContain("Where its files land in this project");
-      expect(text).toContain(path.join(projectRoot, ".claude", "skills"));
+      // A path longer than its column wraps onto the next line, as a Windows
+      // temp path does at the default width, so the lines are rejoined first.
+      expect(text.replace(/\n\s+/g, "")).toContain(path.join(projectRoot, ".claude", "skills"));
     },
     CLI_TIMEOUT
   );
