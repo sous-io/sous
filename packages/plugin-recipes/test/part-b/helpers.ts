@@ -12,7 +12,7 @@ import { BufferedReporter, definePlugin, jsonSchema, type JsonObject, type Plugi
 import { formatsPlugin, hashDirectorySync } from "@sous-io/plugin-formats";
 import type { ContentHash, IndexFile, RecipeManifest } from "@sous-io/plugin-formats/types";
 import { gitPlugin } from "@sous-io/plugin-git";
-import { hostPlugin } from "@sous-io/plugin-host";
+import { createPackage, hostPlugin } from "@sous-io/plugin-host";
 import { refsPlugin } from "@sous-io/plugin-refs";
 import type { CanonicalRepository } from "@sous-io/plugin-refs/types";
 import { stringify } from "yaml";
@@ -194,6 +194,18 @@ export function configPlugin(data: () => JsonObject, hosts: RepositoryHostEntity
     });
 }
 
+/**
+ * The installed sous, found from its package in this workspace: from plugin-host's own source the
+ * lookup would reach the workspace root, whose package is not sous. A spec that brings its own
+ * `test-package` plugin replaces this one.
+ */
+const WORKSPACE_PACKAGE = definePlugin({
+    name: "test-package",
+    register(sous) {
+        sous.services.replace("host.package", () => createPackage({ startDir: path.resolve(import.meta.dirname, "../../../sous") }), { lifetime: "singleton" });
+    },
+});
+
 /** Stand-ins for the plugins plugin-recipes depends on but part B's specs do not exercise. */
 export const STUB_DEPENDENCIES: PluginDefinition[] = [
     ...["@sous-io/plugin-confd", "@sous-io/plugin-variables", "@sous-io/plugin-compiler"].map((name) => definePlugin({ name, version: "0.2.34", register() {} })),
@@ -223,12 +235,17 @@ export async function startEngine(options: {
         env: { SOUS_HOME: options.home, HOME: options.home },
         cwd: options.root,
         reporter,
-        builtIns: [...STUB_DEPENDENCIES, hostPlugin, gitPlugin, formatsPlugin, refsPlugin, recipesPlugin, configPlugin(options.data ?? (() => ({})), options.hosts ?? []), ...(options.plugins ?? [])],
+        builtIns: [...STUB_DEPENDENCIES, hostPlugin, gitPlugin, formatsPlugin, refsPlugin, recipesPlugin, configPlugin(options.data ?? (() => ({})), options.hosts ?? []), ...withPackage(options.plugins ?? [])],
     });
 
     await engine.buildConfig();
 
     return { engine, reporter, project };
+}
+
+/** The plugins a spec passes, with the workspace's package unless one of them stands in for it. */
+function withPackage(plugins: PluginDefinition[]): PluginDefinition[] {
+    return plugins.some((plugin) => plugin.name === WORKSPACE_PACKAGE.name) ? plugins : [WORKSPACE_PACKAGE, ...plugins];
 }
 
 /** Writes a lockfile. */

@@ -9,7 +9,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { ConfigError } from "@sous-io/plugin-api";
 import type { LinkOrigin, LinksMap, WritableFormatParser } from "@sous-io/plugin-formats/types";
-import type { HostGitignore } from "@sous-io/plugin-host/types";
+import type { HostDirectories, HostGitignore } from "@sous-io/plugin-host/types";
 import type { LinkScope, RecipesLinks, ResolvedLink } from "../../types.js";
 import { LINKS_FILE_NAME, PROJECT_REPOS_DIRNAME } from "../constants.js";
 import { messageOf } from "../support.js";
@@ -135,12 +135,17 @@ export class LinksFiles implements RecipesLinks {
 /**
  * Keeps git from seeing what sous keeps in `.sous/` for one machine: `.sous/repos/.gitignore`
  * holding `*`, and sous's managed block in `.sous/.gitignore`. Both are safe to write again.
+ * Given `directories`, `.sous/repos/` also gets the README (and pointer files) that explain it.
  */
-export async function ensureLocalFilesIgnored(sousDir: string, gitignore: HostGitignore): Promise<void> {
+export async function ensureLocalFilesIgnored(sousDir: string, gitignore: HostGitignore, directories?: HostDirectories): Promise<void> {
     const reposDir = path.join(sousDir, PROJECT_REPOS_DIRNAME);
     const inner = path.join(reposDir, ".gitignore");
 
-    fs.mkdirSync(reposDir, { recursive: true });
+    if (directories === undefined) {
+        fs.mkdirSync(reposDir, { recursive: true });
+    } else {
+        await directories.ensureKnown("project-repos", reposDir);
+    }
 
     if (!fs.existsSync(inner) || fs.readFileSync(inner, "utf8") !== "*\n") {
         fs.writeFileSync(inner, "*\n", "utf8");

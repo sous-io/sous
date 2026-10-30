@@ -59,6 +59,7 @@ interface RepoRemoveResult {
     readonly diff: LockDiff;
     readonly dryRun: boolean;
     readonly followUps: readonly IntentFollowUp[];
+    readonly plan?: readonly string[];
 }
 
 interface RepoTrustResult {
@@ -86,6 +87,13 @@ interface StoreGcReport {
     readonly dryRun: boolean;
 }
 
+interface UpstreamComparison {
+    readonly upstream: string;
+    readonly merged?: boolean;
+    readonly behind?: number;
+    readonly detachedAt?: string;
+}
+
 interface RepoLinkResult {
     readonly repo: string;
     readonly path: string;
@@ -95,6 +103,12 @@ interface RepoLinkResult {
     readonly branch?: string;
     readonly trusted: readonly string[];
     readonly dryRun: boolean;
+    readonly notes?: readonly string[];
+    readonly recordedIn?: string;
+    readonly replaced?: string;
+    readonly upstream?: UpstreamComparison;
+    readonly upstreamNote?: string;
+    readonly wouldDo?: readonly string[];
 }
 
 interface RepoUnlinkResult {
@@ -105,6 +119,14 @@ interface RepoUnlinkResult {
     readonly diff?: LockDiff;
     readonly dryRun: boolean;
     readonly followUps: readonly IntentFollowUp[];
+    readonly recordedIn?: string;
+    readonly published?: {
+        readonly checked: boolean;
+        readonly reason?: string;
+        readonly newer: ReadonlyArray<{ readonly key: string; readonly from: string; readonly to: string }>;
+    };
+    readonly checkoutNote?: string;
+    readonly wouldDo?: readonly string[];
 }
 
 interface ResolvedRecipe {
@@ -375,6 +397,24 @@ async function repoRemove(result: RepoRemoveResult, view: CliViewContext): Promi
         out.dryRunNotice("Nothing will be written.");
     }
 
+    // The plan, unless the handler reported it already before asking.
+    const [first, ...rest] = result.plan ?? [];
+
+    if (first !== undefined) {
+        out.blank();
+        out.paragraph(first);
+
+        if (rest.length > 0) {
+            out.blank();
+            out.log(indent("Here is what goes with it:"));
+            out.blank();
+
+            for (const line of rest) {
+                out.log(indent(line, 4));
+            }
+        }
+    }
+
     lockfileBlock(out, result.diff, "Nothing changed; nothing was locked because of this repository.", false);
     stayedBlock(out, result.stayed);
     out.blank();
@@ -481,19 +521,57 @@ function repoLink(result: RepoLinkResult, view: CliViewContext): string {
     out.heading("Linking a repository");
 
     if (result.dryRun) {
-        // The handler said what a dry run would do.
+        out.blank();
+
+        for (const line of result.wouldDo ?? []) {
+            out.dryRunNotice(line);
+        }
+
         out.footer();
 
         return out.text();
     }
 
     out.blank();
+
+    for (const line of result.notes ?? []) {
+        out.log(indent(line));
+    }
+
+    if ((result.notes ?? []).length > 0) {
+        out.blank();
+    }
+
     out.variables({
         Repository: result.repo,
         Checkout: result.path,
         ...(result.branch === undefined ? {} : { Branch: result.branch }),
         Scope: result.scope === "global" ? "every project on this machine" : "this project",
+        ...(result.recordedIn === undefined ? {} : { "Recorded in": result.recordedIn }),
     });
+
+    if (result.replaced !== undefined) {
+        out.blank();
+        out.log(indent(`This replaces an earlier link to ${result.replaced}, which is untouched.`));
+    }
+
+    if (result.upstream !== undefined) {
+        const upstream = result.upstream.upstream;
+        const yesNo = (value: boolean | undefined): string => (value === undefined ? "unknown" : value ? "yes" : "no");
+
+        out.blank();
+        out.variables({
+            ...(result.upstream.detachedAt === undefined ? {} : { "Checked out": `no branch; HEAD is detached at ${result.upstream.detachedAt}` }),
+            "Compared with": upstream,
+            [`Merged into ${upstream}`]: yesNo(result.upstream.merged),
+            [`Behind ${upstream}`]: result.upstream.behind === undefined ? "unknown" : `${result.upstream.behind} ${result.upstream.behind === 1 ? "commit" : "commits"}`,
+        });
+        out.blank();
+        out.note("Upstream was fetched just now; nothing in the checkout was changed.");
+    } else if (result.upstreamNote !== undefined) {
+        out.blank();
+        out.note(result.upstreamNote);
+    }
 
     if (result.trusted.length > 0) {
         out.blank();
@@ -512,8 +590,33 @@ async function repoUnlink(result: RepoUnlinkResult, view: CliViewContext): Promi
 
     out.section("Unlinking a repository");
 
-    if (!result.dryRun) {
-        out.variables({ Repository: result.repo, Checkout: result.path, Scope: result.scope === "global" ? "every project on this machine" : "this project" });
+    if (result.dryRun) {
+        for (const line of result.wouldDo ?? []) {
+            out.dryRunNotice(line);
+        }
+    } else {
+        out.variables({
+            Repository: result.repo,
+            Checkout: result.path,
+            Scope: result.scope === "global" ? "every project on this machine" : "this project",
+            ...(result.recordedIn === undefined ? {} : { Updated: result.recordedIn }),
+        });
+        out.blank();
+        out.paragraph(`'${result.repo}' is read from the versions the lockfile pins again.`);
+    }
+
+    if (result.published !== undefined) {
+        out.blank().subheading("Published versions").blank();
+
+        if (!result.published.checked) {
+            out.note(`Sous could not check '${result.repo}' for newer published versions. ${result.published.reason ?? ""}`.trim());
+        } else if (result.published.newer.length === 0) {
+            out.paragraph(`Every pin from '${result.repo}' is the newest published version its range allows.`);
+        } else {
+            out.paragraph(`'${result.repo}' publishes newer versions within range. The lockfile still pins the older ones:`);
+            out.blank();
+            out.variables(result.published.newer.map((entry) => ({ label: entry.key, value: `${entry.from} pinned, ${entry.to} published` })));
+        }
     }
 
     for (const entry of result.followUps) {
@@ -526,6 +629,11 @@ async function repoUnlink(result: RepoUnlinkResult, view: CliViewContext): Promi
                 out.log(text.replace(/\n$/, ""));
             }
         }
+    }
+
+    if (result.checkoutNote !== undefined) {
+        out.blank();
+        out.paragraph(result.checkoutNote);
     }
 
     out.footer();

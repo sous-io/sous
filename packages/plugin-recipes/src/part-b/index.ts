@@ -167,6 +167,7 @@ function registerContributors(sous: Sous, runtime: PartBRuntime, seeder: CoreSee
 function registerIntents(sous: Sous, runtime: PartBRuntime): void {
     sous.intents.add({
         intent: "lock.rebuild",
+        requiresProject: true,
         summary: "Rebuild this project's lockfile from its subscriptions and the cached repository indexes",
         input: lockRebuildInputSchema,
         changesConfig: true,
@@ -176,6 +177,7 @@ function registerIntents(sous: Sous, runtime: PartBRuntime): void {
 
     sous.intents.add({
         intent: "lock.show",
+        requiresProject: true,
         summary: "Show every recipe version this project's lockfile pins",
         input: lockShowInputSchema,
         parallel: true,
@@ -185,6 +187,7 @@ function registerIntents(sous: Sous, runtime: PartBRuntime): void {
 
     sous.intents.add({
         intent: "repo.gc",
+        requiresProject: true,
         summary: "Collect the machine-wide recipe store back down to its size cap",
         input: repoGcInputSchema,
         cli: { aliases: [["repos", "gc"]], examples: ["sous repo gc", "sous repo gc --dry-run", "sous repo gc --max-bytes 268435456"] },
@@ -193,6 +196,7 @@ function registerIntents(sous: Sous, runtime: PartBRuntime): void {
 
     sous.intents.add({
         intent: "repo.link",
+        requiresProject: true,
         summary: "Point a repository at a working copy on this machine instead of a published version",
         description:
             "'sous repo link <path>' links the checkout already at that path, where it is, adding the repository to this project first if it has not been added yet. " +
@@ -222,6 +226,7 @@ function registerIntents(sous: Sous, runtime: PartBRuntime): void {
 
     sous.intents.add({
         intent: "repo.unlink",
+        requiresProject: true,
         summary: "Stop reading a repository from a working copy and go back to its pinned versions",
         input: repoUnlinkInputSchema,
         changesConfig: true,

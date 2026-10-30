@@ -99,7 +99,7 @@ describe("refs.locations", () => {
         expect(unknown).toBeInstanceOf(ConfigError);
         expect(unknown!.message).toBe("Sous does not recognize the host in the repository URL https://example.com/x/y.");
         expect(unknown!.details[0]).toContain("Sous has these providers: github, gitlab, local.");
-        expect(() => refs.locations.canonicalize("https://github.com/o/r", "gitlab")).toThrow("The gitlab provider does not handle https://github.com/o/r; the github provider does.");
+        expect(() => refs.locations.canonicalize("https://github.com/o/r", "gitlab")).toThrow("The gitlab provider does not handle https://github.com/o/r; that is a github URL, which the github provider handles.");
         expect(() => refs.locations.canonicalize("https://github.com/o/r", "bitbucket")).toThrow(/names the provider 'bitbucket', which sous does not have/);
     });
 

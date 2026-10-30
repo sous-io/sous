@@ -80,7 +80,7 @@ export function createRefsLocations(entities: EntityReader): RefsLocations {
                 const owner = hostFor(url);
 
                 if (owner !== undefined && owner.id !== named.id) {
-                    throw new ConfigError(`The ${named.id} provider does not handle ${url}; the ${owner.id} provider does.`, {
+                    throw new ConfigError(`The ${named.id} provider does not handle ${url}; that is ${owner.id === "local" ? "a local path" : `a ${owner.id} URL`}, which the ${owner.id} provider handles.`, {
                         details: [`Drop '--provider' and let sous work it out, or name '${owner.id}'.`],
                     });
                 }

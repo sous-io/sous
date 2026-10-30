@@ -10,6 +10,7 @@ import { ConfigError } from "@sous-io/plugin-api";
 import type { LockedRecipe, StoreEntry } from "@sous-io/plugin-formats/types";
 import type { RecipesStore, RepositoryHostEntity, StoreKey, RepositoryHostContext } from "../../types.js";
 import type { IndexCacheCore } from "../index-cache/index-cache.js";
+import { CORE_NAMESPACE, CORE_RECIPE_NAME, OFFICIAL_REPO_IDENTITY } from "../constants.js";
 import { hostFor, splitStoredKey } from "../support.js";
 
 /** One pinned recipe to download. */
@@ -90,9 +91,29 @@ async function download(target: RestoreTarget, storeKey: StoreKey, deps: Restore
 
     try {
         await host.fetchRecipeTree(host.canonicalize(target.url), recipe.path, version.tag, fetchDir, deps.context);
+        await dropSeededCoreCopy(storeKey, target.entry.hash, deps.store);
 
         return await deps.store.put(storeKey, fetchDir, target.entry.hash);
     } finally {
         await fs.rm(work, { recursive: true, force: true });
+    }
+}
+
+/**
+ * Removes the store's copy of the core recipe when the lockfile pins other contents for the same
+ * version. That copy was seeded from the package; when the official repository publishes this
+ * version with other contents, the published one wins, and the store would otherwise refuse it as
+ * a changed published version. Only the core recipe is treated this way: any other stored version
+ * came from a download and stays immutable.
+ */
+async function dropSeededCoreCopy(storeKey: StoreKey, pinnedHash: string, store: RecipesStore): Promise<void> {
+    if (storeKey.identity !== OFFICIAL_REPO_IDENTITY || storeKey.namespace !== CORE_NAMESPACE || storeKey.name !== CORE_RECIPE_NAME) {
+        return;
+    }
+
+    const hit = await store.get(storeKey);
+
+    if (hit !== undefined && hit.entry.hash.toLowerCase() !== pinnedHash.toLowerCase()) {
+        await store.remove(storeKey);
     }
 }

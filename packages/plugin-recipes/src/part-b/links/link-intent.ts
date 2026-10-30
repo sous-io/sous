@@ -18,7 +18,7 @@ import path from "node:path";
 import { ConfigError, type Context } from "@sous-io/plugin-api";
 import type { GitRunner } from "@sous-io/plugin-git/types";
 import type { LinkOrigin } from "@sous-io/plugin-formats/types";
-import type { RepoLinkInput, RepoLinkResult } from "../../types.js";
+import type { RepoLinkInput, RepoLinkResult, UpstreamComparison } from "../../types.js";
 import { PROJECT_REPOS_DIRNAME } from "../constants.js";
 import { trustedRepos } from "../lock/lock-service.js";
 import type { PartBRuntime } from "../runtime.js";
@@ -67,15 +67,14 @@ export async function linkRepo(input: RepoLinkInput, ctx: Context, runtime: Part
     const request = branchRequest(input);
 
     if (dryRun) {
-        ctx.reporter.note(`Dry run: would link '${name}' to ${plan.directory}.`);
+        const wouldDo = [
+            `would link '${name}' to ${plan.directory}`,
+            ...plan.notes.filter((note) => note.startsWith("Would")).map((note) => `w${note.slice(1).replace(/\.$/, "")}`),
+            ...describeBranchRequest(request),
+            `would record it in ${scope === "global" ? "the machine-wide" : "this project's"} links map`,
+        ];
 
-        for (const line of [...plan.notes.filter((note) => note.startsWith("Would")), ...describeBranchRequest(request)]) {
-            ctx.reporter.note(`Dry run: ${line}`);
-        }
-
-        ctx.reporter.note(`Dry run: would record it in ${scope === "global" ? "the machine-wide" : "this project's"} links map.`);
-
-        return { repo: name, path: plan.directory, origin: plan.origin, scope, cloned: false, trusted: added, dryRun };
+        return { repo: name, path: plan.directory, origin: plan.origin, scope, cloned: false, trusted: added, dryRun, wouldDo };
     }
 
     if (request.switchTo !== undefined || request.create !== undefined || request.latest) {
@@ -91,34 +90,35 @@ export async function linkRepo(input: RepoLinkInput, ctx: Context, runtime: Part
 
     if (ctx.project !== undefined) {
         try {
-            await ensureLocalFilesIgnored(ctx.project.sousDir, ctx.services.get("host.gitignore"));
+            await ensureLocalFilesIgnored(ctx.project.sousDir, ctx.services.get("host.gitignore"), ctx.services.get("host.directories"));
         } catch (error) {
             ctx.reporter.warning(`Sous could not update .sous/.gitignore, so git may see the links map: ${messageOf(error)}`);
         }
     }
 
-    for (const note of plan.notes) {
-        ctx.reporter.note(note);
-    }
-
     const branch = (await checkout.isGitCheckout(git, plan.directory)) ? await checkout.currentBranch(git, plan.directory) : undefined;
-
-    ctx.reporter.note(`Linked '${name}' to ${link.path}${branch === undefined ? "" : ` (branch ${branch})`}, recorded in ${links.path(scope)}.`);
-
-    if (previous !== undefined && previous.path !== link.path) {
-        ctx.reporter.note(`This replaces an earlier link to ${previous.path}, which is untouched.`);
-    }
-
-    if (plan.kind !== "cloned") {
-        await reportUpstream(git, plan.directory, ctx);
-    }
+    // A checkout sous has just cloned is as current as upstream by definition; any other may be months old.
+    const upstream = plan.kind === "cloned" ? {} : await compareUpstream(git, plan.directory, ctx);
 
     ctx.reporter.warning(
         `The repository '${name}' is now LINKED. Its recipes are read from the checkout above, so versions, the lockfile and freshness checks no longer apply to it. ` +
             `Run 'sous repo unlink ${name}${scope === "global" ? " --global" : ""}' to go back to published versions.`,
     );
 
-    return { repo: name, path: link.path, origin: plan.origin, scope, cloned: plan.kind === "cloned", ...(branch === undefined ? {} : { branch }), trusted: added, dryRun };
+    return {
+        repo: name,
+        path: link.path,
+        origin: plan.origin,
+        scope,
+        cloned: plan.kind === "cloned",
+        ...(branch === undefined ? {} : { branch }),
+        trusted: added,
+        dryRun,
+        notes: plan.notes,
+        recordedIn: links.path(scope),
+        ...(previous !== undefined && previous.path !== link.path ? { replaced: previous.path } : {}),
+        ...upstream,
+    };
 }
 
 /** Works out which repository is being linked, running `repo.add`'s trust question for one the project does not trust. */
@@ -242,10 +242,16 @@ function requireProject(ctx: Context): NonNullable<Context["project"]> {
 function branchRequest(input: RepoLinkInput): BranchRequest {
     const generated = input.generateBranch === true;
     const create = generated ? checkout.generatedBranchName() : input.createBranch;
-    const chosen = [input.branch, input.createBranch, generated ? "generated" : undefined].filter((value) => value !== undefined);
+    const chosen = [
+        input.branch === undefined ? undefined : "--branch",
+        input.createBranch === undefined ? undefined : "--create-branch",
+        generated ? "--generate-branch" : undefined,
+    ].filter((flag) => flag !== undefined);
 
     if (chosen.length > 1) {
-        throw new ConfigError("--branch, --create-branch and --generate-branch each say which branch to work on; pass only one of them.");
+        throw new ConfigError(`${chosen[0]} cannot also be provided when using ${chosen.slice(1).join(" and ")}.`, {
+            details: ["--branch, --create-branch and --generate-branch each say which branch to work on; pass only one of them."],
+        });
     }
 
     if (input.from !== undefined && create === undefined) {
@@ -361,9 +367,17 @@ async function confirmDiscard(branch: string, work: checkout.DiscardableWork, ye
         return;
     }
 
-    ctx.reporter.warning(`Making '${branch}' match ${checkout.UPSTREAM_REMOTE}/${branch} discards this local work:`, {
-        lines: [...work.uncommitted.map((line) => `uncommitted: ${line}`), ...work.localCommits.map((line) => `commit ${checkout.UPSTREAM_REMOTE} does not have: ${line}`)],
-    });
+    const lines = [`Making '${branch}' match ${checkout.UPSTREAM_REMOTE}/${branch} discards the local work below.`];
+
+    if (work.uncommitted.length > 0) {
+        lines.push("", `Uncommitted changes: ${work.uncommitted.length}`, ...work.uncommitted.map((line) => `  • ${line}`));
+    }
+
+    if (work.localCommits.length > 0) {
+        lines.push("", `Commits ${checkout.UPSTREAM_REMOTE} does not have: ${work.localCommits.length}`, ...work.localCommits.map((line) => `  • ${line}`));
+    }
+
+    ctx.reporter.warning(lines.join("\n"));
 
     if (yes) {
         return;
@@ -376,15 +390,18 @@ async function confirmDiscard(branch: string, work: checkout.DiscardableWork, ye
     }
 }
 
-/** Says how a checkout already on disk compares with upstream; a fetch changes none of its files. */
-async function reportUpstream(git: GitRunner, directory: string, ctx: Context): Promise<void> {
+/**
+ * How a checkout already on disk compares with upstream. A short fetch comes first; it updates only
+ * the remote-tracking refs, never the files or branches. When upstream cannot be reached, the link
+ * still stands and a warning says since when the checkout may have diverged.
+ */
+async function compareUpstream(git: GitRunner, directory: string, ctx: Context): Promise<{ upstream?: UpstreamComparison; upstreamNote?: string }> {
     if (!(await checkout.isGitCheckout(git, directory))) {
-        return;
+        return {};
     }
 
     if ((await checkout.remoteUrlOf(git, directory)) === undefined) {
-        ctx.reporter.note(`The checkout has no '${checkout.UPSTREAM_REMOTE}' remote, so there is no upstream to compare it with.`);
-        return;
+        return { upstreamNote: `The checkout has no '${checkout.UPSTREAM_REMOTE}' remote, so there is no upstream to compare it with.` };
     }
 
     const fetched = await checkout.tryFetchUpstream(git, directory);
@@ -394,23 +411,31 @@ async function reportUpstream(git: GitRunner, directory: string, ctx: Context): 
         const since = await checkout.lastFetchedAt(git, directory, branch);
 
         ctx.reporter.warning(
-            `Could not reach upstream; the checkout may have diverged since ${since === undefined ? "it was last fetched, and git has no record of when that was" : `${since.toISOString()}, when it was last fetched`}. ` +
-                `Git said: ${fetched.reason}. The link was recorded all the same, and nothing in the checkout was changed.`,
+            `Could not reach upstream; the checkout may have diverged since ${since === undefined ? "it was last fetched, and git has no record of when that was." : `${formatWhen(since)}, when it was last fetched.`}\n\n` +
+                `Git said:\n${fetched.reason}\n\nThe link was recorded all the same, and nothing in the checkout was changed.`,
         );
-        return;
+        return {};
     }
 
     if (branch === undefined) {
-        ctx.reporter.note("Upstream was fetched, but its default branch could not be worked out, so there is nothing to compare the checkout with.");
-        return;
+        return { upstreamNote: "Upstream was fetched, but its default branch could not be worked out, so there is nothing to compare the checkout with." };
     }
 
     const comparison = await checkout.compareWithUpstream(git, directory, branch);
-    const upstream = `${checkout.UPSTREAM_REMOTE}/${branch}`;
-    const yesNo = (value: boolean | undefined): string => (value === undefined ? "unknown" : value ? "yes" : "no");
-    const behind = comparison.behind === undefined ? "unknown" : `${comparison.behind} ${comparison.behind === 1 ? "commit" : "commits"}`;
 
-    ctx.reporter.note(
-        `${comparison.branch === undefined ? `No branch is checked out; HEAD is detached at ${comparison.commit ?? "an unknown commit"}. ` : ""}Compared with ${upstream}: merged into it ${yesNo(comparison.merged)}, behind it ${behind}. Upstream was fetched just now; nothing in the checkout was changed.`,
-    );
+    return {
+        upstream: {
+            upstream: `${checkout.UPSTREAM_REMOTE}/${branch}`,
+            ...(comparison.merged === undefined ? {} : { merged: comparison.merged }),
+            ...(comparison.behind === undefined ? {} : { behind: comparison.behind }),
+            ...(comparison.branch === undefined ? { detachedAt: comparison.commit ?? "an unknown commit" } : {}),
+        },
+    };
+}
+
+/** A moment as `YYYY-MM-DD HH:MM` in local time, which is how a person reads "since when". */
+function formatWhen(when: Date): string {
+    const pad = (value: number): string => String(value).padStart(2, "0");
+
+    return `${when.getFullYear()}-${pad(when.getMonth() + 1)}-${pad(when.getDate())} ${pad(when.getHours())}:${pad(when.getMinutes())}`;
 }

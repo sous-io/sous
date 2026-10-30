@@ -280,15 +280,18 @@ export async function removeRepo(input: RepoRemoveInput, ctx: Context): Promise<
         dryRun: input.dryRun === true,
     };
 
-    for (const line of removalPlan(planned)) {
-        ctx.reporter.note(line);
-    }
+    const plan = removalPlan(planned);
 
     if (input.dryRun === true) {
-        return { ...planned, followUps: [{ intent: "build", skipped: "--dry-run" }] };
+        return { ...planned, plan, followUps: [{ intent: "build", skipped: "--dry-run" }] };
     }
 
     if (input.yes !== true) {
+        // Everything that goes is reported before the one question; the view need not repeat it.
+        for (const line of plan) {
+            ctx.reporter.note(line);
+        }
+
         const proceed = await ctx.prompter.confirm({ message: `Stop trusting '${name}'?`, answeredBy: "--yes", default: false });
 
         if (!proceed) {
@@ -316,7 +319,12 @@ export async function removeRepo(input: RepoRemoveInput, ctx: Context): Promise<
 
     ctx.configChanged();
 
-    return { ...planned, diff: written, followUps: [await buildFollowUp(ctx, input)] };
+    // The build that follows must see the config without the repository and its subscriptions.
+    if (input.noBuild !== true) {
+        await ctx.refreshConfig();
+    }
+
+    return { ...planned, ...(input.yes === true ? { plan } : {}), diff: written, followUps: [await buildFollowUp(ctx, input)] };
 }
 
 // --- repo.trust -----------------------------------------------------------------------------------
@@ -491,6 +499,7 @@ export async function searchRepos(input: RepoSearchInput, ctx: Context): Promise
 export function registerRepoIntents(sous: Sous): void {
     sous.intents.add({
         intent: "repo.add",
+        requiresProject: true,
         summary: "Add a recipe repository, which trusts it",
         input: inputSchema<RepoAddInput>(
             {
@@ -513,6 +522,7 @@ export function registerRepoIntents(sous: Sous): void {
 
     sous.intents.add({
         intent: "repo.remove",
+        requiresProject: true,
         summary: "Stop trusting a repository, removing the subscriptions that resolve into it",
         input: inputSchema<RepoRemoveInput>({ repo: { type: "string", description: "The repository's short name" }, yes, dryRun, noBuild }, ["repo"]),
         changesConfig: true,
@@ -522,6 +532,7 @@ export function registerRepoIntents(sous: Sous): void {
 
     sous.intents.add({
         intent: "repo.trust",
+        requiresProject: true,
         summary: "Trust a repository by name, URL or identity",
         input: inputSchema<RepoTrustInput>(
             { repo: { type: "string", description: "A short name, URL or identity" }, url: { type: "string", description: "Its URL, when the name has none recorded" }, yes, dryRun },
@@ -534,6 +545,7 @@ export function registerRepoIntents(sous: Sous): void {
 
     sous.intents.add({
         intent: "repo.list",
+        requiresProject: true,
         summary: "List the repositories this project trusts",
         input: inputSchema<RepoListInput>({ latest, installed, verbose: { type: "boolean", description: "Show more about each repository" } }),
         parallel: true,
@@ -543,6 +555,7 @@ export function registerRepoIntents(sous: Sous): void {
 
     sous.intents.add({
         intent: "repo.search",
+        requiresProject: true,
         summary: "Search the trusted repositories for namespaces, recipes and variables",
         input: inputSchema<RepoSearchInput>(
             { text: { type: "string", description: "What to look for" }, latest, installed, limit: { type: "integer", description: "At most this many matches (default 20)" } },

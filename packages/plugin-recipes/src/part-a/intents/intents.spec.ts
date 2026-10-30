@@ -488,7 +488,8 @@ describe("repo intents", () => {
         const result = await removeRepo({ repo: "r", yes: true, noBuild: true }, ctx);
 
         expect(result).toMatchObject({ subscriptions: ["workflow/task-files"], outputs: ["/project/.claude/skills/a.md"], optedOut: false });
-        expect(ctx.reporter.at("notice")).toContain("Removing r deletes 1 built file on the next build:");
+        // With --yes nothing is asked, so the plan travels in the result for the view to print.
+        expect(result.plan).toContain("Removing r deletes 1 built file on the next build:");
         expect(managed.files["500-repos.jsonc"]).toEqual({ repos: {} });
         expect(lock.current.recipes).toEqual({});
     });

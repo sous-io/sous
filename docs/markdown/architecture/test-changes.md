@@ -1275,3 +1275,13 @@ tests had been written against the first new layout, and were brought in line:
 - **Now:** the full-build, included-memory, partial-build and failed-compile cases run the `build` intent with
   stand-ins; the wording case checks `unincludedMemoriesMessage()`.
 - **Why:** the check moved from the old build service into plugin-build.
+
+## Switch-over: repos and links
+
+### `repo-commands.test.ts`: "should link an existing checkout by path"
+
+- **File:** `packages/sous/test/integration/repo-commands.test.ts`
+- **Before:** `.sous/repos/` held `.gitignore`, `AGENTS.md`, `CLAUDE.md` and `README.md`, and `AGENTS.md` pointed at the README.
+- **Now:** it holds `.gitignore`, `CLAUDE.md` and `README.md`; the `AGENTS.md` check is gone.
+- **Why:** pointer files now come from plugins: each harness that reads its memory file in any directory adds
+  one. Claude Code (`CLAUDE.md`) is the only built-in harness that does, so no `AGENTS.md` is written.

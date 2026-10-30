@@ -714,6 +714,8 @@ export interface RepoRemoveResult {
     readonly linkIsGlobal: boolean;
     readonly dryRun: boolean;
     readonly followUps: IntentFollowUp[];
+    /** Everything that goes with the repository, one sentence each, when it was not already reported before a question. */
+    readonly plan?: string[];
 }
 
 /** `repo.trust`. */
@@ -816,6 +818,18 @@ export interface RepoLinkInput extends CheckoutFlags {
     latest?: boolean;
 }
 
+/** How a linked checkout compares with its upstream branch, after a fetch. */
+export interface UpstreamComparison {
+    /** The upstream branch compared with: `origin/main`. */
+    readonly upstream: string;
+    /** Whether the checkout's HEAD is merged into it; `undefined` when git could not say. */
+    readonly merged?: boolean;
+    /** How many commits the checkout is behind it; `undefined` when git could not say. */
+    readonly behind?: number;
+    /** The commit HEAD is detached at, when no branch is checked out. */
+    readonly detachedAt?: string;
+}
+
 /** The result of `repo.link`. */
 export interface RepoLinkResult {
     readonly repo: string;
@@ -826,6 +840,18 @@ export interface RepoLinkResult {
     readonly branch?: string;
     readonly trusted: string[];
     readonly dryRun: boolean;
+    /** What was done to get the checkout, one sentence each: "Cloned ... into ...". */
+    readonly notes?: string[];
+    /** The links map the link was recorded in. */
+    readonly recordedIn?: string;
+    /** The path an earlier link of the same scope pointed at, when this one replaced it. */
+    readonly replaced?: string;
+    /** How a checkout that was already on disk compares with upstream. */
+    readonly upstream?: UpstreamComparison;
+    /** Why there is no comparison, when there is none and it is worth saying. */
+    readonly upstreamNote?: string;
+    /** On a dry run: what would be done, one line each. */
+    readonly wouldDo?: string[];
 }
 
 /** `repo.unlink`. */
@@ -839,6 +865,15 @@ export interface RepoUnlinkInput extends RecipeChangeFlags, AnswerFlags {
     yes?: boolean;
 }
 
+/** What `repo.unlink` found out about newer published versions, when it looked. */
+export interface UnlinkPublishedReport {
+    /** False when the index could not be read; `reason` says why. */
+    readonly checked: boolean;
+    readonly reason?: string;
+    /** The pins with a newer version within range. */
+    readonly newer: ReadonlyArray<{ readonly key: string; readonly from: string; readonly to: string }>;
+}
+
 /** The result of `repo.unlink`. */
 export interface RepoUnlinkResult {
     readonly repo: string;
@@ -848,6 +883,14 @@ export interface RepoUnlinkResult {
     readonly diff?: LockDiff;
     readonly dryRun: boolean;
     readonly followUps: IntentFollowUp[];
+    /** The links map the link was removed from. */
+    readonly recordedIn?: string;
+    /** Newer published versions within range, when the pins were not updated. */
+    readonly published?: UnlinkPublishedReport;
+    /** What became of the checkout, in one sentence. */
+    readonly checkoutNote?: string;
+    /** On a dry run: what would be done, one line each. */
+    readonly wouldDo?: string[];
 }
 
 /** `subscription.add`. */

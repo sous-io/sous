@@ -7,9 +7,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { ConfigError, isSousError, isSousErrorOfKind, type Context } from "@sous-io/plugin-api";
-import type { IntentFollowUp, LinkScope, RepoUnlinkInput, RepoUnlinkResult, ResolvedLink, SubscriptionEntry } from "../../types.js";
+import type { IntentFollowUp, LinkScope, RepoUnlinkInput, RepoUnlinkResult, ResolvedLink, SubscriptionEntry, UnlinkPublishedReport } from "../../types.js";
 import { PROJECT_REPOS_DIRNAME } from "../constants.js";
-import { effectiveRangeForHolders, findNewerInRange, NEWER_VERSION_CHECK_TIMEOUT_MS, withDeadline, type NewerVersion } from "../index-cache/freshness.js";
+import { effectiveRangeForHolders, findNewerInRange, NEWER_VERSION_CHECK_TIMEOUT_MS, withDeadline } from "../index-cache/freshness.js";
 import { trustedRepos } from "../lock/lock-service.js";
 import { plainSubscriptionKey } from "../lock/reachable.js";
 import type { PartBRuntime } from "../runtime.js";
@@ -44,8 +44,7 @@ export async function unlinkRepo(input: RepoUnlinkInput, ctx: Context, runtime: 
     const followUps: IntentFollowUp[] = [];
 
     if (dryRun) {
-        ctx.reporter.note(`Dry run: would unlink '${name}', which points at ${entry.path}.`);
-        ctx.reporter.note(input.remove ? "Dry run: the checkout would be deleted." : "Dry run: the checkout itself would be left where it is.");
+        const wouldDo = [`would unlink '${name}', which points at ${entry.path}`, input.remove ? "the checkout would be deleted" : "the checkout itself would be left where it is"];
 
         if (work !== undefined && !hasNoUnsavedWork(work)) {
             describeUnsavedWork(work, ctx);
@@ -55,7 +54,7 @@ export async function unlinkRepo(input: RepoUnlinkInput, ctx: Context, runtime: 
             followUps.push({ intent: "subscription.update", result: await ctx.run("subscription.update", { ref: name, dryRun: true, noBuild: true }) });
         }
 
-        return { repo: name, path: entry.path, scope, removedCheckout: false, dryRun, followUps };
+        return { repo: name, path: entry.path, scope, removedCheckout: false, dryRun, followUps, wouldDo };
     }
 
     if (work !== undefined) {
@@ -64,9 +63,9 @@ export async function unlinkRepo(input: RepoUnlinkInput, ctx: Context, runtime: 
 
     await links.remove(name, scope);
     ctx.configChanged();
-    ctx.reporter.note(`'${name}' is read from the versions the lockfile pins again (${links.path(scope)} updated).`);
 
     let diff: RepoUnlinkResult["diff"];
+    let published: UnlinkPublishedReport | undefined;
 
     if (input.update) {
         try {
@@ -86,14 +85,16 @@ export async function unlinkRepo(input: RepoUnlinkInput, ctx: Context, runtime: 
             throw isSousErrorOfKind(error, "non-interactive") ? Object.assign(error, { message }) : new ConfigError(message, { cause: error });
         }
     } else {
-        await reportNewerVersions(name, ctx);
+        published = await newerVersions(name, ctx);
     }
+
+    let checkoutNote: string;
 
     if (input.remove) {
         fs.rmSync(entry.path, { recursive: true, force: true });
-        ctx.reporter.note(`The checkout sous cloned at ${entry.path} was deleted.`);
+        checkoutNote = `The checkout sous cloned at ${entry.path} was deleted.`;
     } else {
-        ctx.reporter.note(entry.origin === "clone" ? `The checkout sous cloned is still at ${entry.path}.` : `The checkout at ${entry.path} was yours to begin with, and has not been touched.`);
+        checkoutNote = entry.origin === "clone" ? `The checkout sous cloned is still at ${entry.path}.` : `The checkout at ${entry.path} was yours to begin with, and has not been touched.`;
     }
 
     if (input.noBuild) {
@@ -102,7 +103,18 @@ export async function unlinkRepo(input: RepoUnlinkInput, ctx: Context, runtime: 
         followUps.push(await rebuild(name, ctx));
     }
 
-    return { repo: name, path: entry.path, scope, removedCheckout: input.remove === true, ...(diff === undefined ? {} : { diff }), dryRun, followUps };
+    return {
+        repo: name,
+        path: entry.path,
+        scope,
+        removedCheckout: input.remove === true,
+        ...(diff === undefined ? {} : { diff }),
+        dryRun,
+        followUps,
+        recordedIn: links.path(scope),
+        ...(published === undefined ? {} : { published }),
+        checkoutNote,
+    };
 }
 
 /** Runs the build afterwards; a missing build intent is recorded as skipped. */
@@ -160,28 +172,35 @@ async function confirmRemoval(checkoutPath: string, work: UnsavedWork, yes: bool
 
 /** Reports the work a deletion would lose. */
 function describeUnsavedWork(work: UnsavedWork, ctx: Context): void {
-    ctx.reporter.warning("The checkout holds work that exists nowhere else, and deleting it loses that work.", {
-        ...(work.unknown === undefined ? {} : { uninspectable: work.unknown }),
-        uncommitted: work.uncommitted,
-        unpushed: work.unpushed,
-        stashes: work.stashes,
-    });
-}
+    const lines = ["The checkout holds work that exists nowhere else, and deleting it loses that work."];
+    const group = (title: string, items: readonly string[]): void => {
+        if (items.length > 0) {
+            lines.push("", title, ...items.map((item) => `  • ${item}`));
+        }
+    };
 
-/** Says which pins of the repository have newer versions within range, without changing any. */
-async function reportNewerVersions(name: string, ctx: Context): Promise<NewerVersion[]> {
-    if (trustedRepos(ctx)[name] === undefined) {
-        return [];
+    if (work.unknown !== undefined) {
+        group("Sous could not inspect it, so it may hold anything:", [work.unknown]);
     }
 
-    let newer: NewerVersion[];
+    group("Uncommitted changes:", work.uncommitted);
+    group("Commits no remote has:", work.unpushed);
+    group("Stashes:", work.stashes);
+    ctx.reporter.warning(lines.join("\n"));
+}
+
+/** Which pins of the repository have newer versions within range, without changing any; `undefined` for a repository the project does not trust. */
+async function newerVersions(name: string, ctx: Context): Promise<UnlinkPublishedReport | undefined> {
+    if (trustedRepos(ctx)[name] === undefined) {
+        return undefined;
+    }
+
+    const newer: Array<{ key: string; from: string; to: string }> = [];
 
     try {
         const index = (await withDeadline((signal) => ctx.services.get("recipes.index-cache").get(name, { signal }), NEWER_VERSION_CHECK_TIMEOUT_MS)).index;
         const lockfile = ctx.services.get("recipes.lock").read();
         const subscriptions = ctx.config.get<Record<string, SubscriptionEntry>>("subscriptions") ?? {};
-
-        newer = [];
 
         for (const [key, entry] of Object.entries(lockfile.recipes)) {
             if (entry.repo !== name) {
@@ -200,23 +219,14 @@ async function reportNewerVersions(name: string, ctx: Context): Promise<NewerVer
             const found = range === undefined ? undefined : findNewerInRange({ index, key, lockedVersion: entry.version, range });
 
             if (found !== undefined) {
-                newer.push(found);
+                newer.push({ key: found.key, from: found.from, to: found.to });
             }
         }
     } catch (error) {
-        ctx.reporter.note(`Sous could not check '${name}' for newer published versions. ${messageOf(error).split("\n")[0]}`);
-        return [];
+        return { checked: false, reason: (messageOf(error).split("\n")[0] ?? "").trim(), newer: [] };
     }
 
-    if (newer.length === 0) {
-        ctx.reporter.note(`Every pin from '${name}' is the newest published version its range allows.`);
-    } else {
-        ctx.reporter.note(`'${name}' publishes newer versions within range. The lockfile still pins the older ones:`, {
-            newer: newer.map((entry) => `${entry.key}: ${entry.from} pinned, ${entry.to} published`),
-        });
-    }
-
-    return newer;
+    return { checked: true, newer };
 }
 
 /** The range the project's subscription declares for a key: its own entry, else its namespace's. */
