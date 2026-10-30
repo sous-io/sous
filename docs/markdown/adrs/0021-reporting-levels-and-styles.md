@@ -1,62 +1,50 @@
 # ADR 0021: Reporting as levels and styles
 
-**Status:** Draft, 2026-10-30. Designed by Luke; built by the agent while Luke was away, awaiting
-his review.
+**Status:** Draft, 2026-10-30. Designed by Luke; awaiting his acceptance.
 
-This record summarizes a decision of the 1.0 architecture. The details are in
-[the engine specification](../architecture/specifications/S1-engine.md), section "Reporting: levels
-and styles". Where this record and that file disagree, it wins.
+How it works is described in [the engine specification](../architecture/specifications/S1-engine.md),
+section "Reporting: levels and styles".
 
 ## Context
 
-Plugins reported through a `Reporter` with `log(level, message)`, `note()`, `warning()` and
-`progress()`. Each caller built finished text: glyphs (`✓`, `▶`), indentation, hand-aligned
-`Label : value` lines. The CLI's reporter could only print that text as it came, so everything a
-command printed while it ran (all of `sous build`'s output, every warning) lost its color, and the
-same layout was rebuilt by hand in dozens of places. Command results were printed by a separate
-path, the plugin-cli views and their `Printer`, so the terminal had two sets of renderers.
+Plugins built their own output text (glyphs, indentation, aligned labels) and the CLI printed it as
+given, so most output lost its color and the same layout was rebuilt by hand in many places. Command
+results went through a second renderer, the plugin-cli views' `Printer`.
 
 ## Decision
 
-- **One method carries every message:**
-  `log(level: LogLevel, message: string, details?: ReportDetails, style?: ReportEntryStyle)`. The
-  level says how important it is; the style says what kind of entry it is; `details` carries its
-  facts. A style is added whenever an output needs one, and each reporter decides how it looks.
+1. **Every message is a level and a style.** A caller says how important a message is and what kind
+   of entry it is, and passes the facts; each front end decides how each style looks. Styles are
+   added as outputs need them.
 
-  > "There may be many, many, different styles. We'll add a style every time we see the need for one
-  > and each reporter will decide how to handle it."
-  >
-  >   -- **Luke Chavers** in an agent session (2026-10-30)
+   > "There may be many, many, different styles. We'll add a style every time we see the need for
+   > one and each reporter will decide how to handle it."
+   >
+   >   -- **Luke Chavers** in an agent session (2026-10-30)
 
-- **Level methods** on top of it: `debug`, `info`, `notice`, `warning` (and `warn`), `error`,
-  `critical`, `alert`, `emergency` (and `emerg`), each `(message, details?, style?)`. A notice is not
-  a note: `note()` is the Note style's method.
-- **Style methods** on top of those: typed parameters turned into `message` and `details`, a default
-  level the last parameter overrides, always their own style (`operationStart(operationName, level =
-  LogLevel.Notice)`). Some have partners (`operationEnd`), as the thing they report needs.
-- **Defined once.** Every method lives in `BaseReporter` in plugin-api; `Reporter` is derived from
-  it; every reporter extends it; the `Reporting` mixin copies the methods onto any other class.
+2. **Every reporting method is defined once, in `BaseReporter`**, and everything else (the
+   `Reporter` type, every reporter, a mixin for other classes) is derived from it.
 
-  > "I'm trying to avoid needing to define the convenience methods in more than one place."
-  >
-  >   -- **Luke Chavers** in an agent session (2026-10-30)
+   > "I'm trying to avoid needing to define the convenience methods in more than one place."
+   >
+   >   -- **Luke Chavers** in an agent session (2026-10-30)
 
-- **Progress is a style too.** The CLI draws one progress bar at a time and redraws it under other
-  messages.
-- **The views show results through the same reporter**, so the terminal has one renderer per style
-  and `Printer` is gone.
-- **Streams follow the level:** `debug`, `info` and `notice` go to standard output, `warning` and
-  above to standard error; under `--json` only the JSON result goes to standard output.
+3. **Command results go through the reporter too**, so the terminal has one renderer per style.
+4. **Progress and results go to standard output; warnings and errors to standard error.**
 
-  > "3, our new "level" settings on output allow users to tune what output they see"
-  >
-  >   -- **Luke Chavers** in an agent session (2026-10-30), choosing progress on standard output
+   > "3, our new "level" settings on output allow users to tune what output they see"
+   >
+   >   -- **Luke Chavers** in an agent session (2026-10-30), on progress
+   >
+   > "ok then, stderr is fine"
+   >
+   >   -- **Luke Chavers** in an agent session (2026-10-30), on warnings and errors
 
-## Consequences
+## Alternatives Not Chosen
 
-- Plugin code never formats output; the CLI's look (colors, glyphs, alignment, wrapping) is decided
-  in `TerminalReporter`, and MCP clients get the facts as data.
-- A plugin written before this change calls `reporter.note(...)` and builds text; it must move to the
-  level and style methods.
-- `--log-level` now also decides what a command prints to standard output, since results and progress
-  are messages with levels.
+- **Color the finished text in the CLI reporter.** It would have to guess what each line is from its
+  characters (a line starting with `✓` is a written file), and MCP clients would still get text.
+- **Keep the views' `Printer` beside the reporter.** Two renderers for the same shapes would drift.
+- **Every level to standard output, as the old CLI did.** Both streams show in a terminal, so the
+  choice matters only when output is piped or redirected; Luke kept warnings and errors on standard
+  error.

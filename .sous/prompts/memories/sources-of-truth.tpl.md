@@ -5,8 +5,10 @@ Three artifact types record how sous works, and each answers exactly one questio
 - **The docs** (`docs/markdown/`) answer "how does it work right now?". They are the living
   record: updated whenever behavior changes, and they never carry history.
 - **ADRs** (`docs/markdown/adrs/`) answer "what did we decide, and why?". They are append-only
-  and immutable once finalized. The first ADR for a system records its full initial design;
-  every later ADR records only the delta from the version before it.
+  and immutable once finalized. An ADR states an important decision and its rationale, and may
+  name the alternatives and why they were not chosen; it is not source documentation, and it is
+  short (the user, in an agent session, 2026-10-30: "ADRs are not source documentation ... they
+  should not be books"). How the thing works belongs in the docs.
 - **GitHub issues** answer "what work happened, and how did we get there?". An issue is the
   process record, including mid-flight design changes.
 
