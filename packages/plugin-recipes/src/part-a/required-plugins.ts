@@ -82,7 +82,7 @@ export function unmetRequirements(
  * The directory a resolved recipe's files are in, downloading it into the store when it is not
  * there yet. `undefined` when it cannot be had; the build that follows reports that.
  */
-async function recipeDirectory(ctx: Context, recipe: ResolvedRecipe, download: boolean): Promise<string | undefined> {
+export async function recipeDirectory(ctx: Context, recipe: ResolvedRecipe, download: boolean): Promise<string | undefined> {
     const entry = trustedRepos(ctx.config)[recipe.repo];
 
     if (entry === undefined || !ctx.services.has("recipes.store") || !ctx.services.has("recipes.index-cache")) {

@@ -37,7 +37,7 @@ import { askFollowUp, buildFollowUp } from "../followups.js";
 import { applyResolution, keysHeldBySubscription, PROJECT_HOLDER, type LockRepoInput } from "../lock-holds.js";
 import { configuredSubscriptions, contributorLabel, managedContributor, setSubscriptionEnabled, SUBSCRIPTIONS_LAYER, trustedRepos, writeSubscriptionEntry } from "../project.js";
 import { isShortNamed, planSubscriptionRemoval, subscriptionKeyFor, writeSubscriptionRemoval } from "../subscriptions.js";
-import { ensureRequiredPlugins } from "../required-plugins.js";
+import { ensureRequiredPlugins, recipeDirectory } from "../required-plugins.js";
 import { needUrlError } from "../trust.js";
 import { describeUpdateScope, isEmptyUpdate, planUpdate } from "../update-plan.js";
 import { describeError, nowIso, proposeRepoName, sortBytewise } from "../util.js";
@@ -193,6 +193,7 @@ export function subscriptionPlan(key: string, ref: NamedRef): string[] {
 /** Resolves a ref and everything beneath it, trusting new repositories as often as resolution turns them up. */
 async function resolveClosure(input: SubscriptionAddInput, ref: NamedRef, start: Context): Promise<{ resolved: ResolvedRecipe[]; unreadable: string[]; cycles: string[][]; trusted: string[]; ctx: Context }> {
     const trusted: string[] = [];
+    const tried = new Set<string>();
     let ctx = start;
 
     for (let round = 0; ; round++) {
@@ -209,6 +210,12 @@ async function resolveClosure(input: SubscriptionAddInput, ref: NamedRef, start:
             { ...(input.prerelease === true ? { prerelease: true } : {}) },
         );
         const missing: MissingRepo[] = result.missingRepos;
+
+        // The index does not always say what a version depends on; then its manifest is read from
+        // the store, so a recipe not downloaded yet is downloaded and the closure resolved again.
+        if (missing.length === 0 && round < MAX_TRUST_ROUNDS && input.dryRun !== true && (await downloadUnreadable(ctx, result.resolved, result.unreadable, tried))) {
+            continue;
+        }
 
         if (missing.length === 0 || round >= MAX_TRUST_ROUNDS) {
             if (missing.length > 0) {
@@ -235,6 +242,31 @@ async function resolveClosure(input: SubscriptionAddInput, ref: NamedRef, start:
         ctx.configChanged();
         ctx = await refreshed(ctx);
     }
+}
+
+/**
+ * Downloads the resolved recipes whose manifests could not be read, so the next resolve can read
+ * what they declare. True when any of them is in the store now. Each recipe is tried once: `tried`
+ * holds the keys tried before.
+ */
+export async function downloadUnreadable(ctx: Context, resolved: readonly ResolvedRecipe[], unreadable: readonly string[], tried: Set<string>): Promise<boolean> {
+    let downloaded = false;
+
+    for (const key of unreadable) {
+        const recipe = resolved.find((entry) => entry.key === key);
+
+        if (tried.has(key)) {
+            continue;
+        }
+
+        tried.add(key);
+
+        if (recipe !== undefined && (await recipeDirectory(ctx, recipe, true)) !== undefined) {
+            downloaded = true;
+        }
+    }
+
+    return downloaded;
 }
 
 /** `subscription.add`. */

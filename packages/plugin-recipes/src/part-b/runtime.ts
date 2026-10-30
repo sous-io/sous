@@ -24,8 +24,29 @@ export type RuntimeHost = Pick<Sous, "services" | "entities" | "env" | "project"
 /** Shared machinery for part B. */
 export class PartBRuntime {
     private core: IndexCacheCore | undefined;
+    private readonly fetched = new Set<string>();
 
     constructor(readonly host: RuntimeHost) {}
+
+    /**
+     * Records the recipes the `recipes.fetch` contributor downloaded while the config was built. No
+     * event reaches a listener then, so the next `recipes.lock` restore reports them as restored,
+     * which is how a build says what it fetched.
+     */
+    noteFetched(keys: readonly string[]): void {
+        for (const key of keys) {
+            this.fetched.add(key);
+        }
+    }
+
+    /** The recipes downloaded while the config was built and not reported yet; reading them forgets them. */
+    takeFetched(): string[] {
+        const keys = [...this.fetched];
+
+        this.fetched.clear();
+
+        return keys;
+    }
 
     /** The services of every loaded plugin (singletons while the config is built). */
     get services(): ServiceReader {

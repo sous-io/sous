@@ -51,6 +51,19 @@ export function refKey(ref: SousRef): string {
     return ref.kind === "repo" && rest === "" ? repo : `${repo}:${rest}`;
 }
 
+/**
+ * The key a ref is stored under in a config, a lockfile or an index: its path, without any
+ * repository, because those files say which repository a recipe comes from elsewhere. A repository
+ * ref keeps its name or identity, the only thing that names it.
+ *
+ * ```ts
+ * storedKey(recipe "task-files" in "sous-recipes:workflow"); // -> "workflow/task-files"
+ * ```
+ */
+export function storedKey(ref: SousRef): string {
+    return ref.kind === "repo" ? refKey(ref) : pathPart(ref);
+}
+
 /** The key with the kind in front: what tells a namespace `workflow` from a repository `workflow`. */
 export function refIdentity(ref: SousRef): string {
     return `${ref.kind} ${refKey(ref)}`;
@@ -193,7 +206,7 @@ export function createRefsFormat(ctx: ServiceContext): RefsFormat {
     };
 
     return {
-        key: refKey,
+        key: storedKey,
         identity(ref) {
             const location = locationOf(ref);
 

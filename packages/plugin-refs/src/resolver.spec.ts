@@ -329,7 +329,7 @@ describe("refs.resolver parse() (the forms, ported from the old parser)", () => 
         expect(printed(" repo:workflow/alpha@^1.0 ")).toEqual(["repo:workflow/alpha@^1.0"]);
         expect(printed("https://github.com/o/r/w/a@^1")).toEqual(["github://o/r/w/a@^1"]);
         expect(printed("github://github.com/o/r/w")).toEqual(["github://o/r/w"]);
-        expect(refs.format.key(refs.resolver.parse("repo:workflow/alpha@^1").refs[0]!)).toBe("repo:workflow/alpha");
+        expect(refs.format.identity(refs.resolver.parse("repo:workflow/alpha@^1").refs[0]!)).toBe("repo:workflow/alpha");
     });
 });
 
@@ -462,7 +462,7 @@ describe("refs.resolver resolve()", () => {
         const result = await refs.resolver.resolve({ input: "task-files", extraLookups: [lookup] });
 
         expect(result.usedLookup).toBe(true);
-        expect(result.refs.map((ref) => refs.format.key(ref))).toEqual(["one:workflow/task-files", "two:tools/task-files"]);
+        expect(result.refs.map((ref) => refs.format.identity(ref))).toEqual(["one:workflow/task-files", "two:tools/task-files"]);
     });
 
     /**
@@ -471,8 +471,8 @@ describe("refs.resolver resolve()", () => {
      * resolve("Workflow/Alpha") // -> one:workflow/alpha
      */
     it("should prefer exact spelling and return the published one", async () => {
-        expect((await refs.resolver.resolve({ input: "Workflow/Alpha", extraLookups: [lookup] })).refs.map((ref) => refs.format.key(ref))).toEqual(["one:workflow/alpha"]);
-        expect((await refs.resolver.resolve({ input: "workflow", extraLookups: [lookup] })).refs.map((ref) => refs.format.key(ref))).toEqual(["one:workflow"]);
+        expect((await refs.resolver.resolve({ input: "Workflow/Alpha", extraLookups: [lookup] })).refs.map((ref) => refs.format.identity(ref))).toEqual(["one:workflow/alpha"]);
+        expect((await refs.resolver.resolve({ input: "workflow", extraLookups: [lookup] })).refs.map((ref) => refs.format.identity(ref))).toEqual(["one:workflow"]);
     });
 
     /**
@@ -562,7 +562,7 @@ describe("refs.resolver lookups as entities", () => {
         const result = await withLookups.resolver.resolve({ input: "alpha" });
 
         expect(result.usedLookup).toBe(true);
-        expect(result.refs.map((ref) => withLookups.format.key(ref))).toEqual(["pinned:workflow/alpha"]);
+        expect(result.refs.map((ref) => withLookups.format.identity(ref))).toEqual(["pinned:workflow/alpha"]);
         expect(asked).toEqual(["variable"]);
     });
 
@@ -575,11 +575,11 @@ describe("refs.resolver lookups as entities", () => {
     it("should select lookups by id and tag, joining their answers", async () => {
         const byTag = await withLookups.resolver.resolve({ input: "alpha", lookups: ["installed", "latest"] });
 
-        expect(byTag.refs.map((ref) => withLookups.format.key(ref))).toEqual(["pinned:workflow/alpha", "remote:workflow/alpha"]);
+        expect(byTag.refs.map((ref) => withLookups.format.identity(ref))).toEqual(["pinned:workflow/alpha", "remote:workflow/alpha"]);
 
         const byId = await withLookups.resolver.resolve({ input: "beta", lookups: ["fetched-index"] });
 
-        expect(byId.refs.map((ref) => withLookups.format.key(ref))).toEqual(["remote:workflow/beta"]);
+        expect(byId.refs.map((ref) => withLookups.format.identity(ref))).toEqual(["remote:workflow/beta"]);
     });
 
     /**

@@ -82,9 +82,8 @@ export function fetchContributor(runtime: PartBRuntime): ContributorDefinition {
                 config.addEntity("active-recipe", entity);
             }
 
-            if (recipes.downloaded.length > 0) {
-                await runtime.emit("recipes.fetched", { recipes: recipes.downloaded });
-            }
+            // No listener hears an event while the config is built; the next restore reports these.
+            runtime.noteFetched(recipes.downloaded.map((recipe) => recipe.key));
         },
     };
 }

@@ -248,6 +248,6 @@ describe("resolving and picking together", () => {
         const { refs: found } = await refs.resolver.resolve({ input: "formatter", kinds: ["recipe"] });
         const picked = await refs.picker.pick(found, { search: "formatter", acceptFirst: true }, { prompter: nonInteractivePrompter, reporter: refs.reporter });
 
-        expect(refs.format.key(picked)).toBe("fixtures:workflow/formatter");
+        expect(refs.format.identity(picked)).toBe("fixtures:workflow/formatter");
     });
 });

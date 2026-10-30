@@ -19,13 +19,13 @@ const variable: VariableRef = { kind: "variable", name: "apiUrl", recipe: recipe
 
 describe("refs.format key()", () => {
     /**
-     * Each kind has one canonical key, without range or query values.
+     * Each kind has one stored key, without its repository, range or query values.
      *
-     * key(r:workflow/alpha@^1?x=1) // -> "r:workflow/alpha"
+     * key(r:workflow/alpha@^1?x=1) // -> "workflow/alpha"
      */
     it("should key each kind canonically", () => {
         expect(refs.format.key(reading("workflow", "namespace"))).toBe("workflow");
-        expect(refs.format.key(reading("r:workflow/alpha@^1?x=1", "recipe"))).toBe("r:workflow/alpha");
+        expect(refs.format.key(reading("r:workflow/alpha@^1?x=1", "recipe"))).toBe("workflow/alpha");
         expect(refs.format.key(reading("workflow/alpha/_p/x.md", "recipeFile"))).toBe("workflow/alpha/_p/x.md");
         expect(refs.format.key(reading("workflow/alpha.apiUrl", "variable"))).toBe("workflow/alpha.apiUrl");
         expect(refs.format.key(reading("SOUS_X", "envVar"))).toBe("SOUS_X");
@@ -33,12 +33,14 @@ describe("refs.format key()", () => {
     });
 
     /**
-     * A repository known only by location is keyed by its identity.
+     * A located namespace is keyed without its repository; a repository known only by location is
+     * keyed by its identity.
      *
-     * key(github://o/r/workflow) // -> "github.com/o/r:workflow"
+     * key(github://o/r/workflow) // -> "workflow"
+     * key(git@github.com:o/r.git) // -> "github.com/o/r"
      */
     it("should key a located repository by identity", () => {
-        expect(refs.format.key(reading("github://o/r/workflow", "namespace"))).toBe("github.com/o/r:workflow");
+        expect(refs.format.key(reading("github://o/r/workflow", "namespace"))).toBe("workflow");
         expect(refs.format.key(reading("https://github.com/o/r/tree/main/x", "repo"))).toBe("github.com/o/r:tree/main/x");
         expect(refs.format.key(reading("git@github.com:o/r.git", "repo"))).toBe("github.com/o/r");
     });
