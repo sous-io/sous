@@ -22,9 +22,10 @@ function write(file: string, content: string): void {
 }
 
 /** A context whose `host.processes.run` is a stand-in answering with `stdout`. */
-function context(stdout: string, exitCode = 0, seen: string[][] = []): ServiceContext {
-    const run = async (command: string, args: readonly string[]) => {
+function context(stdout: string, exitCode = 0, seen: string[][] = [], shells: boolean[] = []): ServiceContext {
+    const run = async (command: string, args: readonly string[], options: { windowsShell?: boolean } = {}) => {
         seen.push([command, ...args]);
+        shells.push(options.windowsShell === true);
 
         return { command, args, exitCode, signal: null, stdout, stderr: "", durationMs: 1, timedOut: false };
     };
@@ -78,12 +79,15 @@ describe("pnpm installed", () => {
     /** Global packages come from the root pnpm names. */
     it("should list global packages through pnpm root -g", async () => {
         const seen: string[][] = [];
+        const shells: boolean[] = [];
 
         write("global/@sous-io/sous/package.json", JSON.stringify({ version: "0.2.0" }));
 
-        const found = await pnpmManager.installed("global", undefined, context(`${path.join(dir, "global")}\n`, 0, seen));
+        const found = await pnpmManager.installed("global", undefined, context(`${path.join(dir, "global")}\n`, 0, seen, shells));
 
         expect(seen).toEqual([["pnpm", "root", "-g"]]);
+        // On Windows pnpm is a `.cmd` shim, which only the shell finds.
+        expect(shells).toEqual([true]);
         expect(found.map((p) => p.name)).toEqual(["@sous-io/sous"]);
     });
 });

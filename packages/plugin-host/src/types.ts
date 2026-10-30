@@ -25,6 +25,13 @@ export interface ProcessOptions {
     label?: string;
     /** Throws a `SousError` holding the result when it exits non-zero. Default `false`. */
     reject?: boolean;
+    /**
+     * On Windows, start a bare command name through the shell, which is the only way Windows finds
+     * a `.cmd` shim such as npm's, pnpm's or yarn's. An absolute path is still started directly, and
+     * nothing changes on other platforms. Only for a command line sous wrote itself: the shell reads
+     * the arguments.
+     */
+    windowsShell?: boolean;
 }
 
 /** What a finished subprocess gave back. */
@@ -50,6 +57,13 @@ export interface InteractiveProcessOptions {
     env?: Environment;
     signal?: AbortSignal;
     label?: string;
+    /**
+     * On Windows, start a bare command name through the shell, which is the only way Windows finds
+     * a `.cmd` shim such as npm's, pnpm's or yarn's. An absolute path is still started directly, and
+     * nothing changes on other platforms. Only for a command line sous wrote itself: the shell reads
+     * the arguments.
+     */
+    windowsShell?: boolean;
 }
 
 /** How an interactive subprocess ended. */

@@ -114,6 +114,8 @@ describe("update handler", () => {
             `${process.execPath} ${path.join(location, "bin/run.js")} build`,
         ]);
         expect(recorded.runs[2]).toMatchObject({ cwd: dir, env: { SOUS_NO_DELEGATE: "1" } });
+        // Every run asks for the shell on Windows, where a package manager is a `.cmd` shim.
+        expect(recorded.runs.every((run) => run.windowsShell === true)).toBe(true);
         expect(result.outcomes.map((outcome) => outcome.result)).toEqual(["updated", "updated"]);
         expect(result.build).toMatchObject({ result: "built", directory: dir, exitCode: 0, command: { args: [expect.stringContaining("run.js"), "build"], cwd: dir } });
     });

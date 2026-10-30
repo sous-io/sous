@@ -123,6 +123,8 @@ async function execute(ctx: Context, command: PlannedCommand, env = ctx.env): Pr
         ...(command.cwd === undefined ? {} : { cwd: command.cwd }),
         env,
         label: formatCommand(command),
+        // A package manager is a `.cmd` shim on Windows; the command line is one sous planned.
+        windowsShell: true,
     });
 
     return result.exitCode ?? 1;

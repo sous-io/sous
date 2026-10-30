@@ -98,7 +98,8 @@ export const yarnManager: YarnPackageManager = {
 
     async globalRoot(ctx) {
         try {
-            const result = await ctx.services.get("host.processes").run(commandOf(ctx), ["global", "dir"], { label: "yarn global dir" });
+            // On Windows yarn is a `.cmd` shim, which only the shell finds.
+            const result = await ctx.services.get("host.processes").run(commandOf(ctx), ["global", "dir"], { label: "yarn global dir", windowsShell: true });
             // `yarn global dir` prints the directory above its node_modules; Berry has no such command.
             const dir = result.exitCode === 0 ? lastLine(result.stdout) : undefined;
 

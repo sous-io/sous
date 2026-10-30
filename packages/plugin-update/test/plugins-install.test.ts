@@ -37,6 +37,8 @@ describe("plugins.install handler", () => {
         expect(prompter.asked).toEqual([]);
         expect(recorded.commands).toEqual(["pnpm add -D -E -w sous-plugin-x@^1.0.0 @s/y"]);
         expect(recorded.runs[0]!.cwd).toBe("/p");
+        // The package manager is a `.cmd` shim on Windows, which only the shell finds.
+        expect(recorded.runs[0]!.windowsShell).toBe(true);
         expect(result).toMatchObject({
             manager: "pnpm",
             declined: false,

@@ -22,9 +22,10 @@ function write(file: string, content: string): void {
 }
 
 /** A context whose `host.processes.run` is a stand-in answering with `stdout`. */
-function context(stdout: string, exitCode = 0, seen: string[][] = []): ServiceContext {
-    const run = async (command: string, args: readonly string[]) => {
+function context(stdout: string, exitCode = 0, seen: string[][] = [], shells: boolean[] = []): ServiceContext {
+    const run = async (command: string, args: readonly string[], options: { windowsShell?: boolean } = {}) => {
         seen.push([command, ...args]);
+        shells.push(options.windowsShell === true);
 
         return { command, args, exitCode, signal: null, stdout, stderr: "", durationMs: 1, timedOut: false };
     };
@@ -83,13 +84,16 @@ describe("npm installed", () => {
     /** Global packages come from the root npm names. */
     it("should list global packages through npm root -g", async () => {
         const seen: string[][] = [];
+        const shells: boolean[] = [];
         const root = path.join(dir, "global");
 
         write("global/@sous-io/sous/package.json", JSON.stringify({ version: "0.2.0" }));
 
-        const found = await npmManager.installed("global", undefined, context(`${root}\n`, 0, seen));
+        const found = await npmManager.installed("global", undefined, context(`${root}\n`, 0, seen, shells));
 
         expect(seen).toEqual([["npm", "root", "-g"]]);
+        // On Windows npm is a `.cmd` shim, which only the shell finds.
+        expect(shells).toEqual([true]);
         expect(found.map((p) => p.name)).toEqual(["@sous-io/sous"]);
     });
 

@@ -23,9 +23,10 @@ function write(file: string, content: string): void {
 }
 
 /** A context whose `host.processes.run` is a stand-in answering with `stdout`. */
-function context(stdout: string, exitCode = 0, seen: string[][] = []): ServiceContext {
-    const run = async (command: string, args: readonly string[]) => {
+function context(stdout: string, exitCode = 0, seen: string[][] = [], shells: boolean[] = []): ServiceContext {
+    const run = async (command: string, args: readonly string[], options: { windowsShell?: boolean } = {}) => {
         seen.push([command, ...args]);
+        shells.push(options.windowsShell === true);
 
         return { command, args, exitCode, signal: null, stdout, stderr: "", durationMs: 1, timedOut: false };
     };
@@ -162,12 +163,15 @@ describe("yarn installed", () => {
     /** Classic's global dir has node_modules below it. */
     it("should find the global root through yarn global dir", async () => {
         const seen: string[][] = [];
+        const shells: boolean[] = [];
 
         write("global/node_modules/@sous-io/sous/package.json", JSON.stringify({ version: "0.2.0" }));
 
-        const found = await yarnManager.installed("global", undefined, context(`${path.join(dir, "global")}\n`, 0, seen));
+        const found = await yarnManager.installed("global", undefined, context(`${path.join(dir, "global")}\n`, 0, seen, shells));
 
         expect(seen).toEqual([["yarn", "global", "dir"]]);
+        // On Windows yarn is a `.cmd` shim, which only the shell finds.
+        expect(shells).toEqual([true]);
         expect(found.map((p) => p.name)).toEqual(["@sous-io/sous"]);
     });
 

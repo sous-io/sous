@@ -116,6 +116,37 @@ describe("runInteractive()", () => {
     });
 });
 
+describe("windowsShell", () => {
+    /** A host that believes it runs on Windows, so the shell choice can be seen on any platform. */
+    const onWindows = createProcesses({ env: { PATH: process.env.PATH }, platform: "win32" });
+
+    /**
+     * On Windows a bare command name asked for with `windowsShell` starts through the shell, which
+     * is how a `.cmd` shim such as npm's is found. The shell is visible here because it reads `&&`.
+     * The fake Windows host uses this machine's own shell, so the check runs where that is `sh`.
+     */
+    it.skipIf(process.platform === "win32")("should start a bare command through the shell on Windows", async () => {
+        const args = ["one", "&&", "echo", "two"];
+
+        expect((await onWindows.run("echo", args, { windowsShell: true })).stdout).toBe("one\ntwo\n");
+        expect(onWindows.runSync("echo", args, { windowsShell: true }).stdout).toBe("one\ntwo\n");
+        expect((await onWindows.run("echo", args)).stdout).toBe("one && echo two\n");
+    });
+
+    /** An absolute path, and every command on other platforms, starts directly. */
+    it("should start an absolute path, or any command elsewhere, directly", async () => {
+        const script = ["-e", "process.stdout.write(process.argv.slice(1).join(' '))", "one", "&&", "two"];
+
+        expect((await onWindows.run(node, script, { windowsShell: true })).stdout).toBe("one && two");
+    });
+
+    it.skipIf(process.platform === "win32")("should start a bare command directly away from Windows", async () => {
+        const onLinux = createProcesses({ env: { PATH: process.env.PATH }, platform: "linux" });
+
+        expect((await onLinux.run("echo", ["one", "&&", "echo", "two"], { windowsShell: true })).stdout).toBe("one && echo two\n");
+    });
+});
+
 describe("which()", () => {
     /** A command is found on the given PATH, and only when it can be run. */
     it("should find executables on PATH", async () => {

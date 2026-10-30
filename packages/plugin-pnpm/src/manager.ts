@@ -69,7 +69,8 @@ export const pnpmManager: PnpmPackageManager = {
 
     async globalRoot(ctx) {
         try {
-            const result = await ctx.services.get("host.processes").run(commandOf(ctx), ["root", "-g"], { label: "pnpm root -g" });
+            // On Windows pnpm is a `.cmd` shim, which only the shell finds.
+            const result = await ctx.services.get("host.processes").run(commandOf(ctx), ["root", "-g"], { label: "pnpm root -g", windowsShell: true });
 
             return result.exitCode === 0 ? lastLine(result.stdout) : undefined;
         } catch {

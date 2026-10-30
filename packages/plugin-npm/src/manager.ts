@@ -70,7 +70,8 @@ export const npmManager: NpmPackageManager = {
 
     async globalRoot(ctx) {
         try {
-            const result = await ctx.services.get("host.processes").run(commandOf(ctx), ["root", "-g"], { label: "npm root -g" });
+            // On Windows npm is a `.cmd` shim, which only the shell finds.
+            const result = await ctx.services.get("host.processes").run(commandOf(ctx), ["root", "-g"], { label: "npm root -g", windowsShell: true });
 
             return result.exitCode === 0 ? lastLine(result.stdout) : undefined;
         } catch {

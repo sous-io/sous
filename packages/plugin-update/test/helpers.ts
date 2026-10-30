@@ -78,7 +78,7 @@ export interface Recorded {
     /** Every interactive command, as typed. */
     commands: string[];
     /** The directory and environment each ran with. */
-    runs: Array<{ command: string; args: readonly string[]; cwd?: string; env?: Readonly<Record<string, string | undefined>> }>;
+    runs: Array<{ command: string; args: readonly string[]; cwd?: string; env?: Readonly<Record<string, string | undefined>>; windowsShell?: boolean }>;
     reporter: BufferedReporter;
 }
 
@@ -113,6 +113,7 @@ export function recordingContext(options: RecordingOptions): { ctx: Context; rec
                 args,
                 ...(run?.cwd === undefined ? {} : { cwd: run.cwd }),
                 ...(run?.env === undefined ? {} : { env: run.env }),
+                ...(run?.windowsShell === undefined ? {} : { windowsShell: run.windowsShell }),
             });
 
             return { exitCode: exitCodes.shift() ?? 0, signal: null, durationMs: 1 };

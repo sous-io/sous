@@ -41,6 +41,8 @@ export class ProcessError extends SousError {
 export interface ProcessDeps {
     /** The environment commands get when the caller names none. */
     env: Environment;
+    /** The platform sous runs on. Default: `process.platform`; only tests pass another. */
+    platform?: NodeJS.Platform;
 }
 
 /** Drops the variables whose value is `undefined`, which `spawn` would write as the text "undefined". */
@@ -138,6 +140,10 @@ async function isExecutable(file: string): Promise<boolean> {
 /** Makes the `host.processes` service. */
 export function createProcesses(deps: ProcessDeps): HostProcesses {
     const environmentOf = (options: { env?: Environment }): Record<string, string> => cleanEnvironment(options.env ?? deps.env);
+    const platform = deps.platform ?? process.platform;
+    // A `.cmd` shim only starts through the shell on Windows; see `windowsShell`.
+    const shellFor = (command: string, options: { windowsShell?: boolean }): boolean =>
+        options.windowsShell === true && platform === "win32" && !path.isAbsolute(command);
 
     return {
         run(command, args, options = {}) {
@@ -157,6 +163,7 @@ export function createProcesses(deps: ProcessDeps): HostProcesses {
                     env: environmentOf(options),
                     stdio: ["pipe", "pipe", "pipe"],
                     signal: options.signal,
+                    shell: shellFor(command, options),
                 });
                 let stdout = "";
                 let stderr = "";
@@ -204,6 +211,7 @@ export function createProcesses(deps: ProcessDeps): HostProcesses {
                 encoding: "utf8",
                 timeout: options.timeoutMs,
                 killSignal: "SIGKILL",
+                shell: shellFor(command, options),
             });
 
             return checked(fromSync(command, args, raw, startedAt, options.cwd), options);
@@ -218,6 +226,7 @@ export function createProcesses(deps: ProcessDeps): HostProcesses {
                     env: environmentOf(options),
                     stdio: "inherit",
                     signal: options.signal,
+                    shell: shellFor(command, options),
                 });
 
                 child.on("error", () => resolve({ exitCode: NOT_FOUND_EXIT_CODE, signal: null, durationMs: performance.now() - startedAt }));
