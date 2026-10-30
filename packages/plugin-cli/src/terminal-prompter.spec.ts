@@ -34,6 +34,33 @@ describe("TerminalPrompter", () => {
         expect(written.join("")).toContain("Not that one.");
     });
 
+    /**
+     * A secret is read from the terminal with its echo off, one `*` shown per character typed, so
+     * the answer never appears on screen (ported from the old value prompt's "should mask the
+     * value for a secret").
+     *
+     * ? What is the token? ******
+     */
+    it("should mask the value for a secret", async () => {
+        const stdin = new PassThrough() as PassThrough & { isTTY: boolean; setRawMode: (mode: boolean) => void };
+        const modes: boolean[] = [];
+        const written: string[] = [];
+
+        stdin.isTTY = true;
+        stdin.setRawMode = (mode) => modes.push(mode);
+
+        const p = new TerminalPrompter(stdin, { write: (text: string) => written.push(text) } as never, true);
+        const answer = p.askValue({ message: "What is the token?", secret: true, default: "hidden-default" });
+
+        stdin.write("abc1234\u007f\r");
+
+        expect(await answer).toBe("abc123");
+        expect(written.join("")).toBe("What is the token? *******\b \b\n");
+        expect(written.join("")).not.toContain("abc123");
+        expect(written.join("")).not.toContain("hidden-default");
+        expect(modes).toEqual([true, false]);
+    });
+
     /** askChoice lists the options, numbered, and takes a number or the default. */
     it("should ask for a choice by number", async () => {
         const choices = [

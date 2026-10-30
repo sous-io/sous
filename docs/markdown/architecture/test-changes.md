@@ -1207,3 +1207,42 @@ in `test/support/standins.ts`. Expectations are otherwise unchanged, except for 
   build directory ("yes with the new copy, in /p"), shows the commands that ran, and warns about a
   config it could not load. New cases cover the warning, the notices and a Plug'n'Play location.
 - **Why:** the old commands printed all of this on standard output.
+
+## Switch-over: the CLI front end (help, usage errors, exit codes)
+
+The help screen and usage errors went back to the old CLI's layout and words, so
+`packages/sous/test/integration/help-and-flags.test.ts` passes unchanged. The new front end's own
+tests had been written against the first new layout, and were brought in line:
+
+### Help layout
+
+- **Files:** `packages/plugin-cli/test/cli.test.ts` (help cases), `packages/sous/test/bin.test.ts`
+- **Before:** expected `Usage:\n  sous namespace list [<repository>] [flags]`, `Commands:`,
+  `Aliases:\n  sous render`, `Examples:` and `<repository>` as the argument name.
+- **Now:** expect `USAGE\n  $ sous namespace list [REPOSITORY] [flags]`, `TOPICS` and `COMMANDS`
+  (a group's commands listed by their full words, `repo add`), `ALIASES\n  $ sous render`,
+  `EXAMPLES` and `REPOSITORY`.
+- **Why:** the old CLI's help used these section titles and upper-case argument names, and the
+  old tests (help-and-flags, repo-release, vars-commands, repositories) look for them.
+
+### Usage error wording
+
+- **Files:** `packages/plugin-cli/test/cli.test.ts` (mistakes, extra arguments, schema problems),
+  `packages/plugin-cli/src/parse.spec.ts`
+- **Before:** `There is no flag --priorty. Did you mean --priority?`, `--name needs a value.`,
+  `"sous namespace list" takes at most 1 argument, but was also given "b".`, and a bad `--mode`
+  choice reported as `The input to "repo.add" is not valid.` with `--mode:` and `<url>:` lines.
+- **Now:** `Nonexistent flag: --priorty` with `Did you mean --priority?` under it, `Flag --name
+  expects a value`, `Unexpected argument: b` with the "takes at most 1 argument" line under it,
+  `Expected --mode=maybe to be one of: trusted, untrusted`, and `Missing 1 required arg:` naming the
+  argument. Each is followed by the command's help on standard error, exit code 2.
+- **Why:** these are the old CLI's (oclif's) words, which the old tests expect.
+
+### A question that cannot be asked exits 1
+
+- **Files:** `packages/plugin-cli/test/cli.test.ts` ("should fail a question it cannot ask"),
+  `packages/plugin-cli/src/errors.spec.ts`, `packages/plugin-api/src/errors.spec.ts`
+- **Before:** `NonInteractiveError` exited 2, and the CLI printed only the error.
+- **Now:** it exits 1, and the command's help follows the error on standard error.
+- **Why:** the old CLI exited 2 only for command lines it could not parse, and printed the help under
+  a question it could not ask. Bad input (`InputError`) still exits 2.

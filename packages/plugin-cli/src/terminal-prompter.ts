@@ -9,6 +9,9 @@ import {
 } from "@sous-io/plugin-api";
 import type { InputStream, OutputStream } from "./io.js";
 
+/** A terminal's standard input, which can turn its echo off. */
+type RawInput = InputStream & { setRawMode(mode: boolean): unknown };
+
 /**
  * The CLI's prompter. It asks on standard error and reads standard input, and only when it may
  * (L4): otherwise every question fails with a `NonInteractiveError` naming the flag that answers it.
@@ -29,7 +32,7 @@ export class TerminalPrompter implements Prompter {
         this.refuseUnlessInteractive(question);
 
         for (;;) {
-            const suffix = question.default !== undefined ? ` (${question.default})` : "";
+            const suffix = question.default !== undefined && question.secret !== true ? ` (${question.default})` : "";
             const answer = (await this.ask(`${question.message}${suffix} `, question)).trim() || question.default || "";
             const problem = question.validate?.(answer);
 
@@ -93,7 +96,11 @@ export class TerminalPrompter implements Prompter {
     }
 
     /** Writes the prompt and waits for the next line; one reader serves every question. */
-    private ask(prompt: string, question: QuestionBase): Promise<string> {
+    private ask(prompt: string, question: QuestionBase & { secret?: boolean }): Promise<string> {
+        if (question.secret === true && this.input.isTTY === true && typeof (this.input as RawInput).setRawMode === "function" && this.lines.length === 0) {
+            return this.askSecret(prompt, question);
+        }
+
         this.output.write(prompt);
 
         const buffered = this.lines.shift();
@@ -112,6 +119,65 @@ export class TerminalPrompter implements Prompter {
         this.reader.resume();
 
         return new Promise((resolve, reject) => this.waiting.push((line) => (line === undefined ? reject(ended()) : resolve(line))));
+    }
+
+    /**
+     * Reads a secret answer from a terminal with its echo off, showing a `*` for each character typed,
+     * as the CLI did before the refactor: `? What is the token? ******`. Backspace removes the last
+     * character; Ctrl+C or Ctrl+D stops the question.
+     */
+    private askSecret(prompt: string, question: QuestionBase): Promise<string> {
+        const input = this.input as RawInput;
+
+        this.output.write(prompt);
+        this.reader?.pause();
+        input.setRawMode(true);
+        input.resume();
+
+        return new Promise((resolve, reject) => {
+            let value = "";
+            const finish = (error?: Error) => {
+                input.off("data", onData);
+                input.setRawMode(false);
+                input.pause();
+                this.output.write("\n");
+
+                if (error) {
+                    reject(error);
+                } else {
+                    resolve(value);
+                }
+            };
+            const onData = (chunk: Buffer | string) => {
+                for (const char of chunk.toString()) {
+                    if (char === "\r" || char === "\n") {
+                        finish();
+
+                        return;
+                    }
+
+                    if (char === "\u0003" || char === "\u0004") {
+                        finish(new NonInteractiveError(question.message, question.answeredBy, { details: ["The question was stopped before it was answered."] }));
+
+                        return;
+                    }
+
+                    if (char === "\u007f" || char === "\b") {
+                        if (value.length > 0) {
+                            value = value.slice(0, -1);
+                            this.output.write("\b \b");
+                        }
+
+                        continue;
+                    }
+
+                    value += char;
+                    this.output.write("*");
+                }
+            };
+
+            input.on("data", onData);
+        });
     }
 
     private openReader(): Interface {
