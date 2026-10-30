@@ -1,6 +1,6 @@
 /**
  * The `gitlab` repository-host entity: which URLs are GitLab's, how a location inside a project is
- * read, and how files are read (S4).
+ * read, and how files are read.
  *
  * ```text
  * Token sources      GITLAB_TOKEN, then git credential fill, then glab config get token --host <host>

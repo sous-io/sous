@@ -177,8 +177,7 @@ describe("applyPatch()", () => {
 
     describe("removeIndex", () => {
         /**
-         * removeIndex should remove one item, and report what is missing (S2: "removeIndex 7
-         * removes whatever is at index 7 at that point").
+         * removeIndex should remove one item, and report what is missing.
          *
          * applyPatch({ list: [1, 2, 3] }, { op: "removeIndex", path: "list", index: 0 });
          * // -> { list: [2, 3] }

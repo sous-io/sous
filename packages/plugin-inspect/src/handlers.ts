@@ -1,6 +1,6 @@
 /**
  * The handlers of plugin-inspect. Each reads only the engine and returns plain data; plugin-cli
- * decides how it looks. Secrets are hidden everywhere (G4).
+ * decides how it looks. Secrets are hidden everywhere.
  */
 
 import nodePath from "node:path";

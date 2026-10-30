@@ -21,7 +21,7 @@ describe("renderResult()", () => {
 });
 
 describe("renderTimings()", () => {
-    /** Every timing, slowest total first, with calls, total, max and budget (C52). */
+    /** Every timing, slowest total first, with calls, total, max and budget. */
     it("should list timings slowest first with their budgets", () => {
         const text = renderTimings([
             { key: "intent:a", category: "intent", name: "a", plugin: "p", count: 1, totalMs: 1, maxMs: 1, budgetMs: 10, overBudget: 0 },
@@ -36,7 +36,7 @@ describe("renderTimings()", () => {
 });
 
 describe("thresholdOf()", () => {
-    /** `--debug` means debug; `--log-level` sets a valid level; anything else gives info (C61). */
+    /** `--debug` means debug; `--log-level` sets a valid level; anything else gives info. */
     it("should pick the threshold from --debug and --log-level", () => {
         expect(thresholdOf({ debug: true, "log-level": "error" })).toBe("debug");
         expect(thresholdOf({ "log-level": "error" })).toBe("error");

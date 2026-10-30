@@ -1,5 +1,5 @@
 /**
- * One-line descriptions of patches, as `sous config show --layers` lists them (S2, "Patches").
+ * One-line descriptions of patches, as `sous config show --layers` lists them.
  */
 import { formatPath, parsePath } from "./path.js";
 import { isPatchSet } from "./patch-set.js";

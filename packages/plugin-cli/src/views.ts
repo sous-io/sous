@@ -3,7 +3,7 @@ import type { TimingEntry } from "@sous-io/plugin-api";
 export { renderResult } from "./views/show.js";
 
 /**
- * Every timing of the run, for `--timings` (C52): one line per key, slowest total first.
+ * Every timing of the run, for `--timings`: one line per key, slowest total first.
  *
  * ```text
  * Timings:

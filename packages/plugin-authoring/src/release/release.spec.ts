@@ -78,7 +78,7 @@ describe("runRelease()", () => {
         expect(reporter.at("notice").join("\n")).toContain("this was a dry run");
     });
 
-    /** With nothing to ask and no --yes, nothing is published, and the error names --yes (L4). */
+    /** With nothing to ask and no --yes, nothing is published, and the error names --yes. */
     it("should refuse to publish with nothing to ask and no --yes", async () => {
         await expect(release()).rejects.toThrow(/--yes/);
         expect(tags()).toEqual([]);

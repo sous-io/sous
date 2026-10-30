@@ -1,7 +1,7 @@
 /**
  * What part B's code reaches through the engine, gathered in one place: the services of other
  * plugins, the `repository-host` entities, the index cache core and the context a host's methods
- * get. Contributors run while the config is built, when only singletons exist (S1), so everything
+ * get. Contributors run while the config is built, when only singletons exist, so everything
  * here reaches singletons only.
  */
 

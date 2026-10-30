@@ -78,12 +78,12 @@ function setup(recipeDir = "/nowhere") {
 }
 
 describe("recipes.active", () => {
-    /** Only the locked recipes reached from subscriptions switched on count (S4, 3). */
+    /** Only the locked recipes reached from subscriptions switched on count. */
     it("should reach recipes only from subscriptions switched on", () => {
         expect(reachableKeys(lock, { "tool-usage/automated-browser-tasks": { enabled: false }, workflow: {} })).toEqual(["workflow/missing", "workflow/task-files"]);
     });
 
-    /** One line per skipped recipe, saying why, naming the file that switched it off (S4, 4). */
+    /** One line per skipped recipe, saying why, naming the file that switched it off. */
     it("should say why each locked recipe is skipped", () => {
         const skipped = setup().skipped();
         const byKey = Object.fromEntries(skipped.map((entry) => [entry.key, entry]));

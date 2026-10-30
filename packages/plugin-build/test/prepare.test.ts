@@ -29,7 +29,7 @@ describe("build.prepare", () => {
     });
 
     /**
-     * S4, 3: a switched-off subscription is not locked, and a locked one is not resolved again.
+     * A switched-off subscription is not locked, and a locked one is not resolved again.
      *
      * subscriptions: { off: { enabled: false }, acme: {} } with acme/jira pinned; // -> no resolve
      */

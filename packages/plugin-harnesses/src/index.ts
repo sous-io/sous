@@ -1,7 +1,7 @@
 /**
  * plugin-harnesses: The harness entity, launching a harness, headless runs, and the tools settings.
  *
- * S6, "Harnesses: plugin-harnesses". The contract other plugins code against is `./types.ts`.
+ * The contract other plugins code against is `./types.ts`.
  */
 
 import { definePlugin, jsonSchema, type PluginDefinition } from "@sous-io/plugin-api";

@@ -168,7 +168,7 @@ describe("runContribute()", () => {
         expect(ran.map((entry) => entry.intent)).toEqual(["repo.unlink"]);
     });
 
-    /** Without --submit or --no-submit the person is asked; with nothing to ask, the error names both flags (L4). */
+    /** Without --submit or --no-submit the person is asked; with nothing to ask, the error names both flags. */
     it("should ask whether to submit, naming the flags that answer it", async () => {
         writeFile(checkout, "change.md", "change\n");
         commitAll(checkout, "a change");

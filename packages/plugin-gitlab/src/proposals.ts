@@ -1,6 +1,6 @@
 /**
  * Proposing changes on GitLab: merge requests through `glab`, the only part of this plugin that
- * needs it (S4). `GITLAB_HOST` tells glab which instance, so a self-managed one works too.
+ * needs it. `GITLAB_HOST` tells glab which instance, so a self-managed one works too.
  *
  * Sous does not fork on GitLab: it opens a merge request from a branch the contributor can already
  * push, so `canPush` answers "cannot tell" and `fork` refuses with the manual route.

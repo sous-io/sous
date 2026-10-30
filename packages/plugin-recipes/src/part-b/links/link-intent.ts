@@ -361,7 +361,7 @@ async function requireDefaultBranch(git: GitRunner, directory: string): Promise<
     });
 }
 
-/** Lists what `--latest` would discard and asks once; `--yes` answers ahead of time (L4). */
+/** Lists what `--latest` would discard and asks once; `--yes` answers ahead of time. */
 async function confirmDiscard(branch: string, work: checkout.DiscardableWork, yes: boolean, ctx: Context): Promise<void> {
     if (work.uncommitted.length === 0 && work.localCommits.length === 0) {
         return;

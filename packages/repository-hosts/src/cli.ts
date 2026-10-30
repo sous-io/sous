@@ -1,6 +1,6 @@
 /**
- * Driving a host's own CLI (`gh`, `glab`) through `host.processes` (timed, L5). Only proposing
- * changes needs one (S4); reading never does.
+ * Driving a host's own CLI (`gh`, `glab`) through `host.processes` (timed). Only proposing
+ * changes needs one; reading never does.
  */
 
 import { ConfigError } from "@sous-io/plugin-api";

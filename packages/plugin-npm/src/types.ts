@@ -1,5 +1,5 @@
 /**
- * The contract of plugin-npm (S6, "Host and package-manager plugins"): one `package-manager`
+ * The contract of plugin-npm: one `package-manager`
  * entity, `npm`, that detects npm, lists installed packages and plans installs. It declares no
  * services, intents or events of its own.
  */

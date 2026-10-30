@@ -1,5 +1,5 @@
 /**
- * Checking an answer against the definition that asked for it (S6, `recipe-answers.validator`).
+ * Checking an answer against the definition that asked for it.
  *
  * A recipe declares a small constraint vocabulary (a type, plus `pattern`, `minLength`,
  * `maxLength`, `min`, `max` and `enum`), all plain JSON so a manifest never carries code. A failure

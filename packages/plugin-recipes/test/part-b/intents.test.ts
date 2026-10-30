@@ -75,7 +75,7 @@ describe("lock.rebuild", () => {
         expect(fs.existsSync(path.join(root, ".sous", "sous.lock.json"))).toBe(false);
     });
 
-    it("should keep the pin of a subscription switched off on this machine (S4, 2; C59)", async () => {
+    it("should keep the pin of a subscription switched off on this machine", async () => {
         writeLockfile(
             { root, sousDir: path.join(root, ".sous"), configPath: undefined, confDir: "" },
             {

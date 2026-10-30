@@ -3,7 +3,7 @@ import { parseDocument } from "./text-document.js";
 import { parseJsoncText } from "./jsonc-text.js";
 import type { DocumentFormat } from "./types.js";
 
-/** A managed conf.d file, as sous writes it, with a user's comments added (S2). */
+/** A managed conf.d file, as sous writes it, with a user's comments added. */
 const SUBSCRIPTIONS = `// Managed by sous: subscriptions this project follows.
 {
     "subscriptions": {
@@ -82,7 +82,7 @@ describe("parseDocument()", () => {
     });
 });
 
-describe("TextDocument (JSONC) (C73)", () => {
+describe("TextDocument (JSONC)", () => {
     /**
      * Setting an existing value should replace only that value, keeping the comment beside it.
      *
@@ -98,7 +98,7 @@ describe("TextDocument (JSONC) (C73)", () => {
 
     /**
      * Adding a key should add one line after the last key, in the file's indentation, keeping the
-     * user's other entries exactly as they were (the S2 "surgical edits" rule).
+     * user's other entries exactly as they were (edits touch only the changed entry).
      */
     it("should add a key as a new line, keeping everything else", () => {
         const text = edit(SUBSCRIPTIONS, "jsonc", (doc) =>
@@ -293,7 +293,7 @@ describe("TextDocument (JSONC) (C73)", () => {
     });
 
     /**
-     * A merge at the root should touch only what it changes (C73).
+     * A merge at the root should touch only what it changes.
      */
     it("should merge surgically", () => {
         const text = edit(SUBSCRIPTIONS, "jsonc", (doc) => doc.root().merge({
@@ -307,7 +307,7 @@ describe("TextDocument (JSONC) (C73)", () => {
     });
 });
 
-describe("TextDocument (YAML) (C73)", () => {
+describe("TextDocument (YAML)", () => {
     /**
      * Setting a scalar should keep the comment beside it.
      *

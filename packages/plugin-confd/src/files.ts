@@ -1,5 +1,5 @@
 /**
- * Finding the `conf.d` files (S6, `confd.files`): every file sous reads directly inside `conf.d`
+ * Finding the `conf.d` files: every file sous reads directly inside `conf.d`
  * (not in folders below it), in bytewise order of their names, so `10-` sorts before `2-` on every
  * machine, as `conf.d` sorts today.
  */

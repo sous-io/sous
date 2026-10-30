@@ -1,5 +1,5 @@
 /**
- * Timing and budgets (L5). Every core stage and every call into a plugin is timed, and each has a
+ * Timing and budgets. Every core stage and every call into a plugin is timed, and each has a
  * budget, changeable under the `budgets` config key (`false` turns a warning off).
  */
 

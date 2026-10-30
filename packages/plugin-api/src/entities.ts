@@ -39,7 +39,7 @@ export interface EntityReader {
     kinds(): string[];
 }
 
-/** A `config-key` entity: a key the config may hold, with its schema and defaults (C4, C71). */
+/** A `config-key` entity: a key the config may hold, with its schema and defaults. */
 export interface ConfigKeyEntity {
     /** The key, as a path: `diagrams`, or `tools.claude` for a key inside another plugin's. */
     id: string;

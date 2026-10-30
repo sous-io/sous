@@ -11,8 +11,7 @@ export interface ValidationResult {
 }
 
 /**
- * Checks the finished config against every `config-key` entity, and fills in their defaults (S2,
- * rule 9; C4, C71). Unknown top-level keys are rejected. A key's schema never sees the keys inside
+ * Checks the finished config against every `config-key` entity, and fills in their defaults. Unknown top-level keys are rejected. A key's schema never sees the keys inside
  * it that have `config-key` entities of their own; those are checked on their own.
  *
  * A missing key is checked as `undefined`, then as `{}` (so an object schema's defaults apply); when

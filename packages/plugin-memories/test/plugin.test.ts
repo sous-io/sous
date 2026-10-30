@@ -34,7 +34,7 @@ const settings = (values: Record<string, unknown>) =>
 const compilationTargets = (config: { get(path: string): unknown }) =>
     (config.get("compilation.targets") as CompilationTarget[] | undefined) ?? [];
 
-describe("memory targets (C43)", () => {
+describe("memory targets", () => {
     /**
      * Each memory target becomes one `content` compilation target, id `memories/<target id>`, whose
      * default content is one `@<absolute path>` include line per memory, written to the target's file
@@ -101,7 +101,7 @@ describe("memory targets (C43)", () => {
     });
 
     /**
-     * Sous says nothing about what a filter left out (ruled 2026-10-29).
+     * Sous says nothing about what a filter left out.
      *
      * a filter that takes nothing -> no message at all
      */
@@ -168,7 +168,7 @@ describe("memory targets (C43)", () => {
     });
 });
 
-describe("pointer files (C44)", () => {
+describe("pointer files", () => {
     /**
      * A memory target read in any directory also names a pointer file; one read only at the project
      * root does not.

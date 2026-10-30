@@ -1,9 +1,9 @@
 /**
- * Which variables the active recipes define (S6, `recipe-answers.definitions`).
+ * Which variables the active recipes define.
  *
  * A definition is a published specification, not a value: what a variable is called, what an
  * answer looks like and what question to ask. Definitions ship inside recipe manifests, and only
- * active recipes count (S4, 3): a recipe switched off on this machine asks nothing. Both
+ * active recipes count: a recipe switched off on this machine asks nothing. Both
  * subscribed recipes and the recipes they depend on count, since a recipe may depend on another
  * only to reuse its variables.
  *

@@ -1,9 +1,9 @@
 /**
- * Reporting (L3): services and intents never print. They report through the `Reporter` the front
+ * Reporting: services and intents never print. They report through the `Reporter` the front
  * end handed over with the chain (`ctx.reporter`), and the front end decides how it looks.
  */
 
-/** The eight syslog levels, in full, from least to most severe (S1, "Log levels"). */
+/** The eight syslog levels, in full, from least to most severe. */
 export const LOG_LEVELS = [
     "debug",
     "info",

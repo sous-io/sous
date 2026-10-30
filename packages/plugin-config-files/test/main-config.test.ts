@@ -109,7 +109,7 @@ describe("sous.config.* data files", () => {
         await expect(engine.buildConfig()).resolves.toBeDefined();
     });
 
-    /** Two main config files: the first is read, and sous warns (L6: report, never forbid). */
+    /** Two main config files: the first is read, and sous warns (report, never forbid). */
     it("should warn when a .sous directory holds several main config files", async () => {
         project.write("sous.config.json", JSON.stringify({ name: "json" }));
         project.write("sous.config.yaml", "name: yaml\n");
@@ -152,7 +152,7 @@ describe("sous.config.* module files", () => {
     });
 
     /**
-     * `configure(config)` is given the builder, like any contributor (S2).
+     * `configure(config)` is given the builder, like any contributor.
      *
      * export function configure(config) { config.atPath("_aliases.extra").append("x"); }
      */
@@ -359,10 +359,10 @@ export function configure(cfg) { cfg._vars.readBack = cfg._vars.seed + "-seen"; 
     });
 });
 
-describe("the user's file lands on top (C70, C74)", () => {
+describe("the user's file lands on top", () => {
     /**
      * A plugin sets a key; the user's file sets it too; the user's value wins, with no special
-     * operation (S2's worked example).
+     * operation (the worked example).
      */
     it("should let sous.config.* win over a plugin's value", async () => {
         project.write("sous.config.json", JSON.stringify({ compilation: { includeSourceComments: false } }));
@@ -400,7 +400,7 @@ describe("the user's file lands on top (C70, C74)", () => {
         expect(value.compilation.includeSourceComments).toBe(true);
     });
 
-    /** The file's expressions are evaluated through the expression evaluator before merging (S2, S5). */
+    /** The file's expressions are evaluated through the expression evaluator before merging. */
     it("should evaluate config expressions before merging", async () => {
         project.write(
             "sous.config.json",
@@ -410,7 +410,7 @@ describe("the user's file lands on top (C70, C74)", () => {
         expect((await build()).name).toBe("on-laptop");
     });
 
-    /** The layers view names the file's contributor as the author of each value (G4). */
+    /** The layers view names the file's contributor as the author of each value. */
     it("should record the contributor as the author of each value", async () => {
         project.write("sous.config.json", JSON.stringify({ name: "x" }));
 
@@ -421,7 +421,7 @@ describe("the user's file lands on top (C70, C74)", () => {
     });
 });
 
-describe("patch files beside sous.config.* (C77)", () => {
+describe("patch files beside sous.config.*", () => {
     /** `sous.config.patch.json` with `$patches` applies after the main file. */
     it("should apply sous.config.patch.json after sous.config.*", async () => {
         project.write("sous.config.json", JSON.stringify({ name: "main", tools: { codex: {}, claude: {} } }));

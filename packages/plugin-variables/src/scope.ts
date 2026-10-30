@@ -1,6 +1,6 @@
 /**
  * Building a scope: the auto-variables, then the `variable-source` entities, then `_env`, then the
- * `_vars` of each level down to the one asked for (S2, "Variable scopes"):
+ * `_vars` of each level down to the one asked for:
  *
  * ```text
  * auto-variables → variable sources → _env → root _vars
@@ -39,7 +39,7 @@ const ENV_DEFAULTS_NAME = ".env";
 
 /**
  * Builds the scope a request asks for. `partial` leaves out what cannot be resolved yet instead of
- * throwing (S2: a variable unknown during a pass reads as `undefined`).
+ * throwing (a variable unknown during a pass reads as `undefined`).
  */
 export function buildScope(
     view: ScopeView,

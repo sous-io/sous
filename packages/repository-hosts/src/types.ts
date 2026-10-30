@@ -1,7 +1,7 @@
 /**
  * What the shared token sources and read strategies add to the `repository-host` contract: a reason
  * when a source finds nothing (`GITLAB_TOKEN unset`), and the fix a user can apply when everything
- * fails (`export GITLAB_TOKEN=<a token with read_repository>`), for S4's combined error. Both are
+ * fails (`export GITLAB_TOKEN=<a token with read_repository>`), for the combined error. Both are
  * extra members; a caller that knows only the contract uses `token` and `read` as usual.
  */
 

@@ -1,6 +1,6 @@
 /**
  * The `compilation` and `_aliases` config keys, as `config-key` entities with their schemas and
- * defaults (S2, "Plugins add config keys"; C71). Every object level is strict, so a typo such as
+ * defaults. Every object level is strict, so a typo such as
  * `destinationFiles` is an error naming the file that wrote it, not an output quietly dropped.
  */
 

@@ -17,7 +17,7 @@ export interface ConfigReader {
     value(): Readonly<JsonObject>;
 }
 
-/** One primitive change to a value, and who made it (C53, C78). */
+/** One primitive change to a value, and who made it. */
 export interface ConfigLayer {
     /** The contributor that made it. */
     readonly contributor: string;
@@ -75,7 +75,7 @@ export interface ContributorInfo {
 }
 
 /**
- * What a contributor is given (S2, "The Builder"). It shows the config made from every other
+ * What a contributor is given. It shows the config made from every other
  * contributor's latest patches, without this contributor's own; every read is recorded, and every
  * change becomes this run's patch set.
  */
@@ -93,13 +93,13 @@ export interface ConfigBuilder {
      * Its methods must not use `this` (see `sous.entities.add`).
      */
     addEntity<K extends EntityKind>(kind: K, entry: EntityType<K>): void;
-    /** This contributor's patch set from its previous run, if it ran before (C2). */
+    /** This contributor's patch set from its previous run, if it ran before. */
     previousPatches(): PatchSet | undefined;
-    /** Applies raw patches, as written in a patch file (C77). */
+    /** Applies raw patches, as written in a patch file. */
     apply(patches: Patch | PatchSet | readonly Patch[]): void;
     /** This plugin's own options from `plugins.options`. Recorded as a read. */
     options<T = JsonObject>(): T | undefined;
-    /** Reports a message through the engine's reporter (contributors never print, L3). */
+    /** Reports a message through the engine's reporter (contributors never print). */
     log(level: LogLevel, message: string): void;
     /** Who is running. */
     readonly contributor: ContributorInfo;
@@ -108,7 +108,7 @@ export interface ConfigBuilder {
 }
 
 /**
- * A contributor: anything that adds to the config (S2, "Contributors").
+ * A contributor: anything that adds to the config.
  *
  * ```ts
  * sous.config.contribute({
@@ -132,7 +132,7 @@ export interface ContributorDefinition {
     before?: readonly string[];
     /** Plugins, contributor ids or wildcards this one runs after. Default: its plugin's `after`. */
     after?: readonly string[];
-    /** More to watch than it reads; a change to any re-runs it (C70). */
+    /** More to watch than it reads; a change to any re-runs it. */
     monitors?: readonly Monitor[];
     /** Builds this contributor's patch. Must give the same result for the same input. */
     contribute(config: ConfigBuilder): void | Promise<void>;
@@ -140,6 +140,6 @@ export interface ContributorDefinition {
 
 /** Options for building a config. */
 export interface BuildOptions {
-    /** More contributors for this build only ("what if" builds, C7). */
+    /** More contributors for this build only ("what if" builds). */
     extraContributors?: readonly ContributorDefinition[];
 }

@@ -74,7 +74,7 @@ async function startWatch(input: Record<string, unknown> = {}, setUp?: (world: W
     return { ...rig, h, root, done, session: rig.sessions[0]! };
 }
 
-describe("build.watch (C13)", () => {
+describe("build.watch", () => {
     /**
      * Watch mode watches the targets' sources, `watch.paths`, the config and `conf.d`, and records
      * its PID.

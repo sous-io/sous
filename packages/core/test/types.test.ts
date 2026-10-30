@@ -28,7 +28,7 @@ interface HarnessEntity {
     launch?: (args: string[]) => Promise<void>;
 }
 
-// What sous-plugin-diagrams/src/types.ts would declare (S1, "Types Across Plugins").
+// What sous-plugin-diagrams/src/types.ts would declare.
 declare module "@sous-io/plugin-api" {
     interface SousServices {
         "typed.renderer": Renderer;
@@ -48,12 +48,12 @@ declare module "@sous-io/plugin-api" {
     }
 }
 
-describe("types across plugins (C37)", () => {
+describe("types across plugins", () => {
     /**
      * A plugin that imports another's types sees its services, intents, events and entities typed;
-     * unknown names give `unknown` (S1, "Types Across Plugins"; C37).
+     * unknown names give `unknown`.
      */
-    it("should type services, intents and entities from declaration merging (C37)", () => {
+    it("should type services, intents and entities from declaration merging", () => {
         expectTypeOf<ServiceType<"typed.renderer">>().toEqualTypeOf<Renderer>();
         expectTypeOf<ServiceType<"not.declared">>().toBeUnknown();
         expectTypeOf<IntentInput<"typed.render">>().toEqualTypeOf<{ only?: string }>();
@@ -80,7 +80,7 @@ describe("types across plugins (C37)", () => {
 
     /**
      * A wildcard listener gets the union of every matching known event; a regular expression gets
-     * AnyEvent, narrowed by name (S1, rule 2 of "Types Across Plugins").
+     * AnyEvent, narrowed by name.
      */
     it("should type wildcard and regex patterns", () => {
         expectTypeOf<EventForPattern<"typed.render.*">>().toEqualTypeOf<

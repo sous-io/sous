@@ -1,7 +1,7 @@
 /**
  * plugin-inspect: Showing the engine's state: config show, config get, config validate, plugins show, timings.
  *
- * S6, "Showing the engine's state: plugin-inspect". The contract other plugins code against is `./types.ts`.
+ * The contract other plugins code against is `./types.ts`.
  */
 
 import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";

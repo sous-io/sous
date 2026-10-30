@@ -1,11 +1,11 @@
 /**
- * The contract of plugin-recipe-answers (S6, "Recipe answers: plugin-recipe-answers"): which
+ * The contract of plugin-recipe-answers: which
  * variables the active recipes define, the answer ladder, the answers a build uses, asking for
- * missing answers, answers given up front (L4), variable mappings (`conf.d/520`), validating an
+ * missing answers, answers given up front, variable mappings (`conf.d/520`), validating an
  * answer, and the ref lookups over variables.
  *
  * It adds the answers as a `variable-source` entity (id `recipe-answers`), so config expressions
- * can read them (S2) without plugin-variables knowing recipes exist.
+ * can read them without plugin-variables knowing recipes exist.
  *
  * Other plugins import this file type-only.
  */
@@ -58,7 +58,7 @@ export interface DefinitionOptions {
     file?: string;
 }
 
-/** Which variables the active recipes define (S6, `recipe-answers.definitions`). Only active recipes count (S4, 3). */
+/** Which variables the active recipes define. Only active recipes count. */
 export interface RecipeAnswersDefinitions {
     /** Every defined variable, in recipe order. */
     list(options?: DefinitionOptions): Promise<DefinedVariable[]>;
@@ -102,7 +102,7 @@ export interface AnswerDiagnosis {
     readonly candidates: readonly LadderCandidate[];
 }
 
-/** The answer ladder: where an answer comes from, in order (S6, `recipe-answers.ladder`). */
+/** The answer ladder: where an answer comes from, in order. */
 export interface RecipeAnswersLadder {
     /** The names tried for a variable, in order. */
     candidates(variable: DefinedVariable): LadderCandidate[];
@@ -127,7 +127,7 @@ export interface RecipeAnswers {
     readonly secrets: ReadonlySet<string>;
 }
 
-/** The answers a build uses, per recipe (S6, `recipe-answers.answers`). */
+/** The answers a build uses, per recipe. */
 export interface RecipeAnswersAnswers {
     get(): RecipeAnswers;
     /** One recipe's scope: the merged answers with its own laid over. */
@@ -147,7 +147,7 @@ export interface ProvidedAnswer {
     readonly from: string;
 }
 
-/** The inputs that give answers up front (L4). */
+/** The inputs that give answers up front. */
 export interface ProvidedAnswerInputs {
     /** `--answer <name>=<value>`, repeatable. */
     answer?: readonly string[];
@@ -162,7 +162,7 @@ export interface ApplicableAnswer {
     readonly value: string;
 }
 
-/** Answers given up front, by file or flag (S6, `recipe-answers.preanswers`). */
+/** Answers given up front, by file or flag. */
 export interface RecipeAnswersPreanswers {
     /** Reads the flags and the file; throws an `InputError` for a malformed entry. */
     read(inputs: ProvidedAnswerInputs): Promise<ProvidedAnswer[]>;
@@ -173,7 +173,7 @@ export interface RecipeAnswersPreanswers {
 /** An answer, checked. */
 export type AnswerValidation = { readonly ok: true; readonly value: VariableScalar } | { readonly ok: false; readonly message: string };
 
-/** Checking an answer against its definition, with a time-limited regex (S6, `recipe-answers.validator`). */
+/** Checking an answer against its definition, with a time-limited regex. */
 export interface RecipeAnswersValidator {
     validate(definition: VariableDefinition, answer: string, options?: { recipe?: string; patternBudgetMs?: number }): AnswerValidation;
 }
@@ -186,7 +186,7 @@ export interface MappingTarget {
     readonly variable: string;
 }
 
-/** Variable mapping records in `conf.d/520-var-mappings.jsonc` (S6, `recipe-answers.mappings`). */
+/** Variable mapping records in `conf.d/520-var-mappings.jsonc`. */
 export interface RecipeAnswersMappings {
     /** Every mapping, by environment name. */
     list(): Record<string, MappingTarget>;
@@ -203,7 +203,7 @@ export interface RecipeAnswersMappings {
 // Intents
 // ---------------------------------------------------------------------------------------------
 
-/** `vars.ask`: asks for missing answers through the chain's `Prompter`, or takes them from flags (L4). */
+/** `vars.ask`: asks for missing answers through the chain's `Prompter`, or takes them from flags. */
 export interface VarsAskInput extends ProvidedAnswerInputs {
     /** One variable, by name or ref. */
     name?: string;

@@ -1,11 +1,11 @@
 /**
- * The contract of plugin-memories (S6, "Memories: plugin-memories"): files a harness reads into
+ * The contract of plugin-memories: files a harness reads into
  * every session (`memory-target`), which memories go where, the `memories.targets` contributor that
- * turns memory targets into compilation targets (C6, C43), the `#memories` name, and a
- * `pointer-file` entity for every memory target read in any directory (C44).
+ * turns memory targets into compilation targets, the `#memories` name, and a
+ * `pointer-file` entity for every memory target read in any directory.
  *
  * The order is: the active recipes' memories, the config's selection (`recipes.memories.first`,
- * `.exclude`), the target's `filter()`, then its `format()` (ruled 2026-10-29). The default
+ * `.exclude`), the target's `filter()`, then its `format()`. The default
  * `format()` writes one compiler `@` include line per memory.
  *
  * Other plugins import this file type-only.
@@ -29,7 +29,7 @@ export interface Memory {
 export type MemoryReadIn = "project-root" | "any-directory";
 
 /**
- * A `memory-target` entity (C43): a file a harness reads into every session. `filter` and `format`
+ * A `memory-target` entity: a file a harness reads into every session. `filter` and `format`
  * run in the `memories.targets` contributor and get its builder, so what they read is recorded.
  */
 export interface MemoryTargetEntity {
@@ -49,7 +49,7 @@ export interface MemoryTargetEntity {
     format?(memories: readonly Memory[], config: ConfigBuilder): string;
 }
 
-/** Which memories go where (S6, `memories.selection`). */
+/** Which memories go where. */
 export interface MemoriesSelection {
     /** The active recipes' memories, ordered and filtered by `recipes.memories`. */
     selected(): Memory[];

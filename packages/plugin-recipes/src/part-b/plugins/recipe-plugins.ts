@@ -1,5 +1,5 @@
 /**
- * Recipe plugins (S1, "Where plugins come from"; S6, `recipes.plugins`).
+ * Recipe plugins.
  *
  * A recipe ships a plugin as one bundled file (`plugin.bundle` in its manifest), never something
  * needing `npm install`. The `recipes.plugins` contributor adds each active recipe's bundle to
@@ -7,7 +7,7 @@
  * project trusts and has switched on are active, so nothing inside an untrusted repository runs.
  *
  * Every recipe plugin's `.d.ts`, from the locked version loaded, is copied into `.sous/types/`
- * with an `index.d.ts` referencing them all, rewritten on every build (S1, "Types Across Plugins").
+ * with an `index.d.ts` referencing them all, rewritten on every build.
  */
 
 import fs from "node:fs";
@@ -74,7 +74,7 @@ export function pluginsContributor(): ContributorDefinition {
             for (const recipe of config.entities("active-recipe")) {
                 const repo = repos[recipe.repo];
 
-                // Never run anything inside a repository the project does not trust (S1).
+                // Never run anything inside a repository the project does not trust.
                 if (repo === undefined || repo.enabled === false) {
                     continue;
                 }

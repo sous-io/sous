@@ -1,5 +1,5 @@
 /**
- * Saying why skills went nowhere. Core has no default destination (ruled 2026-10-25, G8), so with
+ * Saying why skills went nowhere. Core has no default destination, so with
  * no `skill-target` and no `recipes.skills.outputs`, skills are skipped and the compile says so.
  *
  * It is said when the compile starts, from the finished config, never from the contributor: an

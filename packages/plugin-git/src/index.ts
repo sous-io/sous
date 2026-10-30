@@ -1,7 +1,7 @@
 /**
  * plugin-git: The one git runner.
  *
- * S6, "Shared building blocks (git.runner)". The contract other plugins code against is `./types.ts`.
+ * The contract other plugins code against is `./types.ts`.
  */
 
 import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";

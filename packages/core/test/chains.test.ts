@@ -23,9 +23,9 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
 describe("the chain scheduler", () => {
     /**
      * Chains run in series by default; parallel chains run together; a waiting series chain blocks
-     * new starts, so a parallel chain submitted after it queues behind it (S1 diagram; C11, C12).
+     * new starts, so a parallel chain submitted after it queues behind it.
      */
-    it("should queue a parallel chain behind a waiting series chain (S1 diagram, C12)", async () => {
+    it("should queue a parallel chain behind a waiting series chain", async () => {
         const log: string[] = [];
         const gates = { get: gate(), build: gate(), catalog: gate() };
         const { engine } = makeEngine([
@@ -66,9 +66,9 @@ describe("the chain scheduler", () => {
     });
 
     /**
-     * Two parallel chains run together; two series chains one after the other (C12).
+     * Two parallel chains run together; two series chains one after the other.
      */
-    it("should run parallel chains together and series chains one at a time (C12)", async () => {
+    it("should run parallel chains together and series chains one at a time", async () => {
         let running = 0;
         let most = 0;
         const { engine } = makeEngine([
@@ -96,7 +96,7 @@ describe("the chain scheduler", () => {
 
     /**
      * After a series chain that changed the config, the config is rebuilt before the next chain
-     * starts; a running chain keeps the config and services it started with (S1, rule 5).
+     * starts; a running chain keeps the config and services it started with.
      */
     it("should rebuild after a chain that changed the config, keeping running chains on theirs", async () => {
         let value = 1;
@@ -180,9 +180,9 @@ describe("the chain scheduler", () => {
 
     /**
      * A background intent runs outside the scheduler: it never blocks a chain, reads the latest
-     * config, submits chains with ctx.run, and whenBackgroundIntentsReturn waits for it (C13, C14).
+     * config, submits chains with ctx.run, and whenBackgroundIntentsReturn waits for it.
      */
-    it("should run background intents outside the scheduler (C13, C14)", async () => {
+    it("should run background intents outside the scheduler", async () => {
         const stop = gate();
         const log: unknown[] = [];
         let value = "first";
@@ -227,9 +227,9 @@ describe("the chain scheduler", () => {
 
     /**
      * ctx.run inside a chain runs at once as part of the chain, never queued, so it never deadlocks;
-     * results flow back, and intents can run in parallel inside a chain (C10, C11).
+     * results flow back, and intents can run in parallel inside a chain.
      */
-    it("should run nested intents at once inside the chain (C10, C11)", async () => {
+    it("should run nested intents at once inside the chain", async () => {
         const { engine } = makeEngine([
             plugin("p", (sous) => {
                 sous.intents.add({
@@ -259,9 +259,9 @@ describe("the chain scheduler", () => {
 
     /**
      * ctx.run nested past limits.runDepth, or the same intent re-entered with the same input past
-     * limits.sameIntentDepth, is a LoopError showing the path (S1, "Finding Loops"; C51).
+     * limits.sameIntentDepth, is a LoopError showing the path.
      */
-    it("should stop deep and self-recursive ctx.run calls with the path (S1 Finding Loops)", async () => {
+    it("should stop deep and self-recursive ctx.run calls with the path", async () => {
         const { engine } = makeEngine([
             plugin("p", (sous) => {
                 sous.intents.add({ intent: "p.deeper", handle: (input, ctx) => ctx.run("p.deeper", { n: (input as { n: number }).n + 1 }) });
@@ -295,10 +295,10 @@ describe("the chain scheduler", () => {
     });
 
     /**
-     * Each chain's ctx.reporter and ctx.prompter are the ones its front end handed over (L3), and
-     * globals reach ctx.globals (C16).
+     * Each chain's ctx.reporter and ctx.prompter are the ones its front end handed over, and
+     * globals reach ctx.globals.
      */
-    it("should give each chain its front end's reporter, prompter and globals (C16)", async () => {
+    it("should give each chain its front end's reporter, prompter and globals", async () => {
         const reporter = new BufferedReporter();
         const prompter = scriptedPrompter(["yes please"]);
         const { engine } = makeEngine([
@@ -353,9 +353,9 @@ describe("intents", () => {
 
     /**
      * A handler given as `load` is imported when the intent first runs: a function, a default export
-     * or a `handle` export; a module with none is an error (G9).
+     * or a `handle` export; a module with none is an error.
      */
-    it("should load lazy handlers on first run (G9)", async () => {
+    it("should load lazy handlers on first run", async () => {
         let loads = 0;
         const { engine } = makeEngine([
             plugin("p", (sous) => {
@@ -390,9 +390,9 @@ describe("intents", () => {
     });
 
     /**
-     * Wrappers stack in plugin order: the plugin loaded last wraps outermost (C15).
+     * Wrappers stack in plugin order: the plugin loaded last wraps outermost.
      */
-    it("should stack intent wrappers in plugin order (C15)", async () => {
+    it("should stack intent wrappers in plugin order", async () => {
         const { engine } = makeEngine([
             plugin("build-owner", (sous) => sous.intents.add({ intent: "build", handle: () => ["built"] })),
             plugin("first", (sous) => sous.intents.wrap("build", (next) => async (input, ctx) => [...((await next(input, ctx)) as string[]), "first"])),

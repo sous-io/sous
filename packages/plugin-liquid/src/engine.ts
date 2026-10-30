@@ -1,6 +1,6 @@
 /**
  * `liquid.engine`: builds a LiquidJS engine with every tag and filter the `liquid-tag` and
- * `liquid-filter` entities add (C36). Today's `src/templating/init-liquid-engine.ts` registered two
+ * `liquid-filter` entities add. Today's `src/templating/init-liquid-engine.ts` registered two
  * fixed lists; here the lists are whatever plugins add.
  */
 
@@ -26,7 +26,7 @@ import type {
 /** The purpose an engine is built for when the caller names none. */
 export const DEFAULT_PURPOSE: LiquidPurpose = "template";
 
-/** The purpose config expressions build their engines for (S5). */
+/** The purpose config expressions build their engines for. */
 export const CONFIG_EXPRESSION_PURPOSE: LiquidPurpose = "config-expression";
 
 /** What the engine builder reads: the parts of a service context it needs. */

@@ -19,7 +19,7 @@ export interface CliPluginOptions {
     io?: () => CliIo;
 }
 
-/** The global arguments plugin-cli adds itself (S1, "Log levels"; C61, C52). */
+/** The global arguments plugin-cli adds itself. */
 export const BUILT_IN_GLOBAL_ARGUMENTS: readonly CliGlobalArgumentEntity[] = [
     {
         id: "config",
@@ -75,8 +75,8 @@ export const BUILT_IN_GLOBAL_ARGUMENTS: readonly CliGlobalArgumentEntity[] = [
 ];
 
 /**
- * The CLI front end (S6, `plugin-cli`): commands generated from every intent's declaration, on
- * Node's `util.parseArgs` (S1, "The CLI foundation"), with terminal output and prompts.
+ * The CLI front end: commands generated from every intent's declaration, on
+ * Node's `util.parseArgs`, with terminal output and prompts.
  */
 export function createCliPlugin(options: CliPluginOptions = {}): PluginDefinition {
     const io = options.io ?? processIo;

@@ -7,9 +7,9 @@ import { contributorsPlugin, keysPlugin, makeEngine, manualClock, plugin } from 
 describe("timing and budgets", () => {
     /**
      * Every core stage and every call into a plugin has a budget: a test fails when a timing category
-     * has none (S1, "Timing and Budgets", ruled 2026-10-25; L5).
+     * has none.
      */
-    it("should have a default budget for every timing category (L5)", () => {
+    it("should have a default budget for every timing category", () => {
         for (const category of TIMING_CATEGORIES) {
             expect(DEFAULT_BUDGETS[category], category).toBeGreaterThan(0);
         }
@@ -43,9 +43,9 @@ describe("timing and budgets", () => {
 
     /**
      * Budgets change under the budgets config key, by category or by "category:name"; false turns a
-     * warning off; the config's budgets apply to its own build (C50).
+     * warning off; the config's budgets apply to its own build.
      */
-    it("should take budgets from the config, with false turning a warning off (C50)", async () => {
+    it("should take budgets from the config, with false turning a warning off", async () => {
         const clock = manualClock();
         const { engine, reporter } = makeEngine(
             [
@@ -85,9 +85,9 @@ describe("timing and budgets", () => {
 
     /**
      * Every kind of plugin call is timed: contributors, plugin loads and registers, intents,
-     * listeners, chains, stages and passes, validation, service creation (C52).
+     * listeners, chains, stages and passes, validation, service creation.
      */
-    it("should time every stage and plugin call (C52)", async () => {
+    it("should time every stage and plugin call", async () => {
         const { engine } = makeEngine([
             keysPlugin("x"),
             plugin("p", (sous) => {
@@ -113,9 +113,9 @@ describe("timing and budgets", () => {
 
     /**
      * Timing costs almost nothing when nothing is over budget: 100k timed calls stay within a few
-     * microseconds each (G9, L5).
+     * microseconds each.
      */
-    it("should add near-zero overhead to calls under budget (L5, G9)", () => {
+    it("should add near-zero overhead to calls under budget", () => {
         const timer = new Timer(DEFAULT_BUDGETS, () => {});
         const calls = 100_000;
         let sum = 0;

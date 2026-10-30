@@ -1,6 +1,5 @@
 /**
- * Resolving recipe requests to versions, and walking the dependency closure (S6,
- * `recipes.resolver`).
+ * Resolving recipe requests to versions, and walking the dependency closure.
  *
  * It works the way apt does: a ref is looked up across the cached indexes of every trusted
  * repository at once, and a ref that exists in more than one of them is an error asking for the

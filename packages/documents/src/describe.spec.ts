@@ -23,13 +23,13 @@ describe("describePatch()", () => {
 describe("describePatchSet()", () => {
     /**
      * describePatchSet should list a contributor's helpers and the primitives each made, as
-     * `--layers` shows them (C78, S2 example).
+     * `--layers` shows them.
      *
      * confd/620-no-diagrams.js
      *   removeWhere compilation.targets
      *     removeIndex compilation.targets[7]
      */
-    it("should show helpers and their primitives (C78)", () => {
+    it("should show helpers and their primitives", () => {
         const targets = ["a", "b", "c", "d", "e", "f", "g", "diagrams"].map((id) => ({ id }));
         const doc = createDocument({ compilation: { targets } });
 

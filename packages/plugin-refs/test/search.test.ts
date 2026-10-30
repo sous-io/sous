@@ -239,11 +239,11 @@ describe("a location on the command line", () => {
 
 describe("resolving and picking together", () => {
     /**
-     * An ambiguous word resolves to several matches, and --accept-first takes the first listed (C46).
+     * An ambiguous word resolves to several matches, and --accept-first takes the first listed.
      *
      * resolve("formatter") then pick({ acceptFirst: true }) // -> fixtures:workflow/formatter
      */
-    it("should settle an ambiguous word with --accept-first (C46)", async () => {
+    it("should settle an ambiguous word with --accept-first", async () => {
         const refs = await over([catalogRepo("fixtures", ["workflow/formatter"]), catalogRepo("extras", ["tooling/formatter"])]);
         const { refs: found } = await refs.resolver.resolve({ input: "formatter", kinds: ["recipe"] });
         const picked = await refs.picker.pick(found, { search: "formatter", acceptFirst: true }, { prompter: nonInteractivePrompter, reporter: refs.reporter });

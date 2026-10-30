@@ -34,7 +34,7 @@ describe("reachability", () => {
         expect(result.reached).toEqual(["workflow/helper", "workflow/tasks", "x/remote"]);
     });
 
-    it("should skip a switched-off subscription's recipes, saying which file switched it off (C59)", () => {
+    it("should skip a switched-off subscription's recipes, saying which file switched it off", () => {
         const result = reachability({
             lockfile,
             repos,

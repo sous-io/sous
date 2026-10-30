@@ -4,9 +4,9 @@ import { nonInteractivePrompter, scriptedPrompter } from "./prompter.js";
 
 describe("nonInteractivePrompter", () => {
     /**
-     * Every question fails with a NonInteractiveError naming the flag that answers it (L4, C46).
+     * Every question fails with a NonInteractiveError naming the flag that answers it.
      */
-    it("should refuse every question, naming the flag (L4, C46)", async () => {
+    it("should refuse every question, naming the flag", async () => {
         expect(nonInteractivePrompter.interactive).toBe(false);
         await expect(nonInteractivePrompter.confirm({ message: "Remove the 3 files listed above?", answeredBy: "--yes" })).rejects.toThrow(
             'sous needed to ask "Remove the 3 files listed above?" but cannot ask questions in this run. Pass --yes to answer it ahead of time.',

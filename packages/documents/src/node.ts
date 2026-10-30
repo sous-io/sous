@@ -1,5 +1,5 @@
 /**
- * The node API (S2, "The Document-Editing Package"): one place in a document, with the inspecting
+ * The node API: one place in a document, with the inspecting
  * methods, the primitives and the helpers built on them. A node holds no state; it reads from and
  * writes to its document's backend.
  */
@@ -112,7 +112,7 @@ export class DocNode implements DocumentNode {
         }
     }
 
-    /** The same as {@link set}, under the name the S2 examples use. */
+    /** The same as {@link set}, under the name the examples use. */
     setValue(value: unknown): void {
         this.set(value);
     }
@@ -191,7 +191,7 @@ export class DocNode implements DocumentNode {
         this.insert("end", item);
     }
 
-    /** The same as {@link append}, under the name the S2 examples use. */
+    /** The same as {@link append}, under the name the examples use. */
     appendValue(item: unknown): void {
         this.append(item);
     }
@@ -293,7 +293,7 @@ export class DocNode implements DocumentNode {
 
     /**
      * Runs a helper of your own: the primitives it makes are grouped in a patch set with this name
-     * and this node's path (C75).
+     * and this node's path.
      *
      * ```ts
      * node.patchSet("appendUnique", (n) => {

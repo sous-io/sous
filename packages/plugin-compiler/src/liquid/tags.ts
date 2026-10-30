@@ -1,6 +1,6 @@
 /**
  * The built-in tags (`showVars`, `exportScalarVarsJs`, `getFiles`, `listFiles`) and filter
- * (`bulletList`), as `liquid-tag` and `liquid-filter` entities (S6), so plugin-liquid registers
+ * (`bulletList`), as `liquid-tag` and `liquid-filter` entities, so plugin-liquid registers
  * them on every engine like any plugin's own.
  */
 

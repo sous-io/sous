@@ -41,7 +41,7 @@ export interface SousApiHost {
     hasService(name: string): boolean;
     defineEntityKind(kind: string, schema: SousSchema, options: EntityKindOptions, record: PluginRecord): void;
     addEntity(kind: string, entry: unknown, record: PluginRecord): void;
-    /** The entities plugins read directly; warns when a contributor reads them (S2, rule 6). */
+    /** The entities plugins read directly; warns when a contributor reads them. */
     entitiesForDirectRead(record: PluginRecord): EntitySnapshot;
     addPlugin(source: PluginDefinition | string, record: PluginRecord): Promise<void>;
     addFrontEnd(definition: FrontEndDefinition, record: PluginRecord): void;
@@ -52,7 +52,7 @@ export interface SousApiHost {
 
 /**
  * The `sous` object a plugin's `register()` receives: the engine, scoped to that plugin, so every
- * registration is recorded with it (S1, "Visibility").
+ * registration is recorded with it.
  */
 export function createSousApi(host: SousApiHost, record: PluginRecord): Sous {
     const note = (kind: string, name: string): void => {

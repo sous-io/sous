@@ -1,5 +1,5 @@
 /**
- * The contract of plugin-refs (S6, "Shared building blocks"): parsing a written ref into every
+ * The contract of plugin-refs: parsing a written ref into every
  * reading it could have, deciding which readings count where it was written, settling which match a
  * run proceeds with, `#` names, and repository locations and identity.
  *
@@ -168,7 +168,7 @@ export interface RefParseResult {
     readonly problems: string[];
 }
 
-/** Reads a written ref into every reading it could have (S6, `refs.parser`). */
+/** Reads a written ref into every reading it could have. */
 export interface RefsParser {
     /** Every reading, with no regard to where it was written. */
     parse(input: string): RefParseResult;
@@ -284,7 +284,7 @@ export interface RefInString {
     readonly result: RefResolution;
 }
 
-/** Which readings count where a ref is written, and what exists (S6, `refs.resolver`). */
+/** Which readings count where a ref is written, and what exists. */
 export interface RefsResolver {
     /** Parses and prunes, with no lookup. Throws a `ConfigError` listing every reason when every reading is refused. */
     parse(input: string, from?: RefSource): RefResolution;
@@ -341,9 +341,9 @@ export interface RefPickIo {
     readonly reporter: Reporter;
 }
 
-/** Settling which of several matches a run proceeds with (S6, `refs.picker`). */
+/** Settling which of several matches a run proceeds with. */
 export interface RefsPicker {
-    /** The one ref a run proceeds with; asks through the prompter, naming `--accept-first` (L4). */
+    /** The one ref a run proceeds with; asks through the prompter, naming `--accept-first`. */
     pick(matches: readonly SousRef[], options: RefPickOptions, io: RefPickIo): Promise<SousRef>;
     /** The facts a resolved ref carries. */
     facts(ref: SousRef, search: string, reason?: string): ResolvedRefFacts;
@@ -433,7 +433,7 @@ export interface RepositoryLocator {
     canonicalize(url: string): CanonicalRepository;
 }
 
-/** Repository locations (`github://...`) and canonical identity (S6, `refs.locations`). */
+/** Repository locations (`github://...`) and canonical identity. */
 export interface RefsLocations {
     /**
      * The location a repository URL or locator names, or `undefined` when no host reads it.

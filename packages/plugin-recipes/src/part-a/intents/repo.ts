@@ -4,7 +4,7 @@
  *
  * Adding a repository trusts it, and nothing is fetched from it before that. Removing one is
  * informed consent: everything that goes is reported first, then one question is asked, which
- * `--yes` answers ahead of time (L4).
+ * `--yes` answers ahead of time.
  */
 
 import fs from "node:fs";

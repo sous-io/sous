@@ -1,5 +1,5 @@
 /**
- * `config-files.loader`: reading one config file in-process (S2, "No child process"), and applying
+ * `config-files.loader`: reading one config file in-process, and applying
  * it through a builder. `.json`, `.jsonc` and `.yaml` files are parsed; `.js` and `.ts` files are
  * imported; `.patch.json` and `.patch.jsonl` files hold raw patches.
  */
@@ -138,7 +138,7 @@ export class ConfigFilesLoaderImpl implements ConfigFilesLoader {
         return file;
     }
 
-    /** Applies data as one merge at the root, its expressions evaluated first (S2, S5). */
+    /** Applies data as one merge at the root, its expressions evaluated first. */
     mergeData(config: ConfigBuilder, data: unknown, label: string, fromRecipe = false): void {
         const evaluated = this.evaluate(config, data as JsonValue, label, fromRecipe);
 
@@ -219,7 +219,7 @@ export class ConfigFilesLoaderImpl implements ConfigFilesLoader {
 
     /**
      * Imports a module file. Node keeps every module it imports, so a file changed on disk is
-     * imported again under a new URL; the old copy stays in memory (S2).
+     * imported again under a new URL; the old copy stays in memory.
      */
     private async importFile(file: string, format: "js" | "ts"): Promise<Record<string, unknown>> {
         const stat = fs.statSync(file);
@@ -312,7 +312,7 @@ export function mainCandidates(sousDir: string): string[] {
     return MAIN_CONFIG_FILE_NAMES.map((name) => path.join(sousDir, name)).filter(isFile);
 }
 
-/** The plain string `_vars` of a file's root, which its own expressions also see (S2). */
+/** The plain string `_vars` of a file's root, which its own expressions also see. */
 function ownVars(data: JsonValue): Record<string, string> | undefined {
     if (!isJsonObject(data) || !isJsonObject(data._vars)) {
         return undefined;

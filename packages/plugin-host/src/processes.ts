@@ -1,5 +1,5 @@
 /**
- * `host.processes`: the one owner of `spawn` (S6). Every run is timed; the engine also times each
+ * `host.processes`: the one owner of `spawn`. Every run is timed; the engine also times each
  * service call.
  */
 

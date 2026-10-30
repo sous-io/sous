@@ -13,7 +13,7 @@ export interface ContributorEntry {
     readonly extra: boolean;
 }
 
-/** Every contributor plugins added (S2, "Contributors"). */
+/** Every contributor plugins added. */
 export class ContributorRegistry {
     private readonly entries = new Map<string, ContributorEntry>();
 

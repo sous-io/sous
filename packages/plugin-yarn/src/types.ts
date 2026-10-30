@@ -1,5 +1,5 @@
 /**
- * The contract of plugin-yarn (S6, "Host and package-manager plugins"; S1, "Loading"): one
+ * The contract of plugin-yarn: one
  * `package-manager` entity, `yarn` (Classic and Berry), and a `plugin-locator` entity (a kind core
  * defines) that finds plugins through Yarn Plug'n'Play's resolver. It declares no services,
  * intents or events of its own.

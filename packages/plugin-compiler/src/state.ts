@@ -1,5 +1,5 @@
 /**
- * The state file (S6, `compiler.state`): every file the compiler wrote, the directories it created,
+ * The state file: every file the compiler wrote, the directories it created,
  * and which target, plugin, recipe and repository each file came from. Only the compiler writes it;
  * `prune`, `clear` and removing a repository read it.
  */

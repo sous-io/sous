@@ -134,7 +134,7 @@ describe("purposes", () => {
     const upper: LiquidFilterEntity = { id: "upper2", filter: () => (value: unknown) => String(value).toUpperCase() };
     const docsFilter: LiquidFilterEntity = { id: "docsOnly", purposes: ["docs"], filter: () => () => "docs" };
 
-    /** Tags skip config expressions unless they ask for them; filters go everywhere by default (S6, ruled 2026-10-29). */
+    /** Tags skip config expressions unless they ask for them; filters go everywhere by default. */
     it("should register tags and filters by purpose", async () => {
         const service = await engines([extensions([plainTag, exprTag], [upper, docsFilter])]);
 
@@ -231,7 +231,7 @@ describe("engine options", () => {
     });
 });
 
-describe("entity kinds (C36)", () => {
+describe("entity kinds", () => {
     /** An entry whose factory is not a function stops the build, naming it. */
     it("should refuse a tag without a factory function", async () => {
         const bad = plugin("sous-plugin-bad", (sous) => sous.entities.add("liquid-tag", { id: "broken", tag: "nope" } as never));

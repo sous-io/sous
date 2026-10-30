@@ -30,7 +30,7 @@ export function isAgentVisible(definition: IntentInfo["definition"]): boolean {
 
 /**
  * The description of a tool: the summary, then `agent.usage`, then `agent.whenNotToUse`, as
- * paragraphs. CLI aliases and examples are left out; they are for the CLI only (S1).
+ * paragraphs. CLI aliases and examples are left out; they are for the CLI only.
  */
 export function toolDescription(definition: IntentInfo["definition"]): string {
     const parts: string[] = [];

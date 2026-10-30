@@ -1,7 +1,7 @@
 import type { Timer } from "../timing/timer.js";
 
 /**
- * Times every method call on a service object (L5): a proxy whose methods are timed and bound to
+ * Times every method call on a service object: a proxy whose methods are timed and bound to
  * the real object, so private fields and `this` keep working. Functions are timed directly;
  * anything else is returned as it is.
  */

@@ -225,7 +225,7 @@ describe("scaffoldRepo()", () => {
   });
 
   /**
-   * The CI workflow comes from the repository host named with --host (G8): its files are written
+   * The CI workflow comes from the repository host named with --host: its files are written
    * beside the scaffold's own, and the README names the workflow.
    */
   it("should write the CI files of the host it is given", async () => {

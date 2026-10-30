@@ -1,5 +1,5 @@
 /**
- * A test-only namespace resolver over a fixed map of recipes to directories (S6, "Misfiled
+ * A test-only namespace resolver over a fixed map of recipes to directories ("Misfiled
  * Modules": today's `StaticNamespaceResolver` goes to the test helpers). It reads a reference as
  * `namespace/recipe/path` by its first two segments, with globs in any of them, and keeps today's
  * scoping rule: a recipe's own file may reach only itself and what it declares; a project file

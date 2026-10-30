@@ -1,5 +1,5 @@
 /**
- * The sous engine (S1, S2): what core holds. Everything else is a plugin.
+ * The sous engine: what core holds. Everything else is a plugin.
  *
  * ```ts
  * const engine = createEngine({ project, env: process.env, builtIns: [cliPlugin] });

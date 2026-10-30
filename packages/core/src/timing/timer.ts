@@ -23,7 +23,7 @@ export interface OverBudget {
 }
 
 /**
- * Times every core stage and every call into a plugin (L5), and reports what goes over budget.
+ * Times every core stage and every call into a plugin, and reports what goes over budget.
  *
  * Timing costs two `performance.now()` calls and one map update per call, so it costs almost
  * nothing when nothing is over budget.
@@ -62,7 +62,7 @@ export class Timer implements Timings {
     /**
      * Re-checks what was held back against the current budgets, and reports it. Only the outermost
      * level that went over is reported (the build, else a stage, else a pass, else each call), so one
-     * slow contributor gives one warning, which names it (S1, "Timing and Budgets").
+     * slow contributor gives one warning, which names it.
      */
     releaseDeferred(): void {
         const held = this.deferred ?? [];

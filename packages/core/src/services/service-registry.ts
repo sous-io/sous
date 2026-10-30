@@ -23,12 +23,12 @@ export type ServicePicks = Readonly<Record<string, string>>;
 /** The provider chosen for a service, and any warning the choice needs. */
 export interface ServiceChoice {
     readonly provider: ServiceProvider;
-    /** Set when the config picked among several; sous warns on every run (S1). */
+    /** Set when the config picked among several; sous warns on every run. */
     readonly warning?: string;
 }
 
 /**
- * Every service, wrapper and replacement plugins registered (S1, "Services"). Which one is used
+ * Every service, wrapper and replacement plugins registered. Which one is used
  * depends on the plugins active in a config, and on what its `services.replace` picks.
  */
 export class ServiceRegistry {

@@ -21,7 +21,7 @@ async function register() {
 }
 
 describe("plugin-update registration", () => {
-    /** It should define the package-manager kind, add the scan contributor and both intents (C5). */
+    /** It should define the package-manager kind, add the scan contributor and both intents. */
     it("should register the entity kind, the contributor and the intents", async () => {
         const { intents, entities, contributors } = await register();
 

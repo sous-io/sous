@@ -76,7 +76,7 @@ describe("the github host", () => {
     });
 
     /**
-     * It registers the strategies and token sources in S4's order.
+     * It registers the strategies and token sources in the expected order.
      *
      * host.tokenSources.map((s) => s.id); // -> ["env", "git-credential", "gh"]
      */
@@ -131,7 +131,7 @@ describe("reading through the github host", () => {
     });
 
     /**
-     * Each strategy's reason is the line S4's combined error shows, and the fixes are GitHub's.
+     * Each strategy's reason is the line the combined error shows, and the fixes are GitHub's.
      *
      * HTTP without token   404: no sous.index.json at HEAD, or the repository is private
      * git                  Permission denied (publickey)

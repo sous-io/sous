@@ -1,7 +1,7 @@
 /**
  * plugin-memories: Memories: selecting them, the memory-target entity, the compilation targets for them, the #memories name.
  *
- * S6, "Memories: plugin-memories". The contract other plugins code against is `./types.ts`.
+ * The contract other plugins code against is `./types.ts`.
  */
 
 import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";

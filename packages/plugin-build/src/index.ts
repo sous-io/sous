@@ -2,7 +2,7 @@
  * plugin-build: the build, compile, prune and clear intents, preparing for a build, watch mode, the
  * PID file and the runtime context file.
  *
- * S6, "Build: plugin-build". The contract other plugins code against is `./types.ts`. It only runs
+ * The contract other plugins code against is `./types.ts`. It only runs
  * other plugins' intents and services, by name: the compiler compiles, prunes and writes; the
  * recipes plugin locks and restores; recipe-answers says what is unanswered.
  */

@@ -1,5 +1,5 @@
 /**
- * The git read strategy (S4, "Read strategies"): a shallow, sparse fetch of the one file through
+ * The git read strategy: a shallow, sparse fetch of the one file through
  * `git.runner.readRemoteFile`, with the user's own git credentials (SSH keys, credential helpers).
  * It tries the SSH address first, then HTTPS.
  */

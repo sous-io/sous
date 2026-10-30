@@ -1,6 +1,6 @@
 /**
  * The input fields part A's intents share, as JSON Schema properties, and their CLI options. Every
- * input is a flag (L4); names and spellings keep today's CLI (`--yes`, `-y`, `--force`, `--trust`,
+ * input is a flag; names and spellings keep today's CLI (`--yes`, `-y`, `--force`, `--trust`,
  * `--latest`, `--remote`).
  */
 

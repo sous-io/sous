@@ -1,7 +1,7 @@
 /**
- * The contract of plugin-mcp (S6, "Front ends"; S1, "Front Ends"): the `sous mcp` server, with a
+ * The contract of plugin-mcp: the `sous mcp` server, with a
  * tool generated from every intent's input schema, MCP logging (`McpReporter`) and elicitation
- * (`ElicitationPrompter`), so every front end can do what another can (C45). It holds no operation
+ * (`ElicitationPrompter`), so every front end can do what another can. It holds no operation
  * itself; it submits the same intents as the CLI.
  *
  * Other plugins import this file type-only.
@@ -23,7 +23,7 @@ export interface McpToolDefinition {
     readonly outputSchema?: Readonly<Record<string, unknown>>;
 }
 
-/** Turning intents into tools, and tool calls into intent requests (S6: tools generated from intents). */
+/** Turning intents into tools, and tool calls into intent requests (tools generated from intents). */
 export interface McpTools {
     /** Every tool: active intents that are neither internal nor `agent.hidden`, filtered by the `mcp` key. */
     list(): McpToolDefinition[];

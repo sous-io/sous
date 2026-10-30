@@ -20,11 +20,11 @@ import type {
 } from "./types.js";
 
 /**
- * `build`: the one build path (S6), used by `build`, `prune`, `launch`, `init` and every intent
+ * `build`: the one build path, used by `build`, `prune`, `launch`, `init` and every intent
  * that changes recipes. In order: announce linked repositories, prepare (`build.prepare`), report
  * what preparing did, write the runtime context file, compile (`compiler.compile`), prune
  * (`compiler.prune`), and say which locked recipes were skipped and what of theirs was pruned
- * (S4, 3). With `watch`, it then starts `build.watch`.
+ *. With `watch`, it then starts `build.watch`.
  *
  * A partial rebuild (`changedFiles`, from watch mode) prepares nothing: the config did not change,
  * so neither did the recipes it needs.
@@ -148,7 +148,7 @@ export function nestedBuildHeading(ctx: Pick<Context, "chain">): string | undefi
 }
 
 /**
- * `compile`: compiles every target in the config without preparing recipes or pruning (S6). Recipe
+ * `compile`: compiles every target in the config without preparing recipes or pruning. Recipe
  * targets are compiled too, since they are part of the config; what this leaves out is seeding,
  * locking, restoring and checking upstream.
  */
@@ -240,7 +240,7 @@ export async function prune(input: PruneInput, ctx: Context): Promise<CompilerPr
 
 /**
  * `clear`: removes every file sous wrote for the project, after asking (`--force` answers ahead of
- * time, L4). The compiler removes them (`compiler.prune` with `all`), so linked checkouts and the
+ * time). The compiler removes them (`compiler.prune` with `all`), so linked checkouts and the
  * shared store stay protected.
  */
 export async function clear(input: ClearInput, ctx: Context): Promise<ClearResult> {
@@ -327,7 +327,7 @@ function filesOfSkipped(ctx: Context, skipped: readonly SkippedRecipe[]): Map<st
     return files;
 }
 
-/** One line per skipped recipe, and how many of its outputs were pruned (S4, 3). */
+/** One line per skipped recipe, and how many of its outputs were pruned. */
 function reportSkipped(
     ctx: Context,
     skipped: readonly SkippedRecipe[],
@@ -362,7 +362,7 @@ export function watcherRunningError(label: string, pid: number, file: string): S
 
 /**
  * Starts `build.watch` as a background intent: it runs outside the scheduler, so the chain that
- * started it finishes, and it submits a chain of its own for each change (S1, "Front Ends").
+ * started it finishes, and it submits a chain of its own for each change.
  */
 function startWatch(ctx: Context, input: BuildWatchInput): void {
     ctx.engine

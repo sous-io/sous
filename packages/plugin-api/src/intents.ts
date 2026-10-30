@@ -21,7 +21,7 @@ export type IntentHandler<In = any, Result = unknown> = (input: In, ctx: Context
  */
 export type IntentWrapper<In = any, Result = unknown> = (next: IntentHandler<In, Result>) => IntentHandler<In, Result>;
 
-/** How the CLI shows an intent (S1, "What an intent declares for the CLI and for agents"). */
+/** How the CLI shows an intent. */
 export interface CliSection {
     /** The command words. Default: the intent's name split at dots (`namespace.list` → `namespace list`). */
     command?: readonly string[];
@@ -65,7 +65,7 @@ export interface AgentSection {
     hidden?: boolean;
 }
 
-/** The handler module an intent can load lazily, so `--help` never imports command code (G9). */
+/** The handler module an intent can load lazily, so `--help` never imports command code. */
 export type IntentHandlerModule<In, Result> =
     | IntentHandler<In, Result>
     | { default: IntentHandler<In, Result> }
@@ -75,8 +75,7 @@ export type IntentHandlerModule<In, Result> =
 export type IntentInputOf<N extends string, S> = N extends keyof SousIntents ? IntentInput<N> : InferOutput<S>;
 
 /**
- * An intent: a step a user or another plugin asks for, with a typed input and one handler (S1,
- * "Intents"). The CLI's commands and flags and the MCP server's tools are generated from it.
+ * An intent: a step a user or another plugin asks for, with a typed input and one handler. The CLI's commands and flags and the MCP server's tools are generated from it.
  *
  * Give either `handle`, or `load` to import the handler only when the intent runs.
  */
@@ -87,7 +86,7 @@ export interface IntentDefinition<N extends string = string, S extends SousSchem
     summary?: string;
     /** More about it, for `--help`. */
     description?: string;
-    /** The input schema. Every input is a flag (L4). Default: no input. */
+    /** The input schema. Every input is a flag. Default: no input. */
     input?: S;
     /** The result schema, for front ends that describe results (MCP). */
     output?: SousSchema;

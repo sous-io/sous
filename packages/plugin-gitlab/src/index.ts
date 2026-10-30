@@ -1,7 +1,7 @@
 /**
- * plugin-gitlab: A repository-host entity for GitLab, with S4's fixes to the index address and the token.
+ * plugin-gitlab: A repository-host entity for GitLab, with fixes to the index address and the token.
  *
- * S6, "Host and package-manager plugins". The contract other plugins code against is `./types.ts`.
+ * The contract other plugins code against is `./types.ts`.
  */
 
 import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";
@@ -15,7 +15,7 @@ export const PLUGIN_NAME = "@sous-io/plugin-gitlab";
 export const gitlabPlugin: PluginDefinition = definePlugin({
     name: PLUGIN_NAME,
     version: "0.2.34",
-    description: "A repository-host entity for GitLab, with S4's fixes to the index address and the token.",
+    description: "A repository-host entity for GitLab, with fixes to the index address and the token.",
     dependsOn: {
         "@sous-io/plugin-recipes": "^0.2.34",
         "@sous-io/plugin-host": "^0.2.34",

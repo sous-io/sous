@@ -77,7 +77,7 @@ export class InputError extends SousError {
 }
 
 /**
- * A question could not be asked, because nothing can answer it in this run (L4). The message
+ * A question could not be asked, because nothing can answer it in this run. The message
  * names the question and the flag or argument that answers it ahead of time.
  */
 export class NonInteractiveError extends SousError {

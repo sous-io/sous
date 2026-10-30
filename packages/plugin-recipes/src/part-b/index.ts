@@ -46,7 +46,7 @@ export async function registerPartB(sous: Sous): Promise<void> {
 
     sous.entities.add("ref-lookup", lockfileLookup());
 
-    // Rewrites `.sous/types/` from the recipe plugins of every real build (S1).
+    // Rewrites `.sous/types/` from the recipe plugins of every real build.
     sous.on("config.built", (event) => {
         const project = sous.project;
 

@@ -28,7 +28,7 @@ describe("CommandTree", () => {
             expect(tree.commands().map((command) => command.intent).sort()).toEqual(["namespace.list", "repo.add", "repo.add.alternate"]);
         });
 
-        /** Internal intents get no command (C9). */
+        /** Internal intents get no command. */
         it("should leave internal intents out", () => {
             const tree = CommandTree.build([intent("secret.thing", "a", undefined, { internal: true })], []);
 
@@ -69,7 +69,7 @@ describe("CommandTree", () => {
             }
         });
 
-        /** `cli.pick` picks the winner of a clash, with a warning naming the ignored plugin (L6). */
+        /** `cli.pick` picks the winner of a clash, with a warning naming the ignored plugin. */
         it("should let cli.pick choose between clashing commands, with a warning", () => {
             const tree = CommandTree.build([intent("namespace.list", "plugin-a", { aliases: [["ns", "list"]] }), intent("ns.list", "plugin-b")], [], {
                 "ns list": "plugin-b",

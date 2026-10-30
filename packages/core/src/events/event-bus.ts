@@ -18,7 +18,7 @@ export interface ListenerEntry {
 
 /**
  * Holds every listener and finds, for an event name, the listeners that match it, in order:
- * priority (higher first), then plugin order, then the order they were added (S1, "Events").
+ * priority (higher first), then plugin order, then the order they were added.
  *
  * Running listeners is the engine's job; the bus only stores and orders them.
  */

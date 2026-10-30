@@ -15,7 +15,7 @@ export interface PluginRecord {
     readonly index: number;
     /** Plugins it brought in as its own dependencies. */
     readonly children: string[];
-    /** What it registered, for `plugins show` (G4). */
+    /** What it registered, for `plugins show`. */
     readonly registrations: Array<{ kind: string; name: string }>;
 }
 
@@ -28,7 +28,7 @@ export interface LoadHooks {
 }
 
 /**
- * Every plugin loaded in this process, in plugin order (S1, "Plugins"). A plugin is loaded and
+ * Every plugin loaded in this process, in plugin order. A plugin is loaded and
  * registered once; whether it is active is decided per config build.
  */
 export class PluginRegistry {

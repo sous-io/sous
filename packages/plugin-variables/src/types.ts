@@ -1,5 +1,5 @@
 /**
- * The contract of plugin-variables (S6, "Shared building blocks"; S2, "Variable scopes"): `${var}`
+ * The contract of plugin-variables: `${var}`
  * substitution, the `_vars` loop, the four scope levels, auto-variables, variable names and which
  * values are secret. The config files and the compiler both use it, so it sits below both.
  *
@@ -12,7 +12,7 @@ import type { ConfigBuilder, Environment, JsonValue, PathInput, ProjectInfo } fr
 export type VarScope = Readonly<Record<string, string>>;
 
 /**
- * The variables sous sets itself (S6: `projectRoot` among them). Setting one in `_vars` or `_env` is
+ * The variables sous sets itself (`projectRoot` among them). Setting one in `_vars` or `_env` is
  * an error. `projectRoot`, `sousDir`, `sousConfigPath` and `sousConfDir` exist only inside a project.
  */
 export type AutoVariableName =
@@ -24,7 +24,7 @@ export type AutoVariableName =
     | "sousRootPath"
     | "sousVersion";
 
-/** The four levels `_vars` may be set at, each inheriting the ones above it (S2). */
+/** The four levels `_vars` may be set at, each inheriting the ones above it. */
 export type ScopeLevel = "root" | "compilation" | "target" | "output";
 
 /**
@@ -59,7 +59,7 @@ export interface VariableSourceEntity {
     secrets?(ctx: VariableSourceContext): readonly string[];
     /**
      * Top-level config keys under which an expression may not read these variables (recipe
-     * answers: `subscriptions` and `repos`, S2, "Recipe answers").
+     * answers: `subscriptions` and `repos`).
      */
     forbiddenUnder?: readonly string[];
 }
@@ -78,7 +78,7 @@ export interface ScopeRequest {
     extra?: VarScope;
     /**
      * Leaves out what cannot be resolved yet (a `${name}` no one sets, an unset `_env` variable)
-     * instead of throwing, so it reads as `undefined` for this pass (S2). Default: `false` for a
+     * instead of throwing, so it reads as `undefined` for this pass. Default: `false` for a
      * built config (`scope()`, or `scopeIn` given a `BuiltConfig`), `true` for any other view.
      */
     partial?: boolean;
@@ -91,7 +91,7 @@ export interface ScopeOrigin {
     readonly value: string;
 }
 
-/** `${var}` substitution, `_vars` resolution and the scope levels (S6, `variables.resolver`). */
+/** `${var}` substitution, `_vars` resolution and the scope levels. */
 export interface VariablesResolver {
     /** Replaces every `${name}` it knows; unknown ones stay as written. */
     substitute(text: string, scope: VarScope): string;
@@ -116,8 +116,7 @@ export interface VariablesResolver {
     /**
      * The same, over any config view. While the config is built, pass the contributor's
      * `ConfigBuilder` itself: every `_vars`, `_env` and `variable-source` read then goes through it
-     * and is recorded, so the contributor re-runs when a variable it read changes (S2, "Config
-     * expressions are part of the same loop").
+     * and is recorded, so the contributor re-runs when a variable it read changes.
      */
     scopeIn(config: ConfigLookup | ConfigBuilder, request?: ScopeRequest): VarScope;
     /** Where each value of a scope came from. */
@@ -125,14 +124,13 @@ export interface VariablesResolver {
     /** The same, over any config view. */
     originsIn(config: ConfigLookup | ConfigBuilder, request?: ScopeRequest): Record<string, ScopeOrigin>;
     /**
-     * The scope request for a value at a config path: the levels that contain it (S2, "Variable
-     * scopes"). `compilation.targets[2].outputs[0].destinationDir` gives the output level; anything
+     * The scope request for a value at a config path: the levels that contain it. `compilation.targets[2].outputs[0].destinationDir` gives the output level; anything
      * outside `compilation` gives the root.
      */
     requestAt(path: PathInput): ScopeRequest;
 }
 
-/** Variable names and their spellings (S6, `variables.names`). */
+/** Variable names and their spellings. */
 export interface VariablesNames {
     /** `SOUS_VAR_`. */
     readonly envPrefix: string;
@@ -152,7 +150,7 @@ export interface VariablesNames {
     isEnvName(text: string): boolean;
 }
 
-/** Which values are secret, and hiding them (S6, `variables.secrets`). */
+/** Which values are secret, and hiding them. */
 export interface VariablesSecrets {
     /** What a hidden value prints as: `(hidden)`. */
     readonly hiddenValue: string;

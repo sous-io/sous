@@ -16,7 +16,7 @@ import { NO_CHANGE, NOTHING_RESTORED } from "./prepare.js";
 
 describe("skippedLine()", () => {
     /**
-     * A switched-off subscription is named with the file that switched it off (S4, 3).
+     * A switched-off subscription is named with the file that switched it off.
      *
      * skippedLine({ key: "tool-usage/automated-browser-tasks", reason: "subscription-disabled", setBy: "conf.d/610-mac.jsonc" });
      * // -> "Skipped tool-usage/automated-browser-tasks: its subscription is switched off (conf.d/610-mac.jsonc)."

@@ -1,6 +1,6 @@
 /**
  * What a build says while it runs, worded as before the refactor. Every message goes through the
- * chain's `Reporter` (L3); the front end decides how it looks.
+ * chain's `Reporter`; the front end decides how it looks.
  */
 
 import type { Memory } from "@sous-io/plugin-memories/types";
@@ -103,7 +103,7 @@ export function newerMessage(newer: BuildPrepareResult["newer"]): string | undef
 }
 
 /**
- * One line per skipped recipe, saying why (S4, 3, rule 4).
+ * One line per skipped recipe, saying why.
  *
  * ```ts
  * skippedLine({ key: "tool-usage/automated-browser-tasks", reason: "subscription-disabled", setBy: "conf.d/610-mac.jsonc", message: "..." });

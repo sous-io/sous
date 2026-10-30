@@ -10,8 +10,8 @@ import type { ServiceReader } from "./services.js";
 import type { Timings } from "./timing.js";
 
 /**
- * The project a sous process serves: the one found from its working directory (S1). Its root is the
- * directory holding the `.sous/` directory the config file was found in (S6).
+ * The project a sous process serves: the one found from its working directory. Its root is the
+ * directory holding the `.sous/` directory the config file was found in.
  */
 export interface ProjectInfo {
     /** The project root. */
@@ -24,7 +24,7 @@ export interface ProjectInfo {
     readonly confDir: string;
 }
 
-/** The environment variables sous was started with. Read them here, never from `process.env` (S6). */
+/** The environment variables sous was started with. Read them here, never from `process.env`. */
 export type Environment = Readonly<Record<string, string | undefined>>;
 
 /** The application the engine runs: sous itself, or another tool built on the engine. */
@@ -51,7 +51,7 @@ export interface PluginInfo {
     readonly builtIn: boolean;
     /** The plugin that brought it in, or `plugins.load`. */
     readonly loadedBy: string | undefined;
-    /** What it registered, for `plugins show` (G4). */
+    /** What it registered, for `plugins show`. */
     readonly registrations: ReadonlyArray<{ readonly kind: string; readonly name: string }>;
     /** Its options from `plugins.options` in the current config, if any. */
     readonly options: JsonObject | undefined;
@@ -81,7 +81,7 @@ export interface EngineHandle {
     setReporter(reporter: Reporter): void;
     /** Submits a chain; resolves with the intent's result. */
     submit<N extends IntentName>(request: IntentRequest<N>, options?: SubmitOptions): Promise<IntentResult<N>>;
-    /** Builds a separate "what if" config, never replacing the real one (C7). */
+    /** Builds a separate "what if" config, never replacing the real one. */
     buildConfig(options?: BuildOptions): Promise<BuiltConfig>;
     /** Every loaded plugin. */
     plugins(): PluginInfo[];
@@ -119,11 +119,11 @@ export interface Context {
     /** This plugin's own options from `plugins.options`. */
     options<T = JsonObject>(): T | undefined;
     /**
-     * Runs an intent as part of this chain, immediately, and returns its result (C10). Outside a
+     * Runs an intent as part of this chain, immediately, and returns its result. Outside a
      * chain it submits a new chain instead.
      */
     run<N extends IntentName>(intent: N, input?: IntentInput<N> | Record<string, unknown>): Promise<IntentResult<N>>;
-    /** Fires an event and waits for every listener (C17). */
+    /** Fires an event and waits for every listener. */
     emit<N extends string>(name: N, payload?: EventPayload<N>): Promise<EventFor<N>>;
     /** Says this chain changed the config, so it is rebuilt before the next chain starts. */
     configChanged(): void;

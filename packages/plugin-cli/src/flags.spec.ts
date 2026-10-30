@@ -5,7 +5,7 @@ import { argumentsFromSchema, convertValue } from "./flags.js";
 
 describe("argumentsFromSchema()", () => {
     /**
-     * Every input field becomes a flag (L4), in kebab case, with its kind, description, default
+     * Every input field becomes a flag, in kebab case, with its kind, description, default
      * and choices from the JSON Schema.
      *
      * z.object({ installPlugins: z.boolean().default(false) })  ->  --install-plugins (boolean)

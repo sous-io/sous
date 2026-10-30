@@ -33,7 +33,7 @@ afterAll(() => {
 describe("the sous bin, end to end", () => {
     /**
      * The bin builds the config, loads the sample plugin named in SOUS_PLUGINS inside the config
-     * loop, and the CLI runs its intent from the generated command (C8).
+     * loop, and the CLI runs its intent from the generated command.
      *
      * sous diagrams render arch --scale 2   // -> { "rendered": 1, "scale": 2, "dryRun": false }
      */
@@ -86,7 +86,7 @@ describe("the sous bin, end to end", () => {
     });
 
     /**
-     * `sous --help` takes under 150ms (S1, G9). The test allows more, since test machines vary;
+     * `sous --help` takes under 150ms. The test allows more, since test machines vary;
      * the measured time is printed for the record.
      */
     it("should answer --help quickly", () => {

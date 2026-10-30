@@ -59,7 +59,7 @@ describe("the config views", () => {
     });
 
     /**
-     * `--layers` on a path: each contributor's change, then the result (S2).
+     * `--layers` on a path: each contributor's change, then the result.
      *
      * ```text
      * config-files/sous.config.jsonc   "demo"
@@ -142,7 +142,7 @@ describe("the config views", () => {
         );
     });
 
-    /** `config show --layers` nests each change under the helpers that made it (S2, "Patches", 6). */
+    /** `config show --layers` nests each change under the helpers that made it. */
     it("should show the whole config's layers as a tree", async () => {
         const result = {
             config: {},
@@ -199,7 +199,7 @@ describe("the config views", () => {
 });
 
 describe("the plugins and timings views", () => {
-    /** `sous plugins show`, as S1 "Visibility" lays it out. */
+    /** `sous plugins show`, the way it is laid out. */
     it("should list each plugin with what it registered", async () => {
         const plugins: PluginInfo[] = [
             {

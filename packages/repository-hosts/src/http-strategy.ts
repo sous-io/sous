@@ -1,6 +1,6 @@
 /**
- * The HTTP read strategies (S4, "Read strategies"): one GET of one file, with or without a token,
- * through `host.http` (timed, L5). Redirects are followed by hand, so a redirect to a sign-in page
+ * The HTTP read strategies: one GET of one file, with or without a token,
+ * through `host.http` (timed). Redirects are followed by hand, so a redirect to a sign-in page
  * is seen for what it is: a private repository.
  */
 

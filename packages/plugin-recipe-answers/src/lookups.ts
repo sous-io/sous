@@ -1,5 +1,5 @@
 /**
- * Ref lookups over variables (S6, "vars and refs"): two `ref-lookup` entities, so plugin-refs
+ * Ref lookups over variables: two `ref-lookup` entities, so plugin-refs
  * knows nothing of variables or answers. Both are opt-in, under the tag `variables`: they answer
  * only callers that ask for them, since narrowing every ref to what defines a variable would hide
  * recipes that define none.

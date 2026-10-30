@@ -1,5 +1,5 @@
 /**
- * Which variables hold a secret, and hiding them (S6, `variables.secrets`).
+ * Which variables hold a secret, and hiding them.
  *
  * A `variable-source` entity declaring a name secret is the authority (a recipe marks a variable
  * `secret: true`). Everything else (an `_env` mapping, a `_vars` entry, an answer whose definition

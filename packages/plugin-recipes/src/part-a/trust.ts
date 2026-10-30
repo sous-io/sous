@@ -1,10 +1,10 @@
 /**
- * Trust (S6, `recipes.trust`; ported from `src/lib/repos/trust.ts`).
+ * Trust.
  *
  * Added equals trusted: a repository sous reads from is one in the merged `repos` map, switched
  * on. Until a repository is trusted, sous downloads nothing from it, not even its index. A
  * resolution can turn up repositories a dependency needs; they are asked about in one question,
- * through the chain's prompter, and `--yes` answers it ahead of time (L4).
+ * through the chain's prompter, and `--yes` answers it ahead of time.
  */
 
 import { NonInteractiveError, SousError, type ConfigReader, type ServiceReader } from "@sous-io/plugin-api";

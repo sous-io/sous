@@ -1,5 +1,5 @@
 /**
- * S5, "Expression Languages" and "What an Expression Can Read": languages as entities, Liquid
+ * Expression languages and what an expression can read: languages as entities, Liquid
  * filters plugins add, and variables by bare name with their scopes.
  */
 
@@ -50,7 +50,7 @@ describe("languages", () => {
 describe("Liquid filters plugins add", () => {
     const isTruthy = filterEntity("is_truthy", (value) => value === "true" || value === "1");
 
-    it("uses a filter a plugin adds (S5's is_truthy example)", () => {
+    it("uses a filter a plugin adds", () => {
         const entities = { "liquid-filter": [isTruthy as never] };
 
         expect(valueOf({ enabled: { $if: "env.CI | is_truthy" } }, { entities, env: { CI: "1" } })).toEqual({ enabled: true });

@@ -243,7 +243,7 @@ describe("scopes", () => {
 
 describe("reading variables while the config is built", () => {
     /**
-     * S2's example: a later file changes a variable an earlier one read, so the earlier one re-runs.
+     * the example: a later file changes a variable an earlier one read, so the earlier one re-runs.
      *
      * sous.config (machineRole: laptop) → 610-browser (reads machineRole) → 700-ci (machineRole: ci)
      */
@@ -375,7 +375,7 @@ describe("substitution through the service", () => {
 });
 
 describe("the plugin", () => {
-    /** Names in the reserved sous* namespace are reported, not refused (L6). */
+    /** Names in the reserved sous* namespace are reported, not refused. */
     it("should warn about _vars names in the sous* namespace", async () => {
         const { engine, reporter } = engineWith({ contributors: [file("sous.config", { _vars: { sousCustom: "x" } })] });
 

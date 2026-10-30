@@ -1,5 +1,5 @@
 /**
- * The contract of plugin-pnpm (S6, "Host and package-manager plugins"): one `package-manager`
+ * The contract of plugin-pnpm: one `package-manager`
  * entity, `pnpm`, that detects pnpm (and its workspaces), lists installed packages and plans
  * installs. It declares no services, intents or events of its own.
  */

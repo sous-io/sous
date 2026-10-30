@@ -1,5 +1,5 @@
 /**
- * Variable mapping records (S6, `recipe-answers.mappings`): the way out when generated names clash.
+ * Variable mapping records: the way out when generated names clash.
  *
  * A record binds one environment variable, of any name, to one recipe variable:
  *

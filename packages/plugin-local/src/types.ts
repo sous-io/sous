@@ -1,5 +1,5 @@
 /**
- * The contract of plugin-local (S6, "Host and package-manager plugins"): one `repository-host`
+ * The contract of plugin-local: one `repository-host`
  * entity, `local`, for a recipe repository on disk (`file://` URLs and absolute paths), for local
  * development and tests. It declares no services, intents or events.
  */

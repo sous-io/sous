@@ -9,7 +9,7 @@ import { entry, harness, plugin, target } from "./helpers.js";
 /** Ported in spirit from src/test/integration/build-service.test.ts: the compiler's half moved to plugin-compiler. */
 describe("the build intent", () => {
     /**
-     * A plain build prepares, compiles and prunes, through the compiler's intents by name (C10).
+     * A plain build prepares, compiles and prunes, through the compiler's intents by name.
      *
      * sous build; // -> compiler.compile {}, compiler.prune { dryRun: false }, ok: true
      */
@@ -133,7 +133,7 @@ describe("the build intent", () => {
     });
 
     /**
-     * S4, 3: one line per skipped recipe, saying why, and how many of its outputs were pruned.
+     * One line per skipped recipe, saying why, and how many of its outputs were pruned.
      *
      * $ sous build
      * Skipped tool-usage/automated-browser-tasks: its subscription is switched off (conf.d/610-mac.jsonc).
@@ -344,7 +344,7 @@ describe("the clear intent", () => {
 
     /**
      * --force removes everything through compiler.prune with `all`, asking nothing; with no way
-     * to ask, the error names --force (L4).
+     * to ask, the error names --force.
      *
      * sous clear --force; // -> compiler.prune { all: true }
      */

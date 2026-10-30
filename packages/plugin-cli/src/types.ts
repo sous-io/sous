@@ -4,8 +4,7 @@ import type { Printer } from "./views/printer.js";
 import type { Style } from "./views/style.js";
 
 /**
- * An argument every command accepts, such as `--debug` (S1, "What an intent declares for the CLI
- * and for agents"). Any plugin can add one; its value reaches every handler as `ctx.globals[id]`.
+ * An argument every command accepts, such as `--debug`. Any plugin can add one; its value reaches every handler as `ctx.globals[id]`.
  *
  * ```ts
  * sous.entities.add("cli-global-argument", {
@@ -54,7 +53,7 @@ export interface CliGroupEntity {
     aliases?: ReadonlyArray<readonly string[]>;
 }
 
-/** Whether this run may ask questions (S6, `cli.interactivity`). */
+/** Whether this run may ask questions. */
 export interface CliInteractivity {
     /**
      * True when standard input and output are terminals, no CI variable is set and
@@ -70,7 +69,7 @@ export interface CliErrorView {
     readonly exitCode: number;
 }
 
-/** Turning errors into messages and exit codes (S6, `cli.errors`). */
+/** Turning errors into messages and exit codes. */
 export interface CliErrors {
     view(error: unknown, options?: { debug?: boolean }): CliErrorView;
 }
@@ -114,8 +113,7 @@ export interface CliViewContext {
 export type CliViewOutput = string | undefined | void | { stdout?: string; stderr?: string; exitCode?: number };
 
 /**
- * How the CLI shows one intent's result (S6: "a view of domain data belongs to plugin-cli: the
- * intent returns plain data, and the CLI decides how it looks"). The id is the intent's name. Any
+ * How the CLI shows one intent's result. The id is the intent's name. Any
  * plugin may add one, for its own intent or to replace another's view: the later one wins. An intent
  * with no view prints its result as JSON, and `--json` always does.
  *

@@ -1,6 +1,6 @@
 /**
- * The `recipes.fetch` contributor (S2, "Downloads"): while the config is built, it makes sure every
- * locked recipe the subscriptions switched on here reach (S4, 3) has its files on disk, downloading
+ * The `recipes.fetch` contributor: while the config is built, it makes sure every
+ * locked recipe the subscriptions switched on here reach has its files on disk, downloading
  * what the store lacks, and adds one `active-recipe` entity for each, so their config layers,
  * plugins and content join the loop. Downloads are cached in the store, so later passes and later
  * runs find them already there. When something cannot be downloaded, building the config fails

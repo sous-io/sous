@@ -1,10 +1,9 @@
 /**
- * Which recipes are active on this machine (S6, `recipes.active`; S4, problem 3; ported from
- * `src/lib/repos/locked-recipes.ts`).
+ * Which recipes are active on this machine.
  *
  * The active recipes are the `active-recipe` entities the `recipes.fetch` contributor adds once
  * their files are on disk: the locked recipes reached from the subscriptions switched on here. Every
- * other locked recipe is skipped, with one sentence saying why, and keeps its pins (S4, 2).
+ * other locked recipe is skipped, with one sentence saying why, and keeps its pins.
  */
 
 import path from "node:path";
@@ -15,7 +14,7 @@ import { emptyLockfile, keysHeldBySubscription, lockedClosure } from "./lock-hol
 import { configuredRepos, configuredSubscriptions, setBy } from "./project.js";
 import { compareBytewise } from "./util.js";
 
-/** The lockfile keys reachable from the subscriptions switched on, by the holder lists (S4, 3). */
+/** The lockfile keys reachable from the subscriptions switched on, by the holder lists. */
 export function reachableKeys(lock: Lockfile, subscriptions: Record<string, { enabled?: boolean }>): string[] {
     const roots = Object.entries(subscriptions)
         .filter(([, entry]) => entry?.enabled !== false)

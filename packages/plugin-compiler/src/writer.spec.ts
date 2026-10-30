@@ -1,6 +1,6 @@
 /**
  * Writing outputs: creating, updating, leaving unchanged files alone, taking over files sous did
- * not write unless `overwriteUntracked` is false (C58), and removing only tracked, unprotected files
+ * not write unless `overwriteUntracked` is false, and removing only tracked, unprotected files
  * (today's `StateService.deleteTrackedFiles`).
  */
 
@@ -66,7 +66,7 @@ describe("WriterService.write()", () => {
         expect((await w.write(file, "x", { source: "s", dryRun: true })).action).toBe("unchanged");
     });
 
-    /** By default a file sous did not write is overwritten and taken over (C58). */
+    /** By default a file sous did not write is overwritten and taken over. */
     it("should overwrite a file it did not write and take it over by default", async () => {
         const file = path.join(dir, "CLAUDE.md");
 
@@ -79,7 +79,7 @@ describe("WriterService.write()", () => {
         expect(store.entry(file)).toBeDefined();
     });
 
-    /** With `overwriteUntracked: false`, such a file is left as it is and not taken over (C58). */
+    /** With `overwriteUntracked: false`, such a file is left as it is and not taken over. */
     it("should leave a file it did not write alone when overwriteUntracked is false", async () => {
         const file = path.join(dir, "CLAUDE.md");
 

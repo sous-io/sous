@@ -21,8 +21,7 @@ export interface OrderResult<T> {
 export const EVERY_CONTRIBUTOR = "*";
 
 /**
- * Orders contributors by name (bytewise), adjusted by their `before` and `after` declarations (S2,
- * "Order and stages"). A name in either list matches a contributor id or a plugin name, exactly or
+ * Orders contributors by name (bytewise), adjusted by their `before` and `after` declarations. A name in either list matches a contributor id or a plugin name, exactly or
  * as a wildcard. When declarations form a cycle, the cycle is broken by name order and reported.
  *
  * A bare `"*"` means every contributor that does not itself declare `"*"` on the same side:

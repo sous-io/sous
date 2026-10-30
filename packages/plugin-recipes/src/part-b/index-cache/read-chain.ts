@@ -1,5 +1,5 @@
 /**
- * Reading one file from a repository (S4, "How Sous Reads Repositories"): each read strategy of
+ * Reading one file from a repository: each read strategy of
  * the repository's host in order, a token tried when a token source finds one, the strategy that
  * worked remembered per repository, and one error listing every attempt when all fail.
  */

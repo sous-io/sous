@@ -9,9 +9,9 @@ describe("the engine handle", () => {
     /**
      * Plugins and front ends see the engine through its handle: the latest config, the app, the
      * intents, timings, the reporter, submit, what-if builds, the plugins and background waiting
-     * (S1, "Front Ends").
+     *.
      */
-    it("should expose the engine to plugins and front ends (C16)", async () => {
+    it("should expose the engine to plugins and front ends", async () => {
         let handleSeen: import("@sous-io/plugin-api").EngineHandle | undefined;
         const { engine } = makeEngine(
             [
@@ -126,9 +126,9 @@ describe("the engine handle", () => {
     });
 
     /**
-     * The default limits are the S1 table: 10, 5, 32, 2 and 5, with 10 config passes.
+     * The default limits are the default table: 10, 5, 32, 2 and 5, with 10 config passes.
      */
-    it("should start from the S1 limits table", () => {
+    it("should start from the default limits table", () => {
         expect(DEFAULT_LIMITS).toEqual({
             configPasses: 10,
             rebuildsChanging: 10,

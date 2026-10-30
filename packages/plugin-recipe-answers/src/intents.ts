@@ -1,6 +1,6 @@
 /**
  * The `vars` intents: `vars.ask`, `vars.list` (also bare `sous vars`), `vars.show` and `vars.map`.
- * Each is written once here; the CLI and MCP generate their commands and tools from it (S6, rule 7).
+ * Each is written once here; the CLI and MCP generate their commands and tools from it.
  */
 
 import { type Context, ConfigError, InputError, type IntentDefinition, jsonSchema } from "@sous-io/plugin-api";

@@ -1,5 +1,5 @@
 /**
- * Which locked recipes are in force on this machine (S4, 3): only those reached from the
+ * Which locked recipes are in force on this machine: only those reached from the
  * subscriptions switched on here, through repositories trusted and switched on here. Every other
  * locked recipe keeps its pin and is skipped, with one sentence saying why.
  */

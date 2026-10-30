@@ -1,5 +1,5 @@
 /**
- * The contract of plugin-authoring (S6, "Authoring: plugin-authoring"): releasing a recipe
+ * The contract of plugin-authoring: releasing a recipe
  * repository (validate, plan, tag, bump, changelog, settle, build the index), proposing changes to
  * one, contributing (link, submit and unlink in one go) and scaffolding one. Everything a host does
  * differently (proposals, the CI workflow) comes from its `repository-host` entity.
@@ -114,7 +114,7 @@ export interface RepoSubmitInput {
     draft?: boolean;
     /**
      * The branch to continue on when the branch's proposal was already merged; answers that question
-     * ahead of time (L4). `--yes` generates one instead.
+     * ahead of time. `--yes` generates one instead.
      */
     nextBranch?: string;
     /** When the repository named matches several, takes the first one listed. */

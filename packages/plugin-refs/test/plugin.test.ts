@@ -9,7 +9,7 @@ import { buildRefs } from "./fixtures.js";
 
 describe("plugin-refs", () => {
     /**
-     * Every service S6 names is provided, and every entity kind defined.
+     * Every service the contract names is provided, and every entity kind defined.
      *
      * services.has("refs.resolver") // -> true
      */
@@ -45,7 +45,7 @@ describe("plugin-refs", () => {
 
     /**
      * Hosts are read from `repository-host` entities, so with no host plugin loaded short refs still
-     * work and locations are refused with a reason (S6: an entity read needs no dependency).
+     * work and locations are refused with a reason (an entity read needs no dependency).
      *
      * parse("workflow/alpha") with no hosts // -> the recipe
      */
@@ -76,7 +76,7 @@ describe("plugin-refs", () => {
     });
 
     /**
-     * A plugin may replace a service, and the others then use the replacement (L1, C31).
+     * A plugin may replace a service, and the others then use the replacement.
      *
      * replace("refs.locations") // -> the resolver's location splitter reads the replacement
      */

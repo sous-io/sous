@@ -1,7 +1,7 @@
 import type { OverBudget } from "./timer.js";
 
 /**
- * A warning for a call that went over budget, in plain words (S1, "Timing and Budgets"):
+ * A warning for a call that went over budget, in plain words:
  *
  * ```text
  * building the config took 840ms (budget 200ms).

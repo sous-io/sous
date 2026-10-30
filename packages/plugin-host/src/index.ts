@@ -1,7 +1,7 @@
 /**
  * plugin-host: The machine sous runs on: processes, HTTP, globs and paths, sous home, self-describing directories, the .gitignore block, package identity.
  *
- * S6, "The machine: plugin-host". The contract other plugins code against is `./types.ts`.
+ * The contract other plugins code against is `./types.ts`.
  * Services read the environment and the project from the engine, never from `process.env` or
  * `process.cwd()`.
  */

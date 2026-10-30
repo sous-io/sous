@@ -1,8 +1,8 @@
 /**
  * plugin-mcp: The sous mcp front end: tools generated from intents, MCP logging and elicitation.
  *
- * S6, "Front ends: plugin-cli, plugin-mcp". The contract other plugins code against is `./types.ts`.
- * The MCP SDK loads only when `sous mcp` runs, so other commands never pay for it (G9).
+ * The contract other plugins code against is `./types.ts`.
+ * The MCP SDK loads only when `sous mcp` runs, so other commands never pay for it.
  */
 
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
@@ -39,7 +39,7 @@ const serveInputSchema = jsonSchema<McpServeInput>({
 });
 
 /**
- * The MCP front end (S6, `plugin-mcp`): `sous mcp` serves the project it started in, with a tool for
+ * The MCP front end: `sous mcp` serves the project it started in, with a tool for
  * every intent agents may see.
  */
 export function createMcpPlugin(options: McpPluginOptions = {}): PluginDefinition {

@@ -52,7 +52,7 @@ describe("DocNode", () => {
         });
     });
 
-    describe("inspecting (C72)", () => {
+    describe("inspecting", () => {
         /**
          * The inspecting methods should describe the value at the node, and treat a missing value
          * plainly: exists() false, type() "missing", keys() [], length() 0.
@@ -92,7 +92,7 @@ describe("DocNode", () => {
         });
     });
 
-    describe("objects and values (C72)", () => {
+    describe("objects and values", () => {
         /**
          * set should emit one setKey (or setIndex for an array item) and never read.
          *
@@ -212,7 +212,7 @@ describe("DocNode", () => {
         });
 
         /**
-         * merge at the root should read the root, so the builder monitors the whole config (S2).
+         * merge at the root should read the root, so the builder monitors the whole config.
          */
         it("should read the node it merges into", () => {
             const { node, reads } = recordingDoc({});
@@ -257,7 +257,7 @@ describe("DocNode", () => {
         });
     });
 
-    describe("arrays (C72)", () => {
+    describe("arrays", () => {
         /**
          * append, prepend and insertAt should each emit one insertAt and never read; append uses
          * "end", so it never depends on the array's length.
@@ -282,12 +282,12 @@ describe("DocNode", () => {
 
         /**
          * removeWhere should emit one removeIndex per match, highest index first, in a
-         * "removeWhere" set (the S2 example).
+         * "removeWhere" set (the example).
          *
          * config.atPath("compilation.targets").removeWhere((target) => target.id === "diagrams");
          * // -> { "op": "removeIndex", "path": "compilation.targets", "index": 7 }
          */
-        it("should remove matches highest index first (S2 example)", () => {
+        it("should remove matches highest index first (the example)", () => {
             const doc = createDocument(targets());
 
             doc.atPath("compilation.targets").removeWhere((target) => target.id === "diagrams");
@@ -379,7 +379,7 @@ describe("DocNode", () => {
         });
     });
 
-    describe("patchSet() (C75)", () => {
+    describe("patchSet()", () => {
         /**
          * patchSet should let a plugin write its own helper on the primitives: what it emits is
          * grouped in a set with the helper's name and the node's path.

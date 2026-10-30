@@ -2,7 +2,7 @@
  * Reading the project's repositories and subscriptions from the built config, and writing the
  * managed `conf.d/500` and `conf.d/510` files key by key.
  *
- * Sous always reads the merged config (S2, "Sous always reads the built config"): no code here
+ * Sous always reads the merged config: no code here
  * re-reads a managed file to learn what is subscribed. A managed file is read only to know whether
  * sous wrote an entry, and so may remove it.
  */
@@ -103,7 +103,7 @@ export function deleteSubscriptionEntry(managed: ConfdManaged, key: string, dryR
     });
 }
 
-/** Overwrites only `enabled` of one subscription, keeping every other field (S2). */
+/** Overwrites only `enabled` of one subscription, keeping every other field. */
 export function setSubscriptionEnabled(managed: ConfdManaged, key: string, enabled: boolean, dryRun = false): Promise<ManagedEditResult> {
     return managed.edit(SUBSCRIPTIONS_LAYER, (root) => root.atPath(["subscriptions", key, "enabled"]).set(enabled), {
         description: SUBSCRIPTIONS_HEADER,

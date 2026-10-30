@@ -6,9 +6,9 @@ describe("order and stages", () => {
     /**
      * Contributors run in name order, adjusted by before and after, which may name a plugin, a
      * contributor id or a wildcard; a plugin's declarations are the default for its contributors, and a
-     * contributor's own replace them (C3, C65).
+     * contributor's own replace them.
      */
-    it("should order contributors by name, before and after (C3, C65)", async () => {
+    it("should order contributors by name, before and after", async () => {
         const order: string[] = [];
         const record = (id: string) => () => void order.push(id);
         const { engine } = makeEngine([
@@ -130,7 +130,7 @@ describe("order and stages", () => {
 
     /**
      * When two contributors set one key, the one declared after wins, even when the earlier one re-runs
-     * later in the build and would otherwise land on top (S2, "Order and stages").
+     * later in the build and would otherwise land on top.
      */
     it("should keep a contributor declared after on top when the earlier one re-runs", async () => {
         const { engine } = makeEngine([
@@ -152,9 +152,9 @@ describe("order and stages", () => {
 
     /**
      * Stages run lowest first; each settles before the next starts from its config, and a finished
-     * stage never runs again (C63).
+     * stage never runs again.
      */
-    it("should run a stage-7 contributor after stage 0 settles (C63)", async () => {
+    it("should run a stage-7 contributor after stage 0 settles", async () => {
         const order: string[] = [];
         const { engine } = makeEngine([
             keysPlugin("compilation"),
@@ -185,9 +185,9 @@ describe("order and stages", () => {
 
     /**
      * Contributors of finished stages stay watched: when a later stage changes something one read,
-     * sous logs at the debug level that it would have re-run, and why it did not (C62).
+     * sous logs at the debug level that it would have re-run, and why it did not.
      */
-    it("should log a debug message for a finished-stage contributor that would have re-run (C62)", async () => {
+    it("should log a debug message for a finished-stage contributor that would have re-run", async () => {
         const { engine, reporter } = makeEngine([
             keysPlugin("recipes"),
             contributorsPlugin("p", [
@@ -209,9 +209,9 @@ describe("order and stages", () => {
 
     /**
      * A plugin loaded during stage N has its stages shifted by N, nesting, so nothing lands in a
-     * finished stage (C64).
+     * finished stage.
      */
-    it("should shift the stages of a plugin loaded during a stage (C64)", async () => {
+    it("should shift the stages of a plugin loaded during a stage", async () => {
         const seen: Array<[string, number]> = [];
         const late = contributorsPlugin("late-plugin", [
             { id: "late-0", contribute: (config) => void seen.push(["late-0", config.contributor.stage]) },
@@ -252,9 +252,9 @@ describe("order and stages", () => {
 describe("validation", () => {
     /**
      * The finished config is checked against every config-key entity, and their schema defaults are
-     * filled in (C4, C71).
+     * filled in.
      */
-    it("should fill in schema defaults for keys nobody set (C71)", async () => {
+    it("should fill in schema defaults for keys nobody set", async () => {
         const { engine } = makeEngine([
             plugin("p", (sous) => {
                 sous.entities.add("config-key", {
@@ -329,9 +329,9 @@ describe("validation", () => {
 
     /**
      * A what-if build adds contributors for itself only: the real config stays as it was, and the
-     * what-if config gets its own config-lifetime services (C7).
+     * what-if config gets its own config-lifetime services.
      */
-    it("should build a what-if config without replacing the real one (C7)", async () => {
+    it("should build a what-if config without replacing the real one", async () => {
         let made = 0;
         const { engine } = makeEngine([
             keysPlugin("version"),

@@ -24,7 +24,7 @@ export interface IntentWrapperEntry {
 export type IntentPicks = Readonly<Record<string, string>>;
 
 /**
- * Every intent and wrapper plugins registered (S1, "Intents"). Which one runs depends on the plugins
+ * Every intent and wrapper plugins registered. Which one runs depends on the plugins
  * active in the config, and on what `intents.replace` picks when two plugins add one name.
  */
 export class IntentRegistry {
@@ -112,7 +112,7 @@ export class IntentRegistry {
             .sort((a, b) => this.pluginIndex(a.plugin) - this.pluginIndex(b.plugin) || a.seq - b.seq);
     }
 
-    /** The handler of an intent, importing it the first time when it is given as `load` (G9). */
+    /** The handler of an intent, importing it the first time when it is given as `load`. */
     handlerOf(definition: IntentDefinition): Promise<IntentHandler> {
         let handler = this.handlers.get(definition);
 

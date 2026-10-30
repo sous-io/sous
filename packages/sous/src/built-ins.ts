@@ -57,9 +57,7 @@ export const envPluginsPlugin: PluginDefinition = definePlugin({
 });
 
 /**
- * The built-in plugins, loaded first and in this order unless the config disables them (S1,
- * "Built-in Plugins"; S6, "Packages"). Each comes after every plugin it depends on (S6,
- * "Dependency Direction").
+ * The built-in plugins, loaded first and in this order unless the config disables them. Each comes after every plugin it depends on.
  */
 export const BUILT_IN_PLUGINS: readonly PluginDefinition[] = [
     hostPlugin,

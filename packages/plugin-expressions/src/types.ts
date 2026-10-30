@@ -1,8 +1,8 @@
 /**
- * The contract of plugin-expressions (S5; S6, "Shared building blocks"): config expressions
+ * The contract of plugin-expressions: config expressions
  * (`$expr`, `$if`, `$elseif`, `$else`) and the expression languages plugins add, Liquid first.
  * Expressions are evaluated inside each config file's contributor, before its values go into its
- * patch (S2, "Config expressions are part of the same loop").
+ * patch.
  *
  * Other plugins import this file type-only.
  */
@@ -10,7 +10,7 @@
 import type { ConfigBuilder, EntityReader, Environment, JsonValue, ProjectInfo, ServiceReader } from "@sous-io/plugin-api";
 import type { VarScope } from "@sous-io/plugin-variables/types";
 
-/** What an expression can read (S5, "What an Expression Can Read"). */
+/** What an expression can read. */
 export interface ExpressionScope {
     /** `host.platform`: Node's `process.platform`. */
     readonly host: { readonly platform: string };
@@ -49,14 +49,14 @@ export interface ExpressionLanguageContext {
     readonly services?: ServiceReader;
 }
 
-/** An `expression-language` entity (S5, "Expression Languages"): Liquid is the default and the first. */
+/** An `expression-language` entity: Liquid is the default and the first. */
 export interface ExpressionLanguageEntity {
     /** The qualifier after `$expr:` or `expr:`: `liquid`. */
     id: string;
     description?: string;
-    /** True for a language that runs code; such a language is refused in a recipe's config file (S5). */
+    /** True for a language that runs code; such a language is refused in a recipe's config file. */
     runsCode?: boolean;
-    /** The variables an expression reads, found without running it, so each is recorded as a read (S2). */
+    /** The variables an expression reads, found without running it, so each is recorded as a read. */
     variables(expression: string, ctx: ExpressionLanguageContext): string[];
     /** Evaluates an expression; throws a `ConfigError` when it cannot parse or fails while running. */
     evaluate(expression: string, scope: ExpressionScope, ctx: ExpressionLanguageContext): ExpressionOutcome;
@@ -82,9 +82,9 @@ export interface EvaluateLayerOptions {
     file: string;
     /** The contributor's builder: every variable read goes through it, so the contributor re-runs when one changes. */
     config: ConfigBuilder;
-    /** The file's own plain root `_vars`, which its expressions also see (S2, rule 1). */
+    /** The file's own plain root `_vars`, which its expressions also see. */
     ownVars?: Readonly<Record<string, string>>;
-    /** True for a recipe's config file: languages that run code are refused (S5). */
+    /** True for a recipe's config file: languages that run code are refused. */
     fromRecipe?: boolean;
 }
 
@@ -98,18 +98,18 @@ export interface EvaluatedLayer {
     readonly pending: boolean;
 }
 
-/** One expression still unknown once the config settled: an error naming it (S5, "Errors" 6). */
+/** One expression still unknown once the config settled: an error naming it. */
 export interface UnsettledExpression {
     readonly file: string;
     readonly path: string;
     readonly unknown: ExpressionUnknowns;
 }
 
-/** Evaluating config expressions inside each layer, before it merges (S6, `expressions.evaluator`). */
+/** Evaluating config expressions inside each layer, before it merges. */
 export interface ExpressionsEvaluator {
-    /** Evaluates every expression object in a file's data. Throws a `ConfigError` for S5's errors 1 to 5 and 8. */
+    /** Evaluates every expression object in a file's data. Throws a `ConfigError` for the expression errors that fail a load. */
     evaluateLayer(data: JsonValue, options: EvaluateLayerOptions): EvaluatedLayer;
-    /** Whether a value is an expression object (holds one of S5's reserved keys). */
+    /** Whether a value is an expression object (holds one of the reserved keys). */
     isExpressionObject(value: unknown): boolean;
     /** Whether a value holds an expression object at any depth. */
     hasExpressions(value: unknown): boolean;

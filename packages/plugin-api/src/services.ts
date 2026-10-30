@@ -4,7 +4,7 @@ import type { EntityReader } from "./entities.js";
 import type { ServiceName, ServiceType } from "./registry.js";
 
 /**
- * How long one service object lives (S1, "Services"):
+ * How long one service object lives:
  * - `singleton`: one for the whole process, for services that never look at the config;
  * - `config`: one per config build, shared by every chain using that config;
  * - `factory`: a new one on every get.

@@ -1,5 +1,5 @@
 /**
- * Aliases (S6, `compiler.aliases`): the built-in `#` names that stand for directories, and the
+ * Aliases: the built-in `#` names that stand for directories, and the
  * config's `_aliases`, each resolved to the base directories an include tries, in order.
  */
 

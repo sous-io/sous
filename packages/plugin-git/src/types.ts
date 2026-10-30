@@ -1,5 +1,5 @@
 /**
- * The contract of plugin-git (S6, "Shared building blocks"): the one git runner, used by every
+ * The contract of plugin-git: the one git runner, used by every
  * caller (providers, releases, links, the runtime context). Other plugins import this file type-only.
  */
 
@@ -53,7 +53,7 @@ export interface GitCloneOptions {
     signal?: AbortSignal;
 }
 
-/** Options for reading one file from a remote without a full clone (S4's `git` read strategy). */
+/** Options for reading one file from a remote without a full clone (the `git` read strategy). */
 export interface GitReadRemoteFileOptions {
     /** A branch, tag or `HEAD`. Default `HEAD`. */
     ref?: string;
@@ -63,7 +63,7 @@ export interface GitReadRemoteFileOptions {
 }
 
 /**
- * The one git runner (S6, `git.runner`): every call is timed (L5) and runs through
+ * The one git runner: every call is timed and runs through
  * `host.processes`. Replaces both of today's `runGit` functions.
  */
 export interface GitRunner {

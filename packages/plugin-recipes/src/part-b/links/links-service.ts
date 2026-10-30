@@ -1,5 +1,5 @@
 /**
- * Links (S6, `recipes.links`): a link points one repository at a working copy on disk instead of
+ * Links: a link points one repository at a working copy on disk instead of
  * the store, which is how a maintainer edits recipes. The project's `.sous/sous.links.json` covers
  * one project; `$SOUS_HOME/sous.links.json` covers every project on the machine. A project link
  * wins. Neither map is committed: a link bypasses versions and the lockfile on one machine only.

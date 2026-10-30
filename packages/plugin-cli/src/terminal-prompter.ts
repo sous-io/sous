@@ -14,7 +14,7 @@ type RawInput = InputStream & { setRawMode(mode: boolean): unknown };
 
 /**
  * The CLI's prompter. It asks on standard error and reads standard input, and only when it may
- * (L4): otherwise every question fails with a `NonInteractiveError` naming the flag that answers it.
+ *: otherwise every question fails with a `NonInteractiveError` naming the flag that answers it.
  */
 export class TerminalPrompter implements Prompter {
     private reader: Interface | undefined;

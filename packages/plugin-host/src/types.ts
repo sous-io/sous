@@ -1,5 +1,5 @@
 /**
- * The contract of plugin-host (S6, "The machine: plugin-host"): the machine sous runs on. Every
+ * The contract of plugin-host: the machine sous runs on. Every
  * service here is a `singleton`; none reads the config. Other plugins import this file type-only.
  */
 
@@ -59,7 +59,7 @@ export interface InteractiveProcessResult {
     readonly durationMs: number;
 }
 
-/** Running subprocesses, every one timed (L5). The one owner of `spawn` (S6). */
+/** Running subprocesses, every one timed. The one owner of `spawn`. */
 export interface HostProcesses {
     /** Runs a command to completion, capturing its output. */
     run(command: string, args: readonly string[], options?: ProcessOptions): Promise<ProcessResult>;
@@ -88,7 +88,7 @@ export interface HttpRequest {
     /** Fails after this long. Default 15 000 ms. */
     timeoutMs?: number;
     signal?: AbortSignal;
-    /** What to do with a redirect. Default `follow`; `manual` lets a caller see a 302 to a sign-in page (S4). */
+    /** What to do with a redirect. Default `follow`; `manual` lets a caller see a 302 to a sign-in page. */
     redirect?: "follow" | "manual" | "error";
     /** The name its timing is recorded under; default: the method and host. */
     label?: string;
@@ -110,7 +110,7 @@ export interface HttpResponse {
     bytes(): Promise<Uint8Array>;
 }
 
-/** HTTP requests, every one timed (L5). Never throws for a status code; only for a failed connection. */
+/** HTTP requests, every one timed. Never throws for a status code; only for a failed connection. */
 export interface HostHttp {
     request(request: HttpRequest): Promise<HttpResponse>;
     /** Shorthand for a `GET`. */
@@ -144,7 +144,7 @@ export interface GlobMatchOptions {
     nocase?: boolean;
 }
 
-/** Globs and paths: matching, a pattern's static base, bytewise order, containment (S6). */
+/** Globs and paths: matching, a pattern's static base, bytewise order, containment. */
 export interface HostGlobs {
     /** Every path matching the patterns, in bytewise order. */
     match(patterns: string | readonly string[], options: GlobOptions): Promise<string[]>;
@@ -184,7 +184,7 @@ export interface SousHomePaths {
     readonly repos: string;
     /** The machine-wide links map (`<root>/sous.links.json`). */
     readonly links: string;
-    /** What reading each repository last worked with (`<root>/cache/read-strategies.json`, S4). */
+    /** What reading each repository last worked with (`<root>/cache/read-strategies.json`). */
     readonly readStrategies: string;
 }
 
@@ -222,7 +222,7 @@ export type SousDirectoryKind = "sous-dir" | "confd" | "project-repos" | "sous-h
 
 /**
  * Creating the self-describing directories sous makes: each gets its own `README.md`, plus one copy
- * of every `pointer-file` entity's file (S6, "Pointer files").
+ * of every `pointer-file` entity's file.
  */
 export interface HostDirectories {
     /** Creates a directory with a README of its own and the pointer files. */
@@ -233,7 +233,7 @@ export interface HostDirectories {
     pointerFileNames(): string[];
 }
 
-/** A `pointer-file` entity: a one-line file telling an agent to read the directory's README (C44). */
+/** A `pointer-file` entity: a one-line file telling an agent to read the directory's README. */
 export interface PointerFileEntity {
     /** Unique; several entities may still name the same file, which is written once. */
     id: string;
@@ -285,7 +285,7 @@ export interface PackageIdentity {
     readonly bin: string | undefined;
 }
 
-/** Package identity (S6). */
+/** Package identity. */
 export interface HostPackage {
     identity(): PackageIdentity;
 }

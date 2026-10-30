@@ -1,10 +1,10 @@
 /**
  * plugin-authoring: releasing, submitting and contributing to recipe repositories, and scaffolding
- * one (S6, "Authoring: plugin-authoring"). The contract other plugins code against is `./types.ts`.
+ * one. The contract other plugins code against is `./types.ts`.
  *
- * Each handler is loaded only when its intent runs, so `--help` never imports release code (G9).
+ * Each handler is loaded only when its intent runs, so `--help` never imports release code.
  * Everything a host does differently (proposals, the CI workflow) comes from its `repository-host`
- * entity; nothing host-specific lives here (G8).
+ * entity; nothing host-specific lives here.
  */
 
 import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";

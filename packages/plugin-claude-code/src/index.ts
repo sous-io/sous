@@ -1,7 +1,7 @@
 /**
  * plugin-claude-code: Everything sous knows about Claude Code: its harness, skill-target and memory-target entities.
  *
- * S6, "Host and package-manager plugins (plugin-claude-code)". The contract other plugins code against is `./types.ts`.
+ * The contract other plugins code against is `./types.ts`.
  */
 
 import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";

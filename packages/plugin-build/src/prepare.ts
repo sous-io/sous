@@ -23,7 +23,7 @@ export const NO_CHANGE: LockDiff = Object.freeze({
 export const NOTHING_RESTORED: RestoreReport = Object.freeze({ restored: [], alreadyPresent: [], failed: [] }) as RestoreReport;
 
 /**
- * `build.prepare` (internal): gets the project's recipes ready to compile (S6). In order:
+ * `build.prepare` (internal): gets the project's recipes ready to compile. In order:
  *
  * 1. seeding the core recipe: the `recipes.core` contributor does this while the config is built,
  *    so this only lists the core recipes that are active;
@@ -210,7 +210,7 @@ function isNewer(candidate: string, pinned: string): boolean {
     return a !== null && b !== null && semver.gt(a, b);
 }
 
-/** The subscriptions switched on on this machine (S4, 3). */
+/** The subscriptions switched on on this machine. */
 export function switchedOn(subscriptions: Readonly<Record<string, SubscriptionEntry>>): Record<string, SubscriptionEntry> {
     return Object.fromEntries(Object.entries(subscriptions).filter(([, entry]) => entry.enabled !== false));
 }

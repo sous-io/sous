@@ -13,7 +13,7 @@ import type { VarScope } from "./types.js";
 export interface ResolveBlockOptions {
     /**
      * Leaves out entries that cannot resolve, and ignores auto-variable names, instead of throwing.
-     * Used while the config is built, when a value may only be known in a later pass (S2).
+     * Used while the config is built, when a value may only be known in a later pass.
      */
     partial?: boolean;
 }

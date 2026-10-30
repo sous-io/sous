@@ -1,5 +1,5 @@
 /**
- * Running a `.js` or `.ts` config file (S2, "No child process").
+ * Running a `.js` or `.ts` config file.
  *
  * A module file may export:
  *   - data: `config`, or a default export that is not a function;
@@ -10,8 +10,7 @@
  * whenever its contributor re-runs, and must give the same result for the same input.
  *
  * Files written before the builder existed change a plain config object in place:
- * `configure(cfg, builder) { cfg.name = "x"; builder.merge({...}) }`. Those keep working (S2, "The
- * robustness principle"): the first argument also reads and writes a copy of the config as it
+ * `configure(cfg, builder) { cfg.name = "x"; builder.merge({...}) }`. Those keep working: the first argument also reads and writes a copy of the config as it
  * stands, the second is the old builder (`config`, `env()`, `merge()`, `loadConfig()`,
  * `loadConfigs()`, `sousDir`, `confDir`, `currentFile`), and when the function returns, what it
  * changed in the copy is recorded through the builder as ordinary patches.

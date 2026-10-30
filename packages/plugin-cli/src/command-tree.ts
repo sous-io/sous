@@ -32,8 +32,8 @@ export interface CommandNode {
 export type CommandPicks = Readonly<Record<string, string>>;
 
 /**
- * The command tree (S6, `cli.commands`): every intent the CLI shows, by its words and its aliases,
- * with group help. Built once per config; `--help` reads it without loading any handler (G9).
+ * The command tree: every intent the CLI shows, by its words and its aliases,
+ * with group help. Built once per config; `--help` reads it without loading any handler.
  */
 export class CommandTree {
     readonly root: CommandNode = newNode([]);

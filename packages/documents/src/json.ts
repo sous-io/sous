@@ -4,7 +4,7 @@
 import type { JsonObject, JsonValue, PathSegment, ValueType } from "./types.js";
 
 /**
- * A fresh, plain JSON copy of any value, following the config's rules (S2, "Plain JSON data"):
+ * A fresh, plain JSON copy of any value, following the config's rules:
  * `undefined`, functions, symbols, bigints, `Date`s, `Map`s and `Set`s are dropped (an array item
  * too, not turned into `null`); a `RegExp` becomes the string `/source/flags`; `NaN` and the
  * infinities become `null`; `toJSON()` is honored. Returns `undefined` when the value itself is

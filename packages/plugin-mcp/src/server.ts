@@ -26,7 +26,7 @@ export interface ServeOptions {
 const DEFAULT_LEVEL: LogLevel = "info";
 
 /**
- * Serves MCP until the client closes (S1, "Front Ends"; S3, "The MCP Server"). Each tool call is
+ * Serves MCP until the client closes. Each tool call is
  * submitted as a new chain with an {@link McpReporter} and an {@link ElicitationPrompter}, so its
  * output and questions go back to the client that called it. The server reports sous's name and
  * version when a client connects, so the Claude Code plugin can check the oldest sous it supports.

@@ -7,7 +7,7 @@
  * has to live with the result.
  *
  * Every builder returns a complete file, ending in a newline. Neither config sets `projectRoot`:
- * sous sets it (and `sousDir`) itself, and a config that sets one is an error (S6).
+ * sous sets it (and `sousDir`) itself, and a config that sets one is an error.
  */
 
 import type { InitConfigFormat } from "./types.js";

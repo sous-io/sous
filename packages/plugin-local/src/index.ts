@@ -1,7 +1,7 @@
 /**
  * plugin-local: A repository-host entity for a repository on disk.
  *
- * S6, "Host and package-manager plugins". The contract other plugins code against is `./types.ts`.
+ * The contract other plugins code against is `./types.ts`.
  */
 
 import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";

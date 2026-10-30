@@ -81,7 +81,7 @@ async function run(intent: string, input: Record<string, unknown> = {}, project:
 }
 
 describe("config.show", () => {
-    /** The evaluated config prints with secrets hidden (G4). */
+    /** The evaluated config prints with secrets hidden. */
     it("should show the config and hide secrets", async () => {
         const result = await run("config.show");
 

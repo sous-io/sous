@@ -1,7 +1,7 @@
 /**
- * The lockfile (S6, `recipes.lock`): `.sous/sous.lock.json` records the exact version and content
+ * The lockfile: `.sous/sous.lock.json` records the exact version and content
  * hash of everything a project uses, so a fresh clone restores to the same bytes with no prompts.
- * Parsing never works out a repository identity (S6, "refs, formats and repos"); this service
+ * Parsing never works out a repository identity; this service
  * fills in a missing one after parsing.
  */
 
@@ -104,7 +104,7 @@ export class LockService implements RecipesLock {
 
     /**
      * The lockfile resolved recipes make. Entries reached from a switched-off subscription, or from
-     * a repository switched off here, keep their pins (S4, 2), so one developer switching a recipe
+     * a repository switched off here, keep their pins, so one developer switching a recipe
      * off never removes it for the others.
      */
     fromResolved(resolved: readonly ResolvedRecipe[], previous: Lockfile = this.read()): Lockfile {
@@ -148,7 +148,7 @@ export class LockService implements RecipesLock {
 
     async restore(options: { keys?: readonly string[]; signal?: AbortSignal } = {}): Promise<RestoreReport> {
         const lockfile = this.read();
-        // By default only the pins in force here (S4, 3): a switched-off subscription keeps its pin
+        // By default only the pins in force here: a switched-off subscription keeps its pin
         // for the others, and this machine downloads nothing for it.
         const wanted =
             options.keys === undefined

@@ -1,5 +1,5 @@
 /**
- * Files the compiler did not write (C58): overwritten and taken over by default; left alone, with
+ * Files the compiler did not write: overwritten and taken over by default; left alone, with
  * a warning, when `compilation.overwriteUntracked` is `false`.
  */
 

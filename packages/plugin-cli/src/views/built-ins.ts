@@ -9,7 +9,7 @@ export interface ViewModule {
 
 /**
  * Which module shows which intents. Modules load only when one of their intents has a result to
- * show, so `--help` never imports view code (G9).
+ * show, so `--help` never imports view code.
  */
 const DOMAINS: ReadonlyArray<{ load: () => Promise<ViewModule>; intents: readonly string[] }> = [
     { load: () => import("./domains/vars.js"), intents: ["vars.ask", "vars.list", "vars.show", "vars.map"] },

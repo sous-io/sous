@@ -5,7 +5,7 @@
  * A recipe layer is JSON, JSONC or YAML only: sous must read what a repository publishes without
  * running any of it, so a `.js` or `.ts` layer from a recipe is refused. Only the keys on the
  * allowlist survive: a recipe may not add a repository, a subscription, or a tool sous launches.
- * The plugin option `configLayers.allowedKeys` adds keys to the list (L6).
+ * The plugin option `configLayers.allowedKeys` adds keys to the list.
  */
 
 import fs from "node:fs";

@@ -2,7 +2,7 @@ import type { Context } from "./context.js";
 import type { BuiltConfig } from "./config.js";
 import type { CoreEvents, IntentInput, IntentResult, SousEvents, SousIntents } from "./registry.js";
 
-/** What every event has (S1, "Events"). */
+/** What every event has. */
 export interface EventBase {
     /** The event's name: `build.before`, `diagrams.rendered`. */
     readonly name: string;

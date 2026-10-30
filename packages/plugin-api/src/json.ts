@@ -1,8 +1,8 @@
 /**
  * Plain JSON values, and the patches that change them.
  *
- * The config is always plain JSON (S2, "Plain JSON data"), and every change to it, or to any
- * document a plugin edits, is a list of primitive patches (S2, "Patches").
+ * The config is always plain JSON, and every change to it, or to any
+ * document a plugin edits, is a list of primitive patches.
  */
 
 /** A plain JSON value. */

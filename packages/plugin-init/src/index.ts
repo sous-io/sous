@@ -1,7 +1,7 @@
 /**
  * plugin-init: Scaffolding a project's .sous/ (sous init).
  *
- * S6, "Project setup and updates: plugin-init, plugin-update". The contract other plugins code against is `./types.ts`.
+ * The contract other plugins code against is `./types.ts`.
  */
 
 import { definePlugin, jsonSchema, type PluginDefinition } from "@sous-io/plugin-api";

@@ -3,20 +3,20 @@ import { BufferedReporter, createReporter, isLevelShown, isLogLevel, LOG_LEVELS,
 
 describe("LOG_LEVELS", () => {
     /**
-     * The reporter uses the eight syslog levels in full, least severe first (S1, "Log levels"; C67).
+     * The reporter uses the eight syslog levels in full, least severe first.
      */
-    it("should list the eight syslog levels in order (C67)", () => {
+    it("should list the eight syslog levels in order", () => {
         expect(LOG_LEVELS).toEqual(["debug", "info", "notice", "warning", "error", "critical", "alert", "emergency"]);
     });
 });
 
 describe("isLevelShown()", () => {
     /**
-     * A message shows when its level is at or above the threshold (C61).
+     * A message shows when its level is at or above the threshold.
      *
      * isLevelShown("warning", "notice") → true; isLevelShown("debug", "info") → false
      */
-    it("should show messages at or above the threshold (C61)", () => {
+    it("should show messages at or above the threshold", () => {
         expect(isLevelShown("warning", "notice")).toBe(true);
         expect(isLevelShown("notice", "notice")).toBe(true);
         expect(isLevelShown("debug", "info")).toBe(false);

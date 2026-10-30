@@ -1,7 +1,7 @@
 import { NonInteractiveError } from "./errors.js";
 
 /**
- * Asking questions (L3, L4). Services never prompt: they ask through the `Prompter` the front end
+ * Asking questions. Services never prompt: they ask through the `Prompter` the front end
  * handed over with the chain (`ctx.prompter`). Every question names the flag or argument that
  * answers it without a prompt, so an agent can do everything a person can.
  */
@@ -12,7 +12,7 @@ export interface QuestionBase {
     message: string;
     /**
      * The flag or argument that answers this question ahead of time (`--yes`, `--harness <id>`).
-     * A prompter that cannot ask names it in its error (L4).
+     * A prompter that cannot ask names it in its error.
      */
     answeredBy?: string;
 }

@@ -24,7 +24,7 @@ export interface StoredEntity extends EntityRecord<unknown> {
 }
 
 /**
- * Entity kinds, and the entities plugins add in `register()` (S1, "Entities"). Entities the config
+ * Entity kinds, and the entities plugins add in `register()`. Entities the config
  * creates belong to the contributors that add them, and live in each build's snapshot.
  */
 export class EntityRegistry {

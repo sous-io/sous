@@ -11,7 +11,7 @@ function stream(isTTY = false) {
 describe("TerminalReporter", () => {
     /**
      * Messages at or above the threshold are written with their literal prefix; the rest are
-     * dropped (C61, C67).
+     * dropped.
      *
      * new TerminalReporter(stderr, "warning").log("error", "x"); // -> "Error: x\n"
      */

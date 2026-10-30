@@ -23,7 +23,7 @@ import { plural } from "../support.js";
 
 /**
  * Resolves every subscription again against the cached indexes and rewrites the lockfile, keeping
- * the pins of switched-off subscriptions (S4, 2), then downloads what the store lacks.
+ * the pins of switched-off subscriptions, then downloads what the store lacks.
  */
 export async function rebuildLock(input: LockRebuildInput, ctx: Context): Promise<LockRebuildResult> {
     const lock = ctx.services.get("recipes.lock");

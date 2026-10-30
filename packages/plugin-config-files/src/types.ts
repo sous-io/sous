@@ -1,5 +1,5 @@
 /**
- * The contract of plugin-config-files (S6, "Config files"; S2, "Config Files"): `sous.config.*` as a
+ * The contract of plugin-config-files: `sous.config.*` as a
  * contributor (`config-files.main`), reading one config file in-process, patch files beside it,
  * setting one value from the command line, and the `.env` files.
  *
@@ -25,7 +25,7 @@ export type MainConfigFileName =
     | "sous.config.yaml"
     | "sous.config.yml";
 
-/** A `.js` or `.ts` config file's export: given the builder, like any contributor (S2). */
+/** A `.js` or `.ts` config file's export: given the builder, like any contributor. */
 export type ConfigureFunction = (config: ConfigBuilder) => void | Promise<void>;
 
 /** A data file: parsed JSON, JSONC or YAML. */
@@ -48,7 +48,7 @@ export interface ModuleConfigFile {
     readonly text: string;
 }
 
-/** A patch file: raw patches, applied with `config.apply` (S2, "Patch files"; C77). */
+/** A patch file: raw patches, applied with `config.apply`. */
 export interface PatchConfigFile {
     readonly kind: "patch";
     readonly path: string;
@@ -60,11 +60,11 @@ export interface PatchConfigFile {
 /** One config file, read. */
 export type LoadedConfigFile = DataConfigFile | ModuleConfigFile | PatchConfigFile;
 
-/** Reading one config file (S6, `config-files.loader`). Each file is read from disk once per build. */
+/** Reading one config file. Each file is read from disk once per build. */
 export interface ConfigFilesLoader {
     /** The format a file name means, or `undefined` for a file sous does not read. */
     formatOf(fileName: string): ConfigFileFormat | undefined;
-    /** Reads one file. A `.js` file changed on disk is imported again under a new URL (S2). */
+    /** Reads one file. A `.js` file changed on disk is imported again under a new URL. */
     load(path: string): Promise<LoadedConfigFile>;
     /** The `sous.config.*` file in a `.sous/` directory, or `undefined`. */
     findMain(sousDir: string): string | undefined;
@@ -73,9 +73,9 @@ export interface ConfigFilesLoader {
     /** Forgets what was read, so the next build reads every file again (watch mode). */
     forget(path?: string): void;
     /**
-     * Applies one file through a builder, the one way every config file is applied (L2): data is
-     * evaluated (S5) and merged at the root, a module's `configure` runs, a patch file's patches are
-     * applied. Errors name the file. (Added beside the contract S6 names, so `plugin-confd` applies
+     * Applies one file through a builder, the one way every config file is applied: data is
+     * evaluated and merged at the root, a module's `configure` runs, a patch file's patches are
+     * applied. Errors name the file. (Added beside the contract names, so `plugin-confd` applies
      * its files the same way without importing this plugin's code.)
      */
     contribute(file: LoadedConfigFile, config: ConfigBuilder, options?: ContributeOptions): Promise<void>;
@@ -87,7 +87,7 @@ export interface ConfigFilesLoader {
 export interface ContributeOptions {
     /** The file's name in messages. Default: its path relative to `.sous/`. */
     label?: string;
-    /** True for a recipe's config file: expression languages that run code are refused (S5). */
+    /** True for a recipe's config file: expression languages that run code are refused. */
     fromRecipe?: boolean;
 }
 
@@ -129,7 +129,7 @@ export interface EnvFileWriteOptions {
     comment?: string;
 }
 
-/** Reading and writing `.sous/.env` and `.sous/.env.local`; one parser for both (S6, L2). */
+/** Reading and writing `.sous/.env` and `.sous/.env.local`; one parser for both. */
 export interface ConfigFilesEnv {
     /** The paths, for the project (or `undefined` outside one). */
     paths(): EnvFilePaths | undefined;

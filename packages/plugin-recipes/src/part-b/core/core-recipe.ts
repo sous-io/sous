@@ -1,5 +1,5 @@
 /**
- * The core recipe that ships inside the sous package (S6, `recipes.core`).
+ * The core recipe that ships inside the sous package.
  *
  * The `core` namespace holds the skills that teach an agent what sous is. Every project gets it,
  * and a project that has never seen a network must still get it, so a copy lives in the package at

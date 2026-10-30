@@ -1,7 +1,7 @@
 /**
- * plugin-expressions: Config expressions (S5) and the expression languages plugins add.
+ * plugin-expressions: Config expressions and the expression languages plugins add.
  *
- * S6, "Shared building blocks (expressions.evaluator, expression-language)". The contract other plugins code against is `./types.ts`.
+ * The contract other plugins code against is `./types.ts`.
  */
 
 import { definePlugin, jsonSchema, type PluginDefinition } from "@sous-io/plugin-api";
@@ -16,7 +16,7 @@ export const PLUGIN_NAME = "@sous-io/plugin-expressions";
 export const expressionsPlugin: PluginDefinition = definePlugin({
     name: PLUGIN_NAME,
     version: "0.2.34",
-    description: "Config expressions (S5) and the expression languages plugins add.",
+    description: "Config expressions and the expression languages plugins add.",
     dependsOn: {
         "@sous-io/plugin-liquid": "^0.2.34",
         "@sous-io/plugin-variables": "^0.2.34",
@@ -47,7 +47,7 @@ export const expressionsPlugin: PluginDefinition = definePlugin({
         // refuses every other lifetime.
         sous.services.add("expressions.evaluator", () => evaluator, { lifetime: "singleton" });
 
-        // Once the config has settled, an expression still unknown is an error (S5, "Errors" 6).
+        // Once the config has settled, an expression still unknown is an error.
         sous.on("config.built", () => evaluator.settle());
     },
 });

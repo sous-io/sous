@@ -1,8 +1,8 @@
 import type { JsonObject } from "@sous-io/plugin-api";
 
 /**
- * The loop-detection limits (S1, "Finding Loops"). They are first guesses; a project changes them
- * under the `limits` config key (C51).
+ * The loop-detection limits. They are first guesses; a project changes them
+ * under the `limits` config key.
  */
 export interface Limits {
     /** Passes one config stage may take before the config is said not to settle. */

@@ -22,7 +22,7 @@ export interface RuntimeContextDeps {
 }
 
 /**
- * The runtime context file (S6, `build.runtime-context`): the current git branch and, on a branch
+ * The runtime context file: the current git branch and, on a branch
  * that matches `branchPattern`, the task file named after it. A target with
  * `generateRuntimeContext` includes it. Written through `compiler.writer`, the one way a build
  * output is written.

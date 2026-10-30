@@ -1,5 +1,5 @@
 /**
- * The answer ladder (S6, `recipe-answers.ladder`): whether a variable already has an answer, and
+ * The answer ladder: whether a variable already has an answer, and
  * which environment variable gave it.
  *
  * Five rungs, most specific first:

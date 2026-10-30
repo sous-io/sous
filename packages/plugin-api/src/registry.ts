@@ -2,8 +2,7 @@ import type { ConfigKeyEntity, PluginLocatorEntity } from "./entities.js";
 import type { ConfigBuiltPayload } from "./events.js";
 
 /**
- * The interfaces plugins add their own types to, through TypeScript declaration merging (S1,
- * "Types Across Plugins"). At run time everything is looked up by its string name; these only
+ * The interfaces plugins add their own types to, through TypeScript declaration merging. At run time everything is looked up by its string name; these only
  * give the names their types.
  *
  * ```ts
@@ -43,7 +42,7 @@ export interface SousEntities {}
 
 /**
  * The type of each top-level config key, for `ctx.config.get("diagrams")`. Optional: a key with no
- * entry here reads as `unknown`. (Added beside the four interfaces S1 names; it follows the same
+ * entry here reads as `unknown`. (Added beside the four interfaces core names; it follows the same
  * pattern for the keys plugins add as `config-key` entities.)
  */
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
@@ -51,7 +50,7 @@ export interface SousConfig {}
 
 /** The entity kinds core itself defines. */
 export interface CoreEntities {
-    /** A key the config may hold, with its schema (S2, "Plugins add config keys"). */
+    /** A key the config may hold, with its schema. */
     "config-key": ConfigKeyEntity;
     /** A way to find a plugin's module from the specifier in `plugins.load`. */
     "plugin-locator": PluginLocatorEntity;

@@ -58,7 +58,7 @@ describe("recipes.trust", () => {
         expect(managed.files["500-repos.jsonc"]).toMatchObject({ repos: { extra: { url: missing.url, addedBy: "workflow/a" } } });
     });
 
-    /** A run that cannot ask fails naming --yes and the command that trusts each repository (L4). */
+    /** A run that cannot ask fails naming --yes and the command that trusts each repository. */
     it("should fail naming --yes when it cannot ask", async () => {
         const { trust } = setup();
         const failure = trust.confirm([missing], {}, { prompter: nonInteractivePrompter, reporter: new BufferedReporter() });

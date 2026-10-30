@@ -92,7 +92,7 @@ afterEach(async () => {
 });
 
 describe("mcp.serve: connecting", () => {
-    it("reports sous's name and version, and the project it serves, when a client connects (S3)", async () => {
+    it("reports sous's name and version, and the project it serves, when a client connects", async () => {
         served = await serve([fixtures]);
 
         expect(served.client.getServerVersion()).toEqual({ name: "sous", version: "1.2.3" });
@@ -116,7 +116,7 @@ describe("mcp.serve: connecting", () => {
     });
 });
 
-describe("mcp.serve: tools generated from intents (C8)", () => {
+describe("mcp.serve: tools generated from intents", () => {
     it("turns every intent agents may see into a tool, leaving out hidden, internal and background ones", async () => {
         served = await serve([fixtures]);
         const { tools } = await served.client.listTools();
@@ -190,7 +190,7 @@ describe("mcp.serve: tools generated from intents (C8)", () => {
     });
 });
 
-describe("mcp.serve: tool calls (C16, C45)", () => {
+describe("mcp.serve: tool calls", () => {
     it("submits each call as a new chain and returns its result as text and structured content", async () => {
         served = await serve([fixtures]);
         const result = await served.client.callTool({ name: "namespace_list", arguments: { repository: "github.com/x/y" } });
@@ -286,7 +286,7 @@ describe("mcp.serve: the MCP reporter (logging, levels)", () => {
     });
 });
 
-describe("mcp.serve: the elicitation prompter (C46)", () => {
+describe("mcp.serve: the elicitation prompter", () => {
     it("asks a chain's questions through MCP elicitation", async () => {
         served = await serve([fixtures], { capabilities: { elicitation: { form: {} } } });
         const asked: string[] = [];
@@ -314,7 +314,7 @@ describe("mcp.serve: the elicitation prompter (C46)", () => {
         expect(textOf(result)).toContain("declined");
     });
 
-    it("names the argument that answers a question when the client cannot elicit (L4)", async () => {
+    it("names the argument that answers a question when the client cannot elicit", async () => {
         served = await serve([fixtures]);
         const result = await served.client.callTool({ name: "vars_ask", arguments: {} });
 

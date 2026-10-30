@@ -1,5 +1,5 @@
 /**
- * The contract of plugin-github (S6, "Host and package-manager plugins"; S4): one
+ * The contract of plugin-github: one
  * `repository-host` entity, `github`: reading indexes (HTTP with a token, HTTP without, then git),
  * the token (`GITHUB_TOKEN`, then `git credential fill`, then `gh`), proposing pull requests, and
  * the GitHub Actions workflow a scaffold writes. It declares no services, intents or events.
@@ -15,10 +15,10 @@ export type GithubHostId = "github";
 /** The entity, as this plugin adds it: features `fetch`, `submit` and `proposals`. */
 export type GithubRepositoryHost = RepositoryHostEntity & { id: GithubHostId };
 
-/** The read strategies it registers, in order (S4). */
+/** The read strategies it registers, in order. */
 export type GithubReadStrategyId = "http-token" | "http" | "git";
 
-/** The token sources it registers, in order (S4). */
+/** The token sources it registers, in order. */
 export type GithubTokenSourceId = "env" | "git-credential" | "gh";
 
 /** This plugin's options (`plugins.options."@sous-io/plugin-github"`). */

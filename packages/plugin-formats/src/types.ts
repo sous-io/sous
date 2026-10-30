@@ -1,7 +1,7 @@
 /**
- * The contract of plugin-formats (S6, "Shared building blocks"): one parser per on-disk format,
+ * The contract of plugin-formats: one parser per on-disk format,
  * reading a manifest file from disk, and the recipe content hash. Parsing is pure: it never works
- * out a repository identity or reads another file (S6, "refs, formats and repos").
+ * out a repository identity or reads another file.
  *
  * Other plugins import this file type-only.
  */
@@ -32,7 +32,7 @@ export interface Submissions {
 
 /**
  * One format: parse and check a value read from disk, and write it back in its one stable form
- * (S2, "The robustness principle": many forms read, one written).
+ * ("The robustness principle": many forms read, one written).
  */
 export interface FormatParser<T> {
     /** The format's name in messages: `lockfile`, `recipe manifest`. */
@@ -149,17 +149,17 @@ export interface RecipeContent extends Extensions {
     exclude?: string[];
 }
 
-/** The plugin a recipe ships: one bundled file, and optionally its types (S1). */
+/** The plugin a recipe ships: one bundled file, and optionally its types. */
 export interface RecipePluginEntry {
     /** The bundle, relative to the recipe: `plugin/index.js`. */
     bundle: string;
-    /** Its `.d.ts`, copied to `.sous/types/` (C40). */
+    /** Its `.d.ts`, copied to `.sous/types/`. */
     types?: string;
 }
 
 /** What a recipe needs that is not a recipe. */
 export interface RecipeRequirements {
-    /** npm plugins, each with a version range (S1, "Recipes that require npm plugins"). */
+    /** npm plugins, each with a version range. */
     plugins?: Record<string, string>;
 }
 
@@ -314,7 +314,7 @@ export interface FoundManifest<T> {
     readonly manifest: T;
 }
 
-/** Reading files in the formats sous reads, from disk (S6, `formats.manifests`). */
+/** Reading files in the formats sous reads, from disk. */
 export interface FormatsManifests {
     /** The manifest file in a directory, or `undefined`. */
     find(directory: string, kind: ManifestKind): string | undefined;
@@ -332,7 +332,7 @@ export interface FormatsManifests {
     readFile(path: string): Promise<unknown>;
 }
 
-/** The content hash a release writes and the store checks (S6, `formats.recipe-hash`). */
+/** The content hash a release writes and the store checks. */
 export interface FormatsRecipeHash {
     /** The hash of a recipe directory's files, names and contents, in bytewise order. */
     hashDirectory(directory: string): Promise<ContentHash>;

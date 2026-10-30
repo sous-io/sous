@@ -16,7 +16,7 @@ export type WatcherFactory = (
     onEvent: (event: string, file: string) => void,
 ) => Promise<FileWatcherHandle>;
 
-/** The default watcher: chokidar, loaded only when watch mode starts (G9). */
+/** The default watcher: chokidar, loaded only when watch mode starts. */
 export const chokidarWatcher: WatcherFactory = async (paths, options, onEvent) => {
     const { default: chokidar } = await import("chokidar");
     const watcher = chokidar.watch([...paths], { ignoreInitial: true, persistent: true, ignored: options.ignored });

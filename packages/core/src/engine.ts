@@ -71,7 +71,7 @@ import { stableKey } from "./util/stable.js";
 
 /** How to start an engine. */
 export interface EngineOptions {
-    /** The project this process serves (S1). */
+    /** The project this process serves. */
     project?: ProjectInfo;
     /**
      * Finds the project at or above a directory, for `ctx.refreshConfig({ locateProjectFrom })`
@@ -82,7 +82,7 @@ export interface EngineOptions {
     env?: Environment;
     /** Where plugin specifiers resolve from when there is no project. Default: the process's directory. */
     cwd?: string;
-    /** The built-in plugins, loaded first, in order (S1, "Built-in Plugins"). */
+    /** The built-in plugins, loaded first, in order. */
     builtIns?: ReadonlyArray<PluginDefinition | string>;
     /** The application's name and version. */
     app?: AppInfo;
@@ -121,7 +121,7 @@ interface BuildFailure {
 }
 
 /**
- * The sous engine (S1): plugin loading inside the config loop, the config builder, the chain
+ * The sous engine: plugin loading inside the config loop, the config builder, the chain
  * scheduler, intents, events, services, entities, loop detection and budgets. Every project state
  * lives in the engine object, so tests can run many engines in one process.
  */
@@ -239,7 +239,7 @@ export class Engine {
         return this.reporterImpl;
     }
 
-    /** Every timing so far (`--timings`, C52). */
+    /** Every timing so far (`--timings`). */
     get timings(): Timings {
         return this.timer;
     }
@@ -251,9 +251,9 @@ export class Engine {
     }
 
     /**
-     * Builds the real config (S2), replacing the current one, and fires `config.built`. When a
+     * Builds the real config, replacing the current one, and fires `config.built`. When a
      * `config.built` listener runs an intent that changes the config, the config is rebuilt, up to
-     * the rebuild limits (S1, "Finding Loops").
+     * the rebuild limits.
      *
      * With `extraContributors`, builds a "what if" config instead (see {@link buildWhatIf}).
      */
@@ -346,14 +346,14 @@ export class Engine {
 
     /**
      * Builds a separate "what if" config with extra contributors, never replacing the real one
-     * (S2, "What if builds"; C7). It gets its own `config` services, and fires no events.
+     *. It gets its own `config` services, and fires no events.
      */
     async buildWhatIf(options: BuildOptions = {}): Promise<BuiltConfig> {
         return this.buildOnce(true, options.extraContributors ?? []);
     }
 
     /**
-     * Submits a chain: one intent, together with every intent it starts (S1). Resolves with the
+     * Submits a chain: one intent, together with every intent it starts. Resolves with the
      * intent's result. A background intent runs outside the scheduler.
      */
     submit(request: IntentRequest, options: SubmitOptions = {}): Promise<unknown> {
@@ -377,14 +377,14 @@ export class Engine {
         };
     }
 
-    /** Resolves when every background intent has returned (S1, "Front Ends", rule 4). */
+    /** Resolves when every background intent has returned. */
     async whenBackgroundIntentsReturn(): Promise<void> {
         while (this.background.size > 0) {
             await Promise.allSettled([...this.background]);
         }
     }
 
-    /** Every loaded plugin, with what it registered (G4). */
+    /** Every loaded plugin, with what it registered. */
     pluginInfo(): PluginInfo[] {
         return this.plugins.list().map((record) => ({
             name: record.name,
@@ -551,7 +551,7 @@ export class Engine {
         return deepFreeze(result.config);
     }
 
-    /** `dependsOn` (C38): every plugin a plugin needs is active, at a version in the range. */
+    /** `dependsOn`: every plugin a plugin needs is active, at a version in the range. */
     private async checkDependencies(active: ReadonlyMap<string, ActivePlugin>): Promise<void> {
         const problems: string[] = [];
         let satisfies: ((version: string, range: string, options: { includePrerelease: boolean }) => boolean) | undefined;
@@ -1062,7 +1062,7 @@ export class Engine {
     }
 
     /**
-     * Runs one intent (S1, "Intents"): checks the limits, checks the input, fires `.before`, runs the
+     * Runs one intent: checks the limits, checks the input, fires `.before`, runs the
      * wrapped handler, fires `.error` on failure and `.after` on success.
      */
     private async runIntent(name: string, rawInput: unknown, call: CallState): Promise<unknown> {
@@ -1244,7 +1244,7 @@ export class Engine {
     }
 
     /**
-     * Gives an event to every matching listener of an active plugin, in order (S1, "Events"):
+     * Gives an event to every matching listener of an active plugin, in order:
      * priority, then plugin order, then the order they were added. A listener that throws fails the
      * caller.
      */

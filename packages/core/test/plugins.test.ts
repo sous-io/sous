@@ -69,7 +69,7 @@ describe("loading plugins by specifier", () => {
     /**
      * The plugins to load are the plugins.load config key; a specifier may be a relative path (from
      * the project), an absolute path, a file: URL, or a package name in node_modules, CommonJS-
-     * resolvable or ES-module-only (S1, "Loading"; C47).
+     * resolvable or ES-module-only.
      */
     it("should load paths, file URLs and packages listed in plugins.load", async () => {
         const { engine } = makeEngine(
@@ -183,8 +183,7 @@ describe("loading plugins by specifier", () => {
 describe("plugin lifecycle", () => {
     /**
      * A plugin removed from the list in a later stage stays in memory, but its patches are dropped;
-     * listed again in a later build, it is active again without registering twice (S2, "Plugins load
-     * inside the loop").
+     * listed again in a later build, it is active again without registering twice.
      */
     it("should drop a removed plugin's patches and re-activate it without registering again", async () => {
         let registered = 0;
@@ -229,9 +228,9 @@ describe("plugin lifecycle", () => {
     });
 
     /**
-     * plugins.disabled keeps a plugin from loading, built-ins included, by name or by specifier (C47).
+     * plugins.disabled keeps a plugin from loading, built-ins included, by name or by specifier.
      */
-    it("should never load a disabled plugin, built-ins included (C47)", async () => {
+    it("should never load a disabled plugin, built-ins included", async () => {
         const builtIn = contributorsPlugin("sous-plugin-old-thing", [{ id: "old", contribute: (config) => config.atPath("loaded.old").set(true) }]);
         const { engine } = makeEngine(
             [
@@ -256,9 +255,9 @@ describe("plugin lifecycle", () => {
 
     /**
      * A plugin may bring in other plugins as its own dependencies (sous.plugins.add); they are active
-     * while it is, users can disable them by name, and the ledger records who loaded them (C5).
+     * while it is, users can disable them by name, and the ledger records who loaded them.
      */
-    it("should load a plugin's own dependencies with sous.plugins.add (C5)", async () => {
+    it("should load a plugin's own dependencies with sous.plugins.add", async () => {
         const child = contributorsPlugin("sous-plugin-mcp-extras", [{ id: "extras", contribute: (config) => config.atPath("loaded.extras").set(true) }]);
         const parent = plugin("plugin-claude-code", async (sous) => {
             await sous.plugins.add(child);
@@ -285,9 +284,9 @@ describe("plugin lifecycle", () => {
 
     /**
      * dependsOn: sous stops before any intent runs when a needed plugin is missing, outside its range,
-     * or has no version; "*" accepts any (C38).
+     * or has no version; "*" accepts any.
      */
-    it("should check dependsOn ranges at the end of the build (C38)", async () => {
+    it("should check dependsOn ranges at the end of the build", async () => {
         const skills = definePlugin({ name: "@sous-io/plugin-skills", version: "1.4.0", register() {} });
         const unversioned = definePlugin({ name: "unversioned", register() {} });
         const needs = (range: Record<string, string>) => definePlugin({ name: "sous-plugin-diagrams", dependsOn: range, register() {} });
@@ -344,10 +343,9 @@ describe("plugin lifecycle", () => {
     });
 
     /**
-     * A name starting with another plugin's prefix is allowed; sous warns once, naming both (S1,
-     * "Names"; C35).
+     * A name starting with another plugin's prefix is allowed; sous warns once, naming both.
      */
-    it("should warn once when a plugin registers under another plugin's prefix (C35)", async () => {
+    it("should warn once when a plugin registers under another plugin's prefix", async () => {
         const compiler = plugin("@sous-io/plugin-compiler", (sous) => {
             sous.services.add("compiler.state", () => ({}));
         });
@@ -367,7 +365,7 @@ describe("plugin lifecycle", () => {
     });
 
     /**
-     * Every registration is recorded with its plugin, for plugins show (S1, "Visibility").
+     * Every registration is recorded with its plugin, for plugins show.
      */
     it("should record every registration in the ledger", async () => {
         const { engine } = makeEngine([

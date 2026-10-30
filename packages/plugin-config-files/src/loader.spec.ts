@@ -146,7 +146,7 @@ describe("load()", () => {
         expect(await loader.load(file)).toMatchObject({ data: { name: "three" } });
     });
 
-    /** A module changed on disk is imported again under a new URL (S2). */
+    /** A module changed on disk is imported again under a new URL. */
     it("should import a changed module again", async () => {
         const urls: string[] = [];
         const importing = new ConfigFilesLoaderImpl({

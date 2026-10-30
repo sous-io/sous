@@ -1,5 +1,5 @@
 /**
- * S5, "Errors": each fails the load as a `ConfigError` naming the file the expression came from
+ * Expression errors: each fails the load as a `ConfigError` naming the file the expression came from
  * and its key path.
  */
 
@@ -186,7 +186,7 @@ describe("6. a variable still unknown when the load settles", () => {
 describe("8. an expression under subscriptions or repos that reads a recipe answer", () => {
     const entities = { "variable-source": [answersSource({ githubProjectId: "42" }) as never] };
 
-    it("fails with S2's message", () => {
+    it("fails with the expected message", () => {
         const error = failure(
             { subscriptions: { "workflow/github-projects": { enabled: { $if: "githubProjectId != ''" } } } },
             { entities, config: { _vars: { githubProjectId: "42" } } },

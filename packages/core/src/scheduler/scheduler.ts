@@ -10,7 +10,7 @@ interface QueuedChain {
 }
 
 /**
- * Runs chains (S1, "Chains and the Scheduler"):
+ * Runs chains:
  *
  * 1. in series by default: each one finishes before the next starts;
  * 2. chains declared parallel may run together;

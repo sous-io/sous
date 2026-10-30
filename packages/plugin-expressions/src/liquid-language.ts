@@ -1,5 +1,5 @@
 /**
- * The `liquid` expression language, the default (S5, "Expression Languages"): an expression is
+ * The `liquid` expression language, the default: an expression is
  * evaluated with LiquidJS `evalValueSync`, the way a `{% if %}` condition is, with every Liquid
  * filter plugins add.
  */
@@ -90,7 +90,7 @@ function makeEngine(ctx: ExpressionLanguageContext, entities: EntityReader): Liq
     });
 }
 
-/** Turns LiquidJS's parse and run errors into a `ConfigError` naming the file and key path (S5, "Errors" 5). */
+/** Turns LiquidJS's parse and run errors into a `ConfigError` naming the file and key path. */
 function guard<T>(expression: string, ctx: ExpressionLanguageContext, run: () => T): T {
     try {
         return run();

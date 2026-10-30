@@ -1,5 +1,5 @@
 /**
- * plugin-cli: the command-line front end of sous (S1, "The CLI foundation"; S6).
+ * plugin-cli: the command-line front end of sous.
  */
 
 import "./types.js";

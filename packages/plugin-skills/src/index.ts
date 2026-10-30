@@ -1,7 +1,7 @@
 /**
  * plugin-skills: Skills: where they come from, the skill-target entity, and the compilation targets for them.
  *
- * S6, "Skills: plugin-skills". The contract other plugins code against is `./types.ts`.
+ * The contract other plugins code against is `./types.ts`.
  */
 
 import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";

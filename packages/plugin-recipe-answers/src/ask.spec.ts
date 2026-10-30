@@ -147,7 +147,7 @@ describe("askForMissing()", () => {
 
     /**
      * A run that cannot ask should fail naming, for each variable, every environment name that
-     * would answer it and the flag that answers it (L4).
+     * would answer it and the flag that answers it.
      */
     it("should fail without a terminal, naming the flag and every name", async () => {
         const error = await askForMissing([variable()], ladder(), {}, run().run).catch((caught: unknown) => caught);

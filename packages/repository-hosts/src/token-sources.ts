@@ -1,5 +1,5 @@
 /**
- * The three kinds of token source S4 names, tried in order by every hosted repository host:
+ * The three kinds of token source sous supports, tried in order by every hosted repository host:
  *
  * ```text
  * 1. the environment         GITLAB_TOKEN, GITHUB_TOKEN

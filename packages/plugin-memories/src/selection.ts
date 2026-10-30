@@ -1,5 +1,5 @@
 /**
- * The `memories.selection` service (S6): which memories go where, after the config is built. It
+ * The `memories.selection` service: which memories go where, after the config is built. It
  * gives the same answers the `memories.targets` contributor worked from.
  */
 

@@ -30,8 +30,8 @@ export interface BuiltConfigData {
 }
 
 /**
- * A config the engine built (S1, S2): read-only values, with the entities and the `config`-lifetime
- * services that belong to it, and the record of who changed what (G4).
+ * A config the engine built: read-only values, with the entities and the `config`-lifetime
+ * services that belong to it, and the record of who changed what.
  */
 export class BuiltConfigImpl implements BuiltConfig {
     readonly buildNumber: number;

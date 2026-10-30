@@ -14,7 +14,7 @@ export interface McpReporterOptions {
 }
 
 /**
- * A chain's output as MCP log messages (S6, `McpReporter`). The eight sous levels are the eight MCP
+ * A chain's output as MCP log messages. The eight sous levels are the eight MCP
  * levels, so each message keeps its level. Progress goes out as progress notifications when the
  * client gave a progress token, and as `debug` messages otherwise.
  *

@@ -9,7 +9,7 @@ const repository = canonicalRepository("gitlab.com", "acme", "recipes");
 describe("tokenFromOutput()", () => {
     /**
      * A token command's output is a token only when it exited 0 and printed exactly one non-empty
-     * line holding no whitespace (S4). This is what stops glab's help text being taken as a token.
+     * line holding no whitespace. This is what stops glab's help text being taken as a token.
      *
      * tokenFromOutput({ exitCode: 0, stdout: "glpat-abc\n" }); // -> "glpat-abc"
      * tokenFromOutput({ exitCode: 0, stdout: "Usage: glab auth <command>\n..." }); // -> undefined
@@ -127,7 +127,7 @@ describe("cliTokenSource()", () => {
     });
 
     /**
-     * Help text printed with exit code 0 (glab 1.114's `auth token`) is refused (S4, problem 2).
+     * Help text printed with exit code 0 (glab 1.114's `auth token`) is refused.
      *
      * // prints "Usage: glab auth <command> [flags]\n..." -> { missing: "glab printed no token for gitlab.com" }
      */

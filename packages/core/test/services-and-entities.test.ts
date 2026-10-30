@@ -5,9 +5,9 @@ import { contributorsPlugin, keysPlugin, makeEngine, plugin } from "./helpers.js
 describe("services", () => {
     /**
      * Three lifetimes: a singleton is shared by every build, a config service is made once per build,
-     * a factory service on every get; each is made on first use (C29).
+     * a factory service on every get; each is made on first use.
      */
-    it("should honour the three lifetimes and create on first use (C29)", async () => {
+    it("should honour the three lifetimes and create on first use", async () => {
         const made = { singleton: 0, config: 0, factory: 0 };
         const { engine } = makeEngine([
             plugin("p", (sous) => {
@@ -36,9 +36,9 @@ describe("services", () => {
     });
 
     /**
-     * Wrappers stack in plugin order (C30); a replacement is used instead of the original (C31).
+     * Wrappers stack in plugin order; a replacement is used instead of the original.
      */
-    it("should stack wrappers in plugin order and use a replacement (C30, C31)", async () => {
+    it("should stack wrappers in plugin order and use a replacement", async () => {
         const { engine } = makeEngine([
             plugin("plugin-git", (sous) => sous.services.add("git.runner", () => ({ name: () => "git" }), { lifetime: "singleton" })),
             plugin("logger", (sous) => sous.services.wrap("git.runner", (inner) => ({ name: () => `log(${(inner as { name(): string }).name()})` }))),
@@ -53,9 +53,9 @@ describe("services", () => {
 
     /**
      * Two plugins replacing one service stop the build with an error naming both; services.replace
-     * picks one, and sous warns on every build that the other may not work (C49).
+     * picks one, and sous warns on every build that the other may not work.
      */
-    it("should refuse two replacements unless services.replace picks one (C49)", async () => {
+    it("should refuse two replacements unless services.replace picks one", async () => {
         const original = plugin("plugin-git", (sous) => sous.services.add("git.runner", () => "git"));
         const fast = plugin("sous-plugin-fast-git", (sous) => sous.services.replace("git.runner", () => "fast"));
         const lfs = plugin("sous-plugin-git-lfs", (sous) => sous.services.replace("git.runner", () => "lfs"));
@@ -151,9 +151,9 @@ describe("services", () => {
 
     /**
      * Method calls on a service are timed through a proxy that keeps `this` and #private fields
-     * working; function services are timed too (L5).
+     * working; function services are timed too.
      */
-    it("should time service methods without breaking private fields (L5)", async () => {
+    it("should time service methods without breaking private fields", async () => {
         class Counter {
             #count = 0;
 
@@ -202,9 +202,9 @@ describe("services", () => {
 describe("entities", () => {
     /**
      * A kind is defined with a schema; every entry is checked when added; a wrong entry is a
-     * ConfigError naming the plugin (C32). Defining a kind twice names both plugins.
+     * ConfigError naming the plugin. Defining a kind twice names both plugins.
      */
-    it("should check entries against their kind's schema (C32)", async () => {
+    it("should check entries against their kind's schema", async () => {
         const harness = jsonSchema({ type: "object", required: ["id"], properties: { id: { type: "string" }, command: { type: "string", default: "claude" } } });
         const ok = makeEngine([
             plugin("plugin-harnesses", (sous) => sous.entities.define("harness", harness)),
@@ -276,9 +276,9 @@ describe("entities", () => {
 
     /**
      * Anything about an entity that depends on the config is a method, called after the build with a
-     * ctx holding the config; entity methods are timed (C34, L5).
+     * ctx holding the config; entity methods are timed.
      */
-    it("should let entity methods read the built config through ctx (C34)", async () => {
+    it("should let entity methods read the built config through ctx", async () => {
         const { engine } = makeEngine([
             keysPlugin("tools"),
             plugin("plugin-claude-code", (sous) => {

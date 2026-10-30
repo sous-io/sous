@@ -1,7 +1,7 @@
 import type { JsonObject, TimingCategory } from "@sous-io/plugin-api";
 
 /**
- * The default budget of every timing category, in milliseconds (L5). These are first guesses; S1
+ * The default budget of every timing category, in milliseconds. These are first guesses; core
  * says they are set from measurements during the refactor. A test fails when a category has none.
  */
 export const DEFAULT_BUDGETS: Readonly<Record<TimingCategory, number>> = Object.freeze({
@@ -25,7 +25,7 @@ export type Budget = number | false;
 
 /**
  * Looks budgets up: `budgets."<category>:<name>"` first, then `budgets."<category>"`, then the
- * default (C50).
+ * default.
  *
  * ```jsonc
  * "budgets": {

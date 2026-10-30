@@ -6,7 +6,7 @@ export function formatPath(path: readonly PathSegment[]): string {
 }
 
 /**
- * A config expression that fails the load (S5, "Errors"): a `ConfigError` naming the key path in
+ * A config expression that fails the load: a `ConfigError` naming the key path in
  * its message and the file in its first detail line.
  */
 export class ExpressionError extends ConfigError {

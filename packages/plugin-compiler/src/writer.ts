@@ -1,7 +1,7 @@
 /**
- * Writing outputs (S6, `compiler.writer`): the one way any plugin writes a build output. A file the
+ * Writing outputs: the one way any plugin writes a build output. A file the
  * compiler did not write is overwritten and taken over, unless `compilation.overwriteUntracked` is
- * `false` (C58). Every write is recorded in the state file.
+ * `false`. Every write is recorded in the state file.
  */
 
 import fs from "node:fs";

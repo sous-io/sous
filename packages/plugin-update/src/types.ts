@@ -1,8 +1,8 @@
 /**
- * The contract of plugin-update (S6, "Project setup and updates"): updating sous itself
+ * The contract of plugin-update: updating sous itself
  * (`sous update`), installing plugins a recipe requires (`plugins.install`, `--install-plugins`),
  * the `package-manager` entity, and the `update.scan` contributor, which adds installed plugins to
- * the `plugins` key when `plugins.discover` is `scan` (S1, "Loading"; C5).
+ * the `plugins` key when `plugins.discover` is `scan`.
  *
  * Package managers only describe and plan; plugin-update runs every command, through
  * `host.processes`. Other plugins import this file type-only.

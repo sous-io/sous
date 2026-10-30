@@ -25,7 +25,7 @@ export interface CliRunOptions {
 }
 
 /**
- * Runs one command line (S1, "Front Ends"): parses argv against the command tree, then shows help,
+ * Runs one command line: parses argv against the command tree, then shows help,
  * prints the version, or submits the intent as a chain with a terminal reporter and prompter and
  * prints its result. Errors become `Error: ` lines on standard error and an exit code.
  */
@@ -186,7 +186,7 @@ function versionArgv(argv: readonly string[], tree: CommandTree): readonly strin
     return argv;
 }
 
-/** The threshold `--debug` and `--log-level` ask for (C61); `--debug` means `--log-level debug`. */
+/** The threshold `--debug` and `--log-level` ask for; `--debug` means `--log-level debug`. */
 export function thresholdOf(globals: Readonly<Record<string, unknown>>): LogLevel {
     if (globals.debug === true) {
         return "debug";

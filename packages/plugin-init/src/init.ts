@@ -4,8 +4,8 @@
  * the sous-managed ignore block), then runs the first build through the one build path, which is
  * what seeds the `core` recipe and pins it in the lockfile.
  *
- * Every question has a flag (L4): setting a project up inside another one is answered by `yes`.
- * Nothing prints or prompts directly (L3).
+ * Every question has a flag: setting a project up inside another one is answered by `yes`.
+ * Nothing prints or prompts directly.
  */
 
 import path from "node:path";

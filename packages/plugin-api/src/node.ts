@@ -1,7 +1,7 @@
 import type { JsonValue, PathInput, PathSegment, ValueType } from "./json.js";
 
 /**
- * One place in a document, or in the config while it is built: the operations S2 lists in "The
+ * One place in a document, or in the config while it is built: the operations listed in "The
  * Document-Editing Package". Inspecting methods read the value (the config builder records each
  * read); every change becomes primitive patches.
  *
@@ -49,7 +49,7 @@ export interface DocumentNode {
 
     /** Sets the value here. `undefined` deletes it. Never reads. */
     set(value: unknown): void;
-    /** The same as {@link set}, under the name the S2 examples use. */
+    /** The same as {@link set}, under the name the examples use. */
     setValue(value: unknown): void;
     /** Deletes the value here. Never reads. */
     delete(): void;
@@ -64,7 +64,7 @@ export interface DocumentNode {
 
     /** Appends an item, creating the array when missing. Never reads. */
     append(item: unknown): void;
-    /** The same as {@link append}, under the name the S2 examples use. */
+    /** The same as {@link append}, under the name the examples use. */
     appendValue(item: unknown): void;
     /** Inserts an item first. Never reads. */
     prepend(item: unknown): void;
@@ -87,7 +87,7 @@ export interface DocumentNode {
 
     /**
      * Runs a helper of your own: the primitives it makes are grouped in a patch set with this name
-     * and this node's path, so `--layers` shows them under it (C75).
+     * and this node's path, so `--layers` shows them under it.
      */
     patchSet(name: string, helper: (node: DocumentNode) => void): void;
 }

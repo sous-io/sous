@@ -4,7 +4,7 @@ import { toKebab } from "./words.js";
 /** How a flag's value is read from the command line. */
 export type ValueKind = "boolean" | "string" | "number" | "integer" | "json";
 
-/** One flag of a command, generated from one field of its input schema (L4: every input is a flag). */
+/** One flag of a command, generated from one field of its input schema (every input is a flag). */
 export interface FlagSpec {
     /** The input field it sets. */
     readonly field: string;

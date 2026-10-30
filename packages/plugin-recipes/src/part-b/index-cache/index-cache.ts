@@ -1,5 +1,5 @@
 /**
- * The index cache (S6, `recipes.index-cache`): one copy of each repository's `sous.index.json`
+ * The index cache: one copy of each repository's `sous.index.json`
  * under `$SOUS_HOME/cache/_indexes/<identity>.json`, beside a sidecar recording when it was
  * fetched and checked. A failed upstream check never breaks a build: when a cached copy exists it
  * is used, marked `stale`.

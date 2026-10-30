@@ -1,7 +1,7 @@
 /**
- * The contract of plugin-liquid (S6, "Shared building blocks"): building a configured LiquidJS
- * engine with every tag and filter plugins add (C36). The compiler renders templates with it, and
- * config expressions evaluate with it (S5).
+ * The contract of plugin-liquid: building a configured LiquidJS
+ * engine with every tag and filter plugins add. The compiler renders templates with it, and
+ * config expressions evaluate with it.
  *
  * Other plugins import this file type-only.
  */
@@ -31,7 +31,7 @@ export interface LiquidExtensionContext {
 /** Why an engine is built. */
 export type LiquidPurpose = "config-expression" | "template" | (string & {});
 
-/** A `liquid-tag` entity: a Liquid tag any plugin adds (C36). */
+/** A `liquid-tag` entity: a Liquid tag any plugin adds. */
 export interface LiquidTagEntity {
     /** The tag's name, as written in `{% name %}`. */
     id: string;
@@ -43,7 +43,7 @@ export interface LiquidTagEntity {
     tag(ctx: LiquidExtensionContext): LiquidTagImplementation;
 }
 
-/** A `liquid-filter` entity: a Liquid filter any plugin adds; config expressions see it too (S6, ruled 2026-10-29). */
+/** A `liquid-filter` entity: a Liquid filter any plugin adds; config expressions see it too. */
 export interface LiquidFilterEntity {
     /** The filter's name, as written after `|`. */
     id: string;
@@ -72,7 +72,7 @@ export interface LiquidEngineOptions {
     liquid?: Omit<LiquidOptions, "fs" | "root">;
 }
 
-/** Building configured LiquidJS engines (S6, `liquid.engine`). */
+/** Building configured LiquidJS engines. */
 export interface LiquidEngines {
     /** A new engine with every tag and filter the entities add. */
     create(options?: LiquidEngineOptions): Liquid;

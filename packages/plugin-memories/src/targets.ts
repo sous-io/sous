@@ -1,7 +1,7 @@
 /**
- * The `memories.targets` contributor (S6, "Memories: plugin-memories"): one `content` compilation
- * target per `memory-target` entity (C6, C43), and a `pointer-file` entity for every memory target
- * read in any directory (C44).
+ * The `memories.targets` contributor: one `content` compilation
+ * target per `memory-target` entity, and a `pointer-file` entity for every memory target
+ * read in any directory.
  *
  * The order is: the active recipes' memories, the config's selection, the target's `filter()`, then
  * its `format()`. Sous does not report what a filter left out; a plugin that wants the user to know

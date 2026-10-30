@@ -1,6 +1,5 @@
 /**
- * Browsing namespaces and recipes (S6, `catalog.list`, `catalog.show`; the contract names them
- * `namespace.list`, `namespace.show`, `recipe.list` and `recipe.show`, the commands users type).
+ * Browsing namespaces and recipes.
  * Each returns plain data; `plugin-cli` shows it. Nothing is downloaded unless `--latest` is given.
  */
 

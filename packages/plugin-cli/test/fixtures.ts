@@ -1,7 +1,7 @@
 import { definePlugin, jsonSchema } from "@sous-io/plugin-api";
 import { z } from "zod";
 
-/** The S1 example: `namespace.list` with aliases across groups and a positional argument. */
+/** The example: `namespace.list` with aliases across groups and a positional argument. */
 export const namespacesPlugin = definePlugin({
     name: "sous-plugin-namespaces",
     version: "1.0.0",
@@ -65,7 +65,7 @@ export const reposPlugin = definePlugin({
     },
 });
 
-/** A plugin adding its own global argument (C69), read back through ctx.globals. */
+/** A plugin adding its own global argument, read back through ctx.globals. */
 export const verbosePlugin = definePlugin({
     name: "sous-plugin-verbose",
 
@@ -100,7 +100,7 @@ export const loudPlugin = definePlugin({
     },
 });
 
-/** An intent that asks a question, answerable by a flag (L4). */
+/** An intent that asks a question, answerable by a flag. */
 export const askingPlugin = definePlugin({
     name: "sous-plugin-asking",
 

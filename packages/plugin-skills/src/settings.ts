@@ -1,5 +1,5 @@
 /**
- * The `recipes.skills` config key (C57): where the user's skills go, and where their own skills come
+ * The `recipes.skills` config key: where the user's skills go, and where their own skills come
  * from.
  */
 

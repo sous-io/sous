@@ -1,5 +1,5 @@
 /**
- * The answers a build uses (S6, `recipe-answers.answers`).
+ * The answers a build uses.
  *
  * A recipe publishes variable definitions; the shell and the env files hold the answers; the
  * ladder says which answer a definition gets. This turns them into the variable scopes templates

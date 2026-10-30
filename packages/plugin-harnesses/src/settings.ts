@@ -13,7 +13,7 @@ export const TOOLS_KEY = "tools";
 /** What the user may have written for one tool: `command` can be left out for a tool a plugin knows. */
 export type PartialToolSettings = Partial<ToolSettings>;
 
-/** The `tools` config key (C56). */
+/** The `tools` config key. */
 export const toolsKeySchema = jsonSchema<Record<string, PartialToolSettings>>({
     type: "object",
     additionalProperties: {

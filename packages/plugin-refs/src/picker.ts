@@ -7,7 +7,7 @@
  *
  *   - one match proceeds, and what it resolved to is reported;
  *   - several matches are offered through the chain's prompter;
- *   - `--accept-first` takes the first one in the listing order (L4);
+ *   - `--accept-first` takes the first one in the listing order;
  *   - a run that cannot ask fails, naming the question and the flag that answers it.
  */
 

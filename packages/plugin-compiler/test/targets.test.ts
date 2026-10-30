@@ -1,7 +1,7 @@
 /**
  * Compilation targets as the config holds them: entry globs and aliases (ported from today's
  * `entry-glob-aliases.test.ts`), `_if` and `${var}` in outputs (from `resolveCompilation()` in
- * today's `settings.spec.ts`), `content` targets a plugin adds (C6), transforms (C42), choosing
+ * today's `settings.spec.ts`), `content` targets a plugin adds, transforms, choosing
  * targets, and watch mode's partial rebuild.
  */
 
@@ -214,7 +214,7 @@ describe("outputs", () => {
     });
 });
 
-describe("content targets (C6)", () => {
+describe("content targets", () => {
     /** A plugin adds a target whose source is a template string; it renders and its includes resolve. */
     it("should compile a content target a plugin adds", async () => {
         project = makeProject();
@@ -278,7 +278,7 @@ describe("content targets (C6)", () => {
     });
 });
 
-describe("compilation transforms (C42)", () => {
+describe("compilation transforms", () => {
     /** A target's and an output's transforms run in order, and may move or drop a file. */
     it("should apply the target's transforms, then the output's", async () => {
         project = makeProject();

@@ -7,7 +7,7 @@ import { ConfigError, type EntityReader } from "@sous-io/plugin-api";
 import type { CanonicalRepository, RefLocation, RefsLocations, RepositoryLocator } from "../types.js";
 import { repositoryIdentity, shortNameFromIdentity } from "./identity.js";
 
-/** The entity kind hosts are, defined by plugin-recipes. Reading it needs no dependency (S6). */
+/** The entity kind hosts are, defined by plugin-recipes. Reading it needs no dependency. */
 export const REPOSITORY_HOST_KIND = "repository-host";
 
 /** Schemes that are ordinary URLs rather than a host's own locator scheme. */

@@ -2,7 +2,7 @@
  * The views of plugin-inspect's intents (`config show`, `config get`, `config validate`,
  * `plugins show`, `timings show`) and of `version`. Ported from today's `src/commands/config/*.ts`,
  * `src/lib/config-inspect.ts` and `src/lib/version-report.ts`; `--layers` and `plugins show` follow
- * S2 ("What `sous config show` and `get` Print") and S1 ("Visibility").
+ * The output of `sous config show`, `get` and `plugins show`.
  */
 
 import os from "node:os";
@@ -186,7 +186,7 @@ const REGISTRATION_LABELS: Readonly<Record<string, string>> = {
 const PLUGIN_LABEL_WIDTH = 17;
 
 /**
- * `sous plugins show`: every plugin, and what it registered, wrapped or replaced (S1, "Visibility").
+ * `sous plugins show`: every plugin, and what it registered, wrapped or replaced.
  *
  * ```text
  * plugin-claude-code (built in)
@@ -307,7 +307,7 @@ function rawFiles(out: Printer, files: readonly RawConfigFile[]): void {
 
 /**
  * `config show --layers`: each contributor, then the helpers around each change and the change
- * itself, indented under them (S2, "Patches", 6).
+ * itself, indented under them.
  *
  * ```text
  * confd/620-no-diagrams.js

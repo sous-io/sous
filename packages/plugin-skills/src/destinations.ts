@@ -1,6 +1,6 @@
 /**
  * Where skills go: every `skill-target` entity, and every directory in `recipes.skills.outputs`,
- * both together (C42, C57). There is no default: with neither, skills go nowhere (G8).
+ * both together. There is no default: with neither, skills go nowhere.
  */
 
 import path from "node:path";

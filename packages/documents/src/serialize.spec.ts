@@ -8,11 +8,11 @@ import type { PatchSet } from "./types.js";
 describe("serializePatchSet()", () => {
     /**
      * Any patch set should serialize to JSON and back unchanged, so it can be saved, sent,
-     * previewed and applied later (C76).
+     * previewed and applied later.
      *
      * deserializePatchSet(serializePatchSet(set));   // deeply equal to set
      */
-    it("should round-trip a contributor's patch set through JSON (C76)", () => {
+    it("should round-trip a contributor's patch set through JSON", () => {
         const doc = createDocument({ compilation: { targets: [{ id: "a" }, { id: "diagrams" }] } });
 
         doc.atPath("compilation.targets").removeWhere((target) => target.id === "diagrams");
@@ -101,9 +101,9 @@ describe("parsePatch()", () => {
 
 describe("parsePatchFile()", () => {
     /**
-     * A .patch.json file with a single `$patches` key should hold several patches (C77, S2 example).
+     * A .patch.json file with a single `$patches` key should hold several patches.
      */
-    it("should read several patches under $patches (C77)", () => {
+    it("should read several patches under $patches", () => {
         const text = `// .sous/conf.d/720-my-special-thing.patch.json: several patches, so a single $patches key
 {
     "$patches": [
@@ -123,9 +123,9 @@ describe("parsePatchFile()", () => {
     });
 
     /**
-     * A .patch.json file without `$patches` should hold one patch (C77).
+     * A .patch.json file without `$patches` should hold one patch.
      */
-    it("should read one patch (C77)", () => {
+    it("should read one patch", () => {
         const text = '{ "op": "setKey", "path": "_vars", "key": "machineRole", "value": "laptop" }';
         const set: PatchSet = parsePatchFile(text, "json", "confd/722-one-thing.patch.json");
 
@@ -133,9 +133,9 @@ describe("parsePatchFile()", () => {
     });
 
     /**
-     * A .patch.jsonl file should hold one patch per line, skipping blank and `//` lines (C77).
+     * A .patch.jsonl file should hold one patch per line, skipping blank and `//` lines.
      */
-    it("should read one patch per line (C77)", () => {
+    it("should read one patch per line", () => {
         const text = `// .sous/conf.d/721-my-list-of-things.patch.jsonl: one patch per line
 {"op": "insertAt", "path": "compilation.targets", "index": 0, "value": {"id": "first", "entryPoint": "a.tpl.md"}}
 

@@ -6,11 +6,11 @@ import { contributorsPlugin, keysPlugin, makeEngine, plugin, userKeys } from "./
 describe("the config loop", () => {
     /**
      * A contributor is given the config made from every other contributor's latest patch, never its
-     * own, and may read its own previous patch set (S2, "The Builder", rule 3; C2).
+     * own, and may read its own previous patch set.
      *
      * a sets x=1; b reads x and sets y=x+1; a sees only y, never its own x.
      */
-    it("should give each contributor the others' latest patches without its own (C2)", async () => {
+    it("should give each contributor the others' latest patches without its own", async () => {
         const seenByA: unknown[] = [];
         const previous: Array<PatchSet | undefined> = [];
         const { engine } = makeEngine([
@@ -42,9 +42,9 @@ describe("the config loop", () => {
 
     /**
      * Patches are applied from an empty config on every pass, each contributor's latest once, so an
-     * append is never doubled however often the contributor re-runs (S2, "The Loop", rule 2).
+     * append is never doubled however often the contributor re-runs.
      */
-    it("should never double an append when a contributor re-runs (S2 rule 2)", async () => {
+    it("should never double an append when a contributor re-runs", async () => {
         let runs = 0;
         const { engine } = makeEngine([
             keysPlugin("list", "flag"),
@@ -71,9 +71,9 @@ describe("the config loop", () => {
 
     /**
      * A contributor re-runs only when a key it read has changed since its last run; the others keep
-     * their stored patches (S2, rule 4).
+     * their stored patches.
      */
-    it("should re-run a contributor only when a key it read changed (S2 rule 4)", async () => {
+    it("should re-run a contributor only when a key it read changed", async () => {
         const runs: Record<string, number> = { reader: 0, other: 0 };
         const { engine } = makeEngine([
             keysPlugin("a", "b", "c"),
@@ -105,9 +105,9 @@ describe("the config loop", () => {
 
     /**
      * A config whose contributors read nothing that later changes settles after one pass that does
-     * work (S2, "Speed").
+     * work.
      */
-    it("should settle in one working pass when nothing read changes (S2 Speed)", async () => {
+    it("should settle in one working pass when nothing read changes", async () => {
         const { engine } = makeEngine([
             keysPlugin("a", "b"),
             contributorsPlugin("p", [
@@ -123,9 +123,9 @@ describe("the config loop", () => {
     });
 
     /**
-     * `monitors` watches more than a contributor reads: a path, or an entity kind (C70).
+     * `monitors` watches more than a contributor reads: a path, or an entity kind.
      */
-    it("should re-run a contributor when something it monitors changes (C70)", async () => {
+    it("should re-run a contributor when something it monitors changes", async () => {
         let runs = 0;
         const { engine } = makeEngine([
             keysPlugin("watched", "out"),
@@ -152,7 +152,7 @@ describe("the config loop", () => {
 
     /**
      * A contributor reading the entity list re-runs when the list changes; a contributor reading one
-     * entity re-runs only when that entity changes, not when another id appears (S2, rule 4).
+     * entity re-runs only when that entity changes, not when another id appears.
      */
     it("should re-run list readers on any change but narrow readers only for their own id", async () => {
         const runs = { list: 0, narrow: 0 };
@@ -234,9 +234,9 @@ describe("the config loop", () => {
     /**
      * A contributor that applies data with one merge at the root reads the whole tree, so any change by
      * anyone re-runs it; declared `after: ["*"]`, as the user's files are, its patch lands on top
-     * (C66, C70).
+     *.
      */
-    it("should re-run a root merge after any change and land it on top (C66)", async () => {
+    it("should re-run a root merge after any change and land it on top", async () => {
         let runs = 0;
         const { engine } = makeEngine([
             keysPlugin("a", "b"),
@@ -261,11 +261,11 @@ describe("the config loop", () => {
     });
 
     /**
-     * The S2 worked example: a recipe plugin turns source comments on; the project's sous.config.js
+     * The the example: a recipe plugin turns source comments on; the project's sous.config.js
      * turns them off. The user's file re-runs after the plugin's change, so the result is false; in a
-     * project whose files don't set it, it is true (C74).
+     * project whose files don't set it, it is true.
      */
-    it("should let the user's file win over a plugin's value (S2 acme example, C74)", async () => {
+    it("should let the user's file win over a plugin's value", async () => {
         const acme = contributorsPlugin("sous-plugin-acme-standards", [
             {
                 id: "acme",
@@ -287,11 +287,11 @@ describe("the config loop", () => {
     });
 
     /**
-     * The S2 conf.d example: the sous.config.* contributor comes first, and each conf.d contributor
+     * The the example: the sous.config.* contributor comes first, and each conf.d contributor
      * names the file before it, so files apply in file order, merged key by key: 610's override
      * changes one field and every 510 field survives.
      */
-    it("should apply conf.d files in file order, key by key (S2 conf.d example)", async () => {
+    it("should apply conf.d files in file order, key by key (the example)", async () => {
         const files: Array<{ name: string; data: Record<string, unknown> }> = [
             {
                 name: "500-repos.jsonc",
@@ -370,10 +370,10 @@ describe("the config loop", () => {
     });
 
     /**
-     * The S2 diagrams example: a contributor reads its own key's value (default from its schema at
-     * check time) and appends a compilation target; the schema fills the defaults (C1, C4, C71).
+     * The the example: a contributor reads its own key's value (default from its schema at
+     * check time) and appends a compilation target; the schema fills the defaults.
      */
-    it("should run the S2 diagrams plugin (C1, C4, C71)", async () => {
+    it("should run a contributor that reads its own key", async () => {
         const { jsonSchema } = await import("@sous-io/plugin-api");
         const diagrams = plugin("sous-plugin-diagrams", (sous) => {
             sous.entities.add("config-key", {
@@ -410,11 +410,11 @@ describe("the config loop", () => {
     });
 
     /**
-     * The S2 worked example of plugins loading inside the loop: a recipes-like contributor adds a
+     * The the example of plugins loading inside the loop: a recipes-like contributor adds a
      * plugin to plugins.load; it loads after the pass and adds a skill-target; the skills contributor
-     * re-runs in pass 2 because the skill-target list it read changed (C5).
+     * re-runs in pass 2 because the skill-target list it read changed.
      */
-    it("should load a listed plugin after the pass and re-run readers of its entities (S2 codex example, C5)", async () => {
+    it("should load a listed plugin after the pass and re-run readers of its entities", async () => {
         const skillsRuns: string[][] = [];
         const codex = plugin("sous-plugin-codex", (sous) => {
             sous.entities.add("skill-target", { id: "codex" });
@@ -451,10 +451,10 @@ describe("the config loop", () => {
     });
 
     /**
-     * Contributors may apply raw patches, as patch files hold them (C77), and a contributor's patch set
-     * serializes to JSON and back (C76).
+     * Contributors may apply raw patches, as patch files hold them, and a contributor's patch set
+     * serializes to JSON and back.
      */
-    it("should apply raw patches and round-trip a contributor's patch set through JSON (C76, C77)", async () => {
+    it("should apply raw patches and round-trip a contributor's patch set through JSON", async () => {
         const { engine } = makeEngine([
             keysPlugin("compilation", "tools", "_vars"),
             contributorsPlugin("p", [
@@ -490,9 +490,9 @@ describe("the config loop", () => {
 
     /**
      * layers() lists every change to a path in order, with its contributor and the helper patch sets
-     * around each primitive (C53, C78).
+     * around each primitive.
      */
-    it("should list each layer of a value with its helper and primitive (C53, C78)", async () => {
+    it("should list each layer of a value with its helper and primitive", async () => {
         const { engine } = makeEngine([
             keysPlugin("compilation"),
             contributorsPlugin("p", [
@@ -524,9 +524,9 @@ describe("the config loop", () => {
     });
 
     /**
-     * Entities a contributor adds are part of its patch: a re-run replaces them (C33).
+     * Entities a contributor adds are part of its patch: a re-run replaces them.
      */
-    it("should replace a contributor's entities when it re-runs (C33)", async () => {
+    it("should replace a contributor's entities when it re-runs", async () => {
         const { engine } = makeEngine([
             keysPlugin("n"),
             plugin("p", (sous) => {
@@ -570,9 +570,9 @@ describe("the config loop", () => {
 
     /**
      * Two contributors that keep undoing each other never settle; the error names the value that kept
-     * changing, who read it and wrote it, and the values it alternated between (S2, rule 7).
+     * changing, who read it and wrote it, and the values it alternated between.
      */
-    it("should stop with a LoopError naming the values that kept changing (S2 rule 7)", async () => {
+    it("should stop with a LoopError naming the values that kept changing", async () => {
         const { engine } = makeEngine([
             keysPlugin("flip"),
             contributorsPlugin("p", [
@@ -597,9 +597,9 @@ describe("the config loop", () => {
     });
 
     /**
-     * The number of passes a stage may take comes from limits.configPasses (C51).
+     * The number of passes a stage may take comes from limits.configPasses.
      */
-    it("should take the pass limit from limits.configPasses (C51)", async () => {
+    it("should take the pass limit from limits.configPasses", async () => {
         const { engine } = makeEngine([
             keysPlugin("counter"),
             contributorsPlugin("p", [
@@ -620,7 +620,7 @@ describe("the config loop", () => {
     });
 
     /**
-     * A patch that cannot be applied is skipped and reported as a warning naming its contributor (L6).
+     * A patch that cannot be applied is skipped and reported as a warning naming its contributor.
      */
     it("should report a patch that could not be applied as a warning", async () => {
         const { engine, reporter } = makeEngine([
@@ -635,7 +635,7 @@ describe("the config loop", () => {
 
     /**
      * Reading sous.entities directly while the config is built warns, since the contributor would not
-     * re-run when they change (S2, "The Builder", rule 6).
+     * re-run when they change.
      */
     it("should note, at the debug level, when a contributor reads sous.entities directly", async () => {
         const { engine, reporter } = makeEngine([
@@ -651,7 +651,7 @@ describe("the config loop", () => {
     });
 
     /**
-     * Contributor logs go through the engine's reporter, prefixed with the contributor id (L3), and
+     * Contributor logs go through the engine's reporter, prefixed with the contributor id, and
      * the builder exposes the project, the environment and its own plugin options.
      */
     it("should give a contributor its info, options, project and environment", async () => {
@@ -695,9 +695,9 @@ describe("the config loop", () => {
     /**
      * Every change goes through the builder and is recorded as primitives, in one patch set named
      * for the contributor; a helper's primitives are grouped under its name, and removeWhere removes
-     * from the highest index down. The builder has no setDefault (S2, "Patches"; "No setDefault").
+     * from the highest index down. The builder has no setDefault.
      */
-    it("should record changes as primitives in a patch set named for the contributor (S2 Patches)", async () => {
+    it("should record changes as primitives in a patch set named for the contributor", async () => {
         let hasSetDefault: boolean | undefined;
         const { engine } = makeEngine([
             keysPlugin("compilation"),
@@ -740,9 +740,9 @@ describe("the config loop", () => {
 
     /**
      * Patch files (a .patch.json with one patch, one with a single $patches key, and a .patch.jsonl
-     * with one patch per line) are contributors whose operations come from the file (C77).
+     * with one patch per line) are contributors whose operations come from the file.
      */
-    it("should apply the three patch-file forms through the builder (C77)", async () => {
+    it("should apply the three patch-file forms through the builder", async () => {
         const files = [
             ["720-my-special-thing.patch.json", "json", `{
     "$patches": [

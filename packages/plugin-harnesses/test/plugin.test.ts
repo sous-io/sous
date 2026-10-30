@@ -37,7 +37,7 @@ process.exit(${code});
 
 const lines = (log: string) => fs.readFileSync(log, "utf8").trim().split("\n").map((line) => JSON.parse(line) as { args: string[]; stdin: string });
 
-describe("the tools key and its contributor (C56, G8)", () => {
+describe("the tools key and its contributor", () => {
     it("adds a harness entity for a tool no plugin provides", async () => {
         const dir = tmp();
         const { engine } = await makeEngine(dir.path, [toolsConfig({ codex: { command: "codex" } })]);

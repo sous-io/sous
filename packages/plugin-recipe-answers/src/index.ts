@@ -2,7 +2,7 @@
  * plugin-recipe-answers: recipe variable definitions, the answer ladder, asking for answers,
  * answer files and variable mappings.
  *
- * S6, "Recipe answers: plugin-recipe-answers". The contract other plugins code against is
+ * The contract other plugins code against is
  * `./types.ts`.
  */
 

@@ -5,7 +5,7 @@ import { askingPlugin, loudPlugin, namespacesPlugin, reposPlugin, verbosePlugin 
 import { fakeIo, runCli } from "./helpers.js";
 
 describe("the CLI front end", () => {
-    describe("commands generated from intents (C8, C68)", () => {
+    describe("commands generated from intents", () => {
         /**
          * An intent's command words come from `cli.command`, and its flags and positional arguments
          * from its input schema; the handler gets the parsed input and the result is printed as JSON.
@@ -67,7 +67,7 @@ describe("the CLI front end", () => {
             }
         });
 
-        /** A hidden intent still runs; an internal one has no command at all (C9). */
+        /** A hidden intent still runs; an internal one has no command at all. */
         it("should run hidden commands and give internal intents no command", async () => {
             expect((await runCli([reposPlugin], ["repo", "secret"])).stdout).toBe("hidden ran\n");
 
@@ -153,7 +153,7 @@ describe("the CLI front end", () => {
         });
     });
 
-    describe("help (C8, C69)", () => {
+    describe("help", () => {
         /**
          * `sous --help` lists the top-level commands and groups, with each group's summary from its
          * `cli-group` entity, and the global flags from the `cli-global-argument` entities.
@@ -227,7 +227,7 @@ describe("the CLI front end", () => {
             expect(repo.stdout).toMatch(/repo add alternate\s+Add an alternate location/);
         });
 
-        /** `--help` never loads a lazy handler (G9). */
+        /** `--help` never loads a lazy handler. */
         it("should show help without loading a lazily loaded handler", async () => {
             let loaded = false;
             const plugin = definePlugin({
@@ -282,8 +282,7 @@ describe("the CLI front end", () => {
 
         /**
          * Two intents claiming the same words is an error naming both plugins, unless
-         * `cli.pick` picks one (S1: "Two intents claiming the same command or alias is an error
-         * naming both plugins").
+         * `cli.pick` picks one.
          */
         it("should report an alias clash naming both plugins", async () => {
             const other = definePlugin({
@@ -303,7 +302,7 @@ describe("the CLI front end", () => {
         });
     });
 
-    describe("global arguments (C61, C69, C52)", () => {
+    describe("global arguments", () => {
         /** A plugin's own global argument is accepted before or after the command words and reaches ctx.globals. */
         it("should pass plugin-added global arguments to the handler", async () => {
             const before = await runCli([verbosePlugin], ["--verbose", "show", "globals"]);
@@ -368,7 +367,7 @@ describe("the CLI front end", () => {
         });
     });
 
-    describe("prompts (L4, C46)", () => {
+    describe("prompts", () => {
         /** Without a terminal the question fails with NonInteractiveError naming the flag that answers it. */
         it("should fail a question it cannot ask, naming the flag", async () => {
             const run = await runCli([askingPlugin], ["prune"]);

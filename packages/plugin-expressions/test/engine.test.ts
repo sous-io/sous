@@ -1,5 +1,5 @@
 /**
- * Expressions inside the real config loop (S2, "Config expressions are part of the same loop"):
+ * Expressions inside the real config loop:
  * each file's contributor evaluates its data before merging it, every variable read re-runs the
  * file when it changes, a filter added later re-runs it, and what is still unknown once the config
  * settles fails the build.
@@ -59,7 +59,7 @@ function engineWith(...plugins: PluginDefinition[]) {
 }
 
 describe("expressions in the config loop", () => {
-    it("re-runs a file when a variable it read is set by a later file (S2's machineRole example)", async () => {
+    it("re-runs a file when a variable it read is set by a later file (the machineRole example)", async () => {
         const runs: Record<string, number> = {};
         const engine = engineWith(
             filesPlugin(

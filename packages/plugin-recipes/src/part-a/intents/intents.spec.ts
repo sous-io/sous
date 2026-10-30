@@ -182,8 +182,8 @@ const pinned: Lockfile = {
     },
 };
 
-describe("subscription.disable and subscription.enable (C59)", () => {
-    /** Disabling overwrites only `enabled` in conf.d/510, keeping every other field (S2). */
+describe("subscription.disable and subscription.enable", () => {
+    /** Disabling overwrites only `enabled` in conf.d/510, keeping every other field. */
     it("should switch a subscription off, keeping its other fields and its pins", async () => {
         const { config, managed, lock } = setup({
             data: { repos: { r: { url: "https://github.com/acme/r" } }, subscriptions: { "workflow/task-files": { range: "^1.0.0" } } },
@@ -218,7 +218,7 @@ describe("subscription.disable and subscription.enable (C59)", () => {
         expect(result).toMatchObject({ changed: false, followUps: [{ intent: "build", skipped: "nothing changed" }] });
     });
 
-    /** A layer after 510 still wins; sous says so and lets it (L6). */
+    /** A layer after 510 still wins; sous says so and lets it. */
     it("should warn when a later layer sets enabled", async () => {
         const { config } = setup({
             data: { repos: {}, subscriptions: { workflow: { enabled: false } } },
@@ -343,7 +343,7 @@ describe("subscription.add", () => {
         expect(ctx.run).not.toHaveBeenCalled();
     });
 
-    /** Without --yes and with no way to ask, it fails naming --yes (L4). */
+    /** Without --yes and with no way to ask, it fails naming --yes. */
     it("should need --yes when it cannot ask", async () => {
         const { config } = setup();
 
@@ -387,7 +387,7 @@ describe("subscription.list", () => {
     });
 });
 
-describe("recipe.update and subscription.update (C60)", () => {
+describe("recipe.update and subscription.update", () => {
     const data = { repos: { r: { url: "https://github.com/acme/r" } }, subscriptions: { "workflow/task-files": {}, core: { range: "0.2.34", addedBy: "sous" }, gone: { enabled: false } } };
 
     /** A plan says what the lockfile would become, writing nothing. */

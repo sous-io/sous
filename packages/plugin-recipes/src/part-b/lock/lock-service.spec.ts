@@ -134,7 +134,7 @@ describe("LockService.fromResolved", () => {
         expect(next.repos.acme).toMatchObject({ url: URL, identity: IDENTITY });
     });
 
-    it("should keep the pins of a subscription switched off on this machine (S4, 2; C59)", async () => {
+    it("should keep the pins of a subscription switched off on this machine", async () => {
         const { lock } = await lockService(config({ "workflow/alpha": { enabled: false }, "workflow/beta": {} }));
         const next = lock.fromResolved([resolvedBeta], pinned());
 

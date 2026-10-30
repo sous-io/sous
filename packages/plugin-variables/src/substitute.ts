@@ -1,5 +1,5 @@
 /**
- * `${name}` substitution: the one implementation (L2). Before the refactor there were two, in
+ * `${name}` substitution: the one implementation. Before the refactor there were two, in
  * `settings.ts` and `include-resolver.ts`.
  */
 

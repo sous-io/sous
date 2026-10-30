@@ -1,5 +1,5 @@
 /**
- * Hiding secrets (G4): everything about the config can be inspected except the values of secrets.
+ * Hiding secrets: everything about the config can be inspected except the values of secrets.
  * The secret policy is `variables.secrets` (declared secrets, secret-sounding names, token formats);
  * when that service is not there, a key is taken as a secret by its name alone.
  */

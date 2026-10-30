@@ -1,6 +1,6 @@
 /**
- * The `harnesses.tools` contributor (C56): adds a `harness` entity for each tool written under
- * `tools` that no plugin already provides, so such a tool launches with no plugin at all (G8).
+ * The `harnesses.tools` contributor: adds a `harness` entity for each tool written under
+ * `tools` that no plugin already provides, so such a tool launches with no plugin at all.
  */
 
 import type { ConfigBuilder, ContributorDefinition } from "@sous-io/plugin-api";

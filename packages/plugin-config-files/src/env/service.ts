@@ -1,5 +1,5 @@
 /**
- * `config-files.env`: reading and writing `.sous/.env` and `.sous/.env.local` (S6).
+ * `config-files.env`: reading and writing `.sous/.env` and `.sous/.env.local`.
  */
 
 import path from "node:path";
@@ -8,7 +8,7 @@ import { ENV_LOCAL_NAME, ENV_SHARED_NAME } from "../names.js";
 import type { ConfigFilesEnv, EnvFileChange, EnvFileKind, EnvFilePaths, EnvFileValues, EnvFileWriteOptions } from "../types.js";
 import { parseEnv, readEnvFile, readEnvFileMap, removeEntry, renderEnvFile, setEntry, writeEnvFile } from "./env-file.js";
 
-/** The env files of one project. Never reads `process.env`: the environment is given (S6, rule 6). */
+/** The env files of one project. Never reads `process.env`: the environment is given. */
 export class EnvFilesService implements ConfigFilesEnv {
     constructor(
         private readonly project: ProjectInfo | undefined,

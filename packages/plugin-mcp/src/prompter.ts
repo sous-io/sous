@@ -23,9 +23,9 @@ export interface ElicitationPrompterOptions {
 const FIELD = "answer";
 
 /**
- * A chain's questions as MCP elicitation (S6, `ElicitationPrompter`), so `sous vars ask` works the
+ * A chain's questions as MCP elicitation, so `sous vars ask` works the
  * same in a terminal and in an agent session. When the client cannot elicit, every question fails
- * with a `NonInteractiveError` naming the tool argument that answers it (L4). A declined or
+ * with a `NonInteractiveError` naming the tool argument that answers it. A declined or
  * cancelled form cancels the chain.
  *
  * ```ts

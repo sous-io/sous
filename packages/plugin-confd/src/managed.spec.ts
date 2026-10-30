@@ -203,7 +203,7 @@ describe("confd.managed", () => {
 
     /**
      * `sous subscription disable <ref>` overwrites the user's condition; adding another
-     * subscription keeps the user's lines as they are (S2's ruling).
+     * subscription keeps the user's lines as they are (the rule that a switched-off subscription keeps them).
      */
     it("should overwrite only the key it is asked to, keeping the user's other lines", async () => {
         seed(

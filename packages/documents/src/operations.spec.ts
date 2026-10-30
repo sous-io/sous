@@ -6,8 +6,8 @@ import { parseDocument, type TextDocument } from "./text-document.js";
 import type { DocumentFormat } from "./types.js";
 
 /**
- * Every node operation S2 lists ("The Document-Editing Package"), run on the same data in each
- * format (C72, C73). For each: the value is right, every change is a primitive patch, comments and
+ * Every node operation ("The Document-Editing Package"), run on the same data in each
+ * format. For each: the value is right, every change is a primitive patch, comments and
  * untouched lines survive, and an untouched file prints back byte for byte.
  */
 

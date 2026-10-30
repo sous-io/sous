@@ -3,7 +3,7 @@
  * manifest, one example recipe with a placeholder skill, an empty but valid index, a README, a
  * `CONTRIBUTING.md`, a `CLAUDE.md` and an `AGENTS.md`, and a `.gitignore`. The CI workflow and any other
  * host files come from the `repository-host` entity (`scaffoldFiles`), so nothing host-specific lives
- * here (G8).
+ * here.
  *
  * The scaffold is planned in memory, written, and read back with the very parsers sous reads a real
  * repository with; a scaffold sous cannot read is reported against the file it just wrote.

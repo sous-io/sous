@@ -1,7 +1,6 @@
 /**
- * `expressions.evaluator` (S6): evaluates every expression object in one config file's data,
- * inside that file's contributor and before its values go into its patch (S2, "Config expressions
- * are part of the same loop"). Every variable an expression reads is read through the
+ * `expressions.evaluator`: evaluates every expression object in one config file's data,
+ * inside that file's contributor and before its values go into its patch. Every variable an expression reads is read through the
  * contributor's builder, so the file re-runs when one changes.
  */
 
@@ -47,7 +46,7 @@ export interface EvaluatorDeps {
 export interface Evaluator extends ExpressionsEvaluator {
     /**
      * Throws a `ConfigError` naming every expression still unknown once the config has settled
-     * (S5, "Errors" 6; unknown filters too). The next layer evaluated starts a new build's records.
+     *. The next layer evaluated starts a new build's records.
      */
     settle(): void;
 }
@@ -132,7 +131,7 @@ function names(list: readonly string[]): string {
     return list.join(", ");
 }
 
-/** A condition is true by Liquid's rules: only `false`, `undefined` and `null` are false (S5). */
+/** A condition is true by Liquid's rules: only `false`, `undefined` and `null` are false. */
 export function isTruthy(value: unknown): boolean {
     return value !== false && value !== undefined && value !== null;
 }
@@ -276,7 +275,7 @@ class LayerRun {
         return plan.otherwise ? this.chosen(plan.otherwise, path, levelVars) : undefined;
     }
 
-    /** A chosen value, evaluated the same way: it may be, or hold, expression objects (S5, "Nesting"). */
+    /** A chosen value, evaluated the same way: it may be, or hold, expression objects. */
     private chosen(written: WrittenValue, path: readonly PathSegment[], levelVars: VarScope): JsonValue | undefined {
         return this.walk(written.value, path, levelVars);
     }
@@ -324,7 +323,7 @@ class LayerRun {
         return language.evaluate(expression.source, { host: { platform: this.deps.platform ?? process.platform }, env: this.config.env, vars }, ctx);
     }
 
-    /** The language an expression names, checked (S5, "Expression Languages" 4 and 5). */
+    /** The language an expression names, checked. */
     private language(expression: ExpressionSource): ExpressionLanguageEntity {
         const id = expression.language ?? LIQUID_LANGUAGE;
         const languages = this.config.entities("expression-language");
@@ -352,7 +351,7 @@ class LayerRun {
     /**
      * The variables an expression sees: the root `_vars` (and `compilation._vars` under
      * `compilation`) of the config built so far, through `variables.resolver`, with the file's own
-     * `_vars` of every level containing the expression laid over them (S2, "Variable scopes").
+     * `_vars` of every level containing the expression laid over them.
      */
     private scope(path: readonly PathSegment[], levelVars: VarScope): VarScope {
         if (!this.deps.services.has("variables.resolver")) {
@@ -366,7 +365,7 @@ class LayerRun {
         return resolver.scopeIn(this.config, { level, extra: levelVars });
     }
 
-    /** Throws when an expression reads a variable its place forbids: recipe answers under `subscriptions` or `repos` (S2). */
+    /** Throws when an expression reads a variable its place forbids: recipe answers under `subscriptions` or `repos`. */
     private checkForbidden(variables: readonly string[], path: readonly PathSegment[]): void {
         const top = path[0];
 
@@ -402,7 +401,7 @@ function forbiddenProblem(name: string, source: VariableSourceEntity): string {
     return `reads ${name}, which comes from ${source.description}. An expression under ${under} cannot read ${source.description}.`;
 }
 
-/** Whether a path is one of the four `_vars` levels (S2): root, compilation, a target, an output. */
+/** Whether a path is one of the four `_vars` levels: root, compilation, a target, an output. */
 function isScopeLevel(path: readonly PathSegment[]): boolean {
     if (path.length === 0) {
         return true;
@@ -455,8 +454,7 @@ export function toJson(value: unknown): JsonValue | undefined {
 }
 
 /**
- * Entities as a contributor sees them, read through its builder so each read is recorded (S2,
- * "The Builder" 6). It never reads `sous.entities`, which sous warns about during a build.
+ * Entities as a contributor sees them, read through its builder so each read is recorded. It never reads `sous.entities`, which sous warns about during a build.
  */
 function builderEntities(config: ConfigBuilder): EntityReader {
     const reader = {

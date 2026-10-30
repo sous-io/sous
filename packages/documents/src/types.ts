@@ -3,7 +3,7 @@
  *
  * Every change to a document, in memory or on disk, is expressed as primitive
  * {@link Patch}es, grouped into named {@link PatchSet}s. Primitives are plain
- * JSON, so any set of changes serializes to JSON and back (S2, "Patches").
+ * JSON, so any set of changes serializes to JSON and back.
  *
  * The JSON, path and patch types are owned by `@sous-io/plugin-api` (plugins see them there);
  * this package re-exports them and adds the types only document editing needs.

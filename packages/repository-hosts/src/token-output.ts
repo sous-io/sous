@@ -1,5 +1,5 @@
 /**
- * The one check every token command's output passes (S4, "Token sources"): it exited `0` and
+ * The one check every token command's output passes: it exited `0` and
  * printed exactly one non-empty line holding no whitespace. Anything else (help text, a prompt, a
  * warning) is never taken as a token.
  */

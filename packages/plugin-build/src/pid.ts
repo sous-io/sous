@@ -30,7 +30,7 @@ export interface PidFileOptions {
 }
 
 /**
- * The watcher's PID file (S6, `build.pid`): one watcher per project. Its path is
+ * The watcher's PID file: one watcher per project. Its path is
  * `_vars.pidFilePath` when set, then `<sousDir>/sous.pid`, then `sous.pid` in the working directory.
  *
  * ```ts

@@ -1,7 +1,6 @@
 /**
  * Recipe answers as config variables: the `variable-source` entity (id `recipe-answers`), so
- * config expressions and templates read them without plugin-variables knowing recipes exist (S2,
- * "Variable scopes", "Recipe answers").
+ * config expressions and templates read them without plugin-variables knowing recipes exist.
  *
  * The entity is added by a contributor, since which recipes are active is known only while the
  * config is built (`active-recipe` entities); reading them re-runs the contributor whenever they

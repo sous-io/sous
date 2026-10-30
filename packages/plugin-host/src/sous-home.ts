@@ -26,7 +26,7 @@ export const GLOBAL_REPOS_DIR_NAME = "repos";
 /** File name of the machine-wide links map. */
 export const GLOBAL_LINKS_FILENAME = "sous.links.json";
 
-/** File name of the read-strategy record, under the store (S4). */
+/** File name of the read-strategy record, under the store. */
 export const READ_STRATEGIES_FILENAME = "read-strategies.json";
 
 /** Expands a leading `~` (`~` and `~/...`); `~user/...` is left alone. */

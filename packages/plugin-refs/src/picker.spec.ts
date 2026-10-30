@@ -58,7 +58,7 @@ describe("refs.picker pick()", () => {
     });
 
     /**
-     * Several matches are offered through the prompter, which names --accept-first (L4).
+     * Several matches are offered through the prompter, which names --accept-first.
      *
      * pick([first, second]) with a prompter answering second // -> second
      */
@@ -104,11 +104,11 @@ describe("refs.picker pick()", () => {
     });
 
     /**
-     * --accept-first takes the first match without asking, and says so (C46).
+     * --accept-first takes the first match without asking, and says so.
      *
      * pick([first, second], { acceptFirst: true }) // -> first
      */
-    it("should take the first match with --accept-first (C46)", async () => {
+    it("should take the first match with --accept-first", async () => {
         const reporter = new BufferedReporter();
         const prompter = scriptedPrompter([]);
         const chosen = await refs.picker.pick([first, second], { search: "formatter", acceptFirst: true }, { prompter, reporter });
@@ -139,7 +139,7 @@ describe("refs.picker pick()", () => {
     });
 
     /**
-     * A run that cannot ask fails, naming --accept-first and every candidate (L4).
+     * A run that cannot ask fails, naming --accept-first and every candidate.
      *
      * pick([first, second]) with no terminal // throws NonInteractiveError
      */

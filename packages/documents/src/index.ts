@@ -1,7 +1,6 @@
 /**
  * `@sous-io/documents`: surgical editing of JSON, JSONC and YAML documents, keeping comments, key
- * order and formatting, with every change expressed as primitive patches (S2, "The
- * Document-Editing Package"). The config builder is built on it.
+ * order and formatting, with every change expressed as primitive patches. The config builder is built on it.
  */
 export type * from "./types.js";
 export { parsePath, formatPath, isPathPrefix, pathsOverlap, PathSyntaxError } from "./path.js";

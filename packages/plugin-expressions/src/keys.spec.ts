@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { chainOrder, compareBytes, hasExpressions, isExpressionObject, isReservedKey, parseReservedKey } from "./keys.js";
 
 describe("reserved keys", () => {
-    it("are the exact list S5 gives", () => {
+    it("are the exact list of reserved keys", () => {
         for (const key of ["$expr", "$expr:liquid", "$if", "$if:a", "$elseif", "$elseif:b", "$else", "$if:", "$expr:"]) {
             expect(isReservedKey(key)).toBe(true);
         }

@@ -1,8 +1,8 @@
 /**
- * The contract of plugin-harnesses (S6, "Harnesses: plugin-harnesses"): the `harness` entity (one
+ * The contract of plugin-harnesses: the `harness` entity (one
  * per tool, with `launch`, `runHeadless` and `readTranscript` each optional; ruled 2026-10-29),
  * launching a harness after a build, headless runs, and the `tools` settings, for which the
- * `harnesses.tools` contributor adds a `harness` entity per tool no plugin provides (C41, C56).
+ * `harnesses.tools` contributor adds a `harness` entity per tool no plugin provides.
  *
  * Other plugins import this file type-only.
  */
@@ -63,7 +63,7 @@ export interface Transcript {
 }
 
 /**
- * A `harness` entity: the program that wraps a model, used interactively, headless, or both (C41).
+ * A `harness` entity: the program that wraps a model, used interactively, headless, or both.
  * Anything that depends on the config, such as a user's launch arguments, is read by the method when
  * it runs (`ctx.config.get("tools.<id>")`).
  */
@@ -80,7 +80,7 @@ export interface HarnessEntity {
     readTranscript?(run: HeadlessRun, ctx: Context): Transcript | Promise<Transcript>;
 }
 
-/** One tool under the `tools` config key: launchable with no plugin (C56). */
+/** One tool under the `tools` config key: launchable with no plugin. */
 export interface ToolSettings {
     /** The command. */
     command: string;

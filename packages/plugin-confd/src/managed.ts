@@ -1,6 +1,5 @@
 /**
- * `confd.managed`: surgical edits to the managed `conf.d/5xx` files (S2, "Sous's edits to the files
- * it manages are surgical").
+ * `confd.managed`: surgical edits to the managed `conf.d/5xx` files.
  *
  * The managed files sit in the 5xx range of `conf.d`, which sous writes rather than a person:
  * `500-repos.jsonc` (the repositories a project trusts), `510-subscriptions.jsonc` (what it
@@ -13,7 +12,7 @@
  * write, so a project never has both.
  *
  * Intents edit these files, never contributors; the engine rebuilds the config after the intent
- * (S2, "Sous always reads the built config"), so nothing reads a managed file back as config.
+ *, so nothing reads a managed file back as config.
  */
 
 import fs from "node:fs";

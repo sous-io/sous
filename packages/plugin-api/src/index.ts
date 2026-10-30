@@ -1,6 +1,6 @@
 /**
- * The plugin interface of sous (S3, "The Plugin Interface"): the one promise sous makes outside its
- * monorepo (G7). It holds `definePlugin`, the interfaces plugins add their types to, every public
+ * The plugin interface of sous: the one promise sous makes outside its
+ * monorepo. It holds `definePlugin`, the interfaces plugins add their types to, every public
  * type, the `Reporter` and `Prompter` interfaces and the error classes. Everything else a plugin
  * uses is handed to it in `register(sous)` and in each `ctx`.
  */

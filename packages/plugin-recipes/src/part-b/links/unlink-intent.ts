@@ -151,7 +151,7 @@ function assertRemovable(name: string, entry: ResolvedLink, scope: LinkScope, ru
     }
 }
 
-/** Asks once before deleting work that exists nowhere else; `--yes` answers ahead of time (L4). */
+/** Asks once before deleting work that exists nowhere else; `--yes` answers ahead of time. */
 async function confirmRemoval(checkoutPath: string, work: UnsavedWork, yes: boolean, ctx: Context): Promise<void> {
     if (hasNoUnsavedWork(work)) {
         return;

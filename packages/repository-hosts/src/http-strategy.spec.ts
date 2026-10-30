@@ -55,7 +55,7 @@ describe("httpReadStrategy()", () => {
     });
 
     /**
-     * A redirect to a sign-in page means the repository is private (S4, problem 1); other redirects
+     * A redirect to a sign-in page means the repository is private; other redirects
      * are followed.
      *
      * 302 Location: https://gitlab.com/users/sign_in -> "302 to sign-in page: the repository is private"

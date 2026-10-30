@@ -1,5 +1,5 @@
 /**
- * The owners plugin-authoring works through, gathered once per intent run (L1): the git runner, the
+ * The owners plugin-authoring works through, gathered once per intent run: the git runner, the
  * format parsers, the recipe hash, the ref services, the recipe declarations, the variable names and
  * the repository hosts. Every module takes this bundle instead of reaching for `ctx`, so a test hands
  * in stand-ins for plugins that are not written yet.

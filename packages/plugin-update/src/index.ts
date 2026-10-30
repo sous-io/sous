@@ -1,7 +1,7 @@
 /**
  * plugin-update: Updating sous itself, installing plugins a recipe requires, the package-manager entity, scanning for installed plugins.
  *
- * S6, "Project setup and updates: plugin-init, plugin-update". The contract other plugins code against is `./types.ts`.
+ * The contract other plugins code against is `./types.ts`.
  */
 
 import { definePlugin, jsonSchema, type PluginDefinition } from "@sous-io/plugin-api";

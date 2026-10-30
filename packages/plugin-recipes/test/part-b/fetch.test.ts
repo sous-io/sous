@@ -1,8 +1,8 @@
 /**
  * The `recipes.fetch`, `recipes.config-layers` and `recipes.plugins` contributors, end to end on a
- * real engine: downloading during config building (S2, "Downloads"), switched-off subscriptions
- * (S4, 3; C59), recipe config layers, recipe plugins loaded from one bundle (C39, C48), and their
- * `.d.ts` copied to `.sous/types/` (C40).
+ * real engine: downloading during config building, switched-off subscriptions
+ *, recipe config layers, recipe plugins loaded from one bundle, and their
+ * `.d.ts` copied to `.sous/types/`.
  */
 
 import fs from "node:fs";
@@ -119,7 +119,7 @@ describe("recipes.fetch", () => {
         expect(reporter.at("warning").join("\n")).toMatch(/Skipped workflow\/alpha/);
     });
 
-    it("should leave a recipe whose subscription is switched off on this machine inactive, keeping its pin (C59)", async () => {
+    it("should leave a recipe whose subscription is switched off on this machine inactive, keeping its pin", async () => {
         const { engine } = await startEngine({
             root,
             home,
@@ -181,14 +181,14 @@ describe("recipes.config-layers", () => {
 });
 
 describe("recipes.plugins", () => {
-    it("should load the plugin an active recipe ships as one bundle (C39, C48)", async () => {
+    it("should load the plugin an active recipe ships as one bundle", async () => {
         const { engine } = await startEngine({ root, home, data: userConfig(), hosts: [fakeHost([repo], calls)] });
 
         expect(engine.config.get("alphaLoaded")).toBe(true);
         expect(engine.handle.plugins().map((plugin) => plugin.name)).toContain("sous-plugin-alpha");
     });
 
-    it("should copy the recipe plugin's .d.ts into .sous/types with an index referencing it (C40)", async () => {
+    it("should copy the recipe plugin's .d.ts into .sous/types with an index referencing it", async () => {
         await startEngine({ root, home, data: userConfig(), hosts: [fakeHost([repo], calls)] });
 
         const types = path.join(root, ".sous", "types");

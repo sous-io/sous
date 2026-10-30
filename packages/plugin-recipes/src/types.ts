@@ -1,5 +1,5 @@
 /**
- * The contract of plugin-recipes (S6, "Recipes: plugin-recipes"; S4): everything about getting
+ * The contract of plugin-recipes: everything about getting
  * recipes into a project. Repositories and their hosts, trust, subscriptions, which recipes are
  * active on this machine, resolving versions, the lockfile, downloading during config building, the
  * store, the index cache, links and checkouts, the core recipe, recipe config layers, recipe
@@ -49,7 +49,7 @@ export interface RepoEntry {
 
 /** One subscription, keyed under `subscriptions` by `namespace` or `namespace/recipe`. */
 export interface SubscriptionEntry {
-    /** Default `true`; `false` switches it off on this machine, keeping its pins (S4; C59). */
+    /** Default `true`; `false` switches it off on this machine, keeping its pins. */
     enabled?: boolean;
     /** Default `*`. */
     range?: string;
@@ -74,7 +74,7 @@ export interface StoreSettings {
 export type AddedByUser = "user";
 
 // =============================================================================================
-// The repository-host entity (S4: read strategies and token sources)
+// The repository-host entity (read strategies and token sources)
 // =============================================================================================
 
 /** What a host can do beyond reading. */
@@ -82,7 +82,7 @@ export type RepositoryHostFeature = "fetch" | "submit" | "proposals" | (string &
 
 /** What a host's methods get. */
 export interface RepositoryHostContext extends ServiceContext {
-    /** Where to report; never print (L3). */
+    /** Where to report; never print. */
     readonly reporter: Reporter;
     readonly signal?: AbortSignal;
 }
@@ -94,7 +94,7 @@ export interface RepositoryToken {
     readonly source: string;
 }
 
-/** One place a token may come from, tried in order (S4, "Token sources"). A missing source gives `undefined`. */
+/** One place a token may come from, tried in order. A missing source gives `undefined`. */
 export interface RepositoryTokenSource {
     id: string;
     /** For the error that lists each attempt. */
@@ -129,7 +129,7 @@ export type RepositoryReadOutcome =
     | { readonly ok: true; readonly notModified: true; readonly etag?: string }
     | { readonly ok: false; readonly reason: string };
 
-/** One way to read a file, tried in order (S4, "Read strategies"); a plugin can add its own. */
+/** One way to read a file, tried in order; a plugin can add its own. */
 export interface RepositoryReadStrategy {
     /** `http-token`, `http`, `git`. Remembered per repository in `$SOUS_HOME/cache/read-strategies.json`. */
     id: string;
@@ -229,7 +229,7 @@ export interface ScaffoldOptions {
 }
 
 /**
- * A `repository-host` entity (S6; S4): a host of recipe repositories, with its read strategies
+ * A `repository-host` entity: a host of recipe repositories, with its read strategies
  * and token sources. Write-path methods are present only on hosts that declare `submit` or
  * `proposals`. Nothing host-specific lives outside the host plugins (rule 5).
  */
@@ -272,7 +272,7 @@ export type ActiveRecipeSource = "store" | "link" | "core" | "project";
 
 /**
  * An `active-recipe` entity (agent addition): one locked recipe reached from the subscriptions
- * switched on on this machine (S4, 3), added by the `recipes.fetch` contributor once its files are
+ * switched on on this machine, added by the `recipes.fetch` contributor once its files are
  * on disk. Plain data.
  */
 export interface ActiveRecipeEntity {
@@ -294,7 +294,7 @@ export interface ActiveRecipeEntity {
     manifest: RecipeManifest;
 }
 
-/** A locked recipe that is not active here, and why (S4, 4: one line per skipped recipe). */
+/** A locked recipe that is not active here, and why (4: one line per skipped recipe). */
 export interface SkippedRecipe {
     readonly key: string;
     readonly reason: "subscription-disabled" | "repository-disabled" | "untrusted" | "missing" | "not-reached";
@@ -321,7 +321,7 @@ export interface ActiveRecipeContent {
     readonly files: readonly RecipeContentFile[];
 }
 
-/** Which recipes are active on this machine (S6, `recipes.active`). */
+/** Which recipes are active on this machine. */
 export interface RecipesActive {
     /** Every active recipe, in lockfile order. */
     list(): ActiveRecipeEntity[];
@@ -369,7 +369,7 @@ export interface ChainIo {
     readonly reporter: Reporter;
 }
 
-/** Trust: which repositories the project accepts recipes from; nothing inside an untrusted one runs (S6, `recipes.trust`). */
+/** Trust: which repositories the project accepts recipes from; nothing inside an untrusted one runs. */
 export interface RecipesTrust {
     /** Every trusted, enabled repository, by short name. */
     trusted(): Record<string, RepoEntry>;
@@ -377,7 +377,7 @@ export interface RecipesTrust {
     isTrusted(repository: string): boolean;
     /** The short name a URL or identity is trusted under. */
     nameOf(repository: string): string | undefined;
-    /** Asks (or, with `yes`, does not ask) to trust repositories, then adds them; asks through `io` (L4: `--yes`). */
+    /** Asks (or, with `yes`, does not ask) to trust repositories, then adds them; asks through `io`. */
     confirm(missing: readonly MissingRepo[], options: ConfirmTrustOptions, io: ChainIo): Promise<ConfirmTrustResult>;
 }
 
@@ -442,13 +442,13 @@ export interface ResolveResult {
     readonly cycles: string[][];
 }
 
-/** Resolving subscriptions to versions, and keeping only what is reachable (S6, `recipes.resolver`). */
+/** Resolving subscriptions to versions, and keeping only what is reachable. */
 export interface RecipesResolver {
     /** Resolves requests and everything they depend on. */
     resolve(requests: readonly RecipeRequest[], options?: ResolveOptions): Promise<ResolveResult>;
     /** Resolves every subscription in the config. */
     resolveSubscriptions(options?: ResolveOptions): Promise<ResolveResult>;
-    /** The lockfile keys reachable from the subscriptions switched on here (S4, 3). */
+    /** The lockfile keys reachable from the subscriptions switched on here. */
     reachable(lockfile: Lockfile): string[];
 }
 
@@ -476,7 +476,7 @@ export interface RestoreReport {
     readonly failed: ReadonlyArray<{ readonly key: string; readonly reason: string }>;
 }
 
-/** The lockfile (S6, `recipes.lock`): read, write, diff, restore. Works out a missing identity after parsing. */
+/** The lockfile: read, write, diff, restore. Works out a missing identity after parsing. */
 export interface RecipesLock {
     path(): string;
     /** The lockfile, or an empty one when there is none. */
@@ -485,7 +485,7 @@ export interface RecipesLock {
     write(lockfile: Lockfile, options?: { dryRun?: boolean }): Promise<LockDiff>;
     /** What changed between two lockfiles. */
     diff(before: Lockfile, after: Lockfile): LockDiff;
-    /** The lockfile resolved recipes make, keeping entries for switched-off subscriptions (S4, 2). */
+    /** The lockfile resolved recipes make, keeping entries for switched-off subscriptions. */
     fromResolved(resolved: readonly ResolvedRecipe[], previous?: Lockfile): Lockfile;
     /** Downloads every pinned recipe missing from the store. */
     restore(options?: { keys?: readonly string[]; signal?: AbortSignal }): Promise<RestoreReport>;
@@ -529,7 +529,7 @@ export interface StoreGcReport {
     readonly dryRun: boolean;
 }
 
-/** The machine-wide recipe store (S6, `recipes.store`). */
+/** The machine-wide recipe store. */
 export interface RecipesStore {
     readonly root: string;
     entryDir(key: StoreKey): string;
@@ -553,7 +553,7 @@ export interface IndexMeta {
     readonly lastCheckedAt: string;
     readonly etag?: string;
     readonly hash: ContentHash;
-    /** The read strategy that worked (S4, "Sous remembers what worked"). */
+    /** The read strategy that worked. */
     readonly strategy?: string;
 }
 
@@ -574,14 +574,14 @@ export interface GetIndexOptions {
     signal?: AbortSignal;
 }
 
-/** A failed read, listing each attempt (S4, "When everything fails"). */
+/** A failed read, listing each attempt. */
 export interface IndexReadFailure {
     readonly repo: string;
     readonly attempts: ReadonlyArray<{ readonly strategy: string; readonly reason: string }>;
     readonly fixes: readonly string[];
 }
 
-/** Cached repository indexes, and when to look upstream (S6, `recipes.index-cache`). */
+/** Cached repository indexes, and when to look upstream. */
 export interface RecipesIndexCache {
     /** The index of a trusted repository, by short name. Throws a `SousError` built from an `IndexReadFailure`. */
     get(repo: string, options?: GetIndexOptions): Promise<CachedIndex>;
@@ -612,7 +612,7 @@ export interface ResolvedLink {
     readonly scope: LinkScope;
 }
 
-/** Links: the project and machine-wide links maps (S6, `recipes.links`). A project link wins over a global one. */
+/** Links: the project and machine-wide links maps. A project link wins over a global one. */
 export interface RecipesLinks {
     /** Every link in force, by repository short name. */
     all(): Record<string, ResolvedLink>;
@@ -636,7 +636,7 @@ export interface DependencyDeclaration {
     readonly named: boolean;
 }
 
-/** How one recipe brings in another (S6, `recipes.declarations`). */
+/** How one recipe brings in another. */
 export interface RecipesDeclarations {
     /** Every declaration of a manifest or a published version, `subscribes` first. */
     of(source: { readonly depends?: readonly string[]; readonly subscribes?: readonly string[] }): DependencyDeclaration[];
@@ -665,7 +665,7 @@ export interface RecipeChangeFlags {
     noBuild?: boolean;
 }
 
-/** Inputs that answer recipe questions ahead of time (L4), passed on to `vars.ask`. */
+/** Inputs that answer recipe questions ahead of time, passed on to `vars.ask`. */
 export interface AnswerFlags {
     /** `--answer <name>=<value>`, repeatable. */
     answer?: string[];
@@ -702,7 +702,7 @@ export interface RepoRemoveInput extends RecipeChangeFlags {
     yes?: boolean;
 }
 
-/** The result of `repo.remove`. Files it deletes are read from `compiler.state` (ruled 2026-10-29). */
+/** The result of `repo.remove`. Files it deletes are read from `compiler.state`. */
 export interface RepoRemoveResult {
     readonly name: string;
     readonly url: string;
@@ -914,7 +914,7 @@ export interface SubscriptionAddInput extends RecipeChangeFlags, AnswerFlags {
     yes?: boolean;
     /** Takes the first match of an ambiguous ref. */
     acceptFirst?: boolean;
-    /** Installs npm plugins the recipe requires (S1). */
+    /** Installs npm plugins the recipe requires. */
     installPlugins?: boolean;
 }
 
@@ -973,7 +973,7 @@ export interface SubscriptionRemoveResult {
     readonly followUps: IntentFollowUp[];
 }
 
-/** `subscription.enable` and `subscription.disable`: overwrite `enabled`, keeping every other field (S2). */
+/** `subscription.enable` and `subscription.disable`: overwrite `enabled`, keeping every other field. */
 export interface SubscriptionToggleInput extends RecipeChangeFlags {
     ref: string;
 }
@@ -1005,7 +1005,7 @@ export interface SubscriptionListing {
     readonly latest?: ReadonlyArray<{ readonly key: string; readonly version?: string }>;
 }
 
-/** What an update would change (C60). */
+/** What an update would change. */
 export type RecipeUpdateScope =
     | { kind: "all" }
     | { kind: "repository"; repo: string }

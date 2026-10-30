@@ -1,5 +1,5 @@
 /**
- * The input schemas of plugin-authoring's intents. Every input is a flag or an argument (L4), and
+ * The input schemas of plugin-authoring's intents. Every input is a flag or an argument, and
  * every question an intent may ask names the field that answers it.
  */
 

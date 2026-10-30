@@ -1,5 +1,5 @@
 /**
- * S5's rules and examples, one by one: expression objects, branch forms, arrays, qualifiers and
+ * The rules and examples, one by one: expression objects, branch forms, arrays, qualifiers and
  * order, results, dropping, truth, `$else`, nesting and depth.
  */
 
@@ -62,7 +62,7 @@ describe("$expr: a computed value", () => {
     });
 });
 
-describe("the forms of one branch (S5 a to e)", () => {
+describe("the forms of one branch", () => {
     const forms = {
         a: { $if: "host.platform != 'win32'" },
         b: { $if: { expr: "host.platform != 'win32'" } },
@@ -101,7 +101,7 @@ describe("arrays", () => {
         },
     };
 
-    it("tries each item in array order (S5's example)", () => {
+    it("tries each item in array order (the example)", () => {
         expect(valueOf(data, { platform: "linux" })).toEqual({ foo: "barx" });
         expect(valueOf(data, { platform: "win32" })).toEqual({ foo: "bar" });
         expect(valueOf(data, { platform: "darwin" })).toEqual({ foo: "bad" });
@@ -167,7 +167,7 @@ describe("qualifiers and order", () => {
         expect(valueOf({ v: { $if: "true", $elseif: "x[" } })).toEqual({ v: true });
     });
 
-    it("gives the three outcomes of S5's qualifier example", () => {
+    it("gives the three outcomes of the qualifier example", () => {
         const data = {
             recipes: {
                 skills: {
@@ -288,7 +288,7 @@ describe("truth and falsehood follow Liquid", () => {
 });
 
 describe("$else", () => {
-    it("gives its value as written (S5's example)", () => {
+    it("gives its value as written (the example)", () => {
         const data = { foo: { $if: { expr: "host.platform != 'win32'", then: "bar" }, $else: "bad" } };
 
         expect(valueOf(data, { platform: "linux" })).toEqual({ foo: "bar" });
@@ -322,7 +322,7 @@ describe("nesting", () => {
         },
     };
 
-    it("evaluates a then value that is itself an expression object (S5's example)", () => {
+    it("evaluates a then value that is itself an expression object (the example)", () => {
         const outputs = (platform: string, ci: string) => (valueOf(data, { platform, env: { CI: ci } }) as never as { recipes: { skills: { outputs: unknown } } }).recipes.skills.outputs;
 
         expect(outputs("darwin", "true")).toEqual(["/tmp/ci-skills"]);
@@ -359,7 +359,7 @@ describe("nesting", () => {
     });
 });
 
-describe("S5's full examples", () => {
+describe("the full examples", () => {
     it("510-subscriptions: one subscription everywhere, another everywhere except Windows", () => {
         const data = {
             subscriptions: {
@@ -395,7 +395,7 @@ describe("S5's full examples", () => {
         expect(valueOf(data, { platform: "win32" })).toEqual({ "form-3": false, "form-4": false });
     });
 
-    it("S2's Mac-only switch-off: false on a Mac, {} on Linux", () => {
+    it("The Mac-only switch-off: false on a Mac, {} on Linux", () => {
         const data = {
             subscriptions: {
                 "tool-usage/automated-browser-tasks": { enabled: { $if: { expr: "host.platform == 'darwin'", then: false } } },

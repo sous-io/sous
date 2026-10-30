@@ -1,5 +1,5 @@
 /**
- * The GitLab CLI, needed only to propose changes (S4).
+ * The GitLab CLI, needed only to propose changes.
  */
 
 import type { RepositoryHostCli } from "@sous-io/plugin-recipes/types";

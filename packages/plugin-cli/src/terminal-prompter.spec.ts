@@ -13,7 +13,7 @@ function prompter(input: string, interactive = true) {
 }
 
 describe("TerminalPrompter", () => {
-    /** Without a terminal every question throws NonInteractiveError naming the flag (L4, C46). */
+    /** Without a terminal every question throws NonInteractiveError naming the flag. */
     it("should refuse every question when it cannot ask, naming the flag", async () => {
         const { prompter: p } = prompter("", false);
 
@@ -107,7 +107,7 @@ describe("canPrompt()", () => {
 
     /**
      * A prompt is possible only with a terminal on both ends, no CI variable and no
-     * --non-interactive (about-cli-command-design, rule 5).
+     * --non-interactive.
      */
     it("should allow prompts only in an interactive terminal", () => {
         expect(canPrompt(tty, {})).toBe(true);

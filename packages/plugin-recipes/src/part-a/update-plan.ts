@@ -1,11 +1,10 @@
 /**
- * Planning an update of pinned versions (S6, `recipe.update`; C60; ported from `planUpdate` and its
- * helpers in `src/lib/repos/subscription-service.ts`). It writes nothing.
+ * Planning an update of pinned versions. It writes nothing.
  *
  * Every trusted repository's index is read fresh; one that cannot be reached is reported, and its
  * pins stay. A ref narrows what may move; everything outside it is held at its locked version for as
  * long as its ranges allow. Subscriptions sous provides itself (`core`) never move: their range is
- * the running sous version. Switched-off subscriptions take no part, and keep their pins (S4, 2).
+ * the running sous version. Switched-off subscriptions take no part, and keep their pins.
  */
 
 import { SousError, type Context } from "@sous-io/plugin-api";

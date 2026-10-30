@@ -1,8 +1,8 @@
 /**
- * The contract of plugin-confd (S6, "Config files"; S2, "Order and stages"): the `conf.d` files,
+ * The contract of plugin-confd: the `conf.d` files,
  * one contributor per file (`confd/<file name>`, each `after` the one before, the first after
  * `config-files.main`), patch files in `conf.d`, and surgical edits to the managed `conf.d/5xx`
- * files. Managed files are edited key by key, by intents, never by contributors (S2).
+ * files. Managed files are edited key by key, by intents, never by contributors.
  *
  * Other plugins import this file type-only.
  */
@@ -22,7 +22,7 @@ export interface ConfdFile {
     readonly managed: boolean;
 }
 
-/** Finding the `conf.d` files, in bytewise order (S6, `confd.files`). */
+/** Finding the `conf.d` files, in bytewise order. */
 export interface ConfdFiles {
     /** The `conf.d` directory, or `undefined` outside a project. */
     directory(): string | undefined;
@@ -55,8 +55,8 @@ export interface ManagedEditResult {
 }
 
 /**
- * Surgical edits to the managed `conf.d/5xx` files (S6, `confd.managed`): comments, key order and
- * formatting stay, and user edits outside the keys touched survive (S2). An intent that edits one
+ * Surgical edits to the managed `conf.d/5xx` files: comments, key order and
+ * formatting stay, and user edits outside the keys touched survive. An intent that edits one
  * declares `changesConfig`, so the config is rebuilt after it.
  */
 export interface ConfdManaged {

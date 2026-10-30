@@ -1,5 +1,5 @@
 /**
- * Include resolution (S6, `compiler.includes`): aliases, `#` names, recipe references (`~`), globs,
+ * Include resolution: aliases, `#` names, recipe references (`~`), globs,
  * `${var}` substitution and the ordered candidate search, for include lines and `{% render %}`.
  *
  * An include path (the part after `@`) resolves to ordered groups. The first group that names at

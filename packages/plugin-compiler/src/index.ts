@@ -2,7 +2,7 @@
  * plugin-compiler: compiling templates, includes, aliases, compilation settings, the built-in tags
  * and filter, the state file, writing outputs, pruning.
  *
- * S6, "Compiler: plugin-compiler". The contract other plugins code against is `./types.ts`. Among
+ * The contract other plugins code against is `./types.ts`. Among
  * the built-in plugins only this one writes build outputs; others add compilation targets.
  */
 

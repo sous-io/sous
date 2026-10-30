@@ -37,7 +37,7 @@ function ctxFor(options: {
 describe("gitlabFileUrl()", () => {
     /**
      * Files are read from the API address, the whole project path encoded, so a nested group's `/`
-     * becomes `%2F` (S4, problem 1).
+     * becomes `%2F`.
      *
      * gitlabFileUrl({ repository: acme/platform/recipes, path: "sous.index.json", ref: "HEAD" });
      * // -> "https://gitlab.com/api/v4/projects/acme%2Fplatform%2Frecipes/repository/files/sous.index.json/raw?ref=HEAD"
@@ -85,7 +85,7 @@ describe("the gitlab host", () => {
     });
 
     /**
-     * It registers S4's strategies and token sources, in order.
+     * It registers the strategies and token sources, in order.
      *
      * host.readStrategies.map((s) => s.id); // -> ["http-token", "http", "git"]
      */
@@ -96,9 +96,9 @@ describe("the gitlab host", () => {
     });
 });
 
-describe("reading through the gitlab host (S4)", () => {
+describe("reading through the gitlab host", () => {
     /**
-     * The token sources are tried in S4's order; GITLAB_TOKEN wins when set, and the token is sent
+     * The token sources are tried in the expected order; GITLAB_TOKEN wins when set, and the token is sent
      * to the API address as `Authorization: Bearer <token>`.
      *
      * GET <API> Authorization: Bearer glpat-x -> 200 (recorded) -> { ok: true, text, etag }
@@ -114,7 +114,7 @@ describe("reading through the gitlab host (S4)", () => {
 
     /**
      * Without a variable, git's stored credential is asked next, then glab, with
-     * `glab config get token --host <host>`, never `glab auth token` (S4, problem 2).
+     * `glab config get token --host <host>`, never `glab auth token`.
      *
      * // git has nothing; glab config get token --host gitlab.com -> "glpat-y" -> source "glab"
      */
@@ -168,13 +168,13 @@ describe("reading through the gitlab host (S4)", () => {
     });
 
     /**
-     * Each strategy's reason is the line S4's combined error shows, and the fixes are GitLab's.
+     * Each strategy's reason is the line the combined error shows, and the fixes are GitLab's.
      *
      * HTTP without token   302 to sign-in page: the repository is private
      * git                  Permission denied (publickey); ...
      * export GITLAB_TOKEN=<a token with read_repository>
      */
-    it("should give S4's reasons and fixes when a private project cannot be read", async () => {
+    it("should give the expected reasons and fixes when a private project cannot be read", async () => {
         const { ctx } = ctxFor({ routes: { [API]: { status: 302, headers: { location: "https://gitlab.com/users/sign_in" } } } });
         const env = host.tokenSources![0] as ExplainedTokenSource;
 

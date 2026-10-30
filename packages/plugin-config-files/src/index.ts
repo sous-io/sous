@@ -1,7 +1,7 @@
 /**
  * plugin-config-files: sous.config.* as a contributor, config.set, and the .env files.
  *
- * S6, "Config files: plugin-config-files and plugin-confd". The contract other plugins code against is `./types.ts`.
+ * The contract other plugins code against is `./types.ts`.
  */
 
 import fs from "node:fs";
@@ -48,7 +48,7 @@ export const configFilesPlugin: PluginDefinition = definePlugin({
 
         sous.config.contribute(mainContributor(loader));
 
-        // The patch files beside sous.config.*, each after the one before (S2, "Patch files").
+        // The patch files beside sous.config.*, each after the one before.
         if (sous.project !== undefined) {
             let previous = MAIN_CONTRIBUTOR;
 
@@ -173,7 +173,7 @@ function mainContributor(loader: ConfigFilesLoaderImpl): ContributorDefinition {
                     );
                 }
 
-                // A file is read from disk once per build (S2).
+                // A file is read from disk once per build.
                 loader.forget(file);
             }
 
@@ -190,7 +190,7 @@ export function fileContributor(loader: ConfigFilesLoaderImpl, file: string, id:
     return {
         id,
         after,
-        // A patch file reads nothing, so it watches everything to keep landing on top (S2).
+        // A patch file reads nothing, so it watches everything to keep landing on top.
         ...(isPatch ? { monitors: [""] } : {}),
         async contribute(config) {
             if (config.contributor.run === 1) {

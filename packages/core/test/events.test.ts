@@ -5,9 +5,9 @@ import { contributorsPlugin, keysPlugin, makeEngine, plugin } from "./helpers.js
 describe("events", () => {
     /**
      * Listeners subscribe by exact name, wildcard or regular expression; once removes itself after one
-     * run, and off removes a listener (C18, C19).
+     * run, and off removes a listener.
      */
-    it("should match exact, wildcard and regex listeners, with once and off (C18, C19)", async () => {
+    it("should match exact, wildcard and regex listeners, with once and off", async () => {
         const heard: string[] = [];
         const removed = () => void heard.push("removed");
         const { engine } = makeEngine([
@@ -46,9 +46,9 @@ describe("events", () => {
     });
 
     /**
-     * Listener order: priority (higher first), then plugin order, then the order they were added (C20).
+     * Listener order: priority (higher first), then plugin order, then the order they were added.
      */
-    it("should order listeners by priority, plugin order, then registration (C20)", async () => {
+    it("should order listeners by priority, plugin order, then registration", async () => {
         const order: string[] = [];
         const { engine } = makeEngine([
             plugin("first", (sous) => {
@@ -70,10 +70,10 @@ describe("events", () => {
     });
 
     /**
-     * A before listener changes the input (C21); an after listener replaces the result (C22); data is
-     * shared from before to after (C25).
+     * A before listener changes the input; an after listener replaces the result; data is
+     * shared from before to after.
      */
-    it("should let listeners change input and result and share data (C21, C22, C25)", async () => {
+    it("should let listeners change input and result and share data", async () => {
         const { engine } = makeEngine([
             plugin("p", (sous) => {
                 sous.intents.add({ intent: "build", handle: (input) => ({ pruned: (input as { prune: boolean }).prune }) });
@@ -93,10 +93,10 @@ describe("events", () => {
     });
 
     /**
-     * Cancelling stops the intent and reports the reason and the plugin (C23); stopPropagation hides
-     * the event from later listeners while the intent still runs (C24).
+     * Cancelling stops the intent and reports the reason and the plugin; stopPropagation hides
+     * the event from later listeners while the intent still runs.
      */
-    it("should cancel intents with a reason, and stop propagation (C23, C24)", async () => {
+    it("should cancel intents with a reason, and stop propagation", async () => {
         let ran = 0;
         const later: string[] = [];
         const { engine } = makeEngine([
@@ -125,10 +125,10 @@ describe("events", () => {
     });
 
     /**
-     * An error listener can turn the failure into a result, and then after fires (C26); without a
+     * An error listener can turn the failure into a result, and then after fires; without a
      * recovery the error propagates. A listener that throws fails the intent.
      */
-    it("should recover from errors and fail on throwing listeners (C26)", async () => {
+    it("should recover from errors and fail on throwing listeners", async () => {
         const afters: unknown[] = [];
         const { engine } = makeEngine([
             plugin("p", (sous) => {
@@ -161,10 +161,10 @@ describe("events", () => {
 
     /**
      * Any plugin fires any event and emit waits for every listener; a listener can cancel a custom
-     * event, which the emitter sees (C17, C23). A listener's ctx can run intents, read the config and
-     * report (C27). Intent events fire whoever started the intent: a front end, ctx.run, or a listener.
+     * event, which the emitter sees. A listener's ctx can run intents, read the config and
+     * report. Intent events fire whoever started the intent: a front end, ctx.run, or a listener.
      */
-    it("should fire custom events and give listeners a full ctx (C17, C27)", async () => {
+    it("should fire custom events and give listeners a full ctx", async () => {
         const befores: string[] = [];
         const { engine, reporter } = makeEngine([
             keysPlugin("diagrams"),
@@ -249,9 +249,9 @@ describe("events", () => {
     });
 
     /**
-     * A config.built listener may run an intent that changes the config; the engine rebuilds (C28).
+     * A config.built listener may run an intent that changes the config; the engine rebuilds.
      */
-    it("should rebuild when a config.built listener changes the config (C28)", async () => {
+    it("should rebuild when a config.built listener changes the config", async () => {
         let enabled = false;
         let builds = 0;
         const { engine } = makeEngine([
@@ -277,9 +277,9 @@ describe("events", () => {
 
     /**
      * Rebuilds in a row that produce a config already seen stop after 5 (going in circles); rebuilds
-     * that keep producing a new config stop after 10; both name the path (S1, "Finding Loops").
+     * that keep producing a new config stop after 10; both name the path.
      */
-    it("should stop rebuild loops: repeating after 5, changing after 10 (S1 Finding Loops)", async () => {
+    it("should stop rebuild loops: repeating after 5, changing after 10", async () => {
         let flag = false;
         const circles = makeEngine([
             keysPlugin("enabled"),

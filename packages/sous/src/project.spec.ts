@@ -23,7 +23,7 @@ afterEach(() => {
 describe("findProject()", () => {
     /**
      * The project is the nearest directory above the working directory that holds a `.sous/`
-     * directory; its config file is the first sous.config.* found there (S6, "The project root").
+     * directory; its config file is the first sous.config.* found there.
      *
      * findProject("/work/app/src") // -> { root: "/work/app", configPath: "/work/app/.sous/sous.config.jsonc", ... }
      */
@@ -43,7 +43,7 @@ describe("findProject()", () => {
         });
     });
 
-    /** A monorepo's nested `.sous/` wins for a working directory inside it (S1: one project per process). */
+    /** A monorepo's nested `.sous/` wins for a working directory inside it (one project per process). */
     it("should prefer the nearest .sous directory", () => {
         const root = tmp();
 

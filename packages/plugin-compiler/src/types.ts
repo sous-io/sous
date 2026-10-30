@@ -1,10 +1,10 @@
 /**
- * The contract of plugin-compiler (S6, "Compiler: plugin-compiler"): compiling every compilation
+ * The contract of plugin-compiler: compiling every compilation
  * target in the config into outputs, include resolution (`@`, `~`, `#`), aliases, the compilation
  * settings, the built-in tags and filter, the state file, writing every build output, and pruning.
  *
- * Among the built-in plugins only the compiler writes build outputs (ruled 2026-10-29); others add
- * compilation targets to the config (C6). It compiles whatever targets the config holds, with a
+ * Among the built-in plugins only the compiler writes build outputs; others add
+ * compilation targets to the config. It compiles whatever targets the config holds, with a
  * scope and a namespace resolver, so it depends on no recipe plugin.
  *
  * Other plugins import this file type-only.
@@ -17,7 +17,7 @@ import type { VarScope } from "@sous-io/plugin-variables/types";
 // The `compilation` and `_aliases` config keys
 // ---------------------------------------------------------------------------------------------
 
-/** Who added a target, so the state file records where each output came from (S6). */
+/** Who added a target, so the state file records where each output came from. */
 export interface CompilationOrigin {
     /** The plugin whose contributor added it. */
     plugin?: string;
@@ -31,7 +31,7 @@ export interface CompilationOrigin {
 export interface CompilationOutput {
     /** Writes only when every named variable equals the value. */
     _if?: Record<string, { eq: string }>;
-    /** Variables of this output's scope (S2, the innermost level). */
+    /** Variables of this output's scope. */
     _vars?: Record<string, string>;
     /** Where a single output goes. One of `destinationFile` and `destinationDir`. */
     destinationFile?: string;
@@ -43,7 +43,7 @@ export interface CompilationOutput {
 
 /**
  * One compilation target. Its source is exactly one of `entryPoint`, `entryGlob` and `content`; a
- * `content` target needs an `id`, which names the source in errors (ruled 2026-10-29).
+ * `content` target needs an `id`, which names the source in errors.
  */
 export interface CompilationTarget {
     /** Names the target in errors, `config show` and `compiler.compile`'s `targets`. */
@@ -54,7 +54,7 @@ export interface CompilationTarget {
     entryPoint?: string;
     /** A glob of source files. */
     entryGlob?: string;
-    /** A template string as the source (C6). */
+    /** A template string as the source. */
     content?: string;
     /** The base output paths mirror under; default: the glob's static base. */
     globBase?: string;
@@ -71,11 +71,11 @@ export interface CompilationTarget {
 
 /** The `compilation` config key, with its defaults filled in. */
 export interface CompilationSettings {
-    /** Variables of the compilation scope (S2). */
+    /** Variables of the compilation scope. */
     _vars?: Record<string, string>;
     /** Default `false`. */
     includeSourceComments: boolean;
-    /** Overwrites files the compiler did not write, taking ownership. Default `true`; `false` opts out (C58). */
+    /** Overwrites files the compiler did not write, taking ownership. Default `true`; `false` opts out. */
     overwriteUntracked: boolean;
     /** Where the state file is written. Default `${sousDir}/.state.json`. */
     stateFile?: string;
@@ -101,7 +101,7 @@ export interface TransformFile {
 
 /**
  * A `compilation-transform` entity: changes an output's path or contents before it is written.
- * Targets and outputs name it under `transforms` (C42: a skill target's optional transform).
+ * Targets and outputs name it under `transforms` (a skill target's optional transform).
  */
 export interface CompilationTransformEntity {
     id: string;
@@ -142,7 +142,7 @@ export type NamespaceResolution =
     | { kind: "escapes-recipe"; recipe: string; reference: string }
     | { kind: "invalid"; reference: string; message: string };
 
-/** The resolver the `~` sigil uses (S6): declared here, registered by plugin-recipes. */
+/** The resolver the `~` sigil uses: declared here, registered by plugin-recipes. */
 export interface NamespaceResolver {
     resolve(request: NamespaceRequest): NamespaceResolution;
     /** The recipe a file belongs to, or `null` for a project file. */
@@ -185,7 +185,7 @@ export interface IncludeResolution {
     readonly hashProblem?: string;
 }
 
-/** Include resolution: include lines and `{% render %}` paths, `@`, `~` and `#` (S6, `compiler.includes`). */
+/** Include resolution: include lines and `{% render %}` paths, `@`, `~` and `#`. */
 export interface CompilerIncludes {
     /** Whether a line is a well-formed include line. */
     isIncludeLine(line: string): boolean;
@@ -197,7 +197,7 @@ export interface CompilerIncludes {
     describeNamespaceProblem(problem: NonNullable<IncludeResolution["namespaceProblem"]>): string;
 }
 
-/** Aliases: the built-in ones and `_aliases`, each resolved to base directories (S6, `compiler.aliases`). */
+/** Aliases: the built-in ones and `_aliases`, each resolved to base directories. */
 export interface CompilerAliases {
     /** Every alias, each to its base directories in the order tried. */
     all(): Record<string, string[]>;
@@ -244,7 +244,7 @@ export interface StateFilter {
     target?: string;
 }
 
-/** The state file (S6, `compiler.state`). Only the compiler writes it. */
+/** The state file. Only the compiler writes it. */
 export interface CompilerState {
     /** Where it is. */
     path(): string;
@@ -288,8 +288,8 @@ export interface WriteOptions {
 }
 
 /**
- * Writing outputs (S6, `compiler.writer`): overwrites and takes ownership, unless
- * `compilation.overwriteUntracked` is `false` (C58). Every write is recorded in the state file.
+ * Writing outputs: overwrites and takes ownership, unless
+ * `compilation.overwriteUntracked` is `false`. Every write is recorded in the state file.
  * The one way any plugin writes a build output (the runtime context file included).
  */
 export interface CompilerWriter {

@@ -1,5 +1,5 @@
 /**
- * Asking for missing answers (S6, `vars.ask`).
+ * Asking for missing answers.
  *
  * A definition is inert. A question is asked only when an active recipe needs a variable and
  * nothing answers it, or when the answer in scope no longer fits the definition. An answer already
@@ -8,8 +8,8 @@
  * Answers are stored in the project's env files: `.sous/.env` for shared ones, committed with the
  * project, and `.sous/.env.local` for machine-specific values and every secret, which git ignores.
  *
- * Questions go through the chain's `Prompter` (L3). Every one is answered by a flag too,
- * `--answer <name>=<value>` (L4); a run that cannot ask fails naming, for each variable, the
+ * Questions go through the chain's `Prompter`. Every one is answered by a flag too,
+ * `--answer <name>=<value>`; a run that cannot ask fails naming, for each variable, the
  * environment variables that would answer it, most specific first.
  */
 

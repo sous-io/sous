@@ -1,6 +1,6 @@
 /**
  * Proposing changes on GitHub: pull requests through `gh`, the only part of this plugin that needs
- * it (S4). A contributor without push permission works through a fork made by `gh repo fork`.
+ * it. A contributor without push permission works through a fork made by `gh repo fork`.
  * Finding a pull request again, reporting where it stands and replacing its text go through
  * `gh pr list`, `gh pr view` and `gh pr edit`.
  */

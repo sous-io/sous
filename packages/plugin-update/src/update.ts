@@ -8,7 +8,7 @@
  * own question, and runs when the answer is yes. Asking the second question after the first
  * install has run means its answer can take the first result into account.
  *
- * Nothing here prints or prompts directly (L3): messages go to `ctx.reporter` and questions to
+ * Nothing here prints or prompts directly: messages go to `ctx.reporter` and questions to
  * `ctx.prompter`; the installs run through `host.processes`.
  */
 

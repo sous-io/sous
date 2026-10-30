@@ -16,7 +16,7 @@ describe("toPlainJson()", () => {
     });
 
     /**
-     * toPlainJson should drop Dates, Maps and Sets, and write a RegExp as "/source/flags" (S2).
+     * toPlainJson should drop Dates, Maps and Sets, and write a RegExp as "/source/flags".
      *
      * toPlainJson({ at: new Date(), re: /x+/g });   // -> { re: "/x+/g" }
      */

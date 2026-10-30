@@ -1,7 +1,7 @@
 /**
  * plugin-variables: ${var} substitution, _vars resolution, auto-variables, variable names and secrets.
  *
- * S6, "Shared building blocks (variables.*, variable-source)". The contract other plugins code against is `./types.ts`.
+ * The contract other plugins code against is `./types.ts`.
  */
 
 import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";
@@ -56,7 +56,7 @@ export const variablesPlugin: PluginDefinition = definePlugin({
             sous.entities.add("config-key", key);
         }
 
-        // Names starting with `sous` may clash with auto-variables added later: say so, never refuse (L6).
+        // Names starting with `sous` may clash with auto-variables added later: say so, never refuse.
         sous.config.contribute({
             id: RESERVED_NAMES_CONTRIBUTOR,
             contribute(config) {

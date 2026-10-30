@@ -1,6 +1,6 @@
 /**
  * The `github` repository-host entity: which URLs are GitHub's, how a location inside a repository
- * is read, and how files are read (S4).
+ * is read, and how files are read.
  *
  * ```text
  * Token sources      GITHUB_TOKEN or GH_TOKEN, then git credential fill, then gh auth token --hostname <host>

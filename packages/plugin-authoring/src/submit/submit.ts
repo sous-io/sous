@@ -10,7 +10,7 @@
  *
  * This is a sequencer. Every host-specific fact (forks, proposals, the host's command line tool) is
  * asked of the `repository-host` entity, and every question goes through the chain's prompter, naming
- * the flag that answers it (L4). Everything is worked out, and every question asked, before anything
+ * the flag that answers it. Everything is worked out, and every question asked, before anything
  * is written; every step is announced before it runs, and a failure says which steps completed.
  */
 

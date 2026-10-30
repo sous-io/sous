@@ -1,5 +1,5 @@
 /**
- * The `skills.targets` contributor (C6, C42, C57): turns every skill into compilation targets, one
+ * The `skills.targets` contributor: turns every skill into compilation targets, one
  * per file, writing into every skill target and every `recipes.skills.outputs` directory. A skill
  * target's `transform` becomes a `compilation-transform` entity its outputs name.
  *

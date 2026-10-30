@@ -3,7 +3,7 @@ import type { Command } from "./command-tree.js";
 import type { CliErrorView } from "./types.js";
 
 /**
- * Turns an error into lines for standard error and an exit code (S6, `cli.errors`). Every message
+ * Turns an error into lines for standard error and an exit code. Every message
  * starts with `Error: `; a sous error's details follow, indented. Input errors name the flag or
  * argument, not the input field. Exit codes: the error's own (1 by default, 2 for usage problems).
  */

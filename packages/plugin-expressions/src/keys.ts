@@ -1,5 +1,5 @@
 /**
- * S5's reserved keys: the exact list that makes an object an expression object, and the order a
+ * the reserved keys: the exact list that makes an object an expression object, and the order a
  * chain's keys are tried in.
  */
 
@@ -14,7 +14,7 @@ export type ReservedKey =
 
 const QUALIFIED = /^\$(expr|if|elseif)(?::(.*))?$/s;
 
-/** What a key means, or `undefined` when it is not one of S5's reserved keys (`$schema`, `$iff`). */
+/** What a key means, or `undefined` when it is not one of the reserved keys (`$schema`, `$iff`). */
 export function parseReservedKey(key: string): ReservedKey | undefined {
     if (key === "$else") {
         return { kind: "else", key };
@@ -32,7 +32,7 @@ export function parseReservedKey(key: string): ReservedKey | undefined {
     return kind === "expr" ? { kind, key, language: qualifier } : { kind, key, name: qualifier };
 }
 
-/** Whether a key is one of S5's reserved keys. */
+/** Whether a key is one of the reserved keys. */
 export function isReservedKey(key: string): boolean {
     return parseReservedKey(key) !== undefined;
 }

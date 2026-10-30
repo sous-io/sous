@@ -9,8 +9,7 @@ import type { SousSchema } from "./schema.js";
 import type { ServiceFactory, ServiceOptions, ServiceReader, ServiceWrapper } from "./services.js";
 
 /**
- * A plugin: a module that registers contributors, intents, listeners, services and entities (S1,
- * "Plugins"). Its module's default export is the definition.
+ * A plugin: a module that registers contributors, intents, listeners, services and entities. Its module's default export is the definition.
  */
 export interface PluginDefinition {
     /** The package name: `sous-plugin-diagrams`, `@sous-io/plugin-skills`. */
@@ -19,11 +18,11 @@ export interface PluginDefinition {
     version?: string;
     /** One sentence saying what it adds. */
     description?: string;
-    /** Plugins this one needs, with semver ranges. Sous stops before any intent runs when one is missing (C38). */
+    /** Plugins this one needs, with semver ranges. Sous stops before any intent runs when one is missing. */
     dependsOn?: Readonly<Record<string, string>>;
-    /** The default `before` of every contributor it adds (C65). */
+    /** The default `before` of every contributor it adds. */
     before?: readonly string[];
-    /** The default `after` of every contributor it adds (C65). */
+    /** The default `after` of every contributor it adds. */
     after?: readonly string[];
     /**
      * Service and intent names this plugin's contract declares for other plugins to implement
@@ -54,7 +53,7 @@ export function definePlugin<const T extends PluginDefinition>(definition: T): T
     return definition;
 }
 
-/** A front end: the CLI, the MCP server, a web GUI (S1, "Front Ends"). */
+/** A front end: the CLI, the MCP server, a web GUI. */
 export interface FrontEndDefinition {
     /** `cli`, `mcp`, `web`. */
     id: string;
@@ -66,18 +65,18 @@ export interface FrontEndDefinition {
 export interface IntentRegistry {
     /** Adds an intent. Two plugins adding one name is an error naming both, unless `intents.replace` picks one. */
     add<const N extends string, S extends SousSchema = SousSchema>(definition: IntentDefinition<N, S>): void;
-    /** Wraps an intent's handler (C15). */
+    /** Wraps an intent's handler. */
     wrap<N extends string>(intent: N, wrapper: IntentWrapper<IntentInputOf<N, unknown>, IntentResult<N>>): void;
 }
 
 /** `sous.services`. */
 export interface ServiceRegistry extends ServiceReader {
-    /** Adds a service with a lifetime (C29). */
+    /** Adds a service with a lifetime. */
     add<N extends ServiceName>(name: N, factory: ServiceFactory<ServiceType<N>>, options?: ServiceOptions): void;
-    /** Wraps a service (C30). Wrappers stack in plugin order. */
+    /** Wraps a service. Wrappers stack in plugin order. */
     wrap<N extends ServiceName>(name: N, wrapper: ServiceWrapper<ServiceType<N>>): void;
     /**
-     * Replaces a service (C31). Two plugins replacing one is an error, unless the config picks one
+     * Replaces a service. Two plugins replacing one is an error, unless the config picks one
      * (`services.replace."<name>": "<plugin>"`); sous then warns on every run.
      */
     replace<N extends ServiceName>(name: N, factory: ServiceFactory<ServiceType<N>>, options?: ServiceOptions): void;
@@ -85,10 +84,10 @@ export interface ServiceRegistry extends ServiceReader {
 
 /** `sous.entities`. */
 export interface EntityRegistry extends EntityReader {
-    /** Defines a kind, with the schema every entry is checked against (C32). */
+    /** Defines a kind, with the schema every entry is checked against. */
     define(kind: string, schema: SousSchema, options?: EntityKindOptions): void;
     /**
-     * Adds an entity whose existence does not depend on the config (C33).
+     * Adds an entity whose existence does not depend on the config.
  *
  * An entity's methods must not use `this`: the engine stores a copy of each entry (its schema
  * check and its method timing make one), so `this` is not the object the plugin made. Close over
@@ -108,7 +107,7 @@ export interface EntityRegistry extends EntityReader {
 
 /**
  * What `register(sous)` receives: everything a plugin uses, scoped to that plugin, so every
- * registration is recorded with it (S1, "Visibility").
+ * registration is recorded with it.
  */
 export interface Sous {
     /** The plugin registering. */
@@ -121,7 +120,7 @@ export interface Sous {
     readonly engine: EngineHandle;
 
     readonly config: {
-        /** Adds a contributor (C1). */
+        /** Adds a contributor. */
         contribute(definition: ContributorDefinition): void;
     };
     readonly intents: IntentRegistry;
@@ -132,16 +131,16 @@ export interface Sous {
         add(plugin: PluginDefinition | string): Promise<void>;
     };
     readonly frontEnds: {
-        /** Adds a front end (C16). */
+        /** Adds a front end. */
         add(definition: FrontEndDefinition): void;
     };
 
-    /** Listens for an event by name, wildcard or regular expression (C18). */
+    /** Listens for an event by name, wildcard or regular expression. */
     on<const P extends EventPattern>(pattern: P, listener: Listener<EventForPattern<P>>, options?: ListenerOptions): void;
-    /** Listens once, then removes itself (C19). */
+    /** Listens once, then removes itself. */
     once<const P extends EventPattern>(pattern: P, listener: Listener<EventForPattern<P>>, options?: ListenerOptions): void;
-    /** Removes a listener added with the same pattern (C19). */
+    /** Removes a listener added with the same pattern. */
     off(pattern: EventPattern, listener: Listener<never>): void;
-    /** Fires an event and waits for every listener (C17). */
+    /** Fires an event and waits for every listener. */
     emit<N extends string>(name: N, payload?: EventPayload<N>): Promise<EventFor<N>>;
 }

@@ -1,10 +1,10 @@
 /**
- * The contract of plugin-claude-code (S6, "Host and package-manager plugins"): everything sous
+ * The contract of plugin-claude-code: everything sous
  * knows about Claude Code, as entities: a `harness` (`claude`), a `skill-target` (`.claude/skills`)
  * and a `memory-target` (`CLAUDE.md`, read in any directory, so it is also a pointer file). It
- * declares no services, intents or events; nothing depends on it (G8).
+ * declares no services, intents or events; nothing depends on it.
  *
- * It is not the Sous-provided Claude Code plugin S3 describes.
+ * It is not the Sous-provided Claude Code plugin the docs describe.
  */
 
 import type {} from "@sous-io/plugin-host/types";

@@ -1,6 +1,5 @@
 /**
- * How one recipe brings in another (S6, `recipes.declarations`; ported from
- * `src/lib/repos/declarations.ts`).
+ * How one recipe brings in another.
  *
  * A manifest lists what it brings in under `depends` and `subscribes`, and one recipe can be covered
  * by more than one entry: `subscribes: [workflow]` covers every recipe of `workflow`, and

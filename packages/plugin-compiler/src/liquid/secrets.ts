@@ -1,6 +1,6 @@
 /**
  * Hiding secrets from the tags that dump a whole scope (`showVars`, `exportScalarVarsJs`). Which
- * values are secret is `variables.secrets`' concern (S6); this only asks it.
+ * values are secret is `variables.secrets`' concern; this only asks it.
  */
 
 import type { LiquidExtensionContext } from "@sous-io/plugin-liquid/types";

@@ -28,7 +28,7 @@ export interface BuilderServices {
 }
 
 /**
- * The builder object a contributor is given (S2, "The Builder"). It shows the view (every other
+ * The builder object a contributor is given. It shows the view (every other
  * contributor's latest patches), records each read against that view, and records each change as
  * this run's patch set. The contributor's own changes are visible to its later reads, but are never
  * recorded as reads, so a contributor never re-runs because of itself.

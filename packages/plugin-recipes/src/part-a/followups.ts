@@ -1,6 +1,6 @@
 /**
  * What an intent that changed recipes runs afterwards (`vars.ask`, `build`), through `ctx.run`, so
- * every front end gets the same steps (S6, "vars and repos").
+ * every front end gets the same steps.
  *
  * The intent refreshes the config (`ctx.refreshConfig()`) after writing, so the follow-ups see
  * the change; `vars.ask` refreshes it again after answering, so `build` sees the answers.

@@ -1,7 +1,7 @@
 /**
  * plugin-liquid: A configured LiquidJS engine, and the Liquid tags and filters plugins add.
  *
- * S6, "Shared building blocks (liquid.engine, liquid-tag, liquid-filter)". The contract other plugins code against is `./types.ts`.
+ * The contract other plugins code against is `./types.ts`.
  * The built-in tags and filter (`showVars`, `exportScalarVarsJs`, `getFiles`, `listFiles`,
  * `bulletList`) are `liquid-tag` and `liquid-filter` entities plugin-compiler adds.
  */

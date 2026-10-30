@@ -28,7 +28,7 @@ interface Trigger {
 }
 
 /**
- * One run of watch mode (C13): watches the sources of the latest config and submits a `build` (or
+ * One run of watch mode: watches the sources of the latest config and submits a `build` (or
  * `compile`) chain for each batch of changes. Chains run one after another; changes that arrive
  * while one runs are gathered into the next.
  *

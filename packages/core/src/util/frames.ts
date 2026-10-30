@@ -2,7 +2,7 @@ import { stableKey } from "./stable.js";
 
 /**
  * The path of calls that led somewhere: every `ctx.run` and every event passes through the engine,
- * so a loop report can show the whole path (S1, "Finding Loops").
+ * so a loop report can show the whole path.
  */
 export interface Frame {
     readonly kind: "intent" | "event" | "listener" | "chain";

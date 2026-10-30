@@ -59,7 +59,7 @@ describe("plugin-skills", () => {
     });
 
     /**
-     * A user can set where skills go (C57): each file of each active recipe's skills becomes a
+     * A user can set where skills go: each file of each active recipe's skills becomes a
      * compilation target writing into every `recipes.skills.outputs` directory, mirroring under the
      * include's base, with the recipe as its origin.
      *
@@ -67,7 +67,7 @@ describe("plugin-skills", () => {
      * // -> { entryPoint: ".../skills/greeting/SKILL.md", globBase: ".../skills",
      * //      outputs: [{ destinationDir: "${projectRoot}/.codex/skills" }] }
      */
-    it("should compile recipes' skills into recipes.skills.outputs (C57)", async () => {
+    it("should compile recipes' skills into recipes.skills.outputs", async () => {
         const { engine } = makeEngine(
             [compilerStandIn(), recipesStandIn([activeRecipe(recipeDir)]), skillsPlugin, userConfig({ recipes: { skills: { outputs: [".codex/skills"] } } })],
             projectIn(projectRoot),
@@ -86,14 +86,14 @@ describe("plugin-skills", () => {
     });
 
     /**
-     * A plugin can add a skill target with a transform (C42): its directory becomes an output of
+     * A plugin can add a skill target with a transform: its directory becomes an output of
      * every skill file, naming a `compilation-transform` entity that hands the target's transform
      * each file with its skill and recipe.
      *
      * sous.entities.add("skill-target", { id: "claude-code", directory: ".claude/skills", transform });
      * // -> outputs: [{ destinationDir: "${projectRoot}/.claude/skills", transforms: ["skills/claude-code"] }]
      */
-    it("should turn a skill target and its transform into outputs and a compilation-transform (C42)", async () => {
+    it("should turn a skill target and its transform into outputs and a compilation-transform", async () => {
         const seen: SkillFile[] = [];
         const { engine } = makeEngine(
             [
@@ -150,7 +150,7 @@ describe("plugin-skills", () => {
 
     /**
      * The contributor reads skill targets through the builder, so a skill target a contributor adds
-     * in a later pass re-runs it (S2, "The Loop").
+     * in a later pass re-runs it.
      *
      * pass 1: skills.targets sees no skill target; codex adds one
      * pass 2: skills.targets re-runs; adds an output for .codex/skills
@@ -199,7 +199,7 @@ describe("plugin-skills", () => {
 
     /**
      * With no skill target and no setting, skills go nowhere: no target is added, and the compile
-     * says why and how to fix it (G8, ruled 2026-10-25).
+     * says why and how to fix it.
      *
      * await engine.submit({ intent: "compiler.compile" });
      * // warning: "Skipped the skills of 1 recipe: nothing says where skills go. ..."

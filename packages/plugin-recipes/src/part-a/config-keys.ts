@@ -1,6 +1,6 @@
 /**
  * The config keys part A owns (`repos`, `subscriptions`, `store`), as `config-key` entities with
- * their schemas and defaults (S2, "Plugins add config keys"; "No setDefault").
+ * their schemas and defaults.
  */
 
 import { jsonSchema, type ConfigKeyEntity, type JsonSchema, type SousSchema } from "@sous-io/plugin-api";

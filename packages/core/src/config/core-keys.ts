@@ -4,12 +4,12 @@ const stringList = { type: "array", items: { type: "string" }, default: [] } as 
 const pickTable = { type: "object", additionalProperties: { type: "string" }, default: {} } as const;
 
 /**
- * The config keys core owns, as `config-key` entities (S2, "Plugins add config keys").
+ * The config keys core owns, as `config-key` entities.
  */
 export const CORE_CONFIG_KEYS: readonly ConfigKeyEntity[] = [
     {
         id: "plugins",
-        description: "Which plugins load, which never load, and each plugin's own options (S1).",
+        description: "Which plugins load, which never load, and each plugin's own options.",
         schema: jsonSchema({
             type: "object",
             properties: {

@@ -33,9 +33,9 @@ export interface ServiceScope {
 }
 
 /**
- * The services of one built config (S1, "Services"): `config` services are made once for it,
+ * The services of one built config: `config` services are made once for it,
  * `singleton` ones once for the process, `factory` ones on every get. Every object is made on first
- * use, wrapped by every active wrapper in plugin order, and has its method calls timed (L5).
+ * use, wrapped by every active wrapper in plugin order, and has its method calls timed.
  */
 export class ServiceContainer implements ServiceReader {
     private readonly perConfig = new Map<string, unknown>();

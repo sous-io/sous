@@ -1,7 +1,7 @@
 /**
  * plugin-confd: The conf.d files, one contributor per file, and surgical edits to the managed conf.d/5xx files.
  *
- * S6, "Config files: plugin-config-files and plugin-confd". The contract other plugins code against is `./types.ts`.
+ * The contract other plugins code against is `./types.ts`.
  */
 
 import fs from "node:fs";
@@ -48,7 +48,7 @@ export const confdPlugin: PluginDefinition = definePlugin({
         const loader = () => sous.services.get("config-files.loader");
         const added = new Set<string>();
 
-        /** Adds a contributor for each file not added yet, each after the file before it (S2). */
+        /** Adds a contributor for each file not added yet, each after the file before it. */
         const addContributors = (files: readonly ConfdFile[]): void => {
             let previous: readonly string[] = [MAIN_CONTRIBUTOR, MAIN_PATCH_CONTRIBUTORS];
 
@@ -104,7 +104,7 @@ export const confdPlugin: PluginDefinition = definePlugin({
 
 /**
  * One `conf.d` file as a contributor: its data as one merge at the root, so it monitors the whole
- * config and lands on top (S2; C70, C74), or its patches. The file is read once per build.
+ * config and lands on top, or its patches. The file is read once per build.
  */
 function fileContributor(sous: Sous, file: ConfdFile, after: readonly string[]): ContributorDefinition {
     const isPatch = file.format === "patch-json" || file.format === "patch-jsonl";
@@ -112,7 +112,7 @@ function fileContributor(sous: Sous, file: ConfdFile, after: readonly string[]):
     return {
         id: contributorId(file.name),
         after,
-        // A patch file reads nothing, so it watches everything to keep landing on top (S2).
+        // A patch file reads nothing, so it watches everything to keep landing on top.
         ...(isPatch ? { monitors: [""] } : {}),
         async contribute(config) {
             const loader = sous.services.get("config-files.loader");

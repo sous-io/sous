@@ -36,7 +36,7 @@ export interface MainOptions {
 }
 
 /**
- * The whole of the bin (S1, "The Shape"): find the project, start the engine with the built-in
+ * The whole of the bin: find the project, start the engine with the built-in
  * plugins, build the config, and hand argv to the CLI front end.
  *
  * The project is found from `--config`/`-c`/`--sous-config`/`--sous-dir`/`--sous-confd` and their

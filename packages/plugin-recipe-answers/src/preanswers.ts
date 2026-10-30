@@ -1,5 +1,5 @@
 /**
- * Answers given up front, by flag or file (S6, `recipe-answers.preanswers`; L4).
+ * Answers given up front, by flag or file.
  *
  * A person at a terminal answers each question as it comes. A script, a CI job or an agent knows
  * every answer already and gives them up front: `--answer name=value`, repeated, or a file of the

@@ -4,9 +4,9 @@
  * `subscription-service.ts` and `src/commands/subscription/`).
  *
  * Subscribing asks nothing about variables itself: it subscribes, then runs `vars.ask` and `build`
- * through `ctx.run` (S6, "vars and repos"). `enable` and `disable` overwrite only `enabled` in
- * `conf.d/510-subscriptions.jsonc`, keeping every other field (S2). Sous always reads the merged
- * config, so a later layer that sets `enabled: false` switches a subscription off (S4, 4).
+ * through `ctx.run`. `enable` and `disable` overwrite only `enabled` in
+ * `conf.d/510-subscriptions.jsonc`, keeping every other field. Sous always reads the merged
+ * config, so a later layer that sets `enabled: false` switches a subscription off.
  */
 
 import { SousError, type BuiltConfig, type Context, type Sous } from "@sous-io/plugin-api";
@@ -406,7 +406,7 @@ export async function toggleSubscription(input: SubscriptionToggleInput, ctx: Co
     const changed = (configured[key]?.enabled !== false) !== enabled;
     const edit = await setSubscriptionEnabled(managed, key, enabled, input.dryRun === true);
 
-    // A layer after 510 that sets `enabled` still wins: say so, and let it (L6).
+    // A layer after 510 that sets `enabled` still wins: say so, and let it.
     const later = laterSetters(ctx.config, key);
 
     if (later.length > 0) {

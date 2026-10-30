@@ -30,7 +30,7 @@ const reportPlugin = definePlugin({
     },
 });
 
-/** A plugin that replaces another's view: the later entity wins (L7). */
+/** A plugin that replaces another's view: the later entity wins. */
 const otherViewPlugin = definePlugin({
     name: "sous-plugin-other-view",
 

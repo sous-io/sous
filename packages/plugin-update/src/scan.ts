@@ -1,6 +1,6 @@
 /**
  * The `update.scan` contributor: when `plugins.discover` is `scan`, asks the package managers which
- * installed packages are sous plugins and adds them to `plugins.load` (S1, "Loading"; C5). The
+ * installed packages are sous plugins and adds them to `plugins.load`. The
  * engine loads what it adds and builds again.
  */
 

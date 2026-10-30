@@ -4,7 +4,7 @@ import type { JsonValue, PathSegment } from "@sous-io/plugin-api";
 import type { EntitySnapshot, StoredEntity } from "../entities/entity-registry.js";
 
 /**
- * What a contributor read while it ran (S2, "The Builder", rule 4): each config key with the value
+ * What a contributor read while it ran: each config key with the value
  * it saw, and each entity list or entity with which entries existed (their ids, sources and a hash
  * of their contents), so an entity that appears, disappears or changes re-runs its readers.
  */

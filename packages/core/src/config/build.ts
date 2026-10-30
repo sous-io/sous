@@ -43,7 +43,7 @@ export interface ContributorRecord {
 /** An activated plugin in one build, with the stage it was activated in. */
 export interface ActivePlugin {
     readonly record: PluginRecord;
-    /** Every stage its contributors declare is shifted by this (S2, "Stages", rule 3). */
+    /** Every stage its contributors declare is shifted by this. */
     readonly stageShift: number;
 }
 
@@ -94,7 +94,7 @@ interface Trigger {
 }
 
 /**
- * One config build (S2, "The Loop"): stages from the lowest, and in each stage, passes until nothing
+ * One config build: stages from the lowest, and in each stage, passes until nothing
  * anyone read has changed and no plugin was loaded or removed.
  *
  * Within a pass, contributors run in sorted order; each one runs when it is new or when something it
@@ -204,7 +204,7 @@ export class ConfigBuild {
 
     private async runStage(stage: number): Promise<void> {
         for (let pass = 1; ; pass++) {
-            // The limit is read on every pass, since the config being built may set it (C51).
+            // The limit is read on every pass, since the config being built may set it.
             const limit = this.host.limitsFrom(this.computeView(undefined).config).configPasses;
 
             if (pass > limit) {
@@ -431,7 +431,7 @@ export class ConfigBuild {
 
     /**
      * Loads and activates the plugins the config now lists, and deactivates those it no longer does
-     * (S2, "Plugins load inside the loop"). Returns whether anything changed.
+     *. Returns whether anything changed.
      */
     private async syncPlugins(stage: number): Promise<boolean> {
         const view = this.computeView(undefined);
@@ -511,7 +511,7 @@ export class ConfigBuild {
 
     /**
      * Logs, at the debug level, every contributor of a finished stage that would have re-run, and why
-     * it did not (S2, "Stages", rule 4; C62).
+     * it did not.
      */
     private watchFinishedStages(stage: number): void {
         for (const record of this.records.values()) {

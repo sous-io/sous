@@ -10,7 +10,7 @@ export interface HelpContext {
 }
 
 /**
- * The `--help` text for a command, a group, or the root (S1, "The CLI foundation"), laid out as the
+ * The `--help` text for a command, a group, or the root, laid out as the
  * CLI's help looked before the refactor: upper-case section titles, `$ sous ...` usage lines and
  * upper-case argument names. Each line of a command or flag describes exactly that thing
  * (about-cli-command-design, "Help Text").

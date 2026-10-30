@@ -99,7 +99,7 @@ afterEach(() => {
 });
 
 describe("plugin-authoring", () => {
-    /** The four intents S6 names, each with today's command words, aliases and arguments. */
+    /** The four intents, each with today's command words, aliases and arguments. */
     it("should register repo.release, repo.submit, repo.contribute and repo.init", async () => {
         const engine = engineWith();
 
@@ -116,7 +116,7 @@ describe("plugin-authoring", () => {
         expect(intents.get("repo.release")?.definition.cli?.flags?.yes).toEqual({ short: "y", aliases: ["force"] });
     });
 
-    /** Every input is a flag (L4): each question's answer is a field of the input schema. */
+    /** Every input is a flag: each question's answer is a field of the input schema. */
     it("should take every answer to a question as an input field", async () => {
         const engine = engineWith();
 

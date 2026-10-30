@@ -1,6 +1,5 @@
 /**
- * The contract of plugin-inspect (S6, "Showing the engine's state"; S2, "What `sous config show`
- * and `get` Print"): the built config and each contributor's changes, every plugin and what it
+ * The contract of plugin-inspect: the built config and each contributor's changes, every plugin and what it
  * registered, and every timing. These intents read only the engine, so the plugin depends on none.
  * The intents return plain data; plugin-cli decides how it looks.
  *
@@ -9,7 +8,7 @@
 
 import type { ConfigLayer, JsonObject, JsonValue, PluginInfo, TimingEntry } from "@sous-io/plugin-api";
 
-/** One contributor's change to a value, for `--layers` (C53, C78). */
+/** One contributor's change to a value, for `--layers`. */
 export interface LayerView extends ConfigLayer {
     /** The config file the contributor reads, from the `.sous` directory: `conf.d/610-mac.jsonc`. */
     readonly source?: string;

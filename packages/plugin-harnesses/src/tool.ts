@@ -1,5 +1,5 @@
 /**
- * The `harness` entity for a tool written under `tools` that no plugin provides (C56, G8): it runs
+ * The `harness` entity for a tool written under `tools` that no plugin provides: it runs
  * the tool's `command`, with nothing else known about it.
  */
 

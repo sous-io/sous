@@ -262,7 +262,7 @@ describe("readIndexThroughHost()", () => {
 
   /**
    * The index is read through the location's own host entity: its token, then its strategies in
-   * order, the first that reads it winning. Nothing about the host lives in authoring (G8).
+   * order, the first that reads it winning. Nothing about the host lives in authoring.
    */
   it("should read the index through the host's strategies, in order", async () => {
     const { entity, seen } = host([{ ok: false, reason: "403" }, { ok: true, text: JSON.stringify(indexOf(["d/x"])) }], true);

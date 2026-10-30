@@ -1,10 +1,10 @@
 /**
- * The contract of plugin-skills (S6, "Skills: plugin-skills"): places a harness reads skills from
+ * The contract of plugin-skills: places a harness reads skills from
  * (`skill-target`), where skills come from, and the `skills.targets` contributor that turns skill
- * targets into compilation targets (C6, C42). It writes nothing itself; the compiler does.
+ * targets into compilation targets. It writes nothing itself; the compiler does.
  *
  * With no `skill-target` and no configured destination, skills go nowhere, and the build says why
- * and how to fix it; core has no default destination (ruled 2026-10-25, G8).
+ * and how to fix it; core has no default destination.
  *
  * Other plugins import this file type-only.
  */
@@ -20,10 +20,10 @@ export interface SkillFile extends TransformFile {
     readonly recipe?: string;
 }
 
-/** A skill target's optional change to each file's name or contents (C42). */
+/** A skill target's optional change to each file's name or contents. */
 export type SkillTransform = (file: SkillFile, ctx: ServiceContext) => SkillFile | undefined | Promise<SkillFile | undefined>;
 
-/** A `skill-target` entity: a place a harness reads skills from (C42). */
+/** A `skill-target` entity: a place a harness reads skills from. */
 export interface SkillTargetEntity {
     /** `claude-code`. */
     id: string;
@@ -54,14 +54,14 @@ export interface SkillSource {
     readonly files: readonly string[];
 }
 
-/** Where skills come from: the active recipes, and the user's own (S6, `skills.sources`). */
+/** Where skills come from: the active recipes, and the user's own. */
 export interface SkillsSources {
     list(): SkillSource[];
     /** The active recipes that publish skills. */
     recipes(): string[];
 }
 
-/** The `recipes.skills` config key (C57). */
+/** The `recipes.skills` config key. */
 export interface SkillsSettings {
     /** Directories skills are also written to, `${var}` allowed (`recipes.skills.outputs`). Default `[]`. */
     outputs: string[];

@@ -116,7 +116,7 @@ describe("readThroughChain", () => {
         }
     });
 
-    it("should word the combined error exactly as S4 does, through the hosts' find and fix methods", async () => {
+    it("should word the combined error the same way for every host, through the hosts' find and fix methods", async () => {
         const sources: RepositoryTokenSource[] = [
             { id: "env", label: "GITLAB_TOKEN", token: async () => undefined, find: async () => ({ missing: "GITLAB_TOKEN unset" }), fix: () => "export GITLAB_TOKEN=<a token with read_repository>" },
             { id: "git-credential", label: "git credential fill", token: async () => undefined, find: async (repository) => ({ missing: `git has no stored credential for ${repository.host}` }) },

@@ -1,5 +1,5 @@
 /**
- * The `skill-target` entity kind (C42): a place a harness reads skills from.
+ * The `skill-target` entity kind: a place a harness reads skills from.
  */
 
 import { jsonSchema } from "@sous-io/plugin-api";

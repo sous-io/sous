@@ -2,7 +2,7 @@
  * plugin-refs: parsing and resolving refs, picking among matches, `#` names, repository locations
  * and identity.
  *
- * S6, "Shared building blocks (refs.*, hash-name)". The contract other plugins code against is
+ * The contract other plugins code against is
  * `./types.ts`. Hosts come from the `repository-host` entities, a kind plugin-recipes defines; an
  * entity read needs no dependency, so this plugin depends on nothing above it.
  */

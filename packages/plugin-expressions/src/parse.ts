@@ -1,6 +1,6 @@
 /**
  * Reading one expression object into a plan: a computed value (`$expr`), or a chain of branches
- * with an optional `$else` (S5). Every form S5 lists is accepted here, and every shape error S5
+ * with an optional `$else`. Every form is accepted here, and every shape error
  * lists (1 to 4) is thrown here, naming the file and the key path.
  */
 
@@ -23,7 +23,7 @@ export interface WrittenValue {
     readonly path: readonly PathSegment[];
 }
 
-/** One branch. With no `condition`, it is a fallback (S5, "Arrays"). */
+/** One branch. With no `condition`, it is a fallback. */
 export interface Branch {
     readonly condition: ExpressionSource | undefined;
     readonly then: WrittenValue | undefined;
@@ -146,7 +146,7 @@ function parseBranches(value: JsonValue, path: readonly PathSegment[], place: Ch
     return [branch];
 }
 
-/** Throws unless a fallback item sits where S5 allows one: last item, last key, no `$else`. */
+/** Throws unless a fallback item sits where one is allowed: last item, last key, no `$else`. */
 function checkFallback(path: readonly PathSegment[], lastItem: boolean, place: ChainPlace, file: string): void {
     if (place.hasElse) {
         throw new ExpressionError(file, path, "is a fallback (an item with no expr), and the chain also has an $else. Keep one of them.");

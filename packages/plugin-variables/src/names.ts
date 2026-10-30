@@ -1,5 +1,5 @@
 /**
- * Variable names and their environment spellings (S6, `variables.names`).
+ * Variable names and their environment spellings.
  *
  * Every environment name here is generated, then looked up. Nothing parses a name back into the
  * scope that made it: `_` is both the delimiter and a legal character, so

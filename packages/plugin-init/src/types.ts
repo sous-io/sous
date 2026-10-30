@@ -1,7 +1,7 @@
 /**
- * The contract of plugin-init (S6, "Project setup and updates"): scaffolding a project's `.sous/`
+ * The contract of plugin-init: scaffolding a project's `.sous/`
  * (`sous init`), then building it through the one build path. The project root is the directory
- * holding the new `.sous/` (S6, "The published package"), so the scaffold writes no `projectRoot`.
+ * holding the new `.sous/`, so the scaffold writes no `projectRoot`.
  *
  * Other plugins import this file type-only.
  */

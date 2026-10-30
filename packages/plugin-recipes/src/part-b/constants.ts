@@ -14,7 +14,7 @@ export const LINKS_FILE_NAME = "sous.links.json";
 /** The directory, inside `.sous/`, that linked checkouts are cloned into. */
 export const PROJECT_REPOS_DIRNAME = "repos";
 
-/** The directory, inside `.sous/`, that recipe plugins' `.d.ts` files are copied into (S1). */
+/** The directory, inside `.sous/`, that recipe plugins' `.d.ts` files are copied into. */
 export const TYPES_DIRNAME = "types";
 
 /** The holder a subscription of the project itself is recorded under in `requestedBy`. */

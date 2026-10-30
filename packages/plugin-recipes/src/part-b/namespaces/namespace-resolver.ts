@@ -8,7 +8,7 @@
  *   recipe holds, however its manifest wrote them;
  * - a file of the project's own templates may address every active recipe.
  *
- * Only active recipes are known (S4, 3): a recipe whose subscription is switched off here is not
+ * Only active recipes are known: a recipe whose subscription is switched off here is not
  * addressable, and the error says so.
  */
 

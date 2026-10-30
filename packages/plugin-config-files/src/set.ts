@@ -1,6 +1,6 @@
 /**
  * The `config.set` intent: one value written into a config file, surgically, so comments, key order
- * and formatting stay (S2, "The Document-Editing Package"). The engine rebuilds the config after it.
+ * and formatting stay. The engine rebuilds the config after it.
  */
 
 import fs from "node:fs";

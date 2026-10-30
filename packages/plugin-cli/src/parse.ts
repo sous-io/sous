@@ -20,7 +20,7 @@ export type ParsedLine =
       };
 
 /**
- * Turns argv into a command and its input (S1, "The CLI foundation"), on Node's `util.parseArgs`:
+ * Turns argv into a command and its input, on Node's `util.parseArgs`:
  * command words first (global flags may come before them), then the command's flags and positional
  * arguments. `--help` anywhere shows help for the words given so far.
  */

@@ -1,5 +1,5 @@
 /**
- * The one parser of `.sous/.env` and `.sous/.env.local` (S6: one implementation, L2), with its
+ * The one parser of `.sous/.env` and `.sous/.env.local` (one implementation for every plugin), with its
  * line-preserving editor.
  *
  * These files belong to the user: hand-written, commented, ordered on purpose, and (for `.env`)

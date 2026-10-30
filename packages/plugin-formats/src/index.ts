@@ -1,7 +1,7 @@
 /**
  * plugin-formats: One parser per on-disk format, reading manifests, and the recipe content hash.
  *
- * S6, "Shared building blocks (formats.*)". The contract other plugins code against is `./types.ts`.
+ * The contract other plugins code against is `./types.ts`.
  * Parsing is pure: a lockfile never gets an identity worked out here (`recipes.lock` does that after
  * parsing), and the only service `plugin-formats` reads is `refs.resolver`, for the refs in a manifest.
  */

@@ -127,7 +127,7 @@ describe("conf.d order", () => {
         ]);
     });
 
-    /** The layers view names each file's contributor (G4). */
+    /** The layers view names each file's contributor. */
     it("should name the file that set each value", async () => {
         project.write("sous.config.json", JSON.stringify({ name: "a" }));
         project.write("conf.d/50-b.json", JSON.stringify({ name: "b" }));
@@ -234,7 +234,7 @@ describe("conf.d files changing between builds", () => {
     });
 });
 
-describe("the user's files land on top (C70, C74)", () => {
+describe("the user's files land on top", () => {
     /** A plugin's value gives way to a conf.d file, even when the plugin sorts after it. */
     it("should let a conf.d file win over a plugin's value", async () => {
         project.write("conf.d/610-mine.json", JSON.stringify({ compilation: { includeSourceComments: false } }));
@@ -250,7 +250,7 @@ describe("the user's files land on top (C70, C74)", () => {
     });
 
     /**
-     * C59: a subscription switched off on one machine. The managed file keeps every field; the
+     * A subscription switched off on one machine. The managed file keeps every field; the
      * user's file only adds `enabled: false`, and only where its condition holds.
      */
     it("should switch a subscription off on one machine, keeping its fields", async () => {
@@ -291,7 +291,7 @@ describe("the user's files land on top (C70, C74)", () => {
     });
 });
 
-describe("patch files in conf.d (C77)", () => {
+describe("patch files in conf.d", () => {
     /** One patch, several under `$patches`, and one per line. */
     it("should apply .patch.json and .patch.jsonl files in file order", async () => {
         project.write("sous.config.json", JSON.stringify({ compilation: { overwriteUntracked: true, targets: [{ id: "second" }] }, tools: { codex: {}, claude: {} } }));
@@ -341,7 +341,7 @@ describe("patch files in conf.d (C77)", () => {
 });
 
 describe("confd.managed through the engine", () => {
-    /** An intent edits a managed file; the next build reads it like any conf.d file (S2). */
+    /** An intent edits a managed file; the next build reads it like any conf.d file. */
     it("should edit a managed file that the next build reads", async () => {
         project.write("sous.config.json", JSON.stringify({ name: "main" }));
 

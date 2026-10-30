@@ -1,5 +1,5 @@
 /**
- * The contract of plugin-build (S6, "Build: plugin-build"): the one build path every front end and
+ * The contract of plugin-build: the one build path every front end and
  * every other intent uses (`build`), compiling without recipes (`compile`), preparing for a build,
  * `prune` and `clear`, watch mode, the PID file and the runtime context file. It only runs intents;
  * every file it writes goes through `compiler.writer`.
@@ -41,7 +41,7 @@ export interface RuntimeContextSettings {
 // Services
 // ---------------------------------------------------------------------------------------------
 
-/** The watcher's PID file (S6, `build.pid`). */
+/** The watcher's PID file. */
 export interface BuildPid {
     /** Where it is (`_vars.pidFilePath`, or `.sous/sous.pid` as before the refactor). */
     path(): string;
@@ -64,7 +64,7 @@ export interface RuntimeContext {
     readonly content: string;
 }
 
-/** The runtime context file: git branch and task file (S6, `build.runtime-context`). */
+/** The runtime context file: git branch and task file. */
 export interface BuildRuntimeContext {
     /** The settings in force, `${var}` substituted, or `undefined` when none are set. */
     settings(): RuntimeContextSettings | undefined;
@@ -95,7 +95,7 @@ export interface BuildPrepareResult {
     /** Newer in-range versions found upstream, not installed. */
     readonly newer: ReadonlyArray<{ readonly key: string; readonly from: string; readonly to: string }>;
     readonly checkedUpstream: boolean;
-    /** Locked recipes not built on this machine, and why (S4, 4). */
+    /** Locked recipes not built on this machine, and why. */
     readonly skipped: SkippedRecipe[];
     /** Required variables with no answer. */
     readonly unanswered: readonly DefinedVariable[];

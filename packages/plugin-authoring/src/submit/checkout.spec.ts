@@ -59,7 +59,7 @@ describe("findSubmitCheckout()", () => {
         expect(found.reason).toBe("It is the only repository this project links.");
     });
 
-    /** Several linked repositories are a question, which names the argument that answers it (L4). */
+    /** Several linked repositories are a question, which names the argument that answers it. */
     it("should ask between several linked repositories, and fail naming the argument without a terminal", async () => {
         const links = memoryLinks([link("a", checkout("a")), link("b", checkout("b"))]);
 

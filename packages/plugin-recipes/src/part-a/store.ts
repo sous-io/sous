@@ -1,6 +1,5 @@
 /**
- * The machine-wide recipe store (S6, `recipes.store`; ported from
- * `src/lib/repos/store/recipe-store.ts`): one immutable directory per recipe version, verified
+ * The machine-wide recipe store: one immutable directory per recipe version, verified
  * against its content hash.
  *
  * ```text

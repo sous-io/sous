@@ -1,5 +1,5 @@
 /**
- * Config files as written, for `--raw` (S2, "What `sous config show` and `get` Print"). The files
+ * Config files as written, for `--raw`. The files
  * are read through `config-files.loader`, which already read them for this build, so `--raw` shows
  * exactly the text the build used.
  */

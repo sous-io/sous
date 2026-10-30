@@ -1,6 +1,6 @@
 /**
  * Patch sets as JSON: writing them, reading them back with clear errors, and reading the raw
- * patch files users write (`.patch.json`, `.patch.jsonl`; S2, "Patch files").
+ * patch files users write (`.patch.json`, `.patch.jsonl`).
  */
 import { parse, type ParseError } from "jsonc-parser";
 import { formatPath, parsePath } from "./path.js";
@@ -17,7 +17,7 @@ export class PatchFormatError extends Error {
 }
 
 /**
- * A patch set as JSON text, to save, send or preview (C76).
+ * A patch set as JSON text, to save, send or preview.
  *
  * ```ts
  * deserializePatchSet(serializePatchSet(set));   // deeply equal to set
@@ -162,7 +162,7 @@ function normalizePath(path: unknown, where: string): string {
 }
 
 /**
- * Reads a raw patch file into one patch set named after the file (C77).
+ * Reads a raw patch file into one patch set named after the file.
  *
  * - `json` (`.patch.json`): one patch, unless the top-level object has a single key, `$patches`,
  *   holding an array; then each item is a patch. Comments are allowed.

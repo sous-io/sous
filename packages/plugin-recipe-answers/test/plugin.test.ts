@@ -49,7 +49,7 @@ describe("plugin-recipe-answers through the engine", () => {
 
     /**
      * The answers should be a variable source, which no expression under `subscriptions` or
-     * `repos` may read (S2, "Recipe answers").
+     * `repos` may read.
      */
     it("should add the answers as a variable source", () => {
         const source = engine.config.entities.get("variable-source", "recipe-answers") as VariableSourceEntity;
@@ -104,7 +104,7 @@ describe("plugin-recipe-answers through the engine", () => {
     });
 
     /**
-     * `vars ask` with no terminal should fail naming the flag that answers each question (L4),
+     * `vars ask` with no terminal should fail naming the flag that answers each question,
      * and succeed when the answers are given as flags, storing them and rebuilding the config.
      */
     it("should take every answer from flags when it cannot ask", async () => {

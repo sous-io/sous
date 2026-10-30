@@ -1,5 +1,5 @@
 /**
- * Expanding absolute glob patterns through `host.globs`, the one owner of globbing (S6).
+ * Expanding absolute glob patterns through `host.globs`, the one owner of globbing.
  */
 
 import fs from "node:fs";

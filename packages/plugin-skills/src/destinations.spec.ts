@@ -21,7 +21,7 @@ describe("outputDir()", () => {
 describe("skillDestinations()", () => {
     /**
      * skillDestinations should return no destination with no skill target and no setting: core has
-     * no default (G8).
+     * no default.
      *
      * skillDestinations([], []); // -> []
      */
@@ -37,7 +37,7 @@ describe("skillDestinations()", () => {
      * // -> [{ dir: "${projectRoot}/.claude/skills", target: "claude-code", transform: "skills/claude-code" },
      * //     { dir: "${projectRoot}/.codex/skills" }]
      */
-    it("should use skill targets and configured outputs together (C42, C57)", () => {
+    it("should use skill targets and configured outputs together", () => {
         const transform = (file: SkillFile) => file;
 
         expect(
