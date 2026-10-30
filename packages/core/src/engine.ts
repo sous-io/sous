@@ -45,9 +45,9 @@ import { type ActivePlugin, type BuildOutcome, ConfigBuild, WHAT_IF_PLUGIN } fro
 import { BuiltConfigImpl } from "./config/built-config.js";
 import { ContributorRegistry } from "./config/contributor-registry.js";
 import { CORE_CONFIG_KEYS } from "./config/core-keys.js";
-import type { View } from "./config/reads.js";
+import { entitySignature, type View } from "./config/reads.js";
 import { validateConfig } from "./config/validate.js";
-import { type CallHost, type CallState, ChainState, createContext } from "./context.js";
+import { type CallHost, type CallState, ChainState, configOf, createContext } from "./context.js";
 import { EntityRegistry, EntitySnapshot, type StoredEntity } from "./entities/entity-registry.js";
 import { EventBus, type StoredListenerFn } from "./events/event-bus.js";
 import { AfterEventImpl, type BaseEvent, BeforeEventImpl, CustomEventImpl, ErrorEventImpl } from "./events/event-objects.js";
@@ -107,6 +107,12 @@ interface RebuildTrigger {
     path: string;
 }
 
+/** The latest real build, when it failed: its error, and the config it reached. */
+interface BuildFailure {
+    readonly error: unknown;
+    readonly partial: BuiltConfigImpl;
+}
+
 /**
  * The sous engine (S1): plugin loading inside the config loop, the config builder, the chain
  * scheduler, intents, events, services, entities, loop detection and budgets. Every project state
@@ -145,6 +151,8 @@ export class Engine {
     private current: BuiltConfigImpl;
     private builtInRecords: PluginRecord[] | undefined;
     private streakTriggers: RebuildTrigger[] | undefined;
+    private failure: BuildFailure | undefined;
+    private failedPartial: BuiltConfigImpl | undefined;
     private readonly serviceHost: ServiceHost;
     private readonly apiHost: SousApiHost;
     private readonly callHost: CallHost;
@@ -181,6 +189,7 @@ export class Engine {
             singletons: this.singletons,
             project: this.project,
             env: this.env,
+            cwd: this.cwd,
             building: () => this.realBuilds > 0 || this.contributorStack.length > 0,
         };
         this.handle = this.createHandle();
@@ -195,6 +204,15 @@ export class Engine {
     /** The config as of the latest build. */
     get config(): BuiltConfig {
         return this.current;
+    }
+
+    /**
+     * The error of the latest real config build, when it failed; `undefined` once a build succeeds.
+     * The config is then the partial one the build reached, and only intents that declare
+     * `toleratesConfigErrors` run.
+     */
+    get configError(): unknown {
+        return this.failure?.error;
     }
 
     /** Where engine-level messages go. */
@@ -225,6 +243,26 @@ export class Engine {
             return this.buildWhatIf(options);
         }
 
+        try {
+            const built = await this.buildAndSettle();
+
+            this.failure = undefined;
+
+            return built;
+        } catch (error) {
+            // Keep what the build reached, for intents that tolerate a broken config.
+            const partial = this.failedPartial ?? this.current;
+
+            this.failedPartial = undefined;
+            this.failure = { error, partial };
+            this.current = partial;
+
+            throw error;
+        }
+    }
+
+    /** Builds the real config, then fires `config.built`, rebuilding while its listeners change the config. */
+    private async buildAndSettle(): Promise<BuiltConfigImpl> {
         const seen = new Map<string, number>();
         let changing = 0;
         let repeating = 0;
@@ -267,21 +305,23 @@ export class Engine {
 
             this.streakTriggers = [];
 
+            let fired: RebuildTrigger[];
+
+            // An error a listener throws fails the build (an expression still unknown once settled, say).
             try {
                 const event = new CustomEventImpl("config.built", { config: built });
 
                 await this.dispatch(event, this.inlineCall(built));
             } finally {
-                const fired = this.streakTriggers;
-
+                fired = this.streakTriggers;
                 this.streakTriggers = undefined;
-
-                if (fired.length === 0) {
-                    return built;
-                }
-
-                triggers.push(...fired);
             }
+
+            if (fired.length === 0) {
+                return built;
+            }
+
+            triggers.push(...fired);
         }
     }
 
@@ -334,6 +374,7 @@ export class Engine {
             builtIn: record.builtIn,
             loadedBy: record.loadedBy ?? (record.specifier ? "plugins.load" : undefined),
             registrations: [...record.registrations],
+            options: this.current.get<JsonObject>(["plugins", "options", record.name]),
         }));
     }
 
@@ -379,9 +420,10 @@ export class Engine {
 
         const endBuild = this.timer.start("config.build", label);
         let built: BuiltConfigImpl | undefined;
+        let build: ConfigBuild | undefined;
 
         try {
-            const build = new ConfigBuild(this.buildHost(), extra);
+            build = new ConfigBuild(this.buildHost(), extra);
             const outcome = await build.run();
 
             await this.checkDependencies(outcome.active);
@@ -404,6 +446,12 @@ export class Engine {
             this.reportBuildWarnings(outcome, entities);
 
             return built;
+        } catch (error) {
+            if (!whatIf && build) {
+                this.failedPartial = this.partialConfig(build, buildNumber);
+            }
+
+            throw error;
         } finally {
             endBuild();
 
@@ -416,6 +464,27 @@ export class Engine {
             }
 
             this.timer.releaseDeferred();
+        }
+    }
+
+    /** The config a failed build reached: the plugins it activated and the values merged so far, unchecked. */
+    private partialConfig(build: ConfigBuild, buildNumber: number): BuiltConfigImpl | undefined {
+        try {
+            const partial = build.partial();
+            const config = deepFreeze(structuredClone(partial.config));
+
+            return this.makeBuilt({
+                buildNumber,
+                whatIf: false,
+                config,
+                entities: partial.entities,
+                records: partial.records,
+                active: partial.active,
+                passes: partial.passes,
+                hash: hashOf(config, partial.entities),
+            });
+        } catch {
+            return undefined;
         }
     }
 
@@ -546,12 +615,21 @@ export class Engine {
         this.warnAboutPrefixes(outcome.active);
     }
 
-    /** A name starting with another plugin's prefix is allowed; sous warns once, naming both (S1, "Names"). */
+    /**
+     * A name starting with another plugin's prefix is allowed; sous warns once per process, naming
+     * both. A name the owning plugin declares `implementable` is expected, and not
+     * warned about.
+     */
     private warnAboutPrefixes(active: ReadonlyMap<string, ActivePlugin>): void {
         const byPrefix = new Map<string, string>();
+        const implementable = new Set<string>();
 
-        for (const name of active.keys()) {
+        for (const [name, { record }] of active) {
             byPrefix.set(pluginPrefix(name), name);
+
+            for (const open of record.definition.implementable ?? []) {
+                implementable.add(open);
+            }
         }
 
         for (const { record } of active.values()) {
@@ -565,7 +643,7 @@ export class Engine {
                 const prefix = namePrefix(registration.name);
                 const owner = byPrefix.get(prefix);
 
-                if (owner && prefix !== own && owner !== record.name) {
+                if (owner && prefix !== own && owner !== record.name && !implementable.has(registration.name)) {
                     this.warnOnce(`${record.name} registers the ${registration.kind} "${registration.name}", which starts with ${owner}'s prefix "${prefix}".`);
                 }
             }
@@ -839,30 +917,97 @@ export class Engine {
         const reporter = options.reporter ?? this.reporterImpl;
         const prompter = options.prompter ?? nonInteractivePrompter;
         const globals = Object.freeze({ ...(options.globals ?? {}) });
+        const cwd = options.cwd ?? this.cwd;
+        const definition = info.definition;
 
-        if (info.definition.background) {
-            return this.startBackground(request, { reporter, prompter, globals }, parentFrame);
+        if (definition.background) {
+            try {
+                this.checkBuildFailure(definition, reporter);
+            } catch (error) {
+                return Promise.reject(error);
+            }
+
+            return this.startBackground(request, { reporter, prompter, globals, cwd }, parentFrame);
         }
 
-        const parallel = options.parallel ?? info.definition.parallel ?? false;
+        const parallel = options.parallel ?? definition.parallel ?? false;
+        const tolerant = definition.toleratesConfigErrors === true;
 
-        return this.scheduler.enqueue(parallel, async (markChanged) => {
-            const chain = new ChainState(++this.chainCounter, request.intent, parallel, this.current, reporter, prompter, globals);
-            const call: CallState = { mode: "chain", chain, frame: parentFrame, config: chain.config, reporter, prompter, globals };
+        return this.scheduler.enqueue(
+            parallel,
+            async (markChanged) => {
+                this.checkBuildFailure(definition, reporter);
 
-            try {
-                return await this.timer.measure("chain", request.intent, undefined, () => this.runIntent(request.intent, request.input, call));
-            } finally {
-                if (chain.changedConfig) {
-                    markChanged();
+                const chain = new ChainState(++this.chainCounter, request.intent, parallel, this.current, reporter, prompter, globals);
+                const call: CallState = { mode: "chain", chain, frame: parentFrame, config: chain.config, reporter, prompter, globals, cwd };
+
+                try {
+                    return await this.timer.measure("chain", request.intent, undefined, () => this.runIntent(request.intent, request.input, call));
+                } finally {
+                    if (chain.changedConfig) {
+                        markChanged();
+                    }
                 }
-            }
-        });
+            },
+            { toleratesConfigErrors: tolerant },
+        );
+    }
+
+    /**
+     * When the latest build failed: an intent that tolerates it runs with the partial config, and
+     * the error is reported as a warning; any other fails with the build's error.
+     */
+    private checkBuildFailure(definition: IntentDefinition, reporter: Reporter): void {
+        if (!this.failure) {
+            return;
+        }
+
+        if (definition.toleratesConfigErrors !== true) {
+            throw this.failure.error;
+        }
+
+        const error = this.failure.error;
+        const details = error instanceof SousError && error.details.length > 0 ? ` (${error.details.join("; ")})` : "";
+
+        reporter.warning(`The config could not be built, so ${definition.intent} runs with what was built before the error: ${messageOf(error)}${details}`);
+    }
+
+    /**
+     * Rebuilds the config in the middle of a series chain (`ctx.refreshConfig()`): the rest of the
+     * chain uses the new config and its services.
+     */
+    private async refreshChainConfig(call: CallState): Promise<BuiltConfig> {
+        const chain = call.chain;
+
+        if (call.mode !== "chain" || !chain) {
+            throw new SousError("ctx.refreshConfig() can only be used inside a chain.", {
+                details: ["A config.built listener, a background intent or code outside a chain cannot refresh the config; call ctx.configChanged() instead."],
+            });
+        }
+
+        if (this.streakTriggers !== undefined || this.realBuilds > 0) {
+            throw new SousError("ctx.refreshConfig() cannot be used while the config is being built or its config.built listeners run.", {
+                details: ["Call ctx.configChanged() instead; the config is rebuilt when the listeners finish."],
+            });
+        }
+
+        if (chain.parallel) {
+            throw new SousError(`ctx.refreshConfig() cannot be used in a parallel chain (${chain.intent}).`, {
+                details: ["Other chains may be using the config. Declare the intent as a series one, or call ctx.configChanged() instead."],
+            });
+        }
+
+        const built = (await this.buildConfig()) as BuiltConfigImpl;
+
+        chain.config = built;
+        chain.changedConfig = false;
+
+        return built;
     }
 
     private startBackground(
         request: IntentRequest,
-        io: { reporter: Reporter; prompter: SubmitOptions["prompter"] & object; globals: Readonly<Record<string, unknown>> },
+        io: { reporter: Reporter; prompter: SubmitOptions["prompter"] & object; globals: Readonly<Record<string, unknown>>; cwd: string },
         parentFrame: Frame | undefined,
     ): Promise<unknown> {
         const call: CallState = { mode: "background", chain: undefined, frame: parentFrame, config: this.current, ...io };
@@ -890,7 +1035,7 @@ export class Engine {
      * wrapped handler, fires `.error` on failure and `.after` on success.
      */
     private async runIntent(name: string, rawInput: unknown, call: CallState): Promise<unknown> {
-        const config = call.mode === "background" ? this.current : call.config;
+        const config = configOf(call, () => this.current);
         const info = this.resolveIntent(name, config);
         const definition = info.definition;
         const limits = config.limits;
@@ -1010,11 +1155,16 @@ export class Engine {
                 case "inline":
                     return this.runInline(intent, input, call);
                 default:
-                    return this.submitWith({ intent, input: input as never }, { reporter: call.reporter, prompter: call.prompter, globals: call.globals }, call.frame);
+                    return this.submitWith(
+                        { intent, input: input as never },
+                        { reporter: call.reporter, prompter: call.prompter, globals: call.globals, cwd: call.cwd },
+                        call.frame,
+                    );
             }
         },
         emitCustom: (name: string, payload: unknown, call: CallState) => this.emitCustom(name, payload, call),
         markConfigChanged: () => this.scheduler.markDirty(),
+        refreshConfig: (call: CallState) => this.refreshChainConfig(call),
         };
     }
 
@@ -1027,11 +1177,12 @@ export class Engine {
             reporter: this.reporterImpl,
             prompter: nonInteractivePrompter,
             globals: {},
+            cwd: this.cwd,
         };
     }
 
     private inlineCall(config: BuiltConfigImpl): CallState {
-        return { mode: "inline", chain: undefined, frame: undefined, config, reporter: this.reporterImpl, prompter: nonInteractivePrompter, globals: {} };
+        return { mode: "inline", chain: undefined, frame: undefined, config, reporter: this.reporterImpl, prompter: nonInteractivePrompter, globals: {}, cwd: this.cwd };
     }
 
     // ------------------------------------------------------------------ events
@@ -1059,7 +1210,7 @@ export class Engine {
      * caller.
      */
     private async dispatch(event: BaseEvent, call: CallState): Promise<void> {
-        const config = call.mode === "background" ? this.current : call.config;
+        const config = configOf(call, () => this.current);
         const depth = countFrames(call.frame, "event", event.name) + 1;
 
         if (depth > config.limits.eventDepth) {
@@ -1155,6 +1306,9 @@ export class Engine {
             get reporter() {
                 return engine.reporterImpl;
             },
+            get configError() {
+                return engine.configError;
+            },
             setReporter: (reporter) => engine.setReporter(reporter),
             submit: ((request: IntentRequest, options?: SubmitOptions) => engine.submit(request, options)) as EngineHandle["submit"],
             buildConfig: (options) => engine.buildWhatIf(options),
@@ -1167,7 +1321,7 @@ export class Engine {
 function hashOf(config: Readonly<JsonObject>, entities: EntitySnapshot): string {
     const ids = entities
         .allRecords()
-        .map((entity) => `${entity.kind}/${entity.id}/${entity.contributor ?? entity.plugin}`)
+        .map((entity) => `${entity.kind}/${entitySignature(entity)}`)
         .sort();
 
     return createHash("sha1").update(stableStringify(config)).update("\u0000").update(ids.join("\n")).digest("hex");

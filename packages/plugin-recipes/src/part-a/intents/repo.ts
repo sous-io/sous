@@ -59,7 +59,7 @@ export async function addRepo(input: RepoAddInput, ctx: Context): Promise<RepoAd
     let url = typed;
 
     if (looksLikeLocalPath(typed)) {
-        url = resolveLocalPath(typed, ctx.env.PWD ?? ctx.project?.root ?? process.cwd(), ctx.env.HOME);
+        url = resolveLocalPath(typed, ctx.cwd ?? ctx.project?.root ?? ".", ctx.env.HOME);
 
         // The host that reads the path explains a path mistake (plugin-local: nothing there, a
         // file, no repository manifest); without one, sous checks only that it is a directory.
@@ -130,8 +130,8 @@ export async function addRepo(input: RepoAddInput, ctx: Context): Promise<RepoAd
     ctx.configChanged();
 
     try {
-        // The running config predates the entry, so the index is read through a config built from the files as they are now.
-        const fresh = await ctx.engine.buildConfig();
+        // The running config predates the entry, so it is rebuilt from the files as they are now, for the rest of this chain.
+        const fresh = await ctx.refreshConfig();
         const cached = await fresh.services.get("recipes.index-cache").get(name, { latest: true });
 
         result.namespaces = sortBytewise(Object.keys(cached.index.namespaces));

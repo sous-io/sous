@@ -53,6 +53,8 @@ export interface PluginInfo {
     readonly loadedBy: string | undefined;
     /** What it registered, for `plugins show` (G4). */
     readonly registrations: ReadonlyArray<{ readonly kind: string; readonly name: string }>;
+    /** Its options from `plugins.options` in the current config, if any. */
+    readonly options: JsonObject | undefined;
 }
 
 /**
@@ -69,6 +71,12 @@ export interface EngineHandle {
     readonly timings: Timings;
     /** Where engine-level messages go (budget warnings, build warnings). */
     readonly reporter: Reporter;
+    /**
+     * The error of the latest config build, when it failed (`undefined` once one succeeds). The
+     * config is then the partial one that build reached; only intents that declare
+     * `toleratesConfigErrors` run, and a front end should report this error for anything else.
+     */
+    readonly configError: unknown;
     /** Sets where engine-level messages go; messages kept so far are sent there first. */
     setReporter(reporter: Reporter): void;
     /** Submits a chain; resolves with the intent's result. */
@@ -100,6 +108,11 @@ export interface Context {
     readonly env: Environment;
     /** The front end's global argument values (`debug`, `logLevel`, plugin-added ones). */
     readonly globals: Readonly<Record<string, unknown>>;
+    /**
+     * The working directory the front end gave the chain: the CLI gives the process's, the MCP
+     * server the project root. Use it instead of `process.cwd()`. Default: the engine's.
+     */
+    readonly cwd: string;
     /** The chain, or `undefined` outside one (a background intent). */
     readonly chain: ChainInfo | undefined;
     readonly engine: EngineHandle;
@@ -114,4 +127,23 @@ export interface Context {
     emit<N extends string>(name: N, payload?: EventPayload<N>): Promise<EventFor<N>>;
     /** Says this chain changed the config, so it is rebuilt before the next chain starts. */
     configChanged(): void;
+    /**
+     * Rebuilds the config now, for the rest of this chain: later `ctx.config`, `ctx.services`
+     * (`config` services are made again), `ctx.entities` and `ctx.run` calls see the new one. The
+     * new config becomes the engine's, and `config.built` fires, as for any rebuild. Resolves with
+     * it; a failed build rejects, and the chain keeps its old config.
+     *
+     * Only a series chain may do this: a parallel chain, a background intent, a `config.built`
+     * listener or code outside any chain gets a `SousError`.
+     *
+     * ```ts
+     * async handle(input, ctx) {
+     *     await writeSubscription(ctx, input);       // changes a config file
+     *     await ctx.refreshConfig();                 // the build below sees it
+     *
+     *     return ctx.run("build", {});
+     * }
+     * ```
+     */
+    refreshConfig(): Promise<BuiltConfig>;
 }

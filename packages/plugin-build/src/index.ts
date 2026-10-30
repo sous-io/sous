@@ -47,13 +47,13 @@ export interface BuildPluginOptions {
     isProcessAlive?: (pid: number) => boolean;
     /** Told about each watch session as it starts. */
     onWatchSession?: (session: WatchSession) => void;
-    /** Where relative paths resolve with no project. Default: the process's directory. */
+    /** Where relative paths resolve with no project. Default: the chain's `ctx.cwd` (the engine's for services). */
     cwd?: () => string;
 }
 
 /** Builds the plugin. {@link buildPlugin} is the one sous ships. */
 export function createBuildPlugin(options: BuildPluginOptions = {}): PluginDefinition {
-    const cwd = options.cwd ?? (() => process.cwd());
+    const cwd = options.cwd;
 
     return definePlugin({
         name: PLUGIN_NAME,
@@ -86,7 +86,7 @@ export function createBuildPlugin(options: BuildPluginOptions = {}): PluginDefin
                     new PidFile({
                         ...explicitPidPath(ctx.services),
                         project: ctx.project,
-                        cwd: cwd(),
+                        cwd: cwd?.() ?? ctx.cwd ?? ".",
                         isAlive: options.isProcessAlive ?? isProcessAlive,
                     }),
                 { lifetime: "singleton" },

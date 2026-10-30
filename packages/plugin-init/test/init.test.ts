@@ -272,13 +272,17 @@ describe("init", () => {
 });
 
 describe("init build", () => {
-    /** Without noBuild, init marks the config changed and runs the one build path. */
-    it("should run the build through ctx.run", async () => {
+    /**
+     * Without noBuild, init marks the config changed, refreshes it for the rest of the chain
+     * (ctx.refreshConfig()) so the build reads the config just written, and runs the one build path.
+     */
+    it("should refresh the config, then run the build through ctx.run", async () => {
         const { ctx, recorded } = initContext();
         const result = await handle({ directory: projectRoot }, ctx);
 
         expect(recorded.runs).toEqual([{ intent: "build", input: {} }]);
         expect(recorded.configChanged).toBe(1);
+        expect(recorded.refreshes).toEqual([0]);
         expect(result.build).toMatchObject({ ok: true });
     });
 

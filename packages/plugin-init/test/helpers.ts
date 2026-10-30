@@ -53,6 +53,8 @@ export interface InitRecorded {
     /** Every intent `ctx.run` was asked for. */
     runs: Array<{ intent: string; input: unknown }>;
     configChanged: number;
+    /** How many times the config was refreshed, and the runs before each refresh. */
+    refreshes: number[];
     asked: string[];
 }
 
@@ -60,7 +62,7 @@ export interface InitRecorded {
 export function initContext(options: InitContextOptions = {}): { ctx: Context; recorded: InitRecorded } {
     const reporter = new BufferedReporter();
     const prompter = scriptedPrompter([...(options.answers ?? [])]);
-    const recorded: InitRecorded = { reporter, runs: [], configChanged: 0, asked: prompter.asked };
+    const recorded: InitRecorded = { reporter, runs: [], configChanged: 0, refreshes: [], asked: prompter.asked };
     const services: Record<string, unknown> = {
         "host.package": { identity: () => ({ name: "@sous-io/sous", version: options.version ?? "0.1.1", root: "/x", realRoot: "/x", bin: undefined }) },
         "host.gitignore": createGitignore(),
@@ -79,6 +81,8 @@ export function initContext(options: InitContextOptions = {}): { ctx: Context; r
         project: undefined,
         env: {},
         configChanged: () => void recorded.configChanged++,
+        chain: { id: 1, intent: "init", parallel: false },
+        refreshConfig: async () => void recorded.refreshes.push(recorded.runs.length),
         run: async (intent: string, input: unknown) => {
             recorded.runs.push({ intent, input });
 

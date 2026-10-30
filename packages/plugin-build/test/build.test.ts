@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { ConfigError, NonInteractiveError, NotFoundError, scriptedPrompter } from "@sous-io/plugin-api";
 import type { CompilerPruneResult } from "@sous-io/plugin-compiler/types";
 import type { BuildResult, ClearResult, CompileCommandResult } from "../src/types.js";
-import { entry, harness, target } from "./helpers.js";
+import { entry, harness, plugin, target } from "./helpers.js";
 
 /** Ported in spirit from src/test/integration/build-service.test.ts: the compiler's half moved to plugin-compiler. */
 describe("the build intent", () => {
@@ -21,6 +21,30 @@ describe("the build intent", () => {
         expect(h.world.compileCalls).toEqual([{}]);
         expect(h.world.pruneCalls).toEqual([{ dryRun: false }]);
         expect(result.prepared.locked.unchanged).toBe(true);
+    });
+
+    /**
+     * When build.prepare locks a new subscription, the build refreshes the config before it
+     * compiles, so the compile sees the recipes the lockfile now pins (ctx.refreshConfig()).
+     *
+     * subscriptions: { acme: {} }, lockfile empty; sous build; // -> compiled with the new config
+     */
+    it("should compile with a refreshed config when preparing changed the lockfile", async () => {
+        const seen: number[] = [];
+        const h = await harness({
+            world: (world) => {
+                world.config = { subscriptions: { acme: {} } };
+                world.published = { "acme/jira": { repo: "acme", namespace: "acme", version: "1.0.0" } };
+            },
+            extra: [plugin("test-watcher", (sous) => sous.on("compiler.compile.before", (_event, ctx) => void seen.push(ctx.config.buildNumber)))],
+        });
+        const before = h.engine.config.buildNumber;
+        const result = await h.run<BuildResult>("build");
+
+        expect(result.prepared.locked.added).toEqual([{ key: "acme/jira", to: "1.0.0" }]);
+        expect(seen).toHaveLength(1);
+        expect(seen[0]).toBeGreaterThan(before);
+        expect(h.reporter.messages.map((entry) => entry.message).join("\n")).not.toContain("compiled from the next build on");
     });
 
     /**

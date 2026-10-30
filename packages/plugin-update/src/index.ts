@@ -70,6 +70,8 @@ export const updatePlugin: PluginDefinition = definePlugin({
             intent: "update",
             summary: "Update sous itself, globally and in this project, through the package manager that installed each copy",
             input: updateInput,
+            // Updating sous is how a user repairs an install whose config no longer builds.
+            toleratesConfigErrors: true,
             cli: {
                 examples: ["sous update", "sous update --global", "sous update --major", "sous update --version 0.2.18", "sous update --version next", "sous update --dry-run"],
                 flags: { yes: { short: "y", aliases: ["force"] }, prerelease: { aliases: ["pre"] } },

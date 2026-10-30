@@ -9,7 +9,12 @@ export interface EntityKindOptions {
     description?: string;
 }
 
-/** One entity, with where it came from. */
+/**
+ * One entity, with where it came from.
+ *
+ * The engine compares entities by id, source and a hash of their fields that are not functions,
+ * so a contributor that read an entity re-runs when it appears, disappears or its data changes.
+ */
 export interface EntityRecord<E = unknown> {
     readonly kind: string;
     readonly id: string;

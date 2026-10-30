@@ -17,6 +17,8 @@ import { listenForWatchKeys, startedWatching, WATCH_KEYS_HINT } from "./watch-ke
 export interface CliRunOptions {
     readonly io: CliIo;
     readonly env: Environment;
+    /** The working directory chains get as `ctx.cwd`: the process's. Default: the engine's. */
+    readonly cwd?: string;
 }
 
 /**
@@ -45,6 +47,12 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
             reporter.warning(warning);
         }
 
+        // A config that failed to build stops every command except an intent that can run
+        // without it (`sous update`), as it did before the front end started.
+        if (engine.configError !== undefined && !(line.kind === "run" && engine.intents.get(line.command.intent)?.definition.toleratesConfigErrors === true)) {
+            throw engine.configError;
+        }
+
         switch (line.kind) {
             case "help":
                 io.stdout.write(renderHelp(line.node, { appName: engine.app.name, globals: specs }));
@@ -59,7 +67,9 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
             case "run": {
                 const prompter = new TerminalPrompter(io.stdin, io.stderr, canPrompt(io, env, line.globals));
                 const intent = line.command.intent;
-                const submitOptions = { reporter, prompter, globals: line.globals };
+                const submitOptions = { reporter, prompter, globals: line.globals, ...(options.cwd === undefined ? {} : { cwd: options.cwd }) };
+                // A background intent (`sous mcp`) owns standard output while it runs; its result is not printed.
+                const background = engine.intents.get(intent)?.definition.background === true;
                 const show = async (result: unknown) => {
                     const shown = await showResult(intent, result, { entities: engine.config.entities, stdout: io.stdout, env, input: line.input, globals: line.globals });
 
@@ -89,7 +99,9 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
                 try {
                     const result = await engine.submit({ intent, input: line.input }, submitOptions);
 
-                    await show(result);
+                    if (!background) {
+                        await show(result);
+                    }
 
                     if (startedWatching(result)) {
                         await watchUntilStopped(engine, io, intent, line.input, submitOptions, show, fail);
@@ -106,7 +118,8 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
             io.stderr.write(renderTimings(engine.timings.entries()));
         }
     } catch (error) {
-        const view = viewError(error, { debug });
+        // With a broken config, its error is the one to show, whatever failed after it.
+        const view = viewError(engine.configError ?? error, { debug });
 
         io.stderr.write(`${view.lines.join("\n")}\n`);
         io.setExitCode(view.exitCode);

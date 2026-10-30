@@ -162,7 +162,7 @@ async function suggestedName(ctx: Context, directory: string): Promise<string | 
 async function requireRepoDirectory(ctx: Context, given: string): Promise<string> {
     const home = ctx.env.HOME ?? os.homedir();
     const expanded = given === "~" ? home : given.startsWith("~/") ? path.join(home, given.slice(2)) : given;
-    const directory = path.resolve(ctx.env.PWD ?? ctx.project?.root ?? ".", expanded);
+    const directory = path.resolve(ctx.cwd ?? ctx.project?.root ?? ".", expanded);
 
     if (!fs.existsSync(directory)) {
         throw new ConfigError(`There is no directory at ${directory}.`, { details: ["Pass the path of a checkout that already exists, or leave the path off to have sous clone the repository for you."] });

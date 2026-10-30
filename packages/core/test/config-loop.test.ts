@@ -65,7 +65,8 @@ describe("the config loop", () => {
 
         expect(runs).toBe(2);
         expect(built.get("list")).toEqual(["item"]);
-        expect(built.contributions().map((c) => c.contributor)).toEqual(["b-flagger", "a-appender"]);
+        // Patches apply in the sorted order; a re-run does not move a contributor.
+        expect(built.contributions().map((c) => c.contributor)).toEqual(["a-appender", "b-flagger"]);
     });
 
     /**
@@ -187,8 +188,53 @@ describe("the config loop", () => {
     });
 
     /**
+     * An entity that keeps its id but changes its data re-runs its readers, list and narrow alike;
+     * functions are not compared.
+     */
+    it("should re-run entity readers when an entity with the same id changes", async () => {
+        const runs = { list: 0, narrow: 0 };
+        const { engine } = makeEngine([
+            keysPlugin("dir", "dirs", "mode"),
+            plugin("p", (sous) => {
+                sous.entities.define("skill-target", { "~standard": { version: 1, vendor: "t", validate: (value) => ({ value }) } });
+                sous.config.contribute({
+                    id: "1-list",
+                    contribute(config) {
+                        runs.list += 1;
+                        config.atPath("dirs").set(config.entities("skill-target").map((target) => (target as unknown as { dir: string }).dir));
+                    },
+                });
+                sous.config.contribute({
+                    id: "1-narrow",
+                    contribute(config) {
+                        runs.narrow += 1;
+                        config.atPath("dir").set((config.entity("skill-target", "codex") as unknown as { dir?: string } | undefined)?.dir ?? "none");
+                    },
+                });
+                sous.config.contribute({
+                    id: "2-adder",
+                    contribute(config) {
+                        const mode = config.atPath("mode").valueOr("plain");
+
+                        // A new function each run: never counted as a change on its own.
+                        config.addEntity("skill-target", { id: "codex", dir: `.codex-${mode}`, run: () => mode });
+                    },
+                });
+                sous.config.contribute({ id: "3-mode", contribute: (config) => config.atPath("mode").set("fancy") });
+            }),
+        ]);
+
+        const built = await engine.buildConfig();
+
+        expect(built.get("dir")).toBe(".codex-fancy");
+        expect(built.get("dirs")).toEqual([".codex-fancy"]);
+        expect(runs).toEqual({ list: 3, narrow: 3 });
+    });
+
+    /**
      * A contributor that applies data with one merge at the root reads the whole tree, so any change by
-     * anyone re-runs it, and its patch lands on top (C66, C70).
+     * anyone re-runs it; declared `after: ["*"]`, as the user's files are, its patch lands on top
+     * (C66, C70).
      */
     it("should re-run a root merge after any change and land it on top (C66)", async () => {
         let runs = 0;
@@ -197,12 +243,14 @@ describe("the config loop", () => {
             contributorsPlugin("p", [
                 {
                     id: "1-file",
+                    after: ["*"],
                     contribute(config) {
                         runs += 1;
-                        config.root().merge({ a: "user" });
+                        config.root().merge({ a: "user", b: "file" });
                     },
                 },
-                { id: "2-plugin", contribute: (config) => config.atPath("a").set("plugin") },
+                // Reads what the file sets, so it re-runs in pass 2 and changes `a` again.
+                { id: "2-plugin", contribute: (config) => config.atPath("a").set(`plugin-${config.atPath("b").valueOr("none")}`) },
             ]),
         ]);
 

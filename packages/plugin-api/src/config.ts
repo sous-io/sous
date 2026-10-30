@@ -47,7 +47,7 @@ export interface BuiltConfig extends ConfigReader {
     readonly whatIf: boolean;
     /** Passes the build took, over every stage, counting only passes in which something ran. */
     readonly passes: number;
-    /** A hash of the values and the entity ids, to tell configs apart. */
+    /** A hash of the values and the entities (ids, sources and data), to tell configs apart. */
     readonly hash: string;
     /** The entities of this build. */
     readonly entities: EntityReader;
@@ -55,7 +55,7 @@ export interface BuiltConfig extends ConfigReader {
     readonly services: ServiceReader;
     /** Every change to a path, or anything inside it or around it, in the order it was applied. */
     layers(path: PathInput): ConfigLayer[];
-    /** Every contributor's part, in the order they last ran. */
+    /** Every contributor's part, in the order their patches apply: the sorted order, earlier stages first. */
     contributions(): Contribution[];
 }
 
@@ -88,7 +88,10 @@ export interface ConfigBuilder {
     entities<K extends EntityKind>(kind: K): EntityType<K>[];
     /** One entity. Recorded as a read of that entity alone. */
     entity<K extends EntityKind>(kind: K, id: string): EntityType<K> | undefined;
-    /** Adds an entity the config creates. It is part of this run's patch, so a re-run replaces it. */
+    /**
+     * Adds an entity the config creates. It is part of this run's patch, so a re-run replaces it.
+     * Its methods must not use `this` (see `sous.entities.add`).
+     */
     addEntity<K extends EntityKind>(kind: K, entry: EntityType<K>): void;
     /** This contributor's patch set from its previous run, if it ran before (C2). */
     previousPatches(): PatchSet | undefined;

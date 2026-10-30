@@ -91,6 +91,13 @@ export interface IntentDefinition<N extends string = string, S extends SousSchem
     parallel?: boolean;
     /** Running it changes the config, so the engine rebuilds the config before the next chain. */
     changesConfig?: boolean;
+    /**
+     * It can run when the config fails to build (`sous update` repairing a broken install): it runs
+     * with whatever partial config the failed build reached (the plugins it activated, the values
+     * it merged, unchecked), and the build's error is reported as a warning. Other intents fail
+     * with that error.
+     */
+    toleratesConfigErrors?: boolean;
     /** Only callable through `ctx.run`; neither the CLI nor MCP shows it. */
     internal?: boolean;
     /** How the CLI shows it. */
@@ -134,4 +141,6 @@ export interface SubmitOptions {
     parallel?: boolean;
     /** Values of the front end's global arguments (`--debug`, plugin-added ones), as `ctx.globals`. */
     globals?: Readonly<Record<string, unknown>>;
+    /** The working directory, as `ctx.cwd` (the CLI: the process's; MCP: the project root). Default: the engine's. */
+    cwd?: string;
 }

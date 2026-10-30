@@ -34,6 +34,83 @@ describe("order and stages", () => {
     });
 
     /**
+     * A bare `*` in `after` puts a contributor after every contributor that does not declare it
+     * itself; among those that do, their own declarations decide. A contributor that names one of
+     * them explicitly keeps its own declaration.
+     */
+    it("should put contributors declared after * last, in their own chain", async () => {
+        const order: string[] = [];
+        const record = (id: string) => () => void order.push(id);
+        const { engine, reporter } = makeEngine([
+            contributorsPlugin("plugin-confd", [
+                { id: "confd/700", after: ["*", "confd/610"], contribute: record("confd/700") },
+                { id: "confd/610", after: ["*", "config-files.main"], contribute: record("confd/610") },
+            ]),
+            contributorsPlugin("plugin-config-files", [{ id: "config-files.main", after: ["*"], contribute: record("config-files.main") }]),
+            contributorsPlugin("plugin-x", [
+                { id: "zzz-plugin", contribute: record("zzz-plugin") },
+                { id: "late-fixups", after: ["confd/*"], contribute: record("late-fixups") },
+            ]),
+        ]);
+
+        await engine.buildConfig();
+
+        expect(order).toEqual(["zzz-plugin", "config-files.main", "confd/610", "confd/700", "late-fixups"]);
+        expect(reporter.at("warning").join("\n")).not.toContain("cycle");
+    });
+
+    /**
+     * `before: ["*"]` is the mirror image: before every contributor that does not declare it.
+     */
+    it("should put contributors declared before * first", async () => {
+        const order: string[] = [];
+        const record = (id: string) => () => void order.push(id);
+        const { engine } = makeEngine([
+            contributorsPlugin("p", [
+                { id: "a", contribute: record("a") },
+                { id: "z-first", before: ["*"], contribute: record("z-first") },
+                { id: "y-first", before: ["*", "z-first"], contribute: record("y-first") },
+            ]),
+        ]);
+
+        await engine.buildConfig();
+
+        expect(order).toEqual(["y-first", "z-first", "a"]);
+    });
+
+    /**
+     * The config-building spec's machineRole example, with stand-ins for the user's files (root merges declared after *,
+     * chained in file order): 610 reads machineRole, which 700 sets. Patches apply in the sorted
+     * order and a re-run does not move a patch, so sous.config.* and 700 never trade places and the
+     * build settles with 700's value.
+     */
+    it("should settle when a file reads a variable a later file sets (the machineRole example)", async () => {
+        const { engine } = makeEngine([
+            keysPlugin("_vars", "browser"),
+            contributorsPlugin("files", [
+                { id: "config-files.main", after: ["*"], contribute: (config) => config.root().merge({ _vars: { machineRole: "laptop" } }) },
+                {
+                    id: "confd/610-browser",
+                    after: ["*", "config-files.main"],
+                    contribute(config) {
+                        const role: unknown = config.atPath("_vars.machineRole").get();
+
+                        config.root().merge({ browser: role === "laptop" ? "on" : "off" });
+                    },
+                },
+                { id: "confd/700-ci", after: ["*", "confd/610-browser"], contribute: (config) => config.root().merge({ _vars: { machineRole: "ci" } }) },
+            ]),
+            contributorsPlugin("plugin-y", [{ id: "zzz-plugin", contribute: (config) => config.atPath("_vars.fromPlugin").setValue(true) }]),
+        ]);
+
+        const built = await engine.buildConfig();
+
+        expect(built.get("_vars")).toEqual({ fromPlugin: true, machineRole: "ci" });
+        expect(built.get("browser")).toBe("off");
+        expect(built.contributions().map((c) => c.contributor)).toEqual(["zzz-plugin", "config-files.main", "confd/610-browser", "confd/700-ci"]);
+    });
+
+    /**
      * Declarations that form a cycle are broken by name order, and sous warns once naming them.
      */
     it("should warn about a cycle of before and after declarations", async () => {

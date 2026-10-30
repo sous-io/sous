@@ -11,13 +11,12 @@ import {
     ConfigError,
     definePlugin,
     jsonSchema,
-    type BuiltConfig,
     type ContributorDefinition,
     type JsonValue,
     type PluginDefinition,
 } from "@sous-io/plugin-api";
 import { describe, expect, it } from "vitest";
-import { expressionsPlugin, type Evaluator } from "../src/index.js";
+import { expressionsPlugin } from "../src/index.js";
 import { hostPlugin } from "@sous-io/plugin-host";
 import { liquidPlugin } from "@sous-io/plugin-liquid";
 import { variablesPlugin } from "@sous-io/plugin-variables";
@@ -98,27 +97,21 @@ describe("expressions in the config loop", () => {
         expect(built.services.get("expressions.evaluator").unsettled()).toEqual([]);
     });
 
-    // The config.built listener throws these errors, but core's buildConfig returns from a
-    // `finally` block, which drops an error a config.built listener throws. Until core is fixed,
-    // these check what the listener sees and throws.
-    it("leaves a filter that never appears unsettled once the config settles, which settle() reports", async () => {
+    // Once the config settles, the config.built listener fails the load: an unknown filter or variable.
+    it("fails the load once settled when a filter never appears, naming it", async () => {
         const engine = engineWith(filesPlugin([{ file: "a-610.jsonc", data: { flags: { ci: { $if: "'1' | is_truthy" } } } }]));
-        const built = await engine.buildConfig().catch((error: unknown) => error);
+        const error = await engine.buildConfig().catch((caught: unknown) => caught);
 
-        expect(built).not.toBeInstanceOf(Error);
-        const evaluator = (built as BuiltConfig).services.get("expressions.evaluator") as Evaluator;
-
-        expect(evaluator.unsettled()).toEqual([{ file: "a-610.jsonc", path: "flags.ci", unknown: { variables: [], filters: ["is_truthy"] } }]);
-        expect(() => evaluator.settle()).toThrow(/flags\.ci uses the Liquid filter is_truthy, which no plugin adds/);
+        expect(error).toBeInstanceOf(ConfigError);
+        expect((error as Error).message).toMatch(/flags\.ci uses the Liquid filter is_truthy, which no plugin adds/);
     });
 
-    it("leaves a variable that is never set unsettled once the config settles", async () => {
+    it("fails the load once settled when a variable is never set, naming it", async () => {
         const engine = engineWith(filesPlugin([{ file: "a-610.jsonc", data: { flags: { x: { $expr: "machineRole" } } } }]));
-        const built = (await engine.buildConfig()) as BuiltConfig;
-        const evaluator = built.services.get("expressions.evaluator") as Evaluator;
+        const error = await engine.buildConfig().catch((caught: unknown) => caught);
 
-        expect(evaluator.unsettled()[0]!.unknown.variables).toEqual(["machineRole"]);
-        expect(() => evaluator.settle()).toThrow(ConfigError);
+        expect(error).toBeInstanceOf(ConfigError);
+        expect((error as Error).message).toMatch(/machineRole/);
     });
 
     it("refuses a recipe answer read under subscriptions", async () => {

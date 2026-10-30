@@ -23,6 +23,12 @@ export const MAIN_CONTRIBUTOR = "config-files.main";
 /** The prefix of the contributors for the patch files beside `sous.config.*`: `config-files/sous.config.patch.json`. */
 export const PATCH_CONTRIBUTOR_PREFIX = "config-files/";
 
+/**
+ * `*` in `after`: after every contributor that is not one of the user's files, in its stage. The
+ * user's files declare it, then their own chain, so their patches land on top.
+ */
+export const EVERY_CONTRIBUTOR = "*";
+
 /** The plugin. */
 export const configFilesPlugin: PluginDefinition = definePlugin({
     name: PLUGIN_NAME,
@@ -49,7 +55,7 @@ export const configFilesPlugin: PluginDefinition = definePlugin({
             for (const file of loader.findPatches(sous.project.sousDir, MAIN_CONFIG_BASE_NAME)) {
                 const id = `${PATCH_CONTRIBUTOR_PREFIX}${path.basename(file)}`;
 
-                sous.config.contribute(fileContributor(loader, file, id, [previous]));
+                sous.config.contribute(fileContributor(loader, file, id, [EVERY_CONTRIBUTOR, previous]));
                 previous = id;
             }
         }
@@ -134,11 +140,13 @@ function createLoader(sous: Sous): ConfigFilesLoaderImpl {
 
 /**
  * `config-files.main`: `sous.config.*` as one merge at the root, so it monitors the whole config and
- * lands on top whenever anything changes (S2, "Order and stages"; C70, C74).
+ * re-runs whenever anything changes; declared after every other contributor, its patch lands on top
+ * whatever a plugin set.
  */
 function mainContributor(loader: ConfigFilesLoaderImpl): ContributorDefinition {
     return {
         id: MAIN_CONTRIBUTOR,
+        after: [EVERY_CONTRIBUTOR],
         async contribute(config) {
             const project = config.project;
 

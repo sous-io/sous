@@ -256,8 +256,7 @@ export function shortRefs(): { resolver: RefsResolver; format: RefsFormat } {
 /** A handler context over a config, with a buffered reporter and a prompter. */
 export function context(config: BuiltConfig, options: { prompter?: Prompter; intents?: string[]; next?: BuiltConfig } = {}): Context & { reporter: BufferedReporter; run: ReturnType<typeof vi.fn>; configChanged: ReturnType<typeof vi.fn> } {
     const intents = new Set(options.intents ?? []);
-
-    return {
+    const ctx = {
         plugin: "@sous-io/plugin-recipes",
         config,
         entities: config.entities,
@@ -276,5 +275,16 @@ export function context(config: BuiltConfig, options: { prompter?: Prompter; int
         run: vi.fn(async (intent: string) => ({ ran: intent })),
         emit: vi.fn(async () => ({}) as never),
         configChanged: vi.fn(),
-    } as unknown as Context & { reporter: BufferedReporter; run: ReturnType<typeof vi.fn>; configChanged: ReturnType<typeof vi.fn> };
+        cwd: "/project",
+        // As core does: the rest of the chain reads the newer build.
+        refreshConfig: vi.fn(async () => {
+            const next = options.next ?? config;
+
+            Object.assign(ctx, { config: next, entities: next.entities, services: next.services });
+
+            return next;
+        }),
+    };
+
+    return ctx as unknown as Context & { reporter: BufferedReporter; run: ReturnType<typeof vi.fn>; configChanged: ReturnType<typeof vi.fn> };
 }

@@ -34,20 +34,20 @@ import {
 /** The one example recipe every scaffold writes. */
 export const EXAMPLE_RECIPE_NAME = "example";
 
-/** Where and when a scaffold runs, for tests. */
+/** Where and when a scaffold runs: the chain's working directory (`ctx.cwd`), or a test's. */
 export interface ScaffoldOptions {
-    readonly cwd?: string;
+    readonly cwd: string;
     readonly now?: Date;
 }
 
 /** The intent's handler. */
 export async function handleInit(input: RepoInitInput, ctx: Context): Promise<RepoInitResult> {
-    return scaffoldRepo(toolsFrom(ctx), input, {});
+    return scaffoldRepo(toolsFrom(ctx), input, { cwd: ctx.cwd });
 }
 
 /** Creates a recipe repository in a directory. */
 export async function scaffoldRepo(tools: AuthoringTools, input: RepoInitInput, options: ScaffoldOptions): Promise<RepoInitResult> {
-    const directory = path.resolve(options.cwd ?? process.cwd(), input.directory ?? ".");
+    const directory = path.resolve(options.cwd, input.directory ?? ".");
     const name = normalizeName(input.name ?? path.basename(directory), "--name");
     const namespace = normalizeName(input.namespace ?? name, "--namespace");
     const dryRun = input.dryRun === true;

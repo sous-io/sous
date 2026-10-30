@@ -405,7 +405,8 @@ describe("plugin lifecycle", () => {
 
     /**
      * A plugin loaded partway through takes its sorted place among the contributors, not the end of
-     * the list (S2, rule 1).
+     * the list, and its patch applies in that place, so b-z-writer, declared after it,
+     * stays on top without re-running.
      */
     it("should sort a newly loaded plugin's contributors into place", async () => {
         const order: string[] = [];
@@ -436,7 +437,7 @@ describe("plugin lifecycle", () => {
 
         const built = await engine.buildConfig();
 
-        expect(order).toEqual(["a-loader", "b-z-writer", "c-reader", "b-late", "b-z-writer"]);
+        expect(order).toEqual(["a-loader", "b-z-writer", "c-reader", "b-late"]);
         expect(built.get("x")).toBe(1);
     });
 });

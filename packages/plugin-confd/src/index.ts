@@ -22,6 +22,9 @@ const MAIN_CONTRIBUTOR = "config-files.main";
 /** The patch files beside `sous.config.*`, which also run before `conf.d`. */
 const MAIN_PATCH_CONTRIBUTORS = "config-files/*";
 
+/** `*` in `after`: after every contributor that is not one of the user's files, so the files' patches land on top. */
+const EVERY_CONTRIBUTOR = "*";
+
 /** The id of the contributor that looks for `conf.d` files added since the plugin loaded. */
 export const SCAN_CONTRIBUTOR = "confd.files";
 
@@ -50,7 +53,7 @@ export const confdPlugin: PluginDefinition = definePlugin({
             for (const file of files) {
                 if (!added.has(file.contributor)) {
                     added.add(file.contributor);
-                    sous.config.contribute(fileContributor(sous, file, previous));
+                    sous.config.contribute(fileContributor(sous, file, [EVERY_CONTRIBUTOR, ...previous]));
                 }
 
                 previous = [file.contributor];
@@ -63,7 +66,7 @@ export const confdPlugin: PluginDefinition = definePlugin({
         // is gone contributes nothing. Reads nothing, so it runs once per build.
         sous.config.contribute({
             id: SCAN_CONTRIBUTOR,
-            after: [MAIN_CONTRIBUTOR],
+            after: [EVERY_CONTRIBUTOR, MAIN_CONTRIBUTOR],
             contribute(config) {
                 const files = listConfdFiles(confDir, loader(), compare);
 

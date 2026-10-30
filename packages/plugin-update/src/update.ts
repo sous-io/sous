@@ -196,7 +196,7 @@ export async function handle(input: UpdateInput, ctx: Context): Promise<UpdateRe
     const dryRun = input.dryRun === true;
     const only: InstallScope | undefined = input.global ? "global" : input.project ? "project" : undefined;
     const metadata = await fetchPublishedVersions(ctx.services.get("host.http"), ctx.env);
-    const discovery = await discoverInstalls({ cwd: process.cwd(), ownRoot: ctx.services.get("host.package").identity().realRoot }, ctx);
+    const discovery = await discoverInstalls({ cwd: ctx.cwd, ownRoot: ctx.services.get("host.package").identity().realRoot }, ctx);
     const { plans, notices } = buildUpdatePlans(discovery, metadata, {
         request: requestOf(input),
         ...(only === undefined ? {} : { only }),

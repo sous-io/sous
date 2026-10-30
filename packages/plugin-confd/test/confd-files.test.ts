@@ -273,16 +273,12 @@ describe("the user's files land on top (C70, C74)", () => {
     });
 
     /**
-     * S2's example: a variable set in a later file. 610 reads machineRole as "laptop" in pass 1;
-     * 700 then sets "ci"; 610 re-runs and sees "ci".
-     *
-     * Known to fail in core today: every file monitors the whole config, and a re-run moves its
-     * patch to the end, so sous.config.* (laptop) and 700 (ci) keep trading places in 610's view and
-     * the build never settles. Core's `isOvertaken` re-runs a file only when an earlier file now
-     * after it writes the same paths; 610 reads machineRole but never writes it. `it.fails` turns
-     * into a failure once core settles this, so the test is then made an ordinary one.
+     * The config-building spec's example: a variable set in a later file. 610 reads machineRole
+     * as "laptop" in pass 1; 700 then sets "ci"; 610 re-runs and sees "ci". Patches apply in the
+     * sorted order and a re-run never moves one, so sous.config.* stays under 700 and the build
+     * settles.
      */
-    it.fails("should re-run a file when a variable it read changes in a later file", async () => {
+    it("should re-run a file when a variable it read changes in a later file", async () => {
         project.write("sous.config.json", JSON.stringify({ _vars: { machineRole: "laptop" } }));
         project.write("conf.d/610-browser.json", JSON.stringify({ name: { $if: { expr: "machineRole == 'laptop'", then: "browser-on", else: "browser-off" } } }));
         project.write("conf.d/700-ci.json", JSON.stringify({ _vars: { machineRole: "ci" } }));

@@ -91,7 +91,12 @@ export async function serveMcp(ctx: Context, options: ServeOptions): Promise<Mcp
         let result: CallToolResult;
 
         try {
-            const value = await engine.submit(service.toRequest(name, request.params.arguments ?? {}), { reporter, prompter });
+            const value = await engine.submit(service.toRequest(name, request.params.arguments ?? {}), {
+                reporter,
+                prompter,
+                // An agent's relative paths mean the project, not wherever the server was started.
+                cwd: ctx.project?.root ?? ctx.cwd,
+            });
 
             result = successResult(value, tool);
         } catch (error) {

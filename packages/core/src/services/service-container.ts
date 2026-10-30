@@ -20,6 +20,8 @@ export interface ServiceHost {
     readonly singletons: Map<string, unknown>;
     readonly project: ProjectInfo | undefined;
     readonly env: Environment;
+    /** The engine's working directory. */
+    readonly cwd: string;
     /** Whether the real config is being built right now. */
     building(): boolean;
 }
@@ -109,6 +111,7 @@ export class ServiceContainer implements ServiceReader {
                 entities: this.scope.entities,
                 project: this.host.project,
                 env: this.host.env,
+                cwd: this.host.cwd,
             });
 
             let instance = this.host.timer.measure("service.create", provider.name, provider.plugin, () =>

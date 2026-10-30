@@ -36,7 +36,7 @@ function workflowHost(seen: ScaffoldOptions[] = []): RepositoryHostEntity {
 /** Scaffolds with the stand-ins, as the intent does. */
 function scaffoldRepo(input: RepoInitInput & { sousVersion: string; now?: Date }, hosts: RepositoryHostEntity[] = []) {
   const { sousVersion, now, ...rest } = input;
-  return scaffold(testTools({ sousVersion, hosts }), rest, now === undefined ? {} : { now });
+  return scaffold(testTools({ sousVersion, hosts }), rest, { cwd: process.cwd(), ...(now === undefined ? {} : { now }) });
 }
 
 /** The version recorded in scaffolded indexes; any valid semver will do. */

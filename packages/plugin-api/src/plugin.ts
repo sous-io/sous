@@ -25,6 +25,12 @@ export interface PluginDefinition {
     before?: readonly string[];
     /** The default `after` of every contributor it adds (C65). */
     after?: readonly string[];
+    /**
+     * Service and intent names this plugin's contract declares for other plugins to implement
+     * (`compiler.namespace-resolver`). Another plugin registering one is expected, so sous does not
+     * warn that it starts with this plugin's prefix.
+     */
+    implementable?: readonly string[];
     /** Runs once, when the plugin loads during config building. */
     register(sous: Sous): void | Promise<void>;
 }
@@ -81,7 +87,22 @@ export interface ServiceRegistry extends ServiceReader {
 export interface EntityRegistry extends EntityReader {
     /** Defines a kind, with the schema every entry is checked against (C32). */
     define(kind: string, schema: SousSchema, options?: EntityKindOptions): void;
-    /** Adds an entity whose existence does not depend on the config (C33). */
+    /**
+     * Adds an entity whose existence does not depend on the config (C33).
+ *
+ * An entity's methods must not use `this`: the engine stores a copy of each entry (its schema
+ * check and its method timing make one), so `this` is not the object the plugin made. Close over
+ * what a method needs instead:
+ *
+ * ```ts
+ * const root = ".codex";
+ *
+ * sous.entities.add("skill-target", {
+ *     id: "codex",
+ *     directory: () => root,          // not `() => this.root`
+ * });
+ * ```
+     */
     add<K extends EntityKind>(kind: K, entry: EntityType<K>): void;
 }
 

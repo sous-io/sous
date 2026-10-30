@@ -32,7 +32,7 @@ export interface WatchHandlerOptions {
     /** Told about each session as it starts, so a front end or a test can stop it. */
     onSession?: (session: WatchSession) => void;
     /** Where relative paths resolve with no project. */
-    cwd: () => string;
+    cwd?: (() => string) | undefined;
 }
 
 /**
@@ -55,7 +55,7 @@ export function createWatchHandler(options: WatchHandlerOptions) {
             ctx,
             input,
             createWatcher: options.createWatcher,
-            cwd: options.cwd(),
+            cwd: options.cwd?.() ?? ctx.cwd,
             ...(options.timers ? { timers: options.timers } : {}),
         });
         const onSignal = () => {

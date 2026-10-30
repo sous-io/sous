@@ -172,12 +172,14 @@ Rules:
 1. Contributors run in name order, adjusted by their `before` and `after` declarations (see "Order
    and stages"). The list is re-sorted every pass, so a contributor found partway through takes its
    sorted place, not the end of the list.
-2. Each pass starts from an empty config and applies the stored patches in the order their
-   contributors last ran, each contributor's latest patch once, so an array append is never
-   doubled. A contributor that re-runs moves its patch to the end.
-3. The user's files win because they re-run last: the `sous.config.*` contributor and each `conf.d`
-   contributor monitor the whole config, so any change in a pass re-runs them after the change, and
-   their patches land on top (see "Order and stages").
+2. Each pass starts from an empty config and applies the stored patches in the sorted order of
+   rule 1 (earlier stages first), each contributor's latest patch once, so an array append is
+   never doubled. A contributor that re-runs keeps its place: re-running replaces its patch, and
+   never moves it.
+3. The user's files win because they sort last: the `sous.config.*` contributor and each `conf.d`
+   contributor declare `after: ["*"]`, which puts them after every contributor that is not one of
+   the user's files, and their patches land on top. They monitor the whole config, so any change in
+   a pass re-runs them, and they see it (see "Order and stages").
 4. A contributor re-runs only when a key or entity it read has changed since its last run. The
    others keep their stored patches.
 5. A patch that replaces a value (a scalar, or an object whole) hides an earlier patch's value for
@@ -205,9 +207,15 @@ pass 3:  nothing anyone read changed → done
 contributor it adds. A name in either list may be a plugin (all its contributors), a contributor id,
 or a wildcard. Their purpose is speed: running a contributor after the ones it reads saves a pass.
 
-Because patches apply in the order their contributors last ran, `before` and `after` also decide
-which of two contributors wins when both run in the same pass and set the same key. The user's files
-rely on that, and nothing else does on purpose.
+Because patches apply in the sorted order, `before` and `after` also decide which of two
+contributors wins when both set the same key: the one sorted later lands on top, however often
+either re-runs. The user's files rely on that, and nothing else does on purpose.
+
+**`"*"`** in `after` means every contributor that does not itself declare `after: ["*"]`, so a
+contributor declaring it sorts after all of those, in its stage. Among the contributors that
+declare it, their other declarations and their names decide. A contributor that names one of them
+explicitly keeps its own declaration: `after: ["confd/*"]` still runs after the `conf.d` files.
+`before: ["*"]` is the mirror image.
 
 ```ts
 export default definePlugin({
@@ -234,15 +242,16 @@ export default definePlugin({
 ```
 
 **The user's files land last.** `plugin-config-files` adds a contributor for `sous.config.*`, and
-`plugin-confd` adds one contributor per `conf.d` file. Each applies its file as one merge at the
-root, so each monitors the whole config automatically (rule 7 of "The Builder"). Any change in a
-pass, by any plugin, re-runs them after the change, and their patches land on top. Re-running costs
-little, since the files are already parsed, and it stops on its own: a file that re-runs and
-produces the same patch changes nothing, so nothing is triggered again.
+`plugin-confd` adds one contributor per `conf.d` file. Each declares `after: ["*"]`, so it sorts
+after every plugin's contributor, and its patch applies after theirs. Each applies its file as one
+merge at the root, so each monitors the whole config automatically (rule 7 of "The Builder"). Any
+change in a pass, by any plugin, re-runs them, so they see it. Re-running costs little, since the
+files are already parsed, and it stops on its own: a file that re-runs and produces the same patch
+changes nothing, so nothing is triggered again.
 
 Among themselves, the files keep today's order through `after`: the `sous.config.*` contributor
-comes first, and each `conf.d` contributor names the file before it, so `conf.d` files run in file
-order, after `sous.config.*`, in every pass.
+comes first, and each `conf.d` contributor names the file before it, so `conf.d` files run, and
+their patches apply, in file order, after `sous.config.*`, in every pass.
 
 ```ts
 // plugin-confd
@@ -253,7 +262,7 @@ for (const file of listConfdFiles(project)) {          // sorted the way conf.d 
 
     sous.config.contribute({
         id,
-        after: [previous],
+        after: ["*", previous],                        // after every plugin, then file order
         contribute: (config) => config.root().merge(file.data),
     });
 
@@ -284,7 +293,7 @@ compilation: {
 
 ```text
 acme's contributor sets includeSourceComments = true, which changes the config
-→ the sous.config.* contributor re-runs after it; its merge lands on top: false
+→ the sous.config.* contributor re-runs; it sorts after acme, so its merge lands on top: false
 result: false. In a project whose files don't set it: true.
 ```
 
@@ -293,7 +302,7 @@ pass 1:  plugin-skills        adds compilation targets for .claude/skills
          confd/610-mac        patch applied on top
          plugin-recipes       loads sous-plugin-codex, which adds skill-target "codex"
 pass 2:  plugin-skills        re-runs: the skill-target list changed; adds a target for .codex/skills
-         confd/610-mac        re-runs: the config changed; its patch lands on top again
+         confd/610-mac        re-runs: the config changed; it still sorts last, so its patch stays on top
 pass 3:  nothing changed → done
 ```
 
@@ -600,8 +609,8 @@ result                           false     (settled after 1 pass)
    if anyone changes that array, the contributor re-runs and computes it again.
 4. A `PatchSet` holds `Patch`es and other `PatchSet`s. A helper's work is a named `PatchSet` of its
    primitives, and one contributor run produces one `PatchSet`. The engine keeps an outer list of
-   contributors' `PatchSet`s, in the order their contributors last ran, and applies it to an empty
-   config on every pass. A re-run replaces that contributor's `PatchSet` and moves it to the end.
+   contributors' `PatchSet`s, in the sorted order of the contributors, and applies it to an empty
+   config on every pass. A re-run replaces that contributor's `PatchSet` in its place.
 5. Since every `Patch` is a primitive over plain JSON values, any `PatchSet` serializes to JSON and
    back. A `PatchSet` can be saved, sent over MCP or to a web front end, previewed, and applied
    later.
@@ -663,7 +672,8 @@ The builder has no `setDefault`. Two things already cover every case found:
    filled in when the finished config is checked. A plugin never writes to its own part of the
    config just to supply a default.
 2. A plugin that suggests a value for a key someone else owns uses an ordinary set. The user's files
-   re-run after any change and land on top, so the user's value wins whenever there is one.
+   sort after every plugin and re-run after any change, so their patches land on top, and the
+   user's value wins whenever there is one.
 
 The only case `setDefault` would add is two plugins setting one key, with one meant to give way to
 the other. No real case was found; it can be added later if one appears.
@@ -728,4 +738,29 @@ None.
 
 ## Changes
 
-None yet.
+### 2026-10-29: Patches apply in the sorted order, and a re-run no longer moves a patch
+
+Made by the agent while the user was away; needs Luke's review.
+
+**What changed.** Rules 2 and 3 of "The Loop", and "Order and stages". Patches used to apply in the
+order their contributors last ran, and a contributor that re-ran moved its patch to the end; the
+user's files landed on top because they re-ran last. Now patches apply in the sorted order (names,
+`before` and `after`, stages), and a re-run keeps a patch in its place. The user's files land on top
+because they declare `after: ["*"]`, which sorts them after every contributor that is not one of the
+user's files, and then their own file-order chain. `"*"` is new.
+
+**Why.** With every file monitoring the whole config, the old rule never settled when a file read
+a variable that a later file set. The example in "Config expressions are part of the same loop":
+
+```text
+sous.config.jsonc     _vars.machineRole = "laptop"
+conf.d/610-browser    reads machineRole
+conf.d/700-ci         _vars.machineRole = "ci"
+```
+
+Every change re-ran all three files. Whichever of `sous.config.*` and `700-ci` re-ran last moved to
+the end and won, so `machineRole` flipped between "laptop" and "ci" on every pass, `610-browser`
+re-ran each time, and the build stopped at the pass limit. With a stable order, `700-ci` always
+applies after `sous.config.*`: `610-browser` sees "ci" in pass 2 and the build settles in pass 3.
+The outcome the user asked for is the same (the user's files win, in file order); it is now
+deterministic and always settles.

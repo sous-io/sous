@@ -1,6 +1,8 @@
 /** One chain waiting to run, or running. */
 interface QueuedChain {
     readonly parallel: boolean;
+    /** Runs even when the rebuild before it fails (an intent that declares `toleratesConfigErrors`). */
+    readonly toleratesConfigErrors: boolean;
     /** Runs the chain; resolves with whether it changed the config. Never rejects. */
     start(): Promise<boolean>;
     /** Fails the chain without running it. */
@@ -15,7 +17,8 @@ interface QueuedChain {
  * 3. when a series chain is waiting, no new chain starts until it has run (the queue is first in,
  *    first out), so a stream of parallel chains never holds it back;
  * 4. after a series chain that changed the config, the config is rebuilt before the next chain
- *    starts. A running chain keeps the config it started with.
+ *    starts. A running chain keeps the config it started with. When the rebuild fails, the chain
+ *    waiting for it fails with its error, unless it tolerates config errors; then it runs anyway.
  */
 export class Scheduler {
     private readonly queue: QueuedChain[] = [];
@@ -45,10 +48,11 @@ export class Scheduler {
      * Queues a chain. `run` starts when the chain's turn comes, and calls `markChanged` when the chain
      * changed the config. The returned promise settles with `run`'s result.
      */
-    enqueue<T>(parallel: boolean, run: (markChanged: () => void) => Promise<T>): Promise<T> {
+    enqueue<T>(parallel: boolean, run: (markChanged: () => void) => Promise<T>, options: { toleratesConfigErrors?: boolean } = {}): Promise<T> {
         return new Promise<T>((resolve, reject) => {
             this.queue.push({
                 parallel,
+                toleratesConfigErrors: options.toleratesConfigErrors === true,
                 async start() {
                     let changed = false;
 
@@ -84,17 +88,21 @@ export class Scheduler {
             }
 
             this.queue.shift();
-            this.running.add(head);
-            void head.start().then((changed) => {
-                this.running.delete(head);
-
-                if (changed) {
-                    this.dirty = true;
-                }
-
-                this.pump();
-            });
+            this.start(head);
         }
+    }
+
+    private start(chain: QueuedChain): void {
+        this.running.add(chain);
+        void chain.start().then((changed) => {
+            this.running.delete(chain);
+
+            if (changed) {
+                this.dirty = true;
+            }
+
+            this.pump();
+        });
     }
 
     private startRebuild(): void {
@@ -110,8 +118,15 @@ export class Scheduler {
                 // The chain waiting for the rebuild fails with its error; later chains try again.
                 this.rebuilding = false;
                 this.dirty = true;
-                this.queue.shift()?.fail(error);
-                this.pump();
+
+                const head = this.queue.shift();
+
+                if (head?.toleratesConfigErrors) {
+                    this.start(head);
+                } else {
+                    head?.fail(error);
+                    this.pump();
+                }
             },
         );
     }

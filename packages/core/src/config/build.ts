@@ -77,7 +77,7 @@ export interface BuildOutcome {
     /** The config, before validation. */
     readonly config: JsonObject;
     readonly entities: EntitySnapshot;
-    /** Every contributor's latest run, in the order they last ran. */
+    /** Every contributor's latest run, in the order their patches apply. */
     readonly records: readonly ContributorRecord[];
     readonly active: ReadonlyMap<string, ActivePlugin>;
     /** Passes in which something ran, over every stage. */
@@ -99,12 +99,13 @@ interface Trigger {
  *
  * Within a pass, contributors run in sorted order; each one runs when it is new or when something it
  * read would now read differently, and sees every other contributor's latest patches, applied from
- * an empty config in the order their contributors last ran. A contributor that runs moves its patch
- * to the end.
+ * an empty config in the sorted order: earlier stages first, and within a stage the order of name,
+ * `before` and `after`. A contributor that re-runs keeps its place, so the order is stable and the
+ * build settles.
  */
 export class ConfigBuild {
     private readonly records = new Map<string, ContributorRecord>();
-    private order: string[] = [];
+    private orderCache: { version: number; contributors: number; ids: string[] } | undefined;
     private readonly active = new Map<string, ActivePlugin>();
     private readonly extras: ContributorEntry[];
     private readonly pending = new Set<string>();
@@ -155,10 +156,26 @@ export class ConfigBuild {
         return {
             config: (view.config ?? {}) as JsonObject,
             entities: view.entities,
-            records: this.order.map((id) => this.records.get(id)!),
+            records: this.applyOrder().map((id) => this.records.get(id)!),
             active: this.active,
             passes: this.passes,
             problems,
+        };
+    }
+
+    /**
+     * What the build reached so far, for a build that failed: the plugins it activated and every
+     * patch applied in order, problems ignored.
+     */
+    partial(): Pick<BuildOutcome, "config" | "entities" | "records" | "active" | "passes"> {
+        const view = this.computeView(undefined, () => {});
+
+        return {
+            config: (view.config ?? {}) as JsonObject,
+            entities: view.entities,
+            records: this.applyOrder().map((id) => this.records.get(id)!),
+            active: this.active,
+            passes: this.passes,
         };
     }
 
@@ -197,10 +214,8 @@ export class ConfigBuild {
             let ran = false;
 
             await this.host.timer.measure("config.pass", `${stage}.${pass}`, undefined, async () => {
-                const { order, predecessors } = this.sortStage(stage);
-
-                for (const entry of order) {
-                    if (await this.runIfNeeded(entry, stage, pass, predecessors)) {
+                for (const entry of this.sorted(stage)) {
+                    if (await this.runIfNeeded(entry, stage, pass)) {
                         ran = true;
                     }
                 }
@@ -242,12 +257,7 @@ export class ConfigBuild {
         return result;
     }
 
-    private async runIfNeeded(
-        entry: ContributorEntry,
-        stage: number,
-        pass: number,
-        predecessors: ReadonlyMap<string, ReadonlySet<string>>,
-    ): Promise<boolean> {
+    private async runIfNeeded(entry: ContributorEntry, stage: number, pass: number): Promise<boolean> {
         const record = this.records.get(entry.id);
 
         if (record && record.verifiedAt === this.version) {
@@ -260,7 +270,7 @@ export class ConfigBuild {
         if (record) {
             change = firstChangedRead(record.reads, view);
 
-            if (!change && !this.isOvertaken(record, predecessors)) {
+            if (!change) {
                 record.verifiedAt = this.version;
 
                 return false;
@@ -271,49 +281,6 @@ export class ConfigBuild {
         await this.runContributor(entry, view, stage, pass, record);
 
         return true;
-    }
-
-    /**
-     * Whether a contributor that this one's `before` and `after` declarations put ahead of it (directly
-     * or through others) now applies after it, and changes the same paths. Patches apply in the order
-     * contributors last ran, so when such a contributor re-ran and this one did not, its patch would
-     * land on top, against the declared order, which is what decides who wins (S2, "Order and
-     * stages"). Re-running this one puts its patch back on top. Name order alone never does this, so a
-     * file that re-runs after a plugin's change still lands on top (S2, rule 3).
-     */
-    private isOvertaken(record: ContributorRecord, predecessors: ReadonlyMap<string, ReadonlySet<string>>): boolean {
-        const ahead = new Set<string>();
-        const visit = (id: string): void => {
-            for (const dep of predecessors.get(id) ?? []) {
-                if (!ahead.has(dep)) {
-                    ahead.add(dep);
-                    visit(dep);
-                }
-            }
-        };
-
-        visit(record.entry.id);
-
-        if (ahead.size === 0 || record.primitives.length === 0) {
-            return false;
-        }
-
-        const position = this.order.indexOf(record.entry.id);
-        const ownTargets = record.primitives.map(primitiveTarget);
-
-        for (const id of this.order.slice(position + 1)) {
-            if (!ahead.has(id)) {
-                continue;
-            }
-
-            const later = this.records.get(id)!;
-
-            if (later.primitives.some((patch) => ownTargets.some((target) => pathsOverlap(primitiveTarget(patch), target)))) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private async runContributor(
@@ -363,21 +330,53 @@ export class ConfigBuild {
             runs,
             verifiedAt: -1,
         });
-        this.order = this.order.filter((id) => id !== entry.id);
-        this.order.push(entry.id);
         this.version += 1;
         this.records.get(entry.id)!.verifiedAt = this.version;
     }
 
     /**
+     * The ids of every contributor that has run, in the order their patches apply: by stage, then
+     * by each stage's sorted order. Re-running never moves a contributor.
+     */
+    private applyOrder(): string[] {
+        const contributors = this.contributors();
+
+        if (this.orderCache?.version === this.version && this.orderCache.contributors === contributors.length) {
+            return this.orderCache.ids;
+        }
+
+        const stages = [...new Set([...this.records.values()].map((record) => record.stage))].sort((a, b) => a - b);
+        const ids: string[] = [];
+
+        for (const stage of stages) {
+            for (const entry of this.sorted(stage)) {
+                if (this.records.get(entry.id)?.stage === stage) {
+                    ids.push(entry.id);
+                }
+            }
+        }
+
+        // A contributor that ran but is no longer listed (it cannot happen today) still applies.
+        for (const [id, record] of this.records) {
+            if (!ids.includes(id)) {
+                ids.splice(lastIndexOfStage(ids, this.records, record.stage) + 1, 0, id);
+            }
+        }
+
+        this.orderCache = { version: this.version, contributors: contributors.length, ids };
+
+        return ids;
+    }
+
+    /**
      * The config and entities made from every contributor's latest patch except `exclude`'s,
-     * applied to an empty config in the order they last ran.
+     * applied to an empty config in the sorted order (see {@link applyOrder}).
      */
     computeView(exclude: string | undefined, onProblem?: (problem: PatchProblem, contributor: string) => void): View {
         let config: JsonValue | undefined = {};
         const entities: StoredEntity[] = [...this.registeredEntities()];
 
-        for (const id of this.order) {
+        for (const id of this.applyOrder()) {
             if (id === exclude) {
                 continue;
             }
@@ -504,7 +503,6 @@ export class ConfigBuild {
         for (const [id, record] of this.records) {
             if (record.entry.plugin === name) {
                 this.records.delete(id);
-                this.order = this.order.filter((other) => other !== id);
             }
         }
 
@@ -546,8 +544,10 @@ export class ConfigBuild {
 
     /** The contributor that last wrote a path, optionally only among those in one stage. */
     private writerOf(path: readonly PathSegment[], stage?: number): ContributorRecord | undefined {
-        for (let index = this.order.length - 1; index >= 0; index--) {
-            const record = this.records.get(this.order[index]!)!;
+        const order = this.applyOrder();
+
+        for (let index = order.length - 1; index >= 0; index--) {
+            const record = this.records.get(order[index]!)!;
 
             if (stage !== undefined && record.stage !== stage) {
                 continue;
@@ -591,6 +591,18 @@ export class ConfigBuild {
             details: details.length > 0 ? details : ["New contributors or plugins kept appearing on every pass."],
         });
     }
+}
+
+function lastIndexOfStage(ids: readonly string[], records: ReadonlyMap<string, ContributorRecord>, stage: number): number {
+    let last = -1;
+
+    ids.forEach((id, index) => {
+        if (records.get(id)!.stage <= stage) {
+            last = index;
+        }
+    });
+
+    return last;
 }
 
 /** The plugin settings core reads from the config while it is built. */

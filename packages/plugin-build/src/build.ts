@@ -51,8 +51,13 @@ export async function build(input: BuildInput, ctx: Context): Promise<BuildResul
         prepared = await ctx.run("build.prepare", { dryRun });
         reportPrepared(prepared, ctx.reporter);
 
+        // The lockfile now pins other recipes: rebuild the config, so this build compiles them.
         if (!prepared.locked.unchanged && !dryRun) {
-            ctx.reporter.note("The lockfile changed while preparing; the recipes it now pins are compiled from the next build on.");
+            if (ctx.chain && !ctx.chain.parallel) {
+                await ctx.refreshConfig();
+            } else {
+                ctx.reporter.note("The lockfile changed while preparing; the recipes it now pins are compiled from the next build on.");
+            }
         }
     }
 

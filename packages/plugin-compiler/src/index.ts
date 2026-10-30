@@ -62,6 +62,8 @@ export const compilerPlugin: PluginDefinition = definePlugin({
     name: PLUGIN_NAME,
     version: "0.2.34",
     description: "Compiling templates, includes, aliases, compilation settings, the built-in tags and filters, the state file, writing outputs, pruning.",
+    // Declared in this plugin's contract for plugin-recipes to implement, so sous does not warn about it.
+    implementable: ["compiler.namespace-resolver"],
     dependsOn: {
         "@sous-io/plugin-liquid": "^0.2.34",
         "@sous-io/plugin-refs": "^0.2.34",

@@ -9,6 +9,7 @@ import { askForMissing, type AnswerStore, askSummary, storeGivenAnswers } from "
 import { namesVariable, recipeKey } from "./definitions.js";
 import type { Ladder } from "./ladder.js";
 import { VAR_MAPPINGS_FILE } from "./mappings.js";
+import { resolveUserPath } from "./paths.js";
 import { unknownAnswerError } from "./preanswers.js";
 import { describeSelection, resolveSelection, SEE_ALL } from "./selection.js";
 import { answerFileFor, buildLadder, displayValue, hiddenValue } from "./sources.js";
@@ -113,8 +114,8 @@ export async function handleAsk(input: VarsAskInput, ctx: Context): Promise<Vars
     }
 
     const preanswers = ctx.services.get("recipe-answers.preanswers");
-    const provided = await preanswers.read(input);
-    const variables = await ctx.services.get("recipe-answers.definitions").list(input.file === undefined ? {} : { file: input.file });
+    const provided = await preanswers.read(input.answersFile === undefined ? input : { ...input, answersFile: resolveUserPath(input.answersFile, ctx) });
+    const variables = await ctx.services.get("recipe-answers.definitions").list(input.file === undefined ? {} : { file: resolveUserPath(input.file, ctx) });
 
     if (variables.length === 0) {
         // A given answer naming a variable nothing defines is a typo until shown otherwise.
@@ -155,7 +156,7 @@ export async function handleAsk(input: VarsAskInput, ctx: Context): Promise<Vars
 
 /** `vars.list`, and `sous vars <name>`. */
 export async function handleList(input: VarsListInput, ctx: Context): Promise<VariableListing[]> {
-    const variables = await ctx.services.get("recipe-answers.definitions").list(input.file === undefined ? {} : { file: input.file });
+    const variables = await ctx.services.get("recipe-answers.definitions").list(input.file === undefined ? {} : { file: resolveUserPath(input.file, ctx) });
     const ladder = ladderFor(ctx);
     const hidden = hiddenValue(ctx.services);
 
@@ -170,7 +171,7 @@ export async function handleList(input: VarsListInput, ctx: Context): Promise<Va
 
 /** `vars.show`. Several matches are settled by `refs.picker` (`--accept-first`). */
 export async function handleShow(input: VarsShowInput, ctx: Context): Promise<VariableDetail> {
-    const variables = await ctx.services.get("recipe-answers.definitions").list(input.file === undefined ? {} : { file: input.file });
+    const variables = await ctx.services.get("recipe-answers.definitions").list(input.file === undefined ? {} : { file: resolveUserPath(input.file, ctx) });
     const matches = variablesNamed(variables, input.name);
     const ladder = ladderFor(ctx);
     const hidden = hiddenValue(ctx.services);

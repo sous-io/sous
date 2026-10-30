@@ -29,15 +29,15 @@ import { buildReleasePlan, describeScope, releaseScope, scopeProblems, type Plan
 import { settleDependencyLocations, type SettledDependency } from "./settle.js";
 import { checkSubmissions } from "./submissions.js";
 
-/** Where `repo.release` runs, for tests; the CLI runs it in the working directory. */
+/** Where `repo.release` runs: the chain's working directory (`ctx.cwd`), or a test's. */
 export interface ReleaseOptions {
-    readonly cwd?: string;
+    readonly cwd: string;
     readonly now?: Date;
 }
 
 /** The intent's handler. */
 export async function handleRelease(input: RepoReleaseInput, ctx: Context): Promise<RepoReleaseResult> {
-    const result = await runRelease(toolsFrom(ctx), input, {});
+    const result = await runRelease(toolsFrom(ctx), input, { cwd: ctx.cwd });
 
     if (!result.dryRun && result.cancelled !== true && result.plan.length > 0) {
         await ctx.emit("authoring.released", {
@@ -61,7 +61,7 @@ export async function runRelease(tools: AuthoringTools, input: RepoReleaseInput,
 
     assertFlagsAgree(input, noBump);
 
-    const rootDir = findRepoRoot(tools, input.directory ?? options.cwd ?? process.cwd());
+    const rootDir = findRepoRoot(tools, input.directory ?? options.cwd);
     const git = new RepoGit(tools.git, rootDir);
     const scope = releaseScope(input.namespace ?? [], input.recipe ?? []);
     const base = { repository: rootDir, indexPath: indexFilePath(rootDir), dryRun };

@@ -303,6 +303,33 @@ describe("subscription.add", () => {
         expect(ctx.emit).toHaveBeenCalledWith("recipes.locked", expect.objectContaining({ path: "/project/.sous/sous.lock.json" }));
     });
 
+    /**
+     * After writing, subscribing refreshes the chain's config (ctx.refreshConfig()), so vars.ask
+     * and build see the new subscription; it refreshes again after vars.ask, so build sees the
+     * answers.
+     */
+    it("should refresh the config before vars.ask and again before build", async () => {
+        const indexes = { r: index({ "workflow/task-files": ["1.0.0"] }, { "workflow/task-files@1.0.0": ["apiUrl"] }) };
+        const { config } = setup({ indexes });
+        const next = { ...config, buildNumber: 99 } as typeof config;
+        const ctx = context(config, { intents: ["vars.ask", "build"], next });
+        const seen: Array<{ intent: string; buildNumber: number; refreshes: number }> = [];
+        const refresh = ctx.refreshConfig as unknown as { mock: { calls: unknown[] } };
+
+        ctx.run.mockImplementation(async (intent: string) => {
+            seen.push({ intent, buildNumber: ctx.config.buildNumber, refreshes: refresh.mock.calls.length });
+
+            return { ran: intent };
+        });
+
+        await addSubscription({ ref: "workflow/task-files", yes: true }, ctx);
+
+        expect(seen).toEqual([
+            { intent: "vars.ask", buildNumber: 99, refreshes: 1 },
+            { intent: "build", buildNumber: 99, refreshes: 2 },
+        ]);
+    });
+
     /** A one-word ref is settled against the indexes; a dry run writes and runs nothing. */
     it("should settle a one-word ref and write nothing on a dry run", async () => {
         const { config, managed, lock } = setup();

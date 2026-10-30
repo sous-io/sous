@@ -2,9 +2,8 @@
  * What an intent that changed recipes runs afterwards (`vars.ask`, `build`), through `ctx.run`, so
  * every front end gets the same steps (S6, "vars and repos").
  *
- * A running chain keeps the config it started with (S1, "Chains and the Scheduler", rule 5), so a
- * follow-up sees the config from before the change. That is the engine's rule today; the result
- * records each follow-up so a front end can tell.
+ * The intent refreshes the config (`ctx.refreshConfig()`) after writing, so the follow-ups see
+ * the change; `vars.ask` refreshes it again after answering, so `build` sees the answers.
  */
 
 import type { Context } from "@sous-io/plugin-api";
@@ -30,6 +29,11 @@ export async function askFollowUp(ctx: Context, flags: RecipeChangeFlags & Answe
         ...(flags.answer === undefined ? {} : { answer: flags.answer }),
         ...(flags.answersFile === undefined ? {} : { answersFile: flags.answersFile }),
     });
+
+    // The answers were written to a config file: the build after this sees them.
+    if (ctx.chain !== undefined && !ctx.chain.parallel) {
+        await ctx.refreshConfig();
+    }
 
     return { intent: "vars.ask", result };
 }

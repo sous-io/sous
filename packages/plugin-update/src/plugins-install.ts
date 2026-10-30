@@ -42,7 +42,7 @@ export async function handle(input: PluginsInstallInput, ctx: Context): Promise<
     }
 
     const parsed = specs.map(parsePluginSpec);
-    const root = path.resolve(ctx.project?.root ?? process.cwd());
+    const root = path.resolve(ctx.project?.root ?? ctx.cwd);
     const owner = await ownerOf(root, ctx.entities.list("package-manager"), ctx);
 
     if (owner === undefined) {

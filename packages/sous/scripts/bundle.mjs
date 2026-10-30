@@ -21,7 +21,8 @@ await esbuild.build({
     minifyWhitespace: true,
     minifySyntax: true,
     legalComments: "none",
-    banner: { js: "#!/usr/bin/env node" },
+    // CommonJS dependencies inside the bundle (yaml) call require() for Node's own modules.
+    banner: { js: '#!/usr/bin/env node\nimport { createRequire as __sousCreateRequire } from "node:module";\nconst require = __sousCreateRequire(import.meta.url);' },
     define: { __SOUS_VERSION__: JSON.stringify(version) },
     logLevel: "warning",
 });

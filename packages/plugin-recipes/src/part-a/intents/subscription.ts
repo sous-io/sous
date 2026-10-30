@@ -46,9 +46,15 @@ import { acceptFirst, answer, answersFile, browsing, dryRun, inputSchema, latest
 /** The most rounds of "resolve, trust what is missing, resolve again" one command runs. */
 const MAX_TRUST_ROUNDS = 10;
 
-/** A context whose config and services are a newer build's: after a managed file was written. */
-export function withConfig(ctx: Context, config: BuiltConfig): Context {
-    return { ...ctx, config, services: config.services, entities: config.entities };
+/**
+ * Rebuilds the config for the rest of this chain (`ctx.refreshConfig()`), so the steps after it,
+ * `vars.ask` and `build` included, see what was just written. Returns the same context, which now
+ * reads the new config.
+ */
+async function refreshed(ctx: Context): Promise<Context> {
+    await ctx.refreshConfig();
+
+    return ctx;
 }
 
 /** The repository records the lockfile writes, for the trusted repositories of a config. */
@@ -64,10 +70,13 @@ function lockRepoInputs(ctx: Context): Record<string, LockRepoInput> {
     return inputs;
 }
 
-/** Builds the config again from the files as they are now, which also downloads what is newly pinned. */
+/**
+ * Builds the config again from the files as they are now, for the rest of this chain, which also
+ * downloads what is newly pinned.
+ */
 async function rebuild(ctx: Context): Promise<Context | undefined> {
     try {
-        return withConfig(ctx, await ctx.engine.buildConfig());
+        return await refreshed(ctx);
     } catch (error) {
         ctx.reporter.warning(`The lockfile was written, but the recipes it pins could not all be downloaded yet: ${describeError(error)}`);
 
@@ -135,7 +144,7 @@ async function resolveWrittenRef(input: SubscriptionAddInput, ctx: Context): Pro
         }
 
         ctx.configChanged();
-        current = withConfig(ctx, await ctx.engine.buildConfig());
+        current = await refreshed(ctx);
     }
 
     const catalog = await loadCatalog(current, { latest: trusted.length > 0 });
@@ -224,7 +233,7 @@ async function resolveClosure(input: SubscriptionAddInput, ref: NamedRef, start:
         }
 
         ctx.configChanged();
-        ctx = withConfig(ctx, await ctx.engine.buildConfig());
+        ctx = await refreshed(ctx);
     }
 }
 
@@ -536,7 +545,7 @@ export async function updateSubscriptions(input: SubscriptionUpdateInput, ctx: C
 
         base.trusted.push(...done.added);
         ctx.configChanged();
-        current = withConfig(ctx, await ctx.engine.buildConfig());
+        current = await refreshed(ctx);
         plan = await planUpdate(planInput, current);
     }
 

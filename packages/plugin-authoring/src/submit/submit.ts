@@ -30,7 +30,7 @@ import { findSubmitCheckout } from "./checkout.js";
 /** What a proposal is called when the host does not say. */
 const DEFAULT_PROPOSAL_NOUN = "proposal";
 
-/** Where and when a submission runs, for tests. */
+/** Where and when a submission runs: the chain's working directory (`ctx.cwd`), or a test's. */
 export interface SubmitOptions {
     readonly cwd?: string;
     readonly now?: Date;
@@ -45,7 +45,7 @@ type ProposalHost = SubmitHost & Required<Pick<RepositoryHostEntity, "findPropos
 
 /** The intent's handler. */
 export async function handleSubmit(input: RepoSubmitInput, ctx: Context): Promise<RepoSubmitResult> {
-    const result = await runSubmit(toolsFrom(ctx), input, {});
+    const result = await runSubmit(toolsFrom(ctx), input, { cwd: ctx.cwd });
 
     if (!result.dryRun && (result.created || result.updated)) {
         await ctx.emit("authoring.submitted", {
@@ -59,8 +59,8 @@ export async function handleSubmit(input: RepoSubmitInput, ctx: Context): Promis
 }
 
 /** Finds the checkout, then carries its branch's proposal one step further. */
-export async function runSubmit(tools: AuthoringTools, input: RepoSubmitInput, options: SubmitOptions): Promise<RepoSubmitResult> {
-    const cwd = path.resolve(input.directory ?? options.cwd ?? process.cwd());
+export async function runSubmit(tools: AuthoringTools, input: RepoSubmitInput, options: SubmitOptions & { readonly cwd: string }): Promise<RepoSubmitResult> {
+    const cwd = path.resolve(input.directory ?? options.cwd);
     const checkout = await findSubmitCheckout(tools, cwd, input.repo, input.acceptFirst === true);
 
     tools.reporter.log("info", `Checkout: ${checkout.rootDir}`, { checkout: checkout.rootDir });

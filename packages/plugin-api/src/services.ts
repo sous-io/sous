@@ -8,6 +8,29 @@ import type { ServiceName, ServiceType } from "./registry.js";
  * - `singleton`: one for the whole process, for services that never look at the config;
  * - `config`: one per config build, shared by every chain using that config;
  * - `factory`: a new one on every get.
+ *
+ * **While the config is being built, only singletons can be used.** A contributor (or a plugin's
+ * `register`) that gets a `config` or `factory` service through `sous.services` gets a
+ * `SousError`: there is no built config to make it for yet, and what it read would not be
+ * recorded, so the contributor would not re-run when it changed. A service that contributors need
+ * must be a singleton that takes what it needs from the config as arguments, and reads nothing of
+ * the config itself:
+ *
+ * ```ts
+ * sous.services.add("diagrams.layout", () => new Layout(), { lifetime: "singleton" });
+ *
+ * sous.config.contribute({
+ *     id: "diagrams",
+ *     contribute(config) {
+ *         const layout = sous.services.get("diagrams.layout");
+ *
+ *         // the contributor reads through the builder, so its reads are recorded
+ *         config.atPath("diagrams.boxes").set(layout.boxes(config.atPath("diagrams.style").get()));
+ *     },
+ * });
+ * ```
+ *
+ * A singleton is made with the config of its first use; it must not keep that config.
  */
 export type ServiceLifetime = "singleton" | "config" | "factory";
 
@@ -22,6 +45,12 @@ export interface ServiceContext {
     readonly entities: EntityReader;
     readonly project: ProjectInfo | undefined;
     readonly env: Environment;
+    /**
+     * The engine's working directory (where the process started). Core always sets it; it is
+     * optional only so contexts made by hand (tests, adapters) need not. A service shared by chains
+     * from several front ends should take a chain's `ctx.cwd` as an argument instead.
+     */
+    readonly cwd?: string;
 }
 
 /** Makes a service object. */

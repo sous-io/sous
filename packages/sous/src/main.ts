@@ -42,7 +42,16 @@ export async function main(argv: readonly string[], options: MainOptions): Promi
     try {
         await engine.buildConfig();
     } catch (error) {
-        // The CLI front end is not running yet, so the bin reports a failed build itself.
+        // A failed build still reaches the CLI when the partial config has it: the CLI reports the
+        // error for every command except one that can run without the config (`sous update`).
+        if (hasFrontEnd(engine, "cli")) {
+            await engine.frontEnd("cli").start(argv);
+            await engine.whenBackgroundIntentsReturn();
+
+            return;
+        }
+
+        // The CLI front end is not available, so the bin reports a failed build itself.
         const message = error instanceof Error ? error.message : String(error);
         const details = isSousError(error) ? error.details.map((line) => `\n  ${line}`).join("") : "";
 
@@ -54,4 +63,15 @@ export async function main(argv: readonly string[], options: MainOptions): Promi
 
     await engine.frontEnd("cli").start(argv);
     await engine.whenBackgroundIntentsReturn();
+}
+
+/** Whether an active plugin adds a front end. */
+function hasFrontEnd(engine: ReturnType<typeof createEngine>, id: string): boolean {
+    try {
+        engine.frontEnd(id);
+
+        return true;
+    } catch {
+        return false;
+    }
 }

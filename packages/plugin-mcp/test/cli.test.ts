@@ -54,7 +54,8 @@ describe("sous mcp", () => {
 
         expect(names).toContain("sous_version");
         expect(result.exitCode).toBeUndefined();
-        expect(JSON.parse(result.stdout)).toEqual({ calls: 0, failed: 0, stoppedBy: "closed" });
+        // Standard output is the MCP channel, so the CLI never prints mcp.serve's result there.
+        expect(result.stdout).toBe("");
     });
 
     it("also answers to sous mcp serve", async () => {

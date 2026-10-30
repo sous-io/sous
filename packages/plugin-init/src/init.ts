@@ -61,7 +61,7 @@ export async function handle(input: InitInput, ctx: Context): Promise<InitResult
     }
 
     const dryRun = input.dryRun === true;
-    const root = path.resolve(input.directory ?? process.cwd());
+    const root = path.resolve(ctx.cwd, input.directory ?? ".");
     const name = (input.name ?? path.basename(root)).trim() || path.basename(root);
 
     await confirmNesting(ctx, root, input.yes === true);
@@ -96,8 +96,12 @@ export async function handle(input: InitInput, ctx: Context): Promise<InitResult
         return result;
     }
 
-    // The next build must read the config just written.
+    // The build must read the config just written: rebuild it for the rest of this chain.
     ctx.configChanged();
+
+    if (ctx.chain !== undefined && !ctx.chain.parallel) {
+        await ctx.refreshConfig();
+    }
 
     const build = await ctx.run("build", {});
 

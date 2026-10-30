@@ -137,6 +137,10 @@ export function recordingContext(options: RecordingOptions): { ctx: Context; rec
         prompter,
         project: options.project,
         env: options.env ?? {},
+        // As the CLI gives it: the process's working directory, which the tests move into the project.
+        get cwd() {
+            return process.cwd();
+        },
         run: async (intent: string, input: unknown) => options.onRun?.(intent, input),
     } as unknown as Context;
 

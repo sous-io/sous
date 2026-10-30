@@ -110,10 +110,11 @@ describe("PreanswersService", () => {
         rmSync(dir, { recursive: true, force: true });
     });
 
-    /** A service resolving relative paths against `PWD`. */
+    /** A service resolving relative paths against its working directory. */
     function service(): PreanswersService {
         return new PreanswersService({
-            env: { PWD: dir },
+            env: {},
+            cwd: dir,
             project: undefined,
             services: serviceReader({ "formats.manifests": { readFile: readJson }, "config-files.env": new MemoryEnv(), "variables.secrets": secrets }),
         } as unknown as ServiceContext);

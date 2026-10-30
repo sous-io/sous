@@ -364,7 +364,7 @@ the Liquid engine, the variable resolver.
     >   -- **Luke Chavers** in an agent session (2026-10-28), naming the lifetimes
 
 3. Services are created when first used, after the config is built. A running chain keeps the
-   services of the config it started with, and a "what if" config build (see S2, config building)
+   services of the config it started with (until it calls `ctx.refreshConfig()`), and a "what if" config build (see S2, config building)
    gets its own copies.
 4. Plugins may wrap a service. Wrappers stack in plugin order.
 5. Plugins may replace a service. When two plugins replace the same service, sous stops with an
@@ -460,7 +460,10 @@ entities   <kind>                  harness   skill-target   memory-target   conf
 
 - The first part names the plugin that owns it.
 - Custom events use the past tense, so `diagrams.rendered` is never confused with `diagrams.render`.
-- A name starting with another plugin's prefix is allowed; sous warns once, naming both plugins.
+- A name starting with another plugin's prefix is allowed; sous warns once per process, naming
+  both plugins. A plugin may declare names it means other plugins to implement
+  (`implementable: ["compiler.namespace-resolver"]` on plugin-compiler); registering one of those
+  is expected and not warned about.
 
 ## Types Across Plugins
 
@@ -810,4 +813,27 @@ None. (The name `plugin-recipes` is an agent decision the user may overrule.)
 
 ## Changes
 
-None yet.
+### 2026-10-29: Engine fixes found while the plugins were built
+
+Made by the agent while the user was away; needs Luke's review.
+
+- **`ctx.refreshConfig()`** ("Chains and the Scheduler", rule 5). A series chain can rebuild the
+  config for the rest of itself. Why: `sous subscription add` writes a subscription, then runs
+  `vars.ask` and `build`; with the chain keeping the config it started with, the build compiled
+  without the new recipe, which today's sous does not do. `build` (after preparing changes the
+  lockfile), `subscription add`, `repo add` and `init` use it.
+- **`toleratesConfigErrors`** ("Intents", rule 7). Why: `sous update` must be able to repair an
+  install whose config no longer builds, as it can today. The bin now starts the CLI even when the
+  build fails; the CLI reports the build's error for every other command, `--help` included, as
+  before.
+- **`ctx.cwd`** ("Intents", rule 8). Why: plugins resolved a user's relative paths against
+  `process.cwd()` or `PWD`, which is wrong for the MCP server.
+- **`implementable`** ("Names"). Why: plugin-recipes implements plugin-compiler's
+  `compiler.namespace-resolver`, and was warned about it on every run.
+- `PluginInfo` gives each plugin's options, for `sous plugins show`.
+- A `config.built` listener that throws now fails the build; an error in engine code dropped it
+  before.
+- While the config is built, only singleton services can be used. This stays as it was: letting
+  contributors use `config` services would hide what those services read from the loop, so the
+  contributor would not re-run when it changed. The rule is now spelled out in the plugin API's
+  documentation, with an example.

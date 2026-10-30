@@ -40,6 +40,14 @@ describe("plugin-update registration", () => {
         expect(update.cli?.flags).toMatchObject({ yes: { short: "y", aliases: ["force"] }, prerelease: { aliases: ["pre"] } });
     });
 
+    /** `sous update` must run when the config fails to build, since it is how a broken install is repaired. */
+    it("should let update run with a broken config", async () => {
+        const { intents } = await register();
+
+        expect(intents.find((intent) => intent.intent === "update")?.toleratesConfigErrors).toBe(true);
+        expect(intents.find((intent) => intent.intent === "plugins.install")?.toleratesConfigErrors).toBeUndefined();
+    });
+
     /** Both handlers should load lazily. */
     it("should load each handler on demand", async () => {
         const { intents } = await register();

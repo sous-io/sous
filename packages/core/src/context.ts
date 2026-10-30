@@ -1,4 +1,5 @@
 import type {
+    BuiltConfig,
     ChainInfo,
     Context,
     EngineHandle,
@@ -21,7 +22,8 @@ export class ChainState implements ChainInfo {
         readonly id: number,
         readonly intent: string,
         readonly parallel: boolean,
-        readonly config: BuiltConfigImpl,
+        /** The chain's config: the one it started with, until `ctx.refreshConfig()` replaces it. */
+        public config: BuiltConfigImpl,
         readonly reporter: Reporter,
         readonly prompter: Prompter,
         readonly globals: Readonly<Record<string, unknown>>,
@@ -41,11 +43,25 @@ export interface CallState {
     readonly mode: "chain" | "inline" | "detached" | "background";
     readonly chain: ChainState | undefined;
     readonly frame: Frame | undefined;
-    /** The config of the call; for background calls, read through {@link CallHost.latestConfig}. */
+    /**
+     * The config of the call outside a chain. Read it through {@link configOf}: a chain's config is
+     * its chain's, and a background call's is the latest.
+     */
     readonly config: BuiltConfigImpl;
     readonly reporter: Reporter;
     readonly prompter: Prompter;
     readonly globals: Readonly<Record<string, unknown>>;
+    /** The working directory the front end gave, as `ctx.cwd`. */
+    readonly cwd: string;
+}
+
+/** The config a call sees: its chain's (which `ctx.refreshConfig()` may replace), or the call's own. */
+export function configOf(call: CallState, latest: () => BuiltConfigImpl): BuiltConfigImpl {
+    if (call.mode === "background") {
+        return latest();
+    }
+
+    return call.mode === "chain" && call.chain ? call.chain.config : call.config;
 }
 
 /** What a context needs from the engine. */
@@ -58,13 +74,15 @@ export interface CallHost {
     emitCustom(name: string, payload: unknown, call: CallState): Promise<unknown>;
     /** Says the config must be rebuilt before the next chain (for calls outside a chain). */
     markConfigChanged(): void;
+    /** Rebuilds the config for the rest of a series chain. */
+    refreshConfig(call: CallState): Promise<BuiltConfig>;
 }
 
 /**
  * The `ctx` a handler, a listener, a wrapper or an entity method gets, for one plugin in one call.
  */
 export function createContext(host: CallHost, call: CallState, plugin: string): Context {
-    const config = (): BuiltConfigImpl => (call.mode === "background" ? host.latestConfig() : call.config);
+    const config = (): BuiltConfigImpl => configOf(call, () => host.latestConfig());
 
     return {
         plugin,
@@ -82,6 +100,7 @@ export function createContext(host: CallHost, call: CallState, plugin: string): 
         project: host.project,
         env: host.env,
         globals: call.globals,
+        cwd: call.cwd,
         chain: call.chain,
         engine: host.handle,
         options<T = JsonObject>(): T | undefined {
@@ -89,6 +108,7 @@ export function createContext(host: CallHost, call: CallState, plugin: string): 
         },
         run: ((intent: string, input?: unknown) => host.run(intent, input, call)) as Context["run"],
         emit: ((name: string, payload?: EventPayload<string>) => host.emitCustom(name, payload, call)) as Context["emit"],
+        refreshConfig: () => host.refreshConfig(call),
         configChanged(): void {
             if (call.chain) {
                 call.chain.changedConfig = true;
