@@ -98,14 +98,14 @@ describe("messages about preparing", () => {
      * Ported from build-preparation.spec.ts: nothing when nothing is newer; otherwise each newer
      * version beside the pinned one, and that no pin changed.
      *
-     * newerMessage([{ key: "a/b", from: "1.0.0", to: "1.2.0" }]); // -> "...a/b: 1.2.0 (this project pins 1.0.0)..."
+     * newerMessage([{ key: "a/b", from: "1.0.0", to: "1.2.0" }]); // -> "...a/b: 1.2.0 this project pins 1.0.0..."
      */
     it("should list newer versions and say nothing moved", () => {
         expect(newerMessage([])).toBeUndefined();
 
         const one = newerMessage([{ key: "a/b", from: "1.0.0", to: "1.2.0" }]);
 
-        expect(one).toContain("a/b: 1.2.0 (this project pins 1.0.0)");
+        expect(one).toContain("a/b: 1.2.0 this project pins 1.0.0");
         expect(one).toContain("No pin was changed, so this build uses the pinned version.");
         expect(newerMessage([{ key: "a/b", from: "1", to: "2" }, { key: "a/c", from: "1", to: "2" }])).toContain("uses the pinned versions.");
     });

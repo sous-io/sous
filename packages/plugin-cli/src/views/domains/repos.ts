@@ -8,6 +8,7 @@
  * command printed after its work was done.
  */
 
+import { browsingVariables } from "./catalog.js";
 import type { CliViewContext, CliViewEntity, CliViewOutput } from "../../types.js";
 import type { Printer } from "../printer.js";
 import type { TableColumn } from "../table.js";
@@ -171,6 +172,7 @@ interface SubscriptionListing {
     readonly addedBy: string | undefined;
     readonly pinned: ReadonlyArray<{ readonly key: string; readonly version: string }>;
     readonly newer?: ReadonlyArray<{ readonly key: string; readonly version: string }>;
+    readonly latest?: ReadonlyArray<{ readonly key: string; readonly version?: string }>;
 }
 
 // --- Shared pieces ---------------------------------------------------------------------------------
@@ -782,8 +784,11 @@ export function describeLatest(listing: SubscriptionListing): string {
         return "";
     }
 
+    // The newest published version, as the handler read it; before it said, the newer one in range.
+    const published = new Map((listing.latest ?? []).map((entry) => [entry.key, entry.version]));
     const newer = new Map((listing.newer ?? []).map((entry) => [entry.key, entry.version]));
-    const latestOf = (key: string, pinned: string) => newer.get(key) ?? pinned;
+    const latestOf = (key: string, pinned: string) =>
+        listing.latest === undefined ? (newer.get(key) ?? pinned) : (published.get(key) ?? "not in any index sous has read");
 
     if (listing.pinned.length === 1) {
         const only = listing.pinned[0]!;
@@ -804,8 +809,9 @@ function describeOrigin(addedBy: string | undefined): string {
 
 function subscriptionList(result: readonly SubscriptionListing[], view: CliViewContext): string {
     const out = view.printer();
+
+    browsingVariables(out, view);
     const installed = view.input.installed === true;
-    const latest = view.input.latest === true && !installed;
     const listings = result.filter((entry) => !installed || entry.pinned.length > 0);
 
     out.heading("Subscriptions");
@@ -818,7 +824,7 @@ function subscriptionList(result: readonly SubscriptionListing[], view: CliViewC
         return out.text();
     }
 
-    const columns = SUBSCRIPTION_COLUMNS.filter((column) => latest || column.key !== "latest").map((column) =>
+    const columns = SUBSCRIPTION_COLUMNS.map((column) =>
         installed && column.key === "pinned" ? { ...column, header: "Installed version" } : column,
     );
 

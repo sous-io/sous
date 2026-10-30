@@ -13,6 +13,7 @@ import path from "node:path";
 import { ConfigError, SousError, type Context, type Sous } from "@sous-io/plugin-api";
 import type { Lockfile } from "@sous-io/plugin-formats/types";
 import type { VariableRef } from "@sous-io/plugin-refs/types";
+import semver from "semver";
 import type {
     RepoAddInput,
     RepoAddResult,
@@ -24,9 +25,10 @@ import type {
     RepoTrustInput,
     RepoTrustResult,
     SearchMatch,
+    CachedIndex,
 } from "../../types.js";
 import { latestVersion, publishedNamespaceRef, publishedRecipeRef, splitRecipeKey } from "../catalog.js";
-import { identityOf, loadCatalog } from "../catalog-context.js";
+import { identityOf, loadCatalog, readUpstream } from "../catalog-context.js";
 import { isBuiltInEntry, USER_ADDED_BY } from "../defaults.js";
 import { buildFollowUp } from "../followups.js";
 import { keysHeldBySubscription, stayedAfter } from "../lock-holds.js";
@@ -388,15 +390,22 @@ export async function listRepos(input: RepoListInput, ctx: Context): Promise<Rep
     for (const [name, entry] of Object.entries(configuredRepos(ctx.config))) {
         const enabled = entry.enabled !== false;
         let problem: string | undefined;
-        let cached = cache.cached(name);
+        let cached = cachedOrNothing(cache, name);
 
         if (enabled && input.latest === true && input.installed !== true) {
             try {
-                cached = await cache.get(name, { latest: true });
+                cached = await readUpstream(ctx, name);
             } catch (error) {
                 problem = describeError(error);
-                cached = cache.cached(name);
+                cached = cachedOrNothing(cache, name);
             }
+        }
+
+        const installed = input.installed === true ? pinsFrom(ctx, name) : undefined;
+
+        // Narrowed to what is installed, a repository nothing is installed from is left out.
+        if (installed !== undefined && installed.length === 0) {
+            continue;
         }
 
         let provider = entry.provider;
@@ -425,6 +434,7 @@ export async function listRepos(input: RepoListInput, ctx: Context): Promise<Rep
                   }),
             ...(links[name] === undefined ? {} : { linkedPath: links[name]!.path }),
             ...(problem === undefined ? {} : { problem }),
+            ...(installed === undefined ? {} : { installed }),
         });
     }
 
@@ -433,6 +443,28 @@ export async function listRepos(input: RepoListInput, ctx: Context): Promise<Rep
     return listings.sort(
         (left, right) => Number(isBuiltInEntry(repos[right.name])) - Number(isBuiltInEntry(repos[left.name])) || (left.name < right.name ? -1 : left.name > right.name ? 1 : 0),
     );
+}
+
+/** The cached index of a repository, or nothing (a repository the cache does not know included). */
+function cachedOrNothing(cache: { cached(repo: string): CachedIndex | undefined }, name: string): CachedIndex | undefined {
+    try {
+        return cache.cached(name);
+    } catch {
+        return undefined;
+    }
+}
+
+/** The recipes the lockfile pins from a repository, sorted by key. */
+function pinsFrom(ctx: Context, repo: string): Array<{ key: string; version: string }> {
+    let recipes: Lockfile["recipes"];
+
+    try {
+        recipes = ctx.services.get("recipes.lock").read().recipes;
+    } catch {
+        return [];
+    }
+
+    return sortBytewise(Object.keys(recipes).filter((key) => recipes[key]!.repo === repo)).map((key) => ({ key, version: recipes[key]!.version }));
 }
 
 // --- repo.search ----------------------------------------------------------------------------------
@@ -457,13 +489,29 @@ export function matchScore(text: string, name: string, description?: string): nu
     return description?.toLowerCase().includes(wanted) === true ? 20 : 0;
 }
 
+/** Versions oldest first; anything that is not a version sorts after, by name. */
+function sortVersions(versions: readonly string[]): string[] {
+    return [...versions].sort((left, right) => {
+        const a = semver.valid(left, { loose: true });
+        const b = semver.valid(right, { loose: true });
+
+        if (a !== null && b !== null) {
+            return semver.compare(a, b);
+        }
+
+        return a !== null ? -1 : b !== null ? 1 : left < right ? -1 : left > right ? 1 : 0;
+    });
+}
+
 /** `repo.search`: namespaces, recipes and variables whose name or description holds the text. */
 export async function searchRepos(input: RepoSearchInput, ctx: Context): Promise<SearchMatch[]> {
     const catalog = await loadCatalog(ctx, input);
     const matches: SearchMatch[] = [];
+    const lock = catalog.inputs.lock;
 
     for (const repo of catalog.inputs.repos) {
-        for (const [namespace, declared] of Object.entries(repo.index.namespaces)) {
+        // Narrowed to what is installed, only installed recipes are searched, as before the refactor.
+        for (const [namespace, declared] of input.installed === true ? [] : Object.entries(repo.index.namespaces)) {
             const score = matchScore(input.text, namespace, declared.description);
 
             if (score > 0) {
@@ -474,8 +522,23 @@ export async function searchRepos(input: RepoSearchInput, ctx: Context): Promise
         for (const [key, recipe] of Object.entries(repo.index.recipes)) {
             const score = Math.max(matchScore(input.text, splitRecipeKey(key).name, recipe.description), matchScore(input.text, key));
 
+            const pinned = lock.recipes[key]?.repo === repo.name ? lock.recipes[key]!.version : undefined;
+
             if (score > 0) {
-                matches.push({ ref: publishedRecipeRef(repo, key), key, kind: "recipe", repo: repo.name, ...(recipe.description === undefined ? {} : { description: recipe.description }), score });
+                matches.push({
+                    ref: publishedRecipeRef(repo, key),
+                    key,
+                    kind: "recipe",
+                    repo: repo.name,
+                    ...(recipe.description === undefined ? {} : { description: recipe.description }),
+                    score,
+                    versions: sortVersions(Object.keys(recipe.versions)),
+                    ...(pinned === undefined ? {} : { installed: pinned }),
+                });
+            }
+
+            if (input.installed === true) {
+                continue;
             }
 
             const version = latestVersion(recipe.versions);

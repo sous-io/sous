@@ -294,12 +294,12 @@ describe("subscription.list", () => {
         { key: "workflow/task-files", range: "^1.0.0", enabled: false, addedBy: undefined, pinned: [], newer: [] },
     ];
 
-    it("should list every subscription with its range, pins, origin and whether it is on", async () => {
+    it("should list every subscription with its range, pins, latest version, origin and whether it is on", async () => {
         const { text } = await show("subscription.list", listings);
 
         expect(text).toContain("▶ Subscriptions:");
-        expect(text).toMatch(/Subscription\s+Range\s+Pinned version\s+Origin\s+Enabled/);
-        expect(text).toMatch(/core\s+any version\s+core\/sous-skills 0\.2\.34\s+built in\s+yes/);
+        expect(text).toMatch(/Subscription\s+Range\s+Pinned version\s+Latest version\s+Origin\s+Enabled/);
+        expect(text).toMatch(/core\s+any version\s+core\/sous-skills 0\.2\.34\s+0\.2\.34\s+built in\s+yes/);
         expect(text).toMatch(/workflow\/task-files\s+\^1\.0\.0\s+not pinned\s+user\s+no/);
     });
 

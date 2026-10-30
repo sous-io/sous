@@ -7,6 +7,7 @@
  * upstream), so these views leave those notes out.
  */
 
+import path from "node:path";
 import type { CliViewContext, CliViewEntity } from "../../types.js";
 import type { Printer, VariableEntry } from "../printer.js";
 import type { TableColumn } from "../table.js";
@@ -94,6 +95,8 @@ export interface SearchMatchShape {
     readonly repo: string;
     readonly description?: string;
     readonly score: number;
+    readonly versions?: readonly string[];
+    readonly installed?: string;
 }
 
 /** One repository `repo.list` returns. */
@@ -111,6 +114,7 @@ export interface RepoListingShape {
     readonly indexSource?: string;
     readonly lastCheckedAt?: string;
     readonly problem?: string;
+    readonly installed?: ReadonlyArray<{ readonly key: string; readonly version: string }>;
 }
 
 // --- Shared wording and columns --------------------------------------------------------------------
@@ -160,6 +164,16 @@ const CONTENT_COLUMNS: TableColumn[] = [
 const SEARCH_COLUMNS: TableColumn[] = [
     { key: "key", header: "Match", kind: "path", overflow: "truncate", minWidth: 12 },
     { key: "kind", header: "Kind", minWidth: 4 },
+    { key: "versions", header: "Versions", overflow: "truncate", minWidth: 7 },
+    { key: "repo", header: "Repository", overflow: "truncate", priority: "medium" },
+    { key: "description", header: "What it is", overflow: "wrap", flex: 1, priority: "low", minWidth: 16 },
+];
+
+/** Narrowed to installed recipes, a search shows the installed version beside each, as before the refactor. */
+const INSTALLED_SEARCH_COLUMNS: TableColumn[] = [
+    { key: "key", header: "Recipe", kind: "path", overflow: "truncate", minWidth: 12 },
+    { key: "installed", header: "Installed", overflow: "truncate", minWidth: 9 },
+    { key: "versions", header: "Versions", overflow: "truncate", minWidth: 7 },
     { key: "repo", header: "Repository", overflow: "truncate", priority: "medium" },
     { key: "description", header: "What it is", overflow: "wrap", flex: 1, priority: "low", minWidth: 16 },
 ];
@@ -295,11 +309,59 @@ function installedFlag(view: CliViewContext): boolean {
     return view.input.installed === true;
 }
 
+/**
+ * The "Command Variables" block a browsing command opens with, as before the refactor: the project,
+ * its config, what was asked about, where the indexes were read from and any narrowing.
+ *
+ * ```text
+ * $ Command Variables:
+ *     Project: my-app
+ *     Config : /work/my-app/.sous/sous.config.js
+ *     Recipe : alpha
+ *     Reading: the cached indexes
+ * ```
+ */
+export function browsingVariables(out: Printer, view: Pick<CliViewContext, "input" | "project">, asked: Record<string, string | undefined> = {}): void {
+    const entries: Record<string, unknown> = {};
+
+    if (view.project !== undefined) {
+        entries.Project = path.basename(view.project.root);
+
+        if (view.project.configPath !== undefined) {
+            entries.Config = view.project.configPath;
+        }
+    }
+
+    for (const [label, value] of Object.entries(asked)) {
+        if (value !== undefined) {
+            entries[label] = value;
+        }
+    }
+
+    entries.Reading = view.input.latest === true ? "each repository, upstream" : "the cached indexes";
+
+    if (view.input.installed === true) {
+        entries.Showing = "only what this project has installed";
+    }
+
+    out.subheading("Command Variables", "$");
+    out.variables(entries);
+}
+
+/** The text of a string input, or nothing. */
+function inputText(view: Pick<CliViewContext, "input">, key: string): string | undefined {
+    const value = view.input[key];
+
+    return typeof value === "string" ? value : undefined;
+}
+
 // --- The views -------------------------------------------------------------------------------------
 
 /** `sous namespace list`. */
 function namespaceList(result: readonly NamespaceListingShape[], view: CliViewContext): string {
     const out = view.printer();
+
+    browsingVariables(out, view);
     const installed = installedFlag(view);
 
     out.heading(installed ? "Namespaces this project has installed recipes from" : "Namespaces in the repositories this project trusts");
@@ -329,6 +391,8 @@ function namespaceList(result: readonly NamespaceListingShape[], view: CliViewCo
 /** `sous namespace show <ref>`. */
 function namespaceShow(detail: NamespaceDetailShape, view: CliViewContext): string {
     const out = view.printer();
+
+    browsingVariables(out, view, { Namespace: inputText(view, "ref") });
     const installed = installedFlag(view);
 
     out.heading(`The namespace ${detail.namespace}`);
@@ -363,6 +427,8 @@ function namespaceShow(detail: NamespaceDetailShape, view: CliViewContext): stri
 /** `sous recipe list`. */
 function recipeList(result: readonly RecipeListingShape[], view: CliViewContext): string {
     const out = view.printer();
+
+    browsingVariables(out, view);
     const installed = installedFlag(view);
 
     out.heading(installed ? "Recipes this project has installed" : "Recipes in the repositories this project trusts");
@@ -385,6 +451,8 @@ function recipeList(result: readonly RecipeListingShape[], view: CliViewContext)
 /** `sous recipe show <ref>`. */
 function recipeShow(detail: RecipeDetailShape, view: CliViewContext): string {
     const out = view.printer();
+
+    browsingVariables(out, view, { Recipe: inputText(view, "ref") });
     const installed = installedFlag(view);
 
     out.heading(detail.key);
@@ -509,6 +577,8 @@ export function firstSentence(text: string): string {
 /** `sous repo search <text>`. */
 function repoSearch(result: readonly SearchMatchShape[], view: CliViewContext): string {
     const out = view.printer();
+
+    browsingVariables(out, view, { Searching: inputText(view, "text") });
     const text = typeof view.input.text === "string" ? view.input.text : "";
     const installed = installedFlag(view);
 
@@ -519,10 +589,12 @@ function repoSearch(result: readonly SearchMatchShape[], view: CliViewContext): 
     } else {
         printTable(
             out,
-            SEARCH_COLUMNS,
+            installed ? INSTALLED_SEARCH_COLUMNS : SEARCH_COLUMNS,
             result.map((match) => ({
                 key: match.key,
                 kind: match.kind,
+                versions: match.versions?.join(", ") ?? "",
+                installed: match.installed ?? "",
                 repo: match.repo,
                 description: match.description !== undefined && match.description.length > 0 ? match.description : "no description published",
             })),
@@ -542,6 +614,8 @@ function repoSearch(result: readonly SearchMatchShape[], view: CliViewContext): 
 /** `sous repo list`. */
 function repoList(result: readonly RepoListingShape[], view: CliViewContext): string {
     const out = view.printer();
+
+    browsingVariables(out, view);
     const verbose = view.input.verbose === true;
 
     out.section(installedFlag(view) ? "Repositories this project has installed recipes from" : "Repositories this project trusts");
@@ -561,6 +635,7 @@ function repoList(result: readonly RepoListingShape[], view: CliViewContext): st
         recipes: entry.recipeCount === undefined ? "not fetched" : String(entry.recipeCount),
         namespaces: entry.namespaces === undefined ? "not fetched" : entry.namespaces.length > 0 ? entry.namespaces.join(", ") : "none",
         enabled: entry.enabled,
+        installed: entry.installed,
     }));
     const width = Math.max(20, out.wrapWidth - INDENT * 2);
 
@@ -574,6 +649,12 @@ function repoList(result: readonly RepoListingShape[], view: CliViewContext): st
 
             if (verbose) {
                 notes.push(`Namespaces: ${String(row.namespaces)}`);
+            }
+
+            const pins = row.installed as RepoListingShape["installed"];
+
+            if (pins !== undefined && pins.length > 0) {
+                notes.push(`Installed: ${pins.map((pin) => `${pin.key} ${pin.version}`).join(", ")}`);
             }
 
             return notes.length === 0

@@ -766,6 +766,8 @@ export interface RepoListing {
     readonly lastCheckedAt?: string;
     /** Why its index could not be read. */
     readonly problem?: string;
+    /** The recipes this project pins from it, with `--installed`. */
+    readonly installed?: ReadonlyArray<{ readonly key: string; readonly version: string }>;
 }
 
 /** `repo.search`. */
@@ -785,6 +787,10 @@ export interface SearchMatch {
     readonly description?: string;
     /** Higher is a better match. */
     readonly score: number;
+    /** Every version a matched recipe publishes, oldest first. */
+    readonly versions?: string[];
+    /** The version this project pins of a matched recipe, from this repository. */
+    readonly installed?: string;
 }
 
 /** `repo.gc`. */
@@ -963,6 +969,11 @@ export interface SubscriptionListing {
     readonly pinned: ReadonlyArray<{ readonly key: string; readonly version: string }>;
     /** A newer version in range, when `--latest` checked. */
     readonly newer?: ReadonlyArray<{ readonly key: string; readonly version: string }>;
+    /**
+     * The newest version published of each pinned recipe, from the cached index, or upstream with
+     * `--latest`; `version` is missing when no index sous has read publishes it.
+     */
+    readonly latest?: ReadonlyArray<{ readonly key: string; readonly version?: string }>;
 }
 
 /** What an update would change (C60). */

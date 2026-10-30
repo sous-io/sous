@@ -31,7 +31,7 @@ import type {
     SubscriptionUpdateResult,
 } from "../../types.js";
 import { findInCatalog, latestVersion } from "../catalog.js";
-import { identityOf, loadCatalog, pickMatch, readingsOf, type CatalogContext } from "../catalog-context.js";
+import { identityOf, loadCatalog, pickMatch, readingsOf, readUpstream, type CatalogContext } from "../catalog-context.js";
 import { USER_ADDED_BY } from "../defaults.js";
 import { askFollowUp, buildFollowUp } from "../followups.js";
 import { applyResolution, keysHeldBySubscription, PROJECT_HOLDER, type LockRepoInput } from "../lock-holds.js";
@@ -427,6 +427,15 @@ export function laterSetters(config: BuiltConfig, key: string): string[] {
 
 // --- subscription.list ------------------------------------------------------------------------------
 
+/** The cached index of a repository, or nothing when there is none or the repository is unknown. */
+function safeCached<T>(cache: { cached(repo: string): T | undefined }, repo: string): T | undefined {
+    try {
+        return cache.cached(repo);
+    } catch {
+        return undefined;
+    }
+}
+
 /** `subscription.list`: every subscription the config declares, switched-off ones included, with its pins. */
 export async function listSubscriptions(input: BrowsingFlags, ctx: Context): Promise<SubscriptionListing[]> {
     const lock = ctx.services.get("recipes.lock").read();
@@ -437,9 +446,9 @@ export async function listSubscriptions(input: BrowsingFlags, ctx: Context): Pro
     const indexOf = async (repo: string) => {
         if (!fresh.has(repo)) {
             try {
-                fresh.set(repo, await cache.get(repo, { latest: true }));
+                fresh.set(repo, input.latest === true ? await readUpstream(ctx, repo) : cache.cached(repo));
             } catch {
-                fresh.set(repo, cache.cached(repo));
+                fresh.set(repo, safeCached(cache, repo));
             }
         }
 
@@ -453,7 +462,7 @@ export async function listSubscriptions(input: BrowsingFlags, ctx: Context): Pro
         const pinned = keysHeldBySubscription(lock, key).map((held) => ({ key: held, version: lock.recipes[held]!.version }));
         const newer: Array<{ key: string; version: string }> = [];
 
-        if (input.latest === true && input.installed !== true) {
+        if (input.latest === true) {
             for (const pin of pinned) {
                 const index = (await indexOf(lock.recipes[pin.key]!.repo))?.index;
                 const versions = index?.recipes[pin.key]?.versions ?? {};
@@ -468,12 +477,21 @@ export async function listSubscriptions(input: BrowsingFlags, ctx: Context): Pro
             }
         }
 
+        const latest: Array<{ key: string; version?: string }> = [];
+
+        for (const pin of pinned) {
+            const best = latestVersion((await indexOf(lock.recipes[pin.key]!.repo))?.index.recipes[pin.key]?.versions ?? {});
+
+            latest.push({ key: pin.key, ...(best === undefined ? {} : { version: best }) });
+        }
+
         listings.push({
             key,
             range: entry.range,
             enabled: entry.enabled !== false,
             addedBy: entry.addedBy,
             pinned,
+            latest,
             ...(input.latest === true ? { newer } : {}),
         });
     }

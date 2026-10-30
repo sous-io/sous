@@ -13,6 +13,7 @@ import type { Context } from "@sous-io/plugin-api";
 import type { RecipeManifest } from "@sous-io/plugin-formats/types";
 import type { SousRef } from "@sous-io/plugin-refs/types";
 import type { BrowsingFlags, CachedIndex } from "../types.js";
+import type { IndexCacheCore } from "../part-b/index-cache/index-cache.js";
 import { findInCatalog, narrowToInstalled, type CatalogInputs, type CatalogMatch, type CatalogRepo, type RecipeLocation } from "./catalog.js";
 import { isBuiltInEntry } from "./defaults.js";
 import { destinationsFor } from "./destinations.js";
@@ -51,6 +52,27 @@ export function identityOf(ctx: Pick<Context, "services">, url: string): string 
     }
 }
 
+/**
+ * A repository's index read upstream now, writing nothing to the cache: browsing with `--latest`
+ * shows what upstream publishes and leaves the cache as it was. A linked repository is read from
+ * its checkout. Throws when upstream cannot be read.
+ */
+export async function readUpstream(ctx: Reader, name: string): Promise<CachedIndex> {
+    const cache = ctx.services.get("recipes.index-cache");
+    const core = (cache as { core?: IndexCacheCore }).core;
+    const entry = trustedRepos(ctx.config)[name];
+    const identity = entry === undefined ? undefined : identityOf(ctx, entry.url);
+    const linked = ctx.services.has("recipes.links") && ctx.services.get("recipes.links").get(name) !== undefined;
+
+    if (core === undefined || entry === undefined || identity === undefined || linked) {
+        return cache.get(name, { latest: true });
+    }
+
+    const index = await core.fetchUpstream({ name, url: entry.url, identity, ...(entry.provider === undefined ? {} : { provider: entry.provider }) });
+
+    return { repo: name, index, source: "network" };
+}
+
 /** Every trusted repository's index, read the way the flags say. */
 export async function readIndexes(ctx: Reader, flags: BrowsingFlags): Promise<Pick<CatalogContext, "notFetched" | "notChecked" | "sources">> {
     const cache = ctx.services.get("recipes.index-cache");
@@ -59,9 +81,16 @@ export async function readIndexes(ctx: Reader, flags: BrowsingFlags): Promise<Pi
     const notChecked: Array<{ repo: string; reason: string }> = [];
 
     for (const name of repoSearchOrder(ctx)) {
-        if (flags.latest === true && flags.installed !== true) {
+        if (flags.latest === true) {
             try {
-                sources.set(name, await cache.get(name, { latest: true }));
+                const read = await readUpstream(ctx, name);
+
+                // Upstream failed and the cached copy came back: listed, but marked not checked.
+                if (read.source === "stale") {
+                    notChecked.push({ repo: name, reason: (read as { problem?: string }).problem ?? "upstream could not be reached" });
+                }
+
+                sources.set(name, read);
                 continue;
             } catch (error) {
                 notChecked.push({ repo: name, reason: describeError(error) });

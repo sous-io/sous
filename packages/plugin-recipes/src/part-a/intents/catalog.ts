@@ -15,19 +15,25 @@ const browsingCli = { flags: { latest: latestFlag } };
 /** Reports the repositories that could not be read, so an empty listing is never a mystery. */
 export function reportUnread(ctx: Pick<Context, "reporter">, catalog: Pick<CatalogContext, "notFetched" | "notChecked">): void {
     if (catalog.notFetched.length > 0) {
-        ctx.reporter.note(
-            `Sous has never read the index of ${catalog.notFetched.join(", ")}, so nothing in ${catalog.notFetched.length === 1 ? "it" : "them"} is listed. Run again with --latest to read it.`,
-        );
+        ctx.reporter.note(`These repositories are trusted and their index has not been fetched yet, so nothing in them is listed: ${catalog.notFetched.join(", ")}.`);
     }
 
-    for (const entry of catalog.notChecked) {
-        ctx.reporter.warning(`Could not check ${entry.repo} upstream, so it is listed from the cache: ${entry.reason}`);
+    if (catalog.notChecked.length > 0) {
+        ctx.reporter.note(
+            `These repositories could not be reached, so they are shown from the cache and were not checked: ${catalog.notChecked.map((entry) => entry.repo).join(", ")}.`,
+        );
+
+        for (const entry of catalog.notChecked) {
+            ctx.reporter.log("debug", `${entry.repo}: ${entry.reason}`);
+        }
     }
 }
 
 /** `namespace.show`: one namespace in full. */
 export async function showNamespace(input: CatalogShowInput, ctx: Context): Promise<NamespaceDetail> {
     const catalog = await loadCatalog(ctx, input);
+
+    reportUnread(ctx, catalog);
     const readings = readingsOf(ctx, input.ref);
 
     if (readings.every((reading) => reading.kind === "recipe" && reading.namespace !== undefined)) {
@@ -50,6 +56,8 @@ export async function showNamespace(input: CatalogShowInput, ctx: Context): Prom
 /** `recipe.show`: one recipe in full. */
 export async function showRecipe(input: CatalogShowInput, ctx: Context): Promise<RecipeDetail> {
     const catalog = await loadCatalog(ctx, input);
+
+    reportUnread(ctx, catalog);
     const found = await resolveInCatalog(ctx, catalog, input.ref, ["recipe"], input.acceptFirst, () => {
         const asNamespace = findInCatalog(catalog.inputs, readingsOf(ctx, input.ref), ["namespace"]);
 
@@ -74,8 +82,8 @@ function installedError(input: CatalogShowInput, what: "namespace" | "recipe"): 
 
     return new SousError(
         what === "namespace"
-            ? `This project has installed no recipe from a namespace called '${input.ref}', so there is nothing to show with --installed.`
-            : `This project has not installed a recipe called '${input.ref}', so there is nothing to show with --installed.`,
+            ? `This project has installed no recipe from the namespace '${input.ref}', so there is nothing to show with '--installed'.`
+            : `This project has not installed the recipe '${input.ref}', so there is nothing to show with '--installed'.`,
     );
 }
 

@@ -92,7 +92,7 @@ export function newerMessage(newer: BuildPrepareResult["newer"]): string | undef
 
     const lines = [
         "Newer versions published:",
-        ...newer.map((entry) => `  ${entry.key}: ${entry.to} (this project pins ${entry.from})`),
+        ...newer.map((entry) => `  ${entry.key}: ${entry.to} this project pins ${entry.from}`),
         "",
         newer.length === 1
             ? "This version is within the range declared for the recipe. No pin was changed, so this build uses the pinned version."
