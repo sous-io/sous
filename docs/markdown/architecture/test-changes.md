@@ -1322,3 +1322,14 @@ tests had been written against the first new layout, and were brought in line:
 - **Now:** the same cases against `src/hand-off.ts`, each passing `argv: []` where it passed none. New:
   `resolveOwnRoot()` finds the invoked install's package root above the bin's directory.
 - **Why:** the module is TypeScript now and `argv` is required.
+
+## Switch-over: release tooling
+
+- `packages/sous/test/integration/sync-core-version.test.ts`: the fixture repository wrote its
+  version into a `package.json` at its root. It now writes it into `packages/sous/package.json`,
+  because the repository root is a private workspace root and the published sous package lives
+  there; the script reads the version from that file. The "no package.json" test still expects
+  the same message, now about that path. One test was added: every other
+  `packages/<name>/package.json` is set to the same version (only its `version` value changes),
+  and a package already at it is left byte for byte, because every workspace package is released
+  at one version and `pnpm pack` writes plugin-api's version into the published sous's dependency.

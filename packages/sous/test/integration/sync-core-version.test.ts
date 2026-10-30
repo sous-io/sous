@@ -1,11 +1,11 @@
 /**
- * `scripts/sync-core-version.mts`, the one thing that holds the packaged core
- * recipe at the sous package's own version.
+ * `scripts/sync-core-version.mts`, the one thing that holds every workspace
+ * package and the packaged core recipe at the sous package's own version.
  *
  * Version parity is a hard rule: every project's implicit `core` subscription
  * asks for exactly the running sous version, so a packaged recipe declaring
  * anything else is unresolvable the moment it is seeded. The release workflow
- * runs this script inside the commit that bumps `package.json`, so it is worth
+ * runs this script inside the commit that bumps `packages/sous/package.json`, so it is worth
  * running the real script, exactly the way the workflow runs it, against a
  * throwaway repository rather than importing its internals.
  */
@@ -112,13 +112,17 @@ function readLockfile(lockfilePath: string): {
   return JSON.parse(fs.readFileSync(lockfilePath, "utf8"));
 }
 
-/** Writes the fixture's package.json with the given version. */
+/** Writes a workspace package's package.json, `packages/<dir>/package.json`, and returns its path. */
+function writeWorkspacePackage(dir: string, name: string, version: string): string {
+  const packageJsonPath = path.join(fixtureRoot, "packages", dir, "package.json");
+  fs.mkdirSync(path.dirname(packageJsonPath), { recursive: true });
+  fs.writeFileSync(packageJsonPath, JSON.stringify({ name, version, private: true }, null, 2) + "\n", "utf8");
+  return packageJsonPath;
+}
+
+/** Writes the fixture's `packages/sous/package.json`, the version source, with the given version. */
 function writePackageJson(version: string): void {
-  fs.writeFileSync(
-    path.join(fixtureRoot, "package.json"),
-    JSON.stringify({ name: "@sous-io/sous", version }, null, 2) + "\n",
-    "utf8"
-  );
+  writeWorkspacePackage("sous", "@sous-io/sous", version);
 }
 
 /** Runs the script the way the release workflow does, against the fixture repository. */
@@ -256,6 +260,33 @@ describe("sync-core-version", () => {
       expect(result.status).toBe(0);
       expect(result.stdout).not.toContain("lockfile");
       expect(fs.existsSync(path.join(fixtureRoot, ".sous", "sous.lock.json"))).toBe(false);
+    },
+    SCRIPT_TIMEOUT
+  );
+
+  /**
+   * Every other workspace package is released at the same version, so each
+   * package.json follows the sous package's, with only its version moving.
+   */
+  it(
+    "should write the package version into every other workspace package",
+    () => {
+      writePackageJson("0.2.0");
+      const pluginApi = writeWorkspacePackage("plugin-api", "@sous-io/plugin-api", "0.1.1");
+      const core = writeWorkspacePackage("core", "@sous-io/core", "0.2.0");
+      const coreBefore = fs.readFileSync(core, "utf8");
+
+      const result = sync();
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("Set 1 workspace package to version 0.2.0");
+      expect(result.stdout).toContain(path.join("packages", "plugin-api", "package.json") + ", from 0.1.1");
+      expect(JSON.parse(fs.readFileSync(pluginApi, "utf8"))).toEqual({
+        name: "@sous-io/plugin-api",
+        version: "0.2.0",
+        private: true,
+      });
+      expect(fs.readFileSync(core, "utf8")).toBe(coreBefore);
     },
     SCRIPT_TIMEOUT
   );

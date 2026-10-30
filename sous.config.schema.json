@@ -1,33 +1,11 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sous-io.github.io/sous/sous.config.schema.json",
+  "title": "Sous config",
   "type": "object",
   "properties": {
-    "$schema": {
-      "type": "string"
-    },
-    "version": {
-      "type": "number",
-      "const": 1
-    },
-    "_env": {
-      "type": "object",
-      "propertyNames": {
-        "type": "string"
-      },
-      "additionalProperties": {
-        "type": "string"
-      }
-    },
-    "_vars": {
-      "type": "object",
-      "propertyNames": {
-        "type": "string"
-      },
-      "additionalProperties": {
-        "type": "string"
-      }
-    },
     "_aliases": {
+      "description": "Include aliases: a name to one base directory or several, tried in order.",
       "type": "object",
       "propertyNames": {
         "type": "string"
@@ -46,10 +24,46 @@
         ]
       }
     },
-    "name": {
+    "_env": {
+      "description": "Config variables read from the environment: each name mapped to an environment variable."
+    },
+    "_vars": {
+      "description": "Config variables, used as ${name}. Values may refer to each other in any order."
+    },
+    "$schema": {
+      "description": "The JSON Schema the file declares, for editors. Sous ignores it.",
       "type": "string"
     },
+    "budgets": {
+      "description": "Time budgets in milliseconds, by \"<category>\" or \"<category>:<name>\"; false turns a warning off.",
+      "type": "object",
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "const": false
+          }
+        ]
+      },
+      "default": {}
+    },
+    "cli": {
+      "description": "CLI settings: cli.pick.\"<command words>\": \"<plugin>\" picks between two commands claiming the same words.",
+      "type": "object",
+      "properties": {
+        "pick": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {}
+        }
+      }
+    },
     "compilation": {
+      "description": "What to compile: targets, their outputs, source comments, the state file, overwriting files sous did not write.",
       "type": "object",
       "properties": {
         "_vars": {
@@ -62,13 +76,27 @@
           }
         },
         "includeSourceComments": {
+          "default": false,
           "type": "boolean"
         },
+        "overwriteUntracked": {
+          "default": true,
+          "type": "boolean"
+        },
+        "stateFile": {
+          "default": "${sousDir}/sous.state.json",
+          "type": "string"
+        },
         "targets": {
+          "default": [],
           "type": "array",
           "items": {
             "type": "object",
             "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
               "_vars": {
                 "type": "object",
                 "propertyNames": {
@@ -84,11 +112,38 @@
               "entryGlob": {
                 "type": "string"
               },
+              "content": {
+                "type": "string"
+              },
               "globBase": {
                 "type": "string"
               },
+              "includeSourceComments": {
+                "type": "boolean"
+              },
               "generateRuntimeContext": {
                 "type": "boolean"
+              },
+              "transforms": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "origin": {
+                "type": "object",
+                "properties": {
+                  "plugin": {
+                    "type": "string"
+                  },
+                  "recipe": {
+                    "type": "string"
+                  },
+                  "repository": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
               },
               "outputs": {
                 "type": "array",
@@ -127,6 +182,12 @@
                     },
                     "destinationDir": {
                       "type": "string"
+                    },
+                    "transforms": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "additionalProperties": false
@@ -140,25 +201,160 @@
           }
         }
       },
-      "required": [
-        "targets"
-      ],
       "additionalProperties": false
     },
+    "intents": {
+      "description": "Which plugin's intent wins when two add one name: intents.replace.\"<intent>\": \"<plugin>\".",
+      "type": "object",
+      "properties": {
+        "replace": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {}
+        }
+      }
+    },
+    "limits": {
+      "description": "The loop-detection limits.",
+      "type": "object",
+      "properties": {
+        "configPasses": {
+          "type": "integer"
+        },
+        "rebuildsChanging": {
+          "type": "integer"
+        },
+        "rebuildsRepeating": {
+          "type": "integer"
+        },
+        "runDepth": {
+          "type": "integer"
+        },
+        "sameIntentDepth": {
+          "type": "integer"
+        },
+        "eventDepth": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false,
+      "default": {}
+    },
+    "mcp": {
+      "description": "MCP server settings: mcp.include and mcp.exclude pick tools by name, with globs.",
+      "type": "object",
+      "properties": {
+        "include": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Only tools whose names match these globs."
+        },
+        "exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Leaves out tools whose names match these globs."
+        }
+      },
+      "additionalProperties": false
+    },
+    "name": {
+      "description": "A display name for the project.",
+      "type": "string"
+    },
+    "plugins": {
+      "description": "Which plugins load, which never load, and each plugin's own options (S1).",
+      "type": "object",
+      "properties": {
+        "discover": {
+          "enum": [
+            "dependencies",
+            "scan"
+          ],
+          "default": "dependencies"
+        },
+        "load": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "disabled": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "options": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object"
+          },
+          "default": {}
+        }
+      }
+    },
+    "repos": {
+      "description": "The repositories this project trusts, by short name.",
+      "type": "object",
+      "default": {},
+      "additionalProperties": {
+        "type": "object",
+        "description": "One trusted repository. Adding it trusts it.",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Where the repository lives."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "False opts out of a repository sous provides itself."
+          },
+          "provider": {
+            "type": "string",
+            "description": "The repository host, when the URL does not give it away."
+          },
+          "alwaysPull": {
+            "type": "boolean",
+            "description": "Install a newer in-range version whenever one exists."
+          },
+          "addedAt": {
+            "type": "string"
+          },
+          "addedBy": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
     "runtimeContext": {
+      "description": "The runtime context file a target with generateRuntimeContext includes: git branch and task file.",
       "type": "object",
       "properties": {
         "gitRoot": {
-          "type": "string"
+          "type": "string",
+          "description": "The git repository branch detection reads (${var} allowed)."
         },
         "outputPath": {
-          "type": "string"
+          "type": "string",
+          "description": "Where the runtime context file is written."
         },
         "taskFileRoot": {
-          "type": "string"
+          "type": "string",
+          "description": "The directory task files live in."
         },
         "branchPattern": {
-          "type": "string"
+          "type": "string",
+          "description": "A regular expression; only matching branches look for a task file."
         }
       },
       "required": [
@@ -168,95 +364,57 @@
       ],
       "additionalProperties": false
     },
-    "tools": {
+    "services": {
+      "description": "Which plugin's replacement of a service wins: services.replace.\"<name>\": \"<plugin>\".",
       "type": "object",
-      "propertyNames": {
-        "type": "string"
-      },
-      "additionalProperties": {
-        "type": "object",
-        "properties": {
-          "command": {
+      "properties": {
+        "replace": {
+          "type": "object",
+          "additionalProperties": {
             "type": "string"
           },
-          "args": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "promptFile": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "command"
-        ],
-        "additionalProperties": false
+          "default": {}
+        }
       }
     },
-    "repos": {
+    "store": {
+      "description": "The machine-wide recipe store.",
       "type": "object",
-      "propertyNames": {
-        "type": "string",
-        "pattern": "^[a-z][a-z0-9-]*$"
-      },
-      "additionalProperties": {
-        "type": "object",
-        "properties": {
-          "url": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "uri"
-              },
-              {
-                "type": "string",
-                "minLength": 1
-              }
-            ]
-          },
-          "enabled": {
-            "type": "boolean"
-          },
-          "provider": {
-            "type": "string",
-            "enum": [
-              "github",
-              "gitlab",
-              "local"
-            ]
-          },
-          "alwaysPull": {
-            "type": "boolean"
-          },
-          "addedAt": {
-            "type": "string"
-          },
-          "addedBy": {
-            "type": "string"
-          }
+      "default": {},
+      "properties": {
+        "maxBytes": {
+          "type": "integer",
+          "default": 1073741824,
+          "description": "Size cap past which old entries are collected."
         },
-        "required": [
-          "url"
-        ],
-        "additionalProperties": false
-      }
+        "freshnessSeconds": {
+          "type": "integer",
+          "default": 300,
+          "description": "How long a fetched index stays fresh."
+        },
+        "watchPollSeconds": {
+          "type": "integer",
+          "default": 300,
+          "description": "How often watch mode checks upstream."
+        }
+      },
+      "additionalProperties": false
     },
     "subscriptions": {
+      "description": "What this project subscribes to, keyed by namespace or namespace/recipe.",
       "type": "object",
-      "propertyNames": {
-        "type": "string",
-        "pattern": "^[a-z][a-z0-9-]*(\\/[a-z][a-z0-9-]*)?$"
-      },
+      "default": {},
       "additionalProperties": {
         "type": "object",
+        "description": "One subscription, to a namespace or to one recipe.",
         "properties": {
           "enabled": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "False switches it off on this machine, keeping its pins."
           },
           "range": {
-            "type": "string"
+            "type": "string",
+            "description": "The version range. Default `*`."
           },
           "prerelease": {
             "type": "boolean"
@@ -271,26 +429,83 @@
             "type": "string"
           }
         },
-        "additionalProperties": false
+        "additionalProperties": true
       }
     },
-    "store": {
+    "tools": {
+      "description": "Tools you can launch with `sous launch <name>`: command, args, promptFile, headless.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string",
+            "description": "The command to run."
+          },
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Arguments always passed, before yours."
+          },
+          "promptFile": {
+            "type": "string",
+            "description": "A file whose content is passed as the last argument."
+          },
+          "headless": {
+            "type": "object",
+            "properties": {
+              "command": {
+                "type": "string"
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "additionalProperties": false,
+            "description": "The command and arguments for a headless run; the prompt is sent on standard input."
+          }
+        },
+        "additionalProperties": false
+      },
+      "default": {}
+    },
+    "varMappings": {
+      "description": "Environment variable names bound to recipe variables (conf.d/520-var-mappings.jsonc).",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {}
+    },
+    "version": {
+      "description": "The config format version. This sous understands version 1.",
+      "const": 1
+    },
+    "watch": {
+      "description": "Watch mode: more paths that trigger a full rebuild, the debounce, and how often to check upstream.",
       "type": "object",
       "properties": {
-        "maxBytes": {
+        "pollSeconds": {
           "type": "integer",
-          "exclusiveMinimum": 0,
-          "maximum": 9007199254740991
+          "description": "How often watch mode checks upstream for newer recipes, in seconds; 0 never. Default: store.watchPollSeconds."
         },
-        "freshnessSeconds": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "More files, directories or globs whose change triggers a full rebuild."
         },
-        "watchPollSeconds": {
+        "debounceMs": {
           "type": "integer",
-          "minimum": 0,
-          "maximum": 9007199254740991
+          "default": 200,
+          "description": "How long to wait for more changes before building, in milliseconds."
         }
       },
       "additionalProperties": false
@@ -298,52 +513,56 @@
     "recipes": {
       "type": "object",
       "properties": {
+        "memories": {
+          "description": "Which recipe memories memory targets and the #memories view take, and in what order.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "first": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": [],
+              "description": "Recipe keys, globs or /regular expressions/ whose memories come first, in this order."
+            },
+            "exclude": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": [],
+              "description": "Recipe keys, globs or /regular expressions/ whose memories are left out."
+            }
+          },
+          "default": {}
+        },
         "skills": {
+          "description": "Where skills go (outputs, `${var}` allowed) and directories of your own skills (include).",
           "type": "object",
           "properties": {
             "outputs": {
               "type": "array",
               "items": {
                 "type": "string"
-              }
-            }
-          },
-          "additionalProperties": false
-        },
-        "memories": {
-          "type": "object",
-          "properties": {
-            "first": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
+              },
+              "default": [],
+              "description": "Directories skills are also written to."
             },
-            "exclude": {
+            "include": {
               "type": "array",
               "items": {
                 "type": "string"
-              }
+              },
+              "default": [],
+              "description": "Directories of your own skills, compiled like a recipe's."
             }
           },
-          "additionalProperties": false
+          "additionalProperties": false,
+          "default": {}
         }
-      },
-      "additionalProperties": false
-    },
-    "varMappings": {
-      "type": "object",
-      "propertyNames": {
-        "type": "string",
-        "pattern": "^[A-Z][A-Z0-9_]*$"
-      },
-      "additionalProperties": {
-        "type": "string",
-        "pattern": "^([a-z][a-z0-9-]*:)?[a-z][a-z0-9-]*\\/[a-z][a-z0-9-]*\\/[a-z][a-zA-Z0-9]*$"
       }
     }
   },
-  "additionalProperties": false,
-  "$id": "https://sous-io.github.io/sous/sous.config.schema.json",
-  "title": "Sous config"
+  "additionalProperties": false
 }
