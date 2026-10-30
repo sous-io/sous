@@ -77,8 +77,11 @@ export const harnessesPlugin: PluginDefinition = definePlugin({
             intent: "launch",
             summary: "Build this project's outputs, then start a coding agent configured in its config",
             input: launchInput,
+            requiresProject: true,
             cli: {
                 positional: ["tool"],
+                // Flags launch does not know go to the tool, after the config's own args.
+                passThrough: true,
                 examples: [
                     "sous launch claude",
                     "sous launch codex --no-build",

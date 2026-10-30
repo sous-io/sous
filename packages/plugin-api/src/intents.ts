@@ -29,6 +29,12 @@ export interface CliSection {
     aliases?: ReadonlyArray<readonly string[]>;
     /** Input fields given as positional arguments, in order. The last may be an array, taking the rest. */
     positional?: readonly string[];
+    /**
+     * Hands every token the command does not know (unknown flags, extra arguments, everything after
+     * `--`) to its last positional, in the order typed, instead of failing: `sous launch claude
+     * --resume -- -c` gives `tool: ["claude", "--resume", "-c"]`. The last positional must be an array.
+     */
+    passThrough?: boolean;
     /** Example command lines for `--help`. */
     examples?: readonly string[];
     /** Keeps it out of help and suggestions; it still runs. */

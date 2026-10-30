@@ -37,6 +37,12 @@ export async function build(input: BuildInput, ctx: Context): Promise<BuildResul
         ensureNoWatcher(ctx);
     }
 
+    const heading = nestedBuildHeading(ctx);
+
+    if (heading !== undefined && !partial) {
+        ctx.reporter.note(heading);
+    }
+
     let prepared: BuildPrepareResult;
 
     if (partial) {
@@ -118,6 +124,25 @@ export async function build(input: BuildInput, ctx: Context): Promise<BuildResul
         dryRun,
         watching,
     };
+}
+
+/** The commands whose own output already says a build is happening, or that are a build. */
+const OWN_BUILD_COMMANDS = new Set(["build", "compile", "prune", "build.watch", "update"]);
+
+/**
+ * The heading a build started by another command prints first, worded as before the refactor:
+ * `sous launch` said "Building", and the commands that change recipes (`subscription add`,
+ * `repo remove`, `init`) said "Building the project". A build that is the command itself, or whose
+ * command announces it already (`update`), prints none.
+ */
+export function nestedBuildHeading(ctx: Pick<Context, "chain">): string | undefined {
+    const command = ctx.chain?.intent;
+
+    if (command === undefined || OWN_BUILD_COMMANDS.has(command)) {
+        return undefined;
+    }
+
+    return command === "launch" ? "Building" : "Building the project";
 }
 
 /**

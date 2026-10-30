@@ -1246,3 +1246,32 @@ tests had been written against the first new layout, and were brought in line:
 - **Now:** it exits 1, and the command's help follows the error on standard error.
 - **Why:** the old CLI exited 2 only for command lines it could not parse, and printed the help under
   a question it could not ask. Bad input (`InputError`) still exits 2.
+
+## Switch-over: build
+
+### `memories-view.test.ts`: the project builds `CLAUDE.md`, not `OUT.md`
+
+- **File:** `packages/sous/test/integration/memories-view.test.ts`
+- **Before:** the project built its one output to `OUT.md`, and the tests read that file.
+- **Now:** the project builds its one output to `CLAUDE.md`, and the tests read that file. The checks are the same.
+- **Why:** Claude Code now has a memory target: unless a project builds `CLAUDE.md` itself, sous writes a `CLAUDE.md`
+  holding every memory. With the output at `OUT.md`, that file included every memory, so the warning about memories
+  no output includes rightly stayed silent. A target from the project's own config now wins over a plugin's
+  target for the same file, so building `CLAUDE.md` puts the test back where it was: memories reach the output only
+  through include lines, and the warning names the rest.
+
+### `launch-passthrough.test.ts`: the official repository is switched off
+
+- **File:** `packages/sous/test/integration/launch-passthrough.test.ts`
+- **Before:** the config named only the tools; the old `sous launch --no-build` never read recipes.
+- **Now:** the config also sets `repos: { "sous-recipes": { enabled: false } }`. The checks are the same.
+- **Why:** every command now reads the recipes while it builds the config, so the test reached GitHub. Launching
+  must not depend on the network.
+
+### Unincluded-memory warning cases from `src/test/integration/memories-warning.test.ts`
+
+- **File:** `packages/plugin-build/test/build.test.ts` and `packages/plugin-build/src/report.spec.ts`
+- **Before:** drove the old build service with a stand-in store.
+- **Now:** the full-build, included-memory, partial-build and failed-compile cases run the `build` intent with
+  stand-ins; the wording case checks `unincludedMemoriesMessage()`.
+- **Why:** the check moved from the old build service into plugin-build.

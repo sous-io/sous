@@ -61,6 +61,9 @@ describe("launch pass-through args", () => {
       JSON.stringify({
         name: "Demo",
         _vars: { projectRoot: "${sousDir}/.." },
+        // Every command reads the recipes while it builds the config, so the official repository
+        // is switched off: launching must not depend on the network.
+        repos: { "sous-recipes": { enabled: false } },
         tools: {
           dump: { command: process.execPath, args: [dumpScript, "--defined-arg"] },
           dumpWithPrompt: {

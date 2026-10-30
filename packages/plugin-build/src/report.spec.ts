@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { BufferedReporter } from "@sous-io/plugin-api";
 import type { DefinedVariable } from "@sous-io/plugin-recipe-answers/types";
-import { linkedReposMessage, lockedMessage, newerMessage, prunedForSkippedLine, reportPrepared, skippedLine, unansweredMessage } from "./report.js";
+import {
+    linkedReposMessage,
+    lockedMessage,
+    newerMessage,
+    prunedForSkippedLine,
+    reportPrepared,
+    skippedLine,
+    unansweredMessage,
+    unincludedMemoriesMessage,
+} from "./report.js";
+import { nestedBuildHeading } from "./build.js";
 import { NO_CHANGE, NOTHING_RESTORED } from "./prepare.js";
 
 describe("skippedLine()", () => {
@@ -124,5 +134,47 @@ describe("messages about preparing", () => {
         expect(reporter.at("notice").join("\n")).toContain("  restored: a/b");
         expect(reporter.at("warning").join("\n")).toContain("Sous could not restore 'a/c'");
         expect(reporter.at("warning").join("\n")).toContain("1 required recipe variable has no answer");
+    });
+});
+
+/** Ported from src/test/integration/memories-warning.test.ts. */
+describe("unincludedMemoriesMessage()", () => {
+    /**
+     * Nothing is said when nothing is missing; otherwise each memory is named with its recipe, and
+     * both fixes are given.
+     *
+     * unincludedMemoriesMessage([]) // -> undefined
+     */
+    it("should say nothing for an empty list and name each memory and both fixes otherwise", () => {
+        expect(unincludedMemoriesMessage([])).toBeUndefined();
+
+        const text = unincludedMemoriesMessage([
+            { recipe: "aaa/app", name: "m.md", path: "/store/aaa/app/memories/m.md" },
+            { recipe: "tool/user", name: "m.md", path: "/store/tool/user/memories/m.md" },
+        ]);
+
+        expect(text).toContain("2 memories published by your subscribed recipes are not included in any output");
+        expect(text).toContain("aaa/app: memories/m.md");
+        expect(text).toContain("tool/user: memories/m.md");
+        expect(text).toContain('"@#memories/**/*.md"');
+        expect(text).toContain("recipes.memories.exclude");
+    });
+});
+
+describe("nestedBuildHeading()", () => {
+    /**
+     * A build another command starts says so first, as before the refactor; a build that is the
+     * command itself says nothing extra.
+     *
+     * subscription add -> "Building the project"; launch -> "Building"; build -> none
+     */
+    it("should name the build only when another command started it", () => {
+        const chain = (intent: string) => ({ chain: { id: 1, intent, parallel: false } });
+
+        expect(nestedBuildHeading(chain("subscription.add"))).toBe("Building the project");
+        expect(nestedBuildHeading(chain("launch"))).toBe("Building");
+        expect(nestedBuildHeading(chain("build"))).toBeUndefined();
+        expect(nestedBuildHeading(chain("prune"))).toBeUndefined();
+        expect(nestedBuildHeading({ chain: undefined })).toBeUndefined();
     });
 });

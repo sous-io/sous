@@ -87,7 +87,35 @@ export function expandTargets(settings: CompilationSettings, env: ExpandEnvironm
         }
     });
 
-    return { units, problems };
+    return { units: yieldToConfigTargets(units), problems };
+}
+
+/**
+ * Drops the outputs a plugin's own target (a memory target's `CLAUDE.md`, say) would write over a
+ * file a target from the project's config writes: the user's own target wins, so the two never
+ * write the same file in turn. Recipe targets are left alone. A unit left with no outputs is dropped.
+ *
+ * ```ts
+ * // the config builds CLAUDE.md from .sous/prompts/CLAUDE.md, plugin-memories adds memories/claude-code
+ * yieldToConfigTargets(units);
+ * // -> memories/claude-code is gone; the config's target writes CLAUDE.md alone
+ * ```
+ */
+export function yieldToConfigTargets(units: readonly CompileUnit[]): CompileUnit[] {
+    const fromConfig = new Set(
+        units.filter((unit) => unit.origin === undefined).flatMap((unit) => unit.outputs.map((output) => output.destination)),
+    );
+    const yields = (unit: CompileUnit) => unit.origin?.plugin !== undefined && unit.origin.recipe === undefined;
+
+    return units.flatMap((unit) => {
+        if (!yields(unit) || !unit.outputs.some((output) => fromConfig.has(output.destination))) {
+            return [unit];
+        }
+
+        const outputs = unit.outputs.filter((output) => !fromConfig.has(output.destination));
+
+        return outputs.length === 0 ? [] : [{ ...unit, outputs }];
+    });
 }
 
 function expandTarget(

@@ -28,15 +28,21 @@ function readPackage(file: string): { name?: string; version?: string } | undefi
     }
 }
 
-/** The nearest directory upward from `from` that holds a package.json named like sous. */
+/**
+ * The nearest directory upward from `from` that holds a package.json named like sous. In a checkout
+ * of the sous workspace, where this module sits in `packages/plugin-host` beside `packages/sous`, the
+ * workspace root's `packages/sous` counts too, so tests run from source find it.
+ */
 function findRoot(from: string, names: readonly string[]): { root: string; version: string } | undefined {
     let current = path.resolve(from);
 
     for (;;) {
-        const manifest = readPackage(path.join(current, "package.json"));
+        for (const root of [current, path.join(current, "packages", "sous")]) {
+            const manifest = readPackage(path.join(root, "package.json"));
 
-        if (manifest?.name !== undefined && names.includes(manifest.name)) {
-            return { root: current, version: manifest.version ?? "0.0.0" };
+            if (manifest?.name !== undefined && names.includes(manifest.name)) {
+                return { root, version: manifest.version ?? "0.0.0" };
+            }
         }
 
         const parent = path.dirname(current);

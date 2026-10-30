@@ -42,7 +42,11 @@ function sous(...args: string[]): { status: number | null; output: string } {
   return { status: result.status, output: `${result.stdout}${result.stderr}` };
 }
 
-/** Writes the project's config (with the given `recipes` block) and its instruction source. */
+/**
+ * Writes the project's config (with the given `recipes` block) and its instruction source. The
+ * project builds its own CLAUDE.md, so Claude Code's memory target (which would otherwise write
+ * every memory into CLAUDE.md) yields to it, and memories reach the output only by include lines.
+ */
 function configure(prompt: string, recipes: unknown = undefined, fileName = "AGENTS.md"): void {
   writeFixtureFile(
     path.join(projectRoot, ".sous", "sous.config.js"),
@@ -53,7 +57,7 @@ function configure(prompt: string, recipes: unknown = undefined, fileName = "AGE
       recipes === undefined ? "" : `  recipes: ${JSON.stringify(recipes)},`,
       "  compilation: { targets: [{",
       `    entryPoint: "\${sousDir}/prompts/${fileName}",`,
-      '    outputs: [{ destinationFile: "${projectRoot}/OUT.md" }],',
+      '    outputs: [{ destinationFile: "${projectRoot}/CLAUDE.md" }],',
       "  }] },",
       "};",
       "",
@@ -64,9 +68,9 @@ function configure(prompt: string, recipes: unknown = undefined, fileName = "AGE
 
 /** Builds the project and returns the output file and everything the build printed. */
 function build(): { status: number | null; out: string; log: string } {
-  fs.rmSync(path.join(projectRoot, "OUT.md"), { force: true });
+  fs.rmSync(path.join(projectRoot, "CLAUDE.md"), { force: true });
   const result = sous("build", "--rebuild");
-  const out = path.join(projectRoot, "OUT.md");
+  const out = path.join(projectRoot, "CLAUDE.md");
   return {
     status: result.status,
     out: fs.existsSync(out) ? fs.readFileSync(out, "utf8") : "",
