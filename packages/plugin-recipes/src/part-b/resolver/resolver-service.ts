@@ -37,7 +37,7 @@ export class ResolverService implements RecipesResolver {
             }
         }
 
-        const indexes = options.indexes ?? (await this.indexes(Object.keys(repos), options.latest === true));
+        const indexes = options.indexes ?? (await this.indexes(Object.keys(repos), options.latest === true, options.quiet === true));
         const wanted: WantedRequest[] = [];
 
         for (const request of requests) {
@@ -106,13 +106,24 @@ export class ResolverService implements RecipesResolver {
     }
 
     /** The index of every trusted repository that can be read; one that cannot is left out. */
-    private async indexes(names: readonly string[], latest: boolean): Promise<Map<string, IndexFile>> {
+    private async indexes(names: readonly string[], latest: boolean, quiet: boolean): Promise<Map<string, IndexFile>> {
         const cache = this.ctx.services.get("recipes.index-cache");
         const found = new Map<string, IndexFile>();
 
         for (const name of sortKeys(names)) {
             try {
-                found.set(name, (await cache.get(name, { latest })).index);
+                const read = await cache.get(name, { latest });
+
+                // Upstream failed and the cached copy answers instead: say so, as before the refactor.
+                if (read.source === "stale" && !quiet) {
+                    const problem = (read as { problem?: string }).problem;
+
+                    this.runtime.host.reporter.warning(
+                        `Sous could not check the repository '${name}' for updates, so it is using the copy of its index that it already had.${problem === undefined ? "" : `\n${problem}`}`,
+                    );
+                }
+
+                found.set(name, read.index);
             } catch {
                 const cached = cache.cached(name);
 

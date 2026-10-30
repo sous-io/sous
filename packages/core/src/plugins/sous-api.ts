@@ -109,7 +109,10 @@ export function createSousApi(host: SousApiHost, record: PluginRecord): Sous {
             return host.project;
         },
         env: host.env,
-        reporter: host.reporter,
+        // Read live: the front end swaps the engine's reporter in after the plugins register.
+        get reporter() {
+            return host.reporter;
+        },
         engine: host.handle,
         config: {
             contribute(definition) {

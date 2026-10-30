@@ -170,7 +170,7 @@ async function checkUpstream(ctx: Context, current: Lockfile, subscriptions: Rec
     let latest: ResolveResult;
 
     try {
-        latest = await ctx.services.get("recipes.resolver").resolveSubscriptions({});
+        latest = await ctx.services.get("recipes.resolver").resolveSubscriptions({ quiet: true });
     } catch (error) {
         ctx.reporter.warning(`Sous could not work out the newest recipe versions, so this build uses the versions it already had.\n${describe(error)}`);
 

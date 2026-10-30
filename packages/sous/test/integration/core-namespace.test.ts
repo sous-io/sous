@@ -169,14 +169,14 @@ describe("the core namespace with no network", () => {
 
   /**
    * The store root and the user-level sous directory around it explain
-   * themselves: each carries a README, plus an AGENTS.md and a CLAUDE.md
-   * pointing at it.
+   * themselves: each carries a README, plus a CLAUDE.md pointing at it. (The
+   * pointer files come from the harnesses now, and only Claude Code adds one.)
    */
   it(
     "should explain the directories it created under the user-level sous directory",
     () => {
       for (const directory of [sousHome, path.join(sousHome, "cache")]) {
-        for (const name of ["README.md", "AGENTS.md", "CLAUDE.md"]) {
+        for (const name of ["README.md", "CLAUDE.md"]) {
           expect(fs.existsSync(path.join(directory, name))).toBe(true);
         }
         expect(fs.readFileSync(path.join(directory, "CLAUDE.md"), "utf8")).toBe(

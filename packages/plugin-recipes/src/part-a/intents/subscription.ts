@@ -373,6 +373,11 @@ export async function removeSubscription(input: SubscriptionRemoveInput, ctx: Co
 
     ctx.configChanged();
 
+    // The build that follows must see the subscription gone, or it would lock it again.
+    if (input.noBuild !== true) {
+        await rebuild(ctx);
+    }
+
     return { ...planned, diff, followUps: [await buildFollowUp(ctx, input)] };
 }
 
@@ -408,6 +413,11 @@ export async function toggleSubscription(input: SubscriptionToggleInput, ctx: Co
     }
 
     ctx.configChanged();
+
+    // The build that follows must see the subscription switched.
+    if (changed && input.noBuild !== true) {
+        await rebuild(ctx);
+    }
 
     return { key, enabled, file, changed, dryRun: false, followUps: changed ? [await buildFollowUp(ctx, input)] : [{ intent: "build", skipped: "nothing changed" }] };
 }

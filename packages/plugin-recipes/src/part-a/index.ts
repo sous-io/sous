@@ -4,6 +4,7 @@
  * the lockfile, the resolver, the index cache, the core recipe, links, downloads and recipe plugins.
  */
 
+import fs from "node:fs";
 import { jsonSchema, type ServiceReader, type Sous } from "@sous-io/plugin-api";
 import { createDirectories } from "@sous-io/plugin-host";
 import type { HostDirectories } from "@sous-io/plugin-host/types";
@@ -64,6 +65,17 @@ export function registerPartA(sous: Sous): void {
         },
         { lifetime: "singleton" },
     );
+
+    // The store root is first made while the config is built, before the memory targets have named
+    // the pointer files (AGENTS.md, CLAUDE.md); once the config is built, they are added beside its
+    // README, and beside the sous home's. Nothing already there is touched.
+    sous.on("config.built", async (_event, ctx) => {
+        const root = ctx.services.get("host.sous-home").paths(ctx.env).store;
+
+        if (fs.existsSync(root) && ctx.services.has("host.directories")) {
+            await ctx.services.get("host.directories").ensureKnown("store", root);
+        }
+    });
 
     sous.entities.add("ref-lookup", cachedIndexLookup());
     sous.entities.add("ref-lookup", fetchedIndexLookup());

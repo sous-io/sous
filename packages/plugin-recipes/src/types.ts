@@ -425,6 +425,11 @@ export interface ResolveOptions {
     indexes?: ReadonlyMap<string, IndexFile>;
     /** Checks upstream for newer indexes first. */
     latest?: boolean;
+    /**
+     * Says nothing when upstream cannot be read and a cached index answers instead. A check for
+     * newer versions is quiet; resolving what to lock warns.
+     */
+    quiet?: boolean;
 }
 
 /** What a resolve found. */

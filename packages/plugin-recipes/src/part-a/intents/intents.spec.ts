@@ -368,13 +368,21 @@ describe("subscription.add", () => {
 
 describe("subscription.list", () => {
     /** Every declared subscription, switched-off ones included, with its pins and, with --latest, newer versions in range. */
-    it("should list subscriptions with pins and newer versions", async () => {
+    it("should list subscriptions with pins, latest and newer versions", async () => {
         const { config } = setup({ data: { repos: {}, subscriptions: { "workflow/task-files": { range: "^1.0.0" }, old: { enabled: false } } }, lock: pinned });
         const listings = await listSubscriptions({ latest: true }, context(config));
 
         expect(listings).toEqual([
-            { key: "old", range: undefined, enabled: false, addedBy: undefined, pinned: [], newer: [] },
-            { key: "workflow/task-files", range: "^1.0.0", enabled: true, addedBy: undefined, pinned: [{ key: "workflow/task-files", version: "1.0.0" }], newer: [{ key: "workflow/task-files", version: "1.1.0" }] },
+            { key: "old", range: undefined, enabled: false, addedBy: undefined, pinned: [], latest: [], newer: [] },
+            {
+                key: "workflow/task-files",
+                range: "^1.0.0",
+                enabled: true,
+                addedBy: undefined,
+                pinned: [{ key: "workflow/task-files", version: "1.0.0" }],
+                latest: [{ key: "workflow/task-files", version: "1.1.0" }],
+                newer: [{ key: "workflow/task-files", version: "1.1.0" }],
+            },
         ]);
     });
 });
