@@ -1,34 +1,18 @@
 import { describe, expect, it } from "vitest";
-import type { CliViewContext } from "../../types.js";
-import { Printer } from "../printer.js";
-import { createStyle } from "../style.js";
+import { BufferedReporter, ReportEntryStyle } from "@sous-io/plugin-api";
+import { type CaptureOptions, captureView } from "../testing.js";
 import {
     describeLockDiff,
     describeUpdateScope,
-    formatUpdatePlan,
     isEmptyUpdate,
     type LockDiffShape,
     type LockShowShape,
+    reportUpdatePlan,
     type SubscriptionUpdateShape,
     type UpdatePlanShape,
     views,
 } from "./updates.js";
-
-/** A plain, 100-column view context; `render` shows nested results as `<intent>`. */
-function context(intent: string): CliViewContext {
-    const style = createStyle(false);
-
-    return {
-        intent,
-        input: {},
-        globals: {},
-        style,
-        columns: 100,
-        isTTY: false,
-        printer: () => new Printer(style, 100, false),
-        render: async (other) => `<${other}>\n`,
-    };
-}
+import { questionFacts } from "./questions.js";
 
 function diff(changes: Partial<LockDiffShape> = {}): LockDiffShape {
     const full = { added: [], removed: [], updated: [], reposAdded: [], reposRemoved: [], ...changes };
@@ -61,10 +45,10 @@ function flat(text: string): string {
 
 const updated = diff({ updated: [{ key: "workflow/a", from: "1.0.0", to: "1.1.0" }] });
 
-async function render(intent: string, result: unknown): Promise<string> {
-    const output = await views[intent]!(result, context(intent));
+async function render(intent: string, result: unknown, options: CaptureOptions = {}): Promise<string> {
+    const shown = await captureView(views[intent]!, result, { intent, show: async () => {}, ...options });
 
-    return flat(typeof output === "string" ? output : (output?.stdout ?? ""));
+    return flat(shown.stdout + shown.stderr);
 }
 
 describe("describeUpdateScope()", () => {
@@ -109,18 +93,29 @@ describe("describeLockDiff()", () => {
     });
 });
 
-describe("formatUpdatePlan()", () => {
-    const text = (facts: UpdatePlanShape) => flat(formatUpdatePlan(facts, context("recipe.update")).join("\n"));
+describe("reportUpdatePlan()", () => {
+    /** Everything the plan reported, as the plain text of each message. */
+    const text = (facts: UpdatePlanShape): string => {
+        const reporter = new BufferedReporter();
+
+        reportUpdatePlan(reporter, facts);
+
+        return flat(reporter.messages.map((entry) => entry.message).join("\n"));
+    };
 
     it("should say when there is nothing to update", () => {
         expect(text(plan())).toContain("Nothing to update");
     });
 
     it("should list each change under the scope", () => {
-        const out = text(plan({ diff: updated }));
+        const reporter = new BufferedReporter();
 
-        expect(out).toContain("Updating every subscription in this project changes the lockfile:");
-        expect(out).toContain("• Updating workflow/a from version 1.0.0 to version 1.1.0");
+        reportUpdatePlan(reporter, plan({ diff: updated }));
+
+        expect(reporter.styled(ReportEntryStyle.List)[0]?.details).toEqual({
+            title: "Updating every subscription in this project changes the lockfile:",
+            items: ["Updating workflow/a from version 1.0.0 to version 1.1.0"],
+        });
     });
 
     it("should name the repositories that need trusting", () => {
@@ -134,11 +129,58 @@ describe("formatUpdatePlan()", () => {
     });
 
     it("should list the questions the new versions ask", () => {
-        const out = text(plan({ diff: updated, newVariables: [{ recipe: "workflow/a", name: "TEAM" }] }));
+        const out = text(plan({ diff: updated, newVariables: [{ recipe: "workflow/a", definition: { name: "TEAM" }, answered: false }] }));
 
         expect(out).toContain("Questions the new versions ask that nothing answers yet:");
         expect(out).toContain("workflow/a asks 1 question:");
         expect(out).toContain("--answer TEAM=<value>");
+    });
+
+    /** Each question shows what it is for, its example, where its answer goes and whether it has one. */
+    it("should show the details of each question", () => {
+        const reporter = new BufferedReporter();
+
+        reportUpdatePlan(
+            reporter,
+            plan({
+                diff: updated,
+                newVariables: [
+                    {
+                        recipe: "workflow/a",
+                        definition: { name: "team", description: "The team that owns the repo. More words.", example: "platform", required: true },
+                        storedAs: "SOUS_VAR_TEAM",
+                        storagePath: "/p/.sous/.env",
+                        answered: false,
+                    },
+                    {
+                        recipe: "workflow/a",
+                        definition: { name: "region", example: "eu" },
+                        answered: true,
+                        answeredFrom: "the .env file",
+                    },
+                ],
+            }),
+        );
+
+        const blocks = reporter.styled(ReportEntryStyle.VariableList).map((entry) => entry.details);
+
+        expect(blocks[0]).toEqual({
+            title: "team",
+            entries: [
+                { label: "about", value: "The team that owns the repo." },
+                { label: "example", value: "platform" },
+                { label: "stored-as", value: "SOUS_VAR_TEAM" },
+                { label: "storage-path", value: "/p/.sous/.env" },
+                { label: "answered", value: "no, and this recipe requires an answer" },
+                { label: "answer-with", value: "--answer team=<value>" },
+            ],
+        });
+        expect(questionFacts({ recipe: "workflow/a", definition: { name: "region" }, answered: true, answeredFrom: "the .env file" }, true)[0]).toEqual({
+            label: "answered",
+            value: "yes, from the .env file",
+        });
+        expect(flat(reporter.messages.map((entry) => entry.message).join("\n"))).toContain("2 questions, 1 of which nothing answers yet.");
+        expect(flat(reporter.messages.map((entry) => entry.message).join("\n"))).toContain("Answer them all ahead of time by running this command again without '--dry-run'");
     });
 
     it("should note everything the update left alone", () => {
@@ -167,7 +209,7 @@ describe("the recipe.update view", () => {
     it("should print the plan and say nothing was written", async () => {
         const out = await render("recipe.update", plan({ diff: updated }));
 
-        expect(out).toContain("▶ Update plan:");
+        expect(out).toContain("Update plan");
         expect(out).toContain("Updating workflow/a from version 1.0.0 to version 1.1.0");
         expect(out).toContain("Nothing was written.");
     });
@@ -190,6 +232,7 @@ describe("the subscription.update view", () => {
     });
 
     it("should print the lockfile changes, trusted repositories, follow-ups and the closing sentence", async () => {
+        const shown: string[] = [];
         const out = await render(
             "subscription.update",
             result({
@@ -200,17 +243,29 @@ describe("the subscription.update view", () => {
                     { intent: "build", result: {} },
                 ],
             }),
+            {
+                show: async (intent) => {
+                    shown.push(intent);
+                },
+            },
         );
 
-        expect(out).toContain("➔ Lockfile:");
-        expect(out).toContain("Lockfile: Updating workflow/a from version 1.0.0 to version 1.1.0");
+        expect(out).toContain("Lockfile");
+        expect(out).toContain("Updating workflow/a from version 1.0.0 to version 1.1.0");
         expect(out).toContain("Repositories trusted along the way: vendor.");
-        expect(out).toContain("➔ Variables:");
-        expect(out).toContain("<vars.ask>");
+        expect(out).toContain("Variables");
+        expect(shown).toEqual(["vars.ask", "build"]);
         expect(out).toContain("x/a -> x/b -> x/a");
         expect(out).toContain("The lockfile now pins the newest versions the ranges allow for every subscription in this project.");
         expect(out).not.toContain("The project was not rebuilt.");
-        expect(out).toContain("<build>");
+    });
+
+    /** A failed build fails the command, though the update itself is written. */
+    it("should exit 1 when the build that followed failed", async () => {
+        const shown = await captureView(views["subscription.update"]!, result({ followUps: [{ intent: "build", result: { ok: false } }] }), { show: async () => {} });
+
+        expect(shown.exitCode).toBe(1);
+        expect(shown.stderr).toContain("The lockfile was updated, but the build that followed it failed");
     });
 
     it("should say the project was not rebuilt when the build was skipped", async () => {
@@ -250,7 +305,7 @@ describe("the lock.show view", () => {
         expect(out).toContain("Recipe versions this project pins");
         expect(out).toMatch(/workflow\/qa-variables\s+0\.1\.0\s+qa-recipes\s+this project/);
         expect(out).toMatch(/workflow\/qa-helper\s+0\.1\.0\s+qa-recipes\s+workflow\/qa-variables/);
-        expect(out).toContain("not built here: Its subscription is switched off.");
+        expect(out).toContain("Its subscription is switched off.");
         expect(out.indexOf("workflow/qa-helper")).toBeLessThan(out.indexOf("workflow/qa-variables"));
         expect(out).toContain("This project's lockfile is /p/.sous/sous.lock.json.");
     });

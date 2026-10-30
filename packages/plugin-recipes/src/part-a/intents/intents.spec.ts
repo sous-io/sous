@@ -399,7 +399,7 @@ describe("recipe.update and subscription.update", () => {
         expect(plan.scope).toEqual({ kind: "all" });
         expect(plan.diff.updated).toEqual([{ key: "workflow/task-files", from: "1.0.0", to: "1.1.0" }]);
         expect(plan.lockfile.recipes["workflow/task-files"]?.version).toBe("1.1.0");
-        expect(plan.newVariables).toEqual([{ recipe: "workflow/task-files", name: "newQuestion" }]);
+        expect(plan.newVariables).toMatchObject([{ recipe: "workflow/task-files", definition: { name: "newQuestion" }, answered: false }]);
         expect(plan.switchedOff).toEqual(["gone"]);
         expect(lock.current).toBe(pinned);
     });

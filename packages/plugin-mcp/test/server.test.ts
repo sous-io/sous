@@ -21,8 +21,8 @@ const fixtures: PluginDefinition = plugin("test-intents", (sous) => {
             whenNotToUse: "Not for finding a recipe by name; use recipe_search for that.",
         },
         handle: (input, ctx) => {
-            ctx.reporter.log("debug", "Reading the catalog.");
-            ctx.reporter.log("info", "Read 2 namespaces.");
+            ctx.reporter.debug("Reading the catalog.");
+            ctx.reporter.info("Read 2 namespaces.");
             ctx.reporter.warning("One repository is offline.", { repository: "example" });
 
             return { namespaces: input.repository ? [input.repository] : ["a", "b"], chain: ctx.chain !== undefined };
@@ -257,7 +257,7 @@ describe("mcp.serve: the MCP reporter (logging, levels)", () => {
 
         expect(served.logs).toEqual([
             { level: "info", logger: "sous", data: "Read 2 namespaces." },
-            { level: "warning", logger: "sous", data: { message: "One repository is offline.", repository: "example" } },
+            { level: "warning", logger: "sous", data: { message: "One repository is offline.", style: "plain", repository: "example" } },
         ]);
     });
 

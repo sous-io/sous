@@ -2,31 +2,40 @@ import { type InputError, isSousError, isSousErrorOfKind } from "@sous-io/plugin
 import type { Command } from "./command-tree.js";
 import type { CliErrorView } from "./types.js";
 
+/** An error taken apart: its message, the lines under it, and its exit code. */
+export interface ErrorParts {
+    readonly summary: string;
+    /** The lines under the message (a sous error's details, then the stack with `debug`), unindented. */
+    readonly details: readonly string[];
+    readonly exitCode: number;
+}
+
+/** Takes an error apart for the reporter to draw: the message, the details under it and the exit code. */
+export function describeError(error: unknown, options: { debug?: boolean; command?: Command } = {}): ErrorParts {
+    if (isSousError(error)) {
+        const details = isSousErrorOfKind(error, "input") && options.command ? inputDetails(error as InputError, options.command) : [...error.details];
+
+        if (options.debug && error.stack) {
+            details.push(...stackLines(error.stack));
+        }
+
+        return { summary: error.message, details, exitCode: error.exitCode };
+    }
+
+    const details = options.debug && error instanceof Error && error.stack ? stackLines(error.stack) : [];
+
+    return { summary: error instanceof Error ? error.message : String(error), details, exitCode: 1 };
+}
+
 /**
  * Turns an error into lines for standard error and an exit code. Every message
  * starts with `Error: `; a sous error's details follow, indented. Input errors name the flag or
  * argument, not the input field. Exit codes: the error's own (1 by default, 2 for usage problems).
  */
 export function viewError(error: unknown, options: { debug?: boolean; command?: Command } = {}): CliErrorView {
-    if (isSousError(error)) {
-        const details = isSousErrorOfKind(error, "input") && options.command ? inputDetails(error as InputError, options.command) : [...error.details];
-        const lines = [`Error: ${error.message}`, ...details.map((line) => `  ${line}`)];
+    const parts = describeError(error, options);
 
-        if (options.debug && error.stack) {
-            lines.push(...stackLines(error.stack));
-        }
-
-        return { lines, exitCode: error.exitCode };
-    }
-
-    const message = error instanceof Error ? error.message : String(error);
-    const lines = [`Error: ${message}`];
-
-    if (options.debug && error instanceof Error && error.stack) {
-        lines.push(...stackLines(error.stack));
-    }
-
-    return { lines, exitCode: 1 };
+    return { lines: [`Error: ${parts.summary}`, ...parts.details.map((line) => `  ${line}`)], exitCode: parts.exitCode };
 }
 
 function inputDetails(error: InputError, command: Command): string[] {
@@ -42,5 +51,5 @@ function inputDetails(error: InputError, command: Command): string[] {
 }
 
 function stackLines(stack: string): string[] {
-    return stack.split("\n").slice(1).map((line) => `  ${line.trim()}`);
+    return stack.split("\n").slice(1).map((line) => line.trim());
 }

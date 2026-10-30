@@ -1,6 +1,6 @@
 import { isSousError } from "@sous-io/plugin-api";
 import type { CliViewEntity } from "../types.js";
-import { renderResult } from "./show.js";
+import { reportResult } from "./show.js";
 
 /** A domain module of views: one render function per intent it shows. */
 export interface ViewModule {
@@ -55,13 +55,13 @@ export const BUILT_IN_VIEWS: readonly CliViewEntity[] = DOMAINS.flatMap(({ load,
             id: intent,
             render: async (result, view) => {
                 if ((typeof result !== "object" || result === null) && !TEXT_RESULTS.has(intent)) {
-                    return renderResult(result);
+                    return reportResult(view.reporter, result);
                 }
 
                 const render = (await load()).views[intent];
 
                 if (!render) {
-                    return renderResult(result);
+                    return reportResult(view.reporter, result);
                 }
 
                 try {
@@ -71,7 +71,7 @@ export const BUILT_IN_VIEWS: readonly CliViewEntity[] = DOMAINS.flatMap(({ load,
                         throw error;
                     }
 
-                    return renderResult(result);
+                    return reportResult(view.reporter, result);
                 }
             },
         }),

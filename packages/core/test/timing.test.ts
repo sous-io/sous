@@ -172,12 +172,12 @@ describe("the engine reporter", () => {
         const reporter = new BufferedReporter();
 
         engine.setReporter(reporter);
-        engine.reporter.note("later");
+        engine.reporter.notice("later");
         engine.handle.setReporter(reporter);
 
         expect(reporter.messages).toEqual([
-            { level: "warning", message: "early warning" },
-            { level: "notice", message: "later" },
+            { level: "warning", message: "early warning", style: "plain" },
+            { level: "notice", message: "later", style: "plain" },
         ]);
         expect(engine.handle.reporter).toBe(reporter);
         expect(engine.handle.app).toEqual({ name: "sous", version: "0.0.0" });

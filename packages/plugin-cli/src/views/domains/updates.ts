@@ -8,10 +8,9 @@
  * Those views print only what was not reported.
  */
 
+import { LogLevel, type Reporter, type TableColumn } from "@sous-io/plugin-api";
 import type { CliViewContext, CliViewEntity, CliViewOutput } from "../../types.js";
-import type { Printer } from "../printer.js";
-import type { TableColumn } from "../table.js";
-import { BULLET, wrapText } from "../text.js";
+import { writeQuestionPlan, type PlannedQuestionShape } from "./questions.js";
 
 // --- The result shapes these views read (plugin-recipes' types, as far as they are used) -----------
 
@@ -51,7 +50,8 @@ export interface UpdatePlanShape {
     readonly scope: UpdateScope;
     readonly diff: LockDiffShape;
     readonly missingRepos: readonly MissingRepoShape[];
-    readonly newVariables: ReadonlyArray<{ readonly recipe: string; readonly name: string }>;
+    /** Variables the new versions declare that have no answer yet (plugin-recipes' `PlannedQuestion`). */
+    readonly newVariables: readonly PlannedQuestionShape[];
     readonly unreadable: readonly string[];
     readonly unreachable: ReadonlyArray<{ readonly repo: string; readonly reason: string }>;
     readonly linked: readonly string[];
@@ -167,168 +167,79 @@ function firstLine(text: string): string {
     return (text.split("\n")[0] ?? "").trim();
 }
 
-function questionCount(count: number): string {
-    return count === 1 ? "1 question" : `${count} questions`;
-}
-
 // --- recipe.update ---------------------------------------------------------------------------------
 
 /**
- * The plan, as lines: pin changes first, then the repositories that need trusting, then the
+ * Reports the plan: pin changes first, then the repositories that need trusting, then the
  * questions, then notes about what the update left alone.
  */
-export function formatUpdatePlan(plan: UpdatePlanShape, view: Pick<CliViewContext, "style" | "columns">): string[] {
-    const { style } = view;
-    const width = Math.max(20, view.columns - 2) - 4;
-    const lines: string[] = [""];
-    const sentence = (text: string, paint = (line: string): string => line): string[] => wrapText(text, width).map(paint);
-    const bullet = (text: string): string[] => wrapText(`  ${BULLET} ${text}`, width, { hangingIndent: 2 });
-
+export function reportUpdatePlan(reporter: Reporter, plan: UpdatePlanShape): void {
     if (isEmptyUpdate(plan)) {
-        lines.push(
-            ...sentence(`Nothing to update: every pin in ${describeUpdateScope(plan.scope)} is already the newest published version its range allows.`),
-        );
+        reporter.info(`Nothing to update: every pin in ${describeUpdateScope(plan.scope)} is already the newest published version its range allows.`);
     } else {
-        lines.push(...sentence(`Updating ${describeUpdateScope(plan.scope)} changes the lockfile:`), "");
-
-        if (plan.diff.unchanged) {
-            lines.push(...bullet("No pin moves until the repositories below are trusted and read."));
-        } else {
-            for (const change of describeLockDiff(plan.diff)) {
-                lines.push(...bullet(change));
-            }
-        }
+        reporter.list(plan.diff.unchanged ? ["No pin moves until the repositories below are trusted and read."] : describeLockDiff(plan.diff), {
+            title: `Updating ${describeUpdateScope(plan.scope)} changes the lockfile:`,
+        });
     }
 
     if (plan.missingRepos.length > 0) {
-        lines.push(
-            "",
-            ...sentence(
-                `A newer version needs ${plan.missingRepos.length === 1 ? "a repository" : "repositories"} this project ${style.highlight("does not trust yet")}. You are asked about each one by name before anything is fetched from it:`,
-                style.warning,
-            ),
-            "",
+        reporter.list(
+            plan.missingRepos.map((missing) => {
+                const where = missing.url === undefined ? "" : ` at ${missing.url}`;
+
+                return `${missing.name}${where}, needed by ${missing.requiredBy.map((entry) => entry.requestedBy).join(", ")}`;
+            }),
+            {
+                title: `A newer version needs ${plan.missingRepos.length === 1 ? "a repository" : "repositories"} this project does not trust yet. You are asked about each one by name before anything is fetched from it:`,
+            },
+            LogLevel.Warning,
         );
-
-        for (const missing of plan.missingRepos) {
-            const where = missing.url === undefined ? "" : ` at ${missing.url}`;
-
-            lines.push(...bullet(`${missing.name}${where}, needed by ${missing.requiredBy.map((entry) => entry.requestedBy).join(", ")}`));
-        }
     }
 
     if (plan.newVariables.length > 0 || plan.unreadable.length > 0) {
-        lines.push("", ...sentence("Questions the new versions ask that nothing answers yet:"), "");
-
-        for (const line of formatNewQuestions(plan, view, width)) {
-            lines.push(line === "" ? "" : `  ${line}`);
-        }
+        reporter.info("Questions the new versions ask that nothing answers yet:");
+        writeQuestionPlan(reporter, { questions: plan.newVariables, unreadable: plan.unreadable }, { answerHints: true });
     }
 
-    const notes: string[] = [];
-
     if (plan.unreadable.length > 0) {
-        notes.push(
+        reporter.note(
             `A dry run downloads no recipe, so the dependencies of the versions not on this machine yet, and not described by their index, are not shown: ${plan.unreadable.join(", ")}.`,
         );
     }
 
     for (const entry of plan.unreachable) {
-        notes.push(`The index of '${entry.repo}' could not be fetched, so its pins stay where they are. ${firstLine(entry.reason)}`);
+        reporter.note(`The index of '${entry.repo}' could not be fetched, so its pins stay where they are. ${firstLine(entry.reason)}`);
     }
 
     for (const entry of plan.failed) {
-        notes.push(`The subscription to '${entry.key}' could not be resolved, so its pins stay where they are. ${firstLine(entry.reason)}`);
+        reporter.note(`The subscription to '${entry.key}' could not be resolved, so its pins stay where they are. ${firstLine(entry.reason)}`);
     }
 
     for (const repo of plan.linked) {
-        notes.push(`The repository '${repo}' is linked to a working copy, so builds keep reading that checkout until it is unlinked; the pins above take effect then.`);
+        reporter.note(`The repository '${repo}' is linked to a working copy, so builds keep reading that checkout until it is unlinked; the pins above take effect then.`);
     }
 
     for (const entry of plan.builtIn) {
-        notes.push(
+        reporter.note(
             `The subscription to '${entry.key}' is one sous provides itself, and it stays at ${entry.version === undefined ? "the version" : `version ${entry.version}, the version`} this installation of sous ships.`,
         );
     }
 
     if (plan.switchedOff.length > 0) {
-        notes.push(`Switched off, so left alone: ${plan.switchedOff.join(", ")}.`);
+        reporter.note(`Switched off, so left alone: ${plan.switchedOff.join(", ")}.`);
     }
-
-    if (notes.length > 0) {
-        lines.push("");
-
-        for (const text of notes) {
-            lines.push(...wrapText(`${BULLET} ${text}`, width, { hangingIndent: 2 }).map(style.note));
-        }
-    }
-
-    lines.push("");
-
-    return lines;
 }
 
-/**
- * The questions the new versions ask, grouped by recipe (a shorter form of today's
- * `formatQuestionPlan`: the plan now carries only each question's recipe and name).
- */
-function formatNewQuestions(plan: UpdatePlanShape, view: Pick<CliViewContext, "style">, width: number): string[] {
-    const { style } = view;
-    const sentence = (text: string, paint = (line: string): string => line): string[] => wrapText(text, width - 2).map(paint);
-    const unreadable =
-        plan.unreadable.length === 0
-            ? []
-            : sentence(
-                  `Not on this machine yet, and their repository's index does not record their questions, so they cannot be listed: ${plan.unreadable.join(", ")}. A dry run downloads nothing; run this command again without '--dry-run' to install them and be asked.`,
-                  style.note,
-              );
-
-    if (plan.newVariables.length === 0) {
-        return unreadable;
-    }
-
-    const subject = plan.unreadable.length === 0 ? "These recipes ask" : "The recipes sous could read ask";
-    const count = plan.newVariables.length;
-    const lines = sentence(`${subject} ${questionCount(count)}, ${count} of which nothing answers yet.`);
-    const groups = new Map<string, string[]>();
-
-    for (const variable of plan.newVariables) {
-        groups.set(variable.recipe, [...(groups.get(variable.recipe) ?? []), variable.name]);
-    }
-
-    for (const [recipe, names] of groups) {
-        lines.push("", `${recipe} asks ${questionCount(names.length)}:`);
-
-        for (const name of names) {
-            lines.push("", `  ${style.cyan(name)}`, `    ${style.label("answer-with")}: ${style.value(`--answer ${name}=<value>`)}`);
-        }
-    }
-
-    if (unreadable.length > 0) {
-        lines.push("", ...unreadable);
-    }
-
-    return lines;
-}
-
-function recipeUpdateView(plan: UpdatePlanShape, view: CliViewContext): string {
-    const out = view.printer();
-
-    out.heading("Update plan");
-
-    for (const line of formatUpdatePlan(plan, view)) {
-        out.log(line === "" ? "" : `  ${line}`);
-    }
-
-    out.paragraph("Nothing was written. Run 'sous subscription update' to apply it.");
-
-    return out.footer().text();
+function recipeUpdateView(plan: UpdatePlanShape, view: CliViewContext): void {
+    view.reporter.operationStart("Update plan");
+    reportUpdatePlan(view.reporter, plan);
+    view.reporter.dryRun("Nothing was written. Run 'sous subscription update' to apply it.");
 }
 
 // --- subscription.update ---------------------------------------------------------------------------
 
 async function subscriptionUpdateView(result: SubscriptionUpdateShape, view: CliViewContext): Promise<CliViewOutput> {
-    const out = view.printer();
+    const { reporter } = view;
     const scope = describeUpdateScope(result.plan.scope);
 
     // The plan itself was reported before the question.
@@ -337,27 +248,21 @@ async function subscriptionUpdateView(result: SubscriptionUpdateShape, view: Cli
     }
 
     if (result.dryRun || !result.applied) {
-        out.blank();
-        out.paragraph(`Nothing was written. Run the same command without '--dry-run' to update ${scope}.`);
+        reporter.dryRun(`Nothing was written. Run the same command without '--dry-run' to update ${scope}.`);
 
-        return out.footer().text();
+        return undefined;
     }
 
-    out.blank();
-    out.subheading("Lockfile");
-    out.blank();
+    reporter.stepStart("Lockfile");
 
     if (result.plan.diff.unchanged) {
-        out.paragraph("Nothing changed.");
+        reporter.info("Nothing changed.");
     } else {
-        for (const line of describeLockDiff(result.plan.diff)) {
-            out.log(`  ${line}`);
-        }
+        reporter.list(describeLockDiff(result.plan.diff));
     }
 
     if (result.trusted.length > 0) {
-        out.blank();
-        out.paragraph(
+        reporter.info(
             `Repositories trusted along the way: ${result.trusted.join(", ")}. They are now recorded in this project's config, and your colleagues inherit them.`,
         );
     }
@@ -365,52 +270,40 @@ async function subscriptionUpdateView(result: SubscriptionUpdateShape, view: Cli
     const ask = result.followUps.find((followUp) => followUp.intent === "vars.ask");
 
     if (ask?.result !== undefined) {
-        out.blank();
-        out.subheading("Variables");
-        await appendRendered(out, view, "vars.ask", ask.result);
+        reporter.stepStart("Variables");
+        await view.show("vars.ask", ask.result);
     }
 
     if (result.plan.cycles.length > 0) {
-        out.warning(
-            `Some of these recipes co-subscribe to each other in a circle:\n${result.plan.cycles.map((cycle) => `  ${cycle.join(" -> ")}`).join("\n")}\nThat is unusual but not broken, and the lockfile was updated.`,
-        );
+        reporter.problem("Some of these recipes co-subscribe to each other in a circle:", {
+            cause: result.plan.cycles.map((cycle) => cycle.join(" -> ")).join("\n"),
+            hint: "That is unusual but not broken, and the lockfile was updated.",
+        });
     }
 
     const build = result.followUps.find((followUp) => followUp.intent === "build");
     const rebuilt = build?.result !== undefined;
 
-    out.blank();
-    out.paragraph(
-            `The lockfile now pins the newest versions the ranges allow for ${scope}. This project's subscriptions are exactly as they were.` +
+    reporter.info(
+        `The lockfile now pins the newest versions the ranges allow for ${scope}. This project's subscriptions are exactly as they were.` +
             (rebuilt || result.plan.diff.unchanged ? "" : " The project was not rebuilt."),
     );
-    out.footer();
 
     if (build?.result !== undefined) {
-        await appendRendered(out, view, "build", build.result);
+        await view.show("build", build.result);
 
         // A failed build fails the command, though the update itself is written (as before the refactor).
         if ((build.result as { ok?: unknown }).ok === false) {
-            return {
-                stdout: out.text(),
-                stderr:
-                    "Error: The lockfile was updated, but the build that followed it failed, so this project's outputs may not match the new versions yet. " +
-                    "The update itself is recorded; fix what the build reported above and run 'sous build' again.\n",
-                exitCode: 1,
-            };
+            reporter.error(
+                "The lockfile was updated, but the build that followed it failed, so this project's outputs may not match the new versions yet. " +
+                    "The update itself is recorded; fix what the build reported above and run 'sous build' again.",
+            );
+
+            return { exitCode: 1 };
         }
     }
 
-    return out.text();
-}
-
-/** Adds another intent's result, as its own view shows it. */
-async function appendRendered(out: Printer, view: CliViewContext, intent: string, result: unknown): Promise<void> {
-    const text = await view.render(intent, result);
-
-    if (text !== "") {
-        out.log(text.replace(/\n$/, ""));
-    }
+    return undefined;
 }
 
 // --- lock.rebuild ----------------------------------------------------------------------------------
@@ -433,43 +326,29 @@ const LOCK_COLUMNS: TableColumn[] = [
     { key: "heldBy", header: "Held by", overflow: "wrap", flex: 1, priority: "low", minWidth: 16 },
 ];
 
-/** How far every line of `lock show` is indented. */
-const LOCK_INDENT = 2;
-
 function describeHolder(holder: string): string {
     return holder === "project" ? "this project" : holder;
 }
 
-function lockShowView(result: LockShowShape, view: CliViewContext): string {
-    const out = view.printer();
+function lockShowView(result: LockShowShape, view: CliViewContext): void {
+    const { reporter } = view;
 
-    out.heading("Recipe versions this project pins");
-    out.blank();
+    reporter.operationStart("Recipe versions this project pins");
 
-    if (result.recipes.length === 0) {
-        out.paragraph(`This project pins nothing yet. Its lockfile is ${result.path}.`);
+    const recipes = [...result.recipes].sort((left, right) => (left.key < right.key ? -1 : left.key > right.key ? 1 : 0));
+    const rows = recipes.map((recipe) => ({
+        key: recipe.key,
+        version: recipe.entry.version,
+        repo: recipe.entry.repo,
+        heldBy: recipe.entry.requestedBy.map(describeHolder).join(", "),
+    }));
+    const rowNotes = recipes.map((recipe) => (recipe.active ? undefined : `not built here: ${recipe.skipped?.message ?? "Not built on this machine."}`));
 
-        return out.footer().text();
+    reporter.table(LOCK_COLUMNS, rows, { empty: `This project pins nothing yet. Its lockfile is ${result.path}.`, rowNotes });
+
+    if (rows.length > 0) {
+        reporter.info(`This project's lockfile is ${result.path}.`);
     }
-
-    const rows = [...result.recipes]
-        .sort((left, right) => (left.key < right.key ? -1 : left.key > right.key ? 1 : 0))
-        .map((recipe) => ({
-            key: recipe.key,
-            version: recipe.entry.version,
-            repo: recipe.entry.repo,
-            heldBy: recipe.entry.requestedBy.map(describeHolder).join(", "),
-            skipped: recipe.active ? undefined : (recipe.skipped?.message ?? "Not built on this machine."),
-        }));
-
-    out.table(LOCK_COLUMNS, rows, {
-        indent: LOCK_INDENT,
-        rowNote: (row) => (row.skipped === undefined ? undefined : view.style.muted(`  not built here: ${row.skipped}`)),
-    });
-    out.blank();
-    out.paragraph(`This project's lockfile is ${result.path}.`);
-
-    return out.footer().text();
 }
 
 /** The views of this domain, by intent. */

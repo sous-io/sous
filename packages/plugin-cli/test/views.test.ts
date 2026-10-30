@@ -17,14 +17,17 @@ const reportPlugin = definePlugin({
         sous.entities.add("cli-view", {
             id: "report.make",
             render: (result: { files: string[]; ok: boolean }, view) => {
-                const out = view.printer();
+                view.reporter.operationStart("Wrote");
 
-                out.section("Wrote");
                 for (const file of result.files) {
-                    out.log(`  ✓ ${file}`);
+                    view.reporter.operation("written", file);
                 }
 
-                return result.ok ? out.text() : { stdout: out.text(), stderr: "Warning: the report failed.\n", exitCode: 1 };
+                if (!result.ok) {
+                    view.reporter.warn("the report failed.");
+
+                    return { exitCode: 1 };
+                }
             },
         });
     },
@@ -35,7 +38,7 @@ const otherViewPlugin = definePlugin({
     name: "sous-plugin-other-view",
 
     register(sous) {
-        sous.entities.add("cli-view", { id: "report.make", render: (result: { files: string[] }) => `${result.files.length} files` });
+        sous.entities.add("cli-view", { id: "report.make", render: (result: { files: string[] }, view) => view.reporter.text(`${result.files.length} files`) });
     },
 });
 
@@ -103,7 +106,7 @@ function watchPlugin(state: { builds: Array<Record<string, unknown>>; stop?: () 
                         state.stop = () => resolve("stopped");
                     }),
             });
-            sous.entities.add("cli-view", { id: "build", render: (result: { ok: boolean }) => (result.ok ? "built" : undefined) });
+            sous.entities.add("cli-view", { id: "build", render: (result: { ok: boolean }, view) => (result.ok ? view.reporter.text("built") : undefined) });
         },
     });
 }
@@ -113,7 +116,7 @@ describe("views (cli-view entities)", () => {
     it("should show a result through its intent's view", async () => {
         const run = await runCli([reportPlugin], ["report", "make"]);
 
-        expect(run.stdout).toBe(" \n▶ Wrote:\n \n  ✓ a.md\n  ✓ b.md\n");
+        expect(run.stdout).toBe("▶ Wrote:\n \n  ✓ a.md\n  ✓ b.md\n \n \n");
         expect(run.exitCode).toBeUndefined();
     });
 
@@ -122,7 +125,7 @@ describe("views (cli-view entities)", () => {
         const run = await runCli([reportPlugin], ["report", "make", "--fail"]);
 
         expect(run.exitCode).toBe(1);
-        expect(run.stderr).toContain("Warning: the report failed.");
+        expect(run.stderr).toContain("the report failed.");
     });
 
     /** `--json` prints the plain result, whatever view the intent has. */
@@ -207,7 +210,7 @@ describe("watch mode keys", () => {
 
         const done = runCli([watchPlugin(state)], ["build", "--watch"], { io });
 
-        await waitFor(() => io.err.join("").includes("Press Q to quit"));
+        await waitFor(() => io.out.join("").includes("Press Q to quit"));
         (io.stdin as unknown as NodeJS.WritableStream).write("r");
         await waitFor(() => state.builds.length === 2);
         (io.stdin as unknown as NodeJS.WritableStream).write("q");
@@ -216,8 +219,8 @@ describe("watch mode keys", () => {
 
         expect(state.builds).toEqual([{ watch: true }, { watch: false }]);
         expect(interrupted).toBe(1);
-        expect(run.stdout).toBe("built\nbuilt\n");
-        expect(run.stderr).toContain("Manual rebuild triggered.");
+        expect(run.stdout.match(/^built$/gm)).toHaveLength(2);
+        expect(run.stdout).toContain("Manual rebuild triggered.");
     });
 
     /** Without a terminal there are no keys: the command waits for watch mode to stop. */
@@ -227,7 +230,7 @@ describe("watch mode keys", () => {
         const done = runCli([watchPlugin(state)], ["build", "--watch"], { io });
 
         await waitFor(() => state.stop !== undefined);
-        expect(io.err.join("")).not.toContain("Press Q");
+        expect(io.out.join("")).not.toContain("Press Q");
         state.stop?.();
         await done;
         expect(state.builds).toHaveLength(1);

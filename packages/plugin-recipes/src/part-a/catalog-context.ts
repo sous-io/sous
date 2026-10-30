@@ -142,7 +142,7 @@ export async function loadCatalog(ctx: Reader, flags: BrowsingFlags = {}): Promi
         lock,
         subscriptions: Object.keys(enabledSubscriptions(ctx.config)).sort(),
         linked,
-        ...(ctx.entities === undefined ? {} : { destinationsFor: (kind: string) => destinationsFor({ entities: ctx.entities!, config: ctx.config, project: ctx.project }, kind) }),
+        ...(ctx.entities === undefined ? {} : { destinationsFor: (kind: string) => destinationsFor({ entities: ctx.entities!, config: ctx.config, project: ctx.project, services: ctx.services }, kind) }),
         ...(declarations === undefined
             ? {}
             : {

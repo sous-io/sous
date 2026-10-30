@@ -12,7 +12,7 @@ describe("describeOverBudget()", () => {
      * the intent "build" took 12ms (budget 5ms).
      */
     it("should describe every category in plain words", () => {
-        const first = (category: TimingCategory, name: string, plugin?: string) => describeOverBudget(over(category, name, plugin), []).split("\n")[0];
+        const first = (category: TimingCategory, name: string, plugin?: string) => describeOverBudget(over(category, name, plugin), []).summary;
 
         expect(first("config.build", "config")).toBe("building the config took 12ms (budget 5ms).");
         expect(first("config.build", "what-if #3")).toBe("building the what-if #3 config took 12ms (budget 5ms).");
@@ -37,9 +37,14 @@ describe("describeOverBudget()", () => {
     it("should name the slowest contributor of a slow build", () => {
         const batch = [over("contributor", "a"), { ...over("contributor", "b"), ms: 610 }, over("intent", "x")];
 
-        expect(describeOverBudget(over("config.stage", "0"), batch)).toBe(
-            "config stage 0 took 12ms (budget 5ms).\n  b took 610ms of that.\n  See every timing with --timings.",
-        );
-        expect(describeOverBudget(over("config.build", "config"), [])).toBe("building the config took 12ms (budget 5ms).\n  See every timing with --timings.");
+        expect(describeOverBudget(over("config.stage", "0"), batch)).toEqual({
+            summary: "config stage 0 took 12ms (budget 5ms).",
+            cause: "b took 610ms of that.",
+            hint: "See every timing with --timings.",
+        });
+        expect(describeOverBudget(over("config.build", "config"), [])).toEqual({
+            summary: "building the config took 12ms (budget 5ms).",
+            hint: "See every timing with --timings.",
+        });
     });
 });

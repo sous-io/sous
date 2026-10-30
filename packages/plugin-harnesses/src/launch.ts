@@ -53,7 +53,7 @@ export async function handle(input: LaunchInput, ctx: Context): Promise<LaunchRe
 
         sessions++;
         await ctx.emit("harnesses.launched", { harness: id, args: passThrough, session: sessions });
-        ctx.reporter.note(`Launching ${id}`);
+        ctx.reporter.notice(`Launching ${id}`);
 
         try {
             last = await harness.launch(passThrough, ctx);

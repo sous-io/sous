@@ -41,7 +41,7 @@ export const skillsPlugin: PluginDefinition = definePlugin({
         // Says why skills go nowhere, from the finished config the compile runs with.
         sous.on("compiler.compile.before", (_event, ctx) => {
             for (const warning of skillWarnings(ctx)) {
-                ctx.reporter.warning(warning);
+                ctx.reporter.problem(warning.summary, warning.hint === undefined ? {} : { hint: warning.hint });
             }
         });
     },

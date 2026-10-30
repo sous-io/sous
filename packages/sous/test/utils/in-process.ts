@@ -10,7 +10,7 @@
  */
 
 import { createEngine } from "@sous-io/core";
-import type { LogLevel, Prompter, Reporter } from "@sous-io/plugin-api";
+import { createReporter, ReportEntryStyle, type Prompter, type Reporter } from "@sous-io/plugin-api";
 import { BUILT_IN_PLUGINS } from "../../src/built-ins.js";
 import { sousVersion } from "../../src/main.js";
 import { findProject } from "../../src/project.js";
@@ -40,15 +40,11 @@ export async function runInProcess(
 ): Promise<InProcessRun> {
     const printed: string[] = [];
     const asked: string[] = [];
-    const log = (_level: LogLevel, message: string): void => {
-        printed.push(message);
-    };
-    const reporter: Reporter = {
-        log,
-        note: (message) => log("notice", message),
-        warning: (message) => log("warning", message),
-        progress: () => undefined,
-    };
+    const reporter: Reporter = createReporter((_level, message, _details, style) => {
+        if (style !== ReportEntryStyle.Progress) {
+            printed.push(message);
+        }
+    });
     const prompter: Prompter = {
         interactive: true,
         askValue: (question) => Promise.reject(new Error(`unexpected question: ${question.message}`)),

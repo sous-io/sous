@@ -1,105 +1,116 @@
 /**
- * What a build says while it runs, worded as before the refactor. Every message goes through the
- * chain's `Reporter`; the front end decides how it looks.
+ * What a build says while it runs. Every message goes through the chain's `Reporter`, with the
+ * facts as details; the front end decides how it looks.
  */
 
 import type { Memory } from "@sous-io/plugin-memories/types";
-import type { Reporter } from "@sous-io/plugin-api";
+import { LogLevel, type Reporter } from "@sous-io/plugin-api";
 import type { DefinedVariable } from "@sous-io/plugin-recipe-answers/types";
 import type { LockDiff, ResolvedLink, RestoreReport, SkippedRecipe } from "@sous-io/plugin-recipes/types";
-import type { BuildPrepareResult } from "./types.js";
+import type { BuildPrepareResult, UnansweredWarning } from "./types.js";
 
-/** The bullet lists use. */
-export const BULLET = "•";
-
-/** The warning for memories no output included, or `undefined` when there are none. */
-export function unincludedMemoriesMessage(missing: readonly Memory[]): string | undefined {
+/** Warns about memories no output included, or says nothing when there are none. */
+export function reportUnincludedMemories(missing: readonly Memory[], reporter: Reporter): void {
     if (missing.length === 0) {
-        return undefined;
+        return;
     }
 
     const one = missing.length === 1;
 
-    return (
-        `${missing.length} ${one ? "memory" : "memories"} published by your subscribed recipes ${one ? "is" : "are"} ` +
-        `not included in any output, so no agent will read ${one ? "it" : "them"}:\n` +
-        missing.map((memory) => `${BULLET} ${memory.recipe}: memories/${memory.name}`).join("\n") +
-        `\nTo include every memory, add the line "@#memories/**/*.md" to your project's instruction ` +
-        `source (the file your AGENTS.md or CLAUDE.md is built from). To leave a recipe's memories out on purpose, ` +
-        `list the recipe in "recipes.memories.exclude" in your sous config.`
+    reporter.list(
+        missing.map((memory) => `${memory.recipe}: memories/${memory.name}`),
+        {
+            title:
+                `${missing.length} ${one ? "memory" : "memories"} published by your subscribed recipes ${one ? "is" : "are"} ` +
+                `not included in any output, so no agent will read ${one ? "it" : "them"}:`,
+            footer:
+                `To include every memory, add the line "@#memories/**/*.md" to your project's instruction ` +
+                `source (the file your AGENTS.md or CLAUDE.md is built from). To leave a recipe's memories out on purpose, ` +
+                `list the recipe in "recipes.memories.exclude" in your sous config.`,
+        },
+        LogLevel.Warning,
     );
 }
 
-/** The lines announcing linked repositories, or none. */
-export function linkedReposMessage(links: Readonly<Record<string, ResolvedLink>>): string | undefined {
+/** Announces linked repositories at `level`, or says nothing when none are linked. */
+export function reportLinkedRepos(links: Readonly<Record<string, ResolvedLink>>, reporter: Reporter, level: LogLevel): void {
     const names = Object.keys(links).sort();
 
     if (names.length === 0) {
-        return undefined;
+        return;
     }
 
-    const lines = [
-        names.length === 1
-            ? "One repository is LINKED to a working copy on this machine."
-            : `${names.length} repositories are LINKED to working copies on this machine.`,
-        "Their recipes are read from those checkouts, so versions, the lockfile and",
-        "freshness checks do not apply to them.",
-        "",
-        ...names.map((name) => `${name} -> ${links[name]!.path}`),
-        "",
-        "Run 'sous repo unlink <name>' to go back to the published versions.",
-    ];
+    const lead = names.length === 1 ? "One repository is LINKED to a working copy on this machine." : `${names.length} repositories are LINKED to working copies on this machine.`;
 
-    return lines.join("\n");
-}
-
-/** The lines about pins that were added or moved, or none. */
-export function lockedMessage(diff: LockDiff): string | undefined {
-    if (diff.unchanged || (diff.added.length === 0 && diff.updated.length === 0)) {
-        return undefined;
-    }
-
-    const lines = [
-        ...diff.added.map((change) => `  pinned: ${change.key} at version ${change.to ?? "?"}.`),
-        ...diff.updated.map((change) => `  ${change.key} moved from version ${change.from ?? "?"} to version ${change.to ?? "?"}.`),
-        "",
-        "The lockfile has been updated. Commit it, so everyone building this project gets exactly these versions.",
-    ];
-
-    return lines.join("\n");
-}
-
-/** The lines about restored recipes, or none. */
-export function restoredMessage(report: RestoreReport): string | undefined {
-    return report.restored.length === 0 ? undefined : report.restored.map((key) => `  restored: ${key}`).join("\n");
-}
-
-/** One warning per recipe that could not be restored. */
-export function restoreFailures(report: RestoreReport): string[] {
-    return report.failed.map(
-        (failure) => `Sous could not restore '${failure.key}' at the version the lockfile pins, so nothing from it was compiled.\n${failure.reason}`,
+    reporter.list(
+        names.map((name) => `${name} -> ${links[name]!.path}`),
+        {
+            title: `${lead} Their recipes are read from those checkouts, so versions, the lockfile and freshness checks do not apply to them.`,
+            footer: "Run 'sous repo unlink <name>' to go back to the published versions.",
+        },
+        level,
     );
 }
 
-/**
- * The newer versions published within range, as a fact: one line per recipe, the newer version
- * beside the pinned one. Nothing moved, and the closing sentence says so.
- */
-export function newerMessage(newer: BuildPrepareResult["newer"]): string | undefined {
-    if (newer.length === 0) {
-        return undefined;
+/** Reports pins that were added or moved, or says nothing. */
+function reportLocked(diff: LockDiff, reporter: Reporter): void {
+    if (diff.unchanged || (diff.added.length === 0 && diff.updated.length === 0)) {
+        return;
     }
 
-    const lines = [
-        "Newer versions published:",
-        ...newer.map((entry) => `  ${entry.key}: ${entry.to} this project pins ${entry.from}`),
-        "",
+    reporter.list(
+        [
+            ...diff.added.map((change) => `pinned: ${change.key} at version ${change.to ?? "?"}.`),
+            ...diff.updated.map((change) => `${change.key} moved from version ${change.from ?? "?"} to version ${change.to ?? "?"}.`),
+        ],
+        {
+            title: "Locking subscribed recipes",
+            footer: "The lockfile has been updated. Commit it, so everyone building this project gets exactly these versions.",
+        },
+        LogLevel.Notice,
+    );
+}
+
+/** Reports restored recipes, or says nothing. */
+function reportRestored(report: RestoreReport, reporter: Reporter): void {
+    if (report.restored.length === 0) {
+        return;
+    }
+
+    reporter.stepStart("Restoring recipes", LogLevel.Notice);
+    reporter.note("This project's lockfile pins recipes that were not in the store on this machine, so they were fetched at exactly the versions it records.");
+    reporter.list(report.restored.map((key) => `restored: ${key}`), {}, LogLevel.Notice);
+}
+
+/** One problem per recipe that could not be restored. */
+function reportRestoreFailures(report: RestoreReport, reporter: Reporter): void {
+    for (const failure of report.failed) {
+        reporter.problem(`Sous could not restore '${failure.key}' at the version the lockfile pins, so nothing from it was compiled.`, {
+            subject: failure.key,
+            cause: failure.reason,
+        });
+    }
+}
+
+/**
+ * The newer versions published within range, as a fact: each recipe with the newer version, and
+ * the pinned one beside it. Nothing moved, and the closing sentence says so.
+ */
+function reportNewer(newer: BuildPrepareResult["newer"], reporter: Reporter): void {
+    if (newer.length === 0) {
+        return;
+    }
+
+    reporter.variables(
+        newer.map((entry) => ({ label: entry.key, value: entry.to, detail: `this project pins ${entry.from}` })),
+        "Newer versions published",
+        LogLevel.Notice,
+    );
+    reporter.note(
         newer.length === 1
             ? "This version is within the range declared for the recipe. No pin was changed, so this build uses the pinned version."
             : "Each version is within the range declared for its recipe. No pin was changed, so this build uses the pinned versions.",
-    ];
-
-    return lines.join("\n");
+    );
 }
 
 /**
@@ -132,60 +143,46 @@ export function prunedForSkippedLine(count: number, dryRun: boolean): string {
 }
 
 /**
- * The warning for required variables nothing answered, or none.
+ * The warning for required variables nothing answered: a title, the variables (each with the
+ * recipe that asks it) and what to do about them. `undefined` when everything is answered.
  *
  * ```text
  * 1 required recipe variable has no answer, so the templates that use it render an empty value:
- *   • jiraKey (asked by acme/jira)
+ *   - jiraKey (asked by acme/jira)
  * Run 'sous vars ask' to answer it.
  * ```
  */
-export function unansweredMessage(unanswered: readonly DefinedVariable[]): string | undefined {
+export function unansweredWarning(unanswered: readonly DefinedVariable[]): UnansweredWarning | undefined {
     if (unanswered.length === 0) {
         return undefined;
     }
 
     const count = unanswered.length;
-    const noun = count === 1 ? "variable" : "variables";
     const pronoun = count === 1 ? "it" : "them";
-    const lines = unanswered.map((defined) => `  ${BULLET} ${defined.definition.name} (asked by ${defined.recipe.namespace}/${defined.recipe.name})`);
 
-    return (
-        `${count} required recipe ${noun} ${count === 1 ? "has" : "have"} no answer, so the templates that use ${pronoun} render an empty value:\n` +
-        `${lines.join("\n")}\n` +
-        `Run 'sous vars ask' to answer ${pronoun}.`
-    );
+    return {
+        title: `${count} required recipe ${count === 1 ? "variable" : "variables"} ${count === 1 ? "has" : "have"} no answer, so the templates that use ${pronoun} render an empty value:`,
+        items: unanswered.map((defined) => `${defined.definition.name} (asked by ${defined.recipe.namespace}/${defined.recipe.name})`),
+        footer: `Run 'sous vars ask' to answer ${pronoun}.`,
+    };
+}
+
+/** Warns about required variables nothing answered, or says nothing. */
+export function reportUnanswered(unanswered: readonly DefinedVariable[], reporter: Reporter): void {
+    const warning = unansweredWarning(unanswered);
+
+    if (warning !== undefined) {
+        reporter.list(warning.items, { title: warning.title, footer: warning.footer }, LogLevel.Warning);
+    }
 }
 
 /** Reports what preparing did, as a build shows it. */
 export function reportPrepared(result: BuildPrepareResult, reporter: Reporter): void {
-    const locked = lockedMessage(result.locked);
-
-    if (locked) {
-        reporter.note(`Locking subscribed recipes\n${locked}`);
-    }
-
-    const restored = restoredMessage(result.restored);
-
-    if (restored) {
-        reporter.note(`Restoring recipes\nThis project's lockfile pins recipes that were not in the store on this machine, so they were fetched at exactly the versions it records.\n${restored}`);
-    }
-
-    for (const failure of restoreFailures(result.restored)) {
-        reporter.warning(failure);
-    }
-
-    const newer = newerMessage(result.newer);
-
-    if (newer) {
-        reporter.note(newer);
-    }
-
-    const unanswered = unansweredMessage(result.unanswered);
-
-    if (unanswered) {
-        reporter.warning(unanswered);
-    }
+    reportLocked(result.locked, reporter);
+    reportRestored(result.restored, reporter);
+    reportRestoreFailures(result.restored, reporter);
+    reportNewer(result.newer, reporter);
+    reportUnanswered(result.unanswered, reporter);
 }
 
 function lowerFirst(text: string): string {

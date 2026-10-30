@@ -164,8 +164,7 @@ function mainContributor(loader: ConfigFilesLoaderImpl): ContributorDefinition {
 
             if (config.contributor.run === 1) {
                 if (candidates.length > 1) {
-                    config.log(
-                        "warning",
+                    config.warn(
                         `${project.sousDir} holds ${candidates.length} main config files (${candidates.map((c) => path.basename(c)).join(", ")}); only ${path.basename(file)} is read. Move the others into conf.d or delete them.`,
                     );
                 }

@@ -36,6 +36,8 @@ export const ReportEntryStyle = {
     List: "list",
     /** A table of rows. {@link TableDetails}. */
     Table: "table",
+    /** Items nested under other items, such as each contributor and the changes it made. {@link TreeDetails}. */
+    Tree: "tree",
     /** How many things were found. {@link CountDetails}. */
     Count: "count",
     /** Says that a run is a dry run, or what a dry run left undone. No details. */
@@ -178,6 +180,26 @@ export interface TableDetails {
     readonly rows: readonly Readonly<Record<string, unknown>>[];
     /** What to say instead of the table when there are no rows: `No repositories are added.` */
     readonly empty?: string;
+    /**
+     * A note shown under a row, by the row's index (`rowNotes[2]` belongs to `rows[2]`), such as
+     * `switched off` or the pins a repository has installed. `undefined` for a row with none.
+     */
+    readonly rowNotes?: readonly (string | undefined)[];
+}
+
+/** One item of a {@link TreeDetails}, with the items nested under it. */
+export interface TreeNode {
+    readonly label: string;
+    /** A secondary fact, shown less prominently after the label. */
+    readonly detail?: string;
+    readonly children?: readonly TreeNode[];
+}
+
+/** {@link ReportEntryStyle.Tree}. */
+export interface TreeDetails {
+    /** A title above the tree. */
+    readonly title?: string;
+    readonly nodes: readonly TreeNode[];
 }
 
 /** {@link ReportEntryStyle.Count}. */

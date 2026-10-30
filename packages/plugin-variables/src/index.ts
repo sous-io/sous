@@ -64,8 +64,7 @@ export const variablesPlugin: PluginDefinition = definePlugin({
 
                 for (const name of vars.isObject() ? vars.keys() : []) {
                     if (name.startsWith("sous") && !isAutoVariable(name)) {
-                        config.log(
-                            "warning",
+                        config.warn(
                             `The variable "${name}" uses the reserved "sous*" namespace and may clash with a variable sous sets.`,
                         );
                     }

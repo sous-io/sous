@@ -1,12 +1,15 @@
 import type { Command, CommandNode } from "./command-tree.js";
 import type { FlagSpec, PositionalSpec } from "./flags.js";
 import type { GlobalSpec } from "./globals.js";
+import { createStyle, type Style } from "./views/style.js";
 
 /** What help needs besides the node. */
 export interface HelpContext {
     readonly appName: string;
     readonly appDescription?: string;
     readonly globals: readonly GlobalSpec[];
+    /** The colors section titles, commands and flags are painted with. Default: none. */
+    readonly style?: Style;
 }
 
 /**
@@ -26,6 +29,9 @@ export interface HelpContext {
  * ```
  */
 export function renderHelp(node: CommandNode, context: HelpContext): string {
+    const style = context.style ?? createStyle(false);
+    const block = (title: string, lines: readonly string[]) => section(style, title, lines);
+    const table = (title: string, rows: ReadonlyArray<readonly [string, string]>) => rowsSection(style, title, rows);
     const sections: string[] = [];
     const command = node.command;
     const path = command && node.viaAlias ? command.path : node.path;
@@ -199,16 +205,22 @@ function flagText(flag: FlagSpec): string {
     return parts.filter((part) => part !== "").join(" ");
 }
 
-function block(title: string, lines: readonly string[]): string {
-    return [title, ...lines.map((line) => `  ${line}`)].join("\n");
+function section(style: Style, title: string, lines: readonly string[]): string {
+    return [style.heading(title), ...lines.map((line) => `  ${line.startsWith("$ ") ? style.value(line) : line}`)].join("\n");
 }
 
-function table(title: string, rows: ReadonlyArray<readonly [string, string]>): string {
+function rowsSection(style: Style, title: string, rows: ReadonlyArray<readonly [string, string]>): string {
     const width = Math.min(32, Math.max(...rows.map(([left]) => left.length)));
 
     return [
-        title,
-        ...rows.map(([left, right]) => (right === "" ? `  ${left}` : left.length > width ? `  ${left}\n  ${" ".repeat(width)}  ${right}` : `  ${left.padEnd(width)}  ${right}`)),
+        style.heading(title),
+        ...rows.map(([left, right]) =>
+            right === ""
+                ? `  ${style.label(left)}`
+                : left.length > width
+                  ? `  ${style.label(left)}\n  ${" ".repeat(width)}  ${right}`
+                  : `  ${style.label(left.padEnd(width))}  ${right}`,
+        ),
     ].join("\n");
 }
 

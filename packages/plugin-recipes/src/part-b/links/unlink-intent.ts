@@ -6,7 +6,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { ConfigError, isSousError, isSousErrorOfKind, type Context } from "@sous-io/plugin-api";
+import { ConfigError, LogLevel, isSousError, isSousErrorOfKind, type Context } from "@sous-io/plugin-api";
 import type { IntentFollowUp, LinkScope, RepoUnlinkInput, RepoUnlinkResult, ResolvedLink, SubscriptionEntry, UnlinkPublishedReport } from "../../types.js";
 import { PROJECT_REPOS_DIRNAME } from "../constants.js";
 import { effectiveRangeForHolders, findNewerInRange, NEWER_VERSION_CHECK_TIMEOUT_MS, withDeadline } from "../index-cache/freshness.js";
@@ -172,12 +172,13 @@ async function confirmRemoval(checkoutPath: string, work: UnsavedWork, yes: bool
 
 /** Reports the work a deletion would lose. */
 function describeUnsavedWork(work: UnsavedWork, ctx: Context): void {
-    const lines = ["The checkout holds work that exists nowhere else, and deleting it loses that work."];
     const group = (title: string, items: readonly string[]): void => {
         if (items.length > 0) {
-            lines.push("", title, ...items.map((item) => `  • ${item}`));
+            ctx.reporter.list(items, { title }, LogLevel.Warning);
         }
     };
+
+    ctx.reporter.warn("The checkout holds work that exists nowhere else, and deleting it loses that work.");
 
     if (work.unknown !== undefined) {
         group("Sous could not inspect it, so it may hold anything:", [work.unknown]);
@@ -186,7 +187,6 @@ function describeUnsavedWork(work: UnsavedWork, ctx: Context): void {
     group("Uncommitted changes:", work.uncommitted);
     group("Commits no remote has:", work.unpushed);
     group("Stashes:", work.stashes);
-    ctx.reporter.warning(lines.join("\n"));
 }
 
 /** Which pins of the repository have newer versions within range, without changing any; `undefined` for a repository the project does not trust. */

@@ -50,3 +50,4 @@
   - [0018: One project root, which sous sets](adrs/0018-one-project-root.md)
   - [0019: Agent tools are plugins](adrs/0019-agent-tools-as-plugins.md)
   - [0020: Config expressions](adrs/0020-config-expressions.md)
+  - [0021: Reporting as levels and styles](adrs/0021-reporting-levels-and-styles.md)

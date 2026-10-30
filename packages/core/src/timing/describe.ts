@@ -1,28 +1,42 @@
 import type { OverBudget } from "./timer.js";
 
+/** The words of a warning for a call that went over budget. */
+export interface OverBudgetDescription {
+    /** What went over: `building the config took 840ms (budget 200ms).` */
+    readonly summary: string;
+    /** For a slow build, stage or pass: the slowest contributor in it. */
+    readonly cause?: string;
+    /** How to see every timing. */
+    readonly hint: string;
+}
+
 /**
- * A warning for a call that went over budget, in plain words:
+ * Describes a call that went over budget, in plain words:
  *
- * ```text
- * building the config took 840ms (budget 200ms).
- *   confd/530-team.js took 610ms of that.
- *   See every timing with --timings.
+ * ```ts
+ * describeOverBudget(over, batch);
+ * // {
+ * //     summary: "building the config took 840ms (budget 200ms).",
+ * //     cause: "confd/530-team.js took 610ms of that.",
+ * //     hint: "See every timing with --timings.",
+ * // }
  * ```
  */
-export function describeOverBudget(over: OverBudget, batch: readonly OverBudget[]): string {
-    const lines = [`${subject(over)} took ${ms(over.ms)} (budget ${ms(over.budgetMs)}).`];
+export function describeOverBudget(over: OverBudget, batch: readonly OverBudget[]): OverBudgetDescription {
+    const summary = `${subject(over)} took ${ms(over.ms)} (budget ${ms(over.budgetMs)}).`;
+    let cause: string | undefined;
 
     if (over.category === "config.build" || over.category === "config.stage" || over.category === "config.pass") {
         const slowest = [...batch].filter((item) => item.category === "contributor").sort((a, b) => b.ms - a.ms)[0];
 
         if (slowest) {
-            lines.push(`  ${slowest.name} took ${ms(slowest.ms)} of that.`);
+            cause = `${slowest.name} took ${ms(slowest.ms)} of that.`;
         }
     }
 
-    lines.push("  See every timing with --timings.");
+    const hint = "See every timing with --timings.";
 
-    return lines.join("\n");
+    return cause === undefined ? { summary, hint } : { summary, cause, hint };
 }
 
 function subject(over: OverBudget): string {

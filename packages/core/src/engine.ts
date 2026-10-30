@@ -30,6 +30,9 @@ import {
     type PluginDefinition,
     PluginError,
     type PluginInfo,
+    type LogLevel,
+    type ReportDetails,
+    type ReportEntryStyle,
     type ProjectInfo,
     type RefreshConfigOptions,
     type Reporter,
@@ -518,7 +521,7 @@ export class Engine {
             loadBuiltIns: () => this.loadBuiltIns(),
             loadSpecifier: (specifier: string, view: View) => this.loadSpecifier(specifier, view),
             plugin: (name: string) => this.plugins.get(name),
-            log: (level: Parameters<Reporter["log"]>[0], message: string) => this.reporterImpl.log(level, message),
+            log: (level: LogLevel, message: string, details?: ReportDetails, style?: ReportEntryStyle) => this.reporterImpl.log(level, message, details, style),
             enterContributor: (id: string) => {
                 this.contributorStack.push(id);
             },
@@ -992,7 +995,7 @@ export class Engine {
         const error = this.failure.error;
         const details = error instanceof SousError && error.details.length > 0 ? ` (${error.details.join("; ")})` : "";
 
-        reporter.warning(`The config could not be built, so ${definition.intent} runs with what was built before the error: ${messageOf(error)}${details}`);
+        reporter.problem(`The config could not be built, so ${definition.intent} runs with what was built before the error.`, { cause: `${messageOf(error)}${details}` });
     }
 
     /**
@@ -1301,14 +1304,16 @@ export class Engine {
     }
 
     private reportOverBudget(over: OverBudget, batch: readonly OverBudget[]): void {
-        this.reporterImpl.warning(describeOverBudget(over, batch));
+        const { summary, cause, hint } = describeOverBudget(over, batch);
+
+        this.reporterImpl.problem(summary, cause === undefined ? { hint } : { cause, hint });
     }
 
     private warnOnce(message: string, level: "warning" | "debug" = "warning"): void {
         if (!this.warnedOnce.has(message)) {
             this.warnedOnce.add(message);
             if (level === "debug") {
-                this.reporterImpl.log("debug", message);
+                this.reporterImpl.debug(message);
             } else {
                 this.reporterImpl.warning(message);
             }

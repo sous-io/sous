@@ -8,8 +8,8 @@
  */
 
 import path from "node:path";
+import type { Reporter, VariableEntry } from "@sous-io/plugin-api";
 import type { CliViewContext, CliViewEntity } from "../../types.js";
-import type { Printer, VariableEntry } from "../printer.js";
 
 /** The package `init` adds to a project's `package.json`. */
 const SOUS_PACKAGE_NAME = "@sous-io/sous";
@@ -109,74 +109,46 @@ export interface PluginsInstallResultShape {
  * `sous init`: the files written (or, in a dry run, that would be), the `package.json` change, the
  * first build's report, then what was set up. Files are shown relative to the project root, as
  * today's CLI showed them.
- *
- * ```text
- * ▶ Setting up the project:
- *
- *     wrote .sous/sous.config.js
- *     wrote .sous/memories/AGENTS.tpl.md
- *     added @sous-io/sous 0.2.34 to devDependencies in package.json
- *
- * ▶ What was set up:
- *
- *     Config        : /p/.sous/sous.config.js
- *     Prompt source : /p/.sous/memories/AGENTS.tpl.md
- *     ...
- * ```
  */
-export async function initView(result: InitResultShape, view: CliViewContext): Promise<string> {
-    const out = view.printer();
+export async function initView(result: InitResultShape, view: CliViewContext): Promise<void> {
+    const { reporter } = view;
     const added = result.packageJson.kind === "added" ? result.packageJson : undefined;
     const packageJsonFile = path.join(result.root, "package.json");
     const files = result.files.filter((file) => !(added && file === packageJsonFile));
+    const anythingDone = files.length > 0 || result.kept.length > 0 || added !== undefined;
 
-    if (files.length > 0 || result.kept.length > 0 || added) {
-        out.section("Setting up the project");
+    if (anythingDone) {
+        reporter.operationStart("Setting up the project");
     }
 
     for (const file of files) {
-        const relative = path.relative(result.root, file) || file;
-
-        if (result.dryRun) {
-            out.dryRunNotice(`would write ${relative}`);
-        } else {
-            out.log(`  wrote ${relative}`);
-        }
+        reporter.operation(result.dryRun ? "would-write" : "written", path.relative(result.root, file) || file);
     }
 
     for (const file of result.kept) {
-        out.log(`  kept ${path.relative(result.root, file) || file}, which already exists`);
+        reporter.operation("skipped", path.relative(result.root, file) || file, { note: "kept, because it already exists" });
     }
 
     if (added) {
-        const what = `${SOUS_PACKAGE_NAME} ${added.range} to devDependencies in package.json`;
+        const what = `${SOUS_PACKAGE_NAME} ${added.range} to devDependencies`;
 
-        if (result.dryRun) {
-            out.dryRunNotice(`would add ${what}`);
-        } else {
-            out.log(`  added ${what}`);
-        }
+        reporter.operation(result.dryRun ? "would-write" : "written", "package.json", { note: result.dryRun ? `would add ${what}` : `added ${what}` });
     }
 
     if (result.dryRun) {
-        if (out.empty) {
-            return "";
+        if (anythingDone) {
+            reporter.dryRun("Nothing was written. Run the same command without '--dry-run' to set the project up.");
         }
 
-        out.blank();
-        out.dryRunNotice("Nothing was written. Run the same command without '--dry-run' to set the project up.");
-
-        return out.footer().text();
+        return;
     }
 
-    const build = result.build === undefined ? "" : await view.render("build", result.build);
-
-    if (build !== "") {
-        out.log(build.replace(/\n$/, ""));
+    if (result.build !== undefined) {
+        await view.show("build", result.build);
     }
 
-    out.section("What was set up");
-    out.variables([
+    reporter.operationStart("What was set up");
+    reporter.variables([
         { label: "Config", value: result.configPath },
         { label: "Prompt source", value: path.join(result.sousDir, STARTER_PROMPT_RELATIVE_PATH) },
         { label: "Compiled to", value: path.join(result.root, STARTER_OUTPUT_NAME) },
@@ -185,12 +157,9 @@ export async function initView(result: InitResultShape, view: CliViewContext): P
         { label: "Shared answers", value: path.join(result.sousDir, ".env"), detail: "committed" },
         { label: "Local answers", value: path.join(result.sousDir, ".env.local"), detail: "gitignored; .env.local.example shows the layout" },
     ]);
-    out.blank();
-    out.paragraph(
-        `  ${STARTER_OUTPUT_NAME} and the skills directory are build output, compiled from the prompt source and from the recipes this project subscribes to; a build recompiles them. The config explains each of its blocks in its own comments.`,
+    reporter.info(
+        `${STARTER_OUTPUT_NAME} and the skills directory are build output, compiled from the prompt source and from the recipes this project subscribes to; a build recompiles them. The config explains each of its blocks in its own comments.`,
     );
-
-    return out.footer().text();
 }
 
 /** The "Dependency" row: where sous sits in `package.json`, or nothing without one. */
@@ -213,28 +182,13 @@ function dependencyRow(outcome: PackageJsonOutcomeShape): VariableEntry[] {
 // ---------------------------------------------------------------------------------------------
 
 /**
- * `sous update`, laid out as today's command printed it: a warning for a project config this copy
- * could not load, the registry, the installs it cannot update, then each install's facts. A dry
- * run ends there; a real run adds the commands that ran and the summary. The commands were also
- * reported as they ran, since their own output follows them.
- *
- * ```text
- * ▶ Updating:
- *
- * ➔ Global install
- *     Location        : /usr/lib/node_modules/@sous-io/sous
- *     Package manager : npm
- *     Installed       : 0.2.30
- *     Will install    : 0.2.34
- *     Running         : npm i -g @sous-io/sous@0.2.34
- *
- * ▶ Summary:
- *
- *     Global install: updated to 0.2.34 from 0.2.30
- * ```
+ * `sous update`: a warning for a project config this copy could not load, the registry, the
+ * installs it cannot update, then each install's facts. A dry run ends there; a real run adds the
+ * commands that ran and the summary. The commands were also reported as they ran, since their own
+ * output follows them.
  */
-export function updateView(result: UpdateResultShape, view: CliViewContext): string {
-    const out = view.printer();
+export function updateView(result: UpdateResultShape, view: CliViewContext): void {
+    const { reporter } = view;
     const plans = result.outcomes.map((outcome) => outcome.plan);
     const globalCount = plans.filter((plan) => plan.scope === "global").length;
     const dryRun = view.input.dryRun === true || result.outcomes.some((outcome) => outcome.result === "planned");
@@ -243,17 +197,16 @@ export function updateView(result: UpdateResultShape, view: CliViewContext): str
     if (result.configProblem !== undefined) {
         const where = result.configProblem.configPath === undefined ? "the project config" : `the project config at ${result.configProblem.configPath}`;
 
-        out.warning(`Sous could not load ${where}, so this command carries on without it.\n\nThe error was:\n${result.configProblem.message}`);
+        reporter.problem(`Sous could not load ${where}, so this command carries on without it.`, { cause: `The error was:\n${result.configProblem.message}` });
     }
 
-    out.subheading("Command Variables", "$");
-    out.variables(commandVariables(result, view));
+    reporter.commandVariables(updateCommandEntries(result, view));
 
     if (result.notices.length > 0) {
-        out.section("Not updated");
+        reporter.operationStart("Not updated");
 
         for (const notice of result.notices) {
-            out.note(notice.message, { indent: 2 });
+            reporter.note(notice.message);
 
             const facts: VariableEntry[] = [];
 
@@ -265,56 +218,61 @@ export function updateView(result: UpdateResultShape, view: CliViewContext): str
                 facts.push(commandFact("Run by hand", notice.manualCommand));
             }
 
-            out.variables(facts);
-            out.blank();
+            if (facts.length > 0) {
+                reporter.variables(facts);
+            }
         }
     }
 
     if (plans.length === 0) {
-        out.blank();
-        out.note("There is no install of sous here that sous can update.", { indent: 2 });
+        reporter.note("There is no install of sous here that sous can update.");
 
-        return out.footer().text();
+        return;
     }
 
-    out.heading(dryRun ? "Update plan" : "Updating");
+    reporter.operationStart(dryRun ? "Update plan" : "Updating");
 
     for (const outcome of result.outcomes) {
         const plan = outcome.plan;
+        const title = planTitle(plan, globalCount);
 
-        out.subheading(planTitle(plan, globalCount));
-        out.variables(planFacts(plan, { dryRun, noBuild, buildDirectory: result.buildDirectory }));
+        const facts = planFacts(plan);
+
+        if (plan.direction !== "current" && plan.scope === "project") {
+            facts.push(buildFact(noBuild, result.buildDirectory));
+        }
+
+        reporter.variables(facts, title);
+
+        if (dryRun && plan.direction !== "current") {
+            reporter.command(plan.command.command, plan.command.args, commandFacts(plan.command, true));
+        }
 
         if (outcome.result === "updated" || outcome.result === "failed") {
-            out.blank();
-            out.variables([commandFact("Running", plan.command)]);
+            reporter.command(plan.command.command, plan.command.args, commandFacts(plan.command, false));
         }
 
         if (outcome.result === "declined") {
-            out.blank();
-            out.log(`  The ${planTitle(plan, globalCount).toLowerCase()} was left at ${plan.installed}.`);
+            reporter.info(`The ${title.toLowerCase()} was left at ${plan.installed}.`);
         }
     }
 
     if (dryRun) {
-        out.blank();
-        out.dryRunNotice("Nothing was installed. Run the same command without '--dry-run' to update.");
+        reporter.dryRun("Nothing was installed. Run the same command without '--dry-run' to update.");
 
-        return out.footer().text();
+        return;
     }
 
     if (result.build?.command !== undefined) {
-        out.section("Building the project");
-        out.variables([commandFact("Running", result.build.command)]);
+        reporter.operationStart("Building the project");
+        reporter.command(result.build.command.command, result.build.command.args, commandFacts(result.build.command, false));
     }
 
-    printSummary(out, result, globalCount);
-
-    return out.footer().text();
+    reportSummary(reporter, result, globalCount);
 }
 
 /** The block `sous update` opens with: where it ran, which installs, which version, the registry. */
-function commandVariables(result: UpdateResultShape, view: CliViewContext): VariableEntry[] {
+function updateCommandEntries(result: UpdateResultShape, view: CliViewContext): VariableEntry[] {
     const input = view.input;
     const installs = input.global === true ? "global only" : input.project === true ? "project only" : "global and project";
     const version =
@@ -349,12 +307,17 @@ export function formatCommand(command: PlannedCommandShape): string {
     return [command.command, ...command.args].join(" ");
 }
 
+/** The facts `reporter.command` takes besides the command and its arguments. */
+function commandFacts(command: PlannedCommandShape, dryRun: boolean): { cwd?: string; dryRun?: boolean } {
+    return { ...(command.cwd === undefined ? {} : { cwd: command.cwd }), ...(dryRun ? { dryRun } : {}) };
+}
+
 function commandFact(label: string, command: PlannedCommandShape): VariableEntry {
     return command.cwd === undefined ? { label, value: formatCommand(command) } : { label, value: formatCommand(command), detail: `in ${command.cwd}` };
 }
 
-/** The facts of one plan; the command is shown only in a dry run (a real run shows what ran). */
-function planFacts(plan: UpdatePlanShape, context: { dryRun: boolean; noBuild: boolean; buildDirectory: string | undefined }): VariableEntry[] {
+/** The facts of one plan. The command is reported after them. */
+function planFacts(plan: UpdatePlanShape): VariableEntry[] {
     const facts: VariableEntry[] = [];
 
     if (plan.projectRoot !== undefined) {
@@ -389,13 +352,6 @@ function planFacts(plan: UpdatePlanShape, context: { dryRun: boolean; noBuild: b
             ? { label: "Will install", value: plan.target, detail: `a downgrade from ${plan.installed}` }
             : { label: "Will install", value: plan.target },
     );
-    if (context.dryRun) {
-        facts.push(commandFact("Command", plan.command));
-    }
-
-    if (plan.scope === "project") {
-        facts.push(buildFact(context.noBuild, context.buildDirectory));
-    }
 
     return facts;
 }
@@ -413,8 +369,8 @@ function buildFact(noBuild: boolean, buildDirectory: string | undefined): Variab
     return { label: "Then builds", value: "yes", detail: `with the new copy, in ${buildDirectory}` };
 }
 
-function printSummary(out: Printer, result: UpdateResultShape, globalCount: number): void {
-    out.section("Summary");
+function reportSummary(reporter: Reporter, result: UpdateResultShape, globalCount: number): void {
+    reporter.operationStart("Summary");
 
     const rows: VariableEntry[] = result.outcomes.map(({ plan, result: outcome, exitCode }) => {
         const label = planTitle(plan, globalCount);
@@ -454,7 +410,7 @@ function printSummary(out: Printer, result: UpdateResultShape, globalCount: numb
         }
     }
 
-    out.variables(rows);
+    reporter.variables(rows);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -465,27 +421,23 @@ function printSummary(out: Printer, result: UpdateResultShape, globalCount: numb
  * `plugins.install` (new: today's CLI has no such command): the plugins installed, or what a dry
  * run would install. The command itself was reported before it ran.
  */
-export function pluginsInstallView(result: PluginsInstallResultShape, view: CliViewContext): string {
-    const out = view.printer();
+export function pluginsInstallView(result: PluginsInstallResultShape, view: CliViewContext): void {
+    const { reporter } = view;
 
     if (result.declined) {
-        out.blank();
-        out.log("  Nothing was installed.");
+        reporter.info("Nothing was installed.");
 
-        return out.footer().text();
+        return;
     }
 
-    out.section(result.dryRun ? "Plugins to install" : "Installed plugins");
-    out.variables(result.installed.map((plugin) => ({ label: plugin.name, value: plugin.range })));
-    out.blank();
-    out.variables([{ ...commandFact(result.dryRun ? "Command" : "Ran", result.command), detail: `through ${result.manager}` }]);
+    reporter.operationStart(result.dryRun ? "Plugins to install" : "Installed plugins");
+    reporter.variables(result.installed.map((plugin) => ({ label: plugin.name, value: plugin.range })));
+    reporter.variable("Package manager", result.manager);
+    reporter.command(result.command.command, result.command.args, commandFacts(result.command, result.dryRun));
 
     if (result.dryRun) {
-        out.blank();
-        out.dryRunNotice("Nothing was installed. Run the same command without '--dry-run' to install.");
+        reporter.dryRun("Nothing was installed. Run the same command without '--dry-run' to install.");
     }
-
-    return out.footer().text();
 }
 
 /** The views of this domain, by intent. */

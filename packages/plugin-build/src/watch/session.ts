@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { Context } from "@sous-io/plugin-api";
+import { type Context, LogLevel } from "@sous-io/plugin-api";
 import { pathsToWatch, type WatchSet, watchSet } from "./paths.js";
 import { type ChangeBatch, ChangeBatcher, type FileWatcherHandle, realTimers, type Timers, type WatcherFactory } from "./watcher.js";
 import { DEFAULT_DEBOUNCE_MS } from "../schemas.js";
@@ -25,6 +25,8 @@ interface Trigger {
     full: boolean;
     /** Why, when no file changed (upstream moved, a person asked). */
     reason?: string;
+    /** Facts listed under the reason. */
+    details?: readonly string[];
 }
 
 /**
@@ -75,8 +77,8 @@ export class WatchSession {
     }
 
     /** Rebuilds everything now, as a change to the config would, without waiting for the debounce. */
-    trigger(reason: string): void {
-        this.enqueue({ files: [], full: true, reason });
+    trigger(reason: string, details?: readonly string[]): void {
+        this.enqueue({ files: [], full: true, reason, ...(details === undefined ? {} : { details }) });
     }
 
     /** Stops watching; resolves {@link done} once the chain in progress, if any, has finished. */
@@ -112,7 +114,7 @@ export class WatchSession {
                 throw error;
             }
 
-            ctx.reporter.log("error", `Sous could not work out what to watch from the new config, so it keeps watching what it watched before.\n  ${message(error)}`);
+            ctx.reporter.problem("Sous could not work out what to watch from the new config, so it keeps watching what it watched before.", { cause: message(error) }, LogLevel.Error);
             set = this.lastSet;
         }
 
@@ -125,7 +127,7 @@ export class WatchSession {
 
         this.batcher = batcher;
         this.watcher = await this.options.createWatcher(paths, { ignored: (file) => ignored.has(path.resolve(file)) }, (event, file) => batcher.handle(event, file));
-        ctx.reporter.note(`Watching ${set.files.length + set.globs.length + set.fullRebuildPaths.length} pattern(s) for changes...`);
+        ctx.reporter.notice(`Watching ${set.files.length + set.globs.length + set.fullRebuildPaths.length} pattern(s) for changes...`);
     }
 
     private async closeWatcher(): Promise<void> {
@@ -185,11 +187,16 @@ export class WatchSession {
         if (trigger.full) {
             const why = trigger.reason ?? `Config changed (${trigger.files.join(", ")}), reloading settings and restarting watcher...`;
 
-            ctx.reporter.note(why);
+            if (trigger.details === undefined) {
+                ctx.reporter.notice(why);
+            } else {
+                ctx.reporter.list(trigger.details, { title: why }, LogLevel.Notice);
+            }
+
             await this.closeWatcher();
             ctx.configChanged();
         } else {
-            ctx.reporter.note(`Change detected: ${trigger.files.join(", ")}`);
+            ctx.reporter.notice(`Change detected: ${trigger.files.join(", ")}`);
         }
 
         try {
@@ -204,12 +211,11 @@ export class WatchSession {
             // A failed build has already said why; the watch keeps running so the next save can fix it.
             this.builds += 1;
             this.failed += 1;
-            ctx.reporter.log(
-                "error",
-                trigger.full
-                    ? `Config reload failed; keeping the last-good config. Fix the config and save again to retry.\n  ${message(error)}`
-                    : `Rebuild failed: ${message(error)}`,
-            );
+            if (trigger.full) {
+                ctx.reporter.problem("Config reload failed; keeping the last-good config.", { cause: message(error), hint: "Fix the config and save again to retry." }, LogLevel.Error);
+            } else {
+                ctx.reporter.error(`Rebuild failed: ${message(error)}`);
+            }
         } finally {
             if (trigger.full && !this.stopped) {
                 await this.openWatcher(false);
@@ -278,11 +284,11 @@ export class WatchSession {
                 return;
             }
 
-            const moved = prepared.locked.updated.map((change) => `  ${change.key} moved from ${change.from ?? "?"} to ${change.to ?? "?"}.`);
+            const moved = prepared.locked.updated.map((change) => `${change.key} moved from ${change.from ?? "?"} to ${change.to ?? "?"}.`);
 
-            this.trigger(["A newer recipe version arrived upstream.", ...moved].join("\n"));
+            this.trigger("A newer recipe version arrived upstream.", moved);
         } catch (error) {
-            ctx.reporter.warning(`Sous could not check upstream for newer recipes; it tries again in ${this.pollSeconds()} seconds.\n  ${message(error)}`);
+            ctx.reporter.problem(`Sous could not check upstream for newer recipes; it tries again in ${this.pollSeconds()} seconds.`, { cause: message(error) });
         }
     }
 }
@@ -291,7 +297,9 @@ function merge(first: Trigger, second: Trigger): Trigger {
     const files = [...first.files, ...second.files.filter((file) => !first.files.includes(file))];
     const reason = second.reason ?? first.reason;
 
-    return { files, full: first.full || second.full, ...(reason === undefined ? {} : { reason }) };
+    const details = second.reason === undefined ? first.details : second.details;
+
+    return { files, full: first.full || second.full, ...(reason === undefined ? {} : { reason }), ...(details === undefined ? {} : { details }) };
 }
 
 function message(error: unknown): string {

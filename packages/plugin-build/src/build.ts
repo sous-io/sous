@@ -1,12 +1,12 @@
 import fs from "node:fs";
 import "@sous-io/plugin-memories/types";
 import path from "node:path";
-import { ConfigError, type Context, NotFoundError, SousError } from "@sous-io/plugin-api";
+import { ConfigError, type Context, LogLevel, NotFoundError, SousError } from "@sous-io/plugin-api";
 import type { CompileResult, CompilerPruneResult, WrittenFile } from "@sous-io/plugin-compiler/types";
 import type { SkippedRecipe } from "@sous-io/plugin-recipes/types";
 import { projectLabel } from "./pid.js";
 import { NO_CHANGE, NOTHING_RESTORED } from "./prepare.js";
-import { linkedReposMessage, prunedForSkippedLine, reportPrepared, skippedLine, unincludedMemoriesMessage } from "./report.js";
+import { prunedForSkippedLine, reportLinkedRepos, reportPrepared, reportUnincludedMemories, skippedLine } from "./report.js";
 import type {
     BuildInput,
     BuildPrepareResult,
@@ -40,7 +40,7 @@ export async function build(input: BuildInput, ctx: Context): Promise<BuildResul
     const heading = nestedBuildHeading(ctx);
 
     if (heading !== undefined && !partial) {
-        ctx.reporter.note(heading);
+        ctx.reporter.operationStart(heading);
     }
 
     let prepared: BuildPrepareResult;
@@ -48,11 +48,7 @@ export async function build(input: BuildInput, ctx: Context): Promise<BuildResul
     if (partial) {
         prepared = nothingPrepared();
     } else {
-        const linked = linkedReposMessage(ctx.services.get("recipes.links").all());
-
-        if (linked) {
-            ctx.reporter.warning(linked);
-        }
+        reportLinkedRepos(ctx.services.get("recipes.links").all(), ctx.reporter, LogLevel.Warning);
 
         prepared = await ctx.run("build.prepare", { dryRun });
         reportPrepared(prepared, ctx.reporter);
@@ -64,7 +60,7 @@ export async function build(input: BuildInput, ctx: Context): Promise<BuildResul
                 // What is skipped was worked out before the new pins were fetched: work it out again.
                 prepared = { ...prepared, skipped: ctx.services.get("recipes.active").skipped() };
             } else {
-                ctx.reporter.note("The lockfile changed while preparing; the recipes it now pins are compiled from the next build on.");
+                ctx.reporter.notice("The lockfile changed while preparing; the recipes it now pins are compiled from the next build on.");
             }
         }
     }
@@ -164,11 +160,7 @@ export async function compile(input: CompileCommandInput, ctx: Context): Promise
         ensureNoWatcher(ctx);
     }
 
-    const linked = linkedReposMessage(ctx.services.get("recipes.links").all());
-
-    if (linked) {
-        ctx.reporter.note(linked);
-    }
+    reportLinkedRepos(ctx.services.get("recipes.links").all(), ctx.reporter, LogLevel.Notice);
 
     const runtimeContext = await writeRuntimeContext(ctx, dryRun);
     const partial = (input.changedFiles?.length ?? 0) > 0 && input.rebuild !== true;
@@ -210,11 +202,8 @@ function warnUnincludedMemories(ctx: Context, compiled: CompileResult): void {
         .get("memories.selection")
         .selected()
         .filter((memory) => !included.has(realPath(memory.path)));
-    const message = unincludedMemoriesMessage(missing);
 
-    if (message !== undefined) {
-        ctx.reporter.warning(message);
-    }
+    reportUnincludedMemories(missing, ctx.reporter);
 }
 
 /** The path with symbolic links resolved, or the path itself when it cannot be read. */
@@ -262,7 +251,7 @@ export async function clear(input: ClearInput, ctx: Context): Promise<ClearResul
         });
 
         if (!confirmed) {
-            ctx.reporter.note("Aborted.");
+            ctx.reporter.notice("Aborted.");
 
             return { removed: [], dirsRemoved: [], dryRun, confirmed: false };
         }
@@ -275,7 +264,7 @@ export async function clear(input: ClearInput, ctx: Context): Promise<ClearResul
 
 /** The result of preparing nothing, for a partial rebuild. */
 function nothingPrepared(): BuildPrepareResult {
-    return { seeded: [], locked: NO_CHANGE, restored: NOTHING_RESTORED, newer: [], checkedUpstream: false, skipped: [], unanswered: [] };
+    return { seeded: [], locked: NO_CHANGE, restored: NOTHING_RESTORED, newer: [], checkedUpstream: false, skipped: [], skippedLines: [], unanswered: [] };
 }
 
 /**
@@ -292,7 +281,7 @@ export async function writeRuntimeContext(ctx: Context, dryRun: boolean): Promis
     const service = ctx.services.get("build.runtime-context");
 
     if (!service.settings()) {
-        ctx.reporter.warning("A compilation target asks for the runtime context (generateRuntimeContext), but the config sets no runtimeContext, so none was written.");
+        ctx.reporter.warn("A compilation target asks for the runtime context (generateRuntimeContext), but the config sets no runtimeContext, so none was written.");
 
         return undefined;
     }
@@ -300,7 +289,7 @@ export async function writeRuntimeContext(ctx: Context, dryRun: boolean): Promis
     const generated = await service.generate();
 
     if (generated && generated.branch === undefined) {
-        ctx.reporter.warning('Sous could not read the current git branch, so the runtime context says "unknown".');
+        ctx.reporter.warn('Sous could not read the current git branch, so the runtime context says "unknown".');
     }
 
     const written = await service.write({ dryRun });
@@ -341,7 +330,11 @@ function reportSkipped(
         const own = files.get(recipe.key) ?? new Set<string>();
         const count = [...own].filter((file) => removed.has(file)).length;
 
-        ctx.reporter.note(count > 0 ? `${skippedLine(recipe)}\n${prunedForSkippedLine(count, dryRun)}` : skippedLine(recipe));
+        ctx.reporter.notice(skippedLine(recipe));
+
+        if (count > 0) {
+            ctx.reporter.detail(prunedForSkippedLine(count, dryRun), LogLevel.Notice);
+        }
     }
 }
 
@@ -368,6 +361,6 @@ function startWatch(ctx: Context, input: BuildWatchInput): void {
     ctx.engine
         .submit({ intent: "build.watch", input }, { reporter: ctx.reporter, prompter: ctx.prompter, globals: ctx.globals })
         .catch((error: unknown) => {
-            ctx.reporter.log("error", `Watch mode stopped: ${error instanceof Error ? error.message : String(error)}`);
+            ctx.reporter.error(`Watch mode stopped: ${error instanceof Error ? error.message : String(error)}`);
         });
 }

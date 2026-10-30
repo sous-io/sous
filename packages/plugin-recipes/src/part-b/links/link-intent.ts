@@ -15,7 +15,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { ConfigError, type Context } from "@sous-io/plugin-api";
+import { ConfigError, LogLevel, type Context } from "@sous-io/plugin-api";
 import type { GitRunner } from "@sous-io/plugin-git/types";
 import type { LinkOrigin } from "@sous-io/plugin-formats/types";
 import type { RepoLinkInput, RepoLinkResult, UpstreamComparison } from "../../types.js";
@@ -79,7 +79,7 @@ export async function linkRepo(input: RepoLinkInput, ctx: Context, runtime: Part
 
     if (request.switchTo !== undefined || request.create !== undefined || request.latest) {
         if (scope === "global") {
-            ctx.reporter.warning(`This checkout is SHARED by every project on this machine that links '${name}' with --global. Changing its branch changes what all of them build from.`);
+            ctx.reporter.warn(`This checkout is SHARED by every project on this machine that links '${name}' with --global. Changing its branch changes what all of them build from.`);
         }
 
         plan.notes.push(...(await applyBranchRequest(git, plan.directory, request, input.yes === true, ctx)));
@@ -92,7 +92,7 @@ export async function linkRepo(input: RepoLinkInput, ctx: Context, runtime: Part
         try {
             await ensureLocalFilesIgnored(ctx.project.sousDir, ctx.services.get("host.gitignore"), ctx.services.get("host.directories"));
         } catch (error) {
-            ctx.reporter.warning(`Sous could not update .sous/.gitignore, so git may see the links map: ${messageOf(error)}`);
+            ctx.reporter.warn(`Sous could not update .sous/.gitignore, so git may see the links map: ${messageOf(error)}`);
         }
     }
 
@@ -100,10 +100,9 @@ export async function linkRepo(input: RepoLinkInput, ctx: Context, runtime: Part
     // A checkout sous has just cloned is as current as upstream by definition; any other may be months old.
     const upstream = plan.kind === "cloned" ? {} : await compareUpstream(git, plan.directory, ctx);
 
-    ctx.reporter.warning(
-        `The repository '${name}' is now LINKED. Its recipes are read from the checkout above, so versions, the lockfile and freshness checks no longer apply to it. ` +
-            `Run 'sous repo unlink ${name}${scope === "global" ? " --global" : ""}' to go back to published versions.`,
-    );
+    ctx.reporter.problem(`The repository '${name}' is now LINKED. Its recipes are read from the checkout above, so versions, the lockfile and freshness checks no longer apply to it.`, {
+        hint: `Run 'sous repo unlink ${name}${scope === "global" ? " --global" : ""}' to go back to published versions.`,
+    });
 
     return {
         repo: name,
@@ -367,17 +366,15 @@ async function confirmDiscard(branch: string, work: checkout.DiscardableWork, ye
         return;
     }
 
-    const lines = [`Making '${branch}' match ${checkout.UPSTREAM_REMOTE}/${branch} discards the local work below.`];
+    ctx.reporter.warn(`Making '${branch}' match ${checkout.UPSTREAM_REMOTE}/${branch} discards the local work below.`);
 
     if (work.uncommitted.length > 0) {
-        lines.push("", `Uncommitted changes: ${work.uncommitted.length}`, ...work.uncommitted.map((line) => `  • ${line}`));
+        ctx.reporter.list(work.uncommitted, { title: `Uncommitted changes: ${work.uncommitted.length}` }, LogLevel.Warning);
     }
 
     if (work.localCommits.length > 0) {
-        lines.push("", `Commits ${checkout.UPSTREAM_REMOTE} does not have: ${work.localCommits.length}`, ...work.localCommits.map((line) => `  • ${line}`));
+        ctx.reporter.list(work.localCommits, { title: `Commits ${checkout.UPSTREAM_REMOTE} does not have: ${work.localCommits.length}` }, LogLevel.Warning);
     }
-
-    ctx.reporter.warning(lines.join("\n"));
 
     if (yes) {
         return;
@@ -410,9 +407,9 @@ async function compareUpstream(git: GitRunner, directory: string, ctx: Context):
     if (!fetched.ok) {
         const since = await checkout.lastFetchedAt(git, directory, branch);
 
-        ctx.reporter.warning(
-            `Could not reach upstream; the checkout may have diverged since ${since === undefined ? "it was last fetched, and git has no record of when that was." : `${formatWhen(since)}, when it was last fetched.`}\n\n` +
-                `Git said:\n${fetched.reason}\n\nThe link was recorded all the same, and nothing in the checkout was changed.`,
+        ctx.reporter.problem(
+            `Could not reach upstream; the checkout may have diverged since ${since === undefined ? "it was last fetched, and git has no record of when that was." : `${formatWhen(since)}, when it was last fetched.`}`,
+            { cause: `Git said: ${fetched.reason}`, hint: "The link was recorded all the same, and nothing in the checkout was changed." },
         );
         return {};
     }

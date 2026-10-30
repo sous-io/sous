@@ -18,10 +18,10 @@ describe("describeNowhere()", () => {
     it("should count the recipes and say how to fix it", () => {
         const message = describeNowhere([source("one", "a/x"), source("two", "a/x"), source("three", "b/y")]);
 
-        expect(message).toBe(
-            "Skipped the skills of 2 recipes: nothing says where skills go.\n" +
-                "  Set recipes.skills.outputs in the config, or enable an agent plugin (such as @sous-io/plugin-claude-code).",
-        );
+        expect(message).toEqual({
+            summary: "Skipped the skills of 2 recipes: nothing says where skills go.",
+            hint: "Set recipes.skills.outputs in the config, or enable an agent plugin (such as @sous-io/plugin-claude-code).",
+        });
     });
 
     /**
@@ -30,7 +30,7 @@ describe("describeNowhere()", () => {
      * describeNowhere([a/x skill, own skill]); // -> "Skipped the skills of 1 recipe and 1 skill of your own: ..."
      */
     it("should count the user's own skills", () => {
-        expect(describeNowhere([source("one", "a/x"), source("mine")])).toMatch(/^Skipped the skills of 1 recipe and 1 skill of your own: /);
+        expect(describeNowhere([source("one", "a/x"), source("mine")])).toMatchObject({ summary: expect.stringMatching(/^Skipped the skills of 1 recipe and 1 skill of your own: /) });
     });
 
     /**

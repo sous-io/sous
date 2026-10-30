@@ -1,37 +1,52 @@
+import { BufferedReporter, ReportEntryStyle } from "@sous-io/plugin-api";
 import { describe, expect, it } from "vitest";
 import { thresholdOf } from "./front-end.js";
-import { renderResult, renderTimings } from "./views.js";
+import { reportResult, reportTimings } from "./views.js";
 
-describe("renderResult()", () => {
+describe("reportResult()", () => {
     /**
-     * Text prints as it is, scalars as text, anything else as JSON; nothing for undefined or null.
+     * Text is reported as text, scalars as text, anything else as data; nothing for undefined or null.
      *
-     * renderResult({ a: 1 }); // -> '{\n  "a": 1\n}\n'
+     * reportResult(reporter, { a: 1 }); // -> a Data entry
      */
-    it("should print each kind of result", () => {
-        expect(renderResult(undefined)).toBeUndefined();
-        expect(renderResult(null)).toBeUndefined();
-        expect(renderResult("done")).toBe("done\n");
-        expect(renderResult("done\n")).toBe("done\n");
-        expect(renderResult(3)).toBe("3\n");
-        expect(renderResult(false)).toBe("false\n");
-        expect(renderResult(10n)).toBe("10\n");
-        expect(renderResult({ a: 1 })).toBe('{\n  "a": 1\n}\n');
+    it("should report each kind of result", () => {
+        const reporter = new BufferedReporter();
+
+        reportResult(reporter, undefined);
+        reportResult(reporter, null);
+        reportResult(reporter, "done");
+        reportResult(reporter, 3);
+        reportResult(reporter, false);
+        reportResult(reporter, 10n);
+        reportResult(reporter, { a: 1 });
+
+        expect(reporter.messages.map((entry) => [entry.style, entry.message])).toEqual([
+            [ReportEntryStyle.Text, "done"],
+            [ReportEntryStyle.Text, "3"],
+            [ReportEntryStyle.Text, "false"],
+            [ReportEntryStyle.Text, "10"],
+            [ReportEntryStyle.Data, '{\n  "a": 1\n}'],
+        ]);
     });
 });
 
-describe("renderTimings()", () => {
-    /** Every timing, slowest total first, with calls, total, max and budget. */
+describe("reportTimings()", () => {
+    /** One table row per timing, slowest total first, with calls, total, max and budget. */
     it("should list timings slowest first with their budgets", () => {
-        const text = renderTimings([
+        const reporter = new BufferedReporter();
+
+        reportTimings(reporter, [
             { key: "intent:a", category: "intent", name: "a", plugin: "p", count: 1, totalMs: 1, maxMs: 1, budgetMs: 10, overBudget: 0 },
             { key: "contributor:b", category: "contributor", name: "b", plugin: "p", count: 2, totalMs: 9, maxMs: 6, budgetMs: false, overBudget: 1 },
         ]);
 
-        expect(text.split("\n")[0]).toBe("Timings:");
-        expect(text.indexOf("contributor:b")).toBeLessThan(text.indexOf("intent:a"));
-        expect(text).toMatch(/contributor:b\s+2 calls\s+9\.0ms total\s+6\.0ms max\s+no budget warning, 1 over/);
-        expect(text).toMatch(/intent:a\s+1 call\s+1\.0ms total\s+1\.0ms max\s+budget 10ms/);
+        const [table] = reporter.styled(ReportEntryStyle.Table);
+        const details = table!.details as { title: string; rows: Array<Record<string, unknown>> };
+
+        expect(details.title).toBe("Timings");
+        expect(details.rows.map((row) => row.name)).toEqual(["contributor:b", "intent:a"]);
+        expect(details.rows[0]).toMatchObject({ calls: 2, total: "9.0 ms", max: "6.0 ms", budget: "no budget warning, 1 over" });
+        expect(details.rows[1]).toMatchObject({ budget: "budget 10 ms" });
     });
 });
 

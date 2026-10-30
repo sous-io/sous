@@ -28,6 +28,7 @@ describe("refs.picker pick()", () => {
         expect(reporter.messages).toEqual([
             {
                 level: "notice",
+                style: "resolved-reference",
                 message: "'task-files' named one recipe, and nothing else, so that is what is being used.",
                 details: {
                     search: "task-files",
@@ -37,6 +38,7 @@ describe("refs.picker pick()", () => {
                     namespace: "workflow",
                     repository: "fixtures",
                     description: "Task files",
+                    reason: "'task-files' named one recipe, and nothing else, so that is what is being used.",
                 },
             },
         ]);
@@ -129,7 +131,7 @@ describe("refs.picker pick()", () => {
 
         await refs.picker.pick([first, second], { search: "formatter", acceptFirst: true, announce: false }, { prompter: nonInteractivePrompter, reporter });
         expect(reporter.messages).toEqual([
-            { level: "notice", message: "'formatter' named 2 things, and '--accept-first' was passed, so the first one listed is being used." },
+            { level: "notice", style: "plain", message: "'formatter' named 2 things, and '--accept-first' was passed, so the first one listed is being used." },
         ]);
 
         const silent = new BufferedReporter();

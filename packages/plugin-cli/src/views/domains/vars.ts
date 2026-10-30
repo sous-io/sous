@@ -5,12 +5,10 @@
  * `VariableDetail`), declared here structurally so plugin-cli depends on no other plugin.
  */
 
-import { projectVariables } from "../command-variables.js";
 import path from "node:path";
+import type { Reporter, TableColumn, VariableEntry } from "@sous-io/plugin-api";
 import type { CliViewContext, CliViewEntity } from "../../types.js";
-import type { Printer, VariableEntry } from "../printer.js";
-import type { TableColumn } from "../table.js";
-import { BULLET, wrapText } from "../text.js";
+import { projectVariables } from "../command-variables.js";
 
 // ---------------------------------------------------------------------------------------------
 // The result shapes this module reads
@@ -218,34 +216,29 @@ export function variableFacts(detail: ViewDetail, sousDir?: string): LabeledFact
     facts.push({ label: "defined-by", lines: [recipeLink(variable.recipe)] });
     facts.push({ label: "storage-path", lines: [sousDir === undefined ? envFileName(detail.storeIn) : path.join(sousDir, envFileName(detail.storeIn))] });
     facts.push({ label: "stored-as", lines: [detail.storedAs] });
-    facts.push({ label: "constraints", lines: detail.constraints.map((bullet) => `${BULLET} ${bullet}`) });
+    facts.push({ label: "constraints", lines: [...detail.constraints] });
 
     return facts;
 }
 
-/** Lays the facts out as one key and value block, colons lined up, indented four. */
-export function renderFacts(out: Printer, facts: readonly LabeledFact[], width = out.columns): string[] {
-    const labelWidth = Math.max(...facts.map((fact) => fact.label.length));
-    const lines: string[] = [];
+/** The facts as label and value entries; a fact's later lines have an empty label, continuing the first. */
+export function factEntries(facts: readonly LabeledFact[]): VariableEntry[] {
+    const entries: VariableEntry[] = [];
 
     for (const fact of facts) {
         fact.lines.forEach((raw, index) => {
             const line: FactLine = typeof raw === "string" ? { text: raw } : raw;
-            const entry: VariableEntry = { label: index === 0 ? fact.label : "", value: line.text, ...(line.detail === undefined ? {} : { detail: line.detail }) };
 
-            lines.push(...out.formatVariable(entry, { indent: 4, labelWidth, width }));
+            entries.push({ label: index === 0 ? fact.label : "", value: line.text, ...(line.detail === undefined ? {} : { detail: line.detail }) });
         });
     }
 
-    return lines;
+    return entries;
 }
 
 // ---------------------------------------------------------------------------------------------
 // vars list
 // ---------------------------------------------------------------------------------------------
-
-/** How far every line of the reports is indented. */
-const INDENT = 2;
 
 const LIST_COLUMNS: TableColumn[] = [
     { key: "name", header: "Variable", overflow: "truncate", minWidth: 8 },
@@ -262,12 +255,11 @@ const LADDER_COLUMNS: TableColumn[] = [
 ];
 
 /** The table of every variable in play, sorted by recipe then name. */
-export function renderVariableList(out: Printer, listings: readonly ViewListing[]): void {
-    out.heading("Variables in play");
+export function renderVariableList(reporter: Reporter, listings: readonly ViewListing[]): void {
+    reporter.operationStart("Variables in play");
 
     if (listings.length === 0) {
-        out.blank();
-        out.paragraph("No recipe in this project defines any variables yet. Subscribe to a recipe that publishes some, or read a definitions file with --file.");
+        reporter.info("No recipe in this project defines any variables yet. Subscribe to a recipe that publishes some, or read a definitions file with --file.");
 
         return;
     }
@@ -282,8 +274,7 @@ export function renderVariableList(out: Printer, listings: readonly ViewListing[
             source: listing.source === undefined ? "nothing yet" : `${rungLabel(listing.source.rung)}, ${sourceLabel(listing.source.file)}`,
         }));
 
-    out.blank();
-    out.table(LIST_COLUMNS, rows, { indent: INDENT });
+    reporter.table(LIST_COLUMNS, rows);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -291,15 +282,14 @@ export function renderVariableList(out: Printer, listings: readonly ViewListing[
 // ---------------------------------------------------------------------------------------------
 
 /** Everything about one variable: the question, its documentation, its facts and its ladder. */
-export function renderVariableDetail(out: Printer, detail: ViewDetail, sousDir?: string): void {
+export function renderVariableDetail(reporter: Reporter, detail: ViewDetail, sousDir?: string): void {
     const { variable } = detail;
     const { definition } = variable;
     const resolved = detail.diagnosis.resolved;
     const key = recipeKey(variable.recipe);
 
-    out.heading(`${definition.name} (${key})`);
-    out.blank();
-    out.variables({
+    reporter.operationStart(`${definition.name} (${key})`);
+    reporter.variables({
         Question: definition.prompt,
         About: definition.description,
         "For example": String(definition.example),
@@ -313,13 +303,7 @@ export function renderVariableDetail(out: Printer, detail: ViewDetail, sousDir?:
                   ? "the value in scope fits this definition"
                   : `the value in scope does not fit: ${detail.problem}`,
     });
-
-    out.blank();
-    out.push(...renderFacts(out, variableFacts(detail, sousDir)));
-
-    out.blank();
-    out.subheading("Environment variables sous looks at, most specific first");
-    out.blank();
+    reporter.variables(factEntries(variableFacts(detail, sousDir)));
 
     const rows = detail.diagnosis.candidates.map((candidate) => ({
         envName: candidate.envName,
@@ -327,78 +311,61 @@ export function renderVariableDetail(out: Printer, detail: ViewDetail, sousDir?:
         status: candidate.envName === resolved?.source.envName ? `answered it, from ${sourceLabel(resolved.source.file)}` : "not set",
     }));
 
-    out.table(LADDER_COLUMNS, rows, { indent: INDENT });
+    reporter.table(LADDER_COLUMNS, rows, { title: "Environment variables sous looks at, most specific first" });
 }
 
 // ---------------------------------------------------------------------------------------------
 // vars ask
 // ---------------------------------------------------------------------------------------------
 
-/** What `vars ask` stored, kept and skipped, as aligned key and value blocks. */
-export function formatAskReport(out: Printer, report: ViewAskResult): string[] {
-    const lines: string[] = [];
-    const width = out.wrapWidth - 2;
-    const labelWidth = Math.max(0, ...[...report.inherited, ...report.answered, ...report.skipped].map((entry) => entry.variable.definition.name.length));
-    const entryLines = (label: string, value: string, detail?: string): string[] =>
-        out.formatVariable({ label, value, ...(detail === undefined ? {} : { detail }) }, { labelWidth, width });
-    const noteLines = (text: string): string[] =>
-        wrapText(text, width - 4 - labelWidth - 2).map((line) => `${" ".repeat(4 + labelWidth + 2)}${out.style.muted(line)}`);
-
+/** What `vars ask` stored, kept and skipped, as key and value blocks under their own titles. */
+export function reportAsk(reporter: Reporter, report: ViewAskResult): void {
     if (report.inherited.length > 0) {
-        lines.push("Answers already in scope:");
-
-        for (const entry of report.inherited) {
-            const shown = displayValue(entry.resolved.value, entry.variable.definition.secret);
-
-            lines.push(...entryLines(entry.variable.definition.name, shown, `from ${describeSource(entry.resolved.source)}`));
-        }
-
-        lines.push("");
+        reporter.variables(
+            report.inherited.map((entry) => ({
+                label: entry.variable.definition.name,
+                value: displayValue(entry.resolved.value, entry.variable.definition.secret),
+                detail: `from ${describeSource(entry.resolved.source)}`,
+            })),
+            "Answers already in scope",
+        );
     }
 
     if (report.answered.length > 0) {
-        lines.push(report.dryRun ? "Answers that would be stored:" : "Answers stored:");
+        const entries: VariableEntry[] = [];
 
         for (const entry of report.answered) {
             const secret = entry.variable.definition.secret;
+            const note = (text: string): VariableEntry => ({ label: "", value: text });
 
-            lines.push(...entryLines(entry.variable.definition.name, displayValue(entry.value, secret), `${entry.envName} in ${envFileName(entry.file)}`));
+            entries.push({ label: entry.variable.definition.name, value: displayValue(entry.value, secret), detail: `${entry.envName} in ${envFileName(entry.file)}` });
 
             if (entry.mapping !== undefined) {
-                lines.push(...noteLines(`mapped to ${entry.mapping.target} in the conf.d layer`));
+                entries.push(note(`mapped to ${entry.mapping.target} in the conf.d layer`));
             }
 
             if (entry.replaced !== undefined) {
-                const previous = displayValue(entry.replaced, secret);
-
-                lines.push(...noteLines(`${report.dryRun ? "replacing" : "replaced"} the answer already there: ${previous}`));
+                entries.push(note(`${report.dryRun ? "replacing" : "replaced"} the answer already there: ${displayValue(entry.replaced, secret)}`));
             }
 
             if (entry.shadowedBy !== undefined) {
-                lines.push(
-                    ...noteLines(`${entry.shadowedBy} is set in your shell environment and answers this variable first; unset it for the stored answer to take effect`),
-                );
+                entries.push(note(`${entry.shadowedBy} is set in your shell environment and answers this variable first; unset it for the stored answer to take effect`));
             }
         }
 
-        lines.push("");
+        reporter.variables(entries, report.dryRun ? "Answers that would be stored" : "Answers stored");
     }
 
     if (report.skipped.length > 0) {
-        lines.push("Left unanswered:");
-
-        for (const entry of report.skipped) {
-            lines.push(...entryLines(entry.variable.definition.name, entry.reason));
-        }
-
-        lines.push("");
+        reporter.variables(
+            report.skipped.map((entry) => ({ label: entry.variable.definition.name, value: entry.reason })),
+            "Left unanswered",
+        );
     }
 
-    if (lines.length === 0) {
-        lines.push(...wrapText("Every variable in play already has an answer that fits its definition.", width));
+    if (report.inherited.length === 0 && report.answered.length === 0 && report.skipped.length === 0) {
+        reporter.info("Every variable in play already has an answer that fits its definition.");
     }
-
-    return lines;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -408,21 +375,13 @@ export function formatAskReport(out: Printer, report: ViewAskResult): string[] {
 /**
  * The "Command Variables" block `vars list` and `vars show` open with: the project, its config file
  * and where the definitions came from. Nothing about the project is shown outside one.
- *
- * ```text
- * $ Command Variables:
- *     Project    : my-app
- *     Config     : /work/my-app/.sous/sous.config.json
- *     Definitions: questions.yaml
- * ```
  */
-export function renderCommandVariables(out: Printer, view: Pick<CliViewContext, "input" | "project" | "projectName">): void {
+export function renderCommandVariables(reporter: Reporter, view: Pick<CliViewContext, "input" | "project" | "projectName">): void {
     const file = view.input.file;
     const entries: Record<string, unknown> = projectVariables(view);
 
     entries.Definitions = typeof file === "string" ? file : "the project's subscribed recipes";
-    out.subheading("Command Variables", "$");
-    out.variables(entries);
+    reporter.commandVariables(entries);
 }
 
 function isDetail(listing: ViewListing): listing is ViewDetail {
@@ -430,54 +389,32 @@ function isDetail(listing: ViewListing): listing is ViewDetail {
 }
 
 /** `vars list`, and `sous vars <name>` (whose result holds every match in full). */
-function varsList(result: readonly ViewListing[], view: CliViewContext): string {
-    const out = view.printer();
-
-    renderCommandVariables(out, view);
+function varsList(result: readonly ViewListing[], view: CliViewContext): void {
+    renderCommandVariables(view.reporter, view);
 
     if (typeof view.input.name === "string" && result.every(isDetail)) {
         for (const detail of result) {
-            renderVariableDetail(out, detail, view.project?.sousDir);
+            renderVariableDetail(view.reporter, detail, view.project?.sousDir);
         }
     } else {
-        renderVariableList(out, result);
+        renderVariableList(view.reporter, result);
     }
-
-    out.footer();
-
-    return out.text();
 }
 
 /** `vars show <name>`. */
-function varsShow(result: ViewDetail, view: CliViewContext): string {
-    const out = view.printer();
-
-    renderCommandVariables(out, view);
-    renderVariableDetail(out, result, view.project?.sousDir);
-    out.footer();
-
-    return out.text();
+function varsShow(result: ViewDetail, view: CliViewContext): void {
+    renderCommandVariables(view.reporter, view);
+    renderVariableDetail(view.reporter, result, view.project?.sousDir);
 }
 
 /** `vars ask`: the report, under "Answering variables". */
-function varsAsk(result: ViewAskResult, view: CliViewContext): string {
-    const out = view.printer();
-
-    out.heading("Answering variables");
-    out.blank();
+function varsAsk(result: ViewAskResult, view: CliViewContext): void {
+    view.reporter.operationStart("Answering variables");
 
     // The handler already says there was nothing to ask when nothing defines a variable.
     if (result.answered.length > 0 || result.inherited.length > 0 || result.skipped.length > 0) {
-        out.blank();
-
-        for (const line of formatAskReport(out, result)) {
-            out.push(line === "" ? "" : `  ${line}`);
-        }
+        reportAsk(view.reporter, result);
     }
-
-    out.footer();
-
-    return out.text();
 }
 
 /** `vars map`: the handler's note says what changed, so nothing more is printed. */

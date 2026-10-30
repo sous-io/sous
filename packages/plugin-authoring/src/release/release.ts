@@ -66,20 +66,22 @@ export async function runRelease(tools: AuthoringTools, input: RepoReleaseInput,
     const scope = releaseScope(input.namespace ?? [], input.recipe ?? []);
     const base = { repository: rootDir, indexPath: indexFilePath(rootDir), dryRun };
 
-    reporter.log("info", `Repository: ${rootDir}`, { repository: rootDir });
-    reporter.log("info", `Mode: ${describeMode(input)}`);
-    reporter.log("info", `Scope: ${describeScope(scope)}`);
+    reporter.variables([
+        { label: "Repository", value: rootDir },
+        { label: "Mode", value: describeMode(input) },
+        { label: "Scope", value: describeScope(scope) },
+    ]);
 
     // --- Validate ---------------------------------------------------------------------------
 
-    reporter.log("info", "Checking the repository");
+    reporter.operationStart("Checking the repository");
 
     let validation = await validateRepo(tools, rootDir);
     const scoping = [...validation.problems, ...scopeProblems(validation, scope)];
 
     reportProblems(tools, scoping);
     stopOnErrors(scoping);
-    reporter.log("info", `  Read ${describeCount(validation.recipes.length, "recipe")}.`);
+    reporter.detail(`Read ${describeCount(validation.recipes.length, "recipe")}.`);
 
     // Settled before anything is planned or written, so an unreachable repository changes nothing.
     const settling = await settleDependencyLocations(tools, validation);
@@ -130,7 +132,7 @@ export async function runRelease(tools: AuthoringTools, input: RepoReleaseInput,
     const entries = (hashes: Map<string, string>) => plan.releases.map((release) => planEntry(release, hashes.get(release.key) ?? ""));
 
     if (dryRun) {
-        reporter.note("Nothing was written; this was a dry run.");
+        reporter.dryRun("Nothing was written; this was a dry run.");
 
         return { ...empty, plan: entries(await workingHashes(tools, validation)) };
     }
@@ -141,7 +143,7 @@ export async function runRelease(tools: AuthoringTools, input: RepoReleaseInput,
         const answer = await tools.prompter.confirm({ message: "Publish these versions?", answeredBy: "--yes", default: true });
 
         if (!answer) {
-            reporter.log("info", "  Nothing was written.");
+            reporter.detail("Nothing was written.");
 
             return { ...empty, plan: entries(await workingHashes(tools, validation)), cancelled: true };
         }
@@ -151,19 +153,19 @@ export async function runRelease(tools: AuthoringTools, input: RepoReleaseInput,
 
     await assertNothingUncommitted(git);
     await assertCommitIdentity(git);
-    reporter.log("info", "Publishing");
+    reporter.operationStart("Publishing");
 
     const changedPaths: string[] = [];
 
     for (const release of plan.releases) {
         if (release.bump === undefined) {
-            reporter.log("info", `  ${release.key}: publishing version ${release.to}.`);
+            reporter.detail(`${release.key}: publishing version ${release.to}.`);
             continue;
         }
 
         const bumped = bumpRecipeVersion(release.manifestPath, release.bump);
 
-        reporter.log("info", `  ${release.key}: ${bumped.from} becomes ${bumped.to}.`);
+        reporter.detail(`${release.key}: ${bumped.from} becomes ${bumped.to}.`);
         changedPaths.push(release.manifestPath);
     }
 
@@ -194,10 +196,10 @@ export async function runRelease(tools: AuthoringTools, input: RepoReleaseInput,
 
     if (rebuilt.stale) {
         fs.writeFileSync(indexFilePath(rootDir), rebuilt.text, "utf8");
-        reporter.log("info", `  Wrote ${INDEX_FILE}.`);
+        reporter.operation("written", indexFilePath(rootDir));
         changedPaths.push(indexFilePath(rootDir));
     } else {
-        reporter.log("info", `  The committed ${INDEX_FILE} was already current.`);
+        reporter.detail(`The committed ${INDEX_FILE} was already current.`);
     }
 
     const message = `Release ${plan.releases.map((release) => `${release.key}@${release.to}`).join(", ")}`;
@@ -206,9 +208,9 @@ export async function runRelease(tools: AuthoringTools, input: RepoReleaseInput,
     if (await git.anythingToCommit(changedPaths)) {
         await git.commitPaths(changedPaths, message);
         committed = true;
-        reporter.log("info", `  Committed: ${message}`);
+        reporter.detail(`Committed: ${message}`);
     } else {
-        reporter.log("info", "  Nothing to commit; the manifests and the index were already current.");
+        reporter.detail("Nothing to commit; the manifests and the index were already current.");
     }
 
     const tagged: string[] = [];
@@ -217,7 +219,7 @@ export async function runRelease(tools: AuthoringTools, input: RepoReleaseInput,
         for (const release of plan.releases) {
             await git.createAnnotatedTag(release.tag, `Release ${release.key} version ${release.to}`);
             tagged.push(release.tag);
-            reporter.log("info", `  Created the tag ${release.tag}.`);
+            reporter.detail(`Created the tag ${release.tag}.`);
         }
     } else {
         reporter.note(
@@ -240,24 +242,24 @@ export async function runRelease(tools: AuthoringTools, input: RepoReleaseInput,
 
         if (branch !== undefined) {
             await git.pushBranch(UPSTREAM_REMOTE, branch);
-            reporter.log("info", `  Pushed the branch '${branch}' to ${UPSTREAM_REMOTE}.`);
+            reporter.detail(`Pushed the branch '${branch}' to ${UPSTREAM_REMOTE}.`);
         }
 
         if (tagged.length > 0) {
             await git.pushTags(UPSTREAM_REMOTE, tagged);
-            reporter.log("info", `  Pushed ${describeCount(tagged.length, "tag")} to ${UPSTREAM_REMOTE}.`);
+            reporter.detail(`Pushed ${describeCount(tagged.length, "tag")} to ${UPSTREAM_REMOTE}.`);
         }
 
         pushed = true;
     } else {
-        reporter.log("info", "What to do next");
-        reporter.log("info", `  Push the commit with 'git push ${UPSTREAM_REMOTE} ${branch ?? "<branch>"}'.`);
+        const next = [`Push the commit with 'git push ${UPSTREAM_REMOTE} ${branch ?? "<branch>"}'.`];
 
         if (tagged.length > 0) {
-            reporter.log("info", `  Push the tags with 'git push ${UPSTREAM_REMOTE} --tags'.`);
+            next.push(`Push the tags with 'git push ${UPSTREAM_REMOTE} --tags'.`);
         }
 
-        reporter.log("info", "  Or run this command again with '--push', which does both.");
+        next.push("Or run this command again with '--push', which does both.");
+        reporter.list(next, { title: "What to do next" });
     }
 
     const hashes = new Map(plan.releases.map((release) => [release.key, rebuilt.index.recipes[release.key]?.versions[release.to]?.hash ?? ""]));
@@ -292,7 +294,7 @@ async function runCheck(
 ): Promise<RepoReleaseResult> {
     const reporter = tools.reporter;
 
-    reporter.log("info", "Checking the index");
+    reporter.operationStart("Checking the index");
 
     const existing = readExistingIndex(tools, validation.rootDir);
     const result = await buildIndex(tools, git, {
@@ -310,21 +312,20 @@ async function runCheck(
     const drift = result.stale ? describeIndexDrift(existing, result.index) : [];
 
     if (result.stale) {
-        reporter.note(`Merging rewrites the committed ${INDEX_FILE}, because:\n${drift.map((line) => `  - ${line}`).join("\n")}`);
+        reporter.list(drift, { title: `Merging rewrites the committed ${INDEX_FILE}, because:` }, "notice");
     } else {
-        reporter.log("info", `  The committed ${INDEX_FILE} is current, and so are the dependencies it records for every version it publishes.`);
+        reporter.detail(`The committed ${INDEX_FILE} is current, and so are the dependencies it records for every version it publishes.`);
     }
 
     if (result.pending.length > 0) {
-        reporter.log("info", "  These versions have no tag yet; they publish when this merges:");
-
-        for (const entry of result.pending) {
-            reporter.log("info", `    ${entry.key}: ${entry.version}  (the tag would be ${entry.tag})`);
-        }
+        reporter.list(
+            result.pending.map((entry) => `${entry.key}: ${entry.version} (the tag would be ${entry.tag})`),
+            { title: "These versions have no tag yet; they publish when this merges:" },
+        );
     }
 
     // A pull request can be opened without `repo submit`, so this is the one gate every change passes.
-    reporter.log("info", "Checking the recipes that take no proposals");
+    reporter.operationStart("Checking the recipes that take no proposals");
 
     const submissions = await checkSubmissions(git, validation);
 
@@ -353,11 +354,11 @@ async function runCheck(
     const compared = submissions.comparedWith;
 
     if (compared.kind === "branch") {
-        reporter.log("info", `  Compared with the branch '${compared.branch}': this change touches no recipe that declines proposals.`);
+        reporter.detail(`Compared with the branch '${compared.branch}': this change touches no recipe that declines proposals.`);
     } else if (compared.kind === "tags") {
-        reporter.log("info", "  Compared with each recipe's last release tag: nothing that declines proposals changed.");
+        reporter.detail("Compared with each recipe's last release tag: nothing that declines proposals changed.");
     } else if (compared.kind === "none declined") {
-        reporter.log("info", "  No recipe in this repository declines proposed changes.");
+        reporter.detail("No recipe in this repository declines proposed changes.");
     } else {
         reporter.note(
             "This checkout holds neither a copy of the default branch nor a release tag of any recipe that declines " +
@@ -432,9 +433,9 @@ function readExistingIndex(tools: AuthoringTools, rootDir: string): IndexFile | 
     try {
         return readIndexFile(tools, rootDir);
     } catch (error) {
-        tools.reporter.warning(
-            `The committed ${INDEX_FILE} could not be read, so it will be regenerated from the recipe manifests and the ` +
-                `release tags.\n${describeError(error)}`,
+        tools.reporter.problem(
+            `The committed ${INDEX_FILE} could not be read, so it will be regenerated from the recipe manifests and the release tags.`,
+            { cause: describeError(error), subject: INDEX_FILE },
         );
 
         return undefined;
@@ -443,11 +444,11 @@ function readExistingIndex(tools: AuthoringTools, rootDir: string): IndexFile | 
 
 function reportProblems(tools: AuthoringTools, problems: readonly ReleaseProblem[]): void {
     for (const problem of errorsIn(problems)) {
-        tools.reporter.log("error", `${problem.where}:\n  ${problem.message}`, { problem });
+        tools.reporter.problem(problem.message, { subject: problem.where }, "error");
     }
 
     for (const problem of warningsIn(problems)) {
-        tools.reporter.warning(`${problem.where}:\n${problem.message}`, { problem });
+        tools.reporter.problem(problem.message, { subject: problem.where }, "warning");
     }
 }
 
@@ -469,45 +470,37 @@ function stopOnErrors(problems: readonly ReleaseProblem[]): void {
 function reportPlan(tools: AuthoringTools, plan: ReleasePlan, context: { willTag: boolean; branch: string | undefined; push: boolean }): void {
     const reporter = tools.reporter;
 
-    reporter.log("info", "The release this would make");
+    reporter.operationStart("The release this would make");
 
     if (plan.releases.length === 0) {
-        reporter.log("info", "  Nothing in scope has changed since the tag that last published it.");
-
-        for (const entry of plan.skipped) {
-            reporter.log("info", `  ${entry.key}: ${entry.reason}`);
-        }
-
-        reporter.log("info", "  Pass '--include-unchanged' to release everything in scope anyway.");
+        reporter.list(
+            plan.skipped.map((entry) => `${entry.key}: ${entry.reason}`),
+            { title: "Nothing in scope has changed since the tag that last published it.", footer: "Pass '--include-unchanged' to release everything in scope anyway." },
+        );
 
         return;
     }
 
-    for (const release of plan.releases) {
-        reporter.log("info", `  ${describeRelease(release)}`, { release });
-    }
+    reporter.list(plan.releases.map(describeRelease));
 
     if (plan.skipped.length > 0) {
-        reporter.log("info", "  Left alone:");
-
-        for (const entry of plan.skipped) {
-            reporter.log("info", `    ${entry.key}: ${entry.reason}`);
-        }
+        reporter.list(
+            plan.skipped.map((entry) => `${entry.key}: ${entry.reason}`),
+            { title: "Left alone" },
+        );
     }
 
-    reporter.log("info", "  This run would:");
-    reporter.log("info", "    Raise the versions listed above, in the manifests that declare them.");
-    reporter.log("info", `    Regenerate ${INDEX_FILE}, with each version's dependencies resolved.`);
-    reporter.log("info", "    Commit the manifests and the index together.");
-    reporter.log(
-        "info",
-        context.willTag ? "    Cut one annotated tag per version, dependency-first." : `    Cut no tags: this is the branch '${context.branch}', not the default one.`,
-    );
-    reporter.log(
-        "info",
-        context.push
-            ? `    Push the commit${context.willTag ? " and the tags" : ""} to ${UPSTREAM_REMOTE}.`
-            : "    Push nothing; pass '--push' to push what it makes.",
+    reporter.list(
+        [
+            "Raise the versions listed above, in the manifests that declare them.",
+            `Regenerate ${INDEX_FILE}, with each version's dependencies resolved.`,
+            "Commit the manifests and the index together.",
+            context.willTag ? "Cut one annotated tag per version, dependency-first." : `Cut no tags: this is the branch '${context.branch}', not the default one.`,
+            context.push
+                ? `Push the commit${context.willTag ? " and the tags" : ""} to ${UPSTREAM_REMOTE}.`
+                : "Push nothing; pass '--push' to push what it makes.",
+        ],
+        { title: "This run would" },
     );
 }
 

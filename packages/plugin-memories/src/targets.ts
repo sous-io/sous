@@ -121,7 +121,7 @@ export function targetsContributor(plugin: string, services: ServiceReader): Con
                 onWarning: (message) => {
                     if (!warned.has(message)) {
                         warned.add(message);
-                        config.log("warning", message);
+                        config.warn(message);
                     }
                 },
             });

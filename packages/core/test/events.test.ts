@@ -185,7 +185,7 @@ describe("events", () => {
                 sous.on("diagrams.rendered", async (event, ctx) => {
                     const count = await ctx.run("diagrams.count", {});
 
-                    ctx.reporter.note(`rendered ${JSON.stringify((event as CustomEvent<{ files: string[] }>).payload.files)} of ${String(count)}`);
+                    ctx.reporter.notice(`rendered ${JSON.stringify((event as CustomEvent<{ files: string[] }>).payload.files)} of ${String(count)}`);
                     event.cancel("docs site says no");
                 });
             }),

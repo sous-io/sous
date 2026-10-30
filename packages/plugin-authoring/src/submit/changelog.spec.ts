@@ -7,6 +7,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { BufferedReporter, ReportEntryStyle } from "@sous-io/plugin-api";
 import type { RecipeManifest, VariableDefinition } from "@sous-io/plugin-formats/types";
 import { commitAll, git, initRepo, makeTmpDir, writeFile, type TmpDir } from "../../test/support/git-repo.js";
 import { realGit, recipeManifestParser, repoManifestParser, testTools } from "../../test/support/standins.js";
@@ -21,6 +22,7 @@ import {
   isTightened,
   readManifestsAt as readAt,
   renderChangelog,
+  reportChangelog,
   snapshotOf,
   UNRAISED_VERSION_WARNING,
   type ManifestSnapshot,
@@ -200,6 +202,27 @@ describe("isTightened()", () => {
     for (const [before, after, expected] of pairs) {
       expect(isTightened(parsedVariable("v", before), parsedVariable("v", after))).toBe(expected);
     }
+  });
+});
+
+describe("reportChangelog()", () => {
+  /**
+   * The changelog is shown as a heading, one list per kind of change and a
+   * warning for a breaking variable change, each in its own style.
+   */
+  it("should report a heading, a list per section and the breaking warning", async () => {
+    const reporter = new BufferedReporter();
+    const base = snapshot(["core"], [recipe("core/x", "1.0.0", { variables: [variable("gone")] })]);
+    const head = snapshot(["core"], [recipe("core/x", "2.0.0")]);
+
+    reportChangelog(reporter, buildChangelog({ baseBranch: "main", base, head, changedPaths: [] }));
+
+    expect(reporter.styled(ReportEntryStyle.OperationStart).map((entry) => entry.message)).toEqual(["What merging this changes"]);
+    expect(reporter.styled(ReportEntryStyle.List).map((entry) => entry.details)).toContainEqual({
+      title: "Version changes",
+      items: ["`core/x`: 1.0.0 becomes 2.0.0"],
+    });
+    expect(reporter.at("warning")).toEqual([BREAKING_VARIABLE_WARNING]);
   });
 });
 

@@ -11,8 +11,10 @@ export interface InputStream extends NodeJS.ReadableStream {
 
 /**
  * Where the CLI reads and writes. The plugin uses the process's own streams; tests pass their own.
- * Results go to standard output, and every message, error and prompt to standard error, so standard
- * output stays clean for pipes (about-cli-command-design, "Output and Errors").
+ * The terminal reporter writes `debug`, `info` and `notice` messages (and so a command's result) to
+ * standard output, and `warning` and above, the banner, progress and questions to standard error.
+ * With `--json`, standard output holds only the JSON result and every message goes to standard
+ * error. Prompts are written to standard error too.
  */
 export interface CliIo {
     readonly stdout: OutputStream;

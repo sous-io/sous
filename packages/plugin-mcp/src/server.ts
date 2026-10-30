@@ -128,7 +128,7 @@ export async function serveMcp(ctx: Context, options: ServeOptions): Promise<Mcp
         const client = server.getClientVersion();
         const who = client ? `${client.name} ${client.version}` : "an MCP client";
 
-        ctx.reporter.log("info", `MCP: ${who} connected to ${engine.app.name} ${engine.app.version}.`);
+        ctx.reporter.info(`MCP: ${who} connected to ${engine.app.name} ${engine.app.version}.`);
     };
 
     server.onerror = (error) => {

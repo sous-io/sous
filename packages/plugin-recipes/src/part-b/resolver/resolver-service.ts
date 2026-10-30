@@ -118,8 +118,9 @@ export class ResolverService implements RecipesResolver {
                 if (read.source === "stale" && !quiet) {
                     const problem = (read as { problem?: string }).problem;
 
-                    this.runtime.host.reporter.warning(
-                        `Sous could not check the repository '${name}' for updates, so it is using the copy of its index that it already had.${problem === undefined ? "" : `\n${problem}`}`,
+                    this.runtime.host.reporter.problem(
+                        `Sous could not check the repository '${name}' for updates, so it is using the copy of its index that it already had.`,
+                        problem === undefined ? {} : { cause: problem },
                     );
                 }
 

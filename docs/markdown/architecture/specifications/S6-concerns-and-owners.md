@@ -307,16 +307,20 @@ root is the parent of the directory holding that file, as `sousDir` is defined t
 | --- | --- |
 | Declaring a plugin | `definePlugin` |
 | The interfaces plugins add their types to | `SousServices`, `SousIntents`, `SousEvents`, `SousEntities` |
-| Reporting progress, notes and warnings (L3, services never print, prompt or exit) | the `Reporter` interface |
+| Reporting every message, as a level and a style (L3, services never print, prompt or exit) | `BaseReporter`, and the `Reporter` type derived from it |
 | Asking a question (L3, services never print, prompt or exit; L4, every prompt has a flag) | the `Prompter` interface |
 | The error classes every plugin throws | `SousError`, `ConfigError`, `NonInteractiveError` |
 
 ```ts
-export interface Reporter {
-    progress(event: ProgressEvent): void;
-    note(message: string): void;
-    warning(message: string): void;
+// Every reporting method is defined once, in BaseReporter; Reporter is its public members.
+export abstract class BaseReporter {
+    log(level: LogLevel, message: string, details?: ReportDetails, style?: ReportEntryStyle): void;
+    info(message: string, details?: ReportDetails, style?: ReportEntryStyle): void;   // one per level
+    operationStart(operationName: string, level?: LogLevel): void;                     // one or more per style
+    protected abstract write(level: LogLevel, message: string, details: ReportDetails | undefined, style: ReportEntryStyle): void;
 }
+
+export type Reporter = { [K in keyof BaseReporter]: BaseReporter[K] };
 
 export interface Prompter {
     // Each question names the flag or argument that answers it without a prompt (L4: every prompt has a flag).
@@ -448,7 +452,7 @@ Removing a repository reports what it deletes from the compiler's state file (ru
 // plugin-recipes, in its "repo.remove" intent
 const files = ctx.services.get("compiler.state").filesFrom({ repository: input.repository });
 
-ctx.reporter.note(`Removing ${input.repository} deletes ${files.length} built files.`);
+ctx.reporter.warn(`Removing ${input.repository} deletes ${files.length} built files.`);
 ```
 
 ### Recipe answers: `plugin-recipe-answers`
@@ -629,7 +633,7 @@ they share one plugin.
 | Arguments every command accepts, and command groups' help | `cli-global-argument`, `cli-group` | `plugin-cli` | entity kinds |
 | `--debug` and `--log-level <level>` | `cli-global-argument` entities | `plugin-cli` | entities |
 | Whether a prompt is possible in this run | `cli.interactivity` | `plugin-cli` | service, singleton |
-| Terminal output: colors, wrapping, tables, every view of domain data | `TerminalReporter` and the views | `plugin-cli` | a `Reporter` |
+| Terminal output: how each reporting style looks (colors, wrapping, tables); every view of domain data, shown through the reporter | `TerminalReporter` and the views | `plugin-cli` | a `Reporter` |
 | Terminal prompts | `TerminalPrompter` | `plugin-cli` | a `Prompter` |
 | Turning an error into a message and an exit code | `cli.errors` | `plugin-cli` | service, singleton |
 | `sous --version` | `version` | `plugin-cli` | intent |
@@ -956,4 +960,9 @@ None.
 
 ## Changes
 
-None yet.
+### 2026-10-30: Reporting is a level and a style
+
+The `Reporter` interface became `BaseReporter` and the `Reporter` type derived from it; `note()` (a
+notice) is gone, and `note()` now reports the Note style. The views show results through the
+reporter instead of building text. Details in S1 (the engine), "Reporting: levels and styles".
+

@@ -3,7 +3,7 @@
  * Each is written once here; the CLI and MCP generate their commands and tools from it.
  */
 
-import { type Context, ConfigError, InputError, type IntentDefinition, jsonSchema } from "@sous-io/plugin-api";
+import { type Context, ConfigError, InputError, type IntentDefinition, jsonSchema, LogLevel } from "@sous-io/plugin-api";
 import type { EnvFileKind } from "@sous-io/plugin-config-files/types";
 import { askForMissing, type AnswerStore, storeGivenAnswers } from "./ask.js";
 import { namesVariable, recipeKey } from "./definitions.js";
@@ -106,11 +106,13 @@ export async function handleAsk(input: VarsAskInput, ctx: Context): Promise<Vars
     const dryRun = input.dryRun === true;
     const hidden = hiddenValue(ctx.services);
 
-    ctx.reporter.log("info", `Definitions: ${definitionsLabel(input.file)}`);
-    ctx.reporter.log("info", `Asking: ${describeSelection(input)}`);
+    ctx.reporter.variables([
+        { label: "Definitions", value: definitionsLabel(input.file) },
+        { label: "Asking", value: describeSelection(input) },
+    ]);
 
     if (dryRun) {
-        ctx.reporter.note("Dry run: no answers will be written.");
+        ctx.reporter.dryRun("No answers will be written.");
     }
 
     const preanswers = ctx.services.get("recipe-answers.preanswers");
@@ -165,7 +167,7 @@ export async function handleList(input: VarsListInput, ctx: Context): Promise<Va
     const hidden = hiddenValue(ctx.services);
 
     // The CLI view names the definitions source in its "Command Variables" block.
-    ctx.reporter.log("debug", `Definitions: ${definitionsLabel(input.file)}`);
+    ctx.reporter.variable("Definitions", definitionsLabel(input.file), undefined, LogLevel.Debug);
 
     if (input.name !== undefined) {
         return variablesNamed(variables, input.name).map((variable) => detailOf(variable, ladder, hidden));
@@ -207,7 +209,9 @@ export async function handleMap(input: VarsMapInput, ctx: Context): Promise<Vars
             ctx.configChanged();
         }
 
-        ctx.reporter.note(changed ? `${dryRun ? "Would remove" : "Removed"} the mapping of ${input.envName} in ${file}.` : `${input.envName} has no mapping in ${file}.`);
+        const removal = changed ? `${dryRun ? "Would remove" : "Removed"} the mapping of ${input.envName} in ${file}.` : `${input.envName} has no mapping in ${file}.`;
+
+        ctx.reporter.notice(removal);
 
         return { envName: input.envName, file, changed, dryRun };
     }
@@ -223,7 +227,7 @@ export async function handleMap(input: VarsMapInput, ctx: Context): Promise<Vars
         ctx.configChanged();
     }
 
-    ctx.reporter.note(changed ? `${dryRun ? "Would map" : "Mapped"} ${input.envName} to ${target} in ${file}.` : `${input.envName} is already mapped to ${target}.`);
+    ctx.reporter.notice(changed ? `${dryRun ? "Would map" : "Mapped"} ${input.envName} to ${target} in ${file}.` : `${input.envName} is already mapped to ${target}.`);
 
     return { envName: input.envName, target, file, changed, dryRun };
 }

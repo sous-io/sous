@@ -55,7 +55,7 @@ export async function buildFollowUp(ctx: Context, flags: RecipeChangeFlags): Pro
     }
 
     // The build reports as it goes, so its heading comes first, as before the refactor.
-    ctx.reporter.note("Building the project");
+    ctx.reporter.operationStart("Building the project");
 
     return { intent: "build", result: await ctx.run("build", {}) };
 }

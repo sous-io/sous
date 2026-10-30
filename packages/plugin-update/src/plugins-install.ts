@@ -61,7 +61,7 @@ export async function handle(input: PluginsInstallInput, ctx: Context): Promise<
     const requested = parsed.map((plugin) => ({ name: plugin.name, range: plugin.range ?? "latest" }));
     const manager = owner.detection.id;
 
-    ctx.reporter.note(`${dryRun ? "Would run" : "Running"}: ${[command.command, ...command.args].join(" ")}`);
+    ctx.reporter.command(command.command, command.args, dryRun ? { dryRun: true } : {});
 
     if (dryRun) {
         return { manager, command, installed: requested, declined: false, dryRun };

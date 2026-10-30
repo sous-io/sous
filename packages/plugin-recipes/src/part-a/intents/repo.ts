@@ -10,7 +10,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { ConfigError, SousError, type Context, type Sous } from "@sous-io/plugin-api";
+import { ConfigError, LogLevel, SousError, type Context, type Reporter, type Sous } from "@sous-io/plugin-api";
 import type { Lockfile } from "@sous-io/plugin-formats/types";
 import type { VariableRef } from "@sous-io/plugin-refs/types";
 import semver from "semver";
@@ -224,6 +224,27 @@ export function removalPlan(result: Omit<RepoRemoveResult, "followUps">): string
     return lines;
 }
 
+/**
+ * Reports the plan before the question. Each line is one sentence; the indented lines that follow a
+ * sentence are the items of a list that sentence introduces.
+ */
+function reportRemovalPlan(reporter: Reporter, plan: readonly string[]): void {
+    for (let index = 0; index < plan.length; index++) {
+        const line = plan[index]!;
+        const items: string[] = [];
+
+        while (plan[index + 1]?.startsWith("  ") === true) {
+            items.push(plan[++index]!.trim());
+        }
+
+        if (items.length > 0) {
+            reporter.list(items, { title: line }, LogLevel.Notice);
+        } else {
+            reporter.note(line);
+        }
+    }
+}
+
 /** `repo.remove`: stops trusting a repository, removing the subscriptions that resolve into it. */
 export async function removeRepo(input: RepoRemoveInput, ctx: Context): Promise<RepoRemoveResult> {
     const name = input.repo;
@@ -290,9 +311,7 @@ export async function removeRepo(input: RepoRemoveInput, ctx: Context): Promise<
 
     if (input.yes !== true) {
         // Everything that goes is reported before the one question; the view need not repeat it.
-        for (const line of plan) {
-            ctx.reporter.note(line);
-        }
+        reportRemovalPlan(ctx.reporter, plan);
 
         const proceed = await ctx.prompter.confirm({ message: `Stop trusting '${name}'?`, answeredBy: "--yes", default: false });
 

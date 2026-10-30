@@ -1,20 +1,25 @@
 import { applyPatch, DocNode, formatPath, getAtPath, isPatch, parsePath, parsePatch, PatchRecorder } from "@sous-io/documents";
-import type {
-    ConfigBuilder,
-    ContributorInfo,
-    DocumentNode,
-    EntityKind,
-    EntityType,
-    Environment,
-    JsonObject,
-    JsonValue,
-    LogLevel,
-    Monitor,
-    Patch,
-    PatchSet,
-    PathInput,
-    PathSegment,
-    ProjectInfo,
+import {
+    BaseReporter,
+    Reporting,
+    type ConfigBuilder,
+    type ContributorInfo,
+    type DocumentNode,
+    type EntityKind,
+    type EntityType,
+    type Environment,
+    type JsonObject,
+    type JsonValue,
+    type LogLevel,
+    type Monitor,
+    type Patch,
+    type PatchSet,
+    type PathInput,
+    type PathSegment,
+    type ProjectInfo,
+    type ReportDetails,
+    type ReportEntryStyle,
+    type Reporter,
 } from "@sous-io/plugin-api";
 import type { EntityRegistry, StoredEntity } from "../entities/entity-registry.js";
 import { entitySignature, type Read, type View } from "./reads.js";
@@ -24,7 +29,21 @@ export interface BuilderServices {
     readonly entityRegistry: EntityRegistry;
     readonly project: ProjectInfo | undefined;
     readonly env: Environment;
-    log(level: LogLevel, message: string): void;
+    log(level: LogLevel, message: string, details?: ReportDetails, style?: ReportEntryStyle): void;
+}
+
+/** A reporter that names the contributor in front of each message and hands it to the engine's reporter. */
+class ContributorReporter extends BaseReporter {
+    constructor(
+        private readonly contributorId: string,
+        private readonly services: BuilderServices,
+    ) {
+        super();
+    }
+
+    protected write(level: LogLevel, message: string, details: ReportDetails | undefined, style: ReportEntryStyle): void {
+        this.services.log(level, `${this.contributorId}: ${message}`, details, style);
+    }
 }
 
 /**
@@ -33,7 +52,7 @@ export interface BuilderServices {
  * this run's patch set. The contributor's own changes are visible to its later reads, but are never
  * recorded as reads, so a contributor never re-runs because of itself.
  */
-export class ConfigBuilderImpl implements ConfigBuilder {
+export class ConfigBuilderImpl extends Reporting(Object) implements ConfigBuilder {
     /** Everything read, against the view. */
     readonly reads: Read[] = [];
     /** Entities this run added. */
@@ -43,6 +62,7 @@ export class ConfigBuilderImpl implements ConfigBuilder {
     private readonly seenPaths = new Set<string>();
     private readonly seenEntityReads = new Set<string>();
     private working: JsonValue;
+    private readonly contributorReporter: Reporter;
 
     constructor(
         private readonly view: View,
@@ -51,6 +71,8 @@ export class ConfigBuilderImpl implements ConfigBuilder {
         private readonly services: BuilderServices,
         monitors: readonly Monitor[] = [],
     ) {
+        super();
+        this.contributorReporter = new ContributorReporter(contributor.id, services);
         this.working = view.config;
         this.recorder = new PatchRecorder(contributor.id);
 
@@ -129,8 +151,12 @@ export class ConfigBuilderImpl implements ConfigBuilder {
         return this.backend.read(["plugins", "options", this.contributor.plugin]) as T | undefined;
     }
 
-    log(level: LogLevel, message: string): void {
-        this.services.log(level, `${this.contributor.id}: ${message}`);
+    protected get reporter(): Reporter {
+        return this.contributorReporter;
+    }
+
+    log(level: LogLevel, message: string, details?: ReportDetails, style?: ReportEntryStyle): void {
+        this.contributorReporter.log(level, message, details, style);
     }
 
     private applyOne(item: Patch | PatchSet): void {

@@ -115,7 +115,7 @@ export function coreContributor(runtime: PartBRuntime, seeder: CoreSeeder): Cont
             const report = await seeder.seed();
 
             if (report.skippedBecause !== undefined) {
-                config.log("warning", report.skippedBecause);
+                config.warn(report.skippedBecause);
             }
         },
     };

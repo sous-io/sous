@@ -23,7 +23,7 @@ describe("the engine handle", () => {
                         async start(engine, argv) {
                             const result = await engine.submit({ intent: argv[0]! });
 
-                            engine.reporter.note(`result ${String(result)}`);
+                            engine.reporter.notice(`result ${String(result)}`);
                         },
                     });
                 }),

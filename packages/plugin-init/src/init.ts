@@ -32,10 +32,10 @@ async function confirmNesting(ctx: Context, root: string, yes: boolean): Promise
         return;
     }
 
-    ctx.reporter.warning(`${root} is inside a project that is already set up for sous.`, { enclosing: enclosing.root, config: enclosing.configPath });
-    ctx.reporter.warning(
-        `The enclosing project's config is ${enclosing.configPath}. Setting this directory up too gives it a config of its own: commands run here will find this one, and commands run from ${enclosing.root} will keep finding the other.`,
-    );
+    ctx.reporter.problem(`${root} is inside a project that is already set up for sous.`, {
+        subject: root,
+        cause: `The enclosing project's config is ${enclosing.configPath}. Setting this directory up too gives it a config of its own: commands run here will find this one, and commands run from ${enclosing.root} will keep finding the other.`,
+    });
 
     if (yes) {
         return;

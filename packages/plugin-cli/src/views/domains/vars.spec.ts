@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { CliViewContext } from "../../types.js";
-import { Printer } from "../printer.js";
-import { createStyle } from "../style.js";
+import { type CaptureOptions, captureView } from "../testing.js";
 import {
     describeSource,
     displayValue,
@@ -15,20 +13,11 @@ import {
     views,
 } from "./vars.js";
 
-/** A plain, 100-column view context. */
-function context(intent: string, input: Record<string, unknown> = {}): CliViewContext {
-    const style = createStyle(false);
+/** Runs a view and returns the text a terminal would get (colors off). */
+async function render(intent: string, result: unknown, input: Record<string, unknown> = {}, options: CaptureOptions = {}): Promise<string> {
+    const shown = await captureView(views[intent]!, result, { intent, input, ...options });
 
-    return {
-        intent,
-        input,
-        globals: {},
-        style,
-        columns: 100,
-        isTTY: false,
-        printer: () => new Printer(style, 100, false),
-        render: async () => "",
-    };
+    return shown.stdout + shown.stderr;
 }
 
 function recipe(overrides: Partial<ViewRecipe> = {}): ViewRecipe {
@@ -47,10 +36,6 @@ function variable(overrides: Partial<ViewVariable["definition"]> = {}, recipeOve
         },
         recipe: recipe(recipeOverrides),
     };
-}
-
-async function render(intent: string, result: unknown, input: Record<string, unknown> = {}): Promise<string> {
-    return String((await views[intent]!(result, context(intent, input))) ?? "");
 }
 
 const answered: ViewListing = {
@@ -116,19 +101,19 @@ describe("the vars views", () => {
 
             expect(withDefault[0]).toEqual({ label: "default", lines: ["https://d"] });
             expect(withDefault.find((fact) => fact.label === "storage-path")?.lines).toEqual([".env"]);
-            expect(withDefault.find((fact) => fact.label === "constraints")?.lines).toEqual(["• Must be a URL."]);
+            expect(withDefault.find((fact) => fact.label === "constraints")?.lines).toEqual(["Must be a URL."]);
         });
     });
 
     describe("vars.list", () => {
         /**
          * sous vars list
-         * // ▶ Variables in play:  then a table: Variable, Recipe, Answered by, Value, Source
+         * // Variables in play, then a table: Variable, Recipe, Answered by, Value, Source
          */
         it("should print the table of every variable in play", async () => {
             const text = await render("vars.list", [unanswered, answered]);
 
-            expect(text).toContain("▶ Variables in play:");
+            expect(text).toContain("Variables in play");
             expect(text).toContain("Answered by");
             expect(text).toContain("SOUS_VAR_API_URL");
             expect(text).toContain("https://example.com");
@@ -158,13 +143,13 @@ describe("the vars views", () => {
         it("should print everything about one variable", async () => {
             const text = await render("vars.show", detail);
 
-            expect(text).toContain("▶ apiUrl (local/questions):");
+            expect(text).toContain("apiUrl (local/questions)");
             expect(text).toContain("Which API should sous talk to?");
             expect(text).toContain("For example");
             expect(text).toContain("https://api.example.com");
             expect(text).toContain("the value in scope fits this definition");
             expect(text).toContain("constraints");
-            expect(text).toContain("• Must be a URL.");
+            expect(text).toContain("Must be a URL.");
             expect(text).toContain("SOUS_VAR_LOCAL_QUESTIONS_API_URL");
             expect(text).toContain("SOUS_VAR_LOCAL_API_URL");
             expect(text).toContain("answered it, from the .env file");
@@ -177,13 +162,13 @@ describe("the vars views", () => {
          */
         it("should name the project and the env file's full path", async () => {
             const project = { root: "/work/app", sousDir: "/work/app/.sous", configPath: "/work/app/.sous/sous.config.json", confDir: "/work/app/.sous/conf.d" };
-            const text = String((await views["vars.show"]!(detail, { ...context("vars.show", { file: "questions.yaml" }), project })) ?? "");
+            const text = await render("vars.show", detail, { file: "questions.yaml" }, { project });
 
-            expect(text).toContain("$ Command Variables:");
-            expect(text).toContain("Project    : app");
-            expect(text).toContain("Config     : /work/app/.sous/sous.config.json");
-            expect(text).toContain("Definitions: questions.yaml");
-            expect(text).toContain("storage-path: /work/app/.sous/.env");
+            expect(text).toContain("Command Variables");
+            expect(text).toMatch(/Project\s*:\s*app/);
+            expect(text).toMatch(/Config\s*:\s*\/work\/app\/\.sous\/sous\.config\.json/);
+            expect(text).toMatch(/Definitions\s*:\s*questions\.yaml/);
+            expect(text).toMatch(/storage-path\s*:\s*\/work\/app\/\.sous\/\.env/);
         });
 
         /** A value that does not fit says why; no answer says so. */
@@ -219,7 +204,7 @@ describe("the vars views", () => {
         it("should print what was kept, stored and left unanswered", async () => {
             const text = await render("vars.ask", report);
 
-            expect(text).toContain("▶ Answering variables:");
+            expect(text).toContain("Answering variables");
             expect(text).toContain("Answers already in scope:");
             expect(text).toContain("(hidden)");
             expect(text).toContain("from the shared scope name SOUS_VAR_API_TOKEN, from the shell environment");
@@ -244,7 +229,9 @@ describe("the vars views", () => {
     describe("vars.map", () => {
         /** The handler already reports the change, so the view prints nothing. */
         it("should print nothing", async () => {
-            expect(await views["vars.map"]!({ envName: "X", file: "f", changed: true, dryRun: false }, context("vars.map"))).toBeUndefined();
+            const shown = await captureView(views["vars.map"]!, { envName: "X", file: "f", changed: true, dryRun: false });
+
+            expect(shown).toEqual({ stdout: "", stderr: "" });
         });
     });
 });

@@ -76,7 +76,7 @@ export function createWatchHandler(options: WatchHandlerOptions) {
             }
 
             options.onSession?.(session);
-            ctx.reporter.note("Watching for changes. Press Ctrl+C to stop.");
+            ctx.reporter.notice("Watching for changes. Press Ctrl+C to stop.");
 
             return await session.done;
         } finally {

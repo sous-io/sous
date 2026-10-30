@@ -6,11 +6,22 @@
  */
 
 import os from "node:os";
-import { ConfigError, type ConfigLayer, type JsonObject, type JsonValue, type Patch, type PluginInfo, type TimingEntry } from "@sous-io/plugin-api";
-import type { CliViewContext, CliViewEntity } from "../../types.js";
-import { renderTimings } from "../../views.js";
-import { isScalar, renderJson, truncateJson } from "../json.js";
-import type { Printer } from "../printer.js";
+import {
+    ConfigError,
+    type ConfigLayer,
+    type JsonObject,
+    type JsonValue,
+    LogLevel,
+    type Patch,
+    type PluginInfo,
+    type Reporter,
+    type TableColumn,
+    type TimingEntry,
+    type VariableEntry,
+} from "@sous-io/plugin-api";
+import type { CliViewContext, CliViewEntity, CliViewOutput } from "../../types.js";
+import { reportTimings } from "../../views.js";
+import { isScalar, truncateJson } from "../json.js";
 
 /** One contributor's change, as plugin-inspect returns it. */
 export interface LayerView extends ConfigLayer {
@@ -62,23 +73,23 @@ export interface ConfigValidateResult {
  * `sous config show`: the config as pretty JSON, colored on a terminal so a pipe still gets valid
  * JSON. `--layers` shows every contributor's changes instead, and `--raw` each file as written.
  */
-export function configShowView(result: ConfigShowResult, view: CliViewContext): string {
+export function configShowView(result: ConfigShowResult, view: CliViewContext): void {
+    const reporter = view.reporter;
+
     if (!result.layers && !result.raw) {
-        return `${renderJson(result.config, view.style)}\n`;
+        reporter.data(result.config);
+
+        return;
     }
 
-    const out = view.printer();
-
     if (result.raw) {
-        rawFiles(out, result.raw);
+        rawFiles(reporter, result.raw);
     }
 
     if (result.layers) {
-        layerTree(out, result.layers);
-        out.log(`${view.style.label("result")}  ${view.style.muted(`settled after ${plural(result.passes, "pass", "passes")}`)}`);
+        layerTree(reporter, result.layers);
+        reporter.variable("result", `settled after ${plural(result.passes, "pass", "passes")}`);
     }
-
-    return out.text();
 }
 
 /**
@@ -93,11 +104,11 @@ export function configShowView(result: ConfigShowResult, view: CliViewContext): 
  * result                           "demo-mac"   (settled after 1 pass)
  * ```
  */
-export function configGetView(result: ConfigGetResult, view: CliViewContext): string {
-    const out = view.printer();
+export function configGetView(result: ConfigGetResult, view: CliViewContext): void {
+    const reporter = view.reporter;
 
     if (result.raw) {
-        rawFiles(out, result.raw);
+        rawFiles(reporter, result.raw);
     }
 
     if (result.layers) {
@@ -105,18 +116,20 @@ export function configGetView(result: ConfigGetResult, view: CliViewContext): st
             throw missingInLayers(result.path);
         }
 
-        layerColumns(out, result, view);
+        layerColumns(reporter, result);
 
-        return out.text();
+        return;
     }
 
     if (!result.exists || result.value === undefined) {
         throw missingValue(result.path);
     }
 
-    out.log(isScalar(result.value) ? String(result.value) : renderJson(result.value, view.style));
-
-    return out.text();
+    if (isScalar(result.value)) {
+        reporter.text(String(result.value));
+    } else {
+        reporter.data(result.value);
+    }
 }
 
 /**
@@ -130,14 +143,14 @@ export function configGetView(result: ConfigGetResult, view: CliViewContext): st
  *     Tools      : claude
  * ```
  */
-export function configValidateView(result: ConfigValidateResult, view: CliViewContext) {
-    const out = view.printer();
+export function configValidateView(result: ConfigValidateResult, view: CliViewContext): CliViewOutput {
+    const reporter = view.reporter;
 
     if (result.ok) {
-        out.heading("Config is valid");
+        reporter.operationStart("Config is valid", LogLevel.Info);
 
         if (result.summary) {
-            out.variables({
+            reporter.variables({
                 "Config File": result.summary.configFile ?? "(none)",
                 Layers: result.summary.layers,
                 Targets: result.summary.targets,
@@ -145,27 +158,19 @@ export function configValidateView(result: ConfigValidateResult, view: CliViewCo
             });
         }
 
-        out.footer();
-
-        return out.text();
+        return;
     }
 
-    out.heading(`The config has ${plural(result.issues.length, "problem")}`);
-    out.blank();
+    reporter.operationStart(`The config has ${plural(result.issues.length, "problem")}`, LogLevel.Info);
 
     for (const issue of result.issues) {
         const [first = "", ...rest] = issue.split("\n");
+        const cause = rest.join("\n").trim();
 
-        out.paragraph(`${view.style.error("✗")} ${first}`, { indent: 4 });
-
-        for (const line of rest) {
-            out.log(line.trim() === "" ? "" : `      ${line}`);
-        }
+        reporter.problem(first, cause === "" ? {} : { cause: rest.join("\n") }, LogLevel.Error);
     }
 
-    out.footer();
-
-    return { stdout: out.text(), exitCode: 1 };
+    return { exitCode: 1 };
 }
 
 /** What each kind of registration is called in `plugins show`. */
@@ -182,9 +187,6 @@ const REGISTRATION_LABELS: Readonly<Record<string, string>> = {
     listener: "listeners",
 };
 
-/** The width of the label column in `plugins show`. */
-const PLUGIN_LABEL_WIDTH = 17;
-
 /**
  * `sous plugins show`: every plugin, and what it registered, wrapped or replaced.
  *
@@ -196,17 +198,16 @@ const PLUGIN_LABEL_WIDTH = 17;
  *   options            { "port": 7801 }
  * ```
  */
-export function pluginsShowView(result: readonly PluginInfo[], view: CliViewContext): string {
-    const out = view.printer();
-    const style = view.style;
+export function pluginsShowView(result: readonly PluginInfo[], view: CliViewContext): void {
+    const reporter = view.reporter;
 
     for (const plugin of result) {
         const notes = [plugin.builtIn ? "built in" : plugin.loadedBy ? `loaded by ${plugin.loadedBy}` : undefined, plugin.active ? undefined : "inactive"].filter(
             (note): note is string => note !== undefined,
         );
-        const version = plugin.version ? ` ${style.muted(plugin.version)}` : "";
+        const version = plugin.version ? ` ${plugin.version}` : "";
 
-        out.log(`${style.value(plugin.name)}${version}${notes.length > 0 ? ` (${notes.join(", ")})` : ""}`);
+        reporter.stepStart(`${plugin.name}${version}${notes.length > 0 ? ` (${notes.join(", ")})` : ""}`, LogLevel.Info);
 
         const groups = new Map<string, string[]>();
 
@@ -218,38 +219,40 @@ export function pluginsShowView(result: readonly PluginInfo[], view: CliViewCont
             groups.set(label, names);
         }
 
-        for (const [label, names] of groups) {
-            pluginRow(out, label, names);
-        }
+        const entries: VariableEntry[] = [...groups].map(([label, names]) => ({ label, value: names.join("    ") }));
 
         if (plugin.options && Object.keys(plugin.options).length > 0) {
-            pluginRow(out, "options", [JSON.stringify(plugin.options, null, 1).replace(/\n\s*/g, " ")]);
+            entries.push({ label: "options", value: JSON.stringify(plugin.options, null, 1).replace(/\n\s*/g, " ") });
+        }
+
+        if (entries.length > 0) {
+            reporter.variables(entries);
         }
     }
-
-    return out.text();
 }
 
 /** `sous timings show`: one line per timing, slowest first. */
-export function timingsShowView(result: readonly TimingEntry[]): string {
-    return result.length === 0 ? "No timings yet.\n" : renderTimings(result);
+export function timingsShowView(result: readonly TimingEntry[], view: CliViewContext): void {
+    if (result.length === 0) {
+        view.reporter.info("No timings yet.");
+    } else {
+        reportTimings(view.reporter, result);
+    }
 }
 
 /**
  * `sous version`: `v1.2.3`, as `sous --version` printed before the refactor; with `--verbose`, the
  * package, where it is installed, the platform and the Node build under it.
  */
-export function versionView(result: string | { name: string; version: string; root?: string }, view: CliViewContext): string {
+export function versionView(result: string | { name: string; version: string; root?: string }, view: CliViewContext): void {
     if (typeof result === "string") {
-        return `v${result}\n`;
+        view.reporter.text(`v${result}`);
+
+        return;
     }
 
-    const out = view.printer();
-
-    out.log(`v${result.version}`);
-    out.variables({ Package: result.name, ...(result.root === undefined ? {} : { Install: result.root }), Platform: `${os.platform()}-${os.arch()}`, Node: process.version });
-
-    return out.text();
+    view.reporter.text(`v${result.version}`);
+    view.reporter.variables({ Package: result.name, ...(result.root === undefined ? {} : { Install: result.root }), Platform: `${os.platform()}-${os.arch()}`, Node: process.version });
 }
 
 /** The views of this domain, by intent. */
@@ -276,78 +279,64 @@ function missingInLayers(path: string): ConfigError {
     });
 }
 
-/** One row of `plugins show`: the label, then the items four spaces apart, as many to a line as fit. */
-function pluginRow(out: Printer, label: string, items: readonly string[]): void {
-    const pad = 2 + PLUGIN_LABEL_WIDTH + 2;
-    const width = Math.max(20, out.wrapWidth - pad);
-    const lines: string[] = [];
-
-    for (const item of items) {
-        const last = lines.at(-1);
-
-        if (last !== undefined && last.length + 4 + item.length <= width) {
-            lines[lines.length - 1] = `${last}    ${item}`;
-        } else {
-            lines.push(item);
-        }
-    }
-
-    lines.forEach((line, index) => {
-        out.log(index === 0 ? `  ${out.style.label(label.padEnd(PLUGIN_LABEL_WIDTH))}  ${line}` : `${" ".repeat(pad)}${line}`);
-    });
-}
-
-function rawFiles(out: Printer, files: readonly RawConfigFile[]): void {
+function rawFiles(reporter: Reporter, files: readonly RawConfigFile[]): void {
     for (const file of files) {
-        out.log(out.style.muted(`# ${file.path} (${file.contributor})`));
-        out.log(file.text.replace(/\n$/, ""));
-        out.log("");
+        reporter.text(`# ${file.path} (${file.contributor})\n${file.text.replace(/\n$/, "")}`);
     }
 }
 
 /**
  * `config show --layers`: each contributor with its apply order, then the helpers around each
- * change and the change itself, indented under them. When `before` or `after` moved the
- * contributor, both numbers show.
+ * change and the change itself. When `before` or `after` moved the contributor, both numbers show.
+ * A tree: each contributor, the helpers it went through, each change under its helpers, and what a
+ * plugin explained about a change under the change.
  *
  * ```text
  * conf.d/620-no-diagrams.js (confd/620-no-diagrams.js, @sous-io/plugin-confd, apply order 90620)
- *   removeWhere
- *     removeIndex compilation.targets[7]
+ *   removeWhere > removeIndex compilation.targets[7]
  * claude-code/late-fixups (plugin-claude-code, apply order 0, moved to 90621)
  *   setKey compilation.overwriteUntracked = false
  * ```
  */
-function layerTree(out: Printer, layers: readonly LayerView[]): void {
-    const style = out.style;
+function layerTree(reporter: Reporter, layers: readonly LayerView[]): void {
+    /** A tree node still being filled. */
+    interface OpenNode {
+        label: string;
+        detail?: string;
+        children: OpenNode[];
+    }
+
+    const roots: OpenNode[] = [];
     let contributor: string | undefined;
-    let open: string[] = [];
 
     for (const layer of layers) {
-        if (layer.contributor !== contributor) {
+        if (layer.contributor !== contributor || roots.length === 0) {
             contributor = layer.contributor;
-            open = [];
             const details = [...(layer.source ? [layer.contributor] : []), layer.plugin, ...applyOrderText(layer)];
 
-            out.log(`${style.value(layer.source ?? layer.contributor)} ${style.muted(`(${details.join(", ")})`)}`);
+            roots.push({ label: layer.source ?? layer.contributor, detail: details.join(", "), children: [] });
         }
 
-        let depth = 0;
+        // Helpers shared with the change before stay one node; the change hangs under the last helper.
+        let parent = roots[roots.length - 1]!;
 
-        while (depth < open.length && depth < layer.helpers.length && open[depth] === layer.helpers[depth]) {
-            depth++;
+        for (const helper of layer.helpers) {
+            const last = parent.children[parent.children.length - 1];
+
+            if (last !== undefined && last.label === helper && last.children.length > 0) {
+                parent = last;
+            } else {
+                const node: OpenNode = { label: helper, children: [] };
+
+                parent.children.push(node);
+                parent = node;
+            }
         }
 
-        open = open.slice(0, depth);
-
-        for (; depth < layer.helpers.length; depth++) {
-            out.log(`${"  ".repeat(depth + 1)}${style.label(layer.helpers[depth]!)}`);
-            open.push(layer.helpers[depth]!);
-        }
-
-        out.log(`${"  ".repeat(layer.helpers.length + 1)}${describePatch(layer.patch, style.muted)}`);
-        annotationLines(out, layer, "  ".repeat(layer.helpers.length + 2));
+        parent.children.push({ label: describePatch(layer.patch), children: annotationLines(layer).map((line) => ({ label: line, children: [] })) });
     }
+
+    reporter.tree(roots);
 }
 
 /** `apply order 50`, or `apply order 10, moved to 51` when `before` or `after` moved it. */
@@ -357,27 +346,35 @@ function applyOrderText(layer: LayerView): string[] {
         : [`apply order ${layer.applyOrder}, moved to ${layer.actualApplyOrder}`];
 }
 
+/** The columns of `config get --layers`. */
+const LAYER_COLUMNS: TableColumn[] = [
+    { key: "source", header: "Config", overflow: "truncate", kind: "path" },
+    { key: "change", header: "Change", overflow: "wrap", flex: 1 },
+];
+
 /**
  * `config get --layers`: each config file (or contributor) that changed the value on the left, what
  * the value was and became on the right, then the result.
  */
-function layerColumns(out: Printer, result: ConfigGetResult, view: CliViewContext): void {
-    const style = view.style;
+function layerColumns(reporter: Reporter, result: ConfigGetResult): void {
     const layers = result.layers ?? [];
-    const labelOf = (layer: LayerView): string => layer.source ?? layer.contributor;
-    const width = Math.max("result".length, ...layers.map((layer) => labelOf(layer).length)) + 3;
+    const rows: Array<Record<string, string>> = [];
 
     for (const layer of layers) {
-        const text = layer.change ? `${shownOrUnset(layer.change, "from")} ${style.muted("->")} ${shownOrUnset(layer.change, "to")}` : changeAt(layer.patch, result.path);
+        const text = layer.change ? `${shownOrUnset(layer.change, "from")} -> ${shownOrUnset(layer.change, "to")}` : changeAt(layer.patch, result.path);
 
-        out.log(`${style.label(labelOf(layer).padEnd(width))}${text}`);
-        annotationLines(out, layer, " ".repeat(width));
+        rows.push({ source: layer.source ?? layer.contributor, change: text });
+
+        for (const line of annotationLines(layer)) {
+            rows.push({ source: "", change: line });
+        }
     }
 
-    const shown = result.exists && result.value !== undefined ? truncateJson(result.value) : "(not set)";
-    const passes = style.muted(`(settled after ${plural(result.passes, "pass", "passes")})`);
+    reporter.table(LAYER_COLUMNS, rows);
 
-    out.log(`${style.label("result".padEnd(width))}${style.value(shown)}   ${passes}`);
+    const shown = result.exists && result.value !== undefined ? truncateJson(result.value) : "(not set)";
+
+    reporter.variable("result", shown, `settled after ${plural(result.passes, "pass", "passes")}`);
 }
 
 /** One side of a change: the value as short JSON, or `(unset)`. */
@@ -403,20 +400,20 @@ function changeAt(patch: Patch, path: string): string {
         }
     }
 
-    return describePatch(patch, (text) => text);
+    return describePatch(patch);
 }
 
 /** A change as one line: `setKey name = "demo"`. */
-function describePatch(patch: Patch, muted: (text: string) => string): string {
+function describePatch(patch: Patch): string {
     const target = targetOf(patch);
 
     switch (patch.op) {
         case "setKey":
         case "setIndex":
         case "insertAt":
-            return `${patch.op} ${target} ${muted("=")} ${truncateJson(patch.value)}`;
+            return `${patch.op} ${target} = ${truncateJson(patch.value)}`;
         case "renameKey":
-            return `${patch.op} ${target} ${muted("→")} ${patch.to}`;
+            return `${patch.op} ${target} → ${patch.to}`;
         default:
             return `${patch.op} ${target}`;
     }
@@ -437,13 +434,9 @@ function targetOf(patch: Patch): string {
     return `${base}${base === "" ? "" : "."}"${patch.key}"`;
 }
 
-/** What a plugin explained about a change (an expression and what it read), muted under it. */
-function annotationLines(out: Printer, layer: LayerView, pad: string): void {
-    for (const [key, value] of Object.entries(layer.annotations ?? {})) {
-        const text = typeof value === "string" ? value : truncateJson(value);
-
-        out.log(`${pad}${out.style.muted(`${key}: ${text}`)}`);
-    }
+/** What a plugin explained about a change (an expression and what it read), as `key: text` lines. */
+function annotationLines(layer: LayerView): string[] {
+    return Object.entries(layer.annotations ?? {}).map(([key, value]) => `${key}: ${typeof value === "string" ? value : truncateJson(value)}`);
 }
 
 function plural(count: number, singular: string, pluralForm = `${singular}s`): string {

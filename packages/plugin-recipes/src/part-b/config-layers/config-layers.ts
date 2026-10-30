@@ -194,7 +194,7 @@ export function configLayersContributor(runtime: PartBRuntime): ContributorDefin
             });
 
             for (const warning of warnings) {
-                config.log("warning", warning);
+                config.warn(warning);
             }
 
             for (const layer of layers) {

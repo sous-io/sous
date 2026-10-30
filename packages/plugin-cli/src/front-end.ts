@@ -1,17 +1,15 @@
-import { type EngineHandle, type Environment, isLogLevel, isSousErrorOfKind, SousError, type LogLevel, type ProjectInfo, type Reporter, type SubmitOptions } from "@sous-io/plugin-api";
-import type { CommandTree } from "./command-tree.js";
+import { type EngineHandle, type Environment, isLogLevel, isSousErrorOfKind, LogLevel, SousError, type ProjectInfo, type Reporter, type SubmitOptions } from "@sous-io/plugin-api";
+import type { Command, CommandTree } from "./command-tree.js";
 import { COMPLETE_COMMAND } from "./completion.js";
-import { viewError } from "./errors.js";
+import { describeError } from "./errors.js";
 import { globalSpecs } from "./globals.js";
 import { renderHelp } from "./help.js";
 import type { CliIo } from "./io.js";
 import { parseLine } from "./parse.js";
 import { canPrompt, TerminalPrompter, whyCannotPrompt } from "./terminal-prompter.js";
 import { TerminalReporter } from "./terminal-reporter.js";
-import { renderTimings } from "./views.js";
-import { renderBanner } from "./views/banner.js";
+import { reportTimings } from "./views.js";
 import { showResult } from "./views/show.js";
-import { colorEnabled, createStyle } from "./views/style.js";
 import { listenForWatchKeys, startedWatching, WATCH_KEYS_HINT } from "./watch-keys.js";
 
 /** What the CLI front end needs besides the engine. */
@@ -31,7 +29,7 @@ export interface CliRunOptions {
  */
 export async function runCommandLine(engine: EngineHandle, argv: readonly string[], options: CliRunOptions): Promise<void> {
     const { io, env } = options;
-    let reporter: Reporter = new TerminalReporter(io.stderr, "info");
+    let reporter = new TerminalReporter({ stdout: io.stdout, stderr: io.stderr, threshold: LogLevel.Info, env });
     // `SOUS_DEBUG` asks for stack traces, as before the refactor, without changing the log level.
     let debug = debugRequested(env);
 
@@ -42,9 +40,10 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
         const specs = globalSpecs(engine.config.entities.list("cli-global-argument"));
         const line = parseLine(versionArgv(argv, tree), tree, specs, engine.app.name);
         const level = thresholdOf(line.globals);
+        const json = line.globals.json === true;
 
         debug = debug || line.globals.debug === true;
-        reporter = new TerminalReporter(io.stderr, level, createStyle(colorEnabled(io.stderr, env)));
+        reporter = new TerminalReporter({ stdout: io.stdout, stderr: io.stderr, threshold: level, env, json });
         engine.setReporter(reporter);
 
         for (const warning of tree.warnings) {
@@ -57,23 +56,23 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
             throw engine.configError;
         }
 
+        const help = (node: Parameters<typeof renderHelp>[0], where: LogLevel) =>
+            renderHelp(node, { appName: engine.app.name, globals: specs, style: reporter.styleFor(where) });
+
         switch (line.kind) {
             case "help":
-                io.stdout.write(renderHelp(line.node, { appName: engine.app.name, globals: specs }));
+                reporter.text(help(line.node, LogLevel.Info));
                 break;
             case "version":
-                io.stdout.write(`v${engine.app.version}\n`);
+                reporter.text(`v${engine.app.version}`);
                 break;
             case "error": {
-                const view = viewError(new SousError(line.message, { details: line.details, exitCode: 2 }), { debug });
-
-                io.stderr.write(`${view.lines.join("\n")}\n`);
+                reportError(reporter, new SousError(line.message, { details: line.details, exitCode: 2 }), { debug }, io);
 
                 if (line.showHelp) {
-                    io.stderr.write(`\n${renderHelp(line.node, { appName: engine.app.name, globals: specs })}`);
+                    reporter.text(`\n${help(line.node, LogLevel.Error)}`, LogLevel.Error);
                 }
 
-                io.setExitCode(view.exitCode);
                 break;
             }
             case "run": {
@@ -85,8 +84,8 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
                 const show = async (result: unknown) => {
                     const shown = await showResult(intent, result, {
                         entities: engine.config.entities,
+                        reporter,
                         stdout: io.stdout,
-                        env,
                         input: line.input,
                         globals: line.globals,
                         project: options.project?.(),
@@ -94,34 +93,24 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
                         cwd: options.cwd,
                     });
 
-                    if (shown.stdout) {
-                        io.stdout.write(shown.stdout);
-                    }
-
-                    if (shown.stderr) {
-                        io.stderr.write(shown.stderr);
-                    }
+                    reporter.finish();
 
                     if (shown.exitCode !== undefined && shown.exitCode !== 0) {
                         io.setExitCode(shown.exitCode);
                     }
                 };
                 const fail = (error: unknown) => {
-                    const view = viewError(error, { debug, command: line.command });
-
-                    io.stderr.write(`${view.lines.join("\n")}\n`);
+                    reportError(reporter, error, { debug, command: line.command }, io);
 
                     // A question that could not be asked, or input the command could not take, is
                     // answered by the command's flags, so its help follows (as before the refactor).
                     if (wantsHelp(error)) {
-                        io.stderr.write(`\n${renderHelp(line.node, { appName: engine.app.name, globals: specs })}`);
+                        reporter.text(`\n${help(line.node, LogLevel.Error)}`, LogLevel.Error);
                     }
-
-                    io.setExitCode(view.exitCode);
                 };
 
-                if (io.stderr.isTTY === true && line.globals.json !== true && engine.config.entities.has("cli-view", intent)) {
-                    io.stderr.write(renderBanner(createStyle(colorEnabled(io.stderr, env))));
+                if (io.stderr.isTTY === true && !json && engine.config.entities.has("cli-view", intent)) {
+                    reporter.banner();
                 }
 
                 try {
@@ -132,7 +121,7 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
                     }
 
                     if (startedWatching(result)) {
-                        await watchUntilStopped(engine, io, intent, line.input, submitOptions, show, fail);
+                        await watchUntilStopped(engine, io, reporter, intent, line.input, submitOptions, show, fail);
                     }
                 } catch (error) {
                     fail(error);
@@ -143,15 +132,22 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
         }
 
         if (line.globals.timings === true) {
-            io.stderr.write(renderTimings(engine.timings.entries()));
+            reportTimings(reporter, engine.timings.entries());
         }
     } catch (error) {
         // With a broken config, its error is the one to show, whatever failed after it.
-        const view = viewError(engine.configError ?? error, { debug });
-
-        io.stderr.write(`${view.lines.join("\n")}\n`);
-        io.setExitCode(view.exitCode);
+        reportError(reporter, engine.configError ?? error, { debug }, io);
+    } finally {
+        reporter.finish();
     }
+}
+
+/** Reports an error as a problem (`Error: ` and what is under it) and sets the exit code. */
+function reportError(reporter: Reporter, error: unknown, options: { debug?: boolean; command?: Command }, io: CliIo): void {
+    const parts = describeError(error, options);
+
+    reporter.problem(parts.summary, parts.details.length === 0 ? {} : { cause: parts.details.join("\n") }, LogLevel.Error);
+    io.setExitCode(parts.exitCode);
 }
 
 /** Values of `SOUS_DEBUG` that mean "not set"; anything else asks for stack traces. */
@@ -189,12 +185,12 @@ function versionArgv(argv: readonly string[], tree: CommandTree): readonly strin
 /** The threshold `--debug` and `--log-level` ask for; `--debug` means `--log-level debug`. */
 export function thresholdOf(globals: Readonly<Record<string, unknown>>): LogLevel {
     if (globals.debug === true) {
-        return "debug";
+        return LogLevel.Debug;
     }
 
     const level = globals["log-level"];
 
-    return isLogLevel(level) ? level : "info";
+    return isLogLevel(level) ? level : LogLevel.Info;
 }
 
 /**
@@ -204,6 +200,7 @@ export function thresholdOf(globals: Readonly<Record<string, unknown>>): LogLeve
 async function watchUntilStopped(
     engine: EngineHandle,
     io: CliIo,
+    reporter: Reporter,
     intent: string,
     input: Readonly<Record<string, unknown>>,
     submitOptions: SubmitOptions,
@@ -216,7 +213,7 @@ async function watchUntilStopped(
         return;
     }
 
-    io.stderr.write(`${WATCH_KEYS_HINT}\n`);
+    reporter.note(WATCH_KEYS_HINT);
 
     let rebuilding: Promise<void> | undefined;
     const stop = listenForWatchKeys(io.stdin, {
@@ -229,7 +226,7 @@ async function watchUntilStopped(
                 return;
             }
 
-            io.stderr.write("Manual rebuild triggered.\n");
+            reporter.notice("Manual rebuild triggered.");
             rebuilding = engine
                 .submit({ intent, input: { ...input, watch: false } }, submitOptions)
                 .then(show, fail)

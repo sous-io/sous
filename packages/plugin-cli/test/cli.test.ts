@@ -320,39 +320,47 @@ describe("the CLI front end", () => {
         it("should filter messages by --log-level and --debug", async () => {
             const normal = await runCli([loudPlugin], ["loud"]);
 
-            expect(normal.stderr).not.toContain("a debug message");
-            expect(normal.stderr).toContain("a info message\na notice message\nWarning: a warning message\nError: a error message\n");
-            expect(normal.stderr).toContain("Critical: a critical message\nAlert: a alert message\nEmergency: a emergency message");
+            expect(normal.stdout).not.toContain("a debug message");
+            expect(normal.stdout).toBe("  a info message\n  a notice message\n");
+            expect(normal.stderr).toContain("a warning message");
+            expect(normal.stderr).toContain("Error: a error message");
+            expect(normal.stderr).toContain("Critical: a critical message");
+            expect(normal.stderr).toContain("Alert: a alert message");
+            expect(normal.stderr).toContain("Emergency: a emergency message");
 
             const errorsOnly = await runCli([loudPlugin], ["--log-level", "error", "loud"]);
 
-            expect(errorsOnly.stderr).toBe("Error: a error message\nCritical: a critical message\nAlert: a alert message\nEmergency: a emergency message\n");
+            expect(errorsOnly.stdout).toBe("");
+            expect(errorsOnly.stderr).not.toContain("a warning message");
+            expect(errorsOnly.stderr).toContain("Error: a error message");
+            expect(errorsOnly.stderr).toContain("Emergency: a emergency message");
 
             const equals = await runCli([loudPlugin], ["loud", "--log-level=critical"]);
 
-            expect(equals.stderr).toBe("Critical: a critical message\nAlert: a alert message\nEmergency: a emergency message\n");
+            expect(equals.stderr).not.toContain("a error message");
+            expect(equals.stderr).toContain("Critical: a critical message");
 
             const debug = await runCli([loudPlugin], ["loud", "--debug"]);
 
-            expect(debug.stderr.startsWith("Debug: a debug message\n")).toBe(true);
+            expect(debug.stdout.startsWith("Debug: a debug message\n")).toBe(true);
         });
 
         /** An unknown log level is rejected by its schema. */
         it("should ignore an unknown log level and fall back to info", async () => {
             const run = await runCli([loudPlugin], ["loud", "--log-level", "loud"]);
 
-            expect(run.stderr).toContain("a info message");
-            expect(run.stderr).not.toContain("Debug:");
+            expect(run.stdout).toContain("a info message");
+            expect(run.stdout).not.toContain("Debug:");
         });
 
-        /** `--timings` prints every timing to standard error after the command. */
+        /** `--timings` prints a table of every timing after the command. */
         it("should print every timing with --timings", async () => {
             const run = await runCli([reposPlugin], ["repo", "secret", "--timings"]);
 
-            expect(run.stdout).toBe("hidden ran\n");
-            expect(run.stderr).toContain("Timings:");
-            expect(run.stderr).toMatch(/config\.build:config\s+1 call/);
-            expect(run.stderr).toMatch(/intent:repo\.secret\s+1 call/);
+            expect(run.stdout.startsWith("hidden ran\n")).toBe(true);
+            expect(run.stdout).toContain("Timings:");
+            expect(run.stdout).toMatch(/config\.build:config\s+1\s/);
+            expect(run.stdout).toMatch(/intent:repo\.secret\s+1\s/);
         });
 
         /**

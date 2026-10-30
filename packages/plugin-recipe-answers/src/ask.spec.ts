@@ -1,4 +1,4 @@
-import { BufferedReporter, NonInteractiveError, nullReporter, type Prompter, scriptedPrompter } from "@sous-io/plugin-api";
+import { BufferedReporter, NonInteractiveError, nullReporter, ReportEntryStyle, type Prompter, scriptedPrompter } from "@sous-io/plugin-api";
 import type { EnvFileKind } from "@sous-io/plugin-config-files/types";
 import { describe, expect, it } from "vitest";
 import { ladder, silentPrompter, variable } from "../test/stand-ins.js";
@@ -193,10 +193,15 @@ describe("askForMissing()", () => {
                 "misc/stuff needs 2 answers, and misc/other, which it depends on, needs 1.",
                 "misc/stuff needs 2 answers before it can be used.",
                 "Question 1 of 2: apiUrl",
-                "Answer: SOUS_VAR_API_URL=https://typed.example.com",
-                "Saved to: /p/.sous/.env",
             ]),
         );
+        expect(reporter.styled(ReportEntryStyle.Question)[0]?.details).toMatchObject({ index: 1, total: 2, name: "apiUrl", recipe: "misc/stuff" });
+        expect(reporter.styled(ReportEntryStyle.VariableList)[0]?.details).toEqual({
+            entries: [
+                { label: "Answer", value: "SOUS_VAR_API_URL=https://typed.example.com" },
+                { label: "Saved to", value: "/p/.sous/.env" },
+            ],
+        });
     });
 
     /** A name the user picked should be asked even when answered, and --all asks everything. */

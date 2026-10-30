@@ -2,7 +2,7 @@
  * `lock.rebuild`, `lock.show` and `repo.gc`: the intents over the lockfile and the store.
  */
 
-import { ConfigError, type Context } from "@sous-io/plugin-api";
+import { ConfigError, LogLevel, type Context } from "@sous-io/plugin-api";
 import type {
     LockRebuildInput,
     LockRebuildResult,
@@ -43,9 +43,7 @@ export async function rebuildLock(input: LockRebuildInput, ctx: Context): Promis
     const after = lock.fromResolved(result.resolved, before);
     const diff = lock.diff(before, after);
 
-    for (const line of describeLockDiff(diff)) {
-        ctx.reporter.note(line);
-    }
+    ctx.reporter.list(describeLockDiff(diff), {}, LogLevel.Notice);
 
     const cache = ctx.services.get("recipes.index-cache");
     const notFetched = Object.keys(trustedRepos(ctx)).filter((name) => {
@@ -71,7 +69,7 @@ export async function rebuildLock(input: LockRebuildInput, ctx: Context): Promis
     }
 
     if (input.dryRun) {
-        ctx.reporter.note(`[Dry Run] Nothing was written. The lockfile is ${lock.path()}.`);
+        ctx.reporter.dryRun(`Nothing was written. The lockfile is ${lock.path()}.`);
 
         return { diff, lockfile: after, missingRepos: result.missingRepos, restored: { restored: [], alreadyPresent: [], failed: [] }, dryRun: true };
     }
@@ -81,7 +79,7 @@ export async function rebuildLock(input: LockRebuildInput, ctx: Context): Promis
 
     const subscriptions = Object.keys(ctx.config.get<Record<string, SubscriptionEntry>>("subscriptions") ?? {}).length;
 
-    ctx.reporter.note(`The lockfile was rebuilt from ${plural(subscriptions, "subscription")} and now pins ${plural(Object.keys(after.recipes).length, "recipe")}: ${lock.path()}.`);
+    ctx.reporter.notice(`The lockfile was rebuilt from ${plural(subscriptions, "subscription")} and now pins ${plural(Object.keys(after.recipes).length, "recipe")}: ${lock.path()}.`);
 
     const restored = await lock.restore({ keys: resolver.reachable(after) });
 
@@ -134,7 +132,7 @@ export async function collectStore(input: RepoGcInput, ctx: Context): Promise<St
     const maxBytes = input.maxBytes ?? ctx.config.get<Partial<StoreSettings>>("store")?.maxBytes;
     const report = await ctx.services.get("recipes.store").gc({ keep, ...(maxBytes === undefined ? {} : { maxBytes }), ...(input.dryRun === undefined ? {} : { dryRun: input.dryRun }) });
 
-    ctx.reporter.note(
+    ctx.reporter.notice(
         report.evicted.length === 0
             ? "The store is already inside its size cap, so nothing was removed."
             : report.dryRun

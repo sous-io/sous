@@ -20,7 +20,7 @@ const tools = ctx.services.get("mcp.tools").list();
 
 - `src/tools.ts`: turns intents into tools.
 - `src/server.ts`: the MCP server.
-- `src/reporter.ts`, `src/prompter.ts`: progress and questions sent to the agent.
+- `src/reporter.ts`, `src/prompter.ts`: log messages, progress and questions sent to the agent.
 
 ## Testing
 

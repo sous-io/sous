@@ -10,10 +10,9 @@
  * what preparing did, laid out as today's `src/lib/build-preparation.ts` did.
  */
 
-import { projectVariables } from "../command-variables.js";
+import { LogLevel, type Reporter } from "@sous-io/plugin-api";
 import type { CliViewContext, CliViewEntity, CliViewOutput } from "../../types.js";
-import type { Printer } from "../printer.js";
-import { BULLET } from "../text.js";
+import { projectVariables } from "../command-variables.js";
 
 // ---------------------------------------------------------------------------------------------
 // The result shapes these views read (from plugin-build, plugin-compiler, plugin-recipes and
@@ -40,18 +39,11 @@ export interface RestoreReportShape {
     readonly failed: ReadonlyArray<{ readonly key: string; readonly reason: string }>;
 }
 
-/** A locked recipe that was not built, and why. */
-export interface SkippedRecipeShape {
-    readonly key: string;
-    readonly reason: string;
-    readonly setBy?: string;
-    readonly message: string;
-}
-
-/** A required variable with no answer. */
-export interface UnansweredShape {
-    readonly definition: { readonly name: string };
-    readonly recipe: { readonly namespace: string; readonly name: string };
+/** The warning for required variables nothing answered (plugin-build's `UnansweredWarning`). */
+export interface UnansweredWarningShape {
+    readonly title: string;
+    readonly items: readonly string[];
+    readonly footer: string;
 }
 
 /** The result of `build.prepare`. */
@@ -60,8 +52,9 @@ export interface BuildPrepareResultShape {
     readonly locked: LockDiffShape;
     readonly restored: RestoreReportShape;
     readonly newer: ReadonlyArray<{ readonly key: string; readonly from: string; readonly to: string }>;
-    readonly skipped: readonly SkippedRecipeShape[];
-    readonly unanswered: readonly UnansweredShape[];
+    /** One finished sentence per skipped recipe. */
+    readonly skippedLines: readonly string[];
+    readonly unansweredWarning?: UnansweredWarningShape;
 }
 
 /** The result of `build` and of `compile`: only whether it went cleanly matters here. */
@@ -95,12 +88,9 @@ export function buildView(result: BuildResultShape, view: CliViewContext): CliVi
         return result.ok ? undefined : { exitCode: 1 };
     }
 
-    const out = view.printer();
+    view.reporter.commandVariables(entries);
 
-    out.subheading("Command Variables", "$");
-    out.variables(entries);
-
-    return result.ok ? out.text() : { stdout: out.text(), exitCode: 1 };
+    return result.ok ? undefined : { exitCode: 1 };
 }
 
 /** `dry-run` as an input key: `dryRun`. */
@@ -117,114 +107,54 @@ export function silentView(): CliViewOutput {
  * `build.prepare` on its own: what preparing did, in the layout of today's
  * `src/lib/build-preparation.ts`. A build reports the same facts itself while it runs, so this
  * shows only when `build.prepare` is the command.
- *
- * ```text
- * ▶ Locking subscribed recipes:
- *
- *   pinned: core/sous-skills at version 0.2.34.
- *
- *   The lockfile has been updated. Commit it, so everyone building this project gets exactly these
- *     versions.
- * ```
  */
 export function prepareView(result: BuildPrepareResultShape, view: CliViewContext): CliViewOutput {
-    const out = view.printer();
+    reportPrepared(view.reporter, result);
 
-    writePrepared(out, result);
-
-    return out.text();
+    return undefined;
 }
 
-/** Writes what preparing did. */
-export function writePrepared(out: Printer, result: BuildPrepareResultShape): void {
+/** Reports what preparing did. */
+export function reportPrepared(reporter: Reporter, result: BuildPrepareResultShape): void {
     if (result.restored.restored.length > 0) {
-        out.heading("Restoring recipes").blank();
-        out.paragraph("This project's lockfile pins recipes that were not in the store on this machine, so they were fetched at exactly the versions it records.");
-        out.blank();
-
-        for (const key of result.restored.restored) {
-            out.paragraph(`  restored: ${key}`);
-        }
-
-        out.footer();
+        reporter.operationStart("Restoring recipes");
+        reporter.list(
+            result.restored.restored.map((key) => `restored: ${key}`),
+            { title: "This project's lockfile pins recipes that were not in the store on this machine, so they were fetched at exactly the versions it records." },
+        );
     }
 
     const locked = result.locked;
 
     if (!locked.unchanged && (locked.added.length > 0 || locked.updated.length > 0)) {
-        out.heading("Locking subscribed recipes").blank();
-
-        for (const change of locked.added) {
-            out.paragraph(`  pinned: ${change.key} at version ${change.to ?? "?"}.`);
-        }
-
-        for (const change of locked.updated) {
-            out.paragraph(`  ${change.key} moved from version ${change.from ?? "?"} to version ${change.to ?? "?"}.`);
-        }
-
-        out.blank();
-        out.paragraph("The lockfile has been updated. Commit it, so everyone building this project gets exactly these versions.");
-        out.footer();
+        reporter.operationStart("Locking subscribed recipes");
+        reporter.list([
+            ...locked.added.map((change) => `pinned: ${change.key} at version ${change.to ?? "?"}.`),
+            ...locked.updated.map((change) => `${change.key} moved from version ${change.from ?? "?"} to version ${change.to ?? "?"}.`),
+        ]);
+        reporter.info("The lockfile has been updated. Commit it, so everyone building this project gets exactly these versions.");
     }
 
     for (const failure of result.restored.failed) {
-        out.warning(`Sous could not restore '${failure.key}' at the version the lockfile pins, so nothing from it was compiled.\n${failure.reason}`);
+        reporter.problem(`Sous could not restore '${failure.key}' at the version the lockfile pins, so nothing from it was compiled.`, { cause: failure.reason });
     }
 
     if (result.newer.length > 0) {
-        out.section("Newer versions published");
-        out.variables(result.newer.map((entry) => ({ label: entry.key, value: entry.to, detail: `this project pins ${entry.from}` })));
-        out.blank();
-        out.note(
+        reporter.operationStart("Newer versions published");
+        reporter.variables(result.newer.map((entry) => ({ label: entry.key, value: entry.to, detail: `this project pins ${entry.from}` })));
+        reporter.note(
             result.newer.length === 1
                 ? "This version is within the range declared for the recipe. No pin was changed, so this build uses the pinned version."
                 : "Each version is within the range declared for its recipe. No pin was changed, so this build uses the pinned versions.",
         );
-        out.footer();
     }
 
-    if (result.unanswered.length > 0) {
-        out.warning(unansweredMessage(result.unanswered));
+    if (result.unansweredWarning !== undefined) {
+        reporter.list(result.unansweredWarning.items, { title: result.unansweredWarning.title, footer: result.unansweredWarning.footer }, LogLevel.Warning);
     }
 
-    for (const skipped of result.skipped) {
-        out.paragraph(skippedLine(skipped));
-    }
-}
-
-/** The warning for required variables nothing answered. */
-export function unansweredMessage(unanswered: readonly UnansweredShape[]): string {
-    const count = unanswered.length;
-    const one = count === 1;
-    const pronoun = one ? "it" : "them";
-    const lines = unanswered.map((defined) => `  ${BULLET} ${defined.definition.name} (asked by ${defined.recipe.namespace}/${defined.recipe.name})`);
-
-    return (
-        `${count} required recipe ${one ? "variable" : "variables"} ${one ? "has" : "have"} no answer, so the templates that use ${pronoun} render an empty value:\n` +
-        `${lines.join("\n")}\n` +
-        `Run 'sous vars ask' to answer ${pronoun}.`
-    );
-}
-
-/** One line for a skipped recipe, saying why. */
-export function skippedLine(skipped: SkippedRecipeShape): string {
-    const where = skipped.setBy ? ` (${skipped.setBy})` : "";
-
-    switch (skipped.reason) {
-        case "subscription-disabled":
-            return `Skipped ${skipped.key}: its subscription is switched off${where}.`;
-        case "repository-disabled":
-            return `Skipped ${skipped.key}: its repository is switched off${where}.`;
-        default: {
-            // A message that names the recipe already is a whole line.
-            if (skipped.message.startsWith("Skipped ")) {
-                return skipped.message;
-            }
-
-            const message = skipped.message.replace(/\.$/u, "");
-
-            return `Skipped ${skipped.key}: ${message.length === 0 ? message : message[0]!.toLowerCase() + message.slice(1)}.`;
-        }
+    for (const line of result.skippedLines) {
+        reporter.info(line);
     }
 }
 

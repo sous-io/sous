@@ -4,7 +4,7 @@
  */
 
 import path from "node:path";
-import { nullReporter, type Context, type Reporter } from "@sous-io/plugin-api";
+import { LogLevel, nullReporter, type Context, type Reporter } from "@sous-io/plugin-api";
 import type { LiquidEngines } from "@sous-io/plugin-liquid/types";
 import type { RefsParser } from "@sous-io/plugin-refs/types";
 import type { VariablesSecrets } from "@sous-io/plugin-variables/types";
@@ -88,7 +88,7 @@ function reportExpansion(problems: CompileProblem[], strict: boolean, reporter: 
     return problems.map((problem) => {
         const level = strict ? "error" : problem.level;
 
-        reporter.log(level, problem.message);
+        reporter.problem(problem.message, {}, level === "error" ? LogLevel.Error : LogLevel.Warning);
 
         return { ...problem, level };
     });
@@ -121,7 +121,7 @@ export async function compile(input: CompileInput, ctx: Context, runtime: Compil
         units = units.filter((unit) => run.reads(unit, changed));
 
         if (units.length === 0) {
-            ctx.reporter.log("info", `  ⊘ No targets affected by change to ${input.changedFiles.join(", ")}; nothing compiled`);
+            ctx.reporter.detail(`No targets affected by change to ${input.changedFiles.join(", ")}; nothing compiled`);
         }
     }
 
@@ -136,7 +136,7 @@ export async function compile(input: CompileInput, ctx: Context, runtime: Compil
             runtime.produced = result.produced;
         }
 
-        ctx.reporter.log("info", errors > 0 ? `Done with ${errors} error(s).` : "Done.");
+        ctx.reporter.operationEnd(errors > 0 ? `Done with ${errors} error(s).` : "Done.", errors === 0);
         await ctx.emit("compiler.wrote", { files: result.outputs, dryRun });
 
         return {
@@ -194,7 +194,7 @@ export async function prune(input: CompilerPruneInput, ctx: Context, runtime: Co
     const { removed, dirsRemoved } = await writer.remove(candidates, { dryRun });
 
     for (const file of removed) {
-        ctx.reporter.log("info", dryRun ? `  ○ would prune: ${file}` : `  ✗ pruned: ${file}`);
+        ctx.reporter.operation(dryRun ? "would-remove" : "removed", file);
     }
 
     if (!dryRun) {

@@ -86,7 +86,7 @@ export function pluginsContributor(): ContributorDefinition {
                 }
 
                 if ("problem" in bundle) {
-                    config.log("warning", bundle.problem);
+                    config.warn(bundle.problem);
                     continue;
                 }
 

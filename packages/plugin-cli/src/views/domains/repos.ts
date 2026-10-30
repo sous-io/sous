@@ -8,11 +8,10 @@
  * command printed after its work was done.
  */
 
-import { browsingVariables, writeQuestionPlan, type QuestionPlanShape } from "./catalog.js";
+import type { Reporter, TableColumn } from "@sous-io/plugin-api";
+import { browsingVariables } from "./catalog.js";
+import { writeQuestionPlan, type QuestionPlanShape } from "./questions.js";
 import type { CliViewContext, CliViewEntity, CliViewOutput } from "../../types.js";
-import type { Printer } from "../printer.js";
-import type { TableColumn } from "../table.js";
-import { indent } from "../text.js";
 
 // --- The result shapes these views read (plugin-recipes' types, kept local: plugin-cli depends on no plugin) ---
 
@@ -178,9 +177,6 @@ interface SubscriptionListing {
 
 // --- Shared pieces ---------------------------------------------------------------------------------
 
-/** How far every line of these commands' output is indented. */
-const INDENT = 2;
-
 /** Who added an entry, as `addedBy` records it. */
 const BUILT_IN_ADDED_BY = "sous";
 const USER_ADDED_BY = "user";
@@ -248,35 +244,27 @@ export function lockDiffLines(diff: LockDiff): string[] {
     return lines.length === 0 ? ["Nothing changed."] : lines;
 }
 
-/** The `➔ Lockfile:` block: the diff's lines, or `whenUnchanged`. */
-function lockfileBlock(out: Printer, diff: LockDiff, whenUnchanged: string, asParagraph = true): void {
-    out.blank().subheading("Lockfile").blank();
-
+/** The lockfile block: the diff's lines, or `whenUnchanged`. */
+function lockfileBlock(reporter: Reporter, diff: LockDiff, whenUnchanged: string): void {
     if (diff.unchanged) {
-        if (asParagraph) {
-            out.paragraph(whenUnchanged);
-        } else {
-            out.log(indent(whenUnchanged));
-        }
+        reporter.stepStart("Lockfile");
+        reporter.info(whenUnchanged);
 
         return;
     }
 
-    for (const line of lockDiffLines(diff)) {
-        out.log(indent(line));
-    }
+    reporter.list(lockDiffLines(diff), { title: "Lockfile" });
 }
 
-function stayedBlock(out: Printer, stayed: readonly Stayed[]): void {
+function stayedBlock(reporter: Reporter, stayed: readonly Stayed[]): void {
     if (stayed.length === 0) {
         return;
     }
 
-    out.blank().subheading("What stayed, and why").blank();
-    out.table(
+    reporter.table(
         STAYED_COLUMNS,
         stayed.map((entry) => ({ key: entry.key, heldBy: entry.heldBy.join(", ") })),
-        { indent: INDENT },
+        { title: "What stayed, and why" },
     );
 }
 
@@ -314,7 +302,6 @@ function rebuilt(result: { readonly followUps?: readonly IntentFollowUp[] }): bo
  * code: a build that failed makes the command fail, with the message today's command gave.
  */
 async function withFollowUps(
-    out: Printer,
     result: { readonly followUps?: readonly IntentFollowUp[] },
     view: CliViewContext,
     buildFailed: string,
@@ -327,14 +314,10 @@ async function withFollowUps(
         }
 
         if (entry.intent === "vars.ask") {
-            out.blank().subheading("Variables");
+            view.reporter.stepStart("Variables");
         }
 
-        const text = await view.render(entry.intent, entry.result);
-
-        if (text !== "") {
-            out.log(text.replace(/\n$/, ""));
-        }
+        await view.show(entry.intent, entry.result);
 
         if (entry.intent === "build" && (entry.result as { ok?: unknown }).ok === false) {
             failed = true;
@@ -342,98 +325,80 @@ async function withFollowUps(
     }
 
     if (!failed) {
-        return out.text();
+        return;
     }
 
-    return { stdout: out.text(), stderr: `Error: ${buildFailed}\n`, exitCode: 1 };
+    view.reporter.error(buildFailed);
+
+    return { exitCode: 1 };
 }
 
 // --- repo.add -----------------------------------------------------------------------------------------
 
-function repoAdd(result: RepoAddResult, view: CliViewContext): string {
-    const out = view.printer();
+function repoAdd(result: RepoAddResult, view: CliViewContext): void {
+    const reporter = view.reporter;
 
-    out.heading("Adding a repository");
-
-    if (result.dryRun) {
-        out.dryRunNotice("Nothing will be trusted, written or downloaded.");
-        out.blank();
-    }
-
-    out.blank();
+    reporter.operationStart("Adding a repository");
 
     if (result.dryRun) {
-        out.note(`The repository would be added as '${result.name}', read through the ${result.provider} provider, and its index would be fetched.`);
-        out.footer();
+        reporter.dryRun("Nothing will be trusted, written or downloaded.");
+        reporter.note(`The repository would be added as '${result.name}', read through the ${result.provider} provider, and its index would be fetched.`);
 
-        return out.text();
+        return;
     }
 
-    out.variables({
+    reporter.variables({
         Repository: result.name,
         Location: result.url,
         Provider: result.provider,
         Namespaces: result.namespaces.length > 0 ? result.namespaces.join(", ") : "none; this repository publishes nothing yet",
         Recipes: String(result.recipeCount),
     });
-    out.blank();
-    out.note(
+    reporter.note(
         result.alreadyTrusted
             ? `This project already trusted '${result.name}', so only its index was refreshed.`
             : `This project now trusts '${result.name}'. Nothing from it has been installed.`,
     );
-    out.footer();
-
-    return out.text();
 }
 
 // --- repo.remove --------------------------------------------------------------------------------------
 
 async function repoRemove(result: RepoRemoveResult, view: CliViewContext): Promise<CliViewOutput> {
-    const out = view.printer();
+    const reporter = view.reporter;
     const rebuilding = rebuilt(result);
     const pruneHint = rebuilding ? "" : " Run 'sous build' to prune what it used to write.";
 
-    out.heading("Removing a repository");
+    reporter.operationStart("Removing a repository");
 
     if (result.dryRun) {
-        out.dryRunNotice("Nothing will be written.");
+        reporter.dryRun("Nothing will be written.");
     }
 
     // The plan, unless the handler reported it already before asking.
     const [first, ...rest] = result.plan ?? [];
 
     if (first !== undefined) {
-        out.blank();
-        out.paragraph(first);
+        reporter.info(first);
 
         if (rest.length > 0) {
-            out.blank();
-            out.log(indent("Here is what goes with it:"));
-            out.blank();
-
-            for (const line of rest) {
-                out.log(indent(line, 4));
-            }
+            reporter.list(rest, { title: "Here is what goes with it:" });
         }
     }
 
-    lockfileBlock(out, result.diff, "Nothing changed; nothing was locked because of this repository.", false);
-    stayedBlock(out, result.stayed);
-    out.blank();
-    out.log(
-        indent(
-            result.dryRun
-                ? "Nothing was written. Run the same command without '--dry-run' to remove it."
-                : result.optedOut
-                  ? `The repository '${result.name}' is one sous provides itself, so it was switched off rather than deleted: this project's config now records '${result.name}: { enabled: false }'.${pruneHint}`
-                  : `This project no longer trusts '${result.name}'. Nothing is read from it any more, and its entry is gone from the repositories layer.${pruneHint}`,
-        ),
-    );
-    out.footer();
+    lockfileBlock(reporter, result.diff, "Nothing changed; nothing was locked because of this repository.");
+    stayedBlock(reporter, result.stayed);
+
+    if (result.dryRun) {
+        reporter.dryRun("Nothing was written. Run the same command without '--dry-run' to remove it.");
+    } else {
+        reporter.info(
+            result.optedOut
+                ? `The repository '${result.name}' is one sous provides itself, so it was switched off rather than deleted: this project's config now records '${result.name}: { enabled: false }'.${pruneHint}`
+                : `This project no longer trusts '${result.name}'. Nothing is read from it any more, and its entry is gone from the repositories layer.${pruneHint}`,
+        );
+    }
 
     return withFollowUps(
-        out,
         result,
         view,
         `The repository '${result.name}' was removed, but the build that followed it failed, so this project may still hold files its recipes used to write. The removal itself is recorded and locked; fix what the build reported above and run 'sous build' again.`,
@@ -442,45 +407,38 @@ async function repoRemove(result: RepoRemoveResult, view: CliViewContext): Promi
 
 // --- repo.trust ---------------------------------------------------------------------------------------
 
-function repoTrust(result: RepoTrustResult, view: CliViewContext): string {
-    const out = view.printer();
+function repoTrust(result: RepoTrustResult, view: CliViewContext): void {
+    const reporter = view.reporter;
 
-    out.heading("Trusting a repository");
+    reporter.operationStart("Trusting a repository");
 
     if (result.dryRun) {
-        out.dryRunNotice("Nothing will be written.");
+        reporter.dryRun("Nothing will be written.");
     }
 
-    out.blank();
-    out.variables({ Repository: result.name, Location: result.url });
-    out.blank();
-    out.note(
-        result.alreadyTrusted
-            ? `This project already trusts '${result.name}'; nothing changed.`
-            : result.dryRun
-              ? `Nothing was written. Run the same command without '--dry-run' to trust '${result.name}'.`
-              : result.trusted
-                ? `This project now trusts '${result.name}'. Nothing from it has been installed.`
-                : `'${result.name}' was not trusted; nothing changed.`,
-    );
-    out.footer();
+    reporter.variables({ Repository: result.name, Location: result.url });
 
-    return out.text();
+    if (result.alreadyTrusted) {
+        reporter.note(`This project already trusts '${result.name}'; nothing changed.`);
+    } else if (result.dryRun) {
+        reporter.dryRun(`Nothing was written. Run the same command without '--dry-run' to trust '${result.name}'.`);
+    } else {
+        reporter.note(result.trusted ? `This project now trusts '${result.name}'. Nothing from it has been installed.` : `'${result.name}' was not trusted; nothing changed.`);
+    }
 }
 
 // --- repo.gc ------------------------------------------------------------------------------------------
 
-function repoGc(report: StoreGcReport, view: CliViewContext): string {
-    const out = view.printer();
+function repoGc(report: StoreGcReport, view: CliViewContext): void {
+    const reporter = view.reporter;
 
-    out.section("Collecting the recipe store");
+    reporter.operationStart("Collecting the recipe store");
 
     if (report.dryRun) {
-        out.dryRunNotice("Nothing will be removed.");
-        out.blank();
+        reporter.dryRun("Nothing will be removed.");
     }
 
-    out.variables({
+    reporter.variables({
         "Entries before": String(report.evicted.length + report.kept.length),
         "Entries kept": String(report.kept.length),
         "Entries evicted": String(report.evicted.length),
@@ -489,8 +447,7 @@ function repoGc(report: StoreGcReport, view: CliViewContext): string {
     });
 
     if (report.evicted.length > 0) {
-        out.blank();
-        out.table(
+        reporter.table(
             EVICTED_COLUMNS,
             report.evicted.map((entry) => ({
                 repo: entry.repo,
@@ -499,53 +456,38 @@ function repoGc(report: StoreGcReport, view: CliViewContext): string {
                 size: describeSize(entry.sizeBytes),
                 lastUsed: entry.lastAccessAt,
             })),
-            { indent: INDENT },
         );
     }
 
-    out.blank();
-    out.paragraph(
+    reporter.info(
         report.evicted.length === 0
             ? "The store is already inside its size cap, so nothing was removed."
             : report.dryRun
               ? "Nothing was removed. Everything listed above is re-fetchable from the lockfile that pins it."
               : "Everything removed is re-fetchable from the lockfile that pins it; the next build that needs one will download it again.",
     );
-    out.footer();
-
-    return out.text();
 }
 
 // --- repo.link ----------------------------------------------------------------------------------------
 
-function repoLink(result: RepoLinkResult, view: CliViewContext): string {
-    const out = view.printer();
+function repoLink(result: RepoLinkResult, view: CliViewContext): void {
+    const reporter = view.reporter;
 
-    out.heading("Linking a repository");
+    reporter.operationStart("Linking a repository");
 
     if (result.dryRun) {
-        out.blank();
-
         for (const line of result.wouldDo ?? []) {
-            out.dryRunNotice(line);
+            reporter.dryRun(line);
         }
 
-        out.footer();
-
-        return out.text();
+        return;
     }
-
-    out.blank();
 
     for (const line of result.notes ?? []) {
-        out.log(indent(line));
+        reporter.detail(line);
     }
 
-    if ((result.notes ?? []).length > 0) {
-        out.blank();
-    }
-
-    out.variables({
+    reporter.variables({
         Repository: result.repo,
         Checkout: result.path,
         ...(result.branch === undefined ? {} : { Branch: result.branch }),
@@ -554,95 +496,75 @@ function repoLink(result: RepoLinkResult, view: CliViewContext): string {
     });
 
     if (result.replaced !== undefined) {
-        out.blank();
-        out.log(indent(`This replaces an earlier link to ${result.replaced}, which is untouched.`));
+        reporter.info(`This replaces an earlier link to ${result.replaced}, which is untouched.`);
     }
 
     if (result.upstream !== undefined) {
         const upstream = result.upstream.upstream;
         const yesNo = (value: boolean | undefined): string => (value === undefined ? "unknown" : value ? "yes" : "no");
 
-        out.blank();
-        out.variables({
+        reporter.variables({
             ...(result.upstream.detachedAt === undefined ? {} : { "Checked out": `no branch; HEAD is detached at ${result.upstream.detachedAt}` }),
             "Compared with": upstream,
             [`Merged into ${upstream}`]: yesNo(result.upstream.merged),
             [`Behind ${upstream}`]: result.upstream.behind === undefined ? "unknown" : `${result.upstream.behind} ${result.upstream.behind === 1 ? "commit" : "commits"}`,
         });
-        out.blank();
-        out.note("Upstream was fetched just now; nothing in the checkout was changed.");
+        reporter.note("Upstream was fetched just now; nothing in the checkout was changed.");
     } else if (result.upstreamNote !== undefined) {
-        out.blank();
-        out.note(result.upstreamNote);
+        reporter.note(result.upstreamNote);
     }
 
     if (result.trusted.length > 0) {
-        out.blank();
-        out.paragraph(`Repositories trusted along the way: ${result.trusted.join(", ")}.`);
+        reporter.info(`Repositories trusted along the way: ${result.trusted.join(", ")}.`);
     }
-
-    out.footer();
-
-    return out.text();
 }
 
 // --- repo.unlink --------------------------------------------------------------------------------------
 
 async function repoUnlink(result: RepoUnlinkResult, view: CliViewContext): Promise<CliViewOutput> {
-    const out = view.printer();
+    const reporter = view.reporter;
 
-    out.section("Unlinking a repository");
+    reporter.operationStart("Unlinking a repository");
 
     if (result.dryRun) {
         for (const line of result.wouldDo ?? []) {
-            out.dryRunNotice(line);
+            reporter.dryRun(line);
         }
     } else {
-        out.variables({
+        reporter.variables({
             Repository: result.repo,
             Checkout: result.path,
             Scope: result.scope === "global" ? "every project on this machine" : "this project",
             ...(result.recordedIn === undefined ? {} : { Updated: result.recordedIn }),
         });
-        out.blank();
-        out.paragraph(`'${result.repo}' is read from the versions the lockfile pins again.`);
+        reporter.info(`'${result.repo}' is read from the versions the lockfile pins again.`);
     }
 
     if (result.published !== undefined) {
-        out.blank().subheading("Published versions").blank();
+        reporter.stepStart("Published versions");
 
         if (!result.published.checked) {
-            out.note(`Sous could not check '${result.repo}' for newer published versions. ${result.published.reason ?? ""}`.trim());
+            reporter.note(`Sous could not check '${result.repo}' for newer published versions. ${result.published.reason ?? ""}`.trim());
         } else if (result.published.newer.length === 0) {
-            out.paragraph(`Every pin from '${result.repo}' is the newest published version its range allows.`);
+            reporter.info(`Every pin from '${result.repo}' is the newest published version its range allows.`);
         } else {
-            out.paragraph(`'${result.repo}' publishes newer versions within range. The lockfile still pins the older ones:`);
-            out.blank();
-            out.variables(result.published.newer.map((entry) => ({ label: entry.key, value: `${entry.from} pinned, ${entry.to} published` })));
+            reporter.info(`'${result.repo}' publishes newer versions within range. The lockfile still pins the older ones:`);
+            reporter.variables(result.published.newer.map((entry) => ({ label: entry.key, value: `${entry.from} pinned, ${entry.to} published` })));
         }
     }
 
     for (const entry of result.followUps) {
         if (entry.intent === "subscription.update" && entry.result !== undefined) {
-            out.blank().subheading("Updating the pins");
-
-            const text = await view.render(entry.intent, entry.result);
-
-            if (text !== "") {
-                out.log(text.replace(/\n$/, ""));
-            }
+            reporter.stepStart("Updating the pins");
+            await view.show(entry.intent, entry.result);
         }
     }
 
     if (result.checkoutNote !== undefined) {
-        out.blank();
-        out.paragraph(result.checkoutNote);
+        reporter.info(result.checkoutNote);
     }
 
-    out.footer();
-
     return withFollowUps(
-        out,
         { followUps: result.followUps.filter((entry) => entry.intent !== "subscription.update") },
         view,
         `The repository '${result.repo}' was unlinked, but the build that followed it failed; fix what the build reported above and run 'sous build' again.`,
@@ -660,50 +582,48 @@ function why(recipe: ResolvedRecipe): string {
 }
 
 async function subscriptionAdd(result: SubscriptionAddResult, view: CliViewContext): Promise<CliViewOutput> {
-    const out = view.printer();
+    const reporter = view.reporter;
 
-    out.heading("Subscribing");
+    reporter.operationStart("Subscribing");
 
     if (result.dryRun) {
-        out.dryRunNotice("Nothing will be downloaded, written or asked.");
+        reporter.dryRun("Nothing will be downloaded, written or asked.");
     }
 
-    out.blank().subheading(result.dryRun ? "What would be installed" : "What was installed").blank();
-    out.table(
+    reporter.table(
         INSTALLED_COLUMNS,
         result.resolved.map((recipe) => ({ key: recipe.key, version: recipe.version, repo: recipe.repo, why: why(recipe) })),
-        { indent: INDENT },
+        { title: result.dryRun ? "What would be installed" : "What was installed" },
     );
 
     if (result.trusted.length > 0) {
-        out.blank();
-        out.paragraph(`Repositories trusted along the way: ${result.trusted.join(", ")}. They are now recorded in this project's config, and your colleagues inherit them.`);
+        reporter.info(`Repositories trusted along the way: ${result.trusted.join(", ")}. They are now recorded in this project's config, and your colleagues inherit them.`);
     }
 
-    lockfileBlock(out, result.diff, "Nothing changed; everything asked for was already locked.");
+    lockfileBlock(reporter, result.diff, "Nothing changed; everything asked for was already locked.");
 
     if (result.cycles.length > 0) {
-        out.warning(
-            `Some of these recipes co-subscribe to each other in a circle:\n${result.cycles.map((cycle) => `  ${cycle.join(" -> ")}`).join("\n")}\nThat is unusual but not broken, and everything above was installed.`,
-        );
+        reporter.problem("Some of these recipes co-subscribe to each other in a circle:", {
+            cause: result.cycles.map((cycle) => cycle.join(" -> ")).join("\n"),
+            hint: "That is unusual but not broken, and everything above was installed.",
+        });
     }
 
     // A dry run asks nothing, so it lists what the subscription would ask instead.
     if (result.dryRun && result.questions !== undefined) {
-        out.blank().subheading("Questions these recipes ask").blank();
-        writeQuestionPlan(out, result.questions, { answerHints: true });
+        reporter.stepStart("Questions these recipes ask");
+        writeQuestionPlan(reporter, result.questions, { answerHints: true });
     }
 
-    out.blank();
-    out.paragraph(
-        result.dryRun
-            ? "Nothing was written. Run the same command without '--dry-run' to install it."
-            : `The subscription to '${result.key}' is recorded in this project's config, and the exact versions above are recorded in its lockfile.${rebuilt(result) ? "" : " Run 'sous build' to compile what they contribute."}`,
-    );
-    out.footer();
+    if (result.dryRun) {
+        reporter.dryRun("Nothing was written. Run the same command without '--dry-run' to install it.");
+    } else {
+        reporter.info(
+            `The subscription to '${result.key}' is recorded in this project's config, and the exact versions above are recorded in its lockfile.${rebuilt(result) ? "" : " Run 'sous build' to compile what they contribute."}`,
+        );
+    }
 
     return withFollowUps(
-        out,
         result,
         view,
         `The subscription to '${result.key}' was saved, but the build that followed it failed, so this project's outputs may be incomplete. The subscription itself is recorded and locked; fix what the build reported above and run 'sous build' again.`,
@@ -713,29 +633,29 @@ async function subscriptionAdd(result: SubscriptionAddResult, view: CliViewConte
 // --- subscription.remove ------------------------------------------------------------------------------
 
 async function subscriptionRemove(result: SubscriptionRemoveResult, view: CliViewContext): Promise<CliViewOutput> {
-    const out = view.printer();
+    const reporter = view.reporter;
     const pruneHint = rebuilt(result) ? "" : " Run 'sous build' to prune what it used to write.";
 
-    out.heading("Unsubscribing");
+    reporter.operationStart("Unsubscribing");
 
     if (result.dryRun) {
-        out.dryRunNotice("Nothing will be written.");
+        reporter.dryRun("Nothing will be written.");
     }
 
     // What stayed, and why, the handler has already reported, one line per recipe.
-    lockfileBlock(out, result.diff, "Nothing changed; nothing was locked because of this subscription.");
-    out.blank();
-    out.paragraph(
-        result.dryRun
-            ? "Nothing was written. Run the same command without '--dry-run' to remove it."
-            : result.optedOut
-              ? `The subscription to '${result.key}' is one sous provides itself, so it was switched off rather than deleted: this project's config now records '${result.key}: { enabled: false }'. The repository it came from is still trusted.${pruneHint}`
-              : `The subscription to '${result.key}' is gone. The repositories it came from are still trusted; remove one of those deliberately if you want to withdraw that too.${pruneHint}`,
-    );
-    out.footer();
+    lockfileBlock(reporter, result.diff, "Nothing changed; nothing was locked because of this subscription.");
+
+    if (result.dryRun) {
+        reporter.dryRun("Nothing was written. Run the same command without '--dry-run' to remove it.");
+    } else {
+        reporter.info(
+            result.optedOut
+                ? `The subscription to '${result.key}' is one sous provides itself, so it was switched off rather than deleted: this project's config now records '${result.key}: { enabled: false }'. The repository it came from is still trusted.${pruneHint}`
+                : `The subscription to '${result.key}' is gone. The repositories it came from are still trusted; remove one of those deliberately if you want to withdraw that too.${pruneHint}`,
+        );
+    }
 
     return withFollowUps(
-        out,
         result,
         view,
         `The subscription to '${result.key}' was removed, but the build that followed it failed, so this project may still hold files it used to write. The removal itself is recorded and locked; fix what the build reported above and run 'sous build' again.`,
@@ -745,29 +665,26 @@ async function subscriptionRemove(result: SubscriptionRemoveResult, view: CliVie
 // --- subscription.enable and .disable -----------------------------------------------------------------
 
 async function subscriptionToggle(result: SubscriptionToggleResult, view: CliViewContext): Promise<CliViewOutput> {
-    const out = view.printer();
+    const reporter = view.reporter;
     const word = result.enabled ? "on" : "off";
 
-    out.heading(result.enabled ? "Enabling a subscription" : "Disabling a subscription");
+    reporter.operationStart(result.enabled ? "Enabling a subscription" : "Disabling a subscription");
 
     if (result.dryRun) {
-        out.dryRunNotice("Nothing will be written.");
+        reporter.dryRun("Nothing will be written.");
     }
 
-    out.blank();
-    out.variables({ Subscription: result.key, Enabled: result.enabled ? "yes" : "no", "Recorded in": result.file });
-    out.blank();
-    out.paragraph(
-        !result.changed
-            ? `The subscription to '${result.key}' was already switched ${word}; nothing changed.`
-            : result.dryRun
-              ? `Nothing was written. Run the same command without '--dry-run' to switch '${result.key}' ${word}.`
-              : `The subscription to '${result.key}' is now switched ${word}.${rebuilt(result) ? "" : " Run 'sous build' to bring the outputs in line."}`,
-    );
-    out.footer();
+    reporter.variables({ Subscription: result.key, Enabled: result.enabled ? "yes" : "no", "Recorded in": result.file });
+
+    if (!result.changed) {
+        reporter.info(`The subscription to '${result.key}' was already switched ${word}; nothing changed.`);
+    } else if (result.dryRun) {
+        reporter.dryRun(`Nothing was written. Run the same command without '--dry-run' to switch '${result.key}' ${word}.`);
+    } else {
+        reporter.info(`The subscription to '${result.key}' is now switched ${word}.${rebuilt(result) ? "" : " Run 'sous build' to bring the outputs in line."}`);
+    }
 
     return withFollowUps(
-        out,
         result,
         view,
         `The subscription to '${result.key}' was switched ${word}, but the build that followed failed; fix what the build reported above and run 'sous build' again.`,
@@ -814,28 +731,20 @@ function describeOrigin(addedBy: string | undefined): string {
     return addedBy === undefined || addedBy === USER_ADDED_BY ? "user" : addedBy;
 }
 
-function subscriptionList(result: readonly SubscriptionListing[], view: CliViewContext): string {
-    const out = view.printer();
+function subscriptionList(result: readonly SubscriptionListing[], view: CliViewContext): void {
+    const reporter = view.reporter;
 
-    browsingVariables(out, view);
+    browsingVariables(reporter, view);
     const installed = view.input.installed === true;
     const listings = result.filter((entry) => !installed || entry.pinned.length > 0);
 
-    out.heading("Subscriptions");
-    out.blank();
-
-    if (listings.length === 0) {
-        out.paragraph(installed ? "No subscription of this project has installed anything yet." : "This project subscribes to nothing yet.");
-        out.footer();
-
-        return out.text();
-    }
+    reporter.operationStart("Subscriptions");
 
     const columns = SUBSCRIPTION_COLUMNS.map((column) =>
         installed && column.key === "pinned" ? { ...column, header: "Installed version" } : column,
     );
 
-    out.table(
+    reporter.table(
         columns,
         listings.map((entry) => ({
             key: entry.key,
@@ -845,11 +754,8 @@ function subscriptionList(result: readonly SubscriptionListing[], view: CliViewC
             origin: describeOrigin(entry.addedBy),
             enabled: entry.enabled ? "yes" : "no",
         })),
-        { indent: INDENT },
+        { empty: installed ? "No subscription of this project has installed anything yet." : "This project subscribes to nothing yet." },
     );
-    out.footer();
-
-    return out.text();
 }
 
 /** The views of this domain, by intent. */

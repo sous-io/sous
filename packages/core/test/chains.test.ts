@@ -306,7 +306,7 @@ describe("the chain scheduler", () => {
                 sous.intents.add({
                     intent: "p.ask",
                     handle: async (_input, ctx) => {
-                        ctx.reporter.note("asking");
+                        ctx.reporter.notice("asking");
 
                         return [await ctx.prompter.askValue({ message: "Name?", answeredBy: "--name" }), ctx.globals.debug, ctx.plugin, ctx.project, ctx.env.X];
                     },

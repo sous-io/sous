@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { colorizeJson, renderJson, truncateJson } from "./json.js";
-import { Printer, withErrorPrefix } from "./printer.js";
-import { colorEnabled, createStyle } from "./style.js";
-import { DEFAULT_WRAP_COLUMNS, indent, stripAnsi, terminalColumns, wrapText } from "./text.js";
+import { colorizeJson, renderJson, truncateJson } from "../views/json.js";
+import { Layout, valueText, withErrorPrefix } from "./layout.js";
+import { colorEnabled, createStyle } from "../views/style.js";
+import { DEFAULT_WRAP_COLUMNS, indent, stripAnsi, terminalColumns, wrapText } from "../views/text.js";
 
-const plain = () => new Printer(createStyle(false), 100);
+
 
 describe("text helpers (ported from formatting.spec.ts)", () => {
     it("should indent each line, by 2 spaces by default", () => {
@@ -41,19 +41,15 @@ describe("text helpers (ported from formatting.spec.ts)", () => {
     });
 });
 
-describe("Printer", () => {
-    /**
-     * ```text
-     *  (blank)
-     * ▶ Compiling targets:
-     * ```
-     */
-    it("should write headings with a symbol and a colon, sections with a blank line under them", () => {
-        expect(plain().heading("Compiling targets").lines).toEqual([" ", "▶ Compiling targets:"]);
-        expect(plain().heading("Config is valid.").lines).toEqual([" ", "▶ Config is valid."]);
-        expect(plain().section("Adding a repository").lines).toEqual([" ", "▶ Adding a repository:", " "]);
-        expect(plain().subheading("Target 1").lines).toEqual([" ", "➔ Target 1:"]);
-        expect(plain().footer().lines).toEqual([" ", " "]);
+describe("Layout", () => {
+    const plain = () => new Layout(createStyle(false), 100);
+
+    /** Headings carry a symbol and a colon unless the text ends with a period. */
+    it("should write headings with a symbol and a colon", () => {
+        expect(plain().heading("Compiling targets")).toBe("▶ Compiling targets:");
+        expect(plain().heading("Config is valid.")).toBe("▶ Config is valid.");
+        expect(plain().subheading("Target 1")).toBe("➔ Target 1:");
+        expect(plain().subheading("Command Variables", "$")).toBe("$ Command Variables:");
     });
 
     it("should indent key and value pairs by four and line their colons up", () => {
@@ -69,34 +65,32 @@ describe("Printer", () => {
 
         expect(wrapped[0]).toBe("    About: one two three four");
         expect(wrapped[1]).toBe("           five six");
-        expect(plain().variables({ Config: "./my-config.js", Strict: "false" }).lines).toEqual(["    Config: ./my-config.js", "    Strict: false"]);
+        expect(plain().variableLines([{ label: "Config", value: "./my-config.js" }, { label: "Strict", value: "false" }])).toEqual(["    Config: ./my-config.js", "    Strict: false"]);
     });
 
     it("should write counts, errors, dry-run notices and warnings", () => {
-        expect(plain().count(5, "tokens").lines).toEqual(["Found [5] tokens"]);
-        expect(plain().count(5, "tokens", "", "Deleted").lines).toEqual(["Deleted [5] tokens"]);
-        expect(plain().count(5, "tokens", "Totals").lines).toEqual([" ", "➔ Totals:", "  Found [5] tokens"]);
-        expect(plain().error("Something broke.\nTry again.").lines).toEqual(["", "  Error: Something broke.", "  Try again.", "", ""]);
-        expect(plain().dryRunNotice("File will not be written.").lines).toEqual(["    [Dry Run] File will not be written."]);
-        expect(plain().warning("This is RISKY.").lines).toEqual(["", "", "   WARNING:   ", "  This is RISKY.", ""]);
+        expect(plain().countLine(5, "tokens")).toBe("Found [5] tokens");
+        expect(plain().countLine(5, "tokens", "Deleted")).toBe("Deleted [5] tokens");
+        expect(plain().errorLines("Something broke.\nTry again.")).toEqual(["Error: Something broke.", "Try again."]);
+        expect(plain().dryRunLines("File will not be written.")).toEqual(["    [Dry Run] File will not be written."]);
+        expect(plain().warningLines("This is RISKY.")).toEqual(["   WARNING:   ", "  This is RISKY."]);
     });
 
     it("should color through the style, and only when it is on", () => {
-        const colored = new Printer(createStyle(true), 100).heading("Building");
-
-        expect(colored.lines[1]).toBe("\u001b[93m▶ Building:\u001b[39m");
-        expect(stripAnsi(new Printer(createStyle(true), 100).warning("A RISK").lines.join("\n"))).toBe(plain().warning("A RISK").lines.join("\n"));
+        expect(new Layout(createStyle(true), 100).heading("Building")).toBe("\u001b[93m▶ Building:\u001b[39m");
+        expect(stripAnsi(new Layout(createStyle(true), 100).warningLines("A RISK").join("\n"))).toBe(plain().warningLines("A RISK").join("\n"));
     });
 
     it("should indent every line of a table, row notes included", () => {
-        const out = plain().table([{ key: "name", header: "Name" }], [{ name: "a" }], { indent: 2, rowNote: () => "  one\n  two" });
+        const lines = plain().tableLines([{ key: "name", header: "Name" }], [{ name: "a" }], { indent: 2, rowNote: () => "  one\n  two" });
 
-        expect(out.lines).toEqual(["  Name", "  ----", "  a", "    one", "    two"]);
+        expect(lines).toEqual(["  Name", "  ----", "  a", "    one", "    two"]);
     });
 
-    it("should end its text with a newline, and give nothing when empty", () => {
-        expect(plain().log("a").text()).toBe("a\n");
-        expect(plain().text()).toBe("");
+    it("should show an array of scalars on one line and an object as JSON", () => {
+        expect(valueText(["a", "b"])).toBe("a, b");
+        expect(valueText({ a: 1 })).toBe('{\n  "a": 1\n}');
+        expect(valueText(undefined)).toBe("");
     });
 });
 

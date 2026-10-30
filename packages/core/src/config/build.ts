@@ -10,6 +10,8 @@ import {
     type Patch,
     type PatchSet,
     type PathSegment,
+    type ReportDetails,
+    type ReportEntryStyle,
     PluginError,
     type ProjectInfo,
 } from "@sous-io/plugin-api";
@@ -66,7 +68,7 @@ export interface BuildHost {
     /** A loaded plugin, by name. */
     plugin(name: string): PluginRecord | undefined;
     /** Reports through the engine's reporter. */
-    log(level: LogLevel, message: string): void;
+    log(level: LogLevel, message: string, details?: ReportDetails, style?: ReportEntryStyle): void;
     /** Called around each contributor run, so the engine can warn about direct entity reads. */
     enterContributor(id: string): void;
     leaveContributor(): void;
@@ -320,7 +322,7 @@ export class ConfigBuild {
                 entityRegistry: this.host.entityRegistry,
                 project: this.host.project,
                 env: this.host.env,
-                log: (level, message) => this.host.log(level, message),
+                log: (level, message, details, style) => this.host.log(level, message, details, style),
             },
             entry.definition.monitors,
         );

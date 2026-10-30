@@ -667,7 +667,7 @@ describe("the config loop", () => {
                         id: "1-reader",
                         contribute: (config) => {
                             seen.push(config.contributor.id, config.contributor.plugin, config.contributor.stage, config.project, config.env.HOME);
-                            config.log("info", "hello");
+                            config.info("hello");
                         },
                     },
                 ]),

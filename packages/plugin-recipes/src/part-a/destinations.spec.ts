@@ -1,6 +1,6 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { builtConfig } from "../../test/part-a/helpers.js";
+import { builtConfig, serviceReader } from "../../test/part-a/helpers.js";
 import { destinationsFor } from "./destinations.js";
 
 /** An absolute project root that is never touched on disk (`D:\project` on Windows). */
@@ -21,6 +21,21 @@ describe("destinationsFor()", () => {
         );
 
         expect(destinationsFor(ctx, "skills")).toEqual(["${projectRoot}/more-skills", "/abs/skills", path.join(root, ".claude", "skills")]);
+    });
+
+    it("should show a directory named by a ${var} and the same directory named by a skill target once, resolved", () => {
+        const ctx = {
+            ...contextWith({ "skill-target": [{ id: "claude-code", directory: ".claude/skills" }] }, { recipes: { skills: { outputs: ["${claudeSkillsDir}"] } } }),
+            services: serviceReader({
+                "variables.resolver": {
+                    scope: () => ({ claudeSkillsDir: path.join(root, ".claude", "skills") }),
+                    substituteStrict: (text: string, scope: Record<string, string>) => text.replace(/\$\{(\w+)\}/g, (_match, name: string) => scope[name] ?? ""),
+                    normalizePath: (value: string) => value,
+                },
+            }),
+        };
+
+        expect(destinationsFor(ctx, "skills")).toEqual([path.join(root, ".claude", "skills")]);
     });
 
     it("should list every memory target's file", () => {

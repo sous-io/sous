@@ -13,7 +13,7 @@
  * environment variables that would answer it, most specific first.
  */
 
-import { NonInteractiveError, type Prompter, type Reporter } from "@sous-io/plugin-api";
+import { LogLevel, NonInteractiveError, type Prompter, type Reporter } from "@sous-io/plugin-api";
 import type { EnvFileKind } from "@sous-io/plugin-config-files/types";
 import type { VariableDefinition } from "@sous-io/plugin-formats/types";
 import { recipeKey } from "./definitions.js";
@@ -372,14 +372,16 @@ async function runQuestion(question: PlannedQuestion, place: { index: number; to
     const { definition } = variable;
     const plan: StoragePlan = { file: answerFileFor(definition), envName: ladder.bareName(variable) };
 
-    run.reporter.note(`Question ${place.index} of ${place.total}: ${definition.name}`, {
-        description: definition.description,
-        example: definition.example,
+    run.reporter.question({
+        index: place.index,
+        total: place.total,
+        name: definition.name,
+        ...(definition.description === undefined ? {} : { description: definition.description }),
+        ...(definition.example === undefined ? {} : { example: String(definition.example) }),
         recipe: recipeKey(variable.recipe),
         storedIn: run.store.envPath(plan.file),
         storedAs: plan.envName,
     });
-    run.reporter.log("info", definition.description);
 
     const answer = await askByType(definition, variable, question.suggestion, run.prompter);
     const checked = check(variable, answer);
@@ -393,8 +395,14 @@ async function runQuestion(question: PlannedQuestion, place: { index: number; to
     const stored = await storeAnswer(variable, String(checked.value), plan, ladder, run);
 
     report.answered.push(stored);
-    run.reporter.note(`Answer: ${stored.envName}=${stored.value}`);
-    run.reporter.note(`${run.dryRun ? "Would be saved to" : "Saved to"}: ${stored.filePath}`);
+    run.reporter.variables(
+        [
+            { label: "Answer", value: `${stored.envName}=${stored.value}` },
+            { label: run.dryRun ? "Would be saved to" : "Saved to", value: stored.filePath },
+        ],
+        undefined,
+        LogLevel.Notice,
+    );
 }
 
 /**

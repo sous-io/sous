@@ -1,23 +1,19 @@
 import { describe, expect, it } from "vitest";
-import type { CliViewContext } from "../../types.js";
-import { Printer } from "../printer.js";
-import { createStyle } from "../style.js";
+import { type CapturedView, type CaptureOptions, captureView } from "../testing.js";
 import { type ContributeResultShape, type SubmitResultShape, views } from "./authoring.js";
 
-/** A view context with no color, 100 columns, and a stand-in for other intents' views. */
-function context(intent: string): CliViewContext {
-    const style = createStyle(false);
+/** Runs a view and returns what a terminal would get (both streams, colors off). */
+async function run(intent: string, result: unknown, options: CaptureOptions = {}): Promise<CapturedView & { text: string }> {
+    const shown = await captureView(views[intent]!, result, { intent, ...options });
 
-    return {
-        intent,
-        input: {},
-        globals: {},
-        style,
-        columns: 100,
-        isTTY: false,
-        printer: () => new Printer(style, 100, false),
-        render: async (other, result) => (other === "repo.submit" ? ((views["repo.submit"]!(result, context(other)) as string | undefined) ?? "") : `[${other}]\n`),
-    };
+    return { ...shown, text: shown.stdout + shown.stderr };
+}
+
+/** Matches a label and its value however the reporter separates them. */
+function fact(label: string, value: string): RegExp {
+    const escape = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    return new RegExp(`${escape(label)}[ :]*${escape(value)}`);
 }
 
 const submitted: SubmitResultShape = {
@@ -37,71 +33,73 @@ const submitted: SubmitResultShape = {
 describe("the authoring views", () => {
     /** Releasing and scaffolding report every line as they run, so their views add nothing. */
     it("should print nothing more for repo release and repo init", async () => {
-        expect(await views["repo.release"]!({ ok: true, plan: [] }, context("repo.release"))).toBeUndefined();
-        expect(await views["repo.init"]!({ directory: "/x", files: [] }, context("repo.init"))).toBeUndefined();
+        expect((await run("repo.release", { ok: true, plan: [] })).text).toBe("");
+        expect((await run("repo.init", { directory: "/x", files: [] })).text).toBe("");
     });
 
-    /**
-     * sous repo submit
-     * // ▶ The pull request that was opened:
-     * //     Repository    : acme/recipes ...
-     */
-    it("should close repo submit with the proposal's facts, as today's command did", async () => {
-        const text = (await views["repo.submit"]!(submitted, context("repo.submit"))) as string;
+    /** `repo submit` closes with the proposal's facts, as today's command did. */
+    it("should close repo submit with the proposal's facts", async () => {
+        const { text } = await run("repo.submit", submitted);
+        const flat = text.replace(/ +/g, " ");
 
-        expect(text.split("\n")).toEqual([
-            " ",
-            "▶ The pull request that was opened:",
-            " ",
-            "    Provider      : github",
-            "    Repository    : acme/recipes",
-            "    Branch        : fix-typo",
-            "    Target branch : main",
-            "    Pushed to     : origin",
-            "    Through a fork: false",
-            "    Title         : Fix a typo",
-            "    Address       : https://github.com/acme/recipes/pull/7",
-            "",
-        ]);
+        expect(flat).toContain("The pull request that was opened");
+        expect(flat).toMatch(fact("Provider", "github"));
+        expect(flat).toMatch(fact("Repository", "acme/recipes"));
+        expect(flat).toMatch(fact("Branch", "fix-typo"));
+        expect(flat).toMatch(fact("Target branch", "main"));
+        expect(flat).toMatch(fact("Pushed to", "origin"));
+        expect(flat).toMatch(fact("Through a fork", "false"));
+        expect(flat).toMatch(fact("Title", "Fix a typo"));
+        expect(flat).toMatch(fact("Address", "https://github.com/acme/recipes/pull/7"));
     });
 
     /** A dry run pushed nothing and opened nothing; an update names the branch. */
     it("should describe a dry run and an update", async () => {
-        const dry = (await views["repo.submit"]!({ ...submitted, dryRun: true, proposal: undefined, committedPaths: ["a.md", "b.md"] }, context("repo.submit"))) as string;
+        const dry = (await run("repo.submit", { ...submitted, dryRun: true, proposal: undefined, committedPaths: ["a.md", "b.md"] })).text.replace(/ +/g, " ");
 
-        expect(dry).toContain("▶ The pull request this would open:");
-        expect(dry).toContain("Pushed to     : (nothing was pushed)");
-        expect(dry).toContain("Committed     : a.md, b.md");
-        expect(dry).toContain("Address       : (not opened yet)");
+        expect(dry).toContain("The pull request this would open");
+        expect(dry).toMatch(fact("Pushed to", "(nothing was pushed)"));
+        expect(dry).toMatch(fact("Committed", "a.md, b.md"));
+        expect(dry).toMatch(fact("Address", "(not opened yet)"));
 
-        const updated = (await views["repo.submit"]!({ ...submitted, outcome: "updated", proposal: { title: "Fix" } }, context("repo.submit"))) as string;
+        const updated = (await run("repo.submit", { ...submitted, outcome: "updated", proposal: { title: "Fix" } })).text;
 
-        expect(updated).toContain("▶ The pull request for 'fix-typo':");
+        expect(updated).toContain("The pull request for 'fix-typo'");
         expect(updated).toContain("(the provider printed no address)");
     });
 
     /** A status look-up and a cancelled run reported everything already. */
     it("should print nothing more for a status look-up or a cancelled submit", async () => {
-        expect(await views["repo.submit"]!({ ...submitted, outcome: "status" }, context("repo.submit"))).toBeUndefined();
-        expect(await views["repo.submit"]!({ ...submitted, outcome: "cancelled" }, context("repo.submit"))).toBeUndefined();
+        expect((await run("repo.submit", { ...submitted, outcome: "status" })).text).toBe("");
+        expect((await run("repo.submit", { ...submitted, outcome: "cancelled" })).text).toBe("");
     });
 
     /** Contributing shows each step's own view in order, then what a start completed. */
     it("should show each step of repo contribute through its own view", async () => {
+        const shownIntents: string[] = [];
+        const options: CaptureOptions = {
+            show: async (intent) => {
+                shownIntents.push(intent);
+            },
+        };
         const started: ContributeResultShape = { stage: "linked", link: { repo: "acme" }, dryRun: false, completed: ["Linked acme"] };
-        const start = (await views["repo.contribute"]!(started, context("repo.contribute"))) as string;
+        const start = await run("repo.contribute", started, options);
 
-        expect(start.startsWith("[repo.link]\n")).toBe(true);
-        expect(start).toContain("▶ What this run did:");
-        expect(start).toContain("    • Linked acme");
+        expect(shownIntents).toEqual(["repo.link"]);
+        expect(start.text).toContain("What this run did");
+        expect(start.text).toContain("Linked acme");
+
+        shownIntents.length = 0;
 
         const finished: ContributeResultShape = { stage: "finished", submit: submitted, unlink: { repo: "acme" }, dryRun: false, completed: ["a", "b"] };
-        const finish = (await views["repo.contribute"]!(finished, context("repo.contribute"))) as string;
+        const finish = await run("repo.contribute", finished, options);
 
-        expect(finish).toContain("▶ The pull request that was opened:");
-        expect(finish.indexOf("pull request")).toBeLessThan(finish.indexOf("[repo.unlink]"));
-        expect(finish).not.toContain("What this run did");
+        expect(shownIntents).toEqual(["repo.submit", "repo.unlink"]);
+        expect(finish.text).not.toContain("What this run did");
 
-        expect(await views["repo.contribute"]!({ stage: "linked", dryRun: true, completed: [] }, context("repo.contribute"))).toBeUndefined();
+        shownIntents.length = 0;
+
+        expect((await run("repo.contribute", { stage: "linked", dryRun: true, completed: [] }, options)).text).toBe("");
+        expect(shownIntents).toEqual([]);
     });
 });

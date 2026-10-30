@@ -102,13 +102,11 @@ export async function definedVariables(ctx: Context, resolved: readonly Resolved
     return { defined, unreadable };
 }
 
-/** Every question the recipes ask, in recipe order, each with whether something answers it. */
-export async function planQuestions(ctx: Context, resolved: readonly ResolvedRecipe[]): Promise<PlannedQuestions> {
+/** One question per defined variable, each with where its answer is stored and whether something answers it. */
+export function plannedQuestionsOf(ctx: Context, defined: readonly DefinedLike[]): PlannedQuestion[] {
     const ladder = ctx.services.has("recipe-answers.ladder") ? (ctx.services.get("recipe-answers.ladder" as never) as LadderLike) : undefined;
-    const { defined, unreadable } = await definedVariables(ctx, resolved);
-    const questions: PlannedQuestion[] = [];
 
-    for (const variable of defined) {
+    return defined.map((variable) => {
         const { definition } = variable;
         let found: ReturnType<LadderLike["resolve"]>;
         let storedAs: string | undefined;
@@ -120,15 +118,20 @@ export async function planQuestions(ctx: Context, resolved: readonly ResolvedRec
             // A variable the ladder cannot place is shown without where it is stored.
         }
 
-        questions.push({
+        return {
             recipe: `${variable.recipe.namespace}/${variable.recipe.name}`,
             definition,
             ...(storedAs === undefined ? {} : { storedAs }),
             ...(ctx.project === undefined ? {} : { storagePath: path.join(ctx.project.sousDir, envFileOf(definition)) }),
             answered: found !== undefined,
             ...(found === undefined ? {} : { answeredFrom: describeSource(found.source) }),
-        });
-    }
+        };
+    });
+}
 
-    return { questions, unreadable };
+/** Every question the recipes ask, in recipe order, each with whether something answers it. */
+export async function planQuestions(ctx: Context, resolved: readonly ResolvedRecipe[]): Promise<PlannedQuestions> {
+    const { defined, unreadable } = await definedVariables(ctx, resolved);
+
+    return { questions: plannedQuestionsOf(ctx, defined), unreadable };
 }

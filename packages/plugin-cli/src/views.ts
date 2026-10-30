@@ -1,27 +1,37 @@
-import type { TimingEntry } from "@sous-io/plugin-api";
+import type { Reporter, TimingEntry } from "@sous-io/plugin-api";
 
-export { renderResult } from "./views/show.js";
+export { reportResult } from "./views/show.js";
 
 /**
- * Every timing of the run, for `--timings`: one line per key, slowest total first.
+ * Reports every timing of the run, for `--timings`: one row per key, slowest total first.
  *
  * ```text
- * Timings:
- *   config.build:config          1 call     12.4ms total   12.4ms max   budget 200ms
+ * ➔ Timings:
+ *   Name                 Calls  Total     Max      Budget
+ *   config.build:config      1  12.4 ms   12.4 ms  200 ms
  * ```
  */
-export function renderTimings(entries: readonly TimingEntry[]): string {
-    const sorted = [...entries].sort((a, b) => b.totalMs - a.totalMs);
-    const width = Math.min(48, Math.max(0, ...sorted.map((entry) => entry.key.length)));
-    const lines = sorted.map((entry) => {
-        const calls = `${entry.count} call${entry.count === 1 ? "" : "s"}`.padStart(9);
-        const total = `${entry.totalMs.toFixed(1)}ms total`.padStart(15);
-        const max = `${entry.maxMs.toFixed(1)}ms max`.padStart(13);
-        const budget = entry.budgetMs === false ? "no budget warning" : `budget ${entry.budgetMs}ms`;
-        const over = entry.overBudget > 0 ? `, ${entry.overBudget} over` : "";
+export function reportTimings(reporter: Reporter, entries: readonly TimingEntry[]): void {
+    const rows = [...entries]
+        .sort((a, b) => b.totalMs - a.totalMs)
+        .map((entry) => ({
+            name: entry.key,
+            calls: entry.count,
+            total: `${entry.totalMs.toFixed(1)} ms`,
+            max: `${entry.maxMs.toFixed(1)} ms`,
+            budget: `${entry.budgetMs === false ? "no budget warning" : `budget ${entry.budgetMs} ms`}${entry.overBudget > 0 ? `, ${entry.overBudget} over` : ""}`,
+        }));
 
-        return `  ${entry.key.padEnd(width)} ${calls} ${total} ${max}   ${budget}${over}`;
-    });
-
-    return `Timings:\n${lines.join("\n")}\n`;
+    reporter.table(
+        [
+            { key: "name", header: "Name", overflow: "truncate", truncate: "middle" },
+            { key: "calls", header: "Calls", kind: "number" },
+            { key: "total", header: "Total", kind: "number" },
+            { key: "max", header: "Max", kind: "number" },
+            { key: "budget", header: "Budget", priority: "low" },
+        ],
+        rows,
+        { title: "Timings" },
+        "notice",
+    );
 }

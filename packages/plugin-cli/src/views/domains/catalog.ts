@@ -7,11 +7,10 @@
  * upstream), so these views leave those notes out.
  */
 
-import path from "node:path";
+import type { Reporter, TableColumn, VariableEntry } from "@sous-io/plugin-api";
 import type { CliViewContext, CliViewEntity } from "../../types.js";
-import type { Printer, VariableEntry } from "../printer.js";
-import type { TableColumn } from "../table.js";
-import { BULLET, indent, wrapText } from "../text.js";
+import { projectVariables } from "../command-variables.js";
+import { writeQuestionPlan, type QuestionPlanShape } from "./questions.js";
 
 // --- The result shapes these views read (plugin-recipes' types, structurally) --------------------
 
@@ -92,19 +91,6 @@ export interface RecipeDetailShape {
     readonly questions?: QuestionPlanShape;
 }
 
-/** The questions some recipes would ask (plugin-recipes' `PlannedQuestions`). */
-export interface QuestionPlanShape {
-    readonly questions: ReadonlyArray<{
-        readonly recipe: string;
-        readonly definition: VariableShape;
-        readonly storedAs?: string;
-        readonly storagePath?: string;
-        readonly answered: boolean;
-        readonly answeredFrom?: string;
-    }>;
-    readonly unreadable: readonly string[];
-}
-
 /** One match `repo.search` returns. */
 export interface SearchMatchShape {
     readonly key: string;
@@ -135,9 +121,6 @@ export interface RepoListingShape {
 }
 
 // --- Shared wording and columns --------------------------------------------------------------------
-
-/** How far every line of a browsing command's output is indented. */
-export const INDENT = 2;
 
 /** The columns a recipe listing shows. */
 export const RECIPE_COLUMNS: TableColumn[] = [
@@ -224,24 +207,24 @@ export function recipeColumns(installed: boolean): TableColumn[] {
 }
 
 /** Recipe listings as table rows. */
-export function recipeRows(listings: readonly RecipeListingShape[], view: CliViewContext): Array<Record<string, string>> {
+export function recipeRows(listings: readonly RecipeListingShape[]): Array<Record<string, string>> {
     return listings.map((entry) => ({
         key: entry.key,
         repo: entry.repo,
         latest: entry.latest ?? "none published",
-        pinned: pinnedCell(entry.pinned, entry.linkedPath, view),
+        pinned: pinnedCell(entry.pinned, entry.linkedPath),
         subscribed: entry.subscribed ? "yes" : "no",
         description: entry.description ?? "no description published",
     }));
 }
 
 /** The pinned version as a cell, marked `linked` when builds read a linked checkout. */
-export function pinnedCell(pinned: string | undefined, linkedPath: string | undefined, view: CliViewContext): string {
+export function pinnedCell(pinned: string | undefined, linkedPath: string | undefined): string {
     if (pinned === undefined) {
         return "";
     }
 
-    return linkedPath === undefined ? pinned : `${pinned} ${view.style.muted("linked")}`;
+    return linkedPath === undefined ? pinned : `${pinned} linked`;
 }
 
 /** Plain wording for how much of a namespace the project subscribes to. */
@@ -299,34 +282,9 @@ export function noDestinationText(kind: string): string {
     }
 }
 
-/** One labeled fact: the label, and the lines beside it. */
-interface Fact {
-    label: string;
-    lines: string[];
-}
-
-function factIf(label: string, value: string | undefined): Fact[] {
-    return value === undefined || value.length === 0 ? [] : [{ label, lines: [value] }];
-}
-
-/** A labeled facts block, indented four, every colon lined up (`renderFacts` today). */
-function printFacts(out: Printer, facts: readonly Fact[]): void {
-    const labelWidth = Math.max(...facts.map((fact) => fact.label.length));
-
-    for (const fact of facts) {
-        fact.lines.forEach((text, index) => {
-            const entry: VariableEntry = { label: index === 0 ? fact.label : "", value: text };
-
-            out.push(...out.formatVariable(entry, { indent: 4, labelWidth }));
-        });
-    }
-}
-
-/** A table, each line indented the browsing commands' two. */
-function printTable(out: Printer, columns: TableColumn[], rows: Array<Record<string, unknown>>, options: { rowNote?: (row: Record<string, unknown>) => string | undefined } = {}): void {
-    for (const line of out.formatTable(columns, rows, { indent: INDENT, ...options })) {
-        out.log(indent(line, INDENT));
-    }
+/** A labeled fact, or nothing when the value is missing or empty. */
+function factIf(label: string, value: string | undefined): VariableEntry[] {
+    return value === undefined || value.length === 0 ? [] : [{ label, value }];
 }
 
 function installedFlag(view: CliViewContext): boolean {
@@ -345,16 +303,8 @@ function installedFlag(view: CliViewContext): boolean {
  *     Reading: the cached indexes
  * ```
  */
-export function browsingVariables(out: Printer, view: Pick<CliViewContext, "input" | "project">, asked: Record<string, string | undefined> = {}): void {
-    const entries: Record<string, unknown> = {};
-
-    if (view.project !== undefined) {
-        entries.Project = path.basename(view.project.root);
-
-        if (view.project.configPath !== undefined) {
-            entries.Config = view.project.configPath;
-        }
-    }
+export function browsingVariables(reporter: Reporter, view: Pick<CliViewContext, "input" | "project" | "projectName">, asked: Record<string, string | undefined> = {}): void {
+    const entries: Record<string, unknown> = { ...projectVariables(view) };
 
     for (const [label, value] of Object.entries(asked)) {
         if (value !== undefined) {
@@ -368,8 +318,7 @@ export function browsingVariables(out: Printer, view: Pick<CliViewContext, "inpu
         entries.Showing = "only what this project has installed";
     }
 
-    out.subheading("Command Variables", "$");
-    out.variables(entries);
+    reporter.commandVariables(entries);
 }
 
 /** The text of a string input, or nothing. */
@@ -382,122 +331,88 @@ function inputText(view: Pick<CliViewContext, "input">, key: string): string | u
 // --- The views -------------------------------------------------------------------------------------
 
 /** `sous namespace list`. */
-function namespaceList(result: readonly NamespaceListingShape[], view: CliViewContext): string {
-    const out = view.printer();
-
-    browsingVariables(out, view);
+function namespaceList(result: readonly NamespaceListingShape[], view: CliViewContext): void {
+    const reporter = view.reporter;
     const installed = installedFlag(view);
 
-    out.heading(installed ? "Namespaces this project has installed recipes from" : "Namespaces in the repositories this project trusts");
-    out.blank();
+    browsingVariables(reporter, view);
+    reporter.operationStart(installed ? "Namespaces this project has installed recipes from" : "Namespaces in the repositories this project trusts");
 
-    if (result.length === 0) {
-        out.paragraph(installed ? "This project has installed no recipe from the repositories it trusts." : "The repositories this project trusts publish no namespaces.");
-    } else {
-        const columns = installed ? NAMESPACE_COLUMNS.map((column) => (column.key === "recipes" ? { ...column, header: "Installed" } : column)) : NAMESPACE_COLUMNS;
+    const columns = installed ? NAMESPACE_COLUMNS.map((column) => (column.key === "recipes" ? { ...column, header: "Installed" } : column)) : NAMESPACE_COLUMNS;
 
-        printTable(
-            out,
-            columns,
-            result.map((entry) => ({
-                namespace: entry.namespace,
-                repo: entry.repo,
-                recipes: String(entry.recipeCount),
-                subscribed: describeCoverage(entry.subscribed),
-                description: entry.description ?? "no description published",
-            })),
-        );
-    }
-
-    return out.footer().text();
+    reporter.table(
+        columns,
+        result.map((entry) => ({
+            namespace: entry.namespace,
+            repo: entry.repo,
+            recipes: String(entry.recipeCount),
+            subscribed: describeCoverage(entry.subscribed),
+            description: entry.description ?? "no description published",
+        })),
+        { empty: installed ? "This project has installed no recipe from the repositories it trusts." : "The repositories this project trusts publish no namespaces." },
+    );
 }
 
 /** `sous namespace show <ref>`. */
-function namespaceShow(detail: NamespaceDetailShape, view: CliViewContext): string {
-    const out = view.printer();
-
-    browsingVariables(out, view, { Namespace: inputText(view, "ref") });
+function namespaceShow(detail: NamespaceDetailShape, view: CliViewContext): void {
+    const reporter = view.reporter;
     const installed = installedFlag(view);
 
-    out.heading(`The namespace ${detail.namespace}`);
-    out.blank();
-    printFacts(out, [
-        { label: "Repository", lines: [detail.repo] },
+    browsingVariables(reporter, view, { Namespace: inputText(view, "ref") });
+    reporter.operationStart(`The namespace ${detail.namespace}`);
+    reporter.variables([
+        { label: "Repository", value: detail.repo },
         ...factIf("Location", detail.repoUrl),
         ...factIf("About", detail.description),
-        { label: installed ? "Installed recipes" : "Recipes", lines: [String(detail.recipes.length)] },
-        { label: "Subscribed", lines: [describeCoverage(detail.subscribed)] },
+        { label: installed ? "Installed recipes" : "Recipes", value: String(detail.recipes.length) },
+        { label: "Subscribed", value: describeCoverage(detail.subscribed) },
     ]);
-    out.blank();
-    out.subheading(`Recipes in ${detail.namespace}`);
-    out.blank();
-
-    if (detail.recipes.length === 0) {
-        out.paragraph(`The repository ${detail.repo} publishes no recipes in this namespace.`);
-
-        return out.footer().text();
-    }
-
-    printTable(out, recipeColumns(installed), recipeRows(detail.recipes, view));
+    reporter.table(recipeColumns(installed), recipeRows(detail.recipes), {
+        title: `Recipes in ${detail.namespace}`,
+        empty: `The repository ${detail.repo} publishes no recipes in this namespace.`,
+    });
 
     if (detail.recipes.some((entry) => entry.linkedPath !== undefined)) {
-        out.blank();
-        out.note(LINKED_NOTE);
+        reporter.note(LINKED_NOTE);
     }
-
-    return out.footer().text();
 }
 
 /** `sous recipe list`. */
-function recipeList(result: readonly RecipeListingShape[], view: CliViewContext): string {
-    const out = view.printer();
-
-    browsingVariables(out, view);
+function recipeList(result: readonly RecipeListingShape[], view: CliViewContext): void {
+    const reporter = view.reporter;
     const installed = installedFlag(view);
 
-    out.heading(installed ? "Recipes this project has installed" : "Recipes in the repositories this project trusts");
-    out.blank();
-
-    if (result.length === 0) {
-        out.paragraph(installed ? "This project has installed no recipe from the repositories it trusts." : "The repositories this project trusts publish no recipes.");
-    } else {
-        printTable(out, recipeColumns(installed), recipeRows(result, view));
-    }
+    browsingVariables(reporter, view);
+    reporter.operationStart(installed ? "Recipes this project has installed" : "Recipes in the repositories this project trusts");
+    reporter.table(recipeColumns(installed), recipeRows(result), {
+        empty: installed ? "This project has installed no recipe from the repositories it trusts." : "The repositories this project trusts publish no recipes.",
+    });
 
     if (result.some((entry) => entry.linkedPath !== undefined)) {
-        out.blank();
-        out.note(LINKED_NOTE);
+        reporter.note(LINKED_NOTE);
     }
-
-    return out.footer().text();
 }
 
 /** `sous recipe show <ref>`. */
-function recipeShow(detail: RecipeDetailShape, view: CliViewContext): string {
-    const out = view.printer();
-
-    browsingVariables(out, view, { Recipe: inputText(view, "ref") });
+function recipeShow(detail: RecipeDetailShape, view: CliViewContext): void {
+    const reporter = view.reporter;
     const installed = installedFlag(view);
 
-    out.heading(detail.key);
-    out.blank();
-    printFacts(out, [
-        { label: "Repository", lines: [detail.repo] },
+    browsingVariables(reporter, view, { Recipe: inputText(view, "ref") });
+    reporter.operationStart(detail.key);
+    reporter.variables([
+        { label: "Repository", value: detail.repo },
         ...factIf("Location", detail.repoUrl),
         ...factIf("About", detail.description),
-        { label: "Folder", lines: [detail.path] },
-        { label: "Latest version", lines: [detail.latest ?? "none published"] },
-        { label: installed ? "Installed version" : "Pinned version", lines: [detail.pinned ?? "this project pins none"] },
+        { label: "Folder", value: detail.path },
+        { label: "Latest version", value: detail.latest ?? "none published" },
+        { label: installed ? "Installed version" : "Pinned version", value: detail.pinned ?? "this project pins none" },
         ...factIf("Linked", detail.linkedPath === undefined ? undefined : `builds currently read this recipe from the checkout at ${detail.linkedPath}`),
-        { label: "Subscribed", lines: [detail.subscribed ? "yes" : "no"] },
+        { label: "Subscribed", value: detail.subscribed ? "yes" : "no" },
         ...factIf("Described below", detail.describing),
     ]);
 
-    out.blank();
-    out.subheading("Published versions");
-    out.blank();
-    printTable(
-        out,
+    reporter.table(
         VERSION_COLUMNS,
         detail.versions.map((entry) => ({
             version: entry.version,
@@ -505,63 +420,50 @@ function recipeShow(detail: RecipeDetailShape, view: CliViewContext): string {
             prerelease: entry.prerelease ? "yes" : "no",
             released: entry.releasedAt ?? "not recorded",
         })),
+        { title: "Published versions" },
     );
 
-    out.blank();
-    out.subheading("What it depends on");
-    out.blank();
-
-    if (detail.dependencies.length === 0) {
-        out.paragraph(detail.manifestRead || detail.dependenciesRecorded ? "This recipe depends on nothing else." : "The repository's index records no dependencies for this version.");
-    } else {
-        printTable(
-            out,
-            DEPENDENCY_COLUMNS,
-            detail.dependencies.map((entry) => ({
-                key: entry.key,
-                declared: entry.declared === undefined ? "not recorded in the index" : describeDeclaration(entry.declared),
-                resolved: entry.resolvedVersion ?? (entry.resolvedRange === undefined ? "not recorded in the index" : `the range ${entry.resolvedRange}`),
-                repo: entry.repo ?? "this repository",
-                kind: describeDependencyKind(entry.kind),
-            })),
-        );
-    }
+    reporter.table(
+        DEPENDENCY_COLUMNS,
+        detail.dependencies.map((entry) => ({
+            key: entry.key,
+            declared: entry.declared === undefined ? "not recorded in the index" : describeDeclaration(entry.declared),
+            resolved: entry.resolvedVersion ?? (entry.resolvedRange === undefined ? "not recorded in the index" : `the range ${entry.resolvedRange}`),
+            repo: entry.repo ?? "this repository",
+            kind: describeDependencyKind(entry.kind),
+        })),
+        {
+            title: "What it depends on",
+            empty: detail.manifestRead || detail.dependenciesRecorded ? "This recipe depends on nothing else." : "The repository's index records no dependencies for this version.",
+        },
+    );
 
     if (detail.describing === undefined) {
-        out.blank();
-        out.paragraph("This recipe publishes no version a subscription would install, so nothing is described below.");
+        reporter.info("This recipe publishes no version a subscription would install, so nothing is described below.");
     } else if (detail.installsProblem !== undefined || detail.installs === undefined || detail.questions === undefined) {
-        out.blank();
-        out.paragraph(detail.installsProblem ?? "Sous could not work out what subscribing would install.");
+        reporter.info(detail.installsProblem ?? "Sous could not work out what subscribing would install.");
     } else {
-        printInstalls(out, detail);
-        out.blank();
-        out.subheading("What subscribing asks you");
-        out.blank();
-        writeQuestionPlan(out, detail.questions, { answerHints: false });
+        reportInstalls(reporter, detail);
+        reporter.stepStart("What subscribing asks you");
+        writeQuestionPlan(reporter, detail.questions, { answerHints: false });
     }
 
-    out.blank();
-    out.subheading("Where its files land in this project");
-    out.blank();
-
-    if (!detail.manifestRead) {
-        out.paragraph("The recipe's own files are not on this machine, so the files it publishes are not known here. Subscribing to it fetches them.");
-    } else if (detail.contents.length === 0) {
-        out.paragraph("This recipe publishes no files.");
-    } else {
-        printTable(
-            out,
-            CONTENT_COLUMNS,
-            detail.contents.map((entry) => ({
-                kind: entry.kind,
-                include: entry.include.join(", "),
-                destination: entry.destinations.length > 0 ? entry.destinations.join(", ") : noDestinationText(entry.kind),
-            })),
-        );
-    }
-
-    return out.footer().text();
+    reporter.table(
+        CONTENT_COLUMNS,
+        detail.manifestRead
+            ? detail.contents.map((entry) => ({
+                  kind: entry.kind,
+                  include: entry.include.join(", "),
+                  destination: entry.destinations.length > 0 ? entry.destinations.join(", ") : noDestinationText(entry.kind),
+              }))
+            : [],
+        {
+            title: "Where its files land in this project",
+            empty: detail.manifestRead
+                ? "This recipe publishes no files."
+                : "The recipe's own files are not on this machine, so the files it publishes are not known here. Subscribing to it fetches them.",
+        },
+    );
 }
 
 /**
@@ -584,12 +486,8 @@ export function describeDeclaration(declared: string): string {
 }
 
 /** Every recipe a subscription to the described version installs, and what brings each in. */
-function printInstalls(out: Printer, detail: RecipeDetailShape): void {
-    out.blank();
-    out.subheading("What subscribing installs");
-    out.blank();
-    printTable(
-        out,
+function reportInstalls(reporter: Reporter, detail: RecipeDetailShape): void {
+    reporter.table(
         INSTALLS_COLUMNS,
         (detail.installs ?? []).map((recipe) => {
             const holders = recipe.requestedBy.filter((holder) => holder !== "project");
@@ -601,13 +499,13 @@ function printInstalls(out: Printer, detail: RecipeDetailShape): void {
                 neededBy: holders.length === 0 ? "this subscription" : holders.join(", "),
             };
         }),
+        { title: "What subscribing installs" },
     );
 
     const missing = detail.installsNeed ?? [];
 
     if (missing.length > 0) {
-        out.blank();
-        out.paragraph(
+        reporter.info(
             `Subscribing also needs ${missing.length === 1 ? "a repository" : "repositories"} this project does not trust yet, so what ${missing.length === 1 ? "it publishes" : "they publish"} is not listed above: ` +
                 missing
                     .map((entry) => `${entry.name}${entry.url === undefined ? "" : ` (${entry.url})`}, needed by ${entry.requiredBy.map((holder) => holder.requestedBy).join(", ")}`)
@@ -617,191 +515,87 @@ function printInstalls(out: Printer, detail: RecipeDetailShape): void {
     }
 }
 
-/**
- * The questions some recipes would ask, grouped by recipe, as `subscription add --dry-run` and
- * `recipe show` showed them before the refactor. `answerHints` adds the flag that answers each.
- */
-export function writeQuestionPlan(out: Printer, plan: QuestionPlanShape, options: { answerHints: boolean }): void {
-    const count = plan.questions.length;
-    const unanswered = plan.questions.filter((question) => !question.answered).length;
-    const unreadable =
-        plan.unreadable.length === 0
-            ? undefined
-            : `Not on this machine yet, and their repository's index does not record their questions, so they cannot be listed: ${plan.unreadable.join(", ")}.` +
-              (options.answerHints ? " A dry run downloads nothing; run this command again without '--dry-run' to install them and be asked." : "");
+/** `sous repo search <text>`. */
+function repoSearch(result: readonly SearchMatchShape[], view: CliViewContext): void {
+    const reporter = view.reporter;
+    const text = typeof view.input.text === "string" ? view.input.text : "";
+    const installed = installedFlag(view);
 
-    if (count === 0) {
-        out.paragraph(unreadable ?? "None of these recipes ask any questions, so nothing needs answering.");
+    browsingVariables(reporter, view, { Searching: inputText(view, "text") });
+    reporter.operationStart("Recipes matching your search");
+    reporter.table(
+        installed ? INSTALLED_SEARCH_COLUMNS : SEARCH_COLUMNS,
+        result.map((match) => ({
+            key: match.key,
+            kind: match.kind,
+            versions: match.versions?.join(", ") ?? "",
+            installed: match.installed ?? "",
+            repo: match.repo,
+            description: match.description !== undefined && match.description.length > 0 ? match.description : "no description published",
+        })),
+        { empty: installed ? `Nothing this project has installed matches '${text}'.` : `Nothing in the repositories this project trusts matches '${text}'.` },
+    );
+
+    const limit = typeof view.input.limit === "number" ? view.input.limit : 20;
+
+    if (result.length > 0 && result.length >= limit) {
+        reporter.info(`Only the first ${limit} matches are shown. Raise the number with '--limit'.`);
+    }
+}
+
+/** What `repo list` notes under a repository's row: switched off, its namespaces, its installed pins. */
+function repoNote(entry: RepoListingShape, verbose: boolean): string | undefined {
+    const notes: string[] = [];
+
+    if (!entry.enabled) {
+        notes.push("Switched off in the config, so nothing is read from it.");
+    }
+
+    if (verbose) {
+        const namespaces = entry.namespaces === undefined ? "not fetched" : entry.namespaces.length > 0 ? entry.namespaces.join(", ") : "none";
+
+        notes.push(`Namespaces: ${namespaces}`);
+    }
+
+    if (entry.installed !== undefined && entry.installed.length > 0) {
+        notes.push(`Installed: ${entry.installed.map((pin) => `${pin.key} ${pin.version}`).join(", ")}`);
+    }
+
+    return notes.length > 0 ? notes.join(" ") : undefined;
+}
+
+/** `sous repo list`. */
+function repoList(result: readonly RepoListingShape[], view: CliViewContext): void {
+    const reporter = view.reporter;
+    const verbose = view.input.verbose === true;
+
+    browsingVariables(reporter, view);
+    reporter.operationStart(installedFlag(view) ? "Repositories this project has installed recipes from" : "Repositories this project trusts");
+
+    if (result.length === 0) {
+        reporter.info("This project trusts no repositories yet. Add one with 'sous repo add <url>'; adding a repository is how you trust it.");
 
         return;
     }
 
-    const subject = plan.unreadable.length === 0 ? "These recipes ask" : "The recipes sous could read ask";
+    reporter.table(
+        REPO_COLUMNS,
+        result.map((entry) => ({
+            name: entry.name,
+            url: entry.url,
+            provider: entry.provider,
+            origin: describeOrigin(entry.addedBy),
+            linked: entry.linkedPath === undefined ? "no" : `yes: ${entry.linkedPath}`,
+            recipes: entry.recipeCount === undefined ? "not fetched" : String(entry.recipeCount),
+        })),
+        { rowNotes: result.map((entry) => repoNote(entry, verbose)) },
+    );
 
-    out.paragraph(`${subject} ${count === 1 ? "1 question" : `${count} questions`}, ${unanswered} of which nothing answers yet.`);
-
-    const groups = new Map<string, QuestionPlanShape["questions"][number][]>();
-
-    for (const question of plan.questions) {
-        groups.set(question.recipe, [...(groups.get(question.recipe) ?? []), question]);
-    }
-
-    for (const [recipe, questions] of groups) {
-        out.blank();
-        out.log(`  ${recipe} asks ${questions.length === 1 ? "1 question" : `${questions.length} questions`}:`);
-
-        for (const question of questions) {
-            const variable = question.definition;
-
-            out.blank();
-            out.log(`    ${out.style.cyan(variable.name)}`);
-
-            const facts: Fact[] = [
-                ...factIf("about", variable.description ? firstSentence(variable.description) : undefined),
-                ...(variable.example === undefined ? [] : [{ label: "example", lines: [String(variable.example)] }]),
-                ...factIf("stored-as", question.storedAs),
-                ...factIf("storage-path", question.storagePath),
-                {
-                    label: "answered",
-                    lines: [
-                        question.answered
-                            ? `yes${question.answeredFrom === undefined ? "" : `, from ${question.answeredFrom}`}`
-                            : variable.required === false
-                              ? "no, and an answer is optional"
-                              : "no, and this recipe requires an answer",
-                    ],
-                },
-                ...(options.answerHints ? [{ label: "answer-with", lines: [`--answer ${variable.name}=<value>`] }] : []),
-            ];
-            const labelWidth = Math.max(...facts.map((fact) => fact.label.length));
-
-            for (const fact of facts) {
-                out.push(...out.formatVariable({ label: fact.label, value: fact.lines[0] ?? "" }, { indent: 6, labelWidth }));
-            }
+    for (const entry of result) {
+        if (entry.problem !== undefined) {
+            reporter.warn(`${entry.name} could not be checked upstream, so it is shown from the cache: ${entry.problem}`);
         }
     }
-
-    if (unreadable !== undefined) {
-        out.blank();
-        out.paragraph(unreadable);
-    }
-
-    if (options.answerHints && unanswered > 0) {
-        out.blank();
-        out.paragraph("Answer them all ahead of time by running this command again without '--dry-run', with one '--answer <name>=<value>' for each, or with '--answers-file <path>'.");
-    }
-}
-
-/** The first sentence of a description. */
-export function firstSentence(text: string): string {
-    const match = /^.*?[.!?](?=\s|$)/s.exec(text.trim());
-
-    return (match?.[0] ?? text.trim()).replace(/\s+/g, " ");
-}
-
-/** `sous repo search <text>`. */
-function repoSearch(result: readonly SearchMatchShape[], view: CliViewContext): string {
-    const out = view.printer();
-
-    browsingVariables(out, view, { Searching: inputText(view, "text") });
-    const text = typeof view.input.text === "string" ? view.input.text : "";
-    const installed = installedFlag(view);
-
-    out.section("Recipes matching your search");
-
-    if (result.length === 0) {
-        out.paragraph(installed ? `Nothing this project has installed matches '${text}'.` : `Nothing in the repositories this project trusts matches '${text}'.`);
-    } else {
-        printTable(
-            out,
-            installed ? INSTALLED_SEARCH_COLUMNS : SEARCH_COLUMNS,
-            result.map((match) => ({
-                key: match.key,
-                kind: match.kind,
-                versions: match.versions?.join(", ") ?? "",
-                installed: match.installed ?? "",
-                repo: match.repo,
-                description: match.description !== undefined && match.description.length > 0 ? match.description : "no description published",
-            })),
-        );
-
-        const limit = typeof view.input.limit === "number" ? view.input.limit : 20;
-
-        if (result.length >= limit) {
-            out.blank();
-            out.paragraph(`Only the first ${limit} matches are shown. Raise the number with '--limit'.`);
-        }
-    }
-
-    return out.footer().text();
-}
-
-/** `sous repo list`. */
-function repoList(result: readonly RepoListingShape[], view: CliViewContext): string {
-    const out = view.printer();
-
-    browsingVariables(out, view);
-    const verbose = view.input.verbose === true;
-
-    out.section(installedFlag(view) ? "Repositories this project has installed recipes from" : "Repositories this project trusts");
-
-    if (result.length === 0) {
-        out.paragraph("This project trusts no repositories yet. Add one with 'sous repo add <url>'; adding a repository is how you trust it.");
-
-        return out.footer().text();
-    }
-
-    const rows = result.map((entry) => ({
-        name: entry.name,
-        url: entry.url,
-        provider: entry.provider,
-        origin: describeOrigin(entry.addedBy),
-        linked: entry.linkedPath === undefined ? "no" : `yes: ${entry.linkedPath}`,
-        recipes: entry.recipeCount === undefined ? "not fetched" : String(entry.recipeCount),
-        namespaces: entry.namespaces === undefined ? "not fetched" : entry.namespaces.length > 0 ? entry.namespaces.join(", ") : "none",
-        enabled: entry.enabled,
-        installed: entry.installed,
-    }));
-    const width = Math.max(20, out.wrapWidth - INDENT * 2);
-
-    printTable(out, REPO_COLUMNS, rows, {
-        rowNote: (row) => {
-            const notes: string[] = [];
-
-            if (row.enabled === false) {
-                notes.push("Switched off in the config, so nothing is read from it.");
-            }
-
-            if (verbose) {
-                notes.push(`Namespaces: ${String(row.namespaces)}`);
-            }
-
-            const pins = row.installed as RepoListingShape["installed"];
-
-            if (pins !== undefined && pins.length > 0) {
-                notes.push(`Installed: ${pins.map((pin) => `${pin.key} ${pin.version}`).join(", ")}`);
-            }
-
-            return notes.length === 0
-                ? undefined
-                : notes
-                      .flatMap((text) => wrapText(text, width))
-                      .map((line) => view.style.gray(indent(line, INDENT)))
-                      .join("\n");
-        },
-    });
-
-    const problems = result.filter((entry) => entry.problem !== undefined);
-
-    if (problems.length > 0) {
-        out.blank();
-
-        for (const entry of problems) {
-            out.paragraph(`${BULLET} ${entry.name} could not be checked upstream, so it is shown from the cache: ${entry.problem}`);
-        }
-    }
-
-    return out.footer().text();
 }
 
 /** The views of this domain, by intent. */

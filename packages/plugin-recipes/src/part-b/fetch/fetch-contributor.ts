@@ -74,7 +74,7 @@ export function fetchContributor(runtime: PartBRuntime): ContributorDefinition {
                 }
 
                 for (const line of lines) {
-                    config.log("warning", `Skipped ${line}`);
+                    config.warn(`Skipped ${line}`);
                 }
             }
 
@@ -119,7 +119,7 @@ function readLockfile(runtime: PartBRuntime, file: string, config: ConfigBuilder
 
         return { ...lockfile, repos };
     } catch (error) {
-        config.log("warning", `Sous could not read the lockfile at ${file}, so no recipes are active: ${messageOf(error)}`);
+        config.warn(`Sous could not read the lockfile at ${file}, so no recipes are active: ${messageOf(error)}`);
 
         return emptyLockfile();
     }

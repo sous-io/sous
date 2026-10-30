@@ -1027,7 +1027,7 @@ export interface RecipeUpdatePlan {
     readonly lockfile: Lockfile;
     readonly missingRepos: MissingRepo[];
     /** Variables the new versions declare that have no answer yet. */
-    readonly newVariables: ReadonlyArray<{ readonly recipe: string; readonly name: string }>;
+    readonly newVariables: readonly PlannedQuestion[];
     readonly unreadable: string[];
     readonly unreachable: ReadonlyArray<{ readonly repo: string; readonly reason: string }>;
     /** Recipes held by a link, not updated. */

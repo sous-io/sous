@@ -28,6 +28,8 @@ import {
     type StepStartDetails,
     type TableColumn,
     type TableDetails,
+    type TreeDetails,
+    type TreeNode,
     type VariableDetails,
     type VariableEntry,
     type VariableListDetails,
@@ -274,14 +276,29 @@ export abstract class BaseReporter {
         this.log(level, joinLines(options.title, items.map((item) => `- ${item}`), options.footer), details, ReportEntryStyle.List);
     }
 
-    /** A table of rows. With no rows, a front end shows `options.empty` when it is given. */
-    table(columns: readonly TableColumn[], rows: readonly Readonly<Record<string, unknown>>[], options: { title?: string; empty?: string } = {}, level: LogLevel = LogLevel.Info): void {
+    /**
+     * A table of rows. With no rows, a front end shows `options.empty` when it is given;
+     * `options.rowNotes[i]` is a note shown under row `i`.
+     */
+    table(
+        columns: readonly TableColumn[],
+        rows: readonly Readonly<Record<string, unknown>>[],
+        options: { title?: string; empty?: string; rowNotes?: readonly (string | undefined)[] } = {},
+        level: LogLevel = LogLevel.Info,
+    ): void {
         const details: TableDetails = { ...options, columns, rows };
         const text = rows.length === 0 && options.empty !== undefined
             ? options.empty
             : joinLines(options.title, rows.map((row) => columns.map((column) => plainValue(row[column.key])).join("  ")));
 
         this.log(level, text, details, ReportEntryStyle.Table);
+    }
+
+    /** Items nested under other items, such as each contributor and the changes it made. */
+    tree(nodes: readonly TreeNode[], title?: string, level: LogLevel = LogLevel.Info): void {
+        const details: TreeDetails = title === undefined ? { nodes } : { title, nodes };
+
+        this.log(level, joinLines(title, treeLines(nodes, 0)), details, ReportEntryStyle.Tree);
     }
 
     /** How many things were found: `Found 5 recipes`. `entity` is already in the right number. */
@@ -368,6 +385,14 @@ function toEntries(entries: readonly VariableEntry[] | Readonly<Record<string, u
     return Array.isArray(entries) ? (entries as readonly VariableEntry[]) : Object.entries(entries).map(([label, value]) => ({ label, value }));
 }
 
+/** A tree's items as lines, each indented two spaces per level. */
+function treeLines(nodes: readonly TreeNode[], depth: number): string[] {
+    return nodes.flatMap((node) => [
+        `${"  ".repeat(depth)}${node.label}${node.detail === undefined ? "" : ` (${node.detail})`}`,
+        ...treeLines(node.children ?? [], depth + 1),
+    ]);
+}
+
 /** One entry as `Label: value (detail)`. */
 function entryText(entry: VariableEntry): string {
     return `${entry.label}: ${plainValue(entry.value)}${entry.detail === undefined ? "" : ` (${entry.detail})`}`;
@@ -418,11 +443,10 @@ export type AbstractConstructor<T = object> = abstract new (...args: any[]) => T
  * }
  * ```
  */
-export function Reporting<TBase extends AbstractConstructor>(Base: TBase) {
-    abstract class WithReporting extends Base {
-        /** Where the reporting methods send their messages. */
-        protected abstract get reporter(): Reporter;
-    }
+export function Reporting<TBase extends AbstractConstructor>(Base: TBase): TBase & AbstractConstructor<ReportingMethods> {
+    // The class provides `reporter` (a getter or a field); it is read when a method is called. It is
+    // not declared here, since a declared type cannot hold a protected member.
+    abstract class WithReporting extends Base {}
 
     for (const name of Object.getOwnPropertyNames(BaseReporter.prototype)) {
         if (NOT_ALIASED.includes(name)) {
@@ -438,7 +462,7 @@ export function Reporting<TBase extends AbstractConstructor>(Base: TBase) {
         });
     }
 
-    return WithReporting as typeof WithReporting & AbstractConstructor<ReportingMethods>;
+    return WithReporting as TBase & AbstractConstructor<ReportingMethods>;
 }
 
 /** One message a {@link BufferedReporter} kept. */

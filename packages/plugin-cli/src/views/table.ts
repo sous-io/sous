@@ -8,45 +8,11 @@
  * important columns step aside when the window is too narrow to hold everything.
  */
 
+import type { ColumnAlign, ColumnKind, ColumnOverflow, ColumnPriority, TableColumn, TruncateSide } from "@sous-io/plugin-api";
 import { createStyle, type Style } from "./style.js";
 import { DEFAULT_WRAP_COLUMNS, displayWidth, terminalColumns, wrapText } from "./text.js";
 
-/** What a column holds, which decides how it aligns and where it truncates. */
-export type ColumnKind = "text" | "path" | "url" | "number";
-
-/** What a column does with a cell too long for it. */
-export type ColumnOverflow = "wrap" | "truncate";
-
-/** Which end of a cell is given up when it is truncated. */
-export type TruncateSide = "start" | "middle" | "end";
-
-/** Where a cell sits inside its column. */
-export type ColumnAlign = "left" | "right" | "center";
-
-/** How willingly a column is hidden when the terminal is too narrow. */
-export type ColumnPriority = "low" | "medium" | "high";
-
-/** One column of a table. */
-export interface TableColumn {
-    /** The property each row is read from. */
-    key: string;
-    /** The heading shown above the column. */
-    header: string;
-    /** Whether a long cell wraps onto more lines or is cut. Defaults to wrapping. */
-    overflow?: ColumnOverflow;
-    /** Which end a cut takes from. Defaults by kind: the middle of a path or a URL, the end of anything else. */
-    truncate?: TruncateSide;
-    /** What the column holds. Defaults to plain text. */
-    kind?: ColumnKind;
-    /** Where a cell sits in the column. Defaults to the right for a number, the left for everything else. */
-    align?: ColumnAlign;
-    /** This column's share of any width left over once every column has its natural width. Defaults to none. */
-    flex?: number;
-    /** The narrowest this column is ever squeezed to. Defaults to the width of its heading. */
-    minWidth?: number;
-    /** How willingly the column is hidden. A high column is never hidden; a low one goes first. Defaults to high. */
-    priority?: ColumnPriority;
-}
+export type { ColumnAlign, ColumnKind, ColumnOverflow, ColumnPriority, TableColumn, TruncateSide };
 
 /** Everything about a table that is not a column. */
 export interface TableOptions<Row extends Record<string, unknown>> {

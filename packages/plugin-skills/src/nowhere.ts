@@ -11,8 +11,14 @@ import { skillDestinations } from "./destinations.js";
 import { stringsOf } from "./settings.js";
 import type { SkillSource, SkillsSources } from "./types.js";
 
-/** The message for skills that go nowhere, or `undefined` when there are none. */
-export function describeNowhere(sources: readonly SkillSource[]): string | undefined {
+/** One warning about skills: what is wrong and, when there is something to do about it, what to do. */
+export interface SkillWarning {
+    readonly summary: string;
+    readonly hint?: string;
+}
+
+/** The warning for skills that go nowhere, or `undefined` when there are none. */
+export function describeNowhere(sources: readonly SkillSource[]): SkillWarning | undefined {
     const recipes = new Set(sources.flatMap((source) => (source.recipe === undefined ? [] : [source.recipe]))).size;
     const own = sources.filter((source) => source.origin === "project").length;
     const parts: string[] = [];
@@ -29,20 +35,20 @@ export function describeNowhere(sources: readonly SkillSource[]): string | undef
         return undefined;
     }
 
-    return (
-        `Skipped ${parts.join(" and ")}: nothing says where skills go.\n` +
-        `  Set recipes.skills.outputs in the config, or enable an agent plugin (such as @sous-io/plugin-claude-code).`
-    );
+    return {
+        summary: `Skipped ${parts.join(" and ")}: nothing says where skills go.`,
+        hint: "Set recipes.skills.outputs in the config, or enable an agent plugin (such as @sous-io/plugin-claude-code).",
+    };
 }
 
 /** Every warning about skills for the config a compile runs with. */
-export function skillWarnings(ctx: Pick<Context, "config" | "entities" | "services">): string[] {
+export function skillWarnings(ctx: Pick<Context, "config" | "entities" | "services">): SkillWarning[] {
     if (!ctx.services.has("skills.sources")) {
         return [];
     }
 
     const sources = ctx.services.get("skills.sources") as SkillsSources & { problems?(): string[] };
-    const warnings = sources.problems?.() ?? [];
+    const warnings: SkillWarning[] = (sources.problems?.() ?? []).map((summary) => ({ summary }));
     const destinations = skillDestinations(stringsOf(ctx.config.get("recipes.skills.outputs")), ctx.entities.list("skill-target"));
 
     if (destinations.length === 0) {

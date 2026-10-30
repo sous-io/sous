@@ -55,7 +55,7 @@ describe("compiler.prune", () => {
         expect(result).toEqual({ removed: [stale], dirsRemoved: [], dryRun: false });
         expect(fs.existsSync(stale)).toBe(false);
         expect(loadState(statePath()).files.find((entry) => entry.dest === stale)).toBeUndefined();
-        expect(compiler.output()).toContain(`  ✗ pruned: ${stale}`);
+        expect(compiler.output()).toContain(`removed: ${stale}`);
     });
 
     /** A plain build (compile, then prune) removes an output dropped from the config. */
@@ -133,7 +133,7 @@ describe("compiler.prune", () => {
 
         expect(result).toEqual({ removed: [stale], dirsRemoved: [], dryRun: true });
         expect(fs.existsSync(stale)).toBe(true);
-        expect(compiler.output()).toContain(`  ○ would prune: ${stale}`);
+        expect(compiler.output()).toContain(`would-remove: ${stale}`);
         expect(loadState(statePath()).files.find((entry) => entry.dest === stale)).toBeDefined();
     });
 

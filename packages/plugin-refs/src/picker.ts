@@ -57,7 +57,7 @@ export function createRefsPicker(locations: () => RefsLocations): RefsPicker {
     const announce = (io: RefPickIo, ref: SousRef, search: string, reason?: string): void => {
         const facts = resolvedRefFacts(ref, search, reason);
 
-        io.reporter.note(reasonOf(facts), { ...facts });
+        io.reporter.resolvedReference(reasonOf(facts), facts);
     };
 
     return {
@@ -88,7 +88,7 @@ export function createRefsPicker(locations: () => RefsLocations): RefsPicker {
                 if (shouldAnnounce) {
                     announce(io, first, search, reason);
                 } else {
-                    io.reporter.note(reason);
+                    io.reporter.notice(reason);
                 }
 
                 return first;

@@ -9,7 +9,6 @@
  */
 
 import type { CliViewContext, CliViewEntity } from "../../types.js";
-import { BULLET } from "../text.js";
 
 /** The part of a proposal the views read. */
 interface ProposalFacts {
@@ -48,24 +47,12 @@ export interface ContributeResultShape {
  * changelog, the status and the closing sentence were reported as the run went, and a status look-up
  * or a cancelled run reported everything there was to say.
  *
- * ```text
- * ▶ The pull request that was opened:
- *
- *     Provider      : github
- *     Repository    : acme/recipes
- *     Branch        : fix-typo
- *     Target branch : main
- *     Pushed to     : origin
- *     Through a fork: false
- *     Address       : https://github.com/acme/recipes/pull/7
- * ```
  */
-export function submitView(result: SubmitResultShape, view: CliViewContext): string | undefined {
+export function submitView(result: SubmitResultShape, view: CliViewContext): void {
     if (result.outcome === "status" || result.outcome === "cancelled") {
-        return undefined;
+        return;
     }
 
-    const out = view.printer();
     const noun = result.proposalNoun;
     const heading =
         result.outcome === "created"
@@ -78,8 +65,8 @@ export function submitView(result: SubmitResultShape, view: CliViewContext): str
     const title = result.title ?? result.proposal?.title;
     const url = result.proposal?.url;
 
-    out.section(heading);
-    out.variables({
+    view.reporter.operationStart(heading);
+    view.reporter.variables({
         ...(result.host === undefined ? {} : { Provider: result.host }),
         Repository: result.repo,
         Branch: result.branch,
@@ -90,8 +77,6 @@ export function submitView(result: SubmitResultShape, view: CliViewContext): str
         ...(result.committedPaths === undefined || result.committedPaths.length === 0 ? {} : { Committed: result.committedPaths.join(", ") }),
         Address: url ?? (result.dryRun ? "(not opened yet)" : "(the provider printed no address)"),
     });
-
-    return out.text();
 }
 
 /**
@@ -99,37 +84,23 @@ export function submitView(result: SubmitResultShape, view: CliViewContext): str
  * each nested command's output; then, after starting one, the steps that completed (finishing one
  * reported them itself).
  */
-export async function contributeView(result: ContributeResultShape, view: CliViewContext): Promise<string | undefined> {
-    const parts: string[] = [];
-
+export async function contributeView(result: ContributeResultShape, view: CliViewContext): Promise<void> {
     if (result.link !== undefined) {
-        parts.push(await view.render("repo.link", result.link));
+        await view.show("repo.link", result.link);
     }
 
     if (result.submit !== undefined) {
-        parts.push(await view.render("repo.submit", result.submit));
+        await view.show("repo.submit", result.submit);
     }
 
     if (result.unlink !== undefined) {
-        parts.push(await view.render("repo.unlink", result.unlink));
+        await view.show("repo.unlink", result.unlink);
     }
 
     if (result.stage === "linked" && !result.dryRun && result.completed.length > 0) {
-        const out = view.printer();
-
-        out.section("What this run did");
-
-        for (const entry of result.completed) {
-            out.paragraph(`${BULLET} ${entry}`, { indent: 4, hangingIndent: 2 });
-        }
-
-        out.footer();
-        parts.push(out.text());
+        view.reporter.operationStart("What this run did");
+        view.reporter.list(result.completed);
     }
-
-    const text = parts.join("");
-
-    return text === "" ? undefined : text;
 }
 
 /** The views of this domain, by intent. */

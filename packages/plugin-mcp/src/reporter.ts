@@ -1,4 +1,4 @@
-import { isLevelShown, type LogLevel, type ProgressEvent, type ReportDetails, type Reporter } from "@sous-io/plugin-api";
+import { BaseReporter, type LogLevel, type ProgressEvent, type ReportDetails, ReportEntryStyle } from "@sous-io/plugin-api";
 import type { ServerNotification } from "@modelcontextprotocol/sdk/types.js";
 
 /** What {@link McpReporter} sends through: one client, in the context of one tool call. */
@@ -14,22 +14,46 @@ export interface McpReporterOptions {
 }
 
 /**
- * A chain's output as MCP log messages. The eight sous levels are the eight MCP
- * levels, so each message keeps its level. Progress goes out as progress notifications when the
- * client gave a progress token, and as `debug` messages otherwise.
+ * A chain's output as MCP log messages. The eight sous levels are the eight MCP levels, so each
+ * message keeps its level. A message with details or a style sends them as data next to the plain
+ * `message`, so a client that ignores styles still reads it. Progress goes out as progress
+ * notifications when the client gave a progress token, and as `debug` messages otherwise. The banner
+ * is dropped.
  *
  * ```ts
  * const reporter = new McpReporter({ send: extra.sendNotification, threshold: () => "info" });
  * reporter.warning("Recipe X declares a variable no template reads.");
  * ```
  */
-export class McpReporter implements Reporter {
+export class McpReporter extends BaseReporter {
     private progressCount = 0;
 
-    constructor(private readonly options: McpReporterOptions) {}
+    constructor(private readonly options: McpReporterOptions) {
+        super(options.threshold);
+    }
 
-    log(level: LogLevel, message: string, details?: ReportDetails): void {
-        if (!isLevelShown(level, this.options.threshold())) {
+    /**
+     * A client that sent a progress token asked for progress, so it gets every event whatever its
+     * log level; without a token, progress is a message like any other.
+     */
+    override progress(event: ProgressEvent, level?: LogLevel): void {
+        if (this.options.progressToken !== undefined) {
+            this.sendProgress(event);
+
+            return;
+        }
+
+        super.progress(event, level);
+    }
+
+    protected write(level: LogLevel, message: string, details: ReportDetails | undefined, style: ReportEntryStyle): void {
+        if (style === ReportEntryStyle.Banner) {
+            return;
+        }
+
+        if (style === ReportEntryStyle.Progress) {
+            this.sendProgress((details as ProgressEvent | undefined) ?? { label: message });
+
             return;
         }
 
@@ -38,12 +62,12 @@ export class McpReporter implements Reporter {
             params: {
                 level,
                 logger: this.options.logger ?? "sous",
-                data: details === undefined ? message : { message, ...details },
+                data: details === undefined && style === ReportEntryStyle.Plain ? message : { message, style, ...details },
             },
         });
     }
 
-    progress(event: ProgressEvent): void {
+    private sendProgress(event: ProgressEvent): void {
         const text = event.item ? `${event.label}: ${event.item}` : event.label;
 
         if (this.options.progressToken === undefined) {
@@ -64,14 +88,6 @@ export class McpReporter implements Reporter {
                 message: text,
             },
         });
-    }
-
-    note(message: string, details?: ReportDetails): void {
-        this.log("notice", message, details);
-    }
-
-    warning(message: string, details?: ReportDetails): void {
-        this.log("warning", message, details);
     }
 
     private send(notification: ServerNotification): void {

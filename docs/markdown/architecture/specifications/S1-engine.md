@@ -601,15 +601,34 @@ module for `--help` also works against the 150ms startup budget (G9, very fast).
 
 A command's code loads only when it runs, so `--help` and shell completion stay fast.
 
-### Log levels
+### Reporting: levels and styles
 
-The reporter's output method takes an optional level, using the syslog names in full: `debug`,
-`info`, `notice`, `warning`, `error`, `critical`, `alert` and `emergency`.
+Every message goes through one method of the reporter, `log(level, message, details?, style?)`:
+
+- **The level** uses the syslog names in full: `debug`, `info`, `notice`, `warning`, `error`,
+  `critical`, `alert` and `emergency` (`LogLevel.Notice`, ...).
+- **The style** says what kind of entry the message is (`ReportEntryStyle.OperationStart`,
+  `ReportEntryStyle.Table`, ...), and `details` carries its facts. A caller never formats output: each
+  front end's reporter decides how each style looks (the CLI draws it with colors and alignment, MCP
+  sends the facts as data). A style is added when an output needs one.
+- **The convenience methods** sit on top of `log`: one per level (`debug()` to `emergency()`, plus
+  `warn()` and `emerg()`), each `(message, details?, style?)`, and one or more per style, each with
+  typed parameters and a default level the last parameter overrides (`operationStart(name, level =
+  LogLevel.Notice)`, `operation(action, target, facts)`, `table(columns, rows)`, ...).
+
+All of them are defined once, in `BaseReporter` (plugin-api). `Reporter`, the type plugins see, is
+derived from it; every reporter extends it; the `Reporting` mixin copies its convenience methods onto
+any other class, and a contributor's `ConfigBuilder` reports the same way.
 
 ```ts
-ctx.reporter.log("debug", "plugin-skills re-ran: the skill-target list changed.");
-ctx.reporter.log("warning", "Recipe X declares a variable no template reads.");
+ctx.reporter.debug("plugin-skills re-ran: the skill-target list changed.");
+ctx.reporter.warn("Recipe X declares a variable no template reads.");
+ctx.reporter.operationStart("Building the project");
+ctx.reporter.operation("written", "/work/app/CLAUDE.md", { tokens: 1840 });
 ```
+
+The CLI sends `debug`, `info` and `notice` to standard output and `warning` and above to standard
+error; under `--json`, only the JSON result goes to standard output.
 
 Every CLI command accepts `--log-level <level>`, which shows messages at that level and above, and
 `--debug`, which means `--log-level debug`. Both are `cli-global-argument` entities of `plugin-cli`.
@@ -815,6 +834,16 @@ Warning: building the config took 840ms (budget 200ms).
 None. (The name `plugin-recipes` is an agent decision the user may overrule.)
 
 ## Changes
+
+### 2026-10-30: Every message is a level and a style
+
+"Reporting: levels and styles" replaces "Log levels". Designed by Luke in an agent session
+(2026-10-30): every message goes through `log(level, message, details?, style?)`; convenience methods
+per level and per style are defined once, in `BaseReporter`, and `Reporter` is derived from it; each
+front end decides how each style looks; the views show results through the same reporter. Ruled in
+the same session: "I'm trying to avoid needing to define the convenience methods in more than one
+place." and, on output streams, "3, our new "level" settings on output allow users to tune what
+output they see" (progress and results back on standard output).
 
 ### 2026-10-30: Contributors declare an apply order
 

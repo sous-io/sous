@@ -8,7 +8,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Liquid } from "liquidjs";
-import type { Reporter, ServiceContext } from "@sous-io/plugin-api";
+import { LogLevel, nullReporter, Reporting, type ProblemDetails, type Reporter, type ServiceContext } from "@sous-io/plugin-api";
 import type { RefsParser } from "@sous-io/plugin-refs/types";
 import type { VarScope } from "@sous-io/plugin-variables/types";
 import { INCLUDE_LINE_PATTERN, looksLikeIncludeLine, splitIncludeQuery, stableVarsFingerprint } from "./paths.js";
@@ -88,8 +88,11 @@ export interface CompileRunResult {
     readonly included: Set<string>;
 }
 
+/** What a problem report says beyond its summary. */
+type ProblemFacts = Omit<ProblemDetails, "summary">;
+
 /** One run of the compiler over a list of units. */
-export class CompileRun {
+export class CompileRun extends Reporting(Object) {
     private readonly problems: CompileProblem[] = [];
     private readonly outputs: CompiledOutput[] = [];
     private readonly produced = new Set<string>();
@@ -103,7 +106,13 @@ export class CompileRun {
     constructor(
         private readonly deps: CompileDependencies,
         private readonly options: CompileOptions = {},
-    ) {}
+    ) {
+        super();
+    }
+
+    protected get reporter(): Reporter {
+        return this.deps.reporter;
+    }
 
     /** Compiles every unit. */
     async run(units: readonly CompileUnit[]): Promise<CompileRunResult> {
@@ -119,7 +128,7 @@ export class CompileRun {
      * not. Reports nothing.
      */
     reads(unit: CompileUnit, files: ReadonlySet<string>): boolean {
-        const quiet = new CompileRun({ ...this.deps, reporter: { log() {}, progress() {}, note() {}, warning() {} } });
+        const quiet = new CompileRun({ ...this.deps, reporter: nullReporter });
 
         quiet.unit = unit;
         quiet.loadUnit(unit);
@@ -134,29 +143,27 @@ export class CompileRun {
     /** First candidates of includes that found nothing, for `reads`. */
     private readonly wanted: string[] = [];
 
-    private error(message: string, extra: Partial<CompileProblem> = {}): void {
+    /** Records an error and reports it. The record keeps the summary with its cause and hint, the report shows them as facts. */
+    private recordError(summary: string, extra: Partial<CompileProblem> = {}, facts: ProblemFacts = {}): void {
         this.errorCount += 1;
-        this.problems.push({ level: "error", message, ...this.where(), ...extra });
-        this.deps.reporter.log("error", message);
+        this.problems.push({ level: "error", message: problemText(summary, facts), ...this.where(), ...extra });
+        this.problem(summary, facts, LogLevel.Error);
     }
 
-    private warning(message: string, extra: Partial<CompileProblem> = {}): void {
+    /** Records a warning and reports it; under `--strict` it is an error instead. */
+    private recordWarning(summary: string, extra: Partial<CompileProblem> = {}, facts: ProblemFacts = {}): void {
         if (this.options.strict) {
-            this.error(message, extra);
+            this.recordError(summary, extra, facts);
 
             return;
         }
 
-        this.problems.push({ level: "warning", message, ...this.where(), ...extra });
-        this.deps.reporter.warning(message);
+        this.problems.push({ level: "warning", message: problemText(summary, facts), ...this.where(), ...extra });
+        this.problem(summary, facts, LogLevel.Warning);
     }
 
     private where(): { target?: string } {
         return this.unit === undefined ? {} : { target: this.unit.targetName };
-    }
-
-    private info(message: string): void {
-        this.deps.reporter.log("info", message);
     }
 
     /** Reads a unit's source and everything it includes. */
@@ -181,8 +188,8 @@ export class CompileRun {
     private async compileUnit(unit: CompileUnit): Promise<void> {
         this.unit = unit;
         this.sourceComments = unit.includeSourceComments;
-        this.info(`▷ ${unit.content !== undefined ? unit.label : path.basename(unit.source)}`);
-        this.info(`Entry Point: ${unit.label}`);
+        this.stepStart(unit.content !== undefined ? unit.label : path.basename(unit.source));
+        this.variable("Entry Point", unit.label);
 
         const errorsBefore = this.errorCount;
         const entry = this.loadUnit(unit);
@@ -192,7 +199,7 @@ export class CompileRun {
         }
 
         if (entry === null) {
-            this.error(`Failed to compile ${unit.label}`);
+            this.recordError(`Failed to compile ${unit.label}`);
 
             return;
         }
@@ -282,7 +289,7 @@ export class CompileRun {
             const transform = this.deps.transform(id);
 
             if (transform === undefined) {
-                this.error(`The compilation transform "${id}" is not registered.\n  in target: ${unit.targetName}`);
+                this.recordError(`The compilation transform "${id}" is not registered.`, {}, { cause: `in target: ${unit.targetName}` });
                 this.notWritten(output.destination);
 
                 return;
@@ -291,14 +298,14 @@ export class CompileRun {
             try {
                 file = await transform.transform(file, this.deps.serviceContext);
             } catch (error) {
-                this.error(`The compilation transform "${id}" failed on ${unit.label}: ${messageOf(error)}`);
+                this.recordError(`The compilation transform "${id}" failed on ${unit.label}`, {}, { subject: unit.label, cause: messageOf(error) });
                 this.notWritten(output.destination);
 
                 return;
             }
 
             if (file === undefined) {
-                this.info(`  ⊘ ${output.destination} (left out by the transform "${id}")`);
+                this.operation("skipped", output.destination, { note: `left out by the transform "${id}"` });
 
                 return;
             }
@@ -335,7 +342,7 @@ export class CompileRun {
             this.outputs.push({ ...base, ...written, ...(tokens === undefined ? {} : { tokens }) });
             this.reportWritten(written.file, written.action, tokens);
         } catch (error) {
-            this.error(`Failed to write ${file.destination}: ${messageOf(error)}`, { file: file.destination });
+            this.recordError(`Failed to write ${file.destination}`, { file: file.destination }, { subject: file.destination, cause: messageOf(error) });
         }
     }
 
@@ -343,20 +350,24 @@ export class CompileRun {
         switch (action) {
             case "created":
             case "updated":
-                this.info(tokens === undefined ? `  ✓ ${file}` : `  ✓ ${file} (~${new Intl.NumberFormat("en-US").format(tokens)} tokens)`);
+                this.operation("written", file, tokens === undefined ? {} : { tokens });
                 break;
             case "unchanged":
-                this.info(`  ⊘ ${file} (unchanged)`);
+                this.operation("unchanged", file);
                 break;
             case "would-create":
             case "would-update":
-                this.info(`  ○ ${file} (would write)`);
+                this.operation("would-write", file);
                 break;
             case "skipped-untracked":
-                this.warning(
-                    `Not overwritten: ${file}\n  The file exists and sous did not write it, and compilation.overwriteUntracked is false.\n` +
-                        `  Remove the file, or set compilation.overwriteUntracked to true to let sous take it over.`,
+                this.recordWarning(
+                    `Not overwritten: ${file}`,
                     { file },
+                    {
+                        subject: file,
+                        cause: "The file exists and sous did not write it, and compilation.overwriteUntracked is false.",
+                        hint: "Remove the file, or set compilation.overwriteUntracked to true to let sous take it over.",
+                    },
                 );
                 break;
         }
@@ -366,7 +377,7 @@ export class CompileRun {
     private notWritten(file: string): void {
         const verb = this.options.dryRun ? "would not be written" : "not written";
 
-        this.info(fs.existsSync(file) ? `  ✗ ${file} (${verb} because of an error; the previous copy stays)` : `  ✗ ${file} (${verb} because of an error)`);
+        this.operation("failed", file, { note: fs.existsSync(file) ? `${verb} because of an error; the previous copy stays` : `${verb} because of an error` });
     }
 
     /**
@@ -382,7 +393,7 @@ export class CompileRun {
         }
 
         if (!fs.existsSync(file)) {
-            this.error(`File not found: ${file}`, { file });
+            this.recordError(`File not found: ${file}`, { file }, { subject: file });
 
             return null;
         }
@@ -399,7 +410,7 @@ export class CompileRun {
 
             return node;
         } catch (error) {
-            this.error(`Failed to read file ${file}: ${messageOf(error)}`, { file });
+            this.recordError(`Failed to read file ${file}`, { file }, { subject: file, cause: messageOf(error) });
             this.nodes.delete(file);
 
             return null;
@@ -446,12 +457,17 @@ export class CompileRun {
 
             if (!match) {
                 if (looksLikeIncludeLine(trimmed)) {
-                    this.error(
-                        `Malformed include line: ${trimmed}\n  in file: ${where}, line ${lineIndex + 1}\n` +
-                            `  An include is "@" followed by a path that ends in .md, optionally followed by ` +
-                            `"?name=value". The path may hold letters, digits and . _ - / : $ { } * ? [ ] , ~ #.\n` +
-                            `  To write a line that starts with "@" as text, put a word after it.`,
+                    this.recordError(
+                        `Malformed include line: ${trimmed}`,
                         { file: fromFile, line: lineIndex + 1 },
+                        {
+                            subject: where,
+                            line: lineIndex + 1,
+                            cause:
+                                `An include is "@" followed by a path that ends in .md, optionally followed by ` +
+                                `"?name=value". The path may hold letters, digits and . _ - / : $ { } * ? [ ] , ~ #.`,
+                            hint: `To write a line that starts with "@" as text, put a word after it.`,
+                        },
                     );
                 }
 
@@ -479,7 +495,7 @@ export class CompileRun {
             const malformed = this.malformedReference(includePath);
 
             if (malformed !== undefined) {
-                this.error(`Malformed include line: ${line}\n  in file: ${where}, line ${lineNumber}\n  ${malformed}`, { file: fromFile, line: lineNumber });
+                this.recordError(`Malformed include line: ${line}`, { file: fromFile, line: lineNumber }, { subject: where, line: lineNumber, cause: malformed });
 
                 return [""];
             }
@@ -489,16 +505,16 @@ export class CompileRun {
             }
 
             const explanation = result.namespaceProblem
-                ? `\n${this.deps.includes.describeNamespaceProblem(result.namespaceProblem)}`
+                ? this.deps.includes.describeNamespaceProblem(result.namespaceProblem)
                 : result.hashProblem
-                  ? `\n  in file: ${where}\n  ${result.hashProblem.split("\n").join("\n  ")}`
-                  : `\n  in file: ${where}`;
+                  ? result.hashProblem
+                  : undefined;
+            const tried = `tried:\n${result.candidates.map((candidate) => `  - ${candidate}`).join("\n")}`;
 
-            this.error(
-                `${result.glob ? "Include matched no files" : "Include not found"}: @${includePath}${explanation}\n  tried:\n${result.candidates
-                    .map((candidate) => `    - ${candidate}`)
-                    .join("\n")}`,
+            this.recordError(
+                `${result.glob ? "Include matched no files" : "Include not found"}: @${includePath}`,
                 { file: fromFile, line: lineNumber },
+                { subject: where, line: lineNumber, cause: explanation === undefined ? tried : `${explanation}\n${tried}` },
             );
 
             return [""];
@@ -508,7 +524,7 @@ export class CompileRun {
 
         for (const file of result.files) {
             if (this.includeStack.includes(file)) {
-                this.error(`Circular dependency detected: ${this.includeStack.join(" -> ")} -> ${file}`, { file: fromFile, line: lineNumber });
+                this.recordError(`Circular dependency detected: ${this.includeStack.join(" -> ")} -> ${file}`, { file: fromFile, line: lineNumber }, { subject: fromFile, line: lineNumber });
                 parts.push("");
                 continue;
             }
@@ -592,7 +608,7 @@ export class CompileRun {
 
             return (await engine.parseAndRender(content, vars)) as string;
         } catch (error) {
-            this.error(`Template rendering error: ${messageOf(error)}`, { file: fromFile });
+            this.recordError("Template rendering error", { file: fromFile }, { subject: fromFile, cause: messageOf(error) });
 
             return content;
         }
@@ -625,4 +641,9 @@ function modeOf(file: string): number | undefined {
     } catch {
         return undefined;
     }
+}
+
+/** A problem as plain text: the summary, then its cause and hint. */
+function problemText(summary: string, facts: ProblemFacts): string {
+    return [summary, facts.cause, facts.hint].filter((part): part is string => part !== undefined).join("\n  ");
 }

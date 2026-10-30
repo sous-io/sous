@@ -226,4 +226,4 @@ export default buildPlugin;
 
 export type * from "./types.js";
 export { renderRuntimeContext } from "./runtime-context.js";
-export { skippedLine, unansweredMessage } from "./report.js";
+export { skippedLine } from "./report.js";

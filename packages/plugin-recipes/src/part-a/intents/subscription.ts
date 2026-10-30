@@ -9,7 +9,7 @@
  * config, so a later layer that sets `enabled: false` switches a subscription off.
  */
 
-import { SousError, type BuiltConfig, type Context, type Sous } from "@sous-io/plugin-api";
+import { LogLevel, SousError, type BuiltConfig, type Context, type Reporter, type Sous } from "@sous-io/plugin-api";
 import type { Lockfile } from "@sous-io/plugin-formats/types";
 import type { NamedRef, SousRef } from "@sous-io/plugin-refs/types";
 import semver from "semver";
@@ -179,17 +179,23 @@ async function pickNamed(ctx: Context, catalog: CatalogContext, readings: readon
     return match.ref.kind === "recipe" && written.kind === "recipe" && written.range !== undefined ? { ...match.ref, range: written.range } : match.ref;
 }
 
-/** The lines reported before the subscribe question: what subscribing does to this project. */
-export function subscriptionPlan(key: string, ref: NamedRef): string[] {
-    return [
-        ref.kind === "namespace"
-            ? `Subscribing to '${key}' subscribes this project to the whole namespace '${ref.name}': every recipe in it, including ones published later.`
-            : `Subscribing to '${key}' installs the recipe '${ref.name}' from the namespace '${ref.namespace?.name ?? "?"}'.`,
-        "The files it ships are compiled into this project's agent directories on the next build.",
-        "Any scripts it ships can be run on this machine when an agent uses them. Sous does not run them itself, and cannot vouch for what they do.",
-        "The variables it publishes are asked about afterwards, and the answers are written to this project's env files.",
-        "Its dependencies are pinned in this project's lockfile at the versions resolved now. A dependency in a repository this project does not trust is asked about by name first.",
-    ];
+/** Reports what subscribing does to this project, before the subscribe question. */
+export function reportSubscriptionPlan(reporter: Reporter, key: string, ref: NamedRef): void {
+    reporter.list(
+        [
+            "The files it ships are compiled into this project's agent directories on the next build.",
+            "Any scripts it ships can be run on this machine when an agent uses them. Sous does not run them itself, and cannot vouch for what they do.",
+            "The variables it publishes are asked about afterwards, and the answers are written to this project's env files.",
+            "Its dependencies are pinned in this project's lockfile at the versions resolved now. A dependency in a repository this project does not trust is asked about by name first.",
+        ],
+        {
+            title:
+                ref.kind === "namespace"
+                    ? `Subscribing to '${key}' subscribes this project to the whole namespace '${ref.name}': every recipe in it, including ones published later.`
+                    : `Subscribing to '${key}' installs the recipe '${ref.name}' from the namespace '${ref.namespace?.name ?? "?"}'.`,
+        },
+        LogLevel.Notice,
+    );
 }
 
 /** Resolves a ref and everything beneath it, trusting new repositories as often as resolution turns them up. */
@@ -236,7 +242,7 @@ async function resolveClosure(input: SubscriptionAddInput, ref: NamedRef, start:
         trusted.push(...done.added);
 
         if (input.dryRun === true) {
-            ctx.reporter.note(`A dry run trusts nothing, so what ${sortBytewise(done.added).join(", ")} would add is not resolved.`);
+            ctx.reporter.dryRun(`A dry run trusts nothing, so what ${sortBytewise(done.added).join(", ")} would add is not resolved.`);
 
             return { resolved: result.resolved, unreadable: result.unreadable, cycles: result.cycles, trusted, ctx };
         }
@@ -278,9 +284,7 @@ export async function addSubscription(input: SubscriptionAddInput, ctx: Context)
     const key = format.key(written.ref);
     const canonical = format.format(written.ref);
 
-    for (const line of subscriptionPlan(key, written.ref)) {
-        ctx.reporter.note(line);
-    }
+    reportSubscriptionPlan(ctx.reporter, key, written.ref);
 
     if (input.dryRun !== true && input.yes !== true) {
         const proceed = await ctx.prompter.confirm({ message: `Subscribe to '${canonical}'?`, answeredBy: "--yes", default: true });
@@ -518,51 +522,36 @@ export async function listSubscriptions(input: BrowsingFlags, ctx: Context): Pro
 
 // --- subscription.update ----------------------------------------------------------------------------
 
-/** The plan, as the lines reported before the update question, worded as before the refactor. */
-export function updatePlanLines(plan: RecipeUpdatePlan): string[] {
-    const lines: string[] = [];
+/** Reports the update plan before the update question. */
+export function reportUpdatePlan(reporter: Reporter, plan: RecipeUpdatePlan): void {
     const scope = describeUpdateScope(plan.scope);
 
     if (isEmptyUpdate(plan)) {
-        lines.push(`Nothing to update: every pin in ${scope} is already the newest published version its range allows.`);
+        reporter.notice(`Nothing to update: every pin in ${scope} is already the newest published version its range allows.`);
     } else {
-        lines.push(`Updating ${scope} changes the lockfile:`, "");
-
-        if (plan.diff.unchanged) {
-            lines.push("  • No pin moves until the repositories below are trusted and read.");
-        } else {
-            for (const change of describeDiff(plan.diff)) {
-                lines.push(`  • ${change}`);
-            }
-        }
+        reporter.list(plan.diff.unchanged ? ["No pin moves until the repositories below are trusted and read."] : describeDiff(plan.diff), { title: `Updating ${scope} changes the lockfile:` }, LogLevel.Notice);
     }
 
     if (plan.missingRepos.length > 0) {
-        lines.push(
-            "",
-            `A newer version needs ${plan.missingRepos.length === 1 ? "a repository" : "repositories"} this project does not trust yet. You are asked about each one by name before anything is fetched from it:`,
-            "",
+        reporter.list(
+            plan.missingRepos.map((missing) => `${missing.name}${missing.url === undefined ? "" : ` at ${missing.url}`}, needed by ${missing.requiredBy.map((entry) => entry.requestedBy).join(", ")}`),
+            {
+                title: `A newer version needs ${plan.missingRepos.length === 1 ? "a repository" : "repositories"} this project does not trust yet. You are asked about each one by name before anything is fetched from it:`,
+            },
+            LogLevel.Notice,
         );
-
-        for (const missing of plan.missingRepos) {
-            const where = missing.url === undefined ? "" : ` at ${missing.url}`;
-
-            lines.push(`  • ${missing.name}${where}, needed by ${missing.requiredBy.map((entry) => entry.requestedBy).join(", ")}`);
-        }
     }
 
     if (plan.newVariables.length > 0 || plan.unreadable.length > 0) {
-        lines.push("", "Questions the new versions ask that nothing answers yet:", "");
-
-        for (const variable of plan.newVariables) {
-            lines.push(`  ${variable.recipe} asks ${variable.name}: answer it with --answer ${variable.name}=<value>`);
-        }
+        const questions = plan.newVariables.map((variable) => `${variable.recipe} asks ${variable.definition.name}: answer it with --answer ${variable.definition.name}=<value>`);
 
         if (plan.unreadable.length > 0) {
-            lines.push(
-                `  Not on this machine yet, and their repository's index does not record their questions, so they cannot be listed: ${plan.unreadable.join(", ")}. A dry run downloads nothing; run this command again without '--dry-run' to install them and be asked.`,
+            questions.push(
+                `Not on this machine yet, and their repository's index does not record their questions, so they cannot be listed: ${plan.unreadable.join(", ")}. A dry run downloads nothing; run this command again without '--dry-run' to install them and be asked.`,
             );
         }
+
+        reporter.list(questions, { title: "Questions the new versions ask that nothing answers yet:" }, LogLevel.Notice);
     }
 
     const notes: string[] = [];
@@ -594,10 +583,8 @@ export function updatePlanLines(plan: RecipeUpdatePlan): string[] {
     }
 
     if (notes.length > 0) {
-        lines.push("", ...notes.map((note) => `• ${note}`));
+        reporter.list(notes, {}, LogLevel.Notice);
     }
-
-    return lines;
 }
 
 /** The first line of a message, trimmed. */
@@ -652,7 +639,7 @@ export async function updateSubscriptions(input: SubscriptionUpdateInput, ctx: C
         plan = await planUpdate(planInput, ctx);
     }
 
-    ctx.reporter.note(updatePlanLines(plan).join("\n"));
+    reportUpdatePlan(ctx.reporter, plan);
 
     if (isEmptyUpdate(plan)) {
         return { ...base, plan, applied: false, nothingToUpdate: true, followUps: [] };

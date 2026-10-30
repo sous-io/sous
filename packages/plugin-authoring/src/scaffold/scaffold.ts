@@ -53,9 +53,11 @@ export async function scaffoldRepo(tools: AuthoringTools, input: RepoInitInput, 
     const dryRun = input.dryRun === true;
     const reporter = tools.reporter;
 
-    reporter.log("info", `Directory: ${directory}`);
-    reporter.log("info", `Name: ${input.name ?? "(from the directory name)"}`);
-    reporter.log("info", `Namespace: ${input.namespace ?? "(same as the repository name)"}`);
+    reporter.variables([
+        { label: "Directory", value: directory },
+        { label: "Name", value: input.name ?? "(from the directory name)" },
+        { label: "Namespace", value: input.namespace ?? "(same as the repository name)" },
+    ]);
 
     assertNoExistingRepo(tools, directory, input.force === true);
 
@@ -73,7 +75,7 @@ export async function scaffoldRepo(tools: AuthoringTools, input: RepoInitInput, 
     };
     const files = [...planFiles(tools, context), ...hostFiles];
 
-    reporter.log("info", "Creating a recipe repository");
+    reporter.operationStart("Creating a recipe repository");
 
     if (!dryRun) {
         for (const file of files) {
@@ -91,7 +93,7 @@ export async function scaffoldRepo(tools: AuthoringTools, input: RepoInitInput, 
     }
 
     for (const file of files) {
-        reporter.log("info", dryRun ? `  Dry run: would write ${file.path}` : `  wrote ${file.path}`);
+        reporter.operation(dryRun ? "would-write" : "written", path.join(directory, file.path));
     }
 
     if (host === undefined) {
@@ -101,18 +103,16 @@ export async function scaffoldRepo(tools: AuthoringTools, input: RepoInitInput, 
         );
     }
 
-    reporter.log(
-        "info",
-        [
-            "What to do next",
-            `  Repository: ${name}`,
-            `  Namespace: ${namespace}`,
-            `  Example recipe: ${path.join("recipes", namespace, EXAMPLE_RECIPE_NAME, RECIPE_MANIFEST_FILE)}`,
-            "  Edit the example recipe, or copy its folder to start another one.",
-            `  Every recipe folder must also be listed under 'recipes' in ${REPO_MANIFEST_FILE}.`,
-            "  Commit the repository and push it, then add it to a project with",
-            "  'sous repo add <url>'. Adding a repository is what trusts it.",
-        ].join("\n"),
+    reporter.operationStart("What to do next");
+    reporter.variables([
+        { label: "Repository", value: name },
+        { label: "Namespace", value: namespace },
+        { label: "Example recipe", value: path.join("recipes", namespace, EXAMPLE_RECIPE_NAME, RECIPE_MANIFEST_FILE) },
+    ]);
+    reporter.note(
+        "Edit the example recipe, or copy its folder to start another one. " +
+            `Every recipe folder must also be listed under 'recipes' in ${REPO_MANIFEST_FILE}. ` +
+            "Commit the repository and push it, then add it to a project with 'sous repo add <url>'. Adding a repository is what trusts it.",
     );
 
     return {

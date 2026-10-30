@@ -1,44 +1,34 @@
-import { ConfigError, type PluginInfo } from "@sous-io/plugin-api";
+import { BufferedReporter, ConfigError, type PluginInfo, ReportEntryStyle } from "@sous-io/plugin-api";
 import { describe, expect, it } from "vitest";
 import type { CliViewContext } from "../../types.js";
-import { Printer } from "../printer.js";
-import { createStyle } from "../style.js";
-import { stripAnsi } from "../text.js";
+import { captureView } from "../testing.js";
 import { type ConfigGetResult, views } from "./inspect.js";
 
-/** A view context: plain 100 columns, or colored like a terminal. */
-function context(intent: string, options: { color?: boolean } = {}): CliViewContext {
-    const style = createStyle(options.color ?? false);
-
-    return {
-        intent,
-        input: {},
-        globals: {},
-        style,
-        columns: 100,
-        isTTY: options.color ?? false,
-        printer: () => new Printer(style, 100, options.color ?? false),
-        render: async () => "",
-    };
+/** Runs a view and returns what a terminal would show (colors off). */
+async function show(intent: string, result: unknown) {
+    return captureView(views[intent]!, result, { intent });
 }
 
-async function show(intent: string, result: unknown, options: { color?: boolean } = {}): Promise<unknown> {
-    return views[intent]!(result, context(intent, options));
+/** Runs a view against a buffering reporter, to read the styles and facts it reported. */
+async function reported(intent: string, result: unknown): Promise<BufferedReporter> {
+    const reporter = new BufferedReporter();
+    const context: CliViewContext = { intent, input: {}, globals: {}, reporter, show: async () => {} };
+
+    await views[intent]!(result, context);
+
+    return reporter;
 }
 
 describe("the config views", () => {
-    /**
-     * `sous config show` prints the config as pretty JSON; colored only on a terminal, so a pipe
-     * still parses.
-     */
-    it("should print the config as JSON, colored only on a terminal", async () => {
+    /** `sous config show` reports the config as data, which a terminal prints as pretty JSON. */
+    it("should print the config as JSON", async () => {
         const result = { config: { name: "demo", n: 1 }, passes: 1 };
-        const plain = (await show("config.show", result)) as string;
-        const colored = (await show("config.show", result, { color: true })) as string;
+        const shown = await show("config.show", result);
+        const messages = (await reported("config.show", result)).styled(ReportEntryStyle.Data);
 
-        expect(JSON.parse(plain)).toEqual({ name: "demo", n: 1 });
-        expect(colored).toContain("\u001b[36m\"name\"\u001b[39m");
-        expect(stripAnsi(colored)).toBe(plain);
+        expect(JSON.parse(shown.stdout)).toEqual({ name: "demo", n: 1 });
+        expect(messages).toHaveLength(1);
+        expect(messages[0]!.details).toEqual({ value: { name: "demo", n: 1 } });
     });
 
     /** A scalar prints raw, without quotes; an object as JSON. */
@@ -46,8 +36,9 @@ describe("the config views", () => {
         const scalar: ConfigGetResult = { path: "name", exists: true, value: "demo", passes: 1 };
         const object: ConfigGetResult = { path: "tools", exists: true, value: { claude: { enabled: true } }, passes: 1 };
 
-        expect(await show("config.get", scalar)).toBe("demo\n");
-        expect(JSON.parse((await show("config.get", object)) as string)).toEqual({ claude: { enabled: true } });
+        expect((await show("config.get", scalar)).stdout.trim()).toBe("demo");
+        expect(JSON.parse((await show("config.get", object)).stdout)).toEqual({ claude: { enabled: true } });
+        expect((await reported("config.get", scalar)).styled(ReportEntryStyle.Text).map((entry) => entry.message)).toEqual(["demo"]);
     });
 
     /** A path with nothing at it is a ConfigError, as before (exit code 1). */
@@ -87,15 +78,16 @@ describe("the config views", () => {
             ],
         };
 
-        expect(await show("config.get", result)).toBe(
-            [
-                'config-files/sous.config.jsonc   "demo"',
-                'confd/610-mac.jsonc              "demo-mac"',
-                "                                 expression: host.platform == 'darwin'",
-                'result                           "demo-mac"   (settled after 2 passes)',
-                "",
-            ].join("\n"),
-        );
+        const shown = (await show("config.get", result)).stdout;
+
+        expect(shown).toContain("config-files/sous.config.jsonc");
+        expect(shown).toContain('"demo"');
+        expect(shown).toContain("confd/610-mac.jsonc");
+        expect(shown).toContain('"demo-mac"');
+        expect(shown).toContain("expression: host.platform == 'darwin'");
+        expect(shown.indexOf("confd/610-mac.jsonc")).toBeLessThan(shown.indexOf("result"));
+        expect(shown).toMatch(/result\s*:?\s*"demo-mac"/);
+        expect(shown).toContain("settled after 2 passes");
     });
 
     /**
@@ -138,14 +130,13 @@ describe("the config views", () => {
             ],
         };
 
-        expect(await show("config.get", result)).toBe(
-            [
-                'sous.config.json          (unset) -> "primary-name"',
-                'conf.d/10-override.json   "primary-name" -> "overridden-name"',
-                'result                    "overridden-name"   (settled after 1 pass)',
-                "",
-            ].join("\n"),
-        );
+        const shown = (await show("config.get", result)).stdout;
+
+        expect(shown).toContain('(unset) -> "primary-name"');
+        expect(shown).toContain('"primary-name" -> "overridden-name"');
+        expect(shown).toContain("conf.d/10-override.json");
+        expect(shown).toContain("settled after 1 pass");
+        expect(shown).not.toContain("1 passes");
     });
 
     /**
@@ -176,46 +167,45 @@ describe("the config views", () => {
             ],
         };
 
-        expect(await show("config.show", result)).toBe(
-            [
-                "confd/620-no-diagrams.js (@sous-io/plugin-confd, apply order 90620)",
-                "  removeWhere",
-                "    removeIndex compilation.targets[7]",
-                "late-fixups (plugin-x, apply order 0, moved to 90621)",
-                "  setKey compilation.overwriteUntracked = false",
-                "result  settled after 1 pass",
-                "",
-            ].join("\n"),
-        );
+        const shown = (await show("config.show", result)).stdout;
+
+        expect(shown).toContain("confd/620-no-diagrams.js (@sous-io/plugin-confd, apply order 90620)");
+        expect(shown).toContain("removeWhere > removeIndex compilation.targets[7]");
+        expect(shown).toContain("late-fixups (plugin-x, apply order 0, moved to 90621)");
+        expect(shown).toContain("setKey compilation.overwriteUntracked = false");
+        expect(shown).toContain("settled after 1 pass");
+        expect(shown.indexOf("confd/620")).toBeLessThan(shown.indexOf("late-fixups"));
     });
 
     /** `config validate`: "Config is valid", or each problem and exit code 1. */
     it("should say the config is valid, or list each problem and fail", async () => {
-        expect(await show("config.validate", { ok: true, issues: [] })).toContain("▶ Config is valid.".replace(".", ":"));
+        expect((await show("config.validate", { ok: true, issues: [] })).stdout).toContain("Config is valid");
 
-        const failed = (await show("config.validate", { ok: false, issues: ["tools.x: Expected object (set by confd/1.js)"] })) as { stdout: string; exitCode: number };
+        const failed = await show("config.validate", { ok: false, issues: ["tools.x: Expected object (set by confd/1.js)"] });
 
         expect(failed.exitCode).toBe(1);
-        expect(failed.stdout).toContain("The config has 1 problem:");
-        expect(failed.stdout).toContain("✗ tools.x: Expected object (set by confd/1.js)");
+        expect(failed.stdout + failed.stderr).toContain("The config has 1 problem");
+        expect(failed.stdout + failed.stderr).toContain("tools.x: Expected object (set by confd/1.js)");
     });
 
     /** A valid config lists what was checked: the file, the layers, the targets and the tools. */
     it("should list what was checked under a valid config", async () => {
         const summary = { configFile: "/p/.sous/sous.config.json", layers: 3, targets: 2, tools: ["claude"] };
-        const text = (await show("config.validate", { ok: true, issues: [], summary })) as string;
+        const text = (await show("config.validate", { ok: true, issues: [], summary })).stdout;
 
-        expect(text).toContain("Config File: /p/.sous/sous.config.json");
-        expect(text).toMatch(/Layers\s*: 3/);
-        expect(text).toMatch(/Targets\s*: 2/);
-        expect(text).toMatch(/Tools\s*: claude/);
+        expect(text).toContain("/p/.sous/sous.config.json");
+        expect(text).toMatch(/Config File\s*:\s*\/p/);
+        expect(text).toMatch(/Layers\s*:\s*3/);
+        expect(text).toMatch(/Targets\s*:\s*2/);
+        expect(text).toMatch(/Tools\s*:\s*claude/);
     });
 
-    /** A problem of several lines keeps its lines, indented under the first. */
-    it("should indent the later lines of a problem under its first", async () => {
-        const failed = (await show("config.validate", { ok: false, issues: ["Unresolved variables in _vars:\n- thing still needs ${bogus}"] })) as { stdout: string };
+    /** A problem of several lines keeps its later lines as the problem's cause. */
+    it("should keep the later lines of a problem as its cause", async () => {
+        const messages = (await reported("config.validate", { ok: false, issues: ["Unresolved variables in _vars:\n- thing still needs ${bogus}"] })).styled(ReportEntryStyle.Problem);
 
-        expect(failed.stdout).toContain("✗ Unresolved variables in _vars:\n      - thing still needs ${bogus}");
+        expect(messages).toHaveLength(1);
+        expect(messages[0]!.details).toMatchObject({ summary: "Unresolved variables in _vars:", cause: "- thing still needs ${bogus}" });
     });
 });
 
@@ -247,32 +237,33 @@ describe("the plugins and timings views", () => {
             },
         ];
 
-        expect(await show("plugins.show", plugins)).toBe(
-            [
-                "plugin-claude-code (built in)",
-                "  entities           harness: claude    skill-target: claude-code",
-                "  listeners          build.after",
-                "sous-plugin-mcp-extras (loaded by sous-plugin-claude-code)",
-                '  options            { "port": 7801 }',
-                "",
-            ].join("\n"),
-        );
+        const shown = (await show("plugins.show", plugins)).stdout;
+
+        expect(shown).toContain("plugin-claude-code (built in)");
+        expect(shown).toMatch(/entities\s*:?\s*harness: claude\s+skill-target: claude-code/);
+        expect(shown).toMatch(/listeners\s*:?\s*build\.after/);
+        expect(shown).toContain("sous-plugin-mcp-extras (loaded by sous-plugin-claude-code)");
+        expect(shown).toMatch(/options\s*:?\s*\{ "port": 7801 \}/);
+        expect(shown.indexOf("plugin-claude-code")).toBeLessThan(shown.indexOf("sous-plugin-mcp-extras"));
     });
 
     /** `sous timings show` uses the `--timings` layout, and says so when there are none. */
     it("should list timings, or say there are none", async () => {
-        expect(await show("timings.show", [])).toBe("No timings yet.\n");
+        expect((await show("timings.show", [])).stdout).toContain("No timings yet.");
         expect(
-            await show("timings.show", [{ key: "intent:build", category: "intent", name: "build", plugin: "p", count: 1, totalMs: 5, maxMs: 5, budgetMs: 100, overBudget: 0 }]),
+            (await show("timings.show", [{ key: "intent:build", category: "intent", name: "build", plugin: "p", count: 1, totalMs: 5, maxMs: 5, budgetMs: 100, overBudget: 0 }])).stdout,
         ).toContain("intent:build");
     });
 
     /** `sous version` prints `v` and the version, as `sous --version` did before the refactor. */
     it("should print the version with a v, and more with --verbose", async () => {
-        expect(await show("version", "1.2.3")).toBe("v1.2.3\n");
+        expect((await show("version", "1.2.3")).stdout.trim()).toBe("v1.2.3");
 
-        const verbose = (await show("version", { name: "@sous-io/sous", version: "1.2.3" })) as string;
+        const verbose = (await show("version", { name: "@sous-io/sous", version: "1.2.3" })).stdout;
 
-        expect(verbose).toMatch(/^v1\.2\.3\n {4}Package : @sous-io\/sous\n {4}Platform: .+\n {4}Node {4}: v\d+/);
+        expect(verbose).toMatch(/^v1\.2\.3\n/);
+        expect(verbose).toMatch(/Package\s*:\s*@sous-io\/sous/);
+        expect(verbose).toMatch(/Platform\s*:\s*\S+/);
+        expect(verbose).toMatch(/Node\s*:\s*v\d+/);
     });
 });

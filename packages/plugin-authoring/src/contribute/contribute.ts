@@ -46,9 +46,11 @@ export async function runContribute(tools: AuthoringTools, input: RepoContribute
     const dryRun = input.dryRun === true;
 
     assertFlagsAgree(input);
-    tools.reporter.log("info", `Reference: ${input.ref}`);
-    tools.reporter.log("info", `Mode: ${finishing ? "Finish a contribution" : "Start a contribution"}`);
-    tools.reporter.log("info", `Scope: ${input.global === true ? "this machine" : "this project"}`);
+    tools.reporter.variables([
+        { label: "Reference", value: input.ref },
+        { label: "Mode", value: finishing ? "Finish a contribution" : "Start a contribution" },
+        { label: "Scope", value: input.global === true ? "this machine" : "this project" },
+    ]);
 
     const repo = await resolveRepository(tools, input.ref, input.acceptFirst === true);
 
@@ -136,6 +138,11 @@ export function unlinkStep(repo: string, input: RepoContributeInput): Contributi
  * ```
  */
 export function commandLine(step: ContributionStep): string {
+    return commandWords(step).map(quoteArgument).join(" ");
+}
+
+/** A step as the words of the command that runs it: `sous`, then its arguments, unquoted. */
+function commandWords(step: ContributionStep): string[] {
     const input = step.input as unknown as Record<string, unknown>;
     const words = ["sous", ...step.intent.split("."), String(input.repo)];
 
@@ -149,7 +156,7 @@ export function commandLine(step: ContributionStep): string {
         words.push(...(value === true ? [flag] : [flag, String(value)]));
     }
 
-    return words.map(quoteArgument).join(" ");
+    return words;
 }
 
 function quoteArgument(value: string): string {
@@ -160,10 +167,11 @@ async function start(tools: AuthoringTools, repo: string, input: RepoContributeI
     const step = startStep(repo, input);
     const steps = [commandLine(step)];
 
-    tools.reporter.log("info", `Starting a contribution\n  This runs one step:\n    ${steps[0]}`);
+    tools.reporter.operationStart("Starting a contribution");
+    reportPlan(tools, [step], dryRun);
 
     if (dryRun) {
-        tools.reporter.note("Dry run: no step was run.");
+        tools.reporter.dryRun("No step was run.");
 
         return { stage: "linked", repo, steps, completed: [], dryRun: true };
     }
@@ -172,12 +180,14 @@ async function start(tools: AuthoringTools, repo: string, input: RepoContributeI
     const link = await runStep(tools, step, completed, run);
     const branch = link.branch ?? (await new RepoGit(tools.git, link.path).currentBranch().catch(() => undefined));
 
-    tools.reporter.log(
-        "info",
-        `Repository: ${repo}\nCheckout: ${link.path}${branch === undefined ? "" : `\nBranch: ${branch}`}\n` +
-            `Builds read '${repo}' from this checkout until the contribution is finished, so an edit made there shows up in ` +
+    tools.reporter.variables([
+        { label: "Repository", value: repo },
+        { label: "Checkout", value: link.path },
+        ...(branch === undefined ? [] : [{ label: "Branch", value: branch }]),
+    ]);
+    tools.reporter.note(
+        `Builds read '${repo}' from this checkout until the contribution is finished, so an edit made there shows up in ` +
             `this project's next build.`,
-        { link },
     );
 
     return { stage: "linked", repo, steps, completed, link, dryRun: false };
@@ -187,32 +197,32 @@ async function finish(tools: AuthoringTools, repo: string, input: RepoContribute
     const linkPath = requireLink(tools, repo, input.global === true);
     const completed: string[] = [];
 
-    tools.reporter.log("info", `Finishing a contribution\n  Repository: ${repo}\n  Checkout: ${linkPath}`);
-    tools.reporter.log("info", "Looking for work no proposal carries yet");
+    tools.reporter.operationStart("Finishing a contribution");
+    tools.reporter.variables([
+        { label: "Repository", value: repo },
+        { label: "Checkout", value: linkPath },
+    ]);
+    tools.reporter.stepStart("Looking for work no proposal carries yet");
 
     const work = await pendingWork(new RepoGit(tools.git, linkPath), input.branch);
     const base = work.baseBranch === undefined ? "upstream" : `origin/${work.baseBranch}`;
 
-    tools.reporter.log(
-        "info",
-        [
-            `  Branch: ${work.branch ?? "(none; HEAD is detached)"}`,
-            `  Uncommitted changes: ${work.uncommitted.length}`,
-            `  Commits ${base} lacks: ${work.ahead.length}`,
-            `  Commits not pushed: ${work.unpushed.length}`,
-            `  Pushed to: ${work.pushedCopies.length === 0 ? "nowhere yet" : work.pushedCopies.join(", ")}`,
-        ].join("\n"),
-        { work },
-    );
+    tools.reporter.variables([
+        { label: "Branch", value: work.branch ?? "(none; HEAD is detached)" },
+        { label: "Uncommitted changes", value: work.uncommitted.length },
+        { label: `Commits ${base} lacks`, value: work.ahead.length },
+        { label: "Commits not pushed", value: work.unpushed.length },
+        { label: "Pushed to", value: work.pushedCopies.length === 0 ? "nowhere yet" : work.pushedCopies.join(", ") },
+    ]);
 
     let verdict = assessPendingWork(work);
 
     if (verdict.kind === "lookup" && !dryRun) {
-        tools.reporter.log("info", verdict.reason);
+        tools.reporter.info(verdict.reason);
         verdict = await lookUpProposal(repo, work.branch!, run);
     }
 
-    tools.reporter.log("info", verdict.reason);
+    tools.reporter.info(verdict.reason);
     completed.push("Looked for work no proposal carries yet");
 
     const unlink = unlinkStep(repo, input);
@@ -220,19 +230,20 @@ async function finish(tools: AuthoringTools, repo: string, input: RepoContribute
 
     if (dryRun) {
         if (verdict.kind === "nothing") {
-            tools.reporter.note("Dry run: would skip submitting, since there is nothing to submit.");
+            tools.reporter.dryRun("Would skip submitting, since there is nothing to submit.");
         } else {
             if (verdict.kind === "lookup") {
-                tools.reporter.note("Dry run: would look the branch's proposal up, and treat the branch as having work to submit when none is open.");
+                tools.reporter.dryRun("Would look the branch's proposal up, and treat the branch as having work to submit when none is open.");
             }
 
-            tools.reporter.note(`Dry run: ${describeSubmitDecision(input)}.`);
+            tools.reporter.dryRun(`${describeSubmitDecision(input)}.`);
         }
 
         const planned = verdict.kind === "nothing" || input.submit === false ? [unlink] : [submit, unlink];
         const steps = planned.map(commandLine);
 
-        tools.reporter.log("info", `${describeSteps(steps)}\nDry run: no step was run.`);
+        reportPlan(tools, planned, true);
+        tools.reporter.dryRun("No step was run.");
 
         return { stage: "finished", repo, steps, completed, verdict: verdict.reason, dryRun: true };
     }
@@ -240,17 +251,17 @@ async function finish(tools: AuthoringTools, repo: string, input: RepoContribute
     const submitting = verdict.kind !== "nothing" && (await shouldSubmit(tools, input));
 
     if (verdict.kind !== "nothing" && !submitting) {
-        tools.reporter.log("info", "It is not submitted; the checkout keeps it.");
+        tools.reporter.info("It is not submitted; the checkout keeps it.");
     }
 
     const steps = submitting ? [commandLine(submit), commandLine(unlink)] : [commandLine(unlink)];
 
-    tools.reporter.log("info", describeSteps(steps));
+    reportPlan(tools, submitting ? [submit, unlink] : [unlink], false);
 
     const submitted = submitting ? await runStep(tools, submit, completed, run) : undefined;
     const unlinked = await runStep(tools, unlink, completed, run);
 
-    tools.reporter.log("info", `What this run did:\n${completed.map((entry) => `  - ${entry}`).join("\n")}`);
+    tools.reporter.list(completed, { title: "What this run did:" });
 
     return {
         stage: "finished",
@@ -389,23 +400,37 @@ async function shouldSubmit(tools: AuthoringTools, input: RepoContributeInput): 
 
 function describeSubmitDecision(input: RepoContributeInput): string {
     if (input.submit === false) {
-        return "would not submit it, because --no-submit was passed";
+        return "Would not submit it, because --no-submit was passed";
     }
 
     if (input.submit === true) {
-        return "would submit it without asking, because --submit was passed";
+        return "Would submit it without asking, because --submit was passed";
     }
 
-    return input.yes === true ? "would submit it without asking, because --yes was passed" : "would ask whether to submit it";
+    return input.yes === true ? "Would submit it without asking, because --yes was passed" : "Would ask whether to submit it";
 }
 
-function describeSteps(steps: readonly string[]): string {
-    return `${steps.length === 1 ? "This runs one step:" : `This runs ${steps.length} steps:`}\n${steps.map((step) => `  - ${step}`).join("\n")}`;
+/** Shows the steps a run takes: as a list, or in a dry run as the commands it would run. */
+function reportPlan(tools: AuthoringTools, steps: readonly ContributionStep[], dryRun: boolean): void {
+    if (dryRun) {
+        for (const step of steps) {
+            const [name = "sous", ...args] = commandWords(step);
+
+            tools.reporter.command(name, args, { dryRun: true });
+        }
+
+        return;
+    }
+
+    tools.reporter.list(steps.map(commandLine), { title: steps.length === 1 ? "This runs one step:" : `This runs ${steps.length} steps:` });
 }
 
 /** Runs one step in the chain; a failure says which steps had completed. */
 async function runStep<N extends StepIntent>(tools: AuthoringTools, step: ContributionStep<N>, completed: string[], run: IntentRunner): Promise<IntentResult<N>> {
-    tools.reporter.log("info", `${step.running}\n  ${commandLine(step)}`);
+    const [name = "sous", ...args] = commandWords(step);
+
+    tools.reporter.stepStart(step.running);
+    tools.reporter.command(name, args);
 
     try {
         const result = await run(step.intent, step.input);

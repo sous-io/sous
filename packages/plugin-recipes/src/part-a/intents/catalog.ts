@@ -27,7 +27,7 @@ export function reportUnread(ctx: Pick<Context, "reporter">, catalog: Pick<Catal
         );
 
         for (const entry of catalog.notChecked) {
-            ctx.reporter.log("debug", `${entry.repo}: ${entry.reason}`);
+            ctx.reporter.debug(`${entry.repo}: ${entry.reason}`);
         }
     }
 }

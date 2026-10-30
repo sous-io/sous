@@ -14,7 +14,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { ConfigError, InputError, SousError, type Context } from "@sous-io/plugin-api";
+import { ConfigError, InputError, LogLevel, SousError, type Context } from "@sous-io/plugin-api";
 import "@sous-io/plugin-host/types";
 import { discoverInstalls, readPackageJson, realpathOr } from "./installs.js";
 import { buildUpdatePlans, type PlannedUpdate } from "./plan.js";
@@ -117,7 +117,7 @@ export function binEntryOf(pkg: Record<string, unknown> | undefined): string | u
 
 /** Runs one command with the terminal handed to it, and returns its exit code. */
 async function execute(ctx: Context, command: PlannedCommand, env = ctx.env): Promise<number> {
-    ctx.reporter.note(`Running: ${formatCommand(command)}${command.cwd === undefined ? "" : ` (in ${command.cwd})`}`);
+    ctx.reporter.command(command.command, command.args, command.cwd === undefined ? {} : { cwd: command.cwd });
 
     const result = await ctx.services.get("host.processes").runInteractive(command.command, command.args, {
         ...(command.cwd === undefined ? {} : { cwd: command.cwd }),
@@ -155,7 +155,9 @@ async function buildProject(plan: PlannedUpdate, directory: string | undefined, 
         const entry = binEntryOf(readPackageJson(root));
 
         if (entry === undefined) {
-            ctx.reporter.log("error", `The update stands, but the new copy at ${root} names no bin sous can run, so the project was not built. Run 'sous build' in the project.`);
+            ctx.reporter.problem(`The update stands, but the new copy at ${root} names no bin sous can run, so the project was not built.`, {
+                hint: "Run 'sous build' in the project.",
+            }, LogLevel.Error);
 
             return { result: "no-bin", directory };
         }
@@ -166,10 +168,10 @@ async function buildProject(plan: PlannedUpdate, directory: string | undefined, 
     const exitCode = await execute(ctx, command, { ...ctx.env, [NO_DELEGATE_ENV]: "1" });
 
     if (exitCode !== 0) {
-        ctx.reporter.log(
-            "error",
-            `The update stands, but the build that followed it exited with code ${exitCode}. Fix what the build reported above and run 'sous build' again.` +
-                (plan.pnpRoot === undefined ? "" : PNP_BUILD_HINT),
+        ctx.reporter.problem(
+            `The update stands, but the build that followed it exited with code ${exitCode}.`,
+            { hint: `Fix what the build reported above and run 'sous build' again.${plan.pnpRoot === undefined ? "" : PNP_BUILD_HINT}` },
+            LogLevel.Error,
         );
 
         return { result: "failed", directory, command, exitCode };
@@ -257,7 +259,7 @@ export async function handle(input: UpdateInput, ctx: Context): Promise<UpdateRe
 
         if (!proceed) {
             if (ctx.prompter.interactive) {
-                ctx.reporter.note(`${title}: ${plan.installed} at ${plan.location}, through ${plan.manager}${plan.managerAssumed ? " (assumed)" : ""}. Will install ${plan.target}: ${formatCommand(plan.command)}`);
+                ctx.reporter.notice(`${title}: ${plan.installed} at ${plan.location}, through ${plan.manager}${plan.managerAssumed ? " (assumed)" : ""}. Will install ${plan.target}: ${formatCommand(plan.command)}`);
             }
 
             proceed = await ctx.prompter.confirm({
@@ -277,7 +279,11 @@ export async function handle(input: UpdateInput, ctx: Context): Promise<UpdateRe
         if (exitCode !== 0) {
             failed = true;
             outcomes.push({ plan, result: "failed", exitCode });
-            ctx.reporter.log("error", `${plan.manager} exited with code ${exitCode}, so the ${title.toLowerCase()} is still at ${plan.installed}. Its own output is above.`);
+            ctx.reporter.problem(
+                `${plan.manager} exited with code ${exitCode}, so the ${title.toLowerCase()} is still at ${plan.installed}.`,
+                { hint: "Its own output is above." },
+                LogLevel.Error,
+            );
             continue;
         }
 

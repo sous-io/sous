@@ -1,16 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { BufferedReporter } from "@sous-io/plugin-api";
+import { BufferedReporter, LogLevel, ReportEntryStyle } from "@sous-io/plugin-api";
 import type { DefinedVariable } from "@sous-io/plugin-recipe-answers/types";
-import {
-    linkedReposMessage,
-    lockedMessage,
-    newerMessage,
-    prunedForSkippedLine,
-    reportPrepared,
-    skippedLine,
-    unansweredMessage,
-    unincludedMemoriesMessage,
-} from "./report.js";
+import { prunedForSkippedLine, reportLinkedRepos, reportPrepared, reportUnanswered, reportUnincludedMemories, skippedLine } from "./report.js";
+import type { BuildPrepareResult } from "./types.js";
 import { nestedBuildHeading } from "./build.js";
 import { NO_CHANGE, NOTHING_RESTORED } from "./prepare.js";
 
@@ -49,69 +41,129 @@ describe("skippedLine()", () => {
     });
 });
 
-describe("unansweredMessage()", () => {
+describe("reportUnanswered()", () => {
     const variable = (name: string) => ({ definition: { name }, recipe: { namespace: "acme", name: "jira" } }) as unknown as DefinedVariable;
 
     /**
      * Required variables with no answer are listed with the recipe asking, and the fix.
      *
-     * unansweredMessage([jiraKey]);
-     * // -> "1 required recipe variable has no answer, ...\n  • jiraKey (asked by acme/jira)\nRun 'sous vars ask' to answer it."
+     * reportUnanswered([jiraKey], reporter);
+     * // -> a warning list: title "1 required recipe variable has no answer, ...", item "jiraKey (asked by acme/jira)"
      */
     it("should list each unanswered variable and say how to answer", () => {
-        expect(unansweredMessage([])).toBeUndefined();
-        expect(unansweredMessage([variable("jiraKey")])).toBe(
-            "1 required recipe variable has no answer, so the templates that use it render an empty value:\n  • jiraKey (asked by acme/jira)\nRun 'sous vars ask' to answer it.",
-        );
-        expect(unansweredMessage([variable("a"), variable("b")])).toContain("2 required recipe variables have no answer");
+        const none = new BufferedReporter();
+
+        reportUnanswered([], none);
+        expect(none.messages).toEqual([]);
+
+        const one = new BufferedReporter();
+
+        reportUnanswered([variable("jiraKey")], one);
+        expect(one.messages).toEqual([
+            {
+                level: "warning",
+                style: ReportEntryStyle.List,
+                message:
+                    "1 required recipe variable has no answer, so the templates that use it render an empty value:\n  - jiraKey (asked by acme/jira)",
+                details: {
+                    title: "1 required recipe variable has no answer, so the templates that use it render an empty value:",
+                    footer: "Run 'sous vars ask' to answer it.",
+                    items: ["jiraKey (asked by acme/jira)"],
+                },
+            },
+        ]);
+
+        const two = new BufferedReporter();
+
+        reportUnanswered([variable("a"), variable("b")], two);
+        expect(two.messages[0]!.message).toContain("2 required recipe variables have no answer");
     });
 });
 
 describe("messages about preparing", () => {
+    const prepared = (overrides: Partial<BuildPrepareResult>): BuildPrepareResult => ({
+        seeded: [],
+        locked: NO_CHANGE,
+        restored: NOTHING_RESTORED,
+        newer: [],
+        checkedUpstream: false,
+        skipped: [],
+        skippedLines: [],
+        unanswered: [],
+        ...overrides,
+    });
+
     /**
-     * Linked repositories are announced, one line each.
+     * Linked repositories are announced as a list, one item each, at the level given.
      *
-     * linkedReposMessage({ acme: { path: "/src/acme" } }); // -> "One repository is LINKED...\nacme -> /src/acme..."
+     * reportLinkedRepos({ acme: { path: "/src/acme" } }, reporter, "notice");
+     * // -> list item "acme -> /src/acme"
      */
     it("should announce linked repositories", () => {
-        expect(linkedReposMessage({})).toBeUndefined();
-        expect(linkedReposMessage({ acme: { path: "/src/acme" } as never })).toContain("One repository is LINKED to a working copy on this machine.\n");
-        expect(linkedReposMessage({ a: { path: "/a" } as never, b: { path: "/b" } as never })).toContain("2 repositories are LINKED");
+        const none = new BufferedReporter();
+
+        reportLinkedRepos({}, none, LogLevel.Warning);
+        expect(none.messages).toEqual([]);
+
+        const one = new BufferedReporter();
+
+        reportLinkedRepos({ acme: { path: "/src/acme" } as never }, one, LogLevel.Warning);
+        expect(one.messages[0]).toMatchObject({ level: "warning", style: ReportEntryStyle.List });
+        expect(one.messages[0]!.message).toContain("One repository is LINKED to a working copy on this machine.");
+        expect(one.messages[0]!.message).toContain("acme -> /src/acme");
+
+        const two = new BufferedReporter();
+
+        reportLinkedRepos({ a: { path: "/a" } as never, b: { path: "/b" } as never }, two, LogLevel.Notice);
+        expect(two.messages[0]).toMatchObject({ level: "notice" });
+        expect(two.messages[0]!.message).toContain("2 repositories are LINKED");
     });
 
     /**
      * New and moved pins are listed, with the reminder to commit the lockfile.
      *
-     * lockedMessage({ added: [{ key: "a/b", to: "1.0.0" }], ... }); // -> "  pinned: a/b at version 1.0.0.\n..."
+     * reportPrepared({ locked: { added: [{ key: "a/b", to: "1.0.0" }], ... } }, reporter);
+     * // -> list item "pinned: a/b at version 1.0.0."
      */
     it("should list pins added and moved", () => {
-        expect(lockedMessage(NO_CHANGE)).toBeUndefined();
+        const none = new BufferedReporter();
 
-        const text = lockedMessage({ ...NO_CHANGE, unchanged: false, added: [{ key: "a/b", to: "1.0.0" }], updated: [{ key: "a/c", from: "1.0.0", to: "1.1.0" }] });
+        reportPrepared(prepared({}), none);
+        expect(none.messages).toEqual([]);
 
-        expect(text).toContain("  pinned: a/b at version 1.0.0.");
-        expect(text).toContain("  a/c moved from version 1.0.0 to version 1.1.0.");
+        const reporter = new BufferedReporter();
+
+        reportPrepared(prepared({ locked: { ...NO_CHANGE, unchanged: false, added: [{ key: "a/b", to: "1.0.0" }], updated: [{ key: "a/c", from: "1.0.0", to: "1.1.0" }] } }), reporter);
+
+        const text = reporter.messages.map((entry) => entry.message).join("\n");
+
+        expect(text).toContain("pinned: a/b at version 1.0.0.");
+        expect(text).toContain("a/c moved from version 1.0.0 to version 1.1.0.");
         expect(text).toContain("Commit it");
     });
 
     /**
-     * Ported from build-preparation.spec.ts: nothing when nothing is newer; otherwise each newer
-     * version beside the pinned one, and that no pin changed.
+     * Nothing is said when nothing is newer; otherwise each newer version is listed with the pinned
+     * one beside it, and a note says no pin changed.
      *
-     * newerMessage([{ key: "a/b", from: "1.0.0", to: "1.2.0" }]); // -> "...a/b: 1.2.0 this project pins 1.0.0..."
+     * reportPrepared({ newer: [{ key: "a/b", from: "1.0.0", to: "1.2.0" }] }, reporter);
+     * // -> variable list entry { label: "a/b", value: "1.2.0", detail: "this project pins 1.0.0" }
      */
     it("should list newer versions and say nothing moved", () => {
-        expect(newerMessage([])).toBeUndefined();
+        const one = new BufferedReporter();
 
-        const one = newerMessage([{ key: "a/b", from: "1.0.0", to: "1.2.0" }]);
+        reportPrepared(prepared({ newer: [{ key: "a/b", from: "1.0.0", to: "1.2.0" }] }), one);
+        expect(one.styled(ReportEntryStyle.VariableList)[0]!.details).toMatchObject({ entries: [{ label: "a/b", value: "1.2.0", detail: "this project pins 1.0.0" }] });
+        expect(one.styled(ReportEntryStyle.Note)[0]!.message).toContain("No pin was changed, so this build uses the pinned version.");
 
-        expect(one).toContain("a/b: 1.2.0 this project pins 1.0.0");
-        expect(one).toContain("No pin was changed, so this build uses the pinned version.");
-        expect(newerMessage([{ key: "a/b", from: "1", to: "2" }, { key: "a/c", from: "1", to: "2" }])).toContain("uses the pinned versions.");
+        const two = new BufferedReporter();
+
+        reportPrepared(prepared({ newer: [{ key: "a/b", from: "1", to: "2" }, { key: "a/c", from: "1", to: "2" }] }), two);
+        expect(two.styled(ReportEntryStyle.Note)[0]!.message).toContain("uses the pinned versions.");
     });
 
     /**
-     * reportPrepared sends each part to the reporter: notes for facts, warnings for failures.
+     * reportPrepared sends each part to the reporter: notices for facts, problems for failures.
      *
      * reportPrepared({ restored: { restored: ["a/b"], failed: [...] }, ... }, reporter);
      */
@@ -119,39 +171,48 @@ describe("messages about preparing", () => {
         const reporter = new BufferedReporter();
 
         reportPrepared(
-            {
-                seeded: [],
-                locked: NO_CHANGE,
+            prepared({
                 restored: { ...NOTHING_RESTORED, restored: ["a/b"], failed: [{ key: "a/c", reason: "offline" }] },
-                newer: [],
-                checkedUpstream: false,
-                skipped: [],
                 unanswered: [{ definition: { name: "x" }, recipe: { namespace: "a", name: "b" } } as never],
-            },
+            }),
             reporter,
         );
 
-        expect(reporter.at("notice").join("\n")).toContain("  restored: a/b");
+        expect(reporter.at("notice").join("\n")).toContain("restored: a/b");
+        expect(reporter.styled(ReportEntryStyle.Problem)[0]).toMatchObject({
+            level: "warning",
+            details: { subject: "a/c", cause: "offline" },
+        });
         expect(reporter.at("warning").join("\n")).toContain("Sous could not restore 'a/c'");
         expect(reporter.at("warning").join("\n")).toContain("1 required recipe variable has no answer");
     });
 });
 
 /** Ported from src/test/integration/memories-warning.test.ts. */
-describe("unincludedMemoriesMessage()", () => {
+describe("reportUnincludedMemories()", () => {
     /**
      * Nothing is said when nothing is missing; otherwise each memory is named with its recipe, and
      * both fixes are given.
      *
-     * unincludedMemoriesMessage([]) // -> undefined
+     * reportUnincludedMemories([], reporter) // -> no message
      */
     it("should say nothing for an empty list and name each memory and both fixes otherwise", () => {
-        expect(unincludedMemoriesMessage([])).toBeUndefined();
+        const none = new BufferedReporter();
 
-        const text = unincludedMemoriesMessage([
-            { recipe: "aaa/app", name: "m.md", path: "/store/aaa/app/memories/m.md" },
-            { recipe: "tool/user", name: "m.md", path: "/store/tool/user/memories/m.md" },
-        ]);
+        reportUnincludedMemories([], none);
+        expect(none.messages).toEqual([]);
+
+        const reporter = new BufferedReporter();
+
+        reportUnincludedMemories(
+            [
+                { recipe: "aaa/app", name: "m.md", path: "/store/aaa/app/memories/m.md" },
+                { recipe: "tool/user", name: "m.md", path: "/store/tool/user/memories/m.md" },
+            ],
+            reporter,
+        );
+
+        const text = reporter.at("warning").join("\n");
 
         expect(text).toContain("2 memories published by your subscribed recipes are not included in any output");
         expect(text).toContain("aaa/app: memories/m.md");

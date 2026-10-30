@@ -56,7 +56,7 @@ export function scanContributor(sous: Sous): ContributorDefinition {
                         }
                     }
                 } catch (error) {
-                    config.log("warning", `${manager.id} could not list the installed packages: ${error instanceof Error ? error.message : String(error)}`);
+                    config.warn(`${manager.id} could not list the installed packages: ${error instanceof Error ? error.message : String(error)}`);
                 }
             }
 

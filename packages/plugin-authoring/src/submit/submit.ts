@@ -15,7 +15,7 @@
  */
 
 import path from "node:path";
-import { ConfigError, type Context } from "@sous-io/plugin-api";
+import { ConfigError, type Context, type Reporter, type VariableEntry } from "@sous-io/plugin-api";
 import type { CanonicalRepository } from "@sous-io/plugin-refs/types";
 import type { ProposalStatus, ProposalSummary, RepositoryHostContext, RepositoryHostEntity } from "@sous-io/plugin-recipes/types";
 import type { RepoSubmitInput, RepoSubmitResult } from "../types.js";
@@ -24,7 +24,7 @@ import { FORK_REMOTE, RepoGit, submitBranchName, UPSTREAM_REMOTE, type ChangedPa
 import { describeCount, describeError, errorsIn, hasErrors, renderProblems } from "../shared/problems.js";
 import { INDEX_FILE, validateRepo, type RepoValidation } from "../shared/repository.js";
 import { recipesRefusingSubmissions, type RefusingRecipe } from "../release/submissions.js";
-import { buildChangelog, commitMessage, composeProposalBody, readManifestsAt, renderChangelog, snapshotOf, type Changelog } from "./changelog.js";
+import { buildChangelog, commitMessage, composeProposalBody, readManifestsAt, renderChangelog, reportChangelog, snapshotOf, type Changelog } from "./changelog.js";
 import { findSubmitCheckout } from "./checkout.js";
 
 /** What a proposal is called when the host does not say. */
@@ -63,7 +63,7 @@ export async function runSubmit(tools: AuthoringTools, input: RepoSubmitInput, o
     const cwd = path.resolve(input.directory ?? options.cwd);
     const checkout = await findSubmitCheckout(tools, cwd, input.repo, input.acceptFirst === true);
 
-    tools.reporter.log("info", `Checkout: ${checkout.rootDir}`, { checkout: checkout.rootDir });
+    tools.reporter.variable("Checkout", checkout.rootDir);
     tools.reporter.note(checkout.reason);
 
     return submitRepo(tools, checkout.rootDir, input, { ...options, ...(checkout.repo === undefined ? {} : { repo: checkout.repo }) });
@@ -81,7 +81,7 @@ export async function submitRepo(
     const dryRun = input.dryRun === true;
     const now = options.now ?? new Date();
     const completed: string[] = [];
-    const step = (message: string) => reporter.log("info", `  ${message}`);
+    const step = (message: string) => reporter.stepStart(message);
     const notice = (message: string) => reporter.note(message);
 
     /** Runs one step, announcing it first and recording it once it succeeds. */
@@ -215,7 +215,7 @@ export async function submitRepo(
         const status = found === undefined ? undefined : await statusOf(found);
 
         if (found === undefined) {
-            reporter.log("info", `The branch '${branch}' has no ${proposalNoun}.`);
+            reporter.info(`The branch '${branch}' has no ${proposalNoun}.`);
         } else {
             reportStatus(tools, proposalNoun, status!);
         }
@@ -297,7 +297,7 @@ export async function submitRepo(
     };
 
     if (refusing.length > 0) {
-        reporter.warning(describeRefusing(refusing));
+        reportRefusing(reporter, refusing);
 
         if (input.yes !== true && !(await tools.prompter.confirm({ message: "Propose the change anyway?", answeredBy: "--yes" }))) {
             return cancelled("You chose not to propose a change to those recipes.");
@@ -395,7 +395,7 @@ export async function submitRepo(
     });
     const rendered = renderChangelog(changelog);
 
-    reporter.log("info", rendered, { changelog });
+    reportChangelog(reporter, changelog);
 
     const proposalBody = description === undefined ? undefined : composeProposalBody(description, changelog);
     const facts = {
@@ -410,20 +410,20 @@ export async function submitRepo(
 
     if (dryRun) {
         if (branchAction === "create") {
-            notice(`A branch named '${branch}' would be created from the current commit.`);
+            reporter.dryRun(`A branch named '${branch}' would be created from the current commit.`);
         } else if (branchAction === "switch") {
-            notice(`The branch '${branch}' would be checked out.`);
+            reporter.dryRun(`The branch '${branch}' would be checked out.`);
         }
 
         if (toCommit.length > 0) {
-            notice(`${describeCount(toCommit.length, "path")} would be committed.`);
+            reporter.dryRun(`${describeCount(toCommit.length, "path")} would be committed.`);
         }
 
         if (usedFork) {
-            notice(`You cannot push to ${repo.owner}/${repo.name}, so the change would go through a fork on your own account.`);
+            reporter.dryRun(`You cannot push to ${repo.owner}/${repo.name}, so the change would go through a fork on your own account.`);
         }
 
-        notice("Nothing was sent; this was a dry run.");
+        reporter.dryRun("Nothing was sent; this was a dry run.");
 
         return outcome({
             outcome: action === "update" ? "updated" : "created",
@@ -479,7 +479,7 @@ export async function submitRepo(
         const status = await statusOf(previous);
         const proposal = { ...previous, ...(url === undefined ? {} : { url }), ...(title === undefined ? {} : { title }) };
 
-        reporter.log("info", changed ? `The ${proposalNoun} was updated with what this run sent.` : `There was nothing new to send, so the ${proposalNoun} was left as it was.`);
+        reporter.info(changed ? `The ${proposalNoun} was updated with what this run sent.` : `There was nothing new to send, so the ${proposalNoun} was left as it was.`);
         reportStatus(tools, proposalNoun, status);
 
         return outcome({
@@ -507,8 +507,7 @@ export async function submitRepo(
         notice(proposed.detail);
     }
 
-    reporter.log(
-        "info",
+    reporter.info(
         `The ${proposalNoun} is open for review${proposed.url === undefined ? "" : `: ${proposed.url}`}. The maintainers decide what happens ` +
             `next; sous never publishes on their behalf.`,
     );
@@ -532,23 +531,22 @@ export async function submitRepo(
     });
 }
 
-/** Says which recipes a change touches although they take no proposals, and where to go instead. */
-export function describeRefusing(refusing: readonly RefusingRecipe[]): string {
-    const lines = [
-        refusing.length === 1 ? "This change touches a recipe that does not take proposed changes:" : "This change touches recipes that do not take proposed changes:",
-    ];
+/** Warns that the change touches recipes that take no proposals, naming each one. */
+export function reportRefusing(reporter: Reporter, refusing: readonly RefusingRecipe[]): void {
+    const items = refusing.map(
+        (recipe) =>
+            `${recipe.key} (${recipe.path}), as ${recipe.declaredBy === "recipe" ? "its own manifest" : "the repository manifest"} says.` +
+            (recipe.instead === undefined ? "" : ` Instead: ${recipe.instead}`),
+    );
 
-    for (const recipe of refusing) {
-        lines.push(`  ${recipe.key} (${recipe.path}), as ${recipe.declaredBy === "recipe" ? "its own manifest" : "the repository manifest"} says.`);
-
-        if (recipe.instead !== undefined) {
-            lines.push(`    Instead: ${recipe.instead}`);
-        }
-    }
-
-    lines.push("Merging such a change usually breaks whatever publishes those recipes, and the repository's own check refuses it.");
-
-    return lines.join("\n");
+    reporter.list(
+        items,
+        {
+            title: refusing.length === 1 ? "This change touches a recipe that does not take proposed changes:" : "This change touches recipes that do not take proposed changes:",
+            footer: "Merging such a change usually breaks whatever publishes those recipes, and the repository's own check refuses it.",
+        },
+        "warning",
+    );
 }
 
 /** Whether a host can carry a proposal: it says `submit` and has the methods. */
@@ -636,7 +634,10 @@ async function confirmCommit(tools: AuthoringTools, input: RepoSubmitInput, path
         return true;
     }
 
-    tools.reporter.log("info", `These paths are uncommitted, and '--commit' would commit all of them:\n${paths.map((entry) => `  ${entry.path}`).join("\n")}`);
+    tools.reporter.list(
+        paths.map((entry) => entry.path),
+        { title: "These paths are uncommitted, and '--commit' would commit all of them:" },
+    );
 
     return tools.prompter.confirm({ message: "Commit these paths?", answeredBy: "--yes" });
 }
@@ -725,25 +726,28 @@ function reportStatus(tools: AuthoringTools, noun: string, status: ProposalStatu
     const { proposal } = status;
     const state =
         proposal.state === "open" ? (proposal.draft ? "open, as a draft" : "open") : proposal.state === "merged" ? "merged" : "closed without being merged";
-    const lines = [`The ${noun}: ${proposal.title}`, `State: ${state}`];
+    const entries: VariableEntry[] = [
+        { label: `The ${noun}`, value: proposal.title },
+        { label: "State", value: state },
+    ];
 
     if (status.review !== undefined) {
-        lines.push(`Review: ${status.review}`);
+        entries.push({ label: "Review", value: status.review });
     }
 
     if (status.checks !== undefined) {
-        lines.push(`Checks: ${status.checks.passed} passed, ${status.checks.failed} failed, ${status.checks.pending} still running`);
+        entries.push({ label: "Checks", value: `${status.checks.passed} passed, ${status.checks.failed} failed, ${status.checks.pending} still running` });
     }
 
     if (status.mergeable !== undefined) {
-        lines.push(`Mergeable: ${status.mergeable ? "yes" : "no, it conflicts with its target branch"}`);
+        entries.push({ label: "Mergeable", value: status.mergeable ? "yes" : "no, it conflicts with its target branch" });
     }
 
     if (proposal.url !== undefined) {
-        lines.push(`Address: ${proposal.url}`);
+        entries.push({ label: "Address", value: proposal.url });
     }
 
-    tools.reporter.log("info", lines.join("\n"), { status });
+    tools.reporter.variables(entries);
 }
 
 function blankToUndefined(value: string | undefined): string | undefined {

@@ -20,14 +20,34 @@ describe("McpReporter", () => {
     it("sends messages at or above the threshold, keeping their level", () => {
         const { sent, reporter } = make("notice");
 
-        reporter.log("info", "hidden");
-        reporter.note("shown");
-        reporter.log("critical", "bad", { path: "x" });
+        reporter.info("hidden");
+        reporter.notice("shown");
+        reporter.critical("bad", { path: "x" });
 
         expect(sent).toEqual([
             { method: "notifications/message", params: { level: "notice", logger: "sous", data: "shown" } },
-            { method: "notifications/message", params: { level: "critical", logger: "sous", data: { message: "bad", path: "x" } } },
+            { method: "notifications/message", params: { level: "critical", logger: "sous", data: { message: "bad", style: "plain", path: "x" } } },
         ]);
+    });
+
+    it("sends a styled message with its style and details next to the plain message", () => {
+        const { sent, reporter } = make("info");
+
+        reporter.note("Because.");
+        reporter.operation("written", "/a/b.md", { tokens: 3 });
+
+        expect(sent.map((notification) => notification.params)).toEqual([
+            { level: "notice", logger: "sous", data: { message: "Because.", style: "note" } },
+            { level: "info", logger: "sous", data: { message: "written: /a/b.md", style: "operation", action: "written", target: "/a/b.md", tokens: 3 } },
+        ]);
+    });
+
+    it("drops the banner", () => {
+        const { sent, reporter } = make("debug");
+
+        reporter.banner();
+
+        expect(sent).toEqual([]);
     });
 
     it("sends progress with the call's token, always rising", () => {

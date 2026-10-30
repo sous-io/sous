@@ -1,40 +1,35 @@
+import { BufferedReporter, ReportEntryStyle } from "@sous-io/plugin-api";
 import { describe, expect, it } from "vitest";
 import type { CliViewContext } from "../../types.js";
-import { Printer } from "../printer.js";
-import { createStyle } from "../style.js";
+import { captureView } from "../testing.js";
 import {
     describeCoverage,
     describeDependencyKind,
     describeOrigin,
     describeVersionStatus,
-    firstSentence,
     noDestinationText,
     type NamespaceDetailShape,
     type RecipeDetailShape,
     type RecipeListingShape,
     views,
 } from "./catalog.js";
+import { firstSentence } from "./questions.js";
 
-/** A plain, 100-column context for one intent and input. */
-function context(intent: string, input: Record<string, unknown> = {}, options: { color?: boolean; columns?: number; tty?: boolean } = {}): CliViewContext {
-    const style = createStyle(options.color ?? false);
-    const columns = options.columns ?? 100;
-    const isTTY = options.tty ?? false;
+/** Runs a view and returns everything a terminal would show (both streams, colors off). */
+async function show(intent: string, result: unknown, input: Record<string, unknown> = {}): Promise<string> {
+    const shown = await captureView(views[intent]!, result, { intent, input });
 
-    return {
-        intent,
-        input,
-        globals: {},
-        style,
-        columns,
-        isTTY,
-        printer: () => new Printer(style, columns, isTTY),
-        render: async () => "",
-    };
+    return `${shown.stdout}\n${shown.stderr}`;
 }
 
-async function show(intent: string, result: unknown, input: Record<string, unknown> = {}, options = {}): Promise<string> {
-    return String(await views[intent]!(result, context(intent, input, options)));
+/** Runs a view against a buffering reporter, to read the styles and facts it reported. */
+async function reported(intent: string, result: unknown, input: Record<string, unknown> = {}): Promise<BufferedReporter> {
+    const reporter = new BufferedReporter();
+    const context: CliViewContext = { intent, input, globals: {}, reporter, show: async () => {} };
+
+    await views[intent]!(result, context);
+
+    return reporter;
 }
 
 const helper: RecipeListingShape = { key: "workflow/qa-helper", repo: "qa-recipes", latest: "0.1.0", subscribed: false, description: "Helps" };
@@ -65,7 +60,7 @@ describe("the catalog views", () => {
     describe("namespace list", () => {
         /**
          * sous namespace list
-         * // ▶ Namespaces in the repositories this project trusts:
+         * // Namespaces in the repositories this project trusts
          * //   workflow  qa-recipes  2  some recipes  ...
          */
         it("should print a table of namespaces with their coverage", async () => {
@@ -74,7 +69,7 @@ describe("the catalog views", () => {
                 { repo: "qa-recipes", namespace: "quality", recipeCount: 2, subscribed: "none", description: "Checks" },
             ]);
 
-            expect(text).toContain("▶ Namespaces in the repositories this project trusts:");
+            expect(text).toContain("Namespaces in the repositories this project trusts");
             expect(text).toMatch(/workflow\s+qa-recipes\s+2\s+some recipes\s+no description published/);
             expect(text).toMatch(/quality\s+qa-recipes\s+2\s+no\s+Checks/);
         });
@@ -106,8 +101,8 @@ describe("the catalog views", () => {
             const text = await show("namespace.show", detail, { ref: "workflow" });
 
             expect(text).toContain("The namespace workflow");
-            expect(text).toMatch(/Repository: qa-recipes/);
-            expect(text).toMatch(/Location {2}: https:\/\/github.com\/acme\/qa/);
+            expect(text).toMatch(/Repository\s*:\s*qa-recipes/);
+            expect(text).toMatch(/Location\s*:\s*https:\/\/github.com\/acme\/qa/);
             expect(text).toContain("Recipes in workflow");
             expect(text).toContain("workflow/qa-helper");
             expect(text).toMatch(/workflow\/qa-variables\s+qa-recipes\s+0\.1\.0\s+0\.1\.0 linked\s+yes/);
@@ -137,11 +132,13 @@ describe("the catalog views", () => {
             expect(await show("recipe.list", [])).toContain("The repositories this project trusts publish no recipes.");
         });
 
-        /** Colors only on a terminal: the header row is cyan. */
-        it("should color the table header when color is on", async () => {
-            const text = await show("recipe.list", [variables], {}, { color: true });
+        /** The command's own facts open the output as a "Command Variables" block. */
+        it("should open with the command variables, then the recipes", async () => {
+            const messages = (await reported("recipe.list", [variables], { installed: true })).messages;
 
-            expect(text).toContain("\u001b[36mRecipe");
+            expect(messages[0]!.style).toBe(ReportEntryStyle.CommandVariables);
+            expect(messages[0]!.details).toMatchObject({ entries: expect.arrayContaining([{ label: "Showing", value: "only what this project has installed" }]) });
+            expect(messages.map((entry) => entry.style)).toEqual([ReportEntryStyle.CommandVariables, ReportEntryStyle.OperationStart, ReportEntryStyle.Table]);
         });
     });
 
@@ -188,7 +185,7 @@ describe("the catalog views", () => {
         it("should show the recipe in full", async () => {
             const text = await show("recipe.show", detail, { ref: "qa-variables" });
 
-            expect(text).toContain("▶ workflow/qa-variables:");
+            expect(text).toContain("workflow/qa-variables");
             expect(text).toContain("recipes/workflow/qa-variables");
             expect(text).toContain("Published versions");
             expect(text).toContain("the latest version, and the one pinned here");
@@ -201,8 +198,8 @@ describe("the catalog views", () => {
             expect(text).toContain("workflow/qa-variables asks 2 questions:");
             expect(text).toContain("SOUS_VAR_QA_DASHBOARD_URL");
             expect(text).toContain("QA_SERVICE_TOKEN");
-            expect(text).toContain("about    : The QA dashboard.");
-            expect(text).toContain("answered : no, and this recipe requires an answer");
+            expect(text).toMatch(/about\s*:\s*The QA dashboard\./);
+            expect(text).toMatch(/answered\s*:\s*no, and this recipe requires an answer/);
             expect(text).not.toContain("--answer");
             expect(text).toContain("Where its files land in this project");
             expect(text).toContain("/p/.claude/skills");
@@ -278,11 +275,11 @@ describe("the catalog views", () => {
             expect(text).not.toContain("Namespaces:");
         });
 
-        /** `--verbose` names each repository's namespaces under its row, indented with it. */
+        /** `--verbose` names each repository's namespaces after the table. */
         it("should list namespaces under each row with --verbose", async () => {
             const text = await show("repo.list", repos, { verbose: true });
 
-            expect(text).toContain("\n    Namespaces: core, workflow");
+            expect(text).toContain("Namespaces: core, workflow");
             expect(text).toContain("Namespaces: not fetched");
         });
 

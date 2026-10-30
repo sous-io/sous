@@ -155,9 +155,8 @@ describe("the build intent", () => {
 
         const notes = h.reporter.at("notice");
 
-        expect(notes).toContain(
-            "Skipped tool-usage/automated-browser-tasks: its subscription is switched off (conf.d/610-mac.jsonc).\nPruned 2 outputs it had written.",
-        );
+        expect(notes).toContain("Skipped tool-usage/automated-browser-tasks: its subscription is switched off (conf.d/610-mac.jsonc).");
+        expect(notes).toContain("Pruned 2 outputs it had written.");
         expect(notes).toContain("Skipped acme/other: its repository is not trusted.");
     });
 

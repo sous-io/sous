@@ -9,6 +9,7 @@
 
 import path from "node:path";
 import type { RecipeManifest, RepoManifest, VariableDefinition } from "@sous-io/plugin-formats/types";
+import type { Reporter } from "@sous-io/plugin-api";
 import type { AuthoringTools } from "../tools.js";
 import type { RepoGit } from "../shared/git.js";
 import { MANIFEST_EXTENSIONS, type RepoValidation } from "../shared/repository.js";
@@ -194,6 +195,56 @@ export const BREAKING_VARIABLE_WARNING =
     "Removing a variable or tightening its validation is usually a major change: a subscriber's stored answer may no " +
     "longer be read, or no longer be accepted.";
 
+/** The title of the section that lists recipes changed without a version raise. */
+const UNRAISED_TITLE = "Changed without a version raise";
+
+/** The changelog's sections that have entries, in order. */
+function changelogSections(changelog: Changelog): { title: string; entries: string[] }[] {
+    return [
+        { title: "Recipes added", entries: changelog.recipesAdded.map((entry) => `\`${entry.key}\`, at version ${entry.version}`) },
+        { title: "Recipes retired", entries: changelog.recipesRemoved.map((entry) => `\`${entry.key}\`, last at version ${entry.version}`) },
+        { title: "Version changes", entries: changelog.versionChanges.map((entry) => `\`${entry.key}\`: ${entry.from} becomes ${entry.to}`) },
+        { title: UNRAISED_TITLE, entries: changelog.unraised.map((entry) => `\`${entry.key}\`: its files changed and its version is still ${entry.version}`) },
+        { title: "Namespaces added", entries: changelog.namespacesAdded.map((name) => `\`${name}\``) },
+        { title: "Namespaces removed", entries: changelog.namespacesRemoved.map((name) => `\`${name}\``) },
+        { title: "Variables", entries: changelog.variables.map(describeVariableChange) },
+    ].filter((section) => section.entries.length > 0);
+}
+
+/**
+ * Shows the changelog to the person running `repo submit`, from the same facts `renderChangelog`
+ * writes as Markdown.
+ */
+export function reportChangelog(reporter: Reporter, changelog: Changelog): void {
+    reporter.operationStart("What merging this changes");
+
+    if (!changelog.compared) {
+        reporter.note(
+            `Sous could not compare this change with the branch '${changelog.baseBranch}', because this checkout holds no copy of it, so no changelog was generated.`,
+        );
+
+        return;
+    }
+
+    if (changelogIsEmpty(changelog)) {
+        reporter.detail("Merging changes no recipe, namespace, version or variable.");
+
+        return;
+    }
+
+    for (const section of changelogSections(changelog)) {
+        reporter.list(section.entries, { title: section.title });
+    }
+
+    if (changelog.unraised.length > 0) {
+        reporter.warn(UNRAISED_VERSION_WARNING);
+    }
+
+    if (changelog.variables.some((entry) => entry.breaking)) {
+        reporter.warn(BREAKING_VARIABLE_WARNING);
+    }
+}
+
 /** The changelog as Markdown, as it goes under a proposal and into a commit message. */
 export function renderChangelog(changelog: Changelog): string {
     const lines = ["## What merging this changes", ""];
@@ -217,42 +268,13 @@ export function renderChangelog(changelog: Changelog): string {
         return lines.join("\n");
     }
 
-    const section = (title: string, entries: string[]) => {
-        if (entries.length > 0) {
-            lines.push("", `**${title}**`, "", ...entries.map((entry) => `- ${entry}`));
+    for (const section of changelogSections(changelog)) {
+        lines.push("", `**${section.title}**`, "", ...section.entries.map((entry) => `- ${entry}`));
+
+        if (section.title === UNRAISED_TITLE) {
+            lines.push("", `**Warning:** ${UNRAISED_VERSION_WARNING}`);
         }
-    };
-
-    section(
-        "Recipes added",
-        changelog.recipesAdded.map((entry) => `\`${entry.key}\`, at version ${entry.version}`),
-    );
-    section(
-        "Recipes retired",
-        changelog.recipesRemoved.map((entry) => `\`${entry.key}\`, last at version ${entry.version}`),
-    );
-    section(
-        "Version changes",
-        changelog.versionChanges.map((entry) => `\`${entry.key}\`: ${entry.from} becomes ${entry.to}`),
-    );
-    section(
-        "Changed without a version raise",
-        changelog.unraised.map((entry) => `\`${entry.key}\`: its files changed and its version is still ${entry.version}`),
-    );
-
-    if (changelog.unraised.length > 0) {
-        lines.push("", `**Warning:** ${UNRAISED_VERSION_WARNING}`);
     }
-
-    section(
-        "Namespaces added",
-        changelog.namespacesAdded.map((name) => `\`${name}\``),
-    );
-    section(
-        "Namespaces removed",
-        changelog.namespacesRemoved.map((name) => `\`${name}\``),
-    );
-    section("Variables", changelog.variables.map(describeVariableChange));
 
     if (changelog.variables.some((entry) => entry.breaking)) {
         lines.push("", `**Warning:** ${BREAKING_VARIABLE_WARNING}`);

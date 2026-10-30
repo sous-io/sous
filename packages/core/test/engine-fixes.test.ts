@@ -180,7 +180,7 @@ describe("intents that tolerate config errors", () => {
 
         await expect(engine.submit({ intent: "p.build" })).rejects.toThrow("The file is broken.");
         await expect(engine.submit({ intent: "p.update" })).resolves.toBe("partial");
-        expect(reporter.at("warning").join("\n")).toContain("The config could not be built, so p.update runs with what was built before the error: The file is broken.");
+        expect(reporter.at("warning").join("\n")).toContain("The config could not be built, so p.update runs with what was built before the error.\n  The file is broken.");
 
         // p.update changed the config, so it is rebuilt, now without the error.
         await expect(engine.submit({ intent: "p.build" })).resolves.toBe("built");

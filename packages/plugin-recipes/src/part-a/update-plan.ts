@@ -9,11 +9,12 @@
 
 import { SousError, type Context } from "@sous-io/plugin-api";
 import type { IndexFile, Lockfile } from "@sous-io/plugin-formats/types";
-import type { MissingRepo, RecipeRequest, RecipeUpdateInput, RecipeUpdatePlan, RecipeUpdateScope, ResolvedRecipe } from "../types.js";
+import type { MissingRepo, PlannedQuestion, RecipeRequest, RecipeUpdateInput, RecipeUpdatePlan, RecipeUpdateScope, ResolvedRecipe } from "../types.js";
 import { findInCatalog, namespaceOfKey, type CatalogInputs } from "./catalog.js";
 import { identityOf, pickMatch, readingsOf, repoSearchOrder } from "./catalog-context.js";
 import { isBuiltInEntry } from "./defaults.js";
 import { applyResolution, keysHeldBySubscription, lockedClosure, mergeHolders, PROJECT_HOLDER, releaseDroppedHolds, type LockRepoInput } from "./lock-holds.js";
+import { definedVariables, plannedQuestionsOf } from "./questions.js";
 import { configuredSubscriptions, enabledSubscriptions, trustedRepos } from "./project.js";
 import { compareBytewise, describeError, sortBytewise } from "./util.js";
 
@@ -283,7 +284,7 @@ export async function planUpdate(input: RecipeUpdateInput, ctx: Context): Promis
         diff: lockService.diff(before, after),
         lockfile: after,
         missingRepos: [...missing.values()].sort((left, right) => compareBytewise(left.name, right.name)),
-        newVariables: newVariables(changed, before, indexes),
+        newVariables: await newVariables(ctx, changed, before, indexes),
         unreadable: sortBytewise(unreadable),
         unreachable,
         linked: sortBytewise(new Set(changed.map((recipe) => recipe.repo).filter((repo) => links?.get(repo) !== undefined))),
@@ -302,21 +303,21 @@ export async function planUpdate(input: RecipeUpdateInput, ctx: Context): Promis
     };
 }
 
-/** Variables a changed recipe's new version declares that its pinned version did not. */
-function newVariables(changed: readonly ResolvedRecipe[], before: Lockfile, indexes: ReadonlyMap<string, IndexFile>): Array<{ recipe: string; name: string }> {
-    const found: Array<{ recipe: string; name: string }> = [];
+/** Questions a changed recipe's new version asks that its pinned version did not, as `recipe show` builds them. */
+async function newVariables(ctx: Context, changed: readonly ResolvedRecipe[], before: Lockfile, indexes: ReadonlyMap<string, IndexFile>): Promise<PlannedQuestion[]> {
+    const { defined } = await definedVariables(ctx, changed);
+    const known = new Set<string>();
 
     for (const recipe of changed) {
         const pinned = before.recipes[recipe.key];
         const old = pinned === undefined ? undefined : indexes.get(pinned.repo)?.recipes[recipe.key]?.versions[pinned.version]?.variables;
-        const known = new Set((old ?? []).map((variable) => variable.name));
 
-        for (const variable of recipe.variables ?? []) {
-            if (!known.has(variable.name)) {
-                found.push({ recipe: recipe.key, name: variable.name });
-            }
+        for (const variable of old ?? []) {
+            known.add(`${recipe.key}.${variable.name}`);
         }
     }
 
-    return found;
+    const added = defined.filter((variable) => !known.has(variable.key));
+
+    return plannedQuestionsOf(ctx, added);
 }

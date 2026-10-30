@@ -1,6 +1,7 @@
 import type { Context } from "@sous-io/plugin-api";
 import type { LockDiff, RecipesLock, ResolvedRecipe, ResolveResult, RestoreReport, SubscriptionEntry } from "@sous-io/plugin-recipes/types";
 import semver from "semver";
+import { skippedLine, unansweredWarning } from "./report.js";
 import type { BuildPrepareInput, BuildPrepareResult } from "./types.js";
 
 /** The lockfile, as `recipes.lock` reads it. */
@@ -68,7 +69,7 @@ export async function prepare(input: BuildPrepareInput, ctx: Context): Promise<B
         } catch (error) {
             const keys = unlocked.map(([key]) => `'${key}'`).join(", ");
 
-            ctx.reporter.warning(`Sous could not work out which version of ${keys} to use, so nothing from it was compiled.\n${describe(error)}`);
+            ctx.reporter.problem(`Sous could not work out which version of ${keys} to use, so nothing from it was compiled.`, { cause: describe(error) });
         }
     }
 
@@ -79,7 +80,7 @@ export async function prepare(input: BuildPrepareInput, ctx: Context): Promise<B
         try {
             restored = await lock.restore();
         } catch (error) {
-            ctx.reporter.warning(`Sous could not restore the recipes this project's lockfile pins.\n${describe(error)}`);
+            ctx.reporter.problem(`Sous could not restore the recipes this project's lockfile pins.`, { cause: describe(error) });
         }
     }
 
@@ -105,7 +106,7 @@ export async function prepare(input: BuildPrepareInput, ctx: Context): Promise<B
                 current = next;
                 restored = mergeRestores(restored, await lock.restore({ keys: [...movedKeys] }));
             } catch (error) {
-                ctx.reporter.warning(`Sous could not move to the newer recipe versions, so this build uses the versions it already had.\n${describe(error)}`);
+                ctx.reporter.problem(`Sous could not move to the newer recipe versions, so this build uses the versions it already had.`, { cause: describe(error) });
             }
         }
     }
@@ -114,14 +115,19 @@ export async function prepare(input: BuildPrepareInput, ctx: Context): Promise<B
         ctx.configChanged();
     }
 
+    const skipped = active.skipped();
+    const unanswered = ctx.services.get("recipe-answers.answers").get().unanswered;
+    const warning = unansweredWarning(unanswered);
     const result: BuildPrepareResult = {
         seeded,
         locked,
         restored,
         newer,
         checkedUpstream,
-        skipped: active.skipped(),
-        unanswered: ctx.services.get("recipe-answers.answers").get().unanswered,
+        skipped,
+        skippedLines: skipped.map(skippedLine),
+        unanswered,
+        ...(warning === undefined ? {} : { unansweredWarning: warning }),
     };
 
     await ctx.emit("build.prepared", result);
@@ -151,7 +157,7 @@ async function checkUpstream(ctx: Context, current: Lockfile, subscriptions: Rec
     try {
         indexes = await ctx.services.get("recipes.index-cache").getAll();
     } catch (error) {
-        ctx.reporter.warning(`Sous could not check upstream for newer recipe versions, so this build uses the versions it already had.\n${describe(error)}`);
+        ctx.reporter.problem(`Sous could not check upstream for newer recipe versions, so this build uses the versions it already had.`, { cause: describe(error) });
 
         return report;
     }
@@ -161,10 +167,10 @@ async function checkUpstream(ctx: Context, current: Lockfile, subscriptions: Rec
     for (const failure of indexes.failed) {
         const reasons = failure.attempts.map((attempt) => `${attempt.strategy}: ${attempt.reason}`).join("\n");
 
-        ctx.reporter.warning(
-            `Sous could not check the repository '${failure.repo}' for a newer version, so this build uses the versions it already had.` +
-                (reasons ? `\n${reasons}` : ""),
-        );
+        ctx.reporter.problem(`Sous could not check the repository '${failure.repo}' for a newer version, so this build uses the versions it already had.`, {
+            subject: failure.repo,
+            ...(reasons ? { cause: reasons } : {}),
+        });
     }
 
     let latest: ResolveResult;
@@ -172,7 +178,7 @@ async function checkUpstream(ctx: Context, current: Lockfile, subscriptions: Rec
     try {
         latest = await ctx.services.get("recipes.resolver").resolveSubscriptions({ quiet: true });
     } catch (error) {
-        ctx.reporter.warning(`Sous could not work out the newest recipe versions, so this build uses the versions it already had.\n${describe(error)}`);
+        ctx.reporter.problem(`Sous could not work out the newest recipe versions, so this build uses the versions it already had.`, { cause: describe(error) });
 
         return report;
     }
@@ -256,18 +262,18 @@ function warnAboutProblems(resolved: ResolveResult, ctx: Context): void {
     for (const missing of resolved.missingRepos) {
         const by = missing.requiredBy.map((entry) => entry.ref).join(", ");
 
-        ctx.reporter.warning(
-            `Sous could not lock ${by || "a subscription"}: it needs the repository '${missing.name}', which this project does not trust yet, so nothing from it was compiled.\n` +
-                `Run 'sous repo add ${missing.url ?? missing.name}' to trust it.`,
+        ctx.reporter.problem(
+            `Sous could not lock ${by || "a subscription"}: it needs the repository '${missing.name}', which this project does not trust yet, so nothing from it was compiled.`,
+            { subject: missing.name, hint: `Run 'sous repo add ${missing.url ?? missing.name}' to trust it.` },
         );
     }
 
     for (const key of resolved.unreadable) {
-        ctx.reporter.warning(`Sous could not read the manifest of '${key}', so nothing from it was compiled.`);
+        ctx.reporter.problem(`Sous could not read the manifest of '${key}', so nothing from it was compiled.`, { subject: key });
     }
 
     for (const cycle of resolved.cycles) {
-        ctx.reporter.warning(`These recipes depend on each other in a cycle: ${cycle.join(" -> ")}.`);
+        ctx.reporter.warn(`These recipes depend on each other in a cycle: ${cycle.join(" -> ")}.`);
     }
 }
 

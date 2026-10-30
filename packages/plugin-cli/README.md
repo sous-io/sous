@@ -6,7 +6,7 @@ What it does:
 
 - Turns intents into a command tree (`sous config show`), with aliases, positional arguments and flags generated from each intent's input schema.
 - Parses `argv`, submits the intent to the engine, and prints the result.
-- Provides the terminal `Reporter` (log levels, `--debug`) and `Prompter` (questions; with no terminal it fails naming the flag that answers each one).
+- Provides the terminal `Reporter` (`TerminalReporter`: draws every report style with colors, glyphs, aligned blocks and tables; `debug`, `info` and `notice` go to standard output, `warning` and above to standard error, everything to standard error under `--json`; call `finish()` when a command's output is done) and `Prompter` (questions; with no terminal it fails naming the flag that answers each one).
 - Turns errors into messages and exit codes.
 
 ## Using it from code
@@ -27,7 +27,8 @@ await engine.frontEnd("cli").start(["config", "show"]);
 - `src/plugin.ts`, `src/front-end.ts`: the plugin and the front end that takes over after the config is built.
 - `src/command-tree.ts`, `src/flags.ts`, `src/parse.ts`: command tree, flags from schemas, argument parsing.
 - `src/help.ts`, `src/completion.ts`: help pages and completions.
-- `src/views.ts`, `src/views/`: how each intent's result is printed.
+- `src/views.ts`, `src/views/`: how each intent's result is shown; a view calls the run's reporter (`view.reporter.table(...)`) and never formats text.
+- `src/terminal/`: the layout and the per-style rendering `TerminalReporter` uses.
 - `src/terminal-reporter.ts`, `src/terminal-prompter.ts`, `src/errors.ts`: output, questions, exit codes.
 
 ## Testing

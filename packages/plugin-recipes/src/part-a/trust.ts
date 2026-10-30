@@ -7,7 +7,7 @@
  * through the chain's prompter, and `--yes` answers it ahead of time.
  */
 
-import { NonInteractiveError, SousError, type ConfigReader, type ServiceReader } from "@sous-io/plugin-api";
+import { LogLevel, NonInteractiveError, SousError, type ConfigReader, type Reporter, type ServiceReader, type VariableEntry } from "@sous-io/plugin-api";
 import type { ChainIo, ConfirmTrustOptions, ConfirmTrustResult, MissingRepo, RecipesTrust, RepoEntry } from "../types.js";
 import { USER_ADDED_BY } from "./defaults.js";
 import { trustedRepos, writeRepoEntry } from "./project.js";
@@ -54,9 +54,7 @@ export class Trust implements RecipesTrust {
                 throw new NonInteractiveError(trustQuestion(missing), "--yes", { details: nonInteractiveDetails(missing) });
             }
 
-            for (const line of trustNotice(missing)) {
-                io.reporter.note(line);
-            }
+            reportTrustNotice(io.reporter, missing);
 
             const accepted = await io.prompter.confirm({ message: trustQuestion(missing), answeredBy: "--yes", default: false });
 
@@ -113,34 +111,33 @@ export function trustQuestion(missing: readonly MissingRepo[]): string {
     return missing.length === 1 ? `Do you trust the repository '${missing[0]!.name}'?` : `Do you trust these ${missing.length} repositories?`;
 }
 
-/** The notice reported before the question: every repository, its URL, and what trusting it means. */
-export function trustNotice(missing: readonly MissingRepo[]): string[] {
-    const lines = [
+/** Reports the notice before the question: every repository, its URL, and what trusting it means. */
+export function reportTrustNotice(reporter: Reporter, missing: readonly MissingRepo[]): void {
+    reporter.notice(
         missing.length === 1
             ? "One repository has to be trusted before this can continue."
             : `${missing.length} repositories have to be trusted before this can continue.`,
-    ];
+    );
 
     for (const repo of missing) {
-        lines.push(`  ${repo.name}`);
-        lines.push(`    Location  ${repo.url ?? "not known to sous; a ref named it by its short name only"}`);
+        const entries: VariableEntry[] = [{ label: "Location", value: repo.url ?? "not known to sous; a ref named it by its short name only" }];
 
         if (repo.identity !== undefined) {
-            lines.push(`    Identity  ${repo.identity}`);
+            entries.push({ label: "Identity", value: repo.identity });
         }
 
         for (const entry of repo.requiredBy) {
-            lines.push(`    Required  ${entry.ref} (required by ${entry.requestedBy === "project" ? "this project" : `'${entry.requestedBy}'`})`);
+            entries.push({ label: "Required", value: `${entry.ref} (required by ${entry.requestedBy === "project" ? "this project" : `'${entry.requestedBy}'`})` });
         }
+
+        reporter.variables(entries, repo.name, LogLevel.Notice);
     }
 
-    lines.push(
+    reporter.note(
         "Trusting a repository trusts every namespace and every recipe in it, including ones published later. " +
             "Trusting on its own runs nothing; subscribing to something inside it can, and probably will, run scripts on this machine.",
-        "Sous cannot tell you whether a repository deserves trust. Look at the location above, and at who publishes it, before answering.",
     );
-
-    return lines;
+    reporter.note("Sous cannot tell you whether a repository deserves trust. Look at the location above, and at who publishes it, before answering.");
 }
 
 /** The details of the error a run that cannot ask gets: each repository, and the command that trusts it. */
