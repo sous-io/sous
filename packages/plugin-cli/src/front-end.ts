@@ -1,4 +1,4 @@
-import { type EngineHandle, type Environment, isLogLevel, type LogLevel, type Reporter, type SubmitOptions } from "@sous-io/plugin-api";
+import { type EngineHandle, type Environment, isLogLevel, type LogLevel, type ProjectInfo, type Reporter, type SubmitOptions } from "@sous-io/plugin-api";
 import type { CommandTree } from "./command-tree.js";
 import { viewError } from "./errors.js";
 import { globalSpecs } from "./globals.js";
@@ -19,6 +19,8 @@ export interface CliRunOptions {
     readonly env: Environment;
     /** The working directory chains get as `ctx.cwd`: the process's. Default: the engine's. */
     readonly cwd?: string;
+    /** The project the engine serves now, for views that name it. */
+    readonly project?: () => ProjectInfo | undefined;
 }
 
 /**
@@ -71,7 +73,15 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
                 // A background intent (`sous mcp`) owns standard output while it runs; its result is not printed.
                 const background = engine.intents.get(intent)?.definition.background === true;
                 const show = async (result: unknown) => {
-                    const shown = await showResult(intent, result, { entities: engine.config.entities, stdout: io.stdout, env, input: line.input, globals: line.globals });
+                    const shown = await showResult(intent, result, {
+                        entities: engine.config.entities,
+                        stdout: io.stdout,
+                        env,
+                        input: line.input,
+                        globals: line.globals,
+                        project: options.project?.(),
+                        cwd: options.cwd,
+                    });
 
                     if (shown.stdout) {
                         io.stdout.write(shown.stdout);

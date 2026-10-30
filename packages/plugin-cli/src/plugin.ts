@@ -171,7 +171,7 @@ export function createCliPlugin(options: CliPluginOptions = {}): PluginDefinitio
 
             sous.frontEnds.add({
                 id: "cli",
-                start: (engine, argv) => runCommandLine(engine, argv, { io: io(), env: sous.env, cwd: process.cwd() }),
+                start: (engine, argv) => runCommandLine(engine, argv, { io: io(), env: sous.env, cwd: process.cwd(), project: () => sous.project }),
             });
         },
     });

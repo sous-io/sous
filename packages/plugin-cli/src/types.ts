@@ -1,4 +1,4 @@
-import type { SousSchema } from "@sous-io/plugin-api";
+import type { ProjectInfo, SousSchema } from "@sous-io/plugin-api";
 import type { CommandTree } from "./command-tree.js";
 import type { Printer } from "./views/printer.js";
 import type { Style } from "./views/style.js";
@@ -96,6 +96,13 @@ export interface CliViewContext {
      * result that holds another's: `build` holds what `build.prepare` returned.
      */
     render(intent: string, result: unknown, input?: Readonly<Record<string, unknown>>): Promise<string>;
+    /**
+     * The project the command ran on (its root, `.sous/` directory and config file), for views that
+     * name them, such as the "Command Variables" block; `undefined` outside a project.
+     */
+    readonly project?: ProjectInfo;
+    /** The directory the command was run from. */
+    readonly cwd?: string;
 }
 
 /**

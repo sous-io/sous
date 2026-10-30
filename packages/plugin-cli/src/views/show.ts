@@ -1,4 +1,4 @@
-import type { EntityReader, Environment } from "@sous-io/plugin-api";
+import type { EntityReader, Environment, ProjectInfo } from "@sous-io/plugin-api";
 import type { OutputStream } from "../io.js";
 import type { CliViewContext, CliViewEntity, CliViewOutput } from "../types.js";
 import { Printer } from "./printer.js";
@@ -19,6 +19,10 @@ export interface ShowOptions {
     readonly env: Environment;
     readonly input: Readonly<Record<string, unknown>>;
     readonly globals: Readonly<Record<string, unknown>>;
+    /** The project the command ran on, when there is one. */
+    readonly project?: ProjectInfo;
+    /** The directory the command was run from. */
+    readonly cwd?: string;
 }
 
 /**
@@ -52,6 +56,8 @@ export function viewContext(intent: string, options: ShowOptions): CliViewContex
         style,
         columns,
         isTTY,
+        project: options.project,
+        cwd: options.cwd,
         printer: () => new Printer(style, columns, isTTY),
         render: async (other, result, input = {}) => {
             const shown = await showResult(other, result, { ...options, input, globals: { ...options.globals, json: false } });
