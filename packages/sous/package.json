@@ -32,6 +32,7 @@
   },
   "files": [
     "dist/bin.js",
+    "dist/sous.js",
     "recipes",
     "docs/markdown/*.md",
     "sous.config.schema.json"

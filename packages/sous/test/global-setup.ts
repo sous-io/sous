@@ -26,7 +26,19 @@ export default function setup(project: TestProject): () => void {
     const dir = mkdtempSync(path.join(testDist, "run-"));
     const bin = path.join(dir, "bin.js");
 
-    execFileSync(process.execPath, [tsc, "-p", "tsconfig.build.json"], { cwd: path.join(packageDir, "..", "plugin-api") });
+    // Test runs side by side share plugin-api's dist/, so its build takes a lock where flock exists.
+    const pluginApi = path.join(packageDir, "..", "plugin-api");
+    const lock = path.join(testDist, "plugin-api.lock");
+
+    try {
+        execFileSync("flock", [lock, process.execPath, tsc, "-p", "tsconfig.build.json"], { cwd: pluginApi });
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+            throw error;
+        }
+
+        execFileSync(process.execPath, [tsc, "-p", "tsconfig.build.json"], { cwd: pluginApi });
+    }
     execFileSync(process.execPath, [path.join(packageDir, "scripts", "bundle.mjs"), bin]);
     project.provide("sousBin", bin);
 
