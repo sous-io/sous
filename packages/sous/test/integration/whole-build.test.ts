@@ -330,8 +330,8 @@ describe("every command that builds prepares the project first", () => {
 
   /**
    * sous init, in a directory whose `.sous/` already holds a lockfile pinning a
-   * recipe the store does not have and the layer trusting its repository: the
-   * first build restores it.
+   * recipe the store does not have, the layer trusting its repository and the
+   * subscription to it: the first build restores it.
    */
   it("should restore a missing recipe in sous init", () => {
     const initRoot = path.join(tmp.path, "init-project");
@@ -353,6 +353,12 @@ describe("every command that builds prepares the project first", () => {
     fs.cpSync(
       path.join(projectRoot, ".sous", "conf.d", "500-repos.jsonc"),
       path.join(initRoot, ".sous", "conf.d", "500-repos.jsonc")
+    );
+    // Only a pin a switched-on subscription reaches is restored, so the
+    // subscription comes along with the pin.
+    writeFixtureFile(
+      path.join(initRoot, ".sous", "conf.d", "510-subscriptions.jsonc"),
+      `${JSON.stringify({ subscriptions: { "workflow/alpha": {} } }, null, 2)}\n`
     );
     fs.rmSync(alpha(), { recursive: true, force: true });
 

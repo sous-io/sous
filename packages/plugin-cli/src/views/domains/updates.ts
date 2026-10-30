@@ -8,7 +8,7 @@
  * Those views print only what was not reported.
  */
 
-import type { CliViewContext, CliViewEntity } from "../../types.js";
+import type { CliViewContext, CliViewEntity, CliViewOutput } from "../../types.js";
 import type { Printer } from "../printer.js";
 import type { TableColumn } from "../table.js";
 import { BULLET, wrapText } from "../text.js";
@@ -327,7 +327,7 @@ function recipeUpdateView(plan: UpdatePlanShape, view: CliViewContext): string {
 
 // --- subscription.update ---------------------------------------------------------------------------
 
-async function subscriptionUpdateView(result: SubscriptionUpdateShape, view: CliViewContext): Promise<string | undefined> {
+async function subscriptionUpdateView(result: SubscriptionUpdateShape, view: CliViewContext): Promise<CliViewOutput> {
     const out = view.printer();
     const scope = describeUpdateScope(result.plan.scope);
 
@@ -388,6 +388,17 @@ async function subscriptionUpdateView(result: SubscriptionUpdateShape, view: Cli
 
     if (build?.result !== undefined) {
         await appendRendered(out, view, "build", build.result);
+
+        // A failed build fails the command, though the update itself is written (as before the refactor).
+        if ((build.result as { ok?: unknown }).ok === false) {
+            return {
+                stdout: out.text(),
+                stderr:
+                    "Error: The lockfile was updated, but the build that followed it failed, so this project's outputs may not match the new versions yet. " +
+                    "The update itself is recorded; fix what the build reported above and run 'sous build' again.\n",
+                exitCode: 1,
+            };
+        }
     }
 
     return out.text();
