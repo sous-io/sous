@@ -1333,3 +1333,55 @@ tests had been written against the first new layout, and were brought in line:
   `packages/<name>/package.json` is set to the same version (only its `version` value changes),
   and a package already at it is left byte for byte, because every workspace package is released
   at one version and `pnpm pack` writes plugin-api's version into the published sous's dependency.
+
+## Switch-over: subscriptions and catalog
+
+- **`repositories.test.ts`, "should ask about an untrusted repository a dependency needs" and
+  "should write nothing when the confirmation is declined"**
+  - **Before:** drove the old in-process `SubscriptionService` with injected `ask` and `write`
+    functions; the plan question was `Proceed?`.
+  - **Now:** they run the `subscription.add` intent in process, with every built-in plugin and a
+    prompter that answers from a function (`test/utils/in-process.ts`), and read what the chain
+    reported. The plan question is `Subscribe to 'workflow/needs-partials'?`. What they check is
+    unchanged: the repository is named with its URL and identity, declining writes nothing.
+  - **Why:** the service class is gone; the intent is what every front end runs.
+- **`repositories.test.ts`, "should add a repository with --trust ...", and `core-namespace.test.ts`,
+  "should explain the directories it created under the user-level sous directory"**
+  - **Before:** each directory sous made held `README.md`, `AGENTS.md` and `CLAUDE.md`.
+  - **Now:** `README.md` and `CLAUDE.md`; the `AGENTS.md` checks are gone.
+  - **Why:** pointer files come from the harnesses now (see the `repo-commands.test.ts` entry above);
+    only Claude Code adds one.
+- **`repositories.test.ts`, "should restore a fresh clone", "should subscribe to a recipe named by a
+  bare name", "should take the first candidate with --accept-first", "should build the project as
+  part of adding and removing a subscription", "should leave the outputs untouched with --no-build"**
+  - **Before:** looked for "Restoring recipes", the resolved ref and "Building the project" on
+    standard output.
+  - **Now:** on standard output and standard error together.
+  - **Why:** a build and a ref resolution report as they go through the reporter, on standard error,
+    as every command now does (see the authoring entry above). The words are unchanged.
+- **`recipe-trust.test.ts`, "should refuse a recipe config layer that tries to add a tool command"**
+  - **Before:** `tools` was absent from `config show`.
+  - **Now:** `tools` is absent or `{}`.
+  - **Why:** the `tools` key has a default of `{}` now; the test still proves no tool was added.
+- **`whole-build.test.ts`, "should restore a missing recipe in sous init"**
+  - **Before:** the new project held the lockfile and the repository layer.
+  - **Now:** it also holds a subscriptions layer subscribing to `workflow/alpha`.
+  - **Why:** only a pin a switched-on subscription reaches is restored (see "lock-service restore
+    with no keys" above).
+- **`plugin-refs`: `format.spec.ts`, `resolver.spec.ts`, `test/search.test.ts`**
+  - **Before:** `refs.format.key()` of `r:workflow/alpha` was `r:workflow/alpha`.
+  - **Now:** `workflow/alpha`; the cases that tell two repositories apart use `refs.format.identity()`.
+  - **Why:** `key()` is the stored key its contract describes, with no repository: configs, lockfiles
+    and indexes key recipes that way, and a release recorded a dependency in another repository under
+    a key the index format refuses.
+- **`plugin-recipes/src/part-a/config-keys.spec.ts`** (new): the "Repositories keys" cases of the old
+  `src/lib/config-schema.spec.ts` (a URL is required and must be one sous can read, a repo name is
+  kebab-case, a subscription key has no qualifier or range, a range is a real range, store numbers are
+  whole, unknown keys in an entry are refused), against the `config-key` schemas. Unknown keys are
+  named "Not a known key." where the old schema said "unknown key(s)".
+- **View and unit specs** (`plugin-cli` `catalog.spec.ts`, `repos.spec.ts`; `plugin-build`
+  `report.spec.ts`; `plugin-recipes` `intents.spec.ts`): `recipe show` expects "What subscribing
+  installs" and the old question wording; `subscription list` always has a latest column; the build
+  states a newer version as `<key>: <to> this project pins <from>`; `subscription.list` returns
+  `latest`; the `vars.ask` after subscribing is no longer narrowed to the new recipe. Each follows
+  the old CLI's output.
