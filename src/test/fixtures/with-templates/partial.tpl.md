@@ -1,3 +1,0 @@
-# Partial
-
-Project: {{ projectName }}

@@ -217,6 +217,12 @@ export interface VarsAskInput extends ProvidedAnswerInputs {
     recipe?: string;
     /** Only these variables, by name or ref. */
     var?: string[];
+    /**
+     * Only the variables of these recipes (`namespace/recipe`), asked as a plain run asks them (what
+     * is required and unanswered), not as naming them would (everything). `subscription.add` asks
+     * this way for the recipes it installed, as before 1.0.
+     */
+    within?: string[];
     acceptFirst?: boolean;
     /** A definitions file. */
     file?: string;

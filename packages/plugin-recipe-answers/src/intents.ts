@@ -137,7 +137,12 @@ export async function handleAsk(input: VarsAskInput, ctx: Context): Promise<Vars
     // Answers given up front are checked and stored before anything is asked, so what is left is
     // what nobody answered.
     const given = await storeGivenAnswers(preanswers.match(provided, variables), ladder, run);
-    const report = await askForMissing(variables, ladder, { ...(only === undefined ? {} : { only }), skip: given.keys, reask: input.all === true }, run);
+    const report = await askForMissing(variables, ladder, {
+        ...(only === undefined ? {} : { only }),
+        ...(input.within === undefined ? {} : { within: new Set(input.within) }),
+        skip: given.keys,
+        reask: input.all === true,
+    }, run);
     const result: VarsAskResult = {
         answered: [...given.stored, ...report.answered],
         inherited: report.inherited.map(({ variable, resolved }) => ({ variable, resolved: variable.definition.secret ? { ...resolved, value: hidden } : resolved })),
@@ -239,6 +244,7 @@ export const varsIntents: IntentDefinition[] = [
                 namespace: { type: "string", description: "Ask only the variables published in this namespace" },
                 recipe: { type: "string", description: "Ask only the variables published by this recipe (namespace/recipe)" },
                 var: { type: "array", items: { type: "string" }, description: "Ask only this variable. Repeat it for each variable" },
+                within: { type: "array", items: { type: "string" }, description: "Ask only what the recipes named here (namespace/recipe) still need" },
                 acceptFirst: { type: "boolean", default: false, description: "When a name matches several things, take the first one listed" },
                 file: FILE_FIELD,
                 dryRun: { type: "boolean", default: false, description: "Report what would be asked and written, without writing anything" },
@@ -263,6 +269,8 @@ export const varsIntents: IntentDefinition[] = [
                 "sous vars ask --answer apiUrl=https://api.example.com",
                 "sous vars ask --answers-file ./answers.yaml",
             ],
+            // `within` is how subscribing asks for the recipes it installed; not a flag for people.
+            flags: { within: { hidden: true } },
         },
         agent: {
             usage: "Pass every answer with `answer` (name=value pairs) or `answersFile`; questions cannot be asked through MCP unless the client supports elicitation.",

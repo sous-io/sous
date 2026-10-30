@@ -1400,3 +1400,13 @@ tests had been written against the first new layout, and were brought in line:
 - **Before:** ran the config intents in an engine with no project.
 - **Now:** in an engine with an empty project.
 - **Why:** `config show`, `get` and `validate` now require a project, as the old commands did.
+
+### "should subscribe and run the follow-ups"
+
+- **File:** `packages/plugin-recipes/src/part-a/intents/intents.spec.ts`
+- **Before:** expected `vars.ask` to be run with only the given answers.
+- **Now:** also with `within: ["workflow/task-files"]`, the recipes the subscription installed.
+- **Why:** after subscribing, the old CLI asked only what the new recipes required and nobody had
+  answered. Without the narrowing, `vars.ask` also asked other recipes' unanswered questions (a fresh
+  project's core `skillsRoot`), so `subscription add` failed with no terminal. `within` narrows
+  without asking optional questions, as naming a recipe does.

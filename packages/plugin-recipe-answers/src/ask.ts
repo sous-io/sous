@@ -53,8 +53,10 @@ export interface AskRun {
 
 /** How the questions are picked. */
 export interface AskOptions {
-    /** Only these variables, by key. */
+    /** Only these variables, by key; they are asked even when answered or optional. */
     only?: ReadonlySet<string>;
+    /** Only the variables of these recipes (`namespace/recipe`), asked as an unnamed run asks. */
+    within?: ReadonlySet<string>;
     /** Variables an answer was given for up front, by key: neither asked nor reported here. */
     skip?: ReadonlySet<string>;
     /** Ask again even when an answer fits. */
@@ -234,6 +236,7 @@ export async function askForMissing(variables: readonly DefinedVariable[], ladde
 
     for (const variable of variables) {
         if (options.only !== undefined && !options.only.has(variable.key)) continue;
+        if (options.within !== undefined && !options.within.has(recipeKey(variable.recipe))) continue;
         if (options.skip?.has(variable.key) === true) continue;
 
         const { definition } = variable;
