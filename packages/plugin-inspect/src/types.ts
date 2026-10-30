@@ -11,6 +11,13 @@ import type { ConfigLayer, JsonObject, JsonValue, PluginInfo, TimingEntry } from
 
 /** One contributor's change to a value, for `--layers` (C53, C78). */
 export interface LayerView extends ConfigLayer {
+    /** The config file the contributor reads, from the `.sous` directory: `conf.d/610-mac.jsonc`. */
+    readonly source?: string;
+    /**
+     * For `config get --layers`, when the change sets the value itself (or an object around it):
+     * what the value was and became. A missing side means the value was not set.
+     */
+    readonly change?: { readonly from?: JsonValue; readonly to?: JsonValue };
     /** More a plugin explains about the change, such as a config file's expressions and what they read. */
     readonly annotations?: Readonly<Record<string, unknown>>;
 }
@@ -60,8 +67,22 @@ export interface ConfigGetResult {
 /** The result of `config.validate`. */
 export interface ConfigValidateResult {
     readonly ok: boolean;
-    /** One line per problem, naming who set the value. */
+    /** One entry per problem, naming who set the value. */
     readonly issues: readonly string[];
+    /** What was checked, for the summary. */
+    readonly summary?: ConfigValidateSummary;
+}
+
+/** What `config.validate` checked. */
+export interface ConfigValidateSummary {
+    /** The main config file. */
+    readonly configFile: string | undefined;
+    /** How many config files were read: the main one and each `conf.d` file. */
+    readonly layers: number;
+    /** How many compilation targets the config holds. */
+    readonly targets: number;
+    /** The names of the configured tools. */
+    readonly tools: readonly string[];
 }
 
 /** `plugins.show`. */

@@ -15,6 +15,10 @@ import type { Printer } from "../printer.js";
 /** One contributor's change, as plugin-inspect returns it. */
 export interface LayerView extends ConfigLayer {
     readonly annotations?: Readonly<Record<string, unknown>>;
+    /** The config file the contributor reads, from the `.sous` directory. */
+    readonly source?: string;
+    /** What the value was and became; a missing side means not set. */
+    readonly change?: { readonly from?: JsonValue; readonly to?: JsonValue };
 }
 
 /** One config file as written. */
@@ -46,6 +50,12 @@ export interface ConfigGetResult {
 export interface ConfigValidateResult {
     readonly ok: boolean;
     readonly issues: readonly string[];
+    readonly summary?: {
+        readonly configFile: string | undefined;
+        readonly layers: number;
+        readonly targets: number;
+        readonly tools: readonly string[];
+    };
 }
 
 /**
@@ -109,12 +119,32 @@ export function configGetView(result: ConfigGetResult, view: CliViewContext): st
     return out.text();
 }
 
-/** `sous config validate`: "Config is valid", or each problem and exit code 1. */
+/**
+ * `sous config validate`: "Config is valid" and what was checked, or each problem and exit code 1.
+ *
+ * ```text
+ * ▶ Config is valid:
+ *     Config File: /work/app/.sous/sous.config.json
+ *     Layers     : 3
+ *     Targets    : 2
+ *     Tools      : claude
+ * ```
+ */
 export function configValidateView(result: ConfigValidateResult, view: CliViewContext) {
     const out = view.printer();
 
     if (result.ok) {
         out.heading("Config is valid");
+
+        if (result.summary) {
+            out.variables({
+                "Config File": result.summary.configFile ?? "(none)",
+                Layers: result.summary.layers,
+                Targets: result.summary.targets,
+                Tools: result.summary.tools.length > 0 ? result.summary.tools.join(", ") : "(none)",
+            });
+        }
+
         out.footer();
 
         return out.text();
@@ -124,7 +154,13 @@ export function configValidateView(result: ConfigValidateResult, view: CliViewCo
     out.blank();
 
     for (const issue of result.issues) {
-        out.paragraph(`${view.style.error("✗")} ${issue}`, { indent: 4 });
+        const [first = "", ...rest] = issue.split("\n");
+
+        out.paragraph(`${view.style.error("✗")} ${first}`, { indent: 4 });
+
+        for (const line of rest) {
+            out.log(line.trim() === "" ? "" : `      ${line}`);
+        }
     }
 
     out.footer();
@@ -288,7 +324,7 @@ function layerTree(out: Printer, layers: readonly LayerView[]): void {
         if (layer.contributor !== contributor) {
             contributor = layer.contributor;
             open = [];
-            out.log(`${style.value(layer.contributor)} ${style.muted(`(${layer.plugin})`)}`);
+            out.log(`${style.value(layer.source ?? layer.contributor)} ${style.muted(`(${layer.source ? `${layer.contributor}, ` : ""}${layer.plugin})`)}`);
         }
 
         let depth = 0;
@@ -309,16 +345,20 @@ function layerTree(out: Printer, layers: readonly LayerView[]): void {
     }
 }
 
-/** `config get --layers`: the contributor on the left, its change to the value on the right, then the result. */
+/**
+ * `config get --layers`: each config file (or contributor) that changed the value on the left, what
+ * the value was and became on the right, then the result.
+ */
 function layerColumns(out: Printer, result: ConfigGetResult, view: CliViewContext): void {
     const style = view.style;
     const layers = result.layers ?? [];
-    const width = Math.max("result".length, ...layers.map((layer) => layer.contributor.length)) + 3;
+    const labelOf = (layer: LayerView): string => layer.source ?? layer.contributor;
+    const width = Math.max("result".length, ...layers.map((layer) => labelOf(layer).length)) + 3;
 
     for (const layer of layers) {
-        const text = changeAt(layer.patch, result.path);
+        const text = layer.change ? `${shownOrUnset(layer.change, "from")} ${style.muted("->")} ${shownOrUnset(layer.change, "to")}` : changeAt(layer.patch, result.path);
 
-        out.log(`${style.label(layer.contributor.padEnd(width))}${text}`);
+        out.log(`${style.label(labelOf(layer).padEnd(width))}${text}`);
         annotationLines(out, layer, " ".repeat(width));
     }
 
@@ -326,6 +366,11 @@ function layerColumns(out: Printer, result: ConfigGetResult, view: CliViewContex
     const passes = style.muted(`(settled after ${plural(result.passes, "pass", "passes")})`);
 
     out.log(`${style.label("result".padEnd(width))}${style.value(shown)}   ${passes}`);
+}
+
+/** One side of a change: the value as short JSON, or `(unset)`. */
+function shownOrUnset(change: NonNullable<LayerView["change"]>, side: "from" | "to"): string {
+    return side in change && change[side] !== undefined ? truncateJson(change[side]) : "(unset)";
 }
 
 /** What one change did, read from the value's own path: the value set, or the operation. */

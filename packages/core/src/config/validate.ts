@@ -32,7 +32,7 @@ export async function validateConfig(
 
     for (const key of Object.keys(result)) {
         if (!topLevel.has(key)) {
-            issues.push(`${formatPath([key])}: Not a known config key.${by(who([key]))}`);
+            issues.push(`${formatPath([key])}: Not a known config key; likely a typo.${by(who([key]))}`);
         }
     }
 

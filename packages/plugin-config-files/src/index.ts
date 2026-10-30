@@ -62,6 +62,7 @@ export const configFilesPlugin: PluginDefinition = definePlugin({
 
         sous.intents.add({
             intent: CONFIG_SET,
+            requiresProject: true,
             summary: "Set one value in a config file",
             description:
                 "Writes one value into sous.config.* (or the file --file names), changing only that key: comments, key order and formatting stay. The value is read as JSON when it is valid JSON, else as text.",

@@ -22,6 +22,7 @@ export const inspectPlugin: PluginDefinition = definePlugin({
     register(sous) {
         sous.intents.add({
             intent: "config.show",
+            requiresProject: true,
             summary: "Print the built config",
             description: "Prints what sous does on this machine. --layers adds each contributor's changes, in order; --raw adds each config file as written.",
             input: configShowSchema,
@@ -33,6 +34,7 @@ export const inspectPlugin: PluginDefinition = definePlugin({
 
         sous.intents.add({
             intent: "config.get",
+            requiresProject: true,
             summary: "Print one value from the built config by path",
             description: "A path like compilation.targets[0].entryPoint. --layers shows who set the value, in order.",
             input: configGetSchema,
@@ -47,6 +49,7 @@ export const inspectPlugin: PluginDefinition = definePlugin({
 
         sous.intents.add({
             intent: "config.validate",
+            requiresProject: true,
             summary: "Check the built config against every config key's schema",
             parallel: true,
             cli: { examples: ["sous config validate"] },

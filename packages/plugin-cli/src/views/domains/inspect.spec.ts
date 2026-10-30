@@ -96,6 +96,52 @@ describe("the config views", () => {
         );
     });
 
+    /**
+     * `--layers` with what each config file did to the value: the file on the left, the old value
+     * and the new one on the right, as the old CLI printed them.
+     *
+     * ```text
+     * sous.config.json          (unset) -> "primary-name"
+     * conf.d/10-override.json   "primary-name" -> "overridden-name"
+     * result                    "overridden-name"   (settled after 1 pass)
+     * ```
+     */
+    it("should show each file's change as old -> new", async () => {
+        const result: ConfigGetResult = {
+            path: "name",
+            exists: true,
+            value: "overridden-name",
+            passes: 1,
+            layers: [
+                {
+                    contributor: "config-files.main",
+                    plugin: "p",
+                    source: "sous.config.json",
+                    patch: { op: "setKey", path: "", key: "name", value: "primary-name" },
+                    helpers: [],
+                    change: { to: "primary-name" },
+                },
+                {
+                    contributor: "confd/10-override.json",
+                    plugin: "p",
+                    source: "conf.d/10-override.json",
+                    patch: { op: "setKey", path: "", key: "name", value: "overridden-name" },
+                    helpers: [],
+                    change: { from: "primary-name", to: "overridden-name" },
+                },
+            ],
+        };
+
+        expect(await show("config.get", result)).toBe(
+            [
+                'sous.config.json          (unset) -> "primary-name"',
+                'conf.d/10-override.json   "primary-name" -> "overridden-name"',
+                'result                    "overridden-name"   (settled after 1 pass)',
+                "",
+            ].join("\n"),
+        );
+    });
+
     /** `config show --layers` nests each change under the helpers that made it (S2, "Patches", 6). */
     it("should show the whole config's layers as a tree", async () => {
         const result = {
@@ -131,6 +177,24 @@ describe("the config views", () => {
         expect(failed.exitCode).toBe(1);
         expect(failed.stdout).toContain("The config has 1 problem:");
         expect(failed.stdout).toContain("✗ tools.x: Expected object (set by confd/1.js)");
+    });
+
+    /** A valid config lists what was checked: the file, the layers, the targets and the tools. */
+    it("should list what was checked under a valid config", async () => {
+        const summary = { configFile: "/p/.sous/sous.config.json", layers: 3, targets: 2, tools: ["claude"] };
+        const text = (await show("config.validate", { ok: true, issues: [], summary })) as string;
+
+        expect(text).toContain("Config File: /p/.sous/sous.config.json");
+        expect(text).toMatch(/Layers\s*: 3/);
+        expect(text).toMatch(/Targets\s*: 2/);
+        expect(text).toMatch(/Tools\s*: claude/);
+    });
+
+    /** A problem of several lines keeps its lines, indented under the first. */
+    it("should indent the later lines of a problem under its first", async () => {
+        const failed = (await show("config.validate", { ok: false, issues: ["Unresolved variables in _vars:\n- thing still needs ${bogus}"] })) as { stdout: string };
+
+        expect(failed.stdout).toContain("✗ Unresolved variables in _vars:\n      - thing still needs ${bogus}");
     });
 });
 

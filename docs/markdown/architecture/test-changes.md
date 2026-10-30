@@ -381,11 +381,12 @@ Config discovery, the config kernel, env files and managed layers, ported to
 
 ### "should throw when a conf.d layer's baseName collides…", "…differ only by extension", `assertUniqueLayerBaseNames()`
 
-- **File:** `config-discovery.spec.ts` → `test/confd-files.test.ts`, "should warn about files that
-  differ only in their extension"
+- **File:** `config-discovery.spec.ts` → `test/confd-files.test.ts`, "should refuse files that
+  differ only in their extension, naming both"
 - **Before:** a `ConfigError`.
-- **Now:** both files are read, and sous warns.
-- **Why:** sous reports a risky choice instead of forbidding it.
+- **Now:** a `ConfigError` again, with the old wording ("Duplicate config layer baseName"). For a
+  while sous warned and read both instead; the switch-over brought the error back, because the old
+  CLI tests (`config validate`, `build`) expect the build to stop.
 
 ### "should find sous.config.yaml (and CONFIG_FILE_NAMES lists yaml, not yml)"
 
@@ -1126,3 +1127,23 @@ in `test/support/standins.ts`. Expectations are otherwise unchanged, except for 
   - **Now:** it says "The contribution stopped", "Failed step: ..." and "These steps had completed
     before it, and no later step ran:", as the old command did.
   - **Why:** the new wording was brought back to the old command's, which the old CLI test checks.
+
+## Switch-over: config and inspect (config show, get, validate)
+
+- **Test:** `packages/core/test/order-and-stages.test.ts`, the unknown top-level key message.
+  - **Before:** `mystery: Not a known config key. (set by confd/610-mac.jsonc)`.
+  - **Now:** `mystery: Not a known config key; likely a typo. (set by confd/610-mac.jsonc)`.
+  - **Why:** the old CLI said an unknown key was "likely a typo", and the old `config validate` test
+    checks for that word.
+- **Test:** `packages/plugin-inspect/src/inspect.spec.ts`, "should read config files as written".
+  - **Before:** the files were read straight from disk.
+  - **Now:** the test adds a stand-in `config-files.loader`, because `--raw` now reads each file
+    through it (the same text the build used).
+- **Test:** `packages/plugin-inspect/src/inspect.spec.ts`, "should report issues and name the
+  contributor".
+  - **Before:** a good config gave exactly `{ ok: true, issues: [] }`.
+  - **Now:** it gives at least that; the result also carries a summary (the config file, how many
+    files were read, the targets and the tools), which `config validate` prints, as the old command
+    did.
+- The old CLI tests in `config-commands.test.ts`, `multi-source-e2e.test.ts` and
+  `overrides-e2e.test.ts` were not changed.

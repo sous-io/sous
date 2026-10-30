@@ -69,7 +69,7 @@ export function listConfdFiles(
 /**
  * Names that collide once the final extension is dropped (`500-repos.json` and
  * `500-repos.jsonc`): such files merge in an order that depends on their extensions, which is
- * never what was meant. Sous reports them and loads both (L6).
+ * never what was meant. The build stops and names them.
  */
 export function duplicateBaseNames(names: readonly string[]): string[][] {
     const byBase = new Map<string, string[]>();

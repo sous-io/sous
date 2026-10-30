@@ -177,18 +177,18 @@ describe("conf.d problems", () => {
     });
 
     /**
-     * Two files that differ only in their extension merge in an order that depends on it. The old
-     * loader refused them; sous now reports them and reads both (L6).
+     * Two files that differ only in their extension would merge in an order that depends on it,
+     * so the build stops and names both, as the old loader did.
      */
-    it("should warn about files that differ only in their extension, and read both", async () => {
+    it("should refuse files that differ only in their extension, naming both", async () => {
         project.write("conf.d/500-repos.json", JSON.stringify({ _vars: { a: "json" } }));
         project.write("conf.d/500-repos.jsonc", JSON.stringify({ _vars: { b: "jsonc" } }));
 
-        const { engine, reporter } = makeEngine(project.info());
-        const config = await engine.buildConfig();
+        const { engine } = makeEngine(project.info());
+        const error = (await engine.buildConfig().catch((caught: unknown) => caught)) as { message: string; details: string[] };
 
-        expect(config.get("_vars")).toEqual({ a: "json", b: "jsonc" });
-        expect(reporter.at("warning").join("\n")).toMatch(/500-repos\.json and 500-repos\.jsonc/);
+        expect(error.message).toMatch(/Duplicate config layer baseName '500-repos'/);
+        expect(error.details.join("\n")).toMatch(/500-repos\.json[\s\S]*500-repos\.jsonc/);
     });
 });
 

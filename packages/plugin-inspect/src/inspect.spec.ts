@@ -5,7 +5,7 @@ import { createEngine } from "@sous-io/core";
 import { definePlugin, jsonSchema, type PluginDefinition, type ProjectInfo } from "@sous-io/plugin-api";
 import { hostPlugin } from "@sous-io/plugin-host";
 import { variablesPlugin } from "@sous-io/plugin-variables";
-import { readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import inspectPlugin from "./index.js";
 import { HIDDEN, redactText } from "./redact.js";
@@ -29,11 +29,23 @@ const demo = definePlugin({
     },
 });
 
-/** Stands in for plugin-confd: lists the `conf.d` files of the project in name order. */
+/**
+ * Stands in for plugin-confd and plugin-config-files: lists the `conf.d` files of the project in
+ * name order, and reads a file's text.
+ */
 const confdStandIn = definePlugin({
     name: "confd-stand-in",
     version: "1.0.0",
     register(sous) {
+        sous.services.add(
+            "config-files.loader",
+            () =>
+                ({
+                    findPatches: () => [],
+                    load: async (file: string) => ({ kind: "data", path: file, format: "jsonc", data: {}, text: readFileSync(file, "utf8") }),
+                }) as never,
+            { lifetime: "singleton" },
+        );
         sous.services.add(
             "confd.files",
             (_config, ctx) =>
@@ -131,9 +143,55 @@ describe("config.get", () => {
 
         expect(result.layers.some((l: any) => l.contributor === "demo/main")).toBe(true);
     });
+
+    /** Each change that sets the value says what it was and became; one that changes nothing is left out. */
+    it("should say what each change did to the value", async () => {
+        const override = definePlugin({
+            name: "override",
+            version: "1.0.0",
+            dependsOn: {},
+            register(sous) {
+                sous.config.contribute({ id: "override/same", after: ["demo/main"], contribute: (config) => void config.atPath("demo").merge({ count: 2 }) });
+                sous.config.contribute({ id: "override/new", after: ["override/same"], contribute: (config) => void config.atPath("demo").merge({ count: 3 }) });
+            },
+        });
+        const result = await run("config.get", { path: "demo.count", layers: true }, undefined, [override]);
+
+        expect(result.layers.map((l: any) => [l.contributor, l.change])).toEqual([
+            ["demo/main", { to: 2 }],
+            ["override/new", { from: 2, to: 3 }],
+        ]);
+    });
 });
 
 describe("config.validate", () => {
+    /** A `${name}` defined nowhere is reported, naming it, as a build would refuse it. */
+    it("should report a variable defined nowhere", async () => {
+        const vars = definePlugin({
+            name: "vars",
+            version: "1.0.0",
+            dependsOn: { "@sous-io/plugin-host": "*" },
+            register(sous) {
+                // Stands in for plugin-host's identity of the installed sous, which the auto-variables read.
+                const identity = { name: "@sous-io/sous", version: "1.0.0", root: "/opt/sous", realRoot: "/opt/sous", bin: undefined };
+
+                sous.services.replace("host.package", () => ({ identity: () => identity }) as never, { lifetime: "singleton" });
+                sous.config.contribute({ id: "vars/main", contribute: (config) => void config.atPath("_vars").merge({ thing: "${bogus}" }) });
+            },
+        });
+        const result = await run("config.validate", {}, undefined, [hostPlugin, variablesPlugin, vars]);
+
+        expect(result.ok).toBe(false);
+        expect(result.issues.join("\n")).toMatch(/bogus/);
+    });
+
+    /** A good config gives what was checked, for the summary. */
+    it("should summarize a good config", async () => {
+        const result = await run("config.validate");
+
+        expect(result.summary).toEqual({ configFile: undefined, layers: 0, targets: 0, tools: [] });
+    });
+
     /** A value that breaks its key's schema is reported with who set it. */
     it("should report issues and name the contributor", async () => {
         const bad = definePlugin({
@@ -153,7 +211,7 @@ describe("config.validate", () => {
         });
         const good = await run("config.validate");
 
-        expect(good).toEqual({ ok: true, issues: [] });
+        expect(good).toMatchObject({ ok: true, issues: [] });
 
         const engine = createEngine({ builtIns: [inspectPlugin, demo, bad], env: {} });
 

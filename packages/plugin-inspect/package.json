@@ -22,8 +22,10 @@
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
+    "@sous-io/documents": "workspace:*",
     "@sous-io/plugin-api": "workspace:*",
     "@sous-io/plugin-confd": "workspace:*",
+    "@sous-io/plugin-config-files": "workspace:*",
     "@sous-io/plugin-variables": "workspace:*"
   },
   "devDependencies": {

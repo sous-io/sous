@@ -474,12 +474,18 @@ importers:
 
   packages/plugin-inspect:
     dependencies:
+      '@sous-io/documents':
+        specifier: workspace:*
+        version: link:../documents
       '@sous-io/plugin-api':
         specifier: workspace:*
         version: link:../plugin-api
       '@sous-io/plugin-confd':
         specifier: workspace:*
         version: link:../plugin-confd
+      '@sous-io/plugin-config-files':
+        specifier: workspace:*
+        version: link:../plugin-config-files
       '@sous-io/plugin-variables':
         specifier: workspace:*
         version: link:../plugin-variables

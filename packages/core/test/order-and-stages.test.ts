@@ -298,7 +298,7 @@ describe("validation", () => {
         expect(error).toBeInstanceOf(ConfigError);
         expect(error.message).toBe("The config is not valid (2 problems).");
         expect(error.details).toEqual([
-            "mystery: Not a known config key. (set by confd/610-mac.jsonc)",
+            "mystery: Not a known config key; likely a typo. (set by confd/610-mac.jsonc)",
             "diagrams.sourceGlob: Expected string, got number 3. (set by confd/610-mac.jsonc)",
         ]);
     });

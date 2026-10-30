@@ -5,7 +5,8 @@
  */
 
 import fs from "node:fs";
-import { type ContributorDefinition, definePlugin, type PluginDefinition, type Sous } from "@sous-io/plugin-api";
+import path from "node:path";
+import { ConfigError, type ContributorDefinition, definePlugin, type PluginDefinition, type Sous } from "@sous-io/plugin-api";
 import type {} from "@sous-io/plugin-config-files/types";
 import type {} from "@sous-io/plugin-host/types";
 import { ConfdFilesImpl, contributorId, duplicateBaseNames, listConfdFiles } from "./files.js";
@@ -71,11 +72,11 @@ export const confdPlugin: PluginDefinition = definePlugin({
             contribute(config) {
                 const files = listConfdFiles(confDir(), loader(), compare);
 
-                for (const group of duplicateBaseNames(files.map((file) => file.name))) {
-                    config.log(
-                        "warning",
-                        `conf.d holds ${group.join(" and ")}, which differ only in their extension, so the order they merge in depends on it. Both are read; rename one.`,
-                    );
+                const mainName = sous.project?.configPath === undefined ? [] : [path.basename(sous.project.configPath)];
+                const duplicate = duplicateBaseNames([...mainName, ...files.map((file) => file.name)])[0];
+
+                if (duplicate !== undefined) {
+                    throw duplicateBaseNameError(duplicate, files, sous.project?.configPath);
                 }
 
                 addContributors(files);
@@ -127,6 +128,24 @@ function fileContributor(sous: Sous, file: ConfdFile, after: readonly string[]):
             await loader.contribute(await loader.load(file.path), config);
         },
     };
+}
+
+/**
+ * Two config files whose names match once the final extension is dropped (`500-repos.json` and
+ * `500-repos.yaml`) would merge in an order that depends on their extensions, which is never what
+ * was meant, so the build stops and names both, as sous always has.
+ */
+function duplicateBaseNameError(names: readonly string[], files: readonly ConfdFile[], mainPath: string | undefined): ConfigError {
+    const dot = names[0]!.lastIndexOf(".");
+    const base = dot <= 0 ? names[0]! : names[0]!.slice(0, dot);
+    const paths = names.map((name) => files.find((file) => file.name === name)?.path ?? mainPath ?? name);
+
+    return new ConfigError(`Duplicate config layer baseName '${base}':`, {
+        details: [
+            ...paths.map((file) => `  ${file}`),
+            "Every loaded config file (the primary config and all conf.d/ layers) must have a unique filename once its final extension is removed. Rename one of them.",
+        ],
+    });
 }
 
 function isFile(file: string): boolean {
