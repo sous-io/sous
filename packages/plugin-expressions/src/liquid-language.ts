@@ -18,7 +18,14 @@ const LEFT = "\u0000<";
 const RIGHT = ">\u0000";
 
 /** An engine that only reads expressions, never runs them: lenient, so unknown filters still parse. */
-const analyzer = new Liquid({ outputDelimiterLeft: LEFT, outputDelimiterRight: RIGHT });
+/** Made on first use: building a Liquid engine costs ~20ms, too much for every start-up. */
+let analyzerEngine: Liquid | undefined;
+
+function analyzer(): Liquid {
+    analyzerEngine ??= new Liquid({ outputDelimiterLeft: LEFT, outputDelimiterRight: RIGHT });
+
+    return analyzerEngine;
+}
 
 /** The `liquid` expression language entity. */
 export function createLiquidLanguage(): ExpressionLanguageEntity {
@@ -27,7 +34,7 @@ export function createLiquidLanguage(): ExpressionLanguageEntity {
         description: "Liquid expressions, as in a {% if %} condition (the default).",
         runsCode: false,
         variables(expression, ctx) {
-            return guard(expression, ctx, () => analyzer.globalVariablesSync(analyzer.parse(`${LEFT}${expression}${RIGHT}`)));
+            return guard(expression, ctx, () => analyzer().globalVariablesSync(analyzer().parse(`${LEFT}${expression}${RIGHT}`)));
         },
         evaluate(expression, scope, ctx) {
             return evaluateLiquid(expression, scope, ctx);
