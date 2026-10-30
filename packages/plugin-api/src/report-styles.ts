@@ -10,8 +10,10 @@
 
 /** What kind of entry a reported message is. */
 export const ReportEntryStyle = {
-    /** A paragraph of text. `details` is optional data. */
+    /** A paragraph of text, which a front end may wrap. `details` is optional data. */
     Plain: "plain",
+    /** Text shown exactly as given: no wrapping, no color (a value printed for a script to read). No details. */
+    Text: "text",
     /** An explanation that is neither a warning nor an error. No details. */
     Note: "note",
     /** The start of an operation, such as "Building the project". {@link OperationStartDetails}. */

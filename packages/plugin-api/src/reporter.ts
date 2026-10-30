@@ -196,6 +196,11 @@ export abstract class BaseReporter {
     // One or more methods per style. Each forces its style, turns its parameters into a plain
     // `message` and typed `details`, and has a default level the last parameter overrides.
 
+    /** Text shown exactly as given, such as a value a script reads: no wrapping, no color. */
+    text(content: string, level: LogLevel = LogLevel.Info): void {
+        this.log(level, content, undefined, ReportEntryStyle.Text);
+    }
+
     /** An explanation that is neither a warning nor an error. */
     note(text: string, level: LogLevel = LogLevel.Notice): void {
         this.log(level, text, undefined, ReportEntryStyle.Note);
