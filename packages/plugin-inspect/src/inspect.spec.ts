@@ -69,8 +69,11 @@ const confdStandIn = definePlugin({
     },
 });
 
-async function run(intent: string, input: Record<string, unknown> = {}, project?: ProjectInfo, extra: PluginDefinition[] = []) {
-    const engine = createEngine({ builtIns: [inspectPlugin, demo, ...extra], env: {}, ...(project ? { project } : {}) });
+/** A project with no files: the config intents need one (they fail outside a project). */
+const EMPTY_PROJECT: ProjectInfo = { root: "/no-files", sousDir: "/no-files/.sous", configPath: undefined, confDir: "/no-files/.sous/conf.d" };
+
+async function run(intent: string, input: Record<string, unknown> = {}, project: ProjectInfo = EMPTY_PROJECT, extra: PluginDefinition[] = []) {
+    const engine = createEngine({ builtIns: [inspectPlugin, demo, ...extra], env: {}, project });
 
     await engine.buildConfig();
 
@@ -213,7 +216,7 @@ describe("config.validate", () => {
 
         expect(good).toMatchObject({ ok: true, issues: [] });
 
-        const engine = createEngine({ builtIns: [inspectPlugin, demo, bad], env: {} });
+        const engine = createEngine({ builtIns: [inspectPlugin, demo, bad], env: {}, project: EMPTY_PROJECT });
 
         try {
             await engine.buildConfig();
