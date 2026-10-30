@@ -35,13 +35,8 @@ holds the mechanism, use it rather than building a second one beside it.
   (`canPrompt` and `whyCannotPrompt` in `packages/plugin-cli/src/terminal-prompter.ts`). Fail instead, naming both the question that could not be asked and
   the flag that would have answered it, and print the command's help under the error. All of it
   goes to stderr, so piped stdout stays clean.
-- **Every question type supports Tab for "Advanced"** (`src/utils/value-prompt.ts`,
-  `choice-prompt.ts`, `confirm-prompt.ts`). The word is always "Advanced", and the hint never
-  presumes what advanced contains.
 - **Informed consent, never prevention.** Warn with facts the user can verify, confirm, then do
   what the user asked for. Never state what a user intended.
-- **Tables go through the responsive renderer** (`src/utils/table.ts`) with per-column
-  priorities: identifiers truncate, prose wraps, and a non-TTY run never drops a column.
 - **Machine-written config layers are `.jsonc`** with a header comment saying what the file
   holds and who writes it, edited by key so comments, key order and formatting survive
   (`managedHeader` and `ConfdManagedImpl` in `packages/plugin-confd/src/managed.ts`). Users may edit them too. Where strict JSON makes a comment
@@ -61,26 +56,30 @@ holds the mechanism, use it rather than building a second one beside it.
   never as a folder path. Any spelling that settles to one identity is accepted, including a
   folder path or a pasted browser URL; host-specific readings belong to each provider's
   `readLocation`.
-- **One way to show a key and its value**: `showVariable` and `showVariables` in
-  `src/utils/formatting.ts`, four spaces in, labels padded so every colon lines up, values in the
-  value color, and anything secondary (a location, a provenance) trailing in muted grey rather
-  than in parentheses. Never build a second aligner beside them; a labeled block anywhere (the
-  facts about a variable, a command's opening block, a result, a notice) goes through them.
-- **One palette, in `palette`** (same file): label, value, muted, warning, highlight, note, error.
-  A warning is bright yellow with its sharpest words in orange; a note (an explanation that is
+- **Output is reported, never formatted, outside the reporter.** Every message and every result
+  goes through the reporter's level and style methods (`BaseReporter`,
+  `packages/plugin-api/src/reporter.ts`; ADR 0021): a caller says what an entry is (`variables`,
+  `table`, `list`, `operation`, `problem`, ...) and passes the facts. No caller writes a glyph,
+  pads a label, indents a line or joins lines with "\n". A shape no style fits gets a new style
+  in `packages/plugin-api/src/report-styles.ts`, with its method in `BaseReporter`.
+- **How each style looks is decided once, in `TerminalReporter`**
+  (`packages/plugin-cli/src/terminal/render-entry.ts`): aligned label and value blocks with
+  details muted, the responsive table renderer (`packages/plugin-cli/src/views/table.ts`: per-column
+  priorities, identifiers truncate, prose wraps, a non-TTY run never drops a column), one wrap
+  (`wrapText`), the real `BULLET` character, and one palette (`packages/plugin-cli/src/views/style.ts`):
+  a warning is bright yellow with its sharpest words in orange; a note (an explanation that is
   neither warning nor error) is bright teal; an error is bright red and is always preceded by the
   literal `Error: `, so it stays findable with color off.
-- **One wrap, `wrapText`**, and every paragraph goes through `paragraph` or `note` before it is
-  printed. Wrapping stops short of the right edge, never breaks a word or a URL, keeps whatever
-  indentation a line arrived with, and hangs continuation lines two spaces.
+- **Streams follow the level**: `debug`, `info` and `notice` go to stdout, `warning` and above to
+  stderr; under `--json`, or while a background intent owns stdout (`sous mcp`), every message
+  goes to stderr.
 - **Prefer a list over a paragraph.** Facts belong in a key and value list with one short sentence
-  after it, not in a sentence with the facts buried inside it. A list of points uses the real
-  `BULLET` character.
+  after it, not in a sentence with the facts buried inside it.
 - **A question has room around it**: two blank lines above the "Question N of M" header, and two
-  blank lines under the input line, so a question never sits on the terminal's last row. The keys
-  a prompt answers to are named by a legend under the input line, built with `keysHelpTip`, in the
-  style `@inquirer/select` uses (`↑↓ navigate • ⏎ select • ⇥ advanced`); never a bracketed hint
-  above it.
+  blank lines under the input line, so a question never sits on the terminal's last row
+  (`TerminalPrompter`, `packages/plugin-cli/src/terminal-prompter.ts`). The keys a prompt answers to
+  are named by a legend under the input line, in the style `@inquirer/select` uses
+  (`↑↓ navigate • ⏎ select`); never a bracketed hint above it.
 
 ## Tests
 
