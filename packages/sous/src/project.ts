@@ -122,7 +122,7 @@ function configIn(sousDir: string): string | undefined {
     return name === undefined ? undefined : path.join(sousDir, name);
 }
 
-/** The values of the named flags (`--name value`, `--name=value`, `-c value`), up to a bare `--`. */
+/** The values of the named flags (`--name value`, `--name=value`, `-c value`, `-cvalue`), up to a bare `--`. */
 function readFlags(argv: readonly string[], names: readonly string[]): Record<string, string | undefined> {
     const found: Record<string, string | undefined> = {};
 
@@ -144,6 +144,9 @@ function readFlags(argv: readonly string[], names: readonly string[]): Record<st
                 found[name] = blank(argv[i + 1]);
             } else if (arg.startsWith(`${flag}=`)) {
                 found[name] = blank(arg.slice(flag.length + 1));
+            } else if (name.length === 1 && arg.startsWith(flag) && arg.length > 2 && !arg.startsWith(`${flag}-`)) {
+                // The attached short form, `-cpath`; `--continuous` starts with "--", not "-c".
+                found[name] = blank(arg.slice(2));
             }
         }
     }

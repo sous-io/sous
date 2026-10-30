@@ -97,6 +97,24 @@ describe("locateProject()", () => {
         expect(readOverrides(["--sous-confd=layers"], { SOUS_CONFD: "ignored" }, root).confDir).toBe(path.join(root, "layers"));
     });
 
+    /** Every way the old CLI read the flags: spaced, `=`, attached `-cpath`, before `--` only. */
+    it("should read the config flags in every form the old CLI did", () => {
+        const root = "/w";
+        const config = (argv: string[]) => readOverrides(argv, {}, root).config;
+
+        expect(config(["--config", "a.js"])).toEqual({ value: "/w/a.js", source: "--config" });
+        expect(config(["build", "--config=a.js"])?.value).toBe("/w/a.js");
+        expect(config(["-c", "a.js"])).toEqual({ value: "/w/a.js", source: "-c" });
+        expect(config(["-ca.js"])?.value).toBe("/w/a.js");
+        expect(config(["--continuous"])).toBeUndefined();
+        expect(config(["--config"])).toBeUndefined();
+        expect(config(["--sous-dir", "d", "--sous-config", "c.js"])).toEqual({ value: "/w/c.js", source: "--sous-config" });
+        expect(readOverrides(["--sous-dir", "d"], {}, root).config).toEqual({ value: "/w/d", source: "--sous-dir" });
+        expect(readOverrides(["--sous-confd", "x"], {}, root).config).toBeUndefined();
+        expect(config(["--", "-c", "a.js"])).toBeUndefined();
+        expect(readOverrides([], { SOUS_CONFIG: " ", SOUS_DIR: "d" }, root).config?.source).toBe("SOUS_DIR");
+    });
+
     /** An override that points at nothing is an error naming it. */
     it("should refuse an override that points at nothing", () => {
         const root = tmp();
