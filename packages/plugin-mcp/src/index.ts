@@ -89,7 +89,13 @@ export function createMcpPlugin(options: McpPluginOptions = {}): PluginDefinitio
 
                         const { StdioServerTransport } = await import("@modelcontextprotocol/sdk/server/stdio.js");
 
-                        return serveMcp(ctx, { transport: new StdioServerTransport(), handleSignals: true });
+                        const transport = new StdioServerTransport();
+
+                        // The SDK's stdio transport does not notice the client closing standard input;
+                        // without this, the server would wait forever (and Node exits with code 13).
+                        process.stdin.once("end", () => void transport.close());
+
+                        return serveMcp(ctx, { transport, handleSignals: true });
                     };
                 },
             });
