@@ -715,6 +715,7 @@ export function registerSubscriptionIntents(sous: Sous): void {
 
     sous.intents.add({
         intent: "subscription.add",
+        requiresProject: true,
         summary: "Subscribe this project to a recipe, or to a whole namespace of them",
         input: inputSchema<SubscriptionAddInput>(
             {
@@ -744,6 +745,7 @@ export function registerSubscriptionIntents(sous: Sous): void {
 
     sous.intents.add({
         intent: "subscription.remove",
+        requiresProject: true,
         summary: "Remove a subscription and the recipes only it held",
         input: inputSchema<SubscriptionRemoveInput>({ ref, dryRun, noBuild }, ["ref"]),
         changesConfig: true,
@@ -753,6 +755,7 @@ export function registerSubscriptionIntents(sous: Sous): void {
 
     sous.intents.add({
         intent: "subscription.enable",
+        requiresProject: true,
         summary: "Switch a subscription back on, on this machine",
         input: toggleInput,
         changesConfig: true,
@@ -762,6 +765,7 @@ export function registerSubscriptionIntents(sous: Sous): void {
 
     sous.intents.add({
         intent: "subscription.disable",
+        requiresProject: true,
         summary: "Switch a subscription off on this machine, keeping its pins",
         input: toggleInput,
         changesConfig: true,
@@ -771,6 +775,7 @@ export function registerSubscriptionIntents(sous: Sous): void {
 
     sous.intents.add({
         intent: "subscription.list",
+        requiresProject: true,
         summary: "List what this project subscribes to",
         input: inputSchema<BrowsingFlags>(browsing),
         parallel: true,
@@ -780,6 +785,7 @@ export function registerSubscriptionIntents(sous: Sous): void {
 
     sous.intents.add({
         intent: "subscription.update",
+        requiresProject: true,
         summary: "Move pinned versions to the newest their ranges allow",
         input: inputSchema<SubscriptionUpdateInput>(
             { ref: { type: "string", description: "Only this repository, namespace or recipe" }, yes, acceptFirst, dryRun, noBuild, answer, answersFile },
@@ -791,6 +797,7 @@ export function registerSubscriptionIntents(sous: Sous): void {
 
     sous.intents.add({
         intent: "recipe.update",
+        requiresProject: true,
         summary: "Plan an update of pinned versions, writing nothing",
         input: inputSchema<RecipeUpdateInput>({ ref: { type: "string", description: "Only this repository, namespace or recipe" }, acceptFirst }),
         parallel: true,
