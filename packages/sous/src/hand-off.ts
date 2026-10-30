@@ -46,6 +46,24 @@ export const SELF_UPDATE_COMMAND = "update";
 /** A project copy found by {@link findProjectInstall}. */
 export type ProjectInstall = { same: true; root: string } | { same: false; root: string; version: string; bin: string };
 
+/**
+ * The root of the invoked install: the nearest directory at or above `start` whose package.json is
+ * `@sous-io/sous`. The bin passes the directory above its own file, which is the root in the
+ * published layout (`dist/bin.js`); a bundle built elsewhere inside the package (the tests build
+ * theirs under `dist/test/`) still finds the package. `start` itself when nothing above it is sous.
+ */
+export function resolveOwnRoot(start: string): string {
+    for (let dir = path.resolve(start); ; dir = path.dirname(dir)) {
+        if (readPackageJson(dir)?.name === PACKAGE_NAME) {
+            return dir;
+        }
+
+        if (path.dirname(dir) === dir) {
+            return path.resolve(start);
+        }
+    }
+}
+
 /** What the bin should do. */
 export type HandOffPlan = { kind: "run-self" } | { kind: "hand-off"; install: Extract<ProjectInstall, { same: false }>; notice: string[] };
 
@@ -175,7 +193,8 @@ export function formatHandoffNotice(options: { install: { root: string; version:
 
 /** Decides whether to hand off, and what to say. */
 export function planHandoff(options: { cwd: string; ownRoot: string; env: Readonly<Record<string, string | undefined>>; argv: readonly string[] }): HandOffPlan {
-    const { cwd, ownRoot, env, argv } = options;
+    const { cwd, env, argv } = options;
+    const ownRoot = resolveOwnRoot(options.ownRoot);
 
     if (isEnvFlagOn(env[NO_DELEGATE_ENV]) || commandWordOf(argv) === SELF_UPDATE_COMMAND) {
         return { kind: "run-self" };

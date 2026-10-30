@@ -161,14 +161,24 @@ export function createCliPlugin(options: CliPluginOptions = {}): PluginDefinitio
                 summary: "Print the version",
                 input: jsonSchema<{ verbose?: boolean }>({
                     type: "object",
-                    properties: { verbose: { type: "boolean", default: false, description: "Also print the application name." } },
+                    properties: { verbose: { type: "boolean", default: false, description: "Also print the package, where it is installed, the platform and the Node build." } },
                 }),
                 parallel: true,
                 agent: { tool: "sous_version", usage: "Call this to learn which sous version serves this project." },
                 handle: (input, ctx) => {
                     const { name, version } = ctx.engine.app;
 
-                    return input.verbose ? { name, version } : version;
+                    if (!input.verbose) {
+                        return version;
+                    }
+
+                    // The npm package and where it is installed, from plugin-host's package identity
+                    // when it is loaded (read by name: plugin-cli does not depend on plugin-host).
+                    const identity = ctx.services.has("host.package")
+                        ? (ctx.services.get("host.package" as never) as { identity(): { name: string; root: string } }).identity()
+                        : undefined;
+
+                    return { name: identity?.name ?? name, version, ...(identity === undefined ? {} : { root: identity.root }) };
                 },
             });
 

@@ -237,9 +237,9 @@ export function timingsShowView(result: readonly TimingEntry[]): string {
 
 /**
  * `sous version`: `v1.2.3`, as `sous --version` printed before the refactor; with `--verbose`, the
- * package, platform and Node build under it.
+ * package, where it is installed, the platform and the Node build under it.
  */
-export function versionView(result: string | { name: string; version: string }, view: CliViewContext): string {
+export function versionView(result: string | { name: string; version: string; root?: string }, view: CliViewContext): string {
     if (typeof result === "string") {
         return `v${result}\n`;
     }
@@ -247,7 +247,7 @@ export function versionView(result: string | { name: string; version: string }, 
     const out = view.printer();
 
     out.log(`v${result.version}`);
-    out.variables({ Package: result.name, Platform: `${os.platform()}-${os.arch()}`, Node: process.version });
+    out.variables({ Package: result.name, ...(result.root === undefined ? {} : { Install: result.root }), Platform: `${os.platform()}-${os.arch()}`, Node: process.version });
 
     return out.text();
 }

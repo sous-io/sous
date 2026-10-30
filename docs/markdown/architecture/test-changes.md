@@ -1296,3 +1296,29 @@ tests had been written against the first new layout, and were brought in line:
   that such a child renders (an unknown variable gives an empty value) with no warning.
 - **Why:** the old class is gone, and every output now has the project's variables, so the unrendered `.tpl.`
   warning was removed (see "Unrendered `.tpl.` warnings" above).
+
+## Switch-over: setup (the hand-off)
+
+### The hand-off to a project's own sous, through the CLI
+
+- **File:** `packages/sous/test/integration/project-install-e2e.test.ts`
+- **Before:** the project copy was made with `npm pack` at the repository root and extracted into a
+  project's `node_modules`; its bin was `bin/run.js`, and "Invoked install" named the repository
+  root.
+- **Now:** the project copy is the published package's layout built in place: the bundle
+  (`scripts/bundle.mjs` into `<copy>/dist/bin.js`), `packages/sous/package.json` with its version
+  relabelled, the packaged core recipe and `packages/sous/node_modules` (both symlinked). Its bin is
+  `dist/bin.js`, and "Invoked install" names `packages/sous`.
+- **Why:** the published package is `packages/sous` now; the repository root is a workspace named
+  `sous-workspace`, which the hand-off rightly refuses as not being sous. Building the copy directly
+  keeps the test from running the package's `prepack` (which copies files into `packages/sous` while
+  other tests run). The cases themselves are unchanged.
+
+### The hand-off, the unit tests
+
+- **File:** `src/lib/project-install.spec.ts` → `packages/sous/src/hand-off.spec.ts`
+- **Before:** tested `src/lib/project-install.mjs`; `planHandoff` and `handOffToProjectInstall` could
+  be called without `argv`.
+- **Now:** the same cases against `src/hand-off.ts`, each passing `argv: []` where it passed none. New:
+  `resolveOwnRoot()` finds the invoked install's package root above the bin's directory.
+- **Why:** the module is TypeScript now and `argv` is required.

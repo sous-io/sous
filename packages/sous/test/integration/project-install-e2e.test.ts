@@ -6,8 +6,9 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { makeTmpDir, type TmpDir } from "../utils/tmp.js";
 
 import { binPath } from "../utils/sous-bin.js";
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
-const ownVersion = (JSON.parse(fs.readFileSync(path.join(repoRoot, "packages", "sous", "package.json"), "utf8")) as {
+/** The published package's directory: the invoked install, as far as the hand-off is concerned. */
+const packageDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const ownVersion = (JSON.parse(fs.readFileSync(path.join(packageDir, "package.json"), "utf8")) as {
   version: string;
 }).version;
 
@@ -22,12 +23,11 @@ const CLI_TIMEOUT = 30_000;
  * project installs (gh-10), exercised through the real entry point
  * (bin/run.js) the way a global install would be.
  *
- * The "project copy" is the package as npm would publish it: `npm pack` builds
- * the tarball from the repository's own files allowlist (no network; pack only
- * reads local files), and it is extracted under a temporary project's
- * node_modules. The copy's node_modules is a symlink to the repository's, so
- * its dependencies resolve without an install, and its package.json version is
- * relabelled so `sous --version` says which copy ran.
+ * The "project copy" is the published package's layout (its bundle and its
+ * package.json), built under a temporary project's node_modules. The copy's
+ * node_modules is a symlink to the package's, so its dependencies resolve
+ * without an install, and its package.json version is relabelled so
+ * `sous --version` says which copy ran.
  */
 describe("hand-off to the project's own install", () => {
   let tmp: TmpDir;
@@ -64,46 +64,25 @@ describe("hand-off to the project's own install", () => {
   beforeAll(() => {
     tmp = makeTmpDir("sous-project-install-e2e-");
 
-    // Pack the repository as npm would publish it. The tarball is found by
-    // listing the destination rather than by parsing npm's output: the shape
-    // of `npm pack --json` differs between npm major versions (an array in
-    // npm 10, an object keyed by package name in npm 12), and the release job
-    // runs the suite under the latest npm while the test job runs the bundled one.
-    const packDir = path.join(tmp.path, "pack");
-    fs.mkdirSync(packDir);
-    const pack = spawnSync(
-      process.platform === "win32" ? "npm.cmd" : "npm",
-      ["pack", "--pack-destination", packDir],
-      { cwd: repoRoot, encoding: "utf8" }
-    );
-    if (pack.status !== 0) {
-      throw new Error(`npm pack failed:\n${pack.stderr}`);
-    }
-    const tarballs = fs.readdirSync(packDir).filter((name) => name.endsWith(".tgz"));
-    if (tarballs.length !== 1) {
-      throw new Error(`npm pack wrote ${tarballs.length} tarballs into ${packDir}; expected one.`);
-    }
-    const [filename] = tarballs as [string];
-
-    // Extract it where a devDependency install would put it.
+    // Build the published package's layout under a project's node_modules, where a devDependency
+    // install would put it: the bundle (dist/bin.js and dist/sous.js), the packaged core recipe and
+    // the package.json, with its version relabelled. Its dependencies (only @sous-io/plugin-api stays outside the bundle) are
+    // the package's own, through a symlinked node_modules.
     projectRoot = path.join(tmp.path, "project");
     projectCopy = path.join(projectRoot, "node_modules", "@sous-io", "sous");
     fs.mkdirSync(projectCopy, { recursive: true });
-    const untar = spawnSync(
-      "tar",
-      ["-xzf", path.join(packDir, filename), "--strip-components=1", "-C", projectCopy],
-      { encoding: "utf8" }
-    );
-    if (untar.status !== 0) {
-      throw new Error(`tar failed:\n${untar.stderr}`);
+    const bundle = spawnSync(process.execPath, [path.join(packageDir, "scripts", "bundle.mjs"), path.join(projectCopy, "dist", "bin.js")], {
+      encoding: "utf8",
+    });
+    if (bundle.status !== 0) {
+      throw new Error(`bundling the project copy failed:\n${bundle.stderr}`);
     }
-
-    // Its dependencies are the repository's; relabel its version.
-    fs.symlinkSync(path.join(repoRoot, "node_modules"), path.join(projectCopy, "node_modules"), "dir");
-    const pkgFile = path.join(projectCopy, "package.json");
-    const pkg = JSON.parse(fs.readFileSync(pkgFile, "utf8")) as Record<string, unknown>;
+    fs.symlinkSync(path.join(packageDir, "node_modules"), path.join(projectCopy, "node_modules"), "dir");
+    // The packaged core recipe, which `npm pack` copies in from the repository root.
+    fs.symlinkSync(path.join(packageDir, "..", "..", "recipes"), path.join(projectCopy, "recipes"), "dir");
+    const pkg = JSON.parse(fs.readFileSync(path.join(packageDir, "package.json"), "utf8")) as Record<string, unknown>;
     pkg.version = PROJECT_VERSION;
-    fs.writeFileSync(pkgFile, JSON.stringify(pkg, null, 2));
+    fs.writeFileSync(path.join(projectCopy, "package.json"), JSON.stringify(pkg, null, 2));
 
     // A sous project with a config, some way beneath the root, and a
     // directory outside any project.
@@ -155,7 +134,7 @@ describe("hand-off to the project's own install", () => {
       expect(result.stdout).toContain(fs.realpathSync(projectCopy));
       expect(result.stdout).toContain(process.version);
       expect(result.stderr).toContain(`Handing off to the project-level Sous install: v${PROJECT_VERSION}`);
-      expect(result.stderr).toContain(`Invoked install: v${ownVersion} at ${fs.realpathSync(repoRoot)}`);
+      expect(result.stderr).toContain(`Invoked install: v${ownVersion} at ${fs.realpathSync(packageDir)}`);
       expect(result.stderr).toContain("SOUS_NO_DELEGATE=1");
     },
     CLI_TIMEOUT
@@ -210,14 +189,14 @@ describe("hand-off to the project's own install", () => {
   /**
    * The project copy invoked directly (what `npx sous` does) finds itself and
    * never hands off, so there is no loop and no notice.
-   * Example: `node <project copy>/bin/run.js --version` reports 0.0.0-project silently.
+   * Example: `node <project copy>/dist/bin.js --version` reports 0.0.0-project silently.
    */
   it(
     "should not hand off from the project copy to itself",
     () => {
       const result = runCli(["--version"], {
         cwd: nestedDir,
-        bin: path.join(projectCopy, "bin", "run.js"),
+        bin: path.join(projectCopy, "dist", "bin.js"),
       });
       expect(result.status).toBe(0);
       expect(result.stdout).toBe(`v${PROJECT_VERSION}\n`);

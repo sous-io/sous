@@ -8,15 +8,23 @@ import { findProject, locateProject, readOverrides } from "./project.js";
 
 declare const __SOUS_VERSION__: string | undefined;
 
-/** The version of this package: set by the bundler, or read from package.json when run from source. */
+/**
+ * The version of this package: the one its package.json (the directory above this module, in the
+ * published layout and from source) states, which is the version npm installed; otherwise the one
+ * the bundler set, for a bundle built outside the package's root.
+ */
 export function sousVersion(): string {
-    if (typeof __SOUS_VERSION__ === "string") {
-        return __SOUS_VERSION__;
+    try {
+        const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { name?: unknown; version?: unknown };
+
+        if (manifest.name === "@sous-io/sous" && typeof manifest.version === "string") {
+            return manifest.version;
+        }
+    } catch {
+        // No package.json beside the bundle: the version the bundler set.
     }
 
-    const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string };
-
-    return manifest.version;
+    return typeof __SOUS_VERSION__ === "string" ? __SOUS_VERSION__ : "0.0.0";
 }
 
 /** What {@link main} reads from the process; tests pass their own. */
