@@ -35,4 +35,4 @@ export default gitPlugin;
 export type * from "./types.js";
 
 export { GIT_TIMEOUT_EXIT_CODE, GitError } from "./errors.js";
-export { createGitRunner } from "./runner.js";
+export { createGitRunner, LF_CHECKOUT_OPTIONS } from "./runner.js";

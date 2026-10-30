@@ -12,6 +12,17 @@ import type { HostProcesses, ProcessResult } from "@sous-io/plugin-host/types";
 import { GIT_TIMEOUT_EXIT_CODE, GitError } from "./errors.js";
 import type { GitResult, GitRunner, GitRunOptions, GitStatusEntry } from "./types.js";
 
+/**
+ * `git clone` options that check files out exactly as they were committed.
+ *
+ * Recipes are hashed over their raw bytes, and Git for Windows installs with
+ * `core.autocrlf=true`, which rewrites every text file to CRLF on checkout. A
+ * recipe published with LF would then hash differently on such a machine and
+ * fail its own pin. `--config` also writes these into the clone's own
+ * `.git/config`, so later checkouts in that clone keep the same bytes.
+ */
+export const LF_CHECKOUT_OPTIONS = ["--config", "core.autocrlf=false", "--config", "core.eol=lf"] as const;
+
 /** What the runner needs from the engine. */
 export interface GitRunnerDeps {
     processes: HostProcesses;
@@ -154,7 +165,8 @@ export function createGitRunner(deps: GitRunnerDeps): GitRunner {
         async clone(url, directory, options = {}) {
             const parent = path.dirname(directory);
             const sparse = options.sparsePaths !== undefined && options.sparsePaths.length > 0;
-            const args = ["clone"];
+            // Every clone keeps the committed bytes, whatever this machine's line-ending settings are.
+            const args: string[] = ["clone", ...LF_CHECKOUT_OPTIONS];
 
             if (options.depth !== undefined && options.depth > 0) {
                 args.push("--depth", String(options.depth));

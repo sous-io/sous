@@ -7,6 +7,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { ConfigError } from "@sous-io/plugin-api";
+import { LF_CHECKOUT_OPTIONS } from "@sous-io/plugin-git";
 import type { GitResult, GitRunner } from "@sous-io/plugin-git/types";
 
 /** The remote a clone creates, and the one every step here works on. */
@@ -72,8 +73,10 @@ export async function cloneRepo(runner: GitRunner, url: string, destination: str
 
     fs.mkdirSync(parent, { recursive: true });
 
+    // A linked checkout is hashed when its recipes are released or compiled, so it keeps the
+    // committed bytes whatever this machine's line-ending settings are.
     if (depth > 0) {
-        const shallow = await git(runner, ["clone", "--depth", String(depth), "--", url, destination], parent);
+        const shallow = await git(runner, ["clone", ...LF_CHECKOUT_OPTIONS, "--depth", String(depth), "--", url, destination], parent);
 
         if (shallow.exitCode === 0) {
             return { depth, fellBackToFullClone: false };
@@ -82,7 +85,7 @@ export async function cloneRepo(runner: GitRunner, url: string, destination: str
         fs.rmSync(destination, { recursive: true, force: true });
     }
 
-    await gitOrThrow(runner, ["clone", "--", url, destination], parent, `Cloning ${url}`);
+    await gitOrThrow(runner, ["clone", ...LF_CHECKOUT_OPTIONS, "--", url, destination], parent, `Cloning ${url}`);
 
     return { depth: 0, fellBackToFullClone: depth > 0 };
 }

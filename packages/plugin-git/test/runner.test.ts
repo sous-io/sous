@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { isSousError } from "@sous-io/plugin-api";
 import type { HostProcesses, ProcessResult } from "@sous-io/plugin-host/types";
@@ -221,10 +222,27 @@ describe("git.runner with a real git", () => {
         const runner = await runnerReal();
         const target = path.join(dir, "sparse");
 
-        await runner.clone(`file://${repo}`, target, { depth: 1, branch: "workflow@1.0.0", sparsePaths: ["recipes/one"] });
+        await runner.clone(pathToFileURL(repo).href, target, { depth: 1, branch: "workflow@1.0.0", sparsePaths: ["recipes/one"] });
 
         expect(existsSync(path.join(target, "recipes", "one", "a.md"))).toBe(true);
         expect(existsSync(path.join(target, "recipes", "two", "b.md"))).toBe(false);
+    });
+
+    /**
+     * A clone keeps the committed bytes even where git is set to turn LF into CRLF on checkout
+     * (Git for Windows' default), because recipes are hashed over their raw bytes.
+     */
+    it("should check files out with the committed line endings whatever git's settings are", async () => {
+        const runner = await runnerReal();
+        const target = path.join(dir, "line-endings");
+        // The user's own git settings, as Git for Windows writes them.
+        const globalConfig = path.join(dir, "global.gitconfig");
+
+        writeFileSync(globalConfig, "[core]\n\tautocrlf = true\n");
+        await runner.clone(repo, target, { env: { GIT_CONFIG_GLOBAL: globalConfig } });
+
+        expect(readFileSync(path.join(target, "README.md"), "utf8")).toBe("# readme\n");
+        expect(await runner.run(["config", "core.autocrlf"], { cwd: target })).toMatchObject({ stdout: "false" });
     });
 
     /** A clone with no checkout leaves no files. */

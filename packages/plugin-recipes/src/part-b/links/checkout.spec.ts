@@ -2,12 +2,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { isSousErrorOfKind } from "@sous-io/plugin-api";
-import { createGitRunner } from "@sous-io/plugin-git";
+import { createGitRunner, LF_CHECKOUT_OPTIONS } from "@sous-io/plugin-git";
 import type { GitResult, GitRunner } from "@sous-io/plugin-git/types";
 import { createProcesses } from "@sous-io/plugin-host";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { cleanTemp, tempDir } from "../../../test/part-b/helpers.js";
 import * as checkout from "./checkout.js";
+
+/** The line-ending options every clone carries, as they appear in a joined command. */
+const LF = LF_CHECKOUT_OPTIONS.join(" ");
 
 /** A runner that answers from a table of command lines, recording every call. */
 function fakeRunner(answers: Record<string, Partial<GitResult>>): GitRunner & { calls: string[] } {
@@ -76,15 +79,15 @@ describe("remote URLs", () => {
 describe("with a fake runner", () => {
     it("should retry the full history when a shallow clone is refused, and say so", async () => {
         const destination = path.join(tempDir(), "repo");
-        const runner = fakeRunner({ [`clone -- https://x/y ${destination}`]: { exitCode: 0 } });
+        const runner = fakeRunner({ [`clone ${LF} -- https://x/y ${destination}`]: { exitCode: 0 } });
 
         expect(await checkout.cloneRepo(runner, "https://x/y", destination)).toEqual({ depth: 0, fellBackToFullClone: true });
-        expect(runner.calls[0]).toBe(`clone --depth 1 -- https://x/y ${destination}`);
+        expect(runner.calls[0]).toBe(`clone ${LF} --depth 1 -- https://x/y ${destination}`);
     });
 
     it("should carry git's message into the error when a clone fails", async () => {
         const destination = path.join(tempDir(), "repo");
-        const runner = fakeRunner({ [`clone -- https://x/y ${destination}`]: { exitCode: 128, stderr: "fatal: repository not found" } });
+        const runner = fakeRunner({ [`clone ${LF} -- https://x/y ${destination}`]: { exitCode: 128, stderr: "fatal: repository not found" } });
 
         await expect(checkout.cloneRepo(runner, "https://x/y", destination, 0)).rejects.toMatchObject({ message: "Cloning https://x/y failed.", details: expect.arrayContaining(["  fatal: repository not found"]) });
     });
