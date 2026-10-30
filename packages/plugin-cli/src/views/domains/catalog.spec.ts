@@ -166,9 +166,25 @@ describe("the catalog views", () => {
                 { name: "serviceToken", env: "QA_SERVICE_TOKEN", required: false, secret: true },
             ],
             manifestRead: true,
+            installs: [
+                { key: "workflow/qa-helper", version: "0.1.0", kind: "depends", requestedBy: ["workflow/qa-variables"] },
+                { key: "workflow/qa-variables", version: "0.1.0", kind: "subscribes", requestedBy: ["project"] },
+            ],
+            questions: {
+                questions: [
+                    {
+                        recipe: "workflow/qa-variables",
+                        definition: { name: "dashboardUrl", prompt: "Where is the dashboard?", description: "The QA dashboard. More words.", example: "https://qa" },
+                        storedAs: "SOUS_VAR_QA_DASHBOARD_URL",
+                        answered: false,
+                    },
+                    { recipe: "workflow/qa-variables", definition: { name: "serviceToken", required: false, secret: true }, storedAs: "QA_SERVICE_TOKEN", answered: true },
+                ],
+                unreadable: [],
+            },
         };
 
-        /** Facts, versions, dependencies, questions and where its files land. */
+        /** Facts, versions, dependencies, what subscribing installs and asks, and where its files land. */
         it("should show the recipe in full", async () => {
             const text = await show("recipe.show", detail, { ref: "qa-variables" });
 
@@ -178,10 +194,16 @@ describe("the catalog views", () => {
             expect(text).toContain("the latest version, and the one pinned here");
             expect(text).toContain("workflow/qa-helper");
             expect(text).toContain("build dependency");
-            expect(text).toContain("This recipe asks 2 questions.");
+            expect(text).toContain("What subscribing installs");
+            expect(text).toMatch(/workflow\/qa-variables\s+0\.1\.0\s+the subscription itself\s+this subscription/);
+            expect(text).toMatch(/workflow\/qa-helper\s+0\.1\.0\s+build dependency\s+workflow\/qa-variables/);
+            expect(text).toContain("These recipes ask 2 questions, 1 of which nothing answers yet.");
+            expect(text).toContain("workflow/qa-variables asks 2 questions:");
             expect(text).toContain("SOUS_VAR_QA_DASHBOARD_URL");
             expect(text).toContain("QA_SERVICE_TOKEN");
             expect(text).toContain("about    : The QA dashboard.");
+            expect(text).toContain("answered : no, and this recipe requires an answer");
+            expect(text).not.toContain("--answer");
             expect(text).toContain("Where its files land in this project");
             expect(text).toContain("/p/.claude/skills");
             expect(text).toContain("reaches an agent through an include line");
@@ -189,11 +211,19 @@ describe("the catalog views", () => {
 
         /** A recipe nothing pins, whose files are not on this machine. */
         it("should say what it does not know", async () => {
-            const text = await show("recipe.show", { ...detail, pinned: undefined, manifestRead: false, dependencies: [], dependenciesRecorded: false, variables: [] });
+            const text = await show("recipe.show", {
+                ...detail,
+                pinned: undefined,
+                manifestRead: false,
+                dependencies: [],
+                dependenciesRecorded: false,
+                variables: [],
+                questions: { questions: [], unreadable: [] },
+            });
 
             expect(text).toContain("this project pins none");
             expect(text).toContain("The repository's index records no dependencies for this version.");
-            expect(text).toContain("This recipe asks no questions");
+            expect(text).toContain("None of these recipes ask any questions, so nothing needs answering.");
             expect(text).toContain("The recipe's own files are not on this machine");
         });
 

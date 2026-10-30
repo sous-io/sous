@@ -926,6 +926,26 @@ export interface SubscriptionAddResult {
     readonly cycles: string[][];
     readonly dryRun: boolean;
     readonly followUps: IntentFollowUp[];
+    /** On a dry run: every question the recipes ask, from what their index records. */
+    readonly questions?: PlannedQuestions;
+}
+
+/** One question a recipe would ask, and whether something answers it already. */
+export interface PlannedQuestion {
+    /** The recipe asking it, `namespace/recipe`. */
+    readonly recipe: string;
+    readonly definition: VariableDefinition;
+    /** The environment name the answer is stored as. */
+    readonly storedAs?: string;
+    /** True when an answer is in scope already. */
+    readonly answered: boolean;
+}
+
+/** The questions some recipes would ask, before anything is downloaded. */
+export interface PlannedQuestions {
+    readonly questions: readonly PlannedQuestion[];
+    /** Recipes whose questions are not known: not on this machine, and not recorded by their index. */
+    readonly unreadable: readonly string[];
 }
 
 /** `subscription.remove`. */
@@ -1115,6 +1135,14 @@ export interface RecipeDetail {
     readonly contents: ReadonlyArray<{ readonly kind: ContentKind; readonly include: string[]; readonly destinations: string[] }>;
     readonly variables: VariableDefinition[];
     readonly manifestRead: boolean;
+    /** What subscribing to the described version would install, worked out from the indexes alone. */
+    readonly installs?: ReadonlyArray<{ readonly key: string; readonly version: string; readonly kind: DependencyKind; readonly requestedBy: readonly string[] }>;
+    /** Repositories subscribing would need that this project does not trust. */
+    readonly installsNeed?: readonly MissingRepo[];
+    /** Why what subscribing installs could not be worked out. */
+    readonly installsProblem?: string;
+    /** Every question subscribing would ask. */
+    readonly questions?: PlannedQuestions;
 }
 
 /** `namespace.show` and `recipe.show`. */

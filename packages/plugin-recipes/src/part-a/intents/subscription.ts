@@ -37,6 +37,7 @@ import { askFollowUp, buildFollowUp } from "../followups.js";
 import { applyResolution, keysHeldBySubscription, PROJECT_HOLDER, type LockRepoInput } from "../lock-holds.js";
 import { configuredSubscriptions, contributorLabel, managedContributor, setSubscriptionEnabled, SUBSCRIPTIONS_LAYER, trustedRepos, writeSubscriptionEntry } from "../project.js";
 import { isShortNamed, planSubscriptionRemoval, subscriptionKeyFor, writeSubscriptionRemoval } from "../subscriptions.js";
+import { planQuestions } from "../questions.js";
 import { ensureRequiredPlugins, recipeDirectory } from "../required-plugins.js";
 import { needUrlError } from "../trust.js";
 import { describeUpdateScope, isEmptyUpdate, planUpdate } from "../update-plan.js";
@@ -314,6 +315,7 @@ export async function addSubscription(input: SubscriptionAddInput, ctx: Context)
             ...result,
             diff: lockService.diff(before, after),
             followUps: [...installFollowUp, { intent: "vars.ask", skipped: "--dry-run" }, { intent: "build", skipped: "--dry-run" }],
+            questions: await planQuestions(current, closure.resolved),
         };
     }
 

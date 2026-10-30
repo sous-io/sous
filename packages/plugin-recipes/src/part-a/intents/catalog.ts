@@ -5,9 +5,13 @@
  */
 
 import { SousError, type Context, type Sous } from "@sous-io/plugin-api";
+import semver from "semver";
 import type { BrowsingFlags, CatalogShowInput, NamespaceDetail, NamespaceListing, RecipeDetail, RecipeListing } from "../../types.js";
 import { describedLocation, describeNamespace, describeRecipe, findInCatalog, listNamespaces, listRecipes, unknownRefError } from "../catalog.js";
 import { loadCatalog, readPublishedManifest, readingsOf, resolveInCatalog, type CatalogContext } from "../catalog-context.js";
+import { PROJECT_HOLDER } from "../lock-holds.js";
+import { planQuestions } from "../questions.js";
+import { describeError } from "../util.js";
 import { acceptFirst, browsing, inputSchema, latestFlag } from "./schema.js";
 
 const browsingCli = { flags: { latest: latestFlag } };
@@ -71,8 +75,44 @@ export async function showRecipe(input: CatalogShowInput, ctx: Context): Promise
     });
     const location = describedLocation(catalog.inputs, { repo: found.repo, key: found.key });
     const manifest = location === undefined ? undefined : await readPublishedManifest(ctx, catalog.inputs, location);
+    const detail = describeRecipe(catalog.inputs, { repo: found.repo, key: found.key }, manifest);
 
-    return describeRecipe(catalog.inputs, { repo: found.repo, key: found.key }, manifest);
+    return { ...detail, ...(await previewSubscription(ctx, catalog, detail)) };
+}
+
+/**
+ * What subscribing to the described version would install and ask, resolved against the indexes
+ * already read, downloading nothing.
+ */
+async function previewSubscription(ctx: Context, catalog: CatalogContext, detail: RecipeDetail): Promise<Pick<RecipeDetail, "installs" | "installsNeed" | "installsProblem" | "questions">> {
+    if (detail.describing === undefined) {
+        return {};
+    }
+
+    const prerelease = semver.prerelease(detail.describing) !== null;
+
+    try {
+        const result = await ctx.services.get("recipes.resolver").resolve(
+            [
+                {
+                    ref: ctx.services.get("refs.format").recipeRef(detail.namespace, detail.name, { repo: detail.repo, range: detail.describing }),
+                    range: detail.describing,
+                    requestedBy: PROJECT_HOLDER,
+                    kind: "subscribes",
+                    ...(prerelease ? { prerelease: true } : {}),
+                },
+            ],
+            { indexes: new Map(catalog.inputs.repos.map((repo) => [repo.name, repo.index])), ...(prerelease ? { prerelease: true } : {}) },
+        );
+
+        return {
+            installs: result.resolved.map((recipe) => ({ key: recipe.key, version: recipe.version, kind: recipe.kind, requestedBy: recipe.requestedBy })),
+            installsNeed: result.missingRepos,
+            questions: await planQuestions(ctx, result.resolved),
+        };
+    } catch (error) {
+        return { installsProblem: `Sous could not work out what subscribing to version ${detail.describing} would install. ${describeError(error)}` };
+    }
 }
 
 function installedError(input: CatalogShowInput, what: "namespace" | "recipe"): SousError | undefined {

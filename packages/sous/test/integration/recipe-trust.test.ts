@@ -141,7 +141,8 @@ describe("what a recipe is not allowed to do", () => {
       expect(shown.status).toBe(0);
 
       const merged = JSON.parse(shown.stdout) as Record<string, unknown>;
-      expect(merged.tools).toBeUndefined();
+      // The tools key has a default of {} now, so "no tool was added" is an empty map.
+      expect(merged.tools ?? {}).toEqual({});
       expect(merged._env).toBeUndefined();
       expect(merged.name).toBe("Recipe Trust Test Project");
 

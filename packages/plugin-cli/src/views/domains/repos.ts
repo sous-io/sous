@@ -8,7 +8,7 @@
  * command printed after its work was done.
  */
 
-import { browsingVariables } from "./catalog.js";
+import { browsingVariables, writeQuestionPlan, type QuestionPlanShape } from "./catalog.js";
 import type { CliViewContext, CliViewEntity, CliViewOutput } from "../../types.js";
 import type { Printer } from "../printer.js";
 import type { TableColumn } from "../table.js";
@@ -146,6 +146,7 @@ interface SubscriptionAddResult {
     readonly cycles: ReadonlyArray<readonly string[]>;
     readonly dryRun: boolean;
     readonly followUps: readonly IntentFollowUp[];
+    readonly questions?: QuestionPlanShape;
 }
 
 interface SubscriptionRemoveResult {
@@ -685,6 +686,12 @@ async function subscriptionAdd(result: SubscriptionAddResult, view: CliViewConte
         out.warning(
             `Some of these recipes co-subscribe to each other in a circle:\n${result.cycles.map((cycle) => `  ${cycle.join(" -> ")}`).join("\n")}\nThat is unusual but not broken, and everything above was installed.`,
         );
+    }
+
+    // A dry run asks nothing, so it lists what the subscription would ask instead.
+    if (result.dryRun && result.questions !== undefined) {
+        out.blank().subheading("Questions these recipes ask").blank();
+        writeQuestionPlan(out, result.questions, { answerHints: true });
     }
 
     out.blank();

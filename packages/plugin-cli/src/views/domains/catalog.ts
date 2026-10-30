@@ -86,6 +86,16 @@ export interface RecipeDetailShape {
     readonly contents: ReadonlyArray<{ readonly kind: string; readonly include: readonly string[]; readonly destinations: readonly string[] }>;
     readonly variables: readonly VariableShape[];
     readonly manifestRead: boolean;
+    readonly installs?: ReadonlyArray<{ readonly key: string; readonly version: string; readonly kind: string; readonly requestedBy: readonly string[] }>;
+    readonly installsNeed?: ReadonlyArray<{ readonly name: string; readonly url?: string; readonly requiredBy: ReadonlyArray<{ readonly requestedBy: string }> }>;
+    readonly installsProblem?: string;
+    readonly questions?: QuestionPlanShape;
+}
+
+/** The questions some recipes would ask (plugin-recipes' `PlannedQuestions`). */
+export interface QuestionPlanShape {
+    readonly questions: ReadonlyArray<{ readonly recipe: string; readonly definition: VariableShape; readonly storedAs?: string; readonly answered: boolean }>;
+    readonly unreadable: readonly string[];
 }
 
 /** One match `repo.search` returns. */
@@ -153,6 +163,13 @@ const DEPENDENCY_COLUMNS: TableColumn[] = [
     { key: "resolved", header: "Resolved to", overflow: "truncate", minWidth: 11 },
     { key: "repo", header: "Repository", overflow: "truncate", priority: "low", minWidth: 12 },
     { key: "kind", header: "Kind", overflow: "wrap", priority: "medium", minWidth: 16 },
+];
+
+const INSTALLS_COLUMNS: TableColumn[] = [
+    { key: "key", header: "Recipe", kind: "path", overflow: "truncate", minWidth: 12 },
+    { key: "version", header: "Version", overflow: "truncate", minWidth: 7 },
+    { key: "kind", header: "Kind", overflow: "wrap", minWidth: 16 },
+    { key: "neededBy", header: "Needed by", overflow: "wrap", flex: 1, priority: "low", minWidth: 16 },
 ];
 
 const CONTENT_COLUMNS: TableColumn[] = [
@@ -495,7 +512,7 @@ function recipeShow(detail: RecipeDetailShape, view: CliViewContext): string {
             DEPENDENCY_COLUMNS,
             detail.dependencies.map((entry) => ({
                 key: entry.key,
-                declared: entry.declared ?? "not recorded in the index",
+                declared: entry.declared === undefined ? "not recorded in the index" : describeDeclaration(entry.declared),
                 resolved: entry.resolvedVersion ?? (entry.resolvedRange === undefined ? "not recorded in the index" : `the range ${entry.resolvedRange}`),
                 repo: entry.repo ?? "this repository",
                 kind: describeDependencyKind(entry.kind),
@@ -503,7 +520,19 @@ function recipeShow(detail: RecipeDetailShape, view: CliViewContext): string {
         );
     }
 
-    printQuestions(out, detail);
+    if (detail.describing === undefined) {
+        out.blank();
+        out.paragraph("This recipe publishes no version a subscription would install, so nothing is described below.");
+    } else if (detail.installsProblem !== undefined || detail.installs === undefined || detail.questions === undefined) {
+        out.blank();
+        out.paragraph(detail.installsProblem ?? "Sous could not work out what subscribing would install.");
+    } else {
+        printInstalls(out, detail);
+        out.blank();
+        out.subheading("What subscribing asks you");
+        out.blank();
+        writeQuestionPlan(out, detail.questions, { answerHints: false });
+    }
 
     out.blank();
     out.subheading("Where its files land in this project");
@@ -528,42 +557,125 @@ function recipeShow(detail: RecipeDetailShape, view: CliViewContext): string {
     return out.footer().text();
 }
 
-/** The questions the described version asks, each with the facts `sous vars show` gives. */
-function printQuestions(out: Printer, detail: RecipeDetailShape): void {
-    out.blank();
-    out.subheading("What subscribing asks you");
-    out.blank();
+/**
+ * How a manifest entry brings a dependency in: a whole namespace is named as one, any other entry
+ * is shown as written.
+ *
+ * ```ts
+ * describeDeclaration("workflow"); // -> "the whole 'workflow' namespace"
+ * describeDeclaration("tools/lint"); // -> "tools/lint"
+ * ```
+ */
+export function describeDeclaration(declared: string): string {
+    const match = /^(?:([a-z0-9][a-z0-9._-]*):)?([a-z][a-z0-9-]*)(?:@.*)?$/i.exec(declared.trim());
 
-    if (detail.describing === undefined) {
-        out.paragraph("This recipe publishes no version a subscription would install, so nothing is described here.");
-
-        return;
+    if (match === null) {
+        return declared;
     }
 
-    const count = detail.variables.length;
+    return match[1] === undefined ? `the whole '${match[2]}' namespace` : `the whole '${match[2]}' namespace of ${match[1]}`;
+}
+
+/** Every recipe a subscription to the described version installs, and what brings each in. */
+function printInstalls(out: Printer, detail: RecipeDetailShape): void {
+    out.blank();
+    out.subheading("What subscribing installs");
+    out.blank();
+    printTable(
+        out,
+        INSTALLS_COLUMNS,
+        (detail.installs ?? []).map((recipe) => {
+            const holders = recipe.requestedBy.filter((holder) => holder !== "project");
+
+            return {
+                key: recipe.key,
+                version: recipe.version,
+                kind: recipe.requestedBy.includes("project") ? "the subscription itself" : describeDependencyKind(recipe.kind),
+                neededBy: holders.length === 0 ? "this subscription" : holders.join(", "),
+            };
+        }),
+    );
+
+    const missing = detail.installsNeed ?? [];
+
+    if (missing.length > 0) {
+        out.blank();
+        out.paragraph(
+            `Subscribing also needs ${missing.length === 1 ? "a repository" : "repositories"} this project does not trust yet, so what ${missing.length === 1 ? "it publishes" : "they publish"} is not listed above: ` +
+                missing
+                    .map((entry) => `${entry.name}${entry.url === undefined ? "" : ` (${entry.url})`}, needed by ${entry.requiredBy.map((holder) => holder.requestedBy).join(", ")}`)
+                    .join("; ") +
+                ".",
+        );
+    }
+}
+
+/**
+ * The questions some recipes would ask, grouped by recipe, as `subscription add --dry-run` and
+ * `recipe show` showed them before the refactor. `answerHints` adds the flag that answers each.
+ */
+export function writeQuestionPlan(out: Printer, plan: QuestionPlanShape, options: { answerHints: boolean }): void {
+    const count = plan.questions.length;
+    const unanswered = plan.questions.filter((question) => !question.answered).length;
+    const unreadable =
+        plan.unreadable.length === 0
+            ? undefined
+            : `Not on this machine yet, and their repository's index does not record their questions, so they cannot be listed: ${plan.unreadable.join(", ")}.` +
+              (options.answerHints ? " A dry run downloads nothing; run this command again without '--dry-run' to install them and be asked." : "");
 
     if (count === 0) {
-        out.paragraph("This recipe asks no questions, so nothing needs answering.");
+        out.paragraph(unreadable ?? "None of these recipes ask any questions, so nothing needs answering.");
 
         return;
     }
 
-    out.paragraph(`This recipe asks ${count === 1 ? "1 question" : `${count} questions`}.`);
+    const subject = plan.unreadable.length === 0 ? "These recipes ask" : "The recipes sous could read ask";
 
-    for (const variable of detail.variables) {
+    out.paragraph(`${subject} ${count === 1 ? "1 question" : `${count} questions`}, ${unanswered} of which nothing answers yet.`);
+
+    const groups = new Map<string, QuestionPlanShape["questions"][number][]>();
+
+    for (const question of plan.questions) {
+        groups.set(question.recipe, [...(groups.get(question.recipe) ?? []), question]);
+    }
+
+    for (const [recipe, questions] of groups) {
         out.blank();
-        out.log(`  ${out.style.label(variable.name)}${variable.prompt ? `: ${variable.prompt}` : ""}`);
+        out.log(`  ${recipe} asks ${questions.length === 1 ? "1 question" : `${questions.length} questions`}:`);
 
-        const facts: Fact[] = [
-            ...factIf("about", variable.description ? firstSentence(variable.description) : undefined),
-            ...(variable.default === undefined ? [] : [{ label: "default", lines: [String(variable.default)] }]),
-            ...(variable.example === undefined ? [] : [{ label: "example", lines: [String(variable.example)] }]),
-            { label: "stored-as", lines: [variable.env ?? variable.name] },
-            { label: "required", lines: [variable.required === false ? "no, an answer is optional" : "yes"] },
-            ...(variable.secret === true ? [{ label: "secret", lines: ["yes, stored in the local answers file"] }] : []),
-        ];
+        for (const question of questions) {
+            const variable = question.definition;
 
-        printFacts(out, facts);
+            out.blank();
+            out.log(`    ${out.style.cyan(variable.name)}`);
+
+            const facts: Fact[] = [
+                ...factIf("about", variable.description ? firstSentence(variable.description) : undefined),
+                ...(variable.example === undefined ? [] : [{ label: "example", lines: [String(variable.example)] }]),
+                ...factIf("stored-as", question.storedAs),
+                ...(variable.secret === true ? [{ label: "secret", lines: ["yes, stored in the local answers file"] }] : []),
+                {
+                    label: "answered",
+                    lines: [question.answered ? "yes" : variable.required === false ? "no, and an answer is optional" : "no, and this recipe requires an answer"],
+                },
+                ...(options.answerHints && !question.answered ? [{ label: "answer-with", lines: [`--answer ${variable.name}=<value>`] }] : []),
+            ];
+            const labelWidth = Math.max(...facts.map((fact) => fact.label.length));
+
+            for (const fact of facts) {
+                out.push(...out.formatVariable({ label: fact.label, value: fact.lines[0] ?? "" }, { indent: 6, labelWidth }));
+            }
+        }
+    }
+
+    if (unreadable !== undefined) {
+        out.blank();
+        out.paragraph(unreadable);
+    }
+
+    if (options.answerHints && unanswered > 0) {
+        out.blank();
+        out.paragraph("Answer them all ahead of time by running this command again without '--dry-run', with one '--answer <name>=<value>' for each, or with '--answers-file <path>'.");
     }
 }
 
