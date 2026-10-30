@@ -298,7 +298,7 @@ describe("subscription.add", () => {
         expect(lock.current.recipes["workflow/task-files"]).toMatchObject({ version: "1.1.0", requestedBy: ["project"] });
         expect(lock.current.repos.r).toEqual({ url: "https://github.com/acme/r", identity: "github.com/acme/r" });
         expect((managed.files["510-subscriptions.jsonc"] as { subscriptions: Record<string, unknown> }).subscriptions["workflow/task-files"]).toMatchObject({ range: "^1.0.0", addedBy: "user" });
-        expect(ctx.run).toHaveBeenNthCalledWith(1, "vars.ask", { recipe: "workflow/task-files", answer: ["apiUrl=https://x"] });
+        expect(ctx.run).toHaveBeenNthCalledWith(1, "vars.ask", { answer: ["apiUrl=https://x"] });
         expect(ctx.run).toHaveBeenNthCalledWith(2, "build", {});
         expect(ctx.emit).toHaveBeenCalledWith("recipes.locked", expect.objectContaining({ path: "/project/.sous/sous.lock.json" }));
     });

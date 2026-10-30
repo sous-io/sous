@@ -24,8 +24,10 @@ export async function askFollowUp(ctx: Context, flags: RecipeChangeFlags & Answe
         return { intent: "vars.ask", skipped: "nothing new to ask" };
     }
 
+    // Not narrowed to the new recipes: naming a recipe asks its optional questions too, and a
+    // subscription asks only what is required and unanswered, as before the refactor. What was
+    // answered already is inherited, so only the new recipes' questions come up.
     const result = await ctx.run("vars.ask", {
-        ...(recipes.length === 1 ? { recipe: recipes[0] } : {}),
         ...(flags.answer === undefined ? {} : { answer: flags.answer }),
         ...(flags.answersFile === undefined ? {} : { answersFile: flags.answersFile }),
     });

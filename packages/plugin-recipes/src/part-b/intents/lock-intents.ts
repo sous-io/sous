@@ -71,7 +71,7 @@ export async function rebuildLock(input: LockRebuildInput, ctx: Context): Promis
     }
 
     if (input.dryRun) {
-        ctx.reporter.note(`Dry run: nothing was written. The lockfile is ${lock.path()}.`);
+        ctx.reporter.note(`[Dry Run] Nothing was written. The lockfile is ${lock.path()}.`);
 
         return { diff, lockfile: after, missingRepos: result.missingRepos, restored: { restored: [], alreadyPresent: [], failed: [] }, dryRun: true };
     }

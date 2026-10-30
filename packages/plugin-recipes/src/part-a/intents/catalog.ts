@@ -50,9 +50,17 @@ export async function showNamespace(input: CatalogShowInput, ctx: Context): Prom
         }
     }
 
-    const found = await resolveInCatalog(ctx, catalog, input.ref, ["namespace"], input.acceptFirst, () =>
-        installedError(input, "namespace") ?? unknownRefError(catalog.inputs, input.ref, "namespace", catalog.notFetched),
-    );
+    const found = await resolveInCatalog(ctx, catalog, input.ref, ["namespace"], input.acceptFirst, () => {
+        const asRecipe = findInCatalog(catalog.inputs, readings, ["recipe"]);
+
+        if (input.installed !== true && asRecipe.length > 0 && !readings.some((reading) => reading.kind === "namespace" && reading.repo !== undefined)) {
+            return new SousError(`No repository this project trusts publishes a namespace called '${input.ref}'.`, {
+                details: ["It is the name of a recipe:", ...asRecipe.map((match) => `  ${match.repo.name}:${match.key}`)],
+            });
+        }
+
+        return installedError(input, "namespace") ?? unknownRefError(catalog.inputs, input.ref, "namespace", catalog.notFetched);
+    });
 
     return describeNamespace(catalog.inputs, { repo: found.repo, namespace: found.key });
 }
