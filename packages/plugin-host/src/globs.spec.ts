@@ -106,7 +106,7 @@ describe("files and containment", () => {
         const pattern = path.join(root, "docs", "**", "*.md");
         const ignore = [path.join(root, "docs", "deep", "**")];
 
-        expect(hostGlobs.matchSync(pattern, { absolute: true, ignore })).toEqual([path.join(root, "docs", "Z.md"), path.join(root, "docs", "a.md"), path.join(root, "docs", "b.md")]);
+        expect(hostGlobs.matchSync(pattern, { cwd: root, absolute: true, ignore })).toEqual([path.join(root, "docs", "Z.md"), path.join(root, "docs", "a.md"), path.join(root, "docs", "b.md")]);
         expect(hostGlobs.isMatch(path.join("docs", "deep", "c.md"), path.join("docs", "**", "*.md"))).toBe(true);
     });
 
