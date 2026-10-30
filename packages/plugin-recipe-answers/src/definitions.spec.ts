@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { activeRecipe, definition, definitionParser, readJson } from "../test/stand-ins.js";
-import { definitionsFromRecipes, loadDefinitionsFile, namesVariable, pseudoRecipeName, qualifiedKey, recipeKey } from "./definitions.js";
+import { definitionsFromRecipes, loadDefinitionsFile, namesVariable, placeIssue, pseudoRecipeName, qualifiedKey, recipeKey } from "./definitions.js";
 
 describe("definitionsFromRecipes()", () => {
     /** It should return no variables when no recipe is active. */
@@ -110,6 +110,15 @@ describe("loadDefinitionsFile()", () => {
         writeFileSync(bad, JSON.stringify({ variables: [{ name: "apiUrl" }] }));
 
         await expect(loadDefinitionsFile(empty, { readFile: readJson, definition: definitionParser })).rejects.toThrow(/empty\.json is not valid/);
-        await expect(loadDefinitionsFile(bad, { readFile: readJson, definition: definitionParser })).rejects.toMatchObject({ details: expect.arrayContaining(["type: is required"]) });
+        await expect(loadDefinitionsFile(bad, { readFile: readJson, definition: definitionParser })).rejects.toThrow(/Invalid variable definitions file at .*bad\.json/);
+        await expect(loadDefinitionsFile(bad, { readFile: readJson, definition: definitionParser })).rejects.toMatchObject({ details: expect.arrayContaining(["- variables[0].type: is required"]) });
+    });
+});
+
+describe("placeIssue()", () => {
+    /** A parser's problem line should be named by the definition's place in the file. */
+    it("should name the field under its place in the list", () => {
+        expect(placeIssue("  - type: Invalid option", 0)).toBe("- variables[0].type: Invalid option");
+        expect(placeIssue("  - unknown key 'x' at the top level.", 2)).toBe("- variables[2]: unknown key 'x' at the top level.");
     });
 });

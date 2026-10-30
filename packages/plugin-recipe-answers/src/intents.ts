@@ -5,7 +5,7 @@
 
 import { type Context, ConfigError, InputError, type IntentDefinition, jsonSchema } from "@sous-io/plugin-api";
 import type { EnvFileKind } from "@sous-io/plugin-config-files/types";
-import { askForMissing, type AnswerStore, askSummary, storeGivenAnswers } from "./ask.js";
+import { askForMissing, type AnswerStore, storeGivenAnswers } from "./ask.js";
 import { namesVariable, recipeKey } from "./definitions.js";
 import type { Ladder } from "./ladder.js";
 import { VAR_MAPPINGS_FILE } from "./mappings.js";
@@ -149,8 +149,7 @@ export async function handleAsk(input: VarsAskInput, ctx: Context): Promise<Vars
         ctx.configChanged();
     }
 
-    ctx.reporter.note(askSummary(result, hidden).join("\n"));
-
+    // The CLI view prints the summary (askSummary); reporting it here too would show it twice.
     return result;
 }
 
@@ -160,7 +159,8 @@ export async function handleList(input: VarsListInput, ctx: Context): Promise<Va
     const ladder = ladderFor(ctx);
     const hidden = hiddenValue(ctx.services);
 
-    ctx.reporter.log("info", `Definitions: ${definitionsLabel(input.file)}`);
+    // The CLI view names the definitions source in its "Command Variables" block.
+    ctx.reporter.log("debug", `Definitions: ${definitionsLabel(input.file)}`);
 
     if (input.name !== undefined) {
         return variablesNamed(variables, input.name).map((variable) => detailOf(variable, ladder, hidden));
@@ -267,6 +267,7 @@ export const varsIntents: IntentDefinition[] = [
         agent: {
             usage: "Pass every answer with `answer` (name=value pairs) or `answersFile`; questions cannot be asked through MCP unless the client supports elicitation.",
         },
+        requiresProject: true,
         handle: handleAsk as IntentDefinition["handle"],
     },
     {
@@ -287,6 +288,7 @@ export const varsIntents: IntentDefinition[] = [
             positional: ["name"],
             examples: ["sous vars", "sous vars apiUrl", "sous vars list", "sous vars list --file ./questions.yaml"],
         },
+        requiresProject: true,
         handle: handleList as IntentDefinition["handle"],
     },
     {
@@ -309,6 +311,7 @@ export const varsIntents: IntentDefinition[] = [
             positional: ["name"],
             examples: ["sous vars show apiUrl", "sous vars show workflow/task-files.apiUrl"],
         },
+        requiresProject: true,
         handle: handleShow as IntentDefinition["handle"],
     },
     {
@@ -332,6 +335,7 @@ export const varsIntents: IntentDefinition[] = [
             positional: ["envName", "target"],
             examples: ["sous vars map TEAM_API_URL sous-recipes:misc/stuff/apiUrl", "sous vars map TEAM_API_URL --remove"],
         },
+        requiresProject: true,
         handle: handleMap as IntentDefinition["handle"],
     },
 ];

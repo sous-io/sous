@@ -171,6 +171,21 @@ describe("the vars views", () => {
             expect(text).toContain("not set");
         });
 
+        /**
+         * In a project, the report opens with the "Command Variables" block and gives the env file's
+         * full path, as before the refactor.
+         */
+        it("should name the project and the env file's full path", async () => {
+            const project = { root: "/work/app", sousDir: "/work/app/.sous", configPath: "/work/app/.sous/sous.config.json", confDir: "/work/app/.sous/conf.d" };
+            const text = String((await views["vars.show"]!(detail, { ...context("vars.show", { file: "questions.yaml" }), project })) ?? "");
+
+            expect(text).toContain("$ Command Variables:");
+            expect(text).toContain("Project    : app");
+            expect(text).toContain("Config     : /work/app/.sous/sous.config.json");
+            expect(text).toContain("Definitions: questions.yaml");
+            expect(text).toContain("storage-path: /work/app/.sous/.env");
+        });
+
         /** A value that does not fit says why; no answer says so. */
         it("should say whether the value in scope fits", async () => {
             expect(await render("vars.show", { ...detail, problem: "it is not a URL" })).toContain("the value in scope does not fit: it is not a URL");

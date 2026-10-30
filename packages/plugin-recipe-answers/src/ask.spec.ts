@@ -154,6 +154,8 @@ describe("askForMissing()", () => {
 
         expect(error).toBeInstanceOf(NonInteractiveError);
         expect((error as NonInteractiveError).answeredBy).toBe("--answer apiUrl=<value>");
+        expect((error as NonInteractiveError).message).toBe("One variable still needs an answer, and there is no terminal to ask on.");
+        expect((error as NonInteractiveError).exitCode).toBe(1);
         expect((error as NonInteractiveError).details).toEqual(
             expect.arrayContaining(["apiUrl (misc/stuff): Which API?", "  SOUS_VAR_MISC_STUFF_API_URL  (recipe scope)", "  SOUS_VAR_API_URL  (shared scope)"]),
         );

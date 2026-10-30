@@ -150,7 +150,16 @@ export function nonInteractiveError(pending: ReadonlyArray<{ variable: DefinedVa
     const first = pending[0]!;
     const question = pending.length === 1 ? first.variable.definition.prompt : `${pending.length} questions about recipe variables`;
 
-    return new NonInteractiveError(question, pending.length === 1 ? answeredBy(first.variable) : "--answer <name>=<value>", { details });
+    // Exit code 1, as before the refactor: nothing was typed wrong, an answer is just missing.
+    const error = new NonInteractiveError(question, pending.length === 1 ? answeredBy(first.variable) : "--answer <name>=<value>", { details, exitCode: 1 });
+
+    // The count says how much is missing, which the generic "sous needed to ask" sentence cannot.
+    error.message =
+        pending.length === 1
+            ? "One variable still needs an answer, and there is no terminal to ask on."
+            : `${pending.length} variables still need answers, and there is no terminal to ask on.`;
+
+    return error;
 }
 
 /** Checks a value against a variable's definition, naming its recipe. */

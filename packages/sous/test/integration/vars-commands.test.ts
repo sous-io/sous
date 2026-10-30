@@ -198,9 +198,9 @@ describe("sous vars commands", () => {
       const result = runSous(root, ["vars", "ask", "--file", "questions.yaml"]);
 
       expect(result.status).toBe(1);
-      expect(result.stdout).toContain("no terminal to ask on");
-      expect(result.stdout).toContain("SOUS_VAR_LOCAL_QUESTIONS_API_TOKEN");
-      expect(result.stdout).toContain("(recipe scope)");
+      expect((result.stdout + result.stderr)).toContain("no terminal to ask on");
+      expect((result.stdout + result.stderr)).toContain("SOUS_VAR_LOCAL_QUESTIONS_API_TOKEN");
+      expect((result.stdout + result.stderr)).toContain("(recipe scope)");
     },
     CLI_TIMEOUT
   );
@@ -239,9 +239,9 @@ describe("sous vars commands", () => {
     () => {
       const byVariable = runSous(root, ["vars", "ask", "apiUrl", "--file", "questions.yaml"]);
       expect(byVariable.status).toBe(1);
-      expect(byVariable.stdout).toContain("One variable still needs an answer");
-      expect(byVariable.stdout).toContain("SOUS_VAR_LOCAL_QUESTIONS_API_URL");
-      expect(byVariable.stdout).not.toContain("SOUS_VAR_LOCAL_QUESTIONS_API_TOKEN");
+      expect((byVariable.stdout + byVariable.stderr)).toContain("One variable still needs an answer");
+      expect((byVariable.stdout + byVariable.stderr)).toContain("SOUS_VAR_LOCAL_QUESTIONS_API_URL");
+      expect((byVariable.stdout + byVariable.stderr)).not.toContain("SOUS_VAR_LOCAL_QUESTIONS_API_TOKEN");
 
       // The '.env' file sets this generated name, so it names the variable it
       // answers.
@@ -253,14 +253,14 @@ describe("sous vars commands", () => {
         "questions.yaml",
       ]);
       expect(byEnvName.status).toBe(1);
-      expect(byEnvName.stdout).toContain("SOUS_VAR_LOCAL_QUESTIONS_API_URL");
-      expect(byEnvName.stdout).not.toContain("SOUS_VAR_LOCAL_QUESTIONS_API_TOKEN");
+      expect((byEnvName.stdout + byEnvName.stderr)).toContain("SOUS_VAR_LOCAL_QUESTIONS_API_URL");
+      expect((byEnvName.stdout + byEnvName.stderr)).not.toContain("SOUS_VAR_LOCAL_QUESTIONS_API_TOKEN");
 
       // The definitions file is attributed to a recipe named after the file, so
       // naming it asks everything the file declares.
       const byRecipe = runSous(root, ["vars", "ask", "questions", "--file", "questions.yaml"]);
       expect(byRecipe.status).toBe(1);
-      expect(byRecipe.stdout).toContain("2 variables still need answers");
+      expect((byRecipe.stdout + byRecipe.stderr)).toContain("2 variables still need answers");
 
       // The same definitions sit in a namespace of their own, reached the same way.
       const byNamespace = runSous(root, [
@@ -272,7 +272,7 @@ describe("sous vars commands", () => {
         "questions.yaml",
       ]);
       expect(byNamespace.status).toBe(1);
-      expect(byNamespace.stdout).toContain("2 variables still need answers");
+      expect((byNamespace.stdout + byNamespace.stderr)).toContain("2 variables still need answers");
     },
     CLI_TIMEOUT
   );
@@ -309,10 +309,10 @@ describe("sous vars commands", () => {
         "--file",
         "questions.yaml",
       ]);
-      expect(accepted.stdout).toContain(
+      expect((accepted.stdout + accepted.stderr)).toContain(
         "'local' named 2 things, and '--accept-first' was passed"
       );
-      expect(accepted.stdout).toContain("2 variables still need answers");
+      expect((accepted.stdout + accepted.stderr)).toContain("2 variables still need answers");
     },
     CLI_TIMEOUT
   );
@@ -340,9 +340,9 @@ describe("sous vars commands", () => {
       ]);
 
       expect(result.status).toBe(1);
-      expect(result.stdout).toContain("One variable still needs an answer");
-      expect(result.stdout).toContain("SOUS_VAR_LOCAL_QUESTIONS_API_TOKEN");
-      expect(result.stdout).not.toContain("SOUS_VAR_LOCAL_QUESTIONS_API_URL");
+      expect((result.stdout + result.stderr)).toContain("One variable still needs an answer");
+      expect((result.stdout + result.stderr)).toContain("SOUS_VAR_LOCAL_QUESTIONS_API_TOKEN");
+      expect((result.stdout + result.stderr)).not.toContain("SOUS_VAR_LOCAL_QUESTIONS_API_URL");
     },
     CLI_TIMEOUT
   );
@@ -365,8 +365,8 @@ describe("sous vars commands", () => {
       ]);
 
       expect(result.status).toBe(1);
-      expect(result.stdout).toContain("Nothing called 'nothingLikeThis' was found");
-      expect(result.stdout).toContain("sous vars");
+      expect((result.stdout + result.stderr)).toContain("Nothing called 'nothingLikeThis' was found");
+      expect((result.stdout + result.stderr)).toContain("sous vars");
     },
     CLI_TIMEOUT
   );
@@ -384,9 +384,9 @@ describe("sous vars commands", () => {
       const result = runSous(root, ["vars", "--file", "bad.yaml"]);
 
       expect(result.status).toBe(1);
-      expect(result.stdout).toContain("Invalid variable definitions file");
-      expect(result.stdout).toContain("variables[0]");
-      expect(result.stdout).not.toContain("at Object.");
+      expect((result.stdout + result.stderr)).toContain("Invalid variable definitions file");
+      expect((result.stdout + result.stderr)).toContain("variables[0]");
+      expect((result.stdout + result.stderr)).not.toContain("at Object.");
     },
     CLI_TIMEOUT
   );
@@ -411,8 +411,8 @@ describe("sous vars commands", () => {
       expect(result.status).toBe(1);
       // The message is wrapped to the terminal, so it is matched a phrase at a
       // time rather than as one long line.
-      expect(result.stdout).toContain("every published variable must explain");
-      expect(result.stdout).toContain("every published variable must show what a real");
+      expect((result.stdout + result.stderr)).toContain("every published variable must explain");
+      expect((result.stdout + result.stderr)).toContain("every published variable must show what a real");
     },
     CLI_TIMEOUT
   );

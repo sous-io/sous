@@ -169,7 +169,43 @@ export async function loadDefinitionsFile(filePath: string, reader: DefinitionsF
         direct: true,
     };
 
-    return linkSharedNames(variables.map((value, index) => defineVariable(recipe, reader.definition.parse(value, `${filePath}, variables[${index}]`))));
+    // Every problem in the file is reported at once, each named by its place in the list.
+    const problems: string[] = [];
+    const defined: DefinedVariable[] = [];
+
+    for (const [index, value] of variables.entries()) {
+        const checked = reader.definition.check(value, `${filePath}, variables[${index}]`);
+
+        if (checked.issues === undefined) {
+            defined.push(defineVariable(recipe, checked.value));
+        } else {
+            // The parser's own heading ("Invalid variable definition at ...:") gives way to the file's.
+            const issues = checked.issues.filter((issue) => !/^Invalid .*:$/.test(issue));
+
+            problems.push(...issues.map((issue) => placeIssue(issue, index)));
+        }
+    }
+
+    if (problems.length > 0) {
+        throw new ConfigError(`Invalid variable definitions file at ${filePath}:`, { details: problems });
+    }
+
+    return linkSharedNames(defined);
+}
+
+/**
+ * One problem the parser found in a definition, named by the definition's place in the file.
+ *
+ * ```ts
+ * placeIssue("  - type: Invalid option", 0);   // -> "- variables[0].type: Invalid option"
+ * placeIssue("  - unknown key 'x'", 2);        // -> "- variables[2]: unknown key 'x'"
+ * ```
+ */
+export function placeIssue(issue: string, index: number): string {
+    const text = issue.replace(/^\s*-\s*/, "");
+    const field = /^([\w.[\]]+): /.exec(text);
+
+    return field === null ? `- variables[${index}]: ${text}` : `- variables[${index}].${text}`;
 }
 
 /** Whether a written name names a variable: by its name, its key, or its key with the repository. */

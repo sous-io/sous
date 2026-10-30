@@ -1078,3 +1078,30 @@ in `test/support/standins.ts`. Expectations are otherwise unchanged, except for 
 - **Before:** found the package under `@sous-io/sous` and `@sous-io/sous-next`.
 - **Now:** only `@sous-io/sous`.
 - **Why:** packages/sous is now the published `@sous-io/sous`; the temporary name is gone.
+
+## Switch-over: vars
+
+### Error messages read from standard error (vars commands)
+
+- **File:** `packages/sous/test/integration/vars-commands.test.ts` ("should fail without a terminal…",
+  "should resolve the name it is asked about at every scope", "should fail on an ambiguous name…",
+  "should narrow by repository, namespace and variable flags", "should refuse a name that matches
+  nothing", "should report a malformed definitions file readably", "should refuse a definition with no
+  description and no example")
+- **Before:** looked for the error message on standard output.
+- **Now:** looks for it in standard output and standard error together. The exit codes and wording it
+  checks are unchanged.
+- **Why:** the old CLI printed errors on standard output; the new one prints them, and its progress
+  notes, on standard error, so they never mix with a command's result.
+
+### Messages the vars unit tests check
+
+- **File:** `packages/plugin-recipe-answers/test/plugin.test.ts` ("should narrow to one recipe, and to a
+  namespace"), `packages/plugin-recipe-answers/src/definitions.spec.ts` ("should report an invalid file
+  with the file and the field")
+- **Before:** expected "Nothing this project's recipes define matches 'nothing'", and a problem line
+  "type: is required".
+- **Now:** expect "Nothing called 'nothing' was found" and "- variables[0].type: is required", under
+  "Invalid variable definitions file at …".
+- **Why:** the plugin now words these errors as the old CLI did, which the old CLI tests check. The
+  engine in `plugin.test.ts` is also given a project, since the vars commands now need one, as before.

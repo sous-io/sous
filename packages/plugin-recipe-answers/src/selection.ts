@@ -15,7 +15,7 @@
  * ```
  */
 
-import { ConfigError, type Prompter, type Reporter, type ServiceReader } from "@sous-io/plugin-api";
+import { ConfigError, isSousErrorOfKind, NonInteractiveError, type Prompter, type Reporter, type ServiceReader } from "@sous-io/plugin-api";
 import type { RefKind, SousRef } from "@sous-io/plugin-refs/types";
 import { recipeKey } from "./definitions.js";
 import type { Ladder } from "./ladder.js";
@@ -143,12 +143,28 @@ async function pickOne(search: string, pool: readonly DefinedVariable[], ladder:
     const candidates = candidatesFor(search, pool, ladder, kinds, io.services);
 
     if (candidates.length === 0) {
-        throw new ConfigError(`Nothing this project's recipes define matches '${search}'.`, { details: [SEE_ALL] });
+        throw new ConfigError(`Nothing called '${search}' was found.`, { details: [SEE_ALL] });
     }
 
     if (candidates.length === 1) {
         return candidates[0]!;
     }
 
-    return io.services.get("refs.picker").pick(candidates, { search, acceptFirst, announce: false, details: [SEE_ALL] }, io);
+    try {
+        return await io.services.get("refs.picker").pick(candidates, { search, acceptFirst, announce: false, details: [SEE_ALL] }, io);
+    } catch (error) {
+        throw isSousErrorOfKind(error, "non-interactive") ? ambiguityError(search, error as NonInteractiveError) : error;
+    }
+}
+
+/**
+ * The picker's "cannot ask" error, worded as before the refactor: it says the question was which
+ * thing the name meant, keeps the candidates and the fix, and exits 1 (nothing was typed wrong).
+ */
+function ambiguityError(search: string, cause: NonInteractiveError): NonInteractiveError {
+    const error = new NonInteractiveError(cause.question, cause.answeredBy, { cause, details: cause.details, exitCode: 1 });
+
+    error.message = `Sous has to ask which '${search}' you meant, and it is not running where it can ask.`;
+
+    return error;
 }

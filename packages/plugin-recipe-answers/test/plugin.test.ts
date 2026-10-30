@@ -14,7 +14,9 @@ async function engineWith(env: Record<string, string> = {}): Promise<{ engine: E
         ],
         new MemoryEnv("/project/.sous", env),
     );
-    const engine = createEngine({ builtIns: [...standIns.plugins, recipeAnswersPlugin], env, reporter: new BufferedReporter() });
+    // The vars intents need a project, as the old commands needed a config.
+    const project = { root: "/project", sousDir: "/project/.sous", configPath: "/project/.sous/sous.config.json", confDir: "/project/.sous/conf.d" };
+    const engine = createEngine({ builtIns: [...standIns.plugins, recipeAnswersPlugin], env, project, reporter: new BufferedReporter() });
 
     await engine.buildConfig();
 
@@ -136,7 +138,7 @@ describe("plugin-recipe-answers through the engine", () => {
         expect(recipe.answered[0]!.outcome).toBe("not written");
         expect(standIns.env.files.shared).toEqual({});
 
-        await expect(engine.handle.submit({ intent: "vars.ask", input: { namespace: "nothing" } })).rejects.toThrow(/Nothing this project's recipes define matches 'nothing'/);
+        await expect(engine.handle.submit({ intent: "vars.ask", input: { namespace: "nothing" } })).rejects.toThrow(/Nothing called 'nothing' was found/);
     });
 
     /** A name meaning several things should be settled by `--accept-first`. */

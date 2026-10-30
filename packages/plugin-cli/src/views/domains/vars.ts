@@ -5,6 +5,7 @@
  * `VariableDetail`), declared here structurally so plugin-cli depends on no other plugin.
  */
 
+import path from "node:path";
 import type { CliViewContext, CliViewEntity } from "../../types.js";
 import type { Printer, VariableEntry } from "../printer.js";
 import type { TableColumn } from "../table.js";
@@ -190,8 +191,11 @@ export function recipeLink(recipe: ViewRecipe): FactLine {
     return location === undefined ? { text: recipeKey(recipe) } : { text: recipeKey(recipe), detail: location };
 }
 
-/** The facts about one variable, in the order `vars show` prints them. */
-export function variableFacts(detail: ViewDetail): LabeledFact[] {
+/**
+ * The facts about one variable, in the order `vars show` prints them. With the project's `.sous/`
+ * directory, the storage path is the env file's full path, as before the refactor.
+ */
+export function variableFacts(detail: ViewDetail, sousDir?: string): LabeledFact[] {
     const { variable } = detail;
     const { definition } = variable;
     const facts: LabeledFact[] = [];
@@ -211,7 +215,7 @@ export function variableFacts(detail: ViewDetail): LabeledFact[] {
 
     facts.push({ label: "required-by", lines: requiredBy });
     facts.push({ label: "defined-by", lines: [recipeLink(variable.recipe)] });
-    facts.push({ label: "storage-path", lines: [envFileName(detail.storeIn)] });
+    facts.push({ label: "storage-path", lines: [sousDir === undefined ? envFileName(detail.storeIn) : path.join(sousDir, envFileName(detail.storeIn))] });
     facts.push({ label: "stored-as", lines: [detail.storedAs] });
     facts.push({ label: "constraints", lines: detail.constraints.map((bullet) => `${BULLET} ${bullet}`) });
 
@@ -286,7 +290,7 @@ export function renderVariableList(out: Printer, listings: readonly ViewListing[
 // ---------------------------------------------------------------------------------------------
 
 /** Everything about one variable: the question, its documentation, its facts and its ladder. */
-export function renderVariableDetail(out: Printer, detail: ViewDetail): void {
+export function renderVariableDetail(out: Printer, detail: ViewDetail, sousDir?: string): void {
     const { variable } = detail;
     const { definition } = variable;
     const resolved = detail.diagnosis.resolved;
@@ -310,7 +314,7 @@ export function renderVariableDetail(out: Printer, detail: ViewDetail): void {
     });
 
     out.blank();
-    out.push(...renderFacts(out, variableFacts(detail)));
+    out.push(...renderFacts(out, variableFacts(detail, sousDir)));
 
     out.blank();
     out.subheading("Environment variables sous looks at, most specific first");
@@ -400,6 +404,34 @@ export function formatAskReport(out: Printer, report: ViewAskResult): string[] {
 // The views
 // ---------------------------------------------------------------------------------------------
 
+/**
+ * The "Command Variables" block `vars list` and `vars show` open with: the project, its config file
+ * and where the definitions came from. Nothing about the project is shown outside one.
+ *
+ * ```text
+ * $ Command Variables:
+ *     Project    : my-app
+ *     Config     : /work/my-app/.sous/sous.config.json
+ *     Definitions: questions.yaml
+ * ```
+ */
+export function renderCommandVariables(out: Printer, view: Pick<CliViewContext, "input" | "project">): void {
+    const file = view.input.file;
+    const entries: Record<string, unknown> = {};
+
+    if (view.project !== undefined) {
+        entries.Project = path.basename(view.project.root);
+
+        if (view.project.configPath !== undefined) {
+            entries.Config = view.project.configPath;
+        }
+    }
+
+    entries.Definitions = typeof file === "string" ? file : "the project's subscribed recipes";
+    out.subheading("Command Variables", "$");
+    out.variables(entries);
+}
+
 function isDetail(listing: ViewListing): listing is ViewDetail {
     return "diagnosis" in listing && "constraints" in listing;
 }
@@ -408,9 +440,11 @@ function isDetail(listing: ViewListing): listing is ViewDetail {
 function varsList(result: readonly ViewListing[], view: CliViewContext): string {
     const out = view.printer();
 
+    renderCommandVariables(out, view);
+
     if (typeof view.input.name === "string" && result.every(isDetail)) {
         for (const detail of result) {
-            renderVariableDetail(out, detail);
+            renderVariableDetail(out, detail, view.project?.sousDir);
         }
     } else {
         renderVariableList(out, result);
@@ -425,7 +459,8 @@ function varsList(result: readonly ViewListing[], view: CliViewContext): string 
 function varsShow(result: ViewDetail, view: CliViewContext): string {
     const out = view.printer();
 
-    renderVariableDetail(out, result);
+    renderCommandVariables(out, view);
+    renderVariableDetail(out, result, view.project?.sousDir);
     out.footer();
 
     return out.text();
