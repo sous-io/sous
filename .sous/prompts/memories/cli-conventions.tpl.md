@@ -27,9 +27,10 @@ holds the mechanism, use it rather than building a second one beside it.
   accepted up to the fully qualified name, and so is a location (a URL, an SSH remote, a
   provider-scheme locator, a URL copied from the browser). Matching tries the exact spelling
   first, then ignores case; a name that still matches several things is a question. The
-  listing order is the contract. What a reference resolved to is reported by
-  `formatResolvedReference` (`packages/plugin-cli/src/views/ref-report.ts`), which the picker
-  calls: the facts as a key and value list, then one sentence saying why that candidate won.
+  listing order is the contract. What a reference resolved to is reported by the picker with
+  `reporter.resolvedReference(reason, facts)`, which the terminal draws (`formatResolvedReference`,
+  `packages/plugin-cli/src/views/ref-report.ts`) as the facts in a key and value list, then one
+  sentence saying why that candidate won.
   Never resolve a name by walking an index or a definition list in a command.
 - **Never prompt when the terminal is not ours**: `--non-interactive`, a truthy `CI`, or no TTY
   (`canPrompt` and `whyCannotPrompt` in `packages/plugin-cli/src/terminal-prompter.ts`). Fail instead, naming both the question that could not be asked and
