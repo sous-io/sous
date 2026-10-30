@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 
-# Dev wrapper over run.js, used by the repo's npm scripts. The published bin
-# is run.js itself.
+# Runs sous from this checkout: the bundle in packages/sous/dist, rebuilt first when any package's
+# source is newer than it (or it does not exist yet). The published bin is packages/sous/dist/bin.js
+# itself; this wrapper is for working on sous.
 #
-# Resolve this script's real location, following symlinks, so run.js is found
-# next to the real file even when invoked through a global bin symlink.
-# Pure POSIX shell: no `readlink -f` (GNU-only) and no `realpath` (missing on
-# stock macOS before 12.3). Works on macOS's bash 3.2.
+# Resolve this script's real location, following symlinks, so the checkout is found even when the
+# script is invoked through a symlink on the PATH. Pure POSIX shell: no `readlink -f` (GNU-only) and
+# no `realpath` (missing on stock macOS before 12.3). Works on macOS's bash 3.2.
 SOURCE="${BASH_SOURCE[0]}"
 while [ -L "$SOURCE" ]; do
   LINK_DIR="$(cd -P "$(dirname "$SOURCE")" > /dev/null && pwd)"
@@ -18,6 +18,18 @@ while [ -L "$SOURCE" ]; do
   esac
 done
 
-SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" > /dev/null && pwd)"
+REPO_DIR="$(cd -P "$(dirname "$SOURCE")/.." > /dev/null && pwd)"
+SOUS_PACKAGE="$REPO_DIR/packages/sous"
+BUNDLE="$SOUS_PACKAGE/dist/sous.js"
+PLUGIN_API="$REPO_DIR/packages/plugin-api"
 
-exec node "$SCRIPT_DIR/run.js" "$@"
+# The bundle keeps @sous-io/plugin-api outside, so its compiled copy must exist too.
+if [ ! -f "$PLUGIN_API/dist/index.js" ] || [ -n "$(find "$PLUGIN_API/src" -newer "$PLUGIN_API/dist/index.js" -print -quit)" ]; then
+  (cd "$PLUGIN_API" && node "$REPO_DIR/node_modules/typescript/bin/tsc" -p tsconfig.build.json) >&2 || exit 1
+fi
+
+if [ ! -f "$BUNDLE" ] || [ -n "$(find "$REPO_DIR/packages" -path '*/node_modules' -prune -o -path '*/dist' -prune -o -path '*/src/*' -newer "$BUNDLE" -print -quit)" ]; then
+  node "$SOUS_PACKAGE/scripts/bundle.mjs" >&2 || exit 1
+fi
+
+exec node "$SOUS_PACKAGE/dist/bin.js" "$@"

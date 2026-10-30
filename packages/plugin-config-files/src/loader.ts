@@ -33,7 +33,7 @@ export interface LoaderHost {
     evaluator(): ExpressionsEvaluator | undefined;
     /** Values the old builder's paths may use: `${sousDir}`, `${sousConfDir}`, `${sousRootPath}`, `${sousVersion}`. */
     pathVariables(): Readonly<Record<string, string>>;
-    /** Imports a module by URL. Default: `import()`, with tsx for TypeScript Node cannot strip. */
+    /** Imports a module by URL. Default: `import()` (Node strips TypeScript types itself). */
     importModule?(url: string, path: string): Promise<Record<string, unknown>>;
 }
 
@@ -239,10 +239,14 @@ export class ConfigFilesLoaderImpl implements ConfigFilesLoader {
         try {
             return (await import(url)) as Record<string, unknown>;
         } catch (error) {
-            if (format === "ts" && needsTsx(error)) {
-                const { tsImport } = await import("tsx/esm/api");
-
-                return (await tsImport(url, import.meta.url)) as Record<string, unknown>;
+            // Node strips TypeScript's types itself (22.18 and later); sous ships no TypeScript compiler.
+            if (format === "ts" && needsTypeStripping(error)) {
+                throw new ConfigError(`${this.label(file)} is TypeScript that this Node.js (${process.version}) cannot run.`, {
+                    details: [
+                        "Node 22.18 or later runs TypeScript whose types can simply be removed; enums, namespaces and parameter properties need a compiler.",
+                        "Use a newer Node, write the config without those, or write it as sous.config.js.",
+                    ],
+                });
             }
 
             throw error;
@@ -355,8 +359,8 @@ function namingFile(error: unknown, label: string, file: string): unknown {
     return new ConfigError(`${label} failed to load: ${message}`, { cause: error });
 }
 
-/** Whether Node could not import a TypeScript file itself, so tsx should. */
-function needsTsx(error: unknown): boolean {
+/** Whether an import failed because Node could not run a TypeScript file as it is. */
+function needsTypeStripping(error: unknown): boolean {
     const code = (error as { code?: unknown } | undefined)?.code;
 
     return (

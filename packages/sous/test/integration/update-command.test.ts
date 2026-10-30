@@ -8,7 +8,7 @@ import { makeTmpDir, type TmpDir } from "../utils/tmp.js";
 
 import { binPath } from "../utils/sous-bin.js";
 
-/** Per-test timeout: each test boots the real CLI (tsx + oclif) in a subprocess. */
+/** Per-test timeout: each test boots the real CLI in a subprocess. */
 const CLI_TIMEOUT = 60_000;
 
 /** What the registry served on the loopback interface publishes. */
@@ -84,7 +84,7 @@ function writePackage(dir: string, pkg: Record<string, unknown>): void {
 }
 
 /**
- * The real `sous update` command, end to end through bin/run.js: its flags,
+ * The real `sous update` command, end to end through the bundled bin: its flags,
  * its wiring to the registry, the package managers and the build, and the
  * hand-off it skips. The registry is a server this test runs on 127.0.0.1,
  * reached through `npm_config_registry`, and every package manager is a

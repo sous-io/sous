@@ -6,7 +6,7 @@ import { makeTmpDir, type TmpDir } from "../utils/tmp.js";
 
 import { binPath } from "../utils/sous-bin.js";
 
-/** Per-test timeout: each test boots the real CLI (tsx + oclif) in a subprocess. */
+/** Per-test timeout: each test boots the real CLI in a subprocess. */
 const CLI_TIMEOUT = 30_000;
 
 /** ESC[ — the start of any ANSI escape sequence. */

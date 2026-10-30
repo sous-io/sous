@@ -7,27 +7,26 @@ Pull requests are welcome. Bug reports and small fixes are the easiest place to 
 ```bash
 git clone git@github.com:sous-io/sous.git
 cd sous
-npm install
-npm test
+pnpm install
+pnpm test
 ```
 
-Node 22 is expected (see `.nvmrc`), and `package.json` requires `>=22`. `npm run build`
-compiles TypeScript to `dist/` and is also the typecheck. `npm run test:watch` reruns tests
-as you edit, and `npm run test:coverage` adds a coverage report.
-
-?> Sous 1.0 is being rebuilt as a pnpm workspace: a small engine (`packages/core`) and a package
-per plugin, bundled by esbuild into `@sous-io/sous`. Until that work lands, the commands in this
-section describe the pre-1.0 layout. Read the [laws](docs/markdown/architecture/laws.md),
+Node 22 is expected (see `.nvmrc`), and `package.json` requires `>=22`. Sous is a pnpm workspace:
+a small engine (`packages/core`), the plugin interface (`packages/plugin-api`), one package per
+built-in plugin (`packages/plugin-*`), and `packages/sous`, the published `@sous-io/sous`, which
+esbuild bundles into one file. Read the [laws](docs/markdown/architecture/laws.md),
 [goals](docs/markdown/architecture/goals.md) and
 [specifications](docs/markdown/architecture/specifications/README.md) before changing how sous
 is built; they rank above every other document.
 
-`npm test` runs the unit and integration suites. The watch-mode end-to-end tests are
-separate because they spawn real processes and watch real files: run them with
-`npm run test:e2e`.
+- `pnpm test` runs every package's tests, including the end-to-end tests in
+  `packages/sous/test/integration/`, which run the bundled `sous` as a process.
+- `pnpm typecheck` type-checks every package (esbuild strips types without checking them).
+- `pnpm build` builds `@sous-io/plugin-api` and the bundle, `packages/sous/dist/bin.js`.
 
-Run the CLI from a clone without installing it globally with `./bin/sous <command>`, or run
-`npm link` once to get `sous` on your PATH.
+Run the CLI from a clone with `./bin/sous <command>`: it rebuilds the bundle when a package's
+source changed, then runs it. To get `sous` on your PATH, link that script (for example
+`ln -s "$PWD/bin/sous" ~/.local/bin/sous`).
 
 This repo configures its own agent skills with sous, from `.sous/sous.config.js`. Running
 `./bin/sous build` compiles them into `.claude/skills/` (the skill target the built-in Claude
@@ -38,8 +37,8 @@ compiler or the shared prompts does what you expect.
 ## Before you open a PR
 
 - Add or update tests for behavior you change.
-- Run `npm test` and make sure it passes.
-- Run `npm run build` so the change typechecks.
+- Run `pnpm test` and make sure it passes.
+- Run `pnpm typecheck` so the change type-checks.
 - Keep the change focused; one topic per PR.
 - Describe what the change does and why in the PR body.
 

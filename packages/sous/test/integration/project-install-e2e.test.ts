@@ -15,13 +15,13 @@ const ownVersion = (JSON.parse(fs.readFileSync(path.join(packageDir, "package.js
 /** The version the project copy is relabelled with, so the two are told apart. */
 const PROJECT_VERSION = "0.0.0-project";
 
-/** Per-test timeout: each test boots the real CLI (tsx + oclif) in a subprocess. */
+/** Per-test timeout: each test boots the real CLI in a subprocess. */
 const CLI_TIMEOUT = 30_000;
 
 /**
  * End-to-end coverage for the hand-off from an invoked sous to the sous a
  * project installs (gh-10), exercised through the real entry point
- * (bin/run.js) the way a global install would be.
+ * (the bundled bin) the way a global install would be.
  *
  * The "project copy" is the published package's layout (its bundle and its
  * package.json), built under a temporary project's node_modules. The copy's

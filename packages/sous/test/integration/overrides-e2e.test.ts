@@ -6,12 +6,12 @@ import { makeTmpDir, type TmpDir } from "../utils/tmp.js";
 
 import { binPath } from "../utils/sous-bin.js";
 
-/** Per-test timeout: each test boots the real CLI (tsx + oclif) in a subprocess. */
+/** Per-test timeout: each test boots the real CLI in a subprocess. */
 const CLI_TIMEOUT = 30_000;
 
 /**
  * End-to-end coverage for the Phase-5 config-locating overrides, exercised
- * through the real CLI entry point (bin/run.js) so the whole startup sequence
+ * through the real CLI entry point (the bundled bin) so the whole startup sequence
  * runs: raw-argv flag prescan, SOUS_* env reads from the REAL environment, then
  * discovery / resolveConfigFlag, conf.d layering and env-file loading.
  *

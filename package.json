@@ -1,6 +1,5 @@
 {
   "name": "sous-workspace",
-  "version": "0.2.34",
   "description": "The sous monorepo: the published @sous-io/sous lives in packages/sous",
   "type": "module",
   "license": "Apache-2.0",
@@ -12,112 +11,23 @@
   "homepage": "https://sous.io",
   "bugs": "https://github.com/sous-io/sous/issues",
   "scripts": {
-    "build": "tsc",
-    "sous:build": "./bin/sous build --rebuild",
-    "claude": "./bin/sous launch claude",
-    "clean": "rm -rf dist",
-    "schema:build": "tsx scripts/build-schema.mts",
-    "version:sync": "tsx scripts/sync-core-version.mts",
+    "build": "pnpm --filter @sous-io/plugin-api build && pnpm --filter @sous-io/sous build",
+    "typecheck": "pnpm -r exec tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "vitest run --config vitest.e2e.config.ts",
-    "test:legacy": "vitest run --project legacy",
-    "test:packages": "vitest run --project documents --project plugin-api --project core --project plugin-cli --project sous",
-    "typecheck:packages": "pnpm -r --filter \"./packages/*\" typecheck",
-    "build:packages": "pnpm --filter @sous-io/plugin-api build && pnpm --filter @sous-io/sous build"
-  },
-  "dependencies": {
-    "@inquirer/core": "^11.1.7",
-    "@inquirer/prompts": "^8.3.2",
-    "@oclif/color": "^1.0.13",
-    "@oclif/core": "^4",
-    "chokidar": "^5.0.0",
-    "glob": "^13.0.6",
-    "inversify": "^8.2.3",
-    "jsonc-parser": "^3.3.1",
-    "liquidjs": "^10.25.0",
-    "minimatch": "^10.2.4",
-    "package-manager-detector": "^1.8.0",
-    "semver": "^7.8.5",
-    "tiktoken": "^1.0.22",
-    "tsx": "^4",
-    "yaml": "^2.9.0",
-    "zod": "^4.4.3"
+    "sous:build": "./bin/sous build --rebuild",
+    "claude": "./bin/sous launch claude",
+    "schema:build": "tsx scripts/build-schema.mts",
+    "version:sync": "tsx scripts/sync-core-version.mts"
   },
   "devDependencies": {
-    "@types/glob": "^8.1.0",
     "@types/node": "^22",
-    "@types/semver": "^7.8.0",
     "@vitest/coverage-v8": "^4.1.0",
-    "memfs": "^4.56.11",
+    "esbuild": "^0.27.4",
+    "tsx": "^4",
     "typescript": "^5",
-    "vitest": "^4.1.0",
-    "esbuild": "^0.27.4"
-  },
-  "oclif": {
-    "bin": "sous",
-    "dirname": "sous",
-    "flexibleTaxonomy": true,
-    "topicSeparator": " ",
-    "additionalHelpFlags": [
-      "-h"
-    ],
-    "commands": {
-      "strategy": "pattern",
-      "target": "./src/commands"
-    },
-    "topics": {
-      "config": {
-        "description": "Inspect the merged configuration"
-      },
-      "configs": {
-        "description": "Inspect the merged configuration",
-        "hidden": true
-      },
-      "repo": {
-        "description": "Manage the recipe repositories this project trusts"
-      },
-      "repos": {
-        "description": "Manage the recipe repositories this project trusts",
-        "hidden": true
-      },
-      "lock": {
-        "description": "Inspect and repair this project's lockfile"
-      },
-      "locks": {
-        "description": "Inspect and repair this project's lockfile",
-        "hidden": true
-      },
-      "namespace": {
-        "description": "Browse the namespaces the trusted repositories publish"
-      },
-      "namespaces": {
-        "description": "Browse the namespaces the trusted repositories publish",
-        "hidden": true
-      },
-      "recipe": {
-        "description": "Browse the recipes the trusted repositories publish"
-      },
-      "recipes": {
-        "description": "Browse the recipes the trusted repositories publish",
-        "hidden": true
-      },
-      "subscription": {
-        "description": "Manage which recipes this project subscribes to"
-      },
-      "subscriptions": {
-        "description": "Manage which recipes this project subscribes to",
-        "hidden": true
-      },
-      "vars": {
-        "description": "Recipe variables and their answers"
-      },
-      "var": {
-        "description": "Recipe variables and their answers",
-        "hidden": true
-      }
-    }
+    "vitest": "^4.1.0"
   },
   "engines": {
     "node": ">=22"

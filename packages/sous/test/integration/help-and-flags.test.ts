@@ -18,7 +18,7 @@ import { buildFixtureRepo } from "../utils/fixture-repo.js";
 
 import { binPath } from "../utils/sous-bin.js";
 
-/** Per-test budget: each of these boots the real CLI (tsx + oclif) at least once. */
+/** Per-test budget: each of these boots the real CLI at least once. */
 const CLI_TIMEOUT = 90_000;
 
 type RunResult = { stdout: string; stderr: string; status: number | null };

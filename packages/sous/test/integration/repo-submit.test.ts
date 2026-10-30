@@ -7,7 +7,7 @@ import { commitAll, git, initRepo, writeFile } from "../utils/git-repo.js";
 
 import { binPath } from "../utils/sous-bin.js";
 
-/** Per-test timeout: each test boots the real CLI (tsx + oclif) in a subprocess. */
+/** Per-test timeout: each test boots the real CLI in a subprocess. */
 const CLI_TIMEOUT = 60_000;
 
 /**

@@ -7,7 +7,7 @@ import { commitAll, git, writeFile } from "../utils/git-repo.js";
 
 import { binPath } from "../utils/sous-bin.js";
 
-/** Per-test timeout: each test boots the real CLI (tsx + oclif) in a subprocess. */
+/** Per-test timeout: each test boots the real CLI in a subprocess. */
 const CLI_TIMEOUT = 90_000;
 
 /** Strips ANSI escape codes, so assertions read the words and not the colors. */
