@@ -3,7 +3,7 @@ import type { EntityReader } from "./entities.js";
 import type { JsonObject, JsonValue, Patch, PatchSet, PathInput } from "./json.js";
 import type { DocumentNode } from "./node.js";
 import type { ConfigKeyType, EntityKind, EntityType } from "./registry.js";
-import type { LogLevel } from "./reporter.js";
+import type { Reporter } from "./reporter.js";
 import type { ServiceReader } from "./services.js";
 
 /** Reading a built config. Values are plain JSON, frozen. */
@@ -88,9 +88,11 @@ export interface ContributorInfo {
 /**
  * What a contributor is given. It shows the config made from every other
  * contributor's latest patches, without this contributor's own; every read is recorded, and every
- * change becomes this run's patch set.
+ * change becomes this run's patch set. It also reports like a reporter (`config.warn(...)`,
+ * `config.log(...)`), through the engine's reporter, with the contributor named in each message
+ * (contributors never print).
  */
-export interface ConfigBuilder {
+export interface ConfigBuilder extends Reporter {
     /** The root, to merge a whole config file: `config.root().merge(data)`. Reading it monitors everything. */
     root(): DocumentNode;
     /** A node at a path. */
@@ -110,8 +112,6 @@ export interface ConfigBuilder {
     apply(patches: Patch | PatchSet | readonly Patch[]): void;
     /** This plugin's own options from `plugins.options`. Recorded as a read. */
     options<T = JsonObject>(): T | undefined;
-    /** Reports a message through the engine's reporter (contributors never print). */
-    log(level: LogLevel, message: string): void;
     /** Who is running. */
     readonly contributor: ContributorInfo;
     readonly project: ProjectInfo | undefined;

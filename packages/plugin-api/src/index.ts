@@ -36,7 +36,18 @@ export type { InputIssue, SousErrorKind, SousErrorOptions } from "./errors.js";
 export { nonInteractivePrompter, scriptedPrompter } from "./prompter.js";
 export type * from "./prompter.js";
 
-export { BufferedReporter, createReporter, isLevelShown, isLogLevel, LOG_LEVELS, nullReporter } from "./reporter.js";
+export {
+    BaseReporter,
+    BufferedReporter,
+    createReporter,
+    isLevelShown,
+    isLogLevel,
+    LOG_LEVELS,
+    LogLevel,
+    nullReporter,
+    ReportEntryStyle,
+    Reporting,
+} from "./reporter.js";
 export type * from "./reporter.js";
 
 export { formatIssuePath, isSchema, jsonSchema, toJsonSchema, validateWith, validateWithSync } from "./schema.js";

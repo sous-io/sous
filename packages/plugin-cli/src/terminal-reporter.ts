@@ -1,4 +1,4 @@
-import { isLevelShown, type LogLevel, type ProgressEvent, type ReportDetails, type Reporter } from "@sous-io/plugin-api";
+import { BaseReporter, type LogLevel, type ProgressEvent, type ReportDetails } from "@sous-io/plugin-api";
 import type { OutputStream } from "./io.js";
 import { formatResolvedReference, isResolvedReference } from "./views/ref-report.js";
 import { createStyle, type Style } from "./views/style.js";
@@ -19,18 +19,16 @@ const PREFIX: Record<LogLevel, string> = {
  * The CLI's reporter: messages at or above the threshold go to standard error, each with a literal
  * prefix (`Warning: `, `Error: `) so they stay findable with color off and in logs.
  */
-export class TerminalReporter implements Reporter {
+export class TerminalReporter extends BaseReporter {
     constructor(
         private readonly stream: OutputStream & { readonly columns?: number },
-        private readonly threshold: LogLevel = "info",
+        threshold: LogLevel = "info",
         private readonly style: Style = createStyle(false),
-    ) {}
+    ) {
+        super(threshold);
+    }
 
-    log(level: LogLevel, message: string, details?: ReportDetails): void {
-        if (!isLevelShown(level, this.threshold)) {
-            return;
-        }
-
+    protected write(level: LogLevel, message: string, details?: ReportDetails): void {
         // A resolved reference (plugin-refs) is shown with its facts, as before the refactor.
         if (level === "notice" && isResolvedReference(details)) {
             const columns = this.stream.isTTY ? terminalColumns(this.stream) : terminalColumns(undefined);
@@ -43,8 +41,8 @@ export class TerminalReporter implements Reporter {
         this.stream.write(`${PREFIX[level]}${message}\n`);
     }
 
-    progress(event: ProgressEvent): void {
-        if (!isLevelShown("info", this.threshold)) {
+    override progress(event: ProgressEvent): void {
+        if (!this.shows("info")) {
             return;
         }
 
@@ -57,13 +55,5 @@ export class TerminalReporter implements Reporter {
         } else if (event.finished) {
             this.stream.write(`${line}\n`);
         }
-    }
-
-    note(message: string, details?: ReportDetails): void {
-        this.log("notice", message, details);
-    }
-
-    warning(message: string, details?: ReportDetails): void {
-        this.log("warning", message, details);
     }
 }
