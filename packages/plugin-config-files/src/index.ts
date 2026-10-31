@@ -11,7 +11,7 @@ import { EnvFilesService } from "./env/service.js";
 import { ConfigFilesLoaderImpl, mainCandidates } from "./loader.js";
 import { MAIN_CONFIG_BASE_NAME } from "./names.js";
 import { CONFIG_SET, configSet } from "./set.js";
-import type { ConfigSetInput, ConfigSetResult } from "./types.js";
+import type { ConfigSetInput } from "./types.js";
 import "./types.js";
 
 /** The plugin's name. */
@@ -89,7 +89,7 @@ export const configFilesPlugin: PluginDefinition = definePlugin({
                 usage: "Call this to change one config value without rewriting the file.",
                 whenNotToUse: "Not for subscriptions or repositories: use their own intents, which keep the lockfile in step.",
             },
-            handle: (input: ConfigSetInput, ctx): Promise<ConfigSetResult> => configSet(input, ctx),
+            handle: (input: ConfigSetInput, ctx) => configSet(input, ctx),
         });
 
         sous.entities.add("config-key", {

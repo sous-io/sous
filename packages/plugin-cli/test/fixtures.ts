@@ -1,5 +1,6 @@
 import { definePlugin, jsonSchema } from "@sous-io/plugin-api";
 import { z } from "zod";
+import { data, nothing, text } from "./outputs.js";
 
 /** The example: `namespace.list` with aliases across groups and a positional argument. */
 export const namespacesPlugin = definePlugin({
@@ -21,7 +22,7 @@ export const namespacesPlugin = definePlugin({
                 examples: ["sous ns list github.com/sous-io/sous-recipes"],
             },
             agent: { tool: "namespace_list", usage: "Call this before subscribing." },
-            handle: (input) => ({ listed: input.repository ?? "all", json: input.json }),
+            handle: (input) => data({ listed: input.repository ?? "all", json: input.json }),
         });
 
         sous.entities.add("cli-group", { id: "namespace", command: ["namespace"], summary: "Browse the namespaces the trusted repositories publish" });
@@ -46,7 +47,7 @@ export const reposPlugin = definePlugin({
                 yes: z.boolean().default(false).describe("Add it without asking"),
             }),
             cli: { positional: ["url"], flags: { yes: { short: "y" }, name: { aliases: ["as"] } } },
-            handle: (input) => input,
+            handle: (input) => data(input),
         });
 
         sous.intents.add({
@@ -54,11 +55,11 @@ export const reposPlugin = definePlugin({
             summary: "Add an alternate location for a repository",
             input: z.object({ repo: z.string(), urls: z.array(z.string()).describe("The other locations") }),
             cli: { command: ["repo", "add", "alternate"], positional: ["repo", "urls"] },
-            handle: (input) => input,
+            handle: (input) => data(input),
         });
 
-        sous.intents.add({ intent: "repo.secret", summary: "Hidden", cli: { hidden: true }, handle: () => "hidden ran" });
-        sous.intents.add({ intent: "repo.internal", summary: "Internal", internal: true, handle: () => "internal ran" });
+        sous.intents.add({ intent: "repo.secret", summary: "Hidden", cli: { hidden: true }, handle: () => text("hidden ran") });
+        sous.intents.add({ intent: "repo.internal", summary: "Internal", internal: true, handle: () => text("internal ran") });
 
         sous.entities.add("cli-group", { id: "repo", command: ["repo"], summary: "Manage the recipe repositories this project trusts" });
         sous.entities.add("cli-group", { id: "repo add", command: ["repo", "add"], summary: "Add a recipe repository, or an alternate location" });
@@ -78,7 +79,7 @@ export const verbosePlugin = definePlugin({
         sous.intents.add({
             intent: "show.globals",
             summary: "Show the global arguments",
-            handle: (_input, ctx) => ({ verbose: ctx.globals.verbose ?? false, debug: ctx.globals.debug ?? false }),
+            handle: (_input, ctx) => data({ verbose: ctx.globals.verbose ?? false, debug: ctx.globals.debug ?? false }),
         });
     },
 });
@@ -95,6 +96,8 @@ export const loudPlugin = definePlugin({
                 for (const level of ["debug", "info", "notice", "warning", "error", "critical", "alert", "emergency"] as const) {
                     ctx.reporter.log(level, `a ${level} message`);
                 }
+
+                return nothing();
             },
         });
     },
@@ -112,7 +115,7 @@ export const askingPlugin = definePlugin({
             handle: async (input, ctx) => {
                 const go = input.yes || (await ctx.prompter.confirm({ message: "Remove the 3 files listed above?", answeredBy: "--yes" }));
 
-                return go ? "removed" : "kept";
+                return text(go ? "removed" : "kept");
             },
         });
     },

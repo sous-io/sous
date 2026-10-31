@@ -27,11 +27,11 @@ export type { ReporterStream, TerminalReporterOptions } from "./terminal-reporte
 export { Layout, VARIABLE_INDENT, withErrorPrefix } from "./terminal/layout.js";
 export type { ParagraphOptions, VariableOptions } from "./terminal/layout.js";
 export { describeError, viewError } from "./errors.js";
-export { reportResult, reportTimings } from "./views.js";
-export { BUILT_IN_VIEWS } from "./views/built-ins.js";
+export { reportTimings } from "./views.js";
 export { colorizeJson, isScalar, renderJson, truncateJson } from "./views/json.js";
 export { formatResolvedReference } from "./views/ref-report.js";
-export { showResult, viewContext } from "./views/show.js";
+export { showOutputs } from "./views/show.js";
+export { HelpPage } from "./help-page.js";
 export { colorEnabled, createStyle } from "./views/style.js";
 export type { Paint, Style } from "./views/style.js";
 export { renderTable } from "./views/table.js";

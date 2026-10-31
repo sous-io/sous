@@ -1,4 +1,5 @@
-import { definePlugin, jsonSchema, LOG_LEVELS, type PluginDefinition } from "@sous-io/plugin-api";
+import os from "node:os";
+import { definePlugin, IntentOutput, IntentOutputs, jsonSchema, LOG_LEVELS, TextBlock, VariableSet, type PluginDefinition } from "@sous-io/plugin-api";
 import { CommandTree, type CommandPicks } from "./command-tree.js";
 import { viewError } from "./errors.js";
 import { commandLineNeedsConfig, runCommandLine } from "./front-end.js";
@@ -7,7 +8,6 @@ import { completeIntent, completionIntent } from "./completion.js";
 import { helpIntent } from "./help-intent.js";
 import { type CliIo, processIo } from "./io.js";
 import { canPrompt } from "./terminal-prompter.js";
-import { BUILT_IN_VIEWS } from "./views/built-ins.js";
 import type { CliGlobalArgumentEntity, CliGroupEntity } from "./types.js";
 
 /** The plugin's name. */
@@ -65,7 +65,7 @@ export const BUILT_IN_GLOBAL_ARGUMENTS: readonly CliGlobalArgumentEntity[] = [
     {
         id: "json",
         schema: jsonSchema<boolean>({ type: "boolean", default: false }),
-        description: "Print the result as JSON instead of the formatted view.",
+        description: "Print the result as JSON instead of the formatted output.",
     },
     {
         id: "non-interactive",
@@ -112,12 +112,6 @@ export function createCliPlugin(options: CliPluginOptions = {}): PluginDefinitio
                 { description: "The help of a command group." },
             );
 
-            sous.entities.define(
-                "cli-view",
-                jsonSchema({ type: "object", properties: { id: { type: "string" } }, required: ["id", "render"] }),
-                { description: "How the CLI shows one intent's result; the id is the intent's name." },
-            );
-
             for (const argument of BUILT_IN_GLOBAL_ARGUMENTS) {
                 sous.entities.add("cli-global-argument", argument);
             }
@@ -130,10 +124,6 @@ export function createCliPlugin(options: CliPluginOptions = {}): PluginDefinitio
 
             for (const group of BUILT_IN_GROUPS) {
                 sous.entities.add("cli-group", group);
-            }
-
-            for (const view of BUILT_IN_VIEWS) {
-                sous.entities.add("cli-view", view);
             }
 
             sous.services.add(
@@ -169,8 +159,10 @@ export function createCliPlugin(options: CliPluginOptions = {}): PluginDefinitio
                 handle: (input, ctx) => {
                     const { name, version } = ctx.engine.app;
 
+                    const text = new TextBlock(`v${version}`, { verbatim: true });
+
                     if (!input.verbose) {
-                        return version;
+                        return new IntentOutputs(new IntentOutput({ result: text, data: { name, version } }));
                     }
 
                     // The npm package and where it is installed, from plugin-host's package identity
@@ -179,13 +171,22 @@ export function createCliPlugin(options: CliPluginOptions = {}): PluginDefinitio
                         ? (ctx.services.get("host.package" as never) as { identity(): { name: string; root: string } }).identity()
                         : undefined;
 
-                    return { name: identity?.name ?? name, version, ...(identity === undefined ? {} : { root: identity.root }) };
+                    const platform = `${os.platform()}-${os.arch()}`;
+                    const facts = { Package: identity?.name ?? name, ...(identity === undefined ? {} : { Install: identity.root }), Platform: platform, Node: process.version };
+
+                    return new IntentOutputs([
+                        new IntentOutput({ result: text }),
+                        new IntentOutput({
+                            result: new VariableSet(facts),
+                            data: { name: identity?.name ?? name, version, ...(identity === undefined ? {} : { root: identity.root }), platform, node: process.version },
+                        }),
+                    ]);
                 },
             });
 
             sous.frontEnds.add({
                 id: "cli",
-                start: (engine, argv) => runCommandLine(engine, argv, { io: io(), env: sous.env, cwd: process.cwd(), project: () => sous.project }),
+                start: (engine, argv) => runCommandLine(engine, argv, { io: io(), env: sous.env, cwd: process.cwd() }),
                 needsConfig: (engine, argv) => commandLineNeedsConfig(engine, argv),
             });
         },

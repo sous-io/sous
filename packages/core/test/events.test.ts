@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { CancelledError, type CustomEvent, LoopError } from "@sous-io/plugin-api";
-import { contributorsPlugin, keysPlugin, makeEngine, plugin } from "./helpers.js";
+import { CancelledError, type CustomEvent, IntentOutputs, LoopError } from "@sous-io/plugin-api";
+import { contributorsPlugin, keysPlugin, makeEngine, nothing, plugin, valued } from "./helpers.js";
 
 describe("events", () => {
     /**
@@ -12,8 +12,8 @@ describe("events", () => {
         const removed = () => void heard.push("removed");
         const { engine } = makeEngine([
             plugin("p", (sous) => {
-                sous.intents.add({ intent: "build", handle: () => 1 });
-                sous.intents.add({ intent: "subscription.add", handle: () => 2 });
+                sous.intents.add({ intent: "build", handle: () => valued(1) });
+                sous.intents.add({ intent: "subscription.add", handle: () => valued(2) });
                 sous.on("build.before", (event) => void heard.push(`exact ${event.name}`));
                 sous.on("build.*", (event) => void heard.push(`wild ${event.name}`));
                 sous.on("*.before", (event) => void heard.push(`any-before ${event.name}`));
@@ -52,7 +52,7 @@ describe("events", () => {
         const order: string[] = [];
         const { engine } = makeEngine([
             plugin("first", (sous) => {
-                sous.intents.add({ intent: "build", handle: () => 1 });
+                sous.intents.add({ intent: "build", handle: () => valued(1) });
                 sous.on("build.before", () => void order.push("first-a"));
                 sous.on("build.before", () => void order.push("first-b"));
             }),
@@ -76,20 +76,20 @@ describe("events", () => {
     it("should let listeners change input and result and share data", async () => {
         const { engine } = makeEngine([
             plugin("p", (sous) => {
-                sous.intents.add({ intent: "build", handle: (input) => ({ pruned: (input as { prune: boolean }).prune }) });
+                sous.intents.add({ intent: "build", handle: (input) => IntentOutputs.of({ pruned: (input as { prune: boolean }).prune }) });
                 sous.on("build.before", (event) => {
                     (event.input as { prune: boolean }).prune = false;
                     event.data.set("startedAt", 7);
                 });
                 sous.on("build.after", (event) => {
-                    event.result = { ...(event.result as object), note: "pruned 3 files", startedAt: event.data.get("startedAt") };
+                    event.result = IntentOutputs.of({ ...(event.result as IntentOutputs).toPlain(), note: "pruned 3 files", startedAt: event.data.get("startedAt") });
                 });
             }),
         ]);
 
         await engine.buildConfig();
 
-        expect(await engine.submit({ intent: "build", input: { prune: true } })).toEqual({ pruned: false, note: "pruned 3 files", startedAt: 7 });
+        expect((await engine.submit({ intent: "build", input: { prune: true } })).toPlain()).toEqual({ pruned: false, note: "pruned 3 files", startedAt: 7 });
     });
 
     /**
@@ -101,8 +101,8 @@ describe("events", () => {
         const later: string[] = [];
         const { engine } = makeEngine([
             plugin("owner", (sous) => {
-                sous.intents.add({ intent: "build", handle: () => void (ran += 1) });
-                sous.intents.add({ intent: "quiet", handle: () => void (ran += 10) });
+                sous.intents.add({ intent: "build", handle: () => ((ran += 1), nothing()) });
+                sous.intents.add({ intent: "quiet", handle: () => ((ran += 10), nothing()) });
             }),
             plugin("sous-plugin-guard", (sous) => {
                 sous.on("build.before", (event) => event.cancel("Recipe X needs sous-plugin-diagrams"));
@@ -138,13 +138,13 @@ describe("events", () => {
                         throw new Error(`failed ${(input as { n: number }).n}`);
                     },
                 });
-                sous.intents.add({ intent: "p.ok", handle: () => "ok" });
+                sous.intents.add({ intent: "p.ok", handle: () => valued("ok") });
                 sous.on("build.error", (event) => {
                     if ((event.input as { n: number }).n === 1) {
-                        event.recover({ built: 0, because: (event.error as Error).message });
+                        event.recover(IntentOutputs.of({ built: 0, because: (event.error as Error).message }));
                     }
                 });
-                sous.on("build.after", (event) => void afters.push(event.result));
+                sous.on("build.after", (event) => void afters.push((event.result as IntentOutputs).toPlain()));
                 sous.on("p.ok.before", () => {
                     throw new Error("listener broke");
                 });
@@ -153,7 +153,7 @@ describe("events", () => {
 
         await engine.buildConfig();
 
-        expect(await engine.submit({ intent: "build", input: { n: 1 } })).toEqual({ built: 0, because: "failed 1" });
+        expect((await engine.submit({ intent: "build", input: { n: 1 } })).toPlain()).toEqual({ built: 0, because: "failed 1" });
         await expect(engine.submit({ intent: "build", input: { n: 2 } })).rejects.toThrow("failed 2");
         await expect(engine.submit({ intent: "p.ok" })).rejects.toThrow("listener broke");
         expect(afters).toEqual([{ built: 0, because: "failed 1" }]);
@@ -175,15 +175,15 @@ describe("events", () => {
                     handle: async (_input, ctx) => {
                         const event = (await ctx.emit("diagrams.rendered", { files: ["a.svg"] })) as CustomEvent<unknown>;
 
-                        return { cancelled: event.cancelled, reason: event.cancelReason };
+                        return IntentOutputs.of({ cancelled: event.cancelled, reason: event.cancelReason });
                     },
                 });
-                sous.intents.add({ intent: "diagrams.count", handle: (_input, ctx) => ctx.config.get("diagrams.count") });
+                sous.intents.add({ intent: "diagrams.count", handle: (_input, ctx) => valued(ctx.config.get("diagrams.count")) });
             }),
             plugin("sous-plugin-docs-site", (sous) => {
                 sous.on("*.before", (event) => void befores.push(event.name));
                 sous.on("diagrams.rendered", async (event, ctx) => {
-                    const count = await ctx.run("diagrams.count", {});
+                    const count = (await ctx.run("diagrams.count", {})).toPlain().value;
 
                     ctx.reporter.notice(`rendered ${JSON.stringify((event as CustomEvent<{ files: string[] }>).payload.files)} of ${String(count)}`);
                     event.cancel("docs site says no");
@@ -193,7 +193,7 @@ describe("events", () => {
 
         await engine.buildConfig();
 
-        expect(await engine.submit({ intent: "diagrams.render" })).toEqual({ cancelled: true, reason: "docs site says no" });
+        expect((await engine.submit({ intent: "diagrams.render" })).toPlain()).toEqual({ cancelled: true, reason: "docs site says no" });
         expect(reporter.at("notice")).toEqual(['rendered ["a.svg"] of 3']);
         expect(befores).toEqual(["diagrams.render.before", "diagrams.count.before"]);
 
@@ -211,9 +211,9 @@ describe("events", () => {
         const { engine } = makeEngine([
             plugin("p", (sous) => {
                 emit = (name, payload) => sous.emit(name, payload as never);
-                sous.intents.add({ intent: "p.go", handle: (input) => input });
+                sous.intents.add({ intent: "p.go", handle: (input) => IntentOutputs.of(input as Record<string, unknown>) });
                 sous.on("p.poked", async (event, ctx) => {
-                    (event as CustomEvent<{ got?: unknown }>).payload.got = await ctx.run("p.go", { x: 1 });
+                    (event as CustomEvent<{ got?: unknown }>).payload.got = (await ctx.run("p.go", { x: 1 })).toPlain();
                     ctx.configChanged();
                 });
             }),
@@ -258,7 +258,7 @@ describe("events", () => {
             keysPlugin("enabled"),
             plugin("p", (sous) => {
                 sous.config.contribute({ id: "e", contribute: (config) => config.atPath("enabled").set(enabled) });
-                sous.intents.add({ intent: "subscription.enable", changesConfig: true, handle: () => void (enabled = true) });
+                sous.intents.add({ intent: "subscription.enable", changesConfig: true, handle: () => ((enabled = true), nothing()) });
                 sous.on("config.built", async (event, ctx) => {
                     builds += 1;
 
@@ -285,7 +285,7 @@ describe("events", () => {
             keysPlugin("enabled"),
             plugin("sous-plugin-foo", (sous) => {
                 sous.config.contribute({ id: "e", contribute: (config) => config.atPath("enabled").set(flag) });
-                sous.intents.add({ intent: "subscription.toggle", changesConfig: true, handle: () => void (flag = !flag) });
+                sous.intents.add({ intent: "subscription.toggle", changesConfig: true, handle: () => ((flag = !flag), nothing()) });
                 sous.on("config.built", (_event, ctx) => ctx.run("subscription.toggle", { enabled: !flag }).then(() => {}));
             }),
         ]);
@@ -301,7 +301,7 @@ describe("events", () => {
             keysPlugin("counter"),
             plugin("sous-plugin-bar", (sous) => {
                 sous.config.contribute({ id: "c", contribute: (config) => config.atPath("counter").set(counter) });
-                sous.intents.add({ intent: "p.bump", changesConfig: true, handle: () => void (counter += 1) });
+                sous.intents.add({ intent: "p.bump", changesConfig: true, handle: () => ((counter += 1), nothing()) });
                 sous.on("config.built", (_event, ctx) => ctx.run("p.bump", {}).then(() => {}));
             }),
         ]);
@@ -318,7 +318,7 @@ describe("events", () => {
     it("should stop an event that keeps emitting itself (eventDepth)", async () => {
         const { engine } = makeEngine([
             plugin("p", (sous) => {
-                sous.intents.add({ intent: "p.go", handle: (_input, ctx) => ctx.emit("p.echoed", {}) });
+                sous.intents.add({ intent: "p.go", handle: async (_input, ctx) => (await ctx.emit("p.echoed", {}), nothing()) });
                 sous.on("p.echoed", async (_event, ctx) => void (await ctx.emit("p.echoed", {})));
             }),
         ]);
@@ -337,7 +337,7 @@ describe("events", () => {
     it("should skip listeners of inactive plugins", async () => {
         const heard: string[] = [];
         const { engine } = makeEngine([
-            plugin("owner", (sous) => sous.intents.add({ intent: "build", handle: () => 1 })),
+            plugin("owner", (sous) => sous.intents.add({ intent: "build", handle: () => valued(1) })),
             plugin("sous-plugin-off", (sous) => sous.on("build.before", () => void heard.push("off"))),
             contributorsPlugin("disabler", [{ id: "d", contribute: (config) => config.atPath("plugins.disabled").set(["sous-plugin-off"]) }]),
         ]);

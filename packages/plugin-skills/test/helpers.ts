@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { createEngine, type Engine } from "@sous-io/core";
 import {
+    IntentOutputs,
     BufferedReporter,
     definePlugin,
     jsonSchema,
@@ -85,7 +86,7 @@ export function compilerStandIn(log: CompileLog = { runs: 0 }): PluginDefinition
                 handle: async () => {
                     log.runs += 1;
 
-                    return { ok: true, outputs: [], problems: [], durationMs: 0 };
+                    return IntentOutputs.of({ ok: true, outputs: [], problems: [], durationMs: 0 });
                 },
             });
         },

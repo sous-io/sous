@@ -1,15 +1,16 @@
-import { type EngineHandle, type Environment, isLogLevel, isSousErrorOfKind, LogLevel, SousError, type ProjectInfo, type Reporter, type SubmitOptions } from "@sous-io/plugin-api";
+import { type EngineHandle, type Environment, IntentOutput, IntentOutputs, isLogLevel, isSousErrorOfKind, LogLevel, SousError, TextBlock, type Reporter, type SubmitOptions } from "@sous-io/plugin-api";
 import type { Command, CommandTree } from "./command-tree.js";
 import { COMPLETE_COMMAND } from "./completion.js";
-import { describeError } from "./errors.js";
+import { describeError, errorForDisplay } from "./errors.js";
 import { globalSpecs } from "./globals.js";
+import { HelpPage } from "./help-page.js";
 import { renderHelp } from "./help.js";
 import type { CliIo } from "./io.js";
 import { parseLine } from "./parse.js";
 import { canPrompt, TerminalPrompter, whyCannotPrompt } from "./terminal-prompter.js";
 import { TerminalReporter } from "./terminal-reporter.js";
 import { reportTimings } from "./views.js";
-import { showResult } from "./views/show.js";
+import { showOutputs } from "./views/show.js";
 import { listenForWatchKeys, startedWatching, WATCH_KEYS_HINT } from "./watch-keys.js";
 
 /** What the CLI front end needs besides the engine. */
@@ -18,14 +19,12 @@ export interface CliRunOptions {
     readonly env: Environment;
     /** The working directory chains get as `ctx.cwd`: the process's. Default: the engine's. */
     readonly cwd?: string;
-    /** The project the engine serves now, for views that name it. */
-    readonly project?: () => ProjectInfo | undefined;
 }
 
 /**
  * Runs one command line: parses argv against the command tree, then shows help,
  * prints the version, or submits the intent as a chain with a terminal reporter and prompter and
- * prints its result. Errors become `Error: ` lines on standard error and an exit code.
+ * shows the outputs it returns (JSON on standard output with `--json`, else through the reporter). Errors become `Error: ` lines on standard error and an exit code.
  */
 export async function runCommandLine(engine: EngineHandle, argv: readonly string[], options: CliRunOptions): Promise<void> {
     const { io, env } = options;
@@ -59,21 +58,23 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
             throw engine.configError;
         }
 
-        const help = (node: Parameters<typeof renderHelp>[0], where: LogLevel) =>
-            renderHelp(node, { appName: engine.app.name, globals: specs, style: reporter.styleFor(where) });
+        // Help shown next to an error goes to standard error, so it is painted for that stream.
+        const help = (node: Parameters<typeof renderHelp>[0]) => renderHelp(node, { appName: engine.app.name, globals: specs, style: reporter.styleFor() });
 
         switch (line.kind) {
             case "help":
-                reporter.text(help(line.node, LogLevel.Info));
+                reporter.result(
+                    new IntentOutputs(new IntentOutput({ result: new HelpPage(line.node, { appName: engine.app.name, globals: specs }) })),
+                );
                 break;
             case "version":
-                reporter.text(`v${engine.app.version}`);
+                reporter.result(IntentOutputs.of({ name: engine.app.name, version: engine.app.version }, { result: new TextBlock(`v${engine.app.version}`, { verbatim: true }) }));
                 break;
             case "error": {
                 reportError(reporter, new SousError(line.message, { details: line.details, exitCode: 2 }), { debug }, io);
 
                 if (line.showHelp) {
-                    reporter.text(`\n${help(line.node, LogLevel.Error)}`, LogLevel.Error);
+                    reporter.text(`\n${help(line.node)}`, LogLevel.Error);
                 }
 
                 break;
@@ -84,22 +85,12 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
                 const submitOptions = { reporter, prompter, globals: line.globals, ...(options.cwd === undefined ? {} : { cwd: options.cwd }) };
                 // A background intent (`sous mcp`) owns standard output while it runs; its result is not printed.
                 const background = engine.intents.get(intent)?.definition.background === true;
-                const show = async (result: unknown) => {
-                    const shown = await showResult(intent, result, {
-                        entities: engine.config.entities,
-                        reporter,
-                        stdout: io.stdout,
-                        input: line.input,
-                        globals: line.globals,
-                        project: options.project?.(),
-                        projectName: projectNameOf(engine),
-                        cwd: options.cwd,
-                    });
-
+                const show = async (outputs: IntentOutputs<object>) => {
+                    showOutputs(outputs, { reporter, stdout: io.stdout, json: line.globals.json === true });
                     reporter.finish();
 
-                    if (shown.exitCode !== undefined && shown.exitCode !== 0) {
-                        io.setExitCode(shown.exitCode);
+                    if (outputs.exitCode !== undefined && outputs.exitCode !== 0) {
+                        io.setExitCode(outputs.exitCode);
                     }
                 };
                 const fail = (error: unknown) => {
@@ -108,22 +99,22 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
                     // A question that could not be asked, or input the command could not take, is
                     // answered by the command's flags, so its help follows (as before the refactor).
                     if (wantsHelp(error)) {
-                        reporter.text(`\n${help(line.node, LogLevel.Error)}`, LogLevel.Error);
+                        reporter.text(`\n${help(line.node)}`, LogLevel.Error);
                     }
                 };
 
-                if (io.stderr.isTTY === true && !json && engine.config.entities.has("cli-view", intent)) {
+                if (io.stderr.isTTY === true && !json && engine.intents.get(intent)?.definition.runsWithoutConfig !== true) {
                     reporter.banner();
                 }
 
                 try {
-                    const result = await engine.submit({ intent, input: line.input }, submitOptions);
+                    const outputs = await engine.submit({ intent, input: line.input }, submitOptions);
 
                     if (!background) {
-                        await show(result);
+                        await show(outputs);
                     }
 
-                    if (startedWatching(result)) {
+                    if (startedWatching(outputs)) {
                         await watchUntilStopped(engine, io, reporter, intent, line.input, submitOptions, show, fail);
                     }
                 } catch (error) {
@@ -166,11 +157,14 @@ export function commandLineNeedsConfig(engine: EngineHandle, argv: readonly stri
     }
 }
 
-/** Reports an error as a problem (`Error: ` and what is under it) and sets the exit code. */
+/**
+ * Reports a failure through `reporter.critical`, which shows the error and the chain of causes
+ * under it, and sets the exit code.
+ */
 function reportError(reporter: Reporter, error: unknown, options: { debug?: boolean; command?: Command }, io: CliIo): void {
     const parts = describeError(error, { ...options, debug: false });
 
-    reporter.problem(parts.summary, parts.details.length === 0 ? {} : { cause: parts.details.join("\n") }, LogLevel.Error);
+    reporter.critical(errorForDisplay(error, options.command));
 
     // Stack frames are shown exactly as given: wrapping would split a frame from its location.
     if (options.debug && error instanceof Error && error.stack) {
@@ -234,7 +228,7 @@ async function watchUntilStopped(
     intent: string,
     input: Readonly<Record<string, unknown>>,
     submitOptions: SubmitOptions,
-    show: (result: unknown) => Promise<void>,
+    show: (outputs: IntentOutputs<object>) => Promise<void>,
     fail: (error: unknown) => void,
 ): Promise<void> {
     if (io.stdin.isTTY !== true) {
@@ -272,11 +266,4 @@ async function watchUntilStopped(
     } finally {
         stop();
     }
-}
-
-/** The config's `name`, when it is a string. */
-function projectNameOf(engine: EngineHandle): string | undefined {
-    const name = engine.config.get("name");
-
-    return typeof name === "string" && name.trim() !== "" ? name : undefined;
 }

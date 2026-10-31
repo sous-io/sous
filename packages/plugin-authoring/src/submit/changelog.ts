@@ -9,7 +9,7 @@
 
 import path from "node:path";
 import type { RecipeManifest, RepoManifest, VariableDefinition } from "@sous-io/plugin-formats/types";
-import type { Reporter } from "@sous-io/plugin-api";
+import { IntentOutput, ItemList, ReportEntryStyle, TextBlock, type Reporter } from "@sous-io/plugin-api";
 import type { AuthoringTools } from "../tools.js";
 import type { RepoGit } from "../shared/git.js";
 import { MANIFEST_EXTENSIONS, type RepoValidation } from "../shared/repository.js";
@@ -212,28 +212,42 @@ function changelogSections(changelog: Changelog): { title: string; entries: stri
 }
 
 /**
- * Shows the changelog to the person running `repo submit`, from the same facts `renderChangelog`
+ * The changelog as outputs for the person running `repo submit`, from the same facts `renderChangelog`
  * writes as Markdown.
  */
-export function reportChangelog(reporter: Reporter, changelog: Changelog): void {
-    reporter.operationStart("What merging this changes");
+export function changelogOutputs(changelog: Changelog): IntentOutput[] {
+    const heading = "What merging this changes";
 
     if (!changelog.compared) {
-        reporter.note(
-            `Sous could not compare this change with the branch '${changelog.baseBranch}', because this checkout holds no copy of it, so no changelog was generated.`,
-        );
-
-        return;
+        return [
+            new IntentOutput({
+                title: heading,
+                result: new TextBlock(
+                    `Sous could not compare this change with the branch '${changelog.baseBranch}', because this checkout holds no copy of it, so no changelog was generated.`,
+                ),
+                style: ReportEntryStyle.Note,
+            }),
+        ];
     }
 
     if (changelogIsEmpty(changelog)) {
-        reporter.detail("Merging changes no recipe, namespace, version or variable.");
-
-        return;
+        return [new IntentOutput({ title: heading, result: new TextBlock("Merging changes no recipe, namespace, version or variable.") })];
     }
 
-    for (const section of changelogSections(changelog)) {
-        reporter.list(section.entries, { title: section.title });
+    return changelogSections(changelog).map(
+        (section, index) =>
+            new IntentOutput({
+                ...(index === 0 ? { title: heading } : {}),
+                result: new ItemList(section.entries, { title: section.title }),
+                style: ReportEntryStyle.List,
+            }),
+    );
+}
+
+/** Warns about what the changelog shows that needs the person's attention. */
+export function reportChangelogWarnings(reporter: Reporter, changelog: Changelog): void {
+    if (!changelog.compared || changelogIsEmpty(changelog)) {
+        return;
     }
 
     if (changelog.unraised.length > 0) {

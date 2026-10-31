@@ -6,7 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { parseDocument, parsePath, toPlainJson } from "@sous-io/documents";
-import { type Context, InputError, type JsonValue, type ProjectInfo, SousError } from "@sous-io/plugin-api";
+import { type Context, InputError, IntentOutputs, type JsonValue, type ProjectInfo, SousError } from "@sous-io/plugin-api";
 import { writeFileAtomically } from "./env/env-file.js";
 import { mainCandidates } from "./loader.js";
 import { formatOf, MAIN_CONFIG_FILE_NAMES } from "./names.js";
@@ -61,8 +61,21 @@ export function resolveSetTarget(project: ProjectInfo, file: string | undefined)
     return path.resolve(project.root, file);
 }
 
+/** One sentence saying what `config.set` did, or would do in a dry run. */
+function describeSet(result: ConfigSetResult): string {
+    const removing = result.value === undefined;
+
+    if (!result.changed) {
+        return removing ? `${result.path} is not set in ${result.file}, so nothing changed.` : `${result.path} already has that value in ${result.file}, so nothing changed.`;
+    }
+
+    const change = removing ? `${result.path} removed` : `${result.path} set to ${JSON.stringify(result.value)}`;
+
+    return result.dryRun ? `Would change ${result.file}: ${change}.` : `Changed ${result.file}: ${change}.`;
+}
+
 /** Runs `config.set`. */
-export async function configSet(input: ConfigSetInput, ctx: Pick<Context, "project">): Promise<ConfigSetResult> {
+export async function configSet(input: ConfigSetInput, ctx: Pick<Context, "project">): Promise<IntentOutputs<ConfigSetResult>> {
     const project = ctx.project;
 
     if (project === undefined) {
@@ -134,5 +147,7 @@ export async function configSet(input: ConfigSetInput, ctx: Pick<Context, "proje
         writeFileAtomically(file, after, 0o644);
     }
 
-    return { file, path: input.path, previous, value, changed, dryRun };
+    const result: ConfigSetResult = { file, path: input.path, previous, value, changed, dryRun };
+
+    return IntentOutputs.of<ConfigSetResult>(result, { summary: describeSet(result) });
 }

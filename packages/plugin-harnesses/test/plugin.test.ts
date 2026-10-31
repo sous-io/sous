@@ -83,7 +83,7 @@ describe("launch", () => {
         const { engine, builds, calls } = await makeEngine(dir.path, [
             toolsConfig({ mytool: { command: process.execPath, args: [tool.file, "--config-arg"], promptFile: "prompt.md" } }),
         ]);
-        const result = await engine.submit({ intent: "launch", input: { tool: ["mytool", "-c", "--resume"] } });
+        const result = (await engine.submit({ intent: "launch", input: { tool: ["mytool", "-c", "--resume"] } })).toPlain();
 
         expect(builds.count).toBe(1);
         expect(lines(tool.log)[0]!.args).toEqual(["--config-arg", "-c", "--resume", "do the thing"]);
@@ -180,7 +180,7 @@ describe("harness.run-headless", () => {
         const { engine, calls } = await makeEngine(dir.path, [
             toolsConfig({ t: { command: "unused", headless: { command: process.execPath, args: [tool.file, "-p"] } } }),
         ]);
-        const { run } = (await engine.submit({ intent: "harness.run-headless", input: { prompt: "hello" } })) as RunHeadlessResult;
+        const { run } = (await engine.submit({ intent: "harness.run-headless", input: { prompt: "hello" } })).toPlain() as unknown as RunHeadlessResult;
 
         expect(run).toMatchObject({ harness: "t", exitCode: 0, output: "out:-p" });
         expect(lines(tool.log)[0]).toEqual({ args: ["-p"], stdin: "hello" });

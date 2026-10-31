@@ -1,6 +1,6 @@
 # @sous-io/plugin-mcp
 
-Lets AI agents use sous directly over MCP: each intent becomes a tool.
+Lets AI agents use sous directly over MCP: each intent becomes a tool. A tool call returns the intent's outputs: their text as the text content and `outputs.toPlain()` as the structured result.
 
 It adds these commands:
 

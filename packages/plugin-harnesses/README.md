@@ -14,12 +14,12 @@ It adds these commands:
 ```ts
 import type {} from "@sous-io/plugin-harnesses/types";
 
-await ctx.run("launch", { tool: "claude", noBuild: true });
+await ctx.run("launch", { tool: ["claude"], noBuild: true });
 ```
 
 ## Where things are
 
-- `src/launch.ts`: the `launch` intent.
+- `src/launch.ts`: the `launch` intent. It returns data only: the build reports while it runs and the tool owns the terminal.
 - `src/run-headless.ts`: headless runs.
 - `src/settings.ts`: the `tools` config key.
 - `src/tool.ts`: turning a tool's settings into a command.

@@ -39,6 +39,7 @@ import {
     type ServiceFactory,
     type ServiceOptions,
     type ServiceWrapper,
+    IntentOutputs,
     SousError,
     type SousSchema,
     type SubmitOptions,
@@ -394,7 +395,7 @@ export class Engine {
      * Submits a chain: one intent, together with every intent it starts. Resolves with the
      * intent's result. A background intent runs outside the scheduler.
      */
-    submit(request: IntentRequest, options: SubmitOptions = {}): Promise<unknown> {
+    submit(request: IntentRequest, options: SubmitOptions = {}): Promise<IntentOutputs> {
         return this.submitWith(request, options, undefined);
     }
 
@@ -974,7 +975,7 @@ export class Engine {
 
     // ------------------------------------------------------------------ chains and intents
 
-    private submitWith(request: IntentRequest, options: SubmitOptions, parentFrame: Frame | undefined): Promise<unknown> {
+    private submitWith(request: IntentRequest, options: SubmitOptions, parentFrame: Frame | undefined): Promise<IntentOutputs> {
         const info = this.resolveIntent(request.intent, this.current);
         const reporter = options.reporter ?? this.reporterImpl;
         const prompter = options.prompter ?? nonInteractivePrompter;
@@ -1079,7 +1080,7 @@ export class Engine {
         request: IntentRequest,
         io: { reporter: Reporter; prompter: SubmitOptions["prompter"] & object; globals: Readonly<Record<string, unknown>>; cwd: string },
         parentFrame: Frame | undefined,
-    ): Promise<unknown> {
+    ): Promise<IntentOutputs> {
         const call: CallState = { mode: "background", chain: undefined, frame: parentFrame, config: this.current, ...io };
         const running = this.runIntent(request.intent, request.input, call);
         const tracked = running.finally(() => this.background.delete(tracked));
@@ -1104,7 +1105,7 @@ export class Engine {
      * Runs one intent: checks the limits, checks the input, fires `.before`, runs the
      * wrapped handler, fires `.error` on failure and `.after` on success.
      */
-    private async runIntent(name: string, rawInput: unknown, call: CallState): Promise<unknown> {
+    private async runIntent(name: string, rawInput: unknown, call: CallState): Promise<IntentOutputs> {
         const config = configOf(call, () => this.current);
         const info = this.resolveIntent(name, config);
         const definition = info.definition;
@@ -1157,6 +1158,7 @@ export class Engine {
             const ctx = createContext(this.callHost, inner, info.plugin);
 
             result = await this.timer.measure("intent", name, info.plugin, () => handler(before.input, ctx));
+            requireOutputs(name, result, "returned");
         } catch (error) {
             const failed = new ErrorEventImpl(name, before.input, error, data);
 
@@ -1167,13 +1169,15 @@ export class Engine {
             }
 
             result = failed.recoveredResult;
+            requireOutputs(name, result, "recovered with");
         }
 
         const after = new AfterEventImpl(name, before.input, result, data);
 
         await this.dispatch(after, inner);
+        requireOutputs(name, after.result, "left in the after event");
 
-        return after.result;
+        return after.result as IntentOutputs;
     }
 
     private async checkInput(definition: IntentDefinition, rawInput: unknown): Promise<unknown> {
@@ -1201,7 +1205,7 @@ export class Engine {
     }
 
     /** Runs an intent as its own chain, at once: used by `config.built` listeners. */
-    private async runInline(intent: string, input: unknown, call: CallState): Promise<unknown> {
+    private async runInline(intent: string, input: unknown, call: CallState): Promise<IntentOutputs> {
         const chain = new ChainState(++this.chainCounter, intent, false, this.current, call.reporter, call.prompter, call.globals);
         const result = await this.runIntent(intent, input, { ...call, mode: "chain", chain, config: this.current });
 
@@ -1452,4 +1456,11 @@ function noProjectError(cwd: string): ConfigError {
             "  2. Pass the config explicitly: sous <command> --config <path>",
         ],
     });
+}
+
+/** Throws unless a value is `IntentOutputs`: handlers, wrappers and listeners must hand back outputs, never a bare value. */
+function requireOutputs(intent: string, value: unknown, what: string): void {
+    if (!IntentOutputs.is(value)) {
+        throw new SousError(`The intent "${intent}" ${what} something that is not IntentOutputs. A handler must return IntentOutputs (for example IntentOutputs.of({ ... })), and wrappers and listeners must keep it so.`);
+    }
 }

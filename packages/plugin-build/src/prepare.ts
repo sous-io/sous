@@ -1,4 +1,4 @@
-import type { Context } from "@sous-io/plugin-api";
+import { IntentOutputs, type Context } from "@sous-io/plugin-api";
 import type { LockDiff, RecipesLock, ResolvedRecipe, ResolveResult, RestoreReport, SubscriptionEntry } from "@sous-io/plugin-recipes/types";
 import semver from "semver";
 import type { BuildPrepareInput, BuildPrepareResult } from "./types.js";
@@ -37,7 +37,12 @@ export const NOTHING_RESTORED: RestoreReport = Object.freeze({ restored: [], alr
  * ignored, because a build must not depend on the network being up. When the lockfile changed, the
  * config is marked changed, so the next chain sees the recipes it now pins.
  */
-export async function prepare(input: BuildPrepareInput, ctx: Context): Promise<BuildPrepareResult> {
+export async function prepare(input: BuildPrepareInput, ctx: Context): Promise<IntentOutputs<BuildPrepareResult>> {
+    // Internal: what it did is reported by `build` as it runs, so it returns the result as data only.
+    return IntentOutputs.of(await prepareProject(input, ctx));
+}
+
+async function prepareProject(input: BuildPrepareInput, ctx: Context): Promise<BuildPrepareResult> {
     const dryRun = input.dryRun === true;
     const lock = ctx.services.get("recipes.lock");
     const resolver = ctx.services.get("recipes.resolver");

@@ -15,11 +15,12 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { ConfigError, LogLevel, type Context } from "@sous-io/plugin-api";
+import { ConfigError, LogLevel, type Context, type IntentOutput } from "@sous-io/plugin-api";
 import type { GitRunner } from "@sous-io/plugin-git/types";
 import type { LinkOrigin } from "@sous-io/plugin-formats/types";
 import type { RepoLinkInput, RepoLinkResult, UpstreamComparison } from "../../types.js";
 import { PROJECT_REPOS_DIRNAME } from "../constants.js";
+import { blockOutput, detailOutput, dryRunOutput, finish, noteOutput, sentence, underHeading } from "../../part-a/outputs.js";
 import { trustedRepos } from "../lock/lock-service.js";
 import type { PartBRuntime } from "../runtime.js";
 import { messageOf } from "../support.js";
@@ -131,12 +132,12 @@ async function resolveRepo(input: RepoLinkInput, ctx: Context, inSlot: string | 
 
     if (inSlot !== undefined || checkout.looksLikeRepoUrl(input.repo)) {
         const suggested = inSlot === undefined ? undefined : await suggestedName(ctx, inSlot);
-        const outcome = await ctx.run("repo.add", {
+        const outcome = (await ctx.run("repo.add", {
             url: inSlot ?? input.repo,
             ...(suggested === undefined ? {} : { name: suggested }),
             ...(input.yes === undefined ? {} : { yes: input.yes }),
             ...(input.dryRun === undefined ? {} : { dryRun: input.dryRun }),
-        });
+        })).toPlain();
 
         return { name: outcome.name, url: outcome.url, added: outcome.alreadyTrusted ? [] : [outcome.name] };
     }
@@ -435,4 +436,58 @@ function formatWhen(when: Date): string {
     const pad = (value: number): string => String(value).padStart(2, "0");
 
     return `${when.getFullYear()}-${pad(when.getMonth() + 1)}-${pad(when.getDate())} ${pad(when.getHours())}:${pad(when.getMinutes())}`;
+}
+
+/** The outputs of `repo.link`. */
+export function linkOutputs(result: RepoLinkResult) {
+    const heading = "Linking a repository";
+
+    if (result.dryRun) {
+        return finish(
+            underHeading(
+                heading,
+                (result.wouldDo ?? []).map((line) => dryRunOutput(line)),
+            ),
+            result,
+        );
+    }
+
+    const outputs: IntentOutput[] = (result.notes ?? []).map((line) => detailOutput(line));
+
+    outputs.push(
+        blockOutput({
+            Repository: result.repo,
+            Checkout: result.path,
+            ...(result.branch === undefined ? {} : { Branch: result.branch }),
+            Scope: result.scope === "global" ? "every project on this machine" : "this project",
+            ...(result.recordedIn === undefined ? {} : { "Recorded in": result.recordedIn }),
+        }),
+    );
+
+    if (result.replaced !== undefined) {
+        outputs.push(sentence(`This replaces an earlier link to ${result.replaced}, which is untouched.`));
+    }
+
+    if (result.upstream !== undefined) {
+        const upstream = result.upstream.upstream;
+        const yesNo = (value: boolean | undefined): string => (value === undefined ? "unknown" : value ? "yes" : "no");
+
+        outputs.push(
+            blockOutput({
+                ...(result.upstream.detachedAt === undefined ? {} : { "Checked out": `no branch; HEAD is detached at ${result.upstream.detachedAt}` }),
+                "Compared with": upstream,
+                [`Merged into ${upstream}`]: yesNo(result.upstream.merged),
+                [`Behind ${upstream}`]: result.upstream.behind === undefined ? "unknown" : `${result.upstream.behind} ${result.upstream.behind === 1 ? "commit" : "commits"}`,
+            }),
+            noteOutput("Upstream was fetched just now; nothing in the checkout was changed."),
+        );
+    } else if (result.upstreamNote !== undefined) {
+        outputs.push(noteOutput(result.upstreamNote));
+    }
+
+    if (result.trusted.length > 0) {
+        outputs.push(sentence(`Repositories trusted along the way: ${result.trusted.join(", ")}.`));
+    }
+
+    return finish(underHeading(heading, outputs), result);
 }

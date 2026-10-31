@@ -775,6 +775,11 @@ export interface RepoListing {
     readonly installed?: ReadonlyArray<{ readonly key: string; readonly version: string }>;
 }
 
+/** What `repo.list` returns. */
+export interface RepoListResult {
+    readonly repos: RepoListing[];
+}
+
 /** `repo.search`. */
 export interface RepoSearchInput extends BrowsingFlags {
     text: string;
@@ -796,6 +801,11 @@ export interface SearchMatch {
     readonly versions?: string[];
     /** The version this project pins of a matched recipe, from this repository. */
     readonly installed?: string;
+}
+
+/** What `repo.search` returns. */
+export interface RepoSearchResult {
+    readonly matches: SearchMatch[];
 }
 
 /** `repo.gc`. */
@@ -1005,6 +1015,11 @@ export interface SubscriptionListing {
     readonly latest?: ReadonlyArray<{ readonly key: string; readonly version?: string }>;
 }
 
+/** What `subscription.list` returns. */
+export interface SubscriptionListResult {
+    readonly subscriptions: SubscriptionListing[];
+}
+
 /** What an update would change. */
 export type RecipeUpdateScope =
     | { kind: "all" }
@@ -1090,6 +1105,11 @@ export interface NamespaceListing {
     readonly subscribed: NamespaceCoverage;
 }
 
+/** What `namespace.list` returns. */
+export interface NamespaceListResult {
+    readonly namespaces: NamespaceListing[];
+}
+
 /** One recipe `recipe.list` and `namespace.show` show. */
 export interface RecipeListing {
     readonly key: string;
@@ -1101,6 +1121,11 @@ export interface RecipeListing {
     readonly linkedPath?: string;
     readonly subscribed: boolean;
     readonly description?: string;
+}
+
+/** What `recipe.list` returns. */
+export interface RecipeListResult {
+    readonly recipes: RecipeListing[];
 }
 
 /** What `namespace.show` shows. */
@@ -1203,8 +1228,8 @@ declare module "@sous-io/plugin-api" {
         "repo.add": { input: RepoAddInput; result: RepoAddResult };
         "repo.remove": { input: RepoRemoveInput; result: RepoRemoveResult };
         "repo.trust": { input: RepoTrustInput; result: RepoTrustResult };
-        "repo.list": { input: RepoListInput; result: RepoListing[] };
-        "repo.search": { input: RepoSearchInput; result: SearchMatch[] };
+        "repo.list": { input: RepoListInput; result: RepoListResult };
+        "repo.search": { input: RepoSearchInput; result: RepoSearchResult };
         "repo.gc": { input: RepoGcInput; result: StoreGcReport };
         "repo.link": { input: RepoLinkInput; result: RepoLinkResult };
         "repo.unlink": { input: RepoUnlinkInput; result: RepoUnlinkResult };
@@ -1212,14 +1237,14 @@ declare module "@sous-io/plugin-api" {
         "subscription.remove": { input: SubscriptionRemoveInput; result: SubscriptionRemoveResult };
         "subscription.enable": { input: SubscriptionToggleInput; result: SubscriptionToggleResult };
         "subscription.disable": { input: SubscriptionToggleInput; result: SubscriptionToggleResult };
-        "subscription.list": { input: BrowsingFlags; result: SubscriptionListing[] };
+        "subscription.list": { input: BrowsingFlags; result: SubscriptionListResult };
         "subscription.update": { input: SubscriptionUpdateInput; result: SubscriptionUpdateResult };
         "recipe.update": { input: RecipeUpdateInput; result: RecipeUpdatePlan };
         "lock.rebuild": { input: LockRebuildInput; result: LockRebuildResult };
         "lock.show": { input: Record<string, never>; result: LockShowResult };
-        "namespace.list": { input: BrowsingFlags; result: NamespaceListing[] };
+        "namespace.list": { input: BrowsingFlags; result: NamespaceListResult };
         "namespace.show": { input: CatalogShowInput; result: NamespaceDetail };
-        "recipe.list": { input: BrowsingFlags; result: RecipeListing[] };
+        "recipe.list": { input: BrowsingFlags; result: RecipeListResult };
         "recipe.show": { input: CatalogShowInput; result: RecipeDetail };
     }
 

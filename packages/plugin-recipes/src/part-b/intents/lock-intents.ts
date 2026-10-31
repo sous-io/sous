@@ -2,7 +2,7 @@
  * `lock.rebuild`, `lock.show` and `repo.gc`: the intents over the lockfile and the store.
  */
 
-import { ConfigError, LogLevel, type Context } from "@sous-io/plugin-api";
+import { ConfigError, IntentOutputs, LogLevel, type Context, type TableColumn } from "@sous-io/plugin-api";
 import type {
     LockRebuildInput,
     LockRebuildResult,
@@ -19,6 +19,7 @@ import { trustedRepos } from "../lock/lock-service.js";
 import { reachability } from "../lock/reachable.js";
 import { storeKeyOf } from "../fetch/restore.js";
 import type { ResolverService } from "../resolver/resolver-service.js";
+import { blockOutput, describeSize, dryRunOutput, finish, sentence, tableOutput, underHeading } from "../../part-a/outputs.js";
 import { plural } from "../support.js";
 
 /**
@@ -141,4 +142,105 @@ export async function collectStore(input: RepoGcInput, ctx: Context): Promise<St
     );
 
     return report;
+}
+
+// --- The outputs ------------------------------------------------------------------------------------
+
+/**
+ * The outputs of `lock.rebuild`. The intent reports every change, every note and its closing
+ * sentence as it goes, so the outputs hold only the result for machines.
+ */
+export function lockRebuildOutputs(result: LockRebuildResult): IntentOutputs<LockRebuildResult> {
+    return IntentOutputs.of(result);
+}
+
+/** The recipe and its version stay at any width; the holders take what is left and wrap. */
+const LOCK_COLUMNS: TableColumn[] = [
+    { key: "key", header: "Recipe", kind: "path", overflow: "truncate", minWidth: 12 },
+    { key: "version", header: "Version", overflow: "truncate", minWidth: 7 },
+    { key: "repo", header: "Repository", overflow: "truncate", priority: "medium" },
+    { key: "heldBy", header: "Held by", overflow: "wrap", flex: 1, priority: "low", minWidth: 16 },
+];
+
+function describeHolder(holder: string): string {
+    return holder === "project" ? "this project" : holder;
+}
+
+/** The outputs of `lock.show`. */
+export function lockShowOutputs(result: LockShowResult): IntentOutputs<LockShowResult> {
+    const recipes = [...result.recipes].sort((left, right) => (left.key < right.key ? -1 : left.key > right.key ? 1 : 0));
+    const rows = recipes.map((recipe) => ({
+        key: recipe.key,
+        version: recipe.entry.version,
+        repo: recipe.entry.repo,
+        heldBy: recipe.entry.requestedBy.map(describeHolder).join(", "),
+    }));
+    const rowNotes = recipes.map((recipe) => (recipe.active ? undefined : `not built here: ${recipe.skipped?.message ?? "Not built on this machine."}`));
+    const outputs = [
+        tableOutput(LOCK_COLUMNS, rows, {
+            heading: "Recipe versions this project pins",
+            empty: `This project pins nothing yet. Its lockfile is ${result.path}.`,
+            rowNotes,
+        }),
+    ];
+
+    if (rows.length > 0) {
+        outputs.push(sentence(`This project's lockfile is ${result.path}.`));
+    }
+
+    return finish(outputs, result);
+}
+
+const EVICTED_COLUMNS: TableColumn[] = [
+    { key: "recipe", header: "Recipe", kind: "path", overflow: "truncate", minWidth: 12 },
+    { key: "version", header: "Version", overflow: "truncate" },
+    { key: "size", header: "Size", kind: "number" },
+    { key: "repo", header: "Repository", overflow: "truncate", priority: "medium" },
+    { key: "lastUsed", header: "Last used", priority: "low", flex: 1 },
+];
+
+/** The outputs of `repo.gc`. */
+export function storeGcOutputs(report: StoreGcReport): IntentOutputs<StoreGcReport> {
+    const outputs = [];
+
+    if (report.dryRun) {
+        outputs.push(dryRunOutput("Nothing will be removed."));
+    }
+
+    outputs.push(
+        blockOutput({
+            "Entries before": String(report.evicted.length + report.kept.length),
+            "Entries kept": String(report.kept.length),
+            "Entries evicted": String(report.evicted.length),
+            "Size before": describeSize(report.bytesBefore),
+            "Size after": describeSize(report.bytesAfter),
+        }),
+    );
+
+    if (report.evicted.length > 0) {
+        outputs.push(
+            tableOutput(
+                EVICTED_COLUMNS,
+                report.evicted.map((entry) => ({
+                    repo: entry.repo,
+                    recipe: `${entry.namespace}/${entry.name}`,
+                    version: entry.version,
+                    size: describeSize(entry.sizeBytes),
+                    lastUsed: entry.lastAccessAt,
+                })),
+            ),
+        );
+    }
+
+    outputs.push(
+        sentence(
+            report.evicted.length === 0
+                ? "The store is already inside its size cap, so nothing was removed."
+                : report.dryRun
+                  ? "Nothing was removed. Everything listed above is re-fetchable from the lockfile that pins it."
+                  : "Everything removed is re-fetchable from the lockfile that pins it; the next build that needs one will download it again.",
+        ),
+    );
+
+    return finish(underHeading("Collecting the recipe store", outputs), report);
 }

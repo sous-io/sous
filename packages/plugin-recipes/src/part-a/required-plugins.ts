@@ -18,7 +18,8 @@
 import { SousError, type Context } from "@sous-io/plugin-api";
 import type {} from "@sous-io/plugin-update/types";
 import semver from "semver";
-import type { IntentFollowUp, ResolvedRecipe } from "../types.js";
+import type { ResolvedRecipe } from "../types.js";
+import type { RanFollowUp } from "./outputs.js";
 import { ensureInStore } from "../part-b/fetch/restore.js";
 import type { IndexCacheCore } from "../part-b/index-cache/index-cache.js";
 import { trustedRepos } from "./project.js";
@@ -167,7 +168,7 @@ export async function requiredPlugins(ctx: Context, resolved: readonly ResolvedR
  * otherwise subscribing is refused. Returns the install follow-up, or `undefined` when nothing
  * was needed.
  */
-export async function ensureRequiredPlugins(ctx: Context, resolved: readonly ResolvedRecipe[], flags: RequirementFlags, ref: string): Promise<IntentFollowUp | undefined> {
+export async function ensureRequiredPlugins(ctx: Context, resolved: readonly ResolvedRecipe[], flags: RequirementFlags, ref: string): Promise<RanFollowUp | undefined> {
     // A dry run downloads nothing, so it checks only the recipes already in the store.
     const required = await requiredPlugins(ctx, resolved, flags.dryRun !== true);
     const unmet = required.length === 0 ? [] : unmetRequirements(required, ctx.engine.plugins());
@@ -207,7 +208,8 @@ export async function ensureRequiredPlugins(ctx: Context, resolved: readonly Res
         });
     }
 
-    const result = await ctx.run(INSTALL_INTENT, { plugins: specs, yes: true });
+    const outputs = await ctx.run(INSTALL_INTENT, { plugins: specs, yes: true });
+    const result = outputs.toPlain();
 
     if (result.declined || (result.exitCode !== undefined && result.exitCode !== 0)) {
         throw new SousError(`Sous could not install ${specs.join(", ")}, so nothing was subscribed.`, {
@@ -215,5 +217,5 @@ export async function ensureRequiredPlugins(ctx: Context, resolved: readonly Res
         });
     }
 
-    return { intent: INSTALL_INTENT, result };
+    return { intent: INSTALL_INTENT, result, outputs };
 }

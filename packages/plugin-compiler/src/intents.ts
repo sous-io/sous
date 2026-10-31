@@ -4,7 +4,7 @@
  */
 
 import path from "node:path";
-import { LogLevel, nullReporter, type Context, type Reporter } from "@sous-io/plugin-api";
+import { IntentOutputs, LogLevel, nullReporter, type Context, type Reporter } from "@sous-io/plugin-api";
 import type { LiquidEngines } from "@sous-io/plugin-liquid/types";
 import type { RefsParser } from "@sous-io/plugin-refs/types";
 import type { VariablesSecrets } from "@sous-io/plugin-variables/types";
@@ -94,8 +94,15 @@ function reportExpansion(problems: CompileProblem[], strict: boolean, reporter: 
     });
 }
 
-/** Runs `compiler.compile`. */
-export async function compile(input: CompileInput, ctx: Context, runtime: CompilerRuntime): Promise<CompileResult> {
+/**
+ * Runs `compiler.compile` (internal). Each output is reported as it is written, so this returns the
+ * result as data only, for `build` and `compile` to read.
+ */
+export async function compile(input: CompileInput, ctx: Context, runtime: CompilerRuntime): Promise<IntentOutputs<CompileResult>> {
+    return IntentOutputs.of(await compileTargets(input, ctx, runtime));
+}
+
+async function compileTargets(input: CompileInput, ctx: Context, runtime: CompilerRuntime): Promise<CompileResult> {
     const started = performance.now();
     const strict = input.strict ?? false;
     const dryRun = input.dryRun ?? false;
@@ -174,8 +181,15 @@ function isDirectWrite(entry: StateFileEntry): boolean {
     return entry.target === undefined && entry.origin?.plugin !== undefined;
 }
 
-/** Runs `compiler.prune`. */
-export async function prune(input: CompilerPruneInput, ctx: Context, runtime: CompilerRuntime): Promise<CompilerPruneResult> {
+/**
+ * Runs `compiler.prune` (internal). Each removal is reported as it happens, so this returns the
+ * result as data only; `prune` and `clear` say how much was removed.
+ */
+export async function prune(input: CompilerPruneInput, ctx: Context, runtime: CompilerRuntime): Promise<IntentOutputs<CompilerPruneResult>> {
+    return IntentOutputs.of(await pruneOutputs(input, ctx, runtime));
+}
+
+async function pruneOutputs(input: CompilerPruneInput, ctx: Context, runtime: CompilerRuntime): Promise<CompilerPruneResult> {
     const dryRun = input.dryRun ?? false;
     const store = runtime.store();
 

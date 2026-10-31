@@ -2,6 +2,7 @@ import { EventEmitter } from "node:events";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import { messageText } from "@sous-io/plugin-api";
 import type { BuildResult, BuildWatchResult } from "../src/types.js";
 import type { SignalSource } from "../src/watch/intent.js";
 import type { WatchSession } from "../src/watch/session.js";
@@ -67,7 +68,7 @@ async function startWatch(input: Record<string, unknown> = {}, setUp?: (world: W
             (setUp ?? sources)(world, root);
         },
     });
-    const done = h.engine.submit({ intent: "build.watch", input }, { reporter: h.reporter }) as Promise<BuildWatchResult>;
+    const done = h.engine.submit({ intent: "build.watch", input }, { reporter: h.reporter }).then((outputs) => outputs.toPlain() as unknown as BuildWatchResult);
 
     await vi.waitFor(() => expect(rig.sessions).toHaveLength(1));
 
@@ -196,10 +197,10 @@ describe("build.watch", () => {
         await session.poll();
 
         await vi.waitFor(() => expect(h.world.compileCalls).toHaveLength(1));
-        expect(h.reporter.messages.find((entry) => entry.message.startsWith("A newer recipe version arrived upstream."))).toMatchObject({
+        expect(h.reporter.messages.find((entry) => messageText(entry.message).startsWith("A newer recipe version arrived upstream."))).toMatchObject({
             level: "notice",
             style: "list",
-            details: { items: ["acme/jira moved from 1.0.0 to 1.2.0."] },
+            message: expect.objectContaining({ items: ["acme/jira moved from 1.0.0 to 1.2.0."] }),
         });
 
         await session.stop();

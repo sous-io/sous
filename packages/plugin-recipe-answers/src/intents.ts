@@ -3,13 +3,25 @@
  * Each is written once here; the CLI and MCP generate their commands and tools from it.
  */
 
-import { type Context, ConfigError, InputError, type IntentDefinition, jsonSchema, LogLevel } from "@sous-io/plugin-api";
+import {
+    type Context,
+    commandVariables,
+    ConfigError,
+    InputError,
+    type IntentDefinition,
+    IntentOutput,
+    IntentOutputs,
+    jsonSchema,
+    ReportEntryStyle,
+    TextBlock,
+} from "@sous-io/plugin-api";
 import type { EnvFileKind } from "@sous-io/plugin-config-files/types";
 import { askForMissing, type AnswerStore, storeGivenAnswers } from "./ask.js";
 import { resolveEnvFile } from "./env-file.js";
 import { namesVariable, recipeKey } from "./definitions.js";
 import type { Ladder } from "./ladder.js";
 import { VAR_MAPPINGS_FILE } from "./mappings.js";
+import { askReportOutputs, variableDetailOutputs, variableListOutput } from "./outputs.js";
 import { resolveUserPath } from "./paths.js";
 import { unknownAnswerError } from "./preanswers.js";
 import { describeSelection, resolveSelection, SEE_ALL } from "./selection.js";
@@ -21,6 +33,7 @@ import type {
     VarsAskInput,
     VarsAskResult,
     VarsListInput,
+    VarsListResult,
     VarsMapInput,
     VarsMapResult,
     VarsShowInput,
@@ -36,6 +49,18 @@ const FILE_FIELD = {
 /** The help line every listing names its definitions source with. */
 function definitionsLabel(file: string | undefined): string {
     return file ?? "the project's subscribed recipes";
+}
+
+/** The outputs with `data` set on the last one, which is what machines get. */
+function withData<T extends object>(outputs: readonly IntentOutput[], data: T): IntentOutputs<T> {
+    const last = outputs[outputs.length - 1];
+    const head = outputs.slice(0, -1);
+
+    if (last === undefined) {
+        return IntentOutputs.of(data);
+    }
+
+    return new IntentOutputs<T>([...head, new IntentOutput<T>({ title: last.title, summary: last.summary, result: last.result, style: last.style, data })]);
 }
 
 /** A ladder for this chain, over the env files as they are now. */
@@ -103,7 +128,7 @@ function storeFor(ctx: Context): AnswerStore {
 }
 
 /** `vars.ask`. */
-export async function handleAsk(input: VarsAskInput, ctx: Context): Promise<VarsAskResult> {
+export async function handleAsk(input: VarsAskInput, ctx: Context): Promise<IntentOutputs<VarsAskResult>> {
     const dryRun = input.dryRun === true;
     const hidden = hiddenValue(ctx.services);
 
@@ -134,11 +159,20 @@ export async function handleAsk(input: VarsAskInput, ctx: Context): Promise<Vars
             throw unknownAnswerError(provided[0], variables);
         }
 
-        ctx.reporter.note(
-            "No recipe in this project defines any variables yet, so there is nothing to ask. Subscribe to a recipe that publishes some, or read a definitions file with --file.",
-        );
+        const empty: VarsAskResult = { answered: [], inherited: [], skipped: [], dryRun };
 
-        return { answered: [], inherited: [], skipped: [], dryRun };
+        return withData(
+            [
+                new IntentOutput({ title: "Answering variables" }),
+                new IntentOutput({
+                    result: new TextBlock(
+                        "No recipe in this project defines any variables yet, so there is nothing to ask. Subscribe to a recipe that publishes some, or read a definitions file with --file.",
+                    ),
+                    style: ReportEntryStyle.Note,
+                }),
+            ],
+            empty,
+        );
     }
 
     const ladder = ladderFor(ctx);
@@ -165,35 +199,47 @@ export async function handleAsk(input: VarsAskInput, ctx: Context): Promise<Vars
         ctx.configChanged();
     }
 
-    // The CLI view prints the summary (askSummary); reporting it here too would show it twice.
-    return result;
+    const entries = result.answered.length > 0 || result.inherited.length > 0 || result.skipped.length > 0 ? askReportOutputs(result, hidden) : [];
+
+    return withData([new IntentOutput({ title: "Answering variables" }), ...entries], result);
 }
 
 /** `vars.list`, and `sous vars <name>`. */
-export async function handleList(input: VarsListInput, ctx: Context): Promise<VariableListing[]> {
+export async function handleList(input: VarsListInput, ctx: Context): Promise<IntentOutputs<VarsListResult>> {
     const variables = await ctx.services.get("recipe-answers.definitions").list(input.file === undefined ? {} : { file: resolveUserPath(input.file, ctx) });
     const ladder = ladderFor(ctx);
     const hidden = hiddenValue(ctx.services);
 
-    // The CLI view names the definitions source in its "Command Variables" block.
-    ctx.reporter.variable("Definitions", definitionsLabel(input.file), undefined, LogLevel.Debug);
+    const opening = commandVariables(ctx, { Definitions: definitionsLabel(input.file) });
 
     if (input.name !== undefined) {
-        return variablesNamed(variables, input.name).map((variable) => detailOf(variable, ladder, hidden));
+        const details = variablesNamed(variables, input.name).map((variable) => detailOf(variable, ladder, hidden));
+        const shown = details.flatMap((detail) => variableDetailOutputs(detail, hidden, ctx.project?.sousDir));
+
+        return withData([opening, ...shown], { variables: details });
     }
 
-    return variables.map((variable) => listingOf(variable, ladder, hidden));
+    const listings = variables.map((variable) => listingOf(variable, ladder, hidden));
+
+    return withData([opening, variableListOutput(listings, hidden)], { variables: listings });
 }
 
 /** `vars.show`. Several matches are settled by `refs.picker` (`--accept-first`). */
-export async function handleShow(input: VarsShowInput, ctx: Context): Promise<VariableDetail> {
+export async function handleShow(input: VarsShowInput, ctx: Context): Promise<IntentOutputs<VariableDetail>> {
     const variables = await ctx.services.get("recipe-answers.definitions").list(input.file === undefined ? {} : { file: resolveUserPath(input.file, ctx) });
     const matches = variablesNamed(variables, input.name);
     const ladder = ladderFor(ctx);
     const hidden = hiddenValue(ctx.services);
 
+    const opening = commandVariables(ctx, { Definitions: definitionsLabel(input.file) });
+    const outputsOf = (variable: DefinedVariable): IntentOutputs<VariableDetail> => {
+        const detail = detailOf(variable, ladder, hidden);
+
+        return withData([opening, ...variableDetailOutputs(detail, hidden, ctx.project?.sousDir)], detail);
+    };
+
     if (matches.length === 1) {
-        return detailOf(matches[0]!, ladder, hidden);
+        return outputsOf(matches[0]!);
     }
 
     const picked = await ctx.services.get("refs.picker").pick(
@@ -203,11 +249,11 @@ export async function handleShow(input: VarsShowInput, ctx: Context): Promise<Va
     );
     const chosen = matches.find((entry) => entry.ref === picked) ?? matches.find((entry) => JSON.stringify(entry.ref) === JSON.stringify(picked)) ?? matches[0]!;
 
-    return detailOf(chosen, ladder, hidden);
+    return outputsOf(chosen);
 }
 
 /** `vars.map`. */
-export async function handleMap(input: VarsMapInput, ctx: Context): Promise<VarsMapResult> {
+export async function handleMap(input: VarsMapInput, ctx: Context): Promise<IntentOutputs<VarsMapResult>> {
     const mappings = ctx.services.get("recipe-answers.mappings");
     const dryRun = input.dryRun === true;
 
@@ -220,9 +266,7 @@ export async function handleMap(input: VarsMapInput, ctx: Context): Promise<Vars
 
         const removal = changed ? `${dryRun ? "Would remove" : "Removed"} the mapping of ${input.envName} in ${file}.` : `${input.envName} has no mapping in ${file}.`;
 
-        ctx.reporter.notice(removal);
-
-        return { envName: input.envName, file, changed, dryRun };
+        return IntentOutputs.of<VarsMapResult>({ envName: input.envName, file, changed, dryRun }, { summary: removal });
     }
 
     if (input.target === undefined) {
@@ -236,9 +280,10 @@ export async function handleMap(input: VarsMapInput, ctx: Context): Promise<Vars
         ctx.configChanged();
     }
 
-    ctx.reporter.notice(changed ? `${dryRun ? "Would map" : "Mapped"} ${input.envName} to ${target} in ${file}.` : `${input.envName} is already mapped to ${target}.`);
-
-    return { envName: input.envName, target, file, changed, dryRun };
+    return IntentOutputs.of<VarsMapResult>(
+        { envName: input.envName, target, file, changed, dryRun },
+        { summary: changed ? `${dryRun ? "Would map" : "Mapped"} ${input.envName} to ${target} in ${file}.` : `${input.envName} is already mapped to ${target}.` },
+    );
 }
 
 /** Every `vars` intent, as registered. */
@@ -292,7 +337,7 @@ export const varsIntents: IntentDefinition[] = [
             usage: "Pass every answer with `answer` (name=value pairs) or `answersFile`; questions cannot be asked through MCP unless the client supports elicitation.",
         },
         requiresProject: true,
-        handle: handleAsk as IntentDefinition["handle"],
+        handle: handleAsk as unknown as IntentDefinition["handle"],
     },
     {
         intent: "vars.list",
@@ -313,7 +358,7 @@ export const varsIntents: IntentDefinition[] = [
             examples: ["sous vars", "sous vars apiUrl", "sous vars list", "sous vars list --file ./questions.yaml"],
         },
         requiresProject: true,
-        handle: handleList as IntentDefinition["handle"],
+        handle: handleList as unknown as IntentDefinition["handle"],
     },
     {
         intent: "vars.show",
@@ -336,7 +381,7 @@ export const varsIntents: IntentDefinition[] = [
             examples: ["sous vars show apiUrl", "sous vars show workflow/task-files.apiUrl"],
         },
         requiresProject: true,
-        handle: handleShow as IntentDefinition["handle"],
+        handle: handleShow as unknown as IntentDefinition["handle"],
     },
     {
         intent: "vars.map",
@@ -360,6 +405,6 @@ export const varsIntents: IntentDefinition[] = [
             examples: ["sous vars map TEAM_API_URL sous-recipes:misc/stuff/apiUrl", "sous vars map TEAM_API_URL --remove"],
         },
         requiresProject: true,
-        handle: handleMap as IntentDefinition["handle"],
+        handle: handleMap as unknown as IntentDefinition["handle"],
     },
 ];

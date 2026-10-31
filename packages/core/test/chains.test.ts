@@ -8,6 +8,7 @@ import {
     scriptedPrompter,
     SousError,
     BufferedReporter,
+    IntentOutputs,
 } from "@sous-io/plugin-api";
 import { contributorsPlugin, keysPlugin, makeEngine, plugin } from "./helpers.js";
 
@@ -39,7 +40,7 @@ describe("the chain scheduler", () => {
                             await gates[name === "config.get" ? "get" : name].promise;
                             log.push(`${name} end`);
 
-                            return name;
+                            return IntentOutputs.of({ name });
                         },
                     });
                 }
@@ -61,7 +62,7 @@ describe("the chain scheduler", () => {
 
         gates.build.open();
         gates.catalog.open();
-        expect(await Promise.all([get, build, catalog])).toEqual(["config.get", "build", "catalog"]);
+        expect((await Promise.all([get, build, catalog])).map((outputs) => outputs.toPlain())).toEqual([{ name: "config.get" }, { name: "build" }, { name: "catalog" }]);
         expect(log.slice(3)).toEqual(["build end", "catalog start", "catalog end"]);
     });
 
@@ -80,6 +81,8 @@ describe("the chain scheduler", () => {
                         most = Math.max(most, running);
                         await tick();
                         running -= 1;
+
+                        return IntentOutputs.of({});
                     },
                 });
             }),
@@ -111,6 +114,8 @@ describe("the chain scheduler", () => {
                     changesConfig: true,
                     handle: () => {
                         value = 2;
+
+                        return IntentOutputs.of({});
                     },
                 });
                 sous.intents.add({
@@ -118,6 +123,8 @@ describe("the chain scheduler", () => {
                     handle: (_input, ctx) => {
                         value = 3;
                         ctx.configChanged();
+
+                        return IntentOutputs.of({});
                     },
                 });
                 sous.intents.add({
@@ -127,7 +134,7 @@ describe("the chain scheduler", () => {
 
                         await tick();
 
-                        return [before, ctx.config.get("value"), (ctx.services.get("p.snapshot") as { value: number }).value];
+                        return IntentOutputs.of({ seen: [before, ctx.config.get("value"), (ctx.services.get("p.snapshot") as { value: number }).value] });
                     },
                 });
             }),
@@ -139,9 +146,9 @@ describe("the chain scheduler", () => {
 
         await tick();
         await engine.submit({ intent: "p.write" });
-        seen.push(await reading, await engine.submit({ intent: "p.read" }));
+        seen.push((await reading).toPlain().seen, (await engine.submit({ intent: "p.read" })).toPlain().seen);
         await engine.submit({ intent: "p.mark" });
-        seen.push(await engine.submit({ intent: "p.read" }));
+        seen.push((await engine.submit({ intent: "p.read" })).toPlain().seen);
 
         expect(seen).toEqual([
             [1, 1, 1],
@@ -165,8 +172,8 @@ describe("the chain scheduler", () => {
                         }
                     },
                 });
-                sous.intents.add({ intent: "p.break", changesConfig: true, handle: () => void (broken = true) });
-                sous.intents.add({ intent: "p.ok", handle: () => "ok" });
+                sous.intents.add({ intent: "p.break", changesConfig: true, handle: () => ((broken = true), IntentOutputs.of({})) });
+                sous.intents.add({ intent: "p.ok", handle: () => IntentOutputs.of({ value: "ok" }) });
             }),
         ]);
 
@@ -175,7 +182,7 @@ describe("the chain scheduler", () => {
         await expect(engine.submit({ intent: "p.ok" })).rejects.toThrow('The contributor "fragile" (p) failed: broken');
 
         broken = false;
-        await expect(engine.submit({ intent: "p.ok" })).resolves.toBe("ok");
+        expect((await engine.submit({ intent: "p.ok" })).toPlain()).toEqual({ value: "ok" });
     });
 
     /**
@@ -196,13 +203,15 @@ describe("the chain scheduler", () => {
                     background: true,
                     handle: async (_input, ctx) => {
                         log.push(`chain:${String(ctx.chain)}`);
-                        log.push(await ctx.run("p.change", {}));
+                        log.push((await ctx.run("p.change", {})).toPlain().value);
                         await stop.promise;
                         log.push(ctx.config.get("value"), (ctx.services.get("p.clock") as { now(): number }).now());
+
+                        return IntentOutputs.of({});
                     },
                 });
-                sous.intents.add({ intent: "p.change", changesConfig: true, handle: () => ((value = "second"), "changed") });
-                sous.intents.add({ intent: "p.quick", handle: () => "quick" });
+                sous.intents.add({ intent: "p.change", changesConfig: true, handle: () => ((value = "second"), IntentOutputs.of({ value: "changed" })) });
+                sous.intents.add({ intent: "p.quick", handle: () => IntentOutputs.of({ value: "quick" }) });
             }),
         ]);
 
@@ -210,7 +219,7 @@ describe("the chain scheduler", () => {
 
         const serving = engine.submit({ intent: "p.serve" });
 
-        expect(await engine.submit({ intent: "p.quick" })).toBe("quick");
+        expect((await engine.submit({ intent: "p.quick" })).toPlain()).toEqual({ value: "quick" });
 
         let returned = false;
         const waiting = engine.whenBackgroundIntentsReturn().then(() => (returned = true));
@@ -236,20 +245,20 @@ describe("the chain scheduler", () => {
                     intent: "subscription.add",
                     input: jsonSchema<{ ref: string }>({ type: "object", required: ["ref"], properties: { ref: { type: "string" } } }),
                     handle: async (input, ctx) => {
-                        const recipe = (await ctx.run("ref.resolve", { ref: (input as { ref: string }).ref })) as { key: string };
-                        const both = await Promise.all([ctx.run("p.slow", { n: 1 }), ctx.run("p.slow", { n: 2 })]);
+                        const recipe = (await ctx.run("ref.resolve", { ref: (input as { ref: string }).ref })).toPlain() as { key: string };
+                        const both = (await Promise.all([ctx.run("p.slow", { n: 1 }), ctx.run("p.slow", { n: 2 })])).map((outputs) => outputs.toPlain().n);
 
-                        return { subscribed: recipe.key, both, chain: ctx.chain?.intent };
+                        return IntentOutputs.of({ subscribed: recipe.key, both, chain: ctx.chain?.intent });
                     },
                 });
-                sous.intents.add({ intent: "ref.resolve", internal: true, handle: (input) => ({ key: `${(input as { ref: string }).ref}@1.0.0` }) });
-                sous.intents.add({ intent: "p.slow", handle: async (input) => (await tick(), (input as { n: number }).n) });
+                sous.intents.add({ intent: "ref.resolve", internal: true, handle: (input) => IntentOutputs.of({ key: `${(input as { ref: string }).ref}@1.0.0` }) });
+                sous.intents.add({ intent: "p.slow", handle: async (input) => (await tick(), IntentOutputs.of({ n: (input as { n: number }).n })) });
             }),
         ]);
 
         await engine.buildConfig();
 
-        expect(await engine.submit({ intent: "subscription.add", input: { ref: "workflow/x" } })).toEqual({
+        expect((await engine.submit({ intent: "subscription.add", input: { ref: "workflow/x" } })).toPlain()).toEqual({
             subscribed: "workflow/x@1.0.0",
             both: [1, 2],
             chain: "subscription.add",
@@ -308,7 +317,7 @@ describe("the chain scheduler", () => {
                     handle: async (_input, ctx) => {
                         ctx.reporter.notice("asking");
 
-                        return [await ctx.prompter.askValue({ message: "Name?", answeredBy: "--name" }), ctx.globals.debug, ctx.plugin, ctx.project, ctx.env.X];
+                        return IntentOutputs.of({ answers: [await ctx.prompter.askValue({ message: "Name?", answeredBy: "--name" }), ctx.globals.debug, ctx.plugin, ctx.project, ctx.env.X] });
                     },
                 });
             }),
@@ -316,7 +325,7 @@ describe("the chain scheduler", () => {
 
         await engine.buildConfig();
 
-        expect(await engine.submit({ intent: "p.ask" }, { reporter, prompter, globals: { debug: true } })).toEqual(["yes please", true, "p", undefined, "1"]);
+        expect((await engine.submit({ intent: "p.ask" }, { reporter, prompter, globals: { debug: true } })).toPlain()).toEqual({ answers: ["yes please", true, "p", undefined, "1"] });
         expect(reporter.at("notice")).toEqual(["asking"]);
         await expect(engine.submit({ intent: "p.ask" })).rejects.toThrow('sous needed to ask "Name?" but cannot ask questions in this run. Pass --name');
     });
@@ -333,16 +342,16 @@ describe("intents", () => {
                 sous.intents.add({
                     intent: "namespace.list",
                     input: jsonSchema({ type: "object", properties: { json: { type: "boolean", default: false }, repository: { type: "string" } } }),
-                    handle: (input) => input,
+                    handle: (input) => IntentOutputs.of(input as Record<string, unknown>),
                 });
-                sous.intents.add({ intent: "p.raw", handle: (input) => input });
+                sous.intents.add({ intent: "p.raw", handle: (input) => IntentOutputs.of(input as Record<string, unknown>) });
             }),
         ]);
 
         await engine.buildConfig();
 
-        expect(await engine.submit({ intent: "namespace.list" })).toEqual({ json: false });
-        expect(await engine.submit({ intent: "p.raw" })).toEqual({});
+        expect((await engine.submit({ intent: "namespace.list" })).toPlain()).toEqual({ json: false });
+        expect((await engine.submit({ intent: "p.raw" })).toPlain()).toEqual({});
 
         const error = (await engine.submit({ intent: "namespace.list", input: { repository: 3 } }).catch((e) => e)) as InputError;
 
@@ -359,9 +368,9 @@ describe("intents", () => {
         let loads = 0;
         const { engine } = makeEngine([
             plugin("p", (sous) => {
-                sous.intents.add({ intent: "p.fn", load: async () => ((loads += 1), () => "fn") });
-                sous.intents.add({ intent: "p.default", load: async () => ({ default: () => "default" }) });
-                sous.intents.add({ intent: "p.handle", load: async () => ({ handle: () => "handle" }) });
+                sous.intents.add({ intent: "p.fn", load: async () => ((loads += 1), () => IntentOutputs.of({ value: "fn" })) });
+                sous.intents.add({ intent: "p.default", load: async () => ({ default: () => IntentOutputs.of({ value: "default" }) }) });
+                sous.intents.add({ intent: "p.handle", load: async () => ({ handle: () => IntentOutputs.of({ value: "handle" }) }) });
                 sous.intents.add({ intent: "p.bad", load: async () => ({ nothing: true }) as never });
             }),
         ]);
@@ -369,12 +378,31 @@ describe("intents", () => {
         await engine.buildConfig();
 
         expect(loads).toBe(0);
-        expect(await engine.submit({ intent: "p.fn" })).toBe("fn");
-        expect(await engine.submit({ intent: "p.fn" })).toBe("fn");
+        expect((await engine.submit({ intent: "p.fn" })).toPlain()).toEqual({ value: "fn" });
+        expect((await engine.submit({ intent: "p.fn" })).toPlain()).toEqual({ value: "fn" });
         expect(loads).toBe(1);
-        expect(await engine.submit({ intent: "p.default" })).toBe("default");
-        expect(await engine.submit({ intent: "p.handle" })).toBe("handle");
+        expect((await engine.submit({ intent: "p.default" })).toPlain()).toEqual({ value: "default" });
+        expect((await engine.submit({ intent: "p.handle" })).toPlain()).toEqual({ value: "handle" });
         await expect(engine.submit({ intent: "p.bad" })).rejects.toThrow('The handler module of "p.bad" exports no handler');
+    });
+
+    /**
+     * A handler must return IntentOutputs; anything else is an error naming the intent, not
+     * wrapped silently. A wrapper that returns something else is the same error.
+     */
+    it("should refuse a handler or wrapper that returns something other than IntentOutputs", async () => {
+        const { engine } = makeEngine([
+            plugin("p", (sous) => {
+                sous.intents.add({ intent: "p.bare", handle: (() => "bare") as never });
+                sous.intents.add({ intent: "p.wrapped", handle: () => IntentOutputs.of({}) });
+                sous.intents.wrap("p.wrapped", () => (() => ({ not: "outputs" })) as never);
+            }),
+        ]);
+
+        await engine.buildConfig();
+
+        await expect(engine.submit({ intent: "p.bare" })).rejects.toThrow('The intent "p.bare" returned something that is not IntentOutputs. A handler must return IntentOutputs');
+        await expect(engine.submit({ intent: "p.wrapped" })).rejects.toThrow('The intent "p.wrapped" returned something that is not IntentOutputs.');
     });
 
     /**
@@ -394,14 +422,14 @@ describe("intents", () => {
      */
     it("should stack intent wrappers in plugin order", async () => {
         const { engine } = makeEngine([
-            plugin("build-owner", (sous) => sous.intents.add({ intent: "build", handle: () => ["built"] })),
-            plugin("first", (sous) => sous.intents.wrap("build", (next) => async (input, ctx) => [...((await next(input, ctx)) as string[]), "first"])),
-            plugin("second", (sous) => sous.intents.wrap("build", (next) => async (input, ctx) => [...((await next(input, ctx)) as string[]), "second"])),
+            plugin("build-owner", (sous) => sous.intents.add({ intent: "build", handle: () => IntentOutputs.of({ steps: ["built"] }) })),
+            plugin("first", (sous) => sous.intents.wrap("build", (next) => async (input, ctx) => IntentOutputs.of({ steps: [...((await next(input, ctx)).toPlain().steps as string[]), "first"] }))),
+            plugin("second", (sous) => sous.intents.wrap("build", (next) => async (input, ctx) => IntentOutputs.of({ steps: [...((await next(input, ctx)).toPlain().steps as string[]), "second"] }))),
         ]);
 
         await engine.buildConfig();
 
-        expect(await engine.submit({ intent: "build" })).toEqual(["built", "first", "second"]);
+        expect((await engine.submit({ intent: "build" })).toPlain()).toEqual({ steps: ["built", "first", "second"] });
     });
 
     /**
@@ -409,8 +437,8 @@ describe("intents", () => {
      * is warned about on every build.
      */
     it("should report a duplicate intent and honour intents.replace", async () => {
-        const a = plugin("plugin-a", (sous) => sous.intents.add({ intent: "x.go", handle: () => "a" }));
-        const b = plugin("plugin-b", (sous) => sous.intents.add({ intent: "x.go", handle: () => "b" }));
+        const a = plugin("plugin-a", (sous) => sous.intents.add({ intent: "x.go", handle: () => IntentOutputs.of({ value: "a" }) }));
+        const b = plugin("plugin-b", (sous) => sous.intents.add({ intent: "x.go", handle: () => IntentOutputs.of({ value: "b" }) }));
         const error = (await makeEngine([a, b]).engine.buildConfig().catch((e) => e)) as ConflictError;
 
         expect(error).toBeInstanceOf(ConflictError);
@@ -423,7 +451,7 @@ describe("intents", () => {
         await engine.buildConfig();
         await engine.buildConfig();
 
-        expect(await engine.submit({ intent: "x.go" })).toBe("a");
+        expect((await engine.submit({ intent: "x.go" })).toPlain()).toEqual({ value: "a" });
         expect(reporter.at("warning")).toEqual([
             'intents.replace picks plugin-a for "x.go". plugin-b\'s intent is ignored, and may not work as expected.',
             'intents.replace picks plugin-a for "x.go". plugin-b\'s intent is ignored, and may not work as expected.',

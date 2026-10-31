@@ -1,6 +1,6 @@
 /**
- * The handlers of plugin-inspect. Each reads only the engine and returns plain data; plugin-cli
- * decides how it looks. Secrets are hidden everywhere.
+ * The handlers of plugin-inspect. Each reads only the engine and returns outputs (`./outputs.ts`
+ * builds what people see). Secrets are hidden everywhere.
  */
 
 import nodePath from "node:path";
@@ -8,6 +8,7 @@ import { getAtPath, isPathPrefix, parsePath } from "@sous-io/documents";
 import "@sous-io/plugin-variables/types";
 import "@sous-io/plugin-confd/types";
 import {
+    IntentOutputs,
     NotFoundError,
     SousError,
     type ConfigKeyEntity,
@@ -19,6 +20,7 @@ import {
     type PluginInfo,
     type TimingEntry,
 } from "@sous-io/plugin-api";
+import { configGetOutputs, configShowOutputs, configValidateOutputs, pluginsShowOutputs, timingsShowOutput, withData } from "./outputs.js";
 import { readRawConfigFiles } from "./raw.js";
 import { KEY_NAME_POLICY, redactLayer, redactUnder, redactValue, servicePolicy, type SecretPolicy } from "./redact.js";
 import type {
@@ -30,7 +32,9 @@ import type {
     ConfigValidateSummary,
     LayerView,
     PluginsShowInput,
+    PluginsShowResult,
     TimingsShowInput,
+    TimingsShowResult,
 } from "./types.js";
 
 /** The secret policy: `variables.secrets` when it is loaded, else the key-name rule. */
@@ -145,26 +149,27 @@ function sourcesOf(ctx: Context): Map<string, string> {
 }
 
 /** `config.show`: the evaluated config, and with `layers` or `raw`, where it came from. */
-export async function configShow(input: ConfigShowInput, ctx: Context): Promise<ConfigShowResult> {
+export async function configShow(input: ConfigShowInput, ctx: Context): Promise<IntentOutputs<ConfigShowResult>> {
     const policy = policyOf(ctx);
-
-    return {
+    const result: ConfigShowResult = {
         config: redactValue(ctx.config.value() as JsonObject, policy),
         passes: ctx.config.passes,
         ...(input.layers === true ? { layers: layersOf(ctx, "", policy) } : {}),
         ...(input.raw === true ? { raw: await readRawConfigFiles(ctx.project, ctx.services, policy) } : {}),
     };
+
+    return new IntentOutputs<ConfigShowResult>(configShowOutputs(result));
 }
 
 /** `config.get`: one value by path. A path with nothing at it gives `exists: false`. */
-export async function configGet(input: ConfigGetInput, ctx: Context): Promise<ConfigGetResult> {
+export async function configGet(input: ConfigGetInput, ctx: Context): Promise<IntentOutputs<ConfigGetResult>> {
     const exists = ctx.config.has(input.path);
     const value = exists ? ctx.config.get<JsonValue>(input.path) : undefined;
     const lastKey = input.path.split(/[.[\]"]+/).filter((part) => part !== "").pop() ?? "";
     const policy = policyOf(ctx);
     const shown = value === undefined ? undefined : redactUnder(lastKey, value, policy);
 
-    return {
+    const result: ConfigGetResult = {
         path: input.path,
         exists,
         value: shown,
@@ -172,6 +177,8 @@ export async function configGet(input: ConfigGetInput, ctx: Context): Promise<Co
         ...(input.layers === true ? { layers: layersOf(ctx, input.path, policy) } : {}),
         ...(input.raw === true ? { raw: await readRawConfigFiles(ctx.project, ctx.services, policy) } : {}),
     };
+
+    return new IntentOutputs<ConfigGetResult>(configGetOutputs(result));
 }
 
 /**
@@ -180,7 +187,7 @@ export async function configGet(input: ConfigGetInput, ctx: Context): Promise<Co
  * instead of in the middle of a build. A key the config does not hold is not checked: the build
  * already filled in every default it has.
  */
-export async function configValidate(_input: unknown, ctx: Context): Promise<ConfigValidateResult> {
+export async function configValidate(_input: unknown, ctx: Context): Promise<IntentOutputs<ConfigValidateResult>> {
     const issues: string[] = [];
 
     for (const key of ctx.entities.list("config-key") as ConfigKeyEntity[]) {
@@ -208,7 +215,10 @@ export async function configValidate(_input: unknown, ctx: Context): Promise<Con
 
     issues.push(...variableIssues(ctx));
 
-    return { ok: issues.length === 0, issues, summary: summaryOf(ctx) };
+    const result: ConfigValidateResult = { ok: issues.length === 0, issues, summary: summaryOf(ctx) };
+
+    // A config with problems ends the command with exit code 1.
+    return new IntentOutputs<ConfigValidateResult>(configValidateOutputs(result), result.ok ? {} : { exitCode: 1 });
 }
 
 /** Resolves the root scope, then each target's and output's scope and values, as a build would. */
@@ -281,12 +291,14 @@ function summaryOf(ctx: Context): ConfigValidateSummary {
 }
 
 /** `plugins.show`: every loaded plugin, or the one named, with secrets in its options hidden. */
-export function pluginsShow(input: PluginsShowInput, ctx: Context): PluginInfo[] {
+export function pluginsShow(input: PluginsShowInput, ctx: Context): IntentOutputs<PluginsShowResult> {
     const policy = policyOf(ctx);
     const plugins = ctx.engine.plugins().map((plugin) => (plugin.options === undefined ? plugin : { ...plugin, options: redactValue(plugin.options, policy) }));
 
+    const done = (shown: PluginInfo[]): IntentOutputs<PluginsShowResult> => new IntentOutputs<PluginsShowResult>(withData(pluginsShowOutputs(shown), { plugins: shown }));
+
     if (input.name === undefined) {
-        return plugins;
+        return done(plugins);
     }
 
     const found = plugins.filter((plugin) => plugin.name === input.name);
@@ -297,13 +309,15 @@ export function pluginsShow(input: PluginsShowInput, ctx: Context): PluginInfo[]
         });
     }
 
-    return found;
+    return done(found);
 }
 
 /** `timings.show`: every timing so far, slowest total first. */
-export function timingsShow(input: TimingsShowInput, ctx: Context): TimingEntry[] {
-    return ctx.engine.timings
+export function timingsShow(input: TimingsShowInput, ctx: Context): IntentOutputs<TimingsShowResult> {
+    const timings: TimingEntry[] = ctx.engine.timings
         .entries()
         .filter((entry) => (input.overBudget !== true || entry.overBudget > 0) && (input.category === undefined || entry.category === input.category))
         .sort((a, b) => b.totalMs - a.totalMs);
+
+    return new IntentOutputs<TimingsShowResult>(withData([timingsShowOutput(timings)], { timings }));
 }

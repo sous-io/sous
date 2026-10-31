@@ -1,4 +1,4 @@
-import type { Context } from "@sous-io/plugin-api";
+import { IntentOutputs, type Context } from "@sous-io/plugin-api";
 import { watcherRunningError } from "../build.js";
 import { projectLabel } from "../pid.js";
 import type { BuildWatchInput, BuildWatchResult } from "../types.js";
@@ -41,7 +41,7 @@ export interface WatchHandlerOptions {
  * something stops the session. The PID file is removed on the way out.
  */
 export function createWatchHandler(options: WatchHandlerOptions) {
-    return async (input: BuildWatchInput, ctx: Context): Promise<BuildWatchResult> => {
+    return async (input: BuildWatchInput, ctx: Context): Promise<IntentOutputs<BuildWatchResult>> => {
         const pid = ctx.services.get("build.pid");
         const recorded = pid.read();
 
@@ -78,7 +78,7 @@ export function createWatchHandler(options: WatchHandlerOptions) {
             options.onSession?.(session);
             ctx.reporter.notice("Watching for changes. Press Ctrl+C to stop.");
 
-            return await session.done;
+            return IntentOutputs.of(await session.done);
         } finally {
             for (const signal of STOP_SIGNALS) {
                 options.signals.off(signal, onSignal);

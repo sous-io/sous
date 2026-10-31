@@ -1,4 +1,4 @@
-import { isSousErrorOfKind, scriptedPrompter, type BuiltConfig, type JsonObject } from "@sous-io/plugin-api";
+import { IntentOutputs, isSousErrorOfKind, scriptedPrompter, type BuiltConfig, type JsonObject } from "@sous-io/plugin-api";
 import type { IndexFile, Lockfile } from "@sous-io/plugin-formats/types";
 import { describe, expect, it, vi } from "vitest";
 import { builtConfig, context, memoryLock, memoryManaged, serviceReader, shortRefs } from "../../../test/part-a/helpers.js";
@@ -207,7 +207,7 @@ describe("subscription.disable and subscription.enable", () => {
         const result = await toggleSubscription({ ref: "workflow" }, ctx, false);
 
         expect(managed.files["510-subscriptions.jsonc"]).toEqual({ subscriptions: { workflow: { enabled: false } } });
-        expect(result.followUps).toEqual([{ intent: "build", result: { ran: "build" } }]);
+        expect(result.followUps).toEqual([{ intent: "build", result: { ran: "build" }, outputs: expect.anything() }]);
     });
 
     /** Enabling a subscription already on changes nothing. */
@@ -319,7 +319,7 @@ describe("subscription.add", () => {
         ctx.run.mockImplementation(async (intent: string) => {
             seen.push({ intent, buildNumber: ctx.config.buildNumber, refreshes: refresh.mock.calls.length });
 
-            return { ran: intent };
+            return IntentOutputs.of({ ran: intent });
         });
 
         await addSubscription({ ref: "workflow/task-files", yes: true }, ctx);
@@ -429,7 +429,7 @@ describe("recipe.update and subscription.update", () => {
         const { config, lock } = setup({ data, lock: pinned });
         const ctx = context(config, { intents: ["build"] });
 
-        ctx.run.mockImplementation(async (intent: string, input: unknown) => (intent === "recipe.update" ? planUpdate(input as never, ctx) : { ran: intent }));
+        ctx.run.mockImplementation(async (intent: string, input: unknown) => (intent === "recipe.update" ? IntentOutputs.of(await planUpdate(input as never, ctx)) : IntentOutputs.of({ ran: intent })));
 
         const result = await updateSubscriptions({ yes: true }, ctx);
 

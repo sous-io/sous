@@ -25,7 +25,8 @@ const answers = ctx.services.get("recipe-answers.answers").get();
 - `src/ladder.ts`, `src/answers.ts`: where answers come from, in order.
 - `src/ask.ts`: asking the user.
 - `src/mappings.ts`: environment variable bindings.
-- `src/intents.ts`: the commands.
+- `src/intents.ts`: the commands. Each returns outputs; `vars.list` declares `{ variables: [...] }`.
+- `src/outputs.ts`: the listing, one variable in full and the `vars ask` report, as outputs.
 
 ## Testing
 

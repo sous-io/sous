@@ -3,13 +3,14 @@ import { ConfigError, definePlugin, type PluginDefinition } from "@sous-io/plugi
 import { describe, expect, it } from "vitest";
 import { createCliPlugin } from "../src/plugin.js";
 import { fakeIo, runCli } from "./helpers.js";
+import { data, text } from "./outputs.js";
 
 /** A plugin with a background intent that returns a value, like `mcp.serve`. */
 const servePlugin: PluginDefinition = definePlugin({
     name: "test-serve",
     register(sous) {
-        sous.intents.add({ intent: "serve", background: true, handle: () => ({ served: true }) });
-        sous.intents.add({ intent: "where", handle: (_input, ctx) => ctx.cwd });
+        sous.intents.add({ intent: "serve", background: true, handle: () => data({ served: true }) });
+        sous.intents.add({ intent: "where", handle: (_input, ctx) => text(ctx.cwd) });
     },
 });
 
@@ -24,8 +25,8 @@ function brokenPlugin(): PluginDefinition {
                     throw new ConfigError("The config file is broken.", { details: ["Fix line 3."] });
                 },
             });
-            sous.intents.add({ intent: "update", toleratesConfigErrors: true, handle: () => "updated" });
-            sous.intents.add({ intent: "build", handle: () => "built" });
+            sous.intents.add({ intent: "update", toleratesConfigErrors: true, handle: () => text("updated") });
+            sous.intents.add({ intent: "build", handle: () => text("built") });
         },
     });
 }

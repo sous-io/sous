@@ -20,6 +20,7 @@ await ctx.run("update", { dryRun: true });
 ## Where things are
 
 - `src/update.ts`, `src/plan.ts`: the update and its plan.
+- `src/report.ts`: the update plan, the summary and the installed plugins, as outputs (the commands themselves are reported as they run).
 - `src/plugins-install.ts`: installing plugins.
 - `src/scan.ts`: finding installed plugins.
 - `src/registry.ts`: asking the npm registry for versions.

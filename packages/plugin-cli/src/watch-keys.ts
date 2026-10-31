@@ -1,3 +1,4 @@
+import type { IntentOutputs } from "@sous-io/plugin-api";
 import type { InputStream } from "./io.js";
 
 /** The line watch mode shows under its output, as before the refactor. */
@@ -52,7 +53,7 @@ export function listenForWatchKeys(stdin: InputStream, actions: WatchKeyActions)
     };
 }
 
-/** Whether a result says watch mode started (`build --watch`, `compile --watch`). */
-export function startedWatching(result: unknown): boolean {
-    return typeof result === "object" && result !== null && (result as { watching?: unknown }).watching === true;
+/** Whether an intent's outputs say watch mode started (`build --watch`, `compile --watch`): the plain result has `watching: true`. */
+export function startedWatching(outputs: IntentOutputs<object>): boolean {
+    return (outputs.toPlain() as { watching?: unknown }).watching === true;
 }

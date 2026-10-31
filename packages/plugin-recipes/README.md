@@ -25,7 +25,7 @@ await ctx.run("subscription.add", { ref: "workflow/task-files" });
 
 - `src/part-a/`: subscriptions, trust, the lockfile and the store.
 - `src/part-b/`: fetching, resolving, links and the core recipe.
-- `src/part-a/intents/`, `src/part-b/index.ts`: the commands.
+- `src/part-a/intents/`, `src/part-b/index.ts`: the commands. Each intent returns `IntentOutputs`: the work is done by a data function, and a `*-outputs.ts` file beside it (and `src/part-a/outputs.ts`, the pieces they share) builds the Command Variables, tables, lists, notes and follow-up outputs that command shows. `toPlain()` of the outputs is the declared result in `types.ts`, an object (a list is `{ subscriptions: [...] }`, `{ repos: [...] }`, and so on).
 - `src/types.ts`: every service and intent.
 
 ## Testing

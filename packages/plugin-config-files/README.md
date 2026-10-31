@@ -19,7 +19,7 @@ await ctx.run("config.set", { path: "compilation.includeSourceComments", value: 
 ## Where things are
 
 - `src/loader.ts`: reads each config file format.
-- `src/set.ts`: the `config.set` intent.
+- `src/set.ts`: the `config.set` intent; its output is one sentence saying what changed.
 - `src/env/`: the `.env` files.
 - `src/index.ts`: registers the layer, services and keys.
 

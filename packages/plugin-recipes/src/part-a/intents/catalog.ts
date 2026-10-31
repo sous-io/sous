@@ -1,16 +1,18 @@
 /**
  * Browsing namespaces and recipes.
- * Each returns plain data; `plugin-cli` shows it. Nothing is downloaded unless `--latest` is given.
+ * The data functions return plain data; each intent turns it into outputs (`catalog-outputs.ts`).
+ * Nothing is downloaded unless `--latest` is given.
  */
 
 import { SousError, type Context, type Sous } from "@sous-io/plugin-api";
 import semver from "semver";
-import type { BrowsingFlags, CatalogShowInput, NamespaceDetail, NamespaceListing, RecipeDetail, RecipeListing } from "../../types.js";
+import type { BrowsingFlags, CatalogShowInput, NamespaceDetail, RecipeDetail } from "../../types.js";
 import { describedLocation, describeNamespace, describeRecipe, findInCatalog, listNamespaces, listRecipes, unknownRefError } from "../catalog.js";
 import { loadCatalog, readPublishedManifest, readingsOf, resolveInCatalog, type CatalogContext } from "../catalog-context.js";
 import { PROJECT_HOLDER } from "../lock-holds.js";
 import { planQuestions } from "../questions.js";
 import { describeError } from "../util.js";
+import { namespaceListOutputs, namespaceShowOutputs, recipeListOutputs, recipeShowOutputs } from "./catalog-outputs.js";
 import { acceptFirst, browsing, inputSchema, latestFlag } from "./schema.js";
 
 const browsingCli = { flags: { latest: latestFlag } };
@@ -144,12 +146,12 @@ export function registerCatalogIntents(sous: Sous): void {
         parallel: true,
         cli: { aliases: [["namespaces", "list"]], ...browsingCli },
         agent: { usage: "Call this before subscribing, to find which namespaces exist." },
-        handle: async (input, ctx): Promise<NamespaceListing[]> => {
+        handle: async (input, ctx) => {
             const catalog = await loadCatalog(ctx, input);
 
             reportUnread(ctx, catalog);
 
-            return listNamespaces(catalog.inputs);
+            return namespaceListOutputs(ctx, input, listNamespaces(catalog.inputs));
         },
     });
 
@@ -160,7 +162,7 @@ export function registerCatalogIntents(sous: Sous): void {
         input: inputSchema<CatalogShowInput>({ ref: { type: "string", description: "The namespace, optionally as repository:namespace" }, ...browsing, acceptFirst }, ["ref"]),
         parallel: true,
         cli: { aliases: [["namespaces", "show"]], positional: ["ref"], ...browsingCli },
-        handle: showNamespace,
+        handle: async (input, ctx) => namespaceShowOutputs(ctx, input, await showNamespace(input, ctx)),
     });
 
     sous.intents.add({
@@ -170,12 +172,12 @@ export function registerCatalogIntents(sous: Sous): void {
         input: inputSchema<BrowsingFlags>(browsing),
         parallel: true,
         cli: { aliases: [["recipes", "list"]], ...browsingCli },
-        handle: async (input, ctx): Promise<RecipeListing[]> => {
+        handle: async (input, ctx) => {
             const catalog = await loadCatalog(ctx, input);
 
             reportUnread(ctx, catalog);
 
-            return listRecipes(catalog.inputs);
+            return recipeListOutputs(ctx, input, listRecipes(catalog.inputs));
         },
     });
 
@@ -189,6 +191,6 @@ export function registerCatalogIntents(sous: Sous): void {
         ),
         parallel: true,
         cli: { aliases: [["recipes", "show"]], positional: ["ref"], ...browsingCli },
-        handle: showRecipe,
+        handle: async (input, ctx) => recipeShowOutputs(ctx, input, await showRecipe(input, ctx)),
     });
 }

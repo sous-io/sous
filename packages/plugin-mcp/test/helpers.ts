@@ -50,7 +50,7 @@ export async function serve(
 
     await engine.buildConfig();
 
-    const serving = engine.submit({ intent: "mcp.serve" }, { reporter }) as Promise<McpServeResult>;
+    const serving = engine.submit({ intent: "mcp.serve" }, { reporter }) .then((outputs) => outputs.toPlain() as unknown as McpServeResult);
     const client = new Client({ name: "test-client", version: "0.0.1" }, { capabilities: options.capabilities ?? {} });
     const logs: Array<LoggingMessageNotification["params"]> = [];
 

@@ -5,9 +5,10 @@
  */
 
 import path from "node:path";
-import { ConfigError, InputError, type Context } from "@sous-io/plugin-api";
+import { ConfigError, InputError, IntentOutputs, type Context } from "@sous-io/plugin-api";
 import "@sous-io/plugin-host/types";
 import { ownerOf } from "./installs.js";
+import { pluginsInstallOutputs, withData } from "./report.js";
 import type { DependencySection, PluginsInstallInput, PluginsInstallResult } from "./types.js";
 
 /** The section plugins are added to when the input names none. */
@@ -33,8 +34,13 @@ export function parsePluginSpec(spec: string): { name: string; range?: string } 
     return range === "" ? { name: spec.slice(0, at) } : { name: spec.slice(0, at), range };
 }
 
+/** The outputs of a finished run, with the result as the machine data. */
+function done(result: PluginsInstallResult): IntentOutputs<PluginsInstallResult> {
+    return new IntentOutputs<PluginsInstallResult>(withData(pluginsInstallOutputs(result), result));
+}
+
 /** Runs the intent. */
-export async function handle(input: PluginsInstallInput, ctx: Context): Promise<PluginsInstallResult> {
+export async function handle(input: PluginsInstallInput, ctx: Context): Promise<IntentOutputs<PluginsInstallResult>> {
     const specs = input.plugins.map((spec) => spec.trim()).filter((spec) => spec !== "");
 
     if (specs.length === 0) {
@@ -64,7 +70,7 @@ export async function handle(input: PluginsInstallInput, ctx: Context): Promise<
     ctx.reporter.command(command.command, command.args, dryRun ? { dryRun: true } : {});
 
     if (dryRun) {
-        return { manager, command, installed: requested, declined: false, dryRun };
+        return done({ manager, command, installed: requested, declined: false, dryRun });
     }
 
     const proceed =
@@ -76,7 +82,7 @@ export async function handle(input: PluginsInstallInput, ctx: Context): Promise<
         }));
 
     if (!proceed) {
-        return { manager, command, installed: [], declined: true, dryRun };
+        return done({ manager, command, installed: [], declined: true, dryRun });
     }
 
     const result = await ctx.services.get("host.processes").runInteractive(command.command, command.args, {
@@ -105,14 +111,14 @@ export async function handle(input: PluginsInstallInput, ctx: Context): Promise<
         // The ranges asked for are reported instead.
     }
 
-    return {
+    return done({
         manager,
         command,
         installed: requested.map((plugin) => ({ name: plugin.name, range: declared.get(plugin.name) ?? plugin.range })),
         exitCode,
         declined: false,
         dryRun,
-    };
+    });
 }
 
 export default handle;

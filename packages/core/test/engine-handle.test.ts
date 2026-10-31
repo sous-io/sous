@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { createEngine, DEFAULT_LIMITS } from "../src/index.js";
-import { contributorsPlugin, keysPlugin, makeEngine, plugin } from "./helpers.js";
+import { contributorsPlugin, keysPlugin, makeEngine, nothing, plugin, valued } from "./helpers.js";
 
 describe("the engine handle", () => {
     /**
@@ -17,13 +17,13 @@ describe("the engine handle", () => {
             [
                 plugin("plugin-cli", (sous) => {
                     handleSeen = sous.engine;
-                    sous.intents.add({ intent: "version", summary: "Print the version", handle: (_input, ctx) => ctx.engine.app.version });
+                    sous.intents.add({ intent: "version", summary: "Print the version", handle: (_input, ctx) => valued(ctx.engine.app.version) });
                     sous.frontEnds.add({
                         id: "cli",
                         async start(engine, argv) {
                             const result = await engine.submit({ intent: argv[0]! });
 
-                            engine.reporter.notice(`result ${String(result)}`);
+                            engine.reporter.notice(`result ${String(result.toPlain().value)}`);
                         },
                     });
                 }),
@@ -43,7 +43,7 @@ describe("the engine handle", () => {
         expect(handle.config).toBe(engine.config);
         expect(handle.intents.list().map((info) => [info.definition.intent, info.plugin])).toEqual([["version", "plugin-cli"]]);
         expect(engine.intentCatalog.get("version")?.definition.summary).toBe("Print the version");
-        expect(await handle.submit({ intent: "version" })).toBe("1.0.0");
+        expect((await handle.submit({ intent: "version" })).toPlain()).toEqual({ value: "1.0.0" });
         expect(handle.timings.get("intent:version")?.count).toBe(2);
         expect(handle.plugins().map((info) => info.name)).toEqual(["plugin-cli"]);
         await expect(handle.whenBackgroundIntentsReturn()).resolves.toBeUndefined();
@@ -105,9 +105,9 @@ describe("the engine handle", () => {
             keysPlugin("value"),
             plugin("p", (sous) => {
                 sous.config.contribute({ id: "v", contribute: (config) => config.atPath("value").set(value) });
-                sous.intents.add({ intent: "p.serve", background: true, handle: async () => "served" });
-                sous.intents.add({ intent: "p.write", background: true, changesConfig: true, handle: () => void (value = 2) });
-                sous.intents.add({ intent: "p.read", handle: (_input, ctx) => ctx.config.get("value") });
+                sous.intents.add({ intent: "p.serve", background: true, handle: async () => valued("served") });
+                sous.intents.add({ intent: "p.write", background: true, changesConfig: true, handle: () => ((value = 2), nothing()) });
+                sous.intents.add({ intent: "p.read", handle: (_input, ctx) => valued(ctx.config.get("value")) });
                 sous.on("p.outside", (_event, ctx) => {
                     value = 3;
                     ctx.configChanged();
@@ -118,11 +118,11 @@ describe("the engine handle", () => {
 
         await engine.buildConfig();
 
-        expect(await engine.submit({ intent: "p.serve" })).toBe("served");
+        expect((await engine.submit({ intent: "p.serve" })).toPlain()).toEqual({ value: "served" });
         await engine.submit({ intent: "p.write" });
-        expect(await engine.submit({ intent: "p.read" })).toBe(2);
+        expect((await engine.submit({ intent: "p.read" })).toPlain()).toEqual({ value: 2 });
         await changeOutside!();
-        expect(await engine.submit({ intent: "p.read" })).toBe(3);
+        expect((await engine.submit({ intent: "p.read" })).toPlain()).toEqual({ value: 3 });
     });
 
     /**

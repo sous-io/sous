@@ -137,7 +137,7 @@ describe("plugin-authoring", () => {
 
         await engine.buildConfig();
 
-        const result = await engine.handle.submit({ intent: "repo.init", input: { directory, host: "github" } });
+        const result = (await engine.handle.submit({ intent: "repo.init", input: { directory, host: "github" } })).toPlain();
 
         expect(result.files).toContain(".github/workflows/sous-release.yml");
         expect(fs.existsSync(path.join(directory, "sous.repo.yaml"))).toBe(true);

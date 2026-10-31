@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ConfigError, ConflictError, jsonSchema, NotFoundError, SousError } from "@sous-io/plugin-api";
+import { ConfigError, ConflictError, IntentOutputs, jsonSchema, NotFoundError, SousError } from "@sous-io/plugin-api";
 import { contributorsPlugin, keysPlugin, makeEngine, plugin } from "./helpers.js";
 
 describe("services", () => {
@@ -292,14 +292,14 @@ describe("entities", () => {
             plugin("plugin-harnesses", (sous) =>
                 sous.intents.add({
                     intent: "launch",
-                    handle: (_input, ctx) => (ctx.entities.get("harness", "claude") as unknown as { launch(a: string[], c: unknown): unknown }).launch(["--x"], ctx),
+                    handle: (_input, ctx) => IntentOutputs.of({ command: (ctx.entities.get("harness", "claude") as unknown as { launch(a: string[], c: unknown): unknown[] }).launch(["--x"], ctx) }),
                 }),
             ),
         ]);
 
         await engine.buildConfig();
 
-        expect(await engine.submit({ intent: "launch" })).toEqual(["claude-beta", "--x"]);
+        expect((await engine.submit({ intent: "launch" })).toPlain()).toEqual({ command: ["claude-beta", "--x"] });
         expect(engine.timings.get("entity.method:harness:claude.launch")).toMatchObject({ count: 1, plugin: "plugin-claude-code" });
     });
 

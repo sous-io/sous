@@ -58,6 +58,12 @@ describe("the build intent", () => {
 
         h.world.compileResult = () => ({ ok, outputs: [], problems: [{ level: "error", message: "bad include" }], durationMs: 1 });
 
+        const failed = await h.engine.submit({ intent: "build", input: { dryRun: true } }, { reporter: h.reporter });
+
+        expect(failed.exitCode).toBe(1);
+        expect(failed.toPlain()).toMatchObject({ ok: false, watching: false });
+        expect(failed.toArray().map((output) => output.title)).toEqual(["Command Variables", undefined]);
+        expect(failed.toArray()[0]!.result!.toPlain()).toMatchObject({ "Dry Run": true });
         expect((await h.run<BuildResult>("build")).ok).toBe(false);
         expect(h.world.pruneCalls).toEqual([]);
 
@@ -333,12 +339,13 @@ describe("the clear intent", () => {
         withState(h);
 
         const prompter = scriptedPrompter([false]);
-        const result = await h.run<ClearResult>("clear", {}, { prompter });
+        const outputs = await h.engine.submit({ intent: "clear", input: {} }, { reporter: h.reporter, prompter });
+        const result = outputs.toPlain() as unknown as ClearResult;
 
         expect(prompter.asked).toEqual([`Delete 2 file(s) and 1 director(ies) for '${path.basename(h.project.root)}'?`]);
         expect(result.confirmed).toBe(false);
         expect(h.world.pruneCalls).toEqual([]);
-        expect(h.reporter.at("notice")).toContain("Aborted.");
+        expect(outputs.toArray().map((output) => output.summary)).toEqual(["Aborted."]);
     });
 
     /**

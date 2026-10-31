@@ -278,6 +278,11 @@ export interface VariableListing {
     readonly storeIn: EnvFileKind;
 }
 
+/** The result of `vars.list`: every variable in play, or the ones a name matched, in full. */
+export interface VarsListResult {
+    readonly variables: readonly VariableListing[];
+}
+
 /** `vars.show`. */
 export interface VarsShowInput {
     name: string;
@@ -332,7 +337,7 @@ declare module "@sous-io/plugin-api" {
 
     interface SousIntents {
         "vars.ask": { input: VarsAskInput; result: VarsAskResult };
-        "vars.list": { input: VarsListInput; result: VariableListing[] };
+        "vars.list": { input: VarsListInput; result: VarsListResult };
         "vars.show": { input: VarsShowInput; result: VariableDetail };
         "vars.map": { input: VarsMapInput; result: VarsMapResult };
     }

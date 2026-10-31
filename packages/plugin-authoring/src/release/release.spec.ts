@@ -18,6 +18,11 @@ import { runRelease } from "./release.js";
 let tmp: TmpDir;
 let repo: string;
 let reporter: BufferedReporter;
+/** The tools of the latest `release()` call; what the command shows as its result is in `results`. */
+let lastTools: ReturnType<typeof testTools>;
+
+/** The text of what the latest release returned as its result. */
+const resultText = () => lastTools.results.map((output) => output.toText()).join("\n");
 
 beforeEach(() => {
     tmp = makeTmpDir("sous-release-run-");
@@ -49,7 +54,9 @@ function listRecipe(name: string): void {
 
 /** Runs a release in the repository. */
 function release(input: RepoReleaseInput = {}, prompter: Prompter = nonInteractivePrompter) {
-    return runRelease(testTools({ reporter, prompter, sousVersion: "1.2.3" }), input, { cwd: repo, now: new Date("2026-10-29T12:00:00.000Z") });
+    lastTools = testTools({ reporter, prompter, sousVersion: "1.2.3" });
+
+    return runRelease(lastTools, input, { cwd: repo, now: new Date("2026-10-29T12:00:00.000Z") });
 }
 
 /** The committed index. */
@@ -75,7 +82,9 @@ describe("runRelease()", () => {
         expect(result.plan[0]!.hash).toMatch(/^sha256-/);
         expect(fs.existsSync(path.join(repo, "sous.index.json"))).toBe(false);
         expect(tags()).toEqual([]);
-        expect(reporter.at("notice").join("\n")).toContain("this was a dry run");
+        expect(resultText()).toContain("this was a dry run");
+        expect(lastTools.results.map((output) => output.title)).toEqual(["Command Variables", "The release this would make", undefined, undefined]);
+        expect(lastTools.results[1]!.result!.toPlain()).toEqual({ items: ["core/example: 0.1.0  (already raised; the tag would be core/example@0.1.0)"] });
     });
 
     /** With nothing to ask and no --yes, nothing is published, and the error names --yes. */
@@ -127,7 +136,7 @@ describe("runRelease()", () => {
         commitAll(repo, "let the index fall behind");
 
         const result = await release({ check: true });
-        const notes = reporter.at("notice").join("\n");
+        const notes = resultText();
 
         expect(result.indexChanged).toBe(true);
         expect(notes).toContain("Merging rewrites the committed sous.index.json");
@@ -239,7 +248,7 @@ describe("runRelease()", () => {
 
         expect(untagged.tagged).toEqual([]);
         expect(untagged.committed).toBe(true);
-        expect(reporter.at("notice").join("\n")).toContain("No tags were cut");
+        expect(resultText()).toContain("No tags were cut");
 
         writeFile(repo, "recipes/core/example/skills/example.md", "edited\n");
         commitAll(repo, "edit");

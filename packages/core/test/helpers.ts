@@ -2,6 +2,7 @@ import {
     BufferedReporter,
     type ContributorDefinition,
     definePlugin,
+    IntentOutputs,
     jsonSchema,
     type PluginDefinition,
     type Sous,
@@ -65,4 +66,14 @@ export function manualClock(): { now: () => number; advance: (ms: number) => voi
     let time = 0;
 
     return { now: () => time, advance: (ms) => (time += ms) };
+}
+
+/** What a test handler returns when it has one value to give: `{ value }`. */
+export function valued<T>(value: T): IntentOutputs<{ value: T }> {
+    return IntentOutputs.of({ value });
+}
+
+/** What a test handler returns when it has nothing to give. */
+export function nothing(): IntentOutputs<Record<string, never>> {
+    return IntentOutputs.of({});
 }

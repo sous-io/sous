@@ -1,12 +1,13 @@
-import { jsonSchema, SousError, type IntentDefinition } from "@sous-io/plugin-api";
+import { IntentOutput, IntentOutputs, jsonSchema, SousError, type IntentDefinition } from "@sous-io/plugin-api";
 import type { CommandTree } from "./command-tree.js";
 import { globalSpecs } from "./globals.js";
-import { renderHelp } from "./help.js";
+import { HelpPage } from "./help-page.js";
 import { suggest } from "./words.js";
 
 /**
  * The `help` intent: `sous help [command...]` prints what `sous <command> --help` prints. Words
- * that match no command are an error with a "did you mean" hint.
+ * that match no command are an error with a "did you mean" hint. The page is a {@link HelpPage},
+ * which the terminal reporter paints; its plain form is `{ text }`.
  */
 export const helpIntent: IntentDefinition = {
     intent: "help",
@@ -34,6 +35,8 @@ export const helpIntent: IntentDefinition = {
             });
         }
 
-        return renderHelp(node, { appName: ctx.engine.app.name, globals: globalSpecs(ctx.entities.list("cli-global-argument")) });
+        const page = new HelpPage(node, { appName: ctx.engine.app.name, globals: globalSpecs(ctx.entities.list("cli-global-argument")) });
+
+        return new IntentOutputs(new IntentOutput({ result: page, data: { text: page.toText() } }));
     },
 };

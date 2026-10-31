@@ -35,6 +35,8 @@ import { keysHeldBySubscription, stayedAfter } from "../lock-holds.js";
 import { configuredRepos, configuredSubscriptions, deleteRepoEntry, managedEntries, REPOS_LAYER, SUBSCRIPTIONS_LAYER, writeRepoEntry } from "../project.js";
 import { planSubscriptionRemoval, writeSubscriptionRemoval } from "../subscriptions.js";
 import { describeError, nowIso, proposeRepoName, REPO_NAME_PATTERN, sortBytewise } from "../util.js";
+import { repoListOutputs, repoSearchOutputs } from "./catalog-outputs.js";
+import { repoAddOutputs, repoRemoveOutputs, repoTrustOutputs } from "./repo-outputs.js";
 import { dryRun, inputSchema, latest, latestFlag, installed, noBuild, yes, yesFlag, yesFlagNoTrust } from "./schema.js";
 
 /** The hosts built in for `--provider`; any loaded `repository-host` entity's id is accepted too. */
@@ -599,7 +601,7 @@ export function registerRepoIntents(sous: Sous): void {
         ),
         changesConfig: true,
         cli: { aliases: [["repos", "add"]], positional: ["url"], flags: { yes: yesFlag } },
-        handle: addRepo,
+        handle: async (input, ctx) => repoAddOutputs(await addRepo(input, ctx)),
     });
 
     sous.intents.add({
@@ -609,7 +611,7 @@ export function registerRepoIntents(sous: Sous): void {
         input: inputSchema<RepoRemoveInput>({ repo: { type: "string", description: "The repository's short name" }, yes, dryRun, noBuild }, ["repo"]),
         changesConfig: true,
         cli: { aliases: [["repos", "remove"]], positional: ["repo"], flags: { yes: yesFlagNoTrust } },
-        handle: removeRepo,
+        handle: async (input, ctx) => repoRemoveOutputs(ctx, await removeRepo(input, ctx)),
     });
 
     sous.intents.add({
@@ -622,7 +624,7 @@ export function registerRepoIntents(sous: Sous): void {
         ),
         changesConfig: true,
         cli: { aliases: [["repos", "trust"]], positional: ["repo"], flags: { yes: yesFlag } },
-        handle: trustRepo,
+        handle: async (input, ctx) => repoTrustOutputs(await trustRepo(input, ctx)),
     });
 
     sous.intents.add({
@@ -632,7 +634,7 @@ export function registerRepoIntents(sous: Sous): void {
         input: inputSchema<RepoListInput>({ latest, installed, verbose: { type: "boolean", description: "Show more about each repository" } }),
         parallel: true,
         cli: { aliases: [["repos", "list"]], flags: { latest: latestFlag } },
-        handle: listRepos,
+        handle: async (input, ctx) => repoListOutputs(ctx, input, await listRepos(input, ctx)),
     });
 
     sous.intents.add({
@@ -645,6 +647,6 @@ export function registerRepoIntents(sous: Sous): void {
         ),
         parallel: true,
         cli: { aliases: [["search"], ["repos", "search"]], positional: ["text"], flags: { latest: latestFlag } },
-        handle: searchRepos,
+        handle: async (input, ctx) => repoSearchOutputs(ctx, input, await searchRepos(input, ctx)),
     });
 }

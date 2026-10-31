@@ -8,7 +8,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createEngine, type Engine } from "@sous-io/core";
-import { BufferedReporter, definePlugin, type PluginDefinition, type ProjectInfo } from "@sous-io/plugin-api";
+import { BufferedReporter, definePlugin, IntentOutputs, type PluginDefinition, type ProjectInfo } from "@sous-io/plugin-api";
 import type { HostProcesses, ProcessResult } from "@sous-io/plugin-host/types";
 import harnessesPlugin from "../src/index.js";
 
@@ -104,7 +104,7 @@ export function buildStandIn(builds: { count: number; ok?: boolean }): PluginDef
                 handle: () => {
                     builds.count++;
 
-                    return { ok: builds.ok ?? true, dryRun: false, watching: false, prepared: {} } as never;
+                    return IntentOutputs.of({ ok: builds.ok ?? true, dryRun: false, watching: false, prepared: {} }) as never;
                 },
             });
         },

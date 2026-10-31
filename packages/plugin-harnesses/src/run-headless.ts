@@ -3,11 +3,11 @@
  * transcript when asked (recipe tests use it).
  */
 
-import { ConfigError, NotFoundError, type Context } from "@sous-io/plugin-api";
+import { ConfigError, IntentOutputs, NotFoundError, type Context } from "@sous-io/plugin-api";
 import type { RunHeadlessInput, RunHeadlessResult } from "./types.js";
 
 /** Runs the intent. */
-export async function handle(input: RunHeadlessInput, ctx: Context): Promise<RunHeadlessResult> {
+export async function handle(input: RunHeadlessInput, ctx: Context): Promise<IntentOutputs<RunHeadlessResult>> {
     const capable = ctx.entities.list("harness").filter((harness) => typeof harness.runHeadless === "function");
     const names = capable.map((harness) => harness.id).join(", ") || "(none)";
     let harness = input.harness === undefined ? undefined : ctx.entities.get("harness", input.harness);
@@ -42,12 +42,12 @@ export async function handle(input: RunHeadlessInput, ctx: Context): Promise<Run
     );
 
     if (!input.transcript) {
-        return { run };
+        return IntentOutputs.of<RunHeadlessResult>({ run });
     }
 
     if (harness.readTranscript === undefined) {
         throw new ConfigError(`The harness '${harness.id}' cannot read a transcript.`);
     }
 
-    return { run, transcript: await harness.readTranscript(run, ctx) };
+    return IntentOutputs.of<RunHeadlessResult>({ run, transcript: await harness.readTranscript(run, ctx) });
 }

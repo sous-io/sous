@@ -5,7 +5,7 @@ The sous engine. It knows nothing about recipes, templates or commands; it only 
 What it does:
 
 - Loads plugins and builds the config: each plugin's config contributors add changes in order, and a contributor re-runs when something it read changes.
-- Runs intents (named steps a user or plugin asks for) in chains, in series or in parallel.
+- Runs intents (named steps a user or plugin asks for) in chains, in series or in parallel. A handler returns `IntentOutputs`; `engine.submit`, `ctx.run`, wrappers and the `.after` and `.error` events all carry them, and anything else is a `SousError` naming the intent.
 - Keeps the registries plugins fill in: services, entities (typed lists other plugins read), and event listeners.
 - Times everything and warns when a timing goes over its budget.
 

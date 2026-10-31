@@ -43,7 +43,9 @@ import { ensureRequiredPlugins, recipeDirectory } from "../required-plugins.js";
 import { needUrlError } from "../trust.js";
 import { describeUpdateScope, isEmptyUpdate, planUpdate } from "../update-plan.js";
 import { describeError, nowIso, proposeRepoName, sortBytewise } from "../util.js";
+import { subscriptionListOutputs } from "./catalog-outputs.js";
 import { acceptFirst, answer, answersFile, browsing, dryRun, inputSchema, latestFlag, noBuild, yes, yesFlag } from "./schema.js";
+import { recipeUpdateOutputs, subscriptionAddOutputs, subscriptionRemoveOutputs, subscriptionToggleOutputs, subscriptionUpdateOutputs } from "./subscription-outputs.js";
 
 /** The most rounds of "resolve, trust what is missing, resolve again" one command runs. */
 const MAX_TRUST_ROUNDS = 10;
@@ -629,7 +631,7 @@ function plannedRecipes(lockfile: Lockfile, keys: readonly string[]): ResolvedRe
 /** `subscription.update`: plans with `recipe.update`, asks once, trusts what a newer version needs, then writes the lockfile. */
 export async function updateSubscriptions(input: SubscriptionUpdateInput, ctx: Context): Promise<SubscriptionUpdateResult> {
     const planInput: RecipeUpdateInput = { ...(input.ref === undefined ? {} : { ref: input.ref }), ...(input.acceptFirst === undefined ? {} : { acceptFirst: input.acceptFirst }) };
-    let plan = await ctx.run("recipe.update", planInput);
+    let plan = (await ctx.run("recipe.update", planInput)).toPlain();
     const base = { trusted: [] as string[], dryRun: input.dryRun === true };
     const tried = new Set<string>();
 
@@ -727,7 +729,7 @@ export function registerSubscriptionIntents(sous: Sous): void {
             examples: ["sous subscription add workflow/task-files", "sous subscription add workflow/task-files@^1.2.0 --yes --answer apiUrl=https://api.example.com"],
         },
         agent: { usage: "Run with --dry-run first to see what it installs and asks; pass --yes and --answer to subscribe without prompts." },
-        handle: addSubscription,
+        handle: async (input, ctx) => subscriptionAddOutputs(ctx, await addSubscription(input, ctx)),
     });
 
     sous.intents.add({
@@ -737,7 +739,7 @@ export function registerSubscriptionIntents(sous: Sous): void {
         input: inputSchema<SubscriptionRemoveInput>({ ref, dryRun, noBuild }, ["ref"]),
         changesConfig: true,
         cli: { aliases: [["subscriptions", "remove"], ["unsubscribe"]], positional: ["ref"] },
-        handle: removeSubscription,
+        handle: async (input, ctx) => subscriptionRemoveOutputs(ctx, await removeSubscription(input, ctx)),
     });
 
     sous.intents.add({
@@ -747,7 +749,7 @@ export function registerSubscriptionIntents(sous: Sous): void {
         input: toggleInput,
         changesConfig: true,
         cli: { aliases: [["subscriptions", "enable"]], positional: ["ref"] },
-        handle: (input, ctx) => toggleSubscription(input, ctx, true),
+        handle: async (input, ctx) => subscriptionToggleOutputs(ctx, await toggleSubscription(input, ctx, true)),
     });
 
     sous.intents.add({
@@ -757,7 +759,7 @@ export function registerSubscriptionIntents(sous: Sous): void {
         input: toggleInput,
         changesConfig: true,
         cli: { aliases: [["subscriptions", "disable"]], positional: ["ref"] },
-        handle: (input, ctx) => toggleSubscription(input, ctx, false),
+        handle: async (input, ctx) => subscriptionToggleOutputs(ctx, await toggleSubscription(input, ctx, false)),
     });
 
     sous.intents.add({
@@ -767,7 +769,7 @@ export function registerSubscriptionIntents(sous: Sous): void {
         input: inputSchema<BrowsingFlags>(browsing),
         parallel: true,
         cli: { aliases: [["subscriptions", "list"]], flags: { latest: latestFlag } },
-        handle: listSubscriptions,
+        handle: async (input, ctx) => subscriptionListOutputs(ctx, input, await listSubscriptions(input, ctx)),
     });
 
     sous.intents.add({
@@ -779,7 +781,7 @@ export function registerSubscriptionIntents(sous: Sous): void {
         ),
         changesConfig: true,
         cli: { aliases: [["subscriptions", "update"]], positional: ["ref"], flags: { yes: yesFlag } },
-        handle: updateSubscriptions,
+        handle: async (input, ctx) => subscriptionUpdateOutputs(ctx, await updateSubscriptions(input, ctx)),
     });
 
     sous.intents.add({
@@ -789,6 +791,6 @@ export function registerSubscriptionIntents(sous: Sous): void {
         input: inputSchema<RecipeUpdateInput>({ ref: { type: "string", description: "Only this repository, namespace or recipe" }, acceptFirst }),
         parallel: true,
         cli: { aliases: [["recipes", "update"]], positional: ["ref"] },
-        handle: planUpdate,
+        handle: async (input, ctx) => recipeUpdateOutputs(await planUpdate(input, ctx)),
     });
 }

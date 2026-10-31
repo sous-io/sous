@@ -7,7 +7,7 @@ export type Paint = (text: string) => string;
  * Every color the CLI writes, in one place (ported from `palette` in today's
  * `src/utils/formatting.ts`): a label is cyan, the value beside it bright white, an aside grey, a
  * warning bright yellow with its sharpest words orange, an explanation bright teal, an error bright
- * red. The raw colors are here too, for views that need them.
+ * red. The raw colors are here too, for code that needs them.
  */
 export interface Style {
     /** Whether any of these paints. */

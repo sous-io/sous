@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { type BuiltConfig, ConfigError, jsonSchema, SousError } from "@sous-io/plugin-api";
-import { keysPlugin, makeEngine, plugin } from "./helpers.js";
+import { type BuiltConfig, ConfigError, IntentOutputs, jsonSchema, SousError } from "@sous-io/plugin-api";
+import { keysPlugin, makeEngine, nothing, plugin, valued } from "./helpers.js";
 
 /** A plugin whose `value` key comes from a variable the test changes between builds. */
 function sourcePlugin(source: { value: string }) {
@@ -24,27 +24,27 @@ describe("ctx.refreshConfig()", () => {
                 sous.services.add("p.reader", (config) => ({ value: config.get("value"), number: ++made }));
                 sous.intents.add({
                     intent: "p.read",
-                    handle: (_input, ctx) => ({ config: ctx.config.get("value"), service: ctx.services.get("p.reader" as never) as { value: unknown } }),
+                    handle: (_input, ctx) => IntentOutputs.of({ config: ctx.config.get("value"), service: ctx.services.get("p.reader" as never) as { value: unknown } }),
                 });
                 sous.intents.add({
                     intent: "p.change",
                     changesConfig: true,
                     async handle(_input, ctx) {
-                        const before = await ctx.run("p.read" as never);
+                        const before = (await ctx.run("p.read" as never)).toPlain();
 
                         source.value = "new";
 
                         const refreshed = await ctx.refreshConfig();
-                        const after = await ctx.run("p.read" as never);
+                        const after = (await ctx.run("p.read" as never)).toPlain();
 
-                        return { before, after, refreshed: refreshed.get("value"), ctxConfig: ctx.config.get("value") };
+                        return IntentOutputs.of({ before, after, refreshed: refreshed.get("value"), ctxConfig: ctx.config.get("value") });
                     },
                 });
             }),
         ]);
 
         const first = await engine.buildConfig();
-        const result = (await engine.submit({ intent: "p.change" })) as Record<string, { config: unknown; service: { value: unknown } } | unknown>;
+        const result = (await engine.submit({ intent: "p.change" })).toPlain() as Record<string, { config: unknown; service: { value: unknown } } | unknown>;
 
         expect(result).toEqual({
             before: { config: "old", service: { value: "old", number: 1 } },
@@ -63,8 +63,8 @@ describe("ctx.refreshConfig()", () => {
             keysPlugin(),
             plugin("p", (sous) => {
                 sous.config.contribute({ id: "count", contribute: () => void (builds += 1) });
-                sous.intents.add({ intent: "p.change", changesConfig: true, handle: async (_input, ctx) => void (await ctx.refreshConfig()) });
-                sous.intents.add({ intent: "p.noop", handle: () => "ok" });
+                sous.intents.add({ intent: "p.change", changesConfig: true, handle: async (_input, ctx) => (await ctx.refreshConfig(), nothing()) });
+                sous.intents.add({ intent: "p.noop", handle: () => valued("ok") });
             }),
         ]);
 
@@ -79,7 +79,7 @@ describe("ctx.refreshConfig()", () => {
     it("should refuse a refresh in a parallel chain", async () => {
         const { engine } = makeEngine([
             plugin("p", (sous) => {
-                sous.intents.add({ intent: "p.parallel", parallel: true, handle: (_input, ctx) => ctx.refreshConfig() });
+                sous.intents.add({ intent: "p.parallel", parallel: true, handle: async (_input, ctx) => (await ctx.refreshConfig(), nothing()) });
             }),
         ]);
 
@@ -92,8 +92,8 @@ describe("ctx.refreshConfig()", () => {
     it("should refuse a refresh from a config.built listener's chain", async () => {
         const { engine } = makeEngine([
             plugin("p", (sous) => {
-                sous.intents.add({ intent: "p.refresh", handle: (_input, ctx) => ctx.refreshConfig() });
-                sous.on("config.built", (_event, ctx) => ctx.run("p.refresh" as never));
+                sous.intents.add({ intent: "p.refresh", handle: async (_input, ctx) => (await ctx.refreshConfig(), nothing()) });
+                sous.on("config.built", async (_event, ctx) => void (await ctx.run("p.refresh" as never)));
             }),
         ]);
 
@@ -109,13 +109,15 @@ describe("ctx.cwd", () => {
             [
                 plugin("p", (sous) => {
                     sous.services.add("p.where", (_config, ctx) => ctx.cwd);
-                    sous.intents.add({ intent: "p.inner", handle: (_input, ctx) => void (seen.inner = ctx.cwd) });
+                    sous.intents.add({ intent: "p.inner", handle: (_input, ctx) => ((seen.inner = ctx.cwd), nothing()) });
                     sous.intents.add({
                         intent: "p.outer",
                         async handle(_input, ctx) {
                             seen.outer = ctx.cwd;
                             seen.service = ctx.services.get("p.where" as never);
                             await ctx.run("p.inner" as never);
+
+                            return nothing();
                         },
                     });
                     sous.on("p.outer.before", (_event, ctx) => void (seen.listener = ctx.cwd));
@@ -156,11 +158,11 @@ describe("intents that tolerate config errors", () => {
                     handle: (_input, ctx) => {
                         state.broken = false;
 
-                        return ctx.config.get("value") ?? "none";
+                        return valued(ctx.config.get("value") ?? "none");
                     },
                 });
-                sous.intents.add({ intent: "p.build", handle: () => "built" });
-                sous.intents.add({ intent: "p.touch", changesConfig: true, handle: () => "touched" });
+                sous.intents.add({ intent: "p.build", handle: () => valued("built") });
+                sous.intents.add({ intent: "p.touch", changesConfig: true, handle: () => valued("touched") });
             }),
         ]);
 
@@ -179,11 +181,11 @@ describe("intents that tolerate config errors", () => {
         expect(engine.handle.configError).toBe(engine.configError);
 
         await expect(engine.submit({ intent: "p.build" })).rejects.toThrow("The file is broken.");
-        await expect(engine.submit({ intent: "p.update" })).resolves.toBe("partial");
+        expect((await engine.submit({ intent: "p.update" })).toPlain()).toEqual({ value: "partial" });
         expect(reporter.at("warning").join("\n")).toContain("The config could not be built, so p.update runs with what was built before the error.\n  The file is broken.");
 
         // p.update changed the config, so it is rebuilt, now without the error.
-        await expect(engine.submit({ intent: "p.build" })).resolves.toBe("built");
+        expect((await engine.submit({ intent: "p.build" })).toPlain()).toEqual({ value: "built" });
         expect(engine.configError).toBeUndefined();
     });
 
@@ -196,8 +198,8 @@ describe("intents that tolerate config errors", () => {
         state.broken = true;
         await engine.submit({ intent: "p.touch" }); // the config must be rebuilt, which now fails
 
-        await expect(engine.submit({ intent: "p.update" })).resolves.toBe("partial");
-        await expect(engine.submit({ intent: "p.build" })).resolves.toBe("built");
+        expect((await engine.submit({ intent: "p.update" })).toPlain()).toEqual({ value: "partial" });
+        expect((await engine.submit({ intent: "p.build" })).toPlain()).toEqual({ value: "built" });
     });
 });
 
@@ -236,8 +238,8 @@ function projectAt(root: string) {
 
 describe("intents that require a project", () => {
     const needsProject = plugin("p", (sous) => {
-        sous.intents.add({ intent: "p.build", requiresProject: true, handle: () => "built" });
-        sous.intents.add({ intent: "p.anywhere", handle: () => "ran" });
+        sous.intents.add({ intent: "p.build", requiresProject: true, handle: () => valued("built") });
+        sous.intents.add({ intent: "p.anywhere", handle: () => valued("ran") });
     });
 
     /**
@@ -256,7 +258,7 @@ describe("intents that require a project", () => {
         await expect(failure).rejects.toBeInstanceOf(ConfigError);
         await expect(failure).rejects.toThrow("No sous config found.");
         await expect(failure).rejects.toMatchObject({ details: expect.arrayContaining(["    /nowhere/here/.sous/", "  1. Set the project up: run 'sous init' in its root directory, or"]) });
-        await expect(engine.submit({ intent: "p.anywhere" })).resolves.toBe("ran");
+        expect((await engine.submit({ intent: "p.anywhere" })).toPlain()).toEqual({ value: "ran" });
     });
 
     /** Inside a project, it runs as usual. */
@@ -265,7 +267,7 @@ describe("intents that require a project", () => {
 
         await engine.buildConfig();
 
-        await expect(engine.submit({ intent: "p.build" })).resolves.toBe("built");
+        expect((await engine.submit({ intent: "p.build" })).toPlain()).toEqual({ value: "built" });
     });
 });
 
@@ -281,7 +283,7 @@ describe("ctx.refreshConfig({ locateProjectFrom })", () => {
         const { engine } = makeEngine(
             [
                 plugin("p", (sous) => {
-                    sous.intents.add({ intent: "p.needs", requiresProject: true, handle: (_input, ctx) => ctx.project?.root });
+                    sous.intents.add({ intent: "p.needs", requiresProject: true, handle: (_input, ctx) => valued(ctx.project?.root) });
                     sous.intents.add({
                         intent: "p.init",
                         async handle(_input, ctx) {
@@ -289,7 +291,7 @@ describe("ctx.refreshConfig({ locateProjectFrom })", () => {
 
                             await ctx.refreshConfig({ locateProjectFrom: "/work/new" });
 
-                            return { before, after: ctx.project?.root, needs: await ctx.run("p.needs" as never) };
+                            return IntentOutputs.of({ before, after: ctx.project?.root, needs: ((await ctx.run("p.needs" as never)).toPlain() as { value: unknown }).value });
                         },
                     });
                 }),
@@ -305,7 +307,7 @@ describe("ctx.refreshConfig({ locateProjectFrom })", () => {
 
         await engine.buildConfig();
 
-        await expect(engine.submit({ intent: "p.init" })).resolves.toEqual({ before: undefined, after: "/work/new", needs: "/work/new" });
+        expect((await engine.submit({ intent: "p.init" })).toPlain()).toEqual({ before: undefined, after: "/work/new", needs: "/work/new" });
         expect(asked).toEqual(["/work/new"]);
         expect(engine.project?.root).toBe("/work/new");
     });
@@ -320,7 +322,7 @@ describe("ctx.refreshConfig({ locateProjectFrom })", () => {
                         async handle(_input, ctx) {
                             await ctx.refreshConfig({ locateProjectFrom: "/empty" });
 
-                            return ctx.project?.root;
+                            return valued(ctx.project?.root);
                         },
                     });
                 }),
@@ -330,7 +332,7 @@ describe("ctx.refreshConfig({ locateProjectFrom })", () => {
 
         await engine.buildConfig();
 
-        await expect(engine.submit({ intent: "p.init" })).resolves.toBe("/work/app");
+        expect((await engine.submit({ intent: "p.init" })).toPlain()).toEqual({ value: "/work/app" });
     });
 });
 

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { ConfigError, NonInteractiveError } from "@sous-io/plugin-api";
+import { ConfigError, NonInteractiveError, ReportEntryStyle, VariableSet } from "@sous-io/plugin-api";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { handle } from "../src/init.js";
 import { IGNORE_BLOCK_END, IGNORE_BLOCK_START } from "@sous-io/plugin-host";
@@ -52,7 +52,8 @@ describe("init", () => {
      */
     it("should write every file a new project needs", async () => {
         const { ctx } = initContext();
-        const result = await handle({ directory: projectRoot, noBuild: true }, ctx);
+        const outputs = await handle({ directory: projectRoot, noBuild: true }, ctx);
+        const result = outputs.toPlain();
 
         expect(result).toMatchObject({ root: projectRoot, sousDir, configPath: path.join(sousDir, "sous.config.js"), dryRun: false, kept: [] });
         expect(result.files.every((file) => path.isAbsolute(file))).toBe(true);
@@ -100,7 +101,8 @@ describe("init", () => {
 
     /** The config should be written as sous.config.js, comments and all. */
     it("should write a JavaScript config", async () => {
-        const result = await handle({ directory: projectRoot, noBuild: true }, initContext().ctx);
+        const outputs = await handle({ directory: projectRoot, noBuild: true }, initContext().ctx);
+        const result = outputs.toPlain();
 
         expect(result.configPath).toBe(path.join(sousDir, "sous.config.js"));
         expect(fs.existsSync(path.join(sousDir, "sous.config.jsonc"))).toBe(false);
@@ -139,17 +141,38 @@ describe("init", () => {
         fs.writeFileSync(envPath, "TEAM=us\n");
 
         const { ctx } = initContext();
-        const result = await handle({ directory: projectRoot, noBuild: true }, ctx);
+        const outputs = await handle({ directory: projectRoot, noBuild: true }, ctx);
+        const result = outputs.toPlain();
 
         expect(result.kept).toEqual([envPath]);
         expect(result.files).not.toContain(envPath);
         expect(fs.readFileSync(envPath, "utf8")).toBe("TEAM=us\n");
     });
 
-    /** A dry run should plan everything, write nothing and run no build (the view says so). */
+    /** The outputs should say a dry run wrote nothing, and a real run should end with what was set up. */
+    it("should end with the dry-run sentence, or with what was set up", async () => {
+        const dry = await handle({ directory: projectRoot, dryRun: true }, initContext().ctx);
+        const real = await handle({ directory: projectRoot, noBuild: true }, initContext().ctx);
+
+        expect(dry.last()?.style).toBe(ReportEntryStyle.DryRun);
+        expect(dry.last()?.result?.toText()).toMatch(/^Nothing was written\./);
+        expect(real.first()?.title).toBe("What was set up");
+        expect((real.first()?.result as VariableSet).toObject()).toMatchObject({ Config: path.join(sousDir, "sous.config.js") });
+        expect(real.last()?.summary).toMatch(/build output/);
+    });
+
+    /** A real run with a build should show the build's outputs before what was set up. */
+    it("should include the build's outputs before what was set up", async () => {
+        const outputs = await handle({ directory: projectRoot }, initContext().ctx);
+
+        expect(outputs.toArray().map((output) => output.title)).toEqual([undefined, "What was set up", undefined]);
+    });
+
+    /** A dry run should plan everything, write nothing and run no build. */
     it("should write nothing on a dry run", async () => {
         const { ctx, recorded } = initContext();
-        const result = await handle({ directory: projectRoot, dryRun: true }, ctx);
+        const outputs = await handle({ directory: projectRoot, dryRun: true }, ctx);
+        const result = outputs.toPlain();
 
         expect(result.dryRun).toBe(true);
         expect(result.files).toHaveLength(5);
@@ -183,7 +206,8 @@ describe("init", () => {
 
         fs.writeFileSync(file, '{\n    "name": "my-app",\n    "scripts": { "test": "vitest" },\n    "devDependencies": { "zod": "^4.0.0" }\n}\n');
 
-        const result = await handle({ directory: projectRoot, noBuild: true }, initContext().ctx);
+        const outputs = await handle({ directory: projectRoot, noBuild: true }, initContext().ctx);
+        const result = outputs.toPlain();
 
         expect(result.packageJson).toEqual({ kind: "added", section: "devDependencies", range: "0.1.1" });
         expect(result.files).toContain(file);
@@ -203,7 +227,8 @@ describe("init", () => {
 
         fs.writeFileSync(file, before);
 
-        const result = await handle({ directory: projectRoot, noBuild: true }, initContext().ctx);
+        const outputs = await handle({ directory: projectRoot, noBuild: true }, initContext().ctx);
+        const result = outputs.toPlain();
 
         expect(result.packageJson).toEqual({ kind: "already-declared", section: "dependencies", range: "^0.1.0" });
         expect(result.files).not.toContain(file);
@@ -212,7 +237,8 @@ describe("init", () => {
 
     /** A project with no package.json gets none, and the result says so. */
     it("should not create a package.json where there is none", async () => {
-        const result = await handle({ directory: projectRoot, noBuild: true }, initContext().ctx);
+        const outputs = await handle({ directory: projectRoot, noBuild: true }, initContext().ctx);
+        const result = outputs.toPlain();
 
         expect(result.packageJson).toEqual({ kind: "no-package-json" });
         expect(fs.existsSync(path.join(projectRoot, "package.json"))).toBe(false);
@@ -233,7 +259,8 @@ describe("init", () => {
 
         fs.writeFileSync(file, before);
 
-        const result = await handle({ directory: projectRoot, dryRun: true }, initContext().ctx);
+        const outputs = await handle({ directory: projectRoot, dryRun: true }, initContext().ctx);
+        const result = outputs.toPlain();
 
         expect(result.packageJson.kind).toBe("added");
         expect(fs.readFileSync(file, "utf8")).toBe(before);
@@ -260,7 +287,8 @@ describe("init build", () => {
      */
     it("should refresh the config, then run the build through ctx.run", async () => {
         const { ctx, recorded } = initContext();
-        const result = await handle({ directory: projectRoot }, ctx);
+        const outputs = await handle({ directory: projectRoot }, ctx);
+        const result = outputs.toPlain();
 
         expect(recorded.runs).toEqual([{ intent: "build", input: {} }]);
         expect(recorded.configChanged).toBe(1);
@@ -271,7 +299,8 @@ describe("init build", () => {
     /** noBuild skips the build. */
     it("should not build under noBuild", async () => {
         const { ctx, recorded } = initContext();
-        const result = await handle({ directory: projectRoot, noBuild: true }, ctx);
+        const outputs = await handle({ directory: projectRoot, noBuild: true }, ctx);
+        const result = outputs.toPlain();
 
         expect(recorded.runs).toEqual([]);
         expect(result.build).toBeUndefined();

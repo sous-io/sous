@@ -11,10 +11,10 @@
  * the repository that publishes it is used.
  */
 
-import { ConfigError, type Context, type IntentInput, type IntentResult } from "@sous-io/plugin-api";
+import { ConfigError, IntentOutput, IntentOutputs, ReportEntryStyle, VariableSet, type Context, type IntentInput, type IntentResult } from "@sous-io/plugin-api";
 import type { SousRef } from "@sous-io/plugin-refs/types";
 import type { RepoContributeInput, RepoContributeResult } from "../types.js";
-import { toolsFrom, type AuthoringTools } from "../tools.js";
+import { listOutput, outputsOf, textOutput, toolsFrom, type AuthoringTools } from "../tools.js";
 import { RepoGit } from "../shared/git.js";
 import { describeError } from "../shared/problems.js";
 import { assessPendingWork, assessStatusResult, pendingWork, type PendingVerdict } from "./pending.js";
@@ -33,11 +33,14 @@ export interface ContributionStep<N extends StepIntent = StepIntent> {
 }
 
 /** Runs an intent in the chain; `ctx.run` in production. */
-export type IntentRunner = <N extends StepIntent>(intent: N, input: IntentInput<N>) => Promise<IntentResult<N>>;
+export type IntentRunner = <N extends StepIntent>(intent: N, input: IntentInput<N>) => Promise<IntentOutputs<IntentResult<N> & object>>;
 
 /** The intent's handler. */
-export async function handleContribute(input: RepoContributeInput, ctx: Context): Promise<RepoContributeResult> {
-    return runContribute(toolsFrom(ctx), input, (intent, stepInput) => ctx.run(intent, stepInput));
+export async function handleContribute(input: RepoContributeInput, ctx: Context): Promise<IntentOutputs<RepoContributeResult>> {
+    const tools = toolsFrom(ctx);
+    const result = await runContribute(tools, input, (intent, stepInput) => ctx.run(intent, stepInput) as never);
+
+    return outputsOf(tools, result);
 }
 
 /** Starts or finishes a contribution. */
@@ -46,11 +49,13 @@ export async function runContribute(tools: AuthoringTools, input: RepoContribute
     const dryRun = input.dryRun === true;
 
     assertFlagsAgree(input);
-    tools.reporter.variables([
-        { label: "Reference", value: input.ref },
-        { label: "Mode", value: finishing ? "Finish a contribution" : "Start a contribution" },
-        { label: "Scope", value: input.global === true ? "this machine" : "this project" },
-    ]);
+    tools.results.push(
+        tools.commandVariables({
+            Reference: input.ref,
+            Mode: finishing ? "Finish a contribution" : "Start a contribution",
+            Scope: input.global === true ? "this machine" : "this project",
+        }),
+    );
 
     const repo = await resolveRepository(tools, input.ref, input.acceptFirst === true);
 
@@ -171,7 +176,7 @@ async function start(tools: AuthoringTools, repo: string, input: RepoContributeI
     reportPlan(tools, [step], dryRun);
 
     if (dryRun) {
-        tools.reporter.dryRun("No step was run.");
+        tools.results.push(textOutput("No step was run.", ReportEntryStyle.DryRun));
 
         return { stage: "linked", repo, steps, completed: [], dryRun: true };
     }
@@ -180,15 +185,21 @@ async function start(tools: AuthoringTools, repo: string, input: RepoContributeI
     const link = await runStep(tools, step, completed, run);
     const branch = link.branch ?? (await new RepoGit(tools.git, link.path).currentBranch().catch(() => undefined));
 
-    tools.reporter.variables([
-        { label: "Repository", value: repo },
-        { label: "Checkout", value: link.path },
-        ...(branch === undefined ? [] : [{ label: "Branch", value: branch }]),
-    ]);
-    tools.reporter.note(
-        `Builds read '${repo}' from this checkout until the contribution is finished, so an edit made there shows up in ` +
-            `this project's next build.`,
+    tools.results.push(
+        new IntentOutput({
+            result: new VariableSet({ Repository: repo, Checkout: link.path, ...(branch === undefined ? {} : { Branch: branch }) }),
+            style: ReportEntryStyle.VariableList,
+        }),
+        textOutput(
+            `Builds read '${repo}' from this checkout until the contribution is finished, so an edit made there shows up in ` +
+                `this project's next build.`,
+            ReportEntryStyle.Note,
+        ),
     );
+
+    if (completed.length > 0) {
+        tools.results.push(listOutput(completed, { heading: "What this run did" }));
+    }
 
     return { stage: "linked", repo, steps, completed, link, dryRun: false };
 }
@@ -230,20 +241,20 @@ async function finish(tools: AuthoringTools, repo: string, input: RepoContribute
 
     if (dryRun) {
         if (verdict.kind === "nothing") {
-            tools.reporter.dryRun("Would skip submitting, since there is nothing to submit.");
+            tools.results.push(textOutput("Would skip submitting, since there is nothing to submit.", ReportEntryStyle.DryRun));
         } else {
             if (verdict.kind === "lookup") {
-                tools.reporter.dryRun("Would look the branch's proposal up, and treat the branch as having work to submit when none is open.");
+                tools.results.push(textOutput("Would look the branch's proposal up, and treat the branch as having work to submit when none is open.", ReportEntryStyle.DryRun));
             }
 
-            tools.reporter.dryRun(`${describeSubmitDecision(input)}.`);
+            tools.results.push(textOutput(`${describeSubmitDecision(input)}.`, ReportEntryStyle.DryRun));
         }
 
         const planned = verdict.kind === "nothing" || input.submit === false ? [unlink] : [submit, unlink];
         const steps = planned.map(commandLine);
 
         reportPlan(tools, planned, true);
-        tools.reporter.dryRun("No step was run.");
+        tools.results.push(textOutput("No step was run.", ReportEntryStyle.DryRun));
 
         return { stage: "finished", repo, steps, completed, verdict: verdict.reason, dryRun: true };
     }
@@ -261,7 +272,7 @@ async function finish(tools: AuthoringTools, repo: string, input: RepoContribute
     const submitted = submitting ? await runStep(tools, submit, completed, run) : undefined;
     const unlinked = await runStep(tools, unlink, completed, run);
 
-    tools.reporter.list(completed, { title: "What this run did:" });
+    tools.results.push(listOutput(completed, { title: "What this run did:" }));
 
     return {
         stage: "finished",
@@ -370,7 +381,7 @@ function requireLink(tools: AuthoringTools, repo: string, isGlobal: boolean): st
 /** Looks the proposal up; a failed lookup counts as work to submit, with the reason. */
 async function lookUpProposal(repo: string, branch: string, run: IntentRunner): Promise<PendingVerdict> {
     try {
-        return assessStatusResult(branch, await run("repo.submit", { repo, branch, status: true }));
+        return assessStatusResult(branch, (await run("repo.submit", { repo, branch, status: true })).toPlain());
     } catch (error) {
         const reason = describeError(error).split("\n")[0]!.trim();
 
@@ -413,11 +424,7 @@ function describeSubmitDecision(input: RepoContributeInput): string {
 /** Shows the steps a run takes: as a list, or in a dry run as the commands it would run. */
 function reportPlan(tools: AuthoringTools, steps: readonly ContributionStep[], dryRun: boolean): void {
     if (dryRun) {
-        for (const step of steps) {
-            const [name = "sous", ...args] = commandWords(step);
-
-            tools.reporter.command(name, args, { dryRun: true });
-        }
+        tools.results.push(listOutput(steps.map(commandLine), { title: steps.length === 1 ? "This would run one step:" : `This would run ${steps.length} steps:` }));
 
         return;
     }
@@ -433,11 +440,13 @@ async function runStep<N extends StepIntent>(tools: AuthoringTools, step: Contri
     tools.reporter.command(name, args);
 
     try {
-        const result = await run(step.intent, step.input);
+        const outputs = await run(step.intent, step.input);
 
         completed.push(step.done);
+        // What the step showed is part of what this command shows, but not its opening facts again.
+        tools.results.push(...outputs.toArray().filter((output) => output.style !== ReportEntryStyle.CommandVariables && (output.title !== undefined || output.summary !== undefined || output.result !== undefined)));
 
-        return result;
+        return outputs.toPlain();
     } catch (error) {
         const done =
             completed.length === 0

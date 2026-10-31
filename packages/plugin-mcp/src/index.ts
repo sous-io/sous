@@ -6,7 +6,7 @@
  */
 
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import { definePlugin, jsonSchema, type PluginDefinition } from "@sous-io/plugin-api";
+import { definePlugin, IntentOutputs, jsonSchema, type PluginDefinition } from "@sous-io/plugin-api";
 import { buildTools, createMcpTools } from "./tools.js";
 import type { McpServeInput, McpSettings } from "./types.js";
 
@@ -84,7 +84,7 @@ export function createMcpPlugin(options: McpPluginOptions = {}): PluginDefinitio
 
                     return async (_input, ctx) => {
                         if (options.transport) {
-                            return serveMcp(ctx, { transport: await options.transport() });
+                            return IntentOutputs.of(await serveMcp(ctx, { transport: await options.transport() }));
                         }
 
                         const { StdioServerTransport } = await import("@modelcontextprotocol/sdk/server/stdio.js");
@@ -95,7 +95,7 @@ export function createMcpPlugin(options: McpPluginOptions = {}): PluginDefinitio
                         // without this, the server would wait forever (and Node exits with code 13).
                         process.stdin.once("end", () => void transport.close());
 
-                        return serveMcp(ctx, { transport, handleSignals: true });
+                        return IntentOutputs.of(await serveMcp(ctx, { transport, handleSignals: true }));
                     };
                 },
             });

@@ -1,4 +1,4 @@
-import { BaseReporter, type Environment, isLevelShown, LogLevel, type ProgressEvent, type ReportDetails, ReportEntryStyle } from "@sous-io/plugin-api";
+import { BaseReporter, type Environment, LogLevel, messageText, type ProgressEvent, type ReportDetails, ReportEntryStyle, type ReportMessage } from "@sous-io/plugin-api";
 import type { OutputStream } from "./io.js";
 import { BLANK, Layout } from "./terminal/layout.js";
 import { type Rendered, renderEntry, type RenderState } from "./terminal/render-entry.js";
@@ -10,9 +10,9 @@ export type ReporterStream = OutputStream & { readonly columns?: number };
 
 /** What a {@link TerminalReporter} is built from. */
 export interface TerminalReporterOptions {
-    /** Where `debug`, `info` and `notice` go (and nothing else under `json`). */
+    /** Where a command's result goes (and nothing else; under `json` not even that). */
     readonly stdout: ReporterStream;
-    /** Where `warning` and above go, and everything when `json` is on. */
+    /** Where every other message goes, at every level, and everything when `json` is on. */
     readonly stderr: ReporterStream;
     /** The least severe level shown. Default `info`. */
     readonly threshold?: LogLevel;
@@ -88,10 +88,11 @@ const FOOTER_BLANKS = 2;
  * aligned blocks, wrapped paragraphs, tables), decides the blank lines between entries from the
  * sequence of styles, and sends each entry to a stream by its level.
  *
- * - `debug`, `info` and `notice` go to standard output; `warning` and above go to standard error.
- *   With `json`, everything goes to standard error.
- * - The banner, a question's header and a progress bar always go to standard error: they belong
- *   to a person at a terminal, and the prompts are written there.
+ * - A command's result (`ReportEntryStyle.Result`, what an intent returned) goes to standard
+ *   output; every other message, at every level, goes to standard error. With `json`, everything
+ *   goes to standard error, so standard output holds only the JSON the front end writes.
+ * - A message is a string, an error (shown with its chain of causes), a payload (`VariableSet`,
+ *   `Table`, ...) or the result's outputs; a payload is drawn from its own fields.
  * - Color is decided for each stream, so a piped standard output stays plain while standard error is colored.
  * - Only one progress bar shows at a time; on a terminal it is redrawn in place and kept under any
  *   message printed while it shows. Elsewhere only its last event prints, as one line.
@@ -127,9 +128,9 @@ export class TerminalReporter extends BaseReporter {
         this.out = options.json === true ? this.err : sinkOf(options.stdout);
     }
 
-    /** The colors of the stream a message at `level` goes to, for text that is built before it is reported. */
-    styleFor(level: LogLevel): Style {
-        return this.sinkFor(level, ReportEntryStyle.Plain).layout.style;
+    /** The colors of standard error, where every message but a result goes, for text built before it is reported. */
+    styleFor(): Style {
+        return this.err.layout.style;
     }
 
     /** Ends a command's output: removes a progress bar that is still showing and writes the closing blank lines. */
@@ -148,14 +149,14 @@ export class TerminalReporter extends BaseReporter {
         sink.pending = 0;
     }
 
-    protected write(level: LogLevel, message: string, details: ReportDetails | undefined, style: ReportEntryStyle): void {
+    protected write(level: LogLevel, message: ReportMessage, details: ReportDetails | undefined, style: ReportEntryStyle): void {
         if (style === ReportEntryStyle.Progress) {
-            this.drawProgress(details as ProgressEvent | undefined, message);
+            this.drawProgress(details as ProgressEvent | undefined, messageText(message));
 
             return;
         }
 
-        const sink = this.sinkFor(level, style);
+        const sink = this.sinkFor(style);
         const rendered = renderEntry(sink.layout, this.state, level, message, details, style);
 
         if (rendered.lines.length > 0) {
@@ -167,13 +168,9 @@ export class TerminalReporter extends BaseReporter {
         }
     }
 
-    /** The stream an entry goes to. */
-    private sinkFor(level: LogLevel, style: ReportEntryStyle): Sink {
-        if (style === ReportEntryStyle.Banner || style === ReportEntryStyle.Question || style === ReportEntryStyle.Progress) {
-            return this.err;
-        }
-
-        return isLevelShown(level, LogLevel.Warning) ? this.err : this.out;
+    /** The stream an entry goes to: standard output for a result, standard error for everything else. */
+    private sinkFor(style: ReportEntryStyle): Sink {
+        return style === ReportEntryStyle.Result ? this.out : this.err;
     }
 
     /** Writes an entry's lines, with the blank lines it needs above them, keeping a progress bar under them. */

@@ -2,7 +2,7 @@
  * The `launch` intent: builds, then starts a harness (today's `sous launch`).
  */
 
-import { ConfigError, NotFoundError, SousError, type Context } from "@sous-io/plugin-api";
+import { ConfigError, IntentOutputs, NotFoundError, SousError, type Context } from "@sous-io/plugin-api";
 import type { BuildResult } from "@sous-io/plugin-build/types";
 import type { HarnessLaunchResult, LaunchInput, LaunchResult } from "./types.js";
 
@@ -18,7 +18,7 @@ export function launchable(ctx: Pick<Context, "entities">): string[] {
 }
 
 /** Runs the intent. */
-export async function handle(input: LaunchInput, ctx: Context): Promise<LaunchResult> {
+export async function handle(input: LaunchInput, ctx: Context): Promise<IntentOutputs<LaunchResult>> {
     const [id, ...passThrough] = input.tool;
 
     if (id === undefined) {
@@ -42,7 +42,7 @@ export async function handle(input: LaunchInput, ctx: Context): Promise<LaunchRe
     do {
         // A failed build stops here: the agent would otherwise start on outputs the build could not bring up to date.
         if (!input.noBuild) {
-            build = await ctx.run("build");
+            build = (await ctx.run("build")).toPlain();
 
             if (!build.ok) {
                 throw new ConfigError(
@@ -70,5 +70,6 @@ export async function handle(input: LaunchInput, ctx: Context): Promise<LaunchRe
         }
     } while (input.continuous);
 
-    return { harness: id, last, sessions, ...(build === undefined ? {} : { build }) };
+    // The build reported as it ran and the tool owned the terminal, so the result holds only data.
+    return IntentOutputs.of<LaunchResult>({ harness: id, last, sessions, ...(build === undefined ? {} : { build }) });
 }

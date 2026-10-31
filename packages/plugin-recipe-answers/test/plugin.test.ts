@@ -1,5 +1,5 @@
 import { createEngine, type Engine } from "@sous-io/core";
-import { BufferedReporter, NonInteractiveError, nonInteractivePrompter, scriptedPrompter, type ServiceContext } from "@sous-io/plugin-api";
+import { BufferedReporter, ReportEntryStyle, Table, VariableSet, NonInteractiveError, nonInteractivePrompter, scriptedPrompter, type ServiceContext } from "@sous-io/plugin-api";
 import type { VariableSourceEntity } from "@sous-io/plugin-variables/types";
 import { beforeEach, describe, expect, it } from "vitest";
 import recipeAnswersPlugin from "../src/index.js";
@@ -84,9 +84,9 @@ describe("plugin-recipe-answers through the engine", () => {
 
     /** `vars list` should list every variable, a secret's value hidden. */
     it("should list variables with their answers", async () => {
-        const listings = await engine.handle.submit({ intent: "vars.list", input: {} });
+        const listings = (await engine.handle.submit({ intent: "vars.list", input: {} })).toPlain();
 
-        expect(listings.map((entry) => [entry.variable.key, entry.answered, entry.value, entry.storeIn])).toEqual([
+        expect(listings.variables.map((entry) => [entry.variable.key, entry.answered, entry.value, entry.storeIn])).toEqual([
             ["misc/stuff.apiUrl", true, "https://shell.example.com", "shared"],
             ["misc/stuff.apiToken", false, undefined, "local"],
             ["workflow/task-files.taskRoot", false, undefined, "shared"],
@@ -95,7 +95,7 @@ describe("plugin-recipe-answers through the engine", () => {
 
     /** `vars show` should give one variable with every name tried and its constraints. */
     it("should show one variable in full", async () => {
-        const detail = await engine.handle.submit({ intent: "vars.show", input: { name: "apiUrl" } });
+        const detail = (await engine.handle.submit({ intent: "vars.show", input: { name: "apiUrl" } })).toPlain();
 
         expect(detail.source).toEqual({ rung: "shared", envName: "SOUS_VAR_API_URL", file: "shell" });
         expect(detail.diagnosis.candidates.map((candidate) => candidate.rung)).toEqual(["recipe", "namespace", "shared"]);
@@ -110,7 +110,7 @@ describe("plugin-recipe-answers through the engine", () => {
     it("should take every answer from flags when it cannot ask", async () => {
         await expect(engine.handle.submit({ intent: "vars.ask", input: { all: true } }, { prompter: nonInteractivePrompter })).rejects.toBeInstanceOf(NonInteractiveError);
 
-        const result = await engine.handle.submit({ intent: "vars.ask", input: { answer: ["apiToken=tok_123", "workflow/task-files.taskRoot=docs/tasks"] } }, { prompter: nonInteractivePrompter });
+        const result = (await engine.handle.submit({ intent: "vars.ask", input: { answer: ["apiToken=tok_123", "workflow/task-files.taskRoot=docs/tasks"] } }, { prompter: nonInteractivePrompter })).toPlain();
 
         expect(result.answered.map((entry) => [entry.envName, entry.file, entry.value])).toEqual([
             ["SOUS_VAR_API_TOKEN", "local", "(hidden)"],
@@ -123,7 +123,7 @@ describe("plugin-recipe-answers through the engine", () => {
     /** `vars ask <name>` should ask about that variable through the chain's prompter. */
     it("should ask a named variable through the prompter", async () => {
         const prompter = scriptedPrompter(["https://typed.example.com"]);
-        const result = await engine.handle.submit({ intent: "vars.ask", input: { name: "misc/stuff.apiUrl" } }, { prompter });
+        const result = (await engine.handle.submit({ intent: "vars.ask", input: { name: "misc/stuff.apiUrl" } }, { prompter })).toPlain();
 
         expect(prompter.asked).toEqual(["Which API?"]);
         expect(result.answered[0]).toMatchObject({ envName: "SOUS_VAR_API_URL", value: "https://typed.example.com", shadowedBy: "SOUS_VAR_API_URL" });
@@ -132,7 +132,7 @@ describe("plugin-recipe-answers through the engine", () => {
 
     /** `vars ask --recipe` should ask only that recipe's questions, as `subscription.add` does. */
     it("should narrow to one recipe, and to a namespace", async () => {
-        const recipe = await engine.handle.submit({ intent: "vars.ask", input: { recipe: "workflow/task-files", all: true, dryRun: true } }, { prompter: scriptedPrompter(["x"]) });
+        const recipe = (await engine.handle.submit({ intent: "vars.ask", input: { recipe: "workflow/task-files", all: true, dryRun: true } }, { prompter: scriptedPrompter(["x"]) })).toPlain();
 
         expect(recipe.answered.map((entry) => entry.variable.key)).toEqual(["workflow/task-files.taskRoot"]);
         expect(recipe.answered[0]!.outcome).toBe("not written");
@@ -143,7 +143,7 @@ describe("plugin-recipe-answers through the engine", () => {
 
     /** A name meaning several things should be settled by `--accept-first`. */
     it("should settle an ambiguous name with --accept-first", async () => {
-        const result = await engine.handle.submit({ intent: "vars.ask", input: { name: "misc", acceptFirst: true, dryRun: true, all: true } }, { prompter: scriptedPrompter(["https://a", "tok"]) });
+        const result = (await engine.handle.submit({ intent: "vars.ask", input: { name: "misc", acceptFirst: true, dryRun: true, all: true } }, { prompter: scriptedPrompter(["https://a", "tok"]) })).toPlain();
 
         expect(result.answered.map((entry) => entry.variable.key)).toEqual(["misc/stuff.apiUrl", "misc/stuff.apiToken"]);
     });
@@ -155,18 +155,67 @@ describe("plugin-recipe-answers through the engine", () => {
 
     /** `vars map` should write a record surgically, and the ladder should read it after the rebuild. */
     it("should map an environment name to a variable", async () => {
-        const result = await engine.handle.submit({ intent: "vars.map", input: { envName: "TEAM_API", target: "misc/stuff/apiUrl" } });
+        const result = (await engine.handle.submit({ intent: "vars.map", input: { envName: "TEAM_API", target: "misc/stuff/apiUrl" } })).toPlain();
 
         expect(result).toEqual({ envName: "TEAM_API", target: "misc/stuff/apiUrl", file: "/project/.sous/conf.d/520-var-mappings.jsonc", changed: true, dryRun: false });
         expect(standIns.confd.data["520-var-mappings.jsonc"]).toEqual({ varMappings: { TEAM_API: "misc/stuff/apiUrl" } });
 
-        const detail = await engine.handle.submit({ intent: "vars.show", input: { name: "apiUrl" } });
+        const detail = (await engine.handle.submit({ intent: "vars.show", input: { name: "apiUrl" } })).toPlain();
 
         expect(detail.diagnosis.candidates[0]).toEqual({ rung: "mapping", envName: "TEAM_API" });
         expect(engine.config.services.get("recipe-answers.mappings").list()).toEqual({ TEAM_API: { namespace: "misc", recipe: "stuff", variable: "apiUrl" } });
 
         await engine.handle.submit({ intent: "vars.map", input: { envName: "TEAM_API", remove: true } });
         expect(standIns.confd.data["520-var-mappings.jsonc"]).toEqual({ varMappings: {} });
+    });
+
+    /** `vars list` should open with Command Variables, then one sorted table, a secret hidden or unanswered. */
+    it("should show the listing as command variables and a table", async () => {
+        const outputs = await engine.handle.submit({ intent: "vars.list", input: {} });
+        const [opening, listing] = outputs.toArray();
+
+        expect(opening!.title).toBe("Command Variables");
+        expect(opening!.style).toBe(ReportEntryStyle.CommandVariables);
+        expect(opening!.result).toBeInstanceOf(VariableSet);
+        expect((opening!.result as VariableSet).toObject()).toMatchObject({ Definitions: "the project's subscribed recipes" });
+        expect(listing!.title).toBe("Variables in play");
+        expect(listing!.result).toBeInstanceOf(Table);
+        expect((listing!.result as Table).rows.map((row) => [row.name, row.value])).toEqual([
+            ["apiToken", "(unanswered)"],
+            ["apiUrl", "https://shell.example.com"],
+            ["taskRoot", "(unanswered)"],
+        ]);
+    });
+
+    /** `vars list <name>` and `vars show` should show a variable in full: question block, facts, then the ladder table. */
+    it("should show one variable as a block, its facts and its ladder", async () => {
+        const outputs = await engine.handle.submit({ intent: "vars.show", input: { name: "apiUrl" } });
+        const [, block, facts, ladder] = outputs.toArray();
+
+        expect(block!.title).toBe("apiUrl (misc/stuff)");
+        expect((block!.result as VariableSet).toObject()).toMatchObject({ Value: "https://shell.example.com", Answer: "the value in scope fits this definition" });
+        expect((facts!.result as VariableSet).entries.map((entry) => entry.label)).toEqual(expect.arrayContaining(["example", "required-by", "defined-by", "storage-path", "stored-as"]));
+        expect((ladder!.result as Table).title).toBe("Environment variables sous looks at, most specific first");
+        expect(outputs.toPlain()).toMatchObject({ answered: true });
+    });
+
+    /** `vars ask` should title the run, then list the answers it stored under their own title. */
+    it("should report the answers stored under their titles", async () => {
+        const outputs = await engine.handle.submit(
+            { intent: "vars.ask", input: { answer: ["apiToken=tok_123", "workflow/task-files.taskRoot=docs/tasks"], dryRun: true } },
+            { prompter: nonInteractivePrompter },
+        );
+        const titles = outputs.toArray().map((output) => output.title);
+
+        expect(titles).toEqual(["Answering variables", "Answers already in scope", "Answers that would be stored"]);
+        expect(outputs.toPlain()).toMatchObject({ dryRun: true });
+    });
+
+    /** `vars map` should say what changed in its summary. */
+    it("should say what vars map changed", async () => {
+        const outputs = await engine.handle.submit({ intent: "vars.map", input: { envName: "TEAM_API", target: "misc/stuff/apiUrl" } });
+
+        expect(outputs.last()!.summary).toMatch(/^Mapped TEAM_API to misc\/stuff\/apiUrl in /);
     });
 
     /** The intents should keep today's commands, aliases and arguments. */

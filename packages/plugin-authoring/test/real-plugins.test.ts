@@ -61,7 +61,7 @@ describe("plugin-authoring with the real plugins", () => {
 
         await engine.buildConfig();
 
-        const first = await engine.handle.submit({ intent: "repo.release", input: { directory: repo, yes: true } });
+        const first = (await engine.handle.submit({ intent: "repo.release", input: { directory: repo, yes: true } })).toPlain();
 
         expect(first.tagged).toEqual(["core/base@2.0.0", "core/user@1.0.0"]);
 
@@ -74,12 +74,12 @@ describe("plugin-authoring with the real plugins", () => {
         writeFile(repo, "recipes/core/base/skills/base.md", "edited\n");
         commitAll(repo, "edit base");
 
-        const second = await engine.handle.submit({ intent: "repo.release", input: { directory: repo, yes: true, bump: "minor" } });
+        const second = (await engine.handle.submit({ intent: "repo.release", input: { directory: repo, yes: true, bump: "minor" } })).toPlain();
 
         expect(second.tagged).toEqual(["core/base@2.1.0"]);
         expect(git(repo, "status", "--porcelain")).toBe("");
 
-        const check = await engine.handle.submit({ intent: "repo.release", input: { directory: repo, check: true } });
+        const check = (await engine.handle.submit({ intent: "repo.release", input: { directory: repo, check: true } })).toPlain();
 
         expect(check.indexChanged).toBe(false);
     });

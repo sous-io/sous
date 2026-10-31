@@ -1,6 +1,6 @@
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { BufferedReporter, nonInteractivePrompter, scriptedPrompter, type IntentInput, type Prompter } from "@sous-io/plugin-api";
+import { BufferedReporter, IntentOutputs, nonInteractivePrompter, scriptedPrompter, type IntentInput, type Prompter } from "@sous-io/plugin-api";
 import type { RepoLinkResult, RepoUnlinkResult } from "@sous-io/plugin-recipes/types";
 import type { SousRef } from "@sous-io/plugin-refs/types";
 import { commitAll, git, initRepo, makeTmpDir, writeFile, type TmpDir } from "../../test/support/git-repo.js";
@@ -108,14 +108,14 @@ describe("runContribute()", () => {
             ran.push({ intent, input });
 
             if (intent === "repo.link") {
-                return { repo: "sous-recipes", path: checkout, origin: "clone", scope: "project", cloned: true, branch: "sous/edit-1", trusted: [], dryRun: false } satisfies RepoLinkResult;
+                return IntentOutputs.of({ repo: "sous-recipes", path: checkout, origin: "clone", scope: "project", cloned: true, branch: "sous/edit-1", trusted: [], dryRun: false } satisfies RepoLinkResult);
             }
 
             if (intent === "repo.unlink") {
-                return { repo: "sous-recipes", path: checkout, scope: "project", removedCheckout: false, dryRun: false, followUps: [] } satisfies RepoUnlinkResult;
+                return IntentOutputs.of({ repo: "sous-recipes", path: checkout, scope: "project", removedCheckout: false, dryRun: false, followUps: [] } satisfies RepoUnlinkResult);
             }
 
-            return { repo: "sous-recipes", branch: "change", fromFork: false, committed: false, pushed: true, created: true, updated: false, dryRun: false, outcome: "created", proposalNoun: "pull request", refusing: [], completed: [], ...submitted };
+            return IntentOutputs.of({ repo: "sous-recipes", branch: "change", fromFork: false, committed: false, pushed: true, created: true, updated: false, dryRun: false, outcome: "created", proposalNoun: "pull request", refusing: [], completed: [], ...submitted });
         }) as IntentRunner;
 
     /** The tools, with the checkout linked in this project. */

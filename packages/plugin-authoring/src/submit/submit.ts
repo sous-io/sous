@@ -15,16 +15,16 @@
  */
 
 import path from "node:path";
-import { ConfigError, type Context, type Reporter, type VariableEntry } from "@sous-io/plugin-api";
+import { ConfigError, IntentOutput, ReportEntryStyle, VariableSet, type Context, type IntentOutputs, type Reporter, type VariableEntry } from "@sous-io/plugin-api";
 import type { CanonicalRepository } from "@sous-io/plugin-refs/types";
 import type { ProposalStatus, ProposalSummary, RepositoryHostContext, RepositoryHostEntity } from "@sous-io/plugin-recipes/types";
 import type { RepoSubmitInput, RepoSubmitResult } from "../types.js";
-import { toolsFrom, type AuthoringTools } from "../tools.js";
+import { listOutput, outputsOf, textOutput, toolsFrom, type AuthoringTools } from "../tools.js";
 import { FORK_REMOTE, RepoGit, submitBranchName, UPSTREAM_REMOTE, type ChangedPath } from "../shared/git.js";
 import { describeCount, describeError, errorsIn, hasErrors, renderProblems } from "../shared/problems.js";
 import { INDEX_FILE, validateRepo, type RepoValidation } from "../shared/repository.js";
 import { recipesRefusingSubmissions, type RefusingRecipe } from "../release/submissions.js";
-import { buildChangelog, commitMessage, composeProposalBody, readManifestsAt, renderChangelog, reportChangelog, snapshotOf, type Changelog } from "./changelog.js";
+import { buildChangelog, commitMessage, composeProposalBody, readManifestsAt, renderChangelog, changelogOutputs, reportChangelogWarnings, snapshotOf, type Changelog } from "./changelog.js";
 import { findSubmitCheckout } from "./checkout.js";
 
 /** What a proposal is called when the host does not say. */
@@ -44,8 +44,9 @@ type SubmitHost = RepositoryHostEntity &
 type ProposalHost = SubmitHost & Required<Pick<RepositoryHostEntity, "findProposal" | "proposalStatus" | "updateProposal">>;
 
 /** The intent's handler. */
-export async function handleSubmit(input: RepoSubmitInput, ctx: Context): Promise<RepoSubmitResult> {
-    const result = await runSubmit(toolsFrom(ctx), input, { cwd: ctx.cwd });
+export async function handleSubmit(input: RepoSubmitInput, ctx: Context): Promise<IntentOutputs<RepoSubmitResult>> {
+    const tools = toolsFrom(ctx);
+    const result = await runSubmit(tools, input, { cwd: ctx.cwd });
 
     if (!result.dryRun && (result.created || result.updated)) {
         await ctx.emit("authoring.submitted", {
@@ -55,7 +56,51 @@ export async function handleSubmit(input: RepoSubmitInput, ctx: Context): Promis
         });
     }
 
-    return result;
+    const facts = proposalFacts(result);
+
+    if (facts !== undefined) {
+        tools.results.push(facts);
+    }
+
+    return outputsOf(tools, result);
+}
+
+/**
+ * The proposal a run opened, updated or would open, as a block of facts. A status look-up and a
+ * cancelled run have none: everything there was to say is already in the outputs.
+ */
+export function proposalFacts(result: RepoSubmitResult): IntentOutput | undefined {
+    if (result.outcome === "status" || result.outcome === "cancelled") {
+        return undefined;
+    }
+
+    const noun = result.proposalNoun;
+    const heading =
+        result.outcome === "created"
+            ? result.dryRun
+                ? `The ${noun} this would open`
+                : `The ${noun} that was opened`
+            : result.dryRun
+              ? `The ${noun} this would update`
+              : `The ${noun} for '${result.branch}'`;
+    const title = result.title ?? result.proposal?.title;
+    const url = result.proposal?.url;
+
+    return new IntentOutput({
+        title: heading,
+        result: new VariableSet({
+            ...(result.host === undefined ? {} : { Provider: result.host }),
+            Repository: result.repo,
+            Branch: result.branch,
+            ...(result.baseBranch === undefined ? {} : { "Target branch": result.baseBranch }),
+            "Pushed to": result.dryRun ? "(nothing was pushed)" : (result.pushedTo ?? "origin"),
+            "Through a fork": result.fromFork,
+            ...(title === undefined ? {} : { Title: title }),
+            ...(result.committedPaths === undefined || result.committedPaths.length === 0 ? {} : { Committed: result.committedPaths.join(", ") }),
+            Address: url ?? (result.dryRun ? "(not opened yet)" : "(the provider printed no address)"),
+        }),
+        style: ReportEntryStyle.VariableList,
+    });
 }
 
 /** Finds the checkout, then carries its branch's proposal one step further. */
@@ -215,7 +260,7 @@ export async function submitRepo(
         const status = found === undefined ? undefined : await statusOf(found);
 
         if (found === undefined) {
-            reporter.info(`The branch '${branch}' has no ${proposalNoun}.`);
+            tools.results.push(textOutput(`The branch '${branch}' has no ${proposalNoun}.`));
         } else {
             reportStatus(tools, proposalNoun, status!);
         }
@@ -291,7 +336,7 @@ export async function submitRepo(
     const refusingFacts = refusing.map((recipe) => ({ key: recipe.key, path: recipe.path, ...(recipe.instead === undefined ? {} : { instead: recipe.instead }) }));
 
     const cancelled = (reason: string): RepoSubmitResult => {
-        notice(`${reason} Nothing was written.`);
+        tools.results.push(textOutput(`${reason} Nothing was written.`, ReportEntryStyle.Note));
 
         return outcome({ outcome: "cancelled", branch: input.branch ?? checkedOut ?? baseBranch, dryRun: true, refusing: refusingFacts });
     };
@@ -395,7 +440,8 @@ export async function submitRepo(
     });
     const rendered = renderChangelog(changelog);
 
-    reportChangelog(reporter, changelog);
+    tools.results.push(...changelogOutputs(changelog));
+    reportChangelogWarnings(reporter, changelog);
 
     const proposalBody = description === undefined ? undefined : composeProposalBody(description, changelog);
     const facts = {
@@ -410,20 +456,20 @@ export async function submitRepo(
 
     if (dryRun) {
         if (branchAction === "create") {
-            reporter.dryRun(`A branch named '${branch}' would be created from the current commit.`);
+            dryRunSentence(tools, `A branch named '${branch}' would be created from the current commit.`);
         } else if (branchAction === "switch") {
-            reporter.dryRun(`The branch '${branch}' would be checked out.`);
+            dryRunSentence(tools, `The branch '${branch}' would be checked out.`);
         }
 
         if (toCommit.length > 0) {
-            reporter.dryRun(`${describeCount(toCommit.length, "path")} would be committed.`);
+            dryRunSentence(tools, `${describeCount(toCommit.length, "path")} would be committed.`);
         }
 
         if (usedFork) {
-            reporter.dryRun(`You cannot push to ${repo.owner}/${repo.name}, so the change would go through a fork on your own account.`);
+            dryRunSentence(tools, `You cannot push to ${repo.owner}/${repo.name}, so the change would go through a fork on your own account.`);
         }
 
-        reporter.dryRun("Nothing was sent; this was a dry run.");
+        dryRunSentence(tools, "Nothing was sent; this was a dry run.");
 
         return outcome({
             outcome: action === "update" ? "updated" : "created",
@@ -479,7 +525,7 @@ export async function submitRepo(
         const status = await statusOf(previous);
         const proposal = { ...previous, ...(url === undefined ? {} : { url }), ...(title === undefined ? {} : { title }) };
 
-        reporter.info(changed ? `The ${proposalNoun} was updated with what this run sent.` : `There was nothing new to send, so the ${proposalNoun} was left as it was.`);
+        tools.results.push(textOutput(changed ? `The ${proposalNoun} was updated with what this run sent.` : `There was nothing new to send, so the ${proposalNoun} was left as it was.`));
         reportStatus(tools, proposalNoun, status);
 
         return outcome({
@@ -507,9 +553,11 @@ export async function submitRepo(
         notice(proposed.detail);
     }
 
-    reporter.info(
-        `The ${proposalNoun} is open for review${proposed.url === undefined ? "" : `: ${proposed.url}`}. The maintainers decide what happens ` +
-            `next; sous never publishes on their behalf.`,
+    tools.results.push(
+        textOutput(
+            `The ${proposalNoun} is open for review${proposed.url === undefined ? "" : `: ${proposed.url}`}. The maintainers decide what happens ` +
+                `next; sous never publishes on their behalf.`,
+        ),
     );
 
     return outcome({
@@ -529,6 +577,11 @@ export async function submitRepo(
         },
         ...facts,
     });
+}
+
+/** Adds a sentence about what a dry run left undone to the result. */
+function dryRunSentence(tools: AuthoringTools, text: string): void {
+    tools.results.push(textOutput(text, ReportEntryStyle.DryRun));
 }
 
 /** Warns that the change touches recipes that take no proposals, naming each one. */
@@ -747,7 +800,7 @@ function reportStatus(tools: AuthoringTools, noun: string, status: ProposalStatu
         entries.push({ label: "Address", value: proposal.url });
     }
 
-    tools.reporter.variables(entries);
+    tools.results.push(new IntentOutput({ result: new VariableSet(entries), style: ReportEntryStyle.VariableList }));
 }
 
 function blankToUndefined(value: string | undefined): string | undefined {

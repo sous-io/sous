@@ -1,4 +1,4 @@
-import { jsonSchema, type IntentDefinition } from "@sous-io/plugin-api";
+import { IntentOutput, IntentOutputs, jsonSchema, TextBlock, type IntentDefinition } from "@sous-io/plugin-api";
 import type { CommandNode, CommandTree } from "./command-tree.js";
 import { globalSpecs } from "./globals.js";
 
@@ -105,7 +105,11 @@ export const completionIntent: IntentDefinition = {
     cli: { positional: ["shell"], examples: ['eval "$(sous completion bash)"', "sous completion fish | source"] },
     parallel: true,
     runsWithoutConfig: true,
-    handle: (rawInput, ctx) => completionScript((rawInput as { shell: CompletionShell }).shell, ctx.engine.app.name),
+    handle: (rawInput, ctx) => {
+        const script = completionScript((rawInput as { shell: CompletionShell }).shell, ctx.engine.app.name);
+
+        return new IntentOutputs(new IntentOutput({ result: new TextBlock(script, { verbatim: true }), data: { script } }));
+    },
 };
 
 /** The hidden `sous __complete <words...>`, which the scripts call: one word per line. */
@@ -124,6 +128,8 @@ export const completeIntent: IntentDefinition = {
         const globals = globalSpecs(ctx.entities.list("cli-global-argument")).filter((spec) => !spec.hidden);
         const words = completeWords(tree, (rawInput as { words?: string[] }).words ?? [""], globals.map((spec) => spec.name));
 
-        return words.length > 0 ? `${words.join("\n")}\n` : "";
+        const text = words.length > 0 ? `${words.join("\n")}\n` : "";
+
+        return new IntentOutputs(new IntentOutput({ result: new TextBlock(text, { verbatim: true }), data: { words } }));
     },
 };

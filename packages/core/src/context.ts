@@ -5,6 +5,7 @@ import type {
     EngineHandle,
     Environment,
     EventPayload,
+    IntentOutputs,
     JsonObject,
     Prompter,
     ProjectInfo,
@@ -71,7 +72,7 @@ export interface CallHost {
     readonly project: ProjectInfo | undefined;
     readonly env: Environment;
     latestConfig(): BuiltConfigImpl;
-    run(intent: string, input: unknown, call: CallState): Promise<unknown>;
+    run(intent: string, input: unknown, call: CallState): Promise<IntentOutputs>;
     emitCustom(name: string, payload: unknown, call: CallState): Promise<unknown>;
     /** Says the config must be rebuilt before the next chain (for calls outside a chain). */
     markConfigChanged(): void;

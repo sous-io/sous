@@ -1,4 +1,4 @@
-import { type InputError, isSousError, isSousErrorOfKind } from "@sous-io/plugin-api";
+import { type InputError, isSousError, isSousErrorOfKind, SousError } from "@sous-io/plugin-api";
 import type { Command } from "./command-tree.js";
 import type { CliErrorView } from "./types.js";
 
@@ -25,6 +25,31 @@ export function describeError(error: unknown, options: { debug?: boolean; comman
     const details = options.debug && error instanceof Error && error.stack ? stackLines(error.stack) : [];
 
     return { summary: error instanceof Error ? error.message : String(error), details, exitCode: 1 };
+}
+
+/**
+ * The error to hand the reporter: the error itself, except an input error, which names the flags
+ * and arguments of the command the input was for, not the input's field names. The cause chain is kept.
+ */
+export function errorForDisplay(error: unknown, command?: Command): Error {
+    if (!(error instanceof Error)) {
+        return new Error(String(error));
+    }
+
+    if (command && isSousErrorOfKind(error, "input")) {
+        const input = error as InputError;
+        const copy = new SousError(input.message, {
+            details: inputDetails(input, command),
+            exitCode: input.exitCode,
+            ...(input.cause === undefined ? {} : { cause: input.cause }),
+        });
+
+        copy.stack = input.stack;
+
+        return copy;
+    }
+
+    return error;
 }
 
 /**

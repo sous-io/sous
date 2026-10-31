@@ -187,7 +187,7 @@ describe("headless runs and transcripts", () => {
         const root = tmp();
         const fake = fakeClaude(root);
         const { engine } = await engineFor(root, { tools: { claude: { command: process.execPath, headless: { args: [fake.file] } } } });
-        const { run } = (await engine.submit({ intent: "harness.run-headless", input: { prompt: "say hi", model: "sonnet" } })) as RunHeadlessResult;
+        const { run } = (await engine.submit({ intent: "harness.run-headless", input: { prompt: "say hi", model: "sonnet" } })).toPlain() as unknown as RunHeadlessResult;
 
         expect(calls(fake.log)[0]).toEqual({
             args: ["-p", "--output-format", "stream-json", "--verbose", "--model", "sonnet"],
@@ -200,7 +200,7 @@ describe("headless runs and transcripts", () => {
         const root = tmp();
         const fake = fakeClaude(root);
         const { engine } = await engineFor(root, { tools: { claude: { command: process.execPath, headless: { args: [fake.file] } } } });
-        const { transcript } = (await engine.submit({ intent: "harness.run-headless", input: { prompt: "x", transcript: true } })) as RunHeadlessResult;
+        const { transcript } = (await engine.submit({ intent: "harness.run-headless", input: { prompt: "x", transcript: true } })).toPlain() as unknown as RunHeadlessResult;
 
         expect(transcript?.harness).toBe("claude");
         expect(transcript?.entries).toEqual([
@@ -216,7 +216,7 @@ describe("headless runs and transcripts", () => {
         const root = tmp();
         const fake = fakeClaude(root, 3);
         const { engine } = await engineFor(root, { tools: { claude: { command: process.execPath, headless: { args: [fake.file] } } } });
-        const { run } = (await engine.submit({ intent: "harness.run-headless", input: { prompt: "x" } })) as RunHeadlessResult;
+        const { run } = (await engine.submit({ intent: "harness.run-headless", input: { prompt: "x" } })).toPlain() as unknown as RunHeadlessResult;
 
         expect(run.exitCode).toBe(3);
     });

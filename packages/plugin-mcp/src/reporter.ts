@@ -1,4 +1,4 @@
-import { BaseReporter, type LogLevel, type ProgressEvent, type ReportDetails, ReportEntryStyle } from "@sous-io/plugin-api";
+import { BaseReporter, errorChain, type LogLevel, messageText, Payload, type ProgressEvent, type ReportDetails, ReportEntryStyle, type ReportMessage } from "@sous-io/plugin-api";
 import type { ServerNotification } from "@modelcontextprotocol/sdk/types.js";
 
 /** What {@link McpReporter} sends through: one client, in the context of one tool call. */
@@ -16,7 +16,10 @@ export interface McpReporterOptions {
 /**
  * A chain's output as MCP log messages. The eight sous levels are the eight MCP levels, so each
  * message keeps its level. A message with details or a style sends them as data next to the plain
- * `message`, so a client that ignores styles still reads it. Progress goes out as progress
+ * `message`, so a client that ignores styles still reads it. An `Error` sends its cause chain as the
+ * message text and as `errors` (`{ name, message }` per error, outermost first); a payload sends its
+ * text as `message` and its `toPlain()` fields. A command's result (`ReportEntryStyle.Result`) is not
+ * sent: the tool call returns it. Progress goes out as progress
  * notifications when the client gave a progress token, and as `debug` messages otherwise. The banner
  * is dropped.
  *
@@ -46,13 +49,15 @@ export class McpReporter extends BaseReporter {
         super.progress(event, level);
     }
 
-    protected write(level: LogLevel, message: string, details: ReportDetails | undefined, style: ReportEntryStyle): void {
-        if (style === ReportEntryStyle.Banner) {
+    protected write(level: LogLevel, message: ReportMessage, details: ReportDetails | undefined, style: ReportEntryStyle): void {
+        if (style === ReportEntryStyle.Banner || style === ReportEntryStyle.Result) {
             return;
         }
 
+        const text = messageText(message);
+
         if (style === ReportEntryStyle.Progress) {
-            this.sendProgress((details as ProgressEvent | undefined) ?? { label: message });
+            this.sendProgress((details as ProgressEvent | undefined) ?? { label: text });
 
             return;
         }
@@ -62,7 +67,7 @@ export class McpReporter extends BaseReporter {
             params: {
                 level,
                 logger: this.options.logger ?? "sous",
-                data: details === undefined && style === ReportEntryStyle.Plain ? message : { message, style, ...details },
+                data: dataFor(text, message, details, style),
             },
         });
     }
@@ -94,4 +99,17 @@ export class McpReporter extends BaseReporter {
         // A client that went away cannot hear it; reporting never fails the chain.
         this.options.send(notification).catch(() => {});
     }
+}
+
+/** What a log message carries: the text alone when nothing more is known, else the text, style and facts. */
+function dataFor(text: string, message: ReportMessage, details: ReportDetails | undefined, style: ReportEntryStyle): string | Record<string, unknown> {
+    if (message instanceof Error) {
+        return { message: text, style, ...details, errors: errorChain(message).map((error) => ({ name: error.name, message: error.message })) };
+    }
+
+    if (Payload.is(message)) {
+        return { message: text, style, ...details, ...message.toPlain() };
+    }
+
+    return details === undefined && style === ReportEntryStyle.Plain ? text : { message: text, style, ...details };
 }

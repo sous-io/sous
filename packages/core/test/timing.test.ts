@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { BufferedReporter, TIMING_CATEGORIES } from "@sous-io/plugin-api";
 import { createEngine, DEFAULT_BUDGETS } from "../src/index.js";
 import { Timer } from "../src/timing/timer.js";
-import { contributorsPlugin, keysPlugin, makeEngine, manualClock, plugin } from "./helpers.js";
+import { contributorsPlugin, keysPlugin, makeEngine, manualClock, nothing, plugin, valued } from "./helpers.js";
 
 describe("timing and budgets", () => {
     /**
@@ -92,8 +92,8 @@ describe("timing and budgets", () => {
                     { id: "slow", contribute: () => clock.advance(500) },
                 ]),
                 plugin("q", (sous) => {
-                    sous.intents.add({ intent: "slow.thing", handle: () => clock.advance(10) });
-                    sous.intents.add({ intent: "fast.thing", handle: () => clock.advance(10) });
+                    sous.intents.add({ intent: "slow.thing", handle: () => (clock.advance(10), nothing()) });
+                    sous.intents.add({ intent: "fast.thing", handle: () => (clock.advance(10), nothing()) });
                     sous.services.add("q.svc", () => ({ work: () => clock.advance(99_999), other: () => clock.advance(99_999) }));
                 }),
             ],
@@ -126,7 +126,7 @@ describe("timing and budgets", () => {
             keysPlugin("x"),
             plugin("p", (sous) => {
                 sous.config.contribute({ id: "c", contribute: (config) => config.atPath("x").set(1) });
-                sous.intents.add({ intent: "p.go", handle: (_input, ctx) => ctx.services.get("p.svc") });
+                sous.intents.add({ intent: "p.go", handle: (_input, ctx) => valued(ctx.services.get("p.svc")) });
                 sous.on("p.go.before", () => {});
                 sous.services.add("p.svc", () => 1);
             }),

@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createEngine } from "@sous-io/core";
-import { definePlugin, jsonSchema, type PluginDefinition, type ProjectInfo } from "@sous-io/plugin-api";
+import { DataValue, definePlugin, type IntentOutputs, jsonSchema, type PluginDefinition, type ProjectInfo, Table, TextBlock, Tree } from "@sous-io/plugin-api";
 import { hostPlugin } from "@sous-io/plugin-host";
 import { variablesPlugin } from "@sous-io/plugin-variables";
 import { readdirSync, readFileSync } from "node:fs";
@@ -77,7 +77,16 @@ async function run(intent: string, input: Record<string, unknown> = {}, project:
 
     await engine.buildConfig();
 
-    return engine.handle.submit({ intent, input } as never) as Promise<any>;
+    return ((await engine.handle.submit({ intent, input } as never)) as IntentOutputs).toPlain() as any;
+}
+
+/** Runs an intent and gives its outputs, as a front end gets them. */
+async function outputsOf(intent: string, input: Record<string, unknown> = {}, project: ProjectInfo = EMPTY_PROJECT, extra: PluginDefinition[] = []): Promise<IntentOutputs> {
+    const engine = createEngine({ builtIns: [inspectPlugin, demo, ...extra], env: {}, project });
+
+    await engine.buildConfig();
+
+    return (await engine.handle.submit({ intent, input } as never)) as IntentOutputs;
 }
 
 describe("config.show", () => {
@@ -140,14 +149,25 @@ describe("config.show", () => {
 });
 
 describe("config.get", () => {
-    /** A path gives its value; a missing path says so. */
-    it("should get a value and report a missing one", async () => {
+    /** A path gives its value; a path with no value is an error. */
+    it("should get a value and fail on a missing one", async () => {
         const found = await run("config.get", { path: "demo.list[1]" });
-        const missing = await run("config.get", { path: "demo.nope" });
 
         expect(found).toMatchObject({ exists: true, value: 2 });
-        expect(missing.exists).toBe(false);
-        expect(missing.value).toBeUndefined();
+        await expect(run("config.get", { path: "demo.nope" })).rejects.toThrow(/No value at config path 'demo.nope'/);
+    });
+
+    /** A scalar is the bare value for scripts; an object is data; --layers is a table then the result. */
+    it("should show a scalar verbatim, an object as data and layers as a table", async () => {
+        const scalar = (await outputsOf("config.get", { path: "demo.count" })).last()!;
+        const object = (await outputsOf("config.get", { path: "demo" })).last()!;
+        const layers = (await outputsOf("config.get", { path: "demo.count", layers: true })).toArray();
+
+        expect(scalar.result).toBeInstanceOf(TextBlock);
+        expect(scalar.result).toMatchObject({ text: "2", verbatim: true });
+        expect(object.result).toBeInstanceOf(DataValue);
+        expect(layers[0]!.result).toBeInstanceOf(Table);
+        expect(layers[1]!.result!.toText()).toContain("settled after");
     });
 
     /** A secret's value is hidden, alone or inside an object. */
@@ -253,9 +273,9 @@ describe("plugins.show", () => {
         const all = await run("plugins.show");
         const one = await run("plugins.show", { name: "demo" });
 
-        expect(all.map((p: any) => p.name)).toEqual(expect.arrayContaining(["demo", "@sous-io/plugin-inspect"]));
-        expect(one).toHaveLength(1);
-        expect(one[0].registrations).toContainEqual({ kind: "entity", name: "config-key: demo" });
+        expect(all.plugins.map((p: any) => p.name)).toEqual(expect.arrayContaining(["demo", "@sous-io/plugin-inspect"]));
+        expect(one.plugins).toHaveLength(1);
+        expect(one.plugins[0].registrations).toContainEqual({ kind: "entity", name: "config-key: demo" });
         await expect(run("plugins.show", { name: "nope" })).rejects.toThrow(/No plugin named/);
     });
 });
@@ -263,9 +283,9 @@ describe("plugins.show", () => {
 describe("timings.show", () => {
     /** Timings come slowest first and can be narrowed by category. */
     it("should list and filter timings", async () => {
-        const all = await run("timings.show");
-        const contributors = await run("timings.show", { category: "contributor" });
-        const over = await run("timings.show", { overBudget: true });
+        const all = (await run("timings.show")).timings;
+        const contributors = (await run("timings.show", { category: "contributor" })).timings;
+        const over = (await run("timings.show", { overBudget: true })).timings;
 
         expect(all.length).toBeGreaterThan(0);
         expect(contributors.every((e: any) => e.category === "contributor")).toBe(true);
@@ -310,5 +330,51 @@ describe("the secret policy", () => {
         expect(result.config.demo.apiToken).toBe(HIDDEN);
         expect(result.config.demo.tokenCount).toBe(3);
         expect(result.config.demo.useToken).toBe("true");
+    });
+});
+
+describe("outputs", () => {
+    /** config show prints the config as data, and --layers a tree then the pass count. */
+    it("should show the config as data and its layers as a tree", async () => {
+        const plain = (await outputsOf("config.show")).toArray();
+        const layered = (await outputsOf("config.show", { layers: true })).toArray();
+
+        expect(plain).toHaveLength(1);
+        expect(plain[0]!.result).toBeInstanceOf(DataValue);
+        expect(layered[0]!.result).toBeInstanceOf(Tree);
+        expect(layered[1]!.result!.toText()).toMatch(/^result: settled after \d+ pass/);
+    });
+
+    /** A valid config gives a titled summary; one with problems ends with exit code 1 (not an exception). */
+    it("should end config validate with exit code 1 when the config has problems", async () => {
+        const good = await outputsOf("config.validate");
+
+        expect(good.first()?.title).toBe("Config is valid");
+        expect(good.exitCode).toBeUndefined();
+
+        const vars = definePlugin({
+            name: "vars",
+            version: "1.0.0",
+            description: "Sets a bad variable.",
+            dependsOn: {},
+            register(sous) {
+                sous.config.contribute({ id: "vars/main", contribute: (config) => void config.atPath("_vars").merge({ thing: "${bogus}" }) });
+            },
+        });
+        const bad = await outputsOf("config.validate", {}, undefined, [hostPlugin, variablesPlugin, vars]);
+
+        expect(bad.exitCode).toBe(1);
+        expect(bad.first()?.title).toMatch(/^The config has \d+ problems?$/);
+        expect(bad.toPlain()).toMatchObject({ ok: false });
+    });
+
+    /** plugins show has one titled output per plugin; timings show is a table slowest first. */
+    it("should title each plugin and show timings as a table", async () => {
+        const plugins = await outputsOf("plugins.show", { name: "demo" });
+        const timings = await outputsOf("timings.show");
+
+        expect(plugins.toArray().map((output) => output.title)).toEqual(["demo 1.0.0 (built in)"]);
+        expect(timings.last()!.result).toBeInstanceOf(Table);
+        expect((timings.last()!.result as Table).title).toBe("Timings");
     });
 });

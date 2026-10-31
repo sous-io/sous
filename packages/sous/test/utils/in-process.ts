@@ -5,24 +5,24 @@
  *
  * ```ts
  * const run = await runInProcess(projectRoot, { SOUS_HOME: sousHome }, "subscription.add", { ref: "workflow/x" }, (message) => message.startsWith("Subscribe"));
- * // run.printed holds every line the chain reported; run.error the error it failed with, if any
+ * // run.printed holds every message the chain reported, then the text of the intent's outputs; run.error the error it failed with, if any
  * ```
  */
 
 import { createEngine } from "@sous-io/core";
-import { createReporter, ReportEntryStyle, type Prompter, type Reporter } from "@sous-io/plugin-api";
+import { createReporter, type IntentOutputs, messageText, ReportEntryStyle, type Prompter, type Reporter } from "@sous-io/plugin-api";
 import { BUILT_IN_PLUGINS } from "../../src/built-ins.js";
 import { sousVersion } from "../../src/main.js";
 import { findProject } from "../../src/project.js";
 
 /** What one in-process run did. */
 export interface InProcessRun {
-    /** Every message the chain reported, in order. */
+    /** Every message the chain reported, in order, then the text of the outputs the intent returned. */
     readonly printed: string[];
     /** Every question it asked, in order. */
     readonly asked: string[];
     /** The intent's result, when it succeeded. */
-    readonly result?: unknown;
+    readonly result?: IntentOutputs;
     /** The error it failed with, when it failed. */
     readonly error?: Error;
 }
@@ -42,7 +42,7 @@ export async function runInProcess(
     const asked: string[] = [];
     const reporter: Reporter = createReporter((_level, message, _details, style) => {
         if (style !== ReportEntryStyle.Progress) {
-            printed.push(message);
+            printed.push(messageText(message));
         }
     });
     const prompter: Prompter = {
@@ -69,6 +69,9 @@ export async function runInProcess(
 
     try {
         const result = await engine.submit({ intent, input }, { reporter, prompter, cwd: projectRoot });
+
+        // A command's result is returned, not reported; its text is what the command shows, so it counts as printed.
+        printed.push(result.toText());
 
         return { printed, asked, result };
     } catch (error) {

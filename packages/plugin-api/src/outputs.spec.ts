@@ -61,6 +61,9 @@ describe("IntentOutputs", () => {
         expect(IntentOutputs.of({ built: 3 }).toPlain()).toEqual({ built: 3 });
         expect(IntentOutputs.is(outputs)).toBe(true);
         expect(IntentOutputs.is({ toPlain: () => ({}) })).toBe(false);
+        expect(new IntentOutputs([first, last]).withData({ all: true }).toPlain()).toEqual({ all: true });
+        expect(new IntentOutputs([first, last]).withData({ all: true }).last()?.summary).toBe("Downloaded.");
+        expect(new IntentOutputs().withData({ all: true }).length).toBe(1);
     });
 });
 

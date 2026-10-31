@@ -38,7 +38,7 @@ describe("config.set", () => {
         const file = project.write("sous.config.jsonc", '// my config\n{\n    "name": "x", // the name\n    "compilation": {}\n}\n');
         const engine = await engineFor();
 
-        const result = await engine.handle.submit({ intent: "config.set", input: { path: "compilation.includeSourceComments", value: "false" } });
+        const result = (await engine.handle.submit({ intent: "config.set", input: { path: "compilation.includeSourceComments", value: "false" } })).toPlain();
 
         expect(result).toEqual({ file, path: "compilation.includeSourceComments", previous: undefined, value: false, changed: true, dryRun: false });
 
@@ -56,10 +56,12 @@ describe("config.set", () => {
         project.write("sous.config.json", "{}");
         const engine = await engineFor();
 
-        const result = await engine.handle.submit({
-            intent: "config.set",
-            input: { path: 'subscriptions."workflow/x".enabled', value: "false", file: "610-mac.jsonc" },
-        });
+        const result = (
+            await engine.handle.submit({
+                intent: "config.set",
+                input: { path: 'subscriptions."workflow/x".enabled', value: "false", file: "610-mac.jsonc" },
+            })
+        ).toPlain();
 
         expect(result).toMatchObject({ file: path.join(project.confDir, "610-mac.jsonc"), changed: true });
         expect(JSON.parse(fs.readFileSync(path.join(project.confDir, "610-mac.jsonc"), "utf8"))).toEqual({
@@ -72,9 +74,9 @@ describe("config.set", () => {
         const file = project.write("sous.config.json", '{ "name": "x", "version": 1 }\n');
         const engine = await engineFor();
 
-        expect(await engine.handle.submit({ intent: "config.set", input: { path: "name", unset: true } })).toMatchObject({ previous: "x", value: undefined, changed: true });
+        expect((await engine.handle.submit({ intent: "config.set", input: { path: "name", unset: true } })).toPlain()).toMatchObject({ previous: "x", value: undefined, changed: true });
         expect(JSON.parse(fs.readFileSync(file, "utf8"))).toEqual({ version: 1 });
-        expect(await engine.handle.submit({ intent: "config.set", input: { path: "name", unset: true } })).toMatchObject({ changed: false });
+        expect((await engine.handle.submit({ intent: "config.set", input: { path: "name", unset: true } })).toPlain()).toMatchObject({ changed: false });
     });
 
     /** A dry run writes nothing. */
@@ -82,8 +84,10 @@ describe("config.set", () => {
         const file = project.write("sous.config.yaml", "name: x\n");
         const engine = await engineFor();
 
-        const result = await engine.handle.submit({ intent: "config.set", input: { path: "name", value: "y", dryRun: true } });
+        const outputs = await engine.handle.submit({ intent: "config.set", input: { path: "name", value: "y", dryRun: true } });
+        const result = outputs.toPlain();
 
+        expect(outputs.last()?.summary).toBe(`Would change ${file}: name set to "y".`);
         expect(result).toMatchObject({ previous: "x", value: "y", changed: true, dryRun: true });
         expect(fs.readFileSync(file, "utf8")).toBe("name: x\n");
     });
@@ -102,7 +106,7 @@ describe("config.set", () => {
     it("should create sous.config.jsonc when there is no main config", async () => {
         const engine = await engineFor();
 
-        const result = await engine.handle.submit({ intent: "config.set", input: { path: "name", value: "new" } });
+        const result = (await engine.handle.submit({ intent: "config.set", input: { path: "name", value: "new" } })).toPlain();
 
         expect(result).toMatchObject({ file: path.join(project.sousDir, "sous.config.jsonc"), changed: true });
         expect((await engine.buildConfig()).get("name")).toBe("new");

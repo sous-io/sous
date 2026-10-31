@@ -6,6 +6,7 @@
 
 import {
     BufferedReporter,
+    IntentOutputs,
     NotFoundError,
     nonInteractivePrompter,
     type BuiltConfig,
@@ -278,7 +279,7 @@ export function context(config: BuiltConfig, options: { prompter?: Prompter; int
             buildConfig: async () => options.next ?? config,
         } as unknown as Context["engine"],
         options: () => undefined,
-        run: vi.fn(async (intent: string) => ({ ran: intent })),
+        run: vi.fn(async (intent: string) => IntentOutputs.of({ ran: intent })),
         emit: vi.fn(async () => ({}) as never),
         configChanged: vi.fn(),
         cwd: "/project",

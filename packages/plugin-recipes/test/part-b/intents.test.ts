@@ -58,7 +58,7 @@ afterEach(() => cleanTemp());
 describe("lock.rebuild", () => {
     it("should resolve every subscription to the newest version in range, write the lockfile and download what is missing", async () => {
         const { engine } = await startEngine({ root, home, data: config({ "workflow/alpha": { range: "^1" } }), hosts: [fakeHost([repo], calls)] });
-        const result = await engine.handle.submit({ intent: "lock.rebuild", input: {} });
+        const result = (await engine.handle.submit({ intent: "lock.rebuild", input: {} })).toPlain();
 
         expect(result.diff.added).toEqual([{ key: "workflow/alpha", to: "1.2.0" }]);
         expect(result.restored.restored).toEqual(["workflow/alpha"]);
@@ -68,7 +68,7 @@ describe("lock.rebuild", () => {
 
     it("should write nothing on a dry run", async () => {
         const { engine } = await startEngine({ root, home, data: config({ "workflow/alpha": {} }), hosts: [fakeHost([repo], calls)] });
-        const result = await engine.handle.submit({ intent: "lock.rebuild", input: { dryRun: true } });
+        const result = (await engine.handle.submit({ intent: "lock.rebuild", input: { dryRun: true } })).toPlain();
 
         expect(result.dryRun).toBe(true);
         expect(result.lockfile.recipes["workflow/alpha"].version).toBe("1.2.0");
@@ -118,7 +118,7 @@ describe("lock.show", () => {
         );
 
         const { engine } = await startEngine({ root, home, data: config({ "workflow/alpha": {}, "workflow/beta": { enabled: false } }), hosts: [fakeHost([repo], calls)] });
-        const result = await engine.handle.submit({ intent: "lock.show", input: {} });
+        const result = (await engine.handle.submit({ intent: "lock.show", input: {} })).toPlain();
 
         expect(result.path).toBe(path.join(root, ".sous", "sous.lock.json"));
         expect(result.recipes.map((recipe) => [recipe.key, recipe.active, recipe.skipped?.reason])).toEqual([
@@ -134,7 +134,7 @@ describe("repo.gc", () => {
 
         await engine.handle.submit({ intent: "lock.rebuild", input: {} });
 
-        const report = await engine.handle.submit({ intent: "repo.gc", input: { maxBytes: 0, dryRun: true } });
+        const report = (await engine.handle.submit({ intent: "repo.gc", input: { maxBytes: 0, dryRun: true } })).toPlain();
 
         expect(report.dryRun).toBe(true);
         expect(report.kept.map((entry) => `${entry.namespace}/${entry.name}`)).toContain("workflow/alpha");
@@ -156,7 +156,7 @@ describe("repo.link and repo.unlink", () => {
     it("should link a trusted repository to an existing checkout, record it in the project's links map and keep it out of git", async () => {
         const dir = checkout();
         const { engine } = await startEngine({ root, home, data: config({ "workflow/alpha": {} }), hosts: [fakeHost([repo], calls)] });
-        const result = await engine.handle.submit({ intent: "repo.link", input: { repo: "acme", path: dir } });
+        const result = (await engine.handle.submit({ intent: "repo.link", input: { repo: "acme", path: dir } })).toPlain();
 
         expect(result).toMatchObject({ repo: "acme", path: dir, origin: "path", scope: "project", cloned: false, trusted: [], dryRun: false });
         expect(JSON.parse(fs.readFileSync(path.join(root, ".sous", "sous.links.json"), "utf8")).links.acme.path).toBe(dir);
@@ -167,7 +167,7 @@ describe("repo.link and repo.unlink", () => {
     it("should write nothing on a dry run", async () => {
         const dir = checkout();
         const { engine } = await startEngine({ root, home, data: config({ "workflow/alpha": {} }), hosts: [fakeHost([repo], calls)] });
-        const result = await engine.handle.submit({ intent: "repo.link", input: { repo: "acme", path: dir, dryRun: true } });
+        const result = (await engine.handle.submit({ intent: "repo.link", input: { repo: "acme", path: dir, dryRun: true } })).toPlain();
 
         expect(result.dryRun).toBe(true);
         expect(fs.existsSync(path.join(root, ".sous", "sous.links.json"))).toBe(false);
@@ -191,7 +191,7 @@ describe("repo.link and repo.unlink", () => {
 
         await engine.handle.submit({ intent: "repo.link", input: { repo: "acme", path: dir } });
 
-        const result = await engine.handle.submit({ intent: "repo.unlink", input: { repo: "acme", noBuild: true } });
+        const result = (await engine.handle.submit({ intent: "repo.unlink", input: { repo: "acme", noBuild: true } })).toPlain();
 
         expect(result).toMatchObject({ repo: "acme", path: dir, scope: "project", removedCheckout: false, dryRun: false });
         expect(result.followUps).toEqual([{ intent: "build", skipped: "--no-build" }]);

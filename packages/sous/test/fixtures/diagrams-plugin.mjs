@@ -1,6 +1,6 @@
 // A plugin as an outside author writes one: plain JavaScript, zod for the schema, and only
 // definePlugin from @sous-io/plugin-api.
-import { definePlugin } from "@sous-io/plugin-api";
+import { definePlugin, IntentOutputs } from "@sous-io/plugin-api";
 import { z } from "zod";
 
 export default definePlugin({
@@ -20,7 +20,7 @@ export default definePlugin({
                 dryRun: z.boolean().default(false).describe("Print the plan and change nothing"),
             }),
             cli: { positional: ["only"], aliases: [["render"]] },
-            handle: (input) => ({ rendered: input.only ? 1 : 3, scale: input.scale, dryRun: input.dryRun }),
+            handle: (input) => IntentOutputs.of({ rendered: input.only ? 1 : 3, scale: input.scale, dryRun: input.dryRun }),
         });
     },
 });

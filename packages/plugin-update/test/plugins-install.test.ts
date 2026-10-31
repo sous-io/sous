@@ -32,7 +32,7 @@ describe("plugins.install handler", () => {
      */
     it("should install through the project's manager", async () => {
         const { ctx, recorded, prompter } = recordingContext({ managers: [pnpm({ "sous-plugin-x": "^1.2.0" })], project: PROJECT });
-        const result = await handle({ plugins: ["sous-plugin-x@^1.0.0", "@s/y"], yes: true }, ctx);
+        const result = (await handle({ plugins: ["sous-plugin-x@^1.0.0", "@s/y"], yes: true }, ctx)).toPlain();
 
         expect(prompter.asked).toEqual([]);
         expect(recorded.commands).toEqual(["pnpm add -D -E -w sous-plugin-x@^1.0.0 @s/y"]);
@@ -63,7 +63,7 @@ describe("plugins.install handler", () => {
     /** A dry run plans the command and runs and asks nothing. */
     it("should only plan under dryRun", async () => {
         const { ctx, recorded } = recordingContext({ managers: [pnpm()], project: PROJECT });
-        const result = await handle({ plugins: ["p@1"], dryRun: true }, ctx);
+        const result = (await handle({ plugins: ["p@1"], dryRun: true }, ctx)).toPlain();
 
         expect(recorded.commands).toEqual([]);
         expect(result).toMatchObject({ dryRun: true, declined: false, command: { command: "pnpm" }, installed: [{ name: "p", range: "1" }] });
@@ -72,7 +72,7 @@ describe("plugins.install handler", () => {
     /** Without yes it asks; a no installs nothing, and no way to ask names --yes. */
     it("should ask unless yes, and name the flag when it cannot", async () => {
         const declined = recordingContext({ managers: [pnpm()], project: PROJECT, answers: [false] });
-        const result = await handle({ plugins: ["p"] }, declined.ctx);
+        const result = (await handle({ plugins: ["p"] }, declined.ctx)).toPlain();
 
         expect(result).toMatchObject({ declined: true, installed: [] });
         expect(declined.recorded.commands).toEqual([]);

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import "@sous-io/plugin-memories/types";
 import path from "node:path";
-import { ConfigError, type Context, LogLevel, NotFoundError, SousError } from "@sous-io/plugin-api";
+import { commandVariables, ConfigError, type Context, IntentOutput, IntentOutputs, LogLevel, NotFoundError, ReportEntryStyle, SousError } from "@sous-io/plugin-api";
 import type { CompileResult, CompilerPruneResult, WrittenFile } from "@sous-io/plugin-compiler/types";
 import type { SkippedRecipe } from "@sous-io/plugin-recipes/types";
 import { projectLabel } from "./pid.js";
@@ -29,7 +29,31 @@ import type {
  * A partial rebuild (`changedFiles`, from watch mode) prepares nothing: the config did not change,
  * so neither did the recipes it needs.
  */
-export async function build(input: BuildInput, ctx: Context): Promise<BuildResult> {
+export async function build(input: BuildInput, ctx: Context): Promise<IntentOutputs<BuildResult>> {
+    const result = await runBuild(input, ctx);
+
+    return buildOutputs(input, ctx, result);
+}
+
+/**
+ * What `build` and `compile` return: the "Command Variables" block (with the flags that change the
+ * run), then the result as data. A build with errors ends with exit code 1.
+ */
+function buildOutputs<T extends { readonly ok: boolean }>(input: BuildInput | CompileCommandInput, ctx: Context, result: T): IntentOutputs<T> {
+    const flags: Record<string, unknown> = {};
+    const given = input as Record<string, unknown>;
+
+    for (const [label, key] of [["Rebuild", "rebuild"], ["Dry Run", "dryRun"], ["No Compile", "noCompile"], ["No Prune", "noPrune"]] as const) {
+        if (given[key] === true) {
+            flags[label] = true;
+        }
+    }
+
+    return new IntentOutputs<T>([commandVariables(ctx, flags), new IntentOutput<T>({ data: result })], result.ok ? {} : { exitCode: 1 }) as IntentOutputs<T>;
+}
+
+/** Runs a build and gives its result. */
+async function runBuild(input: BuildInput, ctx: Context): Promise<BuildResult> {
     const dryRun = input.dryRun === true;
     const partial = (input.changedFiles?.length ?? 0) > 0 && input.rebuild !== true;
 
@@ -50,7 +74,7 @@ export async function build(input: BuildInput, ctx: Context): Promise<BuildResul
     } else {
         reportLinkedRepos(ctx.services.get("recipes.links").all(), ctx.reporter, LogLevel.Warning);
 
-        prepared = await ctx.run("build.prepare", { dryRun });
+        prepared = (await ctx.run("build.prepare", { dryRun })).toPlain();
         reportPrepared(prepared, ctx.reporter);
 
         // The lockfile now pins other recipes: rebuild the config, so this build compiles them.
@@ -77,16 +101,18 @@ export async function build(input: BuildInput, ctx: Context): Promise<BuildResul
     if (!input.noCompile) {
         // --rebuild starts from a clean slate: everything written before is removed first.
         if (input.rebuild && !dryRun) {
-            cleared = await ctx.run("compiler.prune", { all: true });
+            cleared = (await ctx.run("compiler.prune", { all: true })).toPlain();
         }
 
         runtimeContext = await writeRuntimeContext(ctx, dryRun);
-        compiled = await ctx.run("compiler.compile", {
-            ...(input.strict ? { strict: true } : {}),
-            ...(input.rebuild ? { rebuild: true } : {}),
-            ...(dryRun ? { dryRun: true } : {}),
-            ...(partial ? { changedFiles: input.changedFiles } : {}),
-        });
+        compiled = (
+            await ctx.run("compiler.compile", {
+                ...(input.strict ? { strict: true } : {}),
+                ...(input.rebuild ? { rebuild: true } : {}),
+                ...(dryRun ? { dryRun: true } : {}),
+                ...(partial ? { changedFiles: input.changedFiles } : {}),
+            })
+        ).toPlain();
         ok = compiled.ok;
 
         if (!partial) {
@@ -97,7 +123,7 @@ export async function build(input: BuildInput, ctx: Context): Promise<BuildResul
     let pruned: CompilerPruneResult | undefined;
 
     if (!input.noPrune && ok) {
-        pruned = await ctx.run("compiler.prune", { dryRun });
+        pruned = (await ctx.run("compiler.prune", { dryRun })).toPlain();
     }
 
     reportSkipped(ctx, skipped, skippedFiles, [...(cleared?.removed ?? []), ...(pruned?.removed ?? [])], dryRun);
@@ -148,7 +174,12 @@ export function nestedBuildHeading(ctx: Pick<Context, "chain">): string | undefi
  * targets are compiled too, since they are part of the config; what this leaves out is seeding,
  * locking, restoring and checking upstream.
  */
-export async function compile(input: CompileCommandInput, ctx: Context): Promise<CompileCommandResult> {
+export async function compile(input: CompileCommandInput, ctx: Context): Promise<IntentOutputs<CompileCommandResult>> {
+    return buildOutputs(input, ctx, await runCompile(input, ctx));
+}
+
+/** Compiles every target and gives the result. */
+async function runCompile(input: CompileCommandInput, ctx: Context): Promise<CompileCommandResult> {
     const dryRun = input.dryRun === true;
     const targets = ctx.config.get("compilation")?.targets ?? [];
 
@@ -164,12 +195,15 @@ export async function compile(input: CompileCommandInput, ctx: Context): Promise
 
     const runtimeContext = await writeRuntimeContext(ctx, dryRun);
     const partial = (input.changedFiles?.length ?? 0) > 0 && input.rebuild !== true;
-    const compiled = await ctx.run("compiler.compile", {
-        ...(input.strict ? { strict: true } : {}),
-        ...(input.rebuild ? { rebuild: true } : {}),
-        ...(dryRun ? { dryRun: true } : {}),
-        ...(partial ? { changedFiles: input.changedFiles } : {}),
-    });
+    const compiled = (
+        await ctx.run("compiler.compile", {
+            ...(input.strict ? { strict: true } : {}),
+            ...(input.rebuild ? { rebuild: true } : {}),
+            ...(dryRun ? { dryRun: true } : {}),
+            ...(partial ? { changedFiles: input.changedFiles } : {}),
+        })
+    ).toPlain();
+
     if (!partial) {
         warnUnincludedMemories(ctx, compiled);
     }
@@ -220,11 +254,24 @@ function realPath(file: string): string {
  * the recipes the lockfile pins, so they are prepared first, or a recipe missing from the store
  * would have its outputs pruned as if it were gone.
  */
-export async function prune(input: PruneInput, ctx: Context): Promise<CompilerPruneResult> {
+export async function prune(input: PruneInput, ctx: Context): Promise<IntentOutputs<CompilerPruneResult>> {
     const dryRun = input.dryRun === true;
-    const result = await ctx.run("build", { noCompile: true, ...(dryRun ? { dryRun: true } : {}) });
+    const result = (await ctx.run("build", { noCompile: true, ...(dryRun ? { dryRun: true } : {}) })).toPlain();
 
-    return result.pruned ?? { removed: [], dirsRemoved: [], dryRun };
+    return removalOutputs(result.pruned ?? { removed: [], dirsRemoved: [], dryRun });
+}
+
+/**
+ * What `prune` and `clear` return: one sentence saying how much was (or would be) removed, with the
+ * result as data. Each file is reported as it is removed.
+ */
+function removalOutputs<T extends CompilerPruneResult>(result: T): IntentOutputs<T> {
+    const files = `${result.removed.length} ${result.removed.length === 1 ? "file" : "files"}`;
+    const directories = `${result.dirsRemoved.length} ${result.dirsRemoved.length === 1 ? "directory" : "directories"}`;
+    const what = result.dirsRemoved.length === 0 ? files : `${files} and ${directories}`;
+    const summary = result.removed.length === 0 && result.dirsRemoved.length === 0 ? "Nothing to remove." : `${result.dryRun ? "Would remove" : "Removed"} ${what}.`;
+
+    return new IntentOutputs<T>(new IntentOutput<T>({ summary, data: result })) as IntentOutputs<T>;
 }
 
 /**
@@ -232,7 +279,7 @@ export async function prune(input: PruneInput, ctx: Context): Promise<CompilerPr
  * time). The compiler removes them (`compiler.prune` with `all`), so linked checkouts and the
  * shared store stay protected.
  */
-export async function clear(input: ClearInput, ctx: Context): Promise<ClearResult> {
+export async function clear(input: ClearInput, ctx: Context): Promise<IntentOutputs<ClearResult>> {
     const dryRun = input.dryRun === true;
     const state = ctx.services.get("compiler.state");
     const stateFile = state.path();
@@ -251,15 +298,15 @@ export async function clear(input: ClearInput, ctx: Context): Promise<ClearResul
         });
 
         if (!confirmed) {
-            ctx.reporter.notice("Aborted.");
+            const aborted: ClearResult = { removed: [], dirsRemoved: [], dryRun, confirmed: false };
 
-            return { removed: [], dirsRemoved: [], dryRun, confirmed: false };
+            return new IntentOutputs<ClearResult>(new IntentOutput<ClearResult>({ summary: "Aborted.", data: aborted, style: ReportEntryStyle.Note }));
         }
     }
 
-    const result = await ctx.run("compiler.prune", { all: true, ...(dryRun ? { dryRun: true } : {}) });
+    const result = (await ctx.run("compiler.prune", { all: true, ...(dryRun ? { dryRun: true } : {}) })).toPlain();
 
-    return { ...result, confirmed: true };
+    return removalOutputs<ClearResult>({ ...result, confirmed: true });
 }
 
 /** The result of preparing nothing, for a partial rebuild. */

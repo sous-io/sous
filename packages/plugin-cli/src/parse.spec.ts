@@ -1,4 +1,4 @@
-import { jsonSchema, type IntentInfo } from "@sous-io/plugin-api";
+import { IntentOutputs, jsonSchema, type IntentInfo } from "@sous-io/plugin-api";
 import { describe, expect, it } from "vitest";
 import { CommandTree } from "./command-tree.js";
 import { globalSpecs } from "./globals.js";
@@ -7,7 +7,7 @@ import { BUILT_IN_GLOBAL_ARGUMENTS } from "./plugin.js";
 
 const info = (intent: string, input?: object, cli?: IntentInfo["definition"]["cli"]): IntentInfo => ({
     plugin: "p",
-    definition: { intent, handle: () => undefined, ...(input ? { input: jsonSchema(input as never) } : {}), ...(cli ? { cli } : {}) },
+    definition: { intent, handle: () => new IntentOutputs(), ...(input ? { input: jsonSchema(input as never) } : {}), ...(cli ? { cli } : {}) },
 });
 
 const tree = CommandTree.build(

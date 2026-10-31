@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { ConfigError, NonInteractiveError } from "@sous-io/plugin-api";
+import { ConfigError, NonInteractiveError, ReportEntryStyle, VariableSet } from "@sous-io/plugin-api";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { binEntryOf, handle, requestOf } from "../src/update.js";
 import { fakeManager, installedPackage, recordingContext } from "./helpers.js";
@@ -81,6 +81,30 @@ describe("binEntryOf()", () => {
 });
 
 describe("update handler", () => {
+    /** The outputs of a dry run should be the opening block, the plan per install with the command it would run, and the dry-run sentence. */
+    it("should show a dry run as a plan", async () => {
+        const { managers } = layout();
+        const { ctx } = recordingContext({ managers, registry: REGISTRY, ownRoot: "/src/sous" });
+        const outputs = await handle({ dryRun: true }, ctx);
+        const titles = outputs.toArray().map((output) => output.title);
+        const plan = outputs.toArray().find((output) => (output.result as VariableSet | undefined)?.title === "Project install");
+
+        expect(titles.slice(0, 1)).toEqual(["Command Variables"]);
+        expect(titles).toContain("Update plan");
+        expect(plan?.result?.toText()).toMatch(/Would run: /);
+        expect(outputs.last()?.style).toBe(ReportEntryStyle.DryRun);
+    });
+
+    /** A real update should end with a summary of each install. */
+    it("should end a real update with a summary", async () => {
+        const { managers } = layout();
+        const { ctx } = recordingContext({ managers, registry: REGISTRY, ownRoot: "/src/sous" });
+        const outputs = await handle({ yes: true, noBuild: true }, ctx);
+
+        expect(outputs.last()?.title).toBe("Summary");
+        expect(outputs.last()?.result?.toText()).toMatch(/Global install: updated to/);
+    });
+
     /**
      * A dry run should plan both installs, run nothing, ask nothing, and say that nothing was
      * installed.
@@ -88,7 +112,7 @@ describe("update handler", () => {
     it("should plan every install and run nothing under dryRun", async () => {
         const { managers } = layout();
         const { ctx, recorded } = recordingContext({ managers, registry: REGISTRY, ownRoot: "/src/sous" });
-        const result = await handle({ dryRun: true }, ctx);
+        const result = (await handle({ dryRun: true }, ctx)).toPlain();
 
         expect(result.outcomes.map((outcome) => [outcome.plan.scope, outcome.plan.target, outcome.result])).toEqual([
             ["global", "0.2.34", "planned"],
@@ -105,7 +129,7 @@ describe("update handler", () => {
     it("should run each install with yes and build the project afterwards", async () => {
         const { managers, location } = layout({ withConfig: true });
         const { ctx, recorded, prompter } = recordingContext({ managers, registry: REGISTRY, ownRoot: "/src/sous" });
-        const result = await handle({ yes: true }, ctx);
+        const result = (await handle({ yes: true }, ctx)).toPlain();
 
         expect(prompter.asked).toEqual([]);
         expect(recorded.commands).toEqual([
@@ -123,13 +147,13 @@ describe("update handler", () => {
     /** --no-build and a project without a config both skip the build, saying why. */
     it("should skip the build under noBuild and without a config", async () => {
         const first = layout({ withConfig: true });
-        const skipped = await handle({ yes: true, project: true, noBuild: true }, recordingContext({ managers: first.managers, registry: REGISTRY }).ctx);
+        const skipped = (await handle({ yes: true, project: true, noBuild: true }, recordingContext({ managers: first.managers, registry: REGISTRY }).ctx)).toPlain();
 
         expect(skipped.build).toEqual({ result: "skipped" });
 
         fs.rmSync(path.join(dir, ".sous"), { recursive: true });
 
-        const none = await handle({ yes: true, project: true }, recordingContext({ managers: first.managers, registry: REGISTRY }).ctx);
+        const none = (await handle({ yes: true, project: true }, recordingContext({ managers: first.managers, registry: REGISTRY }).ctx)).toPlain();
 
         expect(none.build).toEqual({ result: "no-config" });
     });
@@ -137,8 +161,8 @@ describe("update handler", () => {
     /** --global and --project each narrow the plans. */
     it("should narrow to the global or the project install", async () => {
         const { managers } = layout();
-        const global = await handle({ dryRun: true, global: true }, recordingContext({ managers, registry: REGISTRY }).ctx);
-        const project = await handle({ dryRun: true, project: true }, recordingContext({ managers, registry: REGISTRY }).ctx);
+        const global = (await handle({ dryRun: true, global: true }, recordingContext({ managers, registry: REGISTRY }).ctx)).toPlain();
+        const project = (await handle({ dryRun: true, project: true }, recordingContext({ managers, registry: REGISTRY }).ctx)).toPlain();
 
         expect(global.outcomes.map((outcome) => outcome.plan.scope)).toEqual(["global"]);
         expect(project.outcomes.map((outcome) => outcome.plan.scope)).toEqual(["project"]);
@@ -147,8 +171,8 @@ describe("update handler", () => {
     /** --major and --version choose the version, and --version may downgrade. */
     it("should honor major and version", async () => {
         const { managers } = layout();
-        const major = await handle({ dryRun: true, major: true }, recordingContext({ managers, registry: REGISTRY }).ctx);
-        const older = await handle({ dryRun: true, version: "0.2.18" }, recordingContext({ managers, registry: REGISTRY }).ctx);
+        const major = (await handle({ dryRun: true, major: true }, recordingContext({ managers, registry: REGISTRY }).ctx)).toPlain();
+        const older = (await handle({ dryRun: true, version: "0.2.18" }, recordingContext({ managers, registry: REGISTRY }).ctx)).toPlain();
 
         expect(major.outcomes.map((outcome) => outcome.plan.target)).toEqual(["1.0.0", "1.0.0"]);
         expect(older.outcomes.map((outcome) => [outcome.plan.direction, outcome.result])).toEqual([
@@ -161,7 +185,7 @@ describe("update handler", () => {
     it("should ask once per install and respect a no", async () => {
         const { managers } = layout();
         const { ctx, recorded, prompter } = recordingContext({ managers, registry: REGISTRY, answers: [false, true] });
-        const result = await handle({ noBuild: true }, ctx);
+        const result = (await handle({ noBuild: true }, ctx)).toPlain();
 
         expect(prompter.asked).toHaveLength(2);
         expect(prompter.asked[0]).toMatch(/Update the global install from 0\.2\.30 to 0\.2\.34\? \(1 of 2\)/);
@@ -212,7 +236,7 @@ describe("update handler", () => {
         process.chdir(dir);
 
         const { ctx } = recordingContext({ managers: [fakeManager({ id: "npm", detect: undefined })], registry: REGISTRY, ownRoot: dir });
-        const result = await handle({ yes: true }, ctx);
+        const result = (await handle({ yes: true }, ctx)).toPlain();
 
         expect(result.outcomes).toEqual([]);
         expect(result.registry).toMatch(/@sous-io%2fsous$/);
@@ -234,7 +258,7 @@ describe("update handler", () => {
             configError,
             project: { root: dir, sousDir: path.join(dir, ".sous"), configPath } as never,
         });
-        const result = await handle({ yes: true }, ctx);
+        const result = (await handle({ yes: true }, ctx)).toPlain();
 
         expect(result.configProblem).toEqual({ configPath, message: "The config is not valid (1 problem).\n  futureSetting: Not a known config key" });
     });

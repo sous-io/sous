@@ -6,9 +6,10 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { ConfigError, LogLevel, isSousError, isSousErrorOfKind, type Context } from "@sous-io/plugin-api";
-import type { IntentFollowUp, LinkScope, RepoUnlinkInput, RepoUnlinkResult, ResolvedLink, SubscriptionEntry, UnlinkPublishedReport } from "../../types.js";
+import { ConfigError, LogLevel, isSousError, isSousErrorOfKind, type Context, type IntentOutput } from "@sous-io/plugin-api";
+import type { LinkScope, RepoUnlinkInput, RepoUnlinkResult, ResolvedLink, SubscriptionEntry, UnlinkPublishedReport } from "../../types.js";
 import { PROJECT_REPOS_DIRNAME } from "../constants.js";
+import { blockOutput, dryRunOutput, finish, followUpOutputs, noteOutput, plainResult, sentence, underHeading, type RanFollowUp } from "../../part-a/outputs.js";
 import { effectiveRangeForHolders, findNewerInRange, NEWER_VERSION_CHECK_TIMEOUT_MS, withDeadline } from "../index-cache/freshness.js";
 import { trustedRepos } from "../lock/lock-service.js";
 import { plainSubscriptionKey } from "../lock/reachable.js";
@@ -41,7 +42,7 @@ export async function unlinkRepo(input: RepoUnlinkInput, ctx: Context, runtime: 
 
     const git = ctx.services.get("git.runner");
     const work = input.remove ? await unsavedWork(git, entry.path) : undefined;
-    const followUps: IntentFollowUp[] = [];
+    const followUps: RanFollowUp[] = [];
 
     if (dryRun) {
         const wouldDo = [`would unlink '${name}', which points at ${entry.path}`, input.remove ? "the checkout would be deleted" : "the checkout itself would be left where it is"];
@@ -51,7 +52,9 @@ export async function unlinkRepo(input: RepoUnlinkInput, ctx: Context, runtime: 
         }
 
         if (input.update) {
-            followUps.push({ intent: "subscription.update", result: await ctx.run("subscription.update", { ref: name, dryRun: true, noBuild: true }) });
+            const planned = await ctx.run("subscription.update", { ref: name, dryRun: true, noBuild: true });
+
+            followUps.push({ intent: "subscription.update", result: planned.toPlain(), outputs: planned });
         }
 
         return { repo: name, path: entry.path, scope, removedCheckout: false, dryRun, followUps, wouldDo };
@@ -69,7 +72,7 @@ export async function unlinkRepo(input: RepoUnlinkInput, ctx: Context, runtime: 
 
     if (input.update) {
         try {
-            const result = await ctx.run("subscription.update", {
+            const updated = await ctx.run("subscription.update", {
                 ref: name,
                 noBuild: true,
                 ...(input.yes === undefined ? {} : { yes: input.yes }),
@@ -77,8 +80,8 @@ export async function unlinkRepo(input: RepoUnlinkInput, ctx: Context, runtime: 
                 ...(input.answersFile === undefined ? {} : { answersFile: input.answersFile }),
             });
 
-            diff = result.plan.diff;
-            followUps.push({ intent: "subscription.update", result });
+            diff = updated.toPlain().plan.diff;
+            followUps.push({ intent: "subscription.update", result: updated.toPlain(), outputs: updated });
         } catch (error) {
             const message = `'${name}' was unlinked, but its pins were not updated. ${messageOf(error)}`;
 
@@ -118,13 +121,15 @@ export async function unlinkRepo(input: RepoUnlinkInput, ctx: Context, runtime: 
 }
 
 /** Runs the build afterwards; a missing build intent is recorded as skipped. */
-async function rebuild(name: string, ctx: Context): Promise<IntentFollowUp> {
+async function rebuild(name: string, ctx: Context): Promise<RanFollowUp> {
     if (ctx.engine.intents.get("build") === undefined) {
         return { intent: "build", skipped: "no plugin provides the build intent" };
     }
 
     try {
-        return { intent: "build", result: await ctx.run("build", {}) };
+        const built = await ctx.run("build", {});
+
+        return { intent: "build", result: built.toPlain(), outputs: built };
     } catch (error) {
         throw new ConfigError(`'${name}' was unlinked, but the build that followed failed, so this project's outputs may still hold what the checkout contributed.`, {
             cause: error,
@@ -263,4 +268,60 @@ function notLinkedMessage(links: LinksFiles, name: string, scope: LinkScope): st
     const linked = Object.keys(links.read(scope).links).sort();
 
     return `'${name}' is not linked in ${searched}. ${linked.length > 0 ? `Linked there: ${linked.join(", ")}.` : "Nothing is linked there."} Run 'sous repo link ${name}' to link it.`;
+}
+
+/** The outputs of `repo.unlink`. */
+export function unlinkOutputs(ctx: Pick<Context, "reporter">, result: RepoUnlinkResult) {
+    const outputs: IntentOutput[] = [];
+
+    if (result.dryRun) {
+        outputs.push(...(result.wouldDo ?? []).map((line) => dryRunOutput(line)));
+    } else {
+        outputs.push(
+            blockOutput({
+                Repository: result.repo,
+                Checkout: result.path,
+                Scope: result.scope === "global" ? "every project on this machine" : "this project",
+                ...(result.recordedIn === undefined ? {} : { Updated: result.recordedIn }),
+            }),
+            sentence(`'${result.repo}' is read from the versions the lockfile pins again.`),
+        );
+    }
+
+    if (result.published !== undefined) {
+        const published = result.published;
+        const section: IntentOutput[] = [];
+
+        if (!published.checked) {
+            section.push(noteOutput(`Sous could not check '${result.repo}' for newer published versions. ${published.reason ?? ""}`.trim()));
+        } else if (published.newer.length === 0) {
+            section.push(sentence(`Every pin from '${result.repo}' is the newest published version its range allows.`));
+        } else {
+            section.push(
+                sentence(`'${result.repo}' publishes newer versions within range. The lockfile still pins the older ones:`),
+                blockOutput(published.newer.map((entry) => ({ label: entry.key, value: `${entry.from} pinned, ${entry.to} published` }))),
+            );
+        }
+
+        outputs.push(...underHeading("Published versions", section));
+    }
+
+    for (const entry of result.followUps as readonly RanFollowUp[]) {
+        if (entry.intent === "subscription.update" && entry.outputs !== undefined) {
+            outputs.push(...underHeading("Updating the pins", entry.outputs.toArray()));
+        }
+    }
+
+    if (result.checkoutNote !== undefined) {
+        outputs.push(sentence(result.checkoutNote));
+    }
+
+    // The pins' own follow-ups are in their outputs above; only the rest are shown after.
+    const rest = followUpOutputs({ followUps: result.followUps.filter((entry) => entry.intent !== "subscription.update") });
+
+    if (rest.failed) {
+        ctx.reporter.error(`The repository '${result.repo}' was unlinked, but the build that followed it failed; fix what the build reported above and run 'sous build' again.`);
+    }
+
+    return finish(underHeading("Unlinking a repository", outputs), plainResult(result), { after: rest.outputs, ...(rest.failed ? { exitCode: 1 } : {}) });
 }

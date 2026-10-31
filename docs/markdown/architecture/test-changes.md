@@ -1656,3 +1656,136 @@ Changes made when every message moved onto a level and a style (`BaseReporter`).
   - **Before:** compared the new command tree with `fixtures/command-inventory.json`.
   - **Now:** deleted. The fixture stays because `packages/plugin-authoring/test/plugin.test.ts` still reads it.
   - **Why:** ruling by the user, 2026-10-30: "this is not a valid long-term test".
+
+## intents return outputs (core)
+
+All in `packages/core/test/`. Ruling by the user, 2026-10-30 (ADR 0022): a handler returns `IntentOutputs`.
+
+- **Every test whose handler, wrapper or `.after` / `.error` listener returned a bare value** (`chains.test.ts`, `engine-fixes.test.ts`, `engine-handle.test.ts`, `events.test.ts`, `plugins.test.ts`, `services-and-entities.test.ts`, `timing.test.ts`, `types.test.ts`)
+  - **Before:** handlers returned strings, numbers, arrays, objects or nothing, and tests compared what `engine.submit` and `ctx.run` resolved with, for example `toBe("ok")` or `toEqual(["built", "first", "second"])`.
+  - **Now:** handlers return `IntentOutputs.of({ ... })` (the helpers `valued(x)` and `nothing()` in `test/helpers.ts` give `{ value: x }` and `{}`), and tests compare `(await engine.submit(...)).toPlain()`. A value that was an array or a scalar is now a field of the plain object (`{ steps: [...] }`, `{ value: "ok" }`). `recover(...)` and the `.after` event's `result` carry `IntentOutputs`.
+  - **Why:** the engine now refuses anything else, with no silent wrapping.
+- **"should type services, intents and entities from declaration merging"** and **"should type exact event names"** (`types.test.ts`)
+  - **Before:** `EventFor<"typed.render.after">["result"]` was `{ rendered: number }`.
+  - **Now:** it is `IntentOutputs<{ rendered: number }>`; `IntentResult<"typed.render">` is still `{ rendered: number }`.
+  - **Why:** the event's `result` is what the handler returned.
+- **New:** "should refuse a handler or wrapper that returns something other than IntentOutputs" (`chains.test.ts`).
+
+## intents return outputs (plugin-mcp)
+
+- **"returns a string result as it is"** (`packages/plugin-mcp/test/server.test.ts`)
+  - **Before:** the handler returned a string, and the tool's text was that string.
+  - **Now:** renamed "returns the outputs' text, and their plain object as structured content"; the handler returns outputs with a `summary`, and the test also expects `structuredContent` to be the plain object.
+  - **Why:** a tool call returns `outputs.toText()` and `outputs.toPlain()`.
+- **"submits each call as a new chain and returns its result as text and structured content"** and **"asks a chain's questions through MCP elicitation"** (same file)
+  - **Before / now:** same expectations; the fixture handlers return `IntentOutputs.of(...)`, and `namespace.list` adds a `DataValue` result so the text is still the JSON.
+  - **Why:** same ruling.
+- **New** in `packages/plugin-mcp/src/reporter.spec.ts`: an error sends its cause chain as text and `errors`; a payload sends its text and `toPlain()` fields; a `Result` entry is not sent.
+- **`test/helpers.ts`** reads `mcp.serve`'s outputs with `toPlain()`.
+
+
+## intents return outputs (plugin-cli)
+
+All in `packages/plugin-cli/`. Ruling by the user, 2026-10-30 (ADR 0022): a handler returns `IntentOutputs`, there are no views, results go to standard output and everything else to standard error.
+
+- **Every fixture and test handler that returned a bare value** (`test/fixtures.ts`, `test/cli.test.ts`, `test/engine-fixes.test.ts`, `src/command-tree.spec.ts`, `src/parse.spec.ts`)
+  - **Before:** handlers returned strings, objects, numbers or nothing, and the CLI printed them (text as it was, anything else as JSON).
+  - **Now:** they return the helpers in `test/outputs.ts`: `data(obj)` (outputs with a `DataValue` result, so the CLI still prints JSON), `text(s)` (a verbatim `TextBlock`) and `nothing()`. Expectations on standard output are unchanged.
+  - **Why:** the engine accepts only `IntentOutputs`.
+- **"should filter messages by --log-level and --debug"** and **"should ignore an unknown log level and fall back to info"** (`test/cli.test.ts`)
+  - **Before:** `info` and `notice` messages were expected on standard output, `debug` messages first on standard output.
+  - **Now:** every message is expected on standard error and standard output is empty.
+  - **Why:** "results go to stdout and everything else goes to stderr" (ruling by the user, 2026-10-30).
+- **"should print every timing with --timings"** (`test/cli.test.ts`)
+  - **Before:** the timings table was expected on standard output after the command's text.
+  - **Now:** standard output holds only the command's text; the table is on standard error.
+  - **Why:** same ruling.
+- **"should print the version"** (`test/cli.test.ts`)
+  - **Before:** `version --verbose --json` equaled `{ name, version }`.
+  - **Now:** `version --json` equals `{ name, version }`, and the verbose one also holds `root`, `platform` and `node` (checked with `toMatchObject`).
+  - **Why:** the verbose output now carries the facts it shows (package, platform, Node build) as its `data`.
+- **"should route by level and filter by threshold"** (`src/terminal-reporter.spec.ts`)
+  - **Before:** `debug`, `info` and `notice` went to standard output, `warning` and above to standard error.
+  - **Now:** renamed "should send every message to standard error and filter by threshold"; standard output stays empty.
+  - **Why:** same ruling.
+- **Every other `TerminalReporter` test** (`src/terminal-reporter.spec.ts`: text, data, operations, steps, variables, tables, trees, resolved reference, question and command, progress)
+  - **Before:** read standard output for ordinary messages.
+  - **Now:** read standard error; the drawn text is unchanged. "should mark a styled entry at warning level or above" now checks `Warning: Fine` is absent. "should share spacing between two terminal streams" draws command variables through a result.
+  - **Why:** same ruling.
+- **"should send everything to standard error under json"** (`src/terminal-reporter.spec.ts`): also sends a result and expects standard output empty.
+- **New** in `src/terminal-reporter.spec.ts`: "should send a result to standard output and nothing else"; "should draw a result's outputs in order"; "should print verbatim text exactly and nothing for empty text"; "should draw a payload given as a message while an intent runs"; "should draw an error with its details and its chain of causes".
+- **"reportResult() should report each kind of result"** (`src/views.spec.ts`)
+  - **Before:** checked how a result with no view was guessed (text, scalar, data).
+  - **Now:** deleted; a result is always `IntentOutputs`.
+  - **Why:** `reportResult` is removed.
+- **"reportTimings() should list timings slowest first with their budgets"** (`src/views.spec.ts`): reads the `Table` payload (`message.title`, `message.rows`) instead of `details`.
+- **`test/views.test.ts`** is now `test/outputs.test.ts`.
+  - **Deleted:** "should show a result through its intent's view", "should let a view set the exit code and write to standard error", "should use the view added last", "should fail the command when a view throws a sous error", "should print an unexpected result as JSON through a built-in view".
+    - **Why:** there are no `cli-view` entities and no views.
+  - **Replaced by:** "should draw the outputs on standard output" (heading, summary, table, note), "should set the exit code the outputs carry", "should print the last output's data with --json", "should fall back to the payload's plain object", "should draw command variables first", "should report a thrown error and its cause on standard error", "should show a data value as JSON".
+  - **Kept, with their intents returning outputs:** "should draw the banner on a terminal only", "should accept -y, -f, --yes and --force for clear", "should list the other spellings in help", the two watch mode tests (the rebuild notice and the key hint are now on standard error).
+- **`src/views/domains/*.spec.ts`** are not touched here; the main session deletes them with the view code, and each plugin carries over the assertions about its own intents.
+
+## intents return outputs (plugin-authoring, plugin-build, plugin-compiler)
+
+- **"should print the plan and change nothing on a dry run"**, **"should pass --check and report the drift a merge will rewrite"** and **"should cut no tags on a branch unless --tag says so"** (`plugin-authoring/src/release/release.spec.ts`)
+  - **Before:** read the plan sentences, the drift list and the no-tags note from `reporter.at("notice")`.
+  - **Now:** read them from the outputs the release returns (`tools.results`); the first also checks the output titles and the plan list.
+  - **Why:** the release plan is the command's result now, so it is returned, not reported.
+- **"should report a heading, a list per section and the breaking warning"** (`plugin-authoring/src/submit/changelog.spec.ts`)
+  - **Before:** `reportChangelog` reported the heading and lists.
+  - **Now:** renamed "should return a heading, a list per section and report the breaking warning"; it tests `changelogOutputs` and `reportChangelogWarnings`.
+  - **Why:** the changelog is a result; only its warnings are progress.
+- **contribute, plugin and real-plugins tests** (`plugin-authoring`)
+  - **Before:** step runners and `engine.handle.submit` returned plain results.
+  - **Now:** runners return `IntentOutputs.of(...)`; the engine tests call `.toPlain()`.
+  - **Why:** intents return outputs.
+- **`report.spec.ts`, `build.test.ts`, `watch.test.ts`** (`plugin-build`)
+  - **Before:** read `details` and `message` strings of reported lists, and "Aborted." from the reporter.
+  - **Now:** read payloads with `messageText`; "Aborted." is the summary of the returned output; the failed-build test also checks the exit code 1, the Command Variables output and `watching`.
+  - **Why:** the reporter keeps payloads; `clear` returns "Aborted." as its result.
+- **Test helpers** (`plugin-build/test/helpers.ts`, `plugin-compiler/test/helpers.ts`)
+  - **Now:** stand-in intents return `IntentOutputs.of(...)`, and `run`/`compile`/`prune` return `toPlain()`.
+
+## intents return outputs (plugin-recipe-answers, plugin-init, plugin-update, plugin-inspect, plugin-harnesses, plugin-config-files)
+
+- **Every test that submits or calls a converted intent** (`plugin-recipe-answers/test/plugin.test.ts`, `plugin-init/test/init.test.ts`, `plugin-update/test/update.test.ts` and `plugin-update/test/plugins-install.test.ts`, `plugin-inspect/src/inspect.spec.ts`, `plugin-harnesses/test/plugin.test.ts`, `plugin-config-files/test/config-set.test.ts`)
+  - **Before:** read the intent's result directly.
+  - **Now:** read `.toPlain()` of the returned outputs; the assertions are unchanged.
+  - **Why:** intents return outputs.
+- **"should list variables with their answers"** (`plugin-recipe-answers/test/plugin.test.ts`): reads `variables` of the result, since the declared result of `vars.list` is `{ variables: [...] }` and no longer an array.
+- **"should list plugins and filter by name"** and **"should list and filter timings"** (`plugin-inspect/src/inspect.spec.ts`): read `plugins` and `timings`, since `plugins.show` and `timings.show` declare `{ plugins }` and `{ timings }`.
+- **"should get a value and report a missing one"** (`plugin-inspect/src/inspect.spec.ts`)
+  - **Before:** a missing path gave `exists: false` in the result.
+  - **Now:** renamed "should get a value and fail on a missing one"; the intent throws the `ConfigError` the view used to throw.
+  - **Why:** there is no view to throw it any more.
+- **Ask report assertion** ("should ask through the prompter and store each answer", `plugin-recipe-answers/src/ask.spec.ts`): reads the `VariableSet` message instead of `details`, because the reporter keeps payloads.
+- **Test stand-ins** (`plugin-init/test/helpers.ts`, `plugin-harnesses/test/stand-ins.ts`): the stand-in `build` intent returns `IntentOutputs.of(...)`.
+- **New**
+  - `plugin-recipe-answers/test/plugin.test.ts`: "should show the listing as command variables and a table", "should show one variable as a block, its facts and its ladder", "should report the answers stored under their titles", "should say what vars map changed" (carry over the assertions of the deleted `vars.spec.ts` view).
+  - `plugin-init/test/init.test.ts`: "should end with the dry-run sentence, or with what was set up", "should include the build's outputs before what was set up".
+  - `plugin-update/test/update.test.ts`: "should show a dry run as a plan", "should end a real update with a summary".
+  - `plugin-inspect/src/inspect.spec.ts`: "should show a scalar verbatim, an object as data and layers as a table", and the `outputs` group (config show as data and as a tree, `config validate` ending with exit code 1, plugins and timings outputs).
+  - `plugin-config-files/test/config-set.test.ts`: the dry run test also checks the returned summary.
+
+## intents return outputs (plugin-recipes)
+
+All in `packages/plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022): a handler returns `IntentOutputs`.
+
+- **Every test that read a result from `engine.handle.submit(...)`** (`test/part-b/intents.test.ts`: `lock.rebuild`, `lock.show`, `repo.gc`, `repo.link`, `repo.unlink`)
+  - **Before:** `submit` resolved with the result object.
+  - **Now:** the tests read `(await engine.handle.submit(...)).toPlain()`, the same object.
+  - **Why:** an intent returns outputs; `toPlain()` is the declared result.
+- **"ensureRequiredPlugins() should install the plugin through plugins.install…", "…should offer to install when run interactively", "…should do nothing when the plugin is loaded in range"** (`test/part-a/required-plugins.test.ts`)
+  - **Before:** the harness intent returned the follow-up itself, and the stand-in `plugins.install` returned a bare object; "do nothing" expected `undefined`.
+  - **Now:** both return `IntentOutputs.of(...)` (the follow-up under `followUp`); "do nothing" expects an empty plain object.
+  - **Why:** the engine accepts only `IntentOutputs`, and `ensureRequiredPlugins` reads the install's `toPlain()`.
+- **The `ctx.run` mock** (`test/part-a/helpers.ts`) and the tests that replace it (`src/part-a/intents/intents.spec.ts`: "should refresh the config before vars.ask and again before build", "should apply a plan")
+  - **Before:** `ctx.run` resolved with `{ ran: intent }` or a plan.
+  - **Now:** it resolves with `IntentOutputs.of(...)`.
+  - **Why:** follow-ups read `toPlain()` and keep the outputs.
+- **"should switch off a subscription the managed file does not hold, and build afterwards"** (`intents.spec.ts`)
+  - **Before:** the build follow-up was `{ intent: "build", result: { ran: "build" } }`.
+  - **Now:** it also carries `outputs`, which the intent shows after its own and strips from the machine data.
+  - **Why:** the build's outputs are appended to the subscription's.
+- **New** in `src/part-a/intents/outputs.spec.ts`, carrying over the assertions of the removed plugin-cli views (`catalog`, `repos`, `updates`): the Command Variables output and titled tables of the browsing intents; `--installed` and `--latest` wording; the linked-recipe note; `repo.add`, `repo.gc` and `lock.show` outputs; follow-up outputs after the intent's own with `vars.ask` under "Variables"; exit code 1 and the error when the build failed; the update plan's order; lockfile diff wording; headings; and the closing data output.

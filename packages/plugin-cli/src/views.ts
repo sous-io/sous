@@ -1,7 +1,5 @@
 import type { Reporter, TimingEntry } from "@sous-io/plugin-api";
 
-export { reportResult } from "./views/show.js";
-
 /**
  * Reports every timing of the run, for `--timings`: one row per key, slowest total first.
  *

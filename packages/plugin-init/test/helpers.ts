@@ -6,7 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { BufferedReporter, type Context, scriptedPrompter } from "@sous-io/plugin-api";
+import { BufferedReporter, type Context, IntentOutputs, scriptedPrompter } from "@sous-io/plugin-api";
 import type { BuildResult } from "@sous-io/plugin-build/types";
 import type { ConfigFilesLoader } from "@sous-io/plugin-config-files/types";
 import { createDirectories, createGitignore } from "@sous-io/plugin-host";
@@ -86,7 +86,7 @@ export function initContext(options: InitContextOptions = {}): { ctx: Context; r
         run: async (intent: string, input: unknown) => {
             recorded.runs.push({ intent, input });
 
-            return { ok: true, dryRun: false, watching: false, ...options.build };
+            return IntentOutputs.of({ ok: true, dryRun: false, watching: false, ...options.build });
         },
     } as unknown as Context;
 

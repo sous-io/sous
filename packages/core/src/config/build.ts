@@ -341,7 +341,7 @@ export class ConfigBuild {
             this.host.leaveContributor();
         }
 
-        const patchSet = builder.result();
+        const patchSet = builder.patchSet();
 
         this.records.set(entry.id, {
             entry,

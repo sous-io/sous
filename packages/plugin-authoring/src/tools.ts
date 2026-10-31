@@ -6,7 +6,7 @@
  */
 
 import path from "node:path";
-import type { Context, EntityReader, Environment, Prompter, Reporter } from "@sous-io/plugin-api";
+import { commandVariables, IntentOutput, IntentOutputs, ItemList, ReportEntryStyle, TextBlock, type Context, type EntityReader, type Environment, type Prompter, type Reporter } from "@sous-io/plugin-api";
 import type {
     FormatParser,
     FormatsManifests,
@@ -42,6 +42,13 @@ export interface AuthoringTools {
     readonly env: Environment;
     readonly reporter: Reporter;
     readonly prompter: Prompter;
+    /**
+     * The outputs the run has produced so far, in order. A run adds what its command shows as its
+     * result (a plan, a changelog, a status); what it says while it works goes to `reporter`.
+     */
+    readonly results: IntentOutput[];
+    /** The "Command Variables" output, opening what the command returns. */
+    commandVariables(extra?: Readonly<Record<string, unknown>>): IntentOutput;
     /** The sous version, written into an index as its generator. */
     readonly sousVersion: string;
     /** What a `repository-host` method gets. */
@@ -124,6 +131,8 @@ export function toolsFrom(ctx: Context): AuthoringTools {
         env: ctx.env,
         reporter: ctx.reporter,
         prompter: ctx.prompter,
+        results: [],
+        commandVariables: (extra) => commandVariables(ctx, extra),
         sousVersion: ctx.engine.app.version,
         hostContext: () => ({
             plugin: ctx.plugin,
@@ -150,4 +159,26 @@ export function toolsFrom(ctx: Context): AuthoringTools {
             return directories;
         },
     };
+}
+
+/**
+ * What an intent returns: the outputs the run collected (the "Command Variables" output first), then
+ * one output holding the intent's result as data, which is what `--json` prints.
+ */
+export function outputsOf<T extends object>(tools: AuthoringTools, data: T, options: { exitCode?: number } = {}): IntentOutputs<T> {
+    return new IntentOutputs<T>([...tools.results, new IntentOutput<T>({ data })], options) as IntentOutputs<T>;
+}
+
+/** An output holding one sentence or paragraph, in the given style (a note, a dry-run sentence). */
+export function textOutput(text: string, style?: ReportEntryStyle): IntentOutput {
+    return new IntentOutput({ result: new TextBlock(text), ...(style === undefined ? {} : { style }) });
+}
+
+/** An output holding a list, under an optional heading. */
+export function listOutput(items: readonly string[], options: { heading?: string; title?: string; footer?: string } = {}): IntentOutput {
+    return new IntentOutput({
+        ...(options.heading === undefined ? {} : { title: options.heading }),
+        result: new ItemList(items, { ...(options.title === undefined ? {} : { title: options.title }), ...(options.footer === undefined ? {} : { footer: options.footer }) }),
+        style: ReportEntryStyle.List,
+    });
 }

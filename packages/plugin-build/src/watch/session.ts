@@ -235,10 +235,10 @@ export class WatchSession {
         const io = { reporter: ctx.reporter, prompter: ctx.prompter, globals: ctx.globals };
 
         if (input.compileOnly) {
-            return ctx.engine.submit({ intent: "compile", input: flags }, io);
+            return ctx.engine.submit({ intent: "compile", input: flags }, io).then((outputs) => outputs.toPlain());
         }
 
-        return ctx.engine.submit({ intent: "build", input: { ...flags, ...(input.noPrune ? { noPrune: true } : {}) } }, io);
+        return ctx.engine.submit({ intent: "build", input: { ...flags, ...(input.noPrune ? { noPrune: true } : {}) } }, io).then((outputs) => outputs.toPlain());
     }
 
     // ------------------------------------------------------------------ polling upstream
@@ -278,7 +278,7 @@ export class WatchSession {
         const ctx = this.ctx;
 
         try {
-            const prepared = await ctx.engine.submit({ intent: "build.prepare", input: {} }, { reporter: ctx.reporter, prompter: ctx.prompter, globals: ctx.globals });
+            const prepared = (await ctx.engine.submit({ intent: "build.prepare", input: {} }, { reporter: ctx.reporter, prompter: ctx.prompter, globals: ctx.globals })).toPlain();
 
             if (prepared.locked.unchanged) {
                 return;

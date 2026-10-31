@@ -346,6 +346,25 @@ export class IntentOutputs<T extends object = PlainObject> implements Iterable<I
         return new IntentOutputs<T>([...this.#outputs, ...more], this.exitCode === undefined ? {} : { exitCode: this.exitCode });
     }
 
+    /**
+     * The same outputs with `data` as what machines get: set on the last output, or as one output
+     * holding only data when there is none. Use it when the last output shows something built from
+     * a larger result.
+     *
+     * ```ts
+     * return new IntentOutputs([commandVariables(ctx), table]).withData({ subscriptions });
+     * ```
+     */
+    withData<D extends object>(data: D): IntentOutputs<D> {
+        const outputs = [...this.#outputs];
+        const last = outputs.pop();
+        const replaced = last === undefined
+            ? new IntentOutput<D>({ data })
+            : new IntentOutput<D>({ ...(last.title === undefined ? {} : { title: last.title }), ...(last.summary === undefined ? {} : { summary: last.summary }), ...(last.result === undefined ? {} : { result: last.result }), ...(last.style === undefined ? {} : { style: last.style }), data });
+
+        return new IntentOutputs<D>([...outputs, replaced], this.exitCode === undefined ? {} : { exitCode: this.exitCode });
+    }
+
     /** The same outputs with another exit code. */
     withExitCode(exitCode: number): IntentOutputs<T> {
         return new IntentOutputs<T>([...this.#outputs], { exitCode });

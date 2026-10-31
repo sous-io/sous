@@ -1,10 +1,10 @@
-import { ConflictError, type IntentInfo } from "@sous-io/plugin-api";
+import { IntentOutputs, ConflictError, type IntentInfo } from "@sous-io/plugin-api";
 import { describe, expect, it } from "vitest";
 import { CommandTree } from "./command-tree.js";
 
 const intent = (name: string, plugin: string, cli?: IntentInfo["definition"]["cli"], extra: Partial<IntentInfo["definition"]> = {}): IntentInfo => ({
     plugin,
-    definition: { intent: name, handle: () => undefined, ...(cli ? { cli } : {}), ...extra },
+    definition: { intent: name, handle: () => new IntentOutputs(), ...(cli ? { cli } : {}), ...extra },
 });
 
 describe("CommandTree", () => {

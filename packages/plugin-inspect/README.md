@@ -17,14 +17,15 @@ It adds these commands:
 ```ts
 import type {} from "@sous-io/plugin-inspect/types";
 
-const { layers } = await ctx.run("config.show", { layers: true });
+const { layers } = (await ctx.run("config.show", { layers: true })).toPlain();
 ```
 
 ## Where things are
 
 - `src/types.ts`: every intent's input and result types.
 - `src/index.ts`: registers the intents.
-- `src/handlers.ts`: what each intent does.
+- `src/handlers.ts`: what each intent does; each returns outputs, and `plugins.show` and `timings.show` declare `{ plugins }` and `{ timings }`.
+- `src/outputs.ts`: what people see: the config as data, layers as a tree or a table, the validation result, plugins and timings.
 - `src/raw.ts`, `src/redact.ts`: raw file output, and hiding secrets.
 
 ## Testing

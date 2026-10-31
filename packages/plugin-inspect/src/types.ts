@@ -1,7 +1,7 @@
 /**
  * The contract of plugin-inspect: the built config and each contributor's changes, every plugin and what it
  * registered, and every timing. These intents read only the engine, so the plugin depends on none.
- * The intents return plain data; plugin-cli decides how it looks.
+ * The intents return outputs; each one's plain data is the result type declared here.
  *
  * Other plugins import this file type-only.
  */
@@ -90,6 +90,16 @@ export interface PluginsShowInput {
     name?: string;
 }
 
+/** The result of `plugins.show`. */
+export interface PluginsShowResult {
+    readonly plugins: readonly PluginInfo[];
+}
+
+/** The result of `timings.show`. */
+export interface TimingsShowResult {
+    readonly timings: readonly TimingEntry[];
+}
+
 /** `timings.show`. */
 export interface TimingsShowInput {
     /** Only entries over budget. */
@@ -103,7 +113,7 @@ declare module "@sous-io/plugin-api" {
         "config.show": { input: ConfigShowInput; result: ConfigShowResult };
         "config.get": { input: ConfigGetInput; result: ConfigGetResult };
         "config.validate": { input: Record<string, never>; result: ConfigValidateResult };
-        "plugins.show": { input: PluginsShowInput; result: PluginInfo[] };
-        "timings.show": { input: TimingsShowInput; result: TimingEntry[] };
+        "plugins.show": { input: PluginsShowInput; result: PluginsShowResult };
+        "timings.show": { input: TimingsShowInput; result: TimingsShowResult };
     }
 }

@@ -11,10 +11,10 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { ConfigError, type Context } from "@sous-io/plugin-api";
+import { ConfigError, IntentOutput, ReportEntryStyle, Table, VariableSet, type Context, type IntentOutputs } from "@sous-io/plugin-api";
 import type { RepositoryHostEntity, ScaffoldFile } from "@sous-io/plugin-recipes/types";
 import type { RepoInitInput, RepoInitResult } from "../types.js";
-import { toolsFrom, type AuthoringTools } from "../tools.js";
+import { outputsOf, textOutput, toolsFrom, type AuthoringTools } from "../tools.js";
 import { INDEX_FILE, RECIPE_MANIFEST_FILE, REPO_MANIFEST_FILE } from "../shared/repository.js";
 import { hostForUrl } from "../submit/submit.js";
 import {
@@ -41,8 +41,11 @@ export interface ScaffoldOptions {
 }
 
 /** The intent's handler. */
-export async function handleInit(input: RepoInitInput, ctx: Context): Promise<RepoInitResult> {
-    return scaffoldRepo(toolsFrom(ctx), input, { cwd: ctx.cwd });
+export async function handleInit(input: RepoInitInput, ctx: Context): Promise<IntentOutputs<RepoInitResult>> {
+    const tools = toolsFrom(ctx);
+    const result = await scaffoldRepo(tools, input, { cwd: ctx.cwd });
+
+    return outputsOf(tools, result);
 }
 
 /** Creates a recipe repository in a directory. */
@@ -51,13 +54,14 @@ export async function scaffoldRepo(tools: AuthoringTools, input: RepoInitInput, 
     const name = normalizeName(input.name ?? path.basename(directory), "--name");
     const namespace = normalizeName(input.namespace ?? name, "--namespace");
     const dryRun = input.dryRun === true;
-    const reporter = tools.reporter;
 
-    reporter.variables([
-        { label: "Directory", value: directory },
-        { label: "Name", value: input.name ?? "(from the directory name)" },
-        { label: "Namespace", value: input.namespace ?? "(same as the repository name)" },
-    ]);
+    tools.results.push(
+        tools.commandVariables({
+            Directory: directory,
+            Name: input.name ?? "(from the directory name)",
+            Namespace: input.namespace ?? "(same as the repository name)",
+        }),
+    );
 
     assertNoExistingRepo(tools, directory, input.force === true);
 
@@ -75,8 +79,6 @@ export async function scaffoldRepo(tools: AuthoringTools, input: RepoInitInput, 
     };
     const files = [...planFiles(tools, context), ...hostFiles];
 
-    reporter.operationStart("Creating a recipe repository");
-
     if (!dryRun) {
         for (const file of files) {
             const target = path.join(directory, file.path);
@@ -92,27 +94,46 @@ export async function scaffoldRepo(tools: AuthoringTools, input: RepoInitInput, 
         await verifyScaffold(tools, directory, context);
     }
 
-    for (const file of files) {
-        reporter.operation(dryRun ? "would-write" : "written", path.join(directory, file.path));
-    }
+    tools.results.push(
+        new IntentOutput({
+            title: "Creating a recipe repository",
+            result: new Table(
+                [
+                    { key: "action", header: "Action" },
+                    { key: "file", header: "File", kind: "path" },
+                ],
+                files.map((file) => ({ action: dryRun ? "would write" : "written", file: path.join(directory, file.path) })),
+            ),
+            style: ReportEntryStyle.Table,
+        }),
+    );
 
     if (host === undefined) {
-        reporter.note(
-            "No repository host was named or found from a git remote, and no plugin adds GitHub's, so no CI workflow was " +
-                "written. Pass '--host <id>' (such as 'gitlab') to add the one your host runs.",
+        tools.results.push(
+            textOutput(
+                "No repository host was named or found from a git remote, and no plugin adds GitHub's, so no CI workflow was " +
+                    "written. Pass '--host <id>' (such as 'gitlab') to add the one your host runs.",
+                ReportEntryStyle.Note,
+            ),
         );
     }
 
-    reporter.operationStart("What to do next");
-    reporter.variables([
-        { label: "Repository", value: name },
-        { label: "Namespace", value: namespace },
-        { label: "Example recipe", value: path.join("recipes", namespace, EXAMPLE_RECIPE_NAME, RECIPE_MANIFEST_FILE) },
-    ]);
-    reporter.note(
-        "Edit the example recipe, or copy its folder to start another one. " +
-            `Every recipe folder must also be listed under 'recipes' in ${REPO_MANIFEST_FILE}. ` +
-            "Commit the repository and push it, then add it to a project with 'sous repo add <url>'. Adding a repository is what trusts it.",
+    tools.results.push(
+        new IntentOutput({
+            title: "What to do next",
+            result: new VariableSet({
+                Repository: name,
+                Namespace: namespace,
+                "Example recipe": path.join("recipes", namespace, EXAMPLE_RECIPE_NAME, RECIPE_MANIFEST_FILE),
+            }),
+            style: ReportEntryStyle.VariableList,
+        }),
+        textOutput(
+            "Edit the example recipe, or copy its folder to start another one. " +
+                `Every recipe folder must also be listed under 'recipes' in ${REPO_MANIFEST_FILE}. ` +
+                "Commit the repository and push it, then add it to a project with 'sous repo add <url>'. Adding a repository is what trusts it.",
+            ReportEntryStyle.Note,
+        ),
     );
 
     return {

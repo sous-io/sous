@@ -140,8 +140,8 @@ export async function makeCompiler(project: TestProject, setup: CompilerSetup = 
     return {
         engine,
         reporter,
-        compile: (input = {}) => engine.handle.submit({ intent: "compiler.compile", input }, { reporter }),
-        prune: (input = {}) => engine.handle.submit({ intent: "compiler.prune", input }, { reporter }),
+        compile: async (input = {}) => (await engine.handle.submit({ intent: "compiler.compile", input }, { reporter })).toPlain() as unknown as CompileResult,
+        prune: async (input = {}) => (await engine.handle.submit({ intent: "compiler.prune", input }, { reporter })).toPlain() as unknown as CompilerPruneResult,
         rebuild: async () => {
             await engine.buildConfig();
         },

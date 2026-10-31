@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { askingPlugin, loudPlugin, namespacesPlugin, reposPlugin, verbosePlugin } from "./fixtures.js";
 import { fakeIo, runCli } from "./helpers.js";
+import { data, nothing, text } from "./outputs.js";
 
 describe("the CLI front end", () => {
     describe("commands generated from intents", () => {
@@ -117,12 +118,12 @@ describe("the CLI front end", () => {
             expect(run.stderr).toContain("<repository> was given both as an argument and as --repository.");
         });
 
-        /** A text result prints as text; `undefined` prints nothing. */
+        /** A text result prints as text; outputs holding nothing print nothing. */
         it("should print text results as they are and nothing for undefined", async () => {
             const plugin = definePlugin({
                 name: "p",
                 register(sous) {
-                    sous.intents.add({ intent: "quiet", handle: () => undefined });
+                    sous.intents.add({ intent: "quiet", handle: () => nothing() });
                 },
             });
 
@@ -196,8 +197,8 @@ describe("the CLI front end", () => {
             const plugin = definePlugin({
                 name: "p",
                 register(sous) {
-                    sous.intents.add({ intent: "things.list", summary: "List", handle: () => 1 });
-                    sous.intents.add({ intent: "things.show", summary: "Show", handle: () => 1 });
+                    sous.intents.add({ intent: "things.list", summary: "List", handle: () => text("1") });
+                    sous.intents.add({ intent: "things.show", summary: "Show", handle: () => text("1") });
                 },
             });
 
@@ -239,7 +240,7 @@ describe("the CLI front end", () => {
                         load: async () => {
                             loaded = true;
 
-                            return () => "built";
+                            return () => text("built");
                         },
                     });
                 },
@@ -288,7 +289,7 @@ describe("the CLI front end", () => {
             const other = definePlugin({
                 name: "sous-plugin-other",
                 register(sous) {
-                    sous.intents.add({ intent: "other.list", cli: { command: ["ns", "list"] }, handle: () => "other" });
+                    sous.intents.add({ intent: "other.list", cli: { command: ["ns", "list"] }, handle: () => text("other") });
                 },
             });
 
@@ -320,8 +321,9 @@ describe("the CLI front end", () => {
         it("should filter messages by --log-level and --debug", async () => {
             const normal = await runCli([loudPlugin], ["loud"]);
 
-            expect(normal.stdout).not.toContain("a debug message");
-            expect(normal.stdout).toMatch(/^ {2}a info message\n {2}a notice message\n\s*$/);
+            expect(normal.stdout).toBe("");
+            expect(normal.stderr).not.toContain("a debug message");
+            expect(normal.stderr).toContain("  a info message\n  a notice message\n");
             expect(normal.stderr).toContain("a warning message");
             expect(normal.stderr).toContain("Error: a error message");
             expect(normal.stderr).toContain("Critical: a critical message");
@@ -342,25 +344,25 @@ describe("the CLI front end", () => {
 
             const debug = await runCli([loudPlugin], ["loud", "--debug"]);
 
-            expect(debug.stdout.startsWith("Debug: a debug message\n")).toBe(true);
+            expect(debug.stderr).toContain("Debug: a debug message\n");
         });
 
         /** An unknown log level is rejected by its schema. */
         it("should ignore an unknown log level and fall back to info", async () => {
             const run = await runCli([loudPlugin], ["loud", "--log-level", "loud"]);
 
-            expect(run.stdout).toContain("a info message");
-            expect(run.stdout).not.toContain("Debug:");
+            expect(run.stderr).toContain("a info message");
+            expect(run.stderr).not.toContain("Debug:");
         });
 
         /** `--timings` prints a table of every timing after the command. */
         it("should print every timing with --timings", async () => {
             const run = await runCli([reposPlugin], ["repo", "secret", "--timings"]);
 
-            expect(run.stdout.startsWith("hidden ran\n")).toBe(true);
-            expect(run.stdout).toContain("Timings:");
-            expect(run.stdout).toMatch(/config\.build:config\s+1\s/);
-            expect(run.stdout).toMatch(/intent:repo\.secret\s+1\s/);
+            expect(run.stdout).toBe("hidden ran\n");
+            expect(run.stderr).toContain("Timings:");
+            expect(run.stderr).toMatch(/config\.build:config\s+1\s/);
+            expect(run.stderr).toMatch(/intent:repo\.secret\s+1\s/);
         });
 
         /**
@@ -371,7 +373,8 @@ describe("the CLI front end", () => {
             expect((await runCli([], ["--version"])).stdout).toBe("v9.8.7\n");
             expect((await runCli([], ["version"])).stdout).toBe("v9.8.7\n");
             expect((await runCli([], ["--version", "--verbose"])).stdout).toMatch(/^v9\.8\.7\n {4}Package : sous\n/);
-            expect(JSON.parse((await runCli([], ["version", "--verbose", "--json"])).stdout)).toEqual({ name: "sous", version: "9.8.7" });
+            expect(JSON.parse((await runCli([], ["version", "--json"])).stdout)).toEqual({ name: "sous", version: "9.8.7" });
+            expect(JSON.parse((await runCli([], ["version", "--verbose", "--json"])).stdout)).toMatchObject({ name: "sous", version: "9.8.7", node: process.version });
         });
     });
 
@@ -419,7 +422,7 @@ describe("the CLI front end", () => {
                 name: "p",
                 register(sous) {
                     sous.entities.add("not-a-kind", { id: "x" });
-                    sous.intents.add({ intent: "noop", input: z.object({}), handle: () => undefined });
+                    sous.intents.add({ intent: "noop", input: z.object({}), handle: () => nothing() });
                 },
             });
 
@@ -435,7 +438,7 @@ describe("built-in groups, globals and help intent", () => {
     const commandPlugin = definePlugin({
         name: "p",
         register(sous) {
-            sous.intents.add({ intent: "config.show", summary: "Show the config", cli: { aliases: [["configs", "show"]] }, handle: () => "shown" });
+            sous.intents.add({ intent: "config.show", summary: "Show the config", cli: { aliases: [["configs", "show"]] }, handle: () => text("shown") });
         },
     });
 
@@ -464,7 +467,7 @@ describe("built-in groups, globals and help intent", () => {
         const plugin = definePlugin({
             name: "g",
             register(sous) {
-                sous.intents.add({ intent: "g", summary: "G", handle: (_i, ctx) => ctx.globals });
+                sous.intents.add({ intent: "g", summary: "G", handle: (_i, ctx) => data({ ...ctx.globals }) });
             },
         });
         const run = await runCli([plugin], ["g", "-c", "x.json", "--sous-dir", "d", "--sous-confd", "c", "--sous-config", "y"]);

@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createEngine, type Engine } from "@sous-io/core";
 import {
+    IntentOutputs,
     BufferedReporter,
     definePlugin,
     jsonSchema,
@@ -223,7 +224,7 @@ export function standIns(world: World): PluginDefinition[] {
             handle: async (input) => {
                 world.compileCalls.push(input);
 
-                return world.compileResult(input);
+                return IntentOutputs.of(world.compileResult(input));
             },
         });
         sous.intents.add({
@@ -232,7 +233,7 @@ export function standIns(world: World): PluginDefinition[] {
             handle: async (input) => {
                 world.pruneCalls.push(input);
 
-                return world.pruneResult(input);
+                return IntentOutputs.of(world.pruneResult(input));
             },
         });
     });
@@ -371,7 +372,7 @@ export async function harness(
         project,
         reporter,
         run: <T>(intent: string, input: Record<string, unknown> = {}, runOptions: { prompter?: Prompter } = {}) =>
-            engine.submit({ intent, input }, { reporter, ...(runOptions.prompter ? { prompter: runOptions.prompter } : {}) }) as Promise<T>,
+            engine.submit({ intent, input }, { reporter, ...(runOptions.prompter ? { prompter: runOptions.prompter } : {}) }).then((outputs) => outputs.toPlain() as T),
     };
 }
 

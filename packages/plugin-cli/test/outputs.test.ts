@@ -1,9 +1,10 @@
-import { ConfigError, definePlugin } from "@sous-io/plugin-api";
+import { commandVariables, definePlugin, IntentOutput, IntentOutputs, ReportEntryStyle, SousError, Table, TextBlock, VariableSet } from "@sous-io/plugin-api";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { fakeIo, runCli } from "./helpers.js";
+import { data, text } from "./outputs.js";
 
-/** An intent with a result a view can show, and a plugin view for it. */
+/** An intent returning outputs: a heading, a table, and a note, with machine data for `--json`. */
 const reportPlugin = definePlugin({
     name: "sous-plugin-report",
 
@@ -12,50 +13,14 @@ const reportPlugin = definePlugin({
             intent: "report.make",
             summary: "Make a report",
             input: z.object({ fail: z.boolean().default(false) }),
-            handle: (input) => ({ files: ["a.md", "b.md"], ok: !input.fail }),
-        });
-        sous.entities.add("cli-view", {
-            id: "report.make",
-            render: (result: { files: string[]; ok: boolean }, view) => {
-                view.reporter.operationStart("Wrote");
+            handle: (input) => {
+                const files = ["a.md", "b.md"];
+                const outputs = new IntentOutputs([
+                    new IntentOutput({ title: "Wrote", summary: "Two files.", result: new Table([{ key: "file", header: "File" }], files.map((file) => ({ file }))) }),
+                    new IntentOutput({ result: new TextBlock("Check them."), style: ReportEntryStyle.Note, data: { files, ok: !input.fail } }),
+                ]);
 
-                for (const file of result.files) {
-                    view.reporter.operation("written", file);
-                }
-
-                if (!result.ok) {
-                    view.reporter.warn("the report failed.");
-
-                    return { exitCode: 1 };
-                }
-            },
-        });
-    },
-});
-
-/** A plugin that replaces another's view: the later entity wins. */
-const otherViewPlugin = definePlugin({
-    name: "sous-plugin-other-view",
-
-    register(sous) {
-        sous.entities.add("cli-view", { id: "report.make", render: (result: { files: string[] }, view) => view.reporter.text(`${result.files.length} files`) });
-    },
-});
-
-/** `config.get`-alike, to show a view's error failing the command. */
-const missingPlugin = definePlugin({
-    name: "sous-plugin-missing",
-
-    register(sous) {
-        sous.intents.add({
-            intent: "lookup",
-            summary: "Look a value up",
-            handle: () => ({ exists: false }),
-        });
-        sous.entities.add("cli-view", {
-            id: "lookup",
-            render: () => {
-                throw new ConfigError("No value at config path 'x'.");
+                return input.fail ? outputs.withExitCode(1) : outputs;
             },
         });
     },
@@ -71,7 +36,7 @@ const clearPlugin = definePlugin({
             summary: "Delete every file sous wrote",
             input: z.object({ force: z.boolean().default(false), dryRun: z.boolean().default(false) }),
             cli: { flags: { force: { short: "f", aliases: ["yes"] } } },
-            handle: (input) => (input.force ? "forced" : "asked"),
+            handle: (input) => text(input.force ? "forced" : "asked"),
         });
     },
 });
@@ -93,7 +58,7 @@ function watchPlugin(state: { builds: Array<Record<string, unknown>>; stop?: () 
                         void ctx.engine.submit({ intent: "watcher" });
                     }
 
-                    return { ok: true, watching: input.watch };
+                    return IntentOutputs.of({ ok: true, watching: input.watch }, { result: new TextBlock("built", { verbatim: true }) });
                 },
             });
             sous.intents.add({
@@ -102,68 +67,93 @@ function watchPlugin(state: { builds: Array<Record<string, unknown>>; stop?: () 
                 background: true,
                 internal: true,
                 handle: () =>
-                    new Promise<string>((resolve) => {
-                        state.stop = () => resolve("stopped");
+                    new Promise<IntentOutputs>((resolve) => {
+                        state.stop = () => resolve(new IntentOutputs());
                     }),
             });
-            sous.entities.add("cli-view", { id: "build", render: (result: { ok: boolean }, view) => (result.ok ? view.reporter.text("built") : undefined) });
         },
     });
 }
 
-describe("views (cli-view entities)", () => {
-    /** A plugin's view shows its intent's result instead of the JSON. */
-    it("should show a result through its intent's view", async () => {
+describe("showing the outputs an intent returns", () => {
+    /** Each output is drawn in order on standard output: heading, summary, payload, note. */
+    it("should draw the outputs on standard output", async () => {
         const run = await runCli([reportPlugin], ["report", "make"]);
 
-        expect(run.stdout).toBe("▶ Wrote:\n \n  ✓ a.md\n  ✓ b.md\n \n \n");
+        expect(run.stdout).toBe("▶ Wrote:\n \n  Two files.\n  File\n  ----\n  a.md\n  b.md\n  Check them.\n \n \n");
+        expect(run.stderr).toBe("");
         expect(run.exitCode).toBeUndefined();
     });
 
-    /** A view can write to standard error and set the exit code (a failed build exits 1). */
-    it("should let a view set the exit code and write to standard error", async () => {
+    /** The exit code the outputs carry becomes the command's exit code. */
+    it("should set the exit code the outputs carry", async () => {
         const run = await runCli([reportPlugin], ["report", "make", "--fail"]);
 
         expect(run.exitCode).toBe(1);
-        expect(run.stderr).toContain("the report failed.");
+        expect(run.stdout).toContain("Wrote");
     });
 
-    /** `--json` prints the plain result, whatever view the intent has. */
-    it("should print JSON with --json", async () => {
+    /** `--json` prints the last output's plain object (its `data`) and nothing else on standard output. */
+    it("should print the last output's data with --json", async () => {
         const run = await runCli([reportPlugin], ["report", "make", "--json"]);
 
         expect(JSON.parse(run.stdout)).toEqual({ files: ["a.md", "b.md"], ok: true });
     });
 
-    /** The later view wins, so any plugin can restyle another's result. */
-    it("should use the view added last", async () => {
-        const run = await runCli([reportPlugin, otherViewPlugin], ["report", "make"]);
+    /** With no `data`, the plain object is the payload's own: `{ rows }` for a table. */
+    it("should fall back to the payload's plain object", async () => {
+        const plugin = definePlugin({
+            name: "sous-plugin-table",
+            register(sous) {
+                sous.intents.add({
+                    intent: "table.show",
+                    handle: () => new IntentOutputs(new IntentOutput({ result: new Table([{ key: "n", header: "N" }], [{ n: 1 }]) })),
+                });
+            },
+        });
 
-        expect(run.stdout).toBe("2 files\n");
+        expect(JSON.parse((await runCli([plugin], ["table", "show", "--json"])).stdout)).toEqual({ rows: [{ n: 1 }] });
     });
 
-    /** An error a view throws fails the command like the intent's own error. */
-    it("should fail the command when a view throws a sous error", async () => {
-        const run = await runCli([missingPlugin], ["lookup"]);
+    /** The "Command Variables" output of `commandVariables` opens a result with its own look. */
+    it("should draw command variables first", async () => {
+        const plugin = definePlugin({
+            name: "sous-plugin-vars",
+            register(sous) {
+                sous.intents.add({
+                    intent: "vars.demo",
+                    handle: (_input, ctx) =>
+                        new IntentOutputs([commandVariables(ctx, { Reading: "the cache" }), new IntentOutput({ result: new VariableSet({ Count: 2 }) })]),
+                });
+            },
+        });
+        const run = await runCli([plugin], ["vars", "demo"]);
 
-        expect(run.stderr).toContain("Error: No value at config path 'x'.");
+        expect(run.stdout).toContain("$ Command Variables:\n    Reading: the cache\n");
+        expect(run.stdout).toContain("Count: 2");
+    });
+
+    /** A failure the intent throws is reported with its causes on standard error, and sets the exit code. */
+    it("should report a thrown error and its cause on standard error", async () => {
+        const plugin = definePlugin({
+            name: "sous-plugin-throws",
+            register(sous) {
+                sous.intents.add({
+                    intent: "lookup",
+                    handle: () => {
+                        throw new SousError("No value at config path 'x'.", { cause: new Error("The file is empty.") });
+                    },
+                });
+            },
+        });
+        const run = await runCli([plugin], ["lookup"]);
+
+        expect(run.stdout).toBe("");
+        expect(run.stderr).toBe("Error: No value at config path 'x'.\n  Caused by: The file is empty.\n");
         expect(run.exitCode).toBe(1);
     });
 
-    /** A built-in view given a result of a shape it does not know prints it as JSON instead. */
-    it("should print an unexpected result as JSON through a built-in view", async () => {
-        const plugin = definePlugin({
-            name: "sous-plugin-odd-list",
-            register(sous) {
-                sous.intents.add({ intent: "vars.list", summary: "Odd", handle: () => ({ odd: true }) });
-            },
-        });
-        const run = await runCli([plugin], ["vars", "list"]);
-
-        expect(JSON.parse(run.stdout)).toEqual({ odd: true });
-    });
-
-    /** The banner opens a viewed command on a terminal, on standard error. */
+    /** The banner opens a command on a terminal, on standard error. */
     it("should draw the banner on a terminal only", async () => {
         const io = fakeIo();
         (io.stderr as { isTTY?: boolean }).isTTY = true;
@@ -172,6 +162,13 @@ describe("views (cli-view entities)", () => {
 
         expect(run.stderr).toContain("Agent Configuration Manager");
         expect((await runCli([reportPlugin], ["report", "make"])).stderr).not.toContain("Agent Configuration Manager");
+    });
+
+    /** Data-only outputs show as JSON when they carry a `DataValue` result. */
+    it("should show a data value as JSON", async () => {
+        const plugin = definePlugin({ name: "sous-plugin-data", register: (sous) => sous.intents.add({ intent: "data.show", handle: () => data({ a: 1 }) }) });
+
+        expect((await runCli([plugin], ["data", "show"])).stdout).toBe('{\n  "a": 1\n}\n');
     });
 });
 
@@ -210,7 +207,7 @@ describe("watch mode keys", () => {
 
         const done = runCli([watchPlugin(state)], ["build", "--watch"], { io });
 
-        await waitFor(() => io.out.join("").includes("Press Q to quit"));
+        await waitFor(() => io.err.join("").includes("Press Q to quit"));
         (io.stdin as unknown as NodeJS.WritableStream).write("r");
         await waitFor(() => state.builds.length === 2);
         (io.stdin as unknown as NodeJS.WritableStream).write("q");
@@ -220,7 +217,7 @@ describe("watch mode keys", () => {
         expect(state.builds).toEqual([{ watch: true }, { watch: false }]);
         expect(interrupted).toBe(1);
         expect(run.stdout.match(/^built$/gm)).toHaveLength(2);
-        expect(run.stdout).toContain("Manual rebuild triggered.");
+        expect(run.stderr).toContain("Manual rebuild triggered.");
     });
 
     /** Without a terminal there are no keys: the command waits for watch mode to stop. */
@@ -230,7 +227,7 @@ describe("watch mode keys", () => {
         const done = runCli([watchPlugin(state)], ["build", "--watch"], { io });
 
         await waitFor(() => state.stop !== undefined);
-        expect(io.out.join("")).not.toContain("Press Q");
+        expect(io.err.join("")).not.toContain("Press Q");
         state.stop?.();
         await done;
         expect(state.builds).toHaveLength(1);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BufferedReporter, LogLevel, ReportEntryStyle } from "@sous-io/plugin-api";
+import { BufferedReporter, ItemList, LogLevel, messageText, ReportEntryStyle } from "@sous-io/plugin-api";
 import type { DefinedVariable } from "@sous-io/plugin-recipe-answers/types";
 import { prunedForSkippedLine, reportLinkedRepos, reportPrepared, reportUnanswered, reportUnincludedMemories, skippedLine } from "./report.js";
 import type { BuildPrepareResult } from "./types.js";
@@ -59,24 +59,19 @@ describe("reportUnanswered()", () => {
         const one = new BufferedReporter();
 
         reportUnanswered([variable("jiraKey")], one);
-        expect(one.messages).toEqual([
-            {
-                level: "warning",
-                style: ReportEntryStyle.List,
-                message:
-                    "1 required recipe variable has no answer, so the templates that use it render an empty value:\n  - jiraKey (asked by acme/jira)\nRun 'sous vars ask' to answer it.",
-                details: {
-                    title: "1 required recipe variable has no answer, so the templates that use it render an empty value:",
-                    footer: "Run 'sous vars ask' to answer it.",
-                    items: ["jiraKey (asked by acme/jira)"],
-                },
-            },
-        ]);
+        expect(one.messages).toHaveLength(1);
+        expect(one.messages[0]).toMatchObject({ level: "warning", style: ReportEntryStyle.List });
+        expect(one.messages[0]!.message).toBeInstanceOf(ItemList);
+        expect(one.messages[0]!.message).toMatchObject({
+            title: "1 required recipe variable has no answer, so the templates that use it render an empty value:",
+            footer: "Run 'sous vars ask' to answer it.",
+            items: ["jiraKey (asked by acme/jira)"],
+        });
 
         const two = new BufferedReporter();
 
         reportUnanswered([variable("a"), variable("b")], two);
-        expect(two.messages[0]!.message).toContain("2 required recipe variables have no answer");
+        expect(messageText(two.messages[0]!.message)).toContain("2 required recipe variables have no answer");
     });
 });
 
@@ -108,14 +103,14 @@ describe("messages about preparing", () => {
 
         reportLinkedRepos({ acme: { path: "/src/acme" } as never }, one, LogLevel.Warning);
         expect(one.messages[0]).toMatchObject({ level: "warning", style: ReportEntryStyle.List });
-        expect(one.messages[0]!.message).toContain("One repository is LINKED to a working copy on this machine.");
-        expect(one.messages[0]!.message).toContain("acme -> /src/acme");
+        expect(messageText(one.messages[0]!.message)).toContain("One repository is LINKED to a working copy on this machine.");
+        expect(messageText(one.messages[0]!.message)).toContain("acme -> /src/acme");
 
         const two = new BufferedReporter();
 
         reportLinkedRepos({ a: { path: "/a" } as never, b: { path: "/b" } as never }, two, LogLevel.Notice);
         expect(two.messages[0]).toMatchObject({ level: "notice" });
-        expect(two.messages[0]!.message).toContain("2 repositories are LINKED");
+        expect(messageText(two.messages[0]!.message)).toContain("2 repositories are LINKED");
     });
 
     /**
@@ -134,7 +129,7 @@ describe("messages about preparing", () => {
 
         reportPrepared(prepared({ locked: { ...NO_CHANGE, unchanged: false, added: [{ key: "a/b", to: "1.0.0" }], updated: [{ key: "a/c", from: "1.0.0", to: "1.1.0" }] } }), reporter);
 
-        const text = reporter.messages.map((entry) => entry.message).join("\n");
+        const text = reporter.messages.map((entry) => messageText(entry.message)).join("\n");
 
         expect(text).toContain("pinned: a/b at version 1.0.0.");
         expect(text).toContain("a/c moved from version 1.0.0 to version 1.1.0.");
@@ -152,13 +147,13 @@ describe("messages about preparing", () => {
         const one = new BufferedReporter();
 
         reportPrepared(prepared({ newer: [{ key: "a/b", from: "1.0.0", to: "1.2.0" }] }), one);
-        expect(one.styled(ReportEntryStyle.VariableList)[0]!.details).toMatchObject({ entries: [{ label: "a/b", value: "1.2.0", detail: "this project pins 1.0.0" }] });
-        expect(one.styled(ReportEntryStyle.Note)[0]!.message).toContain("No pin was changed, so this build uses the pinned version.");
+        expect(one.styled(ReportEntryStyle.VariableList)[0]!.message).toMatchObject({ entries: [{ label: "a/b", value: "1.2.0", detail: "this project pins 1.0.0" }] });
+        expect(messageText(one.styled(ReportEntryStyle.Note)[0]!.message)).toContain("No pin was changed, so this build uses the pinned version.");
 
         const two = new BufferedReporter();
 
         reportPrepared(prepared({ newer: [{ key: "a/b", from: "1", to: "2" }, { key: "a/c", from: "1", to: "2" }] }), two);
-        expect(two.styled(ReportEntryStyle.Note)[0]!.message).toContain("uses the pinned versions.");
+        expect(messageText(two.styled(ReportEntryStyle.Note)[0]!.message)).toContain("uses the pinned versions.");
     });
 
     /**

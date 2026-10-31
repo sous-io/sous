@@ -1,34 +1,7 @@
-import { BufferedReporter, ReportEntryStyle } from "@sous-io/plugin-api";
+import { BufferedReporter, ReportEntryStyle, type Table } from "@sous-io/plugin-api";
 import { describe, expect, it } from "vitest";
 import { thresholdOf } from "./front-end.js";
-import { reportResult, reportTimings } from "./views.js";
-
-describe("reportResult()", () => {
-    /**
-     * Text is reported as text, scalars as text, anything else as data; nothing for undefined or null.
-     *
-     * reportResult(reporter, { a: 1 }); // -> a Data entry
-     */
-    it("should report each kind of result", () => {
-        const reporter = new BufferedReporter();
-
-        reportResult(reporter, undefined);
-        reportResult(reporter, null);
-        reportResult(reporter, "done");
-        reportResult(reporter, 3);
-        reportResult(reporter, false);
-        reportResult(reporter, 10n);
-        reportResult(reporter, { a: 1 });
-
-        expect(reporter.messages.map((entry) => [entry.style, entry.message])).toEqual([
-            [ReportEntryStyle.Text, "done"],
-            [ReportEntryStyle.Text, "3"],
-            [ReportEntryStyle.Text, "false"],
-            [ReportEntryStyle.Text, "10"],
-            [ReportEntryStyle.Data, '{\n  "a": 1\n}'],
-        ]);
-    });
-});
+import { reportTimings } from "./views.js";
 
 describe("reportTimings()", () => {
     /** One table row per timing, slowest total first, with calls, total, max and budget. */
@@ -40,13 +13,13 @@ describe("reportTimings()", () => {
             { key: "contributor:b", category: "contributor", name: "b", plugin: "p", count: 2, totalMs: 9, maxMs: 6, budgetMs: false, overBudget: 1 },
         ]);
 
-        const [table] = reporter.styled(ReportEntryStyle.Table);
-        const details = table!.details as { title: string; rows: Array<Record<string, unknown>> };
+        const [entry] = reporter.styled(ReportEntryStyle.Table);
+        const table = entry!.message as Table;
 
-        expect(details.title).toBe("Timings");
-        expect(details.rows.map((row) => row.name)).toEqual(["contributor:b", "intent:a"]);
-        expect(details.rows[0]).toMatchObject({ calls: 2, total: "9.0 ms", max: "6.0 ms", budget: "no budget warning, 1 over" });
-        expect(details.rows[1]).toMatchObject({ budget: "budget 10 ms" });
+        expect(table.title).toBe("Timings");
+        expect(table.rows.map((row) => row.name)).toEqual(["contributor:b", "intent:a"]);
+        expect(table.rows[0]).toMatchObject({ calls: 2, total: "9.0 ms", max: "6.0 ms", budget: "no budget warning, 1 over" });
+        expect(table.rows[1]).toMatchObject({ budget: "budget 10 ms" });
     });
 });
 

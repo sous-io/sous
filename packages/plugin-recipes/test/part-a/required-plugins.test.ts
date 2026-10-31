@@ -6,7 +6,7 @@
 
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { definePlugin, jsonSchema, scriptedPrompter, type Context } from "@sous-io/plugin-api";
+import { definePlugin, IntentOutputs, jsonSchema, scriptedPrompter, type Context } from "@sous-io/plugin-api";
 import type { PluginsInstallInput } from "@sous-io/plugin-update/types";
 import { cleanTemp, fakeHost, fakeUrl, hashOf, indexFile, startEngine, tempDir, writeRecipe, type FakeRepo } from "../part-b/helpers.js";
 import { ensureRequiredPlugins, unmetRequirements, type RequirementFlags } from "../../src/part-a/required-plugins.js";
@@ -58,7 +58,7 @@ async function engineWith(extraPlugins: Array<{ name: string; version: string }>
                 intent: "test.requirements",
                 summary: "Runs the requirement check",
                 input: jsonSchema({ type: "object", additionalProperties: true }),
-                handle: (input: unknown, ctx: Context) => ensureRequiredPlugins(ctx, [resolved], input as RequirementFlags, "workflow/alpha"),
+                handle: async (input: unknown, ctx: Context) => IntentOutputs.of({ followUp: await ensureRequiredPlugins(ctx, [resolved], input as RequirementFlags, "workflow/alpha") }),
             } as never);
             sous.intents.add({
                 intent: "plugins.install",
@@ -67,7 +67,7 @@ async function engineWith(extraPlugins: Array<{ name: string; version: string }>
                 handle: async (input: unknown) => {
                     installs.push(input as PluginsInstallInput);
 
-                    return { manager: "npm", command: { command: "npm", args: ["install"] }, installed: [], declined: false, dryRun: false };
+                    return IntentOutputs.of({ manager: "npm", command: { command: "npm", args: ["install"] }, installed: [], declined: false, dryRun: false });
                 },
             } as never);
         },
@@ -95,7 +95,7 @@ describe("ensureRequiredPlugins()", () => {
 
     it("should install the plugin through plugins.install with --install-plugins", async () => {
         const { engine } = await engineWith();
-        const result = (await engine.handle.submit({ intent: "test.requirements" as never, input: { installPlugins: true } as never })) as { intent: string };
+        const result = ((await engine.handle.submit({ intent: "test.requirements" as never, input: { installPlugins: true } as never })).toPlain() as { followUp: { intent: string } }).followUp;
 
         expect(installs).toEqual([{ plugins: ["sous-plugin-extra@^1.2.0"], yes: true }]);
         expect(result.intent).toBe("plugins.install");
@@ -114,7 +114,7 @@ describe("ensureRequiredPlugins()", () => {
     it("should do nothing when the plugin is loaded in range", async () => {
         const { engine } = await engineWith([{ name: "sous-plugin-extra", version: "1.4.0" }]);
 
-        expect(await engine.handle.submit({ intent: "test.requirements" as never, input: {} as never })).toBeUndefined();
+        expect((await engine.handle.submit({ intent: "test.requirements" as never, input: {} as never })).toPlain()).toEqual({});
         expect(installs).toEqual([]);
     });
 });

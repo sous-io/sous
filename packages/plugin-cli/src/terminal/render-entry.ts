@@ -1,24 +1,31 @@
 import {
     type CommandDetails,
-    type CommandVariablesDetails,
     type CountDetails,
-    type ListDetails,
+    DataValue,
+    errorChain,
+    IntentOutputs,
+    isSousError,
+    ItemList,
+    type IntentOutput,
     type LogLevel,
     type OperationAction,
     type OperationDetails,
     type OperationEndDetails,
+    Payload,
     ReportEntryStyle,
     type ProblemDetails,
     type QuestionDetails,
     type ReportDetails,
+    type ReportMessage,
     type ResolvedReferenceFacts,
-    type TableDetails,
-    type TreeDetails,
+    Table,
+    TextBlock,
+    Tree,
     type TreeNode,
-    type VariableDetails,
     type VariableEntry,
-    type VariableListDetails,
+    VariableSet,
 } from "@sous-io/plugin-api";
+import { HelpPage } from "../help-page.js";
 import { renderBanner } from "../views/banner.js";
 import { colorizeJson } from "../views/json.js";
 import { formatResolvedReference } from "../views/ref-report.js";
@@ -74,8 +81,16 @@ const ACTIONS: Record<OperationAction, { glyph: string; word: string; keepNote: 
  * @param layout - Builds the lines and holds the colors and the width.
  * @param state - Updated as operations and steps open and close.
  */
-export function renderEntry(layout: Layout, state: RenderState, level: LogLevel, message: string, details: ReportDetails | undefined, style: ReportEntryStyle): Rendered {
-    const rendered = renderStyled(layout, state, level, message, details, style);
+export function renderEntry(layout: Layout, state: RenderState, level: LogLevel, message: ReportMessage, details: ReportDetails | undefined, style: ReportEntryStyle): Rendered {
+    if (IntentOutputs.is(message)) {
+        return renderResult(layout, state, message);
+    }
+
+    if (message instanceof Error) {
+        return renderError(layout, level, message);
+    }
+
+    const rendered = Payload.is(message) ? renderPayload(layout, level, message, style) : renderStyled(layout, state, level, String(message), details, style);
 
     return LEVEL_MARKED.has(style) || level === "debug" ? rendered : markLevel(layout, level, rendered);
 }
@@ -113,6 +128,7 @@ function markLevel(layout: Layout, level: LogLevel, rendered: Rendered): Rendere
     return { ...rendered, lines, gapBefore: Math.max(rendered.gapBefore ?? 0, 1) };
 }
 
+/** A message that is plain text, drawn by its style; the facts a style carries are in `details`. */
 function renderStyled(layout: Layout, state: RenderState, level: LogLevel, message: string, details: ReportDetails | undefined, style: ReportEntryStyle): Rendered {
     const colors = layout.style;
     const body = BODY_INDENT + (state.step ? BODY_INDENT : 0);
@@ -120,10 +136,7 @@ function renderStyled(layout: Layout, state: RenderState, level: LogLevel, messa
 
     switch (style) {
         case ReportEntryStyle.Text:
-            return { lines: message.endsWith("\n") ? message.slice(0, -1).split("\n") : message.split("\n") };
-
-        case ReportEntryStyle.Data:
-            return { lines: (colors.enabled ? colorizeJson(message, colors) : message).split("\n") };
+            return verbatim(message);
 
         case ReportEntryStyle.Banner:
             return { lines: renderBanner(colors).replace(/\n$/, "").split("\n") };
@@ -153,50 +166,6 @@ function renderStyled(layout: Layout, state: RenderState, level: LogLevel, messa
             state.step = false;
 
             return { lines: layout.paragraphLines(message, { indent: 0, color: ok ? colors.greenBright : colors.error }), gapBefore: 1, footer: true };
-        }
-
-        case ReportEntryStyle.Variable: {
-            const entry = details as VariableDetails | undefined;
-
-            return entry === undefined ? plain(layout, level, message) : { lines: layout.formatVariable(entry), footer: true };
-        }
-
-        case ReportEntryStyle.VariableList: {
-            const list = details as VariableListDetails | undefined;
-
-            if (list === undefined) {
-                return plain(layout, level, message);
-            }
-
-            return { lines: [...(list.title === undefined ? [] : [layout.subheading(list.title)]), ...layout.variableLines(list.entries)], gapBefore: list.title === undefined ? 0 : 1, footer: true };
-        }
-
-        case ReportEntryStyle.CommandVariables: {
-            const list = details as CommandVariablesDetails | undefined;
-
-            if (list === undefined || list.entries.length === 0) {
-                return { lines: [] };
-            }
-
-            return { lines: [layout.subheading("Command Variables", "$"), ...layout.variableLines(list.entries)], gapBefore: 1, footer: true };
-        }
-
-        case ReportEntryStyle.List: {
-            const list = details as ListDetails | undefined;
-
-            return list === undefined ? plain(layout, level, message) : { lines: listLines(layout, list), footer: true };
-        }
-
-        case ReportEntryStyle.Table: {
-            const table = details as TableDetails | undefined;
-
-            return table === undefined ? plain(layout, level, message) : tableEntry(layout, table);
-        }
-
-        case ReportEntryStyle.Tree: {
-            const tree = details as TreeDetails | undefined;
-
-            return tree === undefined ? plain(layout, level, message) : treeEntry(layout, tree);
         }
 
         case ReportEntryStyle.Count: {
@@ -248,6 +217,157 @@ function renderStyled(layout: Layout, state: RenderState, level: LogLevel, messa
         default:
             return plain(layout, level, message);
     }
+}
+
+/** Text exactly as given, one line per line of text (a trailing newline ends the last line; none for empty text). */
+function verbatim(text: string): Rendered {
+    return { lines: text === "" ? [] : text.endsWith("\n") ? text.slice(0, -1).split("\n") : text.split("\n") };
+}
+
+/**
+ * Draws a payload (`VariableSet`, `Table`, ...) by its kind, whether it came as a message while an
+ * intent runs or as the result of an output. `style` says what the entry is where the payload alone
+ * does not (`CommandVariables`, `Note`, `DryRun`, `Text`). Only the payload's own fields are read.
+ */
+function renderPayload(layout: Layout, level: LogLevel, payload: Payload, style: ReportEntryStyle): Rendered {
+    const colors = layout.style;
+
+    if (payload instanceof VariableSet) {
+        if (style === ReportEntryStyle.CommandVariables) {
+            return payload.entries.length === 0
+                ? { lines: [] }
+                : { lines: [layout.subheading(payload.title ?? "Command Variables", "$"), ...layout.variableLines(payload.entries)], gapBefore: 1, footer: true };
+        }
+
+        const titled = payload.title !== undefined;
+
+        return { lines: [...(titled ? [layout.subheading(payload.title!)] : []), ...layout.variableLines(payload.entries)], gapBefore: titled ? 1 : 0, footer: true };
+    }
+
+    if (payload instanceof Table) {
+        return tableEntry(layout, payload);
+    }
+
+    if (payload instanceof ItemList) {
+        return { lines: listLines(layout, payload), footer: true };
+    }
+
+    if (payload instanceof Tree) {
+        return treeEntry(layout, payload);
+    }
+
+    if (payload instanceof DataValue) {
+        const json = payload.toText();
+
+        return { lines: (colors.enabled ? colorizeJson(json, colors) : json).split("\n") };
+    }
+
+    if (payload instanceof HelpPage) {
+        return verbatim(payload.render(colors));
+    }
+
+    if (payload instanceof TextBlock) {
+        if (style === ReportEntryStyle.Note) {
+            return { lines: layout.noteLines(payload.text), footer: true };
+        }
+
+        if (style === ReportEntryStyle.DryRun) {
+            return { lines: layout.dryRunLines(payload.text), footer: true };
+        }
+
+        return payload.verbatim || style === ReportEntryStyle.Text ? verbatim(payload.text) : plain(layout, level, payload.text);
+    }
+
+    return plain(layout, level, payload.toText());
+}
+
+/**
+ * A command's result: each output in order. Its title is a heading, its summary a paragraph, then
+ * its result payload. Between two parts, the blank lines the one before wants after it or the one
+ * after wants before it, whichever is more.
+ */
+function renderResult(layout: Layout, state: RenderState, outputs: IntentOutputs<object>): Rendered {
+    return joinRendered(outputs.toArray().flatMap((output) => renderOutput(layout, state, output)));
+}
+
+/** The parts of one output. */
+function renderOutput(layout: Layout, state: RenderState, output: IntentOutput): Rendered[] {
+    const parts: Rendered[] = [];
+    const style = output.style ?? ReportEntryStyle.Plain;
+    const block = style === ReportEntryStyle.CommandVariables && output.result instanceof VariableSet;
+
+    if (output.title !== undefined && !block) {
+        state.step = false;
+        parts.push({ lines: [layout.heading(output.title)], gapBefore: 1, gapAfter: 1, footer: true });
+    }
+
+    if (block) {
+        const set = output.result as VariableSet;
+
+        parts.push(renderPayload(layout, "info", new VariableSet(set.entries, { title: output.title ?? set.title ?? "Command Variables" }), style));
+    }
+
+    if (output.summary !== undefined) {
+        parts.push({ lines: layout.paragraphLines(output.summary), footer: true });
+    }
+
+    if (output.result !== undefined && !block) {
+        parts.push(renderPayload(layout, "info", output.result, style));
+    }
+
+    return parts;
+}
+
+/** Puts rendered parts one after another with the blank lines between them they ask for. */
+function joinRendered(parts: readonly Rendered[]): Rendered {
+    const shown = parts.filter((part) => part.lines.length > 0);
+    const lines: string[] = [];
+
+    shown.forEach((part, index) => {
+        const gap = index === 0 ? 0 : Math.max(shown[index - 1]!.gapAfter ?? 0, part.gapBefore ?? 0);
+
+        lines.push(...Array.from({ length: gap }, () => BLANK), ...part.lines);
+    });
+
+    const first = shown[0];
+    const last = shown[shown.length - 1];
+
+    return {
+        lines,
+        ...(first?.gapBefore === undefined ? {} : { gapBefore: first.gapBefore }),
+        ...(last?.gapAfter === undefined ? {} : { gapAfter: last.gapAfter }),
+        ...(shown.some((part) => part.footer === true) ? { footer: true } : {}),
+    };
+}
+
+/**
+ * An error and the errors under it. The first line is the message in the level's color, with the
+ * level's prefix; a failure that ends the run (`critical`) is the CLI's "Error: ". Under it, the
+ * error's `details`, then each cause as "Caused by: ..." with its own details one step deeper.
+ *
+ * ```text
+ * Error: Could not add the repository.
+ *   Check the URL.
+ *   Caused by: getaddrinfo ENOTFOUND example.com
+ * ```
+ */
+function renderError(layout: Layout, level: LogLevel, error: Error): Rendered {
+    const colors = layout.style;
+    const paint = level === "debug" ? colors.muted : levelPaint(layout, level);
+    const prefix = level === "critical" ? ERROR_PREFIX : (LEVEL_PREFIX[level] ?? "");
+    const indented = (text: string, depth: number) =>
+        text
+            .split("\n")
+            .flatMap((line) => (line.trim() === "" ? [BLANK] : wrapText(`${" ".repeat(depth)}${line}`, layout.wrapWidth, { hangingIndent: 2 }).map((wrapped) => paint(wrapped))));
+    const detailsOf = (each: Error, depth: number) => (isSousError(each) ? each.details.flatMap((detail) => indented(detail, depth)) : []);
+    const [first, ...causes] = errorChain(error);
+    const lines = [...wrapText(`${prefix}${first!.message}`, layout.wrapWidth).map((line) => paint(line)), ...detailsOf(first!, 2)];
+
+    for (const cause of causes) {
+        lines.push(...indented(`Caused by: ${cause.message}`, 2), ...detailsOf(cause, 4));
+    }
+
+    return level === "warning" ? { lines, gapBefore: 1, gapAfter: 1 } : { lines, gapBefore: 1 };
 }
 
 /** The color a level paints its text with: yellow for a warning, red for an error or worse, none otherwise. */
@@ -331,7 +451,7 @@ function operation(layout: Layout, details: OperationDetails | undefined, messag
 }
 
 /** A list: its title, bullets, and a closing sentence. */
-function listLines(layout: Layout, list: ListDetails): string[] {
+function listLines(layout: Layout, list: ItemList): string[] {
     const colors = layout.style;
     const lines: string[] = [];
     const indentBy = 4;
@@ -354,7 +474,7 @@ function listLines(layout: Layout, list: ListDetails): string[] {
 }
 
 /** A table under an optional title, or the sentence for having no rows. */
-function tableEntry(layout: Layout, table: TableDetails): Rendered {
+function tableEntry(layout: Layout, table: Table): Rendered {
     const titled = table.title === undefined ? [] : [layout.subheading(table.title)];
 
     if (table.rows.length === 0 && table.empty !== undefined) {
@@ -421,7 +541,7 @@ function questionEntry(layout: Layout, question: QuestionDetails): Rendered {
 }
 
 /** Nested items under an optional title: two spaces per level, a detail in grey after the label. */
-function treeEntry(layout: Layout, tree: TreeDetails): Rendered {
+function treeEntry(layout: Layout, tree: Tree): Rendered {
     const colors = layout.style;
     const lines: string[] = tree.title === undefined ? [] : [layout.subheading(tree.title)];
     const walk = (nodes: readonly TreeNode[], depth: number): void => {

@@ -94,7 +94,7 @@ export class ConfigBuilderImpl extends Reporting(Object) implements ConfigBuilde
     }
 
     /** This run's patch set. */
-    result(): PatchSet {
+    patchSet(): PatchSet {
         return this.recorder.result();
     }
 

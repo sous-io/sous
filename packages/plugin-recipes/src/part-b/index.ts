@@ -16,10 +16,10 @@ import { coreIndexOverlay, packagedCoreRecipeDir } from "./core/core-recipe.js";
 import { CoreSeeder, coreContributor } from "./core/core-contributor.js";
 import { fetchContributor } from "./fetch/fetch-contributor.js";
 import { IndexCacheService } from "./index-cache/index-cache.js";
-import { collectStore, rebuildLock, showLock } from "./intents/lock-intents.js";
-import { linkRepo } from "./links/link-intent.js";
+import { collectStore, lockRebuildOutputs, lockShowOutputs, rebuildLock, showLock, storeGcOutputs } from "./intents/lock-intents.js";
+import { linkOutputs, linkRepo } from "./links/link-intent.js";
 import { LinksFiles } from "./links/links-service.js";
-import { unlinkRepo } from "./links/unlink-intent.js";
+import { unlinkOutputs, unlinkRepo } from "./links/unlink-intent.js";
 import { LockService, trustedRepos } from "./lock/lock-service.js";
 import { lockfileLookup } from "./lookups/lockfile-lookup.js";
 import { explainMissing } from "./namespaces/explain-missing.js";
@@ -172,7 +172,7 @@ function registerIntents(sous: Sous, runtime: PartBRuntime): void {
         input: lockRebuildInputSchema,
         changesConfig: true,
         cli: { aliases: [["locks", "rebuild"]], examples: ["sous lock rebuild", "sous lock rebuild --dry-run"] },
-        handle: (input, ctx) => rebuildLock(input, ctx),
+        handle: async (input, ctx) => lockRebuildOutputs(await rebuildLock(input, ctx)),
     });
 
     sous.intents.add({
@@ -182,7 +182,7 @@ function registerIntents(sous: Sous, runtime: PartBRuntime): void {
         input: lockShowInputSchema,
         parallel: true,
         cli: { aliases: [["locks", "show"]], examples: ["sous lock show"] },
-        handle: (_input, ctx) => showLock(ctx),
+        handle: (_input, ctx) => lockShowOutputs(showLock(ctx)),
     });
 
     sous.intents.add({
@@ -191,7 +191,7 @@ function registerIntents(sous: Sous, runtime: PartBRuntime): void {
         summary: "Collect the machine-wide recipe store back down to its size cap",
         input: repoGcInputSchema,
         cli: { aliases: [["repos", "gc"]], examples: ["sous repo gc", "sous repo gc --dry-run", "sous repo gc --max-bytes 268435456"] },
-        handle: (input, ctx) => collectStore(input, ctx),
+        handle: async (input, ctx) => storeGcOutputs(await collectStore(input, ctx)),
     });
 
     sous.intents.add({
@@ -221,7 +221,7 @@ function registerIntents(sous: Sous, runtime: PartBRuntime): void {
             ],
         },
         agent: { usage: "Use to edit a repository's recipes in a working copy. Pass yes: true to trust a repository the project does not trust yet." },
-        handle: (input, ctx) => linkRepo(input, ctx, runtime),
+        handle: async (input, ctx) => linkOutputs(await linkRepo(input, ctx, runtime)),
     });
 
     sous.intents.add({
@@ -236,6 +236,6 @@ function registerIntents(sous: Sous, runtime: PartBRuntime): void {
             flags: { yes: { short: "y", aliases: ["force", "trust"] } },
             examples: ["sous repo unlink sous-recipes", "sous repo unlink sous-recipes --update", "sous repo unlink sous-recipes --remove", "sous repo unlink sous-recipes --global"],
         },
-        handle: (input, ctx) => unlinkRepo(input, ctx, runtime),
+        handle: async (input, ctx) => unlinkOutputs(ctx, await unlinkRepo(input, ctx, runtime)),
     });
 }

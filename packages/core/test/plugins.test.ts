@@ -4,7 +4,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { definePlugin, PluginError } from "@sous-io/plugin-api";
-import { contributorsPlugin, keysPlugin, makeEngine, plugin } from "./helpers.js";
+import { contributorsPlugin, keysPlugin, makeEngine, nothing, plugin } from "./helpers.js";
 
 /** A plugin module's source: it sets `loaded.<name>` to true, so tests see it ran. */
 function pluginSource(name: string, extra = ""): string {
@@ -351,8 +351,8 @@ describe("plugin lifecycle", () => {
         });
         const extender = plugin("sous-plugin-diagrams", (sous) => {
             sous.services.add("compiler.diagram-renderer", () => ({}));
-            sous.intents.add({ intent: "diagrams.render", handle: () => 0 });
-            sous.intents.add({ intent: "build", handle: () => 0 });
+            sous.intents.add({ intent: "diagrams.render", handle: () => nothing() });
+            sous.intents.add({ intent: "build", handle: () => nothing() });
         });
         const { engine, reporter } = makeEngine([compiler, extender]);
 
@@ -371,7 +371,7 @@ describe("plugin lifecycle", () => {
         const { engine } = makeEngine([
             plugin("p", (sous) => {
                 sous.config.contribute({ id: "c", contribute() {} });
-                sous.intents.add({ intent: "p.go", handle: () => 1 });
+                sous.intents.add({ intent: "p.go", handle: () => nothing() });
                 sous.intents.wrap("p.go", (next) => next);
                 sous.services.add("p.svc", () => 1, { lifetime: "singleton" });
                 sous.services.replace("p.other", () => 2);

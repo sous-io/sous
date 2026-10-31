@@ -16,10 +16,10 @@
  */
 
 import fs from "node:fs";
-import { ConfigError, type Context } from "@sous-io/plugin-api";
+import { ConfigError, IntentOutputs, ReportEntryStyle, type Context } from "@sous-io/plugin-api";
 import type { IndexFile } from "@sous-io/plugin-formats/types";
 import type { ReleasePlanEntry, ReleaseProblem, RepoReleaseInput, RepoReleaseResult } from "../types.js";
-import { toolsFrom, type AuthoringTools } from "../tools.js";
+import { listOutput, outputsOf, textOutput, toolsFrom, type AuthoringTools } from "../tools.js";
 import { RepoGit, UPSTREAM_REMOTE } from "../shared/git.js";
 import { describeCount, describeError, errorsIn, hasErrors, warningsIn } from "../shared/problems.js";
 import { findRepoRoot, INDEX_FILE, validateRepo, type RepoValidation } from "../shared/repository.js";
@@ -36,8 +36,9 @@ export interface ReleaseOptions {
 }
 
 /** The intent's handler. */
-export async function handleRelease(input: RepoReleaseInput, ctx: Context): Promise<RepoReleaseResult> {
-    const result = await runRelease(toolsFrom(ctx), input, { cwd: ctx.cwd });
+export async function handleRelease(input: RepoReleaseInput, ctx: Context): Promise<IntentOutputs<RepoReleaseResult>> {
+    const tools = toolsFrom(ctx);
+    const result = await runRelease(tools, input, { cwd: ctx.cwd });
 
     if (!result.dryRun && result.cancelled !== true && result.plan.length > 0) {
         await ctx.emit("authoring.released", {
@@ -47,10 +48,14 @@ export async function handleRelease(input: RepoReleaseInput, ctx: Context): Prom
         });
     }
 
-    return result;
+    return outputsOf(tools, result);
 }
 
-/** Runs a release with the given tools. */
+/**
+ * Runs a release with the given tools. What the command shows as its result (the facts it ran with,
+ * the plan, what is left alone, what to do next) is added to `tools.results`; the checks and the
+ * steps are reported as they run.
+ */
 export async function runRelease(tools: AuthoringTools, input: RepoReleaseInput, options: ReleaseOptions): Promise<RepoReleaseResult> {
     const reporter = tools.reporter;
     const dryRun = input.dryRun === true;
@@ -66,11 +71,7 @@ export async function runRelease(tools: AuthoringTools, input: RepoReleaseInput,
     const scope = releaseScope(input.namespace ?? [], input.recipe ?? []);
     const base = { repository: rootDir, indexPath: indexFilePath(rootDir), dryRun };
 
-    reporter.variables([
-        { label: "Repository", value: rootDir },
-        { label: "Mode", value: describeMode(input) },
-        { label: "Scope", value: describeScope(scope) },
-    ]);
+    tools.results.push(tools.commandVariables({ Repository: rootDir, Mode: describeMode(input), Scope: describeScope(scope) }));
 
     // --- Validate ---------------------------------------------------------------------------
 
@@ -132,7 +133,7 @@ export async function runRelease(tools: AuthoringTools, input: RepoReleaseInput,
     const entries = (hashes: Map<string, string>) => plan.releases.map((release) => planEntry(release, hashes.get(release.key) ?? ""));
 
     if (dryRun) {
-        reporter.dryRun("Nothing was written; this was a dry run.");
+        tools.results.push(textOutput("Nothing was written; this was a dry run.", ReportEntryStyle.DryRun));
 
         return { ...empty, plan: entries(await workingHashes(tools, validation)) };
     }
@@ -222,9 +223,12 @@ export async function runRelease(tools: AuthoringTools, input: RepoReleaseInput,
             reporter.detail(`Created the tag ${release.tag}.`);
         }
     } else {
-        reporter.note(
-            `No tags were cut: this is the branch '${branch}', and tags are cut on the default branch '${mainBranch}'. ` +
-                `Continuous integration does that after the merge, or pass '--tag' to cut them here.`,
+        tools.results.push(
+            textOutput(
+                `No tags were cut: this is the branch '${branch}', and tags are cut on the default branch '${mainBranch}'. ` +
+                    `Continuous integration does that after the merge, or pass '--tag' to cut them here.`,
+                ReportEntryStyle.Note,
+            ),
         );
     }
 
@@ -259,7 +263,7 @@ export async function runRelease(tools: AuthoringTools, input: RepoReleaseInput,
         }
 
         next.push("Or run this command again with '--push', which does both.");
-        reporter.list(next, { title: "What to do next" });
+        tools.results.push(listOutput(next, { title: "What to do next" }));
     }
 
     const hashes = new Map(plan.releases.map((release) => [release.key, rebuilt.index.recipes[release.key]?.versions[release.to]?.hash ?? ""]));
@@ -312,15 +316,17 @@ async function runCheck(
     const drift = result.stale ? describeIndexDrift(existing, result.index) : [];
 
     if (result.stale) {
-        reporter.list(drift, { title: `Merging rewrites the committed ${INDEX_FILE}, because:` }, "notice");
+        tools.results.push(listOutput(drift, { title: `Merging rewrites the committed ${INDEX_FILE}, because:` }));
     } else {
         reporter.detail(`The committed ${INDEX_FILE} is current, and so are the dependencies it records for every version it publishes.`);
     }
 
     if (result.pending.length > 0) {
-        reporter.list(
-            result.pending.map((entry) => `${entry.key}: ${entry.version} (the tag would be ${entry.tag})`),
-            { title: "These versions have no tag yet; they publish when this merges:" },
+        tools.results.push(
+            listOutput(
+                result.pending.map((entry) => `${entry.key}: ${entry.version} (the tag would be ${entry.tag})`),
+                { title: "These versions have no tag yet; they publish when this merges:" },
+            ),
         );
     }
 
@@ -360,9 +366,12 @@ async function runCheck(
     } else if (compared.kind === "none declined") {
         reporter.detail("No recipe in this repository declines proposed changes.");
     } else {
-        reporter.note(
-            "This checkout holds neither a copy of the default branch nor a release tag of any recipe that declines " +
-                "proposed changes, so there was nothing to compare with.",
+        tools.results.push(
+            textOutput(
+                "This checkout holds neither a copy of the default branch nor a release tag of any recipe that declines " +
+                    "proposed changes, so there was nothing to compare with.",
+                ReportEntryStyle.Note,
+            ),
         );
     }
 
@@ -467,40 +476,45 @@ function stopOnErrors(problems: readonly ReleaseProblem[]): void {
     );
 }
 
+/** Adds the plan to the result: what would be published, what is left alone, and what the run would do. */
 function reportPlan(tools: AuthoringTools, plan: ReleasePlan, context: { willTag: boolean; branch: string | undefined; push: boolean }): void {
-    const reporter = tools.reporter;
-
-    reporter.operationStart("The release this would make");
+    const heading = "The release this would make";
 
     if (plan.releases.length === 0) {
-        reporter.list(
-            plan.skipped.map((entry) => `${entry.key}: ${entry.reason}`),
-            { title: "Nothing in scope has changed since the tag that last published it.", footer: "Pass '--include-unchanged' to release everything in scope anyway." },
+        tools.results.push(
+            listOutput(
+                plan.skipped.map((entry) => `${entry.key}: ${entry.reason}`),
+                { heading, title: "Nothing in scope has changed since the tag that last published it.", footer: "Pass '--include-unchanged' to release everything in scope anyway." },
+            ),
         );
 
         return;
     }
 
-    reporter.list(plan.releases.map(describeRelease));
+    tools.results.push(listOutput(plan.releases.map(describeRelease), { heading }));
 
     if (plan.skipped.length > 0) {
-        reporter.list(
-            plan.skipped.map((entry) => `${entry.key}: ${entry.reason}`),
-            { title: "Left alone" },
+        tools.results.push(
+            listOutput(
+                plan.skipped.map((entry) => `${entry.key}: ${entry.reason}`),
+                { title: "Left alone" },
+            ),
         );
     }
 
-    reporter.list(
-        [
-            "Raise the versions listed above, in the manifests that declare them.",
-            `Regenerate ${INDEX_FILE}, with each version's dependencies resolved.`,
-            "Commit the manifests and the index together.",
-            context.willTag ? "Cut one annotated tag per version, dependency-first." : `Cut no tags: this is the branch '${context.branch}', not the default one.`,
-            context.push
-                ? `Push the commit${context.willTag ? " and the tags" : ""} to ${UPSTREAM_REMOTE}.`
-                : "Push nothing; pass '--push' to push what it makes.",
-        ],
-        { title: "This run would" },
+    tools.results.push(
+        listOutput(
+            [
+                "Raise the versions listed above, in the manifests that declare them.",
+                `Regenerate ${INDEX_FILE}, with each version's dependencies resolved.`,
+                "Commit the manifests and the index together.",
+                context.willTag ? "Cut one annotated tag per version, dependency-first." : `Cut no tags: this is the branch '${context.branch}', not the default one.`,
+                context.push
+                    ? `Push the commit${context.willTag ? " and the tags" : ""} to ${UPSTREAM_REMOTE}.`
+                    : "Push nothing; pass '--push' to push what it makes.",
+            ],
+            { title: "This run would" },
+        ),
     );
 }
 

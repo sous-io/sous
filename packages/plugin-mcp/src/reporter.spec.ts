@@ -1,5 +1,5 @@
 import type { ServerNotification } from "@modelcontextprotocol/sdk/types.js";
-import type { LogLevel } from "@sous-io/plugin-api";
+import { IntentOutputs, type LogLevel, ReportEntryStyle, TextBlock, VariableSet } from "@sous-io/plugin-api";
 import { describe, expect, it } from "vitest";
 import { McpReporter } from "./reporter.js";
 
@@ -40,6 +40,47 @@ describe("McpReporter", () => {
             { level: "notice", logger: "sous", data: { message: "Because.", style: "note" } },
             { level: "info", logger: "sous", data: { message: "written: /a/b.md", style: "operation", action: "written", target: "/a/b.md", tokens: 3 } },
         ]);
+    });
+
+    it("sends an error's cause chain as text and as errors", () => {
+        const { sent, reporter } = make("info");
+
+        reporter.warning(new Error("Could not download", { cause: new Error("DNS failed") }));
+
+        expect(sent.map((notification) => notification.params)).toEqual([
+            {
+                level: "warning",
+                logger: "sous",
+                data: {
+                    message: "Could not download\nCaused by: DNS failed",
+                    style: "plain",
+                    errors: [
+                        { name: "Error", message: "Could not download" },
+                        { name: "Error", message: "DNS failed" },
+                    ],
+                },
+            },
+        ]);
+    });
+
+    it("sends a payload's text as the message and its plain fields next to it", () => {
+        const { sent, reporter } = make("info");
+
+        reporter.log("info", new VariableSet({ Recipe: "acme/git" }), undefined, ReportEntryStyle.VariableList);
+        reporter.log("info", new TextBlock("Hello."), undefined, ReportEntryStyle.Note);
+
+        expect(sent.map((notification) => (notification.params as { data: unknown }).data)).toEqual([
+            { message: "Recipe: acme/git", style: "variable-list", Recipe: "acme/git" },
+            { message: "Hello.", style: "note", text: "Hello." },
+        ]);
+    });
+
+    it("does not send a command's result, since the tool call returns it", () => {
+        const { sent, reporter } = make("debug");
+
+        reporter.result(IntentOutputs.of({ done: true }));
+
+        expect(sent).toEqual([]);
     });
 
     it("drops the banner", () => {

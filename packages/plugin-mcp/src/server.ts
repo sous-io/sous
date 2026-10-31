@@ -9,7 +9,7 @@ import {
     SetLevelRequestSchema,
     type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
-import { type Context, isSousError, type LogLevel } from "@sous-io/plugin-api";
+import { type Context, type IntentOutputs, isSousError, type LogLevel, messageText } from "@sous-io/plugin-api";
 import { ElicitationPrompter } from "./prompter.js";
 import { McpReporter } from "./reporter.js";
 import type { McpServeResult, McpToolDefinition, McpTools } from "./types.js";
@@ -91,14 +91,14 @@ export async function serveMcp(ctx: Context, options: ServeOptions): Promise<Mcp
         let result: CallToolResult;
 
         try {
-            const value = await engine.submit(service.toRequest(name, request.params.arguments ?? {}), {
+            const outputs = await engine.submit(service.toRequest(name, request.params.arguments ?? {}), {
                 reporter,
                 prompter,
                 // An agent's relative paths mean the project, not wherever the server was started.
                 cwd: ctx.project?.root ?? ctx.cwd,
             });
 
-            result = successResult(value, tool);
+            result = successResult(outputs);
         } catch (error) {
             failed++;
             result = errorResult(error);
@@ -170,40 +170,26 @@ function toMcpTool(tool: McpToolDefinition): Tool {
     };
 }
 
-/** An intent's result as a tool result: text for every client, and the object itself when it is one. */
-function successResult(value: unknown, tool: McpToolDefinition): CallToolResult {
-    const structured = isPlainObject(value) ? value : undefined;
-
+/**
+ * An intent's outputs as a tool result: their text for every client, and their plain object as
+ * structured content. Outputs with a non-zero exit code (a build with errors) are an error result,
+ * so the agent sees that it failed.
+ */
+function successResult(outputs: IntentOutputs): CallToolResult {
     return {
-        content: [{ type: "text", text: resultText(value) }],
-        ...(structured ? { structuredContent: structured } : tool.outputSchema ? { structuredContent: { result: value } } : {}),
+        ...(outputs.exitCode !== undefined && outputs.exitCode !== 0 ? { isError: true } : {}),
+        content: [{ type: "text", text: outputs.toText() || "Done." }],
+        structuredContent: outputs.toPlain(),
     };
 }
 
 /** An error as a tool result, so the agent reads what went wrong and how to fix it. */
 function errorResult(error: unknown): CallToolResult {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = error instanceof Error ? messageText(error) : String(error);
     const details = isSousError(error) ? error.details : [];
     const text = [message, ...details.map((detail) => `  ${detail}`)].join("\n");
 
     return { isError: true, content: [{ type: "text", text }] };
-}
-
-/** The text of a result, written the way the CLI prints it. */
-export function resultText(value: unknown): string {
-    if (value === undefined || value === null) {
-        return "Done.";
-    }
-
-    if (typeof value === "string") {
-        return value;
-    }
-
-    if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
-        return String(value);
-    }
-
-    return JSON.stringify(value, null, 2);
 }
 
 /** What the server tells the client about itself. */
@@ -214,8 +200,4 @@ function instructionsFor(ctx: Context): string {
         : "no project (none was found where the server started; tools that need one will fail)";
 
     return `${name} ${version}, serving ${where}. Every tool runs a ${name} intent, as the matching ${name} command does.`;
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-    return typeof value === "object" && value !== null && !Array.isArray(value);
 }

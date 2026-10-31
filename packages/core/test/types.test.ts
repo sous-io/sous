@@ -1,4 +1,5 @@
 import { describe, expectTypeOf, it } from "vitest";
+import { IntentOutputs } from "@sous-io/plugin-api";
 import type {
     AnyEvent,
     Context,
@@ -71,7 +72,7 @@ describe("types across plugins", () => {
     it("should type exact event names", () => {
         expectTypeOf<EventFor<"typed.render.before">>().toEqualTypeOf<IntentBeforeEvent<"typed.render">>();
         expectTypeOf<EventFor<"typed.render.before">["input"]>().toEqualTypeOf<{ only?: string }>();
-        expectTypeOf<EventFor<"typed.render.after">["result"]>().toEqualTypeOf<{ rendered: number }>();
+        expectTypeOf<EventFor<"typed.render.after">["result"]>().toEqualTypeOf<IntentOutputs<{ rendered: number }>>();
         expectTypeOf<EventFor<"typed.render.error">>().toEqualTypeOf<IntentErrorEvent<"typed.render">>();
         expectTypeOf<EventFor<"typed.rendered">>().toEqualTypeOf<CustomEvent<{ files: RenderResult[] }>>();
         expectTypeOf<EventFor<"undeclared.before">["input"]>().toBeUnknown();
@@ -103,7 +104,7 @@ describe("types across plugins", () => {
                 expectTypeOf(event.input).toEqualTypeOf<{ only?: string }>();
             });
             expectTypeOf(sous.services.get("typed.renderer")).toEqualTypeOf<Renderer>();
-            sous.intents.add({ intent: "typed.render", handle: (input) => ({ rendered: input.only ? 1 : 0 }) });
+            sous.intents.add({ intent: "typed.render", handle: (input) => IntentOutputs.of({ rendered: input.only ? 1 : 0 }) });
         };
 
         expectTypeOf(register).toBeFunction();

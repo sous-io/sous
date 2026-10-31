@@ -7,11 +7,12 @@
  */
 
 import type { Context } from "@sous-io/plugin-api";
-import type { AnswerFlags, IntentFollowUp, RecipeChangeFlags } from "../types.js";
+import type { AnswerFlags, RecipeChangeFlags } from "../types.js";
+import type { RanFollowUp } from "./outputs.js";
 import { hasIntent } from "./util.js";
 
 /** Runs `vars.ask` for some recipes, unless there is nothing to ask or no plugin provides it. */
-export async function askFollowUp(ctx: Context, flags: RecipeChangeFlags & AnswerFlags, recipes: readonly string[]): Promise<IntentFollowUp> {
+export async function askFollowUp(ctx: Context, flags: RecipeChangeFlags & AnswerFlags, recipes: readonly string[]): Promise<RanFollowUp> {
     if (flags.dryRun === true) {
         return { intent: "vars.ask", skipped: "--dry-run" };
     }
@@ -37,11 +38,11 @@ export async function askFollowUp(ctx: Context, flags: RecipeChangeFlags & Answe
         await ctx.refreshConfig();
     }
 
-    return { intent: "vars.ask", result };
+    return { intent: "vars.ask", result: result.toPlain(), outputs: result };
 }
 
 /** Runs `build`, unless `--no-build` or `--dry-run` was given or no plugin provides it. */
-export async function buildFollowUp(ctx: Context, flags: RecipeChangeFlags): Promise<IntentFollowUp> {
+export async function buildFollowUp(ctx: Context, flags: RecipeChangeFlags): Promise<RanFollowUp> {
     if (flags.dryRun === true) {
         return { intent: "build", skipped: "--dry-run" };
     }
@@ -57,5 +58,7 @@ export async function buildFollowUp(ctx: Context, flags: RecipeChangeFlags): Pro
     // The build reports as it goes, so its heading comes first, as before the refactor.
     ctx.reporter.operationStart("Building the project");
 
-    return { intent: "build", result: await ctx.run("build", {}) };
+    const built = await ctx.run("build", {});
+
+    return { intent: "build", result: built.toPlain(), outputs: built };
 }

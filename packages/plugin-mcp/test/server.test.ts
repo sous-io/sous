@@ -1,5 +1,5 @@
 import { ElicitRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { jsonSchema, type PluginDefinition } from "@sous-io/plugin-api";
+import { DataValue, IntentOutputs, jsonSchema, type PluginDefinition } from "@sous-io/plugin-api";
 import { afterEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import type { McpCalledPayload } from "../src/types.js";
@@ -25,7 +25,9 @@ const fixtures: PluginDefinition = plugin("test-intents", (sous) => {
             ctx.reporter.info("Read 2 namespaces.");
             ctx.reporter.warning("One repository is offline.", { repository: "example" });
 
-            return { namespaces: input.repository ? [input.repository] : ["a", "b"], chain: ctx.chain !== undefined };
+            const data = { namespaces: input.repository ? [input.repository] : ["a", "b"], chain: ctx.chain !== undefined };
+
+            return IntentOutputs.of(data, { result: new DataValue(data) });
         },
     });
 
@@ -34,12 +36,12 @@ const fixtures: PluginDefinition = plugin("test-intents", (sous) => {
         summary: "Find recipes by name",
         agent: { tool: "recipe_search" },
         input: jsonSchema<{ query: string }>({ type: "object", properties: { query: { type: "string" } }, required: ["query"] }),
-        handle: (input) => `Found 0 recipes for ${input.query}.`,
+        handle: (input) => IntentOutputs.of({ found: 0 }, { summary: `Found 0 recipes for ${input.query}.` }),
     });
 
-    sous.intents.add({ intent: "secret.reset", summary: "Hidden from agents", agent: { hidden: true }, handle: () => "no" });
-    sous.intents.add({ intent: "inner.step", internal: true, handle: () => "no" });
-    sous.intents.add({ intent: "watch.run", background: true, handle: () => "no" });
+    sous.intents.add({ intent: "secret.reset", summary: "Hidden from agents", agent: { hidden: true }, handle: () => IntentOutputs.of({}) });
+    sous.intents.add({ intent: "inner.step", internal: true, handle: () => IntentOutputs.of({}) });
+    sous.intents.add({ intent: "watch.run", background: true, handle: () => IntentOutputs.of({}) });
 
     sous.intents.add({
         intent: "vars.ask",
@@ -60,7 +62,7 @@ const fixtures: PluginDefinition = plugin("test-intents", (sous) => {
             });
             const sure = await ctx.prompter.confirm({ message: "Write the answers?", answeredBy: "--yes" });
 
-            return { name, harness, sure };
+            return IntentOutputs.of({ name, harness, sure });
         },
     });
 
@@ -71,7 +73,7 @@ const fixtures: PluginDefinition = plugin("test-intents", (sous) => {
             ctx.reporter.progress({ label: "Downloading recipes", done: 1, total: 2 });
             ctx.reporter.progress({ label: "Downloading recipes", done: 2, total: 2, finished: true });
 
-            return 2;
+            return IntentOutputs.of({ steps: 2 });
         },
     });
 
@@ -178,7 +180,7 @@ describe("mcp.serve: tools generated from intents", () => {
 
     it("keeps the first of two intents claiming one tool name, and warns naming both", async () => {
         const rival = plugin("rival", (sous) => {
-            sous.intents.add({ intent: "rival.search", agent: { tool: "recipe_search" }, handle: () => "rival" });
+            sous.intents.add({ intent: "rival.search", agent: { tool: "recipe_search" }, handle: () => IntentOutputs.of({}) });
         });
 
         served = await serve([fixtures, rival]);
@@ -200,12 +202,13 @@ describe("mcp.serve: tool calls", () => {
         expect(JSON.parse(textOf(result))).toEqual({ namespaces: ["github.com/x/y"], chain: true });
     });
 
-    it("returns a string result as it is", async () => {
+    it("returns the outputs' text, and their plain object as structured content", async () => {
         served = await serve([fixtures]);
 
-        expect(textOf(await served.client.callTool({ name: "recipe_search", arguments: { query: "skills" } }))).toBe(
-            "Found 0 recipes for skills.",
-        );
+        const result = await served.client.callTool({ name: "recipe_search", arguments: { query: "skills" } });
+
+        expect(textOf(result)).toBe("Found 0 recipes for skills.");
+        expect(result.structuredContent).toEqual({ found: 0 });
     });
 
     it("reports bad input as a tool error naming the field", async () => {

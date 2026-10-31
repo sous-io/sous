@@ -14,11 +14,12 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { ConfigError, InputError, LogLevel, SousError, type Context } from "@sous-io/plugin-api";
+import { commandVariables, ConfigError, InputError, IntentOutputs, LogLevel, SousError, type Context } from "@sous-io/plugin-api";
 import "@sous-io/plugin-host/types";
 import { discoverInstalls, readPackageJson, realpathOr } from "./installs.js";
 import { buildUpdatePlans, type PlannedUpdate } from "./plan.js";
 import { fetchPublishedVersions, registryUrl } from "./registry.js";
+import { formatCommand, planTitle, updateCommandEntries, updateOutputs, withData } from "./report.js";
 import type { InstallScope, PlannedCommand, UpdateInput, UpdateOutcome, UpdatePlan, UpdateResult } from "./types.js";
 import type { VersionRequest } from "./versions.js";
 
@@ -27,11 +28,6 @@ export const NO_DELEGATE_ENV = "SOUS_NO_DELEGATE";
 
 /** The flag spellings a question that cannot be asked names. */
 const YES_FLAG = "--yes (also -y, --force)";
-
-/** A command as a person would type it. */
-export function formatCommand(command: PlannedCommand): string {
-    return [command.command, ...command.args].join(" ");
-}
 
 /** Reads the version request out of the input. */
 export function requestOf(input: UpdateInput): VersionRequest {
@@ -51,15 +47,6 @@ function checkInput(input: UpdateInput): void {
     if (input.global && input.project) {
         throw new InputError("update", [{ path: "global", message: "cannot be combined with project" }]);
     }
-}
-
-/** "Global install", "Global install (pnpm)" when there are several, or "Project install". */
-export function planTitle(plan: UpdatePlan, globalCount: number): string {
-    if (plan.scope === "project") {
-        return "Project install";
-    }
-
-    return globalCount > 1 ? `Global install (${plan.manager})` : "Global install";
 }
 
 /** The question one plan asks. */
@@ -165,6 +152,8 @@ async function buildProject(plan: PlannedUpdate, directory: string | undefined, 
         command = { command: process.execPath, args: [path.resolve(root, entry), "build"], cwd: directory };
     }
 
+    ctx.reporter.operationStart("Building the project");
+
     const exitCode = await execute(ctx, command, { ...ctx.env, [NO_DELEGATE_ENV]: "1" });
 
     if (exitCode !== 0) {
@@ -209,13 +198,20 @@ function questionText(plan: UpdatePlan, title: string, index: number, count: num
  * just before it runs (its own output follows), a failure, and the plan a question is about. The
  * result holds the rest (the plans, the notices, the summary), which the front end shows.
  */
-export async function handle(input: UpdateInput, ctx: Context): Promise<UpdateResult> {
+export async function handle(input: UpdateInput, ctx: Context): Promise<IntentOutputs<UpdateResult>> {
     checkInput(input);
 
     const dryRun = input.dryRun === true;
     const only: InstallScope | undefined = input.global ? "global" : input.project ? "project" : undefined;
     const registry = registryUrl(ctx.env);
     const configProblem = configProblemOf(ctx);
+
+    if (configProblem !== undefined) {
+        const where = configProblem.configPath === undefined ? "the project config" : `the project config at ${configProblem.configPath}`;
+
+        ctx.reporter.problem(`Sous could not load ${where}, so this command carries on without it.`, { cause: `The error was:\n${configProblem.message}` });
+    }
+
     const metadata = await fetchPublishedVersions(ctx.services.get("host.http"), ctx.env);
     const discovery = await discoverInstalls({ cwd: ctx.cwd, ownRoot: ctx.services.get("host.package").identity().realRoot }, ctx);
     const { plans, notices } = buildUpdatePlans(discovery, metadata, {
@@ -235,8 +231,13 @@ export async function handle(input: UpdateInput, ctx: Context): Promise<UpdateRe
     let build: UpdateResult["build"];
     let failed = false;
 
+    const finish = (result: UpdateResult): IntentOutputs<UpdateResult> =>
+        new IntentOutputs<UpdateResult>(
+            withData(updateOutputs(result, input, commandVariables(ctx, updateCommandEntries(result, input, ctx.cwd))), result),
+        );
+
     if (plans.length === 0) {
-        return { ...base, outcomes, failed };
+        return finish({ ...base, outcomes, failed });
     }
 
     const actionable = plans.filter((plan) => plan.direction !== "current");
@@ -307,7 +308,7 @@ export async function handle(input: UpdateInput, ctx: Context): Promise<UpdateRe
         });
     }
 
-    return result;
+    return finish(result);
 }
 
 /** One line saying what became of a plan. */

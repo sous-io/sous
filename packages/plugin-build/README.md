@@ -11,12 +11,15 @@ It adds these commands:
 | `sous prune` | removes outputs the config no longer produces |
 | `sous clear` | deletes every file and directory sous wrote for the project |
 
+`build` and `compile` return the "Command Variables" block, then the result as data, and exit with code 1 when the build has errors. `prune` and `clear` return one sentence saying how much was removed. Progress (targets, removed files, the lockfile) is reported while they run.
+
 ## Using it from another plugin
 
 ```ts
 import type {} from "@sous-io/plugin-build/types";
 
-const result = await ctx.run("build", { dryRun: true });
+// Intents return outputs; a calling intent reads the last output's plain object.
+const result = (await ctx.run("build", { dryRun: true })).toPlain();   // BuildResult, including `watching`
 ```
 
 ## Where things are
