@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
@@ -107,3 +107,43 @@ describe("the sous bin, end to end", () => {
         expect(best).toBeLessThan(600);
     });
 });
+
+describe("the sous bin, with a JavaScript config in a project whose package.json has no type", () => {
+    /** Runs `sous version` in a fresh project holding the given `.sous/sous.config.js`. */
+    function runWithConfig(source: string) {
+        const dir = mkdtempSync(path.join(tmpdir(), "sous-typeless-"));
+
+        try {
+            mkdirSync(path.join(dir, ".sous"));
+            writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name: "typeless" }));
+            writeFileSync(path.join(dir, ".sous", "sous.config.js"), source);
+
+            return spawnSync(process.execPath, [bin, "version"], {
+                cwd: dir,
+                encoding: "utf8",
+                env: { PATH: process.env.PATH ?? "", NODE_OPTIONS: "" },
+            });
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    }
+
+    /** sous.config.js: export const config = { ... }   // no MODULE_TYPELESS_PACKAGE_JSON warning on stderr */
+    it("should load an ES module sous.config.js without Node's typeless package warning", () => {
+        const run = runWithConfig("export const config = {};\n");
+
+        expect(run.status).toBe(0);
+        expect(run.stderr).not.toContain("MODULE_TYPELESS_PACKAGE_JSON");
+        expect(run.stderr).not.toContain("Module type of file");
+    });
+
+    /** sous.config.js: module.exports = {}   // a CommonJS file keeps loading */
+    it("should still load a CommonJS sous.config.js", () => {
+        const run = runWithConfig("module.exports = {};\n");
+
+        expect(run.status).toBe(0);
+        expect(run.stderr).not.toContain("MODULE_TYPELESS_PACKAGE_JSON");
+        expect(run.stderr).not.toContain("Error");
+    });
+});
+

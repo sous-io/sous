@@ -20,6 +20,7 @@ import {
 import type { ExpressionsEvaluator } from "@sous-io/plugin-expressions/types";
 import type { HostGlobs } from "@sous-io/plugin-host/types";
 import { type LegacyRunner, mergeLegacy, moduleConfigure, moduleExports } from "./module-file.js";
+import { declareConfigModule } from "./module-format.js";
 import { formatOf, MAIN_CONFIG_BASE_NAME, MAIN_CONFIG_FILE_NAMES } from "./names.js";
 import type { ConfigFileFormat, ConfigFilesLoader, ContributeOptions, LoadedConfigFile } from "./types.js";
 
@@ -235,6 +236,8 @@ export class ConfigFilesLoaderImpl implements ConfigFilesLoader {
         if (this.host.importModule !== undefined) {
             return this.host.importModule(url, file);
         }
+
+        declareConfigModule(file, url);
 
         try {
             return (await import(url)) as Record<string, unknown>;

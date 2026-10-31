@@ -1828,3 +1828,8 @@ All in `packages/plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022): a 
 - **Before:** standard output ended with the two closing blank lines.
 - **Now:** it ends with the last line of the result.
 - **Why:** the closing blank lines are for a terminal; output sent to a pipe or a file no longer gets them.
+
+### New tests in `sous/test/bin.test.ts`
+
+- **New** "should load an ES module sous.config.js without Node's typeless package warning" and "should still load a CommonJS sous.config.js".
+  - **Why:** a `.js` ES module config in a project whose package.json has no `"type"` made Node print MODULE_TYPELESS_PACKAGE_JSON on every run; the loader now marks such a file as an ES module itself.
