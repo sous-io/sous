@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/plugin-build",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "The build, compile, prune and clear intents, preparing for a build, watch mode, the PID file, the runtime context file.",
   "type": "module",
   "license": "Apache-2.0",

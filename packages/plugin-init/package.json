@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/plugin-init",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Scaffolding a project's .sous/ (sous init).",
   "type": "module",
   "license": "Apache-2.0",

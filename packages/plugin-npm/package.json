@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/plugin-npm",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A package-manager entity for npm.",
   "type": "module",
   "license": "Apache-2.0",

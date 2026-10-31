@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/documents",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Surgical JSON, JSONC and YAML editing, expressed as primitive patches",
   "type": "module",
   "license": "Apache-2.0",

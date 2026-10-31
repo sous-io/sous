@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/plugin-recipe-answers",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Recipe variable definitions, the answer ladder, asking for answers, answer files and variable mappings.",
   "type": "module",
   "license": "Apache-2.0",

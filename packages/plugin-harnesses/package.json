@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/plugin-harnesses",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "The harness entity, launching a harness, headless runs, and the tools settings.",
   "type": "module",
   "license": "Apache-2.0",
