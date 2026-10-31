@@ -4,6 +4,11 @@
   "description": "The plugin interface of sous: definePlugin, the shared type interfaces, Reporter, Prompter and the error classes",
   "type": "module",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sous-io/sous.git",
+    "directory": "packages/plugin-api"
+  },
   "private": false,
   "exports": {
     ".": {
