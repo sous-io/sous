@@ -185,7 +185,21 @@ jobs:
 
           git tag -a "$TAG" -m "sous $VERSION"
           git push origin HEAD:main
-          git push origin "$TAG"
+          # GitHub occasionally rejects a tag push with no reason ("[remote rejected] ... (failed)",
+          # the v1.0.2 release); the release commit is already on main by then, so try again.
+          for attempt in 1 2 3; do
+            if git push origin "$TAG"; then
+              break
+            fi
+
+            if [ "$attempt" = 3 ]; then
+              echo "The tag $TAG could not be pushed after 3 attempts."
+              exit 1
+            fi
+
+            echo "Pushing the tag $TAG failed; trying again in 10 seconds."
+            sleep 10
+          done
           echo "Pushed the release commit and the tag $TAG."
 
   publish:
