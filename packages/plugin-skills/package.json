@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/plugin-skills",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Skills: where they come from, the skill-target entity, and the compilation targets for them.",
   "type": "module",
   "license": "Apache-2.0",

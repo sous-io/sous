@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/plugin-inspect",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Showing the engine's state: config show, config get, config validate, plugins show, timings.",
   "type": "module",
   "license": "Apache-2.0",

@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/plugin-api",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "The plugin interface of sous: definePlugin, the shared type interfaces, Reporter, Prompter and the error classes",
   "type": "module",
   "license": "Apache-2.0",

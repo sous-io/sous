@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/repository-hosts",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "What the repository-host plugins share: URL parsing, token sources, read strategies, the read chain.",
   "type": "module",
   "license": "Apache-2.0",

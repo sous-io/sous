@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/plugin-memories",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Memories: selecting them, the memory-target entity, the compilation targets for them, the #memories name.",
   "type": "module",
   "license": "Apache-2.0",

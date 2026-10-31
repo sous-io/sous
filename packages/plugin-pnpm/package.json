@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/plugin-pnpm",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A package-manager entity for pnpm.",
   "type": "module",
   "license": "Apache-2.0",
