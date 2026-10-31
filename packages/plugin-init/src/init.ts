@@ -1,6 +1,6 @@
 /**
  * The `init` intent: sets a project up for sous. It writes the `.sous/` directory a project needs
- * (a commented primary config, the starter prompt that config compiles, the two answers files and
+ * (a commented primary config (`sous.config.js`), the starter prompt that config compiles, the two answers files and
  * the sous-managed ignore block), then runs the first build through the one build path, which is
  * what seeds the `core` recipe and pins it in the lockfile.
  *
@@ -9,10 +9,9 @@
  */
 
 import path from "node:path";
-import { ConfigError, InputError, type Context } from "@sous-io/plugin-api";
+import { ConfigError, type Context } from "@sous-io/plugin-api";
 import "@sous-io/plugin-build/types";
 import { findEnclosingProject, scaffoldProject } from "./scaffold.js";
-import { INIT_CONFIG_FORMATS } from "./templates.js";
 import type { InitInput, InitResult } from "./types.js";
 
 /** The flag spelling the non-interactive error names. */
@@ -54,19 +53,13 @@ async function confirmNesting(ctx: Context, root: string, yes: boolean): Promise
 
 /** Runs the intent. */
 export async function handle(input: InitInput, ctx: Context): Promise<InitResult> {
-    const format = input.format ?? INIT_CONFIG_FORMATS[0];
-
-    if (!(INIT_CONFIG_FORMATS as readonly string[]).includes(format)) {
-        throw new InputError("init", [{ path: "format", message: `must be one of ${INIT_CONFIG_FORMATS.join(", ")}` }]);
-    }
-
     const dryRun = input.dryRun === true;
     const root = path.resolve(ctx.cwd, input.directory ?? ".");
     const name = (input.name ?? path.basename(root)).trim() || path.basename(root);
 
     await confirmNesting(ctx, root, input.yes === true);
 
-    const scaffold = await scaffoldProject(ctx, { root, format, name, dryRun });
+    const scaffold = await scaffoldProject(ctx, { root, name, dryRun });
 
     // The files written, kept and planned are in the result, which the front end shows.
     const result = {

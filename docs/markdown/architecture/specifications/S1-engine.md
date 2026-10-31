@@ -150,7 +150,7 @@ catalog     (parallel)        ·waiting·····██      queued behind build
 ## Intents
 
 An intent is a step a user or another plugin asks for: a name and a typed input. Exactly one handler
-runs it and returns a result.
+runs it and returns its result as outputs (see "What an intent returns").
 
 ```ts
 sous.intents.add({
@@ -172,7 +172,13 @@ sous.intents.add({
 
         await ctx.run("build", {});
 
-        return { subscribed: recipe.key };
+        return new IntentOutputs(
+            new IntentOutput({
+                summary: `Subscribed to ${recipe.key}.`,
+                result: new VariableSet({ Recipe: recipe.key, Version: recipe.version }),
+                data: { subscribed: recipe.key },
+            }),
+        );
     },
 });
 ```
@@ -189,9 +195,9 @@ sous.intents.add({
 
 ```ts
 sous.intents.wrap("build", (next) => async (input, ctx) => {
-    const result = await next(input, ctx);
+    const outputs = await next(input, ctx);
 
-    return { ...result, diagrams: await renderDiagrams(ctx) };
+    return outputs.with(new IntentOutput({ title: "Diagrams", result: await renderDiagrams(ctx) }));
 });
 ```
 
@@ -201,6 +207,38 @@ sous.intents.wrap("build", (next) => async (input, ctx) => {
 8. A chain gets the working directory of the front end that submitted it as `ctx.cwd`: the CLI
    gives the process's, the MCP server the project root. Services get the engine's. Plugins never
    read `process.cwd()`.
+
+### What an intent returns
+
+A handler returns `IntentOutputs`: one or more `IntentOutput`s, in the order they are shown. An
+intent returns its result; it never prints it.
+
+```ts
+const output = new IntentOutput({
+    title: "Downloaded file",                                   // for people
+    summary: "Downloaded 'https://example.com/a.zip' to '/work/a.zip'.",
+    result: new VariableSet({ URL: url, File: localPath, Size: size }),
+    data: { url, localPath, size },                             // for machines; default: result.toPlain()
+});
+
+return new IntentOutputs(output);
+```
+
+1. **A result is a payload type**, such as `VariableSet`, `Table`, `ItemList`, `Tree` or `TextBlock`.
+   Each holds plain values and converts to them: `toPlain()` gives a plain object, and each type adds
+   its own (`VariableSet.toObject()`, `Table.toRows()`, `ItemList.toArray()`, `TextBlock.toString()`).
+2. **`data` is what machines get.** An output's plain value is its `data` when given, else its
+   `result.toPlain()`. `--json` prints it, MCP returns it as the tool's result, and a calling intent
+   reads it: `(await ctx.run("build.prepare", {})).toPlain()`. `toPlain()` always returns a plain
+   object, never an array; with several outputs it returns the last one's. `first()`, `last()` and
+   `toArray()` give the outputs themselves.
+3. **The front end shows the outputs**: the CLI with `reporter.result(outputs)` after the chain
+   returns. Nothing about a domain is known to the CLI: there are no per-intent views.
+4. **A failure that ends the intent is thrown**, as an error whose `cause` is the error below it. The
+   front end reports it once, at `critical`, with its whole cause chain. A problem a component works
+   around is reported where it happens, at `warning` or `error`, and the work carries on.
+5. An intent that ends with a non-zero exit code (a build with errors) says so on its outputs:
+   `new IntentOutputs(outputs, { exitCode: 1 })`.
 
 ### What an intent declares for the CLI and for agents
 
@@ -294,11 +332,11 @@ sous.on("build.before", async (event, ctx) => {
 });
 
 sous.on("build.after", (event) => {
-    event.result = { ...event.result, note: "pruned 3 files" };   // replace the result
+    event.result = event.result.with(prunedNote);           // replace the outputs
 });
 
 sous.on("build.error", (event) => {
-    event.recover({ built: 0 });                            // turn the failure into a result
+    event.recover(new IntentOutputs(builtNothing));         // turn the failure into outputs
 });
 ```
 
@@ -505,7 +543,7 @@ export default definePlugin({
         sous.on("diagrams.rendered", async (event, ctx) => {
             event.payload.files;                                      // RenderResult[]
             const renderer = ctx.services.get("diagrams.renderer");   // Renderer
-            const result = await ctx.run("diagrams.render", {});      // { rendered: number }
+            const result = (await ctx.run("diagrams.render", {})).toPlain();   // { rendered: number }
         });
     },
 });
@@ -556,12 +594,10 @@ export default definePlugin({
 sous.frontEnds.add({
     id: "cli",
     async start(engine, argv) {
-        const result = await engine.submit(intentFromArgv(argv), {
-            reporter: new TerminalReporter(),
-            prompter: new TerminalPrompter(),
-        });
+        const reporter = new TerminalReporter();
+        const outputs = await engine.submit(intentFromArgv(argv), { reporter, prompter: new TerminalPrompter() });
 
-        printResult(result);
+        reporter.result(outputs);                           // --json prints outputs.toPlain() instead
     },
 });
 ```
@@ -606,16 +642,24 @@ A command's code loads only when it runs, so `--help` and shell completion stay 
 
 Every message goes through one method of the reporter, `log(level, message, details?, style?)`:
 
-- **The level** uses the syslog names in full: `debug`, `info`, `notice`, `warning`, `error`,
-  `critical`, `alert` and `emergency` (`LogLevel.Notice`, ...).
-- **The style** says what kind of entry the message is (`ReportEntryStyle.OperationStart`,
-  `ReportEntryStyle.Table`, ...), and `details` carries its facts. A caller never formats output: each
-  front end's reporter decides how each style looks (the CLI draws it with colors and alignment, MCP
-  sends the facts as data). A style is added when an output needs one.
+- **`message` is for people.** It says everything a person needs; assume nobody reads `details`. It
+  is a string, an `Error` (shown with its whole cause chain), a payload (a `VariableSet`, a `Table`,
+  ...) or, for a command's result, `IntentOutputs`.
+- **`details` is for machines**: plain JSON values that a log or an MCP client may keep. A front end
+  never needs it to show the message.
+- **The style is a hint** (`ReportEntryStyle.OperationStart`, `ReportEntryStyle.Note`, ...). A
+  reporter uses it or ignores it; it never decides what the message holds.
+- **The level** uses the syslog names in full, with these meanings:
+  - `debug`: only in verbose output.
+  - `info`: something worth knowing, maybe.
+  - `notice`: something important or pivotal.
+  - `warning`: everything is fine, but this may cause trouble later if ignored.
+  - `error`: something went wrong, and sous works around it.
+  - `critical`: the operation failed; if it was the only one, the run failed.
+  - `alert` and `emergency`: for plugins (a likely or definite outage); sous does not use them.
 - **The convenience methods** sit on top of `log`: one per level (`debug()` to `emergency()`, plus
-  `warn()` and `emerg()`), each `(message, details?, style?)`, and one or more per style, each with
-  typed parameters and a default level the last parameter overrides (`operationStart(name, level =
-  LogLevel.Notice)`, `operation(action, target, facts)`, `table(columns, rows)`, ...).
+  `warn()` and `emerg()`; `warning()` and above also take an `Error`), one or more per style
+  (`operationStart(name, level = LogLevel.Notice)`, `variables(entries)`, ...), and `result(outputs)`.
 
 All of them are defined once, in `BaseReporter` (plugin-api). `Reporter`, the type plugins see, is
 derived from it; every reporter extends it; the `Reporting` mixin copies its convenience methods onto
@@ -628,8 +672,8 @@ ctx.reporter.operationStart("Building the project");
 ctx.reporter.operation("written", "/work/app/CLAUDE.md", { tokens: 1840 });
 ```
 
-The CLI sends `debug`, `info` and `notice` to standard output and `warning` and above to standard
-error; under `--json`, only the JSON result goes to standard output.
+The CLI sends a command's result (`IntentOutputs`) to standard output and everything else to
+standard error. Under `--json`, standard output holds only `outputs.toPlain()` as JSON.
 
 Every CLI command accepts `--log-level <level>`, which shows messages at that level and above, and
 `--debug`, which means `--log-level debug`. Both are `cli-global-argument` entities of `plugin-cli`.
@@ -860,6 +904,19 @@ project loads no other plugin:
 None. (The name `plugin-recipes` is an agent decision the user may overrule.)
 
 ## Changes
+
+### 2026-10-30: An intent returns outputs; the CLI has no views
+
+"What an intent returns" is new; "Reporting: levels and styles" is rewritten; the front-end example
+changes. Designed by Luke in an agent session (2026-10-30, the scratch design in
+`docs/notes/sous-refactor/result-presentation.ts`): a handler returns `IntentOutputs` that the
+reporter knows how to show, `message` is for people and `details` for machines, a style is a hint,
+failures are thrown as cause chains, and results go to standard output while everything else goes to
+standard error. Ruled in the same session: "having the CLI understand domains ... is stupid", and
+"`toPlain()` means "to plain object", so no, it never returns an array. If multiple exist, return the
+last." Filled in by the agent, not yet ruled: the `data` field on an output (so `--json` keeps domain
+data rather than display cells), `with()` for wrappers, `exitCode` on `IntentOutputs`, results at
+`notice`, and failures that end a command at `critical`.
 
 ### 2026-10-30: Help, version and completion skip the config build
 

@@ -30,10 +30,8 @@ tooling. A JSON config can bind it:
 { "$schema": "./path/to/sous.config.schema.json" }
 ```
 
-The `$schema` key is accepted at the top level and ignored by sous itself. A config written by
-`sous init --format jsonc` binds it to the same artifact as published on GitHub for the running
-version, so an editor resolves it without a path into the installed package; point it at the
-package-local copy instead when the editor should work offline.
+The `$schema` key is accepted at the top level and ignored by sous itself. Point it at the
+package-local copy, or at the artifact published on GitHub for the version you run.
 
 ?> Because each plugin declares its own config keys, the published schema file may not know a key
 that a plugin adds. An editor may flag such a key even though sous accepts it; `sous config validate`

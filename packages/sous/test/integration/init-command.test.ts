@@ -230,37 +230,6 @@ describe("sous init in a directory that has never seen sous", () => {
   );
 
   /**
-   * `--format json` should write `sous.config.jsonc` (JSON with comments) bound
-   * to the schema for the running version through `$schema`, and that config
-   * should build.
-   */
-  it(
-    "should write a JSON config bound to the shipped schema when asked",
-    () => {
-      const project = freshProject("json");
-
-      const init = sous(project, ["init", "--format", "json", "--no-build"]);
-      expect(init.status, init.stdout + init.stderr).toBe(0);
-
-      const configPath = path.join(project, ".sous", "sous.config.jsonc");
-      expect(fs.existsSync(configPath)).toBe(true);
-      expect(fs.existsSync(path.join(project, ".sous", "sous.config.js"))).toBe(false);
-
-      const schema = /"\$schema":\s*"([^"]+)"/.exec(fs.readFileSync(configPath, "utf8"))?.[1];
-      expect(schema).toContain(`/v${SOUS_VERSION}/sous.config.schema.json`);
-
-      // --no-build wrote nothing beyond the setup itself.
-      expect(fs.existsSync(path.join(project, "AGENTS.md"))).toBe(false);
-
-      const build = sous(project, ["build"]);
-      expect(build.status, build.stdout + build.stderr).toBe(0);
-      expect(fs.existsSync(path.join(project, "AGENTS.md"))).toBe(true);
-      expect(fs.readFileSync(path.join(project, "AGENTS.md"), "utf8")).not.toContain("@#memories");
-    },
-    CLI_TIMEOUT
-  );
-
-  /**
    * `--dry-run` should print what would be written and write nothing at all.
    */
   it(

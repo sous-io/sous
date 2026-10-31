@@ -1631,3 +1631,28 @@ Changes made when every message moved onto a level and a style (`BaseReporter`).
   - **Before:** the view for `build.prepare` printed the lockfile, restore, newer-version, unanswered-variable and skipped-recipe facts.
   - **Now:** removed. The view no longer exists; `build.prepare` is internal and plugin-build's `reportPrepared` (`src/report.ts`, covered by `src/report.spec.ts`) is the only reporter of those facts.
   - **Why:** the view was a second copy of that reporting. `BuildPrepareResult` lost `skippedLines` and `unansweredWarning` with it.
+
+### plugin-init and `sous init`: the `--format` option is gone
+
+- **"should write a JSON config bound to the shipped schema when asked"** (`packages/sous/test/integration/init-command.test.ts`)
+  - **Before:** `sous init --format json --no-build` wrote `.sous/sous.config.jsonc` bound to the schema.
+  - **Now:** removed. `sous init` always writes `.sous/sous.config.js`.
+  - **Why:** ruling by the user, 2026-10-30: "remove the format option entirely, all `init` commands should produce `sous.config.js`; I will add it back later, if it seems useful."
+- **"should bind the JSONC config to the schema for this version"**, **"should write sous.config.jsonc for --format %s"** and **"should refuse an unknown format"** (`packages/plugin-init/test/init.test.ts`)
+  - **Before / now:** removed with the option.
+  - **Why:** same ruling.
+- **"should write every file a new project needs"**, **"should write a config without projectRoot or a skills directory"** and **"should write a JavaScript config"** (`packages/plugin-init/test/init.test.ts`)
+  - **Before:** the first two passed `format: "json"` and expected `sous.config.jsonc`; the third passed `format: "js"`.
+  - **Now:** none passes a format; they expect `sous.config.js` (the second reads the config through the loader as a module).
+  - **Why:** same ruling.
+- **"should register the init intent with every old flag"** (`packages/plugin-init/test/index.test.ts`)
+  - **Before:** expected the input properties to include `format` with `["js", "jsonc", "json"]`.
+  - **Now:** `format` is not expected.
+  - **Why:** same ruling.
+
+### `command-inventory.test.ts` deleted
+
+- **The whole "the command inventory" suite** (`packages/sous/test/command-inventory.test.ts`; it ran only with `SOUS_CHECK_INVENTORY=1`)
+  - **Before:** compared the new command tree with `fixtures/command-inventory.json`.
+  - **Now:** deleted. The fixture stays because `packages/plugin-authoring/test/plugin.test.ts` still reads it.
+  - **Why:** ruling by the user, 2026-10-30: "this is not a valid long-term test".

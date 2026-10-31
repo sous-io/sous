@@ -5,7 +5,7 @@ import { ConfigError, NonInteractiveError } from "@sous-io/plugin-api";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { handle } from "../src/init.js";
 import { IGNORE_BLOCK_END, IGNORE_BLOCK_START } from "@sous-io/plugin-host";
-import { configSchemaUrl, STARTER_PROMPT_RELATIVE_PATH } from "../src/templates.js";
+import { STARTER_PROMPT_RELATIVE_PATH } from "../src/templates.js";
 import { initContext } from "./helpers.js";
 
 let tmp: string;
@@ -52,9 +52,9 @@ describe("init", () => {
      */
     it("should write every file a new project needs", async () => {
         const { ctx } = initContext();
-        const result = await handle({ directory: projectRoot, format: "json", noBuild: true }, ctx);
+        const result = await handle({ directory: projectRoot, noBuild: true }, ctx);
 
-        expect(result).toMatchObject({ root: projectRoot, sousDir, configPath: path.join(sousDir, "sous.config.jsonc"), dryRun: false, kept: [] });
+        expect(result).toMatchObject({ root: projectRoot, sousDir, configPath: path.join(sousDir, "sous.config.js"), dryRun: false, kept: [] });
         expect(result.files.every((file) => path.isAbsolute(file))).toBe(true);
         expect(listTree(projectRoot)).toEqual([
             ".sous/.env",
@@ -63,7 +63,7 @@ describe("init", () => {
             ".sous/README.md",
             ".sous/conf.d/README.md",
             `.sous/${STARTER_PROMPT_RELATIVE_PATH}`,
-            ".sous/sous.config.jsonc",
+            ".sous/sous.config.js",
         ]);
         expect([...result.files].sort()).toEqual([...listTree(projectRoot).map((file) => path.join(projectRoot, file))].sort());
     });
@@ -76,64 +76,40 @@ describe("init", () => {
     it("should write a config without projectRoot or a skills directory", async () => {
         const { ctx } = initContext();
 
-        await handle({ directory: projectRoot, format: "json", noBuild: true }, ctx);
+        await handle({ directory: projectRoot, noBuild: true }, ctx);
 
-        const jsonc = fs.readFileSync(path.join(sousDir, "sous.config.jsonc"), "utf8");
-        const loaded = await initContext().ctx.services.get("config-files.loader").load(path.join(sousDir, "sous.config.jsonc"));
+        const text = fs.readFileSync(path.join(sousDir, "sous.config.js"), "utf8");
+        const loaded = await initContext().ctx.services.get("config-files.loader").load(path.join(sousDir, "sous.config.js"));
 
-        expect(jsonc).not.toMatch(/_vars/);
-        expect(jsonc).not.toMatch(/projectRoot\s*"?:/);
-        expect(jsonc).not.toContain(".claude");
+        expect(text).not.toMatch(/_vars/);
+        expect(text).not.toMatch(/projectRoot\s*"?:/);
+        expect(text).not.toContain(".claude");
         expect(fs.readFileSync(path.join(sousDir, STARTER_PROMPT_RELATIVE_PATH), "utf8")).not.toContain(".claude");
-        expect(loaded).toMatchObject({
-            kind: "data",
-            data: {
-                name: "my-app",
-                compilation: { targets: [{ entryPoint: `\${sousDir}/${STARTER_PROMPT_RELATIVE_PATH}`, outputs: [{ destinationFile: "${projectRoot}/AGENTS.md" }] }] },
-            },
+        expect(loaded).toMatchObject({ kind: "module" });
+        expect(JSON.parse((loaded as unknown as { text: string }).text)).toMatchObject({
+            name: "my-app",
+            compilation: { targets: [{ entryPoint: `\${sousDir}/${STARTER_PROMPT_RELATIVE_PATH}`, outputs: [{ destinationFile: "${projectRoot}/AGENTS.md" }] }] },
         });
 
         const other = path.join(tmp, "other");
 
         fs.mkdirSync(other);
-        await handle({ directory: other, name: "Other Project", format: "json", noBuild: true }, initContext().ctx);
-        expect(fs.readFileSync(path.join(other, ".sous/sous.config.jsonc"), "utf8")).toContain('"name": "Other Project"');
+        await handle({ directory: other, name: "Other Project", noBuild: true }, initContext().ctx);
+        expect(fs.readFileSync(path.join(other, ".sous/sous.config.js"), "utf8")).toContain('name: "Other Project"');
     });
 
-    /** The json format should be bound to the shipped schema for this sous version through $schema. */
-    it("should bind the JSONC config to the schema for this version", async () => {
-        await handle({ directory: projectRoot, format: "json", noBuild: true }, initContext({ version: "0.1.1" }).ctx);
-
-        const parsed = await initContext().ctx.services.get("config-files.loader").load(path.join(sousDir, "sous.config.jsonc"));
-
-        expect((parsed as unknown as { data: { $schema: string } }).data.$schema).toBe(configSchemaUrl("0.1.1"));
-        expect(configSchemaUrl("0.1.1")).toContain("/v0.1.1/sous.config.schema.json");
-    });
-
-    /** The js format should write sous.config.js, comments and all, and it should load. */
+    /** The config should be written as sous.config.js, comments and all. */
     it("should write a JavaScript config", async () => {
-        const result = await handle({ directory: projectRoot, format: "js", noBuild: true }, initContext().ctx);
+        const result = await handle({ directory: projectRoot, noBuild: true }, initContext().ctx);
 
         expect(result.configPath).toBe(path.join(sousDir, "sous.config.js"));
+        expect(fs.existsSync(path.join(sousDir, "sous.config.jsonc"))).toBe(false);
 
         const text = fs.readFileSync(result.configPath, "utf8");
 
         expect(text).toContain('name: "my-app"');
         expect(text).not.toMatch(/_vars|projectRoot:/);
         expect(text).toMatch(/^\/\/ The primary sous config for my-app\./);
-    });
-
-    /** Both spellings of the JSONC format should write sous.config.jsonc. */
-    it.each(["jsonc", "json"] as const)("should write sous.config.jsonc for --format %s", async (format) => {
-        await handle({ directory: projectRoot, format, noBuild: true }, initContext().ctx);
-
-        expect(fs.existsSync(path.join(sousDir, "sous.config.jsonc"))).toBe(true);
-        expect(fs.existsSync(path.join(sousDir, "sous.config.js"))).toBe(false);
-    });
-
-    /** A format that is not offered is refused. */
-    it("should refuse an unknown format", async () => {
-        await expect(handle({ directory: projectRoot, format: "yaml" as never }, initContext().ctx)).rejects.toThrow(/not valid/);
     });
 
     /** A .sous/ that already holds a primary config is refused by name and nothing is written. */

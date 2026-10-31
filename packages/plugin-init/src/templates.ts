@@ -6,11 +6,9 @@
  * legible; a rendering step would only stand between the author of the scaffold and the person who
  * has to live with the result.
  *
- * Every builder returns a complete file, ending in a newline. Neither config sets `projectRoot`:
+ * Every builder returns a complete file, ending in a newline. The config does not set `projectRoot`:
  * sous sets it (and `sousDir`) itself, and a config that sets one is an error.
  */
-
-import type { InitConfigFormat } from "./types.js";
 
 /** The `.sous/` directory's name. */
 export const SOUS_DIR_NAME = ".sous";
@@ -24,15 +22,8 @@ export const ENV_DEFAULTS_NAME = ".env";
 /** The gitignored answers file inside `.sous/`. */
 export const ENV_LOCAL_NAME = ".env.local";
 
-/** The config formats `sous init` can write. The first one is the default. */
-export const INIT_CONFIG_FORMATS = ["js", "jsonc", "json"] as const satisfies readonly InitConfigFormat[];
-
-/** The file name each format is written under. */
-export const CONFIG_FILE_NAMES: Readonly<Record<InitConfigFormat, string>> = {
-    jsonc: "sous.config.jsonc",
-    json: "sous.config.jsonc",
-    js: "sous.config.js",
-};
+/** The file name `sous init` writes the primary config under. */
+export const CONFIG_FILE_NAME = "sous.config.js";
 
 /**
  * The path, relative to `.sous/`, of the starter prompt the scaffolded config compiles. It lives
@@ -52,16 +43,7 @@ export interface ScaffoldContext {
     sousVersion: string;
 }
 
-/**
- * Where the JSON Schema for a config of this sous version is published. An editor resolving
- * `$schema` wants a URL, and the tagged copy on GitHub matches this version for as long as the tag
- * exists.
- */
-export function configSchemaUrl(sousVersion: string): string {
-    return `https://raw.githubusercontent.com/sous-io/sous/v${sousVersion}/sous.config.schema.json`;
-}
-
-/** The comment above the primary config, shared by both formats. */
+/** The comment above the primary config. */
 function configIntro(context: ScaffoldContext): string[] {
     return [
         `The primary sous config for ${context.name}.`,
@@ -74,44 +56,7 @@ function configIntro(context: ScaffoldContext): string[] {
     ];
 }
 
-/**
- * The primary config as JSON with comments, bound to the shipped schema through `$schema` so an
- * editor can validate and complete it.
- */
-export function buildConfigJsonc(context: ScaffoldContext): string {
-    const intro = configIntro(context).map((line) => (line === "" ? "//" : `// ${line}`));
-
-    return `${intro.join("\n")}
-{
-    "$schema": ${JSON.stringify(configSchemaUrl(context.sousVersion))},
-
-    // Shown in command output. Any string.
-    "name": ${JSON.stringify(context.name)},
-
-    // What to compile. Each target reads one source and writes it somewhere. The starter target
-    // renders \`${SOUS_DIR_NAME}/${STARTER_PROMPT_RELATIVE_PATH}\` to the project root. \${sousDir} and \${projectRoot} are
-    // set by sous, so nothing here depends on where the project is checked out. A line holding
-    // only \`@path/to/file.md\` in a source pulls that file in, and a \`.tpl.\` in a file name turns
-    // Liquid templating on for it. Compiled files are build output: ignore them or commit them,
-    // as your team prefers.
-    "compilation": {
-        "targets": [
-            {
-                "entryPoint": "\${sousDir}/${STARTER_PROMPT_RELATIVE_PATH}",
-                "outputs": [{ "destinationFile": "\${projectRoot}/${STARTER_OUTPUT_NAME}" }]
-            }
-        ]
-    }
-
-    // Every project subscribes to the \`core\` namespace on its own. The skills and memories the
-    // recipes it subscribes to publish reach your agent's directories through the targets that
-    // plugins add; \`sous recipe list\` shows what is available. The starter prompt pulls the
-    // memories in with one include line.
-}
-`;
-}
-
-/** The primary config as a JavaScript module, commented the same way. */
+/** The primary config as a JavaScript module. */
 export function buildConfigJs(context: ScaffoldContext): string {
     const intro = configIntro(context).map((line) => (line === "" ? "//" : `// ${line}`));
 
@@ -142,11 +87,6 @@ export const config = {
   // memories in with one include line.
 };
 `;
-}
-
-/** The primary config in a format. */
-export function buildConfig(format: InitConfigFormat, context: ScaffoldContext): string {
-    return format === "jsonc" || format === "json" ? buildConfigJsonc(context) : buildConfigJs(context);
 }
 
 /**

@@ -1,6 +1,6 @@
 # ADR 0021: Reporting as levels and styles
 
-**Status:** Draft, 2026-10-30. Designed by Luke; awaiting his acceptance.
+**Status:** Accepted, 2026-10-30. Designed by Luke.
 
 How it works is described in [the engine specification](../architecture/specifications/S1-engine.md),
 section "Reporting: levels and styles".

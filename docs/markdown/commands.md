@@ -78,12 +78,11 @@ gains `@sous-io/sous` as a devDependency at the running version; run your packag
 The starter prompt holds one line, `@#memories/**/*.md`, which includes every memory your subscribed recipes
 publish. Agent plugins can add more places for memories (the built-in Claude Code plugin adds `CLAUDE.md`).
 
-A project whose `.sous/` already holds a config is left untouched. `--format jsonc` (also spelled `--format json`) writes `sous.config.jsonc`, a commented JSON config bound
-to the published schema; `--format js` is the default. `--no-build` skips the first build.
+A project whose `.sous/` already holds a config is left untouched. The config it writes is `sous.config.js`. `--no-build` skips the first build.
 
 ```bash
 sous init
-sous init --format jsonc --name "My Project"
+sous init --name "My Project"
 ```
 
 ### `sous build`

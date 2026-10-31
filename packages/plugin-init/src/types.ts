@@ -8,9 +8,6 @@
 
 import type { BuildResult } from "@sous-io/plugin-build/types";
 
-/** The config file formats `init` writes. */
-export type InitConfigFormat = "js" | "jsonc" | "json";
-
 /** What `init` did to the project's `package.json`. */
 export type PackageJsonOutcome =
     | { readonly kind: "already-declared"; readonly section: "dependencies" | "devDependencies"; readonly range: string }
@@ -21,8 +18,6 @@ export type PackageJsonOutcome =
 export interface InitInput {
     /** The project root. Default the working directory. */
     directory?: string;
-    /** Default `js` (written as `sous.config.js`), as before 1.0; `json` writes `sous.config.jsonc`. */
-    format?: InitConfigFormat;
     /** The project's display name. */
     name?: string;
     /** Answers every question with its default, overwriting nothing that exists (`--yes`, `--force`). */

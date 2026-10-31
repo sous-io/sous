@@ -19,19 +19,19 @@ import "@sous-io/plugin-config-files/types";
 import "@sous-io/plugin-host/types";
 import { planPackageJson } from "./package-json.js";
 import {
-    buildConfig,
+    buildConfigJs,
     buildEnvDefaults,
     buildEnvLocalExample,
     buildStarterPrompt,
     CONFD_DIR_NAME,
-    CONFIG_FILE_NAMES,
+    CONFIG_FILE_NAME,
     ENV_DEFAULTS_NAME,
     ENV_LOCAL_NAME,
     SOUS_DIR_NAME,
     STARTER_PROMPT_RELATIVE_PATH,
     type ScaffoldContext,
 } from "./templates.js";
-import type { InitConfigFormat, PackageJsonOutcome } from "./types.js";
+import type { PackageJsonOutcome } from "./types.js";
 
 /** The lines of the sous-managed block in `.sous/.gitignore`: what stays on this machine. */
 export const IGNORE_BLOCK_LINES: readonly string[] = ["sous.links.json", "sous.state.json", "sous.pid", ENV_LOCAL_NAME, "repos/"];
@@ -40,7 +40,6 @@ export const IGNORE_BLOCK_LINES: readonly string[] = ["sous.links.json", "sous.s
 export interface ScaffoldOptions {
     /** The project root; the `.sous/` directory goes inside it. */
     root: string;
-    format: InitConfigFormat;
     name: string;
     dryRun: boolean;
 }
@@ -124,7 +123,7 @@ export async function scaffoldProject(ctx: Context, options: ScaffoldOptions): P
     const identity = ctx.services.get("host.package").identity();
     const root = path.resolve(options.root);
     const sousDir = sousDirFor(root);
-    const configPath = path.join(sousDir, CONFIG_FILE_NAMES[options.format]);
+    const configPath = path.join(sousDir, CONFIG_FILE_NAME);
     const context: ScaffoldContext = { name: options.name, sousVersion: identity.version };
 
     assertNoExistingConfig(ctx, root);
@@ -132,7 +131,7 @@ export async function scaffoldProject(ctx: Context, options: ScaffoldOptions): P
     // Planned first, so a package.json that cannot be read stops the run before anything is written.
     const dependency = planPackageJson(root, identity.name, identity.version);
     const planned: Array<{ file: string; contents: string }> = [
-        { file: configPath, contents: buildConfig(options.format, context) },
+        { file: configPath, contents: buildConfigJs(context) },
         { file: path.join(sousDir, STARTER_PROMPT_RELATIVE_PATH), contents: buildStarterPrompt(context) },
         { file: path.join(sousDir, ENV_DEFAULTS_NAME), contents: buildEnvDefaults(context) },
         { file: path.join(sousDir, `${ENV_LOCAL_NAME}.example`), contents: buildEnvLocalExample(context) },
