@@ -8,6 +8,7 @@ import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";
 import { configGet, configShow, configValidate, pluginsShow, timingsShow } from "./handlers.js";
 import { configGetSchema, configShowSchema, pluginsShowSchema, timingsShowSchema } from "./schemas.js";
 import "./types.js";
+import packageJson from "../package.json" with { type: "json" };
 
 /** The plugin's name. */
 export const PLUGIN_NAME = "@sous-io/plugin-inspect";
@@ -15,7 +16,7 @@ export const PLUGIN_NAME = "@sous-io/plugin-inspect";
 /** The plugin. */
 export const inspectPlugin: PluginDefinition = definePlugin({
     name: PLUGIN_NAME,
-    version: "0.2.34",
+    version: packageJson.version,
     description: "Showing the engine's state: config show, config get, config validate, plugins show, timings.",
     dependsOn: {},
 

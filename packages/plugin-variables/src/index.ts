@@ -13,6 +13,7 @@ import { Secrets } from "./secrets.js";
 import type { VariableSourceEntity } from "./types.js";
 import type {} from "@sous-io/plugin-host/types";
 import "./types.js";
+import packageJson from "../package.json" with { type: "json" };
 
 /** The plugin's name. */
 export const PLUGIN_NAME = "@sous-io/plugin-variables";
@@ -23,10 +24,10 @@ export const RESERVED_NAMES_CONTRIBUTOR = "variables/reserved-names";
 /** The plugin. */
 export const variablesPlugin: PluginDefinition = definePlugin({
     name: PLUGIN_NAME,
-    version: "0.2.34",
+    version: packageJson.version,
     description: "${var} substitution, _vars resolution, auto-variables, variable names and secrets.",
     dependsOn: {
-        "@sous-io/plugin-host": "^0.2.34",
+        "@sous-io/plugin-host": `^${packageJson.version}`,
     },
 
     register(sous) {

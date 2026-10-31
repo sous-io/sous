@@ -17,6 +17,7 @@ import { buildLadder } from "./sources.js";
 import "./types.js";
 import { validator } from "./validate.js";
 import { variableSourceContributor } from "./variable-source.js";
+import packageJson from "../package.json" with { type: "json" };
 
 /** The plugin's name. */
 export const PLUGIN_NAME = "@sous-io/plugin-recipe-answers";
@@ -24,15 +25,15 @@ export const PLUGIN_NAME = "@sous-io/plugin-recipe-answers";
 /** The plugin. */
 export const recipeAnswersPlugin: PluginDefinition = definePlugin({
     name: PLUGIN_NAME,
-    version: "0.2.34",
+    version: packageJson.version,
     description: "Recipe variable definitions, the answer ladder, asking for answers, answer files and variable mappings.",
     dependsOn: {
-        "@sous-io/plugin-recipes": "^0.2.34",
-        "@sous-io/plugin-confd": "^0.2.34",
-        "@sous-io/plugin-config-files": "^0.2.34",
-        "@sous-io/plugin-formats": "^0.2.34",
-        "@sous-io/plugin-refs": "^0.2.34",
-        "@sous-io/plugin-variables": "^0.2.34",
+        "@sous-io/plugin-recipes": `^${packageJson.version}`,
+        "@sous-io/plugin-confd": `^${packageJson.version}`,
+        "@sous-io/plugin-config-files": `^${packageJson.version}`,
+        "@sous-io/plugin-formats": `^${packageJson.version}`,
+        "@sous-io/plugin-refs": `^${packageJson.version}`,
+        "@sous-io/plugin-variables": `^${packageJson.version}`,
     },
 
     register(sous) {

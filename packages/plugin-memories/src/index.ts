@@ -13,6 +13,7 @@ import { memoriesSettingsSchema, memoryTargetSchema } from "./schemas.js";
 import { MemoriesSelectionService } from "./selection.js";
 import { targetsContributor } from "./targets.js";
 import "./types.js";
+import packageJson from "../package.json" with { type: "json" };
 
 /** The plugin's name. */
 export const PLUGIN_NAME = "@sous-io/plugin-memories";
@@ -20,13 +21,13 @@ export const PLUGIN_NAME = "@sous-io/plugin-memories";
 /** The plugin. */
 export const memoriesPlugin: PluginDefinition = definePlugin({
     name: PLUGIN_NAME,
-    version: "0.2.34",
+    version: packageJson.version,
     description: "Memories: selecting them, the memory-target entity, the compilation targets for them, the #memories name.",
     dependsOn: {
-        "@sous-io/plugin-compiler": "^0.2.34",
-        "@sous-io/plugin-recipes": "^0.2.34",
-        "@sous-io/plugin-refs": "^0.2.34",
-        "@sous-io/plugin-host": "^0.2.34",
+        "@sous-io/plugin-compiler": `^${packageJson.version}`,
+        "@sous-io/plugin-recipes": `^${packageJson.version}`,
+        "@sous-io/plugin-refs": `^${packageJson.version}`,
+        "@sous-io/plugin-host": `^${packageJson.version}`,
     },
 
     register(sous) {

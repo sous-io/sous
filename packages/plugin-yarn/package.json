@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/plugin-yarn",
-  "version": "0.2.37",
+  "version": "1.0.0",
   "description": "A package-manager entity for Yarn, and Yarn Plug'n'Play's plugin locator.",
   "type": "module",
   "license": "Apache-2.0",

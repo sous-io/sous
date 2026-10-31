@@ -28,6 +28,7 @@ import { githubPlugin } from "@sous-io/plugin-github";
 import { gitlabPlugin } from "@sous-io/plugin-gitlab";
 import { localPlugin } from "@sous-io/plugin-local";
 import { claudeCodePlugin } from "@sous-io/plugin-claude-code";
+import packageJson from "../package.json" with { type: "json" };
 
 /**
  * Loads the plugins named in `SOUS_PLUGINS` (separated by commas), for one run, by adding them to
@@ -36,7 +37,7 @@ import { claudeCodePlugin } from "@sous-io/plugin-claude-code";
  */
 export const envPluginsPlugin: PluginDefinition = definePlugin({
     name: "@sous-io/sous",
-    version: "0.2.34",
+    version: packageJson.version,
     description: "Loads the plugins named in SOUS_PLUGINS.",
 
     register(sous) {

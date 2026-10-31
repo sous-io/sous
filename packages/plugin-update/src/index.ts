@@ -9,6 +9,7 @@ import type {} from "@sous-io/plugin-host/types";
 import { scanContributor } from "./scan.js";
 import type { PackageManagerEntity, PluginsInstallInput, UpdateInput } from "./types.js";
 import "./types.js";
+import packageJson from "../package.json" with { type: "json" };
 
 /** The plugin's name. */
 export const PLUGIN_NAME = "@sous-io/plugin-update";
@@ -53,10 +54,10 @@ const pluginsInstallInput = jsonSchema<PluginsInstallInput>({
 /** The plugin. */
 export const updatePlugin: PluginDefinition = definePlugin({
     name: PLUGIN_NAME,
-    version: "0.2.34",
+    version: packageJson.version,
     description: "Updating sous itself, installing plugins a recipe requires, the package-manager entity, scanning for installed plugins.",
     dependsOn: {
-        "@sous-io/plugin-host": "^0.2.34",
+        "@sous-io/plugin-host": `^${packageJson.version}`,
     },
 
     register(sous) {

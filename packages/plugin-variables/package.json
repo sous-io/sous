@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/plugin-variables",
-  "version": "0.2.37",
+  "version": "1.0.0",
   "description": "${var} substitution, _vars resolution, auto-variables, variable names and secrets.",
   "type": "module",
   "license": "Apache-2.0",

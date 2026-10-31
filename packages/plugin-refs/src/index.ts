@@ -19,6 +19,7 @@ import { createRefsPicker } from "./picker.js";
 import { BUILT_IN_PRUNERS } from "./pruners/pruners.js";
 import { createRefsResolver } from "./resolver.js";
 import "./types.js";
+import packageJson from "../package.json" with { type: "json" };
 
 /** The plugin's name. */
 export const PLUGIN_NAME = "@sous-io/plugin-refs";
@@ -29,10 +30,10 @@ export const BUILT_IN_SPLITTERS = [querySplitter, rangeSplitter, locationSplitte
 /** The plugin. */
 export const refsPlugin: PluginDefinition = definePlugin({
     name: PLUGIN_NAME,
-    version: "0.2.34",
+    version: packageJson.version,
     description: "Parsing and resolving refs, picking among matches, # names, repository locations and identity.",
     dependsOn: {
-        "@sous-io/plugin-host": "^0.2.34",
+        "@sous-io/plugin-host": `^${packageJson.version}`,
     },
 
     register(sous) {

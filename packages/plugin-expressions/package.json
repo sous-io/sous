@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/plugin-expressions",
-  "version": "0.2.37",
+  "version": "1.0.0",
   "description": "Config expressions (S5) and the expression languages plugins add.",
   "type": "module",
   "license": "Apache-2.0",

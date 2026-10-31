@@ -7,6 +7,7 @@
 import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";
 import { createGitlabHost } from "./host.js";
 import type { GitlabPluginOptions } from "./types.js";
+import packageJson from "../package.json" with { type: "json" };
 
 /** The plugin's name. */
 export const PLUGIN_NAME = "@sous-io/plugin-gitlab";
@@ -14,12 +15,12 @@ export const PLUGIN_NAME = "@sous-io/plugin-gitlab";
 /** The plugin. */
 export const gitlabPlugin: PluginDefinition = definePlugin({
     name: PLUGIN_NAME,
-    version: "0.2.34",
+    version: packageJson.version,
     description: "A repository-host entity for GitLab, with fixes to the index address and the token.",
     dependsOn: {
-        "@sous-io/plugin-recipes": "^0.2.34",
-        "@sous-io/plugin-host": "^0.2.34",
-        "@sous-io/plugin-git": "^0.2.34",
+        "@sous-io/plugin-recipes": `^${packageJson.version}`,
+        "@sous-io/plugin-host": `^${packageJson.version}`,
+        "@sous-io/plugin-git": `^${packageJson.version}`,
     },
 
     register(sous) {

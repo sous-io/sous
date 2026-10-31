@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/plugin-refs",
-  "version": "0.2.37",
+  "version": "1.0.0",
   "description": "Parsing and resolving refs, picking among matches, # names, repository locations and identity.",
   "type": "module",
   "license": "Apache-2.0",

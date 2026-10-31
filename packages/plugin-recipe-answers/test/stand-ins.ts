@@ -24,6 +24,7 @@ import type { VariablesNames, VariablesSecrets } from "@sous-io/plugin-variables
 import { Ladder, type LadderLayers } from "../src/ladder.js";
 import { defineVariable } from "../src/definitions.js";
 import type { DefinedVariable, DefiningRecipe } from "../src/types.js";
+import packageJson from "../package.json" with { type: "json" };
 
 // ---------------------------------------------------------------------------------------------
 // variables.names, variables.secrets
@@ -364,7 +365,7 @@ export interface StandIns {
 /** Stand-in plugins for every dependency, named and versioned as the real ones. */
 export function standInPlugins(recipes: ActiveRecipeEntity[] = [], env = new MemoryEnv()): StandIns {
     const confd = new MemoryConfd();
-    const version = "0.2.34";
+    const version = packageJson.version;
     const anything = jsonSchema({});
     const plugins: PluginDefinition[] = [
         definePlugin({

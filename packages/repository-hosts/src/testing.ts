@@ -9,6 +9,7 @@ import type { BuiltConfig, Environment, PluginDefinition, ProjectInfo, SousSchem
 import type { GitResult, GitRunner, GitRunOptions } from "@sous-io/plugin-git/types";
 import type { HostHttp, HostProcesses, HostSousHome, HttpRequest, HttpResponse, ProcessOptions, ProcessResult } from "@sous-io/plugin-host/types";
 import type { RepositoryHostContext, RepositoryHostEntity, RepositoryReadOutcome, RepositoryReadRequest, RepositoryToken } from "@sous-io/plugin-recipes/types";
+import packageJson from "../package.json" with { type: "json" };
 
 /** One recorded HTTP response. */
 export interface RecordedResponse {
@@ -254,7 +255,7 @@ const anything = {
  * ```
  */
 export function standInPlugins(options: Record<string, unknown> = {}): PluginDefinition[] {
-    const version = "0.2.34";
+    const version = packageJson.version;
 
     return [
         definePlugin({

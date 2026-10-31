@@ -19,6 +19,7 @@ import { stringify } from "yaml";
 import { recipesPlugin } from "../../src/index.js";
 import type { RepositoryHostEntity } from "../../src/types.js";
 import "../../src/types.js";
+import packageJson from "../../package.json" with { type: "json" };
 
 /** A fresh temporary directory, removed by {@link cleanTemp}. */
 export function tempDir(prefix = "sous-part-b-"): string {
@@ -208,7 +209,7 @@ const WORKSPACE_PACKAGE = definePlugin({
 
 /** Stand-ins for the plugins plugin-recipes depends on but part B's specs do not exercise. */
 export const STUB_DEPENDENCIES: PluginDefinition[] = [
-    ...["@sous-io/plugin-confd", "@sous-io/plugin-variables", "@sous-io/plugin-compiler"].map((name) => definePlugin({ name, version: "0.2.34", register() {} })),
+    ...["@sous-io/plugin-confd", "@sous-io/plugin-variables", "@sous-io/plugin-compiler"].map((name) => definePlugin({ name, version: packageJson.version, register() {} })),
     // Keys the specs set, which other plugins own.
     definePlugin({
         name: "test-config-keys",

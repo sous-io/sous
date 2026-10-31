@@ -2,11 +2,12 @@ import { BufferedReporter, definePlugin, type PluginDefinition, type ProjectInfo
 import { createEngine } from "@sous-io/core";
 import { liquidPlugin } from "../src/index.js";
 import type { LiquidEngines } from "../src/types.js";
+import packageJson from "../package.json" with { type: "json" };
 
 /** A stand-in for plugin-host, which plugin-liquid depends on but does not call. */
 export const hostStandIn: PluginDefinition = definePlugin({
     name: "@sous-io/plugin-host",
-    version: "0.2.34",
+    version: packageJson.version,
     register() {},
 });
 

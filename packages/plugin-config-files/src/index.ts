@@ -13,6 +13,7 @@ import { MAIN_CONFIG_BASE_NAME } from "./names.js";
 import { CONFIG_SET, configSet } from "./set.js";
 import type { ConfigSetInput } from "./types.js";
 import "./types.js";
+import packageJson from "../package.json" with { type: "json" };
 
 /** The plugin's name. */
 export const PLUGIN_NAME = "@sous-io/plugin-config-files";
@@ -33,12 +34,12 @@ export const MAIN_APPLY_ORDER = 89900;
 /** The plugin. */
 export const configFilesPlugin: PluginDefinition = definePlugin({
     name: PLUGIN_NAME,
-    version: "0.2.34",
+    version: packageJson.version,
     description: "sous.config.* as a contributor, config.set, and the .env files.",
     dependsOn: {
-        "@sous-io/plugin-expressions": "^0.2.34",
-        "@sous-io/plugin-variables": "^0.2.34",
-        "@sous-io/plugin-host": "^0.2.34",
+        "@sous-io/plugin-expressions": `^${packageJson.version}`,
+        "@sous-io/plugin-variables": `^${packageJson.version}`,
+        "@sous-io/plugin-host": `^${packageJson.version}`,
     },
 
     register(sous) {

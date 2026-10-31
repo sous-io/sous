@@ -7,6 +7,7 @@
 import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";
 import { npmManager } from "./manager.js";
 import "./types.js";
+import packageJson from "../package.json" with { type: "json" };
 
 /** The plugin's name. */
 export const PLUGIN_NAME = "@sous-io/plugin-npm";
@@ -14,11 +15,11 @@ export const PLUGIN_NAME = "@sous-io/plugin-npm";
 /** The plugin. */
 export const npmPlugin: PluginDefinition = definePlugin({
     name: PLUGIN_NAME,
-    version: "0.2.34",
+    version: packageJson.version,
     description: "A package-manager entity for npm.",
     dependsOn: {
-        "@sous-io/plugin-update": "^0.2.34",
-        "@sous-io/plugin-host": "^0.2.34",
+        "@sous-io/plugin-update": `^${packageJson.version}`,
+        "@sous-io/plugin-host": `^${packageJson.version}`,
     },
 
     register(sous) {

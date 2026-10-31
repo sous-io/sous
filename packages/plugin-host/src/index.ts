@@ -15,6 +15,7 @@ import { createPackage } from "./package-identity.js";
 import { createProcesses } from "./processes.js";
 import { createSousHome } from "./sous-home.js";
 import "./types.js";
+import packageJson from "../package.json" with { type: "json" };
 
 /** The plugin's name. */
 export const PLUGIN_NAME = "@sous-io/plugin-host";
@@ -33,7 +34,7 @@ const pointerFileSchema = jsonSchema({
 /** The plugin. */
 export const hostPlugin: PluginDefinition = definePlugin({
     name: PLUGIN_NAME,
-    version: "0.2.34",
+    version: packageJson.version,
     description: "The machine sous runs on: processes, HTTP, globs and paths, sous home, self-describing directories, the .gitignore block, package identity.",
     dependsOn: {},
 

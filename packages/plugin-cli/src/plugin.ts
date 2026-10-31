@@ -9,6 +9,7 @@ import { helpIntent } from "./help-intent.js";
 import { type CliIo, processIo } from "./io.js";
 import { canPrompt } from "./terminal-prompter.js";
 import type { CliGlobalArgumentEntity, CliGroupEntity } from "./types.js";
+import packageJson from "../package.json" with { type: "json" };
 
 /** The plugin's name. */
 export const CLI_PLUGIN_NAME = "@sous-io/plugin-cli";
@@ -83,7 +84,7 @@ export function createCliPlugin(options: CliPluginOptions = {}): PluginDefinitio
 
     return definePlugin({
         name: CLI_PLUGIN_NAME,
-        version: "0.2.34",
+        version: packageJson.version,
         description: "The command-line front end, generated from intents.",
 
         register(sous) {

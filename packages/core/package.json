@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/core",
-  "version": "0.2.37",
+  "version": "1.0.0",
   "description": "The sous engine: config building, chains, intents, events, services, entities and budgets",
   "type": "module",
   "license": "Apache-2.0",

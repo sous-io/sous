@@ -44,6 +44,7 @@ import type {
     SkippedRecipe,
 } from "@sous-io/plugin-recipes/types";
 import { createBuildPlugin, type BuildPluginOptions } from "../src/index.js";
+import packageJson from "../package.json" with { type: "json" };
 
 type Lockfile = ReturnType<RecipesLock["read"]>;
 
@@ -122,7 +123,7 @@ export function tempProject(): ProjectInfo {
 }
 
 export function plugin(name: string, register: (sous: Sous) => void): PluginDefinition {
-    return definePlugin({ name, version: "0.2.34", register });
+    return definePlugin({ name, version: packageJson.version, register });
 }
 
 const anything = jsonSchema({});

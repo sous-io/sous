@@ -9,6 +9,7 @@ import type { RunHeadlessResult } from "@sous-io/plugin-harnesses/types";
 import { spawn } from "node:child_process";
 import harnessesPlugin from "@sous-io/plugin-harnesses";
 import claudeCodePlugin from "../src/index.js";
+import packageJson from "../package.json" with { type: "json" };
 
 const dirs: string[] = [];
 
@@ -58,23 +59,23 @@ const processes: HostProcesses = {
 const stubs: PluginDefinition[] = [
     definePlugin({
         name: "@sous-io/plugin-host",
-        version: "0.2.34",
+        version: packageJson.version,
         register: (sous) => sous.services.add("host.processes", () => processes, { lifetime: "singleton" }),
     }),
     definePlugin({
         name: "@sous-io/plugin-build",
-        version: "0.2.34",
+        version: packageJson.version,
         register: (sous) => sous.intents.add({ intent: "build", handle: () => IntentOutputs.of({ ok: true }) as never }),
     }),
     // The kinds plugin-skills and plugin-memories own.
     definePlugin({
         name: "@sous-io/plugin-skills",
-        version: "0.2.34",
+        version: packageJson.version,
         register: (sous) => sous.entities.define("skill-target", jsonSchema({ type: "object", required: ["id", "directory"] })),
     }),
     definePlugin({
         name: "@sous-io/plugin-memories",
-        version: "0.2.34",
+        version: packageJson.version,
         register: (sous) => sous.entities.define("memory-target", jsonSchema({ type: "object", required: ["id", "fileName"] })),
     }),
 ];

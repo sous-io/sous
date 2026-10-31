@@ -10,6 +10,7 @@ import type {} from "@sous-io/plugin-config-files/types";
 import type {} from "@sous-io/plugin-host/types";
 import type { InitInput } from "./types.js";
 import "./types.js";
+import packageJson from "../package.json" with { type: "json" };
 
 /** The plugin's name. */
 export const PLUGIN_NAME = "@sous-io/plugin-init";
@@ -29,12 +30,12 @@ const initInput = jsonSchema<InitInput>({
 /** The plugin. */
 export const initPlugin: PluginDefinition = definePlugin({
     name: PLUGIN_NAME,
-    version: "0.2.34",
+    version: packageJson.version,
     description: "Scaffolding a project's .sous/ (sous init).",
     dependsOn: {
-        "@sous-io/plugin-build": "^0.2.34",
-        "@sous-io/plugin-config-files": "^0.2.34",
-        "@sous-io/plugin-host": "^0.2.34",
+        "@sous-io/plugin-build": `^${packageJson.version}`,
+        "@sous-io/plugin-config-files": `^${packageJson.version}`,
+        "@sous-io/plugin-host": `^${packageJson.version}`,
     },
 
     register(sous) {

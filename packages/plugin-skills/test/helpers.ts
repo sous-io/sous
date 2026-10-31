@@ -13,6 +13,7 @@ import {
 } from "@sous-io/plugin-api";
 import type { ActiveRecipeEntity } from "@sous-io/plugin-recipes/types";
 import "../src/types.js";
+import packageJson from "../package.json" with { type: "json" };
 
 /** A temporary directory, removed by `cleanup`. */
 export interface TmpDir {
@@ -77,7 +78,7 @@ export interface CompileLog {
 export function compilerStandIn(log: CompileLog = { runs: 0 }): PluginDefinition {
     return definePlugin({
         name: "@sous-io/plugin-compiler",
-        version: "0.2.34",
+        version: packageJson.version,
         register(sous) {
             sous.entities.add("config-key", { id: "compilation", schema: jsonSchema({}) });
             sous.entities.define("compilation-transform", jsonSchema({ type: "object" }));
@@ -97,7 +98,7 @@ export function compilerStandIn(log: CompileLog = { runs: 0 }): PluginDefinition
 export function recipesStandIn(recipes: readonly ActiveRecipeEntity[]): PluginDefinition {
     return definePlugin({
         name: "@sous-io/plugin-recipes",
-        version: "0.2.34",
+        version: packageJson.version,
         register(sous) {
             sous.entities.define("active-recipe", jsonSchema({ type: "object" }));
             sous.config.contribute({

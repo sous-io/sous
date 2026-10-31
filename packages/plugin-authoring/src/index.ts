@@ -10,6 +10,7 @@
 import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";
 import { contributeInput, initInput, releaseInput, submitInput } from "./schemas.js";
 import "./types.js";
+import packageJson from "../package.json" with { type: "json" };
 
 /** The plugin's name. */
 export const PLUGIN_NAME = "@sous-io/plugin-authoring";
@@ -20,14 +21,14 @@ const yesFlag = { yes: { short: "y", aliases: ["force"] } };
 /** The plugin. */
 export const authoringPlugin: PluginDefinition = definePlugin({
     name: PLUGIN_NAME,
-    version: "0.2.34",
+    version: packageJson.version,
     description: "Releasing, submitting and contributing to recipe repositories, and scaffolding one.",
     dependsOn: {
-        "@sous-io/plugin-recipes": "^0.2.34",
-        "@sous-io/plugin-formats": "^0.2.34",
-        "@sous-io/plugin-refs": "^0.2.34",
-        "@sous-io/plugin-variables": "^0.2.34",
-        "@sous-io/plugin-git": "^0.2.34",
+        "@sous-io/plugin-recipes": `^${packageJson.version}`,
+        "@sous-io/plugin-formats": `^${packageJson.version}`,
+        "@sous-io/plugin-refs": `^${packageJson.version}`,
+        "@sous-io/plugin-variables": `^${packageJson.version}`,
+        "@sous-io/plugin-git": `^${packageJson.version}`,
     },
 
     register(sous) {

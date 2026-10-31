@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/plugin-gitlab",
-  "version": "0.2.37",
+  "version": "1.0.0",
   "description": "A repository-host entity for GitLab, with S4's fixes to the index address and the token.",
   "type": "module",
   "license": "Apache-2.0",

@@ -12,6 +12,7 @@ import {
 import type { HostPackage, HostSousHome } from "@sous-io/plugin-host/types";
 import { variablesPlugin } from "../src/index.js";
 import type { VariableSourceEntity } from "../src/types.js";
+import packageJson from "../package.json" with { type: "json" };
 
 /** The project the tests run in. */
 export const PROJECT: ProjectInfo = {
@@ -24,7 +25,7 @@ export const PROJECT: ProjectInfo = {
 /** A stand-in for plugin-host: the two services the auto-variables read. */
 export const hostStandIn: PluginDefinition = definePlugin({
     name: "@sous-io/plugin-host",
-    version: "0.2.34",
+    version: packageJson.version,
 
     register(sous) {
         const pkg: HostPackage = {

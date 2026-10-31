@@ -12,6 +12,7 @@ import { ConfdFilesImpl, contributorId, duplicateBaseNames, listConfdFiles } fro
 import { ConfdManagedImpl } from "./managed.js";
 import type { ConfdFile } from "./types.js";
 import "./types.js";
+import packageJson from "../package.json" with { type: "json" };
 
 /** The plugin's name. */
 export const PLUGIN_NAME = "@sous-io/plugin-confd";
@@ -31,13 +32,13 @@ export const SCAN_CONTRIBUTOR = "confd.files";
 /** The plugin. */
 export const confdPlugin: PluginDefinition = definePlugin({
     name: PLUGIN_NAME,
-    version: "0.2.34",
+    version: packageJson.version,
     description: "The conf.d files, one contributor per file, and surgical edits to the managed conf.d/5xx files.",
     dependsOn: {
-        "@sous-io/plugin-config-files": "^0.2.34",
-        "@sous-io/plugin-expressions": "^0.2.34",
-        "@sous-io/plugin-variables": "^0.2.34",
-        "@sous-io/plugin-host": "^0.2.34",
+        "@sous-io/plugin-config-files": `^${packageJson.version}`,
+        "@sous-io/plugin-expressions": `^${packageJson.version}`,
+        "@sous-io/plugin-variables": `^${packageJson.version}`,
+        "@sous-io/plugin-host": `^${packageJson.version}`,
     },
 
     register(sous) {

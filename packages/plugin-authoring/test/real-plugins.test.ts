@@ -17,6 +17,7 @@ import refsPlugin from "@sous-io/plugin-refs";
 import variablesPlugin from "@sous-io/plugin-variables";
 import { authoringPlugin } from "../src/index.js";
 import { commitAll, git, initRepo, makeTmpDir, writeFile, type TmpDir } from "./support/git-repo.js";
+import packageJson from "../package.json" with { type: "json" };
 
 let tmp: TmpDir;
 let repo: string;
@@ -34,7 +35,7 @@ afterEach(() => {
 /** plugin-recipes, stood in: it only defines the `repository-host` kind here. */
 const recipesStandIn = definePlugin({
     name: "@sous-io/plugin-recipes",
-    version: "0.2.34",
+    version: packageJson.version,
     register(sous) {
         if (!sous.entities.kinds().includes("repository-host")) {
             sous.entities.define("repository-host", { "~standard": { version: 1, vendor: "test", validate: (value: unknown) => ({ value }) } });

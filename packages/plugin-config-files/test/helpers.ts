@@ -17,6 +17,7 @@ import {
 } from "@sous-io/plugin-api";
 import type { ExpressionsEvaluator } from "@sous-io/plugin-expressions/types";
 import type { HostGlobs } from "@sous-io/plugin-host/types";
+import packageJson from "../package.json" with { type: "json" };
 
 /** A temporary directory, removed by `cleanup`. */
 export interface TmpDir {
@@ -109,7 +110,7 @@ export const standInGlobs: HostGlobs = {
 /** A stand-in for plugin-host. */
 export const standInHost: PluginDefinition = definePlugin({
     name: "@sous-io/plugin-host",
-    version: "0.2.34",
+    version: packageJson.version,
     register(sous) {
         sous.services.add("host.globs", () => standInGlobs, { lifetime: "singleton" });
         sous.services.add(
@@ -125,7 +126,7 @@ export const standInHost: PluginDefinition = definePlugin({
  */
 export const standInVariables: PluginDefinition = definePlugin({
     name: "@sous-io/plugin-variables",
-    version: "0.2.34",
+    version: packageJson.version,
     register(sous) {
         sous.entities.add("config-key", { id: "_vars", schema: jsonSchema({ type: "object" }) });
         sous.entities.add("config-key", { id: "_env", schema: jsonSchema({ type: "object" }) });
@@ -138,7 +139,7 @@ export const standInVariables: PluginDefinition = definePlugin({
  */
 export const standInExpressions: PluginDefinition = definePlugin({
     name: "@sous-io/plugin-expressions",
-    version: "0.2.34",
+    version: packageJson.version,
     register(sous) {
         const isExpression = (value: unknown): boolean =>
             typeof value === "object" && value !== null && !Array.isArray(value) && "$if" in value;

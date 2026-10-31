@@ -15,8 +15,9 @@ import type { LiquidEngineOptions, LiquidEngines, LiquidExtensionContext } from 
 import type { HashNameEntity } from "@sous-io/plugin-refs/types";
 import type { ScopeRequest, VarScope, VariablesResolver, VariablesSecrets } from "@sous-io/plugin-variables/types";
 import "@sous-io/plugin-compiler/types";
+import packageJson from "../package.json" with { type: "json" };
 
-const VERSION = "0.2.34";
+const VERSION = packageJson.version;
 
 /** Accepts any entity. */
 const anything: SousSchema = { "~standard": { version: 1, vendor: "test", validate: (value: unknown) => ({ value }) } };

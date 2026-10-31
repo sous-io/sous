@@ -27,12 +27,13 @@ import {
     repoManifestParser,
     variableNames,
 } from "./support/standins.js";
+import packageJson from "../package.json" with { type: "json" };
 
 /** A stand-in plugin, named as the real one, adding the given services. */
 function standIn(name: string, services: Record<string, unknown>, entities: Array<[string, { id: string }]> = []): PluginDefinition {
     return definePlugin({
         name,
-        version: "0.2.34",
+        version: packageJson.version,
         register(sous) {
             for (const [service, value] of Object.entries(services)) {
                 sous.services.add(service, () => value, { lifetime: "singleton" });

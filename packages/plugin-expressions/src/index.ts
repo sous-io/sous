@@ -8,6 +8,7 @@ import { definePlugin, jsonSchema, type PluginDefinition } from "@sous-io/plugin
 import { createEvaluator } from "./evaluator.js";
 import { createLiquidLanguage } from "./liquid-language.js";
 import "./types.js";
+import packageJson from "../package.json" with { type: "json" };
 
 /** The plugin's name. */
 export const PLUGIN_NAME = "@sous-io/plugin-expressions";
@@ -15,11 +16,11 @@ export const PLUGIN_NAME = "@sous-io/plugin-expressions";
 /** The plugin. */
 export const expressionsPlugin: PluginDefinition = definePlugin({
     name: PLUGIN_NAME,
-    version: "0.2.34",
+    version: packageJson.version,
     description: "Config expressions and the expression languages plugins add.",
     dependsOn: {
-        "@sous-io/plugin-liquid": "^0.2.34",
-        "@sous-io/plugin-variables": "^0.2.34",
+        "@sous-io/plugin-liquid": `^${packageJson.version}`,
+        "@sous-io/plugin-variables": `^${packageJson.version}`,
     },
 
     register(sous) {

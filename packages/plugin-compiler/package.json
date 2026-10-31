@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/plugin-compiler",
-  "version": "0.2.37",
+  "version": "1.0.0",
   "description": "Compiling templates, includes, aliases, compilation settings, the built-in tags and filters, the state file, writing outputs, pruning.",
   "type": "module",
   "license": "Apache-2.0",

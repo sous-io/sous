@@ -9,6 +9,7 @@ import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { definePlugin, IntentOutputs, jsonSchema, type PluginDefinition } from "@sous-io/plugin-api";
 import { buildTools, createMcpTools } from "./tools.js";
 import type { McpServeInput, McpSettings } from "./types.js";
+import packageJson from "../package.json" with { type: "json" };
 
 /** The plugin's name. */
 export const PLUGIN_NAME = "@sous-io/plugin-mcp";
@@ -45,7 +46,7 @@ const serveInputSchema = jsonSchema<McpServeInput>({
 export function createMcpPlugin(options: McpPluginOptions = {}): PluginDefinition {
     return definePlugin({
         name: PLUGIN_NAME,
-        version: "0.2.34",
+        version: packageJson.version,
         description: "The sous mcp front end: tools generated from intents, MCP logging and elicitation.",
         dependsOn: {},
 

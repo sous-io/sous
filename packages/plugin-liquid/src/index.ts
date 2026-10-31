@@ -10,6 +10,7 @@ import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";
 import { createLiquidEngines } from "./engine.js";
 import { liquidFilterSchema, liquidTagSchema } from "./entity-schemas.js";
 import "./types.js";
+import packageJson from "../package.json" with { type: "json" };
 
 /** The plugin's name. */
 export const PLUGIN_NAME = "@sous-io/plugin-liquid";
@@ -17,10 +18,10 @@ export const PLUGIN_NAME = "@sous-io/plugin-liquid";
 /** The plugin. */
 export const liquidPlugin: PluginDefinition = definePlugin({
     name: PLUGIN_NAME,
-    version: "0.2.34",
+    version: packageJson.version,
     description: "A configured LiquidJS engine, and the Liquid tags and filters plugins add.",
     dependsOn: {
-        "@sous-io/plugin-host": "^0.2.34",
+        "@sous-io/plugin-host": `^${packageJson.version}`,
     },
 
     register(sous) {

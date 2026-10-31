@@ -11,6 +11,7 @@ import { skillsConfigKey } from "./settings.js";
 import { SKILL_TARGET, SKILL_TARGET_DESCRIPTION, skillTargetSchema } from "./skill-target.js";
 import { contributeSkillTargets, TARGETS_CONTRIBUTOR } from "./targets.js";
 import "./types.js";
+import packageJson from "../package.json" with { type: "json" };
 
 /** The plugin's name. */
 export const PLUGIN_NAME = "@sous-io/plugin-skills";
@@ -18,11 +19,11 @@ export const PLUGIN_NAME = "@sous-io/plugin-skills";
 /** The plugin. */
 export const skillsPlugin: PluginDefinition = definePlugin({
     name: PLUGIN_NAME,
-    version: "0.2.34",
+    version: packageJson.version,
     description: "Skills: where they come from, the skill-target entity, and the compilation targets for them.",
     dependsOn: {
-        "@sous-io/plugin-compiler": "^0.2.34",
-        "@sous-io/plugin-recipes": "^0.2.34",
+        "@sous-io/plugin-compiler": `^${packageJson.version}`,
+        "@sous-io/plugin-recipes": `^${packageJson.version}`,
     },
 
     register(sous) {

@@ -9,6 +9,7 @@ import type {} from "@sous-io/plugin-host/types";
 import { claudeHarness } from "./harness.js";
 import { targetsContributor } from "./targets.js";
 import "./types.js";
+import packageJson from "../package.json" with { type: "json" };
 
 /** The plugin's name. */
 export const PLUGIN_NAME = "@sous-io/plugin-claude-code";
@@ -16,13 +17,13 @@ export const PLUGIN_NAME = "@sous-io/plugin-claude-code";
 /** The plugin. */
 export const claudeCodePlugin: PluginDefinition = definePlugin({
     name: PLUGIN_NAME,
-    version: "0.2.34",
+    version: packageJson.version,
     description: "Everything sous knows about Claude Code: its harness, skill-target and memory-target entities.",
     dependsOn: {
-        "@sous-io/plugin-skills": "^0.2.34",
-        "@sous-io/plugin-memories": "^0.2.34",
-        "@sous-io/plugin-harnesses": "^0.2.34",
-        "@sous-io/plugin-host": "^0.2.34",
+        "@sous-io/plugin-skills": `^${packageJson.version}`,
+        "@sous-io/plugin-memories": `^${packageJson.version}`,
+        "@sous-io/plugin-harnesses": `^${packageJson.version}`,
+        "@sous-io/plugin-host": `^${packageJson.version}`,
     },
 
     register(sous) {

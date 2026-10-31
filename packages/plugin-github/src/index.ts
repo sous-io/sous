@@ -7,6 +7,7 @@
 import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";
 import { createGithubHost } from "./host.js";
 import type { GithubPluginOptions } from "./types.js";
+import packageJson from "../package.json" with { type: "json" };
 
 /** The plugin's name. */
 export const PLUGIN_NAME = "@sous-io/plugin-github";
@@ -14,12 +15,12 @@ export const PLUGIN_NAME = "@sous-io/plugin-github";
 /** The plugin. */
 export const githubPlugin: PluginDefinition = definePlugin({
     name: PLUGIN_NAME,
-    version: "0.2.34",
+    version: packageJson.version,
     description: "A repository-host entity for GitHub: reading indexes, the token, proposing changes, the CI workflow.",
     dependsOn: {
-        "@sous-io/plugin-recipes": "^0.2.34",
-        "@sous-io/plugin-host": "^0.2.34",
-        "@sous-io/plugin-git": "^0.2.34",
+        "@sous-io/plugin-recipes": `^${packageJson.version}`,
+        "@sous-io/plugin-host": `^${packageJson.version}`,
+        "@sous-io/plugin-git": `^${packageJson.version}`,
     },
 
     register(sous) {

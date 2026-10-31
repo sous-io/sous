@@ -17,6 +17,7 @@ import { StateService } from "./state.js";
 import type { CompileInput, CompilerPruneInput } from "./types.js";
 import { WriterService } from "./writer.js";
 import "./types.js";
+import packageJson from "../package.json" with { type: "json" };
 
 /** The plugin's name. */
 export const PLUGIN_NAME = "@sous-io/plugin-compiler";
@@ -61,15 +62,15 @@ const pruneInput = jsonSchema<CompilerPruneInput>({
 /** The plugin. */
 export const compilerPlugin: PluginDefinition = definePlugin({
     name: PLUGIN_NAME,
-    version: "0.2.34",
+    version: packageJson.version,
     description: "Compiling templates, includes, aliases, compilation settings, the built-in tags and filters, the state file, writing outputs, pruning.",
     // Declared in this plugin's contract for plugin-recipes to implement, so sous does not warn about it.
     implementable: ["compiler.namespace-resolver"],
     dependsOn: {
-        "@sous-io/plugin-liquid": "^0.2.34",
-        "@sous-io/plugin-refs": "^0.2.34",
-        "@sous-io/plugin-variables": "^0.2.34",
-        "@sous-io/plugin-host": "^0.2.34",
+        "@sous-io/plugin-liquid": `^${packageJson.version}`,
+        "@sous-io/plugin-refs": `^${packageJson.version}`,
+        "@sous-io/plugin-variables": `^${packageJson.version}`,
+        "@sous-io/plugin-host": `^${packageJson.version}`,
     },
 
     register(sous) {

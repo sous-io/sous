@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/plugin-local",
-  "version": "0.2.37",
+  "version": "1.0.0",
   "description": "A repository-host entity for a repository on disk.",
   "type": "module",
   "license": "Apache-2.0",

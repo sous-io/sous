@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/plugin-liquid",
-  "version": "0.2.37",
+  "version": "1.0.0",
   "description": "A configured LiquidJS engine, and the Liquid tags and filters plugins add.",
   "type": "module",
   "license": "Apache-2.0",

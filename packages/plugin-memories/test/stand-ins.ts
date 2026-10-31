@@ -13,6 +13,7 @@ import { BufferedReporter, definePlugin, jsonSchema, type PluginDefinition } fro
 import { createEngine, type Engine } from "@sous-io/core";
 import type { MemoryGlobs, MemoryRecipe } from "../src/listing.js";
 import memoriesPlugin from "../src/index.js";
+import packageJson from "../package.json" with { type: "json" };
 
 /** `host.globs`, as far as plugin-memories uses it. */
 export const standInGlobs: MemoryGlobs = {
@@ -120,7 +121,7 @@ export function recipe(root: string, key: string, options: RecipeFixture = {}): 
 /** Stands in for plugin-host: `host.globs` and the `pointer-file` kind. */
 export const hostStandIn = definePlugin({
     name: "@sous-io/plugin-host",
-    version: "0.2.34",
+    version: packageJson.version,
     register(sous) {
         sous.services.add("host.globs", () => standInGlobs as never, { lifetime: "singleton" });
         sous.entities.define(
@@ -133,7 +134,7 @@ export const hostStandIn = definePlugin({
 /** Stands in for plugin-refs: the `hash-name` kind. */
 export const refsStandIn = definePlugin({
     name: "@sous-io/plugin-refs",
-    version: "0.2.34",
+    version: packageJson.version,
     register(sous) {
         sous.entities.define("hash-name", jsonSchema({ type: "object", required: ["id"] }));
     },
@@ -142,7 +143,7 @@ export const refsStandIn = definePlugin({
 /** Stands in for plugin-compiler: the `compilation` key. */
 export const compilerStandIn = definePlugin({
     name: "@sous-io/plugin-compiler",
-    version: "0.2.34",
+    version: packageJson.version,
     register(sous) {
         sous.entities.add("config-key", { id: "compilation", schema: jsonSchema({}) });
     },
@@ -152,7 +153,7 @@ export const compilerStandIn = definePlugin({
 export function recipesStandIn(recipes: () => readonly Record<string, unknown>[]): PluginDefinition {
     return definePlugin({
         name: "@sous-io/plugin-recipes",
-        version: "0.2.34",
+        version: packageJson.version,
         register(sous) {
             sous.entities.add("config-key", { id: "recipes", schema: jsonSchema({}) });
             sous.entities.define("active-recipe", jsonSchema({ type: "object", required: ["id"] }));

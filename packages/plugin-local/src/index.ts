@@ -7,6 +7,7 @@
 import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";
 import { createLocalHost } from "./host.js";
 import "./types.js";
+import packageJson from "../package.json" with { type: "json" };
 
 /** The plugin's name. */
 export const PLUGIN_NAME = "@sous-io/plugin-local";
@@ -14,13 +15,13 @@ export const PLUGIN_NAME = "@sous-io/plugin-local";
 /** The plugin. */
 export const localPlugin: PluginDefinition = definePlugin({
     name: PLUGIN_NAME,
-    version: "0.2.34",
+    version: packageJson.version,
     description: "A repository-host entity for a repository on disk.",
     dependsOn: {
-        "@sous-io/plugin-recipes": "^0.2.34",
-        "@sous-io/plugin-host": "^0.2.34",
-        "@sous-io/plugin-git": "^0.2.34",
-        "@sous-io/plugin-formats": "^0.2.34",
+        "@sous-io/plugin-recipes": `^${packageJson.version}`,
+        "@sous-io/plugin-host": `^${packageJson.version}`,
+        "@sous-io/plugin-git": `^${packageJson.version}`,
+        "@sous-io/plugin-formats": `^${packageJson.version}`,
     },
 
     register(sous) {

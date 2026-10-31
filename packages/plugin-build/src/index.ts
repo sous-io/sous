@@ -28,12 +28,13 @@ import type {} from "@sous-io/plugin-git/types";
 import type {} from "@sous-io/plugin-host/types";
 import type {} from "@sous-io/plugin-variables/types";
 import "./types.js";
+import packageJson from "../package.json" with { type: "json" };
 
 /** The plugin's name. */
 export const PLUGIN_NAME = "@sous-io/plugin-build";
 
 /** The plugin's version. */
-export const PLUGIN_VERSION = "0.2.34";
+export const PLUGIN_VERSION = packageJson.version;
 
 /** What can be swapped in {@link createBuildPlugin}, for tests and other hosts. */
 export interface BuildPluginOptions {
@@ -60,12 +61,12 @@ export function createBuildPlugin(options: BuildPluginOptions = {}): PluginDefin
         version: PLUGIN_VERSION,
         description: "The build, compile, prune and clear intents, preparing for a build, watch mode, the PID file, the runtime context file.",
         dependsOn: {
-            "@sous-io/plugin-compiler": "^0.2.34",
-            "@sous-io/plugin-recipes": "^0.2.34",
-            "@sous-io/plugin-recipe-answers": "^0.2.34",
-            "@sous-io/plugin-git": "^0.2.34",
-            "@sous-io/plugin-host": "^0.2.34",
-            "@sous-io/plugin-variables": "^0.2.34",
+            "@sous-io/plugin-compiler": `^${packageJson.version}`,
+            "@sous-io/plugin-recipes": `^${packageJson.version}`,
+            "@sous-io/plugin-recipe-answers": `^${packageJson.version}`,
+            "@sous-io/plugin-git": `^${packageJson.version}`,
+            "@sous-io/plugin-host": `^${packageJson.version}`,
+            "@sous-io/plugin-variables": `^${packageJson.version}`,
         },
 
         register(sous) {

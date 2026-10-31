@@ -11,6 +11,7 @@ import { toolsContributor } from "./contributor.js";
 import { TOOLS_KEY, toolsKeySchema } from "./settings.js";
 import type { HarnessEntity, LaunchInput, RunHeadlessInput } from "./types.js";
 import "./types.js";
+import packageJson from "../package.json" with { type: "json" };
 
 /** The plugin's name. */
 export const PLUGIN_NAME = "@sous-io/plugin-harnesses";
@@ -53,11 +54,11 @@ const runHeadlessInput = jsonSchema<RunHeadlessInput>({
 /** The plugin. */
 export const harnessesPlugin: PluginDefinition = definePlugin({
     name: PLUGIN_NAME,
-    version: "0.2.34",
+    version: packageJson.version,
     description: "The harness entity, launching a harness, headless runs, and the tools settings.",
     dependsOn: {
-        "@sous-io/plugin-build": "^0.2.34",
-        "@sous-io/plugin-host": "^0.2.34",
+        "@sous-io/plugin-build": `^${packageJson.version}`,
+        "@sous-io/plugin-host": `^${packageJson.version}`,
     },
 
     register(sous) {

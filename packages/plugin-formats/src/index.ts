@@ -20,6 +20,7 @@ import {
 import { recipeHash } from "./recipe-hash.js";
 import "@sous-io/plugin-refs/types";
 import "./types.js";
+import packageJson from "../package.json" with { type: "json" };
 
 /** The plugin's name. */
 export const PLUGIN_NAME = "@sous-io/plugin-formats";
@@ -50,10 +51,10 @@ function manifestRefChecker(ctx: ServiceContext): (ref: string) => void {
 /** The plugin. */
 export const formatsPlugin: PluginDefinition = definePlugin({
     name: PLUGIN_NAME,
-    version: "0.2.34",
+    version: packageJson.version,
     description: "One parser per on-disk format, reading manifests, and the recipe content hash.",
     dependsOn: {
-        "@sous-io/plugin-refs": "^0.2.34",
+        "@sous-io/plugin-refs": `^${packageJson.version}`,
     },
 
     register(sous) {
