@@ -52,7 +52,10 @@ sous at runtime.*
 Everything gets an escape hatch, within practicality. The happy path stays maximally simple;
 the escape hatches are advanced usage and may require the docs, but they must exist and they
 still get thoughtful ergonomics. Projects control everything granularly, and an individual
-user can override every project decision through their own configuration layers.
+user can override every project decision through their own config files. Plugins get the same
+reach: nearly everything sous does, the CLI included, is a plugin, and a plugin can change the
+config, wrap or replace another plugin's work, and add commands. Where a choice is risky, sous
+reports the problem and lets it happen rather than forbidding it.
 
 *Example: subscribing to a recipe is one line and pulls in everything the recipe provides;
 excluding one skill from that subscription may take a documented setting, but the setting is

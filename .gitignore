@@ -27,3 +27,8 @@ sous.pid
 /.codex/
 /docs/CLAUDE.md
 .idea/
+
+# Copied into the published package only while it is packed (packages/sous/scripts/pack-files.mjs).
+/packages/sous/recipes/
+/packages/sous/docs/
+/packages/sous/sous.config.schema.json

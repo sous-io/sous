@@ -1,0 +1,43 @@
+{
+  "name": "@sous-io/plugin-build",
+  "version": "1.0.0",
+  "description": "The build, compile, prune and clear intents, preparing for a build, watch mode, the PID file, the runtime context file.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "private": true,
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./types": {
+      "source": "./src/types.ts",
+      "types": "./dist/types.d.ts",
+      "default": "./dist/types.js"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@sous-io/plugin-api": "workspace:*",
+    "@sous-io/plugin-compiler": "workspace:*",
+    "@sous-io/plugin-git": "workspace:*",
+    "@sous-io/plugin-host": "workspace:*",
+    "@sous-io/plugin-memories": "workspace:*",
+    "@sous-io/plugin-recipe-answers": "workspace:*",
+    "@sous-io/plugin-recipes": "workspace:*",
+    "@sous-io/plugin-variables": "workspace:*",
+    "chokidar": "^5.0.0",
+    "semver": "^7.8.5"
+  },
+  "devDependencies": {
+    "@sous-io/core": "workspace:*",
+    "@types/semver": "^7.8.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

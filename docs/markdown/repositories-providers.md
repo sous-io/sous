@@ -4,9 +4,9 @@ A **provider** is everything sous knows about one kind of repository host. It is
 a host-specific fact is allowed to live, so every command above it (add, subscribe, build,
 release, submit) talks about repositories in the same terms whatever host they live on.
 
-Sous ships three: `github`, `gitlab` and `local`. This page covers how one is chosen for a URL,
-what a URL becomes once a provider has taken it apart, how private repositories authenticate,
-what each provider can do when you propose a change, and what writing a fourth one involves.
+Sous ships three providers, `github`, `gitlab` and `local`, and a sous plugin can add another. This
+page covers how a provider is chosen for a URL, what a URL becomes once a provider has taken it apart, how private repositories authenticate,
+what each provider can do when you propose a change, and what adding another one involves.
 
 ## What a provider answers
 
@@ -132,8 +132,8 @@ absolute directory, because that is what git is given when a recipe is fetched.
 whose scheme is the provider's identifier: `github://sous-io/sous-recipes/workflow/sat@^1.1`. A
 first segment containing a dot is read as the host, so `gitlab://gitlab.example.com/group/project/-/ns/recipe`
 addresses a self-hosted instance; without one, the provider's public host is assumed. Where a
-repository path ends, and what a browser URL's path looks like, is each provider's own rule (its
-`readLocation`), so a URL copied from either host's file view works too. `local://` is refused,
+repository path ends, and what a browser URL's path looks like, is each provider's own rule, so a URL
+copied from either host's file view works too. `local://` is refused,
 because a path on your disk is not a published location. Every form is in
 [Ref forms](repositories-file-formats.md#ref-forms).
 
@@ -141,37 +141,48 @@ because a path on your disk is not a published location. Every form is in
 
 Sous reads a repository in two very different ways, and they authenticate differently.
 
-**The index** is one plain HTTPS GET of a raw file, carrying a bearer token when sous has one:
+**The index** is read by trying three ways in order, so reading works with whatever access you have.
+Neither `gh` nor `glab` is ever required to read a repository; they are needed only for
+`sous repo contribute` and `sous repo submit`.
+
+```text
+Reading sous.index.json from a repository
+  1. HTTP with a token     if a token is found (see below)
+  2. HTTP with no token    public repositories
+  3. git                   a shallow, sparse fetch of the one file, using your own git
+                           credentials (SSH keys, credential helpers)
+```
+
+For GitLab, the HTTP requests use the API address, with the whole project path encoded, so a nested
+group's `/` becomes `%2F`:
 
 ```text
 https://raw.githubusercontent.com/<owner>/<name>/HEAD/sous.index.json
-https://<gitlab host>/<owner>/<name>/-/raw/HEAD/sous.index.json
+https://<gitlab host>/api/v4/projects/<owner>%2F<name>/repository/files/sous.index.json/raw?ref=HEAD
 ```
 
-A token is looked for in two places, in this order:
+A token is looked for in these places, in this order, and a missing one is skipped:
 
 1. the environment: `GITHUB_TOKEN` for GitHub, `GITLAB_TOKEN` for GitLab;
-2. the host's own command line tool, `gh auth token` or `glab auth token`, when it is installed
-   and signed in.
+2. `git credential fill`, the credential git already stores for `https://<host>`;
+3. the host's own command line tool, only when it is installed: `gh` for GitHub, and
+   `glab config get token --host <host>` for GitLab.
 
-Neither is required. A public repository needs no token at all, and a missing `gh` or `glab` is
-never an error on the read path; sous simply fetches without one. When the host refuses, the
-error says which of the two situations you are in:
+A command's output counts as a token only when the command exits `0` and prints exactly one non-empty
+line holding no whitespace.
 
-```text
-Sous could not fetch the repo index from https://raw.githubusercontent.com/acme/recipes/HEAD/sous.index.json.
-  The server answered 404 Not Found.
-  Either the repository publishes no sous index yet, or the URL names a repository that does
-  not exist.
-```
-
-A 401 or 403 says the repository is private or was not authorized, and points at the two sources:
+Sous remembers, per repository, which way worked, in `$SOUS_HOME/cache/read-strategies.json`, and tries it
+first next time; after a failure it forgets it and walks the whole list again. When every way fails, one
+error lists each attempt and why it failed, then names the fixes:
 
 ```text
-Sous could not fetch the repo index from https://raw.githubusercontent.com/acme/recipes/HEAD/sous.index.json.
-  The server answered 403 Forbidden.
-  The repository is private or the request was not authorized. Sous uses a token from the
-  environment, or from the provider's command line tool when one is installed and signed in.
+Error: could not read gitlab.com/acme/private-recipes.
+  HTTP with token      no token found (GITLAB_TOKEN unset; git has no stored credential for gitlab.com)
+  HTTP without token   302 to sign-in page: the repository is private
+  git                  Permission denied (publickey)
+Fix one of these:
+  export GITLAB_TOKEN=<a token with read_repository>
+  set up git access to gitlab.com (an SSH key, or a credential helper)
 ```
 
 **A recipe's files** come from git itself: a shallow, blobless, sparse clone at the version's
@@ -180,9 +191,8 @@ apply, exactly as they would for a manual clone: credential helpers, the SSH age
 `insteadOf` rewrites are all inherited from your git configuration, and sous adds nothing of its
 own. Cloning a working copy with `sous repo link` works the same way.
 
-?> For a private repository, make sure both halves work. `gh auth login` (or `GITHUB_TOKEN`)
-covers the index, and a git credential helper or an SSH key covers the recipe files. A build that
-finds the index but cannot clone has only the second half missing.
+?> For a private repository, git access (a credential helper or an SSH key) covers both the index
+and the recipe files. A token in the environment makes reading the index faster.
 
 ## Proposing a change
 
@@ -238,12 +248,12 @@ provider once, on the repository entry:
 }
 ```
 
-That block goes at the top level of your primary config or of a `conf.d/` layer of your own; sous
-writes its own entries to the `conf.d/500-repos.jsonc` layer it manages. Every key is listed under
+That block goes at the top level of your primary config or of a `conf.d/` file of your own; sous
+writes its own entries to the `conf.d/500-repos.jsonc` file it manages. Every key is listed under
 [configuration keys](repositories-file-formats.md#configuration-keys).
 
 Everything downstream then works normally: the index is read from that host's own raw endpoint,
-`GITLAB_TOKEN` or `glab` supplies the token, and the identity is
+a token comes from the sources above, and the identity is
 `git.example.com/platform/recipes`. Group paths of any depth are preserved, so
 `group/subgroup/project` stays one repository rather than being mistaken for a namespace.
 
@@ -296,32 +306,13 @@ one repository's resolution at a working copy without changing what your project
 
 ## Adding a provider
 
-Adding a provider is one file plus one line. The interface is internal for now, not a published
-plugin API, so it can still change shape; what follows is what a new provider writes today. A
-provider class extends `ProviderBase`, which carries the plumbing no provider should repeat:
-running a subprocess through the injectable runner, checking whether a tool exited cleanly,
-capturing its output, finding a host token, and refusing every write-path call by name until a
-subclass overrides it. Each member is documented where it lives, in
-`src/lib/repos/providers/base.ts`.
+A provider is a sous plugin. It holds everything specific to its host: recognizing and taking apart the
+host's URLs, the ways it reads an index and where it finds a token, and, when it supports them, proposing
+changes and the CI workflow `sous repo init` writes. Nothing else in sous knows a host's name. A plugin can
+also add a way of reading to an existing provider, for example for a host with its own sign-in.
 
-The subclass supplies the rest:
-
-- `id`, the identifier a repository entry and a locator scheme use;
-- `features`, the ones it genuinely answers (`fetch`; `submit` only if all four write calls are
-  real; `proposals` only if `findProposal`, `proposalStatus` and `updateProposal` are);
-- `matches(url)` and `canonicalize(url)`, the URL half;
-- `fetchIndex(repo, options)` and `fetchRecipeTree(repo, recipePath, tag, destDir, options)`, the
-  read half;
-- `cli` and `proposalNoun` when it submits, so messages can name the tool and call a proposal
-  what the host calls it;
-- overrides of the four write-path calls when it submits, and of the three proposals calls when
-  it can follow a proposal up. Each answers with plain data (a proposal's id, address, state,
-  title, review and check counts), never with a host's own vocabulary.
-
-Every call takes an options object carrying the testing seams (`cwd`, `env`, `fetchImpl`, `run`),
-which is why no provider reaches for `spawn` or the global `fetch` directly and no test in this
-layer touches the network. The last change is adding the class to the built-in provider list in
-`providers/index.ts`; nothing above the provider layer learns its name.
+?> The exact interface a provider plugin implements is not published yet; it is settled as sous 1.0
+lands. The plugin design is in [the engine specification](architecture/specifications/S1-engine.md).
 
 ## Where to go next
 

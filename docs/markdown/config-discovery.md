@@ -1,7 +1,9 @@
 # Discovery and Overrides
 
 How sous locates a project's configuration, and every way to override it. Discovery runs on
-every command; there is no opt-out.
+every command; there is no opt-out. It runs once, when sous starts, and finds exactly one project:
+every sous process (a CLI run, watch mode, or `sous mcp` for its whole life) serves the project it
+started in.
 
 ## Locating the primary config
 
@@ -14,9 +16,18 @@ Precedence, highest first. Flags beat env vars; both beat walk-up discovery:
 5. Walk UP from the working directory to the filesystem root, taking the first `.sous/`
    directory that holds a primary config. A `.sous/` without one does not stop the walk.
 
-A primary config is named `sous.config.js`, `sous.config.mjs`, `sous.config.json`,
-`sous.config.jsonc` or `sous.config.yaml`. The `.jsonc` form is JSON with comments: line comments,
+A primary config is named `sous.config.js`, `sous.config.mjs`, `sous.config.ts`,
+`sous.config.json`, `sous.config.jsonc` or `sous.config.yaml`. The `.jsonc` form is JSON with comments: line comments,
 block comments and trailing commas are all allowed in it.
+
+## The project root
+
+The project root is the directory that holds the `.sous/` directory the config was found in. When
+`--config` names a file outside any `.sous/`, the root is the parent of the directory holding that
+file. A project cannot set its root anywhere else: sous publishes it as the auto-variable
+`${projectRoot}`, and setting `projectRoot` in any `_vars` block is an error.
+
+## How a location value is read
 
 Every flag or env value resolves with the same rules. It may point at:
 
@@ -29,22 +40,22 @@ bare `export SOUS_CONFIG=`) is treated as unset and falls through to the next ti
 hijacks resolution. Error messages name the source that was actually set (`--sous-dir`,
 `SOUS_CONFIG`, and so on), not a generic flag.
 
-## Locating the conf.d layer directory
+## Locating the conf.d directory
 
 Precedence: `--sous-confd <path>` flag, then `SOUS_CONFD` env var, then the default
-`<sousDir>/conf.d`. An override flows everywhere the default would: layer enumeration, the
-duplicate-baseName check, and watch-mode reload.
+`<sousDir>/conf.d`. An override applies everywhere the default would: finding the `conf.d` files,
+the check for file names that differ only by extension (below), and reloading in watch mode.
 
 ## Env file layering
 
-After discovery, sous loads two optional files from the discovered `.sous/` into the process
-environment:
+After discovery, sous reads two optional files from the discovered `.sous/` into the environment
+every plugin sees:
 
 - `.env.local`: gitignored; machine-specific values and secrets
 - `.env`: committed; team-shared defaults
 
 Load order is `.env.local` first, then `.env`, and no load ever overwrites a value that is
-already set. Effective precedence is therefore: real shell environment, then `.env.local`, then
+already set. Config expressions read the result as `env.<NAME>`. Effective precedence is therefore: real shell environment, then `.env.local`, then
 `.env`. The syntax is deliberately small (not a shell): `KEY=value` lines, `#` comments, an
 optional `export ` prefix, single or double quoted values (`\n` and `\t` expand inside double
 quotes), and inline `# comment` stripped from unquoted values. Lines without `=` are ignored.
@@ -60,12 +71,12 @@ All are hard `ConfigError`s; sous never guesses:
 - **No config found**: the error lists every directory checked during the walk and names the two
   fixes: run `sous init` in the project's root directory, which writes the config and everything
   else a first build needs, or pass `--config <path>`.
-- **Multiple primary configs**: two or more of `sous.config.js|mjs|json|jsonc|yaml` in the same
+- **Multiple primary configs**: two or more of `sous.config.js|mjs|ts|json|jsonc|yaml` in the same
   `.sous/` is an error naming every candidate.
-- **Duplicate layer baseNames**: any two loaded files (primary or conf.d) whose names differ
-  only by extension is an error naming both files, because their merge order would otherwise
-  depend on extension. `500-repos.json` and `500-repos.jsonc` collide for the same reason, which
-  is what keeps a layer sous is migrating to `.jsonc` from being loaded twice.
+- **Names that differ only by extension**: any two loaded files (primary or conf.d) whose names
+  differ only by extension is an error naming both files, because their merge order would
+  otherwise depend on the extension. `500-repos.json` and `500-repos.jsonc` collide for the same reason, which
+  is what keeps a file sous is migrating to `.jsonc` from being loaded twice.
 
 ## Interaction with `sous launch` pass-through
 

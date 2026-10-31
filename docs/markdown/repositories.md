@@ -48,7 +48,9 @@ $ sous namespace list
 A recipe is the unit you subscribe to and the only thing that carries a version. It may hold
 skills, memories, prompts, config layers and variable definitions in any mixture, and
 subscribing to it gets all of them. A recipe may ship a plugin for a coding tool (a Claude Code
-plugin, say), but never a plugin for sous itself; those come only with sous or as npm packages.
+plugin, say), and it may ship a plugin for sous itself, as one bundled file (see
+[Recipes that ship sous plugins](repositories-authoring.md#recipes-that-ship-sous-plugins)). A recipe may
+also require sous plugins from npm.
 
 ```yaml
 # recipes/workflow/task-files/sous.recipe.yaml
@@ -194,10 +196,16 @@ this machine.
 Subscribing decides what is switched on, and it is not a second security gate. A recipe is
 **active** when the project subscribes to it directly or through its namespace, or when an active
 recipe lists it under `subscribes`; only an active recipe registers entry points of its own, such as
-output files, skills, tool hooks and tool plugins. A recipe held only through `depends` is a library:
+output files, skills, tool hooks, tool plugins and sous plugins. A recipe held only through `depends` is a library:
 an active recipe may include, call or import its files, but it registers nothing itself. Activation
 keeps a project from running what it has no use for and keeps unrelated recipes from colliding;
-everything in a trusted repository is already trusted.
+everything in a trusted repository is already trusted. Nothing inside a repository runs, a sous
+plugin included, until the repository is trusted.
+
+A subscription can be switched off on one machine and left on for everyone else, for example from
+a `conf.d` file of your own. A switched-off subscription is not built: its outputs are pruned, its
+variables are not asked, and its pins stay in the committed lockfile. `sous subscription disable <ref>`
+and `sous subscription enable <ref>` switch one off and on.
 
 ## The official repository, and the built-in core
 
@@ -280,9 +288,9 @@ $ sous build
   ✓ /home/me/my-project/.claude/skills/start-task/SKILL.md (~1,996 tokens)
 ```
 
-Skills default to `<project root>/.claude/skills`, and the
-[`recipes`](repositories-file-formats.md#recipes-what-each-content-kind-does) block changes that. Memories are
-not copied anywhere; one include line in your instruction source pulls them in (see
+Skills go to `<project root>/.claude/skills`, the skills directory the built-in Claude Code plugin names, and the
+[`recipes`](repositories-file-formats.md#recipes-what-each-content-kind-does) block adds destinations of
+your own. Memories are not copied as files; one include line in your instruction source pulls them in (see
 [Recipe memories](repositories-consuming.md#recipe-memories)).
 
 By default a build uses what the lockfile pins and does not talk to the network. Two things
@@ -321,8 +329,10 @@ and `varMappings:` in your primary config instead, which sous never touches. See
 
 Every directory sous creates for its own bookkeeping explains itself: the first time it creates
 one it writes a short `README.md` saying what the directory is, who writes to it, whether you may
-edit it and whether it is committed, plus an `AGENTS.md` and a `CLAUDE.md` pointing at that
-README. None is ever overwritten, and directories holding rendered output are left alone.
+edit it and whether it is committed. Agent plugins add one-line pointer files beside it that tell
+their agent to read the README: the built-in Claude Code plugin adds a `CLAUDE.md`, and a plugin for an
+agent that reads `AGENTS.md` adds that. Each file is written once, none is ever overwritten, and
+directories holding rendered output are left alone.
 
 ## Including recipe files in your own templates
 

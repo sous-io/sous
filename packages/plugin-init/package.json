@@ -1,0 +1,36 @@
+{
+  "name": "@sous-io/plugin-init",
+  "version": "1.0.0",
+  "description": "Scaffolding a project's .sous/ (sous init).",
+  "type": "module",
+  "license": "Apache-2.0",
+  "private": true,
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./types": {
+      "source": "./src/types.ts",
+      "types": "./dist/types.d.ts",
+      "default": "./dist/types.js"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@sous-io/plugin-api": "workspace:*",
+    "@sous-io/plugin-build": "workspace:*",
+    "@sous-io/plugin-config-files": "workspace:*",
+    "@sous-io/plugin-host": "workspace:*"
+  },
+  "devDependencies": {
+    "@sous-io/core": "workspace:*"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

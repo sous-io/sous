@@ -2,6 +2,12 @@
 
 **Status:** Proposed, 2026-09-30.
 
+!> **Superseded in part by the 1.0 architecture (2026-10-29):** `sous update` is now one operation
+of a plugin ([ADR 0016](0016-intents-and-front-ends.md)). The npm, pnpm and Yarn logic moves into
+one plugin per package manager, and the `toleratesConfigErrors` setting goes away with
+`BaseCommand`. See [Concerns and Owners](../architecture/specifications/S6-concerns-and-owners.md)
+(its section on project setup and updates).
+
 This record builds on [ADR 0004](0004-project-install-handoff.md), whose hand-off from a global sous to a
 project's own install this command has to step around; everything ADR 0004 says still holds. The living answer
 is [Updating](../README.md#updating) and the [command reference](../commands.md#sous-update); the process

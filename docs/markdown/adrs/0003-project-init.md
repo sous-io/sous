@@ -2,6 +2,12 @@
 
 **Status:** Accepted, 2026-09-15.
 
+!> **Superseded in part by the 1.0 architecture (2026-10-29):** oclif and the `BaseCommand` class
+are gone, and with them `requiresConfig` and `adoptConfig`. `sous init` is now one operation of a
+plugin, and its first build runs the same build operation every front end uses
+([ADR 0016](0016-intents-and-front-ends.md)). The scaffold no longer writes `projectRoot`, which
+sous now sets itself ([ADR 0018](0018-one-project-root.md)).
+
 This record stands on its own; it amends nothing in [ADR 0001](0001-repositories.md) or
 [ADR 0002](0002-recipe-answers-in-templates.md), and everything both say still holds. The living
 answer to "how does it work right now?" is the `sous init` entry in the

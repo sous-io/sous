@@ -1,0 +1,209 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { makeTmpDir, type TmpDir } from "../utils/tmp.js";
+
+import { binPath } from "../utils/sous-bin.js";
+/** The published package's directory: the invoked install, as far as the hand-off is concerned. */
+const packageDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const ownVersion = (JSON.parse(fs.readFileSync(path.join(packageDir, "package.json"), "utf8")) as {
+  version: string;
+}).version;
+
+/** The version the project copy is relabelled with, so the two are told apart. */
+const PROJECT_VERSION = "0.0.0-project";
+
+/** Per-test timeout: each test boots the real CLI in a subprocess. */
+const CLI_TIMEOUT = 30_000;
+
+/**
+ * End-to-end coverage for the hand-off from an invoked sous to the sous a
+ * project installs (gh-10), exercised through the real entry point
+ * (the bundled bin) the way a global install would be.
+ *
+ * The "project copy" is the published package's layout (its bundle and its
+ * package.json), built under a temporary project's node_modules. The copy's
+ * node_modules is a symlink to the package's, so its dependencies resolve
+ * without an install, and its package.json version is relabelled so
+ * `sous --version` says which copy ran.
+ */
+describe("hand-off to the project's own install", () => {
+  let tmp: TmpDir;
+  let projectRoot: string;
+  let projectCopy: string;
+  let nestedDir: string;
+  let outsideDir: string;
+
+  function runCli(
+    args: string[],
+    opts: { cwd: string; env?: Record<string, string | undefined>; bin?: string }
+  ): { stdout: string; stderr: string; status: number | null } {
+    const env: Record<string, string | undefined> = {
+      ...process.env,
+      SOUS_HOME: path.join(tmp.path, "sous-home"),
+    };
+    delete env.SOUS_CONFIG;
+    delete env.SOUS_DIR;
+    delete env.SOUS_CONFD;
+    delete env.SOUS_NO_DELEGATE;
+    delete env.SOUS_DEBUG;
+    for (const [k, v] of Object.entries(opts.env ?? {})) {
+      if (v === undefined) delete env[k];
+      else env[k] = v;
+    }
+    const result = spawnSync(process.execPath, [opts.bin ?? binPath, ...args], {
+      cwd: opts.cwd,
+      encoding: "utf8",
+      env,
+    });
+    return { stdout: result.stdout ?? "", stderr: result.stderr ?? "", status: result.status };
+  }
+
+  beforeAll(() => {
+    tmp = makeTmpDir("sous-project-install-e2e-");
+
+    // Build the published package's layout under a project's node_modules, where a devDependency
+    // install would put it: the bundle (dist/bin.js and dist/sous.js), the packaged core recipe and
+    // the package.json, with its version relabelled. Its dependencies (only @sous-io/plugin-api stays outside the bundle) are
+    // the package's own, through a symlinked node_modules.
+    projectRoot = path.join(tmp.path, "project");
+    projectCopy = path.join(projectRoot, "node_modules", "@sous-io", "sous");
+    fs.mkdirSync(projectCopy, { recursive: true });
+    const bundle = spawnSync(process.execPath, [path.join(packageDir, "scripts", "bundle.mjs"), path.join(projectCopy, "dist", "bin.js")], {
+      encoding: "utf8",
+    });
+    if (bundle.status !== 0) {
+      throw new Error(`bundling the project copy failed:\n${bundle.stderr}`);
+    }
+    // The links are junctions on Windows, where a directory symlink needs elevated rights; the type
+    // is ignored elsewhere.
+    fs.symlinkSync(path.join(packageDir, "node_modules"), path.join(projectCopy, "node_modules"), "junction");
+    // The packaged core recipe, which `npm pack` copies in from the repository root.
+    fs.symlinkSync(path.join(packageDir, "..", "..", "recipes"), path.join(projectCopy, "recipes"), "junction");
+    const pkg = JSON.parse(fs.readFileSync(path.join(packageDir, "package.json"), "utf8")) as Record<string, unknown>;
+    pkg.version = PROJECT_VERSION;
+    fs.writeFileSync(path.join(projectCopy, "package.json"), JSON.stringify(pkg, null, 2));
+
+    // A sous project with a config, some way beneath the root, and a
+    // directory outside any project.
+    nestedDir = path.join(projectRoot, "packages", "app");
+    fs.mkdirSync(path.join(nestedDir, ".sous"), { recursive: true });
+    fs.writeFileSync(
+      path.join(nestedDir, ".sous", "sous.config.json"),
+      JSON.stringify({ name: "Nested App" })
+    );
+    outsideDir = path.join(tmp.path, "outside");
+    fs.mkdirSync(outsideDir);
+  }, 120_000);
+
+  afterAll(() => {
+    tmp.cleanup();
+  });
+
+  /**
+   * The repository's own bin, standing in for a global install, hands off to
+   * the project copy from anywhere inside the project, and says so on stderr
+   * because the versions differ. The version itself is one plain line.
+   * Example: `sous --version` in <project>/packages/app prints "v0.0.0-project".
+   */
+  it(
+    "should run the project's copy from inside the project and say so on stderr",
+    () => {
+      const result = runCli(["--version"], { cwd: nestedDir });
+      expect(result.status).toBe(0);
+      expect(result.stdout).toBe(`v${PROJECT_VERSION}\n`);
+      expect(result.stderr).toBe(
+        `Handing off to the project-level Sous install: v${PROJECT_VERSION}\n`
+      );
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * `--verbose` makes both the hand-off notice and the version report say
+   * where things are: the notice names both installs and the escape hatch,
+   * and the report lists the package, install path, platform and Node build.
+   * Example: `sous --version --verbose` prints an "Install:" line naming the project copy.
+   */
+  it(
+    "should say where both installs are with --verbose",
+    () => {
+      const result = runCli(["--version", "--verbose"], { cwd: nestedDir });
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain(`v${PROJECT_VERSION}`);
+      expect(result.stdout).toContain(fs.realpathSync(projectCopy));
+      expect(result.stdout).toContain(process.version);
+      expect(result.stderr).toContain(`Handing off to the project-level Sous install: v${PROJECT_VERSION}`);
+      expect(result.stderr).toContain(`Invoked install: v${ownVersion} at ${fs.realpathSync(packageDir)}`);
+      expect(result.stderr).toContain("SOUS_NO_DELEGATE=1");
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * The notice never touches stdout, so a command whose output is consumed by
+   * a pipe prints exactly what it always did.
+   * Example: `sous config get name` prints only `Nested App` on stdout.
+   */
+  it(
+    "should keep stdout clean when it hands off",
+    () => {
+      const result = runCli(["config", "get", "name"], { cwd: nestedDir });
+      expect(result.status).toBe(0);
+      expect(result.stdout.trim()).toBe("Nested App");
+      expect(result.stderr).toContain(`Handing off to the project-level Sous install: v${PROJECT_VERSION}`);
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * Outside any project the invoked copy runs, with nothing on stderr.
+   * Example: `sous --version` in an unrelated directory reports the repository's version.
+   */
+  it(
+    "should run the invoked copy outside a project",
+    () => {
+      const result = runCli(["--version"], { cwd: outsideDir });
+      expect(result.status).toBe(0);
+      expect(result.stdout).toBe(`v${ownVersion}\n`);
+      expect(result.stderr).toBe("");
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * SOUS_NO_DELEGATE keeps the invoked copy running inside the project.
+   * Example: `SOUS_NO_DELEGATE=1 sous --version` in the project reports the repository's version.
+   */
+  it(
+    "should run the invoked copy when SOUS_NO_DELEGATE is set",
+    () => {
+      const result = runCli(["--version"], { cwd: nestedDir, env: { SOUS_NO_DELEGATE: "1" } });
+      expect(result.status).toBe(0);
+      expect(result.stdout).toBe(`v${ownVersion}\n`);
+      expect(result.stderr).toBe("");
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * The project copy invoked directly (what `npx sous` does) finds itself and
+   * never hands off, so there is no loop and no notice.
+   * Example: `node <project copy>/dist/bin.js --version` reports 0.0.0-project silently.
+   */
+  it(
+    "should not hand off from the project copy to itself",
+    () => {
+      const result = runCli(["--version"], {
+        cwd: nestedDir,
+        bin: path.join(projectCopy, "dist", "bin.js"),
+      });
+      expect(result.status).toBe(0);
+      expect(result.stdout).toBe(`v${PROJECT_VERSION}\n`);
+      expect(result.stderr).toBe("");
+    },
+    CLI_TIMEOUT
+  );
+});

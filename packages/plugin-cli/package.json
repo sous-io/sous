@@ -1,0 +1,29 @@
+{
+  "name": "@sous-io/plugin-cli",
+  "version": "1.0.0",
+  "description": "The sous command-line front end, generated from intents",
+  "type": "module",
+  "license": "Apache-2.0",
+  "private": true,
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@sous-io/plugin-api": "workspace:*"
+  },
+  "devDependencies": {
+    "@sous-io/core": "workspace:*",
+    "zod": "^4.4.3"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

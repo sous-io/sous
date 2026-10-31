@@ -23,8 +23,9 @@ cd ~/projects/my-project
 echo 'name: my-project' > .sous/sous.config.yaml
 ```
 
-Everything else has a default: skills compile into `<project root>/.claude/skills`, and the
-lockfile, the state file and the config layers sous writes land under `.sous/`. Outside a
+Everything else has a default: skills compile into `<project root>/.claude/skills` (where the
+Claude Code plugin built into sous puts them), and the lockfile, the state file and the `conf.d`
+files sous writes land under `.sous/`. Outside a
 walkthrough, `sous init` writes a fuller starting point (a commented config, a starter prompt,
 the env files and the ignore block) and runs the first build for you; the one-line config is
 used here so that each step shows one thing. `SOUS_HOME` puts

@@ -1,0 +1,42 @@
+{
+  "name": "@sous-io/plugin-compiler",
+  "version": "1.0.0",
+  "description": "Compiling templates, includes, aliases, compilation settings, the built-in tags and filters, the state file, writing outputs, pruning.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "private": true,
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./types": {
+      "source": "./src/types.ts",
+      "types": "./dist/types.d.ts",
+      "default": "./dist/types.js"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@sous-io/plugin-api": "workspace:*",
+    "@sous-io/plugin-host": "workspace:*",
+    "@sous-io/plugin-liquid": "workspace:*",
+    "@sous-io/plugin-refs": "workspace:*",
+    "@sous-io/plugin-variables": "workspace:*",
+    "liquidjs": "^10.25.0",
+    "tiktoken": "^1.0.22",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@sous-io/core": "workspace:*",
+    "glob": "^13.0.6",
+    "minimatch": "^10.2.4"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

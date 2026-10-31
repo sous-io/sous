@@ -1,0 +1,24 @@
+{
+  "name": "@sous-io/core",
+  "version": "1.0.0",
+  "description": "The sous engine: config building, chains, intents, events, services, entities and budgets",
+  "type": "module",
+  "license": "Apache-2.0",
+  "private": true,
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {"@sous-io/plugin-api": "workspace:*", "@sous-io/documents": "workspace:*", "semver": "^7.8.5"},
+  "devDependencies": {"@types/semver": "^7.8.0"},
+  "engines": {
+    "node": ">=22"
+  }
+}

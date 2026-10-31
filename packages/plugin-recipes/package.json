@@ -1,0 +1,44 @@
+{
+  "name": "@sous-io/plugin-recipes",
+  "version": "1.0.0",
+  "description": "Repositories, trust, subscriptions, the lockfile, the store, the index cache, links, the core recipe, the catalog and recipe plugins.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "private": true,
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./types": {
+      "source": "./src/types.ts",
+      "types": "./dist/types.d.ts",
+      "default": "./dist/types.js"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@sous-io/plugin-api": "workspace:*",
+    "@sous-io/plugin-compiler": "workspace:*",
+    "@sous-io/plugin-confd": "workspace:*",
+    "@sous-io/plugin-formats": "workspace:*",
+    "@sous-io/plugin-git": "workspace:*",
+    "@sous-io/plugin-host": "workspace:*",
+    "@sous-io/plugin-refs": "workspace:*",
+    "@sous-io/plugin-variables": "workspace:*",
+    "semver": "^7.8.5"
+  },
+  "devDependencies": {
+    "@sous-io/core": "workspace:*",
+    "@sous-io/plugin-update": "workspace:*",
+    "@types/semver": "^7.8.0",
+    "yaml": "^2.9.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

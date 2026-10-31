@@ -2,6 +2,14 @@
 
 **Status:** Accepted, 2026-09-13.
 
+!> **Superseded in part by the 1.0 architecture (2026-10-29):** `projectRoot` is no longer a
+convention written into `_vars`. Sous sets it itself, to the directory holding `.sous/`, and
+setting it in any `_vars` is an error ([ADR 0018](0018-one-project-root.md)). Config expressions
+([ADR 0020](0020-config-expressions.md)) may read recipe answers everywhere except under
+`subscriptions` and `repos`. See
+[Building the Config](../architecture/specifications/S2-config-building.md) (its section on recipe
+answers).
+
 This record amends [ADR 0001](0001-repositories.md). It records only the delta from that design:
 one piece of it that was designed but not built, the decisions made while building it, and two
 corrections to what 0001 describes. Everything 0001 says otherwise stands. The living answer to

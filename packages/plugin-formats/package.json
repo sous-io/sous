@@ -1,0 +1,39 @@
+{
+  "name": "@sous-io/plugin-formats",
+  "version": "1.0.0",
+  "description": "One parser per on-disk format, reading manifests, and the recipe content hash.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "private": true,
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./types": {
+      "source": "./src/types.ts",
+      "types": "./dist/types.d.ts",
+      "default": "./dist/types.js"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@sous-io/plugin-api": "workspace:*",
+    "@sous-io/plugin-refs": "workspace:*",
+    "jsonc-parser": "^3.3.1",
+    "semver": "^7.8.5",
+    "yaml": "^2.9.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@sous-io/core": "workspace:*",
+    "@types/semver": "^7.8.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

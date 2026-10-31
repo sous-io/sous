@@ -99,6 +99,36 @@ template may include a file from a recipe this one depends on through the reserv
 this recipe's own `depends` and `subscribes` at their pinned versions; see
 [Including recipe files in your own templates](repositories.md#including-recipe-files-in-your-own-templates).
 
+### Recipes that ship sous plugins
+
+A recipe may ship a sous plugin: code that extends sous itself, with the same plugin interface an npm
+plugin uses. It is one self-contained bundled file, because sous never runs `npm install` for a recipe.
+The same rule holds for anything else in a recipe that runs, such as a helper script or a hook. The
+manifest names the bundle, and optionally its type declarations:
+
+```yaml
+# sous.recipe.yaml
+plugin:
+    bundle: plugin/index.js
+    types: plugin/index.d.ts      # optional
+```
+
+Nothing in a repository runs until the subscriber trusts the repository, so the trust question is the
+gate for a recipe's plugin as for its other content. Sous copies a recipe plugin's `.d.ts` file into the
+subscriber's `.sous/types/`, so other plugins in that project see its types; a plugin with no `.d.ts`
+still works. A recipe may also require plugins from npm, each with a version range:
+
+```yaml
+# sous.recipe.yaml
+requires:
+    plugins:
+        sous-plugin-claude-code: "^1.0.0"
+```
+
+A subscriber is offered the missing plugin when they subscribe; see
+[Subscribe to a recipe](repositories-consuming.md#subscribe-to-a-recipe). How a plugin is written is in
+[the engine specification](architecture/specifications/S1-engine.md), under "Plugins".
+
 ## Declare the variables a recipe needs
 
 A recipe that needs a value from the project asks through a **definition**: a published specification, never a

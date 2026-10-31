@@ -11,8 +11,9 @@
 
 sous compiles AI coding agent configuration from templates. You write skills, memories, and
 instructions once as LiquidJS templates in layered sources, then sous renders them into the
-formats agents actually read: `.claude/` plus `CLAUDE.md` for Claude Code, `.codex/` plus
-`AGENTS.md` for Codex. The CLI binary is named `sous`.
+formats agents actually read: `.claude/` plus `CLAUDE.md` for Claude Code, which sous supports
+out of the box, and other tools' formats (such as `.codex/` plus `AGENTS.md` for Codex) through
+plugins. The CLI binary is named `sous`.
 
 **New to sous? Watch the animated introduction at [sous.io](https://sous.io).**
 
@@ -43,10 +44,9 @@ to; `--verbose` announces every hand-off and adds where both installs are. Set
 To update, run `sous update`. It updates the global install, the project's own install, or both
 (whichever this directory has), through the package manager that installed each one (npm, pnpm or
 Yarn), and asks before each one. By default each install moves to the newest version in its current
-major; `--major` goes past it, `--version <version|range|tag>` picks one (a downgrade included),
-`--global` and `--project` narrow the run, `--yes` answers every question and `--dry-run` only
-prints the plan. After a project update, the new copy builds the project, so its lockfile moves to
-the new version too.
+major; `--major` goes past it and `--version <version|range|tag>` picks one (a downgrade included).
+`sous update --help` lists the rest. After a project update, the new copy builds the project, so its
+lockfile moves to the new version too.
 
 ```bash
 sous update --dry-run     # show what would be installed where, and install nothing
@@ -57,8 +57,8 @@ Or run it from a clone (useful when developing sous itself):
 ```bash
 git clone git@github.com:sous-io/sous.git
 cd sous
-npm install
-npm link
+pnpm install
+./bin/sous --version      # builds the bundle on first use; link bin/sous onto your PATH to use it anywhere
 ```
 
 Then set up a project:
@@ -83,7 +83,6 @@ The config it writes compiles one file:
 ```js
 export const config = {
   name: "My Project",
-  _vars: { projectRoot: "${sousDir}/.." },
   compilation: {
     targets: [
       {
@@ -92,14 +91,16 @@ export const config = {
       },
     ],
   },
-  recipes: { skills: { outputs: ["${projectRoot}/.claude/skills"] } },
 };
 ```
 
-`${sousDir}` is the `.sous/` directory sous found, so a config can name paths relative to
-itself without hardcoding anything machine-specific. One config describes one project. A
-`.sous/` may hold one config file, named `sous.config.js`, `sous.config.mjs`,
-`sous.config.json`, `sous.config.jsonc` or `sous.config.yaml`. After editing, build:
+`${sousDir}` is the `.sous/` directory sous found, and `${projectRoot}` is the directory that
+holds it, so a config can name paths without hardcoding anything machine-specific. Sous sets
+both; setting `projectRoot` yourself in `_vars` is an error. Recipe skills land in
+`.claude/skills` through the built-in Claude Code plugin, and `recipes.skills.outputs` adds
+destinations of your own. One config describes one project. A `.sous/` may hold one config
+file, named `sous.config.js`, `sous.config.mjs`, `sous.config.ts`, `sous.config.json`,
+`sous.config.jsonc` or `sous.config.yaml`. After editing, build:
 
 ```bash
 sous build
@@ -132,9 +133,14 @@ Useful commands:
 | `sous prune` | Remove outputs no longer in the config |
 | `sous clear` | Delete every file sous wrote for the project |
 | `sous launch claude` | Build, then start the agent |
-| `sous config show` | Print the merged config (all layers) as JSON |
-| `sous config get <path>` | Read one value by dot-path; `--layers` shows which file set it |
-| `sous config validate` | Validate the merged config: schema, then variable resolution |
+| `sous config show` | Print the built config as JSON, with every value evaluated |
+| `sous config get <path>` | Read one value by dot-path; `--layers` shows which file or plugin changed it, in order |
+| `sous config validate` | Validate the built config: schema, then variable resolution |
+| `sous plugins show` | List every plugin and what it registered |
+| `sous mcp` | Serve every sous command as an MCP tool, for agents |
+
+`sous <command> --help` lists a command's flags, and the [command reference](docs/markdown/commands.md)
+describes every command.
 
 ## How it works
 
@@ -162,8 +168,8 @@ each level can define variables:
 
 Variables resolve later-wins across scopes: auto-injected, env, config, compilation,
 target, output. Templates read them as `{{ varName }}`; config files reference them as `${varName}`.
-The auto-injected ones include `${sousDir}` and `${sousConfigPath}` for the discovered
-config, and `${sousTemplatePath}` for the template being rendered.
+The auto-injected ones include `${projectRoot}`, `${sousDir}` and `${sousConfigPath}` for the
+discovered config, and `${sousTemplatePath}` for the template being rendered.
 
 Sources come in three tiers, each able to build on the one above it:
 
@@ -187,14 +193,13 @@ can define your own aliases with an `_aliases` block. A path may be a glob, and
 Sous records every file and directory it writes in a state file, `.sous/sous.state.json` by
 default, which is what lets `prune` and `clear` clean up precisely instead of guessing.
 
-## Composing config from layers
+## Composing config from several files
 
-One config can grow large, so sous lets you split it. Alongside the primary
-`sous.config.*`, any file matching `.sous/conf.d/*.{js,mjs,json,yaml}` is a layer. Sous loads
-the primary first, then the `conf.d/` files sorted bytewise-lexicographically (identical order
-on every machine), and merges them into one config: objects deep-merge key by key, scalars are
-later-wins, and arrays concatenate in load order. Every layer is forced back to plain JSON
-before merging, so functions, `RegExp`, `Date`, and `undefined` do not survive a layer.
+One config can grow large, so sous lets you split it. Alongside the primary `sous.config.*`,
+every file in `.sous/conf.d/` (`.js`, `.mjs`, `.ts`, `.json`, `.jsonc`, `.yaml` or `.yml`) adds to
+it. Sous applies the primary first, then the `conf.d/` files sorted bytewise (identical order on
+every machine): objects merge key by key, scalars are later-wins, and arrays are joined. Values
+pass through JSON, so functions, `RegExp`, `Date` and `undefined` do not survive.
 
 ```
 .sous/
@@ -204,22 +209,78 @@ before merging, so functions, `RegExp`, `Date`, and `undefined` do not survive a
     200-skills.yaml       # adds compilation targets
 ```
 
-For anything JSON cannot express, a `.js`/`.mjs` layer may export a `configure` function
-instead of (or alongside) a `config` object. Sous calls it with the cumulative config so far
-and a small builder, and merges the result:
+Recipes and plugins can change the config too, and your own files are always applied again after
+them, so a value you set wins.
+`sous config get <path> --layers` lists every change to a value, in order, with what made it.
 
-```js
-export function configure(currentConfig, builder) {
-  // currentConfig is the live merged config; mutate it by reference, or return
-  // an object to merge. builder.env(name, fallback), builder.loadConfig(path),
-  // builder.loadConfigs(glob), and builder.merge(obj) are available.
-  currentConfig._vars.apiBase = builder.env("API_BASE", "https://example.com");
+A JSON, JSONC or YAML file can decide a value when sous loads it, with a config expression:
+
+```jsonc
+// .sous/conf.d/610-mac.jsonc: switch one subscription off on macOS only
+{
+    "subscriptions": {
+        "tool-usage/automated-browser-tasks": {
+            "enabled": {
+                "$if": {
+                    "expr": "host.platform == 'darwin'",
+                    "then": false
+                }
+            }
+        }
+    }
 }
 ```
 
-`configure` may be async. Builder paths (`loadConfig`/`loadConfigs`) run before variable
-resolution, so they accept only the auto-vars `${sousDir}`, `${sousConfDir}`, `${sousRootPath}`,
-and `${sousVersion}`; any other `${var}` in a builder path is an error.
+For anything a data file cannot express, a `.js` or `.ts` file may export a `configure`
+function. Sous calls it with a builder, and every change it makes through the builder is recorded:
+
+```js
+export function configure(config) {
+  config.atPath("compilation.targets").appendValue({
+    entryPoint: "${sousDir}/memories/TEAM.tpl.md",
+    outputs: [{ destinationFile: "${projectRoot}/TEAM.md" }],
+  });
+}
+```
+
+A file named `*.patch.json` or `*.patch.jsonl` holds raw patch operations instead, for people who
+know how the config build works. The full rules are in
+[Layers and merging](docs/markdown/config-layers.md) and
+[Config expressions](docs/markdown/configuration.md#config-expressions).
+
+## Plugins
+
+Almost everything sous does is a plugin: the CLI, config files, recipes, the compiler, the
+repository hosts, the package managers and Claude Code all ship built in. Plugins come from npm,
+or from recipes in repositories you trust. The `plugins` config key decides which load:
+
+```jsonc
+// .sous/sous.config.jsonc
+{
+    "plugins": {
+        "load": [
+            "sous-plugin-bun"
+        ],
+        "disabled": [
+            "sous-plugin-old-thing"
+        ],
+        "options": {
+            "sous-plugin-claude-code": {
+                "model": "opus"
+            }
+        }
+    }
+}
+```
+
+- `load` names plugins to load though `package.json` does not list them.
+- `disabled` names plugins never to load, built-ins included.
+- `options` holds each plugin's own options; each plugin gets only its own.
+- `discover` is `"dependencies"` (the default: built-ins, the project's `package.json`
+  dependencies and `load`) or `"scan"`, which also looks for installed plugins.
+
+`sous plugins show` lists every plugin and what it adds. How plugins work is in
+[the engine's design](docs/markdown/architecture/specifications/S1-engine.md).
 
 ## Locating the config
 
@@ -238,10 +299,10 @@ found by discovery, so they cannot decide where discovery looks).
 
 ## Validating and inspecting config
 
-`sous config validate` runs the full pipeline: it merges every layer, checks it against the
-schema, then resolves variables, reporting the first failure with a readable message.
-`sous config show` prints the merged config as JSON, and `sous config get <dot.path>` reads a
-single value; add `--layers` to see which layer file set it and to what.
+`sous config validate` builds the config, checks it against the schema, then resolves
+variables, reporting the first failure with a readable message. `sous config show` prints the
+built config as JSON, and `sous config get <dot.path>` reads a single value; add `--layers` to
+see each change to it, in order, and which file or plugin made it.
 
 Config is validated against a JSON Schema on every load. A config may declare a `version`
 field; omit it or set it to `1`. JSON layers can point an editor at the shipped schema with a

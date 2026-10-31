@@ -19,28 +19,41 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The package's engines field requires Node 22 or newer, so that is the
+      # pnpm itself. With no version given here, the action installs the one
+      # the root package.json's packageManager field names (pnpm@10.33.0), so
+      # CI and every contributor's machine run the same pnpm. It has to come
+      # before setup-node, whose pnpm cache needs pnpm on the path.
+      - uses: pnpm/action-setup@v4
+
+      # Every package's engines field requires Node 22 or newer, so that is the
       # only version the suite runs on.
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          # Caches the npm download directory, keyed on package-lock.json.
-          cache: npm
+          # Caches pnpm's package store, keyed on pnpm-lock.yaml.
+          cache: pnpm
 
+      # --frozen-lockfile fails the run when pnpm-lock.yaml does not match the
+      # package.json files, rather than quietly resolving something new.
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
-      # The build is the type check; sous itself always runs from TypeScript
-      # source, so nothing here depends on the compiled output.
+      # Each workspace package type-checks against its own tsconfig. Nothing is
+      # emitted: the tests run every package from its TypeScript source.
       - name: Type check
-        run: npm run build
+        run: pnpm -r exec tsc --noEmit
+
+      # The published bin is a bundle, so a change that type-checks but cannot
+      # be bundled is caught here rather than at release time.
+      - name: Build the bundle
+        run: pnpm --filter @sous-io/sous build
 
       # Several integration tests make commits in temporary git repositories.
       # They configure an identity themselves, and these variables are a second
       # layer of the same thing, so a runner with no global git identity cannot
       # fail a commit.
       - name: Test
-        run: npm test
+        run: pnpm test
         timeout-minutes: 15
         env:
           GIT_AUTHOR_NAME: Sous Test

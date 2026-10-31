@@ -1,0 +1,90 @@
+{
+  "name": "@sous-io/sous",
+  "version": "1.0.0",
+  "description": "Compiles AI coding agent configuration (CLAUDE.md, skills, memories) from LiquidJS templates",
+  "type": "module",
+  "license": "Apache-2.0",
+  "author": "Luke Chavers",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sous-io/sous.git",
+    "directory": "packages/sous"
+  },
+  "homepage": "https://sous.io",
+  "bugs": "https://github.com/sous-io/sous/issues",
+  "keywords": [
+    "cli",
+    "ai",
+    "agents",
+    "claude",
+    "claude-code",
+    "codex",
+    "prompts",
+    "skills",
+    "templates",
+    "liquidjs"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "bin": {
+    "sous": "./dist/bin.js"
+  },
+  "files": [
+    "dist/bin.js",
+    "dist/sous.js",
+    "recipes",
+    "docs/markdown/*.md",
+    "sous.config.schema.json"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p .",
+    "build": "node scripts/bundle.mjs",
+    "prepack": "node scripts/bundle.mjs && node scripts/pack-files.mjs copy",
+    "postpack": "node scripts/pack-files.mjs clean"
+  },
+  "dependencies": {
+    "@sous-io/plugin-api": "workspace:*"
+  },
+  "devDependencies": {
+    "@sous-io/core": "workspace:*",
+    "@sous-io/documents": "workspace:*",
+    "@sous-io/plugin-authoring": "workspace:*",
+    "@sous-io/plugin-build": "workspace:*",
+    "@sous-io/plugin-claude-code": "workspace:*",
+    "@sous-io/plugin-cli": "workspace:*",
+    "@sous-io/plugin-compiler": "workspace:*",
+    "@sous-io/plugin-confd": "workspace:*",
+    "@sous-io/plugin-config-files": "workspace:*",
+    "@sous-io/plugin-expressions": "workspace:*",
+    "@sous-io/plugin-formats": "workspace:*",
+    "@sous-io/plugin-git": "workspace:*",
+    "@sous-io/plugin-github": "workspace:*",
+    "@sous-io/plugin-gitlab": "workspace:*",
+    "@sous-io/plugin-harnesses": "workspace:*",
+    "@sous-io/plugin-host": "workspace:*",
+    "@sous-io/plugin-init": "workspace:*",
+    "@sous-io/plugin-inspect": "workspace:*",
+    "@sous-io/plugin-liquid": "workspace:*",
+    "@sous-io/plugin-local": "workspace:*",
+    "@sous-io/plugin-mcp": "workspace:*",
+    "@sous-io/plugin-memories": "workspace:*",
+    "@sous-io/plugin-npm": "workspace:*",
+    "@sous-io/plugin-pnpm": "workspace:*",
+    "@sous-io/plugin-recipe-answers": "workspace:*",
+    "@sous-io/plugin-recipes": "workspace:*",
+    "@sous-io/plugin-refs": "workspace:*",
+    "@sous-io/plugin-skills": "workspace:*",
+    "@sous-io/plugin-update": "workspace:*",
+    "@sous-io/plugin-variables": "workspace:*",
+    "@sous-io/plugin-yarn": "workspace:*",
+    "esbuild": "^0.27.4",
+    "jsonc-parser": "^3.3.1",
+    "yaml": "^2.9.0",
+    "zod": "^4.4.3"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

@@ -1,0 +1,271 @@
+import { BaseReporter, type Environment, LogLevel, messageText, type ProgressEvent, type ReportDetails, ReportEntryStyle, type ReportMessage } from "@sous-io/plugin-api";
+import type { OutputStream } from "./io.js";
+import { BLANK, Layout } from "./terminal/layout.js";
+import { type Rendered, renderEntry, type RenderState } from "./terminal/render-entry.js";
+import { colorEnabled, createStyle, type Style } from "./views/style.js";
+import { displayWidth, terminalColumns } from "./views/text.js";
+
+/** A stream the reporter writes to; a terminal also says how wide it is. */
+export type ReporterStream = OutputStream & { readonly columns?: number };
+
+/** What a {@link TerminalReporter} is built from. */
+export interface TerminalReporterOptions {
+    /** Where a command's result goes (and nothing else; under `json` not even that). */
+    readonly stdout: ReporterStream;
+    /** Where every other message goes, at every level, and everything when `json` is on. */
+    readonly stderr: ReporterStream;
+    /** The least severe level shown. Default `info`. */
+    readonly threshold?: LogLevel;
+    /** Whether output is colored. Default: decided for each stream by {@link colorEnabled}. */
+    readonly color?: boolean;
+    /** The environment `NO_COLOR`, `FORCE_COLOR` and `TERM` are read from. Default: none set. */
+    readonly env?: Environment;
+    /** The width output is laid out in. Default: a terminal's own width, else 100. */
+    readonly columns?: number;
+    /** Sends every message to standard error, so standard output holds only the result. */
+    readonly json?: boolean;
+}
+
+/** What decides the blank lines between entries: shared by two streams that are the same terminal. */
+class Spacing {
+    /** How many blank lines end what was written so far. */
+    blanks = 0;
+    /** Whether anything was written yet. */
+    wrote = false;
+    /** How many blank lines the next entry should have above it. */
+    pending = 0;
+}
+
+/** One stream, with what is needed to lay out and space what is written to it. */
+class Sink {
+    readonly layout: Layout;
+
+    constructor(
+        readonly stream: ReporterStream,
+        color: boolean,
+        columns: number,
+        readonly spacing: Spacing,
+    ) {
+        this.layout = new Layout(createStyle(color), columns, stream.isTTY === true);
+    }
+
+    get blanks(): number {
+        return this.spacing.blanks;
+    }
+
+    set blanks(value: number) {
+        this.spacing.blanks = value;
+    }
+
+    get wrote(): boolean {
+        return this.spacing.wrote;
+    }
+
+    set wrote(value: boolean) {
+        this.spacing.wrote = value;
+    }
+
+    get pending(): number {
+        return this.spacing.pending;
+    }
+
+    set pending(value: number) {
+        this.spacing.pending = value;
+    }
+}
+
+/** Clears the line the cursor is on. */
+const CLEAR_LINE = "\r\u001b[2K";
+
+/** How many cells the progress bar has. */
+const BAR_CELLS = 20;
+
+/** How many blank lines end a command's output. */
+const FOOTER_BLANKS = 2;
+
+/**
+ * The CLI's reporter: it draws every {@link ReportEntryStyle} the way the CLI looks (colors, glyphs,
+ * aligned blocks, wrapped paragraphs, tables), decides the blank lines between entries from the
+ * sequence of styles, and sends each entry to a stream by its level.
+ *
+ * - A command's result (`ReportEntryStyle.Result`, what an intent returned) goes to standard
+ *   output; every other message, at every level, goes to standard error. With `json`, everything
+ *   goes to standard error, so standard output holds only the JSON the front end writes.
+ * - A message is a string, an error (shown with its chain of causes), a payload (`VariableSet`,
+ *   `Table`, ...) or the result's outputs; a payload is drawn from its own fields.
+ * - Color is decided for each stream, so a piped standard output stays plain while standard error is colored.
+ * - Only one progress bar shows at a time; on a terminal it is redrawn in place and kept under any
+ *   message printed while it shows. Elsewhere only its last event prints, as one line.
+ *
+ * Call {@link finish} when a command's output is done.
+ *
+ * ```ts
+ * const reporter = new TerminalReporter({ stdout: process.stdout, stderr: process.stderr, env: process.env });
+ *
+ * reporter.operationStart("Building the project");
+ * reporter.operation("written", "/work/app/CLAUDE.md", { tokens: 1840 });
+ * reporter.finish();
+ * ```
+ */
+export class TerminalReporter extends BaseReporter {
+    private readonly out: Sink;
+    private readonly err: Sink;
+    private readonly state: RenderState = { step: false };
+    private bar: { readonly sink: Sink; readonly text: string } | undefined;
+    private footerSink: Sink | undefined;
+
+    constructor(options: TerminalReporterOptions) {
+        super(options.threshold ?? LogLevel.Info);
+
+        const env = options.env ?? {};
+        // Two terminal streams are one screen, so they share the count of blank lines.
+        const shared = new Spacing();
+        const sameScreen = options.stdout.isTTY === true && options.stderr.isTTY === true;
+        const sinkOf = (stream: ReporterStream) =>
+            new Sink(stream, options.color ?? colorEnabled(stream, env), options.columns ?? (stream.isTTY === true ? terminalColumns(stream) : terminalColumns(undefined)), sameScreen ? shared : new Spacing());
+
+        this.err = sinkOf(options.stderr);
+        this.out = options.json === true ? this.err : sinkOf(options.stdout);
+    }
+
+    /** The colors of standard error, where every message but a result goes, for text built before it is reported. */
+    styleFor(): Style {
+        return this.err.layout.style;
+    }
+
+    /** Ends a command's output: removes a progress bar that is still showing and writes the closing blank lines. */
+    finish(): void {
+        this.endBar();
+
+        const sink = this.footerSink;
+
+        this.footerSink = undefined;
+
+        // A result sent to a pipe or a file gets no closing room: the file holds the result and nothing after it.
+        if (sink === undefined || !sink.wrote || (sink === this.out && sink !== this.err && sink.stream.isTTY !== true)) {
+            return;
+        }
+
+        this.emit(sink, { lines: Array.from({ length: Math.max(0, FOOTER_BLANKS - sink.blanks) }, () => BLANK) });
+        sink.pending = 0;
+    }
+
+    protected write(level: LogLevel, message: ReportMessage, details: ReportDetails | undefined, style: ReportEntryStyle): void {
+        if (style === ReportEntryStyle.Progress) {
+            this.drawProgress(details as ProgressEvent | undefined, messageText(message));
+
+            return;
+        }
+
+        const sink = this.sinkFor(style);
+        const rendered = renderEntry(sink.layout, this.state, level, message, details, style);
+
+        if (rendered.lines.length > 0) {
+            this.emit(sink, rendered);
+        }
+
+        if (rendered.footer === true) {
+            this.footerSink = sink;
+        }
+    }
+
+    /** The stream an entry goes to: standard output for a result, standard error for everything else. */
+    private sinkFor(style: ReportEntryStyle): Sink {
+        return style === ReportEntryStyle.Result ? this.out : this.err;
+    }
+
+    /** Writes an entry's lines, with the blank lines it needs above them, keeping a progress bar under them. */
+    private emit(sink: Sink, rendered: Rendered): void {
+        const gap = sink.wrote ? Math.max(rendered.gapBefore ?? 0, sink.pending) - sink.blanks : 0;
+        const lines = [...Array.from({ length: Math.max(0, gap) }, () => BLANK), ...rendered.lines];
+        let text = "";
+
+        for (const line of lines) {
+            text += `${line}\n`;
+            sink.blanks = line.trim() === "" ? sink.blanks + 1 : 0;
+        }
+
+        if (this.bar !== undefined) {
+            this.bar.sink.stream.write(CLEAR_LINE);
+        }
+
+        sink.stream.write(text);
+        sink.wrote = true;
+        sink.pending = rendered.gapAfter ?? 0;
+
+        if (this.bar !== undefined) {
+            this.bar.sink.stream.write(this.bar.text);
+        }
+    }
+
+    /** Draws a progress event as the one bar on a terminal, or prints the last one as a line. */
+    private drawProgress(event: ProgressEvent | undefined, message: string): void {
+        const sink = this.err;
+        const progress: ProgressEvent = event ?? { label: message };
+        const layout = sink.layout;
+
+        if (sink.stream.isTTY !== true) {
+            if (progress.finished === true) {
+                this.emit(sink, { lines: [finishedLine(layout, progress)] });
+            }
+
+            return;
+        }
+
+        if (progress.finished === true) {
+            this.bar = undefined;
+            sink.stream.write(CLEAR_LINE);
+            this.emit(sink, { lines: [finishedLine(layout, progress)] });
+
+            return;
+        }
+
+        this.bar = { sink, text: barText(layout, progress) };
+        sink.stream.write(`${CLEAR_LINE}${this.bar.text}`);
+    }
+
+    /** Removes the progress bar, if one shows. */
+    private endBar(): void {
+        if (this.bar !== undefined) {
+            this.bar.sink.stream.write(CLEAR_LINE);
+            this.bar = undefined;
+        }
+    }
+}
+
+/** `3/10` for an event with a count, nothing without one. */
+function countOf(event: ProgressEvent): string {
+    return event.done === undefined ? "" : `${event.done}${event.total === undefined ? "" : `/${event.total}`}`;
+}
+
+/** The line a finished progress leaves behind: `  ✓ Downloading recipes 10/10`. */
+function finishedLine(layout: Layout, event: ProgressEvent): string {
+    const style = layout.style;
+    const count = countOf(event);
+
+    return `  ${style.green("✓")} ${event.label}${count === "" ? "" : ` ${style.value(count)}`}${event.item === undefined || event.item === "" ? "" : ` ${style.muted(event.item)}`}`;
+}
+
+/** The bar a terminal redraws: the label, a bar when the total is known, the count and the item being worked on. */
+function barText(layout: Layout, event: ProgressEvent): string {
+    const style = layout.style;
+    const count = countOf(event);
+    let bar = "";
+
+    if (event.total !== undefined && event.total > 0 && event.done !== undefined) {
+        const filled = Math.max(0, Math.min(BAR_CELLS, Math.round((BAR_CELLS * event.done) / event.total)));
+
+        bar = ` ${style.cyan("█".repeat(filled))}${style.gray("░".repeat(BAR_CELLS - filled))}`;
+    }
+
+    const head = `  ${style.label(event.label)}${bar}${count === "" ? "" : ` ${style.value(count)}`}`;
+    const room = layout.columns - 2 - displayWidth(head);
+
+    if (event.item === undefined || event.item === "" || room < 6) {
+        return head;
+    }
+
+    const item = event.item.length > room ? `${event.item.slice(0, room - 2)}…` : event.item;
+
+    return `${head} ${style.muted(item)}`;
+}

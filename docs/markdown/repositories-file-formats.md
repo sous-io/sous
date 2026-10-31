@@ -79,11 +79,23 @@ contents:                           # what a subscriber actually receives
 | `depends`, `subscribes` | no | Build dependencies and co-subscriptions; within either list, no entry may repeat |
 | `contents`, `variables` | no | Contents default to an empty list, which is what a curated bundle publishes; a duplicated variable name, or two definitions claiming one `env`, is an error |
 | `submissions` | no | Whether this recipe takes proposed changes, winning over the repository's block; see [The submissions block](#the-submissions-block) |
+| `plugin` | no | A sous plugin the recipe ships: `bundle`, the path of one self-contained bundled file, and optionally `types`, its `.d.ts` file; see [Recipes that ship sous plugins](repositories-authoring.md#recipes-that-ship-sous-plugins) |
+| `requires` | no | `requires.plugins` maps npm sous plugin names to version ranges the recipe needs |
 
-`contents[].kind` is `skills`, `memories`, `prompts` or `config`; there is no kind for a sous plugin. `skills` are
+```yaml
+plugin:
+    bundle: plugin/index.js
+    types: plugin/index.d.ts
+requires:
+    plugins:
+        sous-plugin-claude-code: "^1.0.0"
+```
+
+`contents[].kind` is `skills`, `memories`, `prompts` or `config`; a sous plugin is not a content kind but the
+`plugin` field above. `skills` are
 written to the destinations named by [`recipes`](#recipes-what-each-content-kind-does); `memories` are included
 into your instruction files by one line (see [Recipe memories](repositories-consuming.md#recipe-memories));
-`config` entries become config layers; nothing takes `prompts` yet, and the build warns about a recipe that
+each `config` file joins the subscriber's config, under the project's own files so the project wins; nothing takes `prompts` yet, and the build warns about a recipe that
 publishes them. `include` needs at least one glob, and both lists are recipe-relative.
 
 ### The submissions block
@@ -126,9 +138,8 @@ two readings that both publish what is named fail it too, naming the spellings t
 
 ### Ref forms
 
-Every place a ref is written reads it with one ref resolver (`src/services/ref-resolver/`): a parser that
-returns every reading of the text, a pruner for the place that drops the readings the place refuses, and a
-lookup that keeps the readings that exist. These forms are recognized everywhere; the table after them says
+Every place a ref is written reads it the same way: sous lists every way the text can be read, drops the
+readings that place does not accept, and keeps the ones that name something that exists. These forms are recognized everywhere; the table after them says
 which each place allows. A refused form is an error saying what to write there instead.
 
 | Form | Example | Names |
@@ -359,7 +370,7 @@ These live at the top level of the merged config; [The config file](configuratio
 repos:
   sous-recipes:
     url: https://github.com/sous-io/sous-recipes
-    provider: github       # inferred from the URL when omitted; github, gitlab or local
+    provider: github       # inferred from the URL when omitted; github, gitlab, local, or a host a plugin adds
     enabled: true          # false opts out of a repository sous provides itself
     alwaysPull: false      # install a newer in-range version rather than holding the lock
     addedBy: sous          # provenance; "user", "sous" for an entry sous provides itself, or the
@@ -373,7 +384,7 @@ store:                     # every value is a default you can change
   freshnessSeconds: 300    # how long a fetched index stays fresh
   watchPollSeconds: 300    # how often watch mode polls upstream
 recipes:                   # what each content kind a subscribed recipe publishes does
-  skills: { outputs: ["${projectRoot}/.claude/skills", "${projectRoot}/.codex/skills"] }
+  skills: { outputs: ["${projectRoot}/.codex/skills"] }   # added to the skills directories agent plugins name
   memories: { first: ["communication/*"], exclude: ["tool-usage/automated-browser-tasks"] }
 varMappings:
   QA_SERVICE_TOKEN: workflow/qa-variables/qaServiceToken
@@ -395,15 +406,18 @@ the default stands.
 
 ### recipes: what each content kind does
 
-One block per content kind a subscribed recipe publishes. A recipe's `config` contents become layers, not files,
-and a recipe's own config layer may set `recipes.skills` only; `recipes.memories` chooses what the project
+One block per content kind a subscribed recipe publishes. A recipe's `config` contents join the config, not the
+output files, and a recipe's own config file may set `recipes.skills` only; `recipes.memories` chooses what the project
 includes, so it is dropped from a recipe's layer with a warning.
 
-- `recipes.skills.outputs` (`string[]`, default `["<project root>/.claude/skills"]`): the directories recipe skill
-  bundles are written into, `${var}` substituted as in any config path. Name several to feed more than one agent.
+- `recipes.skills.outputs` (`string[]`, default none): your own directories recipe skill bundles are written
+  into, besides every skills directory a plugin for an agent tool names. `${var}` is substituted as in any config path. The
+  built-in Claude Code plugin adds `<project root>/.claude/skills`, so skills land there with no setting. When no
+  plugin names a skills directory and this list is empty, skills go nowhere, and the build says why. `${projectRoot}` is set by sous;
+  setting `projectRoot` in any `_vars` is an error.
 - `recipes.memories.first` (`string[]`, default none): recipes whose memories lead the `#memories` view. An entry
   is a glob over `namespace/recipe` keys (`communication/*`), or a regular expression written between two slashes
-  (`/^tool-usage\//`); a string, because a config layer is JSON and cannot hold a `RegExp`.
+  (`/^tool-usage\//`); a string, because the config is plain JSON data and cannot hold a `RegExp`.
 - `recipes.memories.exclude` (`string[]`, default none): recipes whose memories the view leaves out, and the
   build's unincluded-memory warning never lists. The same entry forms as `first`.
 
@@ -418,7 +432,7 @@ are `.jsonc` so they can carry real comments, and each opens with a header sayin
 | Layer | Holds | Written by |
 |-------|-------|-----------|
 | `500-repos.jsonc` | `repos` | `sous repo add`, `sous repo remove` |
-| `510-subscriptions.jsonc` | `subscriptions` | `sous subscription add`, `sous subscription remove` |
+| `510-subscriptions.jsonc` | `subscriptions` | `sous subscription add`, `remove`, `enable` and `disable` |
 | `520-var-mappings.jsonc` | `varMappings` | `sous vars ask` |
 
 ```jsonc
@@ -437,6 +451,10 @@ A write rewrites only the bytes of the entry that changes, staging the result an
 so an interrupted write leaves the previous layer rather than a truncated one. A layer still carrying its
 old `.json` name is read as a fallback and migrates on the next write: the `.jsonc` file is written and the
 `.json` one removed, so a project never ends up with both, which would be a hard config error.
+
+No file is special to sous when it reads the config: a `conf.d` file of your own that sorts after 510 can
+override a subscription the managed file lists, such as switching it off on one machine (see
+[Switch a subscription off on one machine](repositories-consuming.md#switch-a-subscription-off-on-one-machine)).
 
 ## Where to go next
 

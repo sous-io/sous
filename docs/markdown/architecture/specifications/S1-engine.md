@@ -1,0 +1,970 @@
+# S1: The Engine
+
+**Status:** Accepted on 2026-10-29. From now on, a
+change to this specification is recorded under "Changes".
+
+**Serves:** G1 (encapsulation), G2 (a plugin system), G3 (versatility, always), G4
+(predictable and observable), G6 (testability), G7 (the plugin interface is the only outside
+promise), G8 (features for one agent tool are additions), G9 (very fast).
+
+**Shaped by:** L1 (one owner per concern), L3 (services never print, prompt or exit), L4 (no prompt
+without a flag), L5 (everything timed).
+
+**Related:** S2 (building the config), S6 (concerns, owners and the plugin list).
+
+## What This Specifies
+
+The engine sous is built on: what core holds, how sous starts, how plugins load, and the five kinds
+of things plugins register (contributors, intents, events, services and entities). It is written as
+an engine almost any application could be built on; what sous does is added by plugins.
+
+The user's standing direction for the engine:
+
+> "we want versatility... always...."
+>
+>   -- **Luke Chavers** in an agent session (2026-10-28)
+
+> "I'm not especially interested in policing, only in identifying problems and reporting them, and
+> in versatility."
+>
+>   -- **Luke Chavers** in an agent session (2026-10-28)
+
+## What Core Holds
+
+Core is small. Everything else, including the CLI, the MCP server, the web GUI, config files,
+recipes, repositories, skills, memories, package managers and Claude Code, is a plugin (see S6,
+concerns and owners).
+
+1. Loading plugins, as part of the config-building loop (see S2, config building).
+2. The config-building loop: contributors, the builder object, patches, re-running only what changed
+   (see S2, config building).
+3. The chain scheduler: series by default, parallel when declared, and background intents.
+4. Events: `on`, `once`, `off`, `emit`, wildcards and regular expressions, and priorities.
+5. Services, with their three lifetimes, wrapping and replacing.
+6. Entities: defining kinds, adding entries, and reading them through the builder.
+7. Loop detection, and the time budgets.
+8. The empty type interfaces in `@sous-io/plugin-api`: `SousServices`, `SousIntents`, `SousEvents`
+   and `SousEntities`.
+
+The engine has five kinds of things:
+
+1. **Contributors** build the config (see S2, config building).
+2. **Intents** are the steps a user or another plugin asks for.
+3. **Events** let plugins react to anything.
+4. **Services** are shared objects that do work.
+5. **Entities** are things sous knows about, defined and added by plugins.
+
+## The Shape: Build the Config, Then Process Intents
+
+> "sous builds a config then enters into a mode of processing intents. For most CLI commands, this
+> will be a single intent. For some CLI commands, this will be a series of intents, or a chain of
+> intents that may have some intents processing in parallel. For the MCP server, this will be
+> asynchronous intents coming in throughout the lifetime of the connection, etc."
+>
+>   -- **Luke Chavers** in an agent session (2026-10-25)
+
+1. The bin hands off to the project's own installed copy of sous when there is one, starts the
+   engine, builds the config (see S2, config building), and hands argv to the CLI front end.
+   Help, the version and shell completion skip the build ("Startup budgets", below).
+2. Everything after the config is built is an intent, `sous config show` included:
+
+    > "processing of `config show` is an intent. It happens after the config build."
+    >
+    >   -- **Luke Chavers** in an agent session (2026-10-25)
+
+3. A CLI command usually runs one intent. That intent may start others, some of them in parallel.
+4. Waiting for more requests is not a mode of core. The MCP server, watch mode and the web GUI are
+   background intents that submit new chains as requests arrive (see "Front Ends").
+
+```ts
+// bin: the whole of it
+await handOffToProjectInstall();
+
+const engine = await createEngine({ project: findProject(process.cwd()) });
+
+await engine.buildConfig();
+await engine.frontEnd("cli").start(process.argv.slice(2));
+await engine.whenBackgroundIntentsReturn();
+```
+
+Every sous process serves exactly one project: the one found from its working directory. This holds
+for a CLI run, for watch mode and for `sous mcp`, which serves the project it started in for its
+whole life, even when the agent changes directories. A session started at a monorepo's root gets the
+root's sous, even while the agent edits a subfolder that has its own `.sous/`, as a CLI run from the
+root would. No project state is kept in module-level variables, so tests can run many engines in one
+process.
+
+## Chains and the Scheduler
+
+A chain is one intent submitted to the engine, together with every intent it starts.
+
+> "Anything that produces a chain will decide what can and cannot run in parallel. Sous itself
+> should always run pending chains in series, waiting for each to complete before running another.
+> We will trust that intent chains consider conflicts, etc, and specify parallelism accordingly."
+>
+>   -- **Luke Chavers** in an agent session (2026-10-25)
+
+> "A chain can declare if it can run in parallel and the Sous engine will only allow chains declared
+> as parallelizable (or whatever) to run at the same time. If two chains exist and one is declared
+> parallelizable and the other not, then Sous will treat them both as being series."
+>
+>   -- **Luke Chavers** in an agent session (2026-10-25)
+
+> "yes, parallel generally means "writes nothing that could affect other chains""
+>
+>   -- **Luke Chavers** in an agent session (2026-10-25)
+
+1. Whatever produces a chain decides what inside it can run in parallel, and is trusted to handle
+   conflicts.
+2. Chains run in series by default: each one finishes before the next starts.
+3. A chain may declare itself parallel. Parallel chains may run together. A parallel chain writes
+   nothing that could affect other chains; it may write something only it uses, such as its own
+   cache.
+4. When a series chain is waiting, no new chain starts until it has run, so a stream of parallel
+   chains never holds it back forever.
+5. After a series chain that changed the config, the config is rebuilt before the next chain starts.
+   A running chain keeps the config it started with, unless it asks for a new one: a series chain
+   may call `ctx.refreshConfig()`, which rebuilds the config now, makes it the engine's, fires
+   `config.built`, and gives the rest of the chain the new config and new `config` services. A
+   parallel chain, a background intent and a `config.built` listener may not.
+
+    ```ts
+    async handle(input, ctx) {
+        await writeSubscription(ctx, input);   // changes a conf.d file
+        await ctx.refreshConfig();             // vars.ask and build below see it
+
+        await ctx.run("vars.ask", { recipe: input.ref });
+        await ctx.refreshConfig();             // build sees the answers
+
+        return ctx.run("build", {});
+    }
+    ```
+
+```text
+time ─────────────────────────────────────────────►
+config get  (parallel)  ████
+build       (series)      ·waiting·███████
+catalog     (parallel)        ·waiting·····██      queued behind build, not next to config get
+```
+
+## Intents
+
+An intent is a step a user or another plugin asks for: a name and a typed input. Exactly one handler
+runs it and returns its result as outputs (see "What an intent returns").
+
+```ts
+sous.intents.add({
+    intent: "subscription.add",
+    summary: "Subscribe the project to a recipe",
+    input: z.object({
+        ref: z.string().describe("The recipe to subscribe to"),
+        installPlugins: z.boolean().default(false).describe("Install plugins the recipe requires"),
+    }),
+
+    async handle(input, ctx) {
+        const recipe = await ctx.run("ref.resolve", { ref: input.ref });
+
+        await addSubscription(recipe, ctx);
+
+        if (recipe.variables.length > 0) {
+            await ctx.run("vars.ask", { recipe: recipe.key });
+        }
+
+        await ctx.run("build", {});
+
+        return new IntentOutputs(
+            new IntentOutput({
+                summary: `Subscribed to ${recipe.key}.`,
+                result: new VariableSet({ Recipe: recipe.key, Version: recipe.version }),
+                data: { subscribed: recipe.key },
+            }),
+        );
+    },
+});
+```
+
+1. The CLI's commands and flags, and the MCP server's tools, are generated from each intent's input
+   schema, so every input an intent takes is a flag (L4, no prompt without a flag).
+2. A handler starts other intents as it goes (`ctx.run`), so later steps can depend on earlier
+   results. A chain is not written out up front.
+3. An intent started inside a chain runs immediately, as part of that chain. It never enters the
+   queue, since the chain is waiting for its result.
+4. The engine does not check that a chain declared parallel only runs intents that write nothing.
+5. An intent may be internal: not shown in the CLI or MCP, only callable through `ctx.run`.
+6. Plugins may wrap an intent's handler to change what it does. Wrappers stack in plugin order.
+
+```ts
+sous.intents.wrap("build", (next) => async (input, ctx) => {
+    const outputs = await next(input, ctx);
+
+    return outputs.with(new IntentOutput({ title: "Diagrams", result: await renderDiagrams(ctx) }));
+});
+```
+
+7. An intent may declare `toleratesConfigErrors` (`sous update` does). When the config fails to
+   build, it still runs, with the partial config the failed build reached and the build's error as a
+   warning. Every other intent fails with that error, and the CLI reports it for `--help` too.
+8. A chain gets the working directory of the front end that submitted it as `ctx.cwd`: the CLI
+   gives the process's, the MCP server the project root. Services get the engine's. Plugins never
+   read `process.cwd()`.
+
+### What an intent returns
+
+A handler returns `IntentOutputs`: one or more `IntentOutput`s, in the order they are shown. An
+intent returns its result; it never prints it.
+
+```ts
+const output = new IntentOutput({
+    title: "Downloaded file",                                   // for people
+    summary: "Downloaded 'https://example.com/a.zip' to '/work/a.zip'.",
+    result: new VariableSet({ URL: url, File: localPath, Size: size }),
+    data: { url, localPath, size },                             // for machines; default: result.toPlain()
+});
+
+return new IntentOutputs(output);
+```
+
+1. **A result is a payload type**, such as `VariableSet`, `Table`, `ItemList`, `Tree` or `TextBlock`.
+   Each holds plain values and converts to them: `toPlain()` gives a plain object, and each type adds
+   its own (`VariableSet.toObject()`, `Table.toRows()`, `ItemList.toArray()`, `TextBlock.toString()`).
+2. **`data` is what machines get.** An output's plain value is its `data` when given, else its
+   `result.toPlain()`. `--json` prints it, MCP returns it as the tool's result, and a calling intent
+   reads it: `(await ctx.run("build.prepare", {})).toPlain()`. `toPlain()` always returns a plain
+   object, never an array; with several outputs it returns the last one's. `first()`, `last()` and
+   `toArray()` give the outputs themselves.
+3. **The front end shows the outputs**: the CLI with `reporter.result(outputs)` after the chain
+   returns. Nothing about a domain is known to the CLI: there are no per-intent views. An output
+   holding only `data` (no title, summary or result) shows nothing; it is there for machines, such
+   as `build`'s result after its progress has said everything.
+4. **A failure that ends the intent is thrown**, as an error whose `cause` is the error below it. The
+   front end reports it once, at `critical`, with its whole cause chain. A problem a component works
+   around is reported where it happens, at `warning` or `error`, and the work carries on.
+5. An intent that ends with a non-zero exit code (a build with errors) says so on its outputs:
+   `new IntentOutputs(outputs, { exitCode: 1 })`.
+
+### What an intent declares for the CLI and for agents
+
+An intent may have a `cli` section and an `agent` section. Both are optional: without them, the
+command, the tool name and their help come from the intent's name, `summary` and input schema. Every
+front end reads the same declaration, each taking its own section; a web GUI reads `summary`,
+`usage` and the schema too.
+
+```ts
+sous.intents.add({
+    intent: "namespace.list",
+    summary: "List the namespaces in your subscribed repositories",
+    input: z.object({
+        repository: z.string().optional().describe("Only this repository"),
+        json: z.boolean().default(false).describe("Print JSON"),
+    }),
+
+    cli: {
+        command: ["namespace", "list"],                 // default: from the intent name
+        aliases: [
+            ["namespaces", "list"],
+            ["ns", "list"],
+            ["list", "namespaces"],                     // across groups
+        ],
+        positional: ["repository"],                     // sous namespace list <repository>
+        examples: ["sous ns list github.com/sous-io/sous-recipes"],
+        hidden: false,
+    },
+
+    agent: {
+        tool: "namespace_list",                         // default: from the intent name
+        usage: "Call this before subscribing, to find which namespaces exist.",
+        whenNotToUse: "Not for finding a recipe by name; use recipe_search for that.",
+        hidden: false,                                  // true keeps it out of MCP
+    },
+
+    async handle(input, ctx) {
+        // ...
+    },
+});
+```
+
+Arguments every command accepts, and the help text of a command group, are entities, so any plugin
+can add its own:
+
+```ts
+sous.entities.add("cli-global-argument", {
+    id: "verbose",
+    schema: z.boolean().default(false),
+    description: "Print more detail",
+});
+
+sous.entities.add("cli-group", {
+    id: "repo add",
+    command: ["repo", "add"],
+    summary: "Add a recipe repository",
+});
+```
+
+1. Command groups nest to any depth (`sous repo add alternate ...`).
+2. Aliases are for the CLI only; MCP ignores them.
+3. Two intents claiming the same command or alias is an error naming both plugins. The config can
+   pick the winner, as it can for replaced services (L6, report problems instead of forbidding).
+4. More fields can be added later without breaking any plugin, since every section is optional.
+
+## Events
+
+> "we want to allow plugins to fire arbitrary events, and listeners to be able to monitor for them."
+>
+>   -- **Luke Chavers** in an agent session (2026-10-28)
+
+```ts
+sous.on("build.before", listener);                         // exact name
+sous.on("build.*", listener);                              // wildcard
+sous.on("*.before", listener);                             // every intent's "before"
+sous.on(/^subscription\.(add|remove)\.after$/, listener);  // regular expression
+sous.once("config.built", listener);                       // runs once, then removes itself
+sous.off("build.before", listener);
+
+sous.on("build.before", listener, { priority: 100 });      // higher runs first; default 0
+
+await sous.emit("diagrams.rendered", { files });           // any plugin may fire any event
+```
+
+```ts
+sous.on("build.before", async (event, ctx) => {
+    event.input.prune = false;                              // change the input
+    event.cancel("Recipe X needs sous-plugin-diagrams");    // the intent does not run; the reason is reported
+    event.stopPropagation();                                // later listeners don't see it; the intent still runs
+    event.data.set("startedAt", Date.now());                // shared with later listeners and the "after" event
+});
+
+sous.on("build.after", (event) => {
+    event.result = event.result.with(prunedNote);           // replace the outputs
+});
+
+sous.on("build.error", (event) => {
+    event.recover(new IntentOutputs(builtNothing));         // turn the failure into outputs
+});
+```
+
+1. Each intent fires `<intent>.before`, `<intent>.after` and `<intent>.error` every time it runs,
+   whoever started it.
+2. A listener gets a `ctx` like a handler's, so it can run intents, read the config and report.
+3. `emit` waits for every listener, so a custom event can be cancelled too.
+4. Listener order: `priority` (higher first), then plugin order, then the order listeners were
+   added, so the outcome is the same on every run.
+5. A listener that throws fails the intent. Cancelling is how a listener stops something on purpose.
+6. No events fire while the config is being built; contributors are how plugins take part in it
+   (see S2, config building). Plugins may register intents and listeners as they load, and
+   `config.built` fires once the config is built.
+7. A `config.built` listener may run an intent that changes the config. That is not the recommended
+   approach, and the engine does not forbid it; loop detection catches it going wrong.
+
+## Finding Loops
+
+The engine identifies problems and reports them; it does not police plugins.
+
+> "we may have a tolerance for 10 config rebuilds in a row if the config actually changes 10 times,
+> but only 5 if the config hasnt changed, since that is likely unexpected recursion. We can also
+> monitor recursion depth, etc."
+>
+>   -- **Luke Chavers** in an agent session (2026-10-28)
+
+It stops and reports when one of these goes over its limit. The limits are first guesses, and a
+project may change them, like time budgets:
+
+| What is happening | Likely meaning | Limit |
+| --- | --- | --- |
+| Rebuilds in a row, each producing a new config | settling down legitimately | 10 |
+| Rebuilds in a row that produce a config already seen (same hash) | going in circles, or no change at all | 5 |
+| `ctx.run` calls nested inside each other | deep recursion | 32 levels |
+| The same intent called again, with the same input, inside its own call | a recursion bug | 2 |
+| An event emitted again while its own listeners are still running | a listener that triggers itself | 5 levels |
+
+Every `ctx.run` and every event passes through the engine, so the report shows the whole path:
+
+```text
+Error: the config is going in circles (it was the same as 2 rebuilds ago, 5 times).
+  config.built → sous-plugin-foo listener → intent "subscription.enable" (enabled: true)
+  config.built → sous-plugin-bar listener → intent "subscription.disable" (enabled: false)
+  The two plugins keep undoing each other's change to subscriptions."workflow/x".enabled.
+```
+
+## Services
+
+A service is a shared object that intents and other services call: the git runner, the HTTP client,
+the Liquid engine, the variable resolver.
+
+1. An intent is a meaningful step with plain-data input and output, worth letting plugins hook into.
+   A service is for the rest: its calls fire no events, so it stays fast, and its inputs and results
+   need not be plain data. Finding files, for example, is a service: it is called often, and nobody
+   needs to hook it.
+2. Every service has one of three lifetimes:
+   - `singleton`: one for the whole process, for services that never look at the config;
+   - `config`: one per config build, shared by every chain using that config, and rebuilt after the
+     config is rebuilt;
+   - `factory`: a new one on every get, so nothing is shared.
+
+    > "or, IMO, better worded, "into singletons and factories""
+    >
+    >   -- **Luke Chavers** in an agent session (2026-10-28), naming the lifetimes
+
+3. Services are created when first used, after the config is built. A running chain keeps the
+   services of the config it started with (until it calls `ctx.refreshConfig()`), and a "what if" config build (see S2, config building)
+   gets its own copies.
+4. Plugins may wrap a service. Wrappers stack in plugin order.
+5. Plugins may replace a service. When two plugins replace the same service, sous stops with an
+   error, unless the config picks one (`services.replace."<name>": "<plugin>"`). Then sous warns on
+   every run that the other plugin may not work as expected.
+
+    > "sure, its an edge case, but we give the user an escape hatch. I would only say, though, that
+    > doing that will likely have unintended side-effects."
+    >
+    >   -- **Luke Chavers** in an agent session (2026-10-28)
+
+```ts
+sous.services.add("git.runner", () => new GitRunner(), { lifetime: "singleton" });
+
+sous.services.add("variables.resolver", (config) => new VariableResolver(config.get("_vars")), {
+    lifetime: "config",
+});
+
+sous.services.add("liquid.engine", (config) => createLiquidEngine(config), {
+    lifetime: "factory",
+});
+
+sous.services.wrap("git.runner", (inner) => new LoggingGitRunner(inner));
+```
+
+```text
+Error: two plugins replace "git.runner": sous-plugin-fast-git and sous-plugin-git-lfs.
+  Choose one in the config:  services.replace."git.runner": "sous-plugin-fast-git"
+
+Warning: services.replace picks sous-plugin-fast-git for "git.runner".
+  sous-plugin-git-lfs's replacement is ignored, and the plugin may not work as expected.
+```
+
+## Entities
+
+An entity is a thing sous knows about, such as a harness, a skill target, a memory target, a
+repository host or a config key. A service does work; an entity is described.
+
+```ts
+// plugin-harnesses defines a kind, with its schema
+sous.entities.define("harness", z.object({
+    id: z.string(),
+    launch: z.function().optional(),
+    runHeadless: z.function().optional(),
+    readTranscript: z.function().optional(),
+}));
+
+// plugin-claude-code adds one; launch reads the user's settings when it runs
+sous.entities.add("harness", {
+    id: "claude",
+    launch: (args, ctx) => {
+        const settings = ctx.config.get("tools.claude");
+
+        return spawnInteractive(settings?.command ?? "claude", [
+            ...(settings?.args ?? []),
+            ...args,
+        ], ctx);
+    },
+    runHeadless: (prompt, ctx) => sdkQuery(prompt, ctx),
+    readTranscript: (result) => toTranscript(result),
+});
+
+// plugin-harnesses, in its "launch" intent
+const harness = ctx.entities.get("harness", input.harness ?? "claude");
+
+await harness.launch(input.args, ctx);
+```
+
+1. A plugin defines a kind of entity, with a schema. Sous checks every entry when it is added.
+2. Entities are added during config building, in two ways:
+   - a plugin's `register()` adds entities whose existence does not depend on the config;
+   - a contributor adds entities the config creates (`config.addEntity`; see S2, config building).
+3. Anything about an entity that depends on the config is a method, called after the config is
+   built, with a `ctx` that holds the config.
+
+    > "we probably want to allow configuration settings to affect the entities. [...] I guess it's
+    > ok, though, as long as entity and service definitions expose methods, that run later, and can
+    > be injected with the config?"
+    >
+    >   -- **Luke Chavers** in an agent session (2026-10-29)
+
+4. During config building, contributors read entities through the builder, so they re-run when an
+   entity they read changes (see S2, config building).
+
+## Names
+
+```text
+services   <plugin>.<thing>        git.runner   variables.resolver
+intents    <plugin>.<verb>         diagrams.render   subscription.add   mcp.serve
+events     <intent>.before/.after/.error, or <plugin>.<past tense>     build.after   diagrams.rendered
+entities   <kind>                  harness   skill-target   memory-target   config-key
+```
+
+- The first part names the plugin that owns it.
+- Custom events use the past tense, so `diagrams.rendered` is never confused with `diagrams.render`.
+- A name starting with another plugin's prefix is allowed; sous warns once per process, naming
+  both plugins. A plugin may declare names it means other plugins to implement
+  (`implementable: ["compiler.namespace-resolver"]` on plugin-compiler); registering one of those
+  is expected and not warned about.
+
+## Types Across Plugins
+
+`@sous-io/plugin-api` declares four empty interfaces: `SousServices`, `SousIntents`, `SousEvents` and
+`SousEntities`. A plugin adds its own entries to them (TypeScript declaration merging), and a plugin
+that imports its types sees them. At runtime, everything is looked up by its string name, so two
+copies of a package never confuse anything.
+
+```ts
+// sous-plugin-diagrams/src/types.ts
+declare module "@sous-io/plugin-api" {
+    interface SousServices {
+        "diagrams.renderer": Renderer;
+    }
+
+    interface SousIntents {
+        "diagrams.render": {
+            input: { only?: string };
+            result: { rendered: number };
+        };
+    }
+
+    interface SousEvents {
+        "diagrams.rendered": { files: RenderResult[] };
+    }
+}
+```
+
+```ts
+// sous-plugin-docs-site/src/index.ts
+import type {} from "sous-plugin-diagrams/types";
+
+export default definePlugin({
+    name: "sous-plugin-docs-site",
+    dependsOn: { "sous-plugin-diagrams": "^1.0.0" },
+
+    register(sous) {
+        sous.on("diagrams.rendered", async (event, ctx) => {
+            event.payload.files;                                      // RenderResult[]
+            const renderer = ctx.services.get("diagrams.renderer");   // Renderer
+            const result = (await ctx.run("diagrams.render", {})).toPlain();   // { rendered: number }
+        });
+    },
+});
+```
+
+1. The types come from a type-only import, needed when compiling, not at run time. The runtime
+   guarantee comes from `dependsOn` (see "Plugins").
+2. A wildcard listener gets a union of every matching event TypeScript knows about. A regular
+   expression listener gets `unknown`, and narrows by `event.name`.
+3. Plugins meant for other plugins to use generally come from npm. A recipe plugin may still ship a
+   `.d.ts` file next to its bundle. Sous copies every recipe plugin's `.d.ts` file, from the locked
+   version it loads, into `.sous/types/`, with an `index.d.ts` that references them all, and rewrites
+   it on every build. A project or recipe repository that writes a plugin includes `.sous/types` in
+   its `tsconfig.json`. A recipe plugin with no `.d.ts` still works; plugins using it get `unknown`
+   for its entries.
+
+## Front Ends
+
+> "if the CLI and MCP can be plugins, I'd prefer that, too."
+>
+>   -- **Luke Chavers** in an agent session (2026-10-28)
+
+1. The CLI (`plugin-cli`) and the MCP server (`plugin-mcp`) are plugins, and so is a web GUI. Core
+   never knows a terminal exists.
+2. A front end hands its reporter and prompter over with each chain it submits. `ctx.reporter` and
+   `ctx.prompter` inside that chain are the ones it came with, so each chain's output and questions
+   go back to whoever asked (L3, services never print, prompt or exit).
+3. Every front end can do anything any other front end can, because they all submit the same
+   intents:
+
+    > "ideally that web gui we'll be building will allow the user to do anything that they could do
+    > via the CLI or an AGENT could do from mcp, and more.. so, yes, we want versatility...
+    > always...."
+    >
+    >   -- **Luke Chavers** in an agent session (2026-10-28)
+
+4. A background intent (`background: true`), such as `mcp.serve`, watch mode or `web.serve`, runs
+   outside the scheduler: it never blocks a chain, and nothing waits for it. It cannot use
+   `ctx.run`, since it is not inside a chain; it submits chains, and each one is scheduled normally.
+   The process stays alive until every background intent has returned.
+5. A background intent reads `ctx.engine.config`, which is always the config as of the latest
+   rebuild, and may call services directly. Live rendering on every keystroke, for example, is not a
+   chain. Only things that write go through submitted chains.
+6. A background intent may ask for a "what if" config build (see S2, config building), for previews.
+
+```ts
+// plugin-cli
+sous.frontEnds.add({
+    id: "cli",
+    async start(engine, argv) {
+        const reporter = new TerminalReporter();
+        const outputs = await engine.submit(intentFromArgv(argv), { reporter, prompter: new TerminalPrompter() });
+
+        reporter.result(outputs);                           // --json prints outputs.toPlain() instead
+    },
+});
+```
+
+```ts
+// plugin-mcp: `sous mcp` is an intent like any other
+sous.intents.add({
+    intent: "mcp.serve",
+    background: true,
+
+    async handle(input, ctx) {
+        const server = new McpServer();
+
+        server.onToolCall((call, client) =>
+            ctx.engine.submit(intentFromToolCall(call), {
+                reporter: new McpReporter(client),          // MCP logging
+                prompter: new ElicitationPrompter(client),  // MCP elicitation
+            }),
+        );
+
+        await server.runUntilClosed();
+    },
+});
+```
+
+### The CLI foundation
+
+Ruled 2026-10-29: `plugin-cli` uses a CLI foundation of our own, built on Node's `util.parseArgs`.
+oclif is dropped. oclif expects one class per command in its own files; the commands here are
+generated from intents, and adding them to oclif would depend on its internals. Loading every command
+module for `--help` also works against the 150ms startup budget (G9, very fast).
+
+`plugin-cli` generates, from the intents' declarations:
+
+- the command tree, with nested groups and aliases;
+- flags and positional arguments, from the input schema;
+- `--help`, shell completion, and "did you mean" suggestions for a mistyped command.
+
+A command's code loads only when it runs, so `--help` and shell completion stay fast.
+
+### Reporting: levels and styles
+
+Every message goes through one method of the reporter, `log(level, message, details?, style?)`:
+
+- **`message` is for people.** It says everything a person needs; assume nobody reads `details`. It
+  is a string, an `Error` (shown with its whole cause chain), a payload (a `VariableSet`, a `Table`,
+  ...) or, for a command's result, `IntentOutputs`.
+- **`details` is for machines**: plain JSON values that a log or an MCP client may keep. A front end
+  never needs it to show the message.
+- **The style is a hint** (`ReportEntryStyle.OperationStart`, `ReportEntryStyle.Note`, ...). A
+  reporter uses it or ignores it; it never decides what the message holds.
+- **The level** uses the syslog names in full, with these meanings:
+  - `debug`: only in verbose output.
+  - `info`: something worth knowing, maybe.
+  - `notice`: something important or pivotal.
+  - `warning`: everything is fine, but this may cause trouble later if ignored.
+  - `error`: something went wrong, and sous works around it.
+  - `critical`: the operation failed; if it was the only one, the run failed.
+  - `alert` and `emergency`: for plugins (a likely or definite outage); sous does not use them.
+- **The convenience methods** sit on top of `log`: one per level (`debug()` to `emergency()`, plus
+  `warn()` and `emerg()`; `warning()` and above also take an `Error`), one or more per style
+  (`operationStart(name, level = LogLevel.Notice)`, `variables(entries)`, ...), and `result(outputs)`.
+
+All of them are defined once, in `BaseReporter` (plugin-api). `Reporter`, the type plugins see, is
+derived from it; every reporter extends it; the `Reporting` mixin copies its convenience methods onto
+any other class, and a contributor's `ConfigBuilder` reports the same way.
+
+```ts
+ctx.reporter.debug("plugin-skills re-ran: the skill-target list changed.");
+ctx.reporter.warn("Recipe X declares a variable no template reads.");
+ctx.reporter.operationStart("Building the project");
+ctx.reporter.operation("written", "/work/app/CLAUDE.md", { tokens: 1840 });
+```
+
+The CLI sends a command's result (`IntentOutputs`) to standard output and everything else to
+standard error. Under `--json`, standard output holds only `outputs.toPlain()` as JSON.
+
+Every CLI command accepts `--log-level <level>`, which shows messages at that level and above, and
+`--debug`, which means `--log-level debug`. Both are `cli-global-argument` entities of `plugin-cli`.
+
+## Plugins
+
+A plugin is a module that registers contributors, intents, listeners, services and entities.
+
+```ts
+export default definePlugin({
+    name: "sous-plugin-diagrams",
+    version: "1.0.0",
+
+    // Other plugins this one needs, with version ranges.
+    dependsOn: {
+        "@sous-io/plugin-skills": "^1.0.0",
+    },
+
+    // Only affects speed and who wins conflicts: run my contributor after skills'.
+    // See S2 (config building).
+    after: ["@sous-io/plugin-skills"],
+
+    register(sous) {
+        sous.config.contribute({ id: "diagrams", contribute(config) { /* S2, config building */ } });
+        sous.intents.add({ intent: "diagrams.render", /* ... */ });
+        sous.on("build.after", async (event, ctx) => { /* ... */ });
+    },
+});
+```
+
+### Loading
+
+> "a low-key goal of mine is to eliminate the need for the "boostrap config" and having the
+> "discovery plugin" separate."
+>
+>   -- **Luke Chavers** in an agent session (2026-10-25)
+
+1. The plugins to load are an ordinary config key, and loading them is part of the config-building
+   loop (see S2, config building). There is no bootstrap section, no `"sous"` key in `package.json`
+   and no separate discovery step.
+2. The built-in plugins load first. A plugin that finds other plugins (scanning `node_modules`, for
+   example) is a contributor that adds to the `plugins` key; the loop loads what it adds and repeats.
+3. `register()` runs when the plugin loads, during config building.
+4. A plugin's code cannot be unloaded once imported. A plugin removed from the list in a later pass
+   stays in memory, but its contributions are dropped (see S2, config building).
+
+The four plugin settings ruled for 1.0.0 stay, as ordinary config keys under `plugins`, which any
+contributor may set, a recipe included. Adding one is a change to this specification:
+
+- `discover` (`"dependencies" | "scan" = "dependencies"`): `"dependencies"` loads the built-ins, the
+  plugins in the project's `package.json` dependencies (and the workspace root's) and those under
+  `load`; `"scan"` also asks the package-manager plugins to look for installed plugins.
+- `load` (`string[]`): plugins to load though `package.json` does not list them.
+- `disabled` (`string[]`): plugins never to load, built-ins included.
+- `options` (`Record<string, object>`): each plugin's own options, keyed by plugin name. Each plugin
+  gets only its own.
+
+```jsonc
+// .sous/sous.config.jsonc
+{
+    "plugins": {
+        "load": [
+            "sous-plugin-bun"
+        ],
+        "disabled": [
+            "sous-plugin-old-thing"
+        ],
+        "options": {
+            "sous-plugin-claude-code": {
+                "model": "opus"
+            }
+        }
+    }
+}
+```
+
+- When the global sous hands off to a project's installed sous, global plugins are not loaded. When
+  there is no project install, the package-manager plugins also look in the global `node_modules`
+  next to the global sous.
+- In Yarn Plug'n'Play projects, module lookup needs Yarn's own resolver; `plugin-yarn` provides it.
+
+### Where plugins come from
+
+> "recipes can provide sous plugins."
+>
+>   -- **Luke Chavers** in an agent session (2026-10-25)
+
+1. Plugins come from npm, or from recipes.
+2. `plugin-recipes` downloads what subscribed recipes need during config building, and the loop
+   carries on. Downloads are cached, so later passes find them already there (see S2, config
+   building).
+3. Nothing inside a repository runs until the repository is trusted:
+
+    > "The rule is: we never execute anything inside of a repo until we trust it."
+    >
+    >   -- **Luke Chavers** in an agent session (2026-10-25)
+
+4. Anything in a recipe that runs (plugins, helper scripts, hooks) is one self-contained bundle:
+
+    > "Anything in a recipe must be a bundle because Sous will never manage a `npm install`; this
+    > applies to helper scripts of all kinds, and there are many kinds."
+    >
+    >   -- **Luke Chavers** in an agent session (2026-10-25)
+
+```yaml
+# sous.recipe.yaml
+plugin:
+    bundle: plugin/index.js
+    types: plugin/index.d.ts      # optional
+```
+
+### Dependencies and order
+
+> "I think its also appropriate for plugins to declare dependency on other plugins, with a version,
+> and also be able to say "my config processing should always come after x plugin" (or before)."
+>
+>   -- **Luke Chavers** in an agent session (2026-10-25)
+
+1. `dependsOn` names the plugins a plugin needs, with version ranges. Sous stops before any intent
+   runs when a needed plugin is missing, or loaded at a version outside the range, and names it.
+2. `before` and `after` sit on contributors (see S2, config building). A plugin may declare them
+   too, as the default for every contributor it adds. With each contributor's `applyOrder` (a
+   number from 0 to 99999, default 2000), they decide the order contributors run and their patches
+   apply in: lower numbers apply first, and when a number and a `before` or `after` disagree,
+   `before` and `after` win. When two contributors set one key, the one applied last wins.
+3. A plugin may bring in other plugins as its own dependencies. Users can set their options or
+   disable them by name, like any other plugin.
+
+### Recipes that require npm plugins
+
+A recipe can require plugins from npm, each with a version range:
+
+```yaml
+# sous.recipe.yaml
+requires:
+    plugins:
+        sous-plugin-claude-code: "^1.0.0"
+```
+
+- `sous subscription add` refuses a recipe whose required plugin is missing or outside the range. Run
+  interactively, it offers to install the plugin through the project's package-manager plugin;
+  `--install-plugins` does the same without a prompt (L4, no prompt without a flag).
+- A build fails when a subscribed recipe's requirement is broken, for example after the plugin was
+  removed. The message names the plugin and the command that installs it.
+
+## Built-in Plugins
+
+Built in, and loaded unless the config disables them: the plugins S6 (concerns and owners) lists,
+which include the package managers (npm, pnpm, Yarn), the repository hosts (GitHub, GitLab, local),
+the CLI, the MCP server, and Claude Code. The default sous experience assumes Claude Code. Codex, and every other
+agent tool, are separately installed plugins.
+
+## Visibility
+
+Every contributor, intent, listener, service, wrapper, replacement, entity and plugin option is
+recorded with the plugin that made it, and the user can see them all (G4, predictable and
+observable):
+
+```text
+$ sous plugins show
+sous-plugin-remote-config
+  replaces           git.runner
+plugin-claude-code (built in)
+  entities           harness: claude    skill-target: claude-code    memory-target: claude-code
+  listeners          build.after
+plugin-gitlab (built in)
+  entities           repository-host: gitlab
+sous-plugin-mcp-extras (loaded by sous-plugin-claude-code)
+  options            { "port": 7801 }
+```
+
+## Timing and Budgets
+
+Timing is a core mechanism (L5, everything timed).
+
+- Every core stage, every contributor run, every intent and every service or entity method call
+  from another plugin is timed, and each has a budget.
+- Sous warns when anything goes over budget, core stages included, since the user's own setup (a
+  very complex config, for example) can slow them.
+- Budgets can be changed under the `budgets` config key. A budget set to `false` turns its warning
+  off.
+- Warnings go to stderr, so they never mix with `--json` output.
+- `--timings` on any command prints every timing.
+- Timing must cost almost nothing when nothing is over budget.
+
+```text
+$ sous build
+Warning: building the config took 840ms (budget 200ms).
+  conf.d/530-team.js took 610ms of that.
+  See every timing with: sous build --timings
+```
+
+- `sous --help` and shell completion take under 150ms (ruled 2026-10-25).
+
+### Startup budgets
+
+`sous --help`, `sous help`, `--version` and shell completion read only what the built-in plugins
+registered (the command tree, the version), so they do not wait for the config build when the
+project loads no other plugin:
+
+1. The bin loads the built-in plugins first (`engine.loadBuiltInsOnly()`: a config of their
+   registrations, no contributor run) and asks the front end `needsConfig(engine, argv)`. The CLI
+   answers `false` for help, the version and an intent that declares `runsWithoutConfig`; a line
+   that does not parse (a command a later plugin adds) needs the config.
+2. After every successful config build the bin records a fact in the sous home's cache
+   (`cache/startup/<digest of the project's .sous path>.json`, so a run never writes into the
+   project): whether the build loaded no plugin
+   beyond the built-in ones, with a key. The key is a digest of the sous version, this bundle's
+   file, the `SOUS_*` environment, every file directly in `.sous/`, `conf.d`, and the sous home
+   outside its cache (name, size, modification time). A lockfile or config change changes the key,
+   so the next run builds the config again. The key does not follow files a config module imports;
+   `sous build` records the fact again.
+3. A line that needs no config runs on the built-in registrations only when the fact holds for the
+   current key. Otherwise the config is built with `reportBudgets: false`, so the over-budget
+   warning is never printed above help, the version or completion.
+4. The recipe store verifies a stored recipe's content hash only when the name, size or modification
+   time of one of its files differs from the last verified read (`statFingerprint` in its marker),
+   and refreshes `lastAccessAt` at most once a day, so a build reads no recipe file twice.
+- Every other budget is set from measurements taken during the refactor, and kept as a default in
+  core. A test fails when a stage or call has no budget (ruled 2026-10-25). For comparison, on
+  2026-10-18 the current sous took 0.22s for `--version`, 1.05s for `--help` and 1.19s for
+  `config show`, mostly from compiling TypeScript through tsx on every run and from importing all 36
+  command modules for `--help`.
+- Plugin discovery gets no cache until the budgets show a need for one.
+
+## Open Questions
+
+None. (The name `plugin-recipes` is an agent decision the user may overrule.)
+
+## Changes
+
+### 2026-10-30: An intent returns outputs; the CLI has no views
+
+"What an intent returns" is new; "Reporting: levels and styles" is rewritten; the front-end example
+changes. Designed by Luke in an agent session (2026-10-30, the scratch design in
+`docs/notes/sous-refactor/result-presentation.ts`): a handler returns `IntentOutputs` that the
+reporter knows how to show, `message` is for people and `details` for machines, a style is a hint,
+failures are thrown as cause chains, and results go to standard output while everything else goes to
+standard error. Ruled in the same session: "having the CLI understand domains ... is stupid", and
+"`toPlain()` means "to plain object", so no, it never returns an array. If multiple exist, return the
+last." Filled in by the agent, not yet ruled: the `data` field on an output (so `--json` keeps domain
+data rather than display cells), `with()` for wrappers, `exitCode` on `IntentOutputs`, results at
+`notice`, and failures that end a command at `critical`.
+
+### 2026-10-30: Help, version and completion skip the config build
+
+Made by the agent while Luke was away (guess for him; needs his review). Why: measured on this
+machine, `sous --help` took about 470ms inside this repository against the ruled 150ms, because the
+bin built the whole config first. Added: "Startup budgets" above; `engine.loadBuiltInsOnly()`;
+`BuildOptions.reportBudgets`; `FrontEndDefinition.needsConfig`; `IntentDefinition.runsWithoutConfig`;
+and the recipe store's stat fingerprint.
+
+### 2026-10-30: Every message is a level and a style
+
+"Reporting: levels and styles" replaces "Log levels". Designed by Luke in an agent session
+(2026-10-30): every message goes through `log(level, message, details?, style?)`; convenience methods
+per level and per style are defined once, in `BaseReporter`, and `Reporter` is derived from it; each
+front end decides how each style looks; the views show results through the same reporter. Ruled in
+the same session: "I'm trying to avoid needing to define the convenience methods in more than one
+place." and, on output streams, "3, our new "level" settings on output allow users to tune what
+output they see" (progress and results back on standard output).
+
+### 2026-10-30: Contributors declare an apply order
+
+"Dependencies and order", rule 2: `before` and `after` no longer "only affect speed"; with the new
+`applyOrder` they decide which contributor's patch applies last and wins. Approved by Luke ("yes,
+do it", 2026-10-30); the details are in S2 (config building), "Order and stages" and its "Changes".
+
+### 2026-10-29: Engine fixes found while the plugins were built
+
+Made by the agent while the user was away; needs Luke's review.
+
+- **`ctx.refreshConfig()`** ("Chains and the Scheduler", rule 5). A series chain can rebuild the
+  config for the rest of itself. Why: `sous subscription add` writes a subscription, then runs
+  `vars.ask` and `build`; with the chain keeping the config it started with, the build compiled
+  without the new recipe, which today's sous does not do. `build` (after preparing changes the
+  lockfile), `subscription add`, `repo add` and `init` use it.
+- **`toleratesConfigErrors`** ("Intents", rule 7). Why: `sous update` must be able to repair an
+  install whose config no longer builds, as it can today. The bin now starts the CLI even when the
+  build fails; the CLI reports the build's error for every other command, `--help` included, as
+  before.
+- **`ctx.cwd`** ("Intents", rule 8). Why: plugins resolved a user's relative paths against
+  `process.cwd()` or `PWD`, which is wrong for the MCP server.
+- **`implementable`** ("Names"). Why: plugin-recipes implements plugin-compiler's
+  `compiler.namespace-resolver`, and was warned about it on every run.
+- `PluginInfo` gives each plugin's options, for `sous plugins show`.
+- A `config.built` listener that throws now fails the build; an error in engine code dropped it
+  before.
+- While the config is built, only singleton services can be used. This stays as it was: letting
+  contributors use `config` services would hide what those services read from the loop, so the
+  contributor would not re-run when it changed. The rule is now spelled out in the plugin API's
+  documentation, with an example.

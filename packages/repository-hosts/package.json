@@ -1,0 +1,36 @@
+{
+  "name": "@sous-io/repository-hosts",
+  "version": "1.0.0",
+  "description": "What the repository-host plugins share: URL parsing, token sources, read strategies, the read chain.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "private": true,
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "source": "./src/testing.ts",
+      "types": "./dist/testing.d.ts",
+      "default": "./dist/testing.js"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@sous-io/plugin-api": "workspace:*",
+    "@sous-io/plugin-recipes": "workspace:*",
+    "@sous-io/plugin-refs": "workspace:*",
+    "@sous-io/plugin-host": "workspace:*",
+    "@sous-io/plugin-git": "workspace:*"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=22"
+  },
+  "sideEffects": false
+}

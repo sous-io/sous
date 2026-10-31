@@ -96,10 +96,9 @@ its own question. Each is judged on its own version:
 - `--major`: the newest published version, whatever its major.
 - `--version <version|range|tag>`: exactly that version, the newest one in that range, or the one a
   dist-tag such as `next` points at. This is how you downgrade, and the plan says when it is one.
-- `--prerelease` counts prerelease versions, and is on by default when the installed version is a
-  prerelease; `--no-prerelease` switches it off.
-- `--global` or `--project` updates only that install; `-y, --yes` answers every question;
-  `--dry-run` prints the plans, with the command each would run, and installs nothing.
+
+`--dry-run` prints the plans, with the command each would run, and installs nothing. The other flags
+(prereleases, one install only, answering every question) are in `sous update --help`.
 
 A copy run through `npx`, or one managed by Volta or by a manager sous does not drive, is listed
 with the command to run by hand, and the rest are still updated. A package manager's own failure
@@ -122,4 +121,6 @@ $ sous update --global --yes
 - Look up a command in the [command reference](commands.md)
 - Work out what an error is telling you in [repositories troubleshooting](repositories-troubleshooting.md)
 - Read the [design principles](design-principles.md) that constrain every feature
+- Read [how sous 1.0 is built](architecture/laws.md): the rules, goals and design documents behind
+  it, starting with [the engine](architecture/specifications/S1-engine.md)
 - Read the [source on GitHub](https://github.com/sous-io/sous)

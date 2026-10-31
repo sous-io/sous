@@ -1,0 +1,36 @@
+{
+  "name": "@sous-io/plugin-refs",
+  "version": "1.0.0",
+  "description": "Parsing and resolving refs, picking among matches, # names, repository locations and identity.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "private": true,
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./types": {
+      "source": "./src/types.ts",
+      "types": "./dist/types.d.ts",
+      "default": "./dist/types.js"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@sous-io/plugin-api": "workspace:*",
+    "@sous-io/plugin-host": "workspace:*",
+    "semver": "^7.8.5"
+  },
+  "devDependencies": {
+    "@sous-io/core": "workspace:*",
+    "@types/semver": "^7.8.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

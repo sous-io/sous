@@ -2,6 +2,12 @@
 
 **Status:** Accepted, 2026-09-29.
 
+!> **Superseded in part by the 1.0 architecture (2026-10-29):** the decisions stand, but the one
+build path is now the build operation of the build plugin, which every command and front end runs,
+rather than `runProjectBuild` ([ADR 0016](0016-intents-and-front-ends.md)). A build compiles only
+the recipes reached from subscriptions switched on on this machine. See
+[Private GitLab Repositories and Switched-Off Subscriptions](../architecture/specifications/S4-private-gitlab-and-switched-off-subscriptions.md).
+
 This record amends [ADR 0001](0001-repositories.md) in one place: what a project's own templates may
 address through the `~` sigil. It also records two decisions about the build itself that no earlier
 record covers: which commands prepare a project's recipes before compiling, and what a compile error

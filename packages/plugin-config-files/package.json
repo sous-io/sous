@@ -1,0 +1,38 @@
+{
+  "name": "@sous-io/plugin-config-files",
+  "version": "1.0.0",
+  "description": "sous.config.* as a contributor, config.set, and the .env files.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "private": true,
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./types": {
+      "source": "./src/types.ts",
+      "types": "./dist/types.d.ts",
+      "default": "./dist/types.js"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@sous-io/documents": "workspace:*",
+    "@sous-io/plugin-api": "workspace:*",
+    "@sous-io/plugin-expressions": "workspace:*",
+    "@sous-io/plugin-host": "workspace:*",
+    "@sous-io/plugin-variables": "workspace:*",
+    "tsx": "^4.21.0"
+  },
+  "devDependencies": {
+    "@sous-io/core": "workspace:*"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

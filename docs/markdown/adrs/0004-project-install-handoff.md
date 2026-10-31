@@ -2,6 +2,13 @@
 
 **Status:** Accepted, 2026-09-15.
 
+!> **Superseded in part by the 1.0 architecture (2026-10-29):** the hand-off itself stands; it runs
+in the published package's entry script, before the engine starts. The config kernel and tsx are
+gone: sous ships as compiled, bundled JavaScript, so nothing waits on tsx. When the global sous
+hands off, plugins installed globally are not loaded. See
+[the engine specification](../architecture/specifications/S1-engine.md) and
+[Packaging and Releases](../architecture/specifications/S3-packaging-and-releases.md).
+
 This record stands on its own; it amends nothing in [ADR 0001](0001-repositories.md),
 [ADR 0002](0002-recipe-answers-in-templates.md) or [ADR 0003](0003-project-init.md), and
 everything they say still holds. The living answer to "how does it work right now?" is
