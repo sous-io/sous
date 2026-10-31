@@ -28,7 +28,7 @@ export { Layout, VARIABLE_INDENT, withErrorPrefix } from "./terminal/layout.js";
 export type { ParagraphOptions, VariableOptions } from "./terminal/layout.js";
 export { describeError, viewError } from "./errors.js";
 export { reportTimings } from "./views.js";
-export { colorizeJson, isScalar, renderJson, truncateJson } from "./views/json.js";
+export { colorizeJson, renderJson } from "./views/json.js";
 export { formatResolvedReference } from "./views/ref-report.js";
 export { showOutputs } from "./views/show.js";
 export { HelpPage } from "./help-page.js";

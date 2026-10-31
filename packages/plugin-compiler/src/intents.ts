@@ -182,8 +182,8 @@ function isDirectWrite(entry: StateFileEntry): boolean {
 }
 
 /**
- * Runs `compiler.prune` (internal). Each removal is reported as it happens, so this returns the
- * result as data only; `prune` and `clear` say how much was removed.
+ * Runs `compiler.prune` (internal). Each removal is reported as it happens unless `report` is
+ * `false`; the result is data only, and `prune` and `clear` show the files as their own result.
  */
 export async function prune(input: CompilerPruneInput, ctx: Context, runtime: CompilerRuntime): Promise<IntentOutputs<CompilerPruneResult>> {
     return IntentOutputs.of(await pruneOutputs(input, ctx, runtime));
@@ -207,8 +207,10 @@ async function pruneOutputs(input: CompilerPruneInput, ctx: Context, runtime: Co
     const writer = ctx.services.get("compiler.writer");
     const { removed, dirsRemoved } = await writer.remove(candidates, { dryRun });
 
-    for (const file of removed) {
-        ctx.reporter.operation(dryRun ? "would-remove" : "removed", file);
+    if (input.report !== false) {
+        for (const file of removed) {
+            ctx.reporter.operation(dryRun ? "would-remove" : "removed", file);
+        }
     }
 
     if (!dryRun) {

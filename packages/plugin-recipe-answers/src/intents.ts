@@ -51,18 +51,6 @@ function definitionsLabel(file: string | undefined): string {
     return file ?? "the project's subscribed recipes";
 }
 
-/** The outputs with `data` set on the last one, which is what machines get. */
-function withData<T extends object>(outputs: readonly IntentOutput[], data: T): IntentOutputs<T> {
-    const last = outputs[outputs.length - 1];
-    const head = outputs.slice(0, -1);
-
-    if (last === undefined) {
-        return IntentOutputs.of(data);
-    }
-
-    return new IntentOutputs<T>([...head, new IntentOutput<T>({ title: last.title, summary: last.summary, result: last.result, style: last.style, data })]);
-}
-
 /** A ladder for this chain, over the env files as they are now. */
 function ladderFor(ctx: Context): Ladder {
     return buildLadder({ services: ctx.services, env: ctx.env, config: ctx.config });
@@ -161,8 +149,7 @@ export async function handleAsk(input: VarsAskInput, ctx: Context): Promise<Inte
 
         const empty: VarsAskResult = { answered: [], inherited: [], skipped: [], dryRun };
 
-        return withData(
-            [
+        return new IntentOutputs([
                 new IntentOutput({ title: "Answering variables" }),
                 new IntentOutput({
                     result: new TextBlock(
@@ -170,9 +157,7 @@ export async function handleAsk(input: VarsAskInput, ctx: Context): Promise<Inte
                     ),
                     style: ReportEntryStyle.Note,
                 }),
-            ],
-            empty,
-        );
+        ]).withData(empty);
     }
 
     const ladder = ladderFor(ctx);
@@ -201,7 +186,7 @@ export async function handleAsk(input: VarsAskInput, ctx: Context): Promise<Inte
 
     const entries = result.answered.length > 0 || result.inherited.length > 0 || result.skipped.length > 0 ? askReportOutputs(result, hidden) : [];
 
-    return withData([new IntentOutput({ title: "Answering variables" }), ...entries], result);
+    return new IntentOutputs([new IntentOutput({ title: "Answering variables" }), ...entries]).withData(result);
 }
 
 /** `vars.list`, and `sous vars <name>`. */
@@ -216,12 +201,12 @@ export async function handleList(input: VarsListInput, ctx: Context): Promise<In
         const details = variablesNamed(variables, input.name).map((variable) => detailOf(variable, ladder, hidden));
         const shown = details.flatMap((detail) => variableDetailOutputs(detail, hidden, ctx.project?.sousDir));
 
-        return withData([opening, ...shown], { variables: details });
+        return new IntentOutputs([opening, ...shown]).withData({ variables: details });
     }
 
     const listings = variables.map((variable) => listingOf(variable, ladder, hidden));
 
-    return withData([opening, variableListOutput(listings, hidden)], { variables: listings });
+    return new IntentOutputs([opening, variableListOutput(listings, hidden)]).withData({ variables: listings });
 }
 
 /** `vars.show`. Several matches are settled by `refs.picker` (`--accept-first`). */
@@ -235,7 +220,7 @@ export async function handleShow(input: VarsShowInput, ctx: Context): Promise<In
     const outputsOf = (variable: DefinedVariable): IntentOutputs<VariableDetail> => {
         const detail = detailOf(variable, ladder, hidden);
 
-        return withData([opening, ...variableDetailOutputs(detail, hidden, ctx.project?.sousDir)], detail);
+        return new IntentOutputs([opening, ...variableDetailOutputs(detail, hidden, ctx.project?.sousDir)]).withData(detail);
     };
 
     if (matches.length === 1) {

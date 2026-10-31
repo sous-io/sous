@@ -16,7 +16,7 @@ import { coreIndexOverlay, packagedCoreRecipeDir } from "./core/core-recipe.js";
 import { CoreSeeder, coreContributor } from "./core/core-contributor.js";
 import { fetchContributor } from "./fetch/fetch-contributor.js";
 import { IndexCacheService } from "./index-cache/index-cache.js";
-import { collectStore, lockRebuildOutputs, lockShowOutputs, rebuildLock, showLock, storeGcOutputs } from "./intents/lock-intents.js";
+import { collectStore, lockShowOutputs, rebuildLock, showLock, storeGcOutputs } from "./intents/lock-intents.js";
 import { linkOutputs, linkRepo } from "./links/link-intent.js";
 import { LinksFiles } from "./links/links-service.js";
 import { unlinkOutputs, unlinkRepo } from "./links/unlink-intent.js";
@@ -172,7 +172,7 @@ function registerIntents(sous: Sous, runtime: PartBRuntime): void {
         input: lockRebuildInputSchema,
         changesConfig: true,
         cli: { aliases: [["locks", "rebuild"]], examples: ["sous lock rebuild", "sous lock rebuild --dry-run"] },
-        handle: async (input, ctx) => lockRebuildOutputs(await rebuildLock(input, ctx)),
+        handle: async (input, ctx) => rebuildLock(input, ctx),
     });
 
     sous.intents.add({

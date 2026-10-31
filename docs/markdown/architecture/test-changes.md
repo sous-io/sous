@@ -1789,3 +1789,42 @@ All in `packages/plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022): a 
   - **Now:** it also carries `outputs`, which the intent shows after its own and strips from the machine data.
   - **Why:** the build's outputs are appended to the subscription's.
 - **New** in `src/part-a/intents/outputs.spec.ts`, carrying over the assertions of the removed plugin-cli views (`catalog`, `repos`, `updates`): the Command Variables output and titled tables of the browsing intents; `--installed` and `--latest` wording; the linked-recipe note; `repo.add`, `repo.gc` and `lock.show` outputs; follow-up outputs after the intent's own with `vars.ask` under "Variables"; exit code 1 and the error when the build failed; the update plan's order; lockfile diff wording; headings; and the closing data output.
+
+## intents return outputs (results, not progress: plugin-recipes, plugin-build)
+
+- **"should show the follow-ups' outputs after its own, with vars.ask under 'Variables', and end with the data"** and **"should put the data on the last output, follow-ups included"** (`plugin-recipes/src/part-a/intents/outputs.spec.ts`)
+  - **Before:** a data-only output closed the follow-ups' outputs (3 outputs, last one with no summary).
+  - **Now:** `finish` uses `IntentOutputs.withData`, so the data sits on the follow-ups' last output (2 outputs, last one "Two.").
+  - **Why:** one implementation of "data on the last output"; `toPlain()` is unchanged.
+- **"should clear without asking when forced, and name --force when it cannot ask"** (`plugin-build/test/build.test.ts`)
+  - **Before:** `compiler.prune` was called with `{ all: true }`.
+  - **Now:** `{ all: true, report: false }`.
+  - **Why:** `clear` returns the removed files as its result, so the compiler no longer reports them one by one.
+- **New:** "should return the removed files as lists, not as progress" (`plugin-build/test/build.test.ts`), and a check in the first `lock.rebuild` test (`plugin-recipes/test/part-b/intents.test.ts`) that the diff list and closing sentence are returned outputs.
+
+## intents return outputs (plugin-cli front end, sous, plugin-claude-code)
+
+- **"should run the claude command with the tools.claude args, then the user's"** (`plugin-claude-code/test/plugin.test.ts`)
+  - **Before:** the stub `build` intent returned `{ ok: true }`.
+  - **Now:** it returns `IntentOutputs.of({ ok: true })`.
+  - **Why:** every handler returns `IntentOutputs`; the engine rejects anything else.
+- **"should run a plugin's intent through its generated command"** (`sous/test/bin.test.ts`)
+  - **Before:** read the intent's data as JSON from stdout with no flag.
+  - **Now:** passes `--json`.
+  - **Why:** an output holding only `data` prints nothing without `--json`.
+- **"should set the project up so that the next build succeeds", "should add sous to an existing package.json as a devDependency", "should write nothing on a dry run"** (`sous/test/integration/init-command.test.ts`)
+  - **Before:** looked for `✓ <file>`, `package.json (added ...)` and `<file> (would write)` on stdout.
+  - **Now:** the result block (`Config        : <path>`, `Dependency    : ...`, "Nothing was written.") is checked on stdout, and the per-file lines on stderr.
+  - **Why:** the file list is progress (stderr); the result is the "What was set up" block.
+- **"should update the global install through npm under --yes", "should install nothing in a dry run", "should update and build a Yarn Plug'n'Play project through Yarn"** (`sous/test/integration/update-command.test.ts`)
+  - **Before:** `Running: ...` on stdout; `Would run: ...` with no padding.
+  - **Now:** `Running: ...` is checked on stderr (progress); `Would run : ...` is the aligned key and value row.
+  - **Why:** commands are reported while they run; result blocks go through the shared aligner.
+- **Removed** "should cut one-line JSON with an ellipsis" (`plugin-cli/src/terminal/layout.spec.ts`): `truncateJson` was deleted because nothing in plugin-cli used it.
+- **New** "should not close a result on a pipe with blank lines" (`plugin-cli/src/terminal-reporter.spec.ts`).
+
+### "should draw the outputs on standard output" (plugin-cli, `test/outputs.test.ts`)
+
+- **Before:** standard output ended with the two closing blank lines.
+- **Now:** it ends with the last line of the result.
+- **Why:** the closing blank lines are for a terminal; output sent to a pipe or a file no longer gets them.

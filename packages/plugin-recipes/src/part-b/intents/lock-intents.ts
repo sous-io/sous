@@ -2,7 +2,7 @@
  * `lock.rebuild`, `lock.show` and `repo.gc`: the intents over the lockfile and the store.
  */
 
-import { ConfigError, IntentOutputs, LogLevel, type Context, type TableColumn } from "@sous-io/plugin-api";
+import { ConfigError, type IntentOutput, type IntentOutputs, type Context, type TableColumn } from "@sous-io/plugin-api";
 import type {
     LockRebuildInput,
     LockRebuildResult,
@@ -19,14 +19,14 @@ import { trustedRepos } from "../lock/lock-service.js";
 import { reachability } from "../lock/reachable.js";
 import { storeKeyOf } from "../fetch/restore.js";
 import type { ResolverService } from "../resolver/resolver-service.js";
-import { blockOutput, describeSize, dryRunOutput, finish, sentence, tableOutput, underHeading } from "../../part-a/outputs.js";
+import { blockOutput, describeSize, dryRunOutput, finish, listOutput, noteOutput, sentence, tableOutput, underHeading } from "../../part-a/outputs.js";
 import { plural } from "../support.js";
 
 /**
  * Resolves every subscription again against the cached indexes and rewrites the lockfile, keeping
  * the pins of switched-off subscriptions, then downloads what the store lacks.
  */
-export async function rebuildLock(input: LockRebuildInput, ctx: Context): Promise<LockRebuildResult> {
+export async function rebuildLock(input: LockRebuildInput, ctx: Context): Promise<IntentOutputs<LockRebuildResult>> {
     const lock = ctx.services.get("recipes.lock");
     const resolver = ctx.services.get("recipes.resolver");
     const result = await resolver.resolveSubscriptions();
@@ -44,7 +44,7 @@ export async function rebuildLock(input: LockRebuildInput, ctx: Context): Promis
     const after = lock.fromResolved(result.resolved, before);
     const diff = lock.diff(before, after);
 
-    ctx.reporter.list(describeLockDiff(diff), {}, LogLevel.Notice);
+    const outputs: IntentOutput[] = [listOutput(describeLockDiff(diff))];
 
     const cache = ctx.services.get("recipes.index-cache");
     const notFetched = Object.keys(trustedRepos(ctx)).filter((name) => {
@@ -56,23 +56,23 @@ export async function rebuildLock(input: LockRebuildInput, ctx: Context): Promis
     });
 
     if (notFetched.length > 0) {
-        ctx.reporter.note(`These repositories are trusted and their index has not been fetched yet, so nothing in them could be resolved: ${notFetched.sort().join(", ")}.`);
+        outputs.push(noteOutput(`These repositories are trusted and their index has not been fetched yet, so nothing in them could be resolved: ${notFetched.sort().join(", ")}.`));
     }
 
     if (result.unreadable.length > 0) {
-        ctx.reporter.note(
-            `The files of these recipes are not on this machine, and their repository's index does not record what they depend on, so their own dependencies are not in the rebuilt lockfile: ${result.unreadable.join(", ")}.`,
+        outputs.push(
+            noteOutput(`The files of these recipes are not on this machine, and their repository's index does not record what they depend on, so their own dependencies are not in the rebuilt lockfile: ${result.unreadable.join(", ")}.`),
         );
     }
 
     for (const cycle of result.cycles) {
-        ctx.reporter.note(`These recipes depend on each other in a circle: ${cycle.join(" -> ")}.`);
+        outputs.push(noteOutput(`These recipes depend on each other in a circle: ${cycle.join(" -> ")}.`));
     }
 
     if (input.dryRun) {
-        ctx.reporter.dryRun(`Nothing was written. The lockfile is ${lock.path()}.`);
+        outputs.push(dryRunOutput(`Nothing was written. The lockfile is ${lock.path()}.`));
 
-        return { diff, lockfile: after, missingRepos: result.missingRepos, restored: { restored: [], alreadyPresent: [], failed: [] }, dryRun: true };
+        return finish(outputs, { diff, lockfile: after, missingRepos: result.missingRepos, restored: { restored: [], alreadyPresent: [], failed: [] }, dryRun: true });
     }
 
     await lock.write(after);
@@ -80,7 +80,7 @@ export async function rebuildLock(input: LockRebuildInput, ctx: Context): Promis
 
     const subscriptions = Object.keys(ctx.config.get<Record<string, SubscriptionEntry>>("subscriptions") ?? {}).length;
 
-    ctx.reporter.notice(`The lockfile was rebuilt from ${plural(subscriptions, "subscription")} and now pins ${plural(Object.keys(after.recipes).length, "recipe")}: ${lock.path()}.`);
+    outputs.push(sentence(`The lockfile was rebuilt from ${plural(subscriptions, "subscription")} and now pins ${plural(Object.keys(after.recipes).length, "recipe")}: ${lock.path()}.`));
 
     const restored = await lock.restore({ keys: resolver.reachable(after) });
 
@@ -88,7 +88,7 @@ export async function rebuildLock(input: LockRebuildInput, ctx: Context): Promis
         ctx.reporter.warning(`Sous could not download ${failure.key}: ${failure.reason}`);
     }
 
-    return { diff, lockfile: after, missingRepos: result.missingRepos, restored, dryRun: false };
+    return finish(outputs, { diff, lockfile: after, missingRepos: result.missingRepos, restored, dryRun: false });
 }
 
 /** Every recipe the lockfile pins, with whether it is active here and, when not, why. */
@@ -145,14 +145,6 @@ export async function collectStore(input: RepoGcInput, ctx: Context): Promise<St
 }
 
 // --- The outputs ------------------------------------------------------------------------------------
-
-/**
- * The outputs of `lock.rebuild`. The intent reports every change, every note and its closing
- * sentence as it goes, so the outputs hold only the result for machines.
- */
-export function lockRebuildOutputs(result: LockRebuildResult): IntentOutputs<LockRebuildResult> {
-    return IntentOutputs.of(result);
-}
 
 /** The recipe and its version stay at any width; the holders take what is left and wrap. */
 const LOCK_COLUMNS: TableColumn[] = [

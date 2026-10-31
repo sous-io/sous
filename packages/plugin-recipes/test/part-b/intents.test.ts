@@ -58,8 +58,12 @@ afterEach(() => cleanTemp());
 describe("lock.rebuild", () => {
     it("should resolve every subscription to the newest version in range, write the lockfile and download what is missing", async () => {
         const { engine } = await startEngine({ root, home, data: config({ "workflow/alpha": { range: "^1" } }), hosts: [fakeHost([repo], calls)] });
-        const result = (await engine.handle.submit({ intent: "lock.rebuild", input: {} })).toPlain();
+        const outputs = await engine.handle.submit({ intent: "lock.rebuild", input: {} });
+        const result = outputs.toPlain();
 
+        // The diff list and the closing sentence are the result, not progress.
+        expect((outputs.toArray()[0]?.result as unknown as { items: string[] }).items).toContain("Adding workflow/alpha version 1.2.0");
+        expect(outputs.last()?.summary).toMatch(/^The lockfile was rebuilt from 1 subscription/);
         expect(result.diff.added).toEqual([{ key: "workflow/alpha", to: "1.2.0" }]);
         expect(result.restored.restored).toEqual(["workflow/alpha"]);
         expect(lockfile().recipes["workflow/alpha"]).toMatchObject({ version: "1.2.0", requestedBy: ["project"] });

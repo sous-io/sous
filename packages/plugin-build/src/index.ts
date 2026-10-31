@@ -111,7 +111,7 @@ export function createBuildPlugin(options: BuildPluginOptions = {}): PluginDefin
                 input: buildInputSchema,
                 cli: {
                     examples: ["sous build", "sous build --no-prune", "sous build --rebuild", "sous build --dry-run"],
-                    flags: { watch: { short: "w" }, changedFiles: { hidden: true } },
+                    flags: { watch: { short: "w" }, changedFiles: { hidden: true }, reportRemoved: { hidden: true } },
                 },
                 agent: {
                     usage: "Run after changing the config, a subscription or a template, to write every output again.",

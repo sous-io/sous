@@ -144,7 +144,9 @@ describe("sous init in a directory that has never seen sous", () => {
         expect(fs.existsSync(path.join(project, relative)), relative).toBe(true);
       }
 
-      expect(init.stdout).toContain(`✓ ${path.join(".sous", "sous.config.js")}`);
+      // The result block names the config; the file list is progress, on stderr.
+      expect(init.stdout).toContain(`Config        : ${path.join(project, ".sous", "sous.config.js")}`);
+      expect(init.stderr).toContain(`${path.join(".sous", "sous.config.js")}`);
       expect(init.stdout).not.toContain("package.json");
       // The first build reports its progress (the lockfile pins among it) on stderr.
       expect(init.stdout + init.stderr).toContain(`pinned: core/sous-skills at version ${SOUS_VERSION}`);
@@ -194,7 +196,9 @@ describe("sous init in a directory that has never seen sous", () => {
       const init = sous(project, ["init", "--no-build"]);
       expect(init.status, init.stdout + init.stderr).toBe(0);
 
-      expect(init.stdout).toContain(`package.json (added @sous-io/sous ${SOUS_VERSION} to devDependencies)`);
+      expect(init.stdout).toContain(`Dependency    : @sous-io/sous ${SOUS_VERSION}`);
+      expect(init.stdout).toContain("added to devDependencies in package.json");
+      expect(init.stderr).toContain(`added @sous-io/sous ${SOUS_VERSION} to devDependencies`);
       const pkg = JSON.parse(fs.readFileSync(packageJsonPath, "utf8")) as {
         private: boolean;
         devDependencies: Record<string, string>;
@@ -239,7 +243,9 @@ describe("sous init in a directory that has never seen sous", () => {
 
       const init = sous(project, ["init", "--dry-run"]);
       expect(init.status, init.stdout + init.stderr).toBe(0);
-      expect(init.stdout).toContain(`${path.join(".sous", "sous.config.js")} (would write)`);
+      // The list of files is progress, so it is on stderr.
+      expect(init.stderr).toContain(`${path.join(".sous", "sous.config.js")} (would write)`);
+      expect(init.stdout).toContain("Nothing was written.");
       expect(listTree(project)).toEqual([]);
     },
     CLI_TIMEOUT

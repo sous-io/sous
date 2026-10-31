@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { ConfigError, NonInteractiveError, NotFoundError, scriptedPrompter } from "@sous-io/plugin-api";
+import { ConfigError, type ItemList, NonInteractiveError, NotFoundError, scriptedPrompter } from "@sous-io/plugin-api";
 import type { CompilerPruneResult } from "@sous-io/plugin-compiler/types";
 import type { BuildResult, ClearResult, CompileCommandResult } from "../src/types.js";
 import { entry, harness, plugin, target } from "./helpers.js";
@@ -349,6 +349,27 @@ describe("the clear intent", () => {
     });
 
     /**
+     * The removed files are the result: a list of the files, a list of the directories, then the
+     * summary sentence holding the data.
+     *
+     * sous clear --force; // -> "Files removed", "Directories removed", "Removed 2 files and 1 directory."
+     */
+    it("should return the removed files as lists, not as progress", async () => {
+        const h = await harness();
+
+        withState(h);
+        h.world.pruneResult = () => ({ removed: ["/p/a.md", "/p/b.md"], dirsRemoved: ["/p/dir"], dryRun: false });
+
+        const outputs = await h.engine.submit({ intent: "clear", input: { force: true } }, { reporter: h.reporter });
+        const all = outputs.toArray();
+
+        expect((all[0]?.result as ItemList).items).toEqual(["/p/a.md", "/p/b.md"]);
+        expect((all[0]?.result as ItemList).title).toBe("Files removed");
+        expect((all[1]?.result as ItemList).items).toEqual(["/p/dir"]);
+        expect(all[2]?.summary).toBe("Removed 2 files and 1 directory.");
+    });
+
+    /**
      * --force removes everything through compiler.prune with `all`, asking nothing; with no way
      * to ask, the error names --force.
      *
@@ -366,7 +387,7 @@ describe("the clear intent", () => {
         const result = await h.run<ClearResult>("clear", { force: true });
 
         expect(result).toEqual({ removed: ["/p/a.md", "/p/b.md"], dirsRemoved: ["/p/dir"], dryRun: false, confirmed: true });
-        expect(h.world.pruneCalls).toEqual([{ all: true }]);
+        expect(h.world.pruneCalls).toEqual([{ all: true, report: false }]);
     });
 });
 

@@ -348,6 +348,8 @@ export interface CompilerPruneInput {
     /** Removes every file the compiler wrote, not only those no target produces (`clear`). */
     all?: boolean;
     dryRun?: boolean;
+    /** Reports each removed file as progress (`true` unless `false`); a caller that returns the files as its own result passes `false`. */
+    report?: boolean;
 }
 
 /** The result of `compiler.prune`. */

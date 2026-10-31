@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createEngine } from "@sous-io/core";
-import { BufferedReporter, definePlugin, jsonSchema, type PluginDefinition } from "@sous-io/plugin-api";
+import { BufferedReporter, definePlugin, IntentOutputs, jsonSchema, type PluginDefinition } from "@sous-io/plugin-api";
 import type { HostProcesses, ProcessResult } from "@sous-io/plugin-host/types";
 import type { RunHeadlessResult } from "@sous-io/plugin-harnesses/types";
 import { spawn } from "node:child_process";
@@ -64,7 +64,7 @@ const stubs: PluginDefinition[] = [
     definePlugin({
         name: "@sous-io/plugin-build",
         version: "0.2.34",
-        register: (sous) => sous.intents.add({ intent: "build", handle: () => ({ ok: true }) as never }),
+        register: (sous) => sous.intents.add({ intent: "build", handle: () => IntentOutputs.of({ ok: true }) as never }),
     }),
     // The kinds plugin-skills and plugin-memories own.
     definePlugin({

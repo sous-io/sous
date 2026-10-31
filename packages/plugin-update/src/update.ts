@@ -19,7 +19,7 @@ import "@sous-io/plugin-host/types";
 import { discoverInstalls, readPackageJson, realpathOr } from "./installs.js";
 import { buildUpdatePlans, type PlannedUpdate } from "./plan.js";
 import { fetchPublishedVersions, registryUrl } from "./registry.js";
-import { formatCommand, planTitle, updateCommandEntries, updateOutputs, withData } from "./report.js";
+import { formatCommand, planTitle, updateCommandEntries, updateOutputs } from "./report.js";
 import type { InstallScope, PlannedCommand, UpdateInput, UpdateOutcome, UpdatePlan, UpdateResult } from "./types.js";
 import type { VersionRequest } from "./versions.js";
 
@@ -232,9 +232,7 @@ export async function handle(input: UpdateInput, ctx: Context): Promise<IntentOu
     let failed = false;
 
     const finish = (result: UpdateResult): IntentOutputs<UpdateResult> =>
-        new IntentOutputs<UpdateResult>(
-            withData(updateOutputs(result, input, commandVariables(ctx, updateCommandEntries(result, input, ctx.cwd))), result),
-        );
+        new IntentOutputs(updateOutputs(result, input, commandVariables(ctx, updateCommandEntries(result, input, ctx.cwd)))).withData(result);
 
     if (plans.length === 0) {
         return finish({ ...base, outcomes, failed });

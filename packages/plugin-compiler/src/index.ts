@@ -53,6 +53,7 @@ const pruneInput = jsonSchema<CompilerPruneInput>({
     properties: {
         all: { type: "boolean", description: "Removes every file the compiler wrote, not only those no target produces." },
         dryRun: { type: "boolean", description: "Removes nothing." },
+        report: { type: "boolean", description: "Reports each removed file as progress. Default: true." },
     },
     additionalProperties: false,
 });

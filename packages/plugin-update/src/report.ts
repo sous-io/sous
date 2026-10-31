@@ -20,17 +20,6 @@ export function planTitle(plan: UpdatePlan, globalCount: number): string {
     return globalCount > 1 ? `Global install (${plan.manager})` : "Global install";
 }
 
-/** The outputs with `data` set on the last one, which is what machines get. */
-export function withData<T extends object>(outputs: readonly IntentOutput[], data: T): IntentOutput[] {
-    const last = outputs[outputs.length - 1];
-
-    if (last === undefined) {
-        return [new IntentOutput({ data })];
-    }
-
-    return [...outputs.slice(0, -1), new IntentOutput<T>({ title: last.title, summary: last.summary, result: last.result, style: last.style, data })];
-}
-
 function commandFact(label: string, command: PlannedCommand): VariableEntry {
     return command.cwd === undefined ? { label, value: formatCommand(command) } : { label, value: formatCommand(command), detail: `in ${command.cwd}` };
 }

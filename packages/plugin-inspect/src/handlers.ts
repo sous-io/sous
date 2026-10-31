@@ -20,7 +20,7 @@ import {
     type PluginInfo,
     type TimingEntry,
 } from "@sous-io/plugin-api";
-import { configGetOutputs, configShowOutputs, configValidateOutputs, pluginsShowOutputs, timingsShowOutput, withData } from "./outputs.js";
+import { configGetOutputs, configShowOutputs, configValidateOutputs, pluginsShowOutputs, timingsShowOutput } from "./outputs.js";
 import { readRawConfigFiles } from "./raw.js";
 import { KEY_NAME_POLICY, redactLayer, redactUnder, redactValue, servicePolicy, type SecretPolicy } from "./redact.js";
 import type {
@@ -158,7 +158,7 @@ export async function configShow(input: ConfigShowInput, ctx: Context): Promise<
         ...(input.raw === true ? { raw: await readRawConfigFiles(ctx.project, ctx.services, policy) } : {}),
     };
 
-    return new IntentOutputs<ConfigShowResult>(configShowOutputs(result));
+    return new IntentOutputs(configShowOutputs(result)).withData(result);
 }
 
 /** `config.get`: one value by path. A path with nothing at it gives `exists: false`. */
@@ -178,7 +178,7 @@ export async function configGet(input: ConfigGetInput, ctx: Context): Promise<In
         ...(input.raw === true ? { raw: await readRawConfigFiles(ctx.project, ctx.services, policy) } : {}),
     };
 
-    return new IntentOutputs<ConfigGetResult>(configGetOutputs(result));
+    return new IntentOutputs(configGetOutputs(result)).withData(result);
 }
 
 /**
@@ -218,7 +218,7 @@ export async function configValidate(_input: unknown, ctx: Context): Promise<Int
     const result: ConfigValidateResult = { ok: issues.length === 0, issues, summary: summaryOf(ctx) };
 
     // A config with problems ends the command with exit code 1.
-    return new IntentOutputs<ConfigValidateResult>(configValidateOutputs(result), result.ok ? {} : { exitCode: 1 });
+    return new IntentOutputs(configValidateOutputs(result), result.ok ? {} : { exitCode: 1 }).withData(result);
 }
 
 /** Resolves the root scope, then each target's and output's scope and values, as a build would. */
@@ -295,7 +295,7 @@ export function pluginsShow(input: PluginsShowInput, ctx: Context): IntentOutput
     const policy = policyOf(ctx);
     const plugins = ctx.engine.plugins().map((plugin) => (plugin.options === undefined ? plugin : { ...plugin, options: redactValue(plugin.options, policy) }));
 
-    const done = (shown: PluginInfo[]): IntentOutputs<PluginsShowResult> => new IntentOutputs<PluginsShowResult>(withData(pluginsShowOutputs(shown), { plugins: shown }));
+    const done = (shown: PluginInfo[]): IntentOutputs<PluginsShowResult> => new IntentOutputs(pluginsShowOutputs(shown)).withData({ plugins: shown });
 
     if (input.name === undefined) {
         return done(plugins);
@@ -319,5 +319,5 @@ export function timingsShow(input: TimingsShowInput, ctx: Context): IntentOutput
         .filter((entry) => (input.overBudget !== true || entry.overBudget > 0) && (input.category === undefined || entry.category === input.category))
         .sort((a, b) => b.totalMs - a.totalMs);
 
-    return new IntentOutputs<TimingsShowResult>(withData([timingsShowOutput(timings)], { timings }));
+    return new IntentOutputs([timingsShowOutput(timings)]).withData({ timings });
 }

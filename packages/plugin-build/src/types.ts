@@ -119,6 +119,8 @@ export interface BuildInput {
     /** Writes every output, changed or not. */
     rebuild?: boolean;
     dryRun?: boolean;
+    /** Reports each removed file as progress (`true` unless `false`); `prune` passes `false` and returns the files itself. */
+    reportRemoved?: boolean;
     /** Warnings fail the build. */
     strict?: boolean;
     /** Keeps building on every change (starts `build.watch`). */

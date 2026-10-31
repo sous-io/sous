@@ -132,7 +132,7 @@ describe("the subscription outputs", () => {
         const outputs = subscriptionAddOutputs(fakeContext(), { ...base, followUps });
         const titles = outputs.toArray().map((output) => output.title);
 
-        expect(titles).toEqual(["Subscribing", "Lockfile", undefined, "Variables", "Build", undefined]);
+        expect(titles).toEqual(["Subscribing", "Lockfile", undefined, "Variables", "Build"]);
         expect(outputs.exitCode).toBeUndefined();
         expect(outputs.toPlain().followUps).toEqual([
             { intent: "vars.ask", result: { answered: 1 } },
@@ -204,14 +204,14 @@ describe("the shared pieces", () => {
     });
 
     /** The data goes on the last output, or closes outputs that follow it. */
-    it("should put the data on the last output, or close the follow-ups with a data-only output", () => {
+    it("should put the data on the last output, follow-ups included", () => {
         expect(finish([new IntentOutput({ summary: "One." })], { a: 1 }).toPlain()).toEqual({ a: 1 });
 
         const closed = finish([new IntentOutput({ summary: "One." })], { a: 1 }, { after: [new IntentOutput({ summary: "Two." })] });
 
-        expect(closed.length).toBe(3);
+        expect(closed.length).toBe(2);
         expect(closed.toPlain()).toEqual({ a: 1 });
-        expect(closed.last()?.summary).toBeUndefined();
+        expect(closed.last()?.summary).toBe("Two.");
         expect(plainFollowUps([{ intent: "build", skipped: "--no-build" }])).toEqual([{ intent: "build", skipped: "--no-build" }]);
     });
 

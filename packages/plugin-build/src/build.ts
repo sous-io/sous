@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import "@sous-io/plugin-memories/types";
 import path from "node:path";
-import { commandVariables, ConfigError, type Context, IntentOutput, IntentOutputs, LogLevel, NotFoundError, ReportEntryStyle, SousError } from "@sous-io/plugin-api";
+import { commandVariables, ConfigError, type Context, IntentOutput, IntentOutputs, ItemList, LogLevel, NotFoundError, ReportEntryStyle, SousError } from "@sous-io/plugin-api";
 import type { CompileResult, CompilerPruneResult, WrittenFile } from "@sous-io/plugin-compiler/types";
 import type { SkippedRecipe } from "@sous-io/plugin-recipes/types";
 import { projectLabel } from "./pid.js";
@@ -55,6 +55,7 @@ function buildOutputs<T extends { readonly ok: boolean }>(input: BuildInput | Co
 /** Runs a build and gives its result. */
 async function runBuild(input: BuildInput, ctx: Context): Promise<BuildResult> {
     const dryRun = input.dryRun === true;
+    const report = input.reportRemoved === false ? { report: false } : {};
     const partial = (input.changedFiles?.length ?? 0) > 0 && input.rebuild !== true;
 
     if (input.watch) {
@@ -101,7 +102,7 @@ async function runBuild(input: BuildInput, ctx: Context): Promise<BuildResult> {
     if (!input.noCompile) {
         // --rebuild starts from a clean slate: everything written before is removed first.
         if (input.rebuild && !dryRun) {
-            cleared = (await ctx.run("compiler.prune", { all: true })).toPlain();
+            cleared = (await ctx.run("compiler.prune", { all: true, ...report })).toPlain();
         }
 
         runtimeContext = await writeRuntimeContext(ctx, dryRun);
@@ -123,7 +124,7 @@ async function runBuild(input: BuildInput, ctx: Context): Promise<BuildResult> {
     let pruned: CompilerPruneResult | undefined;
 
     if (!input.noPrune && ok) {
-        pruned = (await ctx.run("compiler.prune", { dryRun })).toPlain();
+        pruned = (await ctx.run("compiler.prune", { dryRun, ...report })).toPlain();
     }
 
     reportSkipped(ctx, skipped, skippedFiles, [...(cleared?.removed ?? []), ...(pruned?.removed ?? [])], dryRun);
@@ -256,22 +257,34 @@ function realPath(file: string): string {
  */
 export async function prune(input: PruneInput, ctx: Context): Promise<IntentOutputs<CompilerPruneResult>> {
     const dryRun = input.dryRun === true;
-    const result = (await ctx.run("build", { noCompile: true, ...(dryRun ? { dryRun: true } : {}) })).toPlain();
+    const result = (await ctx.run("build", { noCompile: true, reportRemoved: false, ...(dryRun ? { dryRun: true } : {}) })).toPlain();
 
     return removalOutputs(result.pruned ?? { removed: [], dirsRemoved: [], dryRun });
 }
 
 /**
- * What `prune` and `clear` return: one sentence saying how much was (or would be) removed, with the
- * result as data. Each file is reported as it is removed.
+ * What `prune` and `clear` return: the files (and directories) removed, or that would be, as lists,
+ * then one sentence saying how much; the result is the data.
  */
 function removalOutputs<T extends CompilerPruneResult>(result: T): IntentOutputs<T> {
     const files = `${result.removed.length} ${result.removed.length === 1 ? "file" : "files"}`;
     const directories = `${result.dirsRemoved.length} ${result.dirsRemoved.length === 1 ? "directory" : "directories"}`;
     const what = result.dirsRemoved.length === 0 ? files : `${files} and ${directories}`;
-    const summary = result.removed.length === 0 && result.dirsRemoved.length === 0 ? "Nothing to remove." : `${result.dryRun ? "Would remove" : "Removed"} ${what}.`;
+    const nothing = result.removed.length === 0 && result.dirsRemoved.length === 0;
+    const summary = nothing ? "Nothing to remove." : `${result.dryRun ? "Would remove" : "Removed"} ${what}.`;
+    const outputs: IntentOutput[] = [];
 
-    return new IntentOutputs<T>(new IntentOutput<T>({ summary, data: result })) as IntentOutputs<T>;
+    if (result.removed.length > 0) {
+        outputs.push(new IntentOutput({ result: new ItemList(result.removed, { title: result.dryRun ? "Files that would be removed" : "Files removed" }) }));
+    }
+
+    if (result.dirsRemoved.length > 0) {
+        outputs.push(new IntentOutput({ result: new ItemList(result.dirsRemoved, { title: result.dryRun ? "Directories that would be removed" : "Directories removed" }) }));
+    }
+
+    outputs.push(new IntentOutput({ summary }));
+
+    return new IntentOutputs(outputs).withData(result);
 }
 
 /**
@@ -304,7 +317,7 @@ export async function clear(input: ClearInput, ctx: Context): Promise<IntentOutp
         }
     }
 
-    const result = (await ctx.run("compiler.prune", { all: true, ...(dryRun ? { dryRun: true } : {}) })).toPlain();
+    const result = (await ctx.run("compiler.prune", { all: true, report: false, ...(dryRun ? { dryRun: true } : {}) })).toPlain();
 
     return removalOutputs<ClearResult>({ ...result, confirmed: true });
 }

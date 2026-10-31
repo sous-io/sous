@@ -22,17 +22,6 @@ import {
 } from "@sous-io/plugin-api";
 import type { ConfigGetResult, ConfigShowResult, ConfigValidateResult, LayerView, RawConfigFile } from "./types.js";
 
-/** The outputs with `data` set on the last one, which is what machines get. */
-export function withData<T extends object>(outputs: readonly IntentOutput[], data: T): IntentOutput[] {
-    const last = outputs[outputs.length - 1];
-
-    if (last === undefined) {
-        return [new IntentOutput({ data })];
-    }
-
-    return [...outputs.slice(0, -1), new IntentOutput<T>({ title: last.title, summary: last.summary, result: last.result, style: last.style, data })];
-}
-
 /** A value as JSON on one line, cut to `max` characters with an ellipsis. */
 function truncateJson(value: unknown, max = 80): string {
     const encoded = JSON.stringify(value);
@@ -80,7 +69,7 @@ function rawFileOutputs(files: readonly RawConfigFile[]): IntentOutput[] {
  */
 export function configShowOutputs(result: ConfigShowResult): IntentOutput[] {
     if (!result.layers && !result.raw) {
-        return withData([new IntentOutput({ result: new DataValue(result.config) })], result);
+        return [new IntentOutput({ result: new DataValue(result.config) })];
     }
 
     const outputs: IntentOutput[] = [];
@@ -94,7 +83,7 @@ export function configShowOutputs(result: ConfigShowResult): IntentOutput[] {
         outputs.push(new IntentOutput({ result: new VariableSet([{ label: "result", value: `settled after ${plural(result.passes, "pass", "passes")}` }]) }));
     }
 
-    return withData(outputs, result);
+    return outputs;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -127,7 +116,7 @@ export function configGetOutputs(result: ConfigGetResult): IntentOutput[] {
 
         outputs.push(new IntentOutput({ result: new VariableSet([{ label: "result", value: shown, detail: `settled after ${plural(result.passes, "pass", "passes")}` }]) }));
 
-        return withData(outputs, result);
+        return outputs;
     }
 
     if (!result.exists || result.value === undefined) {
@@ -136,7 +125,7 @@ export function configGetOutputs(result: ConfigGetResult): IntentOutput[] {
 
     outputs.push(new IntentOutput({ result: isScalar(result.value) ? new TextBlock(String(result.value), { verbatim: true }) : new DataValue(result.value) }));
 
-    return withData(outputs, result);
+    return outputs;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -159,8 +148,7 @@ export function configValidateOutputs(result: ConfigValidateResult): IntentOutpu
     if (result.ok) {
         const summary = result.summary;
 
-        return withData(
-            [
+        return [
                 new IntentOutput({
                     title: "Config is valid",
                     ...(summary === undefined
@@ -174,18 +162,13 @@ export function configValidateOutputs(result: ConfigValidateResult): IntentOutpu
                               }),
                           }),
                 }),
-            ],
-            result,
-        );
+        ];
     }
 
-    return withData(
-        [
+    return [
             new IntentOutput({ title: `The config has ${plural(result.issues.length, "problem")}` }),
             ...result.issues.map((issue) => new IntentOutput({ result: new TextBlock(issue), style: ReportEntryStyle.Problem })),
-        ],
-        result,
-    );
+    ];
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -57,13 +57,13 @@ holds the mechanism, use it rather than building a second one beside it.
   never as a folder path. Any spelling that settles to one identity is accepted, including a
   folder path or a pasted browser URL; host-specific readings belong to each provider's
   `readLocation`.
-- **Output is reported, never formatted, outside the reporter.** Every message and every result
-  goes through the reporter's level and style methods (`BaseReporter`,
-  `packages/plugin-api/src/reporter.ts`; ADR 0021): a caller says what an entry is (`variables`,
-  `table`, `list`, `operation`, `problem`, ...) and passes the facts. No caller writes a glyph,
-  pads a label, indents a line or joins lines with "\n". A shape no style fits gets a new style
-  in `packages/plugin-api/src/report-styles.ts`, with its method in `BaseReporter`.
-- **How each style looks is decided once, in `TerminalReporter`**
+- **A result is returned, never printed; everything else is reported, never formatted.** An intent
+  returns `IntentOutputs` built from payloads (`VariableSet`, `Table`, ...;
+  `packages/plugin-api/src/outputs.ts`; ADR 0022); while it runs it reports through the level and
+  style methods (`BaseReporter`, `packages/plugin-api/src/reporter.ts`; ADR 0021). No caller writes
+  a glyph, pads a label, indents a line or joins lines with "\n". The CLI knows no domain: there are
+  no per-intent views.
+- **How each payload, style and result looks is decided once, in `TerminalReporter`**
   (`packages/plugin-cli/src/terminal/render-entry.ts`): aligned label and value blocks with
   details muted, the responsive table renderer (`packages/plugin-cli/src/views/table.ts`: per-column
   priorities, identifiers truncate, prose wraps, a non-TTY run never drops a column), one wrap
@@ -71,9 +71,10 @@ holds the mechanism, use it rather than building a second one beside it.
   a warning is bright yellow with its sharpest words in orange; a note (an explanation that is
   neither warning nor error) is bright teal; an error is bright red and is always preceded by the
   literal `Error: `, so it stays findable with color off.
-- **Streams follow the level**: `debug`, `info` and `notice` go to stdout, `warning` and above to
-  stderr; under `--json`, or while a background intent owns stdout (`sous mcp`), every message
-  goes to stderr.
+- **A result goes to stdout; everything else goes to stderr** (progress, warnings, errors, the
+  banner, questions), at every level. Under `--json`, stdout holds only `outputs.toPlain()`. The
+  user, 2026-10-30: "I'm fine following the convention that results go to stdout and everything
+  else goes to stderr."
 - **Prefer a list over a paragraph.** Facts belong in a key and value list with one short sentence
   after it, not in a sentence with the facts buried inside it.
 - **A question has room around it**: two blank lines above the "Question N of M" header, and two

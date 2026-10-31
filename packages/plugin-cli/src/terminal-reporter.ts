@@ -141,7 +141,8 @@ export class TerminalReporter extends BaseReporter {
 
         this.footerSink = undefined;
 
-        if (sink === undefined || !sink.wrote) {
+        // A result sent to a pipe or a file gets no closing room: the file holds the result and nothing after it.
+        if (sink === undefined || !sink.wrote || (sink === this.out && sink !== this.err && sink.stream.isTTY !== true)) {
             return;
         }
 

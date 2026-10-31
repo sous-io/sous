@@ -201,7 +201,8 @@ describe("the sous update command", () => {
 
       expect(result.status).toBe(0);
       expect(takeCalls()).toEqual([`npm i -g @sous-io/sous@0.2.34 @ ${outside()}`]);
-      expect(flat(result.stdout)).toContain("Running: npm i -g @sous-io/sous@0.2.34");
+      // The command is progress, so it is reported on stderr.
+      expect(flat(result.stderr)).toContain("Running: npm i -g @sous-io/sous@0.2.34");
       expect(flat(result.stdout)).toContain(`Registry : ${registry}@sous-io%2fsous`);
     },
     CLI_TIMEOUT
@@ -348,7 +349,7 @@ describe("the sous update command", () => {
       );
       expect(plan).toContain("Package manager: yarn@berry");
       expect(plan).toContain("Installed : 0.2.18");
-      expect(plan).toContain("Would run: yarn add -D -E @sous-io/sous@0.2.34");
+      expect(plan).toContain("Would run : yarn add -D -E @sous-io/sous@0.2.34");
       expect(takeCalls()).toEqual([]);
 
       const result = await runSous(project, "update", "--project", "--yes");
@@ -392,7 +393,7 @@ describe("the sous update command", () => {
       const result = await runSous(outside(), "update", "--dry-run");
 
       expect(result.status).toBe(0);
-      expect(flat(result.stdout)).toContain("Would run: npm i -g @sous-io/sous@0.2.34");
+      expect(flat(result.stdout)).toContain("Would run : npm i -g @sous-io/sous@0.2.34");
       expect(flat(result.stdout)).toContain("Nothing was installed.");
       expect(takeCalls()).toEqual([]);
     },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { colorizeJson, renderJson, truncateJson } from "../views/json.js";
+import { colorizeJson, renderJson } from "../views/json.js";
 import { Layout, valueText, withErrorPrefix } from "./layout.js";
 import { colorEnabled, createStyle } from "../views/style.js";
 import { DEFAULT_WRAP_COLUMNS, indent, stripAnsi, terminalColumns, wrapText } from "../views/text.js";
@@ -115,11 +115,5 @@ describe("colors and JSON", () => {
         expect(colored).toContain("\u001b[35mtrue\u001b[39m");
         expect(stripAnsi(colored)).toBe(json);
         expect(renderJson({ a: 1 }, createStyle(false))).toBe('{\n  "a": 1\n}');
-    });
-
-    it("should cut one-line JSON with an ellipsis", () => {
-        expect(truncateJson("abc", 4)).toBe('"ab…');
-        expect(truncateJson({ a: 1 })).toBe('{"a":1}');
-        expect(truncateJson(undefined)).toBe("undefined");
     });
 });

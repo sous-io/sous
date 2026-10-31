@@ -632,7 +632,7 @@ they share one plugin.
 | Arguments every command accepts, and command groups' help | `cli-global-argument`, `cli-group` | `plugin-cli` | entity kinds |
 | `--debug` and `--log-level <level>` | `cli-global-argument` entities | `plugin-cli` | entities |
 | Whether a prompt is possible in this run | `cli.interactivity` | `plugin-cli` | service, singleton |
-| Terminal output: how each reporting style looks (colors, wrapping, tables); every view of domain data, shown through the reporter | `TerminalReporter` and the views | `plugin-cli` | a `Reporter` |
+| Terminal output: how each message, payload and result looks (colors, wrapping, tables); results to standard output, everything else to standard error | `TerminalReporter` | `plugin-cli` | a `Reporter` |
 | Terminal prompts | `TerminalPrompter` | `plugin-cli` | a `Prompter` |
 | Turning an error into a message and an exit code | `cli.errors` | `plugin-cli` | service, singleton |
 | `sous --version` | `version` | `plugin-cli` | intent |
@@ -640,8 +640,9 @@ they share one plugin.
 | MCP output and questions | `McpReporter`, `ElicitationPrompter` | `plugin-mcp` | a `Reporter` and a `Prompter` |
 
 Every front end can do anything another can, because they all submit the same intents (ruled
-2026-10-28). A view of domain data, such as the catalog table, belongs to `plugin-cli`: the intent
-returns plain data, and the CLI decides how it looks.
+2026-10-28). How a result is shown belongs to the plugin that owns it: its intent returns `IntentOutputs` built
+from its data (a `Table` for the catalog), and each front end draws them (S1, "What an intent
+returns"). The CLI knows no domain.
 
 ```ts
 // plugin-mcp
@@ -824,7 +825,8 @@ After:
 - Reading manifests moves to `plugin-formats` (`formats.manifests`); managed layers move to
   `plugin-confd` (`confd.managed`). `plugin-recipe-answers` reads active recipes from
   `plugin-recipes`, one way.
-- `renderFacts`, `formatQuestionPlan` and the update plan are views; they move to `plugin-cli`.
+- `renderFacts`, `formatQuestionPlan` and the update plan become the outputs of the intents that
+  own their data.
 - Subscribing no longer asks anything itself. The `subscription.add` intent subscribes, then runs
   `vars.ask` and `build` through `ctx.run`. Every front end calls the same intent.
 
@@ -933,12 +935,12 @@ After: contributing moves to `plugin-authoring` (the `repo.contribute` intent), 
 | Module | What it is | Where it goes |
 | --- | --- | --- |
 | `src/lib/repos/recipe-targets.ts` | turning recipe content into compilation targets | `plugin-skills` and `plugin-memories`, as contributors |
-| `src/lib/repos/catalog-display.ts` | a view | `plugin-cli` |
-| `src/lib/repos/update-plan.ts` | a view (it says so: "It is pure: it formats what it is handed") | `plugin-cli` |
-| `src/services/ref-resolver/ref-report.ts` | a view | `plugin-cli` |
-| `src/lib/vars/display.ts`, `report.ts`, `question-plan.ts` | views | `plugin-cli` |
-| `src/lib/version-report.ts` | a view | `plugin-cli`, the `version` intent |
-| The reporting half of `src/lib/build-preparation.ts` | a view | `plugin-cli`; `build.prepare` reports events |
+| `src/lib/repos/catalog-display.ts` | a view | the outputs of the intents that own the data (`plugin-recipes`, `plugin-recipe-answers`) |
+| `src/lib/repos/update-plan.ts` | a view (it says so: "It is pure: it formats what it is handed") | the outputs of the intents that own the data (`plugin-recipes`, `plugin-recipe-answers`) |
+| `src/services/ref-resolver/ref-report.ts` | a view | `plugin-refs` reports it; `plugin-cli` draws it |
+| `src/lib/vars/display.ts`, `report.ts`, `question-plan.ts` | views | the outputs of the intents that own the data (`plugin-recipes`, `plugin-recipe-answers`) |
+| `src/lib/version-report.ts` | a view | the `version` intent's outputs (`plugin-cli`) |
+| The reporting half of `src/lib/build-preparation.ts` | a view | `plugin-build`: `build.prepare` reports events |
 | `colorizeJson`, `renderJson` in `src/lib/config-inspect.ts` | a view | `plugin-cli` |
 | `src/utils/sous-directory.ts` | a file-system service, not presentation | `plugin-host`, `host.directories` |
 | `src/lib/repos/managed-layer.ts` | a `conf.d` concern | `plugin-confd`, `confd.managed` |
@@ -958,6 +960,11 @@ After: contributing moves to `plugin-authoring` (the `repo.contribute` intent), 
 None.
 
 ## Changes
+
+### 2026-10-30: No views; intents return outputs
+
+The views of domain data no longer belong to `plugin-cli`: each intent returns `IntentOutputs`
+built from its data, and `TerminalReporter` draws them (ADR 0022).
 
 ### 2026-10-30: Reporting is a level and a style
 

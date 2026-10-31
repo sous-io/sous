@@ -80,7 +80,7 @@ describe("showing the outputs an intent returns", () => {
     it("should draw the outputs on standard output", async () => {
         const run = await runCli([reportPlugin], ["report", "make"]);
 
-        expect(run.stdout).toBe("▶ Wrote:\n \n  Two files.\n  File\n  ----\n  a.md\n  b.md\n  Check them.\n \n \n");
+        expect(run.stdout).toBe("▶ Wrote:\n \n  Two files.\n  File\n  ----\n  a.md\n  b.md\n  Check them.\n");
         expect(run.stderr).toBe("");
         expect(run.exitCode).toBeUndefined();
     });

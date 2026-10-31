@@ -68,6 +68,7 @@ export const buildInputSchema: SousSchema<BuildInput> = jsonSchema<BuildInput>({
         noCompile: boolean("Skip the compile step (prune only)"),
         rebuild: boolean("Ignore cached hashes and reprocess all outputs"),
         dryRun: boolean("Print what would be written/pruned without making changes"),
+        reportRemoved: boolean("Report each removed file as progress. Default: true"),
         strict: boolean("Treat compile warnings as errors"),
         watch: boolean("Watch source files and rebuild on changes"),
         changedFiles: {

@@ -35,15 +35,15 @@ describe("the sous bin, end to end", () => {
      * The bin builds the config, loads the sample plugin named in SOUS_PLUGINS inside the config
      * loop, and the CLI runs its intent from the generated command.
      *
-     * sous diagrams render arch --scale 2   // -> { "rendered": 1, "scale": 2, "dryRun": false }
+     * sous diagrams render arch --scale 2 --json   // -> { "rendered": 1, "scale": 2, "dryRun": false }
      */
     it("should run a plugin's intent through its generated command", () => {
-        const run = sous(["diagrams", "render", "arch", "--scale", "2"]);
+        const run = sous(["diagrams", "render", "arch", "--scale", "2", "--json"]);
 
         expect(run.stderr).toBe("");
         expect(run.status).toBe(0);
         expect(JSON.parse(run.stdout)).toEqual({ rendered: 1, scale: 2, dryRun: false });
-        expect(JSON.parse(sous(["render", "--dry-run"]).stdout)).toEqual({ rendered: 3, scale: 1, dryRun: true });
+        expect(JSON.parse(sous(["render", "--dry-run", "--json"]).stdout)).toEqual({ rendered: 3, scale: 1, dryRun: true });
     });
 
     /** The root help lists the plugin's group with its cli-group summary; the command help lists its flags. */

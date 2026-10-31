@@ -27,19 +27,3 @@ export function renderJson(value: unknown, style: Style): string {
 
     return style.enabled ? colorizeJson(json, style) : json;
 }
-
-/** A value as JSON on one line, cut to `max` characters with an ellipsis. */
-export function truncateJson(value: unknown, max = 80): string {
-    const encoded = JSON.stringify(value);
-
-    if (encoded === undefined) {
-        return "undefined";
-    }
-
-    return encoded.length > max ? `${encoded.slice(0, max - 1)}…` : encoded;
-}
-
-/** Whether a value is a JSON scalar: a string, number, boolean or `null`. */
-export function isScalar(value: unknown): value is string | number | boolean | null {
-    return value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean";
-}

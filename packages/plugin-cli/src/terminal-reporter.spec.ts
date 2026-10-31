@@ -89,6 +89,16 @@ describe("TerminalReporter", () => {
         expect(stderr.text).toBe('v1\n{\n  "a": 1\n}\n');
     });
 
+    /** A result sent to a pipe ends with the result itself, with no closing blank lines. */
+    it("should not close a result on a pipe with blank lines", () => {
+        const { stdout, reporter } = make();
+
+        reporter.result(new IntentOutputs(new IntentOutput({ summary: "Done." })));
+        reporter.finish();
+
+        expect(stdout.text.endsWith("Done.\n")).toBe(true);
+    });
+
     /**
      * An operation opens with a heading, its actions sit under it with a glyph each, and finish() ends
      * the output with two blank lines.

@@ -106,28 +106,14 @@ export function underHeading(heading: string, outputs: readonly IntentOutput[]):
 // --- Finishing --------------------------------------------------------------------------------------
 
 /**
- * The outputs an intent returns. `data` is what machines get (`toPlain()` of the outputs is the
- * last output's), so it goes on the last output of `own`; when `after` outputs follow (the ones of
- * a follow-up intent), a last output holding only `data` closes them, which shows nothing.
+ * The outputs an intent returns: its own, then the ones of any follow-up intent it ran. `data` is
+ * what machines get (`toPlain()` of the outputs is the last output's), so it is set on the last
+ * output with `withData`; the last output keeps what it shows.
  */
 export function finish<T extends object>(own: readonly IntentOutput[], data: T, options: { after?: readonly IntentOutput[]; exitCode?: number } = {}): IntentOutputs<T> {
-    const after = options.after ?? [];
     const exit = options.exitCode === undefined ? {} : { exitCode: options.exitCode };
-    const last = own[own.length - 1];
 
-    if (after.length === 0 && last !== undefined) {
-        const closing = new IntentOutput<T>({
-            ...(last.title === undefined ? {} : { title: last.title }),
-            ...(last.summary === undefined ? {} : { summary: last.summary }),
-            ...(last.result === undefined ? {} : { result: last.result }),
-            ...(last.style === undefined ? {} : { style: last.style }),
-            data,
-        });
-
-        return new IntentOutputs<T>([...own.slice(0, -1), closing], exit);
-    }
-
-    return new IntentOutputs<T>([...own, ...after, new IntentOutput<T>({ data })], exit);
+    return new IntentOutputs([...own, ...(options.after ?? [])], exit).withData(data);
 }
 
 // --- Follow-up intents ------------------------------------------------------------------------------

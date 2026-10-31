@@ -8,7 +8,7 @@ import path from "node:path";
 import { ConfigError, InputError, IntentOutputs, type Context } from "@sous-io/plugin-api";
 import "@sous-io/plugin-host/types";
 import { ownerOf } from "./installs.js";
-import { pluginsInstallOutputs, withData } from "./report.js";
+import { pluginsInstallOutputs } from "./report.js";
 import type { DependencySection, PluginsInstallInput, PluginsInstallResult } from "./types.js";
 
 /** The section plugins are added to when the input names none. */
@@ -36,7 +36,7 @@ export function parsePluginSpec(spec: string): { name: string; range?: string } 
 
 /** The outputs of a finished run, with the result as the machine data. */
 function done(result: PluginsInstallResult): IntentOutputs<PluginsInstallResult> {
-    return new IntentOutputs<PluginsInstallResult>(withData(pluginsInstallOutputs(result), result));
+    return new IntentOutputs(pluginsInstallOutputs(result)).withData(result);
 }
 
 /** Runs the intent. */

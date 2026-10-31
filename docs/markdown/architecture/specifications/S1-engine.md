@@ -233,7 +233,9 @@ return new IntentOutputs(output);
    object, never an array; with several outputs it returns the last one's. `first()`, `last()` and
    `toArray()` give the outputs themselves.
 3. **The front end shows the outputs**: the CLI with `reporter.result(outputs)` after the chain
-   returns. Nothing about a domain is known to the CLI: there are no per-intent views.
+   returns. Nothing about a domain is known to the CLI: there are no per-intent views. An output
+   holding only `data` (no title, summary or result) shows nothing; it is there for machines, such
+   as `build`'s result after its progress has said everything.
 4. **A failure that ends the intent is thrown**, as an error whose `cause` is the error below it. The
    front end reports it once, at `critical`, with its whole cause chain. A problem a component works
    around is reported where it happens, at `warning` or `error`, and the work carries on.
