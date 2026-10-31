@@ -1,10 +1,10 @@
 import type { Context } from "./context.js";
 import type { Prompter } from "./prompter.js";
-import type { IntentInput, IntentResult, SousIntents } from "./registry.js";
+import type { IntentInput, IntentReturn, SousIntents } from "./registry.js";
 import type { Reporter } from "./reporter.js";
 import type { InferOutput, SousSchema } from "./schema.js";
 
-/** A handler: runs an intent and returns its result. */
+/** A handler: runs an intent and returns its outputs (see S1, "What an intent returns"). */
 export type IntentHandler<In = any, Result = unknown> = (input: In, ctx: Context) => Result | Promise<Result>;
 
 /**
@@ -13,9 +13,9 @@ export type IntentHandler<In = any, Result = unknown> = (input: In, ctx: Context
  *
  * ```ts
  * sous.intents.wrap("build", (next) => async (input, ctx) => {
- *     const result = await next(input, ctx);
+ *     const outputs = await next(input, ctx);
  *
- *     return { ...result, diagrams: await renderDiagrams(ctx) };
+ *     return outputs.with(new IntentOutput({ title: "Diagrams", result: await renderDiagrams(ctx) }));
  * });
  * ```
  */
@@ -120,10 +120,10 @@ export interface IntentDefinition<N extends string = string, S extends SousSchem
     cli?: CliSection;
     /** How agents see it. */
     agent?: AgentSection;
-    /** Runs the intent. */
-    handle?: IntentHandler<IntentInputOf<N, S>, IntentResult<N>>;
+    /** Runs the intent and returns its outputs: `new IntentOutputs(new IntentOutput({ ... }))`. */
+    handle?: IntentHandler<IntentInputOf<N, S>, IntentReturn<N>>;
     /** Imports the handler when the intent first runs. */
-    load?: () => Promise<IntentHandlerModule<IntentInputOf<N, S>, IntentResult<N>>>;
+    load?: () => Promise<IntentHandlerModule<IntentInputOf<N, S>, IntentReturn<N>>>;
 }
 
 /** An intent and the plugin that added it, as front ends see it. */

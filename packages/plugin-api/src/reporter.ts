@@ -10,12 +10,10 @@
  * all defined once, in {@link BaseReporter}.
  */
 
+import { DataValue, IntentOutputs, ItemList, Payload, Table, TextBlock, Tree, VariableSet } from "./outputs.js";
 import {
     type CommandDetails,
-    type CommandVariablesDetails,
     type CountDetails,
-    type DataDetails,
-    type ListDetails,
     type OperationAction,
     type OperationDetails,
     type OperationEndDetails,
@@ -27,12 +25,8 @@ import {
     type ResolvedReferenceFacts,
     type StepStartDetails,
     type TableColumn,
-    type TableDetails,
-    type TreeDetails,
     type TreeNode,
-    type VariableDetails,
     type VariableEntry,
-    type VariableListDetails,
 } from "./report-styles.js";
 
 export { ReportEntryStyle } from "./report-styles.js";
@@ -83,10 +77,51 @@ export function isLevelShown(level: LogLevel, threshold: LogLevel): boolean {
 }
 
 /**
+ * What a reported message is, for people: text; an `Error`, shown with its whole cause chain; a
+ * payload (a `VariableSet`, a `Table`, ...); or, for a command's result, `IntentOutputs`.
+ */
+export type ReportMessage = string | Error | Payload | IntentOutputs<object>;
+
+/**
+ * The text of any message: an error's chain one cause per line, a payload's or outputs' text.
+ *
+ * ```ts
+ * messageText(new Error("Could not download", { cause: new Error("DNS failed") }));
+ * // "Could not download\nCaused by: DNS failed"
+ * ```
+ */
+export function messageText(message: ReportMessage): string {
+    if (typeof message === "string") {
+        return message;
+    }
+
+    if (message instanceof Error) {
+        return errorChain(message).map((error, index) => (index === 0 ? error.message : `Caused by: ${error.message}`)).join("\n");
+    }
+
+    return message.toText();
+}
+
+/** An error and every error under it through `cause`, outermost first (a cycle stops it). */
+export function errorChain(error: Error): Error[] {
+    const chain: Error[] = [];
+    let current: unknown = error;
+
+    while (current instanceof Error && !chain.includes(current)) {
+        chain.push(current);
+        current = current.cause;
+    }
+
+    return chain;
+}
+
+/**
  * The facts a message carries, which a front end may show or keep (MCP sends them as data). For a
  * styled message, its style's details type (`OperationDetails` for `ReportEntryStyle.Operation`, ...).
  */
 export type ReportDetails = object;
+// Plain values only (no class instances), so a log pipeline can always serialize them; a front end
+// never needs them to show the message, which says everything a person needs.
 
 /**
  * The shared part of every reporter, and the ONE place every reporting method is defined.
@@ -128,14 +163,14 @@ export abstract class BaseReporter {
     }
 
     /** Writes one message that passed the threshold, in the way this reporter shows `style`. */
-    protected abstract write(level: LogLevel, message: string, details: ReportDetails | undefined, style: ReportEntryStyle): void;
+    protected abstract write(level: LogLevel, message: ReportMessage, details: ReportDetails | undefined, style: ReportEntryStyle): void;
 
     /**
      * Reports one message. Every other reporting method ends here.
      *
      * @param style - What kind of entry it is (default `ReportEntryStyle.Plain`, a paragraph).
      */
-    log(level: LogLevel, message: string, details?: ReportDetails, style: ReportEntryStyle = ReportEntryStyle.Plain): void {
+    log(level: LogLevel, message: ReportMessage, details?: ReportDetails, style: ReportEntryStyle = ReportEntryStyle.Plain): void {
         if (this.shows(level)) {
             this.write(level, message, details, style);
         }
@@ -145,52 +180,52 @@ export abstract class BaseReporter {
     // One method per level
 
     /** Reports a message for whoever is debugging sous. */
-    debug(message: string, details?: ReportDetails, style?: ReportEntryStyle): void {
+    debug(message: string | Error, details?: ReportDetails, style?: ReportEntryStyle): void {
         this.log(LogLevel.Debug, message, details, style);
     }
 
     /** Reports an ordinary message. */
-    info(message: string, details?: ReportDetails, style?: ReportEntryStyle): void {
+    info(message: string | Error, details?: ReportDetails, style?: ReportEntryStyle): void {
         this.log(LogLevel.Info, message, details, style);
     }
 
     /** Reports a normal but significant event. */
-    notice(message: string, details?: ReportDetails, style?: ReportEntryStyle): void {
+    notice(message: string | Error, details?: ReportDetails, style?: ReportEntryStyle): void {
         this.log(LogLevel.Notice, message, details, style);
     }
 
     /** Reports something that may need the user's attention. */
-    warning(message: string, details?: ReportDetails, style?: ReportEntryStyle): void {
+    warning(message: string | Error, details?: ReportDetails, style?: ReportEntryStyle): void {
         this.log(LogLevel.Warning, message, details, style);
     }
 
     /** Shorthand for {@link warning}. */
-    warn(message: string, details?: ReportDetails, style?: ReportEntryStyle): void {
+    warn(message: string | Error, details?: ReportDetails, style?: ReportEntryStyle): void {
         this.log(LogLevel.Warning, message, details, style);
     }
 
     /** Reports something that failed. */
-    error(message: string, details?: ReportDetails, style?: ReportEntryStyle): void {
+    error(message: string | Error, details?: ReportDetails, style?: ReportEntryStyle): void {
         this.log(LogLevel.Error, message, details, style);
     }
 
     /** Reports a failure that stops the run. */
-    critical(message: string, details?: ReportDetails, style?: ReportEntryStyle): void {
+    critical(message: string | Error, details?: ReportDetails, style?: ReportEntryStyle): void {
         this.log(LogLevel.Critical, message, details, style);
     }
 
     /** Reports something that must be acted on at once. */
-    alert(message: string, details?: ReportDetails, style?: ReportEntryStyle): void {
+    alert(message: string | Error, details?: ReportDetails, style?: ReportEntryStyle): void {
         this.log(LogLevel.Alert, message, details, style);
     }
 
     /** Reports that sous cannot work at all. */
-    emergency(message: string, details?: ReportDetails, style?: ReportEntryStyle): void {
+    emergency(message: string | Error, details?: ReportDetails, style?: ReportEntryStyle): void {
         this.log(LogLevel.Emergency, message, details, style);
     }
 
     /** Shorthand for {@link emergency}. */
-    emerg(message: string, details?: ReportDetails, style?: ReportEntryStyle): void {
+    emerg(message: string | Error, details?: ReportDetails, style?: ReportEntryStyle): void {
         this.log(LogLevel.Emergency, message, details, style);
     }
 
@@ -200,7 +235,7 @@ export abstract class BaseReporter {
 
     /** Text shown exactly as given, such as a value a script reads: no wrapping, no color. */
     text(content: string, level: LogLevel = LogLevel.Info): void {
-        this.log(level, content, undefined, ReportEntryStyle.Text);
+        this.log(level, new TextBlock(content, { verbatim: true }), undefined, ReportEntryStyle.Text);
     }
 
     /** An explanation that is neither a warning nor an error. */
@@ -246,9 +281,7 @@ export abstract class BaseReporter {
 
     /** One label and its value: `Repository: /work/recipes`. */
     variable(label: string, value: unknown, detail?: string, level: LogLevel = LogLevel.Info): void {
-        const details: VariableDetails = detail === undefined ? { label, value } : { label, value, detail };
-
-        this.log(level, `${label}: ${plainValue(value)}`, details, ReportEntryStyle.Variable);
+        this.log(level, new VariableSet([detail === undefined ? { label, value } : { label, value, detail }]), undefined, ReportEntryStyle.Variable);
     }
 
     /**
@@ -256,24 +289,17 @@ export abstract class BaseReporter {
      * label and value pairs, in its key order.
      */
     variables(entries: readonly VariableEntry[] | Readonly<Record<string, unknown>>, title?: string, level: LogLevel = LogLevel.Info): void {
-        const list = toEntries(entries);
-        const details: VariableListDetails = title === undefined ? { entries: list } : { title, entries: list };
-
-        this.log(level, joinLines(title, list.map(entryText)), details, ReportEntryStyle.VariableList);
+        this.log(level, new VariableSet(entries, title === undefined ? {} : { title }), undefined, ReportEntryStyle.VariableList);
     }
 
     /** The facts a command runs with (its project, its config, what it reads), shown before its output. */
     commandVariables(entries: readonly VariableEntry[] | Readonly<Record<string, unknown>>, level: LogLevel = LogLevel.Info): void {
-        const list = toEntries(entries);
-
-        this.log(level, joinLines("Command Variables", list.map(entryText)), { entries: list } satisfies CommandVariablesDetails, ReportEntryStyle.CommandVariables);
+        this.log(level, new VariableSet(entries, { title: "Command Variables" }), undefined, ReportEntryStyle.CommandVariables);
     }
 
     /** A list of items, with an optional title before it and an optional sentence after it. */
     list(items: readonly string[], options: { title?: string; footer?: string } = {}, level: LogLevel = LogLevel.Info): void {
-        const details: ListDetails = { ...options, items };
-
-        this.log(level, joinLines(options.title, items.map((item) => `- ${item}`), options.footer), details, ReportEntryStyle.List);
+        this.log(level, new ItemList(items, options), undefined, ReportEntryStyle.List);
     }
 
     /**
@@ -286,19 +312,12 @@ export abstract class BaseReporter {
         options: { title?: string; empty?: string; rowNotes?: readonly (string | undefined)[] } = {},
         level: LogLevel = LogLevel.Info,
     ): void {
-        const details: TableDetails = { ...options, columns, rows };
-        const text = rows.length === 0 && options.empty !== undefined
-            ? options.empty
-            : joinLines(options.title, rows.map((row) => columns.map((column) => plainValue(row[column.key])).join("  ")));
-
-        this.log(level, text, details, ReportEntryStyle.Table);
+        this.log(level, new Table(columns, rows, options), undefined, ReportEntryStyle.Table);
     }
 
     /** Items nested under other items, such as each contributor and the changes it made. */
     tree(nodes: readonly TreeNode[], title?: string, level: LogLevel = LogLevel.Info): void {
-        const details: TreeDetails = title === undefined ? { nodes } : { title, nodes };
-
-        this.log(level, joinLines(title, treeLines(nodes, 0)), details, ReportEntryStyle.Tree);
+        this.log(level, new Tree(nodes, title === undefined ? {} : { title }), undefined, ReportEntryStyle.Tree);
     }
 
     /** How many things were found: `Found 5 recipes`. `entity` is already in the right number. */
@@ -351,51 +370,23 @@ export abstract class BaseReporter {
         this.log(level, event.label, { ...event }, ReportEntryStyle.Progress);
     }
 
-    /** A structured value, such as a command's result as data. */
+    /** A structured value shown as data (a config as JSON). */
     data(value: unknown, level: LogLevel = LogLevel.Info): void {
-        this.log(level, safeJson(value), { value } satisfies DataDetails, ReportEntryStyle.Data);
+        this.log(level, new DataValue(value), undefined, ReportEntryStyle.Data);
+    }
+
+    /**
+     * A command's result: what its intent returned. A terminal sends it to standard output, and
+     * everything else to standard error.
+     */
+    result(outputs: IntentOutputs<object>, level: LogLevel = LogLevel.Notice): void {
+        this.log(level, outputs, undefined, ReportEntryStyle.Result);
     }
 
     /** The sous banner. */
     banner(level: LogLevel = LogLevel.Info): void {
         this.log(level, "sous", undefined, ReportEntryStyle.Banner);
     }
-}
-
-/** A value as plain text: nothing for `undefined` and `null`, JSON for an object. */
-function plainValue(value: unknown): string {
-    if (value === undefined || value === null) {
-        return "";
-    }
-
-    return typeof value === "object" ? safeJson(value) : String(value);
-}
-
-/** JSON text, or `String(value)` when it cannot be serialized (a cycle, a BigInt). */
-function safeJson(value: unknown): string {
-    try {
-        return JSON.stringify(value, null, 2) ?? String(value);
-    } catch {
-        return String(value);
-    }
-}
-
-/** Label and value pairs from an array of entries or a record. */
-function toEntries(entries: readonly VariableEntry[] | Readonly<Record<string, unknown>>): readonly VariableEntry[] {
-    return Array.isArray(entries) ? (entries as readonly VariableEntry[]) : Object.entries(entries).map(([label, value]) => ({ label, value }));
-}
-
-/** A tree's items as lines, each indented two spaces per level. */
-function treeLines(nodes: readonly TreeNode[], depth: number): string[] {
-    return nodes.flatMap((node) => [
-        `${"  ".repeat(depth)}${node.label}${node.detail === undefined ? "" : ` (${node.detail})`}`,
-        ...treeLines(node.children ?? [], depth + 1),
-    ]);
-}
-
-/** One entry as `Label: value (detail)`. */
-function entryText(entry: VariableEntry): string {
-    return `${entry.label}: ${plainValue(entry.value)}${entry.detail === undefined ? "" : ` (${entry.detail})`}`;
 }
 
 /** The lines that are given, one per line; an array's lines are indented two spaces under a title. */
@@ -468,7 +459,7 @@ export function Reporting<TBase extends AbstractConstructor>(Base: TBase): TBase
 /** One message a {@link BufferedReporter} kept. */
 export interface ReportedMessage {
     level: LogLevel;
-    message: string;
+    message: ReportMessage;
     details?: ReportDetails;
     style: ReportEntryStyle;
 }
@@ -482,10 +473,10 @@ export interface ReportedMessage {
  * ```
  */
 export function createReporter(
-    log: (level: LogLevel, message: string, details: ReportDetails | undefined, style: ReportEntryStyle) => void,
+    log: (level: LogLevel, message: ReportMessage, details: ReportDetails | undefined, style: ReportEntryStyle) => void,
 ): Reporter {
     return new (class FunctionReporter extends BaseReporter {
-        protected write(level: LogLevel, message: string, details: ReportDetails | undefined, style: ReportEntryStyle): void {
+        protected write(level: LogLevel, message: ReportMessage, details: ReportDetails | undefined, style: ReportEntryStyle): void {
             log(level, message, details, style);
         }
     })();
@@ -501,13 +492,13 @@ export class BufferedReporter extends BaseReporter {
     /** Every message, in order. */
     readonly messages: ReportedMessage[] = [];
 
-    protected write(level: LogLevel, message: string, details: ReportDetails | undefined, style: ReportEntryStyle): void {
+    protected write(level: LogLevel, message: ReportMessage, details: ReportDetails | undefined, style: ReportEntryStyle): void {
         this.messages.push(details === undefined ? { level, message, style } : { level, message, details, style });
     }
 
-    /** The messages at a level. */
+    /** The text of the messages at a level ({@link messageText}). */
     at(level: LogLevel): string[] {
-        return this.messages.filter((entry) => entry.level === level).map((entry) => entry.message);
+        return this.messages.filter((entry) => entry.level === level).map((entry) => messageText(entry.message));
     }
 
     /** The messages of a style. */

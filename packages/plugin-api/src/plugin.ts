@@ -3,7 +3,7 @@ import type { Environment, EngineHandle, ProjectInfo } from "./context.js";
 import type { EntityKindOptions, EntityReader } from "./entities.js";
 import type { EventFor, EventForPattern, EventPattern, EventPayload, Listener, ListenerOptions } from "./events.js";
 import type { IntentDefinition, IntentWrapper, IntentInputOf } from "./intents.js";
-import type { EntityKind, EntityType, IntentResult, ServiceName, ServiceType } from "./registry.js";
+import type { EntityKind, EntityType, IntentReturn, ServiceName, ServiceType } from "./registry.js";
 import type { Reporter } from "./reporter.js";
 import type { SousSchema } from "./schema.js";
 import type { ServiceFactory, ServiceOptions, ServiceReader, ServiceWrapper } from "./services.js";
@@ -72,7 +72,7 @@ export interface IntentRegistry {
     /** Adds an intent. Two plugins adding one name is an error naming both, unless `intents.replace` picks one. */
     add<const N extends string, S extends SousSchema = SousSchema>(definition: IntentDefinition<N, S>): void;
     /** Wraps an intent's handler. */
-    wrap<N extends string>(intent: N, wrapper: IntentWrapper<IntentInputOf<N, unknown>, IntentResult<N>>): void;
+    wrap<N extends string>(intent: N, wrapper: IntentWrapper<IntentInputOf<N, unknown>, IntentReturn<N>>): void;
 }
 
 /** `sous.services`. */

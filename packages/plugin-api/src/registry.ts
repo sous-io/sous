@@ -1,3 +1,4 @@
+import type { IntentOutputs, PlainObject } from "./outputs.js";
 import type { ConfigKeyEntity, PluginLocatorEntity } from "./entities.js";
 import type { ConfigBuiltPayload } from "./events.js";
 
@@ -87,6 +88,12 @@ export type IntentResult<N extends string> = N extends keyof SousIntents
         ? R
         : unknown
     : unknown;
+
+/**
+ * What an intent's handler returns: its outputs, whose `toPlain()` is the declared result (or a plain
+ * object when the intent declares none).
+ */
+export type IntentReturn<N extends string> = IntentOutputs<IntentResult<N> extends object ? IntentResult<N> : PlainObject>;
 
 /** Every entity kind, core's and the plugins'. */
 export type AllEntities = CoreEntities & SousEntities;

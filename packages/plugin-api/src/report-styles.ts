@@ -26,17 +26,17 @@ export const ReportEntryStyle = {
     Operation: "operation",
     /** How an operation ended, such as "Done." {@link OperationEndDetails}. */
     OperationEnd: "operation-end",
-    /** One label and its value. {@link VariableDetails}. */
+    /** One label and its value. The message is a `VariableSet`. */
     Variable: "variable",
-    /** Labels and values, read as one block, under an optional title. {@link VariableListDetails}. */
+    /** Labels and values, read as one block, under an optional title. The message is a `VariableSet`. */
     VariableList: "variable-list",
-    /** The facts a command runs with: the project, its config, ... {@link CommandVariablesDetails}. */
+    /** The facts a command runs with: the project, its config, ... The message is a `VariableSet`. */
     CommandVariables: "command-variables",
-    /** A list of items, with an optional title and closing sentence. {@link ListDetails}. */
+    /** A list of items, with an optional title and closing sentence. The message is an `ItemList`. */
     List: "list",
-    /** A table of rows. {@link TableDetails}. */
+    /** A table of rows. The message is a `Table`. */
     Table: "table",
-    /** Items nested under other items, such as each contributor and the changes it made. {@link TreeDetails}. */
+    /** Items nested under other items, such as each contributor and the changes it made. The message is a `Tree`. */
     Tree: "tree",
     /** How many things were found. {@link CountDetails}. */
     Count: "count",
@@ -52,10 +52,12 @@ export const ReportEntryStyle = {
     Command: "command",
     /** Progress through a longer step. {@link ProgressEvent}. */
     Progress: "progress",
-    /** A structured value, such as a command's result as data. {@link DataDetails}. */
+    /** A structured value, such as a command's result as data. The message is a `DataValue`. */
     Data: "data",
     /** The sous banner. No details. */
     Banner: "banner",
+    /** A command's result: the message is `IntentOutputs`. */
+    Result: "result",
 } as const;
 
 /** One of the {@link ReportEntryStyle} values. */
@@ -111,30 +113,6 @@ export interface VariableEntry {
     readonly detail?: string;
 }
 
-/** {@link ReportEntryStyle.Variable}. */
-export type VariableDetails = VariableEntry;
-
-/** {@link ReportEntryStyle.VariableList}. */
-export interface VariableListDetails {
-    /** A title above the block. */
-    readonly title?: string;
-    readonly entries: readonly VariableEntry[];
-}
-
-/** {@link ReportEntryStyle.CommandVariables}. */
-export interface CommandVariablesDetails {
-    readonly entries: readonly VariableEntry[];
-}
-
-/** {@link ReportEntryStyle.List}. */
-export interface ListDetails {
-    /** The sentence or title introducing the list. */
-    readonly title?: string;
-    readonly items: readonly string[];
-    /** A sentence after the list, such as what to do about it. */
-    readonly footer?: string;
-}
-
 /** What a column holds, which decides how it aligns and where it is cut. */
 export type ColumnKind = "text" | "path" | "url" | "number";
 
@@ -172,34 +150,12 @@ export interface TableColumn {
     priority?: ColumnPriority;
 }
 
-/** {@link ReportEntryStyle.Table}. */
-export interface TableDetails {
-    /** A title above the table. */
-    readonly title?: string;
-    readonly columns: readonly TableColumn[];
-    readonly rows: readonly Readonly<Record<string, unknown>>[];
-    /** What to say instead of the table when there are no rows: `No repositories are added.` */
-    readonly empty?: string;
-    /**
-     * A note shown under a row, by the row's index (`rowNotes[2]` belongs to `rows[2]`), such as
-     * `switched off` or the pins a repository has installed. `undefined` for a row with none.
-     */
-    readonly rowNotes?: readonly (string | undefined)[];
-}
-
-/** One item of a {@link TreeDetails}, with the items nested under it. */
+/** One item of a `Tree` payload, with the items nested under it. */
 export interface TreeNode {
     readonly label: string;
     /** A secondary fact, shown less prominently after the label. */
     readonly detail?: string;
     readonly children?: readonly TreeNode[];
-}
-
-/** {@link ReportEntryStyle.Tree}. */
-export interface TreeDetails {
-    /** A title above the tree. */
-    readonly title?: string;
-    readonly nodes: readonly TreeNode[];
 }
 
 /** {@link ReportEntryStyle.Count}. */
@@ -282,9 +238,4 @@ export interface ProgressEvent {
     item?: string;
     /** True on the last event of this label. */
     finished?: boolean;
-}
-
-/** {@link ReportEntryStyle.Data}. */
-export interface DataDetails {
-    readonly value: unknown;
 }

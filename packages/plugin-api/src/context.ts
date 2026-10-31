@@ -4,7 +4,7 @@ import type { EventFor, EventPayload } from "./events.js";
 import type { IntentCatalog, IntentRequest, SubmitOptions } from "./intents.js";
 import type { JsonObject } from "./json.js";
 import type { Prompter } from "./prompter.js";
-import type { IntentInput, IntentName, IntentResult } from "./registry.js";
+import type { IntentInput, IntentName, IntentReturn } from "./registry.js";
 import type { Reporter } from "./reporter.js";
 import type { ServiceReader } from "./services.js";
 import type { Timings } from "./timing.js";
@@ -79,8 +79,8 @@ export interface EngineHandle {
     readonly configError: unknown;
     /** Sets where engine-level messages go; messages kept so far are sent there first. */
     setReporter(reporter: Reporter): void;
-    /** Submits a chain; resolves with the intent's result. */
-    submit<N extends IntentName>(request: IntentRequest<N>, options?: SubmitOptions): Promise<IntentResult<N>>;
+    /** Submits a chain; resolves with the intent's outputs. */
+    submit<N extends IntentName>(request: IntentRequest<N>, options?: SubmitOptions): Promise<IntentReturn<N>>;
     /** Builds a separate "what if" config, never replacing the real one. */
     buildConfig(options?: BuildOptions): Promise<BuiltConfig>;
     /** Every loaded plugin. */
@@ -119,10 +119,10 @@ export interface Context {
     /** This plugin's own options from `plugins.options`. */
     options<T = JsonObject>(): T | undefined;
     /**
-     * Runs an intent as part of this chain, immediately, and returns its result. Outside a
-     * chain it submits a new chain instead.
+     * Runs an intent as part of this chain, immediately, and returns its outputs; `toPlain()` gives
+     * its result as a plain object. Outside a chain it submits a new chain instead.
      */
-    run<N extends IntentName>(intent: N, input?: IntentInput<N> | Record<string, unknown>): Promise<IntentResult<N>>;
+    run<N extends IntentName>(intent: N, input?: IntentInput<N> | Record<string, unknown>): Promise<IntentReturn<N>>;
     /** Fires an event and waits for every listener. */
     emit<N extends string>(name: N, payload?: EventPayload<N>): Promise<EventFor<N>>;
     /** Says this chain changed the config, so it is rebuilt before the next chain starts. */
@@ -141,7 +141,7 @@ export interface Context {
      *     await writeSubscription(ctx, input);       // changes a config file
      *     await ctx.refreshConfig();                 // the build below sees it
      *
-     *     return ctx.run("build", {});
+     *     return ctx.run("build", {});      // the build's outputs become this intent's
      * }
      * ```
      */

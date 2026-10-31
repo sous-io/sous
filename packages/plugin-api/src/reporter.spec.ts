@@ -12,6 +12,7 @@ import {
     Reporting,
     type Reporter,
 } from "./reporter.js";
+import { VariableSet } from "./outputs.js";
 
 describe("LOG_LEVELS", () => {
     /**
@@ -194,8 +195,8 @@ describe("BufferedReporter", () => {
 
 describe("style methods", () => {
     /**
-     * Each style method forces its style, fills typed details, writes a plain message, and has a
-     * default level the last parameter overrides.
+     * Each style method forces its style, puts its facts in typed details or its structure in a
+     * payload message, and has a default level the last parameter overrides.
      *
      * operation("failed", "/a") → { level: "error", style: "operation", details: { action: "failed", target: "/a" } }
      */
@@ -215,14 +216,13 @@ describe("style methods", () => {
             { level: "error", message: "failed: /a/AGENTS.md", details: { action: "failed", target: "/a/AGENTS.md" }, style: "operation" },
             {
                 level: "info",
-                message: "Command\n  Project: app\n  Config: /a/.sous/sous.config.js",
-                details: {
-                    title: "Command",
-                    entries: [
+                message: new VariableSet(
+                    [
                         { label: "Project", value: "app" },
                         { label: "Config", value: "/a/.sous/sous.config.js" },
                     ],
-                },
+                    { title: "Command" },
+                ),
                 style: "variable-list",
             },
             {

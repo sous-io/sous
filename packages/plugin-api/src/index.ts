@@ -43,12 +43,18 @@ export {
     isLevelShown,
     isLogLevel,
     LOG_LEVELS,
+    errorChain,
     LogLevel,
+    messageText,
     nullReporter,
     ReportEntryStyle,
     Reporting,
 } from "./reporter.js";
 export type * from "./reporter.js";
+
+export { commandVariables } from "./command-variables.js";
+export { DataValue, IntentOutput, IntentOutputs, ItemList, Payload, Table, TextBlock, Tree, VariableSet } from "./outputs.js";
+export type * from "./outputs.js";
 
 export { formatIssuePath, isSchema, jsonSchema, toJsonSchema, validateWith, validateWithSync } from "./schema.js";
 export type * from "./schema.js";

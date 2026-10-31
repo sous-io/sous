@@ -1,6 +1,6 @@
 import type { Context } from "./context.js";
 import type { BuiltConfig } from "./config.js";
-import type { CoreEvents, IntentInput, IntentResult, SousEvents, SousIntents } from "./registry.js";
+import type { CoreEvents, IntentInput, IntentReturn, SousEvents, SousIntents } from "./registry.js";
 
 /** What every event has. */
 export interface EventBase {
@@ -35,8 +35,8 @@ export interface IntentBeforeEvent<I extends string = string, In = IntentInput<I
     input: In;
 }
 
-/** `<intent>.after`: fired after the handler returned. Listeners may replace `result`. */
-export interface IntentAfterEvent<I extends string = string, In = IntentInput<I>, R = IntentResult<I>>
+/** `<intent>.after`: fired after the handler returned. Listeners may replace `result`, its outputs. */
+export interface IntentAfterEvent<I extends string = string, In = IntentInput<I>, R = IntentReturn<I>>
     extends EventBase {
     readonly kind: "after";
     readonly intent: I;
@@ -44,14 +44,14 @@ export interface IntentAfterEvent<I extends string = string, In = IntentInput<I>
     result: R;
 }
 
-/** `<intent>.error`: fired when the handler threw. A listener may turn the failure into a result. */
-export interface IntentErrorEvent<I extends string = string, In = IntentInput<I>, R = IntentResult<I>>
+/** `<intent>.error`: fired when the handler threw. A listener may turn the failure into outputs. */
+export interface IntentErrorEvent<I extends string = string, In = IntentInput<I>, R = IntentReturn<I>>
     extends EventBase {
     readonly kind: "error";
     readonly intent: I;
     readonly input: In;
     readonly error: unknown;
-    /** Turns the failure into this result; the intent then succeeds and `after` fires. */
+    /** Turns the failure into these outputs; the intent then succeeds and `after` fires. */
     recover(result: R): void;
     /** Whether a listener recovered. */
     readonly recovered: boolean;
