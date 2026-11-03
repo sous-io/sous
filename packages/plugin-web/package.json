@@ -1,0 +1,42 @@
+{
+  "name": "@sous-io/plugin-web",
+  "version": "0.0.0",
+  "description": "A local web editor for sous projects (proof of concept).",
+  "type": "module",
+  "license": "Apache-2.0",
+  "private": true,
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "pnpm run build:server && pnpm run build:web",
+    "build:server": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/index.js --external:@sous-io/plugin-api --external:ws --external:yaml --external:liquidjs",
+    "build:web": "npm --prefix web ci --no-audit --no-fund && npm --prefix web run build",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@sous-io/plugin-api": "workspace:*",
+    "@sous-io/plugin-build": "workspace:*",
+    "@sous-io/plugin-compiler": "workspace:*",
+    "@sous-io/plugin-formats": "workspace:*",
+    "@sous-io/plugin-git": "workspace:*",
+    "@sous-io/plugin-host": "workspace:*",
+    "@sous-io/plugin-inspect": "workspace:*",
+    "@sous-io/plugin-liquid": "workspace:*",
+    "@sous-io/plugin-recipe-answers": "workspace:*",
+    "@sous-io/plugin-recipes": "workspace:*",
+    "@sous-io/plugin-variables": "workspace:*",
+    "ws": "^8.22.1",
+    "yaml": "^2"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.2"
+  }
+}

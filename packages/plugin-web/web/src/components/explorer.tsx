@@ -1,0 +1,362 @@
+import { useEffect, useMemo, useRef, useState } from "react"
+import {
+  BookOpenIcon,
+  ChevronRightIcon,
+  FileCode2Icon,
+  FileIcon,
+  FileOutputIcon,
+  FlaskConicalIcon,
+  FolderIcon,
+  FolderOpenIcon,
+  GitBranchIcon,
+  HouseIcon,
+  PackageIcon,
+  SearchIcon,
+} from "lucide-react"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { Input } from "@/components/ui/input"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import type { CatalogRecipe, PreviewBuild, WorkspaceFile } from "@/lib/api"
+import { changedIds, useStore } from "@/lib/store"
+import { cn } from "@/lib/utils"
+
+type Node = {
+  key: string
+  name: string
+  icon?: "repo" | "namespace" | "recipe" | "project" | "sample" | "folder" | "output"
+  hint?: string
+  badge?: string
+  fileId?: string
+  status?: string
+  children: Node[]
+}
+
+function makeNode(key: string, name: string, extra: Partial<Node> = {}): Node {
+  return { key, name, children: [], ...extra }
+}
+
+/** Adds a file under `root` along a path of folder names. */
+function addPath(root: Node, parts: string[], leaf: Partial<Node>, icon: Node["icon"] = "folder") {
+  let node = root
+  parts.slice(0, -1).forEach((part) => {
+    const key = `${node.key}/${part}`
+    let child = node.children.find((c) => c.key === key)
+    if (!child) {
+      child = makeNode(key, part, { icon })
+      node.children.push(child)
+    }
+    node = child
+  })
+  const name = parts[parts.length - 1]
+  node.children.push(makeNode(`${node.key}/${name}`, name, leaf))
+}
+
+function sortTree(node: Node): Node {
+  node.children.sort((a, b) => {
+    const aDir = a.children.length > 0 ? 0 : 1
+    const bDir = b.children.length > 0 ? 0 : 1
+    return aDir - bDir || a.name.localeCompare(b.name)
+  })
+  node.children.forEach(sortTree)
+  return node
+}
+
+function byFile(files: WorkspaceFile[], projectRoot: string): Node[] {
+  const project = makeNode("f:project", projectRoot.split("/").pop() ?? "project", { icon: "project", hint: projectRoot })
+  const store = makeNode("f:store", "~/.sous/cache", { icon: "folder", hint: "The machine-wide recipe store" })
+  const samples = makeNode("f:sample", "poc-samples", { icon: "sample", hint: "In-memory samples (not on disk)" })
+  for (const f of files) {
+    if (f.origin.kind === "sample") samples.children.push(makeNode(`f:${f.id}`, f.display.split("/").pop()!, { fileId: f.id }))
+    else if (f.origin.kind === "recipe") {
+      const o = f.origin
+      addPath(store, [o.host, o.owner, o.repo, o.namespace, o.recipe, o.version, ...o.recipePath.split("/")], { fileId: f.id })
+    } else addPath(project, f.display.split("/"), { fileId: f.id })
+  }
+  return [samples, project, store].map(sortTree)
+}
+
+function byRecipe(files: WorkspaceFile[], catalog: CatalogRecipe[] | null): Node[] {
+  const project = makeNode("r:project", "This project", { icon: "project" })
+  const samples = makeNode("r:sample", "POC samples", { icon: "sample" })
+  const repos = new Map<string, Node>()
+  for (const f of files) {
+    if (f.origin.kind === "sample") {
+      samples.children.push(makeNode(`r:${f.id}`, f.display.split("/").pop()!, { fileId: f.id }))
+      continue
+    }
+    if (f.origin.kind !== "recipe") {
+      addPath(project, f.display.split("/"), { fileId: f.id })
+      continue
+    }
+    const o = f.origin
+    const repoId = `r:${o.host}/${o.owner}/${o.repo}`
+    let repo = repos.get(repoId)
+    if (!repo) {
+      repo = makeNode(repoId, `${o.owner}/${o.repo}`, { icon: "repo", hint: `${o.host}/${o.owner}/${o.repo}` })
+      repos.set(repoId, repo)
+    }
+    const nsKey = `${repoId}/${o.namespace}`
+    let ns = repo.children.find((c) => c.key === nsKey)
+    if (!ns) {
+      ns = makeNode(nsKey, o.namespace, { icon: "namespace" })
+      repo.children.push(ns)
+    }
+    const recipeKey = `${nsKey}/${o.recipe}`
+    let recipe = ns.children.find((c) => c.key === recipeKey)
+    if (!recipe) {
+      const latest = catalog?.find((r) => r.namespace === o.namespace && r.name === o.recipe && r.repo === `${o.owner}/${o.repo}`)?.latest
+      const update = latest && latest !== o.version ? latest : undefined
+      recipe = makeNode(recipeKey, o.recipe, {
+        icon: "recipe",
+        badge: o.version,
+        hint: update ? `${o.version} → ${update} is downloaded, not applied yet` : o.version,
+      })
+      ns.children.push(recipe)
+    }
+    addPath(recipe, o.recipePath.split("/"), { fileId: f.id })
+  }
+  return [samples, project, ...repos.values()].map(sortTree)
+}
+
+function byOutput(files: WorkspaceFile[], build: PreviewBuild | null): Node[] {
+  const root = makeNode("o:root", "Outputs", { icon: "output" })
+  const info = new Map(build?.outputs.map((o) => [o.output, o]) ?? [])
+  for (const f of files) {
+    for (const out of f.outputs) {
+      const o = info.get(out)
+      addPath(root, out.split("/"), {
+        fileId: f.id,
+        hint: `from ${f.display}${o ? ` · ${o.tokens.toLocaleString()} tokens · ${o.status}` : ""}`,
+        badge: o ? (o.status === "failed" ? "fails" : o.tokens >= 1000 ? `${(o.tokens / 1000).toFixed(1)}k` : String(o.tokens)) : undefined,
+        status: o?.status,
+      })
+    }
+  }
+  return sortTree(root).children
+}
+
+function filterTree(nodes: Node[], query: string, files: Map<string, WorkspaceFile>): Node[] {
+  if (!query) return nodes
+  const q = query.toLowerCase()
+  return nodes
+    .map((n) => {
+      if (n.fileId) {
+        const f = files.get(n.fileId)
+        const hay = `${n.name} ${f?.display ?? ""}`.toLowerCase()
+        return hay.includes(q) ? n : null
+      }
+      const children = filterTree(n.children, query, files)
+      return children.length ? { ...n, children } : null
+    })
+    .filter((n): n is Node => n !== null)
+}
+
+function containsFile(node: Node, id: string): boolean {
+  return node.fileId === id || node.children.some((c) => containsFile(c, id))
+}
+
+const ICONS = {
+  repo: GitBranchIcon,
+  namespace: FolderIcon,
+  recipe: PackageIcon,
+  project: HouseIcon,
+  sample: FlaskConicalIcon,
+  folder: FolderIcon,
+  output: FileOutputIcon,
+}
+
+function TreeNode({ node, depth, forceOpen }: { node: Node; depth: number; forceOpen: boolean }) {
+  const activeId = useStore((s) => s.activeId)
+  const docs = useStore((s) => s.docs)
+  const open = useStore((s) => s.open)
+  const [expanded, setExpanded] = useState(depth < 1 || node.icon === "sample")
+  const holdsActive = useMemo(() => !node.fileId && activeId !== null && containsFile(node, activeId), [node, activeId])
+  useEffect(() => {
+    if (holdsActive) setExpanded(true)
+  }, [holdsActive])
+  const rowRef = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    if (node.fileId && node.fileId === activeId) rowRef.current?.scrollIntoView({ block: "nearest" })
+  }, [activeId, node.fileId])
+  const pad = { paddingLeft: 8 + depth * 12 }
+
+  if (node.fileId) {
+    const doc = docs[node.fileId]
+    const changed = doc && doc.current !== doc.original
+    const isTpl = node.name.includes(".tpl.")
+    const Icon = isTpl ? FileCode2Icon : FileIcon
+    const row = (
+      <button
+        ref={rowRef}
+        onClick={() => open(node.fileId!)}
+        style={pad}
+        className={cn(
+          "flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-[13px] hover:bg-accent",
+          activeId === node.fileId &&
+            "relative bg-brand-soft font-medium text-foreground before:absolute before:inset-y-1 before:left-0 before:w-0.5 before:rounded-full before:bg-brand",
+        )}
+      >
+        <span className="w-3.5" />
+        <Icon className={cn("size-3.5 shrink-0", isTpl ? "text-liquid" : "text-muted-foreground")} />
+        <span className="truncate">{node.name}</span>
+        {node.badge && (
+          <span
+            className={cn(
+              "ml-auto shrink-0 rounded px-1 font-mono text-[10px] tabular-nums",
+              node.status === "failed" ? "bg-destructive/15 text-destructive" : "text-muted-foreground",
+            )}
+          >
+            {node.badge}
+          </span>
+        )}
+        {changed && (
+          <span
+            className={cn("ml-auto size-2 shrink-0 rounded-full", doc.proposedContent === doc.current ? "bg-success" : "bg-warning")}
+          />
+        )}
+      </button>
+    )
+    if (!node.hint) return row
+    return (
+      <Tooltip>
+        <TooltipTrigger render={row} />
+        <TooltipContent side="right">{node.hint}</TooltipContent>
+      </Tooltip>
+    )
+  }
+
+  const Icon = node.icon === "folder" && expanded ? FolderOpenIcon : ICONS[node.icon ?? "folder"]
+  const isOpen = forceOpen || expanded
+  return (
+    <Collapsible open={isOpen} onOpenChange={setExpanded}>
+      <CollapsibleTrigger
+        style={pad}
+        title={node.hint}
+        className={cn(
+          "flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-[13px] hover:bg-accent",
+          depth === 0 && "mt-2 py-1.5",
+        )}
+      >
+        <ChevronRightIcon className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", isOpen && "rotate-90")} />
+        <Icon
+          className={cn(
+            "size-3.5 shrink-0",
+            node.icon === "repo" || node.icon === "recipe" || node.icon === "namespace"
+              ? "text-recipe"
+              : node.icon === "project"
+                ? "text-project"
+                : node.icon === "sample"
+                  ? "text-sample"
+                  : "text-muted-foreground",
+            node.icon === "namespace" && "opacity-70",
+          )}
+        />
+        <span
+          className={cn(
+            "truncate",
+            depth === 0 && "text-[12px] font-semibold text-muted-foreground",
+            depth === 0 && (node.icon === "project" || node.icon === "sample") && "text-[11px] tracking-wider uppercase",
+            node.icon === "recipe" && "font-medium",
+          )}
+        >
+          {node.name}
+        </span>
+        {node.badge && (
+          <span className="ml-auto shrink-0 rounded bg-muted px-1 font-mono text-[10px] text-muted-foreground">
+            {node.badge}
+          </span>
+        )}
+        {node.icon === "recipe" && node.hint?.includes("not applied") && (
+          <span className="size-1.5 shrink-0 rounded-full bg-recipe" title={node.hint} />
+        )}
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        {node.children.map((child) => (
+          <TreeNode key={child.key} node={child} depth={depth + 1} forceOpen={forceOpen} />
+        ))}
+      </CollapsibleContent>
+    </Collapsible>
+  )
+}
+
+export function Explorer() {
+  const workspace = useStore((s) => s.workspace)
+  const build = useStore((s) => s.build)
+  const catalog = useStore((s) => s.catalog)
+  const docs = useStore((s) => s.docs)
+  const open = useStore((s) => s.open)
+  const [view, setView] = useState("recipe")
+  const query = useStore((s) => s.explorerFilter)
+  const setQuery = useStore((s) => s.setExplorerFilter)
+
+  const files = workspace?.files ?? []
+  const fileMap = useMemo(() => new Map(files.map((f) => [f.id, f])), [files])
+  const trees = useMemo(
+    () => ({
+      file: byFile(files, workspace?.projectRoot ?? ""),
+      recipe: byRecipe(files, catalog),
+      output: byOutput(files, build),
+    }),
+    [files, workspace?.projectRoot, build, catalog],
+  )
+  const nodes = filterTree(trees[view as keyof typeof trees], query, fileMap)
+  const changed = changedIds(docs)
+
+  return (
+    <div className="@container flex h-full flex-col bg-sidebar">
+      <div className="space-y-2 border-b p-2">
+        <Tabs value={view} onValueChange={(v) => setView(v as string)}>
+          <TabsList className="w-full">
+            <TabsTrigger value="recipe" title="Repository › namespace › recipe › file">
+              <PackageIcon /> <span className="hidden @[230px]:inline">Sources</span>
+            </TabsTrigger>
+            <TabsTrigger value="file" title="Where each file is on disk">
+              <FolderIcon /> <span className="hidden @[230px]:inline">Files</span>
+            </TabsTrigger>
+            <TabsTrigger value="output" title="What each output file is built from">
+              <FileOutputIcon /> <span className="hidden @[230px]:inline">Built</span>
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <div className="relative">
+          <SearchIcon className="absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Filter files…"
+            className="h-7 pl-7 text-xs"
+          />
+        </div>
+      </div>
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="p-1.5">
+          {changed.length > 0 && (
+            <div className="mb-2 rounded-md border border-warning/35 bg-warning/8 p-1">
+              <div className="flex items-center gap-1.5 px-2 py-1 text-[11px] font-semibold tracking-wide text-warning uppercase">
+                <BookOpenIcon className="size-3" /> Changed ({changed.length})
+              </div>
+              {changed.map((id) => (
+                <button
+                  key={id}
+                  onClick={() => open(id)}
+                  className="flex w-full items-center gap-1.5 truncate rounded px-2 py-0.5 text-left text-xs hover:bg-accent"
+                >
+                  <span
+                    className={cn("size-1.5 rounded-full", docs[id].proposedContent === docs[id].current ? "bg-success" : "bg-warning")}
+                  />
+                  <span className="truncate">{fileMap.get(id)?.display}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {nodes.map((node) => (
+            <TreeNode key={node.key} node={node} depth={0} forceOpen={query.length > 0} />
+          ))}
+          {nodes.length === 0 && <p className="p-3 text-xs text-muted-foreground">No files match.</p>}
+        </div>
+      </ScrollArea>
+    </div>
+  )
+}

@@ -712,6 +712,52 @@ importers:
         specifier: workspace:*
         version: link:../core
 
+  packages/plugin-web:
+    dependencies:
+      '@sous-io/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@sous-io/plugin-build':
+        specifier: workspace:*
+        version: link:../plugin-build
+      '@sous-io/plugin-compiler':
+        specifier: workspace:*
+        version: link:../plugin-compiler
+      '@sous-io/plugin-formats':
+        specifier: workspace:*
+        version: link:../plugin-formats
+      '@sous-io/plugin-git':
+        specifier: workspace:*
+        version: link:../plugin-git
+      '@sous-io/plugin-host':
+        specifier: workspace:*
+        version: link:../plugin-host
+      '@sous-io/plugin-inspect':
+        specifier: workspace:*
+        version: link:../plugin-inspect
+      '@sous-io/plugin-liquid':
+        specifier: workspace:*
+        version: link:../plugin-liquid
+      '@sous-io/plugin-recipe-answers':
+        specifier: workspace:*
+        version: link:../plugin-recipe-answers
+      '@sous-io/plugin-recipes':
+        specifier: workspace:*
+        version: link:../plugin-recipes
+      '@sous-io/plugin-variables':
+        specifier: workspace:*
+        version: link:../plugin-variables
+      ws:
+        specifier: ^8.22.1
+        version: 8.22.1
+      yaml:
+        specifier: ^2
+        version: 2.9.0
+    devDependencies:
+      '@types/ws':
+        specifier: ^8.18.2
+        version: 8.18.2
+
   packages/plugin-yarn:
     dependencies:
       '@sous-io/plugin-api':
@@ -1196,6 +1242,9 @@ packages:
 
   '@types/semver@7.8.0':
     resolution: {integrity: sha512-1mAINjtQCXXeLkJ9ehXkwOcBpqtLxiVtKhpUf83DdRNdQKV0iXZpaHYqRr7nj+wvxuJzoAmAwXI+sCNMv1CzLQ==}
+
+  '@types/ws@8.18.2':
+    resolution: {integrity: sha512-67MQl+fpWKVTT1NYdnmo3U4sc/xPo/zQBncVnI74qmQa0z/b+1g6iYqNmGCPbxO+zz2aklb08a0oHfegiVd0/w==}
 
   '@vitest/coverage-v8@4.1.0':
     resolution: {integrity: sha512-nDWulKeik2bL2Va/Wl4x7DLuTKAXa906iRFooIRPR+huHkcvp9QDkPQ2RJdmjOFrqOqvNfoSQLF68deE3xC3CQ==}
@@ -1958,6 +2007,18 @@ packages:
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
 
+  ws@8.22.1:
+    resolution: {integrity: sha512-oyL6OPYme/CmiFvNuGzeoxCJ4nOrZE2O1FwM9MWM1AsGri6nLXB2pg+lNA8aLeXMSav0J6eIVS1j6vUPzUtK9g==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
+
   yaml@2.9.0:
     resolution: {integrity: sha512-2AvhNX3mb8zd6Zy7INTtSpl1F15HW6Wnqj0srWlkKLcpYl/gMIMJiyuGq2KeI2YFxUPjdlB+3Lc10seMLtL4cA==}
     engines: {node: '>= 14.6'}
@@ -2196,6 +2257,10 @@ snapshots:
       undici-types: 6.21.0
 
   '@types/semver@7.8.0': {}
+
+  '@types/ws@8.18.2':
+    dependencies:
+      '@types/node': 22.19.15
 
   '@vitest/coverage-v8@4.1.0(vitest@4.1.0(@types/node@22.19.15)(vite@8.0.1(@types/node@22.19.15)(esbuild@0.27.4)(tsx@4.21.0)(yaml@2.9.0)))':
     dependencies:
@@ -2931,6 +2996,8 @@ snapshots:
       stackback: 0.0.2
 
   wrappy@1.0.2: {}
+
+  ws@8.22.1: {}
 
   yaml@2.9.0: {}
 

@@ -1,0 +1,485 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+    --color-brand: var(--brand);
+    --color-brand-2: var(--brand-2);
+    --color-brand-soft: var(--brand-soft);
+    --color-recipe: var(--origin-recipe);
+    --color-project: var(--origin-project);
+    --color-sample: var(--origin-sample);
+    --color-success: var(--success);
+    --color-warning: var(--warning);
+    --color-surface-editor: var(--surface-editor);
+    --color-liquid: var(--cm-liquid);
+    --color-liquid-soft: var(--cm-liquid-bg);
+    --font-heading: var(--font-sans);
+    --font-sans: 'Geist Variable', sans-serif;
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-chart-5: var(--chart-5);
+    --color-chart-4: var(--chart-4);
+    --color-chart-3: var(--chart-3);
+    --color-chart-2: var(--chart-2);
+    --color-chart-1: var(--chart-1);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* ---- sous theme: warm "kitchen" light, ink-blue dark, tangerine brand ---- */
+:root {
+    --background: oklch(0.992 0.004 75);
+    --foreground: oklch(0.22 0.025 265);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.22 0.025 265);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.22 0.025 265);
+    --primary: oklch(0.63 0.2 42);
+    --primary-foreground: oklch(0.99 0.01 75);
+    --secondary: oklch(0.955 0.01 75);
+    --secondary-foreground: oklch(0.28 0.03 265);
+    --muted: oklch(0.96 0.008 75);
+    --muted-foreground: oklch(0.5 0.025 265);
+    --accent: oklch(0.945 0.018 60);
+    --accent-foreground: oklch(0.25 0.03 265);
+    --destructive: oklch(0.58 0.22 25);
+    --border: oklch(0.905 0.012 75);
+    --input: oklch(0.89 0.014 75);
+    --ring: oklch(0.63 0.2 42);
+    --chart-1: oklch(0.63 0.2 42);
+    --chart-2: oklch(0.6 0.17 285);
+    --chart-3: oklch(0.62 0.14 230);
+    --chart-4: oklch(0.65 0.15 155);
+    --chart-5: oklch(0.75 0.15 85);
+    --radius: 0.7rem;
+    --sidebar: oklch(0.975 0.008 75);
+    --sidebar-foreground: oklch(0.24 0.025 265);
+    --sidebar-primary: oklch(0.63 0.2 42);
+    --sidebar-primary-foreground: oklch(0.99 0 0);
+    --sidebar-accent: oklch(0.935 0.02 60);
+    --sidebar-accent-foreground: oklch(0.22 0.03 265);
+    --sidebar-border: oklch(0.905 0.012 75);
+    --sidebar-ring: oklch(0.63 0.2 42);
+
+    --brand: oklch(0.66 0.2 42);
+    --brand-2: oklch(0.6 0.2 300);
+    --brand-soft: oklch(0.66 0.2 42 / 0.12);
+    --origin-recipe: oklch(0.58 0.14 230);
+    --origin-project: oklch(0.58 0.15 155);
+    --origin-sample: oklch(0.58 0.19 295);
+    --success: oklch(0.6 0.16 155);
+    --warning: oklch(0.7 0.16 70);
+    --surface-editor: oklch(1 0 0);
+    --shadow-glow: 0 0 0 1px oklch(0.66 0.2 42 / 0.25), 0 8px 24px -8px oklch(0.66 0.2 42 / 0.45);
+}
+
+.dark {
+    --background: oklch(0.175 0.014 268);
+    --foreground: oklch(0.95 0.006 265);
+    --card: oklch(0.215 0.016 268);
+    --card-foreground: oklch(0.95 0.006 265);
+    --popover: oklch(0.23 0.018 268);
+    --popover-foreground: oklch(0.95 0.006 265);
+    --primary: oklch(0.74 0.17 50);
+    --primary-foreground: oklch(0.2 0.04 40);
+    --secondary: oklch(0.26 0.02 268);
+    --secondary-foreground: oklch(0.95 0.006 265);
+    --muted: oklch(0.245 0.018 268);
+    --muted-foreground: oklch(0.7 0.025 265);
+    --accent: oklch(0.27 0.025 268);
+    --accent-foreground: oklch(0.97 0.006 265);
+    --destructive: oklch(0.7 0.19 22);
+    --border: oklch(0.32 0.022 268 / 0.8);
+    --input: oklch(0.34 0.022 268);
+    --ring: oklch(0.74 0.17 50);
+    --chart-1: oklch(0.74 0.17 50);
+    --chart-2: oklch(0.72 0.15 290);
+    --chart-3: oklch(0.72 0.12 230);
+    --chart-4: oklch(0.74 0.14 155);
+    --chart-5: oklch(0.82 0.14 85);
+    --sidebar: oklch(0.155 0.014 268);
+    --sidebar-foreground: oklch(0.93 0.008 265);
+    --sidebar-primary: oklch(0.74 0.17 50);
+    --sidebar-primary-foreground: oklch(0.2 0.04 40);
+    --sidebar-accent: oklch(0.25 0.025 268);
+    --sidebar-accent-foreground: oklch(0.97 0.006 265);
+    --sidebar-border: oklch(0.3 0.02 268 / 0.8);
+    --sidebar-ring: oklch(0.74 0.17 50);
+
+    --brand: oklch(0.76 0.17 52);
+    --brand-2: oklch(0.7 0.18 300);
+    --brand-soft: oklch(0.76 0.17 52 / 0.14);
+    --origin-recipe: oklch(0.76 0.12 225);
+    --origin-project: oklch(0.76 0.14 155);
+    --origin-sample: oklch(0.76 0.15 295);
+    --success: oklch(0.75 0.15 155);
+    --warning: oklch(0.8 0.15 75);
+    --surface-editor: oklch(0.195 0.015 268);
+    --shadow-glow: 0 0 0 1px oklch(0.76 0.17 52 / 0.3), 0 8px 28px -8px oklch(0.76 0.17 52 / 0.5);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    }
+  body {
+    @apply bg-background text-foreground;
+    }
+  html {
+    @apply font-sans;
+    }
+}
+/* ---- sous serve: editor ---- */
+:root {
+  --cm-liquid: oklch(0.6 0.17 285);
+  --cm-liquid-bg: oklch(0.6 0.17 285 / 0.09);
+  --cm-liquid-border: oklch(0.6 0.17 285 / 0.45);
+  --cm-link: oklch(0.55 0.15 245);
+  --cm-code: oklch(0.55 0.13 160);
+  --cm-list: oklch(0.6 0.14 60);
+  --cm-include: oklch(0.6 0.13 200);
+  --diff-add: oklch(0.65 0.15 150 / 0.16);
+  --diff-del: oklch(0.6 0.2 25 / 0.14);
+}
+.dark {
+  --cm-liquid: oklch(0.75 0.14 290);
+  --cm-liquid-bg: oklch(0.72 0.15 290 / 0.12);
+  --cm-liquid-border: oklch(0.72 0.15 290 / 0.5);
+  --cm-link: oklch(0.75 0.12 245);
+  --cm-code: oklch(0.78 0.12 160);
+  --cm-list: oklch(0.8 0.12 70);
+  --cm-include: oklch(0.78 0.11 200);
+  --diff-add: oklch(0.65 0.15 150 / 0.18);
+  --diff-del: oklch(0.6 0.2 25 / 0.18);
+}
+
+html, body, #root { height: 100%; }
+body { overflow: hidden; }
+
+.cm-liquid-rendered {
+  white-space: pre-wrap;
+  background: var(--cm-liquid-bg);
+  box-shadow: inset 0 -1px 0 var(--cm-liquid-border);
+  border-radius: 3px;
+  padding: 0 1px;
+  cursor: text;
+  transition: background 0.15s;
+}
+.cm-liquid-rendered:hover {
+  background: color-mix(in oklch, var(--cm-liquid) 22%, transparent);
+}
+.cm-liquid-block {
+  box-shadow: inset 2px 0 0 var(--cm-liquid-border);
+  padding-left: 6px;
+  border-radius: 0 3px 3px 0;
+}
+.cm-liquid-empty {
+  font-size: 0.78em;
+  color: var(--cm-liquid);
+  font-style: italic;
+  padding: 1px 6px;
+  border: 1px dashed var(--cm-liquid-border);
+  background: transparent;
+  box-shadow: none;
+  border-radius: 999px;
+  vertical-align: 1px;
+}
+.cm-liquid-fresh { animation: liquid-flash 0.9s ease-out; }
+@keyframes liquid-flash {
+  0% { background: color-mix(in oklch, var(--cm-liquid) 55%, transparent); }
+  100% { background: var(--cm-liquid-bg); }
+}
+.cm-liquid-active {
+  background: color-mix(in oklch, var(--cm-liquid) 14%, transparent);
+  outline: 1px solid var(--cm-liquid-border);
+  border-radius: 3px;
+}
+.cm-liquid-syntax { color: var(--cm-liquid); }
+.cm-liquid-source { background: var(--cm-liquid-bg); border-radius: 3px; }
+.cm-include-line {
+  color: var(--cm-include);
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+.output-segment {
+  background: var(--cm-liquid-bg);
+  box-shadow: inset 0 -1px 0 var(--cm-liquid-border);
+  border-radius: 3px;
+  cursor: pointer;
+}
+.output-segment:hover { background: color-mix(in oklch, var(--cm-liquid) 25%, transparent); }
+.output-segment[data-active="true"] { outline: 1px solid var(--cm-liquid); }
+
+.diff-add { background: var(--diff-add); }
+.diff-del { background: var(--diff-del); }
+
+/* ---- Liquid cards (sections that fill whole lines) ---- */
+.cm-liquid-card-wrap, .cm-liquid-bar-wrap { padding: 0 24px 0 12px; }
+.cm-liquid-card-wrap { padding-top: 4px; padding-bottom: 4px; }
+.cm-liquid-card {
+  margin: 0;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--cm-liquid-border);
+  border-left: 3px solid var(--cm-liquid);
+  border-radius: 8px;
+  background: linear-gradient(180deg, color-mix(in oklch, var(--cm-liquid) 9%, transparent), color-mix(in oklch, var(--cm-liquid) 4%, transparent));
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.cm-liquid-card:hover {
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--cm-liquid) 15%, transparent);
+}
+.cm-liquid-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 10px;
+  font-size: 11.5px;
+  color: var(--muted-foreground);
+  border-bottom: 1px dashed color-mix(in oklch, var(--cm-liquid) 25%, transparent);
+  min-width: 0;
+}
+.cm-liquid-card-quiet .cm-liquid-card-head { border-bottom: none; }
+.cm-liquid-card-head code {
+  font-family: inherit;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cm-liquid-chip {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--cm-liquid);
+  background: color-mix(in oklch, var(--cm-liquid) 16%, transparent);
+  border-radius: 4px;
+  padding: 0 6px;
+}
+.cm-liquid-card-hint {
+  margin-left: auto;
+  flex-shrink: 0;
+  opacity: 0;
+  font-size: 10.5px;
+  transition: opacity 0.15s;
+}
+.cm-liquid-card:hover .cm-liquid-card-hint { opacity: 0.8; }
+.cm-liquid-card-body {
+  padding: 6px 12px 8px;
+  white-space: pre-wrap;
+  color: var(--foreground);
+}
+.cm-liquid-card-empty { color: var(--muted-foreground); font-style: italic; font-size: 12px; }
+.cm-liquid-card-quiet {
+  background: transparent;
+  border-style: dashed;
+  border-left-style: solid;
+  border-left-width: 2px;
+  opacity: 0.8;
+}
+.cm-liquid-card-quiet:hover { opacity: 1; }
+.cm-liquid-card.cm-liquid-fresh { animation: card-flash 1s ease-out; }
+@keyframes card-flash {
+  0% { box-shadow: 0 0 0 4px color-mix(in oklch, var(--cm-liquid) 45%, transparent); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* Inline sections: subtle, with the Liquid source on hover. */
+.cm-liquid-rendered { position: relative; }
+.cm-liquid-rendered[data-src-disabled]:hover::after {
+  content: attr(data-src);
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 6px);
+  z-index: 50;
+  white-space: pre;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-style: normal;
+  color: var(--popover-foreground);
+  background: var(--popover);
+  border: 1px solid var(--cm-liquid-border);
+  box-shadow: 0 6px 20px -6px rgb(0 0 0 / 0.4);
+  pointer-events: none;
+}
+
+/* ---- markdown preview ---- */
+.md-preview { font-size: 14px; line-height: 1.65; color: var(--foreground); }
+.md-preview h1 { font-size: 1.6em; font-weight: 700; margin: 0.4em 0 0.5em; letter-spacing: -0.01em; }
+.md-preview h2 { font-size: 1.3em; font-weight: 700; margin: 1.3em 0 0.5em; padding-bottom: 0.25em; border-bottom: 1px solid var(--border); }
+.md-preview h3 { font-size: 1.1em; font-weight: 650; margin: 1.2em 0 0.4em; }
+.md-preview p, .md-preview ul, .md-preview ol, .md-preview table, .md-preview pre, .md-preview blockquote { margin: 0.6em 0; }
+.md-preview ul { list-style: disc; padding-left: 1.4em; }
+.md-preview ol { list-style: decimal; padding-left: 1.4em; }
+.md-preview code { font-family: 'Geist Mono Variable', monospace; font-size: 0.88em; background: var(--muted); padding: 0.1em 0.35em; border-radius: 4px; }
+.md-preview pre { background: var(--muted); padding: 0.8em 1em; border-radius: 8px; overflow-x: auto; }
+.md-preview pre code { background: none; padding: 0; }
+.md-preview table { border-collapse: collapse; font-size: 0.92em; }
+.md-preview th, .md-preview td { border: 1px solid var(--border); padding: 0.3em 0.7em; }
+.md-preview th { background: var(--muted); font-weight: 600; }
+.md-preview blockquote { border-left: 3px solid var(--brand); padding-left: 1em; color: var(--muted-foreground); }
+.md-preview a { color: var(--cm-link); text-decoration: underline; }
+
+/* ---- editing, errors, change bars, frontmatter ---- */
+.cm-liquid-rendered[data-src-disabled]:hover::after { content: attr(data-src) "   ✎ click to edit"; }
+
+.cm-liquid-rendered:hover { box-shadow: inset 0 -2px 0 var(--cm-liquid); }
+.cm-liquid-error {
+  background: color-mix(in oklch, var(--destructive) 14%, transparent) !important;
+  box-shadow: inset 0 -2px 0 var(--destructive) !important;
+  text-decoration: wavy underline var(--destructive);
+  text-underline-offset: 4px;
+}
+.cm-liquid-card-error { border-color: color-mix(in oklch, var(--destructive) 60%, transparent); border-left-color: var(--destructive); background: color-mix(in oklch, var(--destructive) 7%, transparent); }
+.cm-liquid-card-errmsg { margin-left: auto; color: var(--destructive); font-weight: 600; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cm-liquid-card-note {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  color: var(--muted-foreground);
+  border: 1px dashed var(--border);
+  border-radius: 999px;
+  padding: 0 7px;
+}
+.cm-liquid-card-hint { color: var(--cm-liquid); font-weight: 600; }
+
+.cm-liquid-open-line {
+  background: color-mix(in oklch, var(--cm-liquid) 9%, transparent);
+  box-shadow: inset 3px 0 0 var(--cm-liquid);
+}
+.cm-liquid-open-error { background: color-mix(in oklch, var(--destructive) 8%, transparent); box-shadow: inset 3px 0 0 var(--destructive); }
+.cm-liquid-editbar {
+  display: flex; align-items: center; gap: 8px;
+  margin: 6px 0 0 0; padding: 3px 10px;
+  font-size: 11px; color: var(--cm-liquid);
+  background: color-mix(in oklch, var(--cm-liquid) 16%, transparent);
+  border-radius: 8px 8px 0 0;
+  box-shadow: inset 3px 0 0 var(--cm-liquid);
+  font-weight: 600;
+}
+.cm-liquid-editbar-keys { margin-left: auto; font-weight: 400; color: var(--muted-foreground); }
+.cm-liquid-editbar kbd { font-family: inherit; font-size: 10px; border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; background: var(--background); color: var(--foreground); }
+.cm-liquid-resultbar {
+  margin: 0 0 6px 0; padding: 4px 10px 6px;
+  border-radius: 0 0 8px 8px;
+  background: color-mix(in oklch, var(--cm-liquid) 5%, var(--background));
+  box-shadow: inset 3px 0 0 var(--cm-liquid);
+  border-top: 1px dashed color-mix(in oklch, var(--cm-liquid) 35%, transparent);
+}
+.cm-liquid-resultbar-label { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--cm-liquid); }
+.cm-liquid-resultbar-body { white-space: pre-wrap; color: var(--foreground); opacity: 0.9; max-height: 14em; overflow: auto; }
+.cm-liquid-resultbar-error { box-shadow: inset 3px 0 0 var(--destructive); }
+.cm-liquid-resultbar-error .cm-liquid-resultbar-label, .cm-liquid-resultbar-error .cm-liquid-resultbar-body { color: var(--destructive); }
+.cm-liquid-active-error { background: color-mix(in oklch, var(--destructive) 14%, transparent) !important; outline-color: var(--destructive) !important; }
+.cm-liquid-error-line { background: color-mix(in oklch, var(--destructive) 10%, transparent); box-shadow: inset 3px 0 0 var(--destructive); }
+
+
+.cm-liquid-inline-result {
+  display: inline-block; margin-left: 10px; vertical-align: 1px;
+  font-size: 11px; padding: 0 8px; border-radius: 6px;
+  background: var(--cm-liquid); color: white; font-weight: 600;
+  max-width: 480px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  box-shadow: 0 6px 18px -6px rgb(0 0 0 / 0.5);
+}
+.dark .cm-liquid-inline-result { color: oklch(0.2 0.03 290); }
+.cm-liquid-inline-result-error { background: var(--destructive); color: white !important; }
+
+.cm-frontmatter { background: color-mix(in oklch, var(--muted) 70%, transparent); }
+.cm-frontmatter, .cm-frontmatter * { font-size: 12px !important; font-weight: 400 !important; color: var(--muted-foreground); font-style: normal !important; }
+.cm-frontmatter-first { border-radius: 8px 8px 0 0; padding-top: 2px; }
+.cm-frontmatter-last { border-radius: 0 0 8px 8px; padding-bottom: 2px; }
+
+.cm-change-gutter { width: 4px; padding: 0 1px; }
+.cm-change-gutter .cm-gutterElement { padding: 0 !important; }
+.cm-change-added { width: 3px; height: 100%; background: var(--success); border-radius: 2px; }
+.cm-change-deleted { width: 0; height: 0; border-left: 4px solid var(--destructive); border-top: 4px solid transparent; border-bottom: 4px solid transparent; margin-top: -4px; }
+.cm-range-number { font-size: 10px; opacity: 0.8; display: block; padding-top: 6px; }
+.cm-liquid-fresh { animation-duration: 1.4s !important; }
+
+/* ---- autocomplete ---- */
+.cm-tooltip.cm-tooltip-autocomplete {
+  background: var(--popover) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 8px;
+  box-shadow: 0 12px 32px -10px rgb(0 0 0 / 0.45);
+  overflow: hidden;
+}
+.cm-tooltip-autocomplete > ul { font-family: 'Geist Mono Variable', monospace !important; font-size: 12px; max-height: 18em !important; }
+.cm-tooltip-autocomplete > ul > li { padding: 3px 10px !important; color: var(--popover-foreground); }
+.cm-tooltip-autocomplete > ul > li[aria-selected] { background: var(--brand-soft) !important; color: var(--foreground) !important; }
+.cm-completionDetail { color: var(--muted-foreground); font-style: normal !important; margin-left: 1em; }
+.cm-completionIcon { opacity: 0.7; }
+.cm-tooltip.cm-completionInfo {
+  background: var(--popover) !important; border: 1px solid var(--border) !important; border-radius: 8px;
+  padding: 6px 10px !important; font-size: 12px; max-width: 320px; color: var(--popover-foreground);
+}
+
+/* Output of a section inside markdown styling takes that styling. */
+.cm-in-code { color: var(--cm-code); }
+.cm-in-strong { font-weight: 700; }
+.cm-in-em { font-style: italic; }
+.cm-in-h1 { font-size: 1.45em; font-weight: 700; }
+.cm-in-h2 { font-size: 1.25em; font-weight: 700; }
+.cm-in-h3 { font-size: 1.1em; font-weight: 650; }
+.cm-in-h4, .cm-in-h5, .cm-in-h6 { font-weight: 650; }
+
+/* ---- @include chips ---- */
+.cm-include-chip {
+  margin-left: 10px; padding: 0 7px; border-radius: 999px; white-space: nowrap;
+  font-size: 11px; color: var(--cm-include);
+  border: 1px solid color-mix(in oklch, var(--cm-include) 40%, transparent);
+  background: color-mix(in oklch, var(--cm-include) 8%, transparent);
+  vertical-align: 1px;
+}
+.cm-include-chip:hover { background: color-mix(in oklch, var(--cm-include) 18%, transparent); }
+.cm-include-chip-error { color: var(--destructive); border-color: color-mix(in oklch, var(--destructive) 50%, transparent); background: color-mix(in oklch, var(--destructive) 10%, transparent); font-weight: 600; cursor: help; }
+.cm-include-broken { background: color-mix(in oklch, var(--destructive) 8%, transparent); box-shadow: inset 3px 0 0 var(--destructive); }
+.cm-include-broken .cm-include-line { color: var(--destructive); text-decoration: wavy underline var(--destructive); }
+
+/* ---- variable hover ---- */
+.cm-tooltip.cm-tooltip-hover:has(.cm-var-hover) { background: var(--popover) !important; border: 1px solid var(--border) !important; border-radius: 8px; box-shadow: 0 12px 32px -10px rgb(0 0 0 / 0.45); }
+.cm-var-hover { padding: 8px 10px; max-width: 380px; font-size: 12px; display: grid; gap: 3px; }
+.cm-var-hover-name { font-family: 'Geist Mono Variable', monospace; font-weight: 600; color: var(--cm-liquid); }
+.cm-var-hover-value { font-family: 'Geist Mono Variable', monospace; color: var(--foreground); word-break: break-all; }
+.cm-var-hover-from { color: var(--muted-foreground); font-size: 11px; }
+.cm-var-hover-desc { color: var(--muted-foreground); font-size: 11px; border-top: 1px solid var(--border); padding-top: 4px; margin-top: 2px; font-family: 'Geist Variable', sans-serif; }
