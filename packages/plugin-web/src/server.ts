@@ -15,8 +15,9 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CancelledError, IntentOutputs, SousError, toJsonSchema, type BuiltConfig, type Context, type IntentOutputs as Outputs } from "@sous-io/plugin-api";
-import type {} from "@sous-io/plugin-build/types";
+import type { WatchHandle } from "@sous-io/plugin-build/types";
 import type {} from "@sous-io/plugin-host/types";
+import "./types.js";
 import { WebSocketServer, type WebSocket } from "ws";
 import type { ClientMessage, IntentSummary, PreviewSetting, ServerMessage } from "./protocol.js";
 import { SocketPrompter, SocketReporter } from "./socket-io.js";
@@ -284,15 +285,39 @@ export async function serveWeb(input: ServeInput, ctx: Context): Promise<Outputs
         });
     });
 
-    // Files changing on disk: the config is rebuilt before the next chain, and every tab is told.
-    const watcher = ctx.services.get("build.watcher").watch({ outputs: true }, (batch) => {
-        if (batch.config) {
-            ctx.configChanged();
-            broadcast({ type: "event", name: "config.changed", data: {} });
-        }
+    // Files changing on disk: every tab is told. The watcher belongs to one config, so after a
+    // config change it is made again from the new one, watching the new set of files.
+    let watcher: WatchHandle | undefined;
+    let rewatching: Promise<void> | undefined;
 
-        broadcast({ type: "event", name: "files.changed", data: batch });
-    });
+    const watch = async (): Promise<void> => {
+        await watcher?.close();
+
+        // The workspace chain runs on the newest config, which also rebuilds it when it changed.
+        const workspace = (await ctx.engine.submit({ intent: "web.workspace", input: {} }, { cwd: ctx.project?.root ?? ctx.cwd })).toPlain();
+        const extra = workspace.files.filter((file) => file.role === "partial").map((file) => file.path);
+
+        watcher = ctx.engine.config.services
+            .get("build.watcher")
+            .watch({ outputs: true, recipes: true, extra, onError: (error) => ctx.reporter.debug(`The file watcher reported: ${String(error)}`) }, (batch) => {
+                if (batch.config || batch.added.length > 0 || batch.removed.length > 0) {
+                    if (batch.config) {
+                        ctx.configChanged();
+                        broadcast({ type: "event", name: "config.changed", data: {} });
+                    }
+
+                    rewatching ??= watch()
+                        .catch((error: unknown) => ctx.reporter.warning(`Could not watch the project's files again: ${String(error)}`))
+                        .finally(() => {
+                            rewatching = undefined;
+                        });
+                }
+
+                broadcast({ type: "event", name: "files.changed", data: batch });
+            });
+    };
+
+    await watch();
 
     const url = `http://127.0.0.1:${port}/#token=${token}`;
 
@@ -317,7 +342,7 @@ export async function serveWeb(input: ServeInput, ctx: Context): Promise<Outputs
         ctx.signal.addEventListener("abort", stop, { once: true });
     });
 
-    await watcher.close();
+    await watcher?.close();
 
     for (const client of sockets.clients) client.close(1001, "sous serve stopped");
 
