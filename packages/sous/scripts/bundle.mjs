@@ -8,7 +8,8 @@
 //
 //     node scripts/bundle.mjs                  # dist/bin.js and dist/sous.js
 //     node scripts/bundle.mjs out/dir/bin.js   # out/dir/bin.js and out/dir/sous.js (the tests)
-import { readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, readFileSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import * as esbuild from "esbuild";
 
@@ -31,11 +32,19 @@ await esbuild.build({
     minifyWhitespace: true,
     minifySyntax: true,
     legalComments: "none",
-    // CommonJS dependencies inside the bundle (yaml) call require() for Node's own modules.
-    banner: { js: 'import { createRequire as __sousCreateRequire } from "node:module";\nconst require = __sousCreateRequire(import.meta.url);' },
+    // CommonJS dependencies inside the bundle (yaml) call require() for Node's own modules, and
+    // tiktoken finds its .wasm file through __dirname.
+    banner: {
+        js: 'import { createRequire as __sousCreateRequire } from "node:module";\nconst require = __sousCreateRequire(import.meta.url);\nconst __dirname = import.meta.dirname;',
+    },
     define: { __SOUS_VERSION__: JSON.stringify(version) },
     logLevel: "warning",
 });
+
+// tiktoken loads tiktoken_bg.wasm from next to the code that loads it: the bundle.
+const compilerRequire = createRequire(path.resolve(packageDir, "../plugin-compiler/package.json"));
+
+copyFileSync(path.join(path.dirname(compilerRequire.resolve("tiktoken")), "tiktoken_bg.wasm"), path.join(path.dirname(bundleFile), "tiktoken_bg.wasm"));
 
 writeFileSync(
     binFile,

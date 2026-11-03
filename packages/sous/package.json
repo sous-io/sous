@@ -33,6 +33,7 @@
   "files": [
     "dist/bin.js",
     "dist/sous.js",
+    "dist/tiktoken_bg.wasm",
     "recipes",
     "docs/markdown/*.md",
     "sous.config.schema.json"

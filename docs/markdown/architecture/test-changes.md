@@ -1843,3 +1843,7 @@ All in `packages/plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022): a 
 - **New** `plugin-recipes/src/part-a/contents.spec.ts` and "should read an index upstream without caching it" in `index-cache.spec.ts`.
 - **Changed** the fake index cache in `plugin-recipes/src/part-a/intents/intents.spec.ts`: it now has `fetchUpstream` and `ensureInStore`, which callers use instead of reaching into the cache's `core`.
 
+### New tests in `sous/test/bin.test.ts` (token counting)
+
+- **New** "should show the token count of a written output" and "should list tiktoken_bg.wasm among the files npm publishes".
+  - **Why:** the bundle lacked `__dirname` and tiktoken's `tiktoken_bg.wasm`, and `compiler.compile` swallowed the failure, so a published `sous build` never printed `(~N tokens)`. The compiler now warns when the counter does not load.

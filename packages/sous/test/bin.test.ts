@@ -147,3 +147,52 @@ describe("the sous bin, with a JavaScript config in a project whose package.json
     });
 });
 
+
+describe("the sous bin, counting tokens", () => {
+    /**
+     * The bundle carries tiktoken's wasm file, so a build reports each written file's size:
+     *
+     * ✓ /tmp/sous-tokens-x/AGENTS.md (~3 tokens)
+     */
+    it("should show the token count of a written output", () => {
+        const dir = mkdtempSync(path.join(tmpdir(), "sous-tokens-"));
+
+        try {
+            mkdirSync(path.join(dir, ".sous", "prompts"), { recursive: true });
+            writeFileSync(path.join(dir, ".sous", "prompts", "AGENTS.md"), "# The project\n\nSay hello to the user.\n");
+            writeFileSync(
+                path.join(dir, ".sous", "sous.config.js"),
+                [
+                    "export const config = {",
+                    '  _vars: { projectRoot: "${sousDir}/.." },',
+                    '  repos: { "sous-recipes": { enabled: false } },',
+                    "  compilation: {",
+                    '    targets: [{ entryPoint: "${sousDir}/prompts/AGENTS.md", outputs: [{ destinationFile: "${projectRoot}/AGENTS.md" }] }],',
+                    "  },",
+                    "};",
+                    "",
+                ].join("\n"),
+            );
+
+            const run = spawnSync(process.execPath, [bin, "build"], {
+                cwd: dir,
+                encoding: "utf8",
+                env: { PATH: process.env.PATH ?? "", SOUS_HOME: path.join(dir, "home"), NODE_OPTIONS: "" },
+            });
+            const output = `${run.stdout}${run.stderr}`;
+
+            expect(output).not.toContain("Tokens were not counted");
+            expect(output).toMatch(/AGENTS\.md\s+\(~\d+ tokens\)/);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    }, 60_000);
+
+    /** `npm pack` ships the wasm file the bundle loads at run time. */
+    it("should list tiktoken_bg.wasm among the files npm publishes", () => {
+        const pack = spawnSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], { cwd: packageDir, encoding: "utf8" });
+        const files = (JSON.parse(pack.stdout) as Array<{ files: Array<{ path: string }> }>)[0]?.files.map((file) => file.path) ?? [];
+
+        expect(files).toContain("dist/tiktoken_bg.wasm");
+    }, 60_000);
+});
