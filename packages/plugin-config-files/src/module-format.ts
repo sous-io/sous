@@ -6,7 +6,9 @@
  * Node guesses the format of such a `.js` file by trying CommonJS first and falling back to ES
  * module. This does the same guess, and when it lands on ES module it says so in a `module.registerHooks`
  * load hook (synchronous, Node 22.15 and later), so the warning has nothing to report. A file Node would
- * read as CommonJS is left to Node. On a Node without `registerHooks` nothing is registered and Node
+ * read as CommonJS is left to Node. A package.json with `"type": "commonjs"` (what `npm init -y` writes)
+ * makes Node pick CommonJS for every `.js` file, so for a registered config file that format is overridden
+ * the same way when the file only parses as an ES module. On a Node without `registerHooks` nothing is registered and Node
  * behaves as it always did.
  */
 
@@ -59,8 +61,8 @@ export function declareConfigModule(file: string, url: string): void {
             loadUrl: string,
             context: { format?: string | null },
             nextLoad: (url: string, context: unknown) => { format?: string | null; source?: string | Buffer | Uint8Array },
-        ) {
-            if (!registered.has(loadUrl.split("?")[0] as string) || (context.format !== undefined && context.format !== null)) {
+        ): { format?: string | null; source?: string | Buffer | Uint8Array; shortCircuit?: boolean } {
+            if (!registered.has(loadUrl.split("?")[0] as string) || !(context.format === undefined || context.format === null || context.format === "commonjs")) {
                 return nextLoad(loadUrl, context);
             }
 
@@ -72,7 +74,13 @@ export function declareConfigModule(file: string, url: string): void {
                 return nextLoad(loadUrl, context);
             }
 
-            return nextLoad(loadUrl, isEsModuleSource(source) ? { ...context, format: "module" } : context);
+            if (!isEsModuleSource(source)) {
+                return nextLoad(loadUrl, context);
+            }
+
+            // The source is handed back here rather than through nextLoad: under Yarn Plug'n'Play
+            // (which has its own asynchronous loader) nextLoad with a forced format returns no source.
+            return { format: "module", source, shortCircuit: true };
         },
     });
 }

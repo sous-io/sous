@@ -104,12 +104,13 @@ export async function configSet(input: ConfigSetInput, ctx: Pick<Context, "proje
     const format = formatOf(path.basename(file));
 
     if (format !== "json" && format !== "jsonc" && format !== "yaml") {
-        throw new InputError(CONFIG_SET, [
-            {
-                path: "file",
-                message: `${path.basename(file)} is not a JSON, JSONC or YAML file, so sous cannot edit it. Pass --file to name one that is, such as a conf.d file.`,
-            },
-        ]);
+        const name = path.basename(file);
+        const message =
+            input.file === undefined || input.file === ""
+                ? `The main config ${name} is code, so sous cannot edit it. Pass --file with a JSON, JSONC or YAML file to write the value to, such as --file 600-settings.jsonc (created in .sous/conf.d/).`
+                : `${name} is not a JSON, JSONC or YAML file, so sous cannot edit it. Pass --file with one that is, such as --file 600-settings.jsonc (created in .sous/conf.d/).`;
+
+        throw new InputError(CONFIG_SET, [{ path: "file", message }]);
     }
 
     const exists = fs.existsSync(file);

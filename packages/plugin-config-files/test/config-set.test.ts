@@ -118,7 +118,7 @@ describe("config.set", () => {
         const engine = await engineFor();
 
         await expect(engine.handle.submit({ intent: "config.set", input: { path: "name", value: "y" } })).rejects.toMatchObject({
-            details: [expect.stringMatching(/--file/)],
+            details: [expect.stringMatching(/main config sous\.config\.js is code.*--file 600-settings\.jsonc/)],
         });
     });
 

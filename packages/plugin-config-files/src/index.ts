@@ -63,14 +63,14 @@ export const configFilesPlugin: PluginDefinition = definePlugin({
             requiresProject: true,
             summary: "Set one value in a config file",
             description:
-                "Writes one value into sous.config.* (or the file --file names), changing only that key: comments, key order and formatting stay. The value is read as JSON when it is valid JSON, else as text.",
+                "Writes one value into sous.config.* (or the file --file names), changing only that key: comments, key order and formatting stay. The value is read as JSON when it is valid JSON, else as text. A main config written as code (sous.config.js or .ts) cannot be edited; name a JSON, JSONC or YAML file with --file.",
             input: jsonSchema<ConfigSetInput>({
                 type: "object",
                 properties: {
                     path: { type: "string", description: 'The key path: compilation.includeSourceComments, subscriptions."workflow/x".enabled.' },
                     value: { type: "string", description: "The value: JSON when it is valid JSON, else text." },
                     unset: { type: "boolean", description: "Remove the key instead." },
-                    file: { type: "string", description: "The file to write: a conf.d file name, or a path from the project root. Default: sous.config.*." },
+                    file: { type: "string", description: "The file to write: a conf.d file name, or a path from the project root. Default: sous.config.* when it is JSON, JSONC or YAML; a code config needs this." },
                     dryRun: { type: "boolean", description: "Show what would change, writing nothing." },
                 },
                 required: ["path"],
