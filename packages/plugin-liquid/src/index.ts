@@ -9,6 +9,7 @@
 import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";
 import { createLiquidEngines } from "./engine.js";
 import { liquidFilterSchema, liquidTagSchema } from "./entity-schemas.js";
+import { createLiquidRegions } from "./regions.js";
 import "./types.js";
 import packageJson from "../package.json" with { type: "json" };
 
@@ -31,6 +32,9 @@ export const liquidPlugin: PluginDefinition = definePlugin({
         });
 
         sous.services.add("liquid.engine", (_config, ctx) => createLiquidEngines(ctx), { lifetime: "factory" });
+        sous.services.add("liquid.regions", (_config, ctx) => createLiquidRegions(() => createLiquidEngines(ctx)), {
+            lifetime: "factory",
+        });
     },
 });
 
@@ -38,4 +42,5 @@ export default liquidPlugin;
 
 export { createLiquidEngines, filterAllowed, tagAllowed, CONFIG_EXPRESSION_PURPOSE, DEFAULT_PURPOSE } from "./engine.js";
 export type { LiquidEngineDeps } from "./engine.js";
+export { createLiquidRegions, describeError, filterWarning, findRegions, markRegions, splitRender, usedVariables } from "./regions.js";
 export type * from "./types.js";

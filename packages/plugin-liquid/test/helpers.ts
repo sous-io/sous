@@ -1,7 +1,7 @@
 import { BufferedReporter, definePlugin, type PluginDefinition, type ProjectInfo, type Sous } from "@sous-io/plugin-api";
 import { createEngine } from "@sous-io/core";
 import { liquidPlugin } from "../src/index.js";
-import type { LiquidEngines } from "../src/types.js";
+import type { LiquidEngines, LiquidRegions } from "../src/types.js";
 import packageJson from "../package.json" with { type: "json" };
 
 /** A stand-in for plugin-host, which plugin-liquid depends on but does not call. */
@@ -30,4 +30,12 @@ export async function engines(
     const built = await engine.buildConfig();
 
     return built.services.get("liquid.engine");
+}
+
+/** Builds the config with plugin-liquid and the given plugins, and returns `liquid.regions`. */
+export async function regionsService(plugins: PluginDefinition[] = []): Promise<LiquidRegions> {
+    const engine = createEngine({ builtIns: [hostStandIn, liquidPlugin, ...plugins], reporter: new BufferedReporter() });
+    const built = await engine.buildConfig();
+
+    return built.services.get("liquid.regions");
 }
