@@ -19,14 +19,19 @@ import { ConfigError, NotFoundError } from "@sous-io/plugin-api";
 import type { ContentHash, IndexFile, WritableFormatParser } from "@sous-io/plugin-formats/types";
 import type {
     CachedIndex,
+    EnsureInStoreOptions,
+    EnsureInStoreTarget,
+    EnsuredRecipe,
     GetIndexOptions,
     IndexMeta,
     IndexReadFailure,
+    IndexUpstreamTarget,
     RecipesIndexCache,
     RepoEntry,
     RepositoryHostContext,
     RepositoryHostEntity,
 } from "../../types.js";
+import { ensureInStore } from "../fetch/restore.js";
 import { DEFAULT_FRESHNESS_SECONDS } from "../constants.js";
 import { hostFor, identitySegments, messageOf } from "../support.js";
 import { shouldCheckUpstream } from "./freshness.js";
@@ -400,6 +405,20 @@ export class IndexCacheService implements RecipesIndexCache {
         }
 
         return this.core.get(this.target(repo), { ...options, freshnessSeconds: this.source.freshnessSeconds() });
+    }
+
+    fetchUpstream(target: IndexUpstreamTarget, options: { signal?: AbortSignal } = {}): Promise<IndexFile> {
+        return this.core.fetchUpstream(target, options.signal);
+    }
+
+    ensureInStore(target: EnsureInStoreTarget, options: EnsureInStoreOptions): Promise<EnsuredRecipe> {
+        return ensureInStore(target, {
+            store: options.store,
+            cache: this.core,
+            hosts: options.hosts,
+            context: options.context,
+            ...(options.freshnessSeconds === undefined ? {} : { freshnessSeconds: options.freshnessSeconds }),
+        });
     }
 
     async getAll(options: GetIndexOptions = {}): Promise<{ indexes: CachedIndex[]; failed: IndexReadFailure[] }> {

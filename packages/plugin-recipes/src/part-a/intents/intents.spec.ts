@@ -110,6 +110,16 @@ function fakeIndexCache(indexes: Map<string, IndexFile>, failing: string[] = [])
 
             return { ...cached(repo)!, source: "network" };
         },
+        fetchUpstream: async (target) => {
+            if (failing.includes(target.name)) {
+                throw new Error(`${target.name} is offline`);
+            }
+
+            return indexes.get(target.name)!;
+        },
+        ensureInStore: async () => {
+            throw new Error("not used here");
+        },
         getAll: async () => ({ indexes: [], failed: [] }),
         cached,
         isFresh: () => true,

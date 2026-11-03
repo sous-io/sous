@@ -429,11 +429,12 @@ The name is an agent decision, which the user may overrule; the concern is every
 | Trust: which repositories the project accepts recipes from; nothing inside an untrusted repository runs | `recipes.trust` | service, config; `repo.trust` intent |
 | Subscriptions (`conf.d/510`) | `subscription.add`, `.remove`, `.enable`, `.disable`, `.list` | intents |
 | Which recipes are active on this machine: reached from the subscriptions in force (S4, private GitLab and switched-off subscriptions) | `recipes.active` | service, config |
+| Which files a recipe publishes: its manifest `contents` globbed, each file with the base of the include pattern that matched it; plugins that consume a content kind (skills, memories) ask here and never glob a manifest themselves | `recipes.contents` | service, singleton |
 | Resolving subscriptions to versions, and keeping only what is reachable | `recipes.resolver` | service, config |
 | The lockfile | `recipes.lock` | service, config; `lock.rebuild` intent |
 | Downloading what subscribed recipes need, during config building, cached | `recipes.fetch` | contributor |
 | The machine-wide recipe store | `recipes.store` | service, singleton |
-| Cached repository indexes, and when to look upstream | `recipes.index-cache` | service, singleton |
+| Cached repository indexes, when to look upstream, reading an index upstream without caching it, and making sure a pinned recipe version is in the store | `recipes.index-cache` | service, singleton |
 | The core recipe that ships in the package, and seeding it | `recipes.core` | contributor |
 | Recipe config layers, filtered to the keys a recipe may set | `recipes.config-layers` | contributor |
 | Loading the plugins recipes ship (one bundled file each; types copied to `.sous/types/`) | `recipes.plugins` | contributor |

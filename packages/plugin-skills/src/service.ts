@@ -13,7 +13,7 @@ export class ConfigSkillsSources implements SkillsSources {
 
     constructor(
         private readonly config: ConfigReader,
-        private readonly ctx: Pick<ServiceContext, "entities" | "project">,
+        private readonly ctx: Pick<ServiceContext, "entities" | "project" | "services">,
     ) {}
 
     list(): SkillSource[] {
@@ -32,6 +32,7 @@ export class ConfigSkillsSources implements SkillsSources {
     private find(): FoundSkills {
         this.found ??= findSkills({
             recipes: this.ctx.entities.list("active-recipe"),
+            contents: this.ctx.services.get("recipes.contents"),
             include: stringsOf(this.config.get("recipes.skills.include")),
             project: this.ctx.project,
         });

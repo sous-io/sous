@@ -32,11 +32,13 @@ export const skillsPlugin: PluginDefinition = definePlugin({
 
         sous.services.add("skills.sources", (config, ctx) => new ConfigSkillsSources(config, ctx), { lifetime: "config" });
 
+        const services = sous.services;
+
         sous.config.contribute({
             id: TARGETS_CONTRIBUTOR,
             // Only for speed: the active recipes are usually known by then, which saves a pass.
             after: ["@sous-io/plugin-recipes"],
-            contribute: (config) => contributeSkillTargets(config, PLUGIN_NAME),
+            contribute: (config) => contributeSkillTargets(config, PLUGIN_NAME, services.get("recipes.contents")),
         });
 
         // Says why skills go nowhere, from the finished config the compile runs with.
@@ -52,5 +54,5 @@ export default skillsPlugin;
 
 export { describeNowhere, skillWarnings } from "./nowhere.js";
 export { outputDir, skillDestinations, transformIdFor } from "./destinations.js";
-export { findSkills, staticBase } from "./sources.js";
+export { findSkills } from "./sources.js";
 export type * from "./types.js";

@@ -1,7 +1,7 @@
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { activeRecipe, makeTmpDir, projectIn, type TmpDir, write } from "../test/helpers.js";
-import { findSkills, staticBase } from "./sources.js";
+import { activeRecipe, makeTmpDir, standInContents, projectIn, type TmpDir, write } from "../test/helpers.js";
+import { findSkills } from "./sources.js";
 
 let tmp: TmpDir;
 let recipeDir: string;
@@ -18,43 +18,20 @@ afterEach(() => {
     tmp.cleanup();
 });
 
-describe("staticBase()", () => {
-    /**
-     * staticBase should return the directories before the first glob character, which is the base a
-     * recipe's output tree mirrors.
-     *
-     * staticBase("skills/**\/*.md"); // -> "skills"
-     */
-    it("should return the directories before the first glob character", () => {
-        expect(staticBase("skills/**/*.md")).toBe("skills");
-        expect(staticBase("a/b/*.md")).toBe("a/b");
-        expect(staticBase("**/*.md")).toBe(".");
-    });
-
-    /**
-     * staticBase should return a literal file's directory, so the file keeps its name.
-     *
-     * staticBase("skills/greeting/SKILL.md"); // -> "skills/greeting"
-     */
-    it("should return a literal file's directory", () => {
-        expect(staticBase("skills/greeting/SKILL.md")).toBe("skills/greeting");
-    });
-});
-
 describe("findSkills()", () => {
     /**
      * findSkills should list every file a recipe's skills content matches, grouped by the first
      * directory under the include's static base, so `skills/greeting/SKILL.md` belongs to the skill
      * `greeting` and mirrors under `skills/`. (Ported from buildRecipeTargets' "one target per file".)
      *
-     * findSkills({ recipes: [recipe], include: [], project });
+     * findSkills({ recipes: [recipe], contents: standInContents, include: [], project });
      * // -> [{ name: "greeting", dir: ".../skills/greeting", base: ".../skills", files: ["SKILL.md"] }]
      */
     it("should group a recipe's files into skills under the include's base", () => {
         write(path.join(recipeDir, "skills", "greeting", "SKILL.md"), "# hello");
         write(path.join(recipeDir, "skills", "greeting", "refs", "b.md"));
 
-        const { skills, problems } = findSkills({ recipes: [activeRecipe(recipeDir)], include: [], project: projectIn(projectRoot) });
+        const { skills, problems } = findSkills({ recipes: [activeRecipe(recipeDir)], contents: standInContents, include: [], project: projectIn(projectRoot) });
 
         expect(problems).toEqual([]);
         expect(skills).toEqual([
@@ -85,7 +62,7 @@ describe("findSkills()", () => {
 
         recipe.manifest.contents = [{ kind: "skills", include: ["skills/**/*.md"], exclude: ["skills/private/**"] }];
 
-        const { skills } = findSkills({ recipes: [recipe], include: [], project: undefined });
+        const { skills } = findSkills({ recipes: [recipe], contents: standInContents, include: [], project: undefined });
 
         expect(skills.map((skill) => skill.name)).toEqual(["greeting"]);
     });
@@ -99,7 +76,7 @@ describe("findSkills()", () => {
     it("should find nothing in a build dependency", () => {
         write(path.join(recipeDir, "skills", "greeting", "SKILL.md"), "# hello");
 
-        const { skills } = findSkills({ recipes: [activeRecipe(recipeDir, { kind: "depends" })], include: [], project: undefined });
+        const { skills } = findSkills({ recipes: [activeRecipe(recipeDir, { kind: "depends" })], contents: standInContents, include: [], project: undefined });
 
         expect(skills).toEqual([]);
     });
@@ -123,17 +100,17 @@ describe("findSkills()", () => {
             { kind: "prompts", include: ["prompts/**/*.md"] },
         ];
 
-        expect(findSkills({ recipes: [recipe], include: [], project: undefined }).skills).toHaveLength(1);
+        expect(findSkills({ recipes: [recipe], contents: standInContents, include: [], project: undefined }).skills).toHaveLength(1);
     });
 
     /**
      * findSkills should return nothing when no recipe is active and no directory is included, so a
      * project using no repositories pays nothing.
      *
-     * findSkills({ recipes: [], include: [], project }); // -> { skills: [], problems: [] }
+     * findSkills({ recipes: [], contents: standInContents, include: [], project }); // -> { skills: [], problems: [] }
      */
     it("should return nothing when nothing is active", () => {
-        expect(findSkills({ recipes: [], include: [], project: projectIn(projectRoot) })).toEqual({ skills: [], problems: [] });
+        expect(findSkills({ recipes: [], contents: standInContents, include: [], project: projectIn(projectRoot) })).toEqual({ skills: [], problems: [] });
     });
 
     /**
@@ -148,6 +125,7 @@ describe("findSkills()", () => {
         write(path.join(projectRoot, "more", "other", "SKILL.md"));
 
         const { skills, problems } = findSkills({
+            contents: standInContents,
             recipes: [],
             include: ["skills", "${projectRoot}/more"],
             project: projectIn(projectRoot),
@@ -169,7 +147,7 @@ describe("findSkills()", () => {
      * // -> [{ setting: "recipes.skills.include[0]", ... }, { setting: "recipes.skills.include[1]", ... }]
      */
     it("should report included directories it cannot use", () => {
-        const { skills, problems } = findSkills({ recipes: [], include: ["missing", "${home}/x"], project: projectIn(projectRoot) });
+        const { skills, problems } = findSkills({ recipes: [], contents: standInContents, include: ["missing", "${home}/x"], project: projectIn(projectRoot) });
 
         expect(skills).toEqual([]);
         expect(problems.map((problem) => problem.setting)).toEqual(["recipes.skills.include[0]", "recipes.skills.include[1]"]);
@@ -187,7 +165,7 @@ describe("findSkills()", () => {
     it("should name a file directly under the base after the file", () => {
         write(path.join(recipeDir, "skills", "notes.tpl.md"));
 
-        const [skill] = findSkills({ recipes: [activeRecipe(recipeDir)], include: [], project: undefined }).skills;
+        const [skill] = findSkills({ recipes: [activeRecipe(recipeDir)], contents: standInContents, include: [], project: undefined }).skills;
 
         expect(skill).toMatchObject({ name: "notes", dir: path.join(recipeDir, "skills"), files: ["notes.tpl.md"] });
     });

@@ -59,16 +59,15 @@ export function identityOf(ctx: Pick<Context, "services">, url: string): string 
  */
 export async function readUpstream(ctx: Reader, name: string): Promise<CachedIndex> {
     const cache = ctx.services.get("recipes.index-cache");
-    const core = (cache as { core?: IndexCacheCore }).core;
     const entry = trustedRepos(ctx.config)[name];
     const identity = entry === undefined ? undefined : identityOf(ctx, entry.url);
     const linked = ctx.services.has("recipes.links") && ctx.services.get("recipes.links").get(name) !== undefined;
 
-    if (core === undefined || entry === undefined || identity === undefined || linked) {
+    if (entry === undefined || identity === undefined || linked) {
         return cache.get(name, { latest: true });
     }
 
-    const index = await core.fetchUpstream({ name, url: entry.url, identity, ...(entry.provider === undefined ? {} : { provider: entry.provider }) });
+    const index = await cache.fetchUpstream({ name, url: entry.url, identity, ...(entry.provider === undefined ? {} : { provider: entry.provider }) });
 
     return { repo: name, index, source: "network" };
 }

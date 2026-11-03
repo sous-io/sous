@@ -396,13 +396,7 @@ async function readThroughCache(ctx: ServiceContext, repo: { name?: string; loca
         return (await cache.get(repo.name, { latest: true })).index;
     }
 
-    const core = (cache as { core?: { fetchUpstream(target: { name: string; url: string; identity: string; provider?: string }): Promise<IndexFile> } }).core;
-
-    if (core === undefined) {
-        throw new ConfigError(`Sous cannot read the index of ${repo.location.url}: the index cache in use reads only repositories this project trusts.`);
-    }
-
-    return core.fetchUpstream({ name: repo.location.identity, url: repo.location.url, identity: repo.location.identity, provider: repo.location.provider });
+    return cache.fetchUpstream({ name: repo.location.identity, url: repo.location.url, identity: repo.location.identity, provider: repo.location.provider });
 }
 
 /**

@@ -632,6 +632,9 @@ importers:
       '@types/semver':
         specifier: ^7.8.0
         version: 7.8.0
+      glob:
+        specifier: ^13.0.6
+        version: 13.0.6
       yaml:
         specifier: ^2.9.0
         version: 2.9.0

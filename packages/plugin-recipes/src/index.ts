@@ -39,3 +39,4 @@ export const recipesPlugin: PluginDefinition = definePlugin({
 export default recipesPlugin;
 
 export type * from "./types.js";
+export { RecipeContents } from "./part-a/contents.js";

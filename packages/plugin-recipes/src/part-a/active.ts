@@ -6,10 +6,9 @@
  * other locked recipe is skipped, with one sentence saying why, and keeps its pins.
  */
 
-import path from "node:path";
 import type { BuiltConfig, ServiceReader } from "@sous-io/plugin-api";
 import type { ContentKind, Lockfile, VariableDefinition } from "@sous-io/plugin-formats/types";
-import type { ActiveRecipeContent, ActiveRecipeEntity, RecipeContentFile, RecipesActive, SkippedRecipe } from "../types.js";
+import type { ActiveRecipeContent, ActiveRecipeEntity, RecipesActive, SkippedRecipe } from "../types.js";
 import { emptyLockfile, keysHeldBySubscription, lockedClosure } from "./lock-holds.js";
 import { configuredRepos, configuredSubscriptions, setBy } from "./project.js";
 import { compareBytewise } from "./util.js";
@@ -56,29 +55,7 @@ export class ActiveRecipes implements RecipesActive {
     }
 
     contents(kind: ContentKind): ActiveRecipeContent[] {
-        const globs = this.services.get("host.globs");
-        const found: ActiveRecipeContent[] = [];
-
-        for (const recipe of this.list()) {
-            for (const content of recipe.manifest.contents ?? []) {
-                if (content.kind !== kind) {
-                    continue;
-                }
-
-                const relative = globs.matchSync(content.include, {
-                    cwd: recipe.dir,
-                    dot: true,
-                    ignore: content.exclude ?? [],
-                });
-                const files: RecipeContentFile[] = globs
-                    .sortBytewise(relative)
-                    .map((file) => ({ path: globs.toPosix(file), file: path.join(recipe.dir, file) }));
-
-                found.push({ recipe, kind, files });
-            }
-        }
-
-        return found;
+        return this.services.get("recipes.contents").of(this.list(), kind);
     }
 
     variables(): Array<{ readonly recipe: ActiveRecipeEntity; readonly definition: VariableDefinition }> {
