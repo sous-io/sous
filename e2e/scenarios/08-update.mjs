@@ -99,8 +99,9 @@ export default {
         if (!initOk) t.skip("init did not produce a loadable config, see the init step");
         const r = sous(["update", "--project", "--yes", "--no-build", "--version", OLD_VERSION]);
         assert.equal(r.code, 0, r.stderr + r.stdout);
-        const version = expectExit(sous(["--version"])).stdout.trim();
-        expectIncludes(version, OLD_VERSION, "version after update");
+        // Check what the package manager installed, not by running the older sous: an older release
+        // need not load this project (Yarn Plug'n'Play loads only from 1.0.8 on).
+        expectIncludes(t.read(pm.lockfile, dir), OLD_VERSION, "lockfile after update");
       });
     }
 
