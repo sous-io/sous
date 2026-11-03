@@ -764,6 +764,7 @@ export function registerSubscriptionIntents(sous: Sous): void {
 
     sous.intents.add({
         intent: "subscription.list",
+        readOnly: true,
         requiresProject: true,
         summary: "List what this project subscribes to",
         input: inputSchema<BrowsingFlags>(browsing),
@@ -786,6 +787,7 @@ export function registerSubscriptionIntents(sous: Sous): void {
 
     sous.intents.add({
         intent: "recipe.update",
+        readOnly: true,
         requiresProject: true,
         summary: "Plan an update of pinned versions, writing nothing",
         input: inputSchema<RecipeUpdateInput>({ ref: { type: "string", description: "Only this repository, namespace or recipe" }, acceptFirst }),

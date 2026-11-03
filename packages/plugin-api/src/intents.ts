@@ -98,8 +98,9 @@ export interface IntentDefinition<N extends string = string, S extends SousSchem
     /** Running it changes the config, so the engine rebuilds the config before the next chain. */
     changesConfig?: boolean;
     /**
-     * `boolean | (input) => boolean = false`. It writes nothing: no file, no config, nothing outside
-     * the process. Only read-only intents run in a chain on a "what if" config
+     * `boolean | (input) => boolean = false`. It writes nothing a user sees or the config reads: no
+     * project file, no config, no answer, nothing on a remote. Caches may update (a refreshed recipe
+     * index under the sous home is not a write). Only read-only intents run in a chain on a "what if" config
      * (`SubmitOptions.config`). A function decides from the checked input, for an intent that
      * writes only sometimes (`compiler.compile` writes nothing on a dry run).
      */

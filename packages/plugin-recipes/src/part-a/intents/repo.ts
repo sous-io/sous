@@ -629,6 +629,7 @@ export function registerRepoIntents(sous: Sous): void {
 
     sous.intents.add({
         intent: "repo.list",
+        readOnly: true,
         requiresProject: true,
         summary: "List the repositories this project trusts",
         input: inputSchema<RepoListInput>({ latest, installed, verbose: { type: "boolean", description: "Show more about each repository" } }),
@@ -639,6 +640,7 @@ export function registerRepoIntents(sous: Sous): void {
 
     sous.intents.add({
         intent: "repo.search",
+        readOnly: true,
         requiresProject: true,
         summary: "Search the trusted repositories for namespaces, recipes and variables",
         input: inputSchema<RepoSearchInput>(

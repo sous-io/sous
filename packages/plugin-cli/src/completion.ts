@@ -95,6 +95,7 @@ export function completionScript(shell: CompletionShell, appName: string): strin
 /** `sous completion <shell>`: prints the shell completion script. */
 export const completionIntent: IntentDefinition = {
     intent: "completion",
+    readOnly: true,
     summary: "Print a shell completion script",
     description: "Print a shell completion script for bash, zsh or fish",
     input: jsonSchema<{ shell: CompletionShell }>({
@@ -115,6 +116,7 @@ export const completionIntent: IntentDefinition = {
 /** The hidden `sous __complete <words...>`, which the scripts call: one word per line. */
 export const completeIntent: IntentDefinition = {
     intent: "completion.words",
+    readOnly: true,
     summary: "List the words that may come next on a command line",
     input: jsonSchema<{ words?: string[] }>({
         type: "object",
