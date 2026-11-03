@@ -11,6 +11,7 @@ import { suggest } from "./words.js";
  */
 export const helpIntent: IntentDefinition = {
     intent: "help",
+    readOnly: true,
     summary: "Print the help for sous, or for one command or topic",
     input: jsonSchema<{ command?: string[] }>({
         type: "object",

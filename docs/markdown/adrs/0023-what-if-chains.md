@@ -18,11 +18,16 @@ asking what a build would produce under a changed config.
 
 1. `SubmitOptions.config` takes a what-if config. The chain's `ctx.config`, `ctx.services`,
    `ctx.entities` and nested `ctx.run` calls all see it.
-2. A what-if chain only reads: an intent declaring `changesConfig` fails, `ctx.refreshConfig()`
-   fails, and background intents refuse the option. A config that is not a what-if one is refused.
+2. A what-if chain only reads. Intents declare it: `IntentDefinition.readOnly` is `true`, or a
+   function of the checked input for an intent that writes only sometimes (`compiler.compile` with
+   `dryRun`). In a what-if chain, any intent not read-only for its input fails before it starts,
+   nested calls included; `ctx.refreshConfig()` fails; background intents refuse the option. A
+   config that is not a what-if one is refused.
 
 ## Alternatives
 
 - **Each preview reimplements the build against a changed config.** Breaks L1 (one owner).
+- **Refuse only `changesConfig` intents.** `build` changes no config but writes files: a preview
+  with a variable override would write the override into CLAUDE.md.
 - **Let the what-if chain write.** A write made under a config that is not the real one could leave
   the project in a state no real build produces.

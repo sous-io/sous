@@ -149,6 +149,7 @@ export function createCliPlugin(options: CliPluginOptions = {}): PluginDefinitio
             sous.intents.add(completeIntent);
             sous.intents.add({
                 intent: "version",
+                readOnly: true,
                 summary: "Print the version",
                 input: jsonSchema<{ verbose?: boolean }>({
                     type: "object",

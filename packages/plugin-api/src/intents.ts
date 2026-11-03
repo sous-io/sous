@@ -98,6 +98,13 @@ export interface IntentDefinition<N extends string = string, S extends SousSchem
     /** Running it changes the config, so the engine rebuilds the config before the next chain. */
     changesConfig?: boolean;
     /**
+     * `boolean | (input) => boolean = false`. It writes nothing: no file, no config, nothing outside
+     * the process. Only read-only intents run in a chain on a "what if" config
+     * (`SubmitOptions.config`). A function decides from the checked input, for an intent that
+     * writes only sometimes (`compiler.compile` writes nothing on a dry run).
+     */
+    readOnly?: boolean | ((input: IntentInputOf<N, S>) => boolean);
+    /**
      * It can run when the config fails to build (`sous update` repairing a broken install): it runs
      * with whatever partial config the failed build reached (the plugins it activated, the values
      * it merged, unchecked), and the build's error is reported as a warning. Other intents fail
@@ -163,9 +170,9 @@ export interface SubmitOptions {
     /**
      * Runs the chain against this config instead of the engine's current one: a "what if" config
      * from `engine.buildConfig({ extraContributors })`. The chain's `ctx.config`, `ctx.services`,
-     * `ctx.entities` and every nested `ctx.run` see it. Such a chain never writes: an intent that
-     * declares `changesConfig` fails, and `ctx.refreshConfig()` fails. Background intents cannot
-     * take one. Default: the engine's current config.
+     * `ctx.entities` and every nested `ctx.run` see it. Only intents declared `readOnly` (for their
+     * input) run in it; any other fails before it starts, and so does `ctx.refreshConfig()`.
+     * Background intents cannot take one. Default: the engine's current config.
      */
     config?: BuiltConfig;
     /**

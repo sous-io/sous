@@ -19,7 +19,10 @@ the end.
    nested `ctx.run` calls included. Without one, `ctx.signal` never aborts, so code never checks for
    its absence.
 2. The engine checks it before each intent starts and throws `CancelledError`; a long step checks it
-   itself or passes it on (to `fetch`, a child process).
+   itself or passes it on (to `fetch`, a child process). Inside a running handler nothing stops
+   until the handler checks.
+3. Every front end wires it: the CLI aborts on Ctrl+C (and then exits as before), the MCP server on
+   the client's `notifications/cancelled`, the web GUI on its `cancel` message.
 
 ## Alternatives
 

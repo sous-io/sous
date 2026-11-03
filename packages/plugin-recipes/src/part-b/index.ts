@@ -177,6 +177,7 @@ function registerIntents(sous: Sous, runtime: PartBRuntime): void {
 
     sous.intents.add({
         intent: "lock.show",
+        readOnly: true,
         requiresProject: true,
         summary: "Show every recipe version this project's lockfile pins",
         input: lockShowInputSchema,

@@ -96,6 +96,8 @@ export async function serveMcp(ctx: Context, options: ServeOptions): Promise<Mcp
                 prompter,
                 // An agent's relative paths mean the project, not wherever the server was started.
                 cwd: ctx.project?.root ?? ctx.cwd,
+                // notifications/cancelled from the client aborts the chain.
+                signal: extra.signal,
             });
 
             result = successResult(outputs);

@@ -82,7 +82,7 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
             case "run": {
                 const prompter = new TerminalPrompter(io.stdin, io.stderr, canPrompt(io, env, line.globals), whyCannotPrompt(io, env, line.globals));
                 const intent = line.command.intent;
-                const submitOptions = { reporter, prompter, globals: line.globals, ...(options.cwd === undefined ? {} : { cwd: options.cwd }) };
+                const submitOptions: SubmitOptions = { reporter, prompter, globals: line.globals, ...(options.cwd === undefined ? {} : { cwd: options.cwd }) };
                 // A background intent (`sous mcp`) owns standard output while it runs; its result is not printed.
                 const background = engine.intents.get(intent)?.definition.background === true;
                 const show = async (outputs: IntentOutputs<object>) => {
@@ -107,8 +107,10 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
                     reporter.banner();
                 }
 
+                const stopInterrupts = background ? () => {} : cancelOnInterrupt(submitOptions);
+
                 try {
-                    const outputs = await engine.submit({ intent, input: line.input }, submitOptions);
+                    const outputs = await engine.submit({ intent, input: line.input }, submitOptions).finally(stopInterrupts);
 
                     if (!background) {
                         await show(outputs);
@@ -266,4 +268,26 @@ async function watchUntilStopped(
     } finally {
         stop();
     }
+}
+
+/**
+ * Ctrl+C cancels the running chain (`ctx.signal` aborts, so child processes and downloads given it
+ * stop), then ends the process as Ctrl+C always has, unless something else listens for it (watch
+ * mode stops itself). Returns the function that stops listening.
+ */
+function cancelOnInterrupt(options: SubmitOptions): () => void {
+    const controller = new AbortController();
+    const onInterrupt = () => {
+        process.off("SIGINT", onInterrupt);
+        controller.abort(new Error("Cancelled with Ctrl+C."));
+
+        if (process.listenerCount("SIGINT") === 0) {
+            process.kill(process.pid, "SIGINT");
+        }
+    };
+
+    options.signal = controller.signal;
+    process.on("SIGINT", onInterrupt);
+
+    return () => process.off("SIGINT", onInterrupt);
 }

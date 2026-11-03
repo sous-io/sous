@@ -1153,13 +1153,13 @@ export class Engine {
             throw new CancelledError(name, reasonOf(call.signal), undefined);
         }
 
-        if (definition.changesConfig && config.whatIf) {
-            throw new SousError(`${name} changes the config, so it cannot run against a "what if" config.`, {
-                details: ["A what-if chain only reads: run intents that write nothing there, such as a dry run."],
+        const input = await this.checkInput(definition, rawInput);
+
+        if (config.whatIf && !isReadOnly(definition, input)) {
+            throw new SousError(`${name} is not declared read-only, so it cannot run against a "what if" config.`, {
+                details: ["A what-if chain runs only intents that write nothing (readOnly in their definition), such as a dry run."],
             });
         }
-
-        const input = await this.checkInput(definition, rawInput);
         const inputKey = stableKey(input);
         const repeats = countFrames(call.frame, "intent", name, inputKey) + 1;
 
@@ -1511,4 +1511,11 @@ function reasonOf(signal: AbortSignal): string {
     }
 
     return typeof reason === "string" && reason !== "" ? reason : "the front end cancelled it";
+}
+
+/** Whether an intent declares that, for this input, it writes nothing. */
+function isReadOnly(definition: IntentDefinition, input: unknown): boolean {
+    const readOnly = definition.readOnly;
+
+    return typeof readOnly === "function" ? readOnly(input as never) === true : readOnly === true;
 }

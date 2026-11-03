@@ -592,14 +592,18 @@ export default definePlugin({
 6. A background intent may ask for a "what if" config build (see S2, config building), for previews,
    and submit chains against it: `engine.submit(request, { config: whatIf })`. Such a chain's
    `ctx.config`, `ctx.services`, `ctx.entities` and nested `ctx.run` calls all see the what-if
-   config. It only reads: an intent that declares `changesConfig` fails there, and so does
-   `ctx.refreshConfig()`. Background intents cannot take one. A preview of a variable's other value,
+   config. It only reads: an intent runs there only when it declares `readOnly` (`true`, or a
+   function of its checked input, as `compiler.compile` does for `dryRun`); any other fails before it
+   starts, and so does `ctx.refreshConfig()`. Background intents cannot take one. A preview of a variable's other value,
    for example, is a dry-run `compiler.compile` submitted against a what-if config that sets the
    value.
 7. A front end may cancel a chain it submitted: `engine.submit(request, { signal })`. The chain's
    steps see it as `ctx.signal` (nested `ctx.run` calls too); the engine checks it before each intent
-   starts and throws `CancelledError` once it aborts, and a long step checks it itself
-   (`ctx.signal.throwIfAborted()`) or passes it on. Without one, `ctx.signal` never aborts.
+   starts and throws `CancelledError` once it aborts; inside a running handler nothing stops until
+   that handler checks it itself (`ctx.signal.throwIfAborted()`) or passes it on (`host.http` and
+   `host.processes` take a `signal`). Without one, `ctx.signal` never aborts. The CLI aborts on
+   Ctrl+C, the MCP server on the client's `notifications/cancelled`, and the web GUI on its
+   `cancel` message.
 
 ```ts
 // plugin-cli
@@ -919,8 +923,9 @@ None. (The name `plugin-recipes` is an agent decision the user may overrule.)
 
 ### 2026-11-03: What-if chains and cancelling a chain
 
-Front Ends rules 6 and 7. `SubmitOptions` gains `config` (run a chain against a "what if" config,
-read-only) and `signal` (cancel a chain); `Context` gains `signal`. Why: the web GUI previews edits,
+Front Ends rules 6 and 7. `SubmitOptions` gains `config` (run a chain against a "what if" config)
+and `signal` (cancel a chain); `Context` gains `signal`; `IntentDefinition` gains `readOnly`, and only
+read-only intents run on a what-if config. Why: the web GUI previews edits,
 variable values and recipe updates by running dry-run intents against a what-if config, and cancels
 runs the user abandons; until now a what-if config could be built but nothing could run against it,
 and a chain could not be stopped. Shaped with the refactor's agent (major-sous-refactor-04), which

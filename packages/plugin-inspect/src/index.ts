@@ -23,6 +23,7 @@ export const inspectPlugin: PluginDefinition = definePlugin({
     register(sous) {
         sous.intents.add({
             intent: "config.show",
+            readOnly: true,
             requiresProject: true,
             summary: "Print the built config",
             description: "Prints what sous does on this machine. --layers adds each contributor's changes, in order; --raw adds each config file as written.",
@@ -35,6 +36,7 @@ export const inspectPlugin: PluginDefinition = definePlugin({
 
         sous.intents.add({
             intent: "config.get",
+            readOnly: true,
             requiresProject: true,
             summary: "Print one value from the built config by path",
             description: "A path like compilation.targets[0].entryPoint. --layers shows who set the value, in order.",
@@ -50,6 +52,7 @@ export const inspectPlugin: PluginDefinition = definePlugin({
 
         sous.intents.add({
             intent: "config.validate",
+            readOnly: true,
             requiresProject: true,
             summary: "Check the built config against every config key's schema",
             parallel: true,
@@ -59,6 +62,7 @@ export const inspectPlugin: PluginDefinition = definePlugin({
 
         sous.intents.add({
             intent: "plugins.show",
+            readOnly: true,
             summary: "Show every plugin, and what it registered, wrapped or replaced",
             input: pluginsShowSchema,
             parallel: true,
@@ -68,6 +72,7 @@ export const inspectPlugin: PluginDefinition = definePlugin({
 
         sous.intents.add({
             intent: "timings.show",
+            readOnly: true,
             summary: "Show every timing of this run and its budget",
             input: timingsShowSchema,
             parallel: true,

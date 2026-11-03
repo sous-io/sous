@@ -326,6 +326,7 @@ export const varsIntents: IntentDefinition[] = [
     },
     {
         intent: "vars.list",
+        readOnly: true,
         summary: "List every variable this project's recipes define, with its answer",
         input: jsonSchema<VarsListInput>({
             type: "object",
@@ -347,6 +348,7 @@ export const varsIntents: IntentDefinition[] = [
     },
     {
         intent: "vars.show",
+        readOnly: true,
         summary: "Show everything about one variable, including how it was answered",
         input: jsonSchema<VarsShowInput>({
             type: "object",

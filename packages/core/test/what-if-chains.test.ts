@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CancelledError, IntentOutputs, SousError } from "@sous-io/plugin-api";
+import { CancelledError, IntentOutputs, jsonSchema, SousError } from "@sous-io/plugin-api";
 import { keysPlugin, makeEngine, plugin } from "./helpers.js";
 
 function readerPlugin() {
@@ -12,10 +12,17 @@ function readerPlugin() {
         });
         sous.intents.add({
             intent: "read",
+            readOnly: true,
             handle: async (_input, ctx) => IntentOutputs.of({ x: ctx.config.get("x"), nested: (await ctx.run("read.nested" as never, {} as never)).toPlain() }),
         });
-        sous.intents.add({ intent: "read.nested", internal: true, handle: (_input, ctx) => IntentOutputs.of({ x: ctx.config.get("x") }) });
-        sous.intents.add({ intent: "write", changesConfig: true, handle: () => IntentOutputs.of({}) });
+        sous.intents.add({ intent: "read.nested", internal: true, readOnly: true, handle: (_input, ctx) => IntentOutputs.of({ x: ctx.config.get("x") }) });
+        sous.intents.add({ intent: "write", handle: () => IntentOutputs.of({}) });
+        sous.intents.add({
+            intent: "maybe",
+            input: jsonSchema<{ dryRun?: boolean }>({ type: "object", properties: { dryRun: { type: "boolean" } } }),
+            readOnly: (input) => input.dryRun === true,
+            handle: () => IntentOutputs.of({ ran: true }),
+        });
         sous.intents.add({ intent: "bg", background: true, handle: () => IntentOutputs.of({}) });
     });
 }
@@ -39,14 +46,16 @@ describe("chains on a what-if config", () => {
     });
 
     /**
-     * changesConfig intents, background intents and configs that are not what-if ones are refused.
+     * intents not declared read-only (for their input), background intents and configs that are not what-if ones are refused.
      */
     it("should refuse writes, background intents and real configs", async () => {
         const { engine } = makeEngine([keysPlugin("x"), readerPlugin()]);
         const real = await engine.buildConfig();
         const whatIf = await engine.buildConfig({ extraContributors: [{ id: "try", contribute: (config) => config.atPath("x").set(2) }] });
 
-        await expect(engine.submit({ intent: "write" }, { config: whatIf })).rejects.toThrow(/changes the config/);
+        await expect(engine.submit({ intent: "write" }, { config: whatIf })).rejects.toThrow(/not declared read-only/);
+        await expect(engine.submit({ intent: "maybe", input: {} }, { config: whatIf })).rejects.toThrow(/not declared read-only/);
+        expect((await engine.submit({ intent: "maybe", input: { dryRun: true } }, { config: whatIf })).toPlain()).toEqual({ ran: true });
         await expect(engine.submit({ intent: "bg" }, { config: whatIf })).rejects.toThrow(/background intent/);
         await expect(engine.submit({ intent: "read" }, { config: real })).rejects.toBeInstanceOf(SousError);
     });
