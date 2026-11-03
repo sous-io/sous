@@ -92,3 +92,16 @@ entry points and destinations. On success it prints a short summary of the confi
 
 All three commands honor the same config-locating flags and env vars as every other command; see
 [Discovery and overrides](config-discovery.md).
+
+## sous config set
+
+`sous config set <path> <value>` writes one value into a config file, changing only that key, so
+comments, key order and formatting stay. The value is read as JSON when it is valid JSON, else as
+text. Without `--file` it writes the main config (`sous.config.json`, `.jsonc` or `.yaml`). Sous
+cannot edit code, and `sous init` writes the main config as `sous.config.js`; for such a project
+pass `--file` with a JSON, JSONC or YAML file, which is created in `.sous/conf.d/` when it does not
+exist:
+
+```bash
+sous config set compilation.includeSourceComments false --file 600-settings.jsonc
+```

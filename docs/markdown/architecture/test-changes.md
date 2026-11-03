@@ -1853,3 +1853,9 @@ All in `packages/plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022): a 
 - **Before:** ran `npm pack --dry-run` in `packages/sous` and expected `dist/tiktoken_bg.wasm` in its file list.
 - **Now:** "should ship tiktoken_bg.wasm next to the bundle" checks that the bundle the tests build has the wasm file beside it, and that package.json's `files` lists it.
 - **Why:** `npm pack` only lists a `dist/` that is already built, and the release job runs the tests before it builds, so the 1.0.5 release failed on an empty list.
+
+### Config loading fixes (plugin-config-files)
+
+- **Changed** "should refuse to edit a JavaScript config" in `plugin-config-files/test/config-set.test.ts`: it now expects the message to name the main config as code and to give `--file 600-settings.jsonc` as the example.
+  - **Why:** `sous init` writes `sous.config.js`, so `sous config set` without `--file` hit the old generic message; it now says exactly what to pass.
+- **New** `plugin-config-files/src/module-format.spec.ts`: an ES module `.js` config loads whether package.json has no `"type"` or `"type": "commonjs"`, and a `module.exports` config still loads as CommonJS.
