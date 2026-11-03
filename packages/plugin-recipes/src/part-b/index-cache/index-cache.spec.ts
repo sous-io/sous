@@ -295,4 +295,12 @@ describe("IndexCacheService", () => {
 
         expect(service.cached("acme")).toBeUndefined();
     });
+
+    /** fetchUpstream reads the index upstream for any repository, trusted or not, and writes nothing to the cache. */
+    it("should read an index upstream without caching it", async () => {
+        const index = await service.fetchUpstream({ name: "other", url: URL, identity: IDENTITY });
+
+        expect(index).toBeDefined();
+        expect(service.cached("acme")).toBeUndefined();
+    });
 });

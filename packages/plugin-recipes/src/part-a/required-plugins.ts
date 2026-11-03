@@ -20,8 +20,6 @@ import type {} from "@sous-io/plugin-update/types";
 import semver from "semver";
 import type { ResolvedRecipe } from "../types.js";
 import type { RanFollowUp } from "./outputs.js";
-import { ensureInStore } from "../part-b/fetch/restore.js";
-import type { IndexCacheCore } from "../part-b/index-cache/index-cache.js";
 import { trustedRepos } from "./project.js";
 import { hasIntent } from "./util.js";
 
@@ -100,14 +98,8 @@ export async function recipeDirectory(ctx: Context, recipe: ResolvedRecipe, down
         }
     }
 
-    const core = (ctx.services.get("recipes.index-cache") as { core?: IndexCacheCore }).core;
-
-    if (core === undefined) {
-        return undefined;
-    }
-
     try {
-        const outcome = await ensureInStore(
+        const outcome = await ctx.services.get("recipes.index-cache").ensureInStore(
             {
                 key: recipe.key,
                 entry: { repo: recipe.repo, version: recipe.version, hash: recipe.hash, requestedBy: recipe.requestedBy, kind: recipe.kind },
@@ -118,7 +110,6 @@ export async function recipeDirectory(ctx: Context, recipe: ResolvedRecipe, down
             },
             {
                 store: ctx.services.get("recipes.store"),
-                cache: core,
                 hosts: ctx.entities.list("repository-host"),
                 context: { plugin: ctx.plugin, config: ctx.config, services: ctx.services, entities: ctx.entities, project: ctx.project, env: ctx.env, cwd: ctx.cwd, reporter: ctx.reporter },
             },

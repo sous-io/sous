@@ -44,6 +44,7 @@ export class MemoriesSelectionService implements MemoriesSelection {
             recipes: this.ctx.entities.list("active-recipe") as MemoryRecipe[],
             settings: this.config.get<Partial<MemoriesSettings>>(["recipes", "memories"]),
             globs: this.ctx.services.get("host.globs") as MemoryGlobs,
+            contents: this.ctx.services.get("recipes.contents"),
         });
 
         return this.result;

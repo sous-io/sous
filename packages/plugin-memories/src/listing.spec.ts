@@ -1,14 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { makeTmpDir, recipe as makeRecipe, standInGlobs, write, type RecipeFixture } from "../test/stand-ins.js";
+import { makeTmpDir, recipe as makeRecipe, standInContents, standInGlobs, write, type RecipeFixture } from "../test/stand-ins.js";
 import { dependencyOrder, selectMemories, viewPath } from "./listing.js";
 
 let tmp: { path: string; cleanup(): void };
 
 const recipe = (key: string, options?: RecipeFixture) => makeRecipe(tmp.path, key, options);
 const select = (recipes: ReturnType<typeof recipe>[], settings = {}, onWarning?: (m: string) => void) =>
-    selectMemories({ recipes, settings, globs: standInGlobs, ...(onWarning ? { onWarning } : {}) });
+    selectMemories({ recipes, settings, globs: standInGlobs, contents: standInContents, ...(onWarning ? { onWarning } : {}) });
 
 beforeEach(() => {
     tmp = makeTmpDir();

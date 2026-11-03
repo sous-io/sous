@@ -12,7 +12,7 @@ import type { ConfigBuilder, ServiceContext } from "@sous-io/plugin-api";
 import type { CompilationOutput, CompilationTarget, CompilationTransformEntity, TransformFile } from "@sous-io/plugin-compiler/types";
 import { skillDestinations, transformIdFor, type SkillDestination } from "./destinations.js";
 import { stringsOf } from "./settings.js";
-import { findSkills, type FoundSkill } from "./sources.js";
+import { findSkills, type FindSkillsInput, type FoundSkill } from "./sources.js";
 import type { SkillFile, SkillTargetEntity } from "./types.js";
 
 /** The contributor's id. */
@@ -25,7 +25,7 @@ interface FileOrigin {
 }
 
 /** Adds the compilation targets for every skill. */
-export function contributeSkillTargets(config: ConfigBuilder, plugin: string): void {
+export function contributeSkillTargets(config: ConfigBuilder, plugin: string, contents: FindSkillsInput["contents"]): void {
     const outputs = stringsOf(config.atPath("recipes.skills.outputs").get());
     const include = stringsOf(config.atPath("recipes.skills.include").get());
     const targets = config.entities("skill-target");
@@ -37,7 +37,7 @@ export function contributeSkillTargets(config: ConfigBuilder, plugin: string): v
         return;
     }
 
-    const { skills } = findSkills({ recipes, include, project: config.project });
+    const { skills } = findSkills({ recipes, contents, include, project: config.project });
 
     if (skills.length === 0) {
         return;

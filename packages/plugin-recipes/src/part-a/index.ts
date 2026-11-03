@@ -8,6 +8,7 @@ import fs from "node:fs";
 import { jsonSchema, type ServiceReader, type Sous } from "@sous-io/plugin-api";
 import { createDirectories } from "@sous-io/plugin-host";
 import type { HostDirectories } from "@sous-io/plugin-host/types";
+import { RecipeContents } from "./contents.js";
 import { ActiveRecipes } from "./active.js";
 import { configKeys, DEFAULT_STORE_MAX_BYTES } from "./config-keys.js";
 import { Declarations } from "./declarations.js";
@@ -42,6 +43,7 @@ export function registerPartA(sous: Sous): void {
 
     sous.services.add("recipes.trust", (config, ctx) => new Trust(config, ctx.services), { lifetime: "config" });
     sous.services.add("recipes.active", (_config, ctx) => new ActiveRecipes(ctx.config, ctx.services), { lifetime: "config" });
+    sous.services.add("recipes.contents", (_config, ctx) => new RecipeContents(ctx.services), { lifetime: "singleton" });
     sous.services.add("recipes.declarations", (_config, ctx) => new Declarations(() => ctx.services.get("refs.resolver"), () => ctx.services.get("refs.format")), {
         lifetime: "singleton",
     });

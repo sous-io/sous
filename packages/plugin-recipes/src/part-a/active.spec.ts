@@ -2,9 +2,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { Lockfile } from "@sous-io/plugin-formats/types";
+import { globSync } from "glob";
 import { afterEach, describe, expect, it } from "vitest";
 import { builtConfig, memoryLock } from "../../test/part-a/helpers.js";
 import type { ActiveRecipeEntity } from "../types.js";
+import { RecipeContents } from "./contents.js";
 import { ActiveRecipes, reachableKeys } from "./active.js";
 
 const hash = "sha256-aa" as const;
@@ -50,10 +52,12 @@ function entity(id: string, dir: string, manifest: Partial<ActiveRecipeEntity["m
 
 function setup(recipeDir = "/nowhere") {
     const globs = {
-        matchSync: (patterns: readonly string[], options: { cwd: string; ignore?: readonly string[] }) =>
-            patterns.flatMap((pattern) => fs.globSync(pattern, { cwd: options.cwd })).filter((file) => !(options.ignore ?? []).some((ignored) => path.matchesGlob(file, ignored))),
+        matchSync: (pattern: string, options: { cwd: string; dot?: boolean; ignore?: readonly string[] }) =>
+            globSync(pattern, { cwd: options.cwd, dot: options.dot ?? false, nodir: true, ignore: [...(options.ignore ?? [])] }),
         sortBytewise: (items: Iterable<string>) => [...items].sort(),
         toPosix: (file: string) => file.split(path.sep).join("/"),
+        hasGlob: (text: string) => /[*?{[]/.test(text),
+        staticBase: (pattern: string) => pattern.split("/").slice(0, pattern.split("/").findIndex((part) => /[*?{[]/.test(part))).join("/") || "/",
     };
     const config = builtConfig(
         {
@@ -61,7 +65,7 @@ function setup(recipeDir = "/nowhere") {
             subscriptions: { "tool-usage/automated-browser-tasks": { enabled: false }, workflow: {} },
         },
         {
-            services: { "recipes.lock": memoryLock(lock), "host.globs": globs },
+            services: { "recipes.lock": memoryLock(lock), "host.globs": globs, "recipes.contents": new RecipeContents({ get: () => globs } as never) },
             entities: {
                 "active-recipe": [
                     entity("workflow/task-files", recipeDir, {
@@ -118,6 +122,7 @@ describe("recipes.active", () => {
 
         expect(content?.files.map((file) => file.path)).toEqual(["skills/a/SKILL.md", "skills/b.md"]);
         expect(content?.files[0]?.file).toBe(path.join(dir, "skills/a/SKILL.md"));
+        expect(content?.files[0]?.base).toBe(path.join(dir, "skills"));
         expect(active.contents("memories")).toEqual([]);
         expect(active.variables().map((entry) => `${entry.recipe.id}.${entry.definition.name}`)).toEqual(["workflow/task-files.apiUrl"]);
         expect(active.list().map((recipe) => recipe.id)).toEqual(["workflow/task-files"]);

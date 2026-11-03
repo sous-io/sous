@@ -14,15 +14,15 @@
 
 import path from "node:path";
 import type { HostGlobs } from "@sous-io/plugin-host/types";
-import type { ActiveRecipeEntity } from "@sous-io/plugin-recipes/types";
+import type { ActiveRecipeEntity, RecipesContents } from "@sous-io/plugin-recipes/types";
 import { compileRecipeKeyFinder, compileRecipeKeyMatcher } from "./key-matcher.js";
 import type { MemoriesSettings, Memory } from "./types.js";
 
 /** The parts of `host.globs` the listing uses. */
-export type MemoryGlobs = Pick<
-    HostGlobs,
-    "matchSync" | "isMatch" | "staticBase" | "compareBytewise" | "realPathInside" | "toPosix"
->;
+export type MemoryGlobs = Pick<HostGlobs, "isMatch" | "compareBytewise" | "realPathInside" | "toPosix">;
+
+/** The part of `recipes.contents` the listing uses. */
+export type MemoryContents = Pick<RecipesContents, "of">;
 
 /** The fields of an active recipe the listing reads. */
 export type MemoryRecipe = Pick<ActiveRecipeEntity, "id" | "repo" | "kind" | "requestedBy" | "dir" | "manifest">;
@@ -48,6 +48,8 @@ export interface SelectMemoriesOptions {
     /** `recipes.memories`; missing lists are empty. */
     readonly settings?: Partial<MemoriesSettings> | undefined;
     readonly globs: MemoryGlobs;
+    /** Which files each recipe publishes (`recipes.contents`). */
+    readonly contents: MemoryContents;
     /** Gets one sentence for each memory skipped because it is a link leading out of its recipe. */
     readonly onWarning?: (message: string) => void;
 }
@@ -113,45 +115,31 @@ export function dependencyOrder(
 export function recipeMemories(
     recipe: MemoryRecipe,
     globs: MemoryGlobs,
+    contents: MemoryContents,
     onWarning: (message: string) => void = () => {},
 ): Memory[] {
     const byFile = new Map<string, Memory>();
 
-    for (const content of recipe.manifest.contents ?? []) {
-        if (content.kind !== "memories") {
-            continue;
-        }
-
-        for (const include of content.include) {
-            const base = globs.staticBase(globs.toPosix(path.join(recipe.dir, include)));
-            const files = globs.matchSync(include, {
-                cwd: recipe.dir,
-                absolute: true,
-                dot: true,
-                onlyFiles: true,
-                ignore: content.exclude ?? [],
-            });
-
-            for (const file of files) {
-                if (byFile.has(file)) {
-                    continue;
-                }
-
-                if (globs.realPathInside(file, recipe.dir) === undefined) {
-                    onWarning(
-                        `The memory ${file} of the recipe ${recipe.id} was left out, because it is a link ` +
-                            `that leads outside the recipe's directory. Replace the link with the file itself.`,
-                    );
-                    continue;
-                }
-
-                byFile.set(file, {
-                    recipe: recipe.id,
-                    repository: recipe.repo,
-                    name: globs.toPosix(path.relative(base, file)),
-                    path: file,
-                });
+    for (const content of contents.of([recipe], "memories")) {
+        for (const { file, base } of content.files) {
+            if (byFile.has(file)) {
+                continue;
             }
+
+            if (globs.realPathInside(file, recipe.dir) === undefined) {
+                onWarning(
+                    `The memory ${file} of the recipe ${recipe.id} was left out, because it is a link ` +
+                        `that leads outside the recipe's directory. Replace the link with the file itself.`,
+                );
+                continue;
+            }
+
+            byFile.set(file, {
+                recipe: recipe.id,
+                repository: recipe.repo,
+                name: globs.toPosix(path.relative(base, file)),
+                path: file,
+            });
         }
     }
 
@@ -164,7 +152,7 @@ export function recipeMemories(
  * @throws ConfigError when an entry of `first` or `exclude` is an invalid regular expression.
  */
 export function selectMemories(options: SelectMemoriesOptions): MemorySelectionResult {
-    const { recipes, globs } = options;
+    const { recipes, globs, contents } = options;
     const isMatch = (key: string, pattern: string) => globs.isMatch(key, pattern);
     const isFirst = compileRecipeKeyMatcher(options.settings?.first, FIRST_KEY, isMatch);
     const excludedBy = compileRecipeKeyFinder(options.settings?.exclude, EXCLUDE_KEY, isMatch);
@@ -180,11 +168,7 @@ export function selectMemories(options: SelectMemoriesOptions): MemorySelectionR
     for (const key of [...leading, ...rest]) {
         const recipe = byKey.get(key)!;
 
-        if (recipe.kind !== "subscribes") {
-            continue;
-        }
-
-        const memories = recipeMemories(recipe, globs, options.onWarning);
+        const memories = recipeMemories(recipe, globs, contents, options.onWarning);
         const by = excludedBy(key);
 
         if (by === undefined) {

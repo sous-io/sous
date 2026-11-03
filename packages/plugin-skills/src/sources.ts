@@ -16,7 +16,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { globSync } from "glob";
 import type { ProjectInfo } from "@sous-io/plugin-api";
-import type { ActiveRecipeEntity } from "@sous-io/plugin-recipes/types";
+import type { ActiveRecipeContent, ActiveRecipeEntity, RecipesContents } from "@sous-io/plugin-recipes/types";
 import type { SkillSource } from "./types.js";
 
 /** One skill, with the directory its output paths mirror under. */
@@ -36,6 +36,8 @@ export interface SkillProblem {
 export interface FindSkillsInput {
     /** The active recipes, in lockfile order. */
     readonly recipes: readonly ActiveRecipeEntity[];
+    /** Which files the recipes publish (`recipes.contents`). */
+    readonly contents: Pick<RecipesContents, "of">;
     /** `recipes.skills.include`. */
     readonly include: readonly string[];
     readonly project: ProjectInfo | undefined;
@@ -60,8 +62,8 @@ export function findSkills(input: FindSkillsInput): FoundSkills {
     const skills: FoundSkill[] = [];
     const problems: SkillProblem[] = [];
 
-    for (const recipe of input.recipes) {
-        skills.push(...recipeSkills(recipe));
+    for (const content of input.contents.of(input.recipes, "skills")) {
+        skills.push(...recipeSkills(content));
     }
 
     input.include.forEach((entry, index) => {
@@ -86,28 +88,18 @@ export function findSkills(input: FindSkillsInput): FoundSkills {
     return { skills, problems };
 }
 
-/** The skills of one active recipe; none for a build dependency. */
-function recipeSkills(recipe: ActiveRecipeEntity): FoundSkill[] {
-    if (recipe.kind !== "subscribes") {
-        return [];
+/** The skills of one content block of an active recipe. */
+function recipeSkills(content: ActiveRecipeContent): FoundSkill[] {
+    const byBase = new Map<string, string[]>();
+
+    for (const { base, file } of content.files) {
+        byBase.set(base, [...(byBase.get(base) ?? []), file]);
     }
 
-    const groups: Array<{ base: string; files: string[] }> = [];
-
-    for (const content of recipe.manifest.contents ?? []) {
-        if (content.kind !== "skills") {
-            continue;
-        }
-
-        for (const include of content.include) {
-            groups.push({
-                base: path.join(recipe.dir, staticBase(include)),
-                files: listFiles(recipe.dir, include, content.exclude ?? []),
-            });
-        }
-    }
-
-    return groupSkills({ origin: "recipe", recipe: recipe.id, repository: recipe.repo }, groups);
+    return groupSkills(
+        { origin: "recipe", recipe: content.recipe.id, repository: content.recipe.repo },
+        [...byBase].map(([base, files]) => ({ base, files })),
+    );
 }
 
 /** Splits files into skills by the first directory under their base. */
@@ -150,26 +142,6 @@ function groupSkills(
             files: [...skill.files].sort(bytewise),
         }))
         .sort((a, b) => bytewise(a.name, b.name) || bytewise(a.dir, b.dir));
-}
-
-/** The static part of a glob pattern: the directories before the first one with a glob character. */
-export function staticBase(pattern: string): string {
-    const parts: string[] = [];
-
-    for (const part of pattern.split("/")) {
-        if (/[*?{[]/.test(part)) {
-            break;
-        }
-
-        parts.push(part);
-    }
-
-    // A pattern with no glob character names one file; its base is the file's directory.
-    if (parts.length === pattern.split("/").length) {
-        parts.pop();
-    }
-
-    return parts.filter((part) => part !== "").join("/") || ".";
 }
 
 /** Every regular file a pattern matches under a directory, absolute. */

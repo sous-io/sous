@@ -312,13 +312,33 @@ export interface RecipeContentFile {
     readonly path: string;
     /** Absolute. */
     readonly file: string;
+    /**
+     * The absolute directory a consumer names the file relative to: the static part of the include
+     * pattern that matched it (`skills/**` gives `<recipe>/skills`; a pattern naming one file gives
+     * that file's directory).
+     */
+    readonly base: string;
 }
 
-/** One content block of an active recipe, its files listed. */
-export interface ActiveRecipeContent {
-    readonly recipe: ActiveRecipeEntity;
+/** The fields of an active recipe that listing its content reads. */
+export type ContentRecipe = Pick<ActiveRecipeEntity, "id" | "kind" | "dir" | "manifest">;
+
+/** One content block of a recipe, its files listed. */
+export interface ActiveRecipeContent<R extends ContentRecipe = ActiveRecipeEntity> {
+    readonly recipe: R;
     readonly kind: ContentKind;
+    /** Bytewise within each include pattern, in the order of the block's `include` list; a file matched by two patterns is listed once, under the first. */
     readonly files: readonly RecipeContentFile[];
+}
+
+/**
+ * Which files recipes publish. Dot files count, `exclude` patterns are applied, links whose target
+ * is not a file are left out, and only recipes held through `subscribes` contribute (one held
+ * only through `depends` is a library whose files never enter the project's output).
+ */
+export interface RecipesContents {
+    /** The content blocks of one kind in the given recipes, in the recipes' order. */
+    of<R extends ContentRecipe>(recipes: readonly R[], kind: ContentKind): Array<ActiveRecipeContent<R>>;
 }
 
 /** Which recipes are active on this machine. */
@@ -328,7 +348,7 @@ export interface RecipesActive {
     get(key: string): ActiveRecipeEntity | undefined;
     /** Locked recipes that are not active here, and why. */
     skipped(): SkippedRecipe[];
-    /** Every active recipe's content of one kind, its files listed bytewise. */
+    /** Every active recipe's content of one kind (see {@link RecipesContents.of}). */
     contents(kind: ContentKind): ActiveRecipeContent[];
     /** Every variable the active recipes define, with the recipe defining it. */
     variables(): Array<{ readonly recipe: ActiveRecipeEntity; readonly definition: VariableDefinition }>;
@@ -581,8 +601,58 @@ export interface IndexReadFailure {
     readonly fixes: readonly string[];
 }
 
+/** One repository to read an index of: the project's short name (or the identity), its URL and identity. */
+export interface IndexUpstreamTarget {
+    readonly name: string;
+    readonly url: string;
+    readonly identity: string;
+    /** The `repository-host` entity id, when the entry names one. */
+    readonly provider?: string;
+}
+
+/** One pinned recipe to put in the store. */
+export interface EnsureInStoreTarget {
+    /** `namespace/recipe`. */
+    readonly key: string;
+    /** What the lockfile pins. */
+    readonly entry: LockedRecipe;
+    /** The project's short name for the repository. */
+    readonly repo: string;
+    readonly url: string;
+    readonly identity: string;
+    readonly provider?: string;
+}
+
+/** What {@link RecipesIndexCache.ensureInStore} needs besides the cache. */
+export interface EnsureInStoreOptions {
+    readonly store: RecipesStore;
+    readonly hosts: readonly RepositoryHostEntity[];
+    readonly context: RepositoryHostContext;
+    /** `store.freshnessSeconds`. */
+    readonly freshnessSeconds?: number;
+}
+
+/** Where a pinned recipe is in the store. */
+export interface EnsuredRecipe {
+    readonly entry: StoreEntry;
+    /** The directory holding its files. */
+    readonly dir: string;
+    /** Whether this call downloaded it. */
+    readonly downloaded: boolean;
+}
+
 /** Cached repository indexes, and when to look upstream. */
 export interface RecipesIndexCache {
+    /**
+     * Reads a repository's index upstream right now, writing nothing to the cache. Throws when upstream cannot be read.
+     * Works for a repository this project does not trust, which `get` does not.
+     */
+    fetchUpstream(target: IndexUpstreamTarget, options?: { signal?: AbortSignal }): Promise<IndexFile>;
+    /**
+     * Makes sure one pinned recipe version is in the store: the copy already there when its hash matches the
+     * locked one, else a download of exactly that version at its tag. Throws when the version cannot be fetched.
+     */
+    ensureInStore(target: EnsureInStoreTarget, options: EnsureInStoreOptions): Promise<EnsuredRecipe>;
     /** The index of a trusted repository, by short name. Throws a `SousError` built from an `IndexReadFailure`. */
     get(repo: string, options?: GetIndexOptions): Promise<CachedIndex>;
     /** The indexes of every trusted, enabled repository; failures listed, not thrown. */
@@ -1210,6 +1280,8 @@ declare module "@sous-io/plugin-api" {
         "recipes.trust": RecipesTrust;
         /** The active recipes. */
         "recipes.active": RecipesActive;
+        /** Which files recipes publish. */
+        "recipes.contents": RecipesContents;
         /** Resolving versions. */
         "recipes.resolver": RecipesResolver;
         /** The lockfile. */

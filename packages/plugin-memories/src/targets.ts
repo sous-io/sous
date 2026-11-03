@@ -118,6 +118,7 @@ export function targetsContributor(plugin: string, services: ServiceReader): Con
                 recipes: config.entities("active-recipe") as MemoryRecipe[],
                 settings: readSettings(config),
                 globs,
+                contents: services.get("recipes.contents"),
                 onWarning: (message) => {
                     if (!warned.has(message)) {
                         warned.add(message);

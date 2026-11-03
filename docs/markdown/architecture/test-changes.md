@@ -1833,3 +1833,13 @@ All in `packages/plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022): a 
 
 - **New** "should load an ES module sous.config.js without Node's typeless package warning" and "should still load a CommonJS sous.config.js".
   - **Why:** a `.js` ES module config in a project whose package.json has no `"type"` made Node print MODULE_TYPELESS_PACKAGE_JSON on every run; the loader now marks such a file as an ES module itself.
+
+### Recipe contents moved into `recipes.contents` (plugin-skills, plugin-memories, plugin-recipes)
+
+- **Removed** the `staticBase()` tests in `plugin-skills/src/sources.spec.ts`: the function is gone; `host.globs` owns `staticBase`, and `recipes.contents` applies it.
+- **Changed** the `findSkills()` calls in that file and `selectMemories()` calls in `plugin-memories/src/listing.spec.ts`: they now pass `contents` (the real `RecipeContents`, over a stand-in `host.globs`).
+  - **Why:** both plugins used to glob a recipe's manifest themselves; the one implementation is in plugin-recipes.
+- **Changed** `plugin-recipes/src/part-a/active.spec.ts`: `contents()` files now carry `base`, and `contents()` goes through `recipes.contents`.
+- **New** `plugin-recipes/src/part-a/contents.spec.ts` and "should read an index upstream without caching it" in `index-cache.spec.ts`.
+- **Changed** the fake index cache in `plugin-recipes/src/part-a/intents/intents.spec.ts`: it now has `fetchUpstream` and `ensureInStore`, which callers use instead of reaching into the cache's `core`.
+

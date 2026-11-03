@@ -8,21 +8,13 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { ConfigError } from "@sous-io/plugin-api";
 import type { LockedRecipe, StoreEntry } from "@sous-io/plugin-formats/types";
-import type { RecipesStore, RepositoryHostEntity, StoreKey, RepositoryHostContext } from "../../types.js";
+import type { EnsureInStoreTarget, EnsuredRecipe, RecipesStore, RepositoryHostEntity, StoreKey, RepositoryHostContext } from "../../types.js";
 import type { IndexCacheCore } from "../index-cache/index-cache.js";
 import { CORE_NAMESPACE, CORE_RECIPE_NAME, OFFICIAL_REPO_IDENTITY } from "../constants.js";
 import { hostFor, splitStoredKey } from "../support.js";
 
 /** One pinned recipe to download. */
-export interface RestoreTarget {
-    readonly key: string;
-    readonly entry: LockedRecipe;
-    /** The project's short name for the repository. */
-    readonly repo: string;
-    readonly url: string;
-    readonly identity: string;
-    readonly provider?: string;
-}
+export type RestoreTarget = EnsureInStoreTarget;
 
 /** What downloading needs. */
 export interface RestoreDeps {
@@ -45,7 +37,7 @@ export function storeKeyOf(key: string, identity: string, version: string): Stor
  * The store entry of a pinned recipe: the one already there when its hash matches, else a fresh
  * download. Returns the entry and whether it was downloaded.
  */
-export async function ensureInStore(target: RestoreTarget, deps: RestoreDeps): Promise<{ entry: StoreEntry; dir: string; downloaded: boolean }> {
+export async function ensureInStore(target: RestoreTarget, deps: RestoreDeps): Promise<EnsuredRecipe> {
     const storeKey = storeKeyOf(target.key, target.identity, target.entry.version);
     const hit = await deps.store.get(storeKey);
 

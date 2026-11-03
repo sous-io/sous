@@ -11,12 +11,14 @@ import { globSync } from "glob";
 import { minimatch } from "minimatch";
 import { BufferedReporter, definePlugin, jsonSchema, type PluginDefinition } from "@sous-io/plugin-api";
 import { createEngine, type Engine } from "@sous-io/core";
+import type { HostGlobs } from "@sous-io/plugin-host/types";
+import { RecipeContents } from "@sous-io/plugin-recipes";
 import type { MemoryGlobs, MemoryRecipe } from "../src/listing.js";
 import memoriesPlugin from "../src/index.js";
 import packageJson from "../package.json" with { type: "json" };
 
 /** `host.globs`, as far as plugin-memories uses it. */
-export const standInGlobs: MemoryGlobs = {
+export const standInGlobs: MemoryGlobs & Pick<HostGlobs, "matchSync" | "staticBase" | "hasGlob" | "sortBytewise"> = {
     matchSync(patterns, options) {
         const found = globSync(patterns as string | string[], {
             cwd: options.cwd,
@@ -41,6 +43,8 @@ export const standInGlobs: MemoryGlobs = {
 
         return parts.join("/") || "/";
     },
+    hasGlob: (text) => /[*?{[]/.test(text),
+    sortBytewise: (items) => [...items].sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b))),
     compareBytewise: (a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)),
     realPathInside(file, root) {
         try {
@@ -54,6 +58,9 @@ export const standInGlobs: MemoryGlobs = {
     },
     toPosix: (p) => p.split(path.sep).join("/"),
 };
+
+/** `recipes.contents`: the real implementation, over the stand-in `host.globs`. */
+export const standInContents = new RecipeContents({ get: () => standInGlobs } as never);
 
 /** A temporary directory, removed by `cleanup()`. */
 export function makeTmpDir(prefix = "sous-memories-"): { path: string; cleanup(): void } {
@@ -157,6 +164,7 @@ export function recipesStandIn(recipes: () => readonly Record<string, unknown>[]
         register(sous) {
             sous.entities.add("config-key", { id: "recipes", schema: jsonSchema({}) });
             sous.entities.define("active-recipe", jsonSchema({ type: "object", required: ["id"] }));
+            sous.services.add("recipes.contents", () => standInContents, { lifetime: "singleton" });
             sous.config.contribute({
                 id: "recipes.fetch",
                 contribute(config) {
