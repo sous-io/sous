@@ -53,11 +53,19 @@ async function runDependencies(runtime: CompilerRuntime, ctx: Pick<Context, "ser
     const includes: CompilerIncludes = services.get("compiler.includes");
     const liquid: LiquidEngines = services.get("liquid.engine");
     const secretNames = services.has("variables.secrets") ? [...(services.get("variables.secrets") as VariablesSecrets).declared()] : [];
-    const counter = countTokens ? await createTokenCounter().catch(() => undefined) : undefined;
+    let counterError: unknown;
+    const counter = countTokens
+        ? await createTokenCounter().catch((error: unknown) => {
+              counterError = error;
+
+              return undefined;
+          })
+        : undefined;
     const tracked = new Map<string, StateFileEntry>(services.get("compiler.state").entries().map((entry) => [path.resolve(entry.dest), entry]));
 
     return {
         counter,
+        counterError,
         deps: {
             includes,
             hasNamespaceResolver: runtime.namespaceResolver() !== undefined,
@@ -118,7 +126,15 @@ async function compileTargets(input: CompileInput, ctx: Context, runtime: Compil
         only,
     );
     const problems = [...reportExpansion(selectionProblems, false, ctx.reporter), ...reportExpansion(expanded.problems, strict, ctx.reporter)];
-    const { deps, counter } = await runDependencies(runtime, ctx, ctx.reporter, true);
+    const { deps, counter, counterError } = await runDependencies(runtime, ctx, ctx.reporter, true);
+
+    if (counter === undefined) {
+        const message = `Tokens were not counted: the token counter (tiktoken) did not load.\n  ${messageOf(counterError)}`;
+
+        ctx.reporter.problem(message, {}, LogLevel.Warning);
+        problems.push({ level: "warning", message });
+    }
+
     const run = new CompileRun(deps, { strict, ...(input.rebuild ? { rebuild: true } : {}), dryRun });
     let units: CompileUnit[] = expanded.units;
 
@@ -224,4 +240,8 @@ async function pruneOutputs(input: CompilerPruneInput, ctx: Context, runtime: Co
     await ctx.emit("compiler.pruned", { removed, dryRun });
 
     return { removed, dirsRemoved, dryRun };
+}
+
+function messageOf(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
 }
