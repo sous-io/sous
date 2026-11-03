@@ -1,6 +1,6 @@
 /**
  * Counting an output's tokens (`o200k_base`), for the line each written output reports. The
- * encoder loads on first use and is freed when the compile ends.
+ * encoder loads on first use and is kept for the rest of the process.
  */
 
 import type { Tiktoken } from "tiktoken";
@@ -11,20 +11,22 @@ export interface TokenCounter {
     free(): void;
 }
 
-/** Makes a counter; its encoder loads on the first count. */
+/**
+ * The o200k_base encoder, loaded once per process: loading it takes about half a second, which a
+ * long-running front end (sous serve, the MCP server) would otherwise pay on every compile.
+ */
+let shared: Tiktoken | undefined;
+
 export async function createTokenCounter(): Promise<TokenCounter> {
     const { get_encoding } = await import("tiktoken");
-    let encoder: Tiktoken | undefined;
 
     return {
         count(text) {
-            encoder ??= get_encoding("o200k_base");
+            shared ??= get_encoding("o200k_base");
 
-            return encoder.encode(text).length;
+            return shared.encode(text).length;
         },
-        free() {
-            encoder?.free();
-            encoder = undefined;
-        },
+        // The encoder is shared by every counter and lives as long as the process.
+        free() {},
     };
 }
