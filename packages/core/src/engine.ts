@@ -976,21 +976,40 @@ export class Engine {
     // ------------------------------------------------------------------ chains and intents
 
     private submitWith(request: IntentRequest, options: SubmitOptions, parentFrame: Frame | undefined): Promise<IntentOutputs> {
-        const info = this.resolveIntent(request.intent, this.current);
+        let whatIf: BuiltConfigImpl | undefined;
+
+        if (options.config !== undefined) {
+            if (!(options.config instanceof BuiltConfigImpl) || !options.config.whatIf) {
+                return Promise.reject(
+                    new SousError(`${request.intent} was submitted with a config that is not a "what if" config.`, {
+                        details: ["Pass a config from engine.buildConfig({ extraContributors }), or leave config out to use the current one."],
+                    }),
+                );
+            }
+
+            whatIf = options.config;
+        }
+
+        const info = this.resolveIntent(request.intent, whatIf ?? this.current);
         const reporter = options.reporter ?? this.reporterImpl;
         const prompter = options.prompter ?? nonInteractivePrompter;
         const globals = Object.freeze({ ...(options.globals ?? {}) });
         const cwd = options.cwd ?? this.cwd;
+        const signal = options.signal;
         const definition = info.definition;
 
         if (definition.background) {
+            if (whatIf) {
+                return Promise.reject(new SousError(`${request.intent} is a background intent, so it cannot run against a "what if" config.`));
+            }
+
             try {
                 this.checkBuildFailure(definition, reporter);
             } catch (error) {
                 return Promise.reject(error);
             }
 
-            return this.startBackground(request, { reporter, prompter, globals, cwd }, parentFrame);
+            return this.startBackground(request, { reporter, prompter, globals, cwd, signal }, parentFrame);
         }
 
         const parallel = options.parallel ?? definition.parallel ?? false;
@@ -999,10 +1018,12 @@ export class Engine {
         return this.scheduler.enqueue(
             parallel,
             async (markChanged) => {
-                this.checkBuildFailure(definition, reporter);
+                if (!whatIf) {
+                    this.checkBuildFailure(definition, reporter);
+                }
 
-                const chain = new ChainState(++this.chainCounter, request.intent, parallel, this.current, reporter, prompter, globals);
-                const call: CallState = { mode: "chain", chain, frame: parentFrame, config: chain.config, reporter, prompter, globals, cwd };
+                const chain = new ChainState(++this.chainCounter, request.intent, parallel, whatIf ?? this.current, reporter, prompter, globals);
+                const call: CallState = { mode: "chain", chain, frame: parentFrame, config: chain.config, reporter, prompter, globals, cwd, signal };
 
                 try {
                     return await this.timer.measure("chain", request.intent, undefined, () => this.runIntent(request.intent, request.input, call));
@@ -1068,6 +1089,12 @@ export class Engine {
             }
         }
 
+        if (chain.config.whatIf) {
+            throw new SousError(`ctx.refreshConfig() cannot be used in a chain that runs against a "what if" config (${chain.intent}).`, {
+                details: ["A what-if chain only reads; it never changes the config."],
+            });
+        }
+
         const built = (await this.buildConfig()) as BuiltConfigImpl;
 
         chain.config = built;
@@ -1078,7 +1105,7 @@ export class Engine {
 
     private startBackground(
         request: IntentRequest,
-        io: { reporter: Reporter; prompter: SubmitOptions["prompter"] & object; globals: Readonly<Record<string, unknown>>; cwd: string },
+        io: { reporter: Reporter; prompter: SubmitOptions["prompter"] & object; globals: Readonly<Record<string, unknown>>; cwd: string; signal: AbortSignal | undefined },
         parentFrame: Frame | undefined,
     ): Promise<IntentOutputs> {
         const call: CallState = { mode: "background", chain: undefined, frame: parentFrame, config: this.current, ...io };
@@ -1119,6 +1146,16 @@ export class Engine {
         if (depth > limits.runDepth) {
             throw new LoopError("runDepth", `Intents are nested ${depth} deep, past the limit of ${limits.runDepth}.`, {
                 details: [describeFramePath(pushFrame(call.frame, "intent", name, rawInput))],
+            });
+        }
+
+        if (call.signal?.aborted) {
+            throw new CancelledError(name, reasonOf(call.signal), undefined);
+        }
+
+        if (definition.changesConfig && config.whatIf) {
+            throw new SousError(`${name} changes the config, so it cannot run against a "what if" config.`, {
+                details: ["A what-if chain only reads: run intents that write nothing there, such as a dry run."],
             });
         }
 
@@ -1239,7 +1276,7 @@ export class Engine {
                 default:
                     return this.submitWith(
                         { intent, input: input as never },
-                        { reporter: call.reporter, prompter: call.prompter, globals: call.globals, cwd: call.cwd },
+                        { reporter: call.reporter, prompter: call.prompter, globals: call.globals, cwd: call.cwd, signal: call.signal },
                         call.frame,
                     );
             }
@@ -1463,4 +1500,15 @@ function requireOutputs(intent: string, value: unknown, what: string): void {
     if (!IntentOutputs.is(value)) {
         throw new SousError(`The intent "${intent}" ${what} something that is not IntentOutputs. A handler must return IntentOutputs (for example IntentOutputs.of({ ... })), and wrappers and listeners must keep it so.`);
     }
+}
+
+/** The reason an aborted signal gives, as text. */
+function reasonOf(signal: AbortSignal): string {
+    const reason: unknown = signal.reason;
+
+    if (reason instanceof Error) {
+        return reason.name === "AbortError" ? "the front end cancelled it" : reason.message;
+    }
+
+    return typeof reason === "string" && reason !== "" ? reason : "the front end cancelled it";
 }

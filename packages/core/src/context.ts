@@ -55,7 +55,12 @@ export interface CallState {
     readonly globals: Readonly<Record<string, unknown>>;
     /** The working directory the front end gave, as `ctx.cwd`. */
     readonly cwd: string;
+    /** The front end's cancel signal, as `ctx.signal`; nested calls keep it. */
+    readonly signal?: AbortSignal;
 }
+
+/** The signal a call gets when its front end gave none: it never aborts. */
+export const NEVER_ABORTS: AbortSignal = new AbortController().signal;
 
 /** The config a call sees: its chain's (which `ctx.refreshConfig()` may replace), or the call's own. */
 export function configOf(call: CallState, latest: () => BuiltConfigImpl): BuiltConfigImpl {
@@ -105,6 +110,7 @@ export function createContext(host: CallHost, call: CallState, plugin: string): 
         env: host.env,
         globals: call.globals,
         cwd: call.cwd,
+        signal: call.signal ?? NEVER_ABORTS,
         chain: call.chain,
         engine: host.handle,
         options<T = JsonObject>(): T | undefined {

@@ -1,3 +1,4 @@
+import type { BuiltConfig } from "./config.js";
 import type { Context } from "./context.js";
 import type { Prompter } from "./prompter.js";
 import type { IntentInput, IntentReturn, SousIntents } from "./registry.js";
@@ -159,4 +160,18 @@ export interface SubmitOptions {
     globals?: Readonly<Record<string, unknown>>;
     /** The working directory, as `ctx.cwd` (the CLI: the process's; MCP: the project root). Default: the engine's. */
     cwd?: string;
+    /**
+     * Runs the chain against this config instead of the engine's current one: a "what if" config
+     * from `engine.buildConfig({ extraContributors })`. The chain's `ctx.config`, `ctx.services`,
+     * `ctx.entities` and every nested `ctx.run` see it. Such a chain never writes: an intent that
+     * declares `changesConfig` fails, and `ctx.refreshConfig()` fails. Background intents cannot
+     * take one. Default: the engine's current config.
+     */
+    config?: BuiltConfig;
+    /**
+     * Cancels the chain: `ctx.signal` in every step of it, nested `ctx.run` calls included. The
+     * engine checks it before each intent starts; long steps check it themselves
+     * (`ctx.signal.throwIfAborted()`). Default: a signal that never aborts.
+     */
+    signal?: AbortSignal;
 }

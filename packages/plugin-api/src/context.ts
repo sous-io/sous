@@ -113,6 +113,12 @@ export interface Context {
      * server the project root. Use it instead of `process.cwd()`. Default: the engine's.
      */
     readonly cwd: string;
+    /**
+     * Aborts when the front end cancels the chain (`SubmitOptions.signal`). A long step checks it
+     * (`ctx.signal.throwIfAborted()`) or passes it on (to `fetch`, a child process). Never aborts
+     * when the front end gave none.
+     */
+    readonly signal: AbortSignal;
     /** The chain, or `undefined` outside one (a background intent). */
     readonly chain: ChainInfo | undefined;
     readonly engine: EngineHandle;
