@@ -7,5 +7,10 @@
 // It is JSON with comments (.jsonc): line comments, block comments and trailing
 // commas are all allowed here.
 {
-  "subscriptions": {}
+  "subscriptions": {
+    "tool-usage/claude-code": {
+      "addedAt": "2026-11-03T06:25:43.666Z",
+      "addedBy": "user"
+    }
+  }
 }

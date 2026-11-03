@@ -84,6 +84,15 @@
       ],
       "version": "1.0.0"
     },
+    "tool-usage/claude-code": {
+      "hash": "sha256-3285c09de454ebd9266db47fec501c2452130b3f898c639fa93e8ab914517ce9",
+      "kind": "subscribes",
+      "repo": "sous-recipes",
+      "requestedBy": [
+        "project"
+      ],
+      "version": "1.0.0"
+    },
     "workflow/agent-memory": {
       "hash": "sha256-c07c702c5b6e67db2c9d7d84f3b78e347e4bda68f4a10440b33ad9c2c52d89be",
       "kind": "subscribes",
@@ -148,6 +157,7 @@
   "repos": {
     "sous-recipes": {
       "identity": "github.com/sous-io/sous-recipes",
+      "indexHash": "sha256-590e9871714d82136ea2b4649c092b99657bb4801581aaeb556e63a36c8f4b7b",
       "url": "https://github.com/sous-io/sous-recipes"
     }
   }
