@@ -295,7 +295,9 @@ export function MyPullRequests() {
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false))
   }, [])
-  useEffect(() => load(false), [load])
+  useEffect(() => {
+    void load(false)
+  }, [load])
   // Keep "refreshed Xm ago" honest.
   useEffect(() => {
     const t = setInterval(() => tick((n) => n + 1), 30_000)

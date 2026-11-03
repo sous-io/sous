@@ -14,6 +14,7 @@ import {
   SearchIcon,
   SquarePenIcon,
   SunIcon,
+  TerminalSquareIcon,
   VariableIcon,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -41,6 +42,9 @@ import { HomePage } from "@/pages/home-page"
 import { ConfigPage } from "@/pages/config-page"
 import { BuildPage, ContextPage } from "@/pages/build-context"
 import { ProposalsPage } from "@/pages/proposals"
+import { CommandsPage } from "@/pages/commands-page"
+import { Questions } from "@/components/questions"
+import { SocketDebug, useSocketDebug } from "@/components/socket-debug"
 import { unsentIds, useStore, type Page } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
@@ -52,6 +56,7 @@ const NAV: { page: Page; label: string; icon: typeof SquarePenIcon }[] = [
   { page: "config", label: "Config", icon: SlidersHorizontalIcon },
   { page: "recipes", label: "Recipes", icon: BoxesIcon },
   { page: "build", label: "Build", icon: HammerIcon },
+  { page: "commands", label: "Commands", icon: TerminalSquareIcon },
   { page: "proposals", label: "Proposals", icon: GitPullRequestArrowIcon },
 ]
 
@@ -195,8 +200,9 @@ function Palette() {
     { label: "Take the tour", hint: "One minute, ten stops", icon: SquarePenIcon, run: () => useTour.getState().start() },
     { label: "Show rendered Liquid", hint: "Editor mode", icon: SquarePenIcon, run: () => state().setMode("rendered") },
     { label: "Show template source", hint: "Editor mode", icon: FileCode2Icon, run: () => state().setMode("source") },
-    { label: "Check the build again", hint: "Rebuild into a temporary folder", icon: HammerIcon, run: () => state().rebuild() },
+    { label: "Check the build again", hint: "A dry run of every output; nothing is written", icon: HammerIcon, run: () => state().rebuild() },
     ...NAV.map((n) => ({ label: `Go to ${n.label}`, hint: "Page", icon: n.icon, run: () => state().setPage(n.page) })),
+    { label: "Show the socket's messages", hint: "Ctrl+`", icon: TerminalSquareIcon, run: () => useSocketDebug.getState().toggle() },
     { label: "Switch light or dark", hint: "Theme", icon: SunIcon, run: () => document.querySelector<HTMLButtonElement>("[title='Light or dark']")?.click() },
   ]
   const groups = [
@@ -361,6 +367,7 @@ export default function App() {
           {page === "config" && <ConfigPage />}
           {page === "recipes" && <RecipesPage />}
           {page === "build" && <BuildPage />}
+          {page === "commands" && <CommandsPage />}
           {page === "proposals" && <ProposalsPage />}
         </main>
       </div>
@@ -368,6 +375,8 @@ export default function App() {
       <Palette />
       <Toaster position="bottom-right" />
       <Tour />
+      <Questions />
+      <SocketDebug />
     </TooltipProvider>
   )
 }

@@ -6,6 +6,7 @@
 import { IntentOutputs, jsonSchema, type Context, type Sous } from "@sous-io/plugin-api";
 import type {} from "@sous-io/plugin-variables/types";
 import { previewBuild, previewContent } from "./build.js";
+import { contributeInfo, myPrs, scanSecrets } from "./contribute.js";
 import { builtinNames, configReport, findDrift, recipeCatalog, recipeDiff, variableFacts } from "./facts.js";
 import { resolveIncludes } from "./includes.js";
 import { renderFile } from "./render.js";
@@ -93,4 +94,18 @@ export function registerWebIntents(sous: Sous): void {
         object({ key: { type: "string" }, from: { type: "string" }, to: { type: "string" } }, ["key", "from", "to"]),
         async (input: { key: string; from: string; to: string }, ctx) => ({ files: await recipeDiff(ctx, input.key, input.from, input.to) }),
     );
+
+    add(
+        "web.contribute-info",
+        "What sending changes to their recipes would need: sign-in, push access, upstream HEAD and each file's upstream text",
+        object({ ids: { type: "array", items: { type: "string" } } }, ["ids"]),
+        (input: { ids: string[] }, ctx) => contributeInfo(ctx, input.ids),
+    );
+    add(
+        "web.scan-secrets",
+        "Which secret variables' values appear in the lines a change adds",
+        object({ added: { type: "object", additionalProperties: { type: "array", items: { type: "string" } } } }, ["added"]),
+        (input: { added: Record<string, string[]> }, ctx) => scanSecrets(ctx, input.added),
+    );
+    add("web.my-prs", "The signed-in account's pull requests on the repositories this project uses", object({ fresh: { type: "boolean" } }), (input: { fresh?: boolean }, ctx) => myPrs(ctx, input.fresh === true));
 }

@@ -1,7 +1,7 @@
 // The "Send changes" flow. What it shows is real: your diffs, the merge onto
 // upstream HEAD, the recipe manifests and their `submissions` policy, the repo
 // index's released versions, the repo's `contribute:` link, and whether `gh` is
-// signed in and can push (GET /api/contribute-info). Everything from "Propose"
+// signed in and can push (the web.contribute-info intent). Everything from "Propose"
 // onwards (link, commit, push, fork, pull request) is simulated and says so.
 
 import { useEffect, useState } from "react"

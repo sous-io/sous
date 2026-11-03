@@ -153,6 +153,107 @@ export interface RecipeFileDiff {
     sourceChanged: boolean;
 }
 
+/** Whether the host's CLI (`gh`) is installed and signed in, and as whom; never a token. */
+export interface GhStatus {
+    installed: boolean;
+    signedIn: boolean;
+    account?: string;
+    host: string;
+    message: string;
+    ms: number;
+}
+
+/** One recipe being sent: its manifest facts, released versions and the version at upstream HEAD. */
+export interface ContributeRecipe {
+    key: string;
+    repoKey: string;
+    pinned: string;
+    description?: string;
+    manifestPath: string;
+    /** The recipe's directory inside its repository, from the index (`recipes/workflow/task-files`). */
+    repoPath: string;
+    variables: { name: string; type?: string; required?: boolean; secret?: boolean; prompt?: string }[];
+    submissions: { allowed: boolean; instead?: string } | null;
+    /** Where `submissions.instead` points, when it names an owner/repo and a path. */
+    redirect?: { owner: string; repo: string; path: string; canPush: boolean | null };
+    released: { version: string; releasedAt?: string; tag?: string }[];
+    latestReleased?: string;
+    /** The manifest's version at upstream HEAD, or null when upstream couldn't be read. */
+    headVersion: string | null;
+    /** True when the HEAD version already has a tag, so a change must raise it. */
+    headTagged: boolean | null;
+}
+
+/** One repository being sent to: its manifest, linked checkout, push access and upstream HEAD. */
+export interface ContributeRepo {
+    key: string;
+    host: string;
+    owner: string;
+    repo: string;
+    name?: string;
+    contribute?: string;
+    manifestSource: "checkout" | "github" | null;
+    checkout: { path: string; branch: string; head: string; when: string; subject: string } | null;
+    defaultBranch: string | null;
+    head: { sha: string; date: string; message: string } | null;
+    canPush: boolean | null;
+    indexGeneratedAt?: string;
+}
+
+export interface ContributeInfo {
+    gh: GhStatus;
+    git: { userName?: string; userEmail?: string };
+    repos: Record<string, ContributeRepo>;
+    recipes: Record<string, ContributeRecipe>;
+    /** File id → where it lives upstream and its text there (null when it could not be read). */
+    files: Record<string, { upstreamPath: string; upstream: string | null; recipe: string }>;
+    ms: number;
+}
+
+/** A secret variable's value found in a line a change adds; never the value. */
+export interface SecretHit {
+    id: string;
+    /** From 0, in the lines sent. */
+    line: number;
+    name: string;
+}
+
+export interface MyPr {
+    number: number;
+    title: string;
+    state: "open" | "draft" | "merged" | "closed";
+    branch: string;
+    url: string;
+    createdAt: string;
+    updatedAt: string;
+    mergedAt: string | null;
+    review: "approved" | "changes" | "required" | null;
+    checks: { passing: number; failing: number; pending: number; skipped: number };
+    additions: number;
+    deletions: number;
+    changedFiles: number;
+    madeWithSous: boolean;
+}
+
+export interface MyPrsRepo {
+    key: string;
+    owner: string;
+    repo: string;
+    role: "recipes" | "project";
+    ok: boolean;
+    error?: string;
+    prs: MyPr[];
+    /** The newest issue or pull request number on the repository, by anyone. */
+    latestNumber?: number;
+}
+
+export interface MyPrs {
+    gh: GhStatus;
+    repos: MyPrsRepo[];
+    ms: number;
+    at: string;
+}
+
 declare module "@sous-io/plugin-api" {
     interface SousIntents {
         "web.serve": { input: { port?: number; launch?: boolean }; result: { url: string; port: number } };
@@ -168,5 +269,8 @@ declare module "@sous-io/plugin-api" {
         "web.config": { input: Record<string, never>; result: ConfigReport };
         "web.recipes": { input: Record<string, never>; result: { recipes: CatalogRecipe[] } };
         "web.recipe-diff": { input: { key: string; from: string; to: string }; result: { files: RecipeFileDiff[] } };
+        "web.contribute-info": { input: { ids: string[] }; result: ContributeInfo };
+        "web.scan-secrets": { input: { added: Record<string, string[]> }; result: { hits: SecretHit[] } };
+        "web.my-prs": { input: { fresh?: boolean }; result: MyPrs };
     }
 }

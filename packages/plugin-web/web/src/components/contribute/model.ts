@@ -2,7 +2,7 @@
 // checks that run before proposing, the suggested version raise, and the
 // changelog `sous repo submit` appends. All of it is computed from real data
 // (your edits, the store's manifests, the repo index, and upstream HEAD from
-// /api/contribute-info). Only the proposing itself is simulated.
+// the web.contribute-info intent). Only the proposing itself is simulated.
 
 import { applyPatch, createPatch, structuredPatch } from "diff"
 import { create } from "zustand"
@@ -10,7 +10,7 @@ import { api, type WorkspaceFile } from "@/lib/api"
 import type { OpenDoc } from "@/lib/store"
 import { bump, type BumpKind } from "@/mock/data"
 
-// ---- /api/contribute-info ---------------------------------------------------------------------
+// ---- web.contribute-info ------------------------------------------------------------------------
 
 export type RecipeInfo = {
   key: string
@@ -539,7 +539,7 @@ export function relTime(iso: string | undefined): string {
   return `${Math.round(s / 86400)} days ago`
 }
 
-// ---- Pull request numbers (from /api/my-prs) and the "Just sent" card -------------------------
+// ---- Pull request numbers (from web.my-prs) and the "Just sent" card -------------------------
 
 type NumbersState = {
   /** Highest known issue or PR number, by "owner/repo". */

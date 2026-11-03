@@ -60,7 +60,9 @@ type Undeclared = { name: string; declaredBy: string | null }
 function CollectUndeclared({ file, onResult }: { file: WorkspaceFile; onResult: (id: string, found: Undeclared[]) => void }) {
   const found = useUndeclared(file)
   const key = JSON.stringify(found)
-  useEffect(() => onResult(file.id, found), [key]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    onResult(file.id, found)
+  }, [key]) // eslint-disable-line react-hooks/exhaustive-deps
   return null
 }
 

@@ -1,5 +1,5 @@
 // Build and Agent context pages. Both are REAL: they come from a build of every
-// target into a temporary folder (see src/lib/serve/preview-build.ts).
+// target as a dry run (the web.build intent, src/intents/build.ts in the plugin).
 
 import { useEffect, useMemo, useState } from "react"
 import DOMPurify from "dompurify"
@@ -160,8 +160,8 @@ export function BuildPage() {
               <HammerIcon className="size-6 text-brand" /> Build
             </h1>
             <p className="text-sm text-muted-foreground">
-              What <code className="rounded bg-muted px-1">sous build</code> would write right now, compared with what's on disk. Built
-              into a temporary folder in {build.ms} ms; nothing in your project was touched.
+              What <code className="rounded bg-muted px-1">sous build</code> would write right now, compared with what's on disk. A dry run
+              of every output in {build.ms} ms; nothing in your project was touched.
             </p>
           </div>
           <Button className="ml-auto" onClick={rebuild} disabled={building}>
@@ -237,7 +237,7 @@ function Loading() {
   return (
     <div className="grid h-full place-items-center text-sm text-muted-foreground">
       <span className="flex items-center gap-2">
-        <LoaderIcon className="size-4 animate-spin" /> Building every output into a temporary folder…
+        <LoaderIcon className="size-4 animate-spin" /> Building every output as a dry run…
       </span>
     </div>
   )

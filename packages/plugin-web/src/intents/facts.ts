@@ -168,7 +168,14 @@ export async function configReport(ctx: Context): Promise<ConfigReport> {
 
         for (const change of changes) setBy.set(change.key, display);
 
-        layers.push(entry);
+        // The trace lists each change apart; a contributor's changes in a row are one layer.
+        const previous = layers.at(-1);
+
+        if (previous && previous.path === entry.path) {
+            previous.changes.push(...changes);
+        } else {
+            layers.push(entry);
+        }
     }
 
     const final = new Map<string, string>();
