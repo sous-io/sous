@@ -1847,3 +1847,9 @@ All in `packages/plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022): a 
 
 - **New** "should show the token count of a written output" and "should list tiktoken_bg.wasm among the files npm publishes".
   - **Why:** the bundle lacked `__dirname` and tiktoken's `tiktoken_bg.wasm`, and `compiler.compile` swallowed the failure, so a published `sous build` never printed `(~N tokens)`. The compiler now warns when the counter does not load.
+
+### "should list tiktoken_bg.wasm among the files npm publishes" (sous, `test/bin.test.ts`)
+
+- **Before:** ran `npm pack --dry-run` in `packages/sous` and expected `dist/tiktoken_bg.wasm` in its file list.
+- **Now:** "should ship tiktoken_bg.wasm next to the bundle" checks that the bundle the tests build has the wasm file beside it, and that package.json's `files` lists it.
+- **Why:** `npm pack` only lists a `dist/` that is already built, and the release job runs the tests before it builds, so the 1.0.5 release failed on an empty list.

@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
@@ -188,11 +188,15 @@ describe("the sous bin, counting tokens", () => {
         }
     }, 60_000);
 
-    /** `npm pack` ships the wasm file the bundle loads at run time. */
-    it("should list tiktoken_bg.wasm among the files npm publishes", () => {
-        const pack = spawnSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], { cwd: packageDir, encoding: "utf8" });
-        const files = (JSON.parse(pack.stdout) as Array<{ files: Array<{ path: string }> }>)[0]?.files.map((file) => file.path) ?? [];
+    /**
+     * The package ships the wasm file the bundle loads at run time: the bundler puts it next to the
+     * bundle, and package.json lists it among the files npm publishes. (Checked without `npm pack`,
+     * which sees only a `dist/` already built, and the release job runs the tests before it builds.)
+     */
+    it("should ship tiktoken_bg.wasm next to the bundle", () => {
+        const manifest = JSON.parse(readFileSync(path.join(packageDir, "package.json"), "utf8")) as { files?: string[] };
 
-        expect(files).toContain("dist/tiktoken_bg.wasm");
-    }, 60_000);
+        expect(existsSync(path.join(path.dirname(bin), "tiktoken_bg.wasm"))).toBe(true);
+        expect(manifest.files).toContain("dist/tiktoken_bg.wasm");
+    });
 });
