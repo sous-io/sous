@@ -9,12 +9,13 @@
 import { definePlugin, jsonSchema, type PluginDefinition, type SousSchema } from "@sous-io/plugin-api";
 import { AliasService } from "./aliases.js";
 import { IncludeService } from "./includes.js";
-import { compile, prune } from "./intents.js";
+import { compile, prune, tokens } from "./intents.js";
 import { BUILT_IN_FILTERS, BUILT_IN_TAGS } from "./liquid/tags.js";
+import { RenderService, TargetsService } from "./render.js";
 import { RuntimeCache } from "./runtime.js";
 import { CONFIG_KEYS } from "./schema.js";
 import { StateService } from "./state.js";
-import type { CompileInput, CompilerPruneInput } from "./types.js";
+import type { CompileInput, CompilerPruneInput, CompilerTokensInput } from "./types.js";
 import { WriterService } from "./writer.js";
 import "./types.js";
 import packageJson from "../package.json" with { type: "json" };
@@ -45,6 +46,17 @@ const compileInput = jsonSchema<CompileInput>({
         strict: { type: "boolean", description: "Warnings fail the compile." },
         rebuild: { type: "boolean", description: "Writes every output, changed or not." },
         dryRun: { type: "boolean", description: "Writes nothing." },
+        includeContent: { type: "boolean", description: "Puts each output's built text in its content, dry run and unchanged outputs included." },
+        countTokens: { type: "boolean", description: "Counts every output's tokens, dry run and unchanged outputs included." },
+        report: { type: "boolean", description: "Reports progress and problems as it compiles. Default: true." },
+    },
+    additionalProperties: false,
+});
+
+const tokensInput = jsonSchema<CompilerTokensInput>({
+    type: "object",
+    properties: {
+        targets: { type: "array", items: { type: "string" }, description: "Only these targets, by id or index." },
     },
     additionalProperties: false,
 });
@@ -106,12 +118,29 @@ export const compilerPlugin: PluginDefinition = definePlugin({
             { lifetime: "config" },
         );
 
+        sous.services.add("compiler.targets", (_config, ctx) => new TargetsService(runtimes.for(ctx)), { lifetime: "config" });
+        sous.services.add("compiler.render", (_config, ctx) => new RenderService(runtimes.for(ctx)), { lifetime: "config" });
+
         sous.intents.add({
             intent: "compiler.compile",
             summary: "Compile every compilation target into its outputs",
             internal: true,
+            readOnly: (input) => input.dryRun === true,
             input: compileInput,
             handle: (input, ctx) => compile(input, ctx, runtimes.for(ctx)),
+        });
+
+        sous.intents.add({
+            intent: "compiler.tokens",
+            summary: "Show how many tokens each output holds: what an agent reads",
+            description: "Compiles every target without writing anything and counts each output's tokens (o200k_base) and bytes, largest first.",
+            input: tokensInput,
+            requiresProject: true,
+            parallel: true,
+            readOnly: true,
+            cli: { command: ["tokens"], positional: ["targets"], examples: ["sous tokens", "sous tokens claude-md"] },
+            agent: { usage: "See how large each built output is in tokens, to keep what agents read small. Writes nothing." },
+            handle: tokens,
         });
 
         sous.intents.add({

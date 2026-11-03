@@ -76,6 +76,32 @@ export interface CompileOptions {
     readonly strict?: boolean;
     readonly rebuild?: boolean;
     readonly dryRun?: boolean;
+    /** Puts each output's built text in `content`. */
+    readonly includeContent?: boolean;
+    /** Counts every output's tokens, not only those written. */
+    readonly countAllTokens?: boolean;
+}
+
+/** One file to render on its own, as the build would (`compiler.render`). */
+export interface RenderFileRequest {
+    /** The file, absolute. */
+    readonly file: string;
+    /** Its text. */
+    readonly source: string;
+    /** The unit whose entry directory, scope and settings it renders with; none for a file no target reads. */
+    readonly unit?: CompileUnit;
+    /** The variables it renders with. */
+    readonly vars: VarScope;
+    /** What `${var}` in include paths is substituted from. */
+    readonly includeScope: VarScope;
+}
+
+/** What rendering one file gave. */
+export interface RenderFileResult {
+    readonly text: string;
+    readonly problems: CompileProblem[];
+    /** Every other file read. */
+    readonly included: string[];
 }
 
 /** What a run did. */
@@ -101,6 +127,8 @@ export class CompileRun extends Reporting(Object) {
     private includeStack: string[] = [];
     private sourceComments = false;
     private unit: CompileUnit | undefined;
+    /** What include paths are substituted from instead of the unit's scope (`renderFile`). */
+    private includeScope: VarScope | undefined;
     private errorCount = 0;
 
     constructor(
@@ -121,6 +149,35 @@ export class CompileRun extends Reporting(Object) {
         }
 
         return { outputs: this.outputs, problems: this.problems, produced: this.produced, included: this.included };
+    }
+
+    /**
+     * Renders one file's text as the build would for the unit: its includes read and expanded, the
+     * file and every `.tpl.` include rendered with the variables. Writes nothing; problems are
+     * returned (and reported to the run's reporter).
+     */
+    async renderFile(request: RenderFileRequest): Promise<RenderFileResult> {
+        const { file, source, unit } = request;
+
+        this.unit = unit;
+        this.includeScope = request.includeScope;
+        this.sourceComments = unit?.includeSourceComments ?? false;
+        this.nodes = new Map();
+        this.includeStack = [file];
+
+        const isContent = unit?.content !== undefined && unit.source === file;
+        const baseDir = isContent ? (unit!.globBase ?? path.dirname(file)) : path.dirname(file);
+        const node: FileNode = { path: file, content: source, isTpl: isContent || path.basename(file).includes(".tpl."), real: !isContent, parts: [] };
+
+        this.nodes.set(file, node);
+        node.parts = this.processIncludes(source, baseDir, file, isContent ? unit!.label : file);
+        this.includeStack = [];
+
+        const entryDir = unit === undefined ? path.dirname(file) : unit.content !== undefined ? (unit.globBase ?? path.dirname(unit.source)) : path.dirname(unit.source);
+        const text = await this.expand(file, request.vars, entryDir);
+        const included = [...this.nodes.keys()].filter((other) => other !== file);
+
+        return { text, problems: [...this.problems], included };
     }
 
     /**
@@ -336,10 +393,15 @@ export class CompileRun extends Reporting(Object) {
                 ...(this.options.rebuild ? { force: true } : {}),
                 ...(mode === undefined ? {} : { mode }),
             });
-            const counted = written.action === "created" || written.action === "updated";
+            const counted = this.options.countAllTokens || written.action === "created" || written.action === "updated";
             const tokens = counted && this.deps.countTokens ? this.deps.countTokens(file.content) : undefined;
 
-            this.outputs.push({ ...base, ...written, ...(tokens === undefined ? {} : { tokens }) });
+            this.outputs.push({
+                ...base,
+                ...written,
+                ...(tokens === undefined ? {} : { tokens }),
+                ...(this.options.includeContent ? { content: file.content } : {}),
+            });
             this.reportWritten(written.file, written.action, tokens);
         } catch (error) {
             this.recordError(`Failed to write ${file.destination}`, { file: file.destination }, { subject: file.destination, cause: messageOf(error) });
@@ -483,7 +545,7 @@ export class CompileRun extends Reporting(Object) {
 
     /** The parts one include line becomes. */
     private includeLine(includePath: string, line: string, baseDir: string, fromFile: string, where: string, lineNumber: number): Part[] {
-        const unitScope = this.unit?.scope ?? {};
+        const unitScope = this.includeScope ?? this.unit?.scope ?? {};
         const result = this.deps.includes.resolve(includePath, { fromFile, baseDir, scope: unitScope });
 
         if (result.files.length === 0) {
@@ -604,15 +666,22 @@ export class CompileRun extends Reporting(Object) {
 
     private async render(content: string, vars: VarScope, roots: string[], fromFile: string): Promise<string> {
         try {
-            const engine = this.deps.createEngine({ roots, scope: { ...(this.unit?.scope ?? {}), ...vars }, fromFile });
+            const engine = this.deps.createEngine({ roots, scope: { ...(this.includeScope ?? this.unit?.scope ?? {}), ...vars }, fromFile });
 
             return (await engine.parseAndRender(content, vars)) as string;
         } catch (error) {
-            this.recordError("Template rendering error", { file: fromFile }, { subject: fromFile, cause: messageOf(error) });
+            this.recordError("Template rendering error", { file: fromFile, ...liquidPosition(error) }, { subject: fromFile, cause: messageOf(error) });
 
             return content;
         }
     }
+}
+
+/** Where a Liquid error says it is (`line:3, col:5`), when it says. */
+function liquidPosition(error: unknown): { line?: number; column?: number } {
+    const at = /line:(\d+), col:(\d+)/.exec(messageOf(error));
+
+    return at ? { line: Number(at[1]), column: Number(at[2]) } : {};
 }
 
 function messageOf(error: unknown): string {

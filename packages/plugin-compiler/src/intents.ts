@@ -4,7 +4,7 @@
  */
 
 import path from "node:path";
-import { IntentOutputs, LogLevel, nullReporter, type Context, type Reporter } from "@sous-io/plugin-api";
+import { IntentOutput, IntentOutputs, LogLevel, nullReporter, Table, type Context, type Reporter } from "@sous-io/plugin-api";
 import type { LiquidEngines } from "@sous-io/plugin-liquid/types";
 import type { RefsParser } from "@sous-io/plugin-refs/types";
 import type { VariablesSecrets } from "@sous-io/plugin-variables/types";
@@ -21,11 +21,14 @@ import type {
     CompilerIncludes,
     CompilerPruneInput,
     CompilerPruneResult,
+    CompilerTokensInput,
+    CompilerTokensResult,
+    OutputSize,
     StateFileEntry,
 } from "./types.js";
 
 /** Which target indexes `targets` names, by id or index; names that match nothing are problems. */
-function selectTargets(runtime: CompilerRuntime, wanted: ReadonlyArray<string | number> | undefined, problems: CompileProblem[]): Set<number> | undefined {
+export function selectTargets(runtime: CompilerRuntime, wanted: ReadonlyArray<string | number> | undefined, problems: CompileProblem[]): Set<number> | undefined {
     if (wanted === undefined) {
         return undefined;
     }
@@ -48,7 +51,7 @@ function selectTargets(runtime: CompilerRuntime, wanted: ReadonlyArray<string | 
 }
 
 /** Everything a compile run needs, from the runtime and the services in force. */
-async function runDependencies(runtime: CompilerRuntime, ctx: Pick<Context, "services">, reporter: Reporter, countTokens: boolean) {
+export async function runDependencies(runtime: CompilerRuntime, ctx: Pick<Context, "services">, reporter: Reporter, countTokens: boolean) {
     const services = ctx.services;
     const includes: CompilerIncludes = services.get("compiler.includes");
     const liquid: LiquidEngines = services.get("liquid.engine");
@@ -112,6 +115,7 @@ export async function compile(input: CompileInput, ctx: Context, runtime: Compil
 
 async function compileTargets(input: CompileInput, ctx: Context, runtime: CompilerRuntime): Promise<CompileResult> {
     const started = performance.now();
+    const reporter = input.report === false ? nullReporter : ctx.reporter;
     const strict = input.strict ?? false;
     const dryRun = input.dryRun ?? false;
     const store = runtime.store();
@@ -125,17 +129,23 @@ async function compileTargets(input: CompileInput, ctx: Context, runtime: Compil
         { resolver: runtime.resolver(), aliases: runtime.aliases(), globs: runtime.globs(), projectRoot: runtime.projectRoot() },
         only,
     );
-    const problems = [...reportExpansion(selectionProblems, false, ctx.reporter), ...reportExpansion(expanded.problems, strict, ctx.reporter)];
-    const { deps, counter, counterError } = await runDependencies(runtime, ctx, ctx.reporter, true);
+    const problems = [...reportExpansion(selectionProblems, false, reporter), ...reportExpansion(expanded.problems, strict, reporter)];
+    const { deps, counter, counterError } = await runDependencies(runtime, ctx, reporter, true);
 
     if (counter === undefined) {
         const message = `Tokens were not counted: the token counter (tiktoken) did not load.\n  ${messageOf(counterError)}`;
 
-        ctx.reporter.problem(message, {}, LogLevel.Warning);
+        reporter.problem(message, {}, LogLevel.Warning);
         problems.push({ level: "warning", message });
     }
 
-    const run = new CompileRun(deps, { strict, ...(input.rebuild ? { rebuild: true } : {}), dryRun });
+    const run = new CompileRun(deps, {
+        strict,
+        ...(input.rebuild ? { rebuild: true } : {}),
+        dryRun,
+        ...(input.includeContent ? { includeContent: true } : {}),
+        ...(input.countTokens ? { countAllTokens: true } : {}),
+    });
     let units: CompileUnit[] = expanded.units;
 
     if (input.changedFiles !== undefined) {
@@ -144,7 +154,7 @@ async function compileTargets(input: CompileInput, ctx: Context, runtime: Compil
         units = units.filter((unit) => run.reads(unit, changed));
 
         if (units.length === 0) {
-            ctx.reporter.detail(`No targets affected by change to ${input.changedFiles.join(", ")}; nothing compiled`);
+            reporter.detail(`No targets affected by change to ${input.changedFiles.join(", ")}; nothing compiled`);
         }
     }
 
@@ -159,7 +169,7 @@ async function compileTargets(input: CompileInput, ctx: Context, runtime: Compil
             runtime.produced = result.produced;
         }
 
-        ctx.reporter.operationEnd(errors > 0 ? `Done with ${errors} error(s).` : "Done.", errors === 0);
+        reporter.operationEnd(errors > 0 ? `Done with ${errors} error(s).` : "Done.", errors === 0);
         await ctx.emit("compiler.wrote", { files: result.outputs, dryRun });
 
         return {
@@ -172,6 +182,54 @@ async function compileTargets(input: CompileInput, ctx: Context, runtime: Compil
     } finally {
         counter?.free();
     }
+}
+
+/**
+ * Runs `compiler.tokens`: a quiet dry run that counts every output's tokens, shown as a table
+ * from the largest output down. The compile's problems are reported, and listed in the result.
+ */
+export async function tokens(input: CompilerTokensInput, ctx: Context): Promise<IntentOutputs<CompilerTokensResult>> {
+    // Without the counter every count would be missing, so the command fails with the reason.
+    const counter = await createTokenCounter().catch((error: unknown) => {
+        throw new Error(`Cannot count tokens: the token counter (tiktoken) did not load.`, { cause: error });
+    });
+
+    counter.free();
+
+    const compiled = (
+        await ctx.run("compiler.compile", { dryRun: true, countTokens: true, report: false, ...(input.targets === undefined ? {} : { targets: input.targets }) })
+    ).toPlain();
+
+    for (const problem of compiled.problems) {
+        ctx.reporter.problem(problem.message, problem.file === undefined ? {} : { subject: problem.file }, problem.level === "error" ? LogLevel.Error : LogLevel.Warning);
+    }
+
+    const outputs: OutputSize[] = compiled.outputs
+        .filter((output) => output.action !== "skipped-untracked")
+        .map((output) => ({ file: output.file, ...(output.target === undefined ? {} : { target: output.target }), tokens: output.tokens ?? 0, bytes: output.bytes }))
+        .sort((a, b) => b.tokens - a.tokens || a.file.localeCompare(b.file));
+    const totalTokens = outputs.reduce((sum, output) => sum + output.tokens, 0);
+    const totalBytes = outputs.reduce((sum, output) => sum + output.bytes, 0);
+    const root = ctx.project?.root;
+    const shown = (file: string) => (root === undefined ? file : path.relative(root, file) || file);
+    const result: CompilerTokensResult = { outputs, totalTokens, totalBytes, problems: compiled.problems };
+
+    return new IntentOutputs<CompilerTokensResult>(
+        new IntentOutput<CompilerTokensResult>({
+            summary: `${outputs.length} output(s), ${totalTokens.toLocaleString("en-US")} tokens (o200k_base), ${totalBytes.toLocaleString("en-US")} bytes in all.`,
+            result: new Table(
+                [
+                    { key: "file", header: "Output", kind: "path" },
+                    { key: "target", header: "Target" },
+                    { key: "tokens", header: "Tokens", kind: "number" },
+                    { key: "bytes", header: "Bytes", kind: "number" },
+                ],
+                outputs.map((output) => ({ file: shown(output.file), target: output.target ?? "", tokens: output.tokens, bytes: output.bytes })),
+                { empty: "No compilation target produces any output." },
+            ),
+            data: result,
+        }),
+    );
 }
 
 /** Every file the targets would write now: from the latest full compile, or a quiet dry run. */

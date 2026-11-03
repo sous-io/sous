@@ -311,13 +311,20 @@ export interface CompileProblem {
     readonly target?: string;
     readonly file?: string;
     readonly line?: number;
+    /** The column on `line`, from 1, when known (a Liquid error says where it is). */
+    readonly column?: number;
 }
 
 /** One output compiled. */
 export interface CompiledOutput extends WrittenFile {
     readonly source: string;
-    /** Its size in tokens (`o200k_base`), when counted. */
+    /**
+     * Its size in tokens (`o200k_base`), when counted: always for a created or updated output, and
+     * for every output, dry run and unchanged included, under `countTokens`.
+     */
     readonly tokens?: number;
+    /** The text built for it (what is, or would be, written), under `includeContent`. */
+    readonly content?: string;
 }
 
 /** The input of `compiler.compile` (internal). */
@@ -331,6 +338,12 @@ export interface CompileInput {
     /** Writes every output even when unchanged. */
     rebuild?: boolean;
     dryRun?: boolean;
+    /** Puts each output's built text in `content`, dry run and unchanged outputs included. Default `false`. */
+    includeContent?: boolean;
+    /** Counts every output's tokens, dry run and unchanged outputs included. Default `false`: only written outputs are counted. */
+    countTokens?: boolean;
+    /** Reports progress and problems as it compiles (`true` unless `false`); a caller that shows the result itself passes `false`. */
+    report?: boolean;
 }
 
 /** The result of `compiler.compile`. Errors are listed, never thrown, so every target compiles. */
@@ -359,6 +372,101 @@ export interface CompilerPruneResult {
     readonly dryRun: boolean;
 }
 
+/** The input of `compiler.tokens`. */
+export interface CompilerTokensInput {
+    /** Only these targets, by id or index. Default: every target. */
+    targets?: string[];
+}
+
+/** One output's size, as `compiler.tokens` gives it. */
+export interface OutputSize {
+    /** The output, absolute. */
+    readonly file: string;
+    readonly target?: string;
+    readonly tokens: number;
+    readonly bytes: number;
+}
+
+/** The result of `compiler.tokens`: what an agent reads, output by output. */
+export interface CompilerTokensResult {
+    readonly outputs: OutputSize[];
+    readonly totalTokens: number;
+    readonly totalBytes: number;
+    readonly problems: CompileProblem[];
+}
+
+// ---------------------------------------------------------------------------------------------
+// compiler.targets and compiler.render
+// ---------------------------------------------------------------------------------------------
+
+/** One output of one source of a target, as the build resolves it. */
+export interface CompilationEntry {
+    /** The target's id, or its index as text. */
+    readonly target: string;
+    /** The target's index in `compilation.targets`. */
+    readonly targetIndex: number;
+    /** The source file, absolute; for a `content` target, a path named after its id under the project root. */
+    readonly source: string;
+    /** The template text of a `content` target; `undefined` for a source on disk. */
+    readonly content?: string;
+    /** The file it writes, absolute (before any transform changes it). */
+    readonly output: string;
+    /** The output's index in the target's `outputs`. */
+    readonly outputIndex: number;
+    /** The `compilation-transform` ids applied, the target's then the output's. */
+    readonly transforms: readonly string[];
+    /** Who added the target. */
+    readonly origin?: CompilationOrigin;
+}
+
+/** Every entry, and what went wrong expanding the targets. */
+export interface CompilationEntries {
+    readonly entries: CompilationEntry[];
+    readonly problems: CompileProblem[];
+}
+
+/**
+ * The config's targets expanded as the build expands them: globs matched, `${var}` substituted,
+ * `_if` applied, one entry per output. Reads the disk only to match globs.
+ */
+export interface CompilerTargets {
+    /** Every entry; `targets` keeps only those targets, by id or index. */
+    expand(options?: { targets?: ReadonlyArray<string | number> }): CompilationEntries;
+}
+
+/** What `compiler.render` renders. */
+export interface TemplateRenderRequest {
+    /** The source file, absolute. Need not belong to a target, nor exist when `source` is given. */
+    file: string;
+    /** The text to render instead of the file's (an unsaved edit). Rendered exactly as given. */
+    source?: string;
+    /** Values layered over the real scope ("try another value"). */
+    scope?: Record<string, unknown>;
+    /** Whose scope to use, by id or index, when several targets read the file. Default: the first that does. */
+    target?: string | number;
+    /** Which of that target's outputs, by its index in `outputs`. Default: the first. */
+    output?: number;
+}
+
+/** What `compiler.render` rendered. */
+export interface TemplateRenderResult {
+    /** The text the build would produce for the file (before transforms), includes expanded. */
+    readonly text: string;
+    /** Errors and warnings, with the line and column when known. */
+    readonly problems: CompileProblem[];
+    /** The target whose scope was used, when one reads the file. */
+    readonly target?: string;
+    /** The output whose scope was used. */
+    readonly outputIndex?: number;
+    /** Every file the render read beside `file` (its includes), absolute. */
+    readonly included: string[];
+}
+
+/** Renders one template as the build would, writing nothing. */
+export interface CompilerRender {
+    render(request: TemplateRenderRequest): Promise<TemplateRenderResult>;
+}
+
 /** The payload of `compiler.wrote`. */
 export interface CompilerWrotePayload {
     readonly files: readonly WrittenFile[];
@@ -381,6 +489,10 @@ declare module "@sous-io/plugin-api" {
         "compiler.state": CompilerState;
         /** Writing outputs. */
         "compiler.writer": CompilerWriter;
+        /** The targets expanded into concrete sources and outputs. */
+        "compiler.targets": CompilerTargets;
+        /** Rendering one template as the build would. */
+        "compiler.render": CompilerRender;
         /** The `~` sigil's resolver; registered by plugin-recipes. */
         "compiler.namespace-resolver": NamespaceResolver;
     }
@@ -390,6 +502,8 @@ declare module "@sous-io/plugin-api" {
         "compiler.compile": { input: CompileInput; result: CompileResult };
         /** Removes outputs no target produces any more (internal). */
         "compiler.prune": { input: CompilerPruneInput; result: CompilerPruneResult };
+        /** Every output's size in tokens and bytes, from a dry run: what an agent reads. */
+        "compiler.tokens": { input: CompilerTokensInput; result: CompilerTokensResult };
     }
 
     interface SousEvents {
