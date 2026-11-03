@@ -1,9 +1,6 @@
-import path from "node:path";
 import { type Context, LogLevel } from "@sous-io/plugin-api";
-import { pathsToWatch, type WatchSet, watchSet } from "./paths.js";
-import { type ChangeBatch, ChangeBatcher, type FileWatcherHandle, realTimers, type Timers, type WatcherFactory } from "./watcher.js";
-import { DEFAULT_DEBOUNCE_MS } from "../schemas.js";
-import type { BuildWatchInput, BuildWatchResult } from "../types.js";
+import { realTimers, type Timers } from "./watcher.js";
+import type { BuildWatcher, BuildWatchInput, BuildWatchResult, WatchBatch, WatchHandle } from "../types.js";
 
 /** How often watch mode checks upstream when nothing says otherwise, as `store.watchPollSeconds` defaults. */
 export const DEFAULT_POLL_SECONDS = 300;
@@ -13,9 +10,9 @@ export interface WatchSessionOptions {
     /** The background intent's context: `ctx.config` is always the latest config. */
     ctx: Context;
     input: BuildWatchInput;
-    createWatcher: WatcherFactory;
     /** Where relative paths resolve with no project. */
     cwd: string;
+    /** The timers polling upstream uses. */
     timers?: Timers;
 }
 
@@ -30,8 +27,8 @@ interface Trigger {
 }
 
 /**
- * One run of watch mode: watches the sources of the latest config and submits a `build` (or
- * `compile`) chain for each batch of changes. Chains run one after another; changes that arrive
+ * One run of watch mode: watches the sources of the latest config through `build.watcher` and
+ * submits a `build` (or `compile`) chain for each batch of changes. Chains run one after another; changes that arrive
  * while one runs are gathered into the next.
  *
  * - A change to a source file is a partial rebuild: only the targets that include it compile, and
@@ -52,9 +49,9 @@ export class WatchSession {
     private stopped = false;
     private busy: Promise<void> | undefined;
     private pending: Trigger | undefined;
-    private watcher: FileWatcherHandle | undefined;
-    private batcher: ChangeBatcher | undefined;
-    private lastSet: WatchSet | undefined;
+    private watcher: WatchHandle | undefined;
+    /** The watcher service of the last config whose watch set could be worked out. */
+    private lastService: BuildWatcher | undefined;
     private pollTimer: unknown;
     private resolveDone!: (result: BuildWatchResult) => void;
     private readonly timers: Timers;
@@ -89,7 +86,6 @@ export class WatchSession {
 
         this.stopped = true;
         this.pending = undefined;
-        this.batcher?.cancel();
 
         if (this.pollTimer !== undefined) {
             this.timers.clearTimeout(this.pollTimer);
@@ -104,56 +100,42 @@ export class WatchSession {
 
     private async openWatcher(first: boolean): Promise<void> {
         const ctx = this.ctx;
-        const globs = ctx.services.get("host.globs");
-        let set: WatchSet;
+        const service = ctx.config.services.get("build.watcher");
+        const options = { cwd: this.options.cwd, onError: (error: unknown) => ctx.reporter.problem("The file watcher reported an error; watching goes on.", { cause: message(error) }) };
+        const onChange = (batch: WatchBatch) => this.onBatch(batch);
+        let watcher: WatchHandle;
 
         try {
-            set = watchSet(ctx.config, ctx.project, globs, { cwd: this.options.cwd, ignored: this.ignoredFiles() });
+            watcher = service.watch(options, onChange);
+            this.lastService = service;
         } catch (error) {
-            if (first || !this.lastSet) {
+            if (first || !this.lastService) {
                 throw error;
             }
 
             ctx.reporter.problem("Sous could not work out what to watch from the new config, so it keeps watching what it watched before.", { cause: message(error) }, LogLevel.Error);
-            set = this.lastSet;
+            watcher = this.lastService.watch(options, onChange);
         }
 
-        this.lastSet = set;
+        this.watcher = watcher;
+        await watcher.ready;
 
-        const debounceMs = ctx.config.get("watch")?.debounceMs ?? DEFAULT_DEBOUNCE_MS;
-        const batcher = new ChangeBatcher(set, globs, debounceMs, (batch) => this.onBatch(batch), this.timers);
-        const ignored = new Set(set.ignored.map((file) => path.resolve(file)));
-        const paths = pathsToWatch(set, globs);
+        const { files, globs, config } = watcher.watching;
 
-        this.batcher = batcher;
-        this.watcher = await this.options.createWatcher(paths, { ignored: (file) => ignored.has(path.resolve(file)) }, (event, file) => batcher.handle(event, file));
-        ctx.reporter.notice(`Watching ${set.files.length + set.globs.length + set.fullRebuildPaths.length} pattern(s) for changes...`);
+        ctx.reporter.notice(`Watching ${files.length + globs.length + config.length} pattern(s) for changes...`);
     }
 
     private async closeWatcher(): Promise<void> {
         const watcher = this.watcher;
 
         this.watcher = undefined;
-        this.batcher?.cancel();
         await watcher?.close();
-    }
-
-    /** The state file and the PID file: written by builds and by watch mode itself. */
-    private ignoredFiles(): string[] {
-        const services = this.ctx.services;
-        const files = [services.get("build.pid").path()];
-
-        if (services.has("compiler.state")) {
-            files.push(services.get("compiler.state").path());
-        }
-
-        return files;
     }
 
     // ------------------------------------------------------------------ the queue
 
-    private onBatch(batch: ChangeBatch): void {
-        this.enqueue({ files: batch.files, full: batch.full });
+    private onBatch(batch: WatchBatch): void {
+        this.enqueue({ files: batch.files, full: batch.config });
     }
 
     private enqueue(trigger: Trigger): void {

@@ -1,8 +1,8 @@
 /**
  * The contract of plugin-build: the one build path every front end and
  * every other intent uses (`build`), compiling without recipes (`compile`), preparing for a build,
- * `prune` and `clear`, watch mode, the PID file and the runtime context file. It only runs intents;
- * every file it writes goes through `compiler.writer`.
+ * `prune` and `clear`, watch mode and the file watcher, the PID file and the runtime context file. It
+ * only runs intents; every file it writes goes through `compiler.writer`.
  *
  * Other plugins import this file type-only.
  */
@@ -72,6 +72,87 @@ export interface BuildRuntimeContext {
     generate(): Promise<RuntimeContext | undefined>;
     /** Writes the file through `compiler.writer`. */
     write(options?: { dryRun?: boolean }): Promise<WrittenFile | undefined>;
+}
+
+/** What `build.watcher` watches, as absolute paths. */
+export interface WatchedPaths {
+    /** Exact source files: each target's `entryPoint`. */
+    readonly files: readonly string[];
+    /** Glob patterns of source files: each target's `entryGlob`, watched by its static base. */
+    readonly globs: readonly string[];
+    /** Files and directories whose change needs the config rebuilt: the config file, `conf.d`, linked checkouts, `watch.paths`. */
+    readonly config: readonly string[];
+    /** The caller's `extra` paths (globs by their static base); a change to one counts as a source change. */
+    readonly extra: readonly string[];
+    /** The outputs the state file recorded when watching started; empty unless `outputs` was asked for. */
+    readonly outputs: readonly string[];
+    /** Never reported: the state file and the PID file, which builds and watch mode write themselves. */
+    readonly ignored: readonly string[];
+}
+
+/** How to watch. */
+export interface WatchOptions {
+    /** More files, directories or globs to watch, such as the partials the last compile read. A change counts as a source change. */
+    extra?: readonly string[];
+    /** Also watches the sources of targets a recipe added (their files in the store). Default `false`: those change only in a linked checkout, which is watched whole. */
+    recipes?: boolean;
+    /** Also watches every output the state file records. Default `false`. */
+    outputs?: boolean;
+    /** How long to wait for more changes before calling back, in milliseconds. Default `watch.debounceMs`. */
+    debounceMs?: number;
+    /** Closes the watcher when aborted. */
+    signal?: AbortSignal;
+    /** Where relative paths resolve with no project. Default: the engine's working directory. */
+    cwd?: string;
+    /** Told about each error the file watcher reports; watching goes on. Default: ignored. */
+    onError?: (error: unknown) => void;
+}
+
+/** The changes seen over one debounce window. A path is in exactly one of `changed`, `added` and `removed`. */
+export interface WatchBatch {
+    /** Every path, in the order first seen. */
+    readonly files: string[];
+    readonly changed: string[];
+    readonly added: string[];
+    readonly removed: string[];
+    /** True when a source changed: a target's `entryPoint` or `entryGlob`, or an `extra` path. */
+    readonly sources: boolean;
+    /** True when the config needs rebuilding: the config file, `conf.d`, a linked checkout or a `watch.paths` entry. */
+    readonly config: boolean;
+    /** True when an output changed. */
+    readonly outputs: boolean;
+}
+
+/** A running watch. */
+export interface WatchHandle {
+    /** What is watched. */
+    readonly watching: WatchedPaths;
+    /** Resolves once the file watcher has started; rejects when it cannot start. */
+    readonly ready: Promise<void>;
+    /** Stops watching; drops changes not yet called back. Safe to call more than once. */
+    close(): Promise<void>;
+}
+
+/**
+ * Watching the files sous builds from and writes to: the one file watcher, used by `build.watch`
+ * and by any plugin that needs to know when they change. It reads the config it was made for, so
+ * after a config change, close the handle and watch again with the new config's service.
+ *
+ * ```ts
+ * const handle = ctx.services.get("build.watcher").watch({ outputs: true, signal }, (batch) => {
+ *     if (batch.config) ctx.configChanged();
+ * });
+ *
+ * await handle.ready;
+ * ```
+ */
+export interface BuildWatcher {
+    /**
+     * Watches the paths sous builds from (and, with `outputs`, writes to), plus `extra`, and calls
+     * `onChange` with each debounced batch. Throws when what to watch cannot be worked out from the
+     * config (a `${var}` that does not resolve).
+     */
+    watch(options: WatchOptions, onChange: (batch: WatchBatch) => void): WatchHandle;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -217,6 +298,8 @@ declare module "@sous-io/plugin-api" {
     interface SousServices {
         "build.pid": BuildPid;
         "build.runtime-context": BuildRuntimeContext;
+        /** The one file watcher: the sources, the config, `watch.paths` and, when asked, the outputs. */
+        "build.watcher": BuildWatcher;
     }
 
     interface SousIntents {

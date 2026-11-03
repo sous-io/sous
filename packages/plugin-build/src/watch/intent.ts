@@ -3,7 +3,7 @@ import { watcherRunningError } from "../build.js";
 import { projectLabel } from "../pid.js";
 import type { BuildWatchInput, BuildWatchResult } from "../types.js";
 import { WatchSession } from "./session.js";
-import type { Timers, WatcherFactory } from "./watcher.js";
+import type { Timers } from "./watcher.js";
 
 /** The signals that stop watch mode. */
 export const STOP_SIGNALS = ["SIGINT", "SIGTERM"] as const;
@@ -26,8 +26,8 @@ export const processSignals: SignalSource = {
 
 /** What the `build.watch` handler is built with. */
 export interface WatchHandlerOptions {
-    createWatcher: WatcherFactory;
     signals: SignalSource;
+    /** The timers polling upstream uses. */
     timers?: Timers;
     /** Told about each session as it starts, so a front end or a test can stop it. */
     onSession?: (session: WatchSession) => void;
@@ -54,7 +54,6 @@ export function createWatchHandler(options: WatchHandlerOptions) {
         const session = new WatchSession({
             ctx,
             input,
-            createWatcher: options.createWatcher,
             cwd: options.cwd?.() ?? ctx.cwd,
             ...(options.timers ? { timers: options.timers } : {}),
         });

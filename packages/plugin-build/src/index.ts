@@ -1,6 +1,6 @@
 /**
- * plugin-build: the build, compile, prune and clear intents, preparing for a build, watch mode, the
- * PID file and the runtime context file.
+ * plugin-build: the build, compile, prune and clear intents, preparing for a build, watch mode and
+ * the file watcher, the PID file and the runtime context file.
  *
  * The contract other plugins code against is `./types.ts`. It only runs
  * other plugins' intents and services, by name: the compiler compiles, prunes and writes; the
@@ -21,8 +21,9 @@ import {
     watchSettingsSchema,
 } from "./schemas.js";
 import type { SignalSource } from "./watch/intent.js";
+import { WatcherService } from "./watch/service.js";
 import type { WatchSession } from "./watch/session.js";
-import type { Timers, WatcherFactory } from "./watch/watcher.js";
+import { chokidarWatcher, type Timers, type WatcherFactory } from "./watch/watcher.js";
 import type { RuntimeContextSettings } from "./types.js";
 import type {} from "@sous-io/plugin-git/types";
 import type {} from "@sous-io/plugin-host/types";
@@ -38,11 +39,11 @@ export const PLUGIN_VERSION = packageJson.version;
 
 /** What can be swapped in {@link createBuildPlugin}, for tests and other hosts. */
 export interface BuildPluginOptions {
-    /** Starts a file watcher. Default: chokidar. */
+    /** Starts a file watcher for `build.watcher`. Default: chokidar. */
     createWatcher?: WatcherFactory;
     /** Where stop signals come from. Default: the process. */
     signals?: SignalSource;
-    /** The timers debouncing and polling use. Default: the process's. */
+    /** The timers `build.watcher` debounces with and watch mode polls with. Default: the process's. */
     timers?: Timers;
     /** Probes whether a PID is running. */
     isProcessAlive?: (pid: number) => boolean;
@@ -59,7 +60,7 @@ export function createBuildPlugin(options: BuildPluginOptions = {}): PluginDefin
     return definePlugin({
         name: PLUGIN_NAME,
         version: PLUGIN_VERSION,
-        description: "The build, compile, prune and clear intents, preparing for a build, watch mode, the PID file, the runtime context file.",
+        description: "The build, compile, prune and clear intents, preparing for a build, watch mode, the file watcher, the PID file, the runtime context file.",
         dependsOn: {
             "@sous-io/plugin-compiler": `^${packageJson.version}`,
             "@sous-io/plugin-recipes": `^${packageJson.version}`,
@@ -101,6 +102,20 @@ export function createBuildPlugin(options: BuildPluginOptions = {}): PluginDefin
                         git: () => ctx.services.get("git.runner"),
                         writer: () => ctx.services.get("compiler.writer"),
                         plugin: PLUGIN_NAME,
+                    }),
+                { lifetime: "config" },
+            );
+
+            sous.services.add(
+                "build.watcher",
+                (_config, ctx) =>
+                    new WatcherService({
+                        config: ctx.config,
+                        services: ctx.services,
+                        project: ctx.project,
+                        cwd: cwd?.() ?? ctx.cwd ?? ".",
+                        createWatcher: options.createWatcher ?? chokidarWatcher,
+                        ...(options.timers ? { timers: options.timers } : {}),
                     }),
                 { lifetime: "config" },
             );
@@ -174,10 +189,8 @@ export function createBuildPlugin(options: BuildPluginOptions = {}): PluginDefin
                 cli: { hidden: true },
                 agent: { hidden: true },
                 async handle(input, ctx) {
-                    const { chokidarWatcher } = await import("./watch/watcher.js");
                     const { createWatchHandler, processSignals } = await import("./watch/intent.js");
                     const handler = createWatchHandler({
-                        createWatcher: options.createWatcher ?? chokidarWatcher,
                         signals: options.signals ?? processSignals,
                         cwd,
                         ...(options.timers ? { timers: options.timers } : {}),
