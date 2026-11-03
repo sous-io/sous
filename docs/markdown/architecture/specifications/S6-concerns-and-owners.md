@@ -388,6 +388,7 @@ for (const target of config.entities("memory-target")) {
 | Variable names and their spellings (`bareName`) | `variables.names` | `plugin-variables` | service, singleton |
 | Which values are secret, and hiding them | `variables.secrets` | `plugin-variables` | service, config |
 | Building a LiquidJS engine with every tag and filter | `liquid.engine` | `plugin-liquid` | service, factory |
+| Finding a template's top-level Liquid sections, marking them for one render and cutting the output back into one piece per section | `liquid.regions` | `plugin-liquid` | service, factory |
 | Liquid tags and filters plugins add | `liquid-tag`, `liquid-filter` | `plugin-liquid` | entity kinds |
 | Which expression languages exist, Liquid first (S5, config expressions) | `expression-language` | `plugin-expressions` | entity kind |
 | Evaluating config expressions inside each layer, before it merges (S2, config building; S5, config expressions) | `expressions.evaluator` | `plugin-expressions` | service, used by the config-file contributors |
@@ -481,6 +482,9 @@ add compilation targets to the config.
 | Compilation settings: targets, entry globs, `content` targets, outputs, runtime context | the `compilation` config key | `config-key` entity |
 | The built-in tags (`showVars`, `exportScalarVarsJs`, `getFiles`, `listFiles`) and filter (`bulletList`) | `liquid-tag`, `liquid-filter` entities | entities |
 | The state file: every file sous wrote, and which recipe it came from | `compiler.state` | service, config |
+| Rendering one template as the build would, unsaved text and extra values allowed, writing nothing; counting a text's tokens as compile counts an output's | `compiler.render` | service, config |
+| The targets expanded into concrete sources and outputs, as compile expands them | `compiler.targets` | service, config |
+| `sous tokens`: every output's size in tokens | `compiler.tokens` | intent |
 | Writing outputs: overwrite and take ownership, unless `compilation.overwriteUntracked` is `false` | `compiler.writer` | service, config |
 | Pruning outputs no target produces any more | `compiler.prune` | intent, internal |
 | The namespace resolver the `~` sigil uses | `compiler.namespace-resolver` | service type, implemented by `plugin-recipes` |
@@ -507,6 +511,7 @@ A compilation target may give its source as `content`, a template string, instea
 | Preparing for a build: seed core, lock new subscriptions, restore, check upstream | `build.prepare` | intent, internal |
 | Prune and clear | `prune`, `clear` | intents |
 | Watch mode | `build.watch` | intent, background; submits a `build` chain for each change |
+| The one file watcher; `build.watch` and `plugin-web` use it | `build.watcher` | service, config |
 | The watch settings | the `watch` config key | `config-key` entity |
 | The PID file | `build.pid` | service, singleton |
 | The runtime context file (git branch, task file) | `build.runtime-context` | service, config |
@@ -973,3 +978,11 @@ The `Reporter` interface became `BaseReporter` and the `Reporter` type derived f
 notice) is gone, and `note()` now reports the Note style. The views show results through the
 reporter instead of building text. Details in S1 (the engine), "Reporting: levels and styles".
 
+### 2026-11-03: Services for the web GUI
+
+`liquid.regions`, `compiler.render`, `compiler.targets`, the `compiler.tokens` intent and
+`build.watcher` were added for the web GUI (`plugin-web`). `compiler.render` and `compiler.targets`
+run the code `compiler.compile` runs, not a copy of it (L2), and `build.watch` watches through
+`build.watcher`. Approved by Luke's ruling: "I'm ok with even large changes to the existing code to
+not only make the web UI work, but make it work effectively and efficiently". Reviewed by the
+refactor's agent (major-sous-refactor-04).

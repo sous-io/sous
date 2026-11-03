@@ -5,11 +5,12 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { nullReporter } from "@sous-io/plugin-api";
+import { nullReporter, SousError } from "@sous-io/plugin-api";
 import { CompileRun } from "./compiler.js";
-import { runDependencies, selectTargets } from "./intents.js";
+import { expandUnits, runDependencies } from "./intents.js";
 import type { CompilerRuntime } from "./runtime.js";
-import { expandTargets, type CompileUnit, type ExpandResult } from "./targets.js";
+import { createTokenCounter, type TokenCounter } from "./tokens.js";
+import type { CompileUnit } from "./targets.js";
 import type {
     CompilationEntries,
     CompilerRender,
@@ -19,17 +20,11 @@ import type {
     TemplateRenderResult,
 } from "./types.js";
 
-/** The targets expanded into units, `only` keeping those targets (by id or index). */
-function expandUnits(runtime: CompilerRuntime, only?: ReadonlyArray<string | number>): ExpandResult {
-    const problems: CompileProblem[] = [];
-    const selected = selectTargets(runtime, only, problems);
-    const expanded = expandTargets(
-        runtime.settings(),
-        { resolver: runtime.resolver(), aliases: runtime.aliases(), globs: runtime.globs(), projectRoot: runtime.projectRoot() },
-        selected,
-    );
+/** The targets expanded into units, exactly as `compiler.compile` expands them, with every problem. */
+function expandAll(runtime: CompilerRuntime, only?: ReadonlyArray<string | number>): { units: CompileUnit[]; problems: CompileProblem[] } {
+    const expanded = expandUnits(runtime, only);
 
-    return { units: expanded.units, problems: [...problems, ...expanded.problems] };
+    return { units: expanded.units, problems: [...expanded.selectionProblems, ...expanded.problems] };
 }
 
 /** The `compiler.targets` service. */
@@ -37,7 +32,7 @@ export class TargetsService implements CompilerTargets {
     constructor(private readonly runtime: CompilerRuntime) {}
 
     expand(options: { targets?: ReadonlyArray<string | number> } = {}): CompilationEntries {
-        const { units, problems } = expandUnits(this.runtime, options.targets);
+        const { units, problems } = expandAll(this.runtime, options.targets);
         const entries = units.flatMap((unit) =>
             unit.outputs.map((output) => ({
                 target: unit.targetName,
@@ -57,12 +52,40 @@ export class TargetsService implements CompilerTargets {
 
 /** The `compiler.render` service. */
 export class RenderService implements CompilerRender {
+    /** The token counter, loaded on the first count and kept for the next. */
+    private counter: Promise<TokenCounter> | undefined;
+
     constructor(private readonly runtime: CompilerRuntime) {}
+
+    async countTokens(text: string): Promise<number> {
+        // The encoder loads on its first count, so an empty count here loads it or fails.
+        this.counter ??= createTokenCounter().then((counter) => {
+            counter.count("");
+
+            return counter;
+        });
+
+        let counter: TokenCounter;
+
+        try {
+            counter = await this.counter;
+        } catch (error) {
+            // Not kept, so a later count tries again.
+            this.counter = undefined;
+
+            throw new SousError("Cannot count tokens: the token counter (tiktoken) did not load.", {
+                cause: error,
+                details: [error instanceof Error ? error.message : String(error)],
+            });
+        }
+
+        return counter.count(text);
+    }
 
     async render(request: TemplateRenderRequest): Promise<TemplateRenderResult> {
         const file = path.resolve(this.runtime.projectRoot(), request.file);
         const { deps } = await runDependencies(this.runtime, this.runtime.source, nullReporter, false);
-        const expanded = expandUnits(this.runtime, request.target === undefined ? undefined : [request.target]);
+        const expanded = expandAll(this.runtime, request.target === undefined ? undefined : [request.target]);
 
         if (request.target !== undefined && expanded.problems.some((problem) => problem.level === "error" && problem.target === undefined)) {
             return { text: request.source ?? "", problems: expanded.problems, included: [] };

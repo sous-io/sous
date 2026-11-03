@@ -162,19 +162,9 @@ export class CompileRun extends Reporting(Object) {
         this.unit = unit;
         this.includeScope = request.includeScope;
         this.sourceComments = unit?.includeSourceComments ?? false;
-        this.nodes = new Map();
-        this.includeStack = [file];
+        this.loadEntry(file, unit, source);
 
-        const isContent = unit?.content !== undefined && unit.source === file;
-        const baseDir = isContent ? (unit!.globBase ?? path.dirname(file)) : path.dirname(file);
-        const node: FileNode = { path: file, content: source, isTpl: isContent || path.basename(file).includes(".tpl."), real: !isContent, parts: [] };
-
-        this.nodes.set(file, node);
-        node.parts = this.processIncludes(source, baseDir, file, isContent ? unit!.label : file);
-        this.includeStack = [];
-
-        const entryDir = unit === undefined ? path.dirname(file) : unit.content !== undefined ? (unit.globBase ?? path.dirname(unit.source)) : path.dirname(unit.source);
-        const text = await this.expand(file, request.vars, entryDir);
+        const text = await this.renderEntry(file, unit, request.vars);
         const included = [...this.nodes.keys()].filter((other) => other !== file);
 
         return { text, problems: [...this.problems], included };
@@ -225,21 +215,41 @@ export class CompileRun extends Reporting(Object) {
 
     /** Reads a unit's source and everything it includes. */
     private loadUnit(unit: CompileUnit): FileNode | null {
+        return this.loadEntry(unit.source, unit);
+    }
+
+    /**
+     * Reads the file a render starts from and everything it includes: a unit's `content` source,
+     * `source` in place of the file's text (`renderFile`), or else the file on disk. Compiling and
+     * `renderFile` both load through here.
+     */
+    private loadEntry(file: string, unit: CompileUnit | undefined, source?: string): FileNode | null {
         this.nodes = new Map();
         this.includeStack = [];
 
-        if (unit.content !== undefined) {
-            const node: FileNode = { path: unit.source, content: unit.content, isTpl: true, real: false, parts: [] };
+        const isContent = unit?.content !== undefined && unit.source === file;
+        const text = source ?? (isContent ? unit!.content : undefined);
 
-            this.nodes.set(unit.source, node);
-            this.includeStack.push(unit.source);
-            node.parts = this.processIncludes(unit.content, unit.globBase ?? path.dirname(unit.source), unit.source, unit.label);
-            this.includeStack.pop();
-
-            return node;
+        if (text === undefined) {
+            return this.loadFile(file);
         }
 
-        return this.loadFile(unit.source);
+        const node: FileNode = { path: file, content: text, isTpl: isContent || path.basename(file).includes(".tpl."), real: !isContent, parts: [] };
+
+        this.nodes.set(file, node);
+        this.includeStack.push(file);
+        node.parts = this.processIncludes(text, isContent ? entryDirOf(unit!) : path.dirname(file), file, isContent ? unit!.label : file);
+        this.includeStack.pop();
+
+        return node;
+    }
+
+    /**
+     * The loaded entry file's final text with the variables: what compiling writes (before its
+     * transforms) and what `renderFile` returns.
+     */
+    private renderEntry(file: string, unit: CompileUnit | undefined, vars: VarScope): Promise<string> {
+        return this.expand(file, vars, unit === undefined ? path.dirname(file) : entryDirOf(unit));
     }
 
     private async compileUnit(unit: CompileUnit): Promise<void> {
@@ -272,7 +282,7 @@ export class CompileRun extends Reporting(Object) {
             }
         }
 
-        const root = unit.content !== undefined ? (unit.globBase ?? path.dirname(unit.source)) : path.dirname(unit.source);
+        const root = entryDirOf(unit);
         const contentHash = hashContent(
             JSON.stringify([
                 this.sourceComments,
@@ -289,7 +299,7 @@ export class CompileRun extends Reporting(Object) {
                 continue;
             }
 
-            await this.compileOutput(unit, output, contentHash, rendersAnything, root, sourceMode);
+            await this.compileOutput(unit, output, contentHash, rendersAnything, sourceMode);
         }
     }
 
@@ -298,7 +308,6 @@ export class CompileRun extends Reporting(Object) {
         output: UnitOutput,
         contentHash: string,
         rendersAnything: boolean,
-        root: string,
         sourceMode: number | undefined,
     ): Promise<void> {
         const transforms = [...unit.transforms, ...output.transforms];
@@ -332,7 +341,7 @@ export class CompileRun extends Reporting(Object) {
         }
 
         const errorsBefore = this.errorCount;
-        const content = await this.expand(unit.source, output.vars, root);
+        const content = await this.renderEntry(unit.source, unit, output.vars);
 
         if (this.errorCount > errorsBefore) {
             this.notWritten(output.destination);
@@ -675,6 +684,11 @@ export class CompileRun extends Reporting(Object) {
             return content;
         }
     }
+}
+
+/** The directory a unit's entry renders from: a `content` source's glob base, else its source's directory. */
+function entryDirOf(unit: CompileUnit): string {
+    return unit.content !== undefined ? (unit.globBase ?? path.dirname(unit.source)) : path.dirname(unit.source);
 }
 
 /** Where a Liquid error says it is (`line:3, col:5`), when it says. */

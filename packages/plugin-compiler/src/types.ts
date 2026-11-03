@@ -465,6 +465,11 @@ export interface TemplateRenderResult {
 /** Renders one template as the build would, writing nothing. */
 export interface CompilerRender {
     render(request: TemplateRenderRequest): Promise<TemplateRenderResult>;
+    /**
+     * The text's size in tokens (`o200k_base`), counted as compile counts an output's. Throws a
+     * `SousError` saying why when the token counter (tiktoken) cannot load.
+     */
+    countTokens(text: string): Promise<number>;
 }
 
 /** The payload of `compiler.wrote`. */

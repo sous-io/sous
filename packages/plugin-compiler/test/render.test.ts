@@ -154,6 +154,19 @@ describe("compiler.render", () => {
         expect(result).toMatchObject({ text: "Part for Ann\n", target: "0" });
         expect(path.isAbsolute(result.included[0] ?? partial)).toBe(true);
     });
+
+    /** Text that is no output is counted as compile counts an output: the same text, the same count. */
+    it("should count a render's tokens as compile counts an output's", async () => {
+        project = makeProject();
+        const { entry, compilation } = twoOutputs();
+        const compiler = await makeCompiler(project, { config: { compilation } });
+        const render = services(compiler).get("compiler.render");
+        const rendered = await render.render({ file: entry });
+        const compiled = await compiler.compile({ dryRun: true, countTokens: true });
+
+        expect(await render.countTokens(rendered.text)).toBe(compiled.outputs[0]!.tokens);
+        expect(await render.countTokens("")).toBe(0);
+    });
 });
 
 describe("compiler.tokens", () => {

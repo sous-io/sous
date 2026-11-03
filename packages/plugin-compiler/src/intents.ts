@@ -50,6 +50,22 @@ export function selectTargets(runtime: CompilerRuntime, wanted: ReadonlyArray<st
     return selected;
 }
 
+/** The targets expanded into units, as compile expands them; `only` keeps those targets (by id or index). */
+export function expandUnits(
+    runtime: CompilerRuntime,
+    only?: ReadonlyArray<string | number>,
+): { units: CompileUnit[]; selectionProblems: CompileProblem[]; problems: CompileProblem[] } {
+    const selectionProblems: CompileProblem[] = [];
+    const selected = selectTargets(runtime, only, selectionProblems);
+    const expanded = expandTargets(
+        runtime.settings(),
+        { resolver: runtime.resolver(), aliases: runtime.aliases(), globs: runtime.globs(), projectRoot: runtime.projectRoot() },
+        selected,
+    );
+
+    return { units: expanded.units, selectionProblems, problems: expanded.problems };
+}
+
 /** Everything a compile run needs, from the runtime and the services in force. */
 export async function runDependencies(runtime: CompilerRuntime, ctx: Pick<Context, "services">, reporter: Reporter, countTokens: boolean) {
     const services = ctx.services;
@@ -122,14 +138,8 @@ async function compileTargets(input: CompileInput, ctx: Context, runtime: Compil
 
     store.refresh();
 
-    const selectionProblems: CompileProblem[] = [];
-    const only = selectTargets(runtime, input.targets, selectionProblems);
-    const expanded = expandTargets(
-        runtime.settings(),
-        { resolver: runtime.resolver(), aliases: runtime.aliases(), globs: runtime.globs(), projectRoot: runtime.projectRoot() },
-        only,
-    );
-    const problems = [...reportExpansion(selectionProblems, false, reporter), ...reportExpansion(expanded.problems, strict, reporter)];
+    const expanded = expandUnits(runtime, input.targets);
+    const problems = [...reportExpansion(expanded.selectionProblems, false, reporter), ...reportExpansion(expanded.problems, strict, reporter)];
     const { deps, counter, counterError } = await runDependencies(runtime, ctx, reporter, true);
 
     if (counter === undefined) {
@@ -238,12 +248,7 @@ async function producedNow(runtime: CompilerRuntime, ctx: Context): Promise<Read
         return runtime.produced;
     }
 
-    const expanded = expandTargets(runtime.settings(), {
-        resolver: runtime.resolver(),
-        aliases: runtime.aliases(),
-        globs: runtime.globs(),
-        projectRoot: runtime.projectRoot(),
-    });
+    const expanded = expandUnits(runtime);
     const { deps } = await runDependencies(runtime, ctx, nullReporter, false);
     const result = await new CompileRun(deps, { dryRun: true }).run(expanded.units);
 
