@@ -147,6 +147,7 @@ describe("readThroughChain", () => {
                 "Fix one of these:",
                 "  export GITLAB_TOKEN=<a token with read_repository>",
                 "  set up git access to gitlab.com (an SSH key, or a credential helper)",
+                "A token reads only the index. Recipe files are downloaded with git, so building also needs git access.",
             ].join("\n"),
         );
     });
