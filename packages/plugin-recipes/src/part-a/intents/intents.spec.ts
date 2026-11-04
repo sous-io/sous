@@ -8,6 +8,7 @@ import { showNamespace, showRecipe } from "./catalog.js";
 import { addRepo, listRepos, removeRepo, searchRepos } from "./repo.js";
 import { addSubscription, laterSetters, listSubscriptions, removeSubscription, toggleSubscription, updateSubscriptions } from "./subscription.js";
 import { planUpdate } from "../update-plan.js";
+import { NoVersionSatisfiesError } from "../../part-b/resolver/resolve.js";
 
 const hash = "sha256-aa" as const;
 
@@ -91,6 +92,9 @@ function fakeResolver(indexes: Map<string, IndexFile>, missingRepos: RecipeReque
             return { resolved, missingRepos: missingRepos.length > 0 ? [{ name: "extra", url: "https://github.com/acme/extra", requiredBy: [] }] : [], unreadable: [], cycles: [] };
         },
         resolveSubscriptions: async () => ({ resolved: [], missingRepos: [], unreadable: [], cycles: [] }),
+        subscriptionRequest: () => {
+            throw new Error("set by setup()");
+        },
         reachable: () => [],
     };
 }
@@ -179,6 +183,18 @@ function setup(options: Setup = {}) {
     });
 
     services["recipes.trust"] = new Trust(config, reader);
+    // The request a configured subscription makes, read the way the real resolver reads it.
+    resolver.subscriptionRequest = (key: string): RecipeRequest => {
+        const entry = ((data.subscriptions ?? {}) as Record<string, { range?: string; prerelease?: boolean }>)[key] ?? {};
+
+        return {
+            ref: refs.format.parseNamedRef(key, "config"),
+            ...(entry.range === undefined ? {} : { range: entry.range }),
+            ...(entry.prerelease === true ? { prerelease: true } : {}),
+            requestedBy: "project",
+            kind: "subscribes",
+        };
+    };
 
     return { config, managed, lock, resolver, services };
 }
@@ -351,6 +367,76 @@ describe("subscription.add", () => {
         expect(managed.files).toEqual({});
         expect(lock.current.recipes).toEqual({});
         expect(ctx.run).not.toHaveBeenCalled();
+    });
+
+    /**
+     * A new subscription is resolved together with every other subscription switched on here,
+     * holding the locked versions, so a shared pin moves only where every range allows it.
+     *
+     * subscribed: workflow/task-files (locked 1.0.0); sous subscription add workflow/reviews
+     * // -> one resolve asks for both, keeping task-files at 1.0.0
+     */
+    it("should resolve a new subscription together with the others", async () => {
+        const { config, lock, resolver } = setup({
+            data: { repos: { r: { url: "https://github.com/acme/r" } }, subscriptions: { "workflow/task-files": { range: "^1.0.0" } } },
+            lock: pinned,
+        });
+        const asked: Array<{ refs: string[]; keep?: Readonly<Record<string, string>> }> = [];
+        const original = resolver.resolve.bind(resolver);
+
+        resolver.resolve = async (requests, options = {}) => {
+            asked.push({ refs: requests.map((request) => request.ref.name), ...(options.keep === undefined ? {} : { keep: options.keep }) });
+
+            return original(requests, options);
+        };
+
+        const ctx = context(config, { intents: ["vars.ask", "build"] });
+
+        await addSubscription({ ref: "workflow/reviews", yes: true }, ctx);
+
+        expect(asked.at(-1)).toEqual({ refs: ["task-files", "reviews"], keep: { "workflow/task-files": "1.0.0", "tools/helper": "2.0.0" } });
+        expect(lock.current.recipes["workflow/task-files"]).toMatchObject({ version: "1.0.0", requestedBy: ["project"] });
+        expect(lock.current.recipes["workflow/reviews"]).toMatchObject({ version: "0.1.0", requestedBy: ["project"] });
+    });
+
+    /**
+     * A new subscription that would need a version outside another subscription's range is refused,
+     * naming each holder and its range, and nothing is written.
+     *
+     * workflow/task-files needs tools/helper@^2, workflow/reviews needs ^3
+     * // -> "Sous cannot subscribe to 'workflow/reviews' alongside this project's other subscriptions."
+     */
+    it("should refuse a new subscription that breaks another subscription's range", async () => {
+        const { config, managed, lock, resolver } = setup({
+            data: { repos: { r: { url: "https://github.com/acme/r" } }, subscriptions: { "workflow/task-files": { range: "^1.0.0" } } },
+            lock: pinned,
+        });
+        const original = resolver.resolve.bind(resolver);
+
+        resolver.resolve = async (requests, options = {}) => {
+            if (requests.length > 1) {
+                throw new NoVersionSatisfiesError(
+                    "tools/helper",
+                    [
+                        { range: "^2", requestedBy: "workflow/task-files" },
+                        { range: "^3", requestedBy: "workflow/reviews" },
+                    ],
+                    "No published version of 'tools/helper' satisfies what was asked for.",
+                    { details: [] },
+                );
+            }
+
+            return original(requests, options);
+        };
+
+        const ctx = context(config, { intents: ["vars.ask", "build"] });
+
+        await expect(addSubscription({ ref: "workflow/reviews", yes: true }, ctx)).rejects.toMatchObject({
+            message: "Sous cannot subscribe to 'workflow/reviews' alongside this project's other subscriptions.",
+            details: ["No published version of 'tools/helper' satisfies every recipe that needs it: '^2' from 'workflow/task-files', '^3' from 'workflow/reviews'.", "Nothing was written."],
+        });
+        expect(managed.files).toEqual({});
+        expect(lock.current).toBe(pinned);
     });
 
     /** Without --yes and with no way to ask, it fails naming --yes. */

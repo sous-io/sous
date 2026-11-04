@@ -52,6 +52,11 @@ export function reportLinkedRepos(links: Readonly<Record<string, ResolvedLink>>,
     );
 }
 
+/** The words a change to one holder's own pin ends with. */
+function alone(change: LockDiff["added"][number]): string {
+    return change.holder === undefined ? "" : ` for ${change.holder} alone`;
+}
+
 /** Reports pins that were added or moved, or says nothing. */
 function reportLocked(diff: LockDiff, reporter: Reporter): void {
     if (diff.unchanged || (diff.added.length === 0 && diff.updated.length === 0)) {
@@ -60,8 +65,8 @@ function reportLocked(diff: LockDiff, reporter: Reporter): void {
 
     reporter.list(
         [
-            ...diff.added.map((change) => `pinned: ${change.key} at version ${change.to ?? "?"}.`),
-            ...diff.updated.map((change) => `${change.key} moved from version ${change.from ?? "?"} to version ${change.to ?? "?"}.`),
+            ...diff.added.map((change) => `pinned: ${change.key} at version ${change.to ?? "?"}${alone(change)}.`),
+            ...diff.updated.map((change) => `${change.key} moved from version ${change.from ?? "?"} to version ${change.to ?? "?"}${alone(change)}.`),
         ],
         {
             title: "Locking subscribed recipes",

@@ -318,11 +318,28 @@ Machine-written, committed, and the reason a fresh clone restores with no prompt
 | `repos.<name>.url`, `.identity`, `.indexHash` | Where the repository lives, as recorded when it was added; the canonical identity the store and index cache file it under; and the hash of the index this lock was resolved against, when known |
 | `recipes.<key>.repo`, `.version`, `.hash` | The project's short name for the repository, which must appear under `repos`; the version resolved; and the hash verified against the store after every fetch |
 | `recipes.<key>.requestedBy`, `.kind` | Who holds the entry, the literal `project` or the key of a recipe that requires it, and whether that holder is a `subscribes` or a `depends` |
+| `recipes.<key>.pins.<holder>.version`, `.hash` | A version pinned for one holder alone, keyed by that holder's recipe key; absent when every holder uses `version` |
 
 A repository appears under two names on purpose: the key is the project's own short name, which every
 message uses, while `identity` is what the store is keyed by, so two projects with different labels share
 one cached copy. `identity` is optional on read only, for older lockfiles, and is derived from the URL on
 the next write. `requestedBy` makes removal safe; an entry goes when its last holder does.
+
+`pins` appears only when a holder that reaches the recipe through `depends` needs a version no other
+holder's range allows. The entry's `version` is the one the project uses (a recipe some holder reaches
+through `subscribes` has exactly one); each holder under `pins` uses its own version instead, for its
+includes and its questions, and nothing from that version reaches the project's files. Every holder under
+`pins` is also listed in `requestedBy`, and loses its pin when it stops holding the entry. Each pinned
+version is fetched, checked against its hash and kept in the store like the shared one.
+
+```json
+"support/base": { "kind": "depends", "repo": "fixtures", "version": "1.0.0", "hash": "sha256-1b...",
+  "requestedBy": ["lib/one", "lib/two"],
+  "pins": { "lib/two": { "version": "2.0.0", "hash": "sha256-9c..." } } }
+```
+
+A lockfile with no `pins` reads exactly as it did before. A version of sous older than this field refuses a
+lockfile that carries one, naming the unknown key, because the format is strict.
 
 ## The store on disk
 

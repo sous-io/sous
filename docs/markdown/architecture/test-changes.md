@@ -1874,3 +1874,12 @@ All in `packages/plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022): a 
 - **Changed** in `plugin-recipes`: "should ask for the version the index recorded a dependency was released against" (`src/part-b/resolver/resolve.spec.ts`) is now "should ask for the range the index recorded for a dependency"; a recorded exact version is read as `^<version>`, limited by the declared range. "should combine every holder's range" (`src/part-b/index-cache/freshness.spec.ts`) expects `>=1.0.0 <2.0.0-0 >=1.1.0` instead of `^1 >=1.1.0`, because ranges are now combined by one function that also handles `||`.
 - **Removed** "should union holders" (`src/part-a/lock-holds.spec.ts`): `mergeHolders` is gone, because `sous subscription update` now resolves every subscription in one pass instead of merging separate resolutions.
 - **Changed** in `sous`: "should tag dependency-first and record the resolved dependency" (`test/integration/repo-release.test.ts`, now "...record the dependency's range") and "should record declarations and questions in the released index" (`test/integration/recipe-sets.test.ts`) expect `range: "^<version>"` instead of `version`, for the same reason.
+
+### A depends-only recipe is pinned once per holder (gh-220, ADR 0023, decisions 4 and 5)
+
+- **Changed** in `plugin-recipes`: "should satisfy every range asked of a recipe at once" and "should give two subscriptions one shared version every recorded dependency allows" (`src/part-b/resolver/resolve.spec.ts`) expect each holder's range to carry `kind` (`subscribes` or `depends`).
+  - **Why:** the resolver tells holders apart by how they hold a recipe, to decide who shares its version and who gets a pin of their own.
+- **Changed** in `plugin-build`: "should lock a new subscription and mark the config changed" (`test/prepare.test.ts`) expects the resolve to hold `{ keep: {}, keepPins: {} }`, and the stand-in services in `test/helpers.ts` gain `recipes.lock.held` and `recipes.resolver.subscriptionRequest`.
+  - **Why:** the build now asks `recipes.lock.held` for what to hold, which includes each holder's own pin.
+- **Changed** the stand-in resolver in `plugin-recipes/src/part-a/intents/intents.spec.ts` and the in-memory lock in `plugin-recipes/test/part-a/helpers.ts`: they gain `subscriptionRequest` and `held`.
+  - **Why:** `subscription update` and `subscription add` read a subscription's request from `recipes.resolver.subscriptionRequest`, its one owner, and hold the lock through `recipes.lock.held`.

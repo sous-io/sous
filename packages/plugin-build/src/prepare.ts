@@ -62,7 +62,7 @@ async function prepareProject(input: BuildPrepareInput, ctx: Context): Promise<B
 
     if (unlocked.length > 0) {
         try {
-            const resolved = await resolver.resolveSubscriptions({ keep: pinnedVersions(current) });
+            const resolved = await resolver.resolveSubscriptions(lock.held(current));
 
             warnAboutProblems(resolved, ctx);
 
@@ -100,10 +100,8 @@ async function prepareProject(input: BuildPrepareInput, ctx: Context): Promise<B
 
         if (upstream.moved.length > 0) {
             const movedKeys = new Set(upstream.moved.map((change) => change.key));
-            const keep = Object.fromEntries(Object.entries(pinnedVersions(current)).filter(([key]) => !movedKeys.has(key)));
-
             try {
-                const resolved = await resolver.resolveSubscriptions({ keep });
+                const resolved = await resolver.resolveSubscriptions(lock.held(current, movedKeys));
                 const next = lock.fromResolved(resolved.resolved, current);
 
                 locked = mergeDiffs(locked, await lock.write(next));
@@ -251,11 +249,6 @@ export function isLocked(key: string, entry: SubscriptionEntry, lockfile: Lockfi
 
         return semver.satisfies(locked.version, range, { includePrerelease });
     });
-}
-
-/** Every pinned version, by key: what a resolve holds. */
-function pinnedVersions(lockfile: Lockfile): Record<string, string> {
-    return Object.fromEntries(Object.entries(lockfile.recipes).map(([key, locked]) => [key, locked.version]));
 }
 
 /** Reports what a resolve could not do: a repository to trust, a manifest it could not read, a cycle. */

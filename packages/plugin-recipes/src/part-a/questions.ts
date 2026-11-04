@@ -13,11 +13,21 @@ import type { Context } from "@sous-io/plugin-api";
 import type { VariableDefinition } from "@sous-io/plugin-formats/types";
 import type { PlannedQuestion, PlannedQuestions, ResolvedRecipe } from "../types.js";
 import { recipeDirectory } from "./required-plugins.js";
+import { resolvedAtPin } from "./util.js";
 
 /** The part of `recipe-answers.ladder` read here, by shape, so this plugin need not depend on it. */
 interface LadderLike {
     bareName(variable: unknown): string;
     resolve(variable: unknown): { readonly source: { readonly rung: string; readonly envName: string; readonly file: string } } | undefined;
+}
+
+/**
+ * The part of `recipe-answers.definitions` read here, by shape: settling the names several
+ * definitions share, so a preview stores and checks an answer the way `sous vars ask` does.
+ */
+interface DefinitionsLike {
+    listSync(): DefinedLike[];
+    combine(variables: readonly DefinedLike[]): DefinedLike[];
 }
 
 /** The ladder's rungs, in words, as `sous vars` names them. */
@@ -83,11 +93,17 @@ export async function definedVariables(ctx: Context, resolved: readonly Resolved
     const defined: DefinedLike[] = [];
     const unreadable: string[] = [];
 
-    for (const recipe of [...resolved].sort((left, right) => (left.key < right.key ? -1 : left.key > right.key ? 1 : 0))) {
+    const sorted = [...resolved].sort((left, right) => (left.key < right.key ? -1 : left.key > right.key ? 1 : 0));
+
+    // Each version pinned for one holder alone follows its recipe's shared version.
+    for (const recipe of sorted.flatMap((one) => [one, ...(one.pins ?? []).map((pin) => resolvedAtPin(one, pin))])) {
         const variables = await variablesOf(ctx, recipe, download);
 
         if (variables === undefined) {
-            unreadable.push(recipe.key);
+            if (!unreadable.includes(recipe.key)) {
+                unreadable.push(recipe.key);
+            }
+
             continue;
         }
 
@@ -104,11 +120,17 @@ export async function definedVariables(ctx: Context, resolved: readonly Resolved
     return { defined, unreadable };
 }
 
-/** One question per defined variable, each with where its answer is stored and whether something answers it. */
+/**
+ * One question per defined variable, each with where its answer is stored and whether something
+ * answers it. Names several definitions share, among these and those of the recipes already active
+ * here, are first settled by `recipe-answers.definitions`, so the definition, stored-as name and
+ * file are the ones `sous vars ask` uses once these recipes are active too.
+ */
 export function plannedQuestionsOf(ctx: Context, defined: readonly DefinedLike[]): PlannedQuestion[] {
     const ladder = ctx.services.has("recipe-answers.ladder") ? (ctx.services.get("recipe-answers.ladder" as never) as LadderLike) : undefined;
+    const settled = settleSharedNames(ctx, defined);
 
-    return defined.map((variable) => {
+    return settled.map((variable) => {
         const { definition } = variable;
         let found: ReturnType<LadderLike["resolve"]>;
         let storedAs: string | undefined;
@@ -129,6 +151,29 @@ export function plannedQuestionsOf(ctx: Context, defined: readonly DefinedLike[]
             ...(found === undefined ? {} : { answeredFrom: describeSource(found.source) }),
         };
     });
+}
+
+/**
+ * The variables with every name they share settled, alongside the active recipes' own definitions
+ * (an active recipe these variables define again is left out: its new version replaces it). Without
+ * `recipe-answers`, they are returned as they are.
+ */
+function settleSharedNames(ctx: Context, defined: readonly DefinedLike[]): readonly DefinedLike[] {
+    if (!ctx.services.has("recipe-answers.definitions")) {
+        return defined;
+    }
+
+    const definitions = ctx.services.get("recipe-answers.definitions" as never) as DefinitionsLike;
+    const replaced = new Set(defined.map((variable) => `${variable.recipe.namespace}/${variable.recipe.name}`));
+    let active: DefinedLike[] = [];
+
+    try {
+        active = definitions.listSync().filter((variable) => !replaced.has(`${variable.recipe.namespace}/${variable.recipe.name}`));
+    } catch {
+        // Without the active recipes' definitions, only these are settled among themselves.
+    }
+
+    return definitions.combine([...active, ...defined]).slice(active.length);
 }
 
 /** Every question the recipes ask, in recipe order, each with whether something answers it. */

@@ -87,6 +87,13 @@ export interface RecipeAnswersDefinitions {
     listSync(): DefinedVariable[];
     /** The variables a written name or ref names; several when it is ambiguous. */
     find(nameOrRef: string, options?: DefinitionOptions): Promise<DefinedVariable[]>;
+    /**
+     * Settles every name several of the given definitions share, the way `list` does (ADR 0023,
+     * decision 6): each such variable comes back with the strictest combination as its
+     * `definition`, or with `separate` set when they cannot be combined. For a caller holding
+     * definitions of recipes that are not active yet, such as a dry-run preview.
+     */
+    combine(variables: readonly DefinedVariable[]): DefinedVariable[];
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -17,6 +17,7 @@ import type {
     BrowsingFlags,
     LockDiff,
     MissingRepo,
+    RecipeRequest,
     RecipeUpdateInput,
     RecipeUpdatePlan,
     ResolvedRecipe,
@@ -35,14 +36,15 @@ import { identityOf, loadCatalog, pickMatch, readingsOf, readUpstream, type Cata
 import { USER_ADDED_BY } from "../defaults.js";
 import { askFollowUp, buildFollowUp } from "../followups.js";
 import { applyResolution, keysHeldBySubscription, PROJECT_HOLDER, type LockRepoInput } from "../lock-holds.js";
-import { configuredSubscriptions, contributorLabel, managedContributor, setSubscriptionEnabled, SUBSCRIPTIONS_LAYER, trustedRepos, writeSubscriptionEntry } from "../project.js";
+import { configuredSubscriptions, enabledSubscriptions, contributorLabel, managedContributor, setSubscriptionEnabled, SUBSCRIPTIONS_LAYER, trustedRepos, writeSubscriptionEntry } from "../project.js";
 import { isShortNamed, planSubscriptionRemoval, subscriptionKeyFor, writeSubscriptionRemoval } from "../subscriptions.js";
 import { checkProvidedAnswers } from "../provided-answers.js";
 import { planQuestions } from "../questions.js";
+import { lockDiffLines } from "../outputs.js";
 import { ensureRequiredPlugins, recipeDirectory } from "../required-plugins.js";
 import { needUrlError } from "../trust.js";
-import { describeUpdateScope, isEmptyUpdate, planUpdate } from "../update-plan.js";
-import { describeError, nowIso, proposeRepoName, sortBytewise } from "../util.js";
+import { describeUpdateScope, isEmptyUpdate, planUpdate, resolveTogether } from "../update-plan.js";
+import { describeError, nowIso, proposeRepoName, resolvedAtPin, sortBytewise } from "../util.js";
 import { subscriptionListOutputs } from "./catalog-outputs.js";
 import { acceptFirst, answer, answersFile, browsing, dryRun, inputSchema, latestFlag, noBuild, yes, yesFlag } from "./schema.js";
 import { recipeUpdateOutputs, subscriptionAddOutputs, subscriptionRemoveOutputs, subscriptionToggleOutputs, subscriptionUpdateOutputs } from "./subscription-outputs.js";
@@ -200,6 +202,61 @@ export function reportSubscriptionPlan(reporter: Reporter, key: string, ref: Nam
     );
 }
 
+/** The request a new subscription makes. */
+function newSubscriptionRequest(input: SubscriptionAddInput, ref: NamedRef): RecipeRequest {
+    return {
+        ref,
+        ...(ref.kind === "recipe" && ref.range !== undefined ? { range: ref.range } : {}),
+        ...(input.prerelease === true ? { prerelease: true } : {}),
+        requestedBy: PROJECT_HOLDER,
+        kind: "subscribes",
+    };
+}
+
+/**
+ * Resolves the new subscription together with every other subscription switched on here, holding
+ * the locked versions while every range allows them (ADR 0023, decision 5), so adding it never moves
+ * a shared pin outside another subscription's range. Returns what the lockfile takes (`all`) and
+ * the new subscription's own closure (`resolved`), at the versions settled together. A new
+ * subscription that cannot join the others is refused, naming each holder and its range.
+ *
+ * @param key - The new subscription's key; a subscription already configured under it is replaced.
+ * @param alone - The new subscription's closure, resolved on its own (trust and downloads done).
+ */
+async function resolveWithOthers(ctx: Context, input: SubscriptionAddInput, key: string, ref: NamedRef, alone: readonly ResolvedRecipe[]): Promise<{ all: ResolvedRecipe[]; resolved: ResolvedRecipe[] }> {
+    const resolver = ctx.services.get("recipes.resolver");
+    const lock = ctx.services.get("recipes.lock");
+    const requests: Array<{ key: string; request: RecipeRequest }> = [];
+
+    for (const other of sortBytewise(Object.keys(enabledSubscriptions(ctx.config)))) {
+        if (other === key) {
+            continue;
+        }
+
+        try {
+            requests.push({ key: other, request: resolver.subscriptionRequest(other) });
+        } catch {
+            // A subscription whose key cannot be read takes no part, and keeps its pins.
+        }
+    }
+
+    requests.push({ key, request: newSubscriptionRequest(input, ref) });
+
+    const together = await resolveTogether(requests, (asked) => resolver.resolve(asked, lock.held(lock.read())));
+    const refused = together.failed.find((entry) => entry.key === key);
+
+    if (refused !== undefined) {
+        throw new SousError(`Sous cannot subscribe to '${input.ref.trim()}' alongside this project's other subscriptions.`, {
+            details: [refused.reason, "Nothing was written."],
+        });
+    }
+
+    const closure = new Set(alone.map((recipe) => recipe.key));
+    const all = together.result.resolved;
+
+    return { all, resolved: all.filter((recipe) => closure.has(recipe.key)) };
+}
+
 /** Resolves a ref and everything beneath it, trusting new repositories as often as resolution turns them up. */
 async function resolveClosure(input: SubscriptionAddInput, ref: NamedRef, start: Context): Promise<{ resolved: ResolvedRecipe[]; unreadable: string[]; cycles: string[][]; trusted: string[]; ctx: Context }> {
     const trusted: string[] = [];
@@ -207,18 +264,7 @@ async function resolveClosure(input: SubscriptionAddInput, ref: NamedRef, start:
     let ctx = start;
 
     for (let round = 0; ; round++) {
-        const result = await ctx.services.get("recipes.resolver").resolve(
-            [
-                {
-                    ref,
-                    ...(ref.kind === "recipe" && ref.range !== undefined ? { range: ref.range } : {}),
-                    ...(input.prerelease === true ? { prerelease: true } : {}),
-                    requestedBy: PROJECT_HOLDER,
-                    kind: "subscribes",
-                },
-            ],
-            { ...(input.prerelease === true ? { prerelease: true } : {}) },
-        );
+        const result = await ctx.services.get("recipes.resolver").resolve([newSubscriptionRequest(input, ref)], { ...(input.prerelease === true ? { prerelease: true } : {}) });
         const missing: MissingRepo[] = result.missingRepos;
 
         // The index does not always say what a version depends on; then its manifest is read from
@@ -271,8 +317,11 @@ export async function downloadUnreadable(ctx: Context, resolved: readonly Resolv
 
         tried.add(key);
 
-        if (recipe !== undefined && (await recipeDirectory(ctx, recipe, true)) !== undefined) {
-            downloaded = true;
+        // The shared version, then each version pinned for one holder alone, whose manifest is read too.
+        for (const version of recipe === undefined ? [] : [recipe, ...(recipe.pins ?? []).map((pin) => resolvedAtPin(recipe, pin))]) {
+            if ((await recipeDirectory(ctx, version, true)) !== undefined) {
+                downloaded = true;
+            }
         }
     }
 
@@ -296,11 +345,13 @@ export async function addSubscription(input: SubscriptionAddInput, ctx: Context)
         }
     }
 
-    const closure = await resolveClosure(input, written.ref, written.ctx);
-    const current = closure.ctx;
+    const alone = await resolveClosure(input, written.ref, written.ctx);
+    const current = alone.ctx;
+    const settled = await resolveWithOthers(current, input, key, written.ref, alone.resolved);
+    const closure = { ...alone, resolved: settled.resolved };
     const lockService = current.services.get("recipes.lock");
     const before = lockService.read();
-    const after = applyResolution(before, closure.resolved, lockRepoInputs(current));
+    const after = applyResolution(before, settled.all, lockRepoInputs(current));
     const result = {
         ref: canonical,
         key,
@@ -531,7 +582,7 @@ export function reportUpdatePlan(reporter: Reporter, plan: RecipeUpdatePlan): vo
     if (isEmptyUpdate(plan)) {
         reporter.notice(`Nothing to update: every pin in ${scope} is already the newest published version its range allows.`);
     } else {
-        reporter.list(plan.diff.unchanged ? ["No pin moves until the repositories below are trusted and read."] : describeDiff(plan.diff), { title: `Updating ${scope} changes the lockfile:` }, LogLevel.Notice);
+        reporter.list(plan.diff.unchanged ? ["No pin moves until the repositories below are trusted and read."] : lockDiffLines(plan.diff), { title: `Updating ${scope} changes the lockfile:` }, LogLevel.Notice);
     }
 
     if (plan.missingRepos.length > 0) {
@@ -592,25 +643,6 @@ export function reportUpdatePlan(reporter: Reporter, plan: RecipeUpdatePlan): vo
 /** The first line of a message, trimmed. */
 function firstLine(text: string): string {
     return (text.split("\n")[0] ?? "").trim();
-}
-
-/**
- * A lockfile change as lines, one per change, worded as the lockfile report words them.
- *
- * ```ts
- * describeDiff(diff); // -> ["Updating workflow/a from version 1.0.0 to version 1.1.0"]
- * ```
- */
-export function describeDiff(diff: LockDiff): string[] {
-    const byKey = (left: { key: string }, right: { key: string }) => (left.key < right.key ? -1 : left.key > right.key ? 1 : 0);
-
-    return [
-        ...diff.reposAdded.map((name) => `Repository added: ${name}`),
-        ...[...diff.added].sort(byKey).map((change) => `Adding ${change.key} version ${change.to}`),
-        ...[...diff.updated].sort(byKey).map((change) => `Updating ${change.key} from version ${change.from} to version ${change.to}`),
-        ...[...diff.removed].sort(byKey).map((change) => `Removing ${change.key}, which nothing needs any more`),
-        ...diff.reposRemoved.map((name) => `Repository no longer needed: ${name}`),
-    ];
 }
 
 /** The recipes a planned lockfile pins under some keys, in the shape downloading takes. */

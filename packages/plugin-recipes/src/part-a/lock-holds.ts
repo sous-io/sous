@@ -10,7 +10,7 @@
 
 import type { LockedRecipe, Lockfile } from "@sous-io/plugin-formats/types";
 import { PROJECT_HOLDER } from "../part-b/constants.js";
-import { removeHolder } from "../part-b/lock/lockfile-ops.js";
+import { removeHolder, withHolders } from "../part-b/lock/lockfile-ops.js";
 import type { ResolvedRecipe } from "../types.js";
 import { compareBytewise } from "./util.js";
 
@@ -29,7 +29,7 @@ export function dropProjectHold(lock: Lockfile, key: string): Lockfile {
     const recipes = { ...lock.recipes };
 
     if (kept.length > 0) {
-        recipes[key] = { ...entry, requestedBy: kept };
+        recipes[key] = withHolders(entry, kept);
 
         return { ...lock, recipes };
     }
@@ -86,7 +86,7 @@ export function releaseDroppedHolds(
             delete recipes[key];
             orphaned.push(key);
         } else {
-            recipes[key] = { ...entry, requestedBy: kept };
+            recipes[key] = withHolders(entry, kept);
         }
     }
 

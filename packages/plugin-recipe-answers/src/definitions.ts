@@ -135,7 +135,8 @@ export function combineSharedNames(variables: readonly DefinedVariable[]): Defin
 }
 
 /**
- * Every variable the active recipes define, in recipe order, then declaration order.
+ * Every variable the active recipes define, in recipe order, then declaration order. A recipe's
+ * versions pinned for single holders follow its shared version.
  *
  * @param recipes - The `active-recipe` entities.
  * @param repos - The `repos` config key, which lends each recipe its repository's URL.
@@ -158,6 +159,16 @@ export function definitionsFromRecipes(recipes: readonly ActiveRecipeEntity[], r
 
         for (const definition of active.manifest.variables ?? []) {
             defined.push(defineVariable(recipe, definition));
+        }
+
+        // A version pinned for one holder alone (ADR 0023, decision 4) is read at its own version,
+        // so its definitions join the others of their names, labeled with that version.
+        for (const pin of active.pins ?? []) {
+            const pinned: DefiningRecipe = { ...recipe, version: pin.version, dir: pin.dir, direct: false };
+
+            for (const definition of pin.manifest.variables ?? []) {
+                defined.push(defineVariable(pinned, definition));
+            }
         }
     }
 
@@ -281,5 +292,9 @@ export class DefinitionsService implements RecipeAnswersDefinitions {
 
     async find(nameOrRef: string, options: DefinitionOptions = {}): Promise<DefinedVariable[]> {
         return (await this.list(options)).filter((entry) => namesVariable(entry, nameOrRef));
+    }
+
+    combine(variables: readonly DefinedVariable[]): DefinedVariable[] {
+        return combineSharedNames(variables);
     }
 }

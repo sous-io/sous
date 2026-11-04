@@ -166,13 +166,12 @@ export async function planUpdate(input: RecipeUpdateInput, ctx: Context): Promis
     const builtInHeld = new Set(builtInKeys.flatMap((key) => keysHeldBySubscription(before, key)));
 
     const movable = (key: string, repo: string): boolean => !unreachableNames.has(repo) && !builtInHeld.has(key) && recipeInScope(scope, key, repo);
-    const keep: Record<string, string> = {};
-
-    for (const [key, entry] of Object.entries(before.recipes)) {
-        if (!movable(key, entry.repo)) {
-            keep[key] = entry.version;
-        }
-    }
+    const held = lockService.held(
+        before,
+        Object.entries(before.recipes)
+            .filter(([key, entry]) => movable(key, entry.repo))
+            .map(([key]) => key),
+    );
 
     const coverOf = (key: string): { cover: string; qualifier: string | undefined } | undefined => {
         try {
@@ -205,25 +204,14 @@ export async function planUpdate(input: RecipeUpdateInput, ctx: Context): Promis
     const requests: Array<{ key: string; request: RecipeRequest }> = [];
 
     for (const key of targets) {
-        const entry = subscriptions[key]!;
-
         try {
-            requests.push({
-                key,
-                request: {
-                    ref: format.parseNamedRef(key, "config"),
-                    ...(entry.range === undefined ? {} : { range: entry.range }),
-                    ...(entry.prerelease === true ? { prerelease: true } : {}),
-                    requestedBy: PROJECT_HOLDER,
-                    kind: "subscribes",
-                },
-            });
+            requests.push({ key, request: resolver.subscriptionRequest(key) });
         } catch (error) {
             failed.push({ key, reason: describeError(error) });
         }
     }
 
-    const together = await resolveTogether(requests, (asked) => resolver.resolve(asked, { keep, indexes }));
+    const together = await resolveTogether(requests, (asked) => resolver.resolve(asked, { ...held, indexes }));
     const resolvedSubscriptions = together.resolved;
     const result = together.result;
     const merged = new Map<string, ResolvedRecipe>(result.resolved.map((recipe) => [recipe.key, recipe]));
@@ -248,7 +236,7 @@ export async function planUpdate(input: RecipeUpdateInput, ctx: Context): Promis
         covers(resolvedSubscriptions),
         covers(Object.keys(configured).filter((key) => !resolvedSubscriptions.includes(key))),
     );
-    const changed = settled.filter((recipe) => before.recipes[recipe.key]?.version !== recipe.version);
+    const changed = settled.filter((recipe) => before.recipes[recipe.key]?.version !== recipe.version || (recipe.pins ?? []).some((pin) => before.recipes[recipe.key]?.pins?.[pin.holder]?.version !== pin.version));
     const links = ctx.services.has("recipes.links") ? ctx.services.get("recipes.links") : undefined;
 
     return {
@@ -307,9 +295,11 @@ interface ResolvedTogether {
 /**
  * Resolves the subscriptions together, so each recipe several of them reach takes one version that
  * satisfies every holder's range at once (ADR 0023): the locked version while it does, else the
- * newest that does. When they cannot all be resolved at once, they are added one at a time in order,
- * and each one that cannot join the others is refused with the reason, leaving its pins where they
- * are.
+ * newest that does, with a holder that reaches it only through `depends` pinned on its own when its
+ * range does not allow that version. When they cannot all be resolved at once, they are added one
+ * at a time in order, and each one that cannot join the others is refused with the reason, leaving
+ * its pins where they are. The one owner of resolving the project's subscriptions together: an
+ * update resolves those it covers, and `subscription add` resolves the new one after every other.
  *
  * @param requests - One request per subscription, keyed by the subscription.
  * @param resolve - Resolves a set of requests in one pass.

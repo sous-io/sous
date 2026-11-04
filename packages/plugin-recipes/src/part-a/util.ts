@@ -3,6 +3,7 @@
  */
 
 import type { Context } from "@sous-io/plugin-api";
+import type { ResolvedPin, ResolvedRecipe } from "../types.js";
 
 /** The message of an error, whatever was thrown. */
 export function describeError(error: unknown): string {
@@ -82,4 +83,23 @@ export function hasIntent(ctx: Context, name: string): boolean {
 /** The current time as an ISO 8601 string. */
 export function nowIso(): string {
     return new Date().toISOString();
+}
+
+/**
+ * A resolved recipe as it is at a version pinned for one holder alone (ADR 0023, decision 4): that
+ * version's hash, tag and recorded variables, with no pins of its own. For reading or downloading
+ * that version the way the shared one is.
+ */
+export function resolvedAtPin(recipe: ResolvedRecipe, pin: ResolvedPin): ResolvedRecipe {
+    const { variables: _variables, pins: _pins, declares: _declares, dependencies: _dependencies, ...rest } = recipe;
+
+    return {
+        ...rest,
+        version: pin.version,
+        hash: pin.hash,
+        tag: pin.tag,
+        ...(pin.variables === undefined ? {} : { variables: pin.variables }),
+        ...(pin.declares === undefined ? {} : { declares: pin.declares }),
+        ...(pin.dependencies === undefined ? {} : { dependencies: pin.dependencies }),
+    };
 }

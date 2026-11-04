@@ -292,6 +292,22 @@ export interface ActiveRecipeEntity {
     dir: string;
     source: ActiveRecipeSource;
     manifest: RecipeManifest;
+    /**
+     * The versions pinned for one holder alone (ADR 0023, decision 4), each with its own files. Only
+     * that holder's includes and answers read them; nothing of theirs reaches the project.
+     */
+    pins?: ActiveRecipePin[];
+}
+
+/** A version of an active recipe pinned for one holder alone. */
+export interface ActiveRecipePin {
+    /** The recipe key of the holder. */
+    holder: string;
+    version: string;
+    hash: ContentHash;
+    /** The directory holding this version's files. */
+    dir: string;
+    manifest: RecipeManifest;
 }
 
 /** A locked recipe that is not active here, and why (4: one line per skipped recipe). */
@@ -428,8 +444,27 @@ export interface ResolvedRecipe {
     readonly path: string;
     readonly kind: DependencyKind;
     readonly requestedBy: string[];
-    readonly ranges: ReadonlyArray<{ readonly range: string; readonly requestedBy: string }>;
+    /** Each holder's range, and how it holds the recipe (`subscribes` when left out). */
+    readonly ranges: ReadonlyArray<{ readonly range: string; readonly requestedBy: string; readonly kind?: DependencyKind }>;
     readonly prerelease: boolean;
+    readonly dependencies?: Record<string, IndexDependency>;
+    readonly variables?: VariableDefinition[];
+    readonly declares?: { readonly depends: string[]; readonly subscribes: string[] };
+    /**
+     * The versions pinned for one holder alone (ADR 0023, decision 4): a holder that reaches the
+     * recipe through `depends` and whose range does not allow `version`. Every other holder uses
+     * `version`. Absent or empty when every holder does.
+     */
+    readonly pins?: readonly ResolvedPin[];
+}
+
+/** A version of a resolved recipe pinned for one holder alone. */
+export interface ResolvedPin {
+    /** The recipe key of the holder. */
+    readonly holder: string;
+    readonly version: string;
+    readonly hash: ContentHash;
+    readonly tag: string;
     readonly dependencies?: Record<string, IndexDependency>;
     readonly variables?: VariableDefinition[];
     readonly declares?: { readonly depends: string[]; readonly subscribes: string[] };
@@ -441,6 +476,8 @@ export interface ResolveOptions {
     prerelease?: boolean;
     /** Versions to keep where they still satisfy every range, by key (holding the lock). */
     keep?: Readonly<Record<string, string>>;
+    /** Versions pinned for one holder alone to keep while that holder's range allows them, by key, then by holder. */
+    keepPins?: Readonly<Record<string, Readonly<Record<string, string>>>>;
     /** Indexes to use instead of the cached ones (a "what if" plan). */
     indexes?: ReadonlyMap<string, IndexFile>;
     /** Checks upstream for newer indexes first. */
@@ -468,6 +505,8 @@ export interface RecipesResolver {
     resolve(requests: readonly RecipeRequest[], options?: ResolveOptions): Promise<ResolveResult>;
     /** Resolves every subscription in the config. */
     resolveSubscriptions(options?: ResolveOptions): Promise<ResolveResult>;
+    /** The request one configured subscription makes, by its key; throws when the key cannot be read. */
+    subscriptionRequest(key: string): RecipeRequest;
     /** The lockfile keys reachable from the subscriptions switched on here. */
     reachable(lockfile: Lockfile): string[];
 }
@@ -477,6 +516,8 @@ export interface LockChange {
     readonly key: string;
     readonly from?: string;
     readonly to?: string;
+    /** Set when the change is to the version pinned for this holder alone (ADR 0023, decision 4). */
+    readonly holder?: string;
 }
 
 /** What changed between two lockfiles. */
@@ -511,6 +552,11 @@ export interface RecipesLock {
     restore(options?: { keys?: readonly string[]; signal?: AbortSignal }): Promise<RestoreReport>;
     /** One pinned recipe. */
     get(key: string): LockedRecipe | undefined;
+    /**
+     * The versions a resolve holds while every range allows them (`ResolveOptions.keep` and
+     * `keepPins`): every locked version but those of the keys in `except`.
+     */
+    held(lockfile: Lockfile, except?: Iterable<string>): Pick<ResolveOptions, "keep" | "keepPins">;
 }
 
 // =============================================================================================

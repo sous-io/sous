@@ -14,7 +14,7 @@ import type {
     StoreSettings,
     SubscriptionEntry,
 } from "../../types.js";
-import { describeLockDiff } from "../lock/lockfile-ops.js";
+import { describeLockDiff, lockedVersions } from "../lock/lockfile-ops.js";
 import { trustedRepos } from "../lock/lock-service.js";
 import { reachability } from "../lock/reachable.js";
 import { storeKeyOf } from "../fetch/restore.js";
@@ -126,7 +126,7 @@ export async function collectStore(input: RepoGcInput, ctx: Context): Promise<St
         const identity = lockfile.repos[entry.repo]?.identity;
 
         if (identity !== undefined) {
-            keep.push(storeKeyOf(key, identity, entry.version));
+            keep.push(...lockedVersions(entry).map((locked) => storeKeyOf(key, identity, locked.version)));
         }
     }
 
@@ -163,7 +163,7 @@ export function lockShowOutputs(result: LockShowResult): IntentOutputs<LockShowR
     const recipes = [...result.recipes].sort((left, right) => (left.key < right.key ? -1 : left.key > right.key ? 1 : 0));
     const rows = recipes.map((recipe) => ({
         key: recipe.key,
-        version: recipe.entry.version,
+        version: [recipe.entry.version, ...Object.entries(recipe.entry.pins ?? {}).map(([holder, pin]) => `${pin.version} for ${holder}`)].join(", "),
         repo: recipe.entry.repo,
         heldBy: recipe.entry.requestedBy.map(describeHolder).join(", "),
     }));

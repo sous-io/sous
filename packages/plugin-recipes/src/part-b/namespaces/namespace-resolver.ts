@@ -8,6 +8,10 @@
  *   recipe holds, however its manifest wrote them;
  * - a file of the project's own templates may address every active recipe.
  *
+ * A recipe pinned for one holder alone (ADR 0023, decision 4) is addressed from that holder's files
+ * at the holder's own pin, and from everywhere else at its shared version. A file inside a pinned
+ * version addresses itself at that version.
+ *
  * Only active recipes are known: a recipe whose subscription is switched off here is not
  * addressable, and the error says so.
  */
@@ -38,11 +42,24 @@ export class ActiveNamespaceResolver implements NamespaceResolver {
     private readonly dirs = new Map<string, string>();
     private readonly repos = new Map<string, string>();
     private readonly dependencies = new Map<string, string[]>();
+    /** The directory of each version pinned for one holder alone, by key, then holder. */
+    private readonly pinDirs = new Map<string, Map<string, string>>();
+    /** Every directory holding a version of an active recipe, the shared and the pinned ones. */
+    private readonly versionDirs: Array<{ key: string; dir: string }> = [];
 
     constructor(private readonly options: NamespaceResolverOptions) {
         for (const recipe of options.recipes) {
             this.dirs.set(recipe.id, path.resolve(recipe.dir));
             this.repos.set(recipe.id, recipe.repo);
+            this.versionDirs.push({ key: recipe.id, dir: path.resolve(recipe.dir) });
+
+            for (const pin of recipe.pins ?? []) {
+                const byHolder = this.pinDirs.get(recipe.id) ?? new Map<string, string>();
+
+                byHolder.set(pin.holder, path.resolve(pin.dir));
+                this.pinDirs.set(recipe.id, byHolder);
+                this.versionDirs.push({ key: recipe.id, dir: path.resolve(pin.dir) });
+            }
 
             for (const holder of recipe.requestedBy) {
                 const held = this.dependencies.get(holder) ?? [];
@@ -55,18 +72,30 @@ export class ActiveNamespaceResolver implements NamespaceResolver {
 
     /** The recipe whose directory holds a file, the deepest first, or `null` for a project file. */
     includingRecipe(fromFile: string): string | null {
-        const target = path.resolve(fromFile);
-        let best: string | null = null;
-        let bestLength = -1;
+        return this.including(fromFile)?.key ?? null;
+    }
 
-        for (const [key, dir] of this.dirs) {
-            if ((target === dir || target.startsWith(dir + path.sep)) && dir.length > bestLength) {
-                best = key;
-                bestLength = dir.length;
+    /** The recipe, and the directory of the version, holding a file: the deepest first. */
+    private including(fromFile: string): { key: string; dir: string } | undefined {
+        const target = path.resolve(fromFile);
+        let best: { key: string; dir: string } | undefined;
+
+        for (const entry of this.versionDirs) {
+            if ((target === entry.dir || target.startsWith(entry.dir + path.sep)) && entry.dir.length > (best?.dir.length ?? -1)) {
+                best = entry;
             }
         }
 
         return best;
+    }
+
+    /** The directory a recipe is read from for a file of another (or of the project, `undefined`). */
+    private dirFor(key: string, including: { key: string; dir: string } | undefined): string {
+        if (including !== undefined && including.key === key) {
+            return including.dir;
+        }
+
+        return (including === undefined ? undefined : this.pinDirs.get(key)?.get(including.key)) ?? (this.dirs.get(key) as string);
     }
 
     resolve(request: NamespaceRequest): NamespaceResolution {
@@ -103,13 +132,14 @@ export class ActiveNamespaceResolver implements NamespaceResolver {
             return { kind: "unknown-recipe", recipe: wanted, known: this.recipesInNamespace(namespace), ...this.droppedFor(wanted, fromFile) };
         }
 
-        const including = this.includingRecipe(fromFile);
+        const holder = this.including(fromFile);
+        const including = holder?.key ?? null;
         const declared = including === null ? undefined : [including, ...(this.dependencies.get(including) ?? [])];
         const candidates: string[] = [];
         const roots: RecipeRoot[] = [];
 
         for (const key of matched) {
-            const dir = this.dirs.get(key) as string;
+            const dir = this.dirFor(key, holder);
 
             if (declared !== undefined && !declared.some((entry) => entry === key || entry === key.slice(0, key.indexOf("/")))) {
                 if (written.glob === true) {

@@ -21,6 +21,7 @@ import {
     type VariableEntry,
 } from "@sous-io/plugin-api";
 import type { IntentFollowUp, LockDiff, PlannedQuestion, PlannedQuestions } from "../types.js";
+import { describeLockDiff } from "../part-b/lock/lockfile-ops.js";
 
 // --- Single outputs ---------------------------------------------------------------------------------
 
@@ -204,16 +205,7 @@ export function finishWithFollowUps<T extends { readonly followUps: IntentFollow
  * ```
  */
 export function lockDiffLines(diff: LockDiff): string[] {
-    const byKey = (left: { key: string }, right: { key: string }) => (left.key < right.key ? -1 : left.key > right.key ? 1 : 0);
-    const lines = [
-        ...diff.reposAdded.map((name) => `Repository added: ${name}`),
-        ...[...diff.added].sort(byKey).map((change) => `Adding ${change.key} version ${change.to}`),
-        ...[...diff.updated].sort(byKey).map((change) => `Updating ${change.key} from version ${change.from} to version ${change.to}`),
-        ...[...diff.removed].sort(byKey).map((change) => `Removing ${change.key}, which nothing needs any more`),
-        ...diff.reposRemoved.map((name) => `Repository no longer needed: ${name}`),
-    ];
-
-    return lines.length === 0 ? ["Nothing changed."] : lines;
+    return describeLockDiff(diff);
 }
 
 /** The lockfile section: the diff's lines, or `whenUnchanged`. */

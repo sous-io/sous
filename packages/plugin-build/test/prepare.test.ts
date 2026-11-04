@@ -22,7 +22,7 @@ describe("build.prepare", () => {
 
         expect(result.locked.added).toEqual([{ key: "acme/jira", to: "1.0.0" }]);
         expect(h.world.lockfile.recipes["acme/jira"]?.version).toBe("1.0.0");
-        expect(h.world.resolveCalls[0]).toEqual({ keep: {} });
+        expect(h.world.resolveCalls[0]).toEqual({ keep: {}, keepPins: {} });
 
         await h.run("build.prepare", { offline: true });
         expect(h.engine.config.buildNumber).toBeGreaterThan(before);

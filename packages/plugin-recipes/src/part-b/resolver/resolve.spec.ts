@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { IndexFile, IndexVersion } from "@sous-io/plugin-formats/types";
 import type { RefLocation, SousRef } from "@sous-io/plugin-refs/types";
-import { indexDependencyLists, isConfirmedByRecord, NoVersionSatisfiesError, pickVersion, proposeRepoName, resolveWanted, settleBrowsed, wantedOf, type DependencyLists, type ResolveContext, type WantedRequest } from "./resolve.js";
+import { indexDependencyLists, isConfirmedByRecord, NoVersionSatisfiesError, pickVersion, proposeRepoName, resolveWanted, settleBrowsed, settleVersions, wantedOf, type DependencyLists, type ResolveContext, type WantedRequest } from "./resolve.js";
 
 const HASH = `sha256-${"d".repeat(64)}` as const;
 
@@ -105,8 +105,8 @@ describe("resolveWanted: versions", () => {
         expect(a?.version).toBe("1.0.0");
         expect(a?.requestedBy).toEqual(["project", "w/b"]);
         expect(a?.ranges).toEqual([
-            { range: "^1", requestedBy: "project" },
-            { range: "<1.2.0", requestedBy: "w/b" },
+            { range: "^1", requestedBy: "project", kind: "subscribes" },
+            { range: "<1.2.0", requestedBy: "w/b", kind: "depends" },
         ]);
     });
 
@@ -250,8 +250,8 @@ describe("resolveWanted: dependencies", () => {
             [sad]: "1.1.2",
         });
         expect(result.resolved.find((recipe) => recipe.key === sad)?.ranges).toEqual([
-            { range: "^1.1.1", requestedBy: "omakase/house" },
-            { range: "^1.1.2", requestedBy: "workflow/github-projects" },
+            { range: "^1.1.1", requestedBy: "omakase/house", kind: "subscribes" },
+            { range: "^1.1.2", requestedBy: "workflow/github-projects", kind: "depends" },
         ]);
     });
 
@@ -398,5 +398,160 @@ describe("helpers", () => {
     it("should turn refs into wanted parts", () => {
         expect(wantedOf(parseOne("acme:w/a@^1"))).toEqual({ namespace: "w", name: "a", range: "^1", repo: "acme" });
         expect(wantedOf({ kind: "envVar", name: "X" })).toBeUndefined();
+    });
+});
+
+describe("resolveWanted: versions pinned for one holder (ADR 0023, decisions 4 and 5)", () => {
+    /**
+     * Two libraries each need an exact, different version of a recipe they reach only through
+     * `depends`. No version fits both, so each gets the version it needs: one shares the recipe's
+     * version, the other is pinned on its own.
+     *
+     * w/one depends lib/base@1.0.0, w/two depends lib/base@2.0.0
+     * // -> lib/base 2.0.0, pinned at 1.0.0 for w/one
+     */
+    it("should pin each of two libraries that need incompatible versions of a depends-only recipe", async () => {
+        const acme = index("acme", {
+            "w/one": { "1.0.0": { depends: ["lib/base@1.0.0"], subscribes: [] } },
+            "w/two": { "1.0.0": { depends: ["lib/base@2.0.0"], subscribes: [] } },
+            "lib/base": { "1.0.0": { hash: `sha256-${"1".repeat(64)}`, depends: [], subscribes: [] }, "2.0.0": { hash: `sha256-${"2".repeat(64)}`, depends: [], subscribes: [] } },
+        });
+        const result = await resolveWanted([project("w", "one"), project("w", "two")], context({ acme }));
+        const base = result.resolved.find((recipe) => recipe.key === "lib/base");
+
+        expect(base).toMatchObject({ version: "2.0.0", hash: `sha256-${"2".repeat(64)}`, kind: "depends", requestedBy: ["w/one", "w/two"] });
+        expect(base?.pins).toEqual([{ holder: "w/one", version: "1.0.0", hash: `sha256-${"1".repeat(64)}`, tag: "lib/base@1.0.0", declares: { depends: [], subscribes: [] } }]);
+    });
+
+    /**
+     * A recipe the project subscribes to has one version; a library whose range allows it shares it,
+     * and a library whose range does not is pinned on its own, at the newest version its range allows.
+     *
+     * project subscribes lib/base@^1.2, w/fits depends ^1.0.0, w/old depends <1.1.0
+     * // -> lib/base 1.2.0 shared by project and w/fits, pinned at 1.0.5 for w/old
+     */
+    it("should share a subscribed version with each depends holder it fits, and pin the rest", async () => {
+        const acme = index("acme", {
+            "w/fits": { "1.0.0": { depends: ["lib/base@^1.0.0"], subscribes: [] } },
+            "w/old": { "1.0.0": { depends: ["lib/base@<1.1.0"], subscribes: [] } },
+            "lib/base": { "1.0.0": {}, "1.0.5": {}, "1.2.0": {}, "2.0.0": {} },
+        });
+        const result = await resolveWanted([project("lib", "base", { range: "^1.2" }), project("w", "fits"), project("w", "old")], context({ acme }));
+        const base = result.resolved.find((recipe) => recipe.key === "lib/base");
+
+        expect(base).toMatchObject({ version: "1.2.0", kind: "subscribes" });
+        expect(base?.pins?.map((pin) => [pin.holder, pin.version])).toEqual([["w/old", "1.0.5"]]);
+    });
+
+    /**
+     * A version pinned for one holder declares dependencies of its own; they are resolved too, held
+     * by the recipe whose pinned version needs them.
+     *
+     * lib/base@1.0.0 (pinned for w/one) depends lib/helper; lib/base@2.0.0 depends on nothing
+     * // -> lib/helper resolved, held by lib/base
+     */
+    it("should resolve what a pinned version depends on", async () => {
+        const acme = index("acme", {
+            "w/one": { "1.0.0": { depends: ["lib/base@1.0.0"], subscribes: [] } },
+            "w/two": { "1.0.0": { depends: ["lib/base@2.0.0"], subscribes: [] } },
+            "lib/base": { "1.0.0": { depends: ["lib/helper"], subscribes: [] }, "2.0.0": { depends: [], subscribes: [] } },
+            "lib/helper": { "1.0.0": {} },
+        });
+        const result = await resolveWanted([project("w", "one"), project("w", "two")], context({ acme }));
+
+        expect(result.resolved.find((recipe) => recipe.key === "lib/helper")).toMatchObject({ version: "1.0.0", requestedBy: ["lib/base"], kind: "depends" });
+    });
+
+    /**
+     * A holder's own pin is kept while its range allows it, the way the shared version is.
+     *
+     * keepPins { lib/base: { w/old: "1.0.0" } } // -> pinned at 1.0.0, not the newer 1.0.5
+     */
+    it("should keep a holder's locked pin while its range allows it", async () => {
+        const acme = index("acme", {
+            "w/old": { "1.0.0": { depends: ["lib/base@<1.1.0"], subscribes: [] } },
+            "lib/base": { "1.0.0": {}, "1.0.5": {}, "1.2.0": {} },
+        });
+        const result = await resolveWanted([project("lib", "base", { range: "^1.2" }), project("w", "old")], context({ acme }, {}, { keepPins: { "lib/base": { "w/old": "1.0.0" } } }));
+
+        expect(result.resolved.find((recipe) => recipe.key === "lib/base")?.pins?.map((pin) => pin.version)).toEqual(["1.0.0"]);
+    });
+});
+
+describe("settleVersions()", () => {
+    const entry = index("acme", { "lib/base": { "1.0.0": {}, "2.0.0": {}, "3.0.0": {} } }).recipes["lib/base"]!;
+
+    /**
+     * One version fitting every holder is the only one; nobody is pinned on their own.
+     *
+     * settleVersions(key, entry, [^1 || ^2 (depends), ^2 (depends)]) // -> { version: "2.0.0", pins: {} }
+     */
+    it("should give every holder one version when one fits them all", () => {
+        expect(
+            settleVersions("lib/base", entry, [
+                { range: "^1 || ^2", requestedBy: "w/a", kind: "depends" },
+                { range: "^2", requestedBy: "w/b", kind: "depends" },
+            ], false),
+        ).toEqual({ version: "2.0.0", pins: {} });
+    });
+
+    /**
+     * With every holder reaching it through `depends`, the shared version is the one the most
+     * holders' ranges allow, and a tie goes to the newest.
+     *
+     * a: 1.0.0, b: 1.0.0, c: 3.0.0 // -> 1.0.0 shared, c pinned at 3.0.0
+     * a: 1.0.0, c: 3.0.0           // -> 3.0.0 shared (the tie goes to the newest), a pinned at 1.0.0
+     */
+    it("should share the version most depends holders allow, the newest on a tie", () => {
+        expect(
+            settleVersions("lib/base", entry, [
+                { range: "1.0.0", requestedBy: "w/a", kind: "depends" },
+                { range: "1.0.0", requestedBy: "w/b", kind: "depends" },
+                { range: "3.0.0", requestedBy: "w/c", kind: "depends" },
+            ], false),
+        ).toEqual({ version: "1.0.0", pins: { "w/c": "3.0.0" } });
+        expect(
+            settleVersions("lib/base", entry, [
+                { range: "1.0.0", requestedBy: "w/a", kind: "depends" },
+                { range: "3.0.0", requestedBy: "w/c", kind: "depends" },
+            ], false),
+        ).toEqual({ version: "3.0.0", pins: { "w/a": "1.0.0" } });
+    });
+
+    /**
+     * Among the versions the most holders allow, the kept one stays.
+     *
+     * a: 1.0.0, c: 3.0.0, kept 1.0.0 // -> 1.0.0 shared, c pinned at 3.0.0
+     */
+    it("should keep the locked shared version when it is among those the most holders allow", () => {
+        expect(
+            settleVersions("lib/base", entry, [
+                { range: "1.0.0", requestedBy: "w/a", kind: "depends" },
+                { range: "3.0.0", requestedBy: "w/c", kind: "depends" },
+            ], false, "1.0.0"),
+        ).toEqual({ version: "1.0.0", pins: { "w/c": "3.0.0" } });
+    });
+
+    /**
+     * Two holders reaching the recipe through `subscribes` that no version satisfies are a conflict,
+     * and the error names only them: a depends holder is never part of it.
+     *
+     * project 1.0.0, w/s subscribes 2.0.0, w/d depends 3.0.0 // -> NoVersionSatisfiesError
+     */
+    it("should report subscribes holders that no version satisfies", () => {
+        const settling = (): unknown =>
+            settleVersions("lib/base", entry, [
+                { range: "1.0.0", requestedBy: "project", kind: "subscribes" },
+                { range: "2.0.0", requestedBy: "w/s", kind: "subscribes" },
+                { range: "3.0.0", requestedBy: "w/d", kind: "depends" },
+            ], false);
+
+        expect(settling).toThrow(NoVersionSatisfiesError);
+
+        try {
+            settling();
+        } catch (error) {
+            expect((error as NoVersionSatisfiesError).ranges.map((range) => range.requestedBy)).toEqual(["project", "w/s"]);
+        }
     });
 });

@@ -13,7 +13,7 @@ import { ConfigError, type ConfigBuilder, type ContributorDefinition } from "@so
 import type { FormatsManifests, Lockfile, RecipeManifest } from "@sous-io/plugin-formats/types";
 import type { ActiveRecipeEntity, RepoEntry, RepositoryHostEntity, StoreSettings, SubscriptionEntry } from "../../types.js";
 import { CONTRIBUTORS, CORE_RECIPE_KEY, LOCKFILE_NAME, OFFICIAL_REPO_IDENTITY } from "../constants.js";
-import { emptyLockfile } from "../lock/lockfile-ops.js";
+import { emptyLockfile, lockedVersions, restoredLabel } from "../lock/lockfile-ops.js";
 import { plainSubscriptionKey, reachability } from "../lock/reachable.js";
 import { LinksFiles } from "../links/links-service.js";
 import type { PartBRuntime } from "../runtime.js";
@@ -83,7 +83,7 @@ export function fetchContributor(runtime: PartBRuntime): ContributorDefinition {
             }
 
             // No listener hears an event while the config is built; the next restore reports these.
-            runtime.noteFetched(recipes.downloaded.map((recipe) => recipe.key));
+            runtime.noteFetched(recipes.downloaded.map((recipe) => recipe.label));
         },
     };
 }
@@ -135,7 +135,8 @@ function identityOf(runtime: PartBRuntime, url: string, hosts: readonly Reposito
 /** What making the reached recipes active came to. */
 interface ActiveRecipes {
     readonly active: ActiveRecipeEntity[];
-    readonly downloaded: Array<{ key: string; version: string; dir: string }>;
+    /** `label` is how a restore names the version (`restoredLabel`). */
+    readonly downloaded: Array<{ key: string; label: string; version: string; dir: string }>;
     readonly failed: Array<{ key: string; reason: string }>;
 }
 
@@ -156,14 +157,25 @@ async function activeRecipes(
     const store = config.atPath("store").get<Partial<StoreSettings>>();
     const result: ActiveRecipes = { active: [], downloaded: [], failed: [] };
 
+    const reachedSet = new Set(reached);
+    const storeDeps = {
+        store: services.get("recipes.store"),
+        cache: runtime.indexCore(),
+        hosts,
+        context: runtime.hostContext(),
+        ...(store?.freshnessSeconds === undefined ? {} : { freshnessSeconds: store.freshnessSeconds }),
+    };
+
     // Every recipe is looked up at once (a read of the store or a download), then listed in the order reached.
     const settled = await Promise.all(
-        reached.map(async (key): Promise<{ active?: ActiveRecipeEntity; downloaded?: { key: string; version: string; dir: string }; failed?: { key: string; reason: string } }> => {
+        reached.map(async (key): Promise<{ active?: ActiveRecipeEntity; downloaded?: ActiveRecipes["downloaded"]; failed?: { key: string; reason: string } }> => {
             const entry = lockfile.recipes[key];
             const { namespace, name } = splitStoredKey(key);
             const locked = lockfile.repos[entry.repo];
             const identity = locked?.identity ?? (locked === undefined ? undefined : runtime.tryIdentity(locked.url, hosts)) ?? entry.repo;
             const base = { id: key, namespace, name, repo: entry.repo, identity, version: entry.version, hash: entry.hash, kind: entry.kind, requestedBy: [...entry.requestedBy] };
+            // Only the pins of holders active here are needed.
+            const versions = lockedVersions(entry).filter((one) => one.holder === undefined || reachedSet.has(one.holder));
 
             try {
                 const link = links[entry.repo];
@@ -178,8 +190,13 @@ async function activeRecipes(
 
                     const found = (await map).get(key);
 
+                    // A linked working copy answers for every version pinned, a holder's own included.
                     if (found !== undefined) {
-                        return { active: { ...base, dir: found.dir, source: "link", manifest: found.manifest } };
+                        const pins = versions.flatMap((one) =>
+                            one.holder === undefined ? [] : [{ holder: one.holder, version: one.version, hash: one.hash, dir: found.dir, manifest: found.manifest }],
+                        );
+
+                        return { active: { ...base, dir: found.dir, source: "link", manifest: found.manifest, ...(pins.length === 0 ? {} : { pins }) } };
                     }
                 }
 
@@ -188,21 +205,28 @@ async function activeRecipes(
                 }
 
                 const provider = repos[entry.repo]?.provider;
-                const outcome = await ensureInStore(
-                    { key, entry, repo: entry.repo, url: locked.url, identity, ...(provider === undefined ? {} : { provider }) },
-                    {
-                        store: services.get("recipes.store"),
-                        cache: runtime.indexCore(),
-                        hosts,
-                        context: runtime.hostContext(),
-                        ...(store?.freshnessSeconds === undefined ? {} : { freshnessSeconds: store.freshnessSeconds }),
-                    },
+                const fetched = await Promise.all(
+                    versions.map(async (one) => {
+                        const outcome = await ensureInStore(
+                            { key, entry: { ...entry, version: one.version, hash: one.hash }, repo: entry.repo, url: locked.url, identity, ...(provider === undefined ? {} : { provider }) },
+                            storeDeps,
+                        );
+
+                        return { one, outcome, manifest: await readManifest(manifests, outcome.dir, key) };
+                    }),
                 );
-                const manifest = await readManifest(manifests, outcome.dir, key);
+                const shared = fetched[0]!;
+                const pins = fetched.slice(1).map(({ one, outcome, manifest }) => ({ holder: one.holder as string, version: one.version, hash: one.hash, dir: outcome.dir, manifest }));
+                const active: ActiveRecipeEntity = {
+                    ...base,
+                    dir: shared.outcome.dir,
+                    source: key === CORE_RECIPE_KEY && identity === OFFICIAL_REPO_IDENTITY ? "core" : "store",
+                    manifest: shared.manifest,
+                    ...(pins.length === 0 ? {} : { pins }),
+                };
+                const downloaded = fetched.filter(({ outcome }) => outcome.downloaded).map(({ one, outcome }) => ({ key, label: restoredLabel(key, one), version: one.version, dir: outcome.dir }));
 
-                const active: ActiveRecipeEntity = { ...base, dir: outcome.dir, source: key === CORE_RECIPE_KEY && identity === OFFICIAL_REPO_IDENTITY ? "core" : "store", manifest };
-
-                return outcome.downloaded ? { active, downloaded: { key, version: entry.version, dir: outcome.dir } } : { active };
+                return downloaded.length === 0 ? { active } : { active, downloaded };
             } catch (error) {
                 return { failed: { key, reason: messageOf(error) } };
             }
@@ -211,7 +235,7 @@ async function activeRecipes(
 
     for (const one of settled) {
         if (one.active !== undefined) result.active.push(one.active);
-        if (one.downloaded !== undefined) result.downloaded.push(one.downloaded);
+        if (one.downloaded !== undefined) result.downloaded.push(...one.downloaded);
         if (one.failed !== undefined) result.failed.push(one.failed);
     }
 

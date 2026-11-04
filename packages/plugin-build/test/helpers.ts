@@ -288,10 +288,18 @@ export function standIns(world: World): PluginDefinition[] {
                 return world.restoreReport;
             },
             get: (key: string) => world.lockfile.recipes[key],
+            held: (lockfile: Lockfile, except: Iterable<string> = []) => {
+                const skipped = new Set(except);
+
+                return { keep: Object.fromEntries(Object.entries(lockfile.recipes).filter(([key]) => !skipped.has(key)).map(([key, entry]) => [key, entry.version])), keepPins: {} };
+            },
         }));
         sous.services.add("recipes.resolver", () => ({
             resolve: async () => resolve(),
             resolveSubscriptions: resolve,
+            subscriptionRequest: () => {
+                throw new Error("not used");
+            },
             reachable: () => [],
         }));
         sous.services.add("recipes.active", () => ({

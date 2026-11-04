@@ -14,7 +14,7 @@ import { LOCKFILE_NAME } from "../constants.js";
 import { ensureInStore } from "../fetch/restore.js";
 import type { PartBRuntime } from "../runtime.js";
 import { messageOf, sortKeys, trustedWhileBuilding } from "../support.js";
-import { applyResolution, diffLockfiles, emptyLockfile, lockedClosure, keysHeldBySubscription, removeHolder, sortRecipes, type LockRepoInput } from "./lockfile-ops.js";
+import { applyResolution, diffLockfiles, emptyLockfile, heldVersions, lockedClosure, lockedVersions, keysHeldBySubscription, removeHolder, restoredLabel, sortRecipes, type LockRepoInput } from "./lockfile-ops.js";
 import { plainSubscriptionKey, reachability } from "./reachable.js";
 
 /** The repositories the project trusts now: `recipes.trust` when it exists, else the config. */
@@ -181,13 +181,21 @@ export class LockService implements RecipesLock {
                 continue;
             }
 
-            try {
-                const provider = trusted[entry.repo].provider;
-                const outcome = await ensureInStore({ key, entry, repo: entry.repo, url: repo.url, identity, ...(provider === undefined ? {} : { provider }) }, deps);
+            // The shared version, then each version pinned for one holder alone: each is fetched and verified.
+            for (const locked of lockedVersions(entry)) {
+                const label = restoredLabel(key, locked);
 
-                (outcome.downloaded ? restored : alreadyPresent).push(key);
-            } catch (error) {
-                failed.push({ key, reason: messageOf(error) });
+                try {
+                    const provider = trusted[entry.repo].provider;
+                    const outcome = await ensureInStore(
+                        { key, entry: { ...entry, version: locked.version, hash: locked.hash }, repo: entry.repo, url: repo.url, identity, ...(provider === undefined ? {} : { provider }) },
+                        deps,
+                    );
+
+                    (outcome.downloaded ? restored : alreadyPresent).push(label);
+                } catch (error) {
+                    failed.push({ key: label, reason: messageOf(error) });
+                }
             }
         }
 
@@ -196,6 +204,10 @@ export class LockService implements RecipesLock {
         const earlier = alreadyPresent.filter((key) => fetched.includes(key));
 
         return { restored: sortKeys([...restored, ...earlier]), alreadyPresent: alreadyPresent.filter((key) => !fetched.includes(key)), failed };
+    }
+
+    held(lockfile: Lockfile, except: Iterable<string> = []): { keep: Record<string, string>; keepPins: Record<string, Record<string, string>> } {
+        return heldVersions(lockfile, except);
     }
 
     get(key: string): LockedRecipe | undefined {
