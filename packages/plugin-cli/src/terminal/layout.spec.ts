@@ -48,6 +48,7 @@ describe("Layout", () => {
     it("should write headings with a symbol and a colon", () => {
         expect(plain().heading("Compiling targets")).toBe("▶ Compiling targets:");
         expect(plain().heading("Config is valid.")).toBe("▶ Config is valid.");
+        expect(plain().heading("Already ends with a colon:")).toBe("▶ Already ends with a colon:");
         expect(plain().subheading("Target 1")).toBe("➔ Target 1:");
         expect(plain().subheading("Command Variables", "$")).toBe("$ Command Variables:");
     });

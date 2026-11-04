@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { lockShowOutputs, storeGcOutputs } from "../../part-b/intents/lock-intents.js";
 import type { LockDiff, LockShowResult, PlannedQuestions, RecipeUpdatePlan, RepoAddResult, StoreGcReport, SubscriptionAddResult, SubscriptionListing } from "../../types.js";
 import { describeSize, finish, lockDiffLines, plainFollowUps, questionPlanOutputs, underHeading, type RanFollowUp } from "../outputs.js";
-import { namespaceListOutputs, recipeListOutputs, subscriptionListOutputs } from "./catalog-outputs.js";
+import { namespaceListOutputs, recipeListOutputs, repoSearchOutputs, subscriptionListOutputs } from "./catalog-outputs.js";
 import { repoAddOutputs } from "./repo-outputs.js";
 import { subscriptionAddOutputs, updatePlanOutputs } from "./subscription-outputs.js";
 
@@ -26,6 +26,15 @@ describe("the browsing outputs", () => {
         expect(table?.title).toBe("Namespaces in the repositories this project trusts");
         expect((table?.result as Table).rows).toEqual([{ namespace: "workflow", repo: "acme", recipes: "2", subscribed: "some recipes", description: "no description published" }]);
         expect(outputs.toPlain()).toEqual({ namespaces: [{ repo: "acme", namespace: "workflow", recipeCount: 2, subscribed: "some recipes" }] });
+    });
+
+    /** The Kind column must be wide enough for its longest word, or a narrow terminal breaks "recipe" in two. */
+    it("should keep the search Kind column wide enough for every kind", () => {
+        const [, table] = repoSearchOutputs(fakeContext(), { text: "x" }, []).toArray();
+        const kind = (table?.result as Table).columns.find((column) => column.key === "kind");
+
+        expect(kind?.minWidth).toBeGreaterThanOrEqual("namespace".length);
+        expect(kind?.overflow).toBe("truncate");
     });
 
     /** `--installed` and `--latest` change what the Command Variables and the empty text say. */
@@ -224,7 +233,7 @@ describe("the shared pieces", () => {
         const outputs = questionPlanOutputs(plan, { answerHints: true });
 
         expect(outputs[0]?.summary).toBe("These recipes ask 1 question, 1 of which nothing answers yet.");
-        expect(outputs[1]?.title).toBe("workflow/a asks 1 question:");
+        expect(outputs[1]?.title).toBe("workflow/a asks 1 question");
         expect((outputs[1]?.result as VariableSet).title).toBe("apiUrl");
         expect((outputs[1]?.result as VariableSet).toObject()).toMatchObject({ about: "The API.", "answer-with": "--answer apiUrl=<value>", answered: "no, and this recipe requires an answer" });
         expect(outputs[2]?.style).toBe(ReportEntryStyle.Note);

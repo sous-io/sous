@@ -325,7 +325,7 @@ export function questionPlanOutputs(plan: PlannedQuestions, options: { answerHin
 
     for (const [recipe, questions] of groups) {
         questions.forEach((question, index) => {
-            outputs.push(blockOutput(questionFacts(question, options.answerHints), { blockTitle: question.definition.name, ...(index === 0 ? { heading: `${recipe} asks ${questionCount(questions.length)}:` } : {}) }));
+            outputs.push(blockOutput(questionFacts(question, options.answerHints), { blockTitle: question.definition.name, ...(index === 0 ? { heading: `${recipe} asks ${questionCount(questions.length)}` } : {}) }));
         });
     }
 

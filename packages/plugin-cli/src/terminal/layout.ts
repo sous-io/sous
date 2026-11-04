@@ -62,7 +62,7 @@ export class Layout {
         return wrapColumnsOf(this.columns);
     }
 
-    /** `▶ Text:` (a colon is added unless the text ends with a period). */
+    /** `▶ Text:` (a colon is added unless the text ends with a period or a colon). */
     heading(text: string, symbol = "▶"): string {
         return this.style.heading(withSymbol(headingText(text), symbol));
     }
@@ -236,7 +236,7 @@ export function valueText(value: unknown): string {
 }
 
 function headingText(text: string): string {
-    return text.endsWith(".") ? text : `${text}:`;
+    return text.endsWith(".") || text.endsWith(":") ? text : `${text}:`;
 }
 
 function withSymbol(text: string, symbol: string): string {

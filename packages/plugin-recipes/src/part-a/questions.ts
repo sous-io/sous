@@ -34,11 +34,13 @@ function envFileOf(definition: VariableDefinition): string {
     return definition.secret === true || (definition as { scope?: string }).scope === "local" ? ".env.local" : ".env";
 }
 
-/** Where an answer was found, in words: `the shared scope name SOUS_VAR_X, from the .env file`. */
-function describeSource(source: { readonly rung: string; readonly envName: string; readonly file: string }): string {
+/** Where an answer was found, in words: `the shared scope name SOUS_VAR_X, from the .env file`; a bare name reads `the declared name X, from the .env file`. */
+export function describeSource(source: { readonly rung: string; readonly envName: string; readonly file: string }): string {
     const where = source.file === "shell" ? "the shell environment" : source.file === "local" ? "the .env.local file" : "the .env file";
 
-    return `the ${RUNG_LABELS[source.rung] ?? source.rung} name ${source.envName}, from ${where}`;
+    const name = source.rung === "bare" ? `the ${RUNG_LABELS.bare}` : `the ${RUNG_LABELS[source.rung] ?? source.rung} name`;
+
+    return `${name} ${source.envName}, from ${where}`;
 }
 
 /** The variables a recipe declares: its index entry's, else its manifest's (downloaded only when `download`). */

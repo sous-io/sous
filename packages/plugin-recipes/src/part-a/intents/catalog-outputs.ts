@@ -75,7 +75,7 @@ const CONTENT_COLUMNS: TableColumn[] = [
 
 const SEARCH_COLUMNS: TableColumn[] = [
     { key: "key", header: "Match", kind: "path", overflow: "truncate", minWidth: 12 },
-    { key: "kind", header: "Kind", minWidth: 4 },
+    { key: "kind", header: "Kind", overflow: "truncate", minWidth: 9 },
     { key: "versions", header: "Versions", overflow: "truncate", minWidth: 7 },
     { key: "repo", header: "Repository", overflow: "truncate", priority: "medium" },
     { key: "description", header: "What it is", overflow: "wrap", flex: 1, priority: "low", minWidth: 16 },
