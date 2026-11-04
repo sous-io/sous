@@ -3,7 +3,7 @@ name: about-unit-tests
 description: >
   YOU MUST load this skill when writing, editing, or reviewing unit tests in the sous
   project. Covers test framework, file layout, naming conventions, and strategies for
-  mocking the filesystem and console output.
+  using the filesystem and stand-ins for the engine (reporter, prompter, timers).
 user-invocable: false
 ---
 
@@ -14,52 +14,51 @@ This "topical skill" provides information about a specific concept: unit testing
 
 ## Framework
 
-Vitest is the test runner. Tests are written in TypeScript and run via:
+Vitest is the test runner. The repository is a pnpm workspace: every package under `packages/`
+has its own `vitest.config.ts`, built from the shared config in `packages/vitest.shared.ts`, and
+the root `vitest.config.ts` runs them all as projects. Tests import other workspace packages by
+name (`@sous-io/plugin-api`, `@sous-io/plugin-<name>/types`); the shared config resolves each to
+its TypeScript source, so no build is needed first.
 
 ```bash
-npm test                 # run all tests once (excludes e2e)
-npm run test:watch       # watch mode
-npm run test:coverage    # run with v8 coverage report
-npm run test:e2e         # slow, real-FS end-to-end tests only
+pnpm test                                                   # every package's tests, once
+pnpm test:watch                                             # watch mode
+pnpm test:coverage                                          # with a v8 coverage report
+pnpm --filter @sous-io/plugin-<name> test                   # one package
+pnpm --filter @sous-io/plugin-<name> exec vitest run <file> # one file
+pnpm typecheck                                              # tsc --noEmit in every package
 ```
 
-`npm test` uses `vitest.config.ts`. `npm run test:e2e` uses a separate
-`vitest.e2e.config.ts` with a 30s `testTimeout`; the default config excludes
-`src/test/e2e/**` so the slow tests never run as part of `npm test`.
+`packages/sous` is the exception: its tests run the bundled bin, so its `vitest.config.ts` adds a
+global setup (`packages/sous/test/global-setup.ts`) that builds the bundle once per run, longer
+timeouts, and `SOUS_BUDGETS=off`. `pnpm e2e` runs Docker scenarios against a published version;
+it is not part of `pnpm test` and runs only by hand.
 
 ## File Layout
 
-**Co-located specs** live next to their source file:
+Each package follows the same layout; the shared config's `include` is `src/**/*.spec.ts` and
+`test/**/*.test.ts`.
+
+**Co-located specs** (`*.spec.ts`) sit next to their source file, at any depth:
 
 ```
-src/lib/settings.ts
-src/lib/settings.spec.ts
-src/utils/formatting.ts
-src/utils/formatting.spec.ts
+packages/plugin-recipe-answers/src/combine.ts
+packages/plugin-recipe-answers/src/combine.spec.ts
+packages/plugin-recipes/src/part-b/resolver/ranges.ts
+packages/plugin-recipes/src/part-b/resolver/ranges.spec.ts
 ```
 
-This applies at any depth, including the `src/` root (`src/base-command.spec.ts`) and
-nested template directories (`src/templating/tags/getFiles.spec.ts`).
-
-**Shared test infrastructure** lives under `src/test/`:
-
-```
-src/test/
-  fixtures/          # pre-built sample directories copied into temp dirs by tests
-  integration/       # multi-module integration tests (*.test.ts)
-  watch/             # watch-mode tests with a mocked chokidar (*.test.ts)
-  e2e/               # real chokidar + real files; excluded from `npm test`
-  utils/             # shared test helpers (tmp dirs, fixtures, settings builder)
-```
-
-The default config's `include` covers two patterns: `src/**/*.spec.ts` and
-`src/test/**/*.test.ts`.
+**A package's `test/` directory** holds tests that run several modules together (`*.test.ts`),
+the package's test helpers, and its `fixtures/` when it has any. Helper files are named per
+package (`helpers.ts`, `stand-ins.ts`, `tmp.ts`, `support/`, `utils/`); list the package's
+`test/` directory to find them. A spec imports them by relative path
+(`import { makeTmpDir } from "../test/tmp.js"`).
 
 ## Naming Conventions
 
 ### `describe` blocks
 
-For a unit spec, use the function or class name followed by `()`:
+For a unit spec, name the function followed by `()`, or the class by its bare name:
 
 ```ts
 describe("sortObjectKeys()", () => { ... });
@@ -68,8 +67,8 @@ describe("CompilationService", () => { ... });
 
 Integration tests, whose subject is a behavior rather than a single export, use a plain
 prose description instead (e.g. `describe("full rebuild on config change", ...)`).
-Nested `describe` blocks are common in the larger specs — an outer block naming the
-module and inner blocks naming each exported function.
+Nested `describe` blocks are common in the larger specs: an outer block names the module
+and inner blocks name each exported function.
 
 ### `it` blocks
 
@@ -91,95 +90,60 @@ it("should return a new object with keys in alphabetical order", () => {
 });
 ```
 
-The JSDoc comment documents the *contract* — what the function accepts, what it returns,
+The JSDoc comment documents the *contract*, what the function accepts, what it returns,
 and a concrete before/after example. This makes the test file readable as documentation.
 
 ## Filesystem Strategy
 
 | Scenario | Approach |
 |---|---|
-| Real file I/O, or code that walks/creates directories | Real `os.tmpdir()` directory via `makeTmpDir()` |
-| Complex multi-file scenarios | Fixtures in `src/test/fixtures/`, copied with `copyFixture()` |
-| Pure in-memory FS behavior with no OS interaction | `memfs` — mock `node:fs` with `vi.mock` |
+| Real file I/O, or code that walks or creates directories | A real directory under `os.tmpdir()`, from the package's `makeTmpDir()` |
+| Complex multi-file scenarios | A fixture in the package's `test/fixtures/`, or one the test builds as it runs |
+| Pure in-memory FS behavior with no OS interaction | `memfs`, mocking `node:fs` with `vi.mock` |
 
-**Real temp directories are the dominant pattern** in this project — most specs use
-`makeTmpDir()`. `memfs` is the exception, not the default: mocking `node:fs` hides real
-path/permission behavior, and several modules genuinely need it. `src/lib/state.spec.ts`
-is the one spec that mocks the whole module:
+**Real temp directories are the dominant pattern.** Most packages define `makeTmpDir(prefix?)`
+in their `test/` helpers, returning `{ path, cleanup }`; some follow links with `realpathSync`
+so paths compare equal on machines where the temp directory is a link. `memfs` is the exception:
+mocking `node:fs` hides real path and permission behavior. Config discovery, for example, walks
+up to the filesystem root, and a mocked fs hides how `.sous/` directories at different depths
+interact.
 
 ```ts
-import { vol } from "memfs";
-
-vi.mock("node:fs", async () => {
-  const { fs } = await import("memfs");
-  return { default: fs, ...fs };
-});
+let tmp: TmpDir;
 
 beforeEach(() => {
-  vol.reset();
+    tmp = makeTmpDir();
+});
+
+afterEach(() => {
+    tmp.cleanup();
 });
 ```
 
-Two documented cases where `memfs` is explicitly the wrong choice:
-- **Config discovery** walks up to the filesystem root; a mocked fs hides the
-  interaction between `.sous/` directories at different depths.
-- **Watch tests** rely on chokidar, which uses kernel-level `fs.watch()` and does not
-  work against `memfs`. `src/test/watch/` mocks `chokidar.watch()` to return a real
-  `EventEmitter` and emits events manually, combined with fake timers. The real-chokidar
-  version of those tests lives in `src/test/e2e/`.
+## Stand-ins for the Engine
 
-### Shared helpers
+Code that runs inside the engine receives its services through a context, so a test hands it
+stand-ins rather than mocking modules:
 
-`src/test/utils/` holds three helpers, imported via relative paths:
-
-- `makeTmpDir(prefix?)` → `{ path, cleanup }`, a unique dir under `os.tmpdir()`.
-- `copyFixture(fixtureName, destDir)` → copies a directory from `src/test/fixtures/`.
-- `makeSettings(projectKey, project)` → a minimal valid `Settings` object.
-
-## Console / stdout Capture
-
-Many functions in `sous` write to `console.log` or `process.stdout.write` rather than
-returning values. Use spy helpers to capture and assert on their output, and strip ANSI
-codes before asserting so tests are not brittle against color changes.
-
-These helpers are defined locally in the spec that needs them (see
-`src/utils/formatting.spec.ts`) rather than in `src/test/utils/`, since output capture is
-only relevant to the formatting layer:
-
-```ts
-// Strip ANSI escape codes
-const strip = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "");
-
-// Capture console.log output as plain-text lines
-function captureLog(fn: () => void): string[] {
-  const lines: string[] = [];
-  const spy = vi.spyOn(console, "log").mockImplementation((...args) => {
-    lines.push(strip(args.join(" ")));
-  });
-  fn();
-  spy.mockRestore();
-  return lines;
-}
-
-// Capture process.stdout.write output as plain-text chunks
-function captureStdout(fn: () => void): string[] {
-  const chunks: string[] = [];
-  const spy = vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
-    chunks.push(strip(String(chunk)));
-    return true;
-  });
-  fn();
-  spy.mockRestore();
-  return chunks;
-}
-```
+- `BufferedReporter` (`@sous-io/plugin-api`) keeps every reported message; `reporter.at("warn")`
+  returns the text at one level, and `reporter.styled(style)` the messages of one style. Assert on
+  those rather than capturing `console` or `process.stdout`.
+- `scriptedPrompter([answers])` answers questions in order and records what was `asked`;
+  `nonInteractivePrompter` fails every question the way a run with no terminal does. Both come
+  from `@sous-io/plugin-api`.
+- Several plugin packages have a `makeEngine(...)` helper in `test/` that starts the engine with the
+  plugins under test and a `BufferedReporter`.
+- `@sous-io/repository-hosts/testing` holds recorded HTTP responses, fake processes, a fake git
+  runner and a fake sous home for the repository host plugins.
+- Timing code takes its timers as a parameter, so a test drives them by hand (for example
+  `ManualTimers` in `packages/plugin-build/test/timers.ts`) instead of using fake timers.
 
 ## Self-Contained Tests
 
 A test never reads anything outside this repository, and never skips itself because
 something is missing. Every fixture is either built by the test as it runs (see
-`src/test/utils/fixture-repo.ts`) or shipped in the repository under `src/test/fixtures/`,
-so a fresh clone and a continuous integration runner behave exactly like a developer's
+`buildFixtureRepo` in `packages/sous/test/utils/fixture-repo.ts`) or shipped in the repository in
+the package's `test/fixtures/` directory, so a fresh clone and a continuous integration runner behave exactly like a developer's
 machine.
 
 Two rules follow from that:
@@ -187,32 +151,23 @@ Two rules follow from that:
 - **No conditional skips for a missing dependency.** `describe.skipIf(...)` around an
   absent directory, tool or fixture hides a failure everywhere but the one machine that
   has it. If a test needs something, ship it; if it cannot be shipped, the test does not
-  belong in `npm test`.
+  belong in `pnpm test`.
 - **Nothing reaches the user's home directory.** A test that boots the real CLI copies
   what it needs into a temp directory and sets `SOUS_HOME` to a directory inside it, so
   the machine-wide store and index cache the CLI writes stay in the temp tree. A spec that
   only computes a path from `os.homedir()` is fine; reading or writing there is not.
 
-## Hard-Won Gotchas
-
-- Watch tests that assert on `chokidar.watch` call counts must call
-  `vi.mocked(chokidar.watch).mockClear()` in `beforeEach`; without it, call counts accumulate
-  across tests and assertions pass or fail depending on execution order.
-- `PidService._isProcessAlive` is deliberately public (not private) so specs can spy on it;
-  do not "clean it up" into a private member.
-- In test settings objects, `configsRoot` must live in the root-level `settings._vars`, not a
-  project-level `_vars` block, or `StateService.getFilePath` cannot resolve it.
-
 ## Dead Code and Coverage Hints
 
 Use `/* c8 ignore next */` (or `/* c8 ignore next N */`) to annotate dead code branches
 that cannot be meaningfully tested. For a longer region, use the paired
-`/* c8 ignore start */` … `/* c8 ignore stop */` form. These are the v8-compatible
-equivalents of Istanbul's `/* istanbul ignore */` comments. Apply sparingly — only on
+`/* c8 ignore start */` ... `/* c8 ignore stop */` form. These are the v8-compatible
+equivalents of Istanbul's `/* istanbul ignore */` comments. Apply sparingly, only on
 genuinely unreachable branches, not to paper over missing tests.
 
-Coverage is configured to measure `src/**/*.ts`, excluding the specs themselves and
-everything under `src/test/`.
+Coverage measures each package's `src/**/*.ts`, excluding the specs themselves. Give the reason
+after the marker, as `packages/documents/src/yaml-text.ts` does:
+`/* c8 ignore next: a complex YAML key, which a JSON path cannot name */`.
 
 # Other Skills
 
