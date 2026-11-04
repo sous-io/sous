@@ -15,7 +15,7 @@ export class GitError extends SousError {
     /** True when git was stopped for taking too long. */
     readonly timedOut: boolean;
 
-    constructor(result: GitResult, options: { cwd?: string; timedOut?: boolean } = {}) {
+    constructor(result: GitResult, options: { cwd?: string; timedOut?: boolean; timeoutMs?: number } = {}) {
         const timedOut = options.timedOut ?? false;
         const said = (result.stderr.trim() || result.stdout.trim()).split("\n").filter((line) => line.length > 0);
         const details: string[] = [];
@@ -25,6 +25,10 @@ export class GitError extends SousError {
         }
 
         details.push(...said);
+
+        if (timedOut && options.timeoutMs !== undefined) {
+            details.push(`Sous stops this command after ${Math.round(options.timeoutMs / 1000)} seconds.`);
+        }
 
         if (result.exitCode === 127) {
             details.push("Sous fetches recipes with git, so git must be installed and on your PATH.");

@@ -36,4 +36,4 @@ export default gitPlugin;
 export type * from "./types.js";
 
 export { GIT_TIMEOUT_EXIT_CODE, GitError } from "./errors.js";
-export { createGitRunner, LF_CHECKOUT_OPTIONS } from "./runner.js";
+export { batchSshCommand, createGitRunner, GIT_DOWNLOAD_TIMEOUT_MS, LF_CHECKOUT_OPTIONS } from "./runner.js";

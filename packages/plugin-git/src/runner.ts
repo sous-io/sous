@@ -23,6 +23,44 @@ import type { GitResult, GitRunner, GitRunOptions, GitStatusEntry } from "./type
  */
 export const LF_CHECKOUT_OPTIONS = ["--config", "core.autocrlf=false", "--config", "core.eol=lf"] as const;
 
+/**
+ * How long one download step (a clone, or one step of reading a remote file) may take before it is
+ * stopped, in milliseconds. A caller can pass its own `timeoutMs`.
+ */
+export const GIT_DOWNLOAD_TIMEOUT_MS = 120_000;
+
+/**
+ * The ssh command a download runs, so that ssh never stops to ask on the terminal (a host key it
+ * does not know, a key passphrase). `GIT_TERMINAL_PROMPT=0` does not stop those questions: ssh asks
+ * on `/dev/tty`, and several downloads at once would all ask at once and never finish.
+ *
+ * Returns `undefined` when the user's own command is not plain ssh; that command is left alone.
+ *
+ * ```ts
+ * batchSshCommand(undefined);               // "ssh -o BatchMode=yes"
+ * batchSshCommand("ssh -i ~/.ssh/work");    // "ssh -i ~/.ssh/work -o BatchMode=yes"
+ * batchSshCommand("ssh -o BatchMode=no");   // "ssh -o BatchMode=no" (the user chose)
+ * batchSshCommand("plink -batch");          // undefined
+ * ```
+ */
+export function batchSshCommand(command: string | undefined): string | undefined {
+    const trimmed = command?.trim() ?? "";
+
+    if (trimmed.length === 0) {
+        return "ssh -o BatchMode=yes";
+    }
+
+    if (/batchmode/i.test(trimmed)) {
+        return trimmed;
+    }
+
+    // The program is the first word, or the first quoted run when its path holds spaces.
+    const program = /^"([^"]*)"|^'([^']*)'|^(\S+)/.exec(trimmed)?.slice(1).find((part) => part !== undefined) ?? "";
+    const name = program.split(/[\\/]/).pop() ?? "";
+
+    return /^ssh(\.exe)?$/i.test(name) ? `${trimmed} -o BatchMode=yes` : undefined;
+}
+
 /** What the runner needs from the engine. */
 export interface GitRunnerDeps {
     processes: HostProcesses;
@@ -59,7 +97,7 @@ export function createGitRunner(deps: GitRunnerDeps): GitRunner {
 
     const check = (result: GitResult, raw: ProcessResult, options: GitRunOptions): GitResult => {
         if ((options.reject ?? true) && result.exitCode !== 0) {
-            throw new GitError(result, { cwd: options.cwd, timedOut: raw.timedOut });
+            throw new GitError(result, { cwd: options.cwd, timedOut: raw.timedOut, timeoutMs: options.timeoutMs });
         }
 
         return result;
@@ -85,6 +123,30 @@ export function createGitRunner(deps: GitRunnerDeps): GitRunner {
         const result = await run(args, { cwd, reject: false });
 
         return result.exitCode === 0 && result.stdout.length > 0 ? result.stdout : undefined;
+    };
+
+    let configuredSsh: Promise<string | undefined> | undefined;
+
+    /** The user's `core.sshCommand`, read once. Downloads run outside any repository, so only the global and system values apply. */
+    const configuredSshCommand = (): Promise<string | undefined> => {
+        configuredSsh ??= ask(["config", "--get", "core.sshCommand"], deps.env.TMPDIR ?? os.tmpdir());
+
+        return configuredSsh;
+    };
+
+    /** What a download adds to git's environment so that ssh never asks on the terminal. */
+    const downloadEnvironment = async (extra: Environment | undefined): Promise<Environment> => {
+        const env: Environment = { ...deps.env, ...extra };
+
+        // `GIT_SSH_COMMAND` would override a program the user named in `GIT_SSH`, so that one is left alone.
+        if ((env.GIT_SSH ?? "") !== "") {
+            return { ...extra };
+        }
+
+        const own = (env.GIT_SSH_COMMAND ?? "") !== "" ? env.GIT_SSH_COMMAND : await configuredSshCommand();
+        const command = batchSshCommand(own);
+
+        return command === undefined ? { ...extra } : { ...extra, GIT_SSH_COMMAND: command };
     };
 
     const lines = (text: string | undefined): string[] =>
@@ -188,7 +250,7 @@ export function createGitRunner(deps: GitRunnerDeps): GitRunner {
             // Everything after `--` is a path or a URL, never an option, whatever it starts with.
             args.push("--", url, directory);
             await fs.mkdir(parent, { recursive: true });
-            await run(args, { cwd: parent, env: options.env, signal: options.signal });
+            await run(args, { cwd: parent, env: await downloadEnvironment(options.env), timeoutMs: options.timeoutMs ?? GIT_DOWNLOAD_TIMEOUT_MS, signal: options.signal });
 
             if (sparse) {
                 await run(["sparse-checkout", "set", "--", ...options.sparsePaths!], { cwd: directory, env: options.env, signal: options.signal });
@@ -202,7 +264,7 @@ export function createGitRunner(deps: GitRunnerDeps): GitRunner {
 
             const ref = options.ref ?? "HEAD";
             const tmp = await fs.mkdtemp(path.join(deps.env.TMPDIR ?? os.tmpdir(), "sous-git-read-"));
-            const common = { cwd: tmp, env: options.env, timeoutMs: options.timeoutMs, signal: options.signal };
+            const common = { cwd: tmp, env: await downloadEnvironment(options.env), timeoutMs: options.timeoutMs ?? GIT_DOWNLOAD_TIMEOUT_MS, signal: options.signal };
 
             try {
                 await run(["init", "--quiet"], common);

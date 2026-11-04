@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { isSousError } from "@sous-io/plugin-api";
 import type { HostProcesses, ProcessResult } from "@sous-io/plugin-host/types";
-import { GitError } from "../src/index.js";
+import { batchSshCommand, GIT_DOWNLOAD_TIMEOUT_MS, GitError } from "../src/index.js";
 import { git, realRunner, runnerOver } from "./helpers.js";
 
 /** A stand-in for `host.processes` that records calls and answers from a function. */
@@ -98,6 +98,78 @@ describe("git.runner over a stand-in for host.processes", () => {
         expect(error.timedOut).toBe(true);
         expect(error.message).toContain("did not finish in time");
         expect((await runner.run(["fetch"], { cwd: "/r", timeoutMs: 10, reject: false })).exitCode).toBe(124);
+    });
+
+    /**
+     * A clone that runs out of time says how long sous waits.
+     *
+     * runner.clone("https://example.test/o/r.git", "/r/x", { timeoutMs: 120_000 });
+     * // -> GitError, details include "Sous stops this command after 120 seconds."
+     */
+    it("should name the time limit when a download is stopped", async () => {
+        const { processes } = fakeProcesses((args) => (args[0] === "clone" ? { exitCode: null, signal: "SIGKILL", timedOut: true } : { exitCode: 1 }));
+        const runner = await runnerOver(processes);
+        const where = mkdtempSync(path.join(tmpdir(), "sous-git-timeout-"));
+
+        try {
+            const error = (await runner.clone("https://example.test/o/r.git", path.join(where, "x")).catch((caught: unknown) => caught)) as GitError;
+
+            expect(error.timedOut).toBe(true);
+            expect(error.details).toContain("Sous stops this command after 120 seconds.");
+        } finally {
+            rmSync(where, { recursive: true, force: true });
+        }
+    });
+
+    /**
+     * Every download runs ssh in batch mode with a time limit, so a host key ssh does not know
+     * fails at once instead of asking on the terminal.
+     *
+     * runner.clone(url, dir);
+     * // -> git clone ... with GIT_SSH_COMMAND="ssh -o BatchMode=yes" and timeoutMs 120000
+     */
+    it("should stop ssh from asking on the terminal during a download", async () => {
+        const { processes, calls } = fakeProcesses(() => ({ exitCode: 1 }));
+        const runner = await runnerOver(processes);
+        const where = mkdtempSync(path.join(tmpdir(), "sous-git-batch-"));
+
+        try {
+            await runner.clone("git@example.test:o/r.git", path.join(where, "x")).catch(() => undefined);
+            await runner.readRemoteFile("git@example.test:o/r.git", "sous.index.json").catch(() => undefined);
+        } finally {
+            rmSync(where, { recursive: true, force: true });
+        }
+
+        const clone = calls.find((call) => call.args[0] === "clone")!;
+        const init = calls.find((call) => call.args[0] === "init")!;
+
+        expect(clone.options).toMatchObject({ timeoutMs: GIT_DOWNLOAD_TIMEOUT_MS, env: { GIT_SSH_COMMAND: "ssh -o BatchMode=yes", GIT_TERMINAL_PROMPT: "0" } });
+        expect(init.options).toMatchObject({ timeoutMs: GIT_DOWNLOAD_TIMEOUT_MS, env: { GIT_SSH_COMMAND: "ssh -o BatchMode=yes" } });
+    });
+
+    /**
+     * The user's own ssh command is kept: plain ssh gains batch mode, anything else is left alone.
+     *
+     * runner.clone(url, dir, { env: { GIT_SSH_COMMAND: "plink -batch" } });
+     * // -> GIT_SSH_COMMAND stays "plink -batch"
+     */
+    it("should keep the user's own ssh command", async () => {
+        const { processes, calls } = fakeProcesses((args) => (args[0] === "config" ? { stdout: "ssh -i /k/work\n" } : { exitCode: 1 }));
+        const runner = await runnerOver(processes);
+        const where = mkdtempSync(path.join(tmpdir(), "sous-git-own-"));
+
+        try {
+            await runner.clone("git@example.test:o/r.git", path.join(where, "a")).catch(() => undefined);
+            await runner.clone("git@example.test:o/r.git", path.join(where, "b"), { env: { GIT_SSH_COMMAND: "plink -batch" } }).catch(() => undefined);
+            await runner.clone("git@example.test:o/r.git", path.join(where, "c"), { env: { GIT_SSH: "/usr/bin/my-ssh" } }).catch(() => undefined);
+        } finally {
+            rmSync(where, { recursive: true, force: true });
+        }
+
+        const clones = calls.filter((call) => call.args[0] === "clone").map((call) => (call.options!.env as Record<string, string | undefined>).GIT_SSH_COMMAND);
+
+        expect(clones).toEqual(["ssh -i /k/work -o BatchMode=yes", "plink -batch", undefined]);
+        expect(calls.filter((call) => call.args[0] === "config")).toHaveLength(1);
     });
 
     /** Whether git is installed comes from `which`. */
@@ -288,6 +360,25 @@ describe("git.runner with a real git", () => {
 
         expect(runner.runSync(["rev-parse", "--abbrev-ref", "HEAD"], { cwd: repo }).stdout).toBe("main");
         expect(runner.runSync(["rev-parse", "nope"], { cwd: repo, reject: false }).exitCode).not.toBe(0);
+    });
+});
+
+describe("batchSshCommand()", () => {
+    /**
+     * batchSshCommand adds batch mode to plain ssh, keeps a command that already sets it, and
+     * leaves any other program alone.
+     *
+     * batchSshCommand("ssh -i k");  // -> "ssh -i k -o BatchMode=yes"
+     * batchSshCommand("plink");     // -> undefined
+     */
+    it("should add batch mode only to plain ssh", () => {
+        expect(batchSshCommand(undefined)).toBe("ssh -o BatchMode=yes");
+        expect(batchSshCommand("  ")).toBe("ssh -o BatchMode=yes");
+        expect(batchSshCommand("ssh -i ~/.ssh/work")).toBe("ssh -i ~/.ssh/work -o BatchMode=yes");
+        expect(batchSshCommand('"C:\\Program Files\\OpenSSH\\ssh.exe" -v')).toBe('"C:\\Program Files\\OpenSSH\\ssh.exe" -v -o BatchMode=yes');
+        expect(batchSshCommand("/usr/bin/ssh")).toBe("/usr/bin/ssh -o BatchMode=yes");
+        expect(batchSshCommand("ssh -o BatchMode=no")).toBe("ssh -o BatchMode=no");
+        expect(batchSshCommand("plink -batch")).toBeUndefined();
     });
 });
 

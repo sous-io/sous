@@ -50,6 +50,8 @@ export interface GitCloneOptions {
     /** Skips checking files out (`--no-checkout`). */
     noCheckout?: boolean;
     env?: Environment;
+    /** How long the clone may take, in milliseconds. Default 120 seconds (`GIT_DOWNLOAD_TIMEOUT_MS`). */
+    timeoutMs?: number;
     signal?: AbortSignal;
 }
 
