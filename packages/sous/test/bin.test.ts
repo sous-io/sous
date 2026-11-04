@@ -147,6 +147,34 @@ describe("the sous bin, with a JavaScript config in a project whose package.json
     });
 });
 
+describe("the sous bin, on an older Node", () => {
+    /**
+     * On a Node older than 22 the bin says which Node it needs and exits 1, before the bundle loads,
+     * instead of crashing with an ESM SyntaxError. The bin imports node:module as a namespace, so a
+     * Node without enableCompileCache (older than 22.1) still reaches the check.
+     *
+     * node bin.js --version   // on Node 20.20.2
+     * // -> "Sous needs Node 22 or later; this is Node 20.20.2.", exit 1
+     */
+    it("should say Node 22 is needed instead of crashing", () => {
+        const where = mkdtempSync(path.join(tmpdir(), "sous-old-node-"));
+        const preload = path.join(where, "old-node.cjs");
+
+        try {
+            // Pretends to be Node 20 for the bin's version check.
+            writeFileSync(preload, 'Object.defineProperty(process.versions, "node", { value: "20.20.2" });\n');
+
+            const run = spawnSync(process.execPath, ["--require", preload, bin, "--version"], { cwd: where, encoding: "utf8", env: { PATH: process.env.PATH ?? "" } });
+
+            expect(run.stderr).toBe("Sous needs Node 22 or later; this is Node 20.20.2.\n");
+            expect(run.status).toBe(1);
+            expect(readFileSync(bin, "utf8")).toContain('import * as nodeModule from "node:module";');
+        } finally {
+            rmSync(where, { recursive: true, force: true });
+        }
+    });
+});
+
 
 describe("the sous bin, counting tokens", () => {
     /**
