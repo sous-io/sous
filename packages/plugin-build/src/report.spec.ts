@@ -20,6 +20,19 @@ describe("skippedLine()", () => {
     });
 
     /**
+     * A recipe reached only through a switched-off subscription names that subscription, since it
+     * has no subscription of its own.
+     *
+     * skippedLine({ key: "communication/agent-conduct", reason: "subscription-disabled", subscription: "omakase/house", indirect: true, setBy: "conf.d/520-local.jsonc" });
+     * // -> "Skipped communication/agent-conduct: reached only through omakase/house, which is switched off (conf.d/520-local.jsonc)."
+     */
+    it("should name the switched-off subscription that reaches a dependency", () => {
+        expect(
+            skippedLine({ key: "communication/agent-conduct", reason: "subscription-disabled", subscription: "omakase/house", indirect: true, setBy: "conf.d/520-local.jsonc", message: "x" }),
+        ).toBe("Skipped communication/agent-conduct: reached only through omakase/house, which is switched off (conf.d/520-local.jsonc).");
+    });
+
+    /**
      * Any other reason uses the recipe plugin's own sentence.
      *
      * skippedLine({ key: "a/b", reason: "untrusted", message: "Its repository is not trusted." });

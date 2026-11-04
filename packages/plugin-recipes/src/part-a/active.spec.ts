@@ -99,7 +99,14 @@ describe("recipes.active", () => {
             setBy: "conf.d/610-mac.jsonc",
             message: "Skipped tool-usage/automated-browser-tasks: its subscription is switched off (conf.d/610-mac.jsonc).",
         });
-        expect(byKey["tool-usage/helper"]?.reason).toBe("subscription-disabled");
+        expect(byKey["tool-usage/helper"]).toEqual({
+            key: "tool-usage/helper",
+            reason: "subscription-disabled",
+            subscription: "tool-usage/automated-browser-tasks",
+            indirect: true,
+            setBy: "conf.d/610-mac.jsonc",
+            message: "Skipped tool-usage/helper: reached only through tool-usage/automated-browser-tasks, which is switched off (conf.d/610-mac.jsonc).",
+        });
         expect(byKey["workflow/missing"]?.reason).toBe("missing");
         expect(byKey["old/thing"]?.reason).toBe("untrusted");
         expect(byKey["stray/one"]?.reason).toBe("not-reached");

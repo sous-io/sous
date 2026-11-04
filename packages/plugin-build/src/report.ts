@@ -124,6 +124,9 @@ function reportNewer(newer: BuildPrepareResult["newer"], reporter: Reporter): vo
  * ```ts
  * skippedLine({ key: "tool-usage/automated-browser-tasks", reason: "subscription-disabled", setBy: "conf.d/610-mac.jsonc", message: "..." });
  * // "Skipped tool-usage/automated-browser-tasks: its subscription is switched off (conf.d/610-mac.jsonc)."
+ *
+ * skippedLine({ key: "communication/agent-conduct", reason: "subscription-disabled", subscription: "omakase/house", indirect: true, setBy: "conf.d/520-local.jsonc", message: "..." });
+ * // "Skipped communication/agent-conduct: reached only through omakase/house, which is switched off (conf.d/520-local.jsonc)."
  * ```
  */
 export function skippedLine(skipped: SkippedRecipe): string {
@@ -131,7 +134,9 @@ export function skippedLine(skipped: SkippedRecipe): string {
 
     switch (skipped.reason) {
         case "subscription-disabled":
-            return `Skipped ${skipped.key}: its subscription is switched off${where}.`;
+            return skipped.indirect === true && skipped.subscription !== undefined
+                ? `Skipped ${skipped.key}: reached only through ${skipped.subscription}, which is switched off${where}.`
+                : `Skipped ${skipped.key}: its subscription is switched off${where}.`;
         case "repository-disabled":
             return `Skipped ${skipped.key}: its repository is switched off${where}.`;
         default:

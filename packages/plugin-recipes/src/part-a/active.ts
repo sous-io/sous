@@ -121,13 +121,17 @@ export class ActiveRecipes implements RecipesActive {
 
             if (off !== undefined) {
                 const file = setBy(this.config, ["subscriptions", off, "enabled"]);
+                const where = file === undefined ? "" : ` (${file})`;
+                // A recipe the switched-off subscription reaches only as a dependency has no subscription of its own.
+                const indirect = !keysHeldBySubscription(lock, off).includes(key);
 
                 skipped.push({
                     key,
                     reason: "subscription-disabled",
                     subscription: off,
+                    ...(indirect ? { indirect: true } : {}),
                     ...(file === undefined ? {} : { setBy: file }),
-                    message: `Skipped ${key}: its subscription is switched off${file === undefined ? "" : ` (${file})`}.`,
+                    message: indirect ? `Skipped ${key}: reached only through ${off}, which is switched off${where}.` : `Skipped ${key}: its subscription is switched off${where}.`,
                 });
                 continue;
             }

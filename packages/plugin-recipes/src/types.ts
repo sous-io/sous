@@ -316,6 +316,8 @@ export interface SkippedRecipe {
     readonly reason: "subscription-disabled" | "repository-disabled" | "untrusted" | "missing" | "not-reached";
     /** The subscription that switched it off. */
     readonly subscription?: string;
+    /** Set when the recipe has no subscription of its own, and `subscription` reaches it only as a dependency. */
+    readonly indirect?: true;
     /** The file that set it, when known (`conf.d/610-mac.jsonc`). */
     readonly setBy?: string;
     /** One plain sentence. */
