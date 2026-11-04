@@ -50,13 +50,13 @@
       "version": "1.0.0"
     },
     "core/sous-skills": {
-      "hash": "sha256-2fe341bd28888e4e2e0106ee13ba325d09a055a02be1b7f7fc0fa65fa2b14dff",
+      "hash": "sha256-6f89244d0f197dd694b893c9930f177d9cf02dfcf99bc9ef28b140a6b232de81",
       "kind": "subscribes",
       "repo": "sous-recipes",
       "requestedBy": [
         "project"
       ],
-      "version": "1.0.10"
+      "version": "1.0.11"
     },
     "engineering/design-tenets": {
       "hash": "sha256-6c08cc8f33ae0d20ee7ee767a11015fd29e7a4014448a3ab80bb6964b6df160d",
