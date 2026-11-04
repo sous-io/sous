@@ -376,20 +376,27 @@ there is no entry to delete: the one sous provides comes back on the next run, s
 opt-out outlives it. `sous subscription add core` clears it again. If you remove `core`, make sure
 something else tells your agents not to edit generated files.
 
-## Switch a subscription off on one machine
+## Switch a subscription off
 
 A subscription stays in the config with `enabled: false`, so the opt-out is visible. A switched-off
 subscription is not built: the recipes reached only through it are skipped, the outputs they wrote are
 pruned, and their variables are neither asked nor required. Their pins stay in the committed lockfile,
-so switching a recipe off on your machine never removes it for anyone else.
+so a machine that switches a recipe off never removes it from the lockfile for anyone else.
 
 ```bash
 sous subscription disable tool-usage/automated-browser-tasks
 sous subscription enable tool-usage/automated-browser-tasks
 ```
 
-Both edit `.sous/conf.d/510-subscriptions.jsonc` by key. To switch one off only on some machines, write
-`enabled` in a `conf.d` file of your own that sorts after 510; a later file wins over the managed one:
+Both edit `.sous/conf.d/510-subscriptions.jsonc` by key. That file is committed, so once the change is
+committed the subscription is switched off, or back on, for **everyone** using the project. `disable`
+writes `"enabled": false`; `enable` removes it again, so the file goes back to what it held before.
+
+### On one machine only
+
+To switch one off only on some machines, write `enabled` in a `conf.d` file of your own that sorts
+after 510, and keep that file out of git if it is for your machine alone; a later file wins over the
+managed one:
 
 ```jsonc
 // .sous/conf.d/610-mac.jsonc
@@ -442,7 +449,9 @@ rather than stopping the build, and the build prints a warning naming it before 
 A build holds the versions the lockfile pins and does not talk to the network on every run. Sous
 asks a repository for a newer index only when it has never asked, when the freshness window has
 lapsed (`store.freshnessSeconds`, five minutes by default), or when a command forces it; a failed
-check never breaks a build, because the cached index is used instead. Always-pull changes what
+check never breaks a build, because the cached index is used instead. When a recipe or a version
+is missing from the cached index, sous asks upstream once more before reporting it, so a recipe
+released moments ago is found straight away. Always-pull changes what
 happens after that check, not how often it happens: a repository or subscription marked
 `alwaysPull` takes a newer in-range version rather than the locked one; set it with
 `--always-pull`, or on either entry in the config. Without it, `sous subscription update` is how a

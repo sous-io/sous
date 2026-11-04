@@ -167,6 +167,25 @@ async function checkUpstream(ctx: Context, current: Lockfile, subscriptions: Rec
 
     report.checked = indexes.indexes.some((index) => index.source === "network");
 
+    // Upstream failed and the cached copy answers instead: say so once per repository, and mark
+    // the newer versions that copy shows, since a newer index may show others.
+    const stale = new Set<string>();
+
+    for (const index of indexes.indexes) {
+        if (index.source !== "stale") {
+            continue;
+        }
+
+        stale.add(index.repo);
+
+        if (ctx.services.get("recipes.index-cache").firstStaleNotice(index.repo)) {
+            ctx.reporter.problem(`Sous could not check the repository '${index.repo}' for a newer version, so this build uses the copy of its index that it already had.`, {
+                subject: index.repo,
+                ...(index.problem ? { cause: index.problem } : {}),
+            });
+        }
+    }
+
     for (const failure of indexes.failed) {
         const reasons = failure.attempts.map((attempt) => `${attempt.strategy}: ${attempt.reason}`).join("\n");
 
@@ -198,7 +217,7 @@ async function checkUpstream(ctx: Context, current: Lockfile, subscriptions: Rec
         const preferred = prefersNewer(recipe, subscriptions, repos[recipe.repo]?.alwaysPull === true);
 
         for (const change of newerVersions(recipe, pinned)) {
-            (preferred ? report.moved : report.newer).push(change);
+            (preferred ? report.moved : report.newer).push(stale.has(recipe.repo) ? { ...change, staleIndex: true } : change);
         }
     }
 

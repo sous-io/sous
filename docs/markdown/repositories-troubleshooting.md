@@ -9,10 +9,16 @@ lines under the first sentence of a failure, because that is where the remedy is
 ## A repository this project does not trust
 
 ```text
-Error: No added repository publishes the recipe 'workflow/nope'.
-  Repositories searched: qa-recipes, sous-recipes.
-  Add the repository that publishes it with 'sous repo add <url>', then try again.
+Error: None of this project's repositories publishes the recipe 'workflow/nope'.
+  Checked just now: qa-recipes, sous-recipes.
+  Check the spelling, or run 'sous repo search nope' to look for it. If a repository this project
+    has not added publishes it, add that one with 'sous repo add <url>'.
 ```
+
+Before sous reports this, it reads every added repository's index upstream once, so a recipe
+released moments ago is found rather than reported missing. A repository it could not reach just
+then is listed under `Could not be checked just now`, and only the copy of its index that sous
+already had was searched.
 
 A browsing command given a qualified ref whose qualifier is unknown says `This project trusts no
 repository called 'acme'`; a subscribe says `Sous does not know where the repository 'acme' lives,

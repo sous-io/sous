@@ -46,11 +46,28 @@ export async function registerPartB(sous: Sous): Promise<void> {
 
     sous.entities.add("ref-lookup", lockfileLookup());
 
+    // A command that reads no recipe files may have been built without some (see `recipes.fetch`).
+    // When it then runs an intent that reads them (`subscription disable` runs `build`), the config
+    // is rebuilt first, downloading what this machine lacks.
+    sous.on("*.before", async (event, ctx) => {
+        if (!runtime.leftOutRecipeFiles() || ctx.chain === undefined || ctx.chain.parallel) {
+            return;
+        }
+
+        if (ctx.engine.intents.get(event.intent)?.definition.needsRecipeFiles !== true) {
+            return;
+        }
+
+        runtime.wantRecipeFiles();
+        await ctx.refreshConfig();
+    });
+
     // Rewrites `.sous/types/` from the recipe plugins of every real build.
     sous.on("config.built", (event) => {
         const project = sous.project;
 
-        if (project === undefined || !fs.existsSync(project.sousDir)) {
+        // A build that left out recipes whose files are not here would drop their types.
+        if (project === undefined || !fs.existsSync(project.sousDir) || runtime.leftOutRecipeFiles()) {
             return;
         }
 

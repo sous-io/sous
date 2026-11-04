@@ -8,7 +8,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { definePlugin, type JsonObject } from "@sous-io/plugin-api";
+import { definePlugin, type IntentDefinition, IntentOutputs, type JsonObject, type RunPlan } from "@sous-io/plugin-api";
 import { cleanTemp, fakeHost, fakeUrl, hashOf, indexFile, startEngine, tempDir, writeLockfile, writeRecipe, type FakeHostCalls, type FakeRepo } from "./helpers.js";
 
 const URL = fakeUrl("acme", "recipes");
@@ -159,6 +159,144 @@ describe("recipes.fetch", () => {
 
         expect(recipe).toMatchObject({ source: "link", dir: path.join(checkout, "recipes/workflow/alpha") });
         expect(calls.fetches).toHaveLength(0);
+    });
+});
+
+describe("recipes.fetch for a command that reads no recipe files", () => {
+    /** The plan of a command whose intent reads no recipe files, such as `sous repo list`. */
+    const READS_NONE: RunPlan = { intent: { intent: "repo.list" } as IntentDefinition };
+
+    /**
+     * Two intents for the tests below: `probe.reads` declares `needsRecipeFiles` and returns how
+     * many recipes are active; `probe.outer` reads none, and runs `probe.reads`, as
+     * `sous subscription disable` runs `build`.
+     */
+    const probe = definePlugin({
+        name: "sous-plugin-probe",
+        register(sous) {
+            sous.intents.add({
+                intent: "probe.reads",
+                needsRecipeFiles: true,
+                handle: async (_input, ctx) => IntentOutputs.of({ active: ctx.config.entities.list("active-recipe").length }),
+            });
+            sous.intents.add({
+                intent: "probe.outer",
+                handle: async (_input, ctx) => {
+                    const before = ctx.config.entities.list("active-recipe").length;
+                    const inner = (await ctx.run("probe.reads" as never, {})).toPlain() as { active: number };
+
+                    return IntentOutputs.of({ before, inner: inner.active });
+                },
+            });
+        },
+    });
+
+    /**
+     * When the front end says the command reads no recipe files, a pinned recipe this machine lacks
+     * is left out quietly: nothing is downloaded, nothing fails and nothing is reported.
+     *
+     * `sous repo list` on a fresh clone, offline
+     * // -> builds; no active recipe; no fetch; no warning
+     */
+    it("should leave out, without a word, a recipe it cannot download when the command reads no recipe files", async () => {
+        repo.offline = "network unreachable";
+
+        const { engine, reporter } = await startEngine({ root, home, data: userConfig(), hosts: [fakeHost([repo], calls)], plan: READS_NONE });
+
+        expect(engine.config.entities.list("active-recipe")).toEqual([]);
+        expect(calls.fetches).toEqual([]);
+        expect(reporter.at("warning").join("\n")).not.toMatch(/workflow\/alpha|download|Skipped/);
+    });
+
+    /**
+     * Help and the version run no intent (`{ intent: undefined }`), so they never download either.
+     *
+     * `sous --help` on a fresh clone, offline
+     * // -> builds; no fetch
+     */
+    it("should download nothing for help or the version", async () => {
+        repo.offline = "network unreachable";
+
+        const { engine } = await startEngine({ root, home, data: userConfig(), hosts: [fakeHost([repo], calls)], plan: { intent: undefined } });
+
+        expect(engine.config.entities.list("active-recipe")).toEqual([]);
+        expect(calls.fetches).toEqual([]);
+    });
+
+    /**
+     * A recipe already in the store is used as it is, so a command that reads no recipe files still
+     * sees every recipe on a machine that has them.
+     *
+     * second run of `sous repo list` after a build
+     * // -> workflow/alpha is active; nothing fetched
+     */
+    it("should use a recipe already in the store", async () => {
+        await startEngine({ root, home, data: userConfig(), hosts: [fakeHost([repo], calls)] });
+        calls.fetches.length = 0;
+        repo.offline = "network unreachable";
+
+        const { engine } = await startEngine({ root, home, data: userConfig(), hosts: [fakeHost([repo], calls)], plan: READS_NONE });
+
+        expect(engine.config.entities.list("active-recipe").map((recipe) => recipe.id)).toEqual(["workflow/alpha"]);
+        expect(calls.fetches).toEqual([]);
+    });
+
+    /**
+     * A command whose intent declares `needsRecipeFiles` downloads, and fails, as before.
+     *
+     * `sous build` on a fresh clone, offline
+     * // -> fails: "Sous could not download a recipe …"
+     */
+    it("should still download, and fail, for a command whose intent needs recipe files", async () => {
+        repo.offline = "network unreachable";
+
+        await expect(
+            startEngine({ root, home, data: userConfig(), hosts: [fakeHost([repo], calls)], plan: { intent: { intent: "build", needsRecipeFiles: true } as IntentDefinition } }),
+        ).rejects.toThrow(/could not download a recipe/);
+    });
+
+    /**
+     * When a command that read no recipe files runs an intent that does, the config is rebuilt
+     * first, with the downloads, so that intent sees every recipe.
+     *
+     * `sous subscription disable x` on a fresh clone, which then runs `build`
+     * // -> the build sees workflow/alpha, downloaded just before it ran
+     */
+    it("should download what is missing before an intent that needs recipe files runs inside the command", async () => {
+        const { engine } = await startEngine({
+            root,
+            home,
+            data: userConfig(),
+            hosts: [fakeHost([repo], calls)],
+            plugins: [probe],
+            plan: { intent: { intent: "probe.outer" } as IntentDefinition },
+        });
+
+        expect(calls.fetches).toEqual([]);
+
+        const result = (await engine.submit({ intent: "probe.outer" as never, input: {} })).toPlain();
+
+        expect(result).toEqual({ before: 0, inner: 1 });
+        expect(calls.fetches).toHaveLength(1);
+    });
+
+    /**
+     * A build that left out recipes does not rewrite `.sous/types/`, which would drop their types.
+     *
+     * a build with workflow/alpha, then `sous repo list` with the store emptied
+     * // -> .sous/types/ still holds alpha's types
+     */
+    it("should keep .sous/types as it was when recipes were left out", async () => {
+        await startEngine({ root, home, data: userConfig(), hosts: [fakeHost([repo], calls)] });
+        const types = path.join(root, ".sous", "types");
+        const before = fs.readdirSync(types, { recursive: true }).sort();
+
+        fs.rmSync(path.join(home, "cache"), { recursive: true, force: true });
+        repo.offline = "network unreachable";
+        await startEngine({ root, home, data: userConfig(), hosts: [fakeHost([repo], calls)], plan: READS_NONE });
+
+        expect(fs.readdirSync(types, { recursive: true }).sort()).toEqual(before);
+        expect(before.length).toBeGreaterThan(0);
     });
 });
 

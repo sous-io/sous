@@ -1,4 +1,5 @@
 import type { Environment, ProjectInfo } from "./context.js";
+import type { IntentDefinition } from "./intents.js";
 import type { EntityReader } from "./entities.js";
 import type { JsonObject, JsonValue, Patch, PatchSet, PathInput } from "./json.js";
 import type { DocumentNode } from "./node.js";
@@ -116,6 +117,11 @@ export interface ConfigBuilder extends Reporter {
     readonly contributor: ContributorInfo;
     readonly project: ProjectInfo | undefined;
     readonly env: Environment;
+    /**
+     * What the front end is about to run, when it said (`BuildOptions.plan`); `undefined` when
+     * nothing is known, as for a library caller or a command only a plugin loaded later adds.
+     */
+    readonly plan: RunPlan | undefined;
 }
 
 /**
@@ -174,4 +180,23 @@ export interface BuildOptions {
      * where the warning is noise above the answer. The build is still timed (`--timings`).
      */
     reportBudgets?: boolean;
+    /**
+     * What the front end is about to run, when it read its command line before the config was built.
+     * The engine keeps it for every later build in the same run, and contributors read it as
+     * `config.plan`.
+     */
+    plan?: RunPlan;
+}
+
+/**
+ * What a front end is about to run, read from its command line before the config was built.
+ *
+ * ```ts
+ * { intent: buildDefinition }   // `sous build`
+ * { intent: undefined }         // `sous --help`, `sous --version`: no intent runs
+ * ```
+ */
+export interface RunPlan {
+    /** The intent it will submit, or `undefined` when it runs none (help, the version). */
+    readonly intent: IntentDefinition | undefined;
 }

@@ -1912,3 +1912,9 @@ All in `packages/plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022): a 
 
 - **New** "should leave out a topic whose commands are all hidden, and list them when asked by name" in `plugin-cli/test/cli.test.ts`.
   - **Why:** `sous --help` listed `harness  1 command` although its only command is hidden, and `sous harness --help` printed an empty `USAGE`. The `plugins` and `timings` topics now have summaries instead of "N commands".
+
+### `repo release --check` says when a merge leaves the index alone (gh-204, bug 30)
+
+- **Changed** "should pass --check and report the drift a merge will rewrite" (`plugin-authoring/src/release/release.spec.ts` and `sous/test/integration/repo-release.test.ts`), now "should pass --check and report drift that waits for the next release": it expects "The committed sous.index.json is out of date" and no "Merging rewrites".
+  - **Why:** that drift (an older generator, an outdated description) publishes no version, and a release rewrites the index only when it publishes one, so the merge leaves the index as it is. The old wording promised a rewrite that never happened.
+- **New** in `release.spec.ts`: "should say a merge rewrites the index when it publishes a version" and "should say a removed recipe leaves the index at the next release that publishes".

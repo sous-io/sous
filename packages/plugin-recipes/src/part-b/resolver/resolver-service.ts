@@ -14,11 +14,13 @@ import { trustedRepos } from "../lock/lock-service.js";
 import { plainSubscriptionKey, reachability } from "../lock/reachable.js";
 import { enabledSubscriptions, sortKeys } from "../support.js";
 import type { PartBRuntime } from "../runtime.js";
-import { resolveWanted, wantedOf, type DependencyLists, type ResolverRepo, type WantedRequest } from "./resolve.js";
+import { NoVersionSatisfiesError, resolveWanted, UnknownRefError, wantedOf, type DependencyLists, type ResolverRepo, type WantedRequest } from "./resolve.js";
 
 /** `recipes.resolver`. */
 export class ResolverService implements RecipesResolver {
     private readonly linked = new Map<string, Promise<Map<string, LinkedRecipe>>>();
+    /** The upstream reads made after a miss in this run, by the sorted repository names. */
+    private readonly upstream = new Map<string, Promise<{ found: Map<string, IndexFile>; checked: Set<string> }>>();
 
     constructor(
         private readonly ctx: ServiceContext,
@@ -37,7 +39,6 @@ export class ResolverService implements RecipesResolver {
             }
         }
 
-        const indexes = options.indexes ?? (await this.indexes(Object.keys(repos), options.latest === true, options.quiet === true));
         const wanted: WantedRequest[] = [];
 
         for (const request of requests) {
@@ -57,15 +58,55 @@ export class ResolverService implements RecipesResolver {
             });
         }
 
-        return resolveWanted(wanted, {
-            indexes,
-            repos,
-            loadManifest: (recipe) => this.loadManifest(recipe),
-            parseDependency: (written) => this.parseDependency(written),
-            ...(options.prerelease === undefined ? {} : { prerelease: options.prerelease }),
-            ...(options.keep === undefined ? {} : { keep: options.keep }),
-            ...(options.keepPins === undefined ? {} : { keepPins: options.keepPins }),
-        });
+        const run = (indexes: ReadonlyMap<string, IndexFile>, checkedNow?: ReadonlySet<string>): Promise<ResolveResult> =>
+            resolveWanted(wanted, {
+                indexes,
+                repos,
+                loadManifest: (recipe) => this.loadManifest(recipe),
+                parseDependency: (written) => this.parseDependency(written),
+                ...(options.prerelease === undefined ? {} : { prerelease: options.prerelease }),
+                ...(options.keep === undefined ? {} : { keep: options.keep }),
+                ...(options.keepPins === undefined ? {} : { keepPins: options.keepPins }),
+                ...(checkedNow === undefined ? {} : { checkedNow }),
+            });
+
+        if (options.indexes !== undefined) {
+            return run(options.indexes);
+        }
+
+        const names = Object.keys(repos);
+        const latest = options.latest === true;
+        const read = await this.indexes(names, latest, options.quiet === true);
+
+        try {
+            return await run(read.found, latest ? read.checked : undefined);
+        } catch (error) {
+            // A recipe or version released moments ago is missing only from a cached copy of the
+            // index (#133): read every index upstream once, and try again before reporting it.
+            if (latest || !(error instanceof UnknownRefError || error instanceof NoVersionSatisfiesError)) {
+                throw error;
+            }
+
+            const fresh = await this.readUpstreamOnce(names, options.quiet === true);
+
+            return run(fresh.found, fresh.checked);
+        }
+    }
+
+    /**
+     * The indexes read upstream, once per set of repositories in this run, so a ref that is truly
+     * missing costs one read per repository, however many resolves ask for it.
+     */
+    private readUpstreamOnce(names: readonly string[], quiet: boolean): Promise<{ found: Map<string, IndexFile>; checked: Set<string> }> {
+        const key = sortKeys(names).join("\n");
+        let read = this.upstream.get(key);
+
+        if (read === undefined) {
+            read = this.indexes(names, true, quiet);
+            this.upstream.set(key, read);
+        }
+
+        return read;
     }
 
     async resolveSubscriptions(options: ResolveOptions = {}): Promise<ResolveResult> {
@@ -110,18 +151,22 @@ export class ResolverService implements RecipesResolver {
         }
     }
 
-    /** The index of every trusted repository that can be read; one that cannot is left out. */
-    private async indexes(names: readonly string[], latest: boolean, quiet: boolean): Promise<Map<string, IndexFile>> {
+    /**
+     * The index of every trusted repository that can be read; one that cannot is left out. With
+     * `latest`, `checked` names the repositories whose index was read upstream just now.
+     */
+    private async indexes(names: readonly string[], latest: boolean, quiet: boolean): Promise<{ found: Map<string, IndexFile>; checked: Set<string> }> {
         const cache = this.ctx.services.get("recipes.index-cache");
         const found = new Map<string, IndexFile>();
+        const checked = new Set<string>();
 
         for (const name of sortKeys(names)) {
             try {
                 const read = await cache.get(name, { latest });
 
-                // Upstream failed and the cached copy answers instead: say so, as before the refactor.
-                if (read.source === "stale" && !quiet) {
-                    const problem = (read as { problem?: string }).problem;
+                // Upstream failed and the cached copy answers instead: say so, once per repository.
+                if (read.source === "stale" && !quiet && cache.firstStaleNotice(name)) {
+                    const problem = read.problem;
 
                     this.runtime.host.reporter.problem(
                         `Sous could not check the repository '${name}' for updates, so it is using the copy of its index that it already had.`,
@@ -130,6 +175,10 @@ export class ResolverService implements RecipesResolver {
                 }
 
                 found.set(name, read.index);
+
+                if (latest && read.source !== "stale") {
+                    checked.add(name);
+                }
             } catch {
                 const cached = cache.cached(name);
 
@@ -139,7 +188,7 @@ export class ResolverService implements RecipesResolver {
             }
         }
 
-        return found;
+        return { found, checked };
     }
 
     /** A resolved recipe's lists from its files: a linked checkout, else the store. */

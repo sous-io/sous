@@ -4,6 +4,7 @@ import { deepFreeze, stableStringify } from "@sous-io/documents";
 import {
     type AppInfo,
     type BuildOptions,
+    type RunPlan,
     type BuiltConfig,
     BufferedReporter,
     CancelledError,
@@ -115,6 +116,8 @@ export interface StartableFrontEnd {
     start(argv: readonly string[]): Promise<void>;
     /** Whether `argv` needs the built config; asked on the config of the built-in plugins alone. */
     needsConfig(argv: readonly string[]): boolean;
+    /** What `argv` will run, or `undefined` when the front end cannot tell; asked like `needsConfig`. */
+    plan(argv: readonly string[]): RunPlan | undefined;
 }
 
 interface RebuildTrigger {
@@ -167,6 +170,8 @@ export class Engine {
     private builtInRecords: PluginRecord[] | undefined;
     private streakTriggers: RebuildTrigger[] | undefined;
     private failure: BuildFailure | undefined;
+    /** What the front end said it is about to run (`BuildOptions.plan`), kept for every later build. */
+    private runPlan: RunPlan | undefined;
     private failedPartial: BuiltConfigImpl | undefined;
     private readonly serviceHost: ServiceHost;
     private readonly apiHost: SousApiHost;
@@ -300,6 +305,10 @@ export class Engine {
      * With `extraContributors`, builds a "what if" config instead (see {@link buildWhatIf}).
      */
     async buildConfig(options: BuildOptions = {}): Promise<BuiltConfig> {
+        if (options.plan !== undefined) {
+            this.runPlan = options.plan;
+        }
+
         if (options.extraContributors && options.extraContributors.length > 0) {
             return this.buildWhatIf(options);
         }
@@ -417,6 +426,7 @@ export class Engine {
                 await found.definition.start(this.handle, argv);
             },
             needsConfig: (argv) => found.definition.needsConfig?.(this.handle, argv) ?? true,
+            plan: (argv) => found.definition.plan?.(this.handle, argv),
         };
     }
 
@@ -556,6 +566,7 @@ export class Engine {
             timer: this.timer,
             project: this.project,
             env: this.env,
+            plan: this.runPlan,
             baseLimits: this.baseLimits,
             contributorsOf: (isActive: (plugin: string) => boolean) => this.contributors.active(isActive),
             loadBuiltIns: () => this.loadBuiltIns(),

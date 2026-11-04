@@ -14,6 +14,7 @@ import {
     type ReportEntryStyle,
     PluginError,
     type ProjectInfo,
+    type RunPlan,
 } from "@sous-io/plugin-api";
 import type { EntityRegistry, StoredEntity } from "../entities/entity-registry.js";
 import { EntitySnapshot } from "../entities/entity-registry.js";
@@ -57,6 +58,8 @@ export interface BuildHost {
     readonly timer: Timer;
     readonly project: ProjectInfo | undefined;
     readonly env: Environment;
+    /** What the front end is about to run, when it said. */
+    readonly plan?: RunPlan;
     /** The limits as the defaults and the previous config set them. */
     readonly baseLimits: Limits;
     /** Every contributor of the given plugins. */
@@ -322,6 +325,7 @@ export class ConfigBuild {
                 entityRegistry: this.host.entityRegistry,
                 project: this.host.project,
                 env: this.host.env,
+                plan: this.host.plan,
                 log: (level, message, details, style) => this.host.log(level, message, details, style),
             },
             entry.definition.monitors,

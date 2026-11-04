@@ -110,6 +110,13 @@ export interface IntentDefinition<N extends string = string, S extends SousSchem
      */
     runsWithoutConfig?: boolean;
     /**
+     * `boolean = false`. It reads the files of the recipes the project subscribes to (their config
+     * layers, plugins, variables or content), so sous downloads every pinned recipe this machine lacks
+     * before it runs, and fails when one cannot be downloaded. Any other intent runs with the recipe
+     * files already on this machine, so it works offline and without credentials.
+     */
+    needsRecipeFiles?: boolean;
+    /**
      * It works on a project, so it fails, before it runs, when sous was started outside one: the
      * error says no sous config was found and how to set a project up.
      */

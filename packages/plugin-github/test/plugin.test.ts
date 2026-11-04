@@ -19,7 +19,7 @@ describe("plugin-github in an engine", () => {
         expect(host?.features).toEqual(["fetch", "submit", "proposals"]);
         expect(host?.matches("https://ghe.example.com/a/b")).toBe(true);
         expect(host?.matches("https://github.com/a/b")).toBe(true);
-        expect(host?.readStrategies.map((strategy) => strategy.id)).toEqual(["http-token", "http", "git"]);
+        expect(host?.readStrategies.map((strategy) => strategy.id)).toEqual(["http-token", "http", "http-api", "git"]);
         expect(config.entities.describe("repository-host")[0]?.plugin).toBe("@sous-io/plugin-github");
     });
 

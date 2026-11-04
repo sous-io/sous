@@ -239,6 +239,19 @@ describe("the shared pieces", () => {
         expect(outputs[2]?.style).toBe(ReportEntryStyle.Note);
     });
 
+    it("should say a required question with a default takes its default, and not count it as unanswered", () => {
+        const outputs = questionPlanOutputs(
+            {
+                questions: [{ recipe: "core/sous-skills", definition: { name: "skillsRoot", required: true, default: "prompts/skills" }, answered: false }],
+                unreadable: [],
+            } as unknown as PlannedQuestions,
+            { answerHints: true },
+        );
+
+        expect(outputs[0]?.summary).toBe("These recipes ask 1 question, and everything they ask is already answered.");
+        expect((outputs[1]?.result as VariableSet).toObject()).toMatchObject({ answered: "no, so its default is used: prompts/skills" });
+    });
+
     /**
      * A version of a recipe that is not asked a question (another version of the recipe is) shows
      * the warning in place of whether it is answered, and is not counted as unanswered.

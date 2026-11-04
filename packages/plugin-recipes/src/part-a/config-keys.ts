@@ -35,7 +35,10 @@ const subscriptionEntry: JsonSchema = {
     type: "object",
     description: "One subscription, to a namespace or to one recipe.",
     properties: {
-        enabled: { type: "boolean", description: "False switches it off on this machine, keeping its pins." },
+        enabled: {
+            type: "boolean",
+            description: "False switches it off, keeping its pins, wherever the file that sets it applies: for everyone in a committed file, for one machine in a conf.d file kept out of git.",
+        },
         range: { type: "string", description: "The version range. Default `*`." },
         prerelease: { type: "boolean" },
         alwaysPull: { type: "boolean" },

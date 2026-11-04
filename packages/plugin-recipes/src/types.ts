@@ -49,7 +49,7 @@ export interface RepoEntry {
 
 /** One subscription, keyed under `subscriptions` by `namespace` or `namespace/recipe`. */
 export interface SubscriptionEntry {
-    /** Default `true`; `false` switches it off on this machine, keeping its pins. */
+    /** Default `true`; `false` switches it off, keeping its pins, wherever the file that sets it applies. */
     enabled?: boolean;
     /** Default `*`. */
     range?: string;
@@ -136,6 +136,17 @@ export interface RepositoryReadStrategy {
     label: string;
     /** True when it needs a token; it is skipped when none is found. */
     usesToken?: boolean;
+    /**
+     * True when the server may answer with a copy it cached for a while, such as
+     * `raw.githubusercontent.com` (up to five minutes). A read that must see the current file
+     * (`--latest`, or a recipe missing from the cached index) tries it only after every other strategy.
+     */
+    servesCachedCopies?: boolean;
+    /**
+     * True when it is used only by a read that must see the current file, such as GitHub's contents
+     * API without a token, which allows only 60 requests an hour. Other reads skip it.
+     */
+    onlyForCurrentReads?: boolean;
     read(request: RepositoryReadRequest, ctx: RepositoryHostContext): Promise<RepositoryReadOutcome>;
     /** One line that would make this strategy work: `set up git access to gitlab.com (an SSH key, or a credential helper)`. */
     fix?(repository: CanonicalRepository): string | undefined;
@@ -316,6 +327,8 @@ export interface SkippedRecipe {
     readonly reason: "subscription-disabled" | "repository-disabled" | "untrusted" | "missing" | "not-reached";
     /** The subscription that switched it off. */
     readonly subscription?: string;
+    /** Set when the recipe has no subscription of its own, and `subscription` reaches it only as a dependency. */
+    readonly indirect?: true;
     /** The file that set it, when known (`conf.d/610-mac.jsonc`). */
     readonly setBy?: string;
     /** One plain sentence. */
@@ -629,6 +642,8 @@ export interface CachedIndex {
     readonly index: IndexFile;
     readonly source: IndexSource;
     readonly meta?: IndexMeta;
+    /** Why upstream could not be read, when `source` is `stale`. */
+    readonly problem?: string;
 }
 
 /** How to get an index. */
@@ -654,6 +669,29 @@ export interface IndexUpstreamTarget {
     readonly identity: string;
     /** The `repository-host` entity id, when the entry names one. */
     readonly provider?: string;
+}
+
+/**
+ * Why git could not clone a recipe from one URL:
+ *
+ * - `git-missing`: git is not installed, or not on `PATH`.
+ * - `credentials`: the host refused git, or git had no way to sign in (no credential helper, no SSH key, an
+ *   unknown SSH host key).
+ * - `network`: git could not reach the host.
+ * - `timeout`: git did not finish in time.
+ * - `missing-tag`: the host has no such tag (it was released but never pushed, or deleted).
+ * - `other`: anything else; git's own words say what.
+ */
+export type RecipeDownloadProblem = "git-missing" | "credentials" | "network" | "timeout" | "missing-tag" | "other";
+
+/** One clone URL a recipe download tried, and why it failed. */
+export interface RecipeDownloadAttempt {
+    readonly url: string;
+    /** The host the URL names, when it names one (`gitlab.com`). */
+    readonly host: string | undefined;
+    readonly problem: RecipeDownloadProblem;
+    /** What git said, in a line: `could not read Username for 'https://gitlab.com': terminal prompts disabled`. */
+    readonly reason: string;
 }
 
 /** One pinned recipe to put in the store. */
@@ -708,6 +746,11 @@ export interface RecipesIndexCache {
     /** Whether the cached index is still fresh (`store.freshnessSeconds`, `alwaysPull`). */
     isFresh(repo: string): boolean;
     meta(repo: string): IndexMeta | undefined;
+    /**
+     * Whether falling back to a repository's cached copy still has to be reported in this command:
+     * `true` the first time it is asked for a repository, `false` after, so it is reported once.
+     */
+    firstStaleNotice(repo: string): boolean;
     /** Forgets a cached index. */
     forget(repo: string): Promise<void>;
 }

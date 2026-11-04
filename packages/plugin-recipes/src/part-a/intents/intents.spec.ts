@@ -128,6 +128,7 @@ function fakeIndexCache(indexes: Map<string, IndexFile>, failing: string[] = [])
         cached,
         isFresh: () => true,
         meta: (repo) => cached(repo)?.meta,
+        firstStaleNotice: () => true,
         forget: async () => {},
     };
 }
@@ -255,6 +256,79 @@ describe("subscription.disable and subscription.enable", () => {
         expect(laterSetters(config, "workflow")).toEqual(["conf.d/610-mac.jsonc"]);
         await toggleSubscription({ ref: "workflow", noBuild: true }, ctx, true);
         expect(ctx.reporter.at("warning")[0]).toMatch(/conf.d\/610-mac.jsonc also sets subscriptions.workflow.enabled/);
+    });
+
+    /**
+     * Enabling removes the `enabled` that disabling wrote, so conf.d/510 returns to what it held
+     * before, rather than keeping `"enabled": true` (#204 bug 13).
+     *
+     * // 510: { "workflow/task-files": { range: "^1.0.0", addedBy: "user", enabled: false } }
+     * toggleSubscription({ ref: "workflow/task-files" }, ctx, true)
+     * // 510: { "workflow/task-files": { range: "^1.0.0", addedBy: "user" } }
+     */
+    it("should switch a subscription back on by removing the enabled it wrote", async () => {
+        const on = setup({ data: { repos: {}, subscriptions: { "workflow/task-files": { range: "^1.0.0" } } } }).config;
+        const { config, managed } = setup({
+            data: { repos: {}, subscriptions: { "workflow/task-files": { range: "^1.0.0", enabled: false } } },
+            managed: { "510-subscriptions.jsonc": { subscriptions: { "workflow/task-files": { range: "^1.0.0", addedBy: "user", enabled: false } } } },
+        });
+        const result = await toggleSubscription({ ref: "workflow/task-files", noBuild: true }, context(config, { next: on }), true);
+
+        expect(result).toMatchObject({ enabled: true, changed: true });
+        expect(managed.files["510-subscriptions.jsonc"]).toEqual({ subscriptions: { "workflow/task-files": { range: "^1.0.0", addedBy: "user" } } });
+    });
+
+    /**
+     * An entry disabling wrote only to hold `enabled`, for a subscription another file defines (core,
+     * or one in the user's own file), is removed whole.
+     *
+     * // 510: { core: { enabled: false } }; core is defined by sous itself
+     * toggleSubscription({ ref: "core" }, ctx, true) // 510: {}
+     */
+    it("should remove an entry that held only enabled when another file defines the subscription", async () => {
+        const on = setup({ data: { repos: {}, subscriptions: { core: {} } } }).config;
+        const { config, managed } = setup({
+            data: { repos: {}, subscriptions: { core: { enabled: false } } },
+            managed: { "510-subscriptions.jsonc": { subscriptions: { core: { enabled: false } } } },
+            layers: { "subscriptions.core": ["recipes.core", "confd/510-subscriptions.jsonc"] },
+        });
+
+        await toggleSubscription({ ref: "core", noBuild: true }, context(config, { next: on }), true);
+
+        expect(managed.files["510-subscriptions.jsonc"]).toEqual({ subscriptions: {} });
+    });
+
+    /**
+     * When a file applied before 510 switches it off, only a value in 510 wins over it, so enabling
+     * writes `"enabled": true` there.
+     *
+     * // the user's own file: { workflow: { enabled: false } }; 510 holds nothing for it
+     * toggleSubscription({ ref: "workflow" }, ctx, true) // 510: { workflow: { enabled: true } }
+     */
+    it("should write enabled true when an earlier file switches the subscription off", async () => {
+        const { config, managed } = setup({ data: { repos: {}, subscriptions: { workflow: { enabled: false } } } });
+
+        await toggleSubscription({ ref: "workflow", noBuild: true }, context(config), true);
+
+        expect(managed.files["510-subscriptions.jsonc"]).toEqual({ subscriptions: { workflow: { enabled: true } } });
+    });
+
+    /**
+     * When removing 510's value still leaves it switched off by an earlier file, enabling writes
+     * `"enabled": true` after all.
+     *
+     * // the user's own file and 510 both say enabled: false
+     * toggleSubscription({ ref: "workflow" }, ctx, true) // 510: { workflow: { addedBy: "user", enabled: true } }
+     */
+    it("should write enabled true when an earlier file still switches it off once 510's value is gone", async () => {
+        const { config, managed } = setup({
+            data: { repos: {}, subscriptions: { workflow: { enabled: false } } },
+            managed: { "510-subscriptions.jsonc": { subscriptions: { workflow: { addedBy: "user", enabled: false } } } },
+        });
+
+        await toggleSubscription({ ref: "workflow", noBuild: true }, context(config), true);
+
+        expect(managed.files["510-subscriptions.jsonc"]).toEqual({ subscriptions: { workflow: { addedBy: "user", enabled: true } } });
     });
 
     /** Toggling a subscription the project does not have is an error listing what it has. */
@@ -446,11 +520,46 @@ describe("subscription.add", () => {
         await expect(addSubscription({ ref: "workflow" }, context(config))).rejects.toSatisfy((error: unknown) => isSousErrorOfKind(error, "non-interactive"));
     });
 
-    /** A name nothing publishes is an error naming what was searched. */
+    /**
+     * A name nothing publishes is an error naming the repositories checked just now, and it never
+     * suggests adding a repository as if none were added.
+     *
+     * addSubscription({ ref: "nothing" }) // -> "Nothing called 'nothing' was found…", "Checked just now: r."
+     */
     it("should explain a ref that names nothing", async () => {
         const { config } = setup();
 
-        await expect(addSubscription({ ref: "nothing", yes: true }, context(config))).rejects.toMatchObject({ details: expect.arrayContaining([expect.stringMatching(/Searched the namespaces and recipes of: r/)]) });
+        await expect(addSubscription({ ref: "nothing", yes: true }, context(config))).rejects.toMatchObject({
+            details: expect.arrayContaining([
+                "Checked just now: r.",
+                "Check the spelling, or run 'sous repo search nothing' to look for something like it. If a repository this project has not added publishes it, add that one with 'sous repo add <url>'.",
+            ]),
+        });
+    });
+
+    /**
+     * A recipe released moments ago is missing from the cached index, so a miss reads the indexes
+     * upstream once and searches again (#133).
+     *
+     * // cached index of r: no 'fresh'; upstream: workflow/fresh 1.0.0
+     * addSubscription({ ref: "fresh" }) // -> subscribes to workflow/fresh
+     */
+    it("should read the indexes upstream once when a ref is missing from the cached copies", async () => {
+        const cachedIndex = index({ "workflow/task-files": ["1.0.0"] });
+        const upstreamIndex = index({ "workflow/task-files": ["1.0.0"], "workflow/fresh": ["1.0.0"] });
+        const upstreamReads: string[] = [];
+        const cache: RecipesIndexCache = {
+            ...fakeIndexCache(new Map([["r", cachedIndex]])),
+            fetchUpstream: async (target) => {
+                upstreamReads.push(target.name);
+
+                return upstreamIndex;
+            },
+        };
+        const { config } = setup({ indexes: { r: cachedIndex }, services: { "recipes.index-cache": cache } });
+
+        await expect(addSubscription({ ref: "fresh", yes: true, dryRun: true }, context(config))).resolves.toBeDefined();
+        expect(upstreamReads).toEqual(["r"]);
     });
 
     /** A repository a dependency needs that has no URL stops the install, saying how to add it. */

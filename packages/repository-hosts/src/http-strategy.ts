@@ -30,6 +30,10 @@ export interface HttpReadStrategyOptions {
     headers?(request: RepositoryReadRequest): Record<string, string>;
     /** The header that carries the token. Default `Authorization: Bearer <token>`. */
     authorization?(token: RepositoryToken): Record<string, string>;
+    /** True when the server may answer with a copy it cached for a while (`raw.githubusercontent.com`). */
+    servesCachedCopies?: boolean;
+    /** True when only a read that must see the current file uses it (GitHub's API without a token). */
+    onlyForCurrentReads?: boolean;
 }
 
 /**
@@ -49,6 +53,8 @@ export function httpReadStrategy(options: HttpReadStrategyOptions): ExplainedRea
         id: options.id,
         label: options.label,
         usesToken: options.usesToken,
+        ...(options.servesCachedCopies === true ? { servesCachedCopies: true } : {}),
+        ...(options.onlyForCurrentReads === true ? { onlyForCurrentReads: true } : {}),
 
         async read(request, ctx) {
             const token = options.usesToken ? request.token : undefined;

@@ -85,11 +85,22 @@ export interface CoreGetOptions extends GetIndexOptions {
     hosts?: readonly RepositoryHostEntity[];
 }
 
+/**
+ * How long a failed upstream check stands for this process: within it, later reads of the same
+ * repository answer from the cached copy without trying upstream again. It is kept in memory
+ * only, so the next command checks upstream again.
+ */
+export const FAILED_CHECK_RETRY_MS = 60_000;
+
 /** The identity-keyed index cache. */
 export class IndexCacheCore {
     private overlay: IndexOverlay | undefined;
     private readonly memory: StrategyMemoryFile;
     private readonly now: () => Date;
+    /** Upstream checks that failed in this process, by identity. */
+    private readonly failedChecks = new Map<string, { at: number; error: unknown }>();
+    /** Repositories whose stale fallback has been reported in this process. */
+    private readonly staleNoticed = new Set<string>();
 
     constructor(private readonly options: IndexCacheCoreOptions) {
         this.memory = new StrategyMemoryFile(options.strategiesFile);
@@ -210,31 +221,63 @@ export class IndexCacheCore {
             return { repo: target.name, index: cached, source: "cache", ...(meta ? { meta } : {}) };
         }
 
+        const failed = this.failedChecks.get(target.identity);
+
+        if (failed !== undefined && this.now().getTime() - failed.at < FAILED_CHECK_RETRY_MS) {
+            return this.staleOrThrow(target, cached, meta, failed.error);
+        }
+
         try {
-            return await this.refresh(target, options.signal, cached === undefined ? undefined : meta?.etag, options.hosts);
+            const lookup = await this.refresh(target, options.signal, cached === undefined ? undefined : meta?.etag, options.hosts, options.latest === true);
+
+            this.failedChecks.delete(target.identity);
+
+            return lookup;
         } catch (error) {
-            this.recordCheck(target, meta);
+            // A failed check is not a check: `lastCheckedAt` stays as it was, so the next command
+            // looks upstream again. Only this process skips upstream for a while.
+            this.failedChecks.set(target.identity, { at: this.now().getTime(), error });
 
-            if (cached === undefined) {
-                throw error;
-            }
-
-            const fresh = this.readMeta(target.identity);
-
-            return {
-                repo: target.name,
-                index: cached,
-                source: "stale",
-                ...(fresh ? { meta: fresh } : {}),
-                problem: messageOf(error),
-                ...(error instanceof IndexReadError ? { failure: error.failure } : {}),
-            };
+            return this.staleOrThrow(target, cached, meta, error);
         }
     }
 
-    /** Reads a repository's index upstream, writing nothing. Throws when it cannot. */
+    /**
+     * Whether a stale fallback for this repository still has to be reported in this process: `true`
+     * the first time it is asked, `false` after, so each repository is reported once per command.
+     */
+    firstStaleNotice(identity: string): boolean {
+        if (this.staleNoticed.has(identity)) {
+            return false;
+        }
+
+        this.staleNoticed.add(identity);
+
+        return true;
+    }
+
+    /** The cached copy as `stale`, with why upstream failed; the failure itself when nothing is cached. */
+    private staleOrThrow(target: IndexTarget, cached: IndexFile | undefined, meta: IndexMeta | undefined, error: unknown): CacheLookup {
+        if (cached === undefined) {
+            throw error;
+        }
+
+        return {
+            repo: target.name,
+            index: cached,
+            source: "stale",
+            ...(meta ? { meta } : {}),
+            problem: messageOf(error),
+            ...(error instanceof IndexReadError ? { failure: error.failure } : {}),
+        };
+    }
+
+    /**
+     * Reads a repository's index upstream, writing nothing, as a current read: a server's cached copy
+     * answers only when nothing else can. Throws when it cannot.
+     */
     async fetchUpstream(target: IndexTarget, signal?: AbortSignal): Promise<IndexFile> {
-        const outcome = await this.readUpstream(target, signal, undefined, undefined);
+        const outcome = await this.readUpstream(target, signal, undefined, undefined, true);
 
         if ("notModified" in outcome) {
             throw new ConfigError(`'${target.name}' answered "not modified" to a request that sent no cached copy.`);
@@ -250,8 +293,8 @@ export class IndexCacheCore {
     }
 
     /** Reads upstream and writes the result. */
-    private async refresh(target: IndexTarget, signal: AbortSignal | undefined, etag: string | undefined, hosts: readonly RepositoryHostEntity[] | undefined): Promise<CacheLookup> {
-        const outcome = await this.readUpstream(target, signal, etag, hosts);
+    private async refresh(target: IndexTarget, signal: AbortSignal | undefined, etag: string | undefined, hosts: readonly RepositoryHostEntity[] | undefined, current = false): Promise<CacheLookup> {
+        const outcome = await this.readUpstream(target, signal, etag, hosts, current);
         const timestamp = this.now().toISOString();
         const previous = this.readMeta(target.identity);
 
@@ -294,6 +337,7 @@ export class IndexCacheCore {
         signal: AbortSignal | undefined,
         etag: string | undefined,
         hosts: readonly RepositoryHostEntity[] | undefined,
+        current = false,
     ): Promise<{ index: IndexFile; etag?: string; strategy: string } | { notModified: true; etag?: string; strategy: string }> {
         const host = hostFor(hosts ?? this.options.hosts(), target.url, target.provider);
 
@@ -312,6 +356,7 @@ export class IndexCacheCore {
                 host,
                 path: INDEX_FILE_NAME,
                 ...(etag === undefined ? {} : { etag }),
+                ...(current ? { current: true } : {}),
             },
             this.memory,
             signal === undefined ? context : { ...context, signal },
@@ -337,19 +382,6 @@ export class IndexCacheCore {
             strategy: outcome.strategy,
             ...(outcome.etag === undefined ? {} : { etag: outcome.etag }),
         };
-    }
-
-    /** Records that upstream was asked, so an unreachable host is not retried on every build. */
-    private recordCheck(target: IndexTarget, meta: IndexMeta | undefined): void {
-        if (meta === undefined) {
-            return;
-        }
-
-        try {
-            this.writeMeta(target.identity, { ...meta, lastCheckedAt: this.now().toISOString() });
-        } catch {
-            // Recording the check only saves time.
-        }
     }
 
     /** Folds the overlay in; an overlay that throws is ignored. */
@@ -456,6 +488,10 @@ export class IndexCacheService implements RecipesIndexCache {
 
     meta(repo: string): IndexMeta | undefined {
         return this.core.readMeta(this.target(repo).identity);
+    }
+
+    firstStaleNotice(repo: string): boolean {
+        return this.core.firstStaleNotice(this.target(repo).identity);
     }
 
     async forget(repo: string): Promise<void> {

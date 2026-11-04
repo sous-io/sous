@@ -17,6 +17,7 @@ import {
     type PathInput,
     type PathSegment,
     type ProjectInfo,
+    type RunPlan,
     type ReportDetails,
     type ReportEntryStyle,
     type Reporter,
@@ -29,6 +30,8 @@ export interface BuilderServices {
     readonly entityRegistry: EntityRegistry;
     readonly project: ProjectInfo | undefined;
     readonly env: Environment;
+    /** What the front end is about to run, when it said. */
+    readonly plan?: RunPlan;
     log(level: LogLevel, message: string, details?: ReportDetails, style?: ReportEntryStyle): void;
 }
 
@@ -91,6 +94,10 @@ export class ConfigBuilderImpl extends Reporting(Object) implements ConfigBuilde
 
     get env(): Environment {
         return this.services.env;
+    }
+
+    get plan(): RunPlan | undefined {
+        return this.services.plan;
     }
 
     /** This run's patch set. */

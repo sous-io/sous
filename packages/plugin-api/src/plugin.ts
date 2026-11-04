@@ -1,4 +1,4 @@
-import type { ContributorDefinition } from "./config.js";
+import type { ContributorDefinition, RunPlan } from "./config.js";
 import type { Environment, EngineHandle, ProjectInfo } from "./context.js";
 import type { EntityKindOptions, EntityReader } from "./entities.js";
 import type { EventFor, EventForPattern, EventPattern, EventPayload, Listener, ListenerOptions } from "./events.js";
@@ -65,6 +65,12 @@ export interface FrontEndDefinition {
      * building the config when the project loads no further plugin.
      */
     needsConfig?(engine: EngineHandle, argv: readonly string[]): boolean;
+    /**
+     * What `argv` will run, read before the config is built (asked on the config of the built-in
+     * plugins' registrations alone), or `undefined` when it cannot tell. The application passes it to
+     * the config build as `plan`.
+     */
+    plan?(engine: EngineHandle, argv: readonly string[]): RunPlan | undefined;
 }
 
 /** `sous.intents`. */

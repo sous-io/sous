@@ -108,6 +108,7 @@ export const compilerPlugin: PluginDefinition = definePlugin({
 
         sous.intents.add({
             intent: "compiler.compile",
+            needsRecipeFiles: true,
             summary: "Compile every compilation target into its outputs",
             internal: true,
             input: compileInput,
@@ -116,6 +117,7 @@ export const compilerPlugin: PluginDefinition = definePlugin({
 
         sous.intents.add({
             intent: "compiler.prune",
+            needsRecipeFiles: true,
             summary: "Remove outputs no compilation target produces any more",
             internal: true,
             input: pruneInput,

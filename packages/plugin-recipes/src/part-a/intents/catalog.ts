@@ -140,6 +140,7 @@ function installedError(input: CatalogShowInput, what: "namespace" | "recipe"): 
 export function registerCatalogIntents(sous: Sous): void {
     sous.intents.add({
         intent: "namespace.list",
+        needsRecipeFiles: true,
         requiresProject: true,
         summary: "List the namespaces in the repositories this project trusts",
         input: inputSchema<BrowsingFlags>(browsing),
@@ -157,6 +158,7 @@ export function registerCatalogIntents(sous: Sous): void {
 
     sous.intents.add({
         intent: "namespace.show",
+        needsRecipeFiles: true,
         requiresProject: true,
         summary: "Show one namespace and every recipe in it",
         input: inputSchema<CatalogShowInput>({ ref: { type: "string", description: "The namespace, optionally as repository:namespace" }, ...browsing, acceptFirst }, ["ref"]),

@@ -360,6 +360,13 @@ export async function askForMissing(variables: readonly DefinedVariable[], ladde
             continue;
         }
 
+        // Without a terminal, a default that fits answers a required variable, as it does in a build.
+        // Named or re-asked variables still need an answer of their own.
+        if (!run.prompter.interactive && existing === undefined && !named && options.reask !== true && definition.default !== undefined && check(variable, String(definition.default)).ok) {
+            report.skipped.push({ variable, reason: definition.secret ? "no answer yet, so its default is used" : `no answer yet, so its default is used: ${String(definition.default)}` });
+            continue;
+        }
+
         if (!run.prompter.interactive) {
             pending.push({ variable, candidates: diagnosis.candidates, ...(validity?.ok === false ? { current: validity.message } : {}) });
             continue;

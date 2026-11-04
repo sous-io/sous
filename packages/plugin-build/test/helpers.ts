@@ -74,6 +74,8 @@ export interface World {
     restoreReport: RestoreReport;
     indexes: { indexes: CachedIndex[]; failed: IndexReadFailure[] };
     indexCalls: number;
+    /** Repositories whose stale fallback was already reported. */
+    staleNoticed: Set<string>;
     active: ActiveRecipeEntity[];
     skipped: SkippedRecipe[];
     links: Record<string, ResolvedLink>;
@@ -107,6 +109,7 @@ export function newWorld(root: string): World {
         restoreReport: { restored: [], alreadyPresent: [], failed: [] },
         indexes: { indexes: [], failed: [] },
         indexCalls: 0,
+        staleNoticed: new Set(),
         active: [],
         skipped: [],
         links: {},
@@ -322,6 +325,15 @@ export function standIns(world: World): PluginDefinition[] {
                 world.indexCalls += 1;
 
                 return world.indexes;
+            },
+            firstStaleNotice: (repo: string) => {
+                if (world.staleNoticed.has(repo)) {
+                    return false;
+                }
+
+                world.staleNoticed.add(repo);
+
+                return true;
             },
         }) as never);
         sous.services.add("recipes.links", () => ({ all: () => world.links }) as never);

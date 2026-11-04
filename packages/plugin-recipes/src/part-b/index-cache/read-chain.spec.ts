@@ -165,3 +165,54 @@ describe("readThroughChain", () => {
         expect(memory.read()).toEqual({});
     });
 });
+
+describe("readThroughChain: current reads (#133)", () => {
+    /** GitHub's shape: a raw host that may serve a cached copy, and an API used only for current reads. */
+    function github(outcomes: { raw?: string; api?: string; git?: string } = {}): RepositoryReadStrategy[] {
+        return [
+            { ...strategy("http", outcomes.raw ?? "ok"), servesCachedCopies: true },
+            { ...strategy("http-api", outcomes.api ?? "ok"), onlyForCurrentReads: true },
+            strategy("git", outcomes.git ?? "ok"),
+        ];
+    }
+
+    /**
+     * An ordinary read never uses a strategy meant only for current reads.
+     *
+     * // http (cached copies), http-api (current reads only), git; http fails
+     * readThroughChain(read) // tries http, then git
+     */
+    it("should leave out strategies meant only for current reads from an ordinary read", async () => {
+        await readThroughChain(readOf(github({ raw: "500" })), memory, ctx);
+
+        expect(order).toEqual(["http", "git"]);
+    });
+
+    /**
+     * A current read tries a server that may answer with a cached copy only after every other
+     * strategy, even when it is the remembered one, and does not remember a current-only strategy.
+     *
+     * readThroughChain({ ...read, current: true }) // tries http-api first
+     */
+    it("should try a cached-copy server last on a current read, and not remember a current-only strategy", async () => {
+        await readThroughChain(readOf(github()), memory, ctx);
+        expect(memory.read()["fake.test/acme/recipes"]).toMatchObject({ strategy: "http" });
+
+        order = [];
+        await expect(readThroughChain({ ...readOf(github()), current: true }, memory, ctx)).resolves.toMatchObject({ strategy: "http-api" });
+
+        expect(order).toEqual(["http-api"]);
+        expect(memory.read()["fake.test/acme/recipes"]).toMatchObject({ strategy: "http" });
+    });
+
+    /**
+     * When nothing else answers a current read, the cached-copy server still does.
+     *
+     * // http-api and git fail -> http answers
+     */
+    it("should still fall back to a cached-copy server when nothing else answers a current read", async () => {
+        await expect(readThroughChain({ ...readOf(github({ api: "403: rate limited", git: "Permission denied (publickey)" })), current: true }, memory, ctx)).resolves.toMatchObject({ strategy: "http" });
+
+        expect(order).toEqual(["http-api", "git", "http"]);
+    });
+});

@@ -896,7 +896,17 @@ project loads no other plugin:
 3. A line that needs no config runs on the built-in registrations only when the fact holds for the
    current key. Otherwise the config is built with `reportBudgets: false`, so the over-budget
    report is never printed above help, the version or completion.
-4. The recipe store verifies a stored recipe's content hash only when the name, size or modification
+4. The bin also asks the front end what the line will run (`plan(engine, argv)`, a `RunPlan`) and
+   passes it to the build as `BuildOptions.plan`; contributors read it as `config.plan`, and the
+   engine keeps it for every later build in the run. `recipes.fetch` downloads the recipe files this
+   machine lacks only when the intent declares `needsRecipeFiles`, or when the front end could not
+   tell (`plan` is `undefined`: a library caller, a command a later plugin adds). Any other command
+   (help, the version, `repo list`, `subscription list`) uses the recipe files already on the
+   machine and leaves out the rest without a word, so a fresh clone without credentials can still
+   run it. When such a command then runs an intent that needs recipe files (`subscription disable`
+   runs `build`), `plugin-recipes` rebuilds the config first, from that intent's `.before`, with the
+   downloads (#204, bug 3).
+5. The recipe store verifies a stored recipe's content hash only when the name, size or modification
    time of one of its files differs from the last verified read (`statFingerprint` in its marker),
    and refreshes `lastAccessAt` at most once a day, so a build reads no recipe file twice.
 - Every other budget is set from measurements taken during the refactor, and kept as a default in
@@ -911,6 +921,19 @@ project loads no other plugin:
 None. (The name `plugin-recipes` is an agent decision the user may overrule.)
 
 ## Changes
+
+### 2026-11-04: Only commands that read recipe files download them
+
+"Startup budgets" gains step 4. Decided by Luke in an agent session (2026-11-04, #204 bug 3): only
+commands that need recipe files download them (`build`, `launch`, `subscription add` and `update`,
+`vars ask` and `list`, `config get`, and commands a recipe's plugin adds); every other command skips
+the download and says nothing about recipes. Added: `IntentDefinition.needsRecipeFiles`,
+`RunPlan`, `BuildOptions.plan`, `ConfigBuilder.plan` and `FrontEndDefinition.plan`. Filled in by
+the agent: the other intents that read recipe files and so declare `needsRecipeFiles` (`build.*`,
+`compile`, `prune`, `clear`, `compiler.*`, `harness.run-headless`, `mcp.serve`, `vars show` and
+`map`, `config show` and `validate`, `plugins show`, `namespace list` and `show`), the copies
+already in the store still counting for the rest, and the rebuild before a nested intent that needs
+them.
 
 ### 2026-10-30: An intent returns outputs; the CLI has no views
 

@@ -81,7 +81,7 @@ describe("the github host", () => {
      * host.tokenSources.map((s) => s.id); // -> ["env", "git-credential", "gh"]
      */
     it("should register the read strategies and token sources in order", () => {
-        expect(host.readStrategies.map((strategy) => strategy.id)).toEqual(["http-token", "http", "git"]);
+        expect(host.readStrategies.map((strategy) => strategy.id)).toEqual(["http-token", "http", "http-api", "git"]);
         expect(host.tokenSources?.map((source) => source.id)).toEqual(["env", "git-credential", "gh"]);
         expect(host.proposalNoun).toBe("pull request");
     });
@@ -127,6 +127,26 @@ describe("reading through the github host", () => {
 
         expect(await readWith(host, "http", request, ctx)).toMatchObject({ ok: true, text: INDEX });
         expect(http.requests.map((sent) => sent.url)).toEqual([RAW]);
+        expect(http.requests[0]?.headers?.["Authorization"]).toBeUndefined();
+    });
+
+    /**
+     * The raw host may answer with a copy cached for up to five minutes, so a read that must see the
+     * current index goes through the contents API instead, with no token; ordinary reads skip that
+     * strategy, because GitHub allows only 60 such requests an hour.
+     *
+     * readWith(host, "http-api", request, ctx); // GET <API>, no Authorization -> { ok: true }
+     */
+    it("should read the contents API without a token only for reads that must be current", async () => {
+        const { http, ctx } = ctxFor({ routes: { [API]: { status: 200, body: INDEX } } });
+        const byId = new Map(host.readStrategies.map((strategy) => [strategy.id, strategy]));
+
+        expect(byId.get("http")?.servesCachedCopies).toBe(true);
+        expect(byId.get("http-api")?.onlyForCurrentReads).toBe(true);
+        expect(byId.get("http-api")?.usesToken).toBe(false);
+        expect(await readWith(host, "http-api", request, ctx)).toMatchObject({ ok: true, text: INDEX });
+        expect(http.requests.map((sent) => sent.url)).toEqual([API]);
+        expect(http.requests[0]?.headers).toMatchObject({ Accept: "application/vnd.github.raw+json" });
         expect(http.requests[0]?.headers?.["Authorization"]).toBeUndefined();
     });
 

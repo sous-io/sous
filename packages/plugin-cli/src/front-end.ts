@@ -1,4 +1,4 @@
-import { type EngineHandle, type Environment, IntentOutput, IntentOutputs, isLogLevel, isSousErrorOfKind, LogLevel, SousError, TextBlock, type Reporter, type SubmitOptions } from "@sous-io/plugin-api";
+import { type EngineHandle, type Environment, IntentOutput, IntentOutputs, isLogLevel, isSousErrorOfKind, LogLevel, SousError, TextBlock, type Reporter, type RunPlan, type SubmitOptions } from "@sous-io/plugin-api";
 import type { Command, CommandTree } from "./command-tree.js";
 import { COMPLETE_COMMAND } from "./completion.js";
 import { describeError, errorForDisplay } from "./errors.js";
@@ -161,6 +161,36 @@ export function commandLineNeedsConfig(engine: EngineHandle, argv: readonly stri
             return engine.intents.get(line.command.intent)?.definition.runsWithoutConfig !== true;
         default:
             return true;
+    }
+}
+
+/**
+ * What a command line will run, read before the config is built: the intent of a command, no intent
+ * for help or the version, and `undefined` for a line that does not parse yet (a command only a
+ * later plugin adds, say), so the config build cannot hold anything back for it.
+ *
+ * ```ts
+ * commandLinePlan(engine, ["repo", "list"]);  // { intent: <the repo.list definition> }
+ * commandLinePlan(engine, ["--help"]);        // { intent: undefined }
+ * commandLinePlan(engine, ["acme", "deploy"]); // undefined
+ * ```
+ */
+export function commandLinePlan(engine: EngineHandle, argv: readonly string[]): RunPlan | undefined {
+    const tree = engine.config.services.get("cli.commands") as CommandTree;
+    const specs = globalSpecs(engine.config.entities.list("cli-global-argument"));
+    const line = parseLine(versionArgv(argv, tree), tree, specs, engine.app.name);
+
+    switch (line.kind) {
+        case "help":
+        case "version":
+            return { intent: undefined };
+        case "run": {
+            const definition = engine.intents.get(line.command.intent)?.definition;
+
+            return definition === undefined ? undefined : { intent: definition };
+        }
+        default:
+            return undefined;
     }
 }
 

@@ -23,6 +23,7 @@ import type {
     ResolvedRecipe,
     SubscriptionAddInput,
     SubscriptionAddResult,
+    SubscriptionEntry,
     SubscriptionListing,
     SubscriptionRemoveInput,
     SubscriptionRemoveResult,
@@ -36,7 +37,18 @@ import { identityOf, loadCatalog, pickMatch, readingsOf, readUpstream, type Cata
 import { USER_ADDED_BY } from "../defaults.js";
 import { askFollowUp, buildFollowUp } from "../followups.js";
 import { applyResolution, keysHeldBySubscription, PROJECT_HOLDER, type LockRepoInput } from "../lock-holds.js";
-import { configuredSubscriptions, enabledSubscriptions, contributorLabel, managedContributor, setSubscriptionEnabled, SUBSCRIPTIONS_LAYER, trustedRepos, writeSubscriptionEntry } from "../project.js";
+import {
+    clearSubscriptionEnabled,
+    configuredSubscriptions,
+    enabledSubscriptions,
+    contributorLabel,
+    managedContributor,
+    managedEntries,
+    setSubscriptionEnabled,
+    SUBSCRIPTIONS_LAYER,
+    trustedRepos,
+    writeSubscriptionEntry,
+} from "../project.js";
 import { isShortNamed, planSubscriptionRemoval, subscriptionKeyFor, writeSubscriptionRemoval } from "../subscriptions.js";
 import { checkProvidedAnswers } from "../provided-answers.js";
 import { planQuestions } from "../questions.js";
@@ -153,9 +165,10 @@ async function resolveWrittenRef(input: SubscriptionAddInput, ctx: Context): Pro
         current = await refreshed(ctx);
     }
 
-    const catalog = await loadCatalog(current, { latest: trusted.length > 0 });
+    const checkedNow = trusted.length > 0;
+    const catalog = await loadCatalog(current, { latest: checkedNow });
 
-    return { ref: await pickNamed(current, catalog, located, input, located[0]!), trusted, ctx: current };
+    return { ref: await pickNamed(current, catalog, located, input, located[0]!, checkedNow), trusted, ctx: current };
 }
 
 /** Where a named ref says its repository lives. */
@@ -165,17 +178,35 @@ function locationOf(ref: NamedRef): { identity: string; url: string; provider: s
     return repo?.location;
 }
 
-/** The one namespace or recipe the readings name in the catalog; a recipe keeps the range it was written with. */
-async function pickNamed(ctx: Context, catalog: CatalogContext, readings: readonly SousRef[], input: SubscriptionAddInput, written: NamedRef): Promise<NamedRef> {
-    const matches = findInCatalog(catalog.inputs, readings, ["namespace", "recipe"]);
+/**
+ * The one namespace or recipe the readings name in the catalog; a recipe keeps the range it was
+ * written with. When nothing matches in cached indexes, the indexes are read upstream once and
+ * searched again, since a recipe released moments ago is missing only from a cached copy (#133).
+ *
+ * @param checkedNow - True when the catalog's indexes were just read upstream.
+ */
+async function pickNamed(ctx: Context, catalog: CatalogContext, readings: readonly SousRef[], input: SubscriptionAddInput, written: NamedRef, checkedNow = false): Promise<NamedRef> {
+    let searchedIn = catalog;
+    let matches = findInCatalog(searchedIn.inputs, readings, ["namespace", "recipe"]);
+
+    if (matches.length === 0 && !checkedNow) {
+        searchedIn = await loadCatalog(ctx, { latest: true });
+        matches = findInCatalog(searchedIn.inputs, readings, ["namespace", "recipe"]);
+    }
+
     const match = await pickMatch(ctx, matches, input.ref.trim(), input.acceptFirst, () => {
-        const searched = catalog.inputs.repos.map((repo) => repo.name);
+        const searched = searchedIn.inputs.repos.map((repo) => repo.name);
+        const failed = new Set(searchedIn.notChecked.map((entry) => entry.repo));
+        const now = searched.filter((name) => !failed.has(name));
+        const stale = searched.filter((name) => failed.has(name));
 
         return new SousError(`Nothing called '${input.ref.trim()}' was found: no namespace has that name, and no recipe does either.`, {
             details: [
-                searched.length === 0 ? "No repository index could be read, so there was nothing to search." : `Searched the namespaces and recipes of: ${searched.join(", ")}.`,
-                ...(catalog.notFetched.length === 0 ? [] : [`Trusted, but their index has not been read, so nothing in them was searched: ${catalog.notFetched.join(", ")}.`]),
-                `Run 'sous repo search ${input.ref.trim()}' to look for something like it, or 'sous repo add <url>' to add the repository that publishes it.`,
+                ...(searched.length === 0 ? ["No repository index could be read, so there was nothing to search."] : []),
+                ...(now.length === 0 ? [] : [`Checked just now: ${now.join(", ")}.`]),
+                ...(stale.length === 0 ? [] : [`Could not be checked just now, so the copies of their indexes that sous already had were searched: ${stale.join(", ")}.`]),
+                ...(searchedIn.notFetched.length === 0 ? [] : [`Trusted, but their index has not been read, so nothing in them was searched: ${searchedIn.notFetched.join(", ")}.`]),
+                `Check the spelling, or run 'sous repo search ${input.ref.trim()}' to look for something like it. If a repository this project has not added publishes it, add that one with 'sous repo add <url>'.`,
             ],
         });
     }, { announce: true });
@@ -461,10 +492,9 @@ export async function toggleSubscription(input: SubscriptionToggleInput, ctx: Co
     }
 
     const changed = (configured[key]?.enabled !== false) !== enabled;
-    const edit = await setSubscriptionEnabled(managed, key, enabled, input.dryRun === true);
-
     // A layer after 510 that sets `enabled` still wins: say so, and let it.
     const later = laterSetters(ctx.config, key);
+    const edit = enabled ? await switchOn(ctx, key, changed && later.length === 0, input.dryRun === true) : await setSubscriptionEnabled(managed, key, false, input.dryRun === true);
 
     if (later.length > 0) {
         ctx.reporter.warning(`${later[later.length - 1]} also sets subscriptions.${key}.enabled and is applied after conf.d/${SUBSCRIPTIONS_LAYER}, so its value still wins.`);
@@ -482,6 +512,38 @@ export async function toggleSubscription(input: SubscriptionToggleInput, ctx: Co
     }
 
     return { key, enabled, file, changed, dryRun: false, followUps: changed ? [await buildFollowUp(ctx, input)] : [{ intent: "build", skipped: "nothing changed" }] };
+}
+
+/**
+ * Switches a subscription back on by removing the `enabled` that `disable` wrote into
+ * `conf.d/510-subscriptions.jsonc`, so the committed file returns to what it held before (#204 bug
+ * 13). `"enabled": true` is written only when something earlier in the config still switches it
+ * off, since only an explicit value can win over that.
+ *
+ * @param mustTurnOn - True when the subscription is off now and no later layer decides it.
+ */
+async function switchOn(ctx: Context, key: string, mustTurnOn: boolean, dryRun: boolean): Promise<{ readonly changed: boolean }> {
+    const managed = ctx.services.get("confd.managed");
+    const own = (await managedEntries<SubscriptionEntry>(managed, SUBSCRIPTIONS_LAYER, "subscriptions"))[key];
+
+    if (own?.enabled === undefined) {
+        // The 510 entry holds no `enabled`, so another file switches it off: only a value here wins.
+        return mustTurnOn ? setSubscriptionEnabled(managed, key, true, dryRun) : { changed: false };
+    }
+
+    // An entry `disable` wrote only to hold `enabled` goes too, when another file defines the subscription.
+    const definedElsewhere = ctx.config.layers(["subscriptions", key]).some((layer) => layer.contributor !== managedContributor(SUBSCRIPTIONS_LAYER));
+    const edit = await clearSubscriptionEnabled(managed, key, { dropEmpty: definedElsewhere, dryRun });
+
+    if (dryRun || !mustTurnOn || !edit.changed) {
+        return edit;
+    }
+
+    // An earlier file may still switch it off once 510's value is gone: then a value here must win.
+    ctx.configChanged();
+    await ctx.refreshConfig();
+
+    return configuredSubscriptions(ctx.config)[key]?.enabled === false ? setSubscriptionEnabled(managed, key, true) : edit;
 }
 
 /**
@@ -736,6 +798,7 @@ export function registerSubscriptionIntents(sous: Sous): void {
 
     sous.intents.add({
         intent: "subscription.add",
+        needsRecipeFiles: true,
         requiresProject: true,
         summary: "Subscribe this project to a recipe, or to a whole namespace of them",
         input: inputSchema<SubscriptionAddInput>(
@@ -777,7 +840,7 @@ export function registerSubscriptionIntents(sous: Sous): void {
     sous.intents.add({
         intent: "subscription.enable",
         requiresProject: true,
-        summary: "Switch a subscription back on, on this machine",
+        summary: "Switch a subscription back on for everyone using this project",
         input: toggleInput,
         changesConfig: true,
         cli: { aliases: [["subscriptions", "enable"]], positional: ["ref"] },
@@ -787,7 +850,7 @@ export function registerSubscriptionIntents(sous: Sous): void {
     sous.intents.add({
         intent: "subscription.disable",
         requiresProject: true,
-        summary: "Switch a subscription off on this machine, keeping its pins",
+        summary: "Switch a subscription off for everyone using this project, keeping its pins",
         input: toggleInput,
         changesConfig: true,
         cli: { aliases: [["subscriptions", "disable"]], positional: ["ref"] },
@@ -806,6 +869,7 @@ export function registerSubscriptionIntents(sous: Sous): void {
 
     sous.intents.add({
         intent: "subscription.update",
+        needsRecipeFiles: true,
         requiresProject: true,
         summary: "Move pinned versions to the newest their ranges allow",
         input: inputSchema<SubscriptionUpdateInput>(
