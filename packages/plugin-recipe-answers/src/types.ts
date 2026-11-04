@@ -40,12 +40,33 @@ export interface DefiningRecipe {
     readonly dir?: string;
 }
 
+/**
+ * A definition as answers are asked and checked with it. When several definitions of one name were
+ * combined (`combineDefinitions`), an answer must match every one of `patterns`; otherwise only
+ * `validate.pattern` applies.
+ */
+export interface AnswerDefinition extends VariableDefinition {
+    /** Every pattern an answer must match, when combining left more than one. */
+    readonly patterns?: readonly string[];
+}
+
 /** One variable, with the recipe defining it. */
 export interface DefinedVariable {
-    readonly definition: VariableDefinition;
+    /**
+     * The definition answers are asked and checked with: the recipe's own, or, when other recipes
+     * (or other versions of it) define the same name, the strictest combination of them all.
+     */
+    readonly definition: AnswerDefinition;
     readonly recipe: DefiningRecipe;
-    /** Other recipes that define the same name and share the answer. */
+    /** Other recipes that define the same name. They share the answer unless `separate` is set. */
     readonly requiredBy?: readonly DefiningRecipe[];
+    /** The definition the recipe published, when combining it with the others of its name changed it. */
+    readonly published?: VariableDefinition;
+    /**
+     * Why this definition could not be combined with the others of its name, naming them. It is then
+     * asked for on its own, and its answer stored under its recipe-scoped name.
+     */
+    readonly separate?: string;
     /** The variable as a ref, `namespace/recipe.name`. */
     readonly ref: VariableRef;
     /** `namespace/recipe.name`. */
@@ -175,7 +196,7 @@ export type AnswerValidation = { readonly ok: true; readonly value: VariableScal
 
 /** Checking an answer against its definition, with a time-limited regex. */
 export interface RecipeAnswersValidator {
-    validate(definition: VariableDefinition, answer: string, options?: { recipe?: string; patternBudgetMs?: number }): AnswerValidation;
+    validate(definition: AnswerDefinition, answer: string, options?: { recipe?: string; patternBudgetMs?: number }): AnswerValidation;
 }
 
 /** The recipe variable a mapping binds an environment name to. */

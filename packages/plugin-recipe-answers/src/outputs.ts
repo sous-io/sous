@@ -81,6 +81,13 @@ function variableFacts(detail: VariableDetail, sousDir: string | undefined): Var
     }
 
     entries.push(recipeLink(variable.recipe, "defined-by"));
+
+    // Other recipes defining the same name: one combined question, or why each is asked alone.
+    if (variable.separate !== undefined) {
+        entries.push({ label: "asked-separately", value: variable.separate });
+    } else if (variable.requiredBy !== undefined && variable.requiredBy.length > 0) {
+        entries.push({ label: "combined-with", value: variable.requiredBy.map(recipeKey).join(", ") });
+    }
     entries.push({ label: "storage-path", value: sousDir === undefined ? envFileName(detail.storeIn) : path.join(sousDir, envFileName(detail.storeIn)) });
     entries.push({ label: "stored-as", value: detail.storedAs });
 

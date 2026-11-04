@@ -6,11 +6,15 @@
  * render with, so a `{{ variable }}` in a recipe's own files sees the answer to its own question.
  *
  * - `merged`: one value per variable name, for the project's own templates. Two recipes may define
- *   the same name; the first in recipe order wins, and a project that wants something else says
- *   so in `_vars`, which sits above every answer.
+ *   the same name; their definitions are combined into one (`combine.ts`), so they share one
+ *   answer. When they could not be combined, each recipe has its own answer and the first in
+ *   recipe order fills the merged view; a project that wants something else says so in `_vars`,
+ *   which sits above every answer.
  * - `byRecipe`: the answers for each recipe's own definitions, which the recipe-scoped rung can make
  *   differ from the merged view.
- * - `unanswered`: every required definition nothing answered and with no default. A build reports
+ * - `unanswered`: every required definition nothing answered and with no default. Requirements and
+ *   defaults are read from the combined definition, so a default another definition rules out
+ *   does not count. A build reports
  *   them and carries on.
  * - `secrets`: every name some definition declares secret.
  *

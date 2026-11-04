@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { ladder, variable } from "../test/stand-ins.js";
+import { activeRecipe, definition, ladder, variable } from "../test/stand-ins.js";
+import { definitionsFromRecipes } from "./definitions.js";
 import { AnswersService, answersForRecipe, computeAnswers, noRecipeAnswers, unansweredWarning } from "./answers.js";
 
 describe("computeAnswers()", () => {
@@ -16,6 +17,24 @@ describe("computeAnswers()", () => {
     it("should fall back to the definition's default, stringified", () => {
         expect(computeAnswers([variable({ default: "https://default.example.com" })], ladder()).merged).toEqual({ apiUrl: "https://default.example.com" });
         expect(computeAnswers([variable({ name: "port", type: "number", default: 8080 })], ladder()).merged).toEqual({ port: "8080" });
+    });
+
+    /**
+     * A default another recipe's definition rules out should not answer: the build's unanswered
+     * check reads the combined definition, which is required because one definition is.
+     *
+     * misc/stuff: port (optional, default 80), misc/other: port (required, min 1024)
+     * // -> unanswered: both; merged: {}
+     */
+    it("should not count a default the combined definition rules out", () => {
+        const variables = definitionsFromRecipes([
+            activeRecipe("misc/stuff", [definition({ name: "port", type: "number", required: false, default: 80 })]),
+            activeRecipe("misc/other", [definition({ name: "port", type: "number", validate: { min: 1024 } })]),
+        ]);
+        const answers = computeAnswers(variables, ladder());
+
+        expect(answers.merged).toEqual({});
+        expect(answers.unanswered.map((entry) => entry.key)).toEqual(["misc/stuff.port", "misc/other.port"]);
     });
 
     /** Required variables nothing answers should be listed; optional ones dropped. */

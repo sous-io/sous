@@ -9,6 +9,9 @@
  *
  * A standalone definitions file (`--file`) holds the same `variables:` list a manifest does, so a
  * project can ask questions no recipe publishes yet.
+ *
+ * Several definitions of one name are combined into one (`combineSharedNames`), so every reader of
+ * a `DefinedVariable` sees the definition its answer is asked and checked with.
  */
 
 import path from "node:path";
@@ -16,8 +19,9 @@ import { ConfigError, type ServiceContext } from "@sous-io/plugin-api";
 import type { FormatParser, VariableDefinition } from "@sous-io/plugin-formats/types";
 import type { ActiveRecipeEntity, RepoEntry } from "@sous-io/plugin-recipes/types";
 import type { VariableRef } from "@sous-io/plugin-refs/types";
+import { combineDefinitions } from "./combine.js";
 import { resolveUserPath } from "./paths.js";
-import type { DefinedVariable, DefiningRecipe, DefinitionOptions, RecipeAnswersDefinitions } from "./types.js";
+import type { AnswerDefinition, DefinedVariable, DefiningRecipe, DefinitionOptions, RecipeAnswersDefinitions } from "./types.js";
 
 /** The repository name recorded for definitions read from a file. */
 export const LOCAL_FILE_REPO = "local";
@@ -57,35 +61,76 @@ export function variableRefOf(recipe: DefiningRecipe, definition: VariableDefini
     };
 }
 
+/** What combining a definition with the others of its name added to it. */
+export interface SharedNameFacts {
+    /** The other recipes defining the same name. */
+    readonly requiredBy?: readonly DefiningRecipe[];
+    /** The combined definition, in place of the published one. */
+    readonly combined?: AnswerDefinition;
+    /** Why it could not be combined. */
+    readonly separate?: string;
+}
+
 /** One defined variable, its ref and key filled in. */
-export function defineVariable(recipe: DefiningRecipe, definition: VariableDefinition, requiredBy?: readonly DefiningRecipe[]): DefinedVariable {
+export function defineVariable(recipe: DefiningRecipe, definition: VariableDefinition, shared: SharedNameFacts = {}): DefinedVariable {
+    const { requiredBy, combined, separate } = shared;
+
     return {
-        definition,
+        definition: combined ?? definition,
         recipe,
         ref: variableRefOf(recipe, definition),
         key: variableKey(recipe, definition.name),
         ...(requiredBy === undefined || requiredBy.length === 0 ? {} : { requiredBy }),
+        ...(combined === undefined || combined === definition ? {} : { published: definition }),
+        ...(separate === undefined ? {} : { separate }),
     };
 }
 
 /**
- * Fills in `requiredBy`: for each variable, the other recipes that define the same name and so
- * share its answer on the shared rung.
+ * Settles every variable name several definitions share (ADR 0023, decision 6). Each variable gets
+ * `requiredBy` (the other recipes defining its name) and either the strictest combination of every
+ * definition of the name as its `definition`, keeping its own as `published`, or, when they cannot
+ * be combined, `separate`: the reason, naming the definitions, said once each recipe is asked
+ * separately under its recipe-scoped name.
+ *
+ * Definitions are combined in the order given, so the first one lends the question its prompt.
+ * Two versions of one recipe count as two definitions, named with their versions.
  */
-export function linkSharedNames(variables: readonly DefinedVariable[]): DefinedVariable[] {
-    const byName = new Map<string, DefiningRecipe[]>();
+export function combineSharedNames(variables: readonly DefinedVariable[]): DefinedVariable[] {
+    const byName = new Map<string, DefinedVariable[]>();
 
     for (const entry of variables) {
-        const recipes = byName.get(entry.definition.name) ?? [];
+        const group = byName.get(entry.definition.name) ?? [];
 
-        recipes.push(entry.recipe);
-        byName.set(entry.definition.name, recipes);
+        group.push(entry);
+        byName.set(entry.definition.name, group);
+    }
+
+    const settled = new Map<string, { combined?: AnswerDefinition; separate?: string }>();
+
+    for (const [name, group] of byName) {
+        if (group.length < 2) {
+            continue;
+        }
+
+        const keys = group.map((entry) => recipeKey(entry.recipe));
+        const label = (entry: DefinedVariable, index: number): string =>
+            keys.indexOf(keys[index]!) === keys.lastIndexOf(keys[index]!) ? keys[index]! : `${keys[index]!} ${entry.recipe.version}`;
+        const combination = combineDefinitions(group.map((entry, index) => ({ definition: entry.published ?? entry.definition, label: label(entry, index) })));
+
+        settled.set(name, combination.ok ? { combined: combination.definition } : { separate: combination.reason });
     }
 
     return variables.map((entry) => {
-        const others = (byName.get(entry.definition.name) ?? []).filter((recipe) => recipe !== entry.recipe);
+        const outcome = settled.get(entry.definition.name);
 
-        return others.length === 0 ? entry : defineVariable(entry.recipe, entry.definition, others);
+        if (outcome === undefined) {
+            return entry;
+        }
+
+        const others = (byName.get(entry.definition.name) ?? []).filter((other) => other !== entry).map((other) => other.recipe);
+
+        return defineVariable(entry.recipe, entry.published ?? entry.definition, { requiredBy: others, ...outcome });
     });
 }
 
@@ -116,7 +161,7 @@ export function definitionsFromRecipes(recipes: readonly ActiveRecipeEntity[], r
         }
     }
 
-    return linkSharedNames(defined);
+    return combineSharedNames(defined);
 }
 
 /**
@@ -190,7 +235,7 @@ export async function loadDefinitionsFile(filePath: string, reader: DefinitionsF
         throw new ConfigError(`Invalid variable definitions file at ${filePath}:`, { details: problems });
     }
 
-    return linkSharedNames(defined);
+    return combineSharedNames(defined);
 }
 
 /**

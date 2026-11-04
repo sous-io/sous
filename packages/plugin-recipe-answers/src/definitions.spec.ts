@@ -43,6 +43,43 @@ describe("definitionsFromRecipes()", () => {
         expect(defined[0]!.requiredBy?.map(recipeKey)).toEqual(["misc/other"]);
         expect(defined[1]!.requiredBy?.map(recipeKey)).toEqual(["misc/stuff"]);
     });
+
+    /**
+     * Two recipes defining one name should both carry the strictest combination, each keeping its
+     * own definition as `published`.
+     *
+     * misc/stuff: apiToken (shared), misc/other: apiToken (secret, local)
+     * // -> both: { secret: true, scope: "local" }
+     */
+    it("should give every definition of a shared name the combination", () => {
+        const plain = definition({ name: "apiToken" });
+        const secret = definition({ name: "apiToken", secret: true, scope: "local" });
+        const defined = definitionsFromRecipes([activeRecipe("misc/stuff", [plain]), activeRecipe("misc/other", [secret])]);
+
+        expect(defined.map((entry) => [entry.definition.secret, entry.definition.scope])).toEqual([
+            [true, "local"],
+            [true, "local"],
+        ]);
+        expect(defined[0]!.published).toBe(plain);
+        expect(defined[0]!.separate).toBeUndefined();
+    });
+
+    /**
+     * Definitions that cannot be combined should each keep their own, with the reason.
+     *
+     * misc/stuff: port (number), misc/other: port (string)
+     * // -> separate: "misc/stuff defines port as a number, and misc/other defines it as a string, ..."
+     */
+    it("should mark definitions that cannot be combined as separate", () => {
+        const defined = definitionsFromRecipes([
+            activeRecipe("misc/stuff", [definition({ name: "port", type: "number" })]),
+            activeRecipe("misc/other", [definition({ name: "port", type: "string" })]),
+        ]);
+
+        expect(defined.map((entry) => entry.definition.type)).toEqual(["number", "string"]);
+        expect(defined[1]!.separate).toBe("misc/stuff defines port as a number, and misc/other defines it as a string, so no answer fits both.");
+        expect(defined[1]!.requiredBy?.map(recipeKey)).toEqual(["misc/stuff"]);
+    });
 });
 
 describe("namesVariable()", () => {

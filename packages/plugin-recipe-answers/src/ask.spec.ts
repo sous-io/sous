@@ -1,8 +1,9 @@
 import { BufferedReporter, NonInteractiveError, nonInteractivePrompter, nullReporter, ReportEntryStyle, type Prompter, scriptedPrompter, type VariableSet } from "@sous-io/plugin-api";
 import type { EnvFileKind } from "@sous-io/plugin-config-files/types";
 import { describe, expect, it } from "vitest";
-import { ladder, silentPrompter, variable } from "../test/stand-ins.js";
+import { activeRecipe, definition, ladder, silentPrompter, variable } from "../test/stand-ins.js";
 import { type AnswerStore, askForMissing, askLeadIn, type AskRun, askSummary, nonInteractiveError, recipeOpeningLine, storeGivenAnswers } from "./ask.js";
+import { definitionsFromRecipes } from "./definitions.js";
 import type { Ladder } from "./ladder.js";
 import { matchAnswers } from "./preanswers.js";
 import type { DefinedVariable } from "./types.js";
@@ -226,6 +227,73 @@ describe("askForMissing()", () => {
 
         expect(prompter.asked).toHaveLength(1);
         expect(report.inherited.map((entry) => entry.variable.key)).toEqual(["misc/other.apiUrl"]);
+    });
+
+    /**
+     * A secret, local definition paired with another recipe's plain, shared one should be asked
+     * once, as a secret, and stored in the gitignored `.sous/.env.local`; the question names the
+     * other recipe.
+     */
+    it("should ask a combined secret once and store it in .env.local", async () => {
+        const prompter = scriptedPrompter(["t0ken"]);
+        const reporter = new BufferedReporter();
+        const { run: io, store } = run(prompter, false, reporter);
+        const variables = definitionsFromRecipes([
+            activeRecipe("misc/stuff", [definition({ name: "apiToken" })]),
+            activeRecipe("misc/other", [definition({ name: "apiToken", secret: true, scope: "local" })]),
+        ]);
+
+        const report = await askForMissing(variables, ladder(), {}, io);
+
+        expect(prompter.asked).toHaveLength(1);
+        expect(store.answers).toEqual([["local", "SOUS_VAR_API_TOKEN", "t0ken"]]);
+        expect(report.answered[0]).toMatchObject({ file: "local", value: "(hidden)" });
+        expect(report.inherited.map((entry) => entry.variable.key)).toEqual(["misc/other.apiToken"]);
+        expect(reporter.styled(ReportEntryStyle.Question)[0]?.details).toMatchObject({ recipe: "misc/stuff, also used by misc/other" });
+    });
+
+    /**
+     * Definitions that cannot be combined should be asked one recipe at a time, each stored under
+     * its recipe-scoped name, after a note saying why.
+     */
+    it("should ask each recipe separately when the definitions cannot be combined", async () => {
+        const prompter = scriptedPrompter(["8080", "main"]);
+        const reporter = new BufferedReporter();
+        const { run: io, store } = run(prompter, false, reporter);
+        const variables = definitionsFromRecipes([
+            activeRecipe("misc/stuff", [definition({ name: "port", type: "number" })]),
+            activeRecipe("misc/other", [definition({ name: "port", type: "string" })]),
+        ]);
+
+        await askForMissing(variables, ladder(), {}, io);
+
+        expect(prompter.asked).toHaveLength(2);
+        expect(store.answers).toEqual([
+            ["shared", "SOUS_VAR_MISC_STUFF_PORT", "8080"],
+            ["shared", "SOUS_VAR_MISC_OTHER_PORT", "main"],
+        ]);
+        expect(reporter.at("notice")).toContain(
+            "misc/stuff defines port as a number, and misc/other defines it as a string, so no answer fits both. Each recipe is asked for its own answer, stored under its recipe-scoped name.",
+        );
+    });
+
+    /**
+     * A stored answer should be checked against the combination, not only the first definition;
+     * here the old value is replaced where it is (the second scripted answer picks "replace").
+     */
+    it("should re-ask when a stored answer fails another recipe's definition", async () => {
+        const prompter = scriptedPrompter(["beta", false]);
+        const { run: io, store } = run(prompter);
+        const variables = definitionsFromRecipes([
+            activeRecipe("misc/stuff", [definition({ name: "channel", type: "enum", validate: { enum: ["alpha", "beta"] } })]),
+            activeRecipe("misc/other", [definition({ name: "channel", type: "enum", validate: { enum: ["beta", "gamma"] } })]),
+        ]);
+
+        await askForMissing(variables, ladder({ shared: { SOUS_VAR_CHANNEL: "alpha" } }), {}, io);
+
+        expect(prompter.asked).toHaveLength(2);
+        expect(prompter.asked[0]).toBe("Which API?");
+        expect(store.answers).toEqual([["shared", "SOUS_VAR_CHANNEL", "beta"]]);
     });
 
     /** Variables answered up front should be neither asked nor reported. */

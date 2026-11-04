@@ -8,6 +8,11 @@
  * Answers are stored in the project's env files: `.sous/.env` for shared ones, committed with the
  * project, and `.sous/.env.local` for machine-specific values and every secret, which git ignores.
  *
+ * Several recipes may define a variable of the same name. Their definitions arrive already combined
+ * (`combineSharedNames` in `definitions.ts`), so one question is asked under the strictest of them,
+ * naming the other recipes; definitions that could not be combined are asked one recipe at a time,
+ * after a note saying why.
+ *
  * Questions go through the chain's `Prompter`. Every one is answered by a flag too,
  * `--answer <name>=<value>`; a run that cannot ask fails naming, for each variable, the
  * environment variables that would answer it, most specific first.
@@ -148,6 +153,10 @@ export function nonInteractiveError(pending: ReadonlyArray<{ variable: DefinedVa
             details.push(`  The value currently in scope does not fit this variable: ${entry.current}`);
         }
 
+        if (entry.variable.separate !== undefined) {
+            details.push(`  ${entry.variable.separate} Each recipe needs its own answer.`);
+        }
+
         for (const candidate of entry.candidates) {
             details.push(`  ${candidate.envName}  (${RUNG_LABELS[candidate.rung]})`);
         }
@@ -168,12 +177,39 @@ export function nonInteractiveError(pending: ReadonlyArray<{ variable: DefinedVa
     return error;
 }
 
+/**
+ * The recipe a question is asked for, and the other recipes whose definitions of the same name it
+ * was combined with.
+ *
+ * ```ts
+ * askedFor(variable); // -> "misc/stuff, also used by misc/other"
+ * ```
+ */
+export function askedFor(variable: DefinedVariable): string {
+    const others = variable.separate === undefined ? (variable.requiredBy ?? []) : [];
+
+    return others.length === 0 ? recipeKey(variable.recipe) : `${recipeKey(variable.recipe)}, also used by ${others.map(recipeKey).join(", ")}`;
+}
+
+/**
+ * The note said before a variable that is asked one recipe at a time, because its definitions
+ * could not be combined; `undefined` for any other variable.
+ */
+export function separateNote(variable: DefinedVariable): string | undefined {
+    return variable.separate === undefined ? undefined : `${variable.separate} Each recipe is asked for its own answer, stored under its recipe-scoped name.`;
+}
+
 /** The warning for a secret or machine-specific answer headed for the committed env file. */
 export function committedFileWarning(variable: DefinedVariable, file: string): string {
-    const why = variable.definition.secret ? "declared this variable a secret" : "declared this variable machine-specific";
+    const what = variable.definition.secret ? "a secret" : "machine-specific";
+    // A combined definition may be secret or local because of another recipe's definition.
+    const who =
+        variable.published === undefined || variable.requiredBy === undefined
+            ? `${recipeKey(variable.recipe)} declared this variable ${what}`
+            : `${recipeKey(variable.recipe)} shares this variable with ${variable.requiredBy.map(recipeKey).join(", ")}, and one of their definitions declares it ${what}`;
 
     return (
-        `${recipeKey(variable.recipe)} ${why}, and ${file} is committed to git. An answer stored there enters your ` +
+        `${who}, and ${file} is committed to git. An answer stored there enters your ` +
         `project's git history, is pushed with every clone, and is visible to everyone who can read the repository.`
     );
 }
@@ -285,9 +321,10 @@ export async function askForMissing(variables: readonly DefinedVariable[], ladde
             continue;
         }
 
-        // An earlier question in this run will answer one of this variable's names, so it is
-        // settled once that answer is stored.
-        if (existing === undefined && options.reask !== true && !named && diagnosis.candidates.some((candidate) => plannedNames.has(candidate.envName))) {
+        // An earlier question in this run will answer one of this variable's names (a definition of
+        // the same name, combined with this one), so it is settled once that answer is stored. That
+        // holds when the value in scope does not fit either: the earlier question replaces it.
+        if ((existing === undefined || validity?.ok === false) && options.reask !== true && !named && diagnosis.candidates.some((candidate) => plannedNames.has(candidate.envName))) {
             deferred.push(variable);
             continue;
         }
@@ -313,6 +350,13 @@ export async function askForMissing(variables: readonly DefinedVariable[], ladde
 
     if (pending.length > 0) {
         throw nonInteractiveError(pending);
+    }
+
+    // Said once per name, before any question, so the separate questions are no surprise.
+    for (const note of new Set(questions.map((question) => separateNote(question.variable)))) {
+        if (note !== undefined) {
+            run.reporter.note(note);
+        }
     }
 
     const groups = groupQuestions(questions);
@@ -420,7 +464,7 @@ async function runQuestion(question: PlannedQuestion, place: { index: number; to
         name: definition.name,
         ...(definition.description === undefined ? {} : { description: definition.description }),
         ...(definition.example === undefined ? {} : { example: String(definition.example) }),
-        recipe: recipeKey(variable.recipe),
+        recipe: askedFor(variable),
         storedIn: run.store.envPath(plan.file),
         storedAs: plan.envName,
     });
