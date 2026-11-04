@@ -51,6 +51,9 @@ function tryCommand(command, args) {
 function collectTokens() {
   const env = {};
   env.GITHUB_TOKEN = process.env.GITHUB_TOKEN || tryCommand("gh", ["auth", "token"]);
+  // glab refreshes its OAuth token only when it makes a request, so `config get token` alone can
+  // hand over an expired one; one request first makes the stored token current.
+  if (!process.env.GITLAB_TOKEN) tryCommand("glab", ["api", "user"]);
   env.GITLAB_TOKEN =
     process.env.GITLAB_TOKEN || tryCommand("glab", ["config", "get", "token", "--host", "gitlab.com"]);
   for (const key of Object.keys(env)) if (!env[key]) delete env[key];
