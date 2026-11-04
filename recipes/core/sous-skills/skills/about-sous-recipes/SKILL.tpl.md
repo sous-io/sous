@@ -133,6 +133,10 @@ The fields in that example, and the ones it leaves out:
   version a definition MAY only loosen; tightening is a major bump, because an upgrade re-checks the
   answers already stored.
 
+A template may also read a variable another recipe defines. List that recipe under `depends`, so
+the variable is there wherever this recipe is, and branch on it in the template rather than telling
+the agent to look the setting up; `about-liquid-templates` shows how.
+
 ## Depends and Subscribes
 
 Both lists name other recipes, and they do different things:
@@ -232,6 +236,7 @@ example, a partial holding
 ## Source for this Skill
 
 This skill comes from the `core/sous-skills` recipe, installed by sous from a recipe
-repository. It was compiled from a template, so edit the source, never this output file.
+repository. It was compiled from a template, so edit the source, never this output file. To
+change it, propose the change to `sous-io/sous`, under `recipes/core/sous-skills/`.
 
 - Source Path: {{ sousTemplatePath }}

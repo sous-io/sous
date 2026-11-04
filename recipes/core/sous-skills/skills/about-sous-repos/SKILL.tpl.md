@@ -175,6 +175,7 @@ remote before the first release, because `sous repo release` reads and writes ta
 ## Source for this Skill
 
 This skill comes from the `core/sous-skills` recipe, installed by sous from a recipe
-repository. It was compiled from a template, so edit the source, never this output file.
+repository. It was compiled from a template, so edit the source, never this output file. To
+change it, propose the change to `sous-io/sous`, under `recipes/core/sous-skills/`.
 
 - Source Path: {{ sousTemplatePath }}

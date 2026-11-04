@@ -2,8 +2,9 @@
 name: about-sous
 description: >
   YOU MUST load this skill when you cannot edit a file in this project, are asked why
-  a file keeps reverting, need to know where the source of truth for any managed file
-  lives, or need to understand what this project's configuration system is.
+  a file keeps reverting, want to change a skill, memory or other file that came from a
+  recipe, need to know where the source of truth for any managed file lives, or need to
+  understand what this project's configuration system is.
 user-invocable: false
 ---
 
@@ -26,6 +27,21 @@ next time Sous runs:
 
 If you need to change something in one of these files, the change must be made at the
 source, in the central configuration this project uses with Sous.
+
+## Changing a File That Came From a Recipe
+
+A file whose footer names a recipe (`This skill comes from the <namespace>/<recipe> recipe`)
+is published by a recipe repository. Its Source Path points into sous's machine-wide store,
+which is read-only build input: an edit there is lost and reaches nobody. Change it upstream:
+
+1. `sous repo contribute <namespace>/<recipe>` links a working copy of the recipe's
+   repository on a new branch; the project's builds read from it until the contribution
+   is finished, so an edit shows up on the next `sous build`.
+2. Edit the recipe in that working copy, raising its version (YOU MUST load
+   `about-sous-recipes`).
+3. `sous repo contribute <namespace>/<recipe> --finish` proposes the change and unlinks.
+
+YOU MUST load `about-sous-repos` before running these commands.
 
 ## Where Your Skills Live
 
@@ -50,9 +66,10 @@ published by the official sous recipe repository (https://github.com/sous-io/sou
 A copy of that recipe also ships inside the installed sous package, where it seeds the
 machine-wide store so a fresh, offline install still has these skills.
 
-Edit them only in the recipe repository, where they are the sources. Never edit a compiled
-copy of them inside a consuming project; that copy is build output and is overwritten on
-the next sous run.
+Their source is in the sous repository (https://github.com/sous-io/sous), under
+`recipes/core/sous-skills/`; the copy in the recipe repository is written by each sous
+release and takes no proposals. Never edit a compiled copy of them inside a consuming
+project; that copy is build output and is overwritten on the next sous run.
 
 ## Trust and Activation
 
@@ -89,6 +106,7 @@ far.
 ## Source for this Skill
 
 This skill comes from the `core/sous-skills` recipe, installed by sous from a recipe
-repository. It was compiled from a template, so edit the source, never this output file.
+repository. It was compiled from a template, so edit the source, never this output file. To
+change it, propose the change to `sous-io/sous`, under `recipes/core/sous-skills/`.
 
 - Source Path: {{ sousTemplatePath }}

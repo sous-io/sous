@@ -289,6 +289,23 @@ project's variables change.
 4. **Test portability mentally.** Before finalizing a template, ask: "If I compiled
    this for a different project with different settings, would the output still make
    sense?" If not, parameterize the varying part.
+5. **Decide in the template, not in the agent.** When what a file tells the agent depends
+   on a project's answer, branch on the answer so the compiled file states one
+   instruction. An agent that reads a setting and then decides can get it wrong; a
+   rendered instruction cannot. Every recipe the project holds contributes its answers,
+   so a recipe may read another recipe's variable once it lists that recipe under
+   `depends`. Make the `else` branch the conservative behavior, because it is what renders
+   when nothing answered the variable:
+
+   {% raw %}
+   ```markdown
+   {% if createIssues == "always" -%}
+   File the issue without asking, and show the draft in the report.
+   {%- else -%}
+   Present the draft and wait for the user's approval.
+   {%- endif %}
+   ```
+   {% endraw %}
 
 ## Reference Files
 
@@ -304,6 +321,7 @@ The following variables are in scope at compile time in this project (secrets sh
 ## Source for this Skill
 
 This skill comes from the `core/sous-skills` recipe, installed by sous from a recipe
-repository. It was compiled from a template, so edit the source, never this output file.
+repository. It was compiled from a template, so edit the source, never this output file. To
+change it, propose the change to `sous-io/sous`, under `recipes/core/sous-skills/`.
 
 - Source Path: {{ sousTemplatePath }}
