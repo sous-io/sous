@@ -245,6 +245,18 @@ function questionCount(count: number): string {
 }
 
 /**
+ * Whether an unanswered question is answered by its default: a required variable with a default
+ * takes it when nothing else answers, as a build does.
+ *
+ * ```ts
+ * usesDefault({ definition: { name: "skillsRoot", required: true, default: "prompts/skills" }, answered: false, ... }); // true
+ * ```
+ */
+function usesDefault(question: PlannedQuestion): boolean {
+    return !question.answered && question.unanswerable === undefined && question.definition.required !== false && question.definition.default !== undefined;
+}
+
+/**
  * The facts one question shows: what it is for, its example, where its answer goes, whether it has
  * one, and (with `answerHint`) the flag that answers it.
  */
@@ -281,7 +293,11 @@ export function questionFacts(question: PlannedQuestion, answerHint: boolean): V
             ? `yes${question.answeredFrom === undefined ? "" : `, from ${question.answeredFrom}`}`
             : variable.required === false
               ? "no, and an answer is optional"
-              : "no, and this recipe requires an answer",
+              : usesDefault(question)
+                ? variable.secret === true
+                  ? "no, so its default is used"
+                  : `no, so its default is used: ${String(variable.default)}`
+                : "no, and this recipe requires an answer",
     });
 
     if (answerHint) {
@@ -297,7 +313,7 @@ export function questionFacts(question: PlannedQuestion, answerHint: boolean): V
  */
 export function questionPlanOutputs(plan: PlannedQuestions, options: { answerHints: boolean }): IntentOutput[] {
     const count = plan.questions.length;
-    const unanswered = plan.questions.filter((question) => !question.answered && question.unanswerable === undefined).length;
+    const unanswered = plan.questions.filter((question) => !question.answered && question.unanswerable === undefined && !usesDefault(question)).length;
     const unreadable =
         plan.unreadable.length === 0
             ? undefined
