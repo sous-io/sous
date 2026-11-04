@@ -87,6 +87,14 @@ describe("runRelease()", () => {
         expect(lastTools.results[1]!.result!.toPlain()).toEqual({ items: ["core/example: 0.1.0  (already raised; the tag would be core/example@0.1.0)"] });
     });
 
+    /** Outside a git repository the release says so plainly instead of showing git's own fatal line. */
+    it("should say plainly that the directory is not in a git repository", async () => {
+        fs.rmSync(path.join(repo, ".git"), { recursive: true, force: true });
+        lastTools = testTools({ reporter, prompter: nonInteractivePrompter, sousVersion: "1.2.3" });
+
+        await expect(runRelease(lastTools, { check: true }, { cwd: repo, now: new Date("2026-10-29T12:00:00.000Z") })).rejects.toThrow(/is not inside a git repository.*Nothing was changed/s);
+    });
+
     /** With nothing to ask and no --yes, nothing is published, and the error names --yes. */
     it("should refuse to publish with nothing to ask and no --yes", async () => {
         await expect(release()).rejects.toThrow(/--yes/);

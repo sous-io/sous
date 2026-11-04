@@ -1859,3 +1859,10 @@ All in `packages/plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022): a 
 - **Changed** "should refuse to edit a JavaScript config" in `plugin-config-files/test/config-set.test.ts`: it now expects the message to name the main config as code and to give `--file 600-settings.jsonc` as the example.
   - **Why:** `sous init` writes `sous.config.js`, so `sous config set` without `--file` hit the old generic message; it now says exactly what to pass.
 - **New** `plugin-config-files/src/module-format.spec.ts`: an ES module `.js` config loads whether package.json has no `"type"` or `"type": "commonjs"`, and a `module.exports` config still loads as CommonJS.
+
+### Output fixes found by the end-to-end harness (plugin-recipes, plugin-cli)
+
+- **Changed** "should group the questions by recipe, with answer hints" in `plugin-recipes/src/part-a/intents/outputs.spec.ts`: the expected title is now `workflow/a asks 1 question` without a colon.
+  - **Why:** the terminal heading adds the colon itself, so `recipe show` printed `asks 9 questions::`.
+- **New** "describeSource" tests in `plugin-recipes/src/part-a/questions.spec.ts` and a heading case in `plugin-cli/src/terminal/layout.spec.ts`.
+- **New** "should keep the search Kind column wide enough for every kind" in `plugin-recipes/src/part-a/intents/outputs.spec.ts`, and "should say plainly that the directory is not in a git repository" in `plugin-authoring/src/release/release.spec.ts`.

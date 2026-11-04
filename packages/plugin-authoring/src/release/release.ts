@@ -67,6 +67,15 @@ export async function runRelease(tools: AuthoringTools, input: RepoReleaseInput,
     assertFlagsAgree(input, noBump);
 
     const rootDir = findRepoRoot(tools, input.directory ?? options.cwd);
+
+    // A release reads tags and commits; without git it would fail later with git's own message.
+    if ((await tools.git.root(rootDir)) === undefined) {
+        throw new ConfigError(
+            `${rootDir} is not inside a git repository, and a release reads its tags and commits.\n` +
+                `  Nothing was changed. Run 'git init' there and commit the repository, then run the release again.`,
+        );
+    }
+
     const git = new RepoGit(tools.git, rootDir);
     const scope = releaseScope(input.namespace ?? [], input.recipe ?? []);
     const base = { repository: rootDir, indexPath: indexFilePath(rootDir), dryRun };
