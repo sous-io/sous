@@ -1899,3 +1899,8 @@ All in `packages/plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022): a 
 - **Changed** "should report a build over budget at debug level, naming the slowest contributor" (was "should warn when building the config goes over budget…"), "should keep the over-budget warning back…" and "should take budgets from the config…" in `core/test/timing.test.ts`: they read the report at `debug`, not `warning`.
   - **Why:** a step over its budget is for whoever works on sous or a plugin, so it is shown only with `--debug`.
 - **New** "should leave time spent waiting for an answer out of an intent's timing" in `core/test/timing.test.ts`, and "should show messages kept from building the config under the run's --log-level" in `plugin-cli/test/cli.test.ts`.
+
+### A question that cannot be asked no longer prints the command's help (plugin-cli; gh-204 bug 45)
+
+- **Changed** "should fail a question it cannot ask, naming the flag, without the command's help" in `plugin-cli/test/cli.test.ts`: the error is no longer followed by `USAGE`.
+  - **Why:** the error already names the flag that answers the question, and about 50 lines of help pushed it off the screen. Input the command could not take (`InputError`) still prints the help.

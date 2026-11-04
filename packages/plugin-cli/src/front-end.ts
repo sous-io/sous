@@ -98,8 +98,9 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
                 const fail = (error: unknown) => {
                     reportError(reporter, error, { debug, command: line.command }, io);
 
-                    // A question that could not be asked, or input the command could not take, is
-                    // answered by the command's flags, so its help follows (as before the refactor).
+                    // Input the command could not take is fixed with the command's flags, so its help
+                    // follows. A question that could not be asked is not: its error already names
+                    // the flag that answers it, and the help would push that error off the screen.
                     if (wantsHelp(error)) {
                         reporter.text(`\n${help(line.node)}`, LogLevel.Error);
                     }
@@ -190,9 +191,9 @@ export function debugRequested(env: Environment): boolean {
     return raw !== undefined && !DEBUG_OFF.has(raw.trim().toLowerCase());
 }
 
-/** True for the errors the command's own help helps with: bad input, and a question no one could answer. */
+/** True for the errors the command's own help helps with: input the command could not take. */
 function wantsHelp(error: unknown): boolean {
-    return isSousErrorOfKind(error, "input") || isSousErrorOfKind(error, "non-interactive");
+    return isSousErrorOfKind(error, "input");
 }
 
 /**

@@ -379,14 +379,19 @@ describe("the CLI front end", () => {
     });
 
     describe("prompts", () => {
-        /** Without a terminal the question fails with NonInteractiveError naming the flag that answers it. */
-        it("should fail a question it cannot ask, naming the flag", async () => {
+        /**
+         * Without a terminal the question fails with NonInteractiveError naming the flag that answers
+         * it. The command's help does not follow: the error already names the flag, and 50 lines of
+         * help would push it off the screen.
+         */
+        it("should fail a question it cannot ask, naming the flag, without the command's help", async () => {
             const run = await runCli([askingPlugin], ["prune"]);
 
             expect(run.exitCode).toBe(1);
             expect(run.stderr).toMatch(
-                /^Error: sous needed to ask "Remove the 3 files listed above\?" but cannot ask questions in this run\.\s+Pass --yes to answer it ahead of time\.\s+Why: neither input nor output is a terminal\..*USAGE\s+\$ sous prune/s,
+                /^Error: sous needed to ask "Remove the 3 files listed above\?" but cannot ask questions in this run\.\s+Pass --yes to answer it ahead of time\.\s+Why: neither input nor output is a terminal\./s,
             );
+            expect(run.stderr).not.toContain("USAGE");
         });
 
         /** The flag answers the question without a prompt. */
