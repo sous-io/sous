@@ -31,8 +31,9 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
     let reporter = new TerminalReporter({ stdout: io.stdout, stderr: io.stderr, threshold: LogLevel.Info, env });
     // `SOUS_DEBUG` asks for stack traces, as before the refactor, without changing the log level.
     let debug = debugRequested(env);
-
-    engine.setReporter(reporter);
+    // The engine keeps what was reported before this (the config build's messages) until it gets a
+    // reporter, so it gets one only once `--log-level` is read, and those messages follow it too.
+    let handedOver = false;
 
     try {
         const tree = engine.config.services.get("cli.commands") as CommandTree;
@@ -47,6 +48,7 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
         debug = debug || line.globals.debug === true;
         reporter = new TerminalReporter({ stdout: io.stdout, stderr: io.stderr, threshold: level, env, json });
         engine.setReporter(reporter);
+        handedOver = true;
 
         for (const warning of tree.warnings) {
             reporter.warning(warning);
@@ -129,6 +131,10 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
             reportTimings(reporter, engine.timings.entries());
         }
     } catch (error) {
+        if (!handedOver) {
+            engine.setReporter(reporter);
+        }
+
         // With a broken config, its error is the one to show, whatever failed after it.
         reportError(reporter, engine.configError ?? error, { debug }, io);
     } finally {

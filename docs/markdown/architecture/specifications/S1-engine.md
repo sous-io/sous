@@ -853,17 +853,22 @@ Timing is a core mechanism (L5, everything timed).
 
 - Every core stage, every contributor run, every intent and every service or entity method call
   from another plugin is timed, and each has a budget.
-- Sous warns when anything goes over budget, core stages included, since the user's own setup (a
-  very complex config, for example) can slow them.
-- Budgets can be changed under the `budgets` config key. A budget set to `false` turns its warning
+- Sous reports when anything goes over budget, core stages included, since the user's own setup (a
+  very complex config, for example) can slow them. The report is at the `debug` level: a slow step
+  is for whoever works on sous or a plugin, not something the person running a command can act on
+  (gh-204, gh-206). It follows the run's `--log-level`, which the CLI reads after the config build,
+  because the engine keeps what the build reported until the CLI hands it a reporter.
+- Time spent waiting for a person to answer a question is left out of every timing running at the
+  time, so a person thinking never makes an intent look slow (gh-204).
+- Budgets can be changed under the `budgets` config key. A budget set to `false` turns its report
   off.
-- Warnings go to stderr, so they never mix with `--json` output.
+- Reports go to stderr, so they never mix with `--json` output.
 - `--timings` on any command prints every timing.
 - Timing must cost almost nothing when nothing is over budget.
 
 ```text
-$ sous build
-Warning: building the config took 840ms (budget 200ms).
+$ sous build --debug
+Debug: building the config took 840ms (budget 200ms).
   conf.d/530-team.js took 610ms of that.
   See every timing with: sous build --timings
 ```
@@ -890,7 +895,7 @@ project loads no other plugin:
    `sous build` records the fact again.
 3. A line that needs no config runs on the built-in registrations only when the fact holds for the
    current key. Otherwise the config is built with `reportBudgets: false`, so the over-budget
-   warning is never printed above help, the version or completion.
+   report is never printed above help, the version or completion.
 4. The recipe store verifies a stored recipe's content hash only when the name, size or modification
    time of one of its files differs from the last verified read (`statFingerprint` in its marker),
    and refreshes `lastAccessAt` at most once a day, so a build reads no recipe file twice.

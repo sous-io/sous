@@ -30,7 +30,8 @@ import {
     type PluginDefinition,
     PluginError,
     type PluginInfo,
-    type LogLevel,
+    type Prompter,
+    LogLevel,
     type ReportDetails,
     type ReportEntryStyle,
     type ProjectInfo,
@@ -155,6 +156,8 @@ export class Engine {
     private readonly cwd: string;
     private readonly background = new Set<Promise<unknown>>();
     private readonly warnedOnce = new Set<string>();
+    /** Prompters already wrapped by {@link timedPrompter}. */
+    private readonly timedPrompters = new WeakSet<Prompter>();
     private readonly contributorStack: string[] = [];
     private registering = 0;
     private realBuilds = 0;
@@ -978,7 +981,7 @@ export class Engine {
     private submitWith(request: IntentRequest, options: SubmitOptions, parentFrame: Frame | undefined): Promise<IntentOutputs> {
         const info = this.resolveIntent(request.intent, this.current);
         const reporter = options.reporter ?? this.reporterImpl;
-        const prompter = options.prompter ?? nonInteractivePrompter;
+        const prompter = this.timedPrompter(options.prompter ?? nonInteractivePrompter);
         const globals = Object.freeze({ ...(options.globals ?? {}) });
         const cwd = options.cwd ?? this.cwd;
         const definition = info.definition;
@@ -1346,7 +1349,32 @@ export class Engine {
     private reportOverBudget(over: OverBudget, batch: readonly OverBudget[]): void {
         const { summary, cause, hint } = describeOverBudget(over, batch);
 
-        this.reporterImpl.problem(summary, cause === undefined ? { hint } : { cause, hint });
+        // A slow step is for whoever works on sous or a plugin, so it is shown only at debug level.
+        this.reporterImpl.problem(summary, cause === undefined ? { hint } : { cause, hint }, LogLevel.Debug);
+    }
+
+    /**
+     * The prompter, with the time each question waits for an answer left out of every timing, so a
+     * person thinking never makes an intent look slow. A prompter is wrapped only once.
+     */
+    private timedPrompter(prompter: Prompter): Prompter {
+        if (this.timedPrompters.has(prompter)) {
+            return prompter;
+        }
+
+        const timer = this.timer;
+        const timed: Prompter = {
+            get interactive() {
+                return prompter.interactive;
+            },
+            askValue: (question) => timer.waitingForUser(() => prompter.askValue(question)),
+            askChoice: (question) => timer.waitingForUser(() => prompter.askChoice(question)),
+            confirm: (question) => timer.waitingForUser(() => prompter.confirm(question)),
+        };
+
+        this.timedPrompters.add(timed);
+
+        return timed;
     }
 
     private warnOnce(message: string, level: "warning" | "debug" = "warning"): void {

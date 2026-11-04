@@ -163,8 +163,9 @@ Two more keys settle what plugins do:
   the same one stops sous with an error until you choose one:
   `"services": { "replace": { "git.runner": "sous-plugin-fast-git" } }`. Sous then warns on every
   run that the other plugin may not work as expected.
-- `budgets` changes how long a step may take before sous warns that it is slow; a budget set to
-  `false` turns that warning off. `--timings` on any command prints how long every step took.
+- `budgets` changes how long a step may take before sous reports that it is slow (at the `debug`
+  level, so only with `--debug`); a budget set to `false` turns that report off. `--timings` on any
+  command prints how long every step took.
 
 `sous plugins show` lists every plugin and what it adds. Recipes may ship plugins too; see
 [where plugins come from](architecture/specifications/S1-engine.md#where-plugins-come-from).

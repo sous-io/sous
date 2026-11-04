@@ -40,8 +40,10 @@ already exists.
 - `--timings` prints how long each step of the run took.
 - `--json`, on the commands that print a listing or a report, prints it as JSON instead.
 
-Sous warns on standard error when a step takes longer than its time budget, so the warning never mixes with
-`--json` output. The `budgets` config key changes a budget, and `false` turns its warning off.
+Sous reports, at the `debug` level, when a step takes longer than its time budget, so the report shows only
+with `--debug` or `--log-level debug`. It goes to standard error, so it never mixes with `--json` output. Time
+spent waiting for you to answer a question does not count. The `budgets` config key changes a budget, and
+`false` turns its report off.
 
 `sous --version` prints the version (`v1.2.3`); add `--verbose` for where it is installed, the platform and
 the Node build.

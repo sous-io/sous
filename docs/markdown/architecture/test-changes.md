@@ -1893,3 +1893,9 @@ All in `packages/plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022): a 
 
 - **Changed** in `plugin-build`: the `prepared()` helper in "messages about preparing" (`src/report.spec.ts`) and the stand-in world and `recipe-answers.answers` service in `test/helpers.ts` gain `unanswerable: []`.
   - **Why:** `RecipeAnswers` and `BuildPrepareResult` now list the variables a version of a recipe gets no answer for, because another version of the same recipe is asked instead, so the build can warn about them.
+
+### Time-budget reports at debug level (core, plugin-cli; gh-204 bug 15, gh-206 item 1)
+
+- **Changed** "should report a build over budget at debug level, naming the slowest contributor" (was "should warn when building the config goes over budget…"), "should keep the over-budget warning back…" and "should take budgets from the config…" in `core/test/timing.test.ts`: they read the report at `debug`, not `warning`.
+  - **Why:** a step over its budget is for whoever works on sous or a plugin, so it is shown only with `--debug`.
+- **New** "should leave time spent waiting for an answer out of an intent's timing" in `core/test/timing.test.ts`, and "should show messages kept from building the config under the run's --log-level" in `plugin-cli/test/cli.test.ts`.

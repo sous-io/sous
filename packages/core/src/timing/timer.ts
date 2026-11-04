@@ -32,6 +32,8 @@ export class Timer implements Timings {
     private readonly table = new Map<string, MutableEntry>();
     private budgets: BudgetTable;
     private deferred: OverBudget[] | undefined;
+    /** Milliseconds spent waiting for a person to answer a question, so far in this run. */
+    private waitedMs = 0;
 
     constructor(
         private readonly defaults: Readonly<Record<TimingCategory, Budget>>,
@@ -102,38 +104,56 @@ export class Timer implements Timings {
      * Times a call, synchronous or not, and returns what it returns. A thrown error is timed too.
      */
     measure<T>(category: TimingCategory, name: string, plugin: string | undefined, fn: () => T): T {
-        const start = this.now();
+        const elapsed = this.stopwatch();
         let result: T;
 
         try {
             result = fn();
         } catch (error) {
-            this.record(category, name, plugin, this.now() - start);
+            this.record(category, name, plugin, elapsed());
             throw error;
         }
 
         if (isPromiseLike(result)) {
             return Promise.resolve(result).finally(() => {
-                this.record(category, name, plugin, this.now() - start);
+                this.record(category, name, plugin, elapsed());
             }) as T;
         }
 
-        this.record(category, name, plugin, this.now() - start);
+        this.record(category, name, plugin, elapsed());
 
         return result;
     }
 
     /** Starts timing something that ends later; call the returned function when it ends. */
     start(category: TimingCategory, name: string, plugin?: string): () => number {
-        const start = this.now();
+        const elapsed = this.stopwatch();
 
         return () => {
-            const ms = this.now() - start;
+            const ms = elapsed();
 
             this.record(category, name, plugin, ms);
 
             return ms;
         };
+    }
+
+    /**
+     * Runs `ask`, a question put to a person, and leaves the time it takes out of every timing that
+     * is running meanwhile: a person thinking is not sous being slow.
+     *
+     * ```ts
+     * await timer.waitingForUser(() => prompter.confirm(question));
+     * ```
+     */
+    async waitingForUser<T>(ask: () => Promise<T>): Promise<T> {
+        const start = this.now();
+
+        try {
+            return await ask();
+        } finally {
+            this.waitedMs += this.now() - start;
+        }
     }
 
     /** Adds one measured call. */
@@ -175,6 +195,14 @@ export class Timer implements Timings {
         const entry = this.table.get(key);
 
         return entry ? this.toEntry(entry) : undefined;
+    }
+
+    /** A function that returns the milliseconds since this call, less any time spent waiting for a person. */
+    private stopwatch(): () => number {
+        const start = this.now();
+        const waited = this.waitedMs;
+
+        return () => Math.max(0, this.now() - start - (this.waitedMs - waited));
     }
 
     private toEntry(entry: MutableEntry): TimingEntry {
