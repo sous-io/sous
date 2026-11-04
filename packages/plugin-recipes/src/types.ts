@@ -631,6 +631,8 @@ export interface CachedIndex {
     readonly index: IndexFile;
     readonly source: IndexSource;
     readonly meta?: IndexMeta;
+    /** Why upstream could not be read, when `source` is `stale`. */
+    readonly problem?: string;
 }
 
 /** How to get an index. */
@@ -710,6 +712,11 @@ export interface RecipesIndexCache {
     /** Whether the cached index is still fresh (`store.freshnessSeconds`, `alwaysPull`). */
     isFresh(repo: string): boolean;
     meta(repo: string): IndexMeta | undefined;
+    /**
+     * Whether falling back to a repository's cached copy still has to be reported in this command:
+     * `true` the first time it is asked for a repository, `false` after, so it is reported once.
+     */
+    firstStaleNotice(repo: string): boolean;
     /** Forgets a cached index. */
     forget(repo: string): Promise<void>;
 }

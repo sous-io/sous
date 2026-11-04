@@ -119,9 +119,9 @@ export class ResolverService implements RecipesResolver {
             try {
                 const read = await cache.get(name, { latest });
 
-                // Upstream failed and the cached copy answers instead: say so, as before the refactor.
-                if (read.source === "stale" && !quiet) {
-                    const problem = (read as { problem?: string }).problem;
+                // Upstream failed and the cached copy answers instead: say so, once per repository.
+                if (read.source === "stale" && !quiet && cache.firstStaleNotice(name)) {
+                    const problem = read.problem;
 
                     this.runtime.host.reporter.problem(
                         `Sous could not check the repository '${name}' for updates, so it is using the copy of its index that it already had.`,

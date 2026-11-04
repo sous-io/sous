@@ -359,14 +359,14 @@ describe("the browsing flags and the newer-version notice", () => {
   );
 
   /**
-   * A build whose look upstream fails says nothing about the failure and still
-   * succeeds; the cached index, which the previous build refreshed, still
-   * answers for the newer version.
+   * A build whose look upstream fails still succeeds from the cached index,
+   * which the previous build refreshed. It says once that it could not check,
+   * and marks the newer version the cached copy shows as coming from it.
    *
    * sous build   // with the repository moved away
    */
   it(
-    "should build quietly from the cache when the upstream check fails",
+    "should build from the cache when the upstream check fails, and say so",
     () => {
       const moved = `${recipeRepo}-away`;
       fs.renameSync(recipeRepo, moved);
@@ -375,8 +375,8 @@ describe("the browsing flags and the newer-version notice", () => {
         const text = output(result);
 
         expect(result.status, text).toBe(0);
-        expect(text).not.toContain("could not check");
-        expect(text).toMatch(/workflow\/alpha\s*:\s*1\.1\.0 this project pins 1\.0\.0/);
+        expect(text.match(/Sous could not check the repository 'browse' for a newer version/g)?.length, text).toBe(1);
+        expect(text).toMatch(/workflow\/alpha\s*:\s*1\.1\.0\s+this project pins 1\.0\.0; seen in the copy of the index sous already had/);
         expect(pinnedVersion("workflow/alpha")).toBe("1.0.0");
       } finally {
         fs.renameSync(moved, recipeRepo);

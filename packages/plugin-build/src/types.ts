@@ -94,9 +94,10 @@ export interface BuildPrepareResult {
     readonly restored: RestoreReport;
     /**
      * Newer in-range versions found upstream, not installed. `holder` names the holder a version
-     * pinned for one holder alone belongs to; it is missing for the shared version.
+     * pinned for one holder alone belongs to; it is missing for the shared version. `staleIndex` is
+     * set when the version comes from a cached index sous could not check upstream.
      */
-    readonly newer: ReadonlyArray<{ readonly key: string; readonly from: string; readonly to: string; readonly holder?: string }>;
+    readonly newer: ReadonlyArray<{ readonly key: string; readonly from: string; readonly to: string; readonly holder?: string; readonly staleIndex?: true }>;
     readonly checkedUpstream: boolean;
     /** Locked recipes not built on this machine, and why. */
     readonly skipped: SkippedRecipe[];

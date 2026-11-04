@@ -128,6 +128,7 @@ function fakeIndexCache(indexes: Map<string, IndexFile>, failing: string[] = [])
         cached,
         isFresh: () => true,
         meta: (repo) => cached(repo)?.meta,
+        firstStaleNotice: () => true,
         forget: async () => {},
     };
 }

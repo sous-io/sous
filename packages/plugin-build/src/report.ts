@@ -107,7 +107,11 @@ function reportNewer(newer: BuildPrepareResult["newer"], reporter: Reporter): vo
     }
 
     reporter.variables(
-        newer.map((entry) => ({ label: entry.key, value: entry.to, detail: `this project pins ${entry.from}${alone(entry)}` })),
+        newer.map((entry) => ({
+            label: entry.key,
+            value: entry.to,
+            detail: `this project pins ${entry.from}${alone(entry)}${entry.staleIndex === true ? "; seen in the copy of the index sous already had, which may be out of date" : ""}`,
+        })),
         "Newer versions published",
         LogLevel.Notice,
     );

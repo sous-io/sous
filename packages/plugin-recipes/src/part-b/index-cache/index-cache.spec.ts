@@ -136,8 +136,16 @@ describe("IndexCacheCore", () => {
         expect(core.readMeta(IDENTITY)?.fetchedAt).toBe("2026-10-29T12:00:00.000Z");
     });
 
-    it("should fall back to the stale copy when upstream fails, recording the problem and the check", async () => {
+    /**
+     * A failed upstream check falls back to the cached copy as `stale`, with the problem. It is not
+     * recorded as a check, so the next command looks upstream again.
+     *
+     * cached, window over, upstream fails -> { source: "stale", problem }; lastCheckedAt unchanged
+     */
+    it("should fall back to the stale copy when upstream fails, recording the problem but not a check", async () => {
         await core.get(target);
+        const checkedAt = now.toISOString();
+
         later(400);
         served = undefined;
 
@@ -146,8 +154,45 @@ describe("IndexCacheCore", () => {
         expect(lookup.source).toBe("stale");
         expect(lookup.problem?.split("\n")[0]).toBe("could not read fake.test/acme/recipes.");
         expect(lookup.failure?.attempts).toEqual([{ strategy: "HTTP", reason: "404 not found" }]);
-        expect(core.readMeta(IDENTITY)?.lastCheckedAt).toBe(now.toISOString());
-        expect(core.isFresh(IDENTITY, 300)).toBe(true);
+        expect(core.readMeta(IDENTITY)?.lastCheckedAt).toBe(checkedAt);
+        expect(core.isFresh(IDENTITY, 300)).toBe(false);
+    });
+
+    /**
+     * Within one process, a failed check stands for a minute: later reads answer from the cached
+     * copy without trying upstream again; after it, upstream is tried again.
+     *
+     * fail; get again at +10 s -> stale, no read; get at +70 s -> reads upstream
+     */
+    it("should not retry a failed check within a minute in the same process", async () => {
+        await core.get(target);
+        later(400);
+        served = undefined;
+        await core.get(target);
+
+        const readsAfterFailure = reads.length;
+
+        later(10);
+
+        expect((await core.get(target)).source).toBe("stale");
+        expect(reads.length).toBe(readsAfterFailure);
+
+        later(60);
+        served = index("1.1.0");
+
+        expect((await core.get(target)).source).toBe("network");
+        expect(reads.length).toBe(readsAfterFailure + 1);
+    });
+
+    /**
+     * Each repository's stale fallback is reported once per process.
+     *
+     * firstStaleNotice(id) -> true; firstStaleNotice(id) -> false
+     */
+    it("should report a stale fallback once per repository", () => {
+        expect(core.firstStaleNotice(IDENTITY)).toBe(true);
+        expect(core.firstStaleNotice(IDENTITY)).toBe(false);
+        expect(core.firstStaleNotice("fake.test/acme/other")).toBe(true);
     });
 
     it("should raise when upstream fails and nothing is cached", async () => {

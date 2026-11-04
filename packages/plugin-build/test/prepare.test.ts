@@ -163,6 +163,37 @@ describe("build.prepare", () => {
         expect(result.checkedUpstream).toBe(false);
         expect(h.reporter.at("warning").join("\n")).toContain("Sous could not check the repository 'acme' for a newer version");
     });
+
+    /**
+     * A repository whose upstream check failed, and whose cached copy answered instead, is a
+     * warning naming why, printed once however many builds this process runs; the newer versions
+     * that copy shows are marked as coming from it.
+     *
+     * getAll -> [{ repo: "acme", source: "stale", problem: "could not read ..." }]
+     * // -> warning "Sous could not check the repository 'acme' for a newer version, so this build uses the copy of its index that it already had."
+     * // -> newer [{ key: "acme/jira", from: "1.0.0", to: "1.2.0", staleIndex: true }]
+     */
+    it("should warn once about a stale fallback, and mark the newer versions it shows", async () => {
+        const h = await harness({
+            world: (world) => {
+                world.config = { subscriptions: { acme: {} }, repos: { acme: { url: "https://x" } } };
+                world.lockfile = { formatVersion: 1, repos: {}, recipes: { "acme/jira": locked("1.0.0") } } as never;
+                world.published = { "acme/jira": { repo: "acme", namespace: "acme", version: "1.2.0" } };
+                world.indexes = { indexes: [{ repo: "acme", source: "stale", problem: "could not read github.com/acme/recipes." } as never], failed: [] };
+            },
+        });
+        const first = await h.run<BuildPrepareResult>("build.prepare");
+
+        await h.run<BuildPrepareResult>("build.prepare");
+
+        const warnings = h.reporter.at("warning").filter((text) => text.includes("Sous could not check the repository 'acme'"));
+
+        expect(warnings).toEqual([
+            "Sous could not check the repository 'acme' for a newer version, so this build uses the copy of its index that it already had.\n  could not read github.com/acme/recipes.",
+        ]);
+        expect(first.checkedUpstream).toBe(false);
+        expect(first.newer).toEqual([{ key: "acme/jira", from: "1.0.0", to: "1.2.0", staleIndex: true }]);
+    });
 });
 
 describe("isLocked()", () => {
