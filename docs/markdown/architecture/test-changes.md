@@ -1883,3 +1883,8 @@ All in `packages/plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022): a 
   - **Why:** the build now asks `recipes.lock.held` for what to hold, which includes each holder's own pin.
 - **Changed** the stand-in resolver in `plugin-recipes/src/part-a/intents/intents.spec.ts` and the in-memory lock in `plugin-recipes/test/part-a/helpers.ts`: they gain `subscriptionRequest` and `held`.
   - **Why:** `subscription update` and `subscription add` read a subscription's request from `recipes.resolver.subscriptionRequest`, its one owner, and hold the lock through `recipes.lock.held`.
+
+### Newer versions of a holder's own pin are reported (gh-220, ADR 0023, decision 4)
+
+- **Changed** in `plugin-build`: "should list newer versions and say nothing moved" (`src/report.spec.ts`) also checks that a newer version of a version pinned for one holder alone is listed with the detail "this project pins 1.0.0 for lib/two alone". The stand-in resolver in `test/helpers.ts` reads optional `requestedBy` and `pins` from `world.published`, and holds `keepPins` the way it holds `keep`.
+  - **Why:** the build's upstream check now compares each holder's own pin with the version the newest resolve gives that holder, and names the holder in what it reports.

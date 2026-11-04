@@ -142,6 +142,7 @@ describe("messages about preparing", () => {
      *
      * reportPrepared({ newer: [{ key: "a/b", from: "1.0.0", to: "1.2.0" }] }, reporter);
      * // -> variable list entry { label: "a/b", value: "1.2.0", detail: "this project pins 1.0.0" }
+     * // a version pinned for lib/two alone: detail "this project pins 1.0.0 for lib/two alone"
      */
     it("should list newer versions and say nothing moved", () => {
         const one = new BufferedReporter();
@@ -149,6 +150,13 @@ describe("messages about preparing", () => {
         reportPrepared(prepared({ newer: [{ key: "a/b", from: "1.0.0", to: "1.2.0" }] }), one);
         expect(one.styled(ReportEntryStyle.VariableList)[0]!.message).toMatchObject({ entries: [{ label: "a/b", value: "1.2.0", detail: "this project pins 1.0.0" }] });
         expect(messageText(one.styled(ReportEntryStyle.Note)[0]!.message)).toContain("No pin was changed, so this build uses the pinned version.");
+
+        const pinned = new BufferedReporter();
+
+        reportPrepared(prepared({ newer: [{ key: "a/b", from: "1.0.0", to: "1.3.0", holder: "lib/two" }] }), pinned);
+        expect(pinned.styled(ReportEntryStyle.VariableList)[0]!.message).toMatchObject({
+            entries: [{ label: "a/b", value: "1.3.0", detail: "this project pins 1.0.0 for lib/two alone" }],
+        });
 
         const two = new BufferedReporter();
 

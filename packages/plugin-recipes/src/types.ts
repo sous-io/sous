@@ -1007,8 +1007,12 @@ export interface UnlinkPublishedReport {
     /** False when the index could not be read; `reason` says why. */
     readonly checked: boolean;
     readonly reason?: string;
-    /** The pins with a newer version within range. */
-    readonly newer: ReadonlyArray<{ readonly key: string; readonly from: string; readonly to: string }>;
+    /**
+     * The pins with a newer version within range. `holder` names the holder a version pinned for
+     * one holder alone belongs to, checked against that holder's range; it is missing for the
+     * shared version, checked against every other holder's range.
+     */
+    readonly newer: ReadonlyArray<{ readonly key: string; readonly from: string; readonly to: string; readonly holder?: string }>;
 }
 
 /** The result of `repo.unlink`. */

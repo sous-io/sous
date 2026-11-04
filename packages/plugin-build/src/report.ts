@@ -52,8 +52,8 @@ export function reportLinkedRepos(links: Readonly<Record<string, ResolvedLink>>,
     );
 }
 
-/** The words a change to one holder's own pin ends with. */
-function alone(change: LockDiff["added"][number]): string {
+/** The words a change to, or a newer version of, one holder's own pin ends with. */
+function alone(change: { readonly holder?: string }): string {
     return change.holder === undefined ? "" : ` for ${change.holder} alone`;
 }
 
@@ -107,7 +107,7 @@ function reportNewer(newer: BuildPrepareResult["newer"], reporter: Reporter): vo
     }
 
     reporter.variables(
-        newer.map((entry) => ({ label: entry.key, value: entry.to, detail: `this project pins ${entry.from}` })),
+        newer.map((entry) => ({ label: entry.key, value: entry.to, detail: `this project pins ${entry.from}${alone(entry)}` })),
         "Newer versions published",
         LogLevel.Notice,
     );

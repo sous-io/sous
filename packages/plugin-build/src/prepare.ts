@@ -90,7 +90,7 @@ async function prepareProject(input: BuildPrepareInput, ctx: Context): Promise<B
 
     // 4. Check upstream.
     let checkedUpstream = false;
-    const newer: Array<{ key: string; from: string; to: string }> = [];
+    const newer: NewerVersion[] = [];
 
     if (!dryRun && input.offline !== true && Object.keys(current.recipes).length > 0) {
         const upstream = await checkUpstream(ctx, current, subscriptions);
@@ -134,14 +134,17 @@ async function prepareProject(input: BuildPrepareInput, ctx: Context): Promise<B
     return result;
 }
 
+/** A newer version of one locked version; `holder` is set for a version pinned for that holder alone. */
+type NewerVersion = BuildPrepareResult["newer"][number];
+
 /** What looking upstream found. */
 interface UpstreamReport {
     /** Whether any index was read from upstream. */
     checked: boolean;
     /** Newer versions of recipes that prefer them: these move. */
-    moved: Array<{ key: string; from: string; to: string }>;
+    moved: NewerVersion[];
     /** Newer versions of every other recipe: only reported. */
-    newer: Array<{ key: string; from: string; to: string }>;
+    newer: NewerVersion[];
 }
 
 /**
@@ -187,20 +190,52 @@ async function checkUpstream(ctx: Context, current: Lockfile, subscriptions: Rec
     for (const recipe of latest.resolved) {
         const pinned = current.recipes[recipe.key];
 
-        if (!pinned || !isNewer(recipe.version, pinned.version)) {
+        if (!pinned) {
             continue;
         }
 
-        const change = { key: recipe.key, from: pinned.version, to: recipe.version };
+        const preferred = prefersNewer(recipe, subscriptions, repos[recipe.repo]?.alwaysPull === true);
 
-        if (prefersNewer(recipe, subscriptions, repos[recipe.repo]?.alwaysPull === true)) {
-            report.moved.push(change);
-        } else {
-            report.newer.push(change);
+        for (const change of newerVersions(recipe, pinned)) {
+            (preferred ? report.moved : report.newer).push(change);
         }
     }
 
     return report;
+}
+
+/**
+ * The locked versions of one recipe the newest resolve moves forward: the shared version against
+ * the newest shared one, and each holder's own pin against the version the newest resolve gives
+ * that holder (its own pin there, else the shared version), which the resolver chose within that
+ * holder's range.
+ *
+ * ```ts
+ * // locked: 1.0.0, pinned 1.0.0 for lib/two; newest: 2.1.0, pinned 1.4.0 for lib/two
+ * newerVersions(latest, locked);
+ * // [{ key, from: "1.0.0", to: "2.1.0" }, { key, from: "1.0.0", to: "1.4.0", holder: "lib/two" }]
+ * ```
+ */
+function newerVersions(latest: ResolvedRecipe, locked: Lockfile["recipes"][string]): NewerVersion[] {
+    const found: NewerVersion[] = [];
+
+    if (isNewer(latest.version, locked.version)) {
+        found.push({ key: latest.key, from: locked.version, to: latest.version });
+    }
+
+    for (const [holder, pin] of Object.entries(locked.pins ?? {})) {
+        if (!latest.requestedBy.includes(holder)) {
+            continue;
+        }
+
+        const to = latest.pins?.find((candidate) => candidate.holder === holder)?.version ?? latest.version;
+
+        if (isNewer(to, pin.version)) {
+            found.push({ key: latest.key, from: pin.version, to, holder });
+        }
+    }
+
+    return found;
 }
 
 /** Whether a recipe's repository or subscription prefers a newer in-range version. */

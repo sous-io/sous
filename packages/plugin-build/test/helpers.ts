@@ -65,8 +65,11 @@ export interface World {
     lockfile: Lockfile;
     lockWrites: Array<{ lockfile: Lockfile; dryRun: boolean }>;
     resolveCalls: ResolveOptions[];
-    /** The newest version of each key; a resolve keeps what `keep` names. */
-    published: Record<string, { repo: string; version: string; namespace: string }>;
+    /**
+     * The newest version of each key, its holders (`["project"]` when left out) and the newest
+     * version pinned for each holder alone; a resolve keeps what `keep` and `keepPins` name.
+     */
+    published: Record<string, { repo: string; version: string; namespace: string; requestedBy?: string[]; pins?: Record<string, string> }>;
     restoreCalls: Array<{ keys?: readonly string[] }>;
     restoreReport: RestoreReport;
     indexes: { indexes: CachedIndex[]; failed: IndexReadFailure[] };
@@ -253,7 +256,10 @@ export function standIns(world: World): PluginDefinition[] {
                 name: key.split("/")[1]!,
                 repo: published.repo,
                 version: options.keep?.[key] ?? published.version,
-                requestedBy: ["project"],
+                requestedBy: published.requestedBy ?? ["project"],
+                ...(published.pins === undefined
+                    ? {}
+                    : { pins: Object.entries(published.pins).map(([holder, version]) => ({ holder, version: options.keepPins?.[key]?.[holder] ?? version })) }),
             })) as unknown as ResolvedRecipe[];
 
             return { resolved, missingRepos: [], unreadable: [], cycles: [] };

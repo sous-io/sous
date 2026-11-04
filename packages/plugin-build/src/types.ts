@@ -92,8 +92,11 @@ export interface BuildPrepareResult {
     /** What locking new subscriptions changed. */
     readonly locked: LockDiff;
     readonly restored: RestoreReport;
-    /** Newer in-range versions found upstream, not installed. */
-    readonly newer: ReadonlyArray<{ readonly key: string; readonly from: string; readonly to: string }>;
+    /**
+     * Newer in-range versions found upstream, not installed. `holder` names the holder a version
+     * pinned for one holder alone belongs to; it is missing for the shared version.
+     */
+    readonly newer: ReadonlyArray<{ readonly key: string; readonly from: string; readonly to: string; readonly holder?: string }>;
     readonly checkedUpstream: boolean;
     /** Locked recipes not built on this machine, and why. */
     readonly skipped: SkippedRecipe[];

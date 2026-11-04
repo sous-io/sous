@@ -108,6 +108,45 @@ describe("build.prepare", () => {
     });
 
     /**
+     * A version pinned for one holder alone is compared with the version the newest resolve gives
+     * that holder: its own pin there, else the shared version, which the resolver chose within that
+     * holder's range. Each is reported apart from the shared version, naming its holder.
+     *
+     * acme/lib 2.0.0 shared, 1.0.0 for acme/one and for acme/two alone;
+     * newest: 2.1.0 shared, 1.3.0 for acme/one alone, acme/two on the shared version
+     * // -> newer [2.0.0 -> 2.1.0, 1.0.0 -> 1.3.0 for acme/one, 1.0.0 -> 2.1.0 for acme/two]
+     */
+    it("should report a newer version of a version pinned for one holder alone, naming the holder", async () => {
+        const h = await harness({
+            world: (world) => {
+                world.config = { subscriptions: {} };
+                world.lockfile = {
+                    formatVersion: 1,
+                    repos: {},
+                    recipes: {
+                        "acme/lib": {
+                            ...locked("2.0.0"),
+                            requestedBy: ["acme/one", "acme/three", "acme/two"],
+                            kind: "depends",
+                            pins: { "acme/one": { version: "1.0.0", hash: "h" }, "acme/two": { version: "1.0.0", hash: "h" } },
+                        },
+                    },
+                } as never;
+                world.published = { "acme/lib": { repo: "acme", namespace: "acme", version: "2.1.0", requestedBy: ["acme/one", "acme/three", "acme/two"], pins: { "acme/one": "1.3.0" } } };
+                world.indexes = { indexes: [{ repo: "acme", source: "network" } as never], failed: [] };
+            },
+        });
+        const report = await h.run<BuildPrepareResult>("build.prepare");
+
+        expect(report.newer).toEqual([
+            { key: "acme/lib", from: "2.0.0", to: "2.1.0" },
+            { key: "acme/lib", from: "1.0.0", to: "1.3.0", holder: "acme/one" },
+            { key: "acme/lib", from: "1.0.0", to: "2.1.0", holder: "acme/two" },
+        ]);
+        expect(report.locked.unchanged).toBe(true);
+    });
+
+    /**
      * A repository that could not be read is a warning, never a failure.
      *
      * getAll -> failed [{ repo: "acme" }]; // -> warning "Sous could not check the repository 'acme'..."
