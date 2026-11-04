@@ -567,11 +567,11 @@ describe("sous repo release and sous repo submit", () => {
 
   /**
    * Tags are cut dependency-first, so a recipe is never published before
-   * something it depends on, and the index records the exact version it was
-   * released against.
+   * something it depends on, and the index records the range the dependency
+   * may take: the same major as the version it was released alongside.
    */
   it(
-    "should tag dependency-first and record the resolved dependency",
+    "should tag dependency-first and record the dependency's range",
     () => {
       // The example recipe now depends on its sibling.
       const manifestPath = path.join(
@@ -598,7 +598,7 @@ describe("sous repo release and sous repo submit", () => {
       const published = Object.keys(index.recipes["core/example"]!.versions).sort();
       const newest = published[published.length - 1]!;
       expect(index.recipes["core/example"]!.versions[newest]!.dependencies).toEqual({
-        "core/other": { version: "1.0.2", declared: "core/other", kind: "depends" },
+        "core/other": { range: "^1.0.2", declared: "core/other", kind: "depends" },
       });
     },
     CLI_TIMEOUT

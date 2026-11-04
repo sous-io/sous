@@ -62,7 +62,7 @@ async function prepareProject(input: BuildPrepareInput, ctx: Context): Promise<B
 
     if (unlocked.length > 0) {
         try {
-            const resolved = await resolver.resolveSubscriptions({ keep: pinnedVersions(current) });
+            const resolved = await resolver.resolveSubscriptions(lock.held(current));
 
             warnAboutProblems(resolved, ctx);
 
@@ -90,7 +90,7 @@ async function prepareProject(input: BuildPrepareInput, ctx: Context): Promise<B
 
     // 4. Check upstream.
     let checkedUpstream = false;
-    const newer: Array<{ key: string; from: string; to: string }> = [];
+    const newer: NewerVersion[] = [];
 
     if (!dryRun && input.offline !== true && Object.keys(current.recipes).length > 0) {
         const upstream = await checkUpstream(ctx, current, subscriptions);
@@ -100,10 +100,8 @@ async function prepareProject(input: BuildPrepareInput, ctx: Context): Promise<B
 
         if (upstream.moved.length > 0) {
             const movedKeys = new Set(upstream.moved.map((change) => change.key));
-            const keep = Object.fromEntries(Object.entries(pinnedVersions(current)).filter(([key]) => !movedKeys.has(key)));
-
             try {
-                const resolved = await resolver.resolveSubscriptions({ keep });
+                const resolved = await resolver.resolveSubscriptions(lock.held(current, movedKeys));
                 const next = lock.fromResolved(resolved.resolved, current);
 
                 locked = mergeDiffs(locked, await lock.write(next));
@@ -120,7 +118,7 @@ async function prepareProject(input: BuildPrepareInput, ctx: Context): Promise<B
     }
 
     const skipped = active.skipped();
-    const unanswered = ctx.services.get("recipe-answers.answers").get().unanswered;
+    const { unanswered, unanswerable } = ctx.services.get("recipe-answers.answers").get();
     const result: BuildPrepareResult = {
         seeded,
         locked,
@@ -129,6 +127,7 @@ async function prepareProject(input: BuildPrepareInput, ctx: Context): Promise<B
         checkedUpstream,
         skipped,
         unanswered,
+        unanswerable,
     };
 
     await ctx.emit("build.prepared", result);
@@ -136,14 +135,17 @@ async function prepareProject(input: BuildPrepareInput, ctx: Context): Promise<B
     return result;
 }
 
+/** A newer version of one locked version; `holder` is set for a version pinned for that holder alone. */
+type NewerVersion = BuildPrepareResult["newer"][number];
+
 /** What looking upstream found. */
 interface UpstreamReport {
     /** Whether any index was read from upstream. */
     checked: boolean;
     /** Newer versions of recipes that prefer them: these move. */
-    moved: Array<{ key: string; from: string; to: string }>;
+    moved: NewerVersion[];
     /** Newer versions of every other recipe: only reported. */
-    newer: Array<{ key: string; from: string; to: string }>;
+    newer: NewerVersion[];
 }
 
 /**
@@ -189,20 +191,52 @@ async function checkUpstream(ctx: Context, current: Lockfile, subscriptions: Rec
     for (const recipe of latest.resolved) {
         const pinned = current.recipes[recipe.key];
 
-        if (!pinned || !isNewer(recipe.version, pinned.version)) {
+        if (!pinned) {
             continue;
         }
 
-        const change = { key: recipe.key, from: pinned.version, to: recipe.version };
+        const preferred = prefersNewer(recipe, subscriptions, repos[recipe.repo]?.alwaysPull === true);
 
-        if (prefersNewer(recipe, subscriptions, repos[recipe.repo]?.alwaysPull === true)) {
-            report.moved.push(change);
-        } else {
-            report.newer.push(change);
+        for (const change of newerVersions(recipe, pinned)) {
+            (preferred ? report.moved : report.newer).push(change);
         }
     }
 
     return report;
+}
+
+/**
+ * The locked versions of one recipe the newest resolve moves forward: the shared version against
+ * the newest shared one, and each holder's own pin against the version the newest resolve gives
+ * that holder (its own pin there, else the shared version), which the resolver chose within that
+ * holder's range.
+ *
+ * ```ts
+ * // locked: 1.0.0, pinned 1.0.0 for lib/two; newest: 2.1.0, pinned 1.4.0 for lib/two
+ * newerVersions(latest, locked);
+ * // [{ key, from: "1.0.0", to: "2.1.0" }, { key, from: "1.0.0", to: "1.4.0", holder: "lib/two" }]
+ * ```
+ */
+function newerVersions(latest: ResolvedRecipe, locked: Lockfile["recipes"][string]): NewerVersion[] {
+    const found: NewerVersion[] = [];
+
+    if (isNewer(latest.version, locked.version)) {
+        found.push({ key: latest.key, from: locked.version, to: latest.version });
+    }
+
+    for (const [holder, pin] of Object.entries(locked.pins ?? {})) {
+        if (!latest.requestedBy.includes(holder)) {
+            continue;
+        }
+
+        const to = latest.pins?.find((candidate) => candidate.holder === holder)?.version ?? latest.version;
+
+        if (isNewer(to, pin.version)) {
+            found.push({ key: latest.key, from: pin.version, to, holder });
+        }
+    }
+
+    return found;
 }
 
 /** Whether a recipe's repository or subscription prefers a newer in-range version. */
@@ -251,11 +285,6 @@ export function isLocked(key: string, entry: SubscriptionEntry, lockfile: Lockfi
 
         return semver.satisfies(locked.version, range, { includePrerelease });
     });
-}
-
-/** Every pinned version, by key: what a resolve holds. */
-function pinnedVersions(lockfile: Lockfile): Record<string, string> {
-    return Object.fromEntries(Object.entries(lockfile.recipes).map(([key, locked]) => [key, locked.version]));
 }
 
 /** Reports what a resolve could not do: a repository to trust, a manifest it could not read, a cycle. */

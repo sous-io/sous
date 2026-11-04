@@ -331,6 +331,27 @@ export function activeRecipe(key: string, variables: VariableDefinition[], overr
     };
 }
 
+/**
+ * `support/base`, held through `depends` by `lib/one` at its shared version 1.0.0 and pinned at
+ * other versions for other holders (ADR 0023, decision 4).
+ *
+ * @param shared - The variables version 1.0.0 defines.
+ * @param pins - Each pinned version: its holder, version and variables.
+ */
+export function pinnedRecipe(shared: VariableDefinition[], pins: ReadonlyArray<{ holder: string; version: string; variables: VariableDefinition[] }>): ActiveRecipeEntity {
+    return activeRecipe("support/base", shared, {
+        kind: "depends",
+        requestedBy: ["lib/one", ...pins.map((pin) => pin.holder)],
+        pins: pins.map((pin) => ({
+            holder: pin.holder,
+            version: pin.version,
+            hash: "sha256-1",
+            dir: `/store/support/base/${pin.version}`,
+            manifest: { formatVersion: 1, namespace: "support", name: "base", version: pin.version, variables: pin.variables } as ActiveRecipeEntity["manifest"],
+        })),
+    });
+}
+
 /** A service reader over a fixed map, for code that only reads services. */
 export function serviceReader(services: Record<string, unknown>): ServiceReader {
     return {

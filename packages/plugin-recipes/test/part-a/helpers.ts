@@ -22,6 +22,7 @@ import type { ConfdManaged } from "@sous-io/plugin-confd/types";
 import type { Lockfile } from "@sous-io/plugin-formats/types";
 import type { NamedRef, RefsFormat, RefsResolver, SousRef } from "@sous-io/plugin-refs/types";
 import { vi } from "vitest";
+import { heldVersions } from "../../src/part-b/lock/lockfile-ops.js";
 import type { LockDiff, RecipesLock } from "../../src/types.js";
 import "../../src/types.js";
 
@@ -193,6 +194,7 @@ export function memoryLock(lockfile: Lockfile): RecipesLock & { current: Lockfil
         fromResolved: () => lockfile,
         restore: async () => ({ restored: [], alreadyPresent: [], failed: [] }),
         get: (key: string) => lock.current.recipes[key],
+        held: (current: Lockfile, except?: Iterable<string>) => heldVersions(current, except),
     };
 
     return lock;

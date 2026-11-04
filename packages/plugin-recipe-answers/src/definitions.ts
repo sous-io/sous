@@ -9,6 +9,9 @@
  *
  * A standalone definitions file (`--file`) holds the same `variables:` list a manifest does, so a
  * project can ask questions no recipe publishes yet.
+ *
+ * Several definitions of one name are combined into one (`combineSharedNames`), so every reader of
+ * a `DefinedVariable` sees the definition its answer is asked and checked with.
  */
 
 import path from "node:path";
@@ -16,8 +19,9 @@ import { ConfigError, type ServiceContext } from "@sous-io/plugin-api";
 import type { FormatParser, VariableDefinition } from "@sous-io/plugin-formats/types";
 import type { ActiveRecipeEntity, RepoEntry } from "@sous-io/plugin-recipes/types";
 import type { VariableRef } from "@sous-io/plugin-refs/types";
+import { combineDefinitions, type Definer } from "./combine.js";
 import { resolveUserPath } from "./paths.js";
-import type { DefinedVariable, DefiningRecipe, DefinitionOptions, RecipeAnswersDefinitions } from "./types.js";
+import type { AnswerDefinition, DefinedVariable, DefiningRecipe, DefinitionOptions, RecipeAnswersDefinitions } from "./types.js";
 
 /** The repository name recorded for definitions read from a file. */
 export const LOCAL_FILE_REPO = "local";
@@ -57,40 +61,195 @@ export function variableRefOf(recipe: DefiningRecipe, definition: VariableDefini
     };
 }
 
+/** What combining a definition with the others of its name added to it. */
+export interface SharedNameFacts {
+    /** The other recipes defining the same name. */
+    readonly requiredBy?: readonly DefiningRecipe[];
+    /** The combined definition, in place of the published one. */
+    readonly combined?: AnswerDefinition;
+    /** Why it could not be combined. */
+    readonly separate?: string;
+    /** Why this version is not asked at all: another version of its recipe is (see `DefinedVariable.unanswerable`). */
+    readonly unanswerable?: string;
+}
+
 /** One defined variable, its ref and key filled in. */
-export function defineVariable(recipe: DefiningRecipe, definition: VariableDefinition, requiredBy?: readonly DefiningRecipe[]): DefinedVariable {
+export function defineVariable(recipe: DefiningRecipe, definition: VariableDefinition, shared: SharedNameFacts = {}): DefinedVariable {
+    const { requiredBy, combined, separate, unanswerable } = shared;
+
     return {
-        definition,
+        definition: combined ?? definition,
         recipe,
         ref: variableRefOf(recipe, definition),
         key: variableKey(recipe, definition.name),
         ...(requiredBy === undefined || requiredBy.length === 0 ? {} : { requiredBy }),
+        ...(combined === undefined || combined === definition ? {} : { published: definition }),
+        ...(separate === undefined ? {} : { separate }),
+        ...(unanswerable === undefined ? {} : { unanswerable }),
     };
 }
 
-/**
- * Fills in `requiredBy`: for each variable, the other recipes that define the same name and so
- * share its answer on the shared rung.
- */
-export function linkSharedNames(variables: readonly DefinedVariable[]): DefinedVariable[] {
-    const byName = new Map<string, DefiningRecipe[]>();
+/** The definitions of one name as `combineDefinitions` takes them, each labeled with its version when its recipe appears twice. */
+function definersOf(group: readonly DefinedVariable[]): Definer[] {
+    const keys = group.map((entry) => recipeKey(entry.recipe));
 
-    for (const entry of variables) {
-        const recipes = byName.get(entry.definition.name) ?? [];
+    return group.map((entry, index) => {
+        const key = keys[index]!;
 
-        recipes.push(entry.recipe);
-        byName.set(entry.definition.name, recipes);
-    }
-
-    return variables.map((entry) => {
-        const others = (byName.get(entry.definition.name) ?? []).filter((recipe) => recipe !== entry.recipe);
-
-        return others.length === 0 ? entry : defineVariable(entry.recipe, entry.definition, others);
+        return { definition: entry.published ?? entry.definition, label: keys.indexOf(key) === keys.lastIndexOf(key) ? key : `${key} ${entry.recipe.version}` };
     });
 }
 
 /**
- * Every variable the active recipes define, in recipe order, then declaration order.
+ * "lib/one and lib/two", for the holders of one version; "this project" for the project itself.
+ */
+function holderList(holders: readonly string[]): string {
+    const named = holders.map((holder) => (holder === "project" ? "this project" : holder));
+
+    return named.length < 2 ? (named[0] ?? "") : `${named.slice(0, -1).join(", ")} and ${named.at(-1)!}`;
+}
+
+/**
+ * The warning for a version of a recipe that is not asked a variable, because its definition cannot
+ * be combined with the version that is.
+ *
+ * ```ts
+ * versionConflictWarning("tone", base200, base100, "support/base 1.0.0 defines tone as a string, and ...");
+ * // -> "The variable tone of support/base 2.0.0 cannot be answered alongside support/base 1.0.0, so it is not
+ * //     asked and gets no answer: where support/base 2.0.0 is used, tone renders empty. support/base 2.0.0 is
+ * //     used by lib/two, and support/base 1.0.0 by lib/one. support/base 1.0.0 defines tone as a string, and ..."
+ * ```
+ */
+export function versionConflictWarning(name: string, skipped: DefiningRecipe, asked: DefiningRecipe, reason: string): string {
+    const key = recipeKey(skipped);
+    const skippedAt = `${key} ${skipped.version}`;
+    const askedAt = `${key} ${asked.version}`;
+    const users = [
+        ...(skipped.holders === undefined || skipped.holders.length === 0 ? [] : [`${skippedAt} is used by ${holderList(skipped.holders)}`]),
+        ...(asked.holders === undefined || asked.holders.length === 0 ? [] : [`${askedAt} by ${holderList(asked.holders)}`]),
+    ];
+    const used = users.length === 0 ? "" : ` ${users.join(", and ")}.`;
+
+    return `The variable ${name} of ${skippedAt} cannot be answered alongside ${askedAt}, so it is not asked and gets no answer: where ${skippedAt} is used, ${name} renders empty.${used} ${reason}`;
+}
+
+/** How one name several definitions share was settled, per definition. */
+type Settled = Map<DefinedVariable, Omit<SharedNameFacts, "requiredBy">>;
+
+/**
+ * Settles one name whose definitions cannot all be combined (ADR 0023, decision 6, and the ruling
+ * on two versions of one recipe). Within each recipe, the version asked is its shared version (the
+ * one not `pinned`), else the first; every other version joins it when their definitions combine,
+ * and is otherwise not asked at all (`unanswerable`), since every version of a recipe would store
+ * its answer under the same recipe-scoped name. What remains is combined again across recipes; when
+ * that fails too, each recipe is asked separately with the combination of its own versions.
+ */
+function settleConflict(group: readonly DefinedVariable[], settled: Settled): void {
+    const name = group[0]!.definition.name;
+    const byRecipe = new Map<string, DefinedVariable[]>();
+
+    for (const entry of group) {
+        byRecipe.set(recipeKey(entry.recipe), [...(byRecipe.get(recipeKey(entry.recipe)) ?? []), entry]);
+    }
+
+    const ownCombination = new Map<DefinedVariable, AnswerDefinition>();
+
+    for (const versions of byRecipe.values()) {
+        const asked = versions.find((entry) => entry.recipe.pinned !== true) ?? versions[0]!;
+        const kept = [asked];
+
+        for (const other of versions) {
+            if (other === asked) {
+                continue;
+            }
+
+            const combination = combineDefinitions(definersOf([...kept, other]));
+
+            if (combination.ok) {
+                kept.push(other);
+            } else {
+                settled.set(other, { unanswerable: versionConflictWarning(name, other.recipe, asked.recipe, combination.reason) });
+            }
+        }
+
+        const own = combineDefinitions(definersOf(kept));
+
+        for (const entry of kept) {
+            ownCombination.set(entry, own.ok ? own.definition : (entry.published ?? entry.definition));
+        }
+    }
+
+    const remaining = group.filter((entry) => !settled.has(entry));
+
+    if (remaining.length < 2) {
+        return;
+    }
+
+    const combination = combineDefinitions(definersOf(remaining));
+
+    for (const entry of remaining) {
+        settled.set(entry, combination.ok ? { combined: combination.definition } : { combined: ownCombination.get(entry)!, separate: combination.reason });
+    }
+}
+
+/**
+ * Settles every variable name several definitions share (ADR 0023, decision 6). Each variable gets
+ * `requiredBy` (the other recipes defining its name) and either the strictest combination of every
+ * definition of the name as its `definition`, keeping its own as `published`, or, when they cannot
+ * be combined, `separate`: the reason, naming the definitions, said once each recipe is asked
+ * separately under its recipe-scoped name.
+ *
+ * Two versions of one recipe count as two definitions, named with their versions. When they cannot
+ * be combined, only one of them is asked (`settleConflict`); the other gets `unanswerable`.
+ *
+ * Definitions are combined in the order given, so the first one lends the question its prompt.
+ */
+export function combineSharedNames(variables: readonly DefinedVariable[]): DefinedVariable[] {
+    const byName = new Map<string, DefinedVariable[]>();
+
+    for (const entry of variables) {
+        const group = byName.get(entry.definition.name) ?? [];
+
+        group.push(entry);
+        byName.set(entry.definition.name, group);
+    }
+
+    const settled: Settled = new Map();
+
+    for (const group of byName.values()) {
+        if (group.length < 2) {
+            continue;
+        }
+
+        const combination = combineDefinitions(definersOf(group));
+
+        if (combination.ok) {
+            for (const entry of group) {
+                settled.set(entry, { combined: combination.definition });
+            }
+        } else {
+            settleConflict(group, settled);
+        }
+    }
+
+    return variables.map((entry) => {
+        const outcome = settled.get(entry);
+        const group = byName.get(entry.definition.name) ?? [];
+
+        if (group.length < 2) {
+            return entry;
+        }
+
+        // A version that is not asked shares nobody's answer, so it is no other definition's company.
+        const others = group.filter((other) => other !== entry && (outcome?.unanswerable !== undefined || settled.get(other)?.unanswerable === undefined)).map((other) => other.recipe);
+
+        return defineVariable(entry.recipe, entry.published ?? entry.definition, { requiredBy: others, ...(outcome ?? {}) });
+    });
+}
+
+/**
+ * Every variable the active recipes define, in recipe order, then declaration order. A recipe's
+ * versions pinned for single holders follow its shared version.
  *
  * @param recipes - The `active-recipe` entities.
  * @param repos - The `repos` config key, which lends each recipe its repository's URL.
@@ -111,12 +270,38 @@ export function definitionsFromRecipes(recipes: readonly ActiveRecipeEntity[], r
             ...(url === undefined ? {} : { url }),
         };
 
+        // Each version pinned for some holders alone (ADR 0023, decision 4) is read at its own
+        // version, so its definitions join the others of their names, labeled with that version.
+        // The holders of a version are named when two versions of the recipe conflict.
+        const pinnedFor = new Map<string, { version: string; dir: string; manifest: typeof active.manifest; holders: string[] }>();
+
+        for (const pin of active.pins ?? []) {
+            const same = pinnedFor.get(pin.version);
+
+            if (same === undefined) {
+                pinnedFor.set(pin.version, { version: pin.version, dir: pin.dir, manifest: pin.manifest, holders: [pin.holder] });
+            } else {
+                same.holders.push(pin.holder);
+            }
+        }
+
+        const pinnedHolders = new Set((active.pins ?? []).map((pin) => pin.holder));
+        const shared: DefiningRecipe = { ...recipe, holders: active.requestedBy.filter((holder) => !pinnedHolders.has(holder)) };
+
         for (const definition of active.manifest.variables ?? []) {
-            defined.push(defineVariable(recipe, definition));
+            defined.push(defineVariable(pinnedFor.size === 0 ? recipe : shared, definition));
+        }
+
+        for (const pin of pinnedFor.values()) {
+            const pinned: DefiningRecipe = { ...recipe, version: pin.version, dir: pin.dir, direct: false, holders: pin.holders, pinned: true };
+
+            for (const definition of pin.manifest.variables ?? []) {
+                defined.push(defineVariable(pinned, definition));
+            }
         }
     }
 
-    return linkSharedNames(defined);
+    return combineSharedNames(defined);
 }
 
 /**
@@ -190,7 +375,7 @@ export async function loadDefinitionsFile(filePath: string, reader: DefinitionsF
         throw new ConfigError(`Invalid variable definitions file at ${filePath}:`, { details: problems });
     }
 
-    return linkSharedNames(defined);
+    return combineSharedNames(defined);
 }
 
 /**
@@ -236,5 +421,9 @@ export class DefinitionsService implements RecipeAnswersDefinitions {
 
     async find(nameOrRef: string, options: DefinitionOptions = {}): Promise<DefinedVariable[]> {
         return (await this.list(options)).filter((entry) => namesVariable(entry, nameOrRef));
+    }
+
+    combine(variables: readonly DefinedVariable[]): DefinedVariable[] {
+        return combineSharedNames(variables);
     }
 }

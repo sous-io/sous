@@ -6,12 +6,20 @@
  * render with, so a `{{ variable }}` in a recipe's own files sees the answer to its own question.
  *
  * - `merged`: one value per variable name, for the project's own templates. Two recipes may define
- *   the same name; the first in recipe order wins, and a project that wants something else says
- *   so in `_vars`, which sits above every answer.
+ *   the same name; their definitions are combined into one (`combine.ts`), so they share one
+ *   answer. When they could not be combined, each recipe has its own answer and the first in
+ *   recipe order fills the merged view; a project that wants something else says so in `_vars`,
+ *   which sits above every answer.
  * - `byRecipe`: the answers for each recipe's own definitions, which the recipe-scoped rung can make
  *   differ from the merged view.
- * - `unanswered`: every required definition nothing answered and with no default. A build reports
+ * - `unanswered`: every required definition nothing answered and with no default. Requirements and
+ *   defaults are read from the combined definition, so a default another definition rules out
+ *   does not count. A build reports
  *   them and carries on.
+ * - `unanswerable`: every definition that gets no answer because another version of its recipe is
+ *   asked instead (`DefinedVariable.unanswerable`). Its default does not apply either, and each
+ *   recipe holding that version sees the name empty in its own scope, unless the holder defines
+ *   the name itself. A build reports them and carries on.
  * - `secrets`: every name some definition declares secret.
  *
  * A definition's `default` is the answer of last resort. Values are laid in as stored: nothing
@@ -25,11 +33,15 @@ import type { DefinedVariable, RecipeAnswers, RecipeAnswersAnswers } from "./typ
 
 /** The answers of a project that defines no variables. */
 export function noRecipeAnswers(): RecipeAnswers {
-    return { merged: {}, byRecipe: {}, unanswered: [], secrets: new Set() };
+    return { merged: {}, byRecipe: {}, unanswered: [], unanswerable: [], secrets: new Set() };
 }
 
 /** The answer one definition renders with: what the ladder found, else its default. */
 export function answerFor(variable: DefinedVariable, ladder: Pick<Ladder, "resolve">): string | undefined {
+    if (variable.unanswerable !== undefined) {
+        return undefined;
+    }
+
     const resolved = ladder.resolve(variable);
 
     if (resolved !== undefined) {
@@ -46,6 +58,7 @@ export function computeAnswers(variables: readonly DefinedVariable[], ladder: Pi
     const merged: Record<string, string> = {};
     const byRecipe: Record<string, Record<string, string>> = {};
     const unanswered: DefinedVariable[] = [];
+    const unanswerable: DefinedVariable[] = [];
     const secrets = new Set<string>();
 
     for (const variable of variables) {
@@ -54,6 +67,11 @@ export function computeAnswers(variables: readonly DefinedVariable[], ladder: Pi
 
         if (variable.definition.secret) {
             secrets.add(name);
+        }
+
+        if (variable.unanswerable !== undefined) {
+            unanswerable.push(variable);
+            continue;
         }
 
         if (value === undefined) {
@@ -73,7 +91,21 @@ export function computeAnswers(variables: readonly DefinedVariable[], ladder: Pi
         byRecipe[key] = { ...(byRecipe[key] ?? {}), [name]: value };
     }
 
-    return { merged, byRecipe, unanswered, secrets };
+    // A holder of a version that gets no answer renders the name empty, not the answer another
+    // version was given, unless the holder defines the name itself.
+    for (const variable of unanswerable) {
+        const name = variable.definition.name;
+
+        for (const holder of variable.recipe.holders ?? []) {
+            const ownsName = variables.some((other) => other.definition.name === name && recipeKey(other.recipe) === holder);
+
+            if (!ownsName) {
+                byRecipe[holder] = { ...(byRecipe[holder] ?? {}), [name]: "" };
+            }
+        }
+    }
+
+    return { merged, byRecipe, unanswered, unanswerable, secrets };
 }
 
 /** A recipe's own scope: the merged answers with its own laid over. */

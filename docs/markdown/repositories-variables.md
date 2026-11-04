@@ -31,6 +31,37 @@ match on a worker under a fixed budget of 100 milliseconds, and a pattern that e
 naming the pattern and the recipe rather than blaming your answer. See
 [A variable pattern that runs out of time](repositories-troubleshooting.md#a-variable-pattern-that-runs-out-of-time).
 
+## Two recipes, one name
+
+Answers are shared by name, so when several recipes, or several versions of one recipe, define a variable of
+the same name, sous asks **one** question, built from the strictest combination of every definition:
+
+- secret when any definition is secret, `scope: local` when any is local, and required when any is required;
+- only the values every definition accepts: the `enum` options they share, the highest `min` and `minLength`,
+  the lowest `max` and `maxLength`, and every `pattern`;
+- the first definition's prompt, description and example, with the question naming the other recipes
+  (`workflow/notes, also used by review/checklist`);
+- the first `default` that passes the combination; a default that fails it is dropped.
+
+For example, one recipe defines `port` as a number of at least 1000 and another as a secret number of at most
+9000: you are asked once, for a secret number from 1000 to 9000, stored locally.
+
+When no answer could satisfy every definition (one says `number` and the other `string`, their `enum` lists
+share no option, or one's `min` is above another's `max`), the definitions are not combined. Sous says why,
+naming both, and asks each recipe separately, storing each answer under that recipe's
+[recipe-scoped name](#how-sous-finds-an-answer-the-ladder) (`SOUS_VAR_<NAMESPACE>_<RECIPE>_<VARIABLE>`).
+
+Two versions of one recipe (a recipe pinned at a different version for some of the recipes that depend on it)
+would share that recipe-scoped name, so when their definitions cannot be combined, sous asks only one of them:
+the version the lockfile shares, or else the first version the lockfile lists. The other version gets no
+answer, not even its default, and the variable renders empty where that version is used. `sous vars ask`,
+`sous vars list` and `sous vars show`, a build, and the question preview of `sous subscription add --dry-run`
+and `sous recipe show` warn about it, naming both versions, the recipes that use each, and why the definitions
+cannot be combined.
+
+A recipe that only reads another recipe's variable, by listing that recipe under `depends` and using the
+name in its templates, does not define it, so it adds nothing to the combination.
+
 ## Answer the questions
 
 Subscribing asks whatever is unanswered, so in normal use you rarely run `sous vars ask` yourself; reach for

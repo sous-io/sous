@@ -1,7 +1,7 @@
 import type { Lockfile } from "@sous-io/plugin-formats/types";
 import { describe, expect, it } from "vitest";
 import type { ResolvedRecipe } from "../types.js";
-import { covers, dropProjectHold, mergeHolders, releaseDroppedHolds, stayedAfter } from "./lock-holds.js";
+import { covers, dropProjectHold, releaseDroppedHolds, stayedAfter } from "./lock-holds.js";
 
 const hash = "sha256-aa" as const;
 
@@ -70,15 +70,7 @@ describe("releaseDroppedHolds", () => {
     });
 });
 
-describe("mergeHolders and covers", () => {
-    /** Two resolutions of one version keep every holder, and a co-subscription wins. */
-    it("should union holders", () => {
-        const left = { ...resolved("a/x", ["project"]), kind: "depends" as const };
-        const right = resolved("a/x", ["b/y"]);
-
-        expect(mergeHolders(left, right)).toMatchObject({ requestedBy: ["b/y", "project"], kind: "subscribes" });
-    });
-
+describe("covers", () => {
     /** A namespace cover covers its recipes, and nothing else. */
     it("should match covers", () => {
         expect(covers("a", "a/x")).toBe(true);

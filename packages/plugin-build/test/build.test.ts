@@ -189,6 +189,25 @@ describe("the build intent", () => {
     });
 
     /**
+     * A variable one version of a recipe defines and another version of it is asked instead is
+     * warned about with the warning recipe-answers built, and the build carries on.
+     *
+     * sous build; // -> warning "The variable tone of support/base 2.0.0 cannot be answered alongside support/base 1.0.0, ..."
+     */
+    it("should warn about a variable a version of a recipe gets no answer for", async () => {
+        const warning = "The variable tone of support/base 2.0.0 cannot be answered alongside support/base 1.0.0, so it is not asked and gets no answer.";
+        const h = await harness({
+            world: (world) => {
+                world.unanswerable = [{ definition: { name: "tone" }, recipe: { namespace: "support", name: "base", version: "2.0.0" }, unanswerable: warning } as never];
+            },
+        });
+
+        await h.run("build");
+
+        expect(h.reporter.at("warning")).toContain(warning);
+    });
+
+    /**
      * A target with generateRuntimeContext gets the runtime context file written through
      * compiler.writer before anything compiles, with `${var}` in its settings substituted.
      *

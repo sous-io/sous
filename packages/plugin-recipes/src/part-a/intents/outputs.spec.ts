@@ -238,4 +238,26 @@ describe("the shared pieces", () => {
         expect((outputs[1]?.result as VariableSet).toObject()).toMatchObject({ about: "The API.", "answer-with": "--answer apiUrl=<value>", answered: "no, and this recipe requires an answer" });
         expect(outputs[2]?.style).toBe(ReportEntryStyle.Note);
     });
+
+    /**
+     * A version of a recipe that is not asked a question (another version of the recipe is) shows
+     * the warning in place of whether it is answered, and is not counted as unanswered.
+     */
+    it("should show a question a version is not asked as not answerable", () => {
+        const warning = "The variable tone of support/base 2.0.0 cannot be answered alongside support/base 1.0.0, so it is not asked and gets no answer.";
+        const plan = {
+            questions: [
+                { recipe: "support/base", definition: { name: "tone", example: "plain", required: true }, answered: true },
+                { recipe: "support/base", definition: { name: "tone", example: "3", required: true }, answered: false, unanswerable: warning },
+            ],
+            unreadable: [],
+        } as unknown as PlannedQuestions;
+        const outputs = questionPlanOutputs(plan, { answerHints: true });
+        const skipped = (outputs[2]?.result as VariableSet).toObject();
+
+        expect(outputs[0]?.summary).toBe("These recipes ask 2 questions, and everything they ask is already answered.");
+        expect(skipped).toMatchObject({ "not-answerable": warning });
+        expect(skipped).not.toHaveProperty("answered");
+        expect(skipped).not.toHaveProperty("answer-with");
+    });
 });

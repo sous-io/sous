@@ -1866,3 +1866,30 @@ All in `packages/plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022): a 
   - **Why:** the terminal heading adds the colon itself, so `recipe show` printed `asks 9 questions::`.
 - **New** "describeSource" tests in `plugin-recipes/src/part-a/questions.spec.ts` and a heading case in `plugin-cli/src/terminal/layout.spec.ts`.
 - **New** "should keep the search Kind column wide enough for every kind" in `plugin-recipes/src/part-a/intents/outputs.spec.ts`, and "should say plainly that the directory is not in a git repository" in `plugin-authoring/src/release/release.spec.ts`.
+
+### The index records ranges, and subscriptions resolve together (gh-220, ADR 0023)
+
+- **Changed** in `plugin-authoring`: "should record a sibling dependency at the version it is released with" (`src/release/index-builder.spec.ts`) is now "should record a sibling with no range as the same major as its release", and every expected dependency entry in that file, `src/release/release.spec.ts` ("should tag dependency-first and record the dependency's range") and `test/real-plugins.test.ts` records `range` (`^<version>` for a sibling named with no range, the declared range otherwise) instead of `version`. The expected disagreement message in "should report a recorded kind that disagrees with the manifest" says "the range '^0.1.0'" instead of "version 0.1.0".
+  - **Why:** a release records a range per dependency and no exact version; the consuming project's lockfile is the only lock.
+- **Changed** in `plugin-recipes`: "should ask for the version the index recorded a dependency was released against" (`src/part-b/resolver/resolve.spec.ts`) is now "should ask for the range the index recorded for a dependency"; a recorded exact version is read as `^<version>`, limited by the declared range. "should combine every holder's range" (`src/part-b/index-cache/freshness.spec.ts`) expects `>=1.0.0 <2.0.0-0 >=1.1.0` instead of `^1 >=1.1.0`, because ranges are now combined by one function that also handles `||`.
+- **Removed** "should union holders" (`src/part-a/lock-holds.spec.ts`): `mergeHolders` is gone, because `sous subscription update` now resolves every subscription in one pass instead of merging separate resolutions.
+- **Changed** in `sous`: "should tag dependency-first and record the resolved dependency" (`test/integration/repo-release.test.ts`, now "...record the dependency's range") and "should record declarations and questions in the released index" (`test/integration/recipe-sets.test.ts`) expect `range: "^<version>"` instead of `version`, for the same reason.
+
+### A depends-only recipe is pinned once per holder (gh-220, ADR 0023, decisions 4 and 5)
+
+- **Changed** in `plugin-recipes`: "should satisfy every range asked of a recipe at once" and "should give two subscriptions one shared version every recorded dependency allows" (`src/part-b/resolver/resolve.spec.ts`) expect each holder's range to carry `kind` (`subscribes` or `depends`).
+  - **Why:** the resolver tells holders apart by how they hold a recipe, to decide who shares its version and who gets a pin of their own.
+- **Changed** in `plugin-build`: "should lock a new subscription and mark the config changed" (`test/prepare.test.ts`) expects the resolve to hold `{ keep: {}, keepPins: {} }`, and the stand-in services in `test/helpers.ts` gain `recipes.lock.held` and `recipes.resolver.subscriptionRequest`.
+  - **Why:** the build now asks `recipes.lock.held` for what to hold, which includes each holder's own pin.
+- **Changed** the stand-in resolver in `plugin-recipes/src/part-a/intents/intents.spec.ts` and the in-memory lock in `plugin-recipes/test/part-a/helpers.ts`: they gain `subscriptionRequest` and `held`.
+  - **Why:** `subscription update` and `subscription add` read a subscription's request from `recipes.resolver.subscriptionRequest`, its one owner, and hold the lock through `recipes.lock.held`.
+
+### Newer versions of a holder's own pin are reported (gh-220, ADR 0023, decision 4)
+
+- **Changed** in `plugin-build`: "should list newer versions and say nothing moved" (`src/report.spec.ts`) also checks that a newer version of a version pinned for one holder alone is listed with the detail "this project pins 1.0.0 for lib/two alone". The stand-in resolver in `test/helpers.ts` reads optional `requestedBy` and `pins` from `world.published`, and holds `keepPins` the way it holds `keep`.
+  - **Why:** the build's upstream check now compares each holder's own pin with the version the newest resolve gives that holder, and names the holder in what it reports.
+
+### Two versions of one recipe that cannot share an answer (gh-220, ADR 0023, decisions 4 and 6)
+
+- **Changed** in `plugin-build`: the `prepared()` helper in "messages about preparing" (`src/report.spec.ts`) and the stand-in world and `recipe-answers.answers` service in `test/helpers.ts` gain `unanswerable: []`.
+  - **Why:** `RecipeAnswers` and `BuildPrepareResult` now list the variables a version of a recipe gets no answer for, because another version of the same recipe is asked instead, so the build can warn about them.

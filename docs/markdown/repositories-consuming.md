@@ -67,8 +67,8 @@ upstream's newest version beside the installed one.
 
 Read `sous recipe show` before subscribing. It works offline, from the index alone: every published
 version, what the version depends on (the manifest entry that brings each dependency in, whether it
-is a co-subscription whose files land here or a build dependency, and the version it was released
-against), every recipe a subscription would install, and every question that would ask. Only the
+is a co-subscription whose files land here or a build dependency, and the range of versions it
+may take), every recipe a subscription would install, and every question that would ask. Only the
 files it publishes wait until it is installed. A preset set, a recipe that only bundles others,
 reads like this:
 
@@ -77,11 +77,11 @@ $ sous recipe show omakase/house
     Latest version : 1.0.0
     Pinned version : this project pins none
     Subscribed     : no
-  Dependency       Declared as                     Resolved to  Repository       Kind
-  ---------------  ------------------------------  -----------  ---------------  ----------------
-  tools/lint       tools/lint                      1.0.0        this repository  build dependency
-  workflow/notes   the whole 'workflow' namespace  1.0.0        this repository  co-subscription
-  workflow/review  the whole 'workflow' namespace  1.0.0        this repository  co-subscription
+  Dependency       Declared as                     Resolved to       Repository       Kind
+  ---------------  ------------------------------  ----------------  ---------------  ----------------
+  tools/lint       tools/lint                      the range ^1.0.0  this repository  build dependency
+  workflow/notes   the whole 'workflow' namespace  the range ^1.0.0  this repository  co-subscription
+  workflow/review  the whole 'workflow' namespace  the range ^1.0.0  this repository  co-subscription
 ➔ What subscribing asks you:
   These recipes ask 3 questions, 3 of which nothing answers yet.
   workflow/notes asks 1 question:
@@ -168,7 +168,8 @@ change when you say yes: `.sous/conf.d/510-subscriptions.jsonc` records the subs
 the new skills are on disk when it returns; `--no-build` defers that, and a failed build keeps it.
 
 ?> Only a recipe a manifest lists under `subscribes` contributes files; one listed under `depends`,
-like `workflow/qa-helper` above, is fetched and pinned but stays out of your output. See
+like `workflow/qa-helper` above, is fetched and pinned but stays out of your output. Recipes under both
+lists have their questions asked. See
 [Dependencies](repositories.md#dependencies).
 
 ## Choose where the files land
@@ -312,6 +313,11 @@ What it will and will not do:
 - A pin moves only within the range its subscription declares, or the range the recipe depending
   on it declares; a range is never widened. Prereleases count only for a subscription that opted
   into them.
+- Every subscription in scope resolves together, so a recipe several of them need takes one version
+  that every holder's range allows: the pinned one while it still fits, otherwise the newest that
+  does. When no version fits every holder, the subscription that cannot join is refused, naming each
+  holder and its range. A library held only through `depends` that its holders need at
+  incompatible versions is instead pinned once per holder.
 - Dependencies move with the closure: a dependency a newer version adds is pinned, and one it
   dropped leaves the lockfile unless something else still holds it.
 - Only the lockfile changes. Your subscriptions stay exactly as they are written.

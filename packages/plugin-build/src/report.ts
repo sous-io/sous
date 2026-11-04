@@ -52,6 +52,11 @@ export function reportLinkedRepos(links: Readonly<Record<string, ResolvedLink>>,
     );
 }
 
+/** The words a change to, or a newer version of, one holder's own pin ends with. */
+function alone(change: { readonly holder?: string }): string {
+    return change.holder === undefined ? "" : ` for ${change.holder} alone`;
+}
+
 /** Reports pins that were added or moved, or says nothing. */
 function reportLocked(diff: LockDiff, reporter: Reporter): void {
     if (diff.unchanged || (diff.added.length === 0 && diff.updated.length === 0)) {
@@ -60,8 +65,8 @@ function reportLocked(diff: LockDiff, reporter: Reporter): void {
 
     reporter.list(
         [
-            ...diff.added.map((change) => `pinned: ${change.key} at version ${change.to ?? "?"}.`),
-            ...diff.updated.map((change) => `${change.key} moved from version ${change.from ?? "?"} to version ${change.to ?? "?"}.`),
+            ...diff.added.map((change) => `pinned: ${change.key} at version ${change.to ?? "?"}${alone(change)}.`),
+            ...diff.updated.map((change) => `${change.key} moved from version ${change.from ?? "?"} to version ${change.to ?? "?"}${alone(change)}.`),
         ],
         {
             title: "Locking subscribed recipes",
@@ -102,7 +107,7 @@ function reportNewer(newer: BuildPrepareResult["newer"], reporter: Reporter): vo
     }
 
     reporter.variables(
-        newer.map((entry) => ({ label: entry.key, value: entry.to, detail: `this project pins ${entry.from}` })),
+        newer.map((entry) => ({ label: entry.key, value: entry.to, detail: `this project pins ${entry.from}${alone(entry)}` })),
         "Newer versions published",
         LogLevel.Notice,
     );
@@ -176,6 +181,19 @@ export function reportUnanswered(unanswered: readonly DefinedVariable[], reporte
     }
 }
 
+/**
+ * Warns once about each variable a version of a recipe defines that gets no answer, because
+ * another version of the same recipe is asked instead. The warning (`unanswerable`, built by
+ * `recipe-answers`) names both versions, their holders and why they cannot share an answer.
+ */
+export function reportUnanswerable(unanswerable: readonly DefinedVariable[], reporter: Reporter): void {
+    for (const warning of new Set(unanswerable.map((defined) => defined.unanswerable ?? ""))) {
+        if (warning !== "") {
+            reporter.warning(warning);
+        }
+    }
+}
+
 /** Reports what preparing did, as a build shows it. */
 export function reportPrepared(result: BuildPrepareResult, reporter: Reporter): void {
     reportLocked(result.locked, reporter);
@@ -183,6 +201,7 @@ export function reportPrepared(result: BuildPrepareResult, reporter: Reporter): 
     reportRestoreFailures(result.restored, reporter);
     reportNewer(result.newer, reporter);
     reportUnanswered(result.unanswered, reporter);
+    reportUnanswerable(result.unanswerable, reporter);
 }
 
 function lowerFirst(text: string): string {

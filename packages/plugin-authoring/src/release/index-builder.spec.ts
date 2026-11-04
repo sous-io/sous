@@ -275,12 +275,15 @@ describe("buildIndex()", { timeout: GIT_TIMEOUT }, () => {
   });
 
   /**
-   * Each published version records what it was released against, so a consumer
-   * installs the versions the recipe was published with rather than
-   * re-resolving its ranges later. A sibling with no range means "the version
-   * released alongside me".
+   * Each published version records the range each dependency may take, never
+   * an exact version: the consuming project's lockfile is the only lock. A
+   * sibling named with no range may take the same major as the version
+   * released alongside it.
+   *
+   * example@1.0.0 depends [core/partials], partials released at 2.0.0
+   * // -> { "core/partials": { range: "^2.0.0" } }
    */
-  it("should record a sibling dependency at the version it is released with", async () => {
+  it("should record a sibling with no range as the same major as its release", async () => {
     writeFile(
       repo,
       "sous.repo.yaml",
@@ -308,7 +311,7 @@ describe("buildIndex()", { timeout: GIT_TIMEOUT }, () => {
     expect(
       result.index.recipes["core/example"]!.versions["1.0.0"]!.dependencies
     ).toEqual({
-      "core/partials": { version: "2.0.0", declared: "core/partials", kind: "depends" },
+      "core/partials": { range: "^2.0.0", declared: "core/partials", kind: "depends" },
     });
   });
 
@@ -482,8 +485,15 @@ function editIndex(edit: (index: Record<string, any>) => void): void {
 describe("buildIndex() and published dependencies", { timeout: GIT_TIMEOUT }, () => {
   const HOUSE = "subscribes:\n  - workflow\n  - tools/gamma\n";
 
-  /** What each member of the set records: the version, and the entry naming it. */
-  const member = (version: string, declared: string) => ({
+  /** What each member of the set records: the range, and the entry naming it. */
+  const member = (range: string, declared: string) => ({
+    range,
+    declared,
+    kind: "subscribes",
+  });
+
+  /** What an entry written before ADR 0023 records: the exact version, and the entry naming it. */
+  const exactMember = (version: string, declared: string) => ({
     version,
     declared,
     kind: "subscribes",
@@ -507,17 +517,17 @@ describe("buildIndex() and published dependencies", { timeout: GIT_TIMEOUT }, ()
 
   /**
    * A version being published resolves its dependencies once: a whole
-   * namespace expands to the recipes it holds, and a sibling with no range is
-   * the version released alongside it.
+   * namespace expands to the recipes it holds, and a sibling with no range may
+   * take the same major as the version released alongside it.
    *
    * house subscribes [workflow, tools/gamma]
-   * // -> { tools/gamma: 0.1.0, workflow/alpha: 0.1.0, workflow/beta: 0.1.0 }
+   * // -> { tools/gamma: ^0.1.0, workflow/alpha: ^0.1.0, workflow/beta: ^0.1.0 }
    */
   it("should resolve a new version's dependencies when it is first published", async () => {
     expect(readIndexFile(repo)!.recipes["omakase/house"]!.versions["0.1.0"]!.dependencies).toEqual({
-      "tools/gamma": member("0.1.0", "tools/gamma"),
-      "workflow/alpha": member("0.1.0", "workflow"),
-      "workflow/beta": member("0.1.0", "workflow"),
+      "tools/gamma": member("^0.1.0", "tools/gamma"),
+      "workflow/alpha": member("^0.1.0", "workflow"),
+      "workflow/beta": member("^0.1.0", "workflow"),
     });
   });
 
@@ -546,8 +556,8 @@ describe("buildIndex() and published dependencies", { timeout: GIT_TIMEOUT }, ()
 
     const house = index.recipes["omakase/house"]!.versions["0.2.0"]!;
     expect(house.dependencies).toEqual({
-      "workflow/alpha": member("0.1.0", "workflow/alpha"),
-      "workflow/beta": member("0.1.0", "workflow"),
+      "workflow/alpha": member("^0.1.0", "workflow/alpha"),
+      "workflow/beta": member("^0.1.0", "workflow"),
     });
     expect(house.depends).toEqual(["workflow/alpha"]);
     expect(house.subscribes).toEqual(["workflow"]);
@@ -631,7 +641,7 @@ describe("buildIndex() and published dependencies", { timeout: GIT_TIMEOUT }, ()
     const result = await regenerate();
 
     expect(errorsIn(result.problems).map((problem) => problem.message).join("\n")).toContain(
-      "'tools/gamma': the index records version 0.1.0, through the entry 'tools/gamma' as a " +
+      "'tools/gamma': the index records the range '^0.1.0', through the entry 'tools/gamma' as a " +
         "build dependency, and the manifest declares it with no range, through the entry " +
         "'tools/gamma' as a co-subscription"
     );
@@ -684,10 +694,10 @@ describe("buildIndex() and published dependencies", { timeout: GIT_TIMEOUT }, ()
 
     const versions = index.recipes["omakase/house"]!.versions;
     expect(versions["0.1.0"]!.dependencies!["tools/gamma"]).toEqual(
-      member("0.1.0", "tools/gamma")
+      member("^0.1.0", "tools/gamma")
     );
     expect(versions["0.2.0"]!.dependencies!["tools/gamma"]).toEqual(
-      member("0.2.0", "tools/gamma")
+      member("^0.2.0", "tools/gamma")
     );
   });
 
@@ -697,7 +707,7 @@ describe("buildIndex() and published dependencies", { timeout: GIT_TIMEOUT }, ()
    * tag, not as it stands now.
    *
    * rm sous.index.json; buildIndex(...)
-   * // -> house@0.1.0 still depends on tools/gamma 0.1.0, with no workflow/epsilon
+   * // -> house@0.1.0 still records tools/gamma ^0.1.0, with no workflow/epsilon
    */
   it("should rebuild each tagged version's dependencies from its tag", async () => {
     writeSetRepository([
@@ -725,9 +735,9 @@ describe("buildIndex() and published dependencies", { timeout: GIT_TIMEOUT }, ()
     expect(errorsIn(rebuilt.problems)).toEqual([]);
     const house = rebuilt.index.recipes["omakase/house"]!.versions;
     expect(house["0.1.0"]!.dependencies).toEqual({
-      "tools/gamma": member("0.1.0", "tools/gamma"),
-      "workflow/alpha": member("0.1.0", "workflow"),
-      "workflow/beta": member("0.1.0", "workflow"),
+      "tools/gamma": member("^0.1.0", "tools/gamma"),
+      "workflow/alpha": member("^0.1.0", "workflow"),
+      "workflow/beta": member("^0.1.0", "workflow"),
     });
     for (const [key, recipe] of Object.entries(published.recipes)) {
       for (const [version, entry] of Object.entries(recipe.versions)) {
@@ -799,6 +809,64 @@ describe("buildIndex() and published dependencies", { timeout: GIT_TIMEOUT }, ()
     expect(errorsIn(result.problems).map((problem) => problem.message).join("\n")).toContain(
       "'tools/gamma': the index records version 0.2.0, through the entry " +
         "'tools/gamma@^0.1.0' as a co-subscription, and the manifest declares the range '^0.1.0'"
+    );
+  });
+
+  /**
+   * A sibling the manifest constrains with a range is recorded with that range,
+   * exactly as written.
+   *
+   * subscribes: [tools/gamma@^0.1.0] // -> { tools/gamma: { range: "^0.1.0" } }
+   */
+  it("should record a declared sibling range as written", async () => {
+    writeSetRecipe("omakase/house", "0.2.0", "subscribes:\n  - tools/gamma@~0.1.0\n");
+    commitAll(repo, "constrain gamma");
+    const index = await publish({ "omakase/house": "0.2.0" });
+
+    expect(index.recipes["omakase/house"]!.versions["0.2.0"]!.dependencies).toEqual({
+      "tools/gamma": member("~0.1.0", "tools/gamma@~0.1.0"),
+    });
+  });
+
+  /**
+   * An entry written before ADR 0023 records exact versions. It still honours
+   * its manifest, so it is carried forward without an error.
+   *
+   * recorded { tools/gamma: { version: "0.1.0" } }, manifest subscribes [tools/gamma] // -> no error
+   */
+  it("should accept an entry that records exact versions", async () => {
+    editIndex((index) => {
+      index.recipes["omakase/house"].versions["0.1.0"].dependencies = {
+        "tools/gamma": exactMember("0.1.0", "tools/gamma"),
+        "workflow/alpha": exactMember("0.1.0", "workflow"),
+        "workflow/beta": exactMember("0.1.0", "workflow"),
+      };
+    });
+    const before = houseEntryText();
+
+    const result = await regenerate();
+
+    expect(errorsIn(result.problems)).toEqual([]);
+    expect(JSON.stringify(result.index.recipes["omakase/house"]!.versions["0.1.0"])).toBe(before);
+  });
+
+  /**
+   * A recorded range must be the one the manifest implies: the declared range,
+   * or `^<version>` for a sibling named with no range. Anything else means the
+   * index was edited.
+   *
+   * recorded { tools/gamma: { range: ">=0.0.1" } }, manifest subscribes [tools/gamma] // -> error
+   */
+  it("should report a recorded range the manifest does not imply", async () => {
+    editIndex((index) => {
+      index.recipes["omakase/house"].versions["0.1.0"].dependencies["tools/gamma"].range = ">=0.0.1";
+    });
+
+    const result = await regenerate();
+
+    expect(errorsIn(result.problems).map((problem) => problem.message).join("\n")).toContain(
+      "'tools/gamma': the index records the range '>=0.0.1', through the entry 'tools/gamma' as a " +
+        "co-subscription, and the manifest declares it with no range"
     );
   });
 

@@ -12,6 +12,8 @@ import { PROJECT_REPOS_DIRNAME } from "../constants.js";
 import { blockOutput, dryRunOutput, finish, followUpOutputs, noteOutput, plainResult, sentence, underHeading, type RanFollowUp } from "../../part-a/outputs.js";
 import { effectiveRangeForHolders, findNewerInRange, NEWER_VERSION_CHECK_TIMEOUT_MS, withDeadline } from "../index-cache/freshness.js";
 import { trustedRepos } from "../lock/lock-service.js";
+import { lockedVersions } from "../lock/lockfile-ops.js";
+import { declaredRange, recordedRange } from "../resolver/ranges.js";
 import { plainSubscriptionKey } from "../lock/reachable.js";
 import type { PartBRuntime } from "../runtime.js";
 import { messageOf } from "../support.js";
@@ -200,31 +202,38 @@ async function newerVersions(name: string, ctx: Context): Promise<UnlinkPublishe
         return undefined;
     }
 
-    const newer: Array<{ key: string; from: string; to: string }> = [];
+    const newer: Array<{ key: string; from: string; to: string; holder?: string }> = [];
 
     try {
         const index = (await withDeadline((signal) => ctx.services.get("recipes.index-cache").get(name, { signal, latest: true }), NEWER_VERSION_CHECK_TIMEOUT_MS)).index;
         const lockfile = ctx.services.get("recipes.lock").read();
         const subscriptions = ctx.config.get<Record<string, SubscriptionEntry>>("subscriptions") ?? {};
+        const refs = ctx.services.get("refs.resolver");
+        const parse = (written: string) => refs.resolveSync({ input: written, from: "manifest", lookups: false, refusedIsEmpty: true }).refs;
+        const lookup = {
+            subscriptionRange: (recipe: string) => subscriptionRange(recipe, subscriptions),
+            dependencyRange: (holder: string, recipe: string) => {
+                const pinned = lockfile.recipes[holder];
+                const recorded = pinned === undefined ? undefined : index.recipes[holder]?.versions[pinned.version]?.dependencies?.[recipe];
+
+                return recorded === undefined ? undefined : (recordedRange(recorded, declaredRange(recorded.declared, parse)) ?? "*");
+            },
+        };
 
         for (const [key, entry] of Object.entries(lockfile.recipes)) {
             if (entry.repo !== name) {
                 continue;
             }
 
-            const range = effectiveRangeForHolders(key, entry.requestedBy, {
-                subscriptionRange: (recipe) => subscriptionRange(recipe, subscriptions),
-                dependencyRange: (holder, recipe) => {
-                    const pinned = lockfile.recipes[holder];
-                    const recorded = pinned === undefined ? undefined : index.recipes[holder]?.versions[pinned.version]?.dependencies?.[recipe];
+            // The shared version answers to every holder without a pin of its own; each pin answers to its holder alone.
+            for (const locked of lockedVersions(entry)) {
+                const holders = locked.holder === undefined ? entry.requestedBy.filter((holder) => entry.pins?.[holder] === undefined) : [locked.holder];
+                const range = effectiveRangeForHolders(key, holders, lookup);
+                const found = range === undefined ? undefined : findNewerInRange({ index, key, lockedVersion: locked.version, range });
 
-                    return recorded === undefined ? undefined : (recorded.range ?? "*");
-                },
-            });
-            const found = range === undefined ? undefined : findNewerInRange({ index, key, lockedVersion: entry.version, range });
-
-            if (found !== undefined) {
-                newer.push({ key: found.key, from: found.from, to: found.to });
+                if (found !== undefined) {
+                    newer.push({ key: found.key, from: found.from, to: found.to, ...(locked.holder === undefined ? {} : { holder: locked.holder }) });
+                }
             }
         }
     } catch (error) {
@@ -299,7 +308,12 @@ export function unlinkOutputs(ctx: Pick<Context, "reporter">, result: RepoUnlink
         } else {
             section.push(
                 sentence(`'${result.repo}' publishes newer versions within range. The lockfile still pins the older ones:`),
-                blockOutput(published.newer.map((entry) => ({ label: entry.key, value: `${entry.from} pinned, ${entry.to} published` }))),
+                blockOutput(
+                    published.newer.map((entry) => ({
+                        label: entry.key,
+                        value: `${entry.from} pinned${entry.holder === undefined ? "" : ` for ${entry.holder} alone`}, ${entry.to} published`,
+                    })),
+                ),
             );
         }
 

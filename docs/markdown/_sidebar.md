@@ -52,3 +52,4 @@
   - [0020: Config expressions](adrs/0020-config-expressions.md)
   - [0021: Reporting as levels and styles](adrs/0021-reporting-levels-and-styles.md)
   - [0022: Intents return outputs](adrs/0022-intents-return-outputs.md)
+  - [0023: The project's lockfile is the only lock](adrs/0023-the-project-lockfile-is-the-only-lock.md)

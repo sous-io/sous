@@ -8,13 +8,16 @@
  * Answers are stored as text in env files, so a check always starts from a string and hands back
  * the coerced value.
  *
+ * A definition combined from several of the same name (`combine.ts`) may carry several patterns
+ * (`patterns`); an answer must match every one.
+ *
  * A `pattern` comes from a recipe, which is code from somewhere else, so it never runs on this
  * thread without a time limit (see `safe-regex.ts`). A pattern that runs out of time fails the
  * check, and the message says the pattern is the problem, not the answer.
  */
 
-import type { VariableDefinition, VariableScalar } from "@sous-io/plugin-formats/types";
-import type { AnswerValidation, RecipeAnswersValidator } from "./types.js";
+import type { VariableScalar } from "@sous-io/plugin-formats/types";
+import type { AnswerDefinition, AnswerValidation, RecipeAnswersValidator } from "./types.js";
 import { DEFAULT_PATTERN_BUDGET_MS, matchWithBudget } from "./safe-regex.js";
 
 /** What the caller knows about where a definition came from, for messages. */
@@ -30,6 +33,11 @@ const TRUE_WORDS = new Set(["true", "yes", "y", "on", "1"]);
 
 /** The words accepted as a false answer for a boolean variable. */
 const FALSE_WORDS = new Set(["false", "no", "n", "off", "0"]);
+
+/** Every pattern an answer must match: the combined list, else the one `validate.pattern`. */
+export function patternsOf(definition: AnswerDefinition): readonly string[] {
+    return definition.patterns ?? (definition.validate?.pattern === undefined ? [] : [definition.validate.pattern]);
+}
 
 /** One check: the reason it failed, or `undefined`. */
 type Check = (value: string) => string | undefined;
@@ -47,7 +55,7 @@ type Check = (value: string) => string | undefined;
  * @param context - What is known about the recipe, for the pattern message.
  * @returns The coerced value, or a plain message naming what is wrong.
  */
-export function validateAnswer(definition: VariableDefinition, raw: string, context: ValidationContext = {}): AnswerValidation {
+export function validateAnswer(definition: AnswerDefinition, raw: string, context: ValidationContext = {}): AnswerValidation {
     const trimmed = typeof raw === "string" ? raw.trim() : "";
 
     if (trimmed.length === 0 && !definition.required) {
@@ -136,10 +144,9 @@ export function validateAnswer(definition: VariableDefinition, raw: string, cont
             checks.push((value) => (value.length <= max ? undefined : `must be at most ${max} characters long`));
         }
 
-        if (rules?.pattern !== undefined) {
-            const pattern = rules.pattern;
-            const budget = context.patternBudgetMs ?? DEFAULT_PATTERN_BUDGET_MS;
+        const budget = context.patternBudgetMs ?? DEFAULT_PATTERN_BUDGET_MS;
 
+        for (const pattern of patternsOf(definition)) {
             checks.push((value) => {
                 const outcome = matchWithBudget(pattern, value, budget);
 
@@ -191,7 +198,7 @@ export function storedForm(value: VariableScalar): string {
  * A short summary of a definition's constraints, shown beside a question. The type is always
  * first.
  */
-export function constraintHints(definition: VariableDefinition): string[] {
+export function constraintHints(definition: AnswerDefinition): string[] {
     const hints: string[] = [];
     const rules = definition.validate;
 
@@ -205,7 +212,7 @@ export function constraintHints(definition: VariableDefinition): string[] {
     if (rules?.maxLength !== undefined) hints.push(`at most ${rules.maxLength} characters`);
     if (rules?.min !== undefined) hints.push(`no less than ${rules.min}`);
     if (rules?.max !== undefined) hints.push(`no more than ${rules.max}`);
-    if (rules?.pattern !== undefined) hints.push(`matching ${rules.pattern}`);
+    for (const pattern of patternsOf(definition)) hints.push(`matching ${pattern}`);
     if (!definition.required) hints.push("optional");
 
     return hints;
@@ -226,7 +233,7 @@ function characters(count: number): string {
  * // -> ["must be a value of the type url (type: url)", "must match the pattern /^https/ (pattern: ^https)"]
  * ```
  */
-export function constraintBullets(definition: VariableDefinition): string[] {
+export function constraintBullets(definition: AnswerDefinition): string[] {
     const rules = definition.validate;
     const options = rules?.enum;
 
@@ -251,7 +258,7 @@ export function constraintBullets(definition: VariableDefinition): string[] {
 
     if (rules?.min !== undefined) bullets.push(`must be no less than ${rules.min} (min: ${rules.min})`);
     if (rules?.max !== undefined) bullets.push(`must be no more than ${rules.max} (max: ${rules.max})`);
-    if (rules?.pattern !== undefined) bullets.push(`must match the pattern /${rules.pattern}/ (pattern: ${rules.pattern})`);
+    for (const pattern of patternsOf(definition)) bullets.push(`must match the pattern /${pattern}/ (pattern: ${pattern})`);
     if (!definition.required) bullets.push("an answer is optional");
 
     return bullets;

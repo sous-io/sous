@@ -81,6 +81,16 @@ function variableFacts(detail: VariableDetail, sousDir: string | undefined): Var
     }
 
     entries.push(recipeLink(variable.recipe, "defined-by"));
+
+    // Other recipes defining the same name: one combined question, or why each is asked alone, or
+    // why this version is not asked at all.
+    if (variable.unanswerable !== undefined) {
+        entries.push({ label: "not-answerable", value: variable.unanswerable });
+    } else if (variable.separate !== undefined) {
+        entries.push({ label: "asked-separately", value: variable.separate });
+    } else if (variable.requiredBy !== undefined && variable.requiredBy.length > 0) {
+        entries.push({ label: "combined-with", value: variable.requiredBy.map(recipeKey).join(", ") });
+    }
     entries.push({ label: "storage-path", value: sousDir === undefined ? envFileName(detail.storeIn) : path.join(sousDir, envFileName(detail.storeIn)) });
     entries.push({ label: "stored-as", value: detail.storedAs });
 
@@ -112,7 +122,12 @@ export function variableListOutput(listings: readonly VariableListing[], hidden:
             recipe: recipeKey(listing.variable.recipe),
             envName: listing.source?.envName ?? "",
             value: displayValue(listing.answered ? (listing.value ?? "") : undefined, listing.variable.definition.secret, hidden),
-            source: listing.source === undefined ? "nothing yet" : `${rungLabel(listing.source.rung)}, ${sourceLabel(listing.source.file)}`,
+            source:
+                listing.variable.unanswerable !== undefined
+                    ? "not answerable alongside another version of this recipe"
+                    : listing.source === undefined
+                      ? "nothing yet"
+                      : `${rungLabel(listing.source.rung)}, ${sourceLabel(listing.source.file)}`,
         }));
 
     return new IntentOutput({
@@ -147,7 +162,9 @@ export function variableDetailOutputs(detail: VariableDetail, hidden: string, so
                 "Stored in": envFileName(detail.storeIn),
                 Value: displayValue(resolved === undefined ? undefined : resolved.value, definition.secret, hidden),
                 Answer:
-                    resolved === undefined
+                    variable.unanswerable !== undefined
+                        ? `none: this version of ${key} is not asked this variable, because another version of ${key} is`
+                        : resolved === undefined
                         ? "nothing in scope answers this variable yet"
                         : detail.problem === undefined
                           ? "the value in scope fits this definition"

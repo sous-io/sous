@@ -14,9 +14,10 @@ import semver from "semver";
 import { ConfigError } from "@sous-io/plugin-api";
 import type { DependencyKind, IndexDependency, IndexFile, IndexVersion } from "@sous-io/plugin-formats/types";
 import type { RefLocation, RepoRef, SousRef } from "@sous-io/plugin-refs/types";
-import type { MissingRepo, ResolvedRecipe, ResolveResult } from "../../types.js";
+import type { MissingRepo, ResolvedPin, ResolvedRecipe, ResolveResult } from "../../types.js";
 import { PROJECT_HOLDER } from "../constants.js";
 import { identitySegments, sortKeys, splitStoredKey } from "../support.js";
+import { recordedRange } from "./ranges.js";
 
 /** One thing to resolve, in the resolver's own terms. */
 export interface Wanted {
@@ -65,6 +66,8 @@ export interface ResolveContext {
     readonly prerelease?: boolean;
     /** Versions to hold while every range still allows them, by key. */
     readonly keep?: Readonly<Record<string, string>>;
+    /** Versions pinned for one holder alone, held while that holder's range allows them, by key, then holder. */
+    readonly keepPins?: Readonly<Record<string, Readonly<Record<string, string>>>>;
 }
 
 /** A recipe being resolved, before it is frozen into a {@link ResolvedRecipe}. */
@@ -102,6 +105,7 @@ export async function resolveWanted(requests: readonly WantedRequest[], context:
     const cycles: string[][] = [];
     const parents = new Map<string, string>();
     const walked = new Map<string, string>();
+    const walkedPins = new Set<string>();
 
     const queue: WorkItem[] = requests.map((request) => ({
         ...request,
@@ -151,6 +155,26 @@ export async function resolveWanted(requests: readonly WantedRequest[], context:
             parents.set(recipe.key, item.requestedBy);
         }
 
+        // A version pinned for one holder declares dependencies of its own, which that holder's
+        // copy needs; they are walked once per version.
+        for (const pin of recipe.pins ?? []) {
+            if (pin.version === recipe.version || walkedPins.has(`${recipe.key}@${pin.version}`)) {
+                continue;
+            }
+
+            walkedPins.add(`${recipe.key}@${pin.version}`);
+
+            const view = pinnedView(recipe, pin);
+            const pinLists = (await safeLoad(context, view)) ?? view.declares;
+
+            if (pinLists === undefined) {
+                unreadable.add(recipe.key);
+                continue;
+            }
+
+            queue.push(...dependencyRequests(pinLists, view, context));
+        }
+
         if (walked.get(recipe.key) === recipe.version) {
             const cycle = findCycle(recipe.key, item.requestedBy, parents);
 
@@ -170,14 +194,7 @@ export async function resolveWanted(requests: readonly WantedRequest[], context:
             continue;
         }
 
-        for (const [kind, refs] of [
-            ["depends", lists.depends],
-            ["subscribes", lists.subscribes],
-        ] as Array<[DependencyKind, readonly string[]]>) {
-            for (const written of refs) {
-                queue.push(dependencyRequest(written, recipe, kind, context));
-            }
-        }
+        queue.push(...dependencyRequests(lists, recipe, context));
     }
 
     await keepOnlyReachable(resolved, context);
@@ -196,6 +213,32 @@ export async function resolveWanted(requests: readonly WantedRequest[], context:
         unreadable: sortKeys(unreadable),
         cycles,
     };
+}
+
+/** One request per entry a recipe's manifest lists, `depends` first. */
+function dependencyRequests(lists: DependencyLists, parent: Draft, context: ResolveContext): WorkItem[] {
+    return [
+        ...lists.depends.map((written) => dependencyRequest(written, parent, "depends", context)),
+        ...lists.subscribes.map((written) => dependencyRequest(written, parent, "subscribes", context)),
+    ];
+}
+
+/**
+ * A resolved recipe as it is at a version pinned for one holder: that version's hash, tag and
+ * recorded lists, so its own manifest and dependencies are read.
+ */
+function pinnedView(recipe: Draft, pin: ResolvedPin): Draft {
+    const { dependencies: _dependencies, variables: _variables, declares: _declares, ...rest } = recipe;
+
+    return {
+        ...rest,
+        version: pin.version,
+        hash: pin.hash,
+        tag: pin.tag,
+        ...(pin.dependencies === undefined ? {} : { dependencies: pin.dependencies }),
+        ...(pin.variables === undefined ? {} : { variables: pin.variables }),
+        ...(pin.declares === undefined ? {} : { declares: { depends: [...pin.declares.depends], subscribes: [...pin.declares.subscribes] } }),
+    } as Draft;
 }
 
 /** A manifest's lists, or `undefined` when the loader cannot give them. */
@@ -281,8 +324,8 @@ function describeWanted(wanted: Wanted): string {
 
 /**
  * Turns one `depends` or `subscribes` entry into work. A sibling ref resolves inside the declaring
- * recipe's repository. When the index records what this version of the parent was released
- * against, that exact version is asked for.
+ * recipe's repository. The range asked for is the one the index records for this version of the
+ * parent ({@link recordedRange}), else the one the entry was written with.
  */
 function dependencyRequest(written: string, parent: Draft, kind: DependencyKind, context: ResolveContext): WorkItem {
     const reading = settleDependency(written, parent, context);
@@ -309,7 +352,7 @@ function dependencyRequest(written: string, parent: Draft, kind: DependencyKind,
 
     const key = wanted.name === undefined ? undefined : `${wanted.namespace}/${wanted.name}`;
     const pinned = key === undefined ? undefined : parent.dependencies?.[key];
-    const range = wanted.name === undefined ? undefined : (pinned?.version ?? wanted.range ?? pinned?.range);
+    const range = wanted.name === undefined ? undefined : recordedRange(pinned, wanted.range);
     const target = { namespace: wanted.namespace, ...(wanted.name === undefined ? {} : { name: wanted.name }), ...(range === undefined ? {} : { range }) };
 
     if (wanted.location === undefined) {
@@ -459,7 +502,7 @@ function settleBrowsedItem(item: WorkItem, index: IndexFile | undefined): void {
 
     item.namespace = found.namespace;
     item.name = found.name;
-    item.range = found.name === undefined ? undefined : (pinned?.version ?? browsed.range ?? pinned?.range);
+    item.range = found.name === undefined ? undefined : recordedRange(pinned, browsed.range);
 }
 
 /** The error for a dependency that reads more than one way with nothing to settle it. */
@@ -548,15 +591,35 @@ function resolveRecipe(item: WorkItem, context: ResolveContext, resolved: Map<st
 
     const ranges = [...(previous?.ranges ?? [])];
     const range = item.range ?? "*";
+    const known = ranges.findIndex((one) => one.range === range && one.requestedBy === item.requestedBy);
 
-    if (!ranges.some((known) => known.range === range && known.requestedBy === item.requestedBy)) {
-        ranges.push({ range, requestedBy: item.requestedBy });
+    if (known === -1) {
+        ranges.push({ range, requestedBy: item.requestedBy, kind: item.kind });
+    } else if (item.kind === "subscribes" && ranges[known]!.kind === "depends") {
+        ranges[known] = { ...ranges[known]!, kind: "subscribes" };
     }
 
     const prerelease = (previous?.prerelease ?? false) || (item.prerelease ?? context.prerelease ?? false);
-    const version = pickVersion(key, entry, ranges, prerelease, context.keep?.[key]);
+    const settled = settleVersions(key, entry, ranges, prerelease, context.keep?.[key], context.keepPins?.[key]);
+    const version = settled.version;
     const versionEntry = entry.versions[version];
     const declares = indexDependencyLists(versionEntry);
+    const pins: ResolvedPin[] = Object.entries(settled.pins)
+        .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+        .map(([holder, pinned]) => {
+            const pinnedEntry = entry.versions[pinned];
+            const pinnedDeclares = indexDependencyLists(pinnedEntry);
+
+            return {
+                holder,
+                version: pinned,
+                hash: pinnedEntry.hash,
+                tag: pinnedEntry.tag,
+                ...(pinnedEntry.dependencies === undefined ? {} : { dependencies: pinnedEntry.dependencies }),
+                ...(pinnedEntry.variables === undefined ? {} : { variables: pinnedEntry.variables }),
+                ...(pinnedDeclares === undefined ? {} : { declares: { depends: [...pinnedDeclares.depends], subscribes: [...pinnedDeclares.subscribes] } }),
+            };
+        });
     const requestedBy = [...(previous?.requestedBy ?? [])];
 
     if (!requestedBy.includes(item.requestedBy)) {
@@ -580,7 +643,107 @@ function resolveRecipe(item: WorkItem, context: ResolveContext, resolved: Map<st
         requestedBy,
         ranges,
         prerelease,
+        ...(pins.length === 0 ? {} : { pins }),
     } as Draft;
+}
+
+/**
+ * No published version of a recipe satisfies every range asked of it. It names the recipe and each
+ * holder's range, so a caller can say which holders conflict.
+ */
+export class NoVersionSatisfiesError extends ConfigError {
+    constructor(
+        readonly key: string,
+        readonly ranges: ReadonlyArray<{ readonly range: string; readonly requestedBy: string }>,
+        message: string,
+        options: { details: string[] },
+    ) {
+        super(message, options);
+    }
+}
+
+/** One holder's range, and how it holds the recipe (`subscribes` when left out). */
+type HolderRange = { readonly range: string; readonly requestedBy: string; readonly kind?: DependencyKind };
+
+/**
+ * The version a recipe takes, and the versions pinned for single holders (ADR 0023, decisions 4
+ * and 5). When one version satisfies every holder's range, it is the only one: the kept version
+ * while it fits, else the newest that does.
+ *
+ * Otherwise holders are told apart by how they hold the recipe. A recipe some holder reaches
+ * through `subscribes` has one version in the project: the one every such holder's range allows
+ * (kept while it fits, else the newest); when none does, that is a conflict, and the error names
+ * those holders. When every holder reaches it through `depends`, the shared version is the one the
+ * most holders' ranges allow, the kept one among those when it is one, else the newest. Each
+ * `depends` holder whose range does not allow the shared version is pinned on its own: its kept pin
+ * while its range allows it, else the newest its range allows. Holders are never grouped to save a
+ * download.
+ *
+ * ```ts
+ * // holders a (depends, "1.0.0") and b (depends, "2.0.0") of a recipe publishing 1.0.0 and 2.0.0:
+ * settleVersions(key, entry, ranges, false); // { version: "2.0.0", pins: { a: "1.0.0" } }
+ * ```
+ */
+export function settleVersions(
+    key: string,
+    entry: IndexFile["recipes"][string],
+    ranges: readonly HolderRange[],
+    prerelease: boolean,
+    keep?: string,
+    keepPins?: Readonly<Record<string, string>>,
+): { version: string; pins: Record<string, string> } {
+    let conflict: NoVersionSatisfiesError;
+
+    try {
+        return { version: pickVersion(key, entry, ranges, prerelease, keep), pins: {} };
+    } catch (error) {
+        if (!(error instanceof NoVersionSatisfiesError)) {
+            throw error;
+        }
+
+        conflict = error;
+    }
+
+    const holders = new Map<string, { ranges: HolderRange[]; subscribes: boolean }>();
+
+    for (const one of ranges) {
+        const holder = holders.get(one.requestedBy) ?? { ranges: [], subscribes: false };
+
+        holder.ranges.push(one);
+        holder.subscribes ||= one.kind !== "depends";
+        holders.set(one.requestedBy, holder);
+    }
+
+    const sharing = [...holders.values()].filter((holder) => holder.subscribes);
+    const allows = (version: string, holder: { ranges: readonly HolderRange[] }): boolean =>
+        holder.ranges.every(({ range }) => semver.satisfies(version, range, { includePrerelease: prerelease }));
+    let version: string;
+
+    if (sharing.length > 0) {
+        version = pickVersion(key, entry, sharing.flatMap((holder) => holder.ranges), prerelease, keep);
+    } else {
+        const published = Object.keys(entry.versions).filter((one) => prerelease || entry.versions[one].prerelease !== true);
+        const counted = published.map((one) => ({ version: one, count: [...holders.values()].filter((holder) => allows(one, holder)).length }));
+        const most = Math.max(0, ...counted.map((one) => one.count));
+
+        if (most === 0) {
+            throw conflict;
+        }
+
+        const best = counted.filter((one) => one.count === most).map((one) => one.version);
+
+        version = keep !== undefined && best.includes(keep) ? keep : best.sort((left, right) => semver.rcompare(left, right, { loose: true }))[0]!;
+    }
+
+    const pins: Record<string, string> = {};
+
+    for (const [name, holder] of holders) {
+        if (!holder.subscribes && !allows(version, holder)) {
+            pins[name] = pickVersion(key, entry, holder.ranges, prerelease, keepPins?.[name]);
+        }
+    }
+
+    return { version, pins };
 }
 
 /** The highest published version satisfying every range at once; prereleases only when opted into. */
@@ -605,7 +768,7 @@ export function pickVersion(key: string, entry: IndexFile["recipes"][string], ra
     const asked = ranges.map(({ range, requestedBy }) => `  ${range} (required by ${requestedBy})`);
     const available = [...published].sort((left, right) => semver.rcompare(left, right, { loose: true })).join(", ");
 
-    throw new ConfigError(`No published version of '${key}' satisfies what was asked for.`, {
+    throw new NoVersionSatisfiesError(key, ranges, `No published version of '${key}' satisfies what was asked for.`, {
         details: [
             `Version ${ranges.length === 1 ? "range" : "ranges"} asked for:`,
             ...asked,
@@ -696,8 +859,14 @@ function findCycle(key: string, from: string, parents: Map<string, string>): str
  */
 async function keepOnlyReachable(resolved: Map<string, Draft>, context: ResolveContext): Promise<void> {
     const holders = new Map<string, Map<string, DependencyKind>>();
+    // A version pinned for one holder is walked once that holder is reached: `[key, holder]`.
+    const pinQueue: Array<[string, string]> = [];
     const declare = (parent: string, child: string, kind: DependencyKind): boolean => {
         const existing = holders.get(child);
+
+        if (existing?.has(parent) !== true && resolved.get(child)?.pins?.some((pin) => pin.holder === parent) === true) {
+            pinQueue.push([child, parent]);
+        }
 
         if (existing === undefined) {
             holders.set(child, new Map([[parent, kind]]));
@@ -711,6 +880,20 @@ async function keepOnlyReachable(resolved: Map<string, Draft>, context: ResolveC
         return false;
     };
     const queue: string[] = [];
+    const declareTargets = (lists: DependencyLists, holder: Draft, key: string): void => {
+        for (const [kind, refs] of [
+            ["depends", lists.depends],
+            ["subscribes", lists.subscribes],
+        ] as Array<[DependencyKind, readonly string[]]>) {
+            for (const written of refs) {
+                for (const target of dependencyTargets(written, holder, context, resolved)) {
+                    if (resolved.has(target) && declare(key, target, kind)) {
+                        queue.push(target);
+                    }
+                }
+            }
+        }
+    };
 
     for (const recipe of resolved.values()) {
         if (recipe.requestedBy.includes(PROJECT_HOLDER) && declare(PROJECT_HOLDER, recipe.key, "subscribes")) {
@@ -718,7 +901,21 @@ async function keepOnlyReachable(resolved: Map<string, Draft>, context: ResolveC
         }
     }
 
-    while (queue.length > 0) {
+    while (queue.length > 0 || pinQueue.length > 0) {
+        if (queue.length === 0) {
+            const [key, holder] = pinQueue.shift() as [string, string];
+            const recipe = resolved.get(key) as Draft;
+            const pin = recipe.pins?.find((one) => one.holder === holder) as ResolvedPin;
+            const view = pinnedView(recipe, pin);
+            const lists = (await safeLoad(context, view)) ?? view.declares;
+
+            if (lists !== undefined) {
+                declareTargets(lists, view, key);
+            }
+
+            continue;
+        }
+
         const key = queue.shift() as string;
         const recipe = resolved.get(key);
 
@@ -738,18 +935,7 @@ async function keepOnlyReachable(resolved: Map<string, Draft>, context: ResolveC
             continue;
         }
 
-        for (const [kind, refs] of [
-            ["depends", lists.depends],
-            ["subscribes", lists.subscribes],
-        ] as Array<[DependencyKind, readonly string[]]>) {
-            for (const written of refs) {
-                for (const target of dependencyTargets(written, recipe, context, resolved)) {
-                    if (resolved.has(target) && declare(key, target, kind)) {
-                        queue.push(target);
-                    }
-                }
-            }
-        }
+        declareTargets(lists, recipe, key);
     }
 
     for (const [key, recipe] of [...resolved]) {
@@ -763,6 +949,14 @@ async function keepOnlyReachable(resolved: Map<string, Draft>, context: ResolveC
         recipe.requestedBy = [...reached.keys()];
         recipe.ranges = recipe.ranges.filter((entry) => reached.has(entry.requestedBy));
         recipe.kind = [...reached.values()].includes("subscribes") ? "subscribes" : "depends";
+
+        const pins = (recipe.pins ?? []).filter((pin) => reached.has(pin.holder));
+
+        if (pins.length === 0) {
+            delete (recipe as Partial<Draft>).pins;
+        } else {
+            recipe.pins = pins;
+        }
     }
 }
 

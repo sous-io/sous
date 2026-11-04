@@ -38,14 +38,49 @@ export interface DefiningRecipe {
     readonly path?: string;
     /** The directory holding its files. */
     readonly dir?: string;
+    /**
+     * The recipes holding this version (`project` for a subscription the project made itself), when
+     * known. Messages about two versions of one recipe name them.
+     */
+    readonly holders?: readonly string[];
+    /** True for a version pinned for some holders alone (ADR 0023, decision 4), not the shared one. */
+    readonly pinned?: boolean;
+}
+
+/**
+ * A definition as answers are asked and checked with it. When several definitions of one name were
+ * combined (`combineDefinitions`), an answer must match every one of `patterns`; otherwise only
+ * `validate.pattern` applies.
+ */
+export interface AnswerDefinition extends VariableDefinition {
+    /** Every pattern an answer must match, when combining left more than one. */
+    readonly patterns?: readonly string[];
 }
 
 /** One variable, with the recipe defining it. */
 export interface DefinedVariable {
-    readonly definition: VariableDefinition;
+    /**
+     * The definition answers are asked and checked with: the recipe's own, or, when other recipes
+     * (or other versions of it) define the same name, the strictest combination of them all.
+     */
+    readonly definition: AnswerDefinition;
     readonly recipe: DefiningRecipe;
-    /** Other recipes that define the same name and share the answer. */
+    /** Other recipes that define the same name. They share the answer unless `separate` is set. */
     readonly requiredBy?: readonly DefiningRecipe[];
+    /** The definition the recipe published, when combining it with the others of its name changed it. */
+    readonly published?: VariableDefinition;
+    /**
+     * Why this definition could not be combined with the others of its name, naming them. It is then
+     * asked for on its own, and its answer stored under its recipe-scoped name.
+     */
+    readonly separate?: string;
+    /**
+     * Set when this version of a recipe defines the name in a way that cannot be combined with
+     * another version of the same recipe: the warning saying so, naming both versions, their
+     * holders and why. Such a definition is never asked, and gets no answer (not even its default),
+     * so it renders empty where this version is used.
+     */
+    readonly unanswerable?: string;
     /** The variable as a ref, `namespace/recipe.name`. */
     readonly ref: VariableRef;
     /** `namespace/recipe.name`. */
@@ -66,6 +101,13 @@ export interface RecipeAnswersDefinitions {
     listSync(): DefinedVariable[];
     /** The variables a written name or ref names; several when it is ambiguous. */
     find(nameOrRef: string, options?: DefinitionOptions): Promise<DefinedVariable[]>;
+    /**
+     * Settles every name several of the given definitions share, the way `list` does (ADR 0023,
+     * decision 6): each such variable comes back with the strictest combination as its
+     * `definition`, or with `separate` set when they cannot be combined. For a caller holding
+     * definitions of recipes that are not active yet, such as a dry-run preview.
+     */
+    combine(variables: readonly DefinedVariable[]): DefinedVariable[];
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -123,6 +165,8 @@ export interface RecipeAnswers {
     readonly byRecipe: Readonly<Record<string, VarScope>>;
     /** Required variables with no answer. */
     readonly unanswered: readonly DefinedVariable[];
+    /** Definitions that get no answer, because another version of their recipe is asked instead (`unanswerable`). */
+    readonly unanswerable: readonly DefinedVariable[];
     /** The names declared secret. */
     readonly secrets: ReadonlySet<string>;
 }
@@ -175,7 +219,7 @@ export type AnswerValidation = { readonly ok: true; readonly value: VariableScal
 
 /** Checking an answer against its definition, with a time-limited regex. */
 export interface RecipeAnswersValidator {
-    validate(definition: VariableDefinition, answer: string, options?: { recipe?: string; patternBudgetMs?: number }): AnswerValidation;
+    validate(definition: AnswerDefinition, answer: string, options?: { recipe?: string; patternBudgetMs?: number }): AnswerValidation;
 }
 
 /** The recipe variable a mapping binds an environment name to. */

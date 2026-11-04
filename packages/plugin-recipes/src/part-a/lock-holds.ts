@@ -10,7 +10,7 @@
 
 import type { LockedRecipe, Lockfile } from "@sous-io/plugin-formats/types";
 import { PROJECT_HOLDER } from "../part-b/constants.js";
-import { removeHolder } from "../part-b/lock/lockfile-ops.js";
+import { removeHolder, withHolders } from "../part-b/lock/lockfile-ops.js";
 import type { ResolvedRecipe } from "../types.js";
 import { compareBytewise } from "./util.js";
 
@@ -29,7 +29,7 @@ export function dropProjectHold(lock: Lockfile, key: string): Lockfile {
     const recipes = { ...lock.recipes };
 
     if (kept.length > 0) {
-        recipes[key] = { ...entry, requestedBy: kept };
+        recipes[key] = withHolders(entry, kept);
 
         return { ...lock, recipes };
     }
@@ -37,27 +37,6 @@ export function dropProjectHold(lock: Lockfile, key: string): Lockfile {
     delete recipes[key];
 
     return removeHolder({ ...lock, recipes }, key);
-}
-
-/**
- * Combines two resolutions of the same recipe version, so every holder is kept.
- */
-export function mergeHolders(left: ResolvedRecipe, right: ResolvedRecipe): ResolvedRecipe {
-    const requestedBy = [...new Set([...left.requestedBy, ...right.requestedBy])].sort(compareBytewise);
-    const ranges = [...left.ranges];
-
-    for (const entry of right.ranges) {
-        if (!ranges.some((seen) => seen.range === entry.range && seen.requestedBy === entry.requestedBy)) {
-            ranges.push(entry);
-        }
-    }
-
-    return {
-        ...left,
-        requestedBy,
-        ranges,
-        kind: left.kind === "subscribes" || right.kind === "subscribes" ? "subscribes" : "depends",
-    };
 }
 
 /** Whether a stored key falls under a subscription's cover (`workflow` covers `workflow/a`). */
@@ -107,7 +86,7 @@ export function releaseDroppedHolds(
             delete recipes[key];
             orphaned.push(key);
         } else {
-            recipes[key] = { ...entry, requestedBy: kept };
+            recipes[key] = withHolders(entry, kept);
         }
     }
 

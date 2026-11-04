@@ -123,6 +123,37 @@ describe("parseLockfile()", () => {
   });
 
   /**
+   * A recipe pinned for one holder alone (ADR 0023, decision 4) carries
+   * `pins`, keyed by that holder, each with its exact version and hash.
+   *
+   * { ..., requestedBy: ["workflow/task-files"], pins: { "workflow/task-files": { version: "0.1.0", hash } } }
+   */
+  it("should accept a version pinned for one holder", () => {
+    const lock = validLockfile();
+    const entry = {
+      ...lock.recipes["core/sous-skills"],
+      pins: { "workflow/task-files": { version: "0.1.0", hash: HASH } },
+    };
+    const withPin = { ...lock, recipes: { ...lock.recipes, "core/sous-skills": entry } };
+    expect(parseLockfile(withPin, SOURCE)).toEqual(withPin);
+  });
+
+  /**
+   * A pin for a holder that does not hold the entry would outlive it, so it
+   * is refused, naming the holder.
+   */
+  it("should reject a pin for a holder missing from requestedBy", () => {
+    const lock = validLockfile();
+    const entry = {
+      ...lock.recipes["core/sous-skills"],
+      pins: { "tools/other": { version: "0.1.0", hash: HASH } },
+    };
+    const message = expectRejectMessage({ ...lock, recipes: { ...lock.recipes, "core/sous-skills": entry } });
+    expect(message).toContain("recipes.core/sous-skills.pins.tools/other:");
+    expect(message).toContain("which is not listed in 'requestedBy'");
+  });
+
+  /**
    * A locked version is exact, never a range; the range lives in the
    * subscription, and the lock records what it resolved to.
    */

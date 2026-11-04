@@ -3,7 +3,7 @@ import { BufferedReporter, ReportEntryStyle, Table, VariableSet, NonInteractiveE
 import type { VariableSourceEntity } from "@sous-io/plugin-variables/types";
 import { beforeEach, describe, expect, it } from "vitest";
 import recipeAnswersPlugin from "../src/index.js";
-import { activeRecipe, definition, MemoryEnv, type StandIns, standInPlugins } from "./stand-ins.js";
+import { activeRecipe, definition, MemoryEnv, pinnedRecipe, type StandIns, standInPlugins } from "./stand-ins.js";
 
 /** An engine with the stand-ins, this plugin, and two active recipes. */
 async function engineWith(env: Record<string, string> = {}): Promise<{ engine: Engine; standIns: StandIns }> {
@@ -225,5 +225,43 @@ describe("plugin-recipe-answers through the engine", () => {
         expect(cli("vars.list")).toMatchObject({ command: ["vars", "list"], aliases: [["var", "list"], ["vars"]], positional: ["name"] });
         expect(cli("vars.show")).toMatchObject({ command: ["vars", "show"], aliases: [["var", "show"]], positional: ["name"] });
         expect(cli("vars.ask")).toMatchObject({ command: ["vars", "ask"], aliases: [["var", "ask"]], positional: ["name"] });
+    });
+});
+
+describe("two versions of one recipe that cannot share an answer", () => {
+    /**
+     * `vars list` and `vars show` should show the version that is not asked as not answerable, with
+     * the warning, even when an answer is set for the name.
+     *
+     * support/base 1.0.0 (lib/one): tone (string), 2.0.0 (lib/two): tone (number); SOUS_VAR_TONE=warm
+     * // -> list: the 2.0.0 row "(unanswered)", "not answerable ..."; show: fact "not-answerable"
+     */
+    it("should list and show the version not asked as not answerable", async () => {
+        const env = { SOUS_VAR_TONE: "warm" };
+        const standIns = standInPlugins(
+            [pinnedRecipe([definition({ name: "tone" })], [{ holder: "lib/two", version: "2.0.0", variables: [definition({ name: "tone", type: "number" })] }])],
+            new MemoryEnv("/project/.sous", env),
+        );
+        const project = { root: "/project", sousDir: "/project/.sous", configPath: "/project/.sous/sous.config.json", confDir: "/project/.sous/conf.d" };
+        const engine = createEngine({ builtIns: [...standIns.plugins, recipeAnswersPlugin], env, project, reporter: new BufferedReporter() });
+
+        await engine.buildConfig();
+
+        const [, listing] = (await engine.handle.submit({ intent: "vars.list", input: {} })).toArray();
+
+        expect((listing!.result as Table).rows.map((row) => [row.value, row.source])).toEqual([
+            ["warm", "shared scope, the shell environment"],
+            ["(unanswered)", "not answerable alongside another version of this recipe"],
+        ]);
+
+        const shown = await engine.handle.submit({ intent: "vars.show", input: { name: "tone", acceptFirst: true } });
+        const details = await engine.handle.submit({ intent: "vars.list", input: { name: "tone" } });
+        const skipped = details.toArray().filter((output) => output.result instanceof VariableSet && (output.result as VariableSet).entries.some((entry) => entry.label === "not-answerable"));
+
+        expect(shown.toPlain()).toMatchObject({ answered: true });
+        expect(skipped).toHaveLength(1);
+        expect((skipped[0]!.result as VariableSet).entries.find((entry) => entry.label === "not-answerable")?.value).toContain(
+            "The variable tone of support/base 2.0.0 cannot be answered alongside support/base 1.0.0",
+        );
     });
 });

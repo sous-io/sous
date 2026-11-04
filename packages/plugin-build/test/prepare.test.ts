@@ -22,7 +22,7 @@ describe("build.prepare", () => {
 
         expect(result.locked.added).toEqual([{ key: "acme/jira", to: "1.0.0" }]);
         expect(h.world.lockfile.recipes["acme/jira"]?.version).toBe("1.0.0");
-        expect(h.world.resolveCalls[0]).toEqual({ keep: {} });
+        expect(h.world.resolveCalls[0]).toEqual({ keep: {}, keepPins: {} });
 
         await h.run("build.prepare", { offline: true });
         expect(h.engine.config.buildNumber).toBeGreaterThan(before);
@@ -105,6 +105,45 @@ describe("build.prepare", () => {
         expect(moved.newer).toEqual([]);
         expect(moved.locked.updated).toEqual([{ key: "acme/jira", from: "1.0.0", to: "1.2.0" }]);
         expect(moving.world.restoreCalls).toEqual([{}, { keys: ["acme/jira"] }]);
+    });
+
+    /**
+     * A version pinned for one holder alone is compared with the version the newest resolve gives
+     * that holder: its own pin there, else the shared version, which the resolver chose within that
+     * holder's range. Each is reported apart from the shared version, naming its holder.
+     *
+     * acme/lib 2.0.0 shared, 1.0.0 for acme/one and for acme/two alone;
+     * newest: 2.1.0 shared, 1.3.0 for acme/one alone, acme/two on the shared version
+     * // -> newer [2.0.0 -> 2.1.0, 1.0.0 -> 1.3.0 for acme/one, 1.0.0 -> 2.1.0 for acme/two]
+     */
+    it("should report a newer version of a version pinned for one holder alone, naming the holder", async () => {
+        const h = await harness({
+            world: (world) => {
+                world.config = { subscriptions: {} };
+                world.lockfile = {
+                    formatVersion: 1,
+                    repos: {},
+                    recipes: {
+                        "acme/lib": {
+                            ...locked("2.0.0"),
+                            requestedBy: ["acme/one", "acme/three", "acme/two"],
+                            kind: "depends",
+                            pins: { "acme/one": { version: "1.0.0", hash: "h" }, "acme/two": { version: "1.0.0", hash: "h" } },
+                        },
+                    },
+                } as never;
+                world.published = { "acme/lib": { repo: "acme", namespace: "acme", version: "2.1.0", requestedBy: ["acme/one", "acme/three", "acme/two"], pins: { "acme/one": "1.3.0" } } };
+                world.indexes = { indexes: [{ repo: "acme", source: "network" } as never], failed: [] };
+            },
+        });
+        const report = await h.run<BuildPrepareResult>("build.prepare");
+
+        expect(report.newer).toEqual([
+            { key: "acme/lib", from: "2.0.0", to: "2.1.0" },
+            { key: "acme/lib", from: "1.0.0", to: "1.3.0", holder: "acme/one" },
+            { key: "acme/lib", from: "1.0.0", to: "2.1.0", holder: "acme/two" },
+        ]);
+        expect(report.locked.unchanged).toBe(true);
     });
 
     /**

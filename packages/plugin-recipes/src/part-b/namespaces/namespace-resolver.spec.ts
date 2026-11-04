@@ -194,3 +194,52 @@ describe("ActiveNamespaceResolver explainMissing", () => {
         expect(asked).toBe(false);
     });
 });
+
+describe("ActiveNamespaceResolver: versions pinned for one holder (ADR 0023, decision 4)", () => {
+    const pinnedDir = path.join(STORE, "lib/base@1.0.0");
+    const recipes = (): ActiveRecipeEntity[] => [
+        recipe("w/one"),
+        recipe("w/two"),
+        {
+            ...recipe("lib/base", ["w/one", "w/two"]),
+            version: "2.0.0",
+            kind: "depends",
+            pins: [{ holder: "w/one", version: "1.0.0", hash: "sha256-1", dir: pinnedDir, manifest: { formatVersion: 1, namespace: "lib", name: "base", version: "1.0.0", contents: [] } }],
+        },
+    ];
+
+    /**
+     * A holder pinned on its own reads the recipe at its own pin; another holder reads the shared
+     * version.
+     *
+     * from w/one: ~lib/base/partials/x.md // -> <store>/lib/base@1.0.0/partials/x.md
+     * from w/two: ~lib/base/partials/x.md // -> <store>/lib/base/partials/x.md
+     */
+    it("should resolve a holder's include to its own pin, and another holder's to the shared version", () => {
+        const resolver = makeResolver(recipes());
+
+        expect(resolver.resolve({ reference: "lib/base/partials/x.md", fromFile: path.join(STORE, "w/one/skills/a/SKILL.md") })).toMatchObject({
+            kind: "candidates",
+            candidates: [path.join(pinnedDir, "partials/x.md")],
+        });
+        expect(resolver.resolve({ reference: "lib/base/partials/x.md", fromFile: path.join(STORE, "w/two/skills/a/SKILL.md") })).toMatchObject({
+            kind: "candidates",
+            candidates: [path.join(STORE, "lib/base/partials/x.md")],
+        });
+    });
+
+    /**
+     * A file inside a pinned version belongs to that recipe, and addresses itself at that version.
+     *
+     * from <store>/lib/base@1.0.0/partials/a.md: ~lib/base/partials/b.md // -> <store>/lib/base@1.0.0/partials/b.md
+     */
+    it("should resolve a pinned version's own include inside that version", () => {
+        const resolver = makeResolver(recipes());
+
+        expect(resolver.includingRecipe(path.join(pinnedDir, "partials/a.md"))).toBe("lib/base");
+        expect(resolver.resolve({ reference: "lib/base/partials/b.md", fromFile: path.join(pinnedDir, "partials/a.md") })).toMatchObject({
+            kind: "candidates",
+            candidates: [path.join(pinnedDir, "partials/b.md")],
+        });
+    });
+});

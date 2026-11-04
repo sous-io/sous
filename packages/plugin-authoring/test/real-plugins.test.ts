@@ -69,7 +69,7 @@ describe("plugin-authoring with the real plugins", () => {
         const index = JSON.parse(fs.readFileSync(path.join(repo, "sous.index.json"), "utf8")) as IndexFile;
 
         expect(index.recipes["core/user"]!.versions["1.0.0"]!.dependencies).toEqual({
-            "core/base": { version: "2.0.0", declared: "core/base@^2", kind: "depends" },
+            "core/base": { range: "^2", declared: "core/base@^2", kind: "depends" },
         });
 
         writeFile(repo, "recipes/core/base/skills/base.md", "edited\n");

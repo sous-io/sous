@@ -217,7 +217,7 @@ fetches only this file; nothing more is downloaded until a project subscribes.
   "recipes": { "quality/qa-remote-dep": { "path": "recipes/quality/qa-remote-dep",
     "versions": { "0.1.0": {
       "dependencies": {
-        "workflow/qa-helper": { "version": "0.1.0", "declared": "workflow", "kind": "subscribes" },
+        "workflow/qa-helper": { "range": "^0.1.0", "declared": "workflow", "kind": "subscribes" },
         "workflow/sub-agent-delegation": { "range": "^1.0", "repo": "github.com/sous-io/sous-recipes",
           "declared": "github://sous-io/sous-recipes/workflow/sub-agent-delegation@^1.0",
           "kind": "depends" } },
@@ -239,20 +239,26 @@ fetches only this file; nothing more is downloaded until a project subscribes.
 | `recipes` | top level | Keyed `namespace/recipe`; a recipe whose namespace is not declared is an error. Each entry carries `path` (the recipe folder), `description`, and `versions`, keyed by exact version |
 | `hash`, `tag` | per version | The content hash verified after every fetch, and the tag, which must be exactly `namespace/recipe@version` so a version can never point at a branch |
 | `prerelease`, `releasedAt`, `seeded` | per version | Whether ranges skip it unless a subscription opts in, when it was released, and whether it is the copy sous folds in from its own package |
-| `dependencies` | per version | What the version was released against, keyed `namespace/recipe`; see below |
+| `dependencies` | per version | The range each dependency may take, keyed `namespace/recipe`; see below |
 | `variables` | per version | The version's variable definitions, exactly as its manifest publishes them (see [Variable definitions](#variable-definitions)), with `required`, `secret` and `scope` filled in; `[]` when it asks nothing |
 | `depends`, `subscribes` | per version | The version's manifest lists, exactly as written; `[]` when empty |
 
-Dependencies are resolved at release time and keyed `namespace/recipe`. An entry carries `version` (a
-sibling, resolved exactly) or `range` plus `repo` (the identity of the repository publishing it, whose own
-index resolves the range); at least one is required. Installing a version installs these rather than
-re-resolving the manifest's ranges.
+Dependencies are recorded at release time and keyed `namespace/recipe`. Each entry carries `range`: the range
+the manifest declares, or `^<the sibling's version at release>` for a sibling named with no range (`*` when the
+sibling has no version yet). A dependency in another repository also carries `repo`, the identity of the
+repository publishing it, whose own index resolves the range. The index never pins a dependency to one version;
+the consuming project resolves every range and its lockfile is the only lock.
+
+An entry written by an older release carries `version`, the exact version that release resolved, instead of
+`range`. Sous reads it as `^<version>`, further limited by the range in the entry's `declared` field when it
+holds one, so `{ "version": "1.1.1", "declared": "workflow/sub-agent-delegation@~1.1" }` allows any `1.1.x`
+from `1.1.1` up. Nothing is republished to change it.
 
 **Each version describes itself.** So that a recipe can be described before anything is fetched, every
 version a release records carries more than its dependencies. Each dependency records `declared`, the
 manifest entry that brings it in exactly as written (a recipe such as `workflow/qa-helper@^1.0`, a whole
 namespace such as `workflow`, or a locator), and `kind`: `subscribes` for a co-subscription, whose files
-land and whose questions are asked, or `depends` for a build dependency. When several entries cover one
+land, or `depends` for a build dependency, whose files stay out; the questions of both are asked. When several entries cover one
 recipe, an entry naming it wins over a namespace, and it is a co-subscription when any entry covering it is
 one. The version records `variables`, its manifest's definitions, and `depends` and `subscribes`, its
 manifest's lists as written; the lists are what a consumer walks, because a namespace of another repository
@@ -263,15 +269,16 @@ the resolver walks a recipe whose files are not on the machine from its index en
 its manifest. A version recorded before a release wrote these fields keeps its entry as it is; its questions
 are known only once its files are fetched, and the dry run names it as such.
 
-**A published version's entry is frozen.** Its dependencies are resolved once, when the version is first
-recorded, and every later release carries the entry forward exactly as published, like its hash; releasing
+**A published version's entry is frozen.** Its dependencies are recorded once, when the version is first
+published, and every later release carries the entry forward exactly as published, like its hash; releasing
 other recipes, adding a recipe to a namespace it subscribes to, or raising a sibling it names changes nothing
 in it. A release still checks the recorded list against the version's manifest: a recipe the manifest names
-that the list lacks, a recipe in the list the manifest does not declare, a sibling outside its declared
-range, or another repository's entry with a different repository or range is an error naming the recipe, the
-version and each difference; restore the entry if the index was edited, or bump the version to publish
-different dependencies. A version rebuilt from its tag, when the index lost it, has its dependencies resolved
-against the repository as it stood at that tag, then frozen the same way. An entry written before sous
+that the list lacks, a recipe in the list the manifest does not declare, a recorded range that is not the
+declared one (for a sibling named with no range, not a `^<version>` range or `*`), an older entry's `version`
+outside its declared range, or another repository's entry with a different repository is an error naming the
+recipe, the version and each difference; restore the entry if the index was edited, or bump the version to publish
+different dependencies. A version rebuilt from its tag, when the index lost it, has its dependencies recorded
+from the repository as it stood at that tag, then frozen the same way. An entry written before sous
 recorded dependencies carries none, stays that way, and installs by resolving its manifest's ranges.
 
 **Fields this sous does not know are kept, not refused.** A later sous may add fields to the index, at any
@@ -311,11 +318,28 @@ Machine-written, committed, and the reason a fresh clone restores with no prompt
 | `repos.<name>.url`, `.identity`, `.indexHash` | Where the repository lives, as recorded when it was added; the canonical identity the store and index cache file it under; and the hash of the index this lock was resolved against, when known |
 | `recipes.<key>.repo`, `.version`, `.hash` | The project's short name for the repository, which must appear under `repos`; the version resolved; and the hash verified against the store after every fetch |
 | `recipes.<key>.requestedBy`, `.kind` | Who holds the entry, the literal `project` or the key of a recipe that requires it, and whether that holder is a `subscribes` or a `depends` |
+| `recipes.<key>.pins.<holder>.version`, `.hash` | A version pinned for one holder alone, keyed by that holder's recipe key; absent when every holder uses `version` |
 
 A repository appears under two names on purpose: the key is the project's own short name, which every
 message uses, while `identity` is what the store is keyed by, so two projects with different labels share
 one cached copy. `identity` is optional on read only, for older lockfiles, and is derived from the URL on
 the next write. `requestedBy` makes removal safe; an entry goes when its last holder does.
+
+`pins` appears only when a holder that reaches the recipe through `depends` needs a version no other
+holder's range allows. The entry's `version` is the one the project uses (a recipe some holder reaches
+through `subscribes` has exactly one); each holder under `pins` uses its own version instead, for its
+includes and its questions, and nothing from that version reaches the project's files. Every holder under
+`pins` is also listed in `requestedBy`, and loses its pin when it stops holding the entry. Each pinned
+version is fetched, checked against its hash and kept in the store like the shared one.
+
+```json
+"support/base": { "kind": "depends", "repo": "fixtures", "version": "1.0.0", "hash": "sha256-1b...",
+  "requestedBy": ["lib/one", "lib/two"],
+  "pins": { "lib/two": { "version": "2.0.0", "hash": "sha256-9c..." } } }
+```
+
+A lockfile with no `pins` reads exactly as it did before. A version of sous older than this field refuses a
+lockfile that carries one, naming the unknown key, because the format is strict.
 
 ## The store on disk
 

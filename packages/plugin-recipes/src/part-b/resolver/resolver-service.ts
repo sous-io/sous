@@ -64,25 +64,30 @@ export class ResolverService implements RecipesResolver {
             parseDependency: (written) => this.parseDependency(written),
             ...(options.prerelease === undefined ? {} : { prerelease: options.prerelease }),
             ...(options.keep === undefined ? {} : { keep: options.keep }),
+            ...(options.keepPins === undefined ? {} : { keepPins: options.keepPins }),
         });
     }
 
     async resolveSubscriptions(options: ResolveOptions = {}): Promise<ResolveResult> {
         const subscriptions = enabledSubscriptions(this.ctx.config.get<Record<string, SubscriptionEntry>>("subscriptions"));
+
+        return this.resolve(
+            sortKeys(Object.keys(subscriptions)).map((key) => this.subscriptionRequest(key)),
+            options,
+        );
+    }
+
+    subscriptionRequest(key: string): RecipeRequest {
+        const entry = this.ctx.config.get<Record<string, SubscriptionEntry>>("subscriptions")?.[key] ?? {};
         const format = this.ctx.services.get("refs.format");
-        const requests: RecipeRequest[] = sortKeys(Object.keys(subscriptions)).map((key) => {
-            const entry = subscriptions[key];
 
-            return {
-                ref: format.parseNamedRef(key, "config"),
-                ...(entry.range === undefined ? {} : { range: entry.range }),
-                ...(entry.prerelease === true ? { prerelease: true } : {}),
-                requestedBy: PROJECT_HOLDER,
-                kind: "subscribes" as const,
-            };
-        });
-
-        return this.resolve(requests, options);
+        return {
+            ref: format.parseNamedRef(key, "config"),
+            ...(entry.range === undefined ? {} : { range: entry.range }),
+            ...(entry.prerelease === true ? { prerelease: true } : {}),
+            requestedBy: PROJECT_HOLDER,
+            kind: "subscribes" as const,
+        };
     }
 
     reachable(lockfile: Lockfile): string[] {

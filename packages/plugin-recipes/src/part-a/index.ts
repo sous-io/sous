@@ -20,6 +20,7 @@ import { RecipeStore } from "./store.js";
 import { Trust } from "./trust.js";
 import type { StoreKey } from "../types.js";
 import { splitRecipeKey } from "./catalog.js";
+import { lockedVersions } from "../part-b/lock/lockfile-ops.js";
 
 /** The entity kinds plugin-recipes defines, when part B has not defined them already. */
 export function defineEntityKinds(sous: Sous): void {
@@ -117,7 +118,7 @@ function pinnedStoreKeys(services: ServiceReader): StoreKey[] {
         return Object.entries(lock.recipes).flatMap(([key, entry]) => {
             const identity = lock.repos[entry.repo]?.identity;
 
-            return identity === undefined ? [] : [{ identity, ...splitRecipeKey(key), version: entry.version }];
+            return identity === undefined ? [] : lockedVersions(entry).map((locked) => ({ identity, ...splitRecipeKey(key), version: locked.version }));
         });
     } catch {
         return [];

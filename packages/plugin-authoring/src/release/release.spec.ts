@@ -299,8 +299,8 @@ describe("runRelease()", () => {
         expect(reporter.at("error").join("\n")).toContain("publishes no recipe called 'core/nope'");
     });
 
-    /** Tags are cut dependency-first, and the index records the version each dependency resolved to. */
-    it("should tag dependency-first and record the resolved dependency", async () => {
+    /** Tags are cut dependency-first, and the index records the range each dependency may take. */
+    it("should tag dependency-first and record the dependency's range", async () => {
         writeFile(repo, "sous.repo.yaml", "formatVersion: 1\nname: test-repo\nnamespaces:\n  core: {}\nrecipes:\n  - recipes/core/user\n  - recipes/core/base\n");
         writeRecipe("user", "1.0.0", "depends:\n  - core/base\n");
         writeRecipe("base", "2.0.0");
@@ -311,7 +311,7 @@ describe("runRelease()", () => {
 
         expect(result.tagged).toEqual(["core/base@2.0.0", "core/user@1.0.0"]);
         expect(readIndex().recipes["core/user"]!.versions["1.0.0"]!.dependencies).toEqual({
-            "core/base": { version: "2.0.0", declared: "core/base", kind: "depends" },
+            "core/base": { range: "^2.0.0", declared: "core/base", kind: "depends" },
         });
     });
 

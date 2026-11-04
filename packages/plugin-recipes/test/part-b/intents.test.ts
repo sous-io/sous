@@ -203,6 +203,62 @@ describe("repo.link and repo.unlink", () => {
         expect(fs.existsSync(dir)).toBe(true);
     });
 
+    /**
+     * Without --update, unlink reports the newer versions within range: the shared version against
+     * the ranges of the holders that use it, and a version pinned for one holder alone against that
+     * holder's own range.
+     *
+     * workflow/lib 2.0.0 shared (beta wants ^2), 1.0.0 for workflow/alpha alone (alpha wants ^1);
+     * 1.3.0 and 2.1.0 published
+     * // -> newer [{ from "2.0.0", to "2.1.0" }, { from "1.0.0", to "1.3.0", holder "workflow/alpha" }]
+     */
+    it("should report a newer version of a version pinned for one holder alone, within that holder's range", async () => {
+        for (const version of ["1.0.0", "1.3.0", "2.0.0", "2.1.0"]) {
+            publish("workflow/lib", version);
+        }
+
+        repo.index!.recipes["workflow/alpha"].versions["1.2.0"].dependencies = { "workflow/lib": { range: "^1.0.0" } };
+        repo.index!.recipes["workflow/beta"].versions["2.0.0"].dependencies = { "workflow/lib": { range: "^2.0.0" } };
+
+        const pinned = (key: string, version: string) => ({ repo: "acme", version, hash: hashes[`${key}@${version}`], requestedBy: ["project"], kind: "subscribes" });
+
+        writeLockfile(
+            { root, sousDir: path.join(root, ".sous"), configPath: undefined, confDir: "" },
+            {
+                formatVersion: 1,
+                repos: { acme: { url: URL, identity: IDENTITY } },
+                recipes: {
+                    "workflow/alpha": pinned("workflow/alpha", "1.2.0"),
+                    "workflow/beta": pinned("workflow/beta", "2.0.0"),
+                    "workflow/lib": {
+                        repo: "acme",
+                        version: "2.0.0",
+                        hash: hashes["workflow/lib@2.0.0"],
+                        requestedBy: ["workflow/alpha", "workflow/beta"],
+                        kind: "depends",
+                        pins: { "workflow/alpha": { version: "1.0.0", hash: hashes["workflow/lib@1.0.0"] } },
+                    },
+                },
+            },
+        );
+
+        const dir = checkout();
+        const { engine } = await startEngine({ root, home, data: config({ "workflow/alpha": {}, "workflow/beta": {} }), hosts: [fakeHost([repo], calls)] });
+
+        await engine.handle.submit({ intent: "repo.link", input: { repo: "acme", path: dir } });
+
+        const outputs = await engine.handle.submit({ intent: "repo.unlink", input: { repo: "acme", noBuild: true } });
+
+        expect(outputs.toPlain().published).toEqual({
+            checked: true,
+            newer: [
+                { key: "workflow/lib", from: "2.0.0", to: "2.1.0" },
+                { key: "workflow/lib", from: "1.0.0", to: "1.3.0", holder: "workflow/alpha" },
+            ],
+        });
+        expect(JSON.stringify(outputs.toArray())).toContain("1.0.0 pinned for workflow/alpha alone, 1.3.0 published");
+    });
+
     it("should refuse --remove for a checkout sous did not clone", async () => {
         const dir = checkout();
         const { engine } = await startEngine({ root, home, data: config({ "workflow/alpha": {} }), hosts: [fakeHost([repo], calls)] });

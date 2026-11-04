@@ -7,6 +7,7 @@
 import semver from "semver";
 import type { IndexFile } from "@sous-io/plugin-formats/types";
 import { DEFAULT_FRESHNESS_SECONDS, PROJECT_HOLDER } from "../constants.js";
+import { intersectRanges } from "../resolver/ranges.js";
 
 /** What decides whether to look upstream. */
 export interface FreshnessInput {
@@ -120,9 +121,11 @@ export function effectiveRangeForHolders(key: string, requestedBy: readonly stri
         return "*";
     }
 
-    const combined = constraints.join(" ");
+    if (constraints.some((range) => semver.validRange(range) === null)) {
+        return undefined;
+    }
 
-    return semver.validRange(combined) === null ? undefined : combined;
+    return constraints.reduce((all, range) => intersectRanges(all, range));
 }
 
 /** How long a build waits on a repository it checks only to say whether something newer exists. */

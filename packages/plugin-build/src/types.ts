@@ -92,13 +92,21 @@ export interface BuildPrepareResult {
     /** What locking new subscriptions changed. */
     readonly locked: LockDiff;
     readonly restored: RestoreReport;
-    /** Newer in-range versions found upstream, not installed. */
-    readonly newer: ReadonlyArray<{ readonly key: string; readonly from: string; readonly to: string }>;
+    /**
+     * Newer in-range versions found upstream, not installed. `holder` names the holder a version
+     * pinned for one holder alone belongs to; it is missing for the shared version.
+     */
+    readonly newer: ReadonlyArray<{ readonly key: string; readonly from: string; readonly to: string; readonly holder?: string }>;
     readonly checkedUpstream: boolean;
     /** Locked recipes not built on this machine, and why. */
     readonly skipped: SkippedRecipe[];
     /** Required variables with no answer. */
     readonly unanswered: readonly DefinedVariable[];
+    /**
+     * Variables a version of a recipe defines that get no answer, because another version of the
+     * same recipe is asked instead; each carries its warning (`unanswerable`).
+     */
+    readonly unanswerable: readonly DefinedVariable[];
 }
 
 /** The warning for required variables nothing answered. */

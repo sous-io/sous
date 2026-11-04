@@ -77,6 +77,18 @@ export interface LockedRecipe {
     /** Who asked for it: `project`, or the keys of the recipes that depend on it. */
     requestedBy: string[];
     kind: DependencyKind;
+    /**
+     * Versions pinned for one holder alone, keyed by the holder's recipe key (ADR 0023, decision 4):
+     * a holder whose range does not allow `version`, of a recipe it reaches only through `depends`.
+     * Every key is also in `requestedBy`. Absent when every holder uses `version`.
+     */
+    pins?: Record<string, LockedPin>;
+}
+
+/** A version of a recipe pinned for one holder alone. */
+export interface LockedPin {
+    version: string;
+    hash: ContentHash;
 }
 
 /** The lockfile: every pinned recipe and the repositories they come from. */

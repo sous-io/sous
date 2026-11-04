@@ -132,7 +132,8 @@ export class Ladder implements RecipeAnswersLadder {
             { rung: "recipe", envName: this.names.recipeScopedName(namespace, recipe, name) },
             { rung: "namespace", envName: this.names.namespaceScopedName(namespace, name) },
             { rung: "shared", envName: this.names.sharedName(name) },
-            { rung: "bare", envName: this.names.bareName(variable.definition) },
+            // The recipe's own declared name, which a combined definition may have set aside.
+            { rung: "bare", envName: this.names.bareName(variable.published ?? variable.definition) },
         ];
         const seen = new Set<string>();
 
@@ -147,9 +148,13 @@ export class Ladder implements RecipeAnswersLadder {
         });
     }
 
-    /** The name a new answer is stored under with nothing else said: the definition's `env`, or its shared name. */
+    /**
+     * The name a new answer is stored under with nothing else said: the definition's `env`, or its
+     * shared name. A definition that could not be combined with the others of its name
+     * (`separate`) is stored under its recipe-scoped name instead, so each recipe keeps its own.
+     */
     bareName(variable: DefinedVariable): string {
-        return this.names.bareName(variable.definition);
+        return variable.separate === undefined ? this.names.bareName(variable.definition) : this.recipeScopedName(variable);
     }
 
     /** The most specific generated name: `SOUS_VAR_<NAMESPACE>_<RECIPE>_<VARIABLE>`. */
@@ -181,6 +186,12 @@ export class Ladder implements RecipeAnswersLadder {
 
     diagnose(variable: DefinedVariable): AnswerDiagnosis {
         const candidates = this.candidates(variable);
+
+        // A version of a recipe that is not asked a variable, because another version of the same
+        // recipe is (`unanswerable`), gets no answer from any name.
+        if (variable.unanswerable !== undefined) {
+            return { candidates };
+        }
 
         for (const candidate of candidates) {
             const hit = this.lookup(candidate.envName);
