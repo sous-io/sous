@@ -1,6 +1,6 @@
 {
   "name": "@sous-io/plugin-formats",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "description": "One parser per on-disk format, reading manifests, and the recipe content hash.",
   "type": "module",
   "license": "Apache-2.0",
