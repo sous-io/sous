@@ -12,6 +12,7 @@ import { PROJECT_REPOS_DIRNAME } from "../constants.js";
 import { blockOutput, dryRunOutput, finish, followUpOutputs, noteOutput, plainResult, sentence, underHeading, type RanFollowUp } from "../../part-a/outputs.js";
 import { effectiveRangeForHolders, findNewerInRange, NEWER_VERSION_CHECK_TIMEOUT_MS, withDeadline } from "../index-cache/freshness.js";
 import { trustedRepos } from "../lock/lock-service.js";
+import { declaredRange, recordedRange } from "../resolver/ranges.js";
 import { plainSubscriptionKey } from "../lock/reachable.js";
 import type { PartBRuntime } from "../runtime.js";
 import { messageOf } from "../support.js";
@@ -206,6 +207,8 @@ async function newerVersions(name: string, ctx: Context): Promise<UnlinkPublishe
         const index = (await withDeadline((signal) => ctx.services.get("recipes.index-cache").get(name, { signal, latest: true }), NEWER_VERSION_CHECK_TIMEOUT_MS)).index;
         const lockfile = ctx.services.get("recipes.lock").read();
         const subscriptions = ctx.config.get<Record<string, SubscriptionEntry>>("subscriptions") ?? {};
+        const refs = ctx.services.get("refs.resolver");
+        const parse = (written: string) => refs.resolveSync({ input: written, from: "manifest", lookups: false, refusedIsEmpty: true }).refs;
 
         for (const [key, entry] of Object.entries(lockfile.recipes)) {
             if (entry.repo !== name) {
@@ -218,7 +221,7 @@ async function newerVersions(name: string, ctx: Context): Promise<UnlinkPublishe
                     const pinned = lockfile.recipes[holder];
                     const recorded = pinned === undefined ? undefined : index.recipes[holder]?.versions[pinned.version]?.dependencies?.[recipe];
 
-                    return recorded === undefined ? undefined : (recorded.range ?? "*");
+                    return recorded === undefined ? undefined : (recordedRange(recorded, declaredRange(recorded.declared, parse)) ?? "*");
                 },
             });
             const found = range === undefined ? undefined : findNewerInRange({ index, key, lockedVersion: entry.version, range });

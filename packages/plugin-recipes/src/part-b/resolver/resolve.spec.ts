@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { IndexFile, IndexVersion } from "@sous-io/plugin-formats/types";
 import type { RefLocation, SousRef } from "@sous-io/plugin-refs/types";
-import { indexDependencyLists, isConfirmedByRecord, pickVersion, proposeRepoName, resolveWanted, settleBrowsed, wantedOf, type DependencyLists, type ResolveContext, type WantedRequest } from "./resolve.js";
+import { indexDependencyLists, isConfirmedByRecord, NoVersionSatisfiesError, pickVersion, proposeRepoName, resolveWanted, settleBrowsed, wantedOf, type DependencyLists, type ResolveContext, type WantedRequest } from "./resolve.js";
 
 const HASH = `sha256-${"d".repeat(64)}` as const;
 
@@ -173,14 +173,110 @@ describe("resolveWanted: dependencies", () => {
         expect(lib).toMatchObject({ repo: "acme", version: "1.0.0", kind: "depends", requestedBy: ["w/a"] });
     });
 
-    it("should ask for the version the index recorded a dependency was released against", async () => {
+    /**
+     * A dependency the index records with a range asks for that range (ADR 0023): a sibling named with
+     * no range was recorded as the same major it was released with.
+     *
+     * w/a@1.0.0 records { lib/x: { range: "^1.1.0" } }, lib/x publishes 1.0.0, 1.9.0, 2.0.0
+     * // -> lib/x 1.9.0
+     */
+    it("should ask for the range the index recorded for a dependency", async () => {
         const acme = index("acme", {
-            "w/a": { "1.0.0": { dependencies: { "lib/x": { version: "1.1.0", range: "^1" } } } },
-            "lib/x": { "1.0.0": {}, "1.1.0": {}, "1.9.0": {} },
+            "w/a": { "1.0.0": { dependencies: { "lib/x": { range: "^1.1.0", declared: "lib/x", kind: "depends" } } } },
+            "lib/x": { "1.0.0": {}, "1.9.0": {}, "2.0.0": {} },
         });
-        const result = await resolveWanted([project("w", "a")], context({ acme }, { "w/a@1.0.0": { depends: ["lib/x@^1"], subscribes: [] } }));
+        const result = await resolveWanted([project("w", "a")], context({ acme }, { "w/a@1.0.0": { depends: ["lib/x"], subscribes: [] } }));
 
-        expect(result.resolved.find((recipe) => recipe.key === "lib/x")?.version).toBe("1.1.0");
+        expect(result.resolved.find((recipe) => recipe.key === "lib/x")).toMatchObject({ version: "1.9.0", ranges: [{ range: "^1.1.0", requestedBy: "w/a" }] });
+    });
+
+    /**
+     * An entry written before ADR 0023 records the exact version that release resolved. It is read as
+     * the same major from that version on, never as that version alone.
+     *
+     * w/a@1.0.0 records { lib/x: { version: "1.1.0" } }, written "lib/x" // -> lib/x 1.9.0, not 1.0.0 or 2.0.0
+     */
+    it("should read a recorded exact version as the same major from that version on", async () => {
+        const acme = index("acme", {
+            "w/a": { "1.0.0": { dependencies: { "lib/x": { version: "1.1.0" } } } },
+            "lib/x": { "1.0.0": {}, "1.1.0": {}, "1.9.0": {}, "2.0.0": {} },
+        });
+        const result = await resolveWanted([project("w", "a")], context({ acme }, { "w/a@1.0.0": { depends: ["lib/x"], subscribes: [] } }));
+
+        expect(result.resolved.find((recipe) => recipe.key === "lib/x")?.version).toBe("1.9.0");
+    });
+
+    /**
+     * A recorded exact version is further limited by the range its manifest entry declared.
+     *
+     * records { lib/x: { version: "1.1.0" } }, written "lib/x@~1.1.0" // -> lib/x 1.1.5
+     */
+    it("should limit a recorded exact version by the declared range", async () => {
+        const acme = index("acme", {
+            "w/a": { "1.0.0": { dependencies: { "lib/x": { version: "1.1.0", declared: "lib/x@~1.1.0", kind: "depends" } } } },
+            "lib/x": { "1.0.0": {}, "1.1.0": {}, "1.1.5": {}, "1.9.0": {} },
+        });
+        const result = await resolveWanted([project("w", "a")], context({ acme }, { "w/a@1.0.0": { depends: ["lib/x@~1.1.0"], subscribes: [] } }));
+
+        expect(result.resolved.find((recipe) => recipe.key === "lib/x")?.version).toBe("1.1.5");
+    });
+
+    /**
+     * gh-220: two subscriptions whose releases recorded different exact versions of a shared recipe.
+     * Every declared range allows the newest, so resolving them together takes it for both, with no
+     * refusal.
+     *
+     * house@1.0.1 records sub-agent-delegation 1.1.1; github-projects@1.1.3 records 1.1.2
+     * // -> house 1.0.1, github-projects 1.1.3, sub-agent-delegation 1.1.2
+     */
+    it("should give two subscriptions one shared version every recorded dependency allows", async () => {
+        const sad = "workflow/sub-agent-delegation";
+        const recipes = index("sous-recipes", {
+            "omakase/house": {
+                "1.0.0": { dependencies: { [sad]: { version: "1.1.1" } } },
+                "1.0.1": { dependencies: { [sad]: { version: "1.1.1", declared: sad, kind: "subscribes" } }, depends: [], subscribes: [sad] },
+            },
+            "workflow/github-projects": {
+                "1.1.2": { dependencies: { [sad]: { version: "1.1.1" } } },
+                "1.1.3": { dependencies: { [sad]: { version: "1.1.2", declared: `${sad}@^1.0.0`, kind: "depends" } }, depends: [`${sad}@^1.0.0`], subscribes: [] },
+            },
+            [sad]: { "1.1.0": {}, "1.1.1": {}, "1.1.2": { depends: [], subscribes: [] } },
+        });
+        const result = await resolveWanted([project("omakase", "house"), project("workflow", "github-projects")], context({ "sous-recipes": recipes }));
+
+        expect(Object.fromEntries(result.resolved.map((recipe) => [recipe.key, recipe.version]))).toEqual({
+            "omakase/house": "1.0.1",
+            "workflow/github-projects": "1.1.3",
+            [sad]: "1.1.2",
+        });
+        expect(result.resolved.find((recipe) => recipe.key === sad)?.ranges).toEqual([
+            { range: "^1.1.1", requestedBy: "omakase/house" },
+            { range: "^1.1.2", requestedBy: "workflow/github-projects" },
+        ]);
+    });
+
+    /**
+     * Two holders whose ranges no published version satisfies at once are a conflict, reported with
+     * each holder and its range.
+     *
+     * w/a needs lib/x@~1.1.0, w/b needs lib/x@^1.2.0 // -> NoVersionSatisfiesError naming both
+     */
+    it("should report two holders no version satisfies, naming each and its range", async () => {
+        const acme = index("acme", {
+            "w/a": { "1.0.0": { depends: [], subscribes: ["lib/x@~1.1.0"] } },
+            "w/b": { "1.0.0": { depends: [], subscribes: ["lib/x@^1.2.0"] } },
+            "lib/x": { "1.1.0": {}, "1.2.0": {} },
+        });
+        const resolving = resolveWanted([project("w", "a"), project("w", "b")], context({ acme }));
+
+        await expect(resolving).rejects.toBeInstanceOf(NoVersionSatisfiesError);
+        await expect(resolving).rejects.toMatchObject({
+            key: "lib/x",
+            ranges: [
+                { range: "~1.1.0", requestedBy: "w/a" },
+                { range: "^1.2.0", requestedBy: "w/b" },
+            ],
+        });
     });
 
     it("should read what a recipe declares from its index entry when its files are not here", async () => {

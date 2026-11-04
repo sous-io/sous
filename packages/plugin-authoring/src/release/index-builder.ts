@@ -9,8 +9,9 @@
  * 3. The tags are the backstop. A tagged version missing from the index is rebuilt from its tree, so
  *    deleting the index and regenerating it restores the same catalog.
  *
- * Each new version also records what it was released against (its dependencies resolved to exact
- * versions), how each was declared, and the variables it publishes. Those are frozen with the entry.
+ * Each new version also records the range each dependency may take (the declared range, or the same
+ * major as a sibling named with no range), how each was declared, and the variables it publishes.
+ * Those are frozen with the entry. The consuming project's lockfile is the only lock (ADR 0023).
  */
 
 import fs from "node:fs";
@@ -109,7 +110,7 @@ export async function buildIndex(tools: AuthoringTools, git: RepoGit, options: B
 
     const recipes: IndexFile["recipes"] = {};
     const publishing = options.publishing ?? {};
-    const current = siblingState(validation, tagsByKey, existing, publishing);
+    const current = siblingState(validation, publishing);
 
     for (const recipe of validation.recipes) {
         if (!Object.hasOwn(namespaces, recipe.manifest.namespace)) {
@@ -129,7 +130,7 @@ export async function buildIndex(tools: AuthoringTools, git: RepoGit, options: B
                 continue;
             }
 
-            const rebuilt = await rebuildTaggedVersion(tools, git, tag, recipe, tagsByKey, existing, options.settled);
+            const rebuilt = await rebuildTaggedVersion(tools, git, tag, recipe, options.settled);
 
             problems.push(...rebuilt.problems);
             versions[tag.version] = {
@@ -358,10 +359,8 @@ interface DeclaredDependencies {
 }
 
 interface SiblingState {
-    /** The version each recipe is released at: what "released alongside me" means. */
+    /** The version each recipe is released at: a sibling named with no range takes its major. */
     readonly settled: Map<string, string>;
-    /** Every version each recipe publishes, for resolving a range. */
-    readonly published: Map<string, string[]>;
 }
 
 /** The dependencies a manifest declares, a whole-namespace one expanded into its recipes. */
@@ -452,44 +451,24 @@ function declaredDependencies(
 }
 
 /**
- * What each recipe is published at for one resolution. A new version resolves against the repository
- * as it stands, counting this run's versions; a version rebuilt from its tag resolves against the
- * repository at that tag, counting only versions up to the declared one.
+ * What each recipe is released at for one resolution. A new version counts this run's versions; a
+ * version rebuilt from its tag counts the manifests at that tag.
  */
-function siblingState(
-    validation: RepoValidation,
-    tagsByKey: Map<string, RecipeTag[]>,
-    existing: IndexFile | undefined,
-    publishing?: Record<string, string>,
-): SiblingState {
+function siblingState(validation: RepoValidation, publishing?: Record<string, string>): SiblingState {
     const settled = new Map<string, string>();
-    const published = new Map<string, string[]>();
 
     for (const recipe of validation.recipes) {
-        const version = publishing?.[recipe.key] ?? recipe.manifest.version;
-
-        settled.set(recipe.key, version);
-
-        const known = new Set((tagsByKey.get(recipe.key) ?? []).map((tag) => tag.version));
-
-        for (const other of Object.keys(existing?.recipes[recipe.key]?.versions ?? {})) {
-            known.add(other);
-        }
-
-        known.add(version);
-
-        const all = [...known];
-
-        published.set(recipe.key, publishing === undefined ? all.filter((other) => semver.valid(other) !== null && semver.lte(other, version)) : all);
+        settled.set(recipe.key, publishing?.[recipe.key] ?? recipe.manifest.version);
     }
 
-    return { settled, published };
+    return { settled };
 }
 
 /**
- * A recipe's declared dependencies as the exact versions its entry publishes. A sibling with no range
- * is the version released alongside it; one with a range resolves against what this repository
- * publishes; one in another repository records that repository and the range.
+ * A recipe's declared dependencies as the ranges its entry publishes (ADR 0023). A sibling with no
+ * range may take the same major as the version released alongside it (`^<that version>`); a declared
+ * range is recorded as written; one in another repository records that repository and the range. No
+ * exact version is recorded: the consuming project's lockfile is the only lock.
  */
 function resolveIndexDependencies(declared: DeclaredDependencies, siblings: SiblingState): Record<string, IndexDependency> {
     const resolved: Record<string, IndexDependency> = {};
@@ -502,19 +481,15 @@ function resolveIndexDependencies(declared: DeclaredDependencies, siblings: Sibl
             continue;
         }
 
-        if (dependency.range === undefined) {
-            const settled = siblings.settled.get(key);
-
-            resolved[key] = { ...(settled === undefined ? { range: "*" } : { version: settled }), ...how };
-            continue;
-        }
-
-        const best = semver.maxSatisfying(siblings.published.get(key) ?? [], dependency.range);
-
-        resolved[key] = { ...(best === null ? { range: dependency.range } : { version: best }), ...how };
+        resolved[key] = { range: dependency.range ?? siblingRange(siblings.settled.get(key)), ...how };
     }
 
     return resolved;
+}
+
+/** The range a sibling named with no range is recorded with: its major at release, else anything. */
+function siblingRange(version: string | undefined): string {
+    return version === undefined ? "*" : `^${version}`;
 }
 
 type VersionDescription = Pick<IndexVersion, "dependencies" | "depends" | "subscribes" | "variables">;
@@ -648,15 +623,21 @@ function recordedSatisfies(entry: IndexDependency, dependency: DeclaredDependenc
         return false;
     }
 
-    if (dependency.range === undefined) {
-        return true;
+    // An entry written before ADR 0023 records the exact version the release resolved.
+    if (entry.version !== undefined) {
+        return dependency.range === undefined || semver.satisfies(entry.version, dependency.range);
     }
 
-    if (entry.version !== undefined) {
-        return semver.satisfies(entry.version, dependency.range);
+    if (dependency.range === undefined) {
+        return entry.range !== undefined && isSiblingRange(entry.range);
     }
 
     return entry.range === dependency.range;
+}
+
+/** Whether a range is one a release records for a sibling named with no range: `^<version>`, or `*`. */
+function isSiblingRange(range: string): boolean {
+    return range === "*" || (range.startsWith("^") && semver.valid(range.slice(1)) !== null);
 }
 
 /** `build dependency`, `co-subscription`. */
@@ -701,8 +682,6 @@ async function rebuildTaggedVersion(
     git: RepoGit,
     tag: RecipeTag,
     recipe: ValidatedRecipe,
-    tagsByKey: Map<string, RecipeTag[]>,
-    existing: IndexFile | undefined,
     settled?: Map<string, SettledDependency>,
 ): Promise<RebuiltVersion> {
     return git.withTree(tag.tag, ".", async (treeDir) => {
@@ -717,7 +696,7 @@ async function rebuildTaggedVersion(
                 const description = describeVersion(
                     tagged,
                     declaredDependencies(tools, tagged, snapshot, settled),
-                    siblingState(snapshot, tagsByKey, existing),
+                    siblingState(snapshot),
                 );
 
                 return { hash, description, problems: [] };

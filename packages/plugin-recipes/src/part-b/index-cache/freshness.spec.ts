@@ -66,7 +66,7 @@ describe("effectiveRangeForHolders", () => {
     };
 
     it("should combine every holder's range", () => {
-        expect(effectiveRangeForHolders("w/a", ["project", "w/b"], lookup)).toBe("^1 >=1.1.0");
+        expect(effectiveRangeForHolders("w/a", ["project", "w/b"], lookup)).toBe(">=1.0.0 <2.0.0-0 >=1.1.0");
     });
 
     it("should give * when every holder allows anything", () => {

@@ -9,14 +9,15 @@
 
 import { SousError, type Context } from "@sous-io/plugin-api";
 import type { IndexFile, Lockfile } from "@sous-io/plugin-formats/types";
-import type { MissingRepo, PlannedQuestion, RecipeRequest, RecipeUpdateInput, RecipeUpdatePlan, RecipeUpdateScope, ResolvedRecipe } from "../types.js";
+import type { PlannedQuestion, RecipeRequest, RecipeUpdateInput, RecipeUpdatePlan, RecipeUpdateScope, ResolvedRecipe, ResolveResult } from "../types.js";
 import { findInCatalog, namespaceOfKey, type CatalogInputs } from "./catalog.js";
 import { identityOf, pickMatch, readingsOf, repoSearchOrder } from "./catalog-context.js";
 import { isBuiltInEntry } from "./defaults.js";
-import { applyResolution, keysHeldBySubscription, lockedClosure, mergeHolders, PROJECT_HOLDER, releaseDroppedHolds, type LockRepoInput } from "./lock-holds.js";
+import { applyResolution, keysHeldBySubscription, lockedClosure, PROJECT_HOLDER, releaseDroppedHolds, type LockRepoInput } from "./lock-holds.js";
 import { definedVariables, plannedQuestionsOf } from "./questions.js";
 import { configuredSubscriptions, enabledSubscriptions, trustedRepos } from "./project.js";
 import { compareBytewise, describeError, sortBytewise } from "./util.js";
+import { NoVersionSatisfiesError } from "../part-b/resolver/resolve.js";
 
 /** The scope in words, for a sentence that says what was updated. */
 export function describeUpdateScope(scope: RecipeUpdateScope): string {
@@ -200,63 +201,34 @@ export async function planUpdate(input: RecipeUpdateInput, ctx: Context): Promis
     };
 
     const targets = sortBytewise(Object.keys(subscriptions)).filter((key) => !isBuiltInEntry(subscriptions[key]) && touches(key));
-    const merged = new Map<string, ResolvedRecipe>();
-    const resolvedSubscriptions: string[] = [];
-    const missing = new Map<string, MissingRepo>();
     const failed: Array<{ key: string; reason: string }> = [];
-    const cycles: string[][] = [];
-    const unreadable = new Set<string>();
+    const requests: Array<{ key: string; request: RecipeRequest }> = [];
 
     for (const key of targets) {
         const entry = subscriptions[key]!;
-        let request: RecipeRequest;
 
         try {
-            request = {
-                ref: format.parseNamedRef(key, "config"),
-                ...(entry.range === undefined ? {} : { range: entry.range }),
-                ...(entry.prerelease === true ? { prerelease: true } : {}),
-                requestedBy: PROJECT_HOLDER,
-                kind: "subscribes",
-            };
+            requests.push({
+                key,
+                request: {
+                    ref: format.parseNamedRef(key, "config"),
+                    ...(entry.range === undefined ? {} : { range: entry.range }),
+                    ...(entry.prerelease === true ? { prerelease: true } : {}),
+                    requestedBy: PROJECT_HOLDER,
+                    kind: "subscribes",
+                },
+            });
         } catch (error) {
             failed.push({ key, reason: describeError(error) });
-            continue;
         }
-
-        let result;
-
-        try {
-            result = await resolver.resolve([request], { keep, indexes, ...(entry.prerelease === true ? { prerelease: true } : {}) });
-        } catch (error) {
-            failed.push({ key, reason: describeError(error) });
-            continue;
-        }
-
-        cycles.push(...result.cycles);
-        result.unreadable.forEach((item) => unreadable.add(item));
-
-        for (const repo of result.missingRepos) {
-            const known = missing.get(repo.name);
-
-            missing.set(repo.name, known === undefined ? repo : { ...known, requiredBy: [...known.requiredBy, ...repo.requiredBy] });
-        }
-
-        const conflict = result.resolved.find((recipe) => merged.has(recipe.key) && merged.get(recipe.key)!.version !== recipe.version);
-
-        if (conflict !== undefined) {
-            failed.push({ key, reason: `It wants version ${conflict.version} of '${conflict.key}', and another subscription wants ${merged.get(conflict.key)!.version}.` });
-            continue;
-        }
-
-        for (const recipe of result.resolved) {
-            const already = merged.get(recipe.key);
-
-            merged.set(recipe.key, already === undefined ? recipe : mergeHolders(already, recipe));
-        }
-
-        resolvedSubscriptions.push(key);
     }
+
+    const together = await resolveTogether(requests, (asked) => resolver.resolve(asked, { keep, indexes }));
+    const resolvedSubscriptions = together.resolved;
+    const result = together.result;
+    const merged = new Map<string, ResolvedRecipe>(result.resolved.map((recipe) => [recipe.key, recipe]));
+
+    failed.push(...together.failed);
 
     const repoInputs: Record<string, LockRepoInput> = {};
 
@@ -283,9 +255,9 @@ export async function planUpdate(input: RecipeUpdateInput, ctx: Context): Promis
         scope,
         diff: lockService.diff(before, after),
         lockfile: after,
-        missingRepos: [...missing.values()].sort((left, right) => compareBytewise(left.name, right.name)),
+        missingRepos: [...result.missingRepos].sort((left, right) => compareBytewise(left.name, right.name)),
         newVariables: await newVariables(ctx, changed, before, indexes),
-        unreadable: sortBytewise(unreadable),
+        unreadable: sortBytewise(result.unreadable),
         unreachable,
         linked: sortBytewise(new Set(changed.map((recipe) => recipe.repo).filter((repo) => links?.get(repo) !== undefined))),
         builtIn: builtInKeys
@@ -299,7 +271,7 @@ export async function planUpdate(input: RecipeUpdateInput, ctx: Context): Promis
             }),
         ),
         failed,
-        cycles,
+        cycles: result.cycles,
     };
 }
 
@@ -320,4 +292,67 @@ async function newVariables(ctx: Context, changed: readonly ResolvedRecipe[], be
     const added = defined.filter((variable) => !known.has(variable.key));
 
     return plannedQuestionsOf(ctx, added);
+}
+
+/** What resolving the subscriptions together settled. */
+interface ResolvedTogether {
+    /** The result covering every subscription that could be resolved. */
+    readonly result: ResolveResult;
+    /** The keys of those subscriptions. */
+    readonly resolved: string[];
+    /** Each subscription refused, and why. */
+    readonly failed: Array<{ key: string; reason: string }>;
+}
+
+/**
+ * Resolves the subscriptions together, so each recipe several of them reach takes one version that
+ * satisfies every holder's range at once (ADR 0023): the locked version while it does, else the
+ * newest that does. When they cannot all be resolved at once, they are added one at a time in order,
+ * and each one that cannot join the others is refused with the reason, leaving its pins where they
+ * are.
+ *
+ * @param requests - One request per subscription, keyed by the subscription.
+ * @param resolve - Resolves a set of requests in one pass.
+ */
+export async function resolveTogether(
+    requests: ReadonlyArray<{ key: string; request: RecipeRequest }>,
+    resolve: (requests: RecipeRequest[]) => Promise<ResolveResult>,
+): Promise<ResolvedTogether> {
+    const empty: ResolveResult = { resolved: [], missingRepos: [], unreadable: [], cycles: [] };
+
+    if (requests.length === 0) {
+        return { result: empty, resolved: [], failed: [] };
+    }
+
+    try {
+        return { result: await resolve(requests.map((entry) => entry.request)), resolved: requests.map((entry) => entry.key), failed: [] };
+    } catch {
+        // Something cannot be resolved alongside the rest; find out which, one at a time.
+    }
+
+    const accepted: Array<{ key: string; request: RecipeRequest }> = [];
+    const failed: Array<{ key: string; reason: string }> = [];
+    let result = empty;
+
+    for (const entry of requests) {
+        try {
+            result = await resolve([...accepted, entry].map((each) => each.request));
+            accepted.push(entry);
+        } catch (error) {
+            failed.push({ key: entry.key, reason: failureReason(error) });
+        }
+    }
+
+    return { result, resolved: accepted.map((entry) => entry.key), failed };
+}
+
+/** Why a subscription could not be resolved, in one sentence; a version conflict names each holder and its range. */
+function failureReason(error: unknown): string {
+    if (!(error instanceof NoVersionSatisfiesError)) {
+        return describeError(error);
+    }
+
+    const holders = error.ranges.map(({ range, requestedBy }) => `'${range}' from ${requestedBy === PROJECT_HOLDER ? "a subscription of this project" : `'${requestedBy}'`}`);
+
+    return `No published version of '${error.key}' satisfies every recipe that needs it: ${holders.join(", ")}.`;
 }

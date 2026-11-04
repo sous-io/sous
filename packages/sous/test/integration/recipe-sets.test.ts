@@ -212,9 +212,9 @@ describe("a recipe set described from the index", () => {
 
     const house = index.recipes["omakase/house"]!.versions["1.0.0"]!;
     expect(house.dependencies).toEqual({
-      "tools/lint": { version: "1.0.0", declared: "tools/lint", kind: "depends" },
-      "workflow/notes": { version: "1.0.0", declared: "workflow", kind: "subscribes" },
-      "workflow/review": { version: "1.0.0", declared: "workflow", kind: "subscribes" },
+      "tools/lint": { range: "^1.0.0", declared: "tools/lint", kind: "depends" },
+      "workflow/notes": { range: "^1.0.0", declared: "workflow", kind: "subscribes" },
+      "workflow/review": { range: "^1.0.0", declared: "workflow", kind: "subscribes" },
     });
     expect(house.variables).toEqual([]);
     expect(house.depends).toEqual(["tools/lint"]);

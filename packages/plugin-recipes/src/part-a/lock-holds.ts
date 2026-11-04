@@ -39,27 +39,6 @@ export function dropProjectHold(lock: Lockfile, key: string): Lockfile {
     return removeHolder({ ...lock, recipes }, key);
 }
 
-/**
- * Combines two resolutions of the same recipe version, so every holder is kept.
- */
-export function mergeHolders(left: ResolvedRecipe, right: ResolvedRecipe): ResolvedRecipe {
-    const requestedBy = [...new Set([...left.requestedBy, ...right.requestedBy])].sort(compareBytewise);
-    const ranges = [...left.ranges];
-
-    for (const entry of right.ranges) {
-        if (!ranges.some((seen) => seen.range === entry.range && seen.requestedBy === entry.requestedBy)) {
-            ranges.push(entry);
-        }
-    }
-
-    return {
-        ...left,
-        requestedBy,
-        ranges,
-        kind: left.kind === "subscribes" || right.kind === "subscribes" ? "subscribes" : "depends",
-    };
-}
-
 /** Whether a stored key falls under a subscription's cover (`workflow` covers `workflow/a`). */
 export function covers(cover: string | undefined, key: string): boolean {
     return cover !== undefined && (key === cover || key.startsWith(`${cover}/`));

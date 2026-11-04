@@ -41,20 +41,30 @@ function namespaceOfKey(key: string): string {
 }
 
 /**
- * One dependency of one published version, as the release resolved it.
+ * One dependency of one published version, as the release recorded it (ADR 0023).
  *
- * A SIBLING (a recipe in this same repository) always resolves to an exact
- * version, because the release that wrote this entry cut that sibling's tag or
- * found it already cut. A CROSS-REPOSITORY dependency carries the identity of
- * the repository it lives in, which is what a consumer needs in order to add
- * that repository and find the recipe in the store; the version it resolves to
- * belongs to that repository's own index, so this entry carries the range the
- * manifest declared instead.
+ * The entry records the range the dependency may take, never an exact version:
+ * the consuming project's lockfile is the only lock. A SIBLING (a recipe in this
+ * same repository) named with a range records that range; one named with no
+ * range records `^<its version at release>`, the same major. A
+ * CROSS-REPOSITORY dependency also carries the identity of the repository it
+ * lives in, which is what a consumer needs in order to add that repository and
+ * find the recipe in the store.
+ *
+ * An entry written before ADR 0023 records `version` instead, the exact version
+ * that release resolved. A consumer reads it as `^<version>`, further limited by
+ * the range in `declared` when that entry holds one.
  */
 export const indexDependencySchema = forwardCompatibleObject({
-  /** The exact version this dependency resolved to, when the release could resolve one. */
+  /**
+   * The exact version an older release resolved this dependency to. Written
+   * only before ADR 0023, and read as `^<version>`.
+   */
   version: semverVersionSchema.optional(),
-  /** The range the manifest declared, recorded when no exact version could be resolved. */
+  /**
+   * The range this dependency may take: the declared range, or
+   * `^<the sibling's version at release>` for a sibling named with no range.
+   */
   range: semverRangeSchema.optional(),
   /**
    * The canonical identity of the repository publishing it
@@ -80,8 +90,8 @@ export const indexDependencySchema = forwardCompatibleObject({
   kind: dependencyKindSchema.optional(),
 }).refine((entry) => entry.version !== undefined || entry.range !== undefined, {
   message:
-    "must record either the exact version this dependency resolved to or the range " +
-    "the recipe declared",
+    "must record the range this dependency may take, or the exact version an older " +
+    "release resolved it to",
 });
 
 /** One published version of one recipe. */
@@ -110,10 +120,11 @@ export const indexVersionSchema = forwardCompatibleObject({
   /** When the version was released. */
   releasedAt: isoTimestampSchema.optional(),
   /**
-   * What this exact version depends on, resolved at release time and keyed
-   * `namespace/recipe`. A consumer installing this version installs these
-   * versions rather than re-resolving the ranges its manifest declared, so a
-   * published version means one thing forever.
+   * What this exact version depends on, recorded at release time and keyed
+   * `namespace/recipe`: the repository each dependency comes from, how it was
+   * declared, and the range it may take. A consumer resolves those ranges
+   * together with every other holder's, and its own lockfile pins the result
+   * (ADR 0023). The entry itself is frozen once published (ADR 0007).
    *
    * The field is additive: an index written before it existed still parses, and
    * a consumer that finds no entry falls back to the manifest's ranges. A

@@ -17,6 +17,7 @@ import type { RefLocation, RepoRef, SousRef } from "@sous-io/plugin-refs/types";
 import type { MissingRepo, ResolvedRecipe, ResolveResult } from "../../types.js";
 import { PROJECT_HOLDER } from "../constants.js";
 import { identitySegments, sortKeys, splitStoredKey } from "../support.js";
+import { recordedRange } from "./ranges.js";
 
 /** One thing to resolve, in the resolver's own terms. */
 export interface Wanted {
@@ -281,8 +282,8 @@ function describeWanted(wanted: Wanted): string {
 
 /**
  * Turns one `depends` or `subscribes` entry into work. A sibling ref resolves inside the declaring
- * recipe's repository. When the index records what this version of the parent was released
- * against, that exact version is asked for.
+ * recipe's repository. The range asked for is the one the index records for this version of the
+ * parent ({@link recordedRange}), else the one the entry was written with.
  */
 function dependencyRequest(written: string, parent: Draft, kind: DependencyKind, context: ResolveContext): WorkItem {
     const reading = settleDependency(written, parent, context);
@@ -309,7 +310,7 @@ function dependencyRequest(written: string, parent: Draft, kind: DependencyKind,
 
     const key = wanted.name === undefined ? undefined : `${wanted.namespace}/${wanted.name}`;
     const pinned = key === undefined ? undefined : parent.dependencies?.[key];
-    const range = wanted.name === undefined ? undefined : (pinned?.version ?? wanted.range ?? pinned?.range);
+    const range = wanted.name === undefined ? undefined : recordedRange(pinned, wanted.range);
     const target = { namespace: wanted.namespace, ...(wanted.name === undefined ? {} : { name: wanted.name }), ...(range === undefined ? {} : { range }) };
 
     if (wanted.location === undefined) {
@@ -459,7 +460,7 @@ function settleBrowsedItem(item: WorkItem, index: IndexFile | undefined): void {
 
     item.namespace = found.namespace;
     item.name = found.name;
-    item.range = found.name === undefined ? undefined : (pinned?.version ?? browsed.range ?? pinned?.range);
+    item.range = found.name === undefined ? undefined : recordedRange(pinned, browsed.range);
 }
 
 /** The error for a dependency that reads more than one way with nothing to settle it. */
@@ -583,6 +584,21 @@ function resolveRecipe(item: WorkItem, context: ResolveContext, resolved: Map<st
     } as Draft;
 }
 
+/**
+ * No published version of a recipe satisfies every range asked of it. It names the recipe and each
+ * holder's range, so a caller can say which holders conflict.
+ */
+export class NoVersionSatisfiesError extends ConfigError {
+    constructor(
+        readonly key: string,
+        readonly ranges: ReadonlyArray<{ readonly range: string; readonly requestedBy: string }>,
+        message: string,
+        options: { details: string[] },
+    ) {
+        super(message, options);
+    }
+}
+
 /** The highest published version satisfying every range at once; prereleases only when opted into. */
 export function pickVersion(key: string, entry: IndexFile["recipes"][string], ranges: ReadonlyArray<{ range: string; requestedBy: string }>, prerelease: boolean, keep?: string): string {
     const published = Object.keys(entry.versions);
@@ -605,7 +621,7 @@ export function pickVersion(key: string, entry: IndexFile["recipes"][string], ra
     const asked = ranges.map(({ range, requestedBy }) => `  ${range} (required by ${requestedBy})`);
     const available = [...published].sort((left, right) => semver.rcompare(left, right, { loose: true })).join(", ");
 
-    throw new ConfigError(`No published version of '${key}' satisfies what was asked for.`, {
+    throw new NoVersionSatisfiesError(key, ranges, `No published version of '${key}' satisfies what was asked for.`, {
         details: [
             `Version ${ranges.length === 1 ? "range" : "ranges"} asked for:`,
             ...asked,
