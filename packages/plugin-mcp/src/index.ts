@@ -71,6 +71,7 @@ export function createMcpPlugin(options: McpPluginOptions = {}): PluginDefinitio
 
             sous.intents.add({
                 intent: "mcp.serve",
+                needsRecipeFiles: true,
                 summary: "Serve this project to agents over MCP",
                 description:
                     "Starts an MCP server on standard input and output. Every command is a tool, and each tool call " +

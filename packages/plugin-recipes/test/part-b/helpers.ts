@@ -8,7 +8,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createEngine, type Engine } from "@sous-io/core";
-import { BufferedReporter, definePlugin, jsonSchema, type JsonObject, type PluginDefinition, type ProjectInfo } from "@sous-io/plugin-api";
+import { BufferedReporter, definePlugin, jsonSchema, type JsonObject, type PluginDefinition, type ProjectInfo, type RunPlan } from "@sous-io/plugin-api";
 import { formatsPlugin, hashDirectorySync } from "@sous-io/plugin-formats";
 import type { ContentHash, IndexFile, RecipeManifest } from "@sous-io/plugin-formats/types";
 import { gitPlugin } from "@sous-io/plugin-git";
@@ -228,6 +228,8 @@ export async function startEngine(options: {
     data?: () => JsonObject;
     hosts?: RepositoryHostEntity[];
     plugins?: PluginDefinition[];
+    /** What the front end says it will run (`BuildOptions.plan`). */
+    plan?: RunPlan;
 }): Promise<{ engine: Engine; reporter: BufferedReporter; project: ProjectInfo }> {
     const project = makeProject(options.root);
     const reporter = new BufferedReporter();
@@ -239,7 +241,7 @@ export async function startEngine(options: {
         builtIns: [...STUB_DEPENDENCIES, hostPlugin, gitPlugin, formatsPlugin, refsPlugin, recipesPlugin, configPlugin(options.data ?? (() => ({})), options.hosts ?? []), ...withPackage(options.plugins ?? [])],
     });
 
-    await engine.buildConfig();
+    await engine.buildConfig(options.plan === undefined ? {} : { plan: options.plan });
 
     return { engine, reporter, project };
 }

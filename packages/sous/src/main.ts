@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { type Budget, createEngine, DEFAULT_BUDGETS, type Engine } from "@sous-io/core";
-import type { Environment, ProjectInfo, TimingCategory } from "@sous-io/plugin-api";
+import type { Environment, ProjectInfo, RunPlan, TimingCategory } from "@sous-io/plugin-api";
 import { isSousError } from "@sous-io/plugin-api";
 import { projectEnvironment } from "@sous-io/plugin-config-files";
 import { BUILT_IN_PLUGINS } from "./built-ins.js";
@@ -71,6 +71,7 @@ export async function main(argv: readonly string[], options: MainOptions): Promi
 
     const key = startupKey(project, options.env, sousVersion(), fileURLToPath(import.meta.url));
     let quiet = false;
+    let plan: RunPlan | undefined;
 
     // Help, the version and shell completion read only what the built-in plugins registered, so they
     // do not wait for the config build when the last build loaded no other plugin (and, when it did,
@@ -78,6 +79,10 @@ export async function main(argv: readonly string[], options: MainOptions): Promi
     await engine.loadBuiltInsOnly();
 
     if (hasFrontEnd(engine, "cli")) {
+        // What the command line runs decides what the build may leave out: a command that reads no
+        // recipe files does not wait for, or fail on, downloading the ones this machine lacks.
+        plan = engine.frontEnd("cli").plan(argv);
+
         if (!engine.frontEnd("cli").needsConfig(argv)) {
             if (loadsOnlyBuiltIns(project, options.env, key)) {
                 await engine.frontEnd("cli").start(argv);
@@ -91,7 +96,7 @@ export async function main(argv: readonly string[], options: MainOptions): Promi
     }
 
     try {
-        await engine.buildConfig(quiet ? { reportBudgets: false } : {});
+        await engine.buildConfig({ ...(quiet ? { reportBudgets: false } : {}), ...(plan === undefined ? {} : { plan }) });
         recordStartupFact(project, options.env, key, engine.pluginInfo().every((plugin) => plugin.builtIn));
     } catch (error) {
         // A failed build still reaches the CLI when the partial config has it: the CLI reports the

@@ -39,15 +39,29 @@ export function storeKeyOf(key: string, identity: string, version: string): Stor
  */
 export async function ensureInStore(target: RestoreTarget, deps: RestoreDeps): Promise<EnsuredRecipe> {
     const storeKey = storeKeyOf(target.key, target.identity, target.entry.version);
-    const hit = await deps.store.get(storeKey);
+    const hit = await findInStore(target, deps.store);
 
-    if (hit !== undefined && hit.entry.hash.toLowerCase() === target.entry.hash.toLowerCase()) {
-        return { entry: hit.entry, dir: hit.dir, downloaded: false };
+    if (hit !== undefined) {
+        return hit;
     }
 
     const entry = await download(target, storeKey, deps);
 
     return { entry, dir: deps.store.entryDir(storeKey), downloaded: true };
+}
+
+/**
+ * The store entry of a pinned recipe when this machine already has it with the locked hash, else
+ * `undefined`. Nothing is downloaded.
+ */
+export async function findInStore(target: RestoreTarget, store: RecipesStore): Promise<EnsuredRecipe | undefined> {
+    const hit = await store.get(storeKeyOf(target.key, target.identity, target.entry.version));
+
+    if (hit !== undefined && hit.entry.hash.toLowerCase() === target.entry.hash.toLowerCase()) {
+        return { entry: hit.entry, dir: hit.dir, downloaded: false };
+    }
+
+    return undefined;
 }
 
 /** Fetches the recipe's subtree at its tag and puts it in the store under the locked hash. */

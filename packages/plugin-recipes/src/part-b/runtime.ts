@@ -5,7 +5,7 @@
  * here reaches singletons only.
  */
 
-import type { BuiltConfig, EntityReader, Reporter, ServiceReader, Sous } from "@sous-io/plugin-api";
+import type { BuiltConfig, EntityReader, Reporter, RunPlan, ServiceReader, Sous } from "@sous-io/plugin-api";
 import { nullReporter } from "@sous-io/plugin-api";
 import type {} from "@sous-io/plugin-formats/types";
 import type {} from "@sous-io/plugin-git/types";
@@ -25,6 +25,10 @@ export type RuntimeHost = Pick<Sous, "services" | "entities" | "env" | "project"
 export class PartBRuntime {
     private core: IndexCacheCore | undefined;
     private readonly fetched = new Set<string>();
+    /** Set once an intent that needs recipe files runs: from then on, builds download what is missing. */
+    private recipeFilesWanted = false;
+    /** How many reached recipes the latest build left out, because their files were not on this machine. */
+    private leftOut = 0;
 
     constructor(readonly host: RuntimeHost) {}
 
@@ -37,6 +41,29 @@ export class PartBRuntime {
         for (const key of keys) {
             this.fetched.add(key);
         }
+    }
+
+    /**
+     * Whether a build may download recipe files: always, unless the front end said the command it
+     * runs reads none (`RunPlan`), and no intent that reads them has run since.
+     */
+    downloadsRecipeFiles(plan: RunPlan | undefined): boolean {
+        return this.recipeFilesWanted || plan === undefined || plan.intent?.needsRecipeFiles === true;
+    }
+
+    /** Records how many reached recipes the latest build left out for want of their files. */
+    noteLeftOut(count: number): void {
+        this.leftOut = count;
+    }
+
+    /** Whether the latest build left out recipes whose files are not on this machine. */
+    leftOutRecipeFiles(): boolean {
+        return this.leftOut > 0;
+    }
+
+    /** Lets every later build download the recipe files this machine lacks. */
+    wantRecipeFiles(): void {
+        this.recipeFilesWanted = true;
     }
 
     /** The recipes downloaded while the config was built and not reported yet; reading them forgets them. */

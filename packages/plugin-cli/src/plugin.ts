@@ -2,7 +2,7 @@ import os from "node:os";
 import { definePlugin, IntentOutput, IntentOutputs, jsonSchema, LOG_LEVELS, TextBlock, VariableSet, type PluginDefinition } from "@sous-io/plugin-api";
 import { CommandTree, type CommandPicks } from "./command-tree.js";
 import { viewError } from "./errors.js";
-import { commandLineNeedsConfig, runCommandLine } from "./front-end.js";
+import { commandLineNeedsConfig, commandLinePlan, runCommandLine } from "./front-end.js";
 import { BUILT_IN_GROUPS } from "./groups.js";
 import { completeIntent, completionIntent } from "./completion.js";
 import { helpIntent } from "./help-intent.js";
@@ -189,6 +189,7 @@ export function createCliPlugin(options: CliPluginOptions = {}): PluginDefinitio
                 id: "cli",
                 start: (engine, argv) => runCommandLine(engine, argv, { io: io(), env: sous.env, cwd: process.cwd() }),
                 needsConfig: (engine, argv) => commandLineNeedsConfig(engine, argv),
+                plan: (engine, argv) => commandLinePlan(engine, argv),
             });
         },
     });

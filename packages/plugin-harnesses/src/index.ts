@@ -76,6 +76,7 @@ export const harnessesPlugin: PluginDefinition = definePlugin({
 
         sous.intents.add({
             intent: "launch",
+            needsRecipeFiles: true,
             summary: "Build this project's outputs, then start a coding agent configured in its config",
             input: launchInput,
             requiresProject: true,
@@ -95,6 +96,7 @@ export const harnessesPlugin: PluginDefinition = definePlugin({
 
         sous.intents.add({
             intent: "harness.run-headless",
+            needsRecipeFiles: true,
             summary: "Run a coding agent with no person at the keyboard, and read its transcript",
             input: runHeadlessInput,
             cli: { command: ["harness", "run-headless"], hidden: true },

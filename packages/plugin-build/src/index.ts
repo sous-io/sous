@@ -107,6 +107,7 @@ export function createBuildPlugin(options: BuildPluginOptions = {}): PluginDefin
 
             sous.intents.add({
                 intent: "build",
+                needsRecipeFiles: true,
                 requiresProject: true,
                 summary: "Compile this project's outputs and remove the ones its config no longer produces",
                 input: buildInputSchema,
@@ -123,6 +124,7 @@ export function createBuildPlugin(options: BuildPluginOptions = {}): PluginDefin
 
             sous.intents.add({
                 intent: "compile",
+                needsRecipeFiles: true,
                 requiresProject: true,
                 summary: "Compile markdown templates into output files",
                 description: "Compiles every target in the config without preparing recipes or pruning.",
@@ -136,6 +138,7 @@ export function createBuildPlugin(options: BuildPluginOptions = {}): PluginDefin
 
             sous.intents.add({
                 intent: "build.prepare",
+                needsRecipeFiles: true,
                 requiresProject: true,
                 summary: "Seed core, lock new subscriptions, restore the store and check upstream",
                 input: prepareInputSchema,
@@ -145,6 +148,7 @@ export function createBuildPlugin(options: BuildPluginOptions = {}): PluginDefin
 
             sous.intents.add({
                 intent: "prune",
+                needsRecipeFiles: true,
                 requiresProject: true,
                 summary: "Remove output files that are no longer in the current config",
                 input: pruneInputSchema,
@@ -154,6 +158,7 @@ export function createBuildPlugin(options: BuildPluginOptions = {}): PluginDefin
 
             sous.intents.add({
                 intent: "clear",
+                needsRecipeFiles: true,
                 requiresProject: true,
                 summary: "Delete all files and directories written by Sous for a project",
                 input: clearInputSchema,
@@ -167,6 +172,7 @@ export function createBuildPlugin(options: BuildPluginOptions = {}): PluginDefin
 
             sous.intents.add({
                 intent: "build.watch",
+                needsRecipeFiles: true,
                 requiresProject: true,
                 summary: "Watch the sources and build on every change",
                 input: watchInputSchema,

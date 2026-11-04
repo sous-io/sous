@@ -736,6 +736,7 @@ export function registerSubscriptionIntents(sous: Sous): void {
 
     sous.intents.add({
         intent: "subscription.add",
+        needsRecipeFiles: true,
         requiresProject: true,
         summary: "Subscribe this project to a recipe, or to a whole namespace of them",
         input: inputSchema<SubscriptionAddInput>(
@@ -806,6 +807,7 @@ export function registerSubscriptionIntents(sous: Sous): void {
 
     sous.intents.add({
         intent: "subscription.update",
+        needsRecipeFiles: true,
         requiresProject: true,
         summary: "Move pinned versions to the newest their ranges allow",
         input: inputSchema<SubscriptionUpdateInput>(

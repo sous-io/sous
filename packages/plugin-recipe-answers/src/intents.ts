@@ -275,6 +275,7 @@ export async function handleMap(input: VarsMapInput, ctx: Context): Promise<Inte
 export const varsIntents: IntentDefinition[] = [
     {
         intent: "vars.ask",
+        needsRecipeFiles: true,
         summary: "Answer the variables this project's recipes define, storing the answers in the .sous env files",
         description:
             "Asks only what is unanswered or no longer fits; --all asks everything again. The name may be a variable, an environment variable name, a recipe, a namespace or a repository. Every question can be answered ahead of time with --answer <name>=<value> or --answers-file.",
@@ -326,6 +327,7 @@ export const varsIntents: IntentDefinition[] = [
     },
     {
         intent: "vars.list",
+        needsRecipeFiles: true,
         summary: "List every variable this project's recipes define, with its answer",
         input: jsonSchema<VarsListInput>({
             type: "object",
@@ -347,6 +349,7 @@ export const varsIntents: IntentDefinition[] = [
     },
     {
         intent: "vars.show",
+        needsRecipeFiles: true,
         summary: "Show everything about one variable, including how it was answered",
         input: jsonSchema<VarsShowInput>({
             type: "object",
@@ -370,6 +373,7 @@ export const varsIntents: IntentDefinition[] = [
     },
     {
         intent: "vars.map",
+        needsRecipeFiles: true,
         summary: "Bind an environment variable to one recipe variable, in conf.d/520-var-mappings.jsonc",
         input: jsonSchema<VarsMapInput>({
             type: "object",

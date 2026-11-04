@@ -5,6 +5,11 @@
  * plugins and content join the loop. Downloads are cached in the store, so later passes and later
  * runs find them already there. When something cannot be downloaded, building the config fails
  * and says what (unless the plugin option `fetch.missing` is `skip`).
+ *
+ * Only a command that reads recipe files downloads them (an intent that declares
+ * `needsRecipeFiles`, or a command the front end could not read before the build). Any other
+ * command (help, the version, `repo list`, `subscription list`) uses the recipe files already on
+ * this machine and leaves out the rest without a word, so it works offline and without credentials.
  */
 
 import fs from "node:fs";
@@ -20,7 +25,7 @@ import type { PartBRuntime } from "../runtime.js";
 import { messageOf, splitStoredKey } from "../support.js";
 import { mapLinkedRecipes, type LinkedRecipe } from "./linked-recipes.js";
 import { describeFailures, downloadFailureError, type RecipeFailure } from "./download-failures.js";
-import { ensureInStore } from "./restore.js";
+import { ensureInStore, findInStore } from "./restore.js";
 
 /** This plugin's options, under `plugins.options."@sous-io/plugin-recipes"`. */
 export interface RecipesPluginOptions {
@@ -63,9 +68,14 @@ export function fetchContributor(runtime: PartBRuntime): ContributorDefinition {
             }
 
             const missing = config.options<RecipesPluginOptions>()?.fetch?.missing ?? "fail";
-            const recipes = await activeRecipes(runtime, config, lockfile, reached, repos, project.sousDir);
+            // A command that reads no recipe files (help, `repo list`, `subscription list`) uses the
+            // ones already on this machine, and leaves out the rest without a word.
+            const download = runtime.downloadsRecipeFiles(config.plan);
+            const recipes = await activeRecipes(runtime, config, lockfile, reached, repos, project.sousDir, download);
 
-            if (recipes.failed.length > 0) {
+            runtime.noteLeftOut(download ? 0 : recipes.failed.length);
+
+            if (download && recipes.failed.length > 0) {
                 if (missing === "fail") {
                     throw downloadFailureError(recipes.failed);
                 }
@@ -140,11 +150,14 @@ interface ActiveRecipes {
     readonly active: ActiveRecipeEntity[];
     /** `label` is how a restore names the version (`restoredLabel`). */
     readonly downloaded: Array<{ key: string; label: string; version: string; dir: string }>;
-    /** Recipes that could not be made active, each with the error that says why. */
+    /** Recipes that could not be made active; when nothing may be downloaded, those whose files are not here. */
     readonly failed: RecipeFailure[];
 }
 
-/** Locates or downloads every reached recipe and reads its manifest. */
+/**
+ * Locates or downloads every reached recipe and reads its manifest. With `download` false, only the
+ * copies already in the store (or a linked working copy) count; nothing is downloaded.
+ */
 async function activeRecipes(
     runtime: PartBRuntime,
     config: ConfigBuilder,
@@ -152,6 +165,7 @@ async function activeRecipes(
     reached: readonly string[],
     repos: Record<string, RepoEntry>,
     sousDir: string,
+    download: boolean,
 ): Promise<ActiveRecipes> {
     const services = runtime.services;
     const manifests = services.get("formats.manifests");
@@ -209,16 +223,20 @@ async function activeRecipes(
                 }
 
                 const provider = repos[entry.repo]?.provider;
-                const fetched = await Promise.all(
+                const found = await Promise.all(
                     versions.map(async (one) => {
-                        const outcome = await ensureInStore(
-                            { key, entry: { ...entry, version: one.version, hash: one.hash }, repo: entry.repo, url: locked.url, identity, ...(provider === undefined ? {} : { provider }) },
-                            storeDeps,
-                        );
+                        const target = { key, entry: { ...entry, version: one.version, hash: one.hash }, repo: entry.repo, url: locked.url, identity, ...(provider === undefined ? {} : { provider }) };
+                        const outcome = download ? await ensureInStore(target, storeDeps) : await findInStore(target, storeDeps.store);
 
-                        return { one, outcome, manifest: await readManifest(manifests, outcome.dir, key) };
+                        return outcome === undefined ? undefined : { one, outcome, manifest: await readManifest(manifests, outcome.dir, key) };
                     }),
                 );
+                const fetched = found.filter((one) => one !== undefined);
+
+                if (fetched.length < found.length) {
+                    return { failed: { key, error: new Error(`the files of ${key} are not on this machine`) } };
+                }
+
                 const shared = fetched[0]!;
                 const pins = fetched.slice(1).map(({ one, outcome, manifest }) => ({ holder: one.holder as string, version: one.version, hash: one.hash, dir: outcome.dir, manifest }));
                 const active: ActiveRecipeEntity = {

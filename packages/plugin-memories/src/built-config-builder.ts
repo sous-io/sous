@@ -27,6 +27,8 @@ class BuiltConfigBuilder extends Reporting(Object) implements ConfigBuilder {
     readonly contributor: ContributorInfo;
     readonly project: ProjectInfo | undefined;
     readonly env: Environment;
+    /** Nothing is planned: this builder reads a config already built. */
+    readonly plan: undefined = undefined;
 
     private readonly document: ReturnType<typeof createDocument>;
 
