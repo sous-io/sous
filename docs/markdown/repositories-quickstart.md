@@ -93,8 +93,8 @@ sous recipe show workflow/task-files
 ```
 
 On a machine that has never fetched the recipe, sous shows what the index knows: every published
-version, and every dependency with each declared range beside the exact version the index resolved
-it to. The questions it asks are not known until it is fetched; run the same command after
+version, and every dependency with the range it was declared with and the range the index records
+for it. The questions it asks are not known until it is fetched; run the same command after
 subscribing and it adds a table of the variables the recipe publishes.
 
 ## 4. Subscribe to a recipe

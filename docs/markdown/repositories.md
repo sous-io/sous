@@ -93,8 +93,8 @@ with the project.
 A recipe manifest can declare two relationships to other recipes, and they differ in exactly one
 respect: whose files end up in your project. `depends` fetches, pins and trust-gates the target
 and makes it addressable while rendering, but keeps its files out of your output; `subscribes`
-does all of that and lands the target's files in your project too, along with the variable
-questions it publishes (see [Recipe variables](repositories-variables.md)).
+does all of that and lands the target's files in your project too. Under either list, the variable
+questions the target publishes are asked (see [Recipe variables](repositories-variables.md)).
 
 ```yaml
 depends:

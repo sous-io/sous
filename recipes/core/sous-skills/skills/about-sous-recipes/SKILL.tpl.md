@@ -134,8 +134,13 @@ The fields in that example, and the ones it leaves out:
   answers already stored.
 
 A template may also read a variable another recipe defines. List that recipe under `depends`, so
-the variable is there wherever this recipe is, and branch on it in the template rather than telling
-the agent to look the setting up; `about-liquid-templates` shows how.
+the variable is there wherever this recipe is, and MUST NOT redefine it; branch on it in the
+template rather than telling the agent to look the setting up (`about-liquid-templates` shows how).
+
+When two recipes do define one name, the project is asked one question built from the strictest
+combination: secret, `local` or required if any definition is, and only the values every definition
+accepts. When no value can satisfy both (different types, no shared `enum` option), each recipe is
+asked separately under its recipe-scoped name.
 
 ## Depends and Subscribes
 
@@ -144,14 +149,18 @@ Both lists name other recipes, and they do different things:
 - `depends` makes the other recipe a **library** for this one. It is fetched and pinned, and its
   files can be included from this recipe's templates, but its files never reach the subscriber's
   output.
-- `subscribes` is a **co-subscription**. The other recipe's files land and its questions are asked,
-  as if the project had subscribed to it too.
+- `subscribes` is a **co-subscription**. The other recipe's files land, as if the project had
+  subscribed to it too.
+
+Under either list, the other recipe's questions are asked, and its answers are in this recipe's
+templates.
 
 Each entry names its target by where it lives:
 
 - a bare `namespace/recipe` (or `namespace` for all of it) for a sibling in the same repository.
-  With no range it means the version released alongside this one; an `@` range (npm's rules) is
-  allowed but uncommon.
+  With no range it means `^<the sibling's version at release>`, the same major version. An `@`
+  range follows npm's rules and MAY be exact (`workflow/qa-helper@1.2.0`) when this recipe needs
+  certainty; the subscribing project's lockfile is the only thing that pins an exact version.
 - a location for a recipe in another repository, such as
   `github://example-org/team-recipes/review/wording@^1.0`, an HTTPS or SSH URL, or a URL copied
   from the browser. A ref is stored and printed as its published identity (namespace and recipe),

@@ -132,7 +132,7 @@ A subscriber is offered the missing plugin when they subscribe; see
 ## Declare the variables a recipe needs
 
 A recipe that needs a value from the project asks through a **definition**: a published specification, never a
-value. Sous asks the question only when a subscribed recipe needs the variable and no valid answer is in scope.
+value. Sous asks the question only when a recipe the project holds needs the variable and no valid answer is in scope.
 
 ```yaml
 variables:
@@ -177,7 +177,7 @@ variables:
   a value the environment already carries, such as `GITHUB_TOKEN`; `x-intentional: true` then silences the
   release warning about claiming a well-known name (`PATH`, `HOME`, `USER`, `SHELL`, `GITHUB_TOKEN`,
   `GITLAB_TOKEN`, `NPM_TOKEN`, or anything starting `AWS_` or `SOUS_`, except the `SOUS_VAR_` names sous
-  derives itself). Two definitions of the same name may share one variable; two of **different** names
+  derives itself). Two definitions of the same name share one variable; two of **different** names
   claiming the same one is an error.
 - **`secret: true`** hides the value everywhere sous prints it, and **`scope`** picks the file the answer is
   written to: `shared` for the committed `.sous/.env`, `local` for the gitignored `.sous/.env.local`. A secret
@@ -187,19 +187,23 @@ variables:
   answering, and the message names your pattern. Within a major version a schema may only LOOSEN: tightening a
   constraint is a major bump, and an upgrade re-validates stored answers, re-prompting only where an old one no
   longer fits.
+- **Reading another recipe's variable** needs no definition: list that recipe under `depends` and use the name in
+  your templates. Redefining it makes a second definition, which sous combines with the first; see
+  [Two recipes, one name](repositories-variables.md#two-recipes-one-name).
 - **Further reading:** [Recipe variables](repositories-variables.md) covers how an answer is found at build
   time; [Variable definitions](repositories-file-formats.md#variable-definitions) is the full field table.
 
 ## Declare dependencies and co-subscriptions
 
 `depends` fetches and pins a recipe whose files stay OUT of a subscriber's output but are addressable from your
-own templates, and from the templates of any project whose lockfile pins it. `subscribes` is a co-subscription: its questions run and its files DO enter the output, which is
-how a curated bundle is built. Both hold plain strings naming their target by where it lives.
+own templates, and from the templates of any project whose lockfile pins it. `subscribes` is a co-subscription: its
+files DO enter the output, which is how a curated bundle is built. Under either list, the other recipe's questions
+are asked and its answers reach your templates. Both hold plain strings naming their target by where it lives.
 
 ```yaml
 depends:
-  - workflow/qa-helper                                       # a sibling, released alongside me
-  - workflow/qa-helper@^1.1                                  # a sibling with a range; uncommon
+  - workflow/qa-helper                                       # a sibling: ^ its version at release
+  - workflow/qa-helper@1.1.4                                 # a sibling at exactly one version
   - github://sous-io/sous-recipes/workflow/sat@^1.0          # another repository
   - gitlab://gitlab.example.com/group/subgroup/proj/-/qa/lint  # a self-hosted host, with subgroups
   - https://github.com/acme/recipes/tree/main/recipes/lint     # a URL copied from the browser
@@ -207,14 +211,15 @@ subscribes:
   - quality/code-review                                      # co-subscribed: its files land too
 ```
 
-A **bare ref** is a sibling in this repository; with no range it means "the version released alongside me", since
-one run cuts both tags and records the exact version in the index. A location names another repository: a
+A **bare ref** is a sibling in this repository; with no range it means `^<the sibling's version at release>`, any
+later version with the same major. A location names another repository: a
 locator, an HTTPS or SSH URL, or a URL copied from the browser. A ref is stored and printed as its published
 **identity** (namespace and recipe), never as a folder path. Any spelling that settles to one identity is
 accepted, including a folder path or a pasted browser URL: a recipe stored at `recipes/shared/sat/` and
 published as `workflow/sat` may be written `github://owner/repo/workflow/sat` or
 `https://github.com/owner/repo/tree/main/recipes/shared/sat`, and the release settles the second through the
-other repository's index. The optional range after `@` follows npm's rules. `local://` locators and `repo:`
+other repository's index. The optional range after `@` follows npm's rules, and may be exact when your recipe needs
+certainty; nothing else pins a dependency to one version except the subscribing project's lockfile. `local://` locators and `repo:`
 short names are refused: a local repository is a consumer's convenience, and a short name is one project's
 private label. See [Dependencies named by location](repositories-file-formats.md#dependencies-named-by-location)
 and every accepted spelling in [Ref forms](repositories-file-formats.md#ref-forms).
@@ -292,8 +297,9 @@ this release's scope** is fine: the release depends on the last published versio
     release's scope; 'workflow/qa-variables@0.1.1' will depend on 'workflow/qa-helper@0.1.0'.
 ```
 
-Each version's resolved dependencies are written into the index, so a consumer installing that version gets what
-it was published with rather than ranges re-resolved months later. Each dependency also records the manifest
+Each version's dependencies are written into the index as ranges: the range the manifest declares, or
+`^<the sibling's version at release>` for a sibling named with no range. A consumer resolves those ranges, and
+its own lockfile pins what it got; that lockfile is the only lock. Each dependency also records the manifest
 entry that brought it in and whether it is a co-subscription or a build dependency, and each version records the
 variable definitions its manifest publishes, so `sous recipe show` and `sous subscription add --dry-run` can say
 what a recipe installs and asks before anything is fetched. A published version never changes: its content
