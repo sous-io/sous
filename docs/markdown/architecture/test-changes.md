@@ -1893,3 +1893,22 @@ All in `packages/plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022): a 
 
 - **Changed** in `plugin-build`: the `prepared()` helper in "messages about preparing" (`src/report.spec.ts`) and the stand-in world and `recipe-answers.answers` service in `test/helpers.ts` gain `unanswerable: []`.
   - **Why:** `RecipeAnswers` and `BuildPrepareResult` now list the variables a version of a recipe gets no answer for, because another version of the same recipe is asked instead, so the build can warn about them.
+
+### Time-budget reports at debug level (core, plugin-cli; gh-204 bug 15, gh-206 item 1)
+
+- **Changed** "should report a build over budget at debug level, naming the slowest contributor" (was "should warn when building the config goes over budget…"), "should keep the over-budget warning back…" and "should take budgets from the config…" in `core/test/timing.test.ts`: they read the report at `debug`, not `warning`.
+  - **Why:** a step over its budget is for whoever works on sous or a plugin, so it is shown only with `--debug`.
+- **New** "should leave time spent waiting for an answer out of an intent's timing" in `core/test/timing.test.ts`, and "should show messages kept from building the config under the run's --log-level" in `plugin-cli/test/cli.test.ts`.
+
+### A question that cannot be asked no longer prints the command's help (plugin-cli; gh-204 bug 45)
+
+- **Changed** "should fail a question it cannot ask, naming the flag, without the command's help" in `plugin-cli/test/cli.test.ts`: the error is no longer followed by `USAGE`.
+  - **Why:** the error already names the flag that answers the question, and about 50 lines of help pushed it off the screen. Input the command could not take (`InputError`) still prints the help.
+- **Changed** "should accept --non-interactive and refuse to publish, naming --yes" (`sous/test/integration/repo-release.test.ts`), "should fail on an ambiguous name and take the first with --accept-first" (`vars-commands.test.ts`) and "should fail on an ambiguous bare name with no terminal, naming --accept-first" (`repositories.test.ts`): they expect no `USAGE` under the error.
+- **Changed** "should refuse to add a repository with no terminal and no --trust" (`repositories.test.ts`): it expects the error to name `--yes`, the flag the error itself gives (`--trust` and `--force` spell the same answer).
+  - **Why:** the test found `--trust` only in the command's help, which no longer follows the error.
+
+### Help leaves out topics whose commands are all hidden (plugin-cli; gh-204 bug 46)
+
+- **New** "should leave out a topic whose commands are all hidden, and list them when asked by name" in `plugin-cli/test/cli.test.ts`.
+  - **Why:** `sous --help` listed `harness  1 command` although its only command is hidden, and `sous harness --help` printed an empty `USAGE`. The `plugins` and `timings` topics now have summaries instead of "N commands".

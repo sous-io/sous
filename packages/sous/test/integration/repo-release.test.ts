@@ -210,8 +210,8 @@ describe("sous repo release and sous repo submit", () => {
       expect(output).not.toContain("Nonexistent flag");
       expect(output).toContain("--non-interactive");
       expect(output).toContain("--yes");
-      // The command's own help, printed underneath the error.
-      expect(result.stderr).toContain("USAGE");
+      // The error names the flag that answers the question; no help follows it.
+      expect(result.stderr).not.toContain("USAGE");
       expect(git(recipeRepo, "tag", "--list")).toBe("");
     },
     CLI_TIMEOUT

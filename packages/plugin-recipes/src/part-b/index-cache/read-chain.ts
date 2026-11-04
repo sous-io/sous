@@ -96,13 +96,21 @@ const ATTEMPT_LABEL_WIDTH = 19;
  * Fix one of these:
  *   export GITLAB_TOKEN=<a token with read_repository>
  *   set up git access to gitlab.com (an SSH key, or a credential helper)
+ * A token reads only the index. Recipe files are downloaded with git, so building also needs git access.
  * ```
+ *
+ * Any one fix reads the index, but only git access downloads recipe files, so the last line says so
+ * whenever the fixes offer a token.
  */
 export function formatReadFailure(failure: IndexReadFailure): string {
     const lines = [`could not read ${failure.repo}.`, ...failure.attempts.map((attempt) => `  ${attempt.strategy.padEnd(ATTEMPT_LABEL_WIDTH)}  ${attempt.reason}`)];
 
     if (failure.fixes.length > 0) {
         lines.push("Fix one of these:", ...failure.fixes.map((fix) => `  ${fix}`));
+    }
+
+    if (failure.fixes.some((fix) => !/git access/i.test(fix))) {
+        lines.push("A token reads only the index. Recipe files are downloaded with git, so building also needs git access.");
     }
 
     return lines.join("\n");

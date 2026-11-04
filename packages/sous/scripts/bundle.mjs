@@ -50,11 +50,19 @@ writeFileSync(
     binFile,
     [
         "#!/usr/bin/env node",
-        'import { enableCompileCache } from "node:module";',
+        // A namespace import, never a named one: a named import of an export this Node lacks fails
+        // before any line below runs, so the version check would never be reached.
+        'import * as nodeModule from "node:module";',
+        "",
+        "// Checked before the bundle loads, so an older Node gets this line instead of a syntax error.",
+        'if (Number(process.versions.node.split(".")[0]) < 22) {',
+        "    process.stderr.write(`Sous needs Node 22 or later; this is Node ${process.versions.node}.\\n`);",
+        "    process.exit(1);",
+        "}",
         "",
         "// Keeps the compiled bundle on disk between runs (Node 22.1 and later); start-up is faster.",
         "try {",
-        "    enableCompileCache?.();",
+        "    nodeModule.enableCompileCache?.();",
         "} catch {",
         "    // No cache: sous still runs, only a little slower to start.",
         "}",

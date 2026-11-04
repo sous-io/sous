@@ -166,6 +166,29 @@ export class RepoGit {
         return pushReportIsUpToDate(report) ? "up-to-date" : "updated";
     }
 
+    /** The names of every tag in this checkout. */
+    async localTags(): Promise<Set<string>> {
+        return new Set(lines(await this.run(["tag", "--list"])));
+    }
+
+    /**
+     * The names of every tag a remote holds, read with `git ls-remote`.
+     *
+     * ```ts
+     * await git.remoteTags("origin");   // Set { "core/example@0.1.0" }
+     * ```
+     */
+    async remoteTags(remote: string): Promise<Set<string>> {
+        const report = await this.run(["ls-remote", "--tags", "--refs", remote]);
+
+        return new Set(
+            lines(report)
+                .map((line) => line.split("\t")[1] ?? "")
+                .filter((ref) => ref.startsWith("refs/tags/"))
+                .map((ref) => ref.slice("refs/tags/".length)),
+        );
+    }
+
     /** Pushes exactly these tags. */
     async pushTags(remote: string, tags: readonly string[]): Promise<void> {
         if (tags.length === 0) {

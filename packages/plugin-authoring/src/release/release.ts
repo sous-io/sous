@@ -136,6 +136,14 @@ export async function runRelease(tools: AuthoringTools, input: RepoReleaseInput,
     };
 
     if (plan.releases.length === 0) {
+        // Nothing new to publish, but an earlier run without --push may have left its commit and
+        // tags here; --push sends those.
+        if (input.push === true && !dryRun) {
+            await pushRelease(tools, git, branch, readExistingIndex(tools, rootDir), "Nothing new was released, and");
+
+            return { ...empty, plan: [], pushed: true };
+        }
+
         return { ...empty, plan: [] };
     }
 
@@ -246,32 +254,16 @@ export async function runRelease(tools: AuthoringTools, input: RepoReleaseInput,
     let pushed = false;
 
     if (input.push === true) {
-        if ((await git.remoteUrl(UPSTREAM_REMOTE)) === undefined) {
-            throw new ConfigError(
-                `The release was made, but this repository has no '${UPSTREAM_REMOTE}' remote to push it to.\n` +
-                    `  Add one with 'git remote add ${UPSTREAM_REMOTE} <url>', then push the commit and its tags yourself.`,
-            );
-        }
-
-        if (branch !== undefined) {
-            await git.pushBranch(UPSTREAM_REMOTE, branch);
-            reporter.detail(`Pushed the branch '${branch}' to ${UPSTREAM_REMOTE}.`);
-        }
-
-        if (tagged.length > 0) {
-            await git.pushTags(UPSTREAM_REMOTE, tagged);
-            reporter.detail(`Pushed ${describeCount(tagged.length, "tag")} to ${UPSTREAM_REMOTE}.`);
-        }
-
+        await pushRelease(tools, git, branch, rebuilt.index, "The release was made, but");
         pushed = true;
     } else {
         const next = [`Push the commit with 'git push ${UPSTREAM_REMOTE} ${branch ?? "<branch>"}'.`];
 
         if (tagged.length > 0) {
-            next.push(`Push the tags with 'git push ${UPSTREAM_REMOTE} --tags'.`);
+            next.push(`Push the tags with 'git push ${UPSTREAM_REMOTE} ${tagged.join(" ")}'.`);
         }
 
-        next.push("Or run this command again with '--push', which does both.");
+        next.push("Or run 'sous repo release --push' now or after a later release: it pushes the branch and every release tag still missing upstream.");
         tools.results.push(listOutput(next, { title: "What to do next" }));
     }
 
@@ -289,6 +281,60 @@ export async function runRelease(tools: AuthoringTools, input: RepoReleaseInput,
         committed,
         skipped: plan.skipped,
     };
+}
+
+/**
+ * `--push`: sends the branch, and every release tag the index publishes that this checkout holds
+ * and the remote lacks, so the pushed index never names a tag subscribers cannot fetch. That
+ * includes tags an earlier run cut without `--push`. Tags go first: a subscriber that reads the
+ * pushed index then finds every tag it names.
+ *
+ * `lead` opens the error when there is no remote: "The release was made, but".
+ */
+async function pushRelease(tools: AuthoringTools, git: RepoGit, branch: string | undefined, index: IndexFile | undefined, lead: string): Promise<void> {
+    const reporter = tools.reporter;
+
+    if ((await git.remoteUrl(UPSTREAM_REMOTE)) === undefined) {
+        throw new ConfigError(
+            `${lead} this repository has no '${UPSTREAM_REMOTE}' remote to push to.\n` +
+                `  Add one with 'git remote add ${UPSTREAM_REMOTE} <url>', then push the commit and its tags yourself.`,
+        );
+    }
+
+    const local = await git.localTags();
+    const remote = await git.remoteTags(UPSTREAM_REMOTE);
+    const missing = publishedTags(index).filter((tag) => local.has(tag) && !remote.has(tag));
+
+    if (missing.length > 0) {
+        await git.pushTags(UPSTREAM_REMOTE, missing);
+        reporter.detail(`Pushed ${describeCount(missing.length, "tag")} to ${UPSTREAM_REMOTE}: ${missing.join(", ")}.`);
+    }
+
+    if (branch !== undefined) {
+        const outcome = await git.pushBranch(UPSTREAM_REMOTE, branch);
+
+        reporter.detail(outcome === "up-to-date" ? `The branch '${branch}' was already on ${UPSTREAM_REMOTE}.` : `Pushed the branch '${branch}' to ${UPSTREAM_REMOTE}.`);
+    }
+}
+
+/**
+ * Every tag an index publishes, sorted.
+ *
+ * ```ts
+ * publishedTags({ recipes: { "core/a": { versions: { "1.0.0": { tag: "core/a@1.0.0", ... } } } } });
+ * // ["core/a@1.0.0"]
+ * ```
+ */
+export function publishedTags(index: IndexFile | undefined): string[] {
+    const tags = new Set<string>();
+
+    for (const recipe of Object.values(index?.recipes ?? {})) {
+        for (const version of Object.values(recipe.versions)) {
+            tags.add(version.tag);
+        }
+    }
+
+    return [...tags].sort();
 }
 
 /**
@@ -519,7 +565,7 @@ function reportPlan(tools: AuthoringTools, plan: ReleasePlan, context: { willTag
                 "Commit the manifests and the index together.",
                 context.willTag ? "Cut one annotated tag per version, dependency-first." : `Cut no tags: this is the branch '${context.branch}', not the default one.`,
                 context.push
-                    ? `Push the commit${context.willTag ? " and the tags" : ""} to ${UPSTREAM_REMOTE}.`
+                    ? `Push the commit${context.willTag ? " and the tags" : ""} to ${UPSTREAM_REMOTE}, with any release tags still missing there.`
                     : "Push nothing; pass '--push' to push what it makes.",
             ],
             { title: "This run would" },

@@ -377,6 +377,9 @@ importers:
       '@sous-io/plugin-host':
         specifier: workspace:*
         version: link:../plugin-host
+      '@sous-io/plugin-variables':
+        specifier: workspace:*
+        version: link:../plugin-variables
     devDependencies:
       '@sous-io/core':
         specifier: workspace:*

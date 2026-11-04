@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BufferedReporter, TIMING_CATEGORIES } from "@sous-io/plugin-api";
+import { BufferedReporter, type Prompter, TIMING_CATEGORIES } from "@sous-io/plugin-api";
 import { createEngine, DEFAULT_BUDGETS } from "../src/index.js";
 import { Timer } from "../src/timing/timer.js";
 import { contributorsPlugin, keysPlugin, makeEngine, manualClock, nothing, plugin, valued } from "./helpers.js";
@@ -18,10 +18,11 @@ describe("timing and budgets", () => {
     });
 
     /**
-     * A build over budget warns, naming the slowest contributor; the warning goes to the engine's
-     * reporter (stderr in the CLI).
+     * A build over budget is reported at debug level, naming the slowest contributor, to the
+     * engine's reporter (stderr in the CLI). Nothing reaches the warning level: a slow step is for
+     * whoever works on sous or a plugin, not something the person running a command can act on.
      */
-    it("should warn when building the config goes over budget, naming the slowest contributor", async () => {
+    it("should report a build over budget at debug level, naming the slowest contributor", async () => {
         const clock = manualClock();
         const { engine, reporter } = makeEngine(
             [
@@ -35,7 +36,8 @@ describe("timing and budgets", () => {
 
         await engine.buildConfig();
 
-        expect(reporter.at("warning")).toEqual([
+        expect(reporter.at("warning")).toEqual([]);
+        expect(reporter.at("debug")).toEqual([
             "building the config took 611ms (budget 200ms).\n  confd/530-team.js took 610ms of that.\n  See every timing with --timings.",
         ]);
         expect(engine.timings.get("contributor:confd/530-team.js")).toMatchObject({ count: 1, totalMs: 610, maxMs: 610, overBudget: 1, budgetMs: 100 });
@@ -51,7 +53,7 @@ describe("timing and budgets", () => {
 
         await engine.buildConfig({ reportBudgets: false });
 
-        expect(reporter.at("warning")).toEqual([]);
+        expect(reporter.at("debug")).toEqual([]);
         expect(engine.timings.get("contributor:slow")).toMatchObject({ count: 1, totalMs: 610 });
     });
 
@@ -102,19 +104,57 @@ describe("timing and budgets", () => {
 
         const built = await engine.buildConfig();
 
-        expect(reporter.at("warning")).toEqual([]);
+        expect(reporter.at("debug")).toEqual([]);
 
         await engine.submit({ intent: "slow.thing" });
         await engine.submit({ intent: "fast.thing" });
         (built.services.get("q.svc") as { work(): void; other(): void }).work();
         (built.services.get("q.svc") as { work(): void; other(): void }).other();
 
-        expect(reporter.at("warning")).toEqual([
+        expect(reporter.at("debug")).toEqual([
             'the intent "slow.thing" took 10ms (budget 5ms).\n  See every timing with --timings.',
             "the service call q.svc.other() took 99999ms (budget 5000ms).\n  See every timing with --timings.",
         ]);
         expect(engine.timings.get("intent:slow.thing")?.budgetMs).toBe(5);
         expect(engine.timings.get("service.method:q.svc.work")?.budgetMs).toBe(false);
+    });
+
+    /**
+     * Time spent waiting for a person to answer a question is left out of the intent's timing, so
+     * a person thinking for 20 seconds never makes an intent look slow.
+     *
+     * an intent that works 10ms and waits 20s for a confirm is timed at 10ms
+     */
+    it("should leave time spent waiting for an answer out of an intent's timing", async () => {
+        const clock = manualClock();
+        const { engine, reporter } = makeEngine(
+            [
+                plugin("q", (sous) => {
+                    sous.intents.add({
+                        intent: "q.ask",
+                        handle: async (_input, ctx) => {
+                            clock.advance(10);
+                            await ctx.prompter.confirm({ message: "Go on?", answeredBy: "--yes" });
+
+                            return nothing();
+                        },
+                    });
+                }),
+            ],
+            { now: clock.now },
+        );
+        const slowPerson: Prompter = {
+            interactive: true,
+            askValue: () => Promise.resolve(""),
+            askChoice: () => Promise.reject(new Error("not asked")),
+            confirm: () => Promise.resolve((clock.advance(20_000), true)),
+        };
+
+        await engine.buildConfig();
+        await engine.submit({ intent: "q.ask" }, { prompter: slowPerson });
+
+        expect(engine.timings.get("intent:q.ask")).toMatchObject({ count: 1, totalMs: 10, overBudget: 0 });
+        expect(reporter.at("debug")).toEqual([]);
     });
 
     /**

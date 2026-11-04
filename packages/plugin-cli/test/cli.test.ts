@@ -192,6 +192,31 @@ describe("the CLI front end", () => {
             expect(run.stdout).not.toContain("internal");
         });
 
+        /**
+         * A topic whose commands are all hidden is not listed in the root help, and its hidden
+         * commands are not counted anywhere. Asked for by name, it lists them instead of an empty page:
+         *
+         * sous --help         -> no "harness" topic
+         * sous harness --help -> COMMANDS: harness run-headless
+         */
+        it("should leave out a topic whose commands are all hidden, and list them when asked by name", async () => {
+            const hiddenOnly = definePlugin({
+                name: "h",
+                register(sous) {
+                    sous.intents.add({ intent: "harness.run-headless", summary: "Run headless", cli: { command: ["harness", "run-headless"], hidden: true }, handle: () => text("ran") });
+                },
+            });
+
+            const root = await runCli([hiddenOnly], ["--help"]);
+
+            expect(root.stdout).not.toMatch(/^\s+harness\s/m);
+
+            const topic = await runCli([hiddenOnly], ["harness", "--help"]);
+
+            expect(topic.stdout).toContain("USAGE\n  $ sous harness COMMAND");
+            expect(topic.stdout).toMatch(/harness run-headless\s+Run headless/);
+        });
+
         /** A group with no `cli-group` entity shows how many commands it has. */
         it("should count the commands of a group with no help entity", async () => {
             const plugin = definePlugin({
@@ -379,14 +404,19 @@ describe("the CLI front end", () => {
     });
 
     describe("prompts", () => {
-        /** Without a terminal the question fails with NonInteractiveError naming the flag that answers it. */
-        it("should fail a question it cannot ask, naming the flag", async () => {
+        /**
+         * Without a terminal the question fails with NonInteractiveError naming the flag that answers
+         * it. The command's help does not follow: the error already names the flag, and 50 lines of
+         * help would push it off the screen.
+         */
+        it("should fail a question it cannot ask, naming the flag, without the command's help", async () => {
             const run = await runCli([askingPlugin], ["prune"]);
 
             expect(run.exitCode).toBe(1);
             expect(run.stderr).toMatch(
-                /^Error: sous needed to ask "Remove the 3 files listed above\?" but cannot ask questions in this run\.\s+Pass --yes to answer it ahead of time\.\s+Why: neither input nor output is a terminal\..*USAGE\s+\$ sous prune/s,
+                /^Error: sous needed to ask "Remove the 3 files listed above\?" but cannot ask questions in this run\.\s+Pass --yes to answer it ahead of time\.\s+Why: neither input nor output is a terminal\./s,
             );
+            expect(run.stderr).not.toContain("USAGE");
         });
 
         /** The flag answers the question without a prompt. */
@@ -430,6 +460,42 @@ describe("the CLI front end", () => {
 
             expect(run.stderr).toContain("WARNING:");
             expect(run.stderr.replace(/\s+/g, " ")).toContain('p added a "not-a-kind" entity, but no plugin defines that kind.');
+        });
+
+        /**
+         * Messages kept from building the config are shown under the run's own `--log-level`, which
+         * the CLI reads after the build:
+         *
+         * a debug message from a contributor -> hidden by default, shown with --debug
+         * a warning from a contributor       -> shown by default, hidden with --log-level error
+         */
+        it("should show messages kept from building the config under the run's --log-level", async () => {
+            const plugin = definePlugin({
+                name: "p",
+                register(sous) {
+                    sous.config.contribute({
+                        id: "chatty",
+                        contribute: (config) => {
+                            config.debug("a build debug message");
+                            config.warn("a build warning");
+                        },
+                    });
+                    sous.intents.add({ intent: "noop", input: z.object({}), handle: () => nothing() });
+                },
+            });
+
+            const normal = await runCli([plugin], ["noop"]);
+
+            expect(normal.stderr).toContain("a build warning");
+            expect(normal.stderr).not.toContain("a build debug message");
+
+            const errorsOnly = await runCli([plugin], ["noop", "--log-level", "error"]);
+
+            expect(errorsOnly.stderr).not.toContain("a build warning");
+
+            const debug = await runCli([plugin], ["noop", "--debug"]);
+
+            expect(debug.stderr).toContain("a build debug message");
         });
     });
 });

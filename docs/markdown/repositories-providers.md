@@ -183,6 +183,7 @@ Error: could not read gitlab.com/acme/private-recipes.
 Fix one of these:
   export GITLAB_TOKEN=<a token with read_repository>
   set up git access to gitlab.com (an SSH key, or a credential helper)
+A token reads only the index. Recipe files are downloaded with git, so building also needs git access.
 ```
 
 **A recipe's files** come from git itself: a shallow, blobless, sparse clone at the version's

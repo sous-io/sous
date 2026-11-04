@@ -282,9 +282,10 @@ describe("the repositories consumer surface", () => {
   /**
    * `sous repo add` must not add anything without an answer to the trust
    * question, and a run with no terminal cannot answer one. It should fail
-   * naming the repository and the flag that acknowledges the trust.
+   * naming the repository and the flag that acknowledges the trust (--yes,
+   * which --trust and --force also spell).
    *
-   * sous repo add /path/to/fixtures   // -> exits non-zero, names --trust
+   * sous repo add /path/to/fixtures   // -> exits non-zero, names --yes
    */
   it(
     "should refuse to add a repository with no terminal and no --trust",
@@ -293,7 +294,9 @@ describe("the repositories consumer surface", () => {
 
       expect(result.status).not.toBe(0);
       expect(result.stdout + result.stderr).toContain("fixtures");
-      expect(result.stdout + result.stderr).toContain("--trust");
+      // The error names --yes, the flag that answers the trust question. (--trust appeared only in
+      // the command's help, which no longer follows a question that cannot be asked.)
+      expect(result.stdout + result.stderr).toContain("--yes");
       expect(fs.existsSync(path.join(sousDir, "conf.d", "500-repos.jsonc"))).toBe(false);
     },
     CLI_TIMEOUT
@@ -1071,9 +1074,8 @@ describe("the repositories consumer surface", () => {
       expect(output).toContain("--accept-first");
       expect(output).toContain("fixtures:formatter");
       expect(output).toContain("extras:tooling/formatter");
-      // The command's own help, printed underneath the error.
-      expect(result.stderr).toContain("USAGE");
-      expect(result.stderr).toContain("--non-interactive");
+      // The error names the flag that answers the question; no help follows it.
+      expect(result.stderr).not.toContain("USAGE");
 
       const lock = readJson(path.join(sousDir, "sous.lock.json"));
       expect(Object.keys(lock.recipes as Record<string, unknown>)).not.toContain(
