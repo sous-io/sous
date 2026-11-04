@@ -76,6 +76,12 @@ export interface ChainRead {
     /** Default `HEAD`. */
     readonly ref?: string;
     readonly etag?: string;
+    /**
+     * True when the read must see the current file (`--latest`, or a recipe missing from the cached
+     * index): a strategy whose server may answer with a cached copy goes last, and a strategy used
+     * only for such reads joins in.
+     */
+    readonly current?: boolean;
 }
 
 /** What a successful read gave, and how. */
@@ -126,7 +132,7 @@ export class IndexReadError extends ConfigError {
 /** Reads one file through the host's chain of strategies. Throws an {@link IndexReadError} when all fail. */
 export async function readThroughChain(read: ChainRead, memory: StrategyMemoryFile, ctx: RepositoryHostContext, now: () => Date = () => new Date()): Promise<ChainOutcome> {
     const remembered = memory.read()[read.identity];
-    const strategies = ordered(read.host.readStrategies, remembered?.strategy);
+    const strategies = ordered(read.host.readStrategies, remembered?.strategy, read.current === true);
     const attempts: Array<{ strategy: string; reason: string }> = [];
     let token: { found?: RepositoryToken; tried: string[] } | undefined;
 
@@ -162,12 +168,15 @@ export async function readThroughChain(read: ChainRead, memory: StrategyMemoryFi
         }
 
         if (outcome.ok) {
-            memory.remember(read.identity, {
-                strategy: strategy.id,
-                tokenSource: found?.source ?? null,
-                lastSuccess: now().toISOString(),
-                lastDurationMs: Math.max(0, now().getTime() - started),
-            });
+            // A strategy used only for current reads is not what ordinary reads should try first.
+            if (strategy.onlyForCurrentReads !== true) {
+                memory.remember(read.identity, {
+                    strategy: strategy.id,
+                    tokenSource: found?.source ?? null,
+                    lastSuccess: now().toISOString(),
+                    lastDurationMs: Math.max(0, now().getTime() - started),
+                });
+            }
 
             return { ...outcome, strategy: strategy.id };
         }
@@ -180,11 +189,23 @@ export async function readThroughChain(read: ChainRead, memory: StrategyMemoryFi
     throw new IndexReadError({ repo: read.identity, attempts, fixes: fixesFor(read) });
 }
 
-/** The strategies, the remembered one first. */
-function ordered(strategies: readonly RepositoryReadStrategy[], first: string | undefined): RepositoryReadStrategy[] {
-    const remembered = strategies.find((strategy) => strategy.id === first);
+/**
+ * The strategies to try, in order: the remembered one first. An ordinary read leaves out the
+ * strategies used only for current reads; a current read puts the strategies whose server may
+ * answer with a cached copy last, so they answer only when nothing else can.
+ *
+ * ```ts
+ * // GitHub: http-token, http (cached copies), http-api (current reads only), git
+ * ordered(github, "http", false); // -> http, http-token, git
+ * ordered(github, "http", true);  // -> http-token, http-api, git, http
+ * ```
+ */
+export function ordered(strategies: readonly RepositoryReadStrategy[], first: string | undefined, current = false): RepositoryReadStrategy[] {
+    const usable = strategies.filter((strategy) => current || strategy.onlyForCurrentReads !== true);
+    const remembered = usable.find((strategy) => strategy.id === first && !(current && strategy.servesCachedCopies === true));
+    const inOrder = remembered ? [remembered, ...usable.filter((strategy) => strategy !== remembered)] : usable;
 
-    return remembered ? [remembered, ...strategies.filter((strategy) => strategy !== remembered)] : [...strategies];
+    return current ? [...inOrder.filter((strategy) => strategy.servesCachedCopies !== true), ...inOrder.filter((strategy) => strategy.servesCachedCopies === true)] : inOrder;
 }
 
 /** The first token a token source finds, and what each source said. */

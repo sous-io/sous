@@ -447,11 +447,46 @@ describe("subscription.add", () => {
         await expect(addSubscription({ ref: "workflow" }, context(config))).rejects.toSatisfy((error: unknown) => isSousErrorOfKind(error, "non-interactive"));
     });
 
-    /** A name nothing publishes is an error naming what was searched. */
+    /**
+     * A name nothing publishes is an error naming the repositories checked just now, and it never
+     * suggests adding a repository as if none were added.
+     *
+     * addSubscription({ ref: "nothing" }) // -> "Nothing called 'nothing' was found…", "Checked just now: r."
+     */
     it("should explain a ref that names nothing", async () => {
         const { config } = setup();
 
-        await expect(addSubscription({ ref: "nothing", yes: true }, context(config))).rejects.toMatchObject({ details: expect.arrayContaining([expect.stringMatching(/Searched the namespaces and recipes of: r/)]) });
+        await expect(addSubscription({ ref: "nothing", yes: true }, context(config))).rejects.toMatchObject({
+            details: expect.arrayContaining([
+                "Checked just now: r.",
+                "Check the spelling, or run 'sous repo search nothing' to look for something like it. If a repository this project has not added publishes it, add that one with 'sous repo add <url>'.",
+            ]),
+        });
+    });
+
+    /**
+     * A recipe released moments ago is missing from the cached index, so a miss reads the indexes
+     * upstream once and searches again (#133).
+     *
+     * // cached index of r: no 'fresh'; upstream: workflow/fresh 1.0.0
+     * addSubscription({ ref: "fresh" }) // -> subscribes to workflow/fresh
+     */
+    it("should read the indexes upstream once when a ref is missing from the cached copies", async () => {
+        const cachedIndex = index({ "workflow/task-files": ["1.0.0"] });
+        const upstreamIndex = index({ "workflow/task-files": ["1.0.0"], "workflow/fresh": ["1.0.0"] });
+        const upstreamReads: string[] = [];
+        const cache: RecipesIndexCache = {
+            ...fakeIndexCache(new Map([["r", cachedIndex]])),
+            fetchUpstream: async (target) => {
+                upstreamReads.push(target.name);
+
+                return upstreamIndex;
+            },
+        };
+        const { config } = setup({ indexes: { r: cachedIndex }, services: { "recipes.index-cache": cache } });
+
+        await expect(addSubscription({ ref: "fresh", yes: true, dryRun: true }, context(config))).resolves.toBeDefined();
+        expect(upstreamReads).toEqual(["r"]);
     });
 
     /** A repository a dependency needs that has no URL stops the install, saying how to add it. */

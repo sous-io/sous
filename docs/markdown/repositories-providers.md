@@ -161,6 +161,13 @@ https://raw.githubusercontent.com/<owner>/<name>/HEAD/sous.index.json
 https://<gitlab host>/api/v4/projects/<owner>%2F<name>/repository/files/sous.index.json/raw?ref=HEAD
 ```
 
+GitHub's raw host can answer with a copy it cached for up to five minutes. When sous must see the
+current index (a `--latest` read, or a recipe missing from its cached copy, which is how a recipe
+released moments ago looks), it reads GitHub's contents API without a token instead
+(`https://api.github.com/repos/<owner>/<name>/contents/sous.index.json`), and tries the raw host only
+if nothing else answers. GitHub allows 60 such requests an hour from one address, so ordinary reads
+never use it. GitLab's API always answers with the current file.
+
 A token is looked for in these places, in this order, and a missing one is skipped:
 
 1. the environment: `GITHUB_TOKEN` for GitHub, `GITLAB_TOKEN` for GitLab;

@@ -123,7 +123,10 @@ export function createGithubHost(options: GithubPluginOptions = {}): GithubRepos
 
         readStrategies: [
             httpReadStrategy({ id: "http-token", label: "HTTP with token", usesToken: true, url: githubApiFileUrl, headers: () => API_HEADERS }),
-            httpReadStrategy({ id: "http", label: "HTTP without token", usesToken: false, url: githubRawFileUrl, headers: () => ({ Accept: "*/*" }) }),
+            // The raw host caches a file for up to five minutes, so a read that must see the current
+            // index (a recipe released moments ago, #133) goes through the API instead, without a token.
+            httpReadStrategy({ id: "http", label: "HTTP without token", usesToken: false, url: githubRawFileUrl, headers: () => ({ Accept: "*/*" }), servesCachedCopies: true }),
+            httpReadStrategy({ id: "http-api", label: "API without token", usesToken: false, url: githubApiFileUrl, headers: () => API_HEADERS, onlyForCurrentReads: true }),
             gitReadStrategy(),
         ],
 

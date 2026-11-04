@@ -442,7 +442,9 @@ rather than stopping the build, and the build prints a warning naming it before 
 A build holds the versions the lockfile pins and does not talk to the network on every run. Sous
 asks a repository for a newer index only when it has never asked, when the freshness window has
 lapsed (`store.freshnessSeconds`, five minutes by default), or when a command forces it; a failed
-check never breaks a build, because the cached index is used instead. Always-pull changes what
+check never breaks a build, because the cached index is used instead. When a recipe or a version
+is missing from the cached index, sous asks upstream once more before reporting it, so a recipe
+released moments ago is found straight away. Always-pull changes what
 happens after that check, not how often it happens: a repository or subscription marked
 `alwaysPull` takes a newer in-range version rather than the locked one; set it with
 `--always-pull`, or on either entry in the config. Without it, `sous subscription update` is how a

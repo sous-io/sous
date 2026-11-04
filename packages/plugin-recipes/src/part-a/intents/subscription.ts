@@ -153,9 +153,10 @@ async function resolveWrittenRef(input: SubscriptionAddInput, ctx: Context): Pro
         current = await refreshed(ctx);
     }
 
-    const catalog = await loadCatalog(current, { latest: trusted.length > 0 });
+    const checkedNow = trusted.length > 0;
+    const catalog = await loadCatalog(current, { latest: checkedNow });
 
-    return { ref: await pickNamed(current, catalog, located, input, located[0]!), trusted, ctx: current };
+    return { ref: await pickNamed(current, catalog, located, input, located[0]!, checkedNow), trusted, ctx: current };
 }
 
 /** Where a named ref says its repository lives. */
@@ -165,17 +166,35 @@ function locationOf(ref: NamedRef): { identity: string; url: string; provider: s
     return repo?.location;
 }
 
-/** The one namespace or recipe the readings name in the catalog; a recipe keeps the range it was written with. */
-async function pickNamed(ctx: Context, catalog: CatalogContext, readings: readonly SousRef[], input: SubscriptionAddInput, written: NamedRef): Promise<NamedRef> {
-    const matches = findInCatalog(catalog.inputs, readings, ["namespace", "recipe"]);
+/**
+ * The one namespace or recipe the readings name in the catalog; a recipe keeps the range it was
+ * written with. When nothing matches in cached indexes, the indexes are read upstream once and
+ * searched again, since a recipe released moments ago is missing only from a cached copy (#133).
+ *
+ * @param checkedNow - True when the catalog's indexes were just read upstream.
+ */
+async function pickNamed(ctx: Context, catalog: CatalogContext, readings: readonly SousRef[], input: SubscriptionAddInput, written: NamedRef, checkedNow = false): Promise<NamedRef> {
+    let searchedIn = catalog;
+    let matches = findInCatalog(searchedIn.inputs, readings, ["namespace", "recipe"]);
+
+    if (matches.length === 0 && !checkedNow) {
+        searchedIn = await loadCatalog(ctx, { latest: true });
+        matches = findInCatalog(searchedIn.inputs, readings, ["namespace", "recipe"]);
+    }
+
     const match = await pickMatch(ctx, matches, input.ref.trim(), input.acceptFirst, () => {
-        const searched = catalog.inputs.repos.map((repo) => repo.name);
+        const searched = searchedIn.inputs.repos.map((repo) => repo.name);
+        const failed = new Set(searchedIn.notChecked.map((entry) => entry.repo));
+        const now = searched.filter((name) => !failed.has(name));
+        const stale = searched.filter((name) => failed.has(name));
 
         return new SousError(`Nothing called '${input.ref.trim()}' was found: no namespace has that name, and no recipe does either.`, {
             details: [
-                searched.length === 0 ? "No repository index could be read, so there was nothing to search." : `Searched the namespaces and recipes of: ${searched.join(", ")}.`,
-                ...(catalog.notFetched.length === 0 ? [] : [`Trusted, but their index has not been read, so nothing in them was searched: ${catalog.notFetched.join(", ")}.`]),
-                `Run 'sous repo search ${input.ref.trim()}' to look for something like it, or 'sous repo add <url>' to add the repository that publishes it.`,
+                ...(searched.length === 0 ? ["No repository index could be read, so there was nothing to search."] : []),
+                ...(now.length === 0 ? [] : [`Checked just now: ${now.join(", ")}.`]),
+                ...(stale.length === 0 ? [] : [`Could not be checked just now, so the copies of their indexes that sous already had were searched: ${stale.join(", ")}.`]),
+                ...(searchedIn.notFetched.length === 0 ? [] : [`Trusted, but their index has not been read, so nothing in them was searched: ${searchedIn.notFetched.join(", ")}.`]),
+                `Check the spelling, or run 'sous repo search ${input.ref.trim()}' to look for something like it. If a repository this project has not added publishes it, add that one with 'sous repo add <url>'.`,
             ],
         });
     }, { announce: true });

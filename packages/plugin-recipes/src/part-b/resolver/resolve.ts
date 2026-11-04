@@ -68,6 +68,12 @@ export interface ResolveContext {
     readonly keep?: Readonly<Record<string, string>>;
     /** Versions pinned for one holder alone, held while that holder's range allows them, by key, then holder. */
     readonly keepPins?: Readonly<Record<string, Readonly<Record<string, string>>>>;
+    /**
+     * The repositories whose index was read upstream just before this resolve, by short name. When
+     * given, a ref none of them publishes is reported as checked just now; when left out, the indexes
+     * may be cached copies.
+     */
+    readonly checkedNow?: ReadonlySet<string>;
 }
 
 /** A recipe being resolved, before it is frozen into a {@link ResolvedRecipe}. */
@@ -778,20 +784,69 @@ export function pickVersion(key: string, entry: IndexFile["recipes"][string], ra
     });
 }
 
-/** The error for a ref no trusted repository publishes, naming the repositories searched. */
-function unknownRefError(item: WorkItem, context: ResolveContext, what: "namespace" | "recipe"): ConfigError {
+/**
+ * A ref that no trusted repository publishes. It is told apart from {@link NoVersionSatisfiesError}
+ * (the recipe exists, but no version fits), so the resolver service can read the indexes upstream
+ * once and try again: a recipe released moments ago is missing only from a cached copy (#133).
+ */
+export class UnknownRefError extends ConfigError {
+    constructor(
+        readonly what: "namespace" | "recipe",
+        readonly written: string,
+        message: string,
+        options: { details: string[] },
+    ) {
+        super(message, options);
+    }
+}
+
+/**
+ * The error for a ref no trusted repository publishes. It says which indexes were checked just now
+ * and which were cached copies, and suggests adding a repository only when it could be another one.
+ *
+ * ```text
+ * Error: None of this project's repositories publishes the recipe 'acme/gadget'.
+ *   Checked just now: sous-recipes, recipes.
+ *   Check the spelling, or run 'sous repo search gadget' to look for it. If a repository this project
+ *     has not added publishes it, add that one with 'sous repo add <url>'.
+ * ```
+ */
+function unknownRefError(item: WorkItem, context: ResolveContext, what: "namespace" | "recipe"): UnknownRefError {
     const searched = [...context.indexes.keys()];
     const index = item.repo === undefined ? undefined : context.indexes.get(item.repo);
+    const search = what === "namespace" ? item.namespace : (item.name ?? item.namespace);
+
+    if (searched.length === 0) {
+        return new UnknownRefError(what, item.written, `No repository publishes the ${what} '${item.written}', because this project has added none yet.`, {
+            details: [
+                ...(item.requestedBy === PROJECT_HOLDER ? [] : [`It was required by the recipe '${item.requestedBy}'.`]),
+                "Add the repository that publishes it with 'sous repo add <url>', then try again.",
+            ],
+        });
+    }
+
+    const checked = context.checkedNow;
+    const now = checked === undefined ? [] : searched.filter((name) => checked.has(name));
+    const cached = searched.filter((name) => !now.includes(name));
     const details = [
-        searched.length === 0 ? "This project has added no repositories yet." : `Repositories searched: ${searched.join(", ")}.`,
+        ...(now.length === 0 ? [] : [`Checked just now: ${now.join(", ")}.`]),
+        ...(cached.length === 0
+            ? []
+            : [
+                  checked === undefined
+                      ? `Searched the copies of these indexes that sous already had: ${cached.join(", ")}.`
+                      : `Could not be checked just now, so the copies of their indexes that sous already had were searched: ${cached.join(", ")}.`,
+              ]),
         ...(item.requestedBy === PROJECT_HOLDER ? [] : [`It was required by the recipe '${item.requestedBy}'.`]),
         ...(index === undefined
             ? []
             : [`The repository '${item.repo}' publishes: ${Object.keys(index.recipes).length === 0 ? "nothing yet" : sortKeys(Object.keys(index.recipes)).join(", ")}.`]),
-        "Add the repository that publishes it with 'sous repo add <url>', then try again.",
+        item.repo === undefined
+            ? `Check the spelling, or run 'sous repo search ${search}' to look for it. If a repository this project has not added publishes it, add that one with 'sous repo add <url>'.`
+            : `Check the spelling, or run 'sous repo search ${search}' to look for it.`,
     ];
 
-    return new ConfigError(`No added repository publishes the ${what} '${item.written}'.`, { details });
+    return new UnknownRefError(what, item.written, `None of this project's repositories publishes the ${what} '${item.written}'.`, { details });
 }
 
 /** The error for a ref more than one repository publishes; sous never picks a winner. */

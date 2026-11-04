@@ -123,6 +123,36 @@ describe("IndexCacheCore", () => {
         expect(reads).toHaveLength(2);
     });
 
+    /**
+     * A --latest read, and fetchUpstream, must see the current index, so they pass over a server
+     * that may answer with a copy it cached (GitHub's raw host) for a strategy meant for such reads.
+     *
+     * core.get(target)                   // read through "raw"
+     * core.get(target, { latest: true }) // read through "api"
+     */
+    it("should read --latest and fetchUpstream through a strategy that sees the current index", async () => {
+        const used: string[] = [];
+        const read = (id: string) => async () => {
+            used.push(id);
+
+            return { ok: true as const, text: JSON.stringify(served), ref: "HEAD" };
+        };
+        const githubLike = new IndexCacheCore({
+            directory: path.join(dir, "github-like"),
+            strategiesFile: path.join(dir, "github-like-strategies.json"),
+            parser: indexFileFormat,
+            hosts: () => [{ ...host(), readStrategies: [{ id: "raw", label: "raw", servesCachedCopies: true, read: read("raw") }, { id: "api", label: "api", onlyForCurrentReads: true, read: read("api") }] }],
+            hostContext: () => ({ reporter: nullReporter }) as unknown as RepositoryHostContext,
+            now: () => now,
+        });
+
+        await githubLike.get(target);
+        await githubLike.get(target, { latest: true });
+        await githubLike.fetchUpstream(target);
+
+        expect(used).toEqual(["raw", "api", "api"]);
+    });
+
     it("should send the cached ETag, and keep the cached copy when upstream says it is not modified", async () => {
         await core.get(target);
         later(400);

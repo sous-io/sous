@@ -228,7 +228,7 @@ export class IndexCacheCore {
         }
 
         try {
-            const lookup = await this.refresh(target, options.signal, cached === undefined ? undefined : meta?.etag, options.hosts);
+            const lookup = await this.refresh(target, options.signal, cached === undefined ? undefined : meta?.etag, options.hosts, options.latest === true);
 
             this.failedChecks.delete(target.identity);
 
@@ -272,9 +272,12 @@ export class IndexCacheCore {
         };
     }
 
-    /** Reads a repository's index upstream, writing nothing. Throws when it cannot. */
+    /**
+     * Reads a repository's index upstream, writing nothing, as a current read: a server's cached copy
+     * answers only when nothing else can. Throws when it cannot.
+     */
     async fetchUpstream(target: IndexTarget, signal?: AbortSignal): Promise<IndexFile> {
-        const outcome = await this.readUpstream(target, signal, undefined, undefined);
+        const outcome = await this.readUpstream(target, signal, undefined, undefined, true);
 
         if ("notModified" in outcome) {
             throw new ConfigError(`'${target.name}' answered "not modified" to a request that sent no cached copy.`);
@@ -290,8 +293,8 @@ export class IndexCacheCore {
     }
 
     /** Reads upstream and writes the result. */
-    private async refresh(target: IndexTarget, signal: AbortSignal | undefined, etag: string | undefined, hosts: readonly RepositoryHostEntity[] | undefined): Promise<CacheLookup> {
-        const outcome = await this.readUpstream(target, signal, etag, hosts);
+    private async refresh(target: IndexTarget, signal: AbortSignal | undefined, etag: string | undefined, hosts: readonly RepositoryHostEntity[] | undefined, current = false): Promise<CacheLookup> {
+        const outcome = await this.readUpstream(target, signal, etag, hosts, current);
         const timestamp = this.now().toISOString();
         const previous = this.readMeta(target.identity);
 
@@ -334,6 +337,7 @@ export class IndexCacheCore {
         signal: AbortSignal | undefined,
         etag: string | undefined,
         hosts: readonly RepositoryHostEntity[] | undefined,
+        current = false,
     ): Promise<{ index: IndexFile; etag?: string; strategy: string } | { notModified: true; etag?: string; strategy: string }> {
         const host = hostFor(hosts ?? this.options.hosts(), target.url, target.provider);
 
@@ -352,6 +356,7 @@ export class IndexCacheCore {
                 host,
                 path: INDEX_FILE_NAME,
                 ...(etag === undefined ? {} : { etag }),
+                ...(current ? { current: true } : {}),
             },
             this.memory,
             signal === undefined ? context : { ...context, signal },

@@ -136,6 +136,17 @@ export interface RepositoryReadStrategy {
     label: string;
     /** True when it needs a token; it is skipped when none is found. */
     usesToken?: boolean;
+    /**
+     * True when the server may answer with a copy it cached for a while, such as
+     * `raw.githubusercontent.com` (up to five minutes). A read that must see the current file
+     * (`--latest`, or a recipe missing from the cached index) tries it only after every other strategy.
+     */
+    servesCachedCopies?: boolean;
+    /**
+     * True when it is used only by a read that must see the current file, such as GitHub's contents
+     * API without a token, which allows only 60 requests an hour. Other reads skip it.
+     */
+    onlyForCurrentReads?: boolean;
     read(request: RepositoryReadRequest, ctx: RepositoryHostContext): Promise<RepositoryReadOutcome>;
     /** One line that would make this strategy work: `set up git access to gitlab.com (an SSH key, or a credential helper)`. */
     fix?(repository: CanonicalRepository): string | undefined;

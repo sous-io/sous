@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { IndexFile, IndexVersion } from "@sous-io/plugin-formats/types";
 import type { RefLocation, SousRef } from "@sous-io/plugin-refs/types";
-import { indexDependencyLists, isConfirmedByRecord, NoVersionSatisfiesError, pickVersion, proposeRepoName, resolveWanted, settleBrowsed, settleVersions, wantedOf, type DependencyLists, type ResolveContext, type WantedRequest } from "./resolve.js";
+import { indexDependencyLists, isConfirmedByRecord, NoVersionSatisfiesError, pickVersion, proposeRepoName, resolveWanted, settleBrowsed, settleVersions, UnknownRefError, wantedOf, type DependencyLists, type ResolveContext, type WantedRequest } from "./resolve.js";
 
 const HASH = `sha256-${"d".repeat(64)}` as const;
 
@@ -148,12 +148,48 @@ describe("resolveWanted: finding recipes", () => {
         expect(result.resolved[0]).toMatchObject({ repo: "other", version: "2.0.0" });
     });
 
+    /**
+     * A ref nobody publishes throws an UnknownRefError naming the repositories searched, and says
+     * whether their indexes were cached copies or checked just now. It never tells the user to add a
+     * repository the ref already names.
+     *
+     * // indexes: acme (a cached copy)
+     * resolveWanted([w/zz]) // -> "None of this project's repositories publishes the recipe 'w/zz'."
+     * //    "Searched the copies of these indexes that sous already had: acme."
+     */
     it("should name the repositories searched for a ref nobody publishes", async () => {
-        await expect(resolveWanted([project("w", "zz")], context({ acme: index("acme", { "w/a": { "1.0.0": {} } }) }))).rejects.toMatchObject({
-            message: "No added repository publishes the recipe 'w/zz'.",
-            details: expect.arrayContaining(["Repositories searched: acme."]),
+        const acme = { acme: index("acme", { "w/a": { "1.0.0": {} } }) };
+        const missing = resolveWanted([project("w", "zz")], context(acme));
+
+        await expect(missing).rejects.toBeInstanceOf(UnknownRefError);
+        await expect(missing).rejects.toMatchObject({
+            what: "recipe",
+            message: "None of this project's repositories publishes the recipe 'w/zz'.",
+            details: expect.arrayContaining([
+                "Searched the copies of these indexes that sous already had: acme.",
+                "Check the spelling, or run 'sous repo search zz' to look for it. If a repository this project has not added publishes it, add that one with 'sous repo add <url>'.",
+            ]),
         });
         await expect(resolveWanted([project("nope")], context({}))).rejects.toThrow(/namespace 'nope'/);
+    });
+
+    /**
+     * After the indexes were read upstream, the error says they were checked just now; a qualified
+     * ref is not told to add the repository it already names.
+     *
+     * resolveWanted([acme:w/zz], { checkedNow: {acme} }) // -> "Checked just now: acme."
+     */
+    it("should say the indexes were checked just now, and not suggest adding a named repository", async () => {
+        const acme = { acme: index("acme", { "w/a": { "1.0.0": {} } }), other: index("other", {}) };
+        const error = await resolveWanted([project("w", "zz", { repo: "acme" })], { ...context(acme), checkedNow: new Set(["acme"]) }).catch((caught: unknown) => caught);
+
+        expect(error).toBeInstanceOf(UnknownRefError);
+        expect((error as UnknownRefError).details).toEqual([
+            "Checked just now: acme.",
+            "Could not be checked just now, so the copies of their indexes that sous already had were searched: other.",
+            "The repository 'acme' publishes: w/a.",
+            "Check the spelling, or run 'sous repo search zz' to look for it.",
+        ]);
     });
 
     it("should expand a namespace into every recipe in it, applying its range to each", async () => {
