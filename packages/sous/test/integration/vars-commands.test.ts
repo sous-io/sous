@@ -298,8 +298,8 @@ describe("sous vars commands", () => {
       expect(output).toContain("which 'local' you meant");
       expect(output).toContain("matched 2 things");
       expect(output).toContain("--accept-first");
-      // The command's own help, printed underneath the error.
-      expect(ambiguous.stderr).toContain("USAGE");
+      // The error names the flag that answers the question; no help follows it.
+      expect(ambiguous.stderr).not.toContain("USAGE");
 
       const accepted = runSous(root, [
         "vars",

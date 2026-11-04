@@ -1904,6 +1904,9 @@ All in `packages/plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022): a 
 
 - **Changed** "should fail a question it cannot ask, naming the flag, without the command's help" in `plugin-cli/test/cli.test.ts`: the error is no longer followed by `USAGE`.
   - **Why:** the error already names the flag that answers the question, and about 50 lines of help pushed it off the screen. Input the command could not take (`InputError`) still prints the help.
+- **Changed** "should accept --non-interactive and refuse to publish, naming --yes" (`sous/test/integration/repo-release.test.ts`), "should fail on an ambiguous name and take the first with --accept-first" (`vars-commands.test.ts`) and "should fail on an ambiguous bare name with no terminal, naming --accept-first" (`repositories.test.ts`): they expect no `USAGE` under the error.
+- **Changed** "should refuse to add a repository with no terminal and no --trust" (`repositories.test.ts`): it expects the error to name `--yes`, the flag the error itself gives (`--trust` and `--force` spell the same answer).
+  - **Why:** the test found `--trust` only in the command's help, which no longer follows the error.
 
 ### Help leaves out topics whose commands are all hidden (plugin-cli; gh-204 bug 46)
 
