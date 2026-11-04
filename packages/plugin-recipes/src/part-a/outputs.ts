@@ -268,6 +268,13 @@ export function questionFacts(question: PlannedQuestion, answerHint: boolean): V
         entries.push({ label: "storage-path", value: question.storagePath });
     }
 
+    // A version of a recipe that is not asked this question takes no answer, so no flag answers it.
+    if (question.unanswerable !== undefined) {
+        entries.push({ label: "not-answerable", value: question.unanswerable });
+
+        return entries;
+    }
+
     entries.push({
         label: "answered",
         value: question.answered
@@ -290,7 +297,7 @@ export function questionFacts(question: PlannedQuestion, answerHint: boolean): V
  */
 export function questionPlanOutputs(plan: PlannedQuestions, options: { answerHints: boolean }): IntentOutput[] {
     const count = plan.questions.length;
-    const unanswered = plan.questions.filter((question) => !question.answered).length;
+    const unanswered = plan.questions.filter((question) => !question.answered && question.unanswerable === undefined).length;
     const unreadable =
         plan.unreadable.length === 0
             ? undefined

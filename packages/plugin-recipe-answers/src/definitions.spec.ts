@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { activeRecipe, definition, definitionParser, readJson } from "../test/stand-ins.js";
+import { activeRecipe, definition, definitionParser, pinnedRecipe, readJson } from "../test/stand-ins.js";
 import { definitionsFromRecipes, loadDefinitionsFile, namesVariable, placeIssue, pseudoRecipeName, qualifiedKey, recipeKey } from "./definitions.js";
 
 describe("definitionsFromRecipes()", () => {
@@ -79,6 +79,79 @@ describe("definitionsFromRecipes()", () => {
         expect(defined.map((entry) => entry.definition.type)).toEqual(["number", "string"]);
         expect(defined[1]!.separate).toBe("misc/stuff defines port as a number, and misc/other defines it as a string, so no answer fits both.");
         expect(defined[1]!.requiredBy?.map(recipeKey)).toEqual(["misc/stuff"]);
+    });
+
+    /**
+     * Two versions of one recipe whose definitions cannot be combined would store their answers
+     * under the same recipe-scoped name, so only the shared version is asked; the pinned one gets
+     * a warning naming both versions, their holders and why.
+     *
+     * support/base 1.0.0 (lib/one): tone (string), support/base 2.0.0 (lib/two): tone (number)
+     * // -> 2.0.0: unanswerable "The variable tone of support/base 2.0.0 cannot be answered alongside support/base 1.0.0, ..."
+     */
+    it("should not ask a version whose definition cannot be combined with the shared version", () => {
+        const defined = definitionsFromRecipes([
+            pinnedRecipe([definition({ name: "tone" })], [{ holder: "lib/two", version: "2.0.0", variables: [definition({ name: "tone", type: "number" })] }]),
+        ]);
+
+        expect(defined.map((entry) => entry.recipe.version)).toEqual(["1.0.0", "2.0.0"]);
+        expect(defined[0]!).not.toHaveProperty("unanswerable");
+        expect(defined[0]!).not.toHaveProperty("separate");
+        expect(defined[0]!).not.toHaveProperty("requiredBy");
+        expect(defined[1]!.unanswerable).toBe(
+            "The variable tone of support/base 2.0.0 cannot be answered alongside support/base 1.0.0, so it is not asked and gets no answer: " +
+                "where support/base 2.0.0 is used, tone renders empty. support/base 2.0.0 is used by lib/two, and support/base 1.0.0 by lib/one. " +
+                "support/base 1.0.0 defines tone as a string, and support/base 2.0.0 defines it as a number, so no answer fits both.",
+        );
+    });
+
+    /**
+     * When the shared version does not define the name, the first pinned version (in lockfile
+     * order) is the one asked.
+     *
+     * support/base 1.0.0: nothing, 2.0.0 (lib/two): tone (string), 3.0.0 (lib/three): tone (number)
+     * // -> 3.0.0 is not asked
+     */
+    it("should ask the first pinned version when the shared version does not define the name", () => {
+        const defined = definitionsFromRecipes([
+            pinnedRecipe(
+                [],
+                [
+                    { holder: "lib/two", version: "2.0.0", variables: [definition({ name: "tone" })] },
+                    { holder: "lib/three", version: "3.0.0", variables: [definition({ name: "tone", type: "number" })] },
+                ],
+            ),
+        ]);
+
+        expect(defined.map((entry) => [entry.recipe.version, entry.unanswerable === undefined])).toEqual([
+            ["2.0.0", true],
+            ["3.0.0", false],
+        ]);
+        expect(defined[1]!.unanswerable).toContain("support/base 3.0.0 is used by lib/three, and support/base 2.0.0 by lib/two.");
+    });
+
+    /**
+     * Two versions that combine with each other share one question, even when another recipe's
+     * definition of the name keeps them apart from it: each recipe is asked separately, and both
+     * versions carry their own combination.
+     *
+     * misc/other: tone (string); support/base 1.0.0: tone (number, min 1), 2.0.0: tone (number, max 9)
+     * // -> misc/other separate; both versions separate with { min: 1, max: 9 }
+     */
+    it("should combine the versions of one recipe that is asked separately from another", () => {
+        const defined = definitionsFromRecipes([
+            activeRecipe("misc/other", [definition({ name: "tone" })]),
+            pinnedRecipe(
+                [definition({ name: "tone", type: "number", validate: { min: 1 } })],
+                [{ holder: "lib/two", version: "2.0.0", variables: [definition({ name: "tone", type: "number", validate: { max: 9 } })] }],
+            ),
+        ]);
+
+        expect(defined.map((entry) => entry.unanswerable)).toEqual([undefined, undefined, undefined]);
+        expect(defined.every((entry) => entry.separate !== undefined)).toBe(true);
+        expect(defined[0]!.definition.type).toBe("string");
+        expect(defined[1]!.definition.validate).toEqual({ min: 1, max: 9 });
+        expect(defined[2]!.definition.validate).toEqual({ min: 1, max: 9 });
     });
 });
 

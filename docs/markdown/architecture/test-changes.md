@@ -1888,3 +1888,8 @@ All in `packages/plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022): a 
 
 - **Changed** in `plugin-build`: "should list newer versions and say nothing moved" (`src/report.spec.ts`) also checks that a newer version of a version pinned for one holder alone is listed with the detail "this project pins 1.0.0 for lib/two alone". The stand-in resolver in `test/helpers.ts` reads optional `requestedBy` and `pins` from `world.published`, and holds `keepPins` the way it holds `keep`.
   - **Why:** the build's upstream check now compares each holder's own pin with the version the newest resolve gives that holder, and names the holder in what it reports.
+
+### Two versions of one recipe that cannot share an answer (gh-220, ADR 0023, decisions 4 and 6)
+
+- **Changed** in `plugin-build`: the `prepared()` helper in "messages about preparing" (`src/report.spec.ts`) and the stand-in world and `recipe-answers.answers` service in `test/helpers.ts` gain `unanswerable: []`.
+  - **Why:** `RecipeAnswers` and `BuildPrepareResult` now list the variables a version of a recipe gets no answer for, because another version of the same recipe is asked instead, so the build can warn about them.

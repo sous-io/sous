@@ -181,6 +181,11 @@ export function matchAnswers(answers: readonly ProvidedAnswer[], variables: read
         }
 
         for (const target of targets) {
+            // A version of a recipe that is not asked this variable takes no answer (`unanswerable`).
+            if (target.unanswerable !== undefined) {
+                continue;
+            }
+
             const checked = validateAnswer(target.definition, answer.value, { recipe: recipeKey(target.recipe) });
 
             if (!checked.ok) {

@@ -32,13 +32,19 @@ export const FORBIDDEN_UNDER = ["subscriptions", "repos"] as const;
  */
 export function recipeAnswersSource(variables: readonly DefinedVariable[], services: Pick<ServiceReader, "get" | "has">): VariableSourceEntity {
     const answers = (ctx: VariableSourceContext): RecipeAnswers => computeAnswers(variables, buildLadder({ services, env: ctx.env, config: ctx.config }));
+    // The recipes with a scope of their own: each defining recipe, and each holder of a version
+    // whose variable gets no answer, which renders it empty.
+    const scopeKeys = new Set([
+        ...variables.map((entry) => `${entry.recipe.namespace}/${entry.recipe.name}`),
+        ...variables.flatMap((entry) => (entry.unanswerable === undefined ? [] : (entry.recipe.holders ?? []))),
+    ]);
 
     return {
         id: VARIABLE_SOURCE_ID,
         description: "recipe answers",
         variables: (ctx): VarScope => (variables.length === 0 ? {} : answers(ctx).merged),
         scoped: (scopeKey, ctx): VarScope | undefined => {
-            if (!variables.some((entry) => `${entry.recipe.namespace}/${entry.recipe.name}` === scopeKey)) {
+            if (!scopeKeys.has(scopeKey)) {
                 return undefined;
             }
 

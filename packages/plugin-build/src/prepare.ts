@@ -118,7 +118,7 @@ async function prepareProject(input: BuildPrepareInput, ctx: Context): Promise<B
     }
 
     const skipped = active.skipped();
-    const unanswered = ctx.services.get("recipe-answers.answers").get().unanswered;
+    const { unanswered, unanswerable } = ctx.services.get("recipe-answers.answers").get();
     const result: BuildPrepareResult = {
         seeded,
         locked,
@@ -127,6 +127,7 @@ async function prepareProject(input: BuildPrepareInput, ctx: Context): Promise<B
         checkedUpstream,
         skipped,
         unanswered,
+        unanswerable,
     };
 
     await ctx.emit("build.prepared", result);

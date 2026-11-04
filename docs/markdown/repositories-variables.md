@@ -51,6 +51,14 @@ share no option, or one's `min` is above another's `max`), the definitions are n
 naming both, and asks each recipe separately, storing each answer under that recipe's
 [recipe-scoped name](#how-sous-finds-an-answer-the-ladder) (`SOUS_VAR_<NAMESPACE>_<RECIPE>_<VARIABLE>`).
 
+Two versions of one recipe (a recipe pinned at a different version for some of the recipes that depend on it)
+would share that recipe-scoped name, so when their definitions cannot be combined, sous asks only one of them:
+the version the lockfile shares, or else the first version the lockfile lists. The other version gets no
+answer, not even its default, and the variable renders empty where that version is used. `sous vars ask`,
+`sous vars list` and `sous vars show`, a build, and the question preview of `sous subscription add --dry-run`
+and `sous recipe show` warn about it, naming both versions, the recipes that use each, and why the definitions
+cannot be combined.
+
 A recipe that only reads another recipe's variable, by listing that recipe under `depends` and using the
 name in its templates, does not define it, so it adds nothing to the combination.
 

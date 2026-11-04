@@ -38,6 +38,13 @@ export interface DefiningRecipe {
     readonly path?: string;
     /** The directory holding its files. */
     readonly dir?: string;
+    /**
+     * The recipes holding this version (`project` for a subscription the project made itself), when
+     * known. Messages about two versions of one recipe name them.
+     */
+    readonly holders?: readonly string[];
+    /** True for a version pinned for some holders alone (ADR 0023, decision 4), not the shared one. */
+    readonly pinned?: boolean;
 }
 
 /**
@@ -67,6 +74,13 @@ export interface DefinedVariable {
      * asked for on its own, and its answer stored under its recipe-scoped name.
      */
     readonly separate?: string;
+    /**
+     * Set when this version of a recipe defines the name in a way that cannot be combined with
+     * another version of the same recipe: the warning saying so, naming both versions, their
+     * holders and why. Such a definition is never asked, and gets no answer (not even its default),
+     * so it renders empty where this version is used.
+     */
+    readonly unanswerable?: string;
     /** The variable as a ref, `namespace/recipe.name`. */
     readonly ref: VariableRef;
     /** `namespace/recipe.name`. */
@@ -151,6 +165,8 @@ export interface RecipeAnswers {
     readonly byRecipe: Readonly<Record<string, VarScope>>;
     /** Required variables with no answer. */
     readonly unanswered: readonly DefinedVariable[];
+    /** Definitions that get no answer, because another version of their recipe is asked instead (`unanswerable`). */
+    readonly unanswerable: readonly DefinedVariable[];
     /** The names declared secret. */
     readonly secrets: ReadonlySet<string>;
 }

@@ -181,6 +181,19 @@ export function reportUnanswered(unanswered: readonly DefinedVariable[], reporte
     }
 }
 
+/**
+ * Warns once about each variable a version of a recipe defines that gets no answer, because
+ * another version of the same recipe is asked instead. The warning (`unanswerable`, built by
+ * `recipe-answers`) names both versions, their holders and why they cannot share an answer.
+ */
+export function reportUnanswerable(unanswerable: readonly DefinedVariable[], reporter: Reporter): void {
+    for (const warning of new Set(unanswerable.map((defined) => defined.unanswerable ?? ""))) {
+        if (warning !== "") {
+            reporter.warning(warning);
+        }
+    }
+}
+
 /** Reports what preparing did, as a build shows it. */
 export function reportPrepared(result: BuildPrepareResult, reporter: Reporter): void {
     reportLocked(result.locked, reporter);
@@ -188,6 +201,7 @@ export function reportPrepared(result: BuildPrepareResult, reporter: Reporter): 
     reportRestoreFailures(result.restored, reporter);
     reportNewer(result.newer, reporter);
     reportUnanswered(result.unanswered, reporter);
+    reportUnanswerable(result.unanswerable, reporter);
 }
 
 function lowerFirst(text: string): string {

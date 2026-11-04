@@ -102,6 +102,11 @@ export interface BuildPrepareResult {
     readonly skipped: SkippedRecipe[];
     /** Required variables with no answer. */
     readonly unanswered: readonly DefinedVariable[];
+    /**
+     * Variables a version of a recipe defines that get no answer, because another version of the
+     * same recipe is asked instead; each carries its warning (`unanswerable`).
+     */
+    readonly unanswerable: readonly DefinedVariable[];
 }
 
 /** The warning for required variables nothing answered. */

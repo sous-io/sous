@@ -187,6 +187,12 @@ export class Ladder implements RecipeAnswersLadder {
     diagnose(variable: DefinedVariable): AnswerDiagnosis {
         const candidates = this.candidates(variable);
 
+        // A version of a recipe that is not asked a variable, because another version of the same
+        // recipe is (`unanswerable`), gets no answer from any name.
+        if (variable.unanswerable !== undefined) {
+            return { candidates };
+        }
+
         for (const candidate of candidates) {
             const hit = this.lookup(candidate.envName);
 

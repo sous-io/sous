@@ -81,6 +81,7 @@ export interface World {
     memories: Memory[];
     // recipe-answers
     unanswered: DefinedVariable[];
+    unanswerable: DefinedVariable[];
     // git
     branch: string | undefined;
 }
@@ -111,6 +112,7 @@ export function newWorld(root: string): World {
         links: {},
         memories: [],
         unanswered: [],
+        unanswerable: [],
         branch: "main",
     };
 }
@@ -327,7 +329,7 @@ export function standIns(world: World): PluginDefinition[] {
 
     const answers = plugin("@sous-io/plugin-recipe-answers", (sous) => {
         sous.services.add("recipe-answers.answers", () => ({
-            get: () => ({ merged: {}, byRecipe: {}, unanswered: world.unanswered, secrets: new Set<string>() }),
+            get: () => ({ merged: {}, byRecipe: {}, unanswered: world.unanswered, unanswerable: world.unanswerable, secrets: new Set<string>() }),
             forRecipe: () => ({}),
         }));
     });

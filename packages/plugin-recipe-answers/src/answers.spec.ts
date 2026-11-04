@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeRecipe, definition, ladder, variable } from "../test/stand-ins.js";
+import { activeRecipe, definition, ladder, pinnedRecipe, variable } from "../test/stand-ins.js";
 import { definitionsFromRecipes } from "./definitions.js";
 import { AnswersService, answersForRecipe, computeAnswers, noRecipeAnswers, unansweredWarning } from "./answers.js";
 
@@ -73,6 +73,26 @@ describe("computeAnswers()", () => {
         const answers = computeAnswers([variable()], ladder({ local: { TEAM: "mapped", SOUS_VAR_API_URL: "shared" } }, { TEAM: "misc/stuff/apiUrl" }));
 
         expect(answers.merged).toEqual({ apiUrl: "mapped" });
+    });
+
+    /**
+     * A version of a recipe that is not asked a variable should get no answer, not even its
+     * default, and render it empty in the scope of each recipe holding that version.
+     *
+     * support/base 1.0.0 (lib/one): tone (string), 2.0.0 (lib/two): tone (number, default 3); SOUS_VAR_TONE=warm
+     * // -> merged tone "warm"; lib/two's scope: tone ""; unanswerable: the 2.0.0 definition
+     */
+    it("should render a variable empty where a version that is not asked is used", () => {
+        const variables = definitionsFromRecipes([
+            pinnedRecipe([definition({ name: "tone" })], [{ holder: "lib/two", version: "2.0.0", variables: [definition({ name: "tone", type: "number", default: 3 })] }]),
+        ]);
+        const answers = computeAnswers(variables, ladder({ shared: { SOUS_VAR_TONE: "warm" } }));
+
+        expect(answers.merged).toEqual({ tone: "warm" });
+        expect(answersForRecipe(answers, "lib/one")).toEqual({ tone: "warm" });
+        expect(answersForRecipe(answers, "lib/two")).toEqual({ tone: "" });
+        expect(answers.unanswerable.map((entry) => entry.recipe.version)).toEqual(["2.0.0"]);
+        expect(answers.unanswered).toEqual([]);
     });
 
     /** Every name declared secret should be listed, answered or not. */

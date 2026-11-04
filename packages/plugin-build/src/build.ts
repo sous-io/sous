@@ -324,7 +324,7 @@ export async function clear(input: ClearInput, ctx: Context): Promise<IntentOutp
 
 /** The result of preparing nothing, for a partial rebuild. */
 function nothingPrepared(): BuildPrepareResult {
-    return { seeded: [], locked: NO_CHANGE, restored: NOTHING_RESTORED, newer: [], checkedUpstream: false, skipped: [], unanswered: [] };
+    return { seeded: [], locked: NO_CHANGE, restored: NOTHING_RESTORED, newer: [], checkedUpstream: false, skipped: [], unanswered: [], unanswerable: [] };
 }
 
 /**

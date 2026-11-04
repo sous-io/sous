@@ -82,9 +82,21 @@ async function variablesOf(ctx: Context, recipe: ResolvedRecipe, download: boole
  */
 export interface DefinedLike {
     readonly definition: VariableDefinition;
-    readonly recipe: { readonly repo: string; readonly namespace: string; readonly name: string; readonly version: string; readonly identity: string };
+    readonly recipe: {
+        readonly repo: string;
+        readonly namespace: string;
+        readonly name: string;
+        readonly version: string;
+        readonly identity: string;
+        /** The recipes holding this version, named when two versions of the recipe conflict. */
+        readonly holders?: readonly string[];
+        /** True for a version pinned for some holders alone, not the shared one. */
+        readonly pinned?: boolean;
+    };
     readonly ref: { readonly kind: "variable"; readonly name: string; readonly recipe: unknown };
     readonly key: string;
+    /** Set by `recipe-answers.definitions.combine` when another version of the recipe is asked this name instead: the warning saying why. */
+    readonly unanswerable?: string;
 }
 
 /** Every variable the recipes define, in recipe order, and the recipes whose variables are not known. */
@@ -95,8 +107,31 @@ export async function definedVariables(ctx: Context, resolved: readonly Resolved
 
     const sorted = [...resolved].sort((left, right) => (left.key < right.key ? -1 : left.key > right.key ? 1 : 0));
 
-    // Each version pinned for one holder alone follows its recipe's shared version.
-    for (const recipe of sorted.flatMap((one) => [one, ...(one.pins ?? []).map((pin) => resolvedAtPin(one, pin))])) {
+    // Each version pinned for some holders alone follows its recipe's shared version, once per
+    // version, with the holders that use it.
+    const versions = sorted.flatMap((one) => {
+        if (one.pins === undefined || one.pins.length === 0) {
+            return [{ recipe: one }];
+        }
+
+        const pinned = new Map<string, { recipe: ResolvedRecipe; holders: string[]; pinned: true }>();
+
+        for (const pin of one.pins) {
+            const same = pinned.get(pin.version);
+
+            if (same === undefined) {
+                pinned.set(pin.version, { recipe: resolvedAtPin(one, pin), holders: [pin.holder], pinned: true });
+            } else {
+                same.holders.push(pin.holder);
+            }
+        }
+
+        const pinnedHolders = new Set(one.pins.map((pin) => pin.holder));
+
+        return [{ recipe: one, holders: one.requestedBy.filter((holder) => !pinnedHolders.has(holder)) }, ...pinned.values()];
+    });
+
+    for (const { recipe, ...held } of versions) {
         const variables = await variablesOf(ctx, recipe, download);
 
         if (variables === undefined) {
@@ -110,7 +145,7 @@ export async function definedVariables(ctx: Context, resolved: readonly Resolved
         for (const definition of variables) {
             defined.push({
                 definition,
-                recipe: { repo: recipe.repo, namespace: recipe.namespace, name: recipe.name, version: recipe.version, identity: recipe.identity },
+                recipe: { repo: recipe.repo, namespace: recipe.namespace, name: recipe.name, version: recipe.version, identity: recipe.identity, ...held },
                 ref: { kind: "variable", name: definition.name, recipe: format.recipeRef(recipe.namespace, recipe.name, { repo: recipe.repo }) },
                 key: `${recipe.key}.${definition.name}`,
             });
@@ -149,6 +184,7 @@ export function plannedQuestionsOf(ctx: Context, defined: readonly DefinedLike[]
             ...(ctx.project === undefined ? {} : { storagePath: path.join(ctx.project.sousDir, envFileOf(definition)) }),
             answered: found !== undefined,
             ...(found === undefined ? {} : { answeredFrom: describeSource(found.source) }),
+            ...(variable.unanswerable === undefined ? {} : { unanswerable: variable.unanswerable }),
         };
     });
 }

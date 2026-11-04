@@ -1078,6 +1078,11 @@ export interface PlannedQuestion {
     readonly answered: boolean;
     /** Where the answer in scope comes from, in words, when there is one. */
     readonly answeredFrom?: string;
+    /**
+     * Set when this version of the recipe is not asked the question, because another version of the
+     * same recipe is and their definitions cannot be combined: the warning saying so.
+     */
+    readonly unanswerable?: string;
 }
 
 /** The questions some recipes would ask, before anything is downloaded. */

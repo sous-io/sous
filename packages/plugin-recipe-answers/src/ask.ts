@@ -11,7 +11,8 @@
  * Several recipes may define a variable of the same name. Their definitions arrive already combined
  * (`combineSharedNames` in `definitions.ts`), so one question is asked under the strictest of them,
  * naming the other recipes; definitions that could not be combined are asked one recipe at a time,
- * after a note saying why.
+ * after a note saying why. A version of a recipe whose definition cannot be combined with the
+ * version asked is not asked at all: the run warns, and lists it as left unanswered.
  *
  * Questions go through the chain's `Prompter`. Every one is answered by a flag too,
  * `--answer <name>=<value>`; a run that cannot ask fails naming, for each variable, the
@@ -199,6 +200,20 @@ export function separateNote(variable: DefinedVariable): string | undefined {
     return variable.separate === undefined ? undefined : `${variable.separate} Each recipe is asked for its own answer, stored under its recipe-scoped name.`;
 }
 
+/**
+ * The short reason a run's summary gives for a variable it did not ask because another version of
+ * its recipe is asked instead; the warning said before it has the whole story.
+ *
+ * ```ts
+ * unanswerableReason(variable); // -> "not asked for support/base 2.0.0, which cannot share an answer with another version of support/base"
+ * ```
+ */
+export function unanswerableReason(variable: DefinedVariable): string {
+    const key = recipeKey(variable.recipe);
+
+    return `not asked for ${key} ${variable.recipe.version}, which cannot share an answer with another version of ${key}`;
+}
+
 /** The warning for a secret or machine-specific answer headed for the committed env file. */
 export function committedFileWarning(variable: DefinedVariable, file: string): string {
     const what = variable.definition.secret ? "a secret" : "machine-specific";
@@ -309,6 +324,14 @@ export async function askForMissing(variables: readonly DefinedVariable[], ladde
     for (const variable of variables) {
         if (options.only !== undefined && !options.only.has(variable.key)) continue;
         if (options.within !== undefined && !options.within.has(recipeKey(variable.recipe))) continue;
+
+        // Another version of this recipe is asked this name instead; this one gets no answer.
+        if (variable.unanswerable !== undefined) {
+            run.reporter.warning(variable.unanswerable);
+            report.skipped.push({ variable, reason: unanswerableReason(variable) });
+            continue;
+        }
+
         if (options.skip?.has(variable.key) === true) continue;
 
         const { definition } = variable;
