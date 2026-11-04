@@ -280,6 +280,71 @@ describe("runRelease()", () => {
         expect(git(upstream, "log", "-1", "--format=%s", "main")).toBe("Release core/example@0.1.0");
     });
 
+    /**
+     * --push should also push release tags an earlier run cut without --push, since the pushed index
+     * publishes them: a subscriber would otherwise be pinned to a tag it cannot fetch.
+     *
+     * release (no --push)        // tags core/example@0.1.0 here only
+     * release --push (other)     // pushes core/example@0.1.0 and core/other@0.1.0
+     */
+    it("should push the tags an earlier run left here, with --push", async () => {
+        const upstream = path.join(tmp.path, "upstream.git");
+
+        git(tmp.path, "init", "--quiet", "--bare", "--initial-branch", "main", upstream);
+        git(repo, "remote", "add", "origin", upstream);
+        await release({ yes: true });
+
+        writeRecipe("other", "0.1.0");
+        listRecipe("other");
+        commitAll(repo, "add other");
+
+        await release({ yes: true, push: true, recipe: ["core/other"] });
+
+        expect(git(upstream, "tag", "--list").split("\n")).toEqual(["core/example@0.1.0", "core/other@0.1.0"]);
+        expect(git(upstream, "log", "-1", "--format=%s", "main")).toBe("Release core/other@0.1.0");
+    });
+
+    /**
+     * With nothing new to release, --push should still push the commit and the tags an earlier run
+     * left here, instead of returning before the push.
+     *
+     * release (no --push); release --push   // the second run releases nothing and pushes both
+     */
+    it("should push pending commits and tags with --push when nothing new is released", async () => {
+        const upstream = path.join(tmp.path, "upstream.git");
+
+        git(tmp.path, "init", "--quiet", "--bare", "--initial-branch", "main", upstream);
+        git(repo, "remote", "add", "origin", upstream);
+        await release({ yes: true });
+
+        const result = await release({ yes: true, push: true });
+
+        expect(result.plan).toEqual([]);
+        expect(result.pushed).toBe(true);
+        expect(git(upstream, "tag", "--list")).toBe("core/example@0.1.0");
+        expect(git(upstream, "log", "-1", "--format=%s", "main")).toBe("Release core/example@0.1.0");
+    });
+
+    /**
+     * A tag the remote already has should not be pushed again, and a run that finds everything
+     * pushed says the branch was already there.
+     */
+    it("should push nothing again when the remote already has everything", async () => {
+        const upstream = path.join(tmp.path, "upstream.git");
+
+        git(tmp.path, "init", "--quiet", "--bare", "--initial-branch", "main", upstream);
+        git(repo, "remote", "add", "origin", upstream);
+        await release({ yes: true, push: true });
+        reporter = new BufferedReporter();
+
+        await release({ yes: true, push: true });
+
+        const details = JSON.stringify(reporter.messages);
+
+        expect(details).not.toContain("Pushed");
+        expect(details).toContain("The branch 'main' was already on origin.");
+    });
+
     /** --push with no origin is a readable error, after the release was made. */
     it("should say how to push when there is no origin", async () => {
         await expect(release({ yes: true, push: true })).rejects.toThrow(/no 'origin' remote/);

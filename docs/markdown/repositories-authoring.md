@@ -276,6 +276,11 @@ says which one to keep. `--ci` implies `--no-bump` and `--yes`, accepting the pl
 but it deliberately does not imply `--push`, so what a workflow pushes stays visible in the workflow file. Under
 either, a recipe whose files changed without a bump is an error naming its manifest and the colliding tag.
 
+`--push` pushes the branch to `origin`, plus every release tag that `sous.index.json` publishes, that this checkout
+holds and that `origin` lacks. That includes tags an earlier run cut without `--push`, so the pushed index never
+names a tag subscribers cannot fetch. The tags go first, then the branch. A `--push` run with nothing new to
+release still pushes them, which is how to send a release you made without `--push`.
+
 ### The branch rule
 
 The default branch is whatever `origin/HEAD` points at. On any other branch a release bumps and commits but cuts

@@ -25,7 +25,7 @@ export const releaseInput = jsonSchema<RepoReleaseInput>({
         noBump: { type: "boolean", description: "Raise no versions; a changed recipe that was never raised is an error" },
         includeUnchanged: { type: "boolean", description: "Release every recipe in scope, whether its files changed or not" },
         tag: { type: "boolean", description: "Cut the tags even on a branch other than the default one" },
-        push: { type: "boolean", description: "Push the commit, and the tags this run created, to the remote" },
+        push: { type: "boolean", description: "Push the branch, and every release tag the index publishes that the remote lacks, to the remote" },
         yes: { ...yes, description: "Accept the plan without being asked" },
         dryRun: { ...dryRun, description: "Print the plan and stop, changing nothing" },
     },
