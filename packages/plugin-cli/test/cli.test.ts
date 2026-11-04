@@ -192,6 +192,31 @@ describe("the CLI front end", () => {
             expect(run.stdout).not.toContain("internal");
         });
 
+        /**
+         * A topic whose commands are all hidden is not listed in the root help, and its hidden
+         * commands are not counted anywhere. Asked for by name, it lists them instead of an empty page:
+         *
+         * sous --help         -> no "harness" topic
+         * sous harness --help -> COMMANDS: harness run-headless
+         */
+        it("should leave out a topic whose commands are all hidden, and list them when asked by name", async () => {
+            const hiddenOnly = definePlugin({
+                name: "h",
+                register(sous) {
+                    sous.intents.add({ intent: "harness.run-headless", summary: "Run headless", cli: { command: ["harness", "run-headless"], hidden: true }, handle: () => text("ran") });
+                },
+            });
+
+            const root = await runCli([hiddenOnly], ["--help"]);
+
+            expect(root.stdout).not.toMatch(/^\s+harness\s/m);
+
+            const topic = await runCli([hiddenOnly], ["harness", "--help"]);
+
+            expect(topic.stdout).toContain("USAGE\n  $ sous harness COMMAND");
+            expect(topic.stdout).toMatch(/harness run-headless\s+Run headless/);
+        });
+
         /** A group with no `cli-group` entity shows how many commands it has. */
         it("should count the commands of a group with no help entity", async () => {
             const plugin = definePlugin({

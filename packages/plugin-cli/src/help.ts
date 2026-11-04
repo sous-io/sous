@@ -45,7 +45,10 @@ export function renderHelp(node: CommandNode, context: HelpContext): string {
         sections.push(context.appDescription);
     }
 
-    const children = visibleChildren(node);
+    // Asked for by name, a topic whose commands are all hidden (`sous harness --help`) lists them,
+    // rather than an empty page.
+    const shown = visibleChildren(node);
+    const children = shown.length > 0 || node.path.length === 0 ? shown : hiddenChildren(node);
     const usage: string[] = [];
 
     if (command) {
@@ -110,10 +113,18 @@ export function argumentName(spec: PositionalSpec): string {
     return spec.name.toUpperCase().replaceAll("-", "_");
 }
 
+/** The children help lists: not hidden, and not a topic whose commands are all hidden. */
 function visibleChildren(node: CommandNode): CommandNode[] {
-    return [...node.children.values()]
-        .filter((child) => child.canonical && !child.group?.hidden && !(child.command?.hidden && child.children.size === 0 && !child.group))
-        .sort((a, b) => (a.path.at(-1)! < b.path.at(-1)! ? -1 : 1));
+    return sortedChildren(node).filter((child) => !child.group?.hidden && (child.group !== undefined || (child.viaAlias && child.command?.hidden !== true) || countCommands(child) > 0));
+}
+
+/** The commands of a topic whose commands are all hidden. */
+function hiddenChildren(node: CommandNode): CommandNode[] {
+    return sortedChildren(node).filter((child) => child.command !== undefined);
+}
+
+function sortedChildren(node: CommandNode): CommandNode[] {
+    return [...node.children.values()].filter((child) => child.canonical).sort((a, b) => (a.path.at(-1)! < b.path.at(-1)! ? -1 : 1));
 }
 
 function summaryOf(node: CommandNode): string {
@@ -130,8 +141,9 @@ function summaryOf(node: CommandNode): string {
     return `${count} command${count === 1 ? "" : "s"}`;
 }
 
+/** How many commands a node holds that help lists: hidden ones are not counted. */
 function countCommands(node: CommandNode): number {
-    let count = node.command && !node.viaAlias ? 1 : 0;
+    let count = node.command && !node.viaAlias && !node.command.hidden ? 1 : 0;
 
     for (const child of node.children.values()) {
         count += countCommands(child);

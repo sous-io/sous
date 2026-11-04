@@ -12,4 +12,6 @@ export const BUILT_IN_GROUPS: readonly CliGroupEntity[] = [
     { id: "recipe", command: ["recipe"], summary: "Browse the recipes the trusted repositories publish", aliases: [["recipes"]] },
     { id: "subscription", command: ["subscription"], summary: "Manage which recipes this project subscribes to", aliases: [["subscriptions"]] },
     { id: "vars", command: ["vars"], summary: "Recipe variables and their answers", aliases: [["var"]] },
+    { id: "plugins", command: ["plugins"], summary: "Show and install the plugins sous loads" },
+    { id: "timings", command: ["timings"], summary: "Show how long each step of this run took" },
 ];

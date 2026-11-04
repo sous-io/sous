@@ -1904,3 +1904,8 @@ All in `packages/plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022): a 
 
 - **Changed** "should fail a question it cannot ask, naming the flag, without the command's help" in `plugin-cli/test/cli.test.ts`: the error is no longer followed by `USAGE`.
   - **Why:** the error already names the flag that answers the question, and about 50 lines of help pushed it off the screen. Input the command could not take (`InputError`) still prints the help.
+
+### Help leaves out topics whose commands are all hidden (plugin-cli; gh-204 bug 46)
+
+- **New** "should leave out a topic whose commands are all hidden, and list them when asked by name" in `plugin-cli/test/cli.test.ts`.
+  - **Why:** `sous --help` listed `harness  1 command` although its only command is hidden, and `sous harness --help` printed an empty `USAGE`. The `plugins` and `timings` topics now have summaries instead of "N commands".
