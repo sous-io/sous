@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { definePlugin } from "@sous-io/plugin-api";
+import variablesPlugin from "@sous-io/plugin-variables";
+import { MAX_ARGUMENT_BYTES } from "../src/tool.js";
 import type { RunHeadlessResult } from "../src/types.js";
 import { makeEngine, makeTmpDir, script, toolsConfig } from "./stand-ins.js";
 
@@ -125,6 +127,70 @@ describe("launch", () => {
         const { engine } = await makeEngine(dir.path, [toolsConfig({ a: { args: ["x"] } })]);
 
         await expect(engine.submit({ intent: "launch", input: { tool: ["a"], noBuild: true } })).rejects.toThrow('tools.a has no "command"');
+    });
+
+    /**
+     * launch should fill in config variables in a tool's settings before it acts on them, as it did
+     * before 1.0: `promptFile`, `command` and `args` all see `${projectRoot}`.
+     *
+     * tools: { a: { command: "<node>", promptFile: "${projectRoot}/AGENTS.md" } }
+     * // the tool gets the content of <project>/AGENTS.md as its last argument
+     */
+    it("should fill in ${projectRoot} in promptFile and args", async () => {
+        const dir = tmp();
+        const tool = recorder(dir.path);
+
+        fs.writeFileSync(path.join(dir.path, "AGENTS.md"), "from the project root");
+
+        const { engine } = await makeEngine(dir.path, [
+            variablesPlugin,
+            toolsConfig({ a: { command: process.execPath, args: ["${projectRoot}/tool.mjs", "--root=${projectRoot}"], promptFile: "${projectRoot}/AGENTS.md" } }),
+        ]);
+
+        await engine.submit({ intent: "launch", input: { tool: ["a"], noBuild: true } });
+
+        expect(lines(tool.log)[0]!.args).toEqual([`--root=${dir.path}`, "from the project root"]);
+    });
+
+    /**
+     * An argument may hold a literal `${...}` meant for the tool, so an unknown name in `args`
+     * should stay as written, while an unknown name in `promptFile` fails, naming the key.
+     *
+     * args: ["${notAVariable}"]          // passed as written
+     * promptFile: "${nope}/AGENTS.md"    // ConfigError: Unresolved variable ${nope} in tools.a.promptFile
+     */
+    it("should keep unknown names in args, and refuse them in promptFile", async () => {
+        const dir = tmp();
+        const tool = recorder(dir.path);
+        const literal = await makeEngine(dir.path, [variablesPlugin, toolsConfig({ a: { command: process.execPath, args: [tool.file, "${notAVariable}"] } })]);
+
+        await literal.engine.submit({ intent: "launch", input: { tool: ["a"], noBuild: true } });
+        expect(lines(tool.log)[0]!.args).toEqual(["${notAVariable}"]);
+
+        const strict = await makeEngine(dir.path, [variablesPlugin, toolsConfig({ a: { command: process.execPath, promptFile: "${nope}/AGENTS.md" } })]);
+
+        await expect(strict.engine.submit({ intent: "launch", input: { tool: ["a"], noBuild: true } })).rejects.toThrow("Unresolved variable ${nope} in tools.a.promptFile");
+    });
+
+    /**
+     * Linux refuses one argument of 128 KiB or more with a bare `spawn E2BIG`, so launch should
+     * refuse such a prompt file first, with its size and the limit.
+     *
+     * promptFile: "big.md" (144 KiB)
+     * // ConfigError: The prompt file is too large to pass as one argument (144.0 KiB, limit 128 KiB): <path>
+     */
+    it("should refuse a prompt file too large to pass as one argument", async () => {
+        const dir = tmp();
+
+        fs.writeFileSync(path.join(dir.path, "big.md"), "x".repeat(144 * 1024));
+
+        const { engine, calls } = await makeEngine(dir.path, [toolsConfig({ a: { command: process.execPath, promptFile: "big.md" } })]);
+
+        await expect(engine.submit({ intent: "launch", input: { tool: ["a"], noBuild: true } })).rejects.toThrow(
+            "The prompt file is too large to pass as one argument (144.0 KiB, limit 128 KiB)",
+        );
+        expect(calls).toEqual([]);
+        expect(MAX_ARGUMENT_BYTES).toBe(131072);
     });
 
     it("reports a missing prompt file", async () => {

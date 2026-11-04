@@ -106,5 +106,6 @@ export const harnessesPlugin: PluginDefinition = definePlugin({
 export default harnessesPlugin;
 
 export { TOOLS_CONTRIBUTOR } from "./contributor.js";
-export { launchArguments, toolHarness } from "./tool.js";
+export { launchArguments, MAX_ARGUMENT_BYTES, toolHarness } from "./tool.js";
+export { toolSettings } from "./settings.js";
 export type * from "./types.js";

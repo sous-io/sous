@@ -6,8 +6,8 @@
  */
 
 import { SousError } from "@sous-io/plugin-api";
-import type { HarnessEntity, HeadlessRun, ToolSettings, Transcript } from "@sous-io/plugin-harnesses/types";
-import { launchArguments } from "@sous-io/plugin-harnesses";
+import type { HarnessEntity, HeadlessRun, Transcript } from "@sous-io/plugin-harnesses/types";
+import { launchArguments, toolSettings } from "@sous-io/plugin-harnesses";
 import type {} from "@sous-io/plugin-host/types";
 import { finalText, parseStream, transcriptEntries, type ClaudeRaw } from "./transcript.js";
 import type { ClaudeCodePluginOptions, ClaudeCodeHarness } from "./types.js";
@@ -27,7 +27,7 @@ export const claudeHarness: ClaudeCodeHarness = {
     description: "Claude Code, started with the `claude` command.",
 
     async launch(args, ctx) {
-        const settings = ctx.config.get<Partial<ToolSettings>>("tools.claude") ?? {};
+        const settings = toolSettings(ctx, HARNESS_ID);
 
         return ctx.services.get("host.processes").runInteractive(settings.command ?? DEFAULT_COMMAND, launchArguments(settings, args, ctx), {
             ...(ctx.project ? { cwd: ctx.project.root } : {}),
@@ -37,7 +37,7 @@ export const claudeHarness: ClaudeCodeHarness = {
     },
 
     async runHeadless(request, ctx): Promise<HeadlessRun> {
-        const settings = ctx.config.get<Partial<ToolSettings>>("tools.claude") ?? {};
+        const settings = toolSettings(ctx, HARNESS_ID);
         const model = request.model ?? ctx.options<ClaudeCodePluginOptions>()?.model;
         const command = settings.headless?.command ?? settings.command ?? DEFAULT_COMMAND;
         const args = [...(settings.headless?.args ?? []), ...HEADLESS_ARGS, ...(model === undefined ? [] : ["--model", model]), ...passed(request.options)];

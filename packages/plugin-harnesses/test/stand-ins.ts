@@ -9,7 +9,7 @@ import os from "node:os";
 import path from "node:path";
 import { createEngine, type Engine } from "@sous-io/core";
 import { BufferedReporter, definePlugin, IntentOutputs, type PluginDefinition, type ProjectInfo } from "@sous-io/plugin-api";
-import type { HostProcesses, ProcessResult } from "@sous-io/plugin-host/types";
+import type { HostPackage, HostProcesses, HostSousHome, ProcessResult } from "@sous-io/plugin-host/types";
 import harnessesPlugin from "../src/index.js";
 import packageJson from "../package.json" with { type: "json" };
 
@@ -83,13 +83,33 @@ export function processesStandIn(calls: ProcessCall[]): HostProcesses {
     };
 }
 
-/** Stands in for plugin-host. */
+/**
+ * Stands in for plugin-host: `host.processes`, plus the two services plugin-variables reads for its
+ * auto-variables, so a test can load the real plugin-variables.
+ */
 export function hostStandIn(calls: ProcessCall[]): PluginDefinition {
     return definePlugin({
         name: "@sous-io/plugin-host",
         version: packageJson.version,
         register(sous) {
+            const pkg: HostPackage = {
+                identity: () => ({ name: "@sous-io/sous", version: "9.8.7", root: "/opt/sous", realRoot: "/opt/sous", bin: undefined }),
+            };
+            const home: HostSousHome = {
+                paths: () => ({
+                    root: "/home/me/.sous",
+                    store: "/home/me/.sous/cache",
+                    indexCache: "/home/me/.sous/cache/_indexes",
+                    repos: "/home/me/.sous/repos",
+                    links: "/home/me/.sous/sous.links.json",
+                    readStrategies: "/home/me/.sous/cache/read-strategies.json",
+                }),
+                resolve: (...segments) => ["/home/me/.sous", ...segments].join("/"),
+            };
+
             sous.services.add("host.processes", () => processesStandIn(calls), { lifetime: "singleton" });
+            sous.services.add("host.package", () => pkg, { lifetime: "singleton" });
+            sous.services.add("host.sous-home", () => home, { lifetime: "singleton" });
         },
     });
 }

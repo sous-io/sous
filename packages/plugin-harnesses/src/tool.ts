@@ -9,6 +9,12 @@ import type {} from "@sous-io/plugin-host/types";
 import { promptFilePath, toolSettings, type PartialToolSettings } from "./settings.js";
 import type { HarnessEntity, HarnessLaunchResult, HeadlessRequest, HeadlessRun } from "./types.js";
 
+/**
+ * The most bytes one argument may hold on Linux (`MAX_ARG_STRLEN`). A longer prompt file fails to
+ * start with a bare `spawn E2BIG`, so it is refused first with its size.
+ */
+export const MAX_ARGUMENT_BYTES = 128 * 1024;
+
 /** The arguments of an interactive run: configured, then the user's, then the prompt file's content. */
 export function launchArguments(
     settings: { args?: string[]; promptFile?: string },
@@ -23,10 +29,24 @@ export function launchArguments(
             throw new ConfigError(`promptFile not found: ${file}`);
         }
 
-        args.push(fs.readFileSync(file, "utf8"));
+        const content = fs.readFileSync(file, "utf8");
+        const bytes = Buffer.byteLength(content, "utf8");
+
+        if (bytes >= MAX_ARGUMENT_BYTES) {
+            throw new ConfigError(`The prompt file is too large to pass as one argument (${kib(bytes)}, limit 128 KiB): ${file}`, {
+                details: ["Shorten the prompt file, or have the tool read it some other way."],
+            });
+        }
+
+        args.push(content);
     }
 
     return args;
+}
+
+/** A size in KiB, with one decimal: `144.2 KiB`. */
+function kib(bytes: number): string {
+    return `${(bytes / 1024).toFixed(1)} KiB`;
 }
 
 /** A headless run's arguments: its own, or, when it names no command, the interactive ones. */
@@ -41,7 +61,7 @@ export function toolHarness(id: string): HarnessEntity {
         description: `The tool "${id}", as written under "tools" in the config.`,
 
         async launch(args, ctx): Promise<HarnessLaunchResult> {
-            const settings = toolSettings(ctx.config, id);
+            const settings = toolSettings(ctx, id);
 
             if (settings.command === undefined) {
                 throw new ConfigError(`tools.${id} has no "command".`, { details: [`Set tools.${id}.command in your config.`] });
@@ -55,7 +75,7 @@ export function toolHarness(id: string): HarnessEntity {
         },
 
         async runHeadless(request: HeadlessRequest, ctx): Promise<HeadlessRun> {
-            const settings = toolSettings(ctx.config, id);
+            const settings = toolSettings(ctx, id);
             const command = settings.headless?.command ?? settings.command;
 
             if (command === undefined) {
