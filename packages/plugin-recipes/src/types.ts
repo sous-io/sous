@@ -660,6 +660,29 @@ export interface IndexUpstreamTarget {
     readonly provider?: string;
 }
 
+/**
+ * Why git could not clone a recipe from one URL:
+ *
+ * - `git-missing`: git is not installed, or not on `PATH`.
+ * - `credentials`: the host refused git, or git had no way to sign in (no credential helper, no SSH key, an
+ *   unknown SSH host key).
+ * - `network`: git could not reach the host.
+ * - `timeout`: git did not finish in time.
+ * - `missing-tag`: the host has no such tag (it was released but never pushed, or deleted).
+ * - `other`: anything else; git's own words say what.
+ */
+export type RecipeDownloadProblem = "git-missing" | "credentials" | "network" | "timeout" | "missing-tag" | "other";
+
+/** One clone URL a recipe download tried, and why it failed. */
+export interface RecipeDownloadAttempt {
+    readonly url: string;
+    /** The host the URL names, when it names one (`gitlab.com`). */
+    readonly host: string | undefined;
+    readonly problem: RecipeDownloadProblem;
+    /** What git said, in a line: `could not read Username for 'https://gitlab.com': terminal prompts disabled`. */
+    readonly reason: string;
+}
+
 /** One pinned recipe to put in the store. */
 export interface EnsureInStoreTarget {
     /** `namespace/recipe`. */
