@@ -23,6 +23,7 @@ import type {
     ResolvedRecipe,
     SubscriptionAddInput,
     SubscriptionAddResult,
+    SubscriptionEntry,
     SubscriptionListing,
     SubscriptionRemoveInput,
     SubscriptionRemoveResult,
@@ -36,7 +37,18 @@ import { identityOf, loadCatalog, pickMatch, readingsOf, readUpstream, type Cata
 import { USER_ADDED_BY } from "../defaults.js";
 import { askFollowUp, buildFollowUp } from "../followups.js";
 import { applyResolution, keysHeldBySubscription, PROJECT_HOLDER, type LockRepoInput } from "../lock-holds.js";
-import { configuredSubscriptions, enabledSubscriptions, contributorLabel, managedContributor, setSubscriptionEnabled, SUBSCRIPTIONS_LAYER, trustedRepos, writeSubscriptionEntry } from "../project.js";
+import {
+    clearSubscriptionEnabled,
+    configuredSubscriptions,
+    enabledSubscriptions,
+    contributorLabel,
+    managedContributor,
+    managedEntries,
+    setSubscriptionEnabled,
+    SUBSCRIPTIONS_LAYER,
+    trustedRepos,
+    writeSubscriptionEntry,
+} from "../project.js";
 import { isShortNamed, planSubscriptionRemoval, subscriptionKeyFor, writeSubscriptionRemoval } from "../subscriptions.js";
 import { checkProvidedAnswers } from "../provided-answers.js";
 import { planQuestions } from "../questions.js";
@@ -480,10 +492,9 @@ export async function toggleSubscription(input: SubscriptionToggleInput, ctx: Co
     }
 
     const changed = (configured[key]?.enabled !== false) !== enabled;
-    const edit = await setSubscriptionEnabled(managed, key, enabled, input.dryRun === true);
-
     // A layer after 510 that sets `enabled` still wins: say so, and let it.
     const later = laterSetters(ctx.config, key);
+    const edit = enabled ? await switchOn(ctx, key, changed && later.length === 0, input.dryRun === true) : await setSubscriptionEnabled(managed, key, false, input.dryRun === true);
 
     if (later.length > 0) {
         ctx.reporter.warning(`${later[later.length - 1]} also sets subscriptions.${key}.enabled and is applied after conf.d/${SUBSCRIPTIONS_LAYER}, so its value still wins.`);
@@ -501,6 +512,38 @@ export async function toggleSubscription(input: SubscriptionToggleInput, ctx: Co
     }
 
     return { key, enabled, file, changed, dryRun: false, followUps: changed ? [await buildFollowUp(ctx, input)] : [{ intent: "build", skipped: "nothing changed" }] };
+}
+
+/**
+ * Switches a subscription back on by removing the `enabled` that `disable` wrote into
+ * `conf.d/510-subscriptions.jsonc`, so the committed file returns to what it held before (#204 bug
+ * 13). `"enabled": true` is written only when something earlier in the config still switches it
+ * off, since only an explicit value can win over that.
+ *
+ * @param mustTurnOn - True when the subscription is off now and no later layer decides it.
+ */
+async function switchOn(ctx: Context, key: string, mustTurnOn: boolean, dryRun: boolean): Promise<{ readonly changed: boolean }> {
+    const managed = ctx.services.get("confd.managed");
+    const own = (await managedEntries<SubscriptionEntry>(managed, SUBSCRIPTIONS_LAYER, "subscriptions"))[key];
+
+    if (own?.enabled === undefined) {
+        // The 510 entry holds no `enabled`, so another file switches it off: only a value here wins.
+        return mustTurnOn ? setSubscriptionEnabled(managed, key, true, dryRun) : { changed: false };
+    }
+
+    // An entry `disable` wrote only to hold `enabled` goes too, when another file defines the subscription.
+    const definedElsewhere = ctx.config.layers(["subscriptions", key]).some((layer) => layer.contributor !== managedContributor(SUBSCRIPTIONS_LAYER));
+    const edit = await clearSubscriptionEnabled(managed, key, { dropEmpty: definedElsewhere, dryRun });
+
+    if (dryRun || !mustTurnOn || !edit.changed) {
+        return edit;
+    }
+
+    // An earlier file may still switch it off once 510's value is gone: then a value here must win.
+    ctx.configChanged();
+    await ctx.refreshConfig();
+
+    return configuredSubscriptions(ctx.config)[key]?.enabled === false ? setSubscriptionEnabled(managed, key, true) : edit;
 }
 
 /**
@@ -797,7 +840,7 @@ export function registerSubscriptionIntents(sous: Sous): void {
     sous.intents.add({
         intent: "subscription.enable",
         requiresProject: true,
-        summary: "Switch a subscription back on, on this machine",
+        summary: "Switch a subscription back on for everyone using this project",
         input: toggleInput,
         changesConfig: true,
         cli: { aliases: [["subscriptions", "enable"]], positional: ["ref"] },
@@ -807,7 +850,7 @@ export function registerSubscriptionIntents(sous: Sous): void {
     sous.intents.add({
         intent: "subscription.disable",
         requiresProject: true,
-        summary: "Switch a subscription off on this machine, keeping its pins",
+        summary: "Switch a subscription off for everyone using this project, keeping its pins",
         input: toggleInput,
         changesConfig: true,
         cli: { aliases: [["subscriptions", "disable"]], positional: ["ref"] },

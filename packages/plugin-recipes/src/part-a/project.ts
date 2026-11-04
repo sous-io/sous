@@ -103,6 +103,36 @@ export function deleteSubscriptionEntry(managed: ConfdManaged, key: string, dryR
     });
 }
 
+/**
+ * Removes `enabled` from one subscription in `conf.d/510-subscriptions.jsonc`, so switching it back
+ * on leaves the file as it was before it was switched off. With `dropEmpty`, an entry left with no
+ * fields is removed too (`disable` wrote it only to hold `enabled`, and another file defines the
+ * subscription). Changes nothing when the entry holds no `enabled`.
+ *
+ * ```ts
+ * // 510: { "workflow/a": { "addedBy": "user", "enabled": false }, "core": { "enabled": false } }
+ * await clearSubscriptionEnabled(managed, "workflow/a"); // -> { "addedBy": "user" }
+ * await clearSubscriptionEnabled(managed, "core", { dropEmpty: true }); // -> "core" removed
+ * ```
+ */
+export async function clearSubscriptionEnabled(managed: ConfdManaged, key: string, options: { dropEmpty?: boolean; dryRun?: boolean } = {}): Promise<ManagedEditResult> {
+    const entry = (await managedEntries<Record<string, unknown>>(managed, SUBSCRIPTIONS_LAYER, "subscriptions"))[key];
+    const holdsEnabled = entry !== null && typeof entry === "object" && Object.hasOwn(entry, "enabled");
+    const nothingElse = holdsEnabled && Object.keys(entry).every((field) => field === "enabled");
+
+    return managed.edit(
+        SUBSCRIPTIONS_LAYER,
+        (root) => {
+            if (!holdsEnabled) {
+                return;
+            }
+
+            root.atPath(nothingElse && options.dropEmpty === true ? ["subscriptions", key] : ["subscriptions", key, "enabled"]).delete();
+        },
+        { description: SUBSCRIPTIONS_HEADER, dryRun: options.dryRun === true },
+    );
+}
+
 /** Overwrites only `enabled` of one subscription, keeping every other field. */
 export function setSubscriptionEnabled(managed: ConfdManaged, key: string, enabled: boolean, dryRun = false): Promise<ManagedEditResult> {
     return managed.edit(SUBSCRIPTIONS_LAYER, (root) => root.atPath(["subscriptions", key, "enabled"]).set(enabled), {

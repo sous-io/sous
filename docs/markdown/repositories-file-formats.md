@@ -478,7 +478,7 @@ old `.json` name is read as a fallback and migrates on the next write: the `.jso
 
 No file is special to sous when it reads the config: a `conf.d` file of your own that sorts after 510 can
 override a subscription the managed file lists, such as switching it off on one machine (see
-[Switch a subscription off on one machine](repositories-consuming.md#switch-a-subscription-off-on-one-machine)).
+[On one machine only](repositories-consuming.md#on-one-machine-only)).
 
 ## Where to go next
 

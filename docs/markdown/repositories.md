@@ -205,7 +205,8 @@ plugin included, until the repository is trusted.
 A subscription can be switched off on one machine and left on for everyone else, for example from
 a `conf.d` file of your own. A switched-off subscription is not built: its outputs are pruned, its
 variables are not asked, and its pins stay in the committed lockfile. `sous subscription disable <ref>`
-and `sous subscription enable <ref>` switch one off and on.
+and `sous subscription enable <ref>` switch one off and on for everyone, because they edit the
+committed `conf.d/510-subscriptions.jsonc`.
 
 ## The official repository, and the built-in core
 

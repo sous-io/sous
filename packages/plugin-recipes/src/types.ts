@@ -49,7 +49,7 @@ export interface RepoEntry {
 
 /** One subscription, keyed under `subscriptions` by `namespace` or `namespace/recipe`. */
 export interface SubscriptionEntry {
-    /** Default `true`; `false` switches it off on this machine, keeping its pins. */
+    /** Default `true`; `false` switches it off, keeping its pins, wherever the file that sets it applies. */
     enabled?: boolean;
     /** Default `*`. */
     range?: string;

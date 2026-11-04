@@ -258,6 +258,79 @@ describe("subscription.disable and subscription.enable", () => {
         expect(ctx.reporter.at("warning")[0]).toMatch(/conf.d\/610-mac.jsonc also sets subscriptions.workflow.enabled/);
     });
 
+    /**
+     * Enabling removes the `enabled` that disabling wrote, so conf.d/510 returns to what it held
+     * before, rather than keeping `"enabled": true` (#204 bug 13).
+     *
+     * // 510: { "workflow/task-files": { range: "^1.0.0", addedBy: "user", enabled: false } }
+     * toggleSubscription({ ref: "workflow/task-files" }, ctx, true)
+     * // 510: { "workflow/task-files": { range: "^1.0.0", addedBy: "user" } }
+     */
+    it("should switch a subscription back on by removing the enabled it wrote", async () => {
+        const on = setup({ data: { repos: {}, subscriptions: { "workflow/task-files": { range: "^1.0.0" } } } }).config;
+        const { config, managed } = setup({
+            data: { repos: {}, subscriptions: { "workflow/task-files": { range: "^1.0.0", enabled: false } } },
+            managed: { "510-subscriptions.jsonc": { subscriptions: { "workflow/task-files": { range: "^1.0.0", addedBy: "user", enabled: false } } } },
+        });
+        const result = await toggleSubscription({ ref: "workflow/task-files", noBuild: true }, context(config, { next: on }), true);
+
+        expect(result).toMatchObject({ enabled: true, changed: true });
+        expect(managed.files["510-subscriptions.jsonc"]).toEqual({ subscriptions: { "workflow/task-files": { range: "^1.0.0", addedBy: "user" } } });
+    });
+
+    /**
+     * An entry disabling wrote only to hold `enabled`, for a subscription another file defines (core,
+     * or one in the user's own file), is removed whole.
+     *
+     * // 510: { core: { enabled: false } }; core is defined by sous itself
+     * toggleSubscription({ ref: "core" }, ctx, true) // 510: {}
+     */
+    it("should remove an entry that held only enabled when another file defines the subscription", async () => {
+        const on = setup({ data: { repos: {}, subscriptions: { core: {} } } }).config;
+        const { config, managed } = setup({
+            data: { repos: {}, subscriptions: { core: { enabled: false } } },
+            managed: { "510-subscriptions.jsonc": { subscriptions: { core: { enabled: false } } } },
+            layers: { "subscriptions.core": ["recipes.core", "confd/510-subscriptions.jsonc"] },
+        });
+
+        await toggleSubscription({ ref: "core", noBuild: true }, context(config, { next: on }), true);
+
+        expect(managed.files["510-subscriptions.jsonc"]).toEqual({ subscriptions: {} });
+    });
+
+    /**
+     * When a file applied before 510 switches it off, only a value in 510 wins over it, so enabling
+     * writes `"enabled": true` there.
+     *
+     * // the user's own file: { workflow: { enabled: false } }; 510 holds nothing for it
+     * toggleSubscription({ ref: "workflow" }, ctx, true) // 510: { workflow: { enabled: true } }
+     */
+    it("should write enabled true when an earlier file switches the subscription off", async () => {
+        const { config, managed } = setup({ data: { repos: {}, subscriptions: { workflow: { enabled: false } } } });
+
+        await toggleSubscription({ ref: "workflow", noBuild: true }, context(config), true);
+
+        expect(managed.files["510-subscriptions.jsonc"]).toEqual({ subscriptions: { workflow: { enabled: true } } });
+    });
+
+    /**
+     * When removing 510's value still leaves it switched off by an earlier file, enabling writes
+     * `"enabled": true` after all.
+     *
+     * // the user's own file and 510 both say enabled: false
+     * toggleSubscription({ ref: "workflow" }, ctx, true) // 510: { workflow: { addedBy: "user", enabled: true } }
+     */
+    it("should write enabled true when an earlier file still switches it off once 510's value is gone", async () => {
+        const { config, managed } = setup({
+            data: { repos: {}, subscriptions: { workflow: { enabled: false } } },
+            managed: { "510-subscriptions.jsonc": { subscriptions: { workflow: { addedBy: "user", enabled: false } } } },
+        });
+
+        await toggleSubscription({ ref: "workflow", noBuild: true }, context(config), true);
+
+        expect(managed.files["510-subscriptions.jsonc"]).toEqual({ subscriptions: { workflow: { addedBy: "user", enabled: true } } });
+    });
+
     /** Toggling a subscription the project does not have is an error listing what it has. */
     it("should refuse an unknown subscription", async () => {
         const { config } = setup({ data: { repos: {}, subscriptions: { core: {} } } });
