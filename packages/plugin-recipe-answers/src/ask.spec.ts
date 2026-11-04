@@ -167,6 +167,49 @@ describe("askForMissing()", () => {
         );
     });
 
+    /**
+     * Without a terminal, a required variable with a default that fits should take the default, as a
+     * build does, instead of failing (core/sous-skills' skillsRoot).
+     *
+     * askForMissing([skillsRoot required, default "prompts/skills"], emptyLadder, {}, noTerminal);
+     * // -> skipped: "no answer yet, so its default is used: prompts/skills"; nothing stored
+     */
+    it("should use a required variable's default without a terminal", async () => {
+        const { run: io, store } = run();
+        const report = await askForMissing([variable({ name: "skillsRoot", default: "prompts/skills" })], ladder(), {}, io);
+
+        expect(report.skipped.map((entry) => entry.reason)).toEqual(["no answer yet, so its default is used: prompts/skills"]);
+        expect(store.answers).toEqual([]);
+    });
+
+    /**
+     * A variable named on the command line still needs an answer of its own, so its default does not
+     * settle it without a terminal.
+     *
+     * askForMissing([skillsRoot with a default], emptyLadder, { only: {skillsRoot} }, noTerminal);
+     * // -> throws NonInteractiveError
+     */
+    it("should still fail without a terminal for a named variable with a default", async () => {
+        const subject = variable({ name: "skillsRoot", default: "prompts/skills" });
+        const error = await askForMissing([subject], ladder(), { only: new Set([subject.key]) }, run().run).catch((caught: unknown) => caught);
+
+        expect(error).toBeInstanceOf(NonInteractiveError);
+    });
+
+    /**
+     * With a terminal, the default should be offered rather than taken silently.
+     *
+     * askForMissing([skillsRoot with a default], emptyLadder, {}, terminal answering "");
+     * // -> asked once
+     */
+    it("should still ask at a terminal, offering the default", async () => {
+        const prompter = scriptedPrompter(["prompts/skills"]);
+        const report = await askForMissing([variable({ name: "skillsRoot", default: "prompts/skills" })], ladder(), {}, run(prompter).run);
+
+        expect(prompter.asked).toEqual(["Which API?"]);
+        expect(report.answered).toHaveLength(1);
+    });
+
     /** A value that no longer fits should be named in that failure. */
     it("should name a value in scope that no longer fits", () => {
         const error = nonInteractiveError([{ variable: variable(), candidates: [], current: "apiUrl must not be empty." }]);
