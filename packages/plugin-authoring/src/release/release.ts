@@ -370,8 +370,16 @@ async function runCheck(
 
     const drift = result.stale ? describeIndexDrift(existing, result.index) : [];
 
-    if (result.stale) {
+    if (result.stale && result.pending.length > 0) {
         tools.results.push(listOutput(drift, { title: `Merging rewrites the committed ${INDEX_FILE}, because:` }));
+    } else if (result.stale) {
+        // A release rewrites the index only when it publishes a version, and nothing here would.
+        tools.results.push(
+            listOutput(drift, {
+                title: `The committed ${INDEX_FILE} is out of date, because:`,
+                footer: `Merging leaves it as it is: a release rewrites ${INDEX_FILE} only when it publishes a version, so these changes reach the index with the next release that does.`,
+            }),
+        );
     } else {
         reporter.detail(`The committed ${INDEX_FILE} is current, and so are the dependencies it records for every version it publishes.`);
     }
