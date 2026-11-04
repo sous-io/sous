@@ -168,6 +168,9 @@ The rules:
   saying what they are, and treats them as refining the goal. With none, it takes the broadest
   reasonable reading of roughly the last 10 turns, NEVER asks which of several targets was meant,
   and names what it took in the first line of its reply.
+- **Decide in the template.** When a step depends on a setting the project answers, branch on it
+  in the `.tpl.` file, so the compiled skill gives one instruction instead of asking the agent to
+  look the setting up. YOU MUST load `about-liquid-templates` for how.
 - **Tiers, never models.** Name a sub-agent's model by tier ("the next tier down from the main
   session"), never by product or provider.
 - **Public by default.** A skill published in a recipe repository is public: its examples use
@@ -206,7 +209,8 @@ A skill published in a recipe names its recipe:
 ## Source for this Skill
 
 This skill comes from the `<namespace>/<recipe>` recipe, installed by sous from a recipe
-repository. It was compiled from a template, so edit the source, never this output file.
+repository. It was compiled from a template, so edit the source, never this output file. To
+change it, run `sous repo contribute <namespace>/<recipe>`.
 
 - Source Path: <resolved source path>
 ```
@@ -222,8 +226,9 @@ never this output file.
 - Source Path: <resolved source path>
 ```
 
-The footer tells an agent reading the compiled copy where the skill came from and where to make a
-change.
+The footer tells an agent reading the compiled copy where the skill came from and how to change
+it. The Source Path of a recipe's skill points into sous's machine-wide store, which is read-only
+build input; a change to a recipe goes upstream through `sous repo contribute`.
 
 ## Examples
 
@@ -240,6 +245,7 @@ change.
 ## Source for this Skill
 
 This skill comes from the `core/sous-skills` recipe, installed by sous from a recipe
-repository. It was compiled from a template, so edit the source, never this output file.
+repository. It was compiled from a template, so edit the source, never this output file. To
+change it, propose the change to `sous-io/sous`, under `recipes/core/sous-skills/`.
 
 - Source Path: {{ sousTemplatePath }}
