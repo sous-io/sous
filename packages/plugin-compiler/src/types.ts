@@ -336,6 +336,11 @@ export interface CompileInput {
     /** Writes every output even when unchanged. */
     rebuild?: boolean;
     dryRun?: boolean;
+    /**
+     * Ends the report with `Done.` (`true` unless `false`). A caller that reports more steps after
+     * the compile (the build's prune) passes `false` and ends the report itself.
+     */
+    reportEnd?: boolean;
 }
 
 /** The result of `compiler.compile`. Errors are listed, never thrown, so every target compiles. */

@@ -56,6 +56,8 @@ describe("compiler.prune", () => {
         expect(fs.existsSync(stale)).toBe(false);
         expect(loadState(statePath(), project.root).files.find((entry) => entry.dest === stale)).toBeUndefined();
         expect(compiler.output()).toContain(`removed: ${stale}`);
+        expect(compiler.output().indexOf("Removed outputs")).toBeGreaterThan(-1);
+        expect(compiler.output().indexOf("Removed outputs")).toBeLessThan(compiler.output().indexOf(`removed: ${stale}`));
     });
 
     /** A plain build (compile, then prune) removes an output dropped from the config. */

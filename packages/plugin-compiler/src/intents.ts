@@ -159,7 +159,9 @@ async function compileTargets(input: CompileInput, ctx: Context, runtime: Compil
             runtime.produced = result.produced;
         }
 
-        ctx.reporter.operationEnd(errors > 0 ? `Done with ${errors} error(s).` : "Done.", errors === 0);
+        if (input.reportEnd !== false) {
+            ctx.reporter.operationEnd(errors > 0 ? `Done with ${errors} error(s).` : "Done.", errors === 0);
+        }
         await ctx.emit("compiler.wrote", { files: result.outputs, dryRun });
 
         return {
@@ -223,7 +225,9 @@ async function pruneOutputs(input: CompilerPruneInput, ctx: Context, runtime: Co
     const writer = ctx.services.get("compiler.writer");
     const { removed, dirsRemoved } = await writer.remove(candidates, { dryRun });
 
-    if (input.report !== false) {
+    if (input.report !== false && removed.length > 0) {
+        ctx.reporter.stepStart(dryRun ? "Outputs that would be removed" : "Removed outputs");
+
         for (const file of removed) {
             ctx.reporter.operation(dryRun ? "would-remove" : "removed", file);
         }
