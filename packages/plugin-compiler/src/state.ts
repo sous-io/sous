@@ -37,26 +37,129 @@ export function isProtectedPath(target: string, protectedRoots: readonly string[
     });
 }
 
-/** Reads a state file; an empty state when it is missing or cannot be read. */
-export function loadState(file: string): StateFile {
-    try {
-        const parsed = JSON.parse(fs.readFileSync(file, "utf8")) as Partial<StateFile>;
+/** Whether a path is the directory `root` or inside it. */
+function isInside(target: string, root: string): boolean {
+    const relative = path.relative(root, target);
 
-        return {
-            lastBuild: typeof parsed.lastBuild === "string" ? parsed.lastBuild : "",
-            resolvedVars: parsed.resolvedVars && typeof parsed.resolvedVars === "object" ? { ...parsed.resolvedVars } : {},
-            dirs: Array.isArray(parsed.dirs) ? parsed.dirs.filter((dir): dir is string => typeof dir === "string") : [],
-            files: Array.isArray(parsed.files) ? parsed.files.filter((entry): entry is StateFileEntry => typeof entry?.dest === "string") : [],
-        };
-    } catch {
-        return emptyState();
-    }
+    return relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
 }
 
-/** Writes a state file, creating its directory when missing. */
+/**
+ * A state file read for one project. `state` holds what belongs to the project, every path
+ * absolute. `foreign` holds the files recorded outside the project by a state file that does not
+ * name this project as the one it was written for: a state file copied from another project
+ * (`cp -r`), or one written before state files named their project. A foreign file is never
+ * removed; it stays known only so a build may overwrite it, and the next save forgets it unless
+ * the build wrote it again.
+ */
+export interface ReadState {
+    state: StateFile;
+    foreign: StateFileEntry[];
+}
+
+/**
+ * Reads a state file for the project at `projectRoot`:
+ *
+ * - A relative path is read against `projectRoot`, and is the project's.
+ * - An absolute path inside `projectRoot` is the project's.
+ * - An absolute path outside `projectRoot` is the project's only when the file's own
+ *   `projectRoot` is this one; otherwise it is foreign (see `ReadState`), and a directory is dropped.
+ *
+ * Without `projectRoot`, every path is kept as written. A missing or unreadable file reads as empty.
+ *
+ * ```ts
+ * // /p/project-b/.sous/sous.state.json, copied from project-a, which also wrote /home/me/.claude/x.md:
+ * // { "projectRoot": "/p/project-a", "files": [{ "dest": "AGENTS.md" }, { "dest": "/home/me/.claude/x.md" }] }
+ * readState(file, "/p/project-b");
+ * // -> state.files: [/p/project-b/AGENTS.md], foreign: [/home/me/.claude/x.md]
+ * ```
+ */
+export function readState(file: string, projectRoot?: string): ReadState {
+    const root = projectRoot === undefined ? undefined : path.resolve(projectRoot);
+    let parsed: Partial<StateFile>;
+
+    try {
+        parsed = JSON.parse(fs.readFileSync(file, "utf8")) as Partial<StateFile>;
+    } catch {
+        return { state: root === undefined ? emptyState() : { ...emptyState(), projectRoot: root }, foreign: [] };
+    }
+
+    const sameProject = root !== undefined && typeof parsed.projectRoot === "string" && path.resolve(parsed.projectRoot) === root;
+    // Where a recorded path is, and whether it is this project's.
+    const place = (recorded: string): { at: string; own: boolean } => {
+        if (root === undefined) {
+            return { at: recorded, own: true };
+        }
+
+        if (!path.isAbsolute(recorded)) {
+            return { at: path.resolve(root, recorded), own: true };
+        }
+
+        const at = path.resolve(recorded);
+
+        return { at, own: sameProject || isInside(at, root) };
+    };
+    const files: StateFileEntry[] = [];
+    const foreign: StateFileEntry[] = [];
+
+    for (const entry of Array.isArray(parsed.files) ? parsed.files : []) {
+        if (typeof entry?.dest === "string") {
+            const { at, own } = place(entry.dest);
+
+            (own ? files : foreign).push({ ...entry, dest: at });
+        }
+    }
+
+    const dirs: string[] = [];
+
+    for (const dir of Array.isArray(parsed.dirs) ? parsed.dirs : []) {
+        if (typeof dir === "string") {
+            const { at, own } = place(dir);
+
+            if (own) {
+                dirs.push(at);
+            }
+        }
+    }
+
+    return {
+        state: {
+            ...(root === undefined ? {} : { projectRoot: root }),
+            lastBuild: typeof parsed.lastBuild === "string" ? parsed.lastBuild : "",
+            resolvedVars: parsed.resolvedVars && typeof parsed.resolvedVars === "object" ? { ...parsed.resolvedVars } : {},
+            dirs,
+            files,
+        },
+        foreign,
+    };
+}
+
+/** Reads a state file: what belongs to the project at `projectRoot` (see `readState`). */
+export function loadState(file: string, projectRoot?: string): StateFile {
+    return readState(file, projectRoot).state;
+}
+
+/**
+ * Writes a state file, creating its directory when missing. When the state names its project
+ * (`projectRoot`), every path inside the project is written relative to it, so a copy of the
+ * project reads them as its own files rather than the original's.
+ *
+ * ```ts
+ * saveState(file, { projectRoot: "/p/a", files: [{ dest: "/p/a/AGENTS.md" }, { dest: "/home/me/x.md" }], ... });
+ * // -> "dest": "AGENTS.md" and "dest": "/home/me/x.md"
+ * ```
+ */
 export function saveState(file: string, state: StateFile): void {
+    const root = state.projectRoot === undefined ? undefined : path.resolve(state.projectRoot);
+    const written = (target: string): string => (root !== undefined && isInside(target, root) ? path.relative(root, target) || "." : target);
+    const onDisk: StateFile = {
+        ...state,
+        dirs: state.dirs.map(written),
+        files: state.files.map((entry) => ({ ...entry, dest: written(entry.dest) })),
+    };
+
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify(state, null, 2), "utf8");
+    fs.writeFileSync(file, JSON.stringify(onDisk, null, 2), "utf8");
 }
 
 /**
@@ -65,11 +168,19 @@ export function saveState(file: string, state: StateFile): void {
  */
 export class StateStore {
     private loaded: StateFile | undefined;
+    private readonly foreign = new Map<string, StateFileEntry>();
     private readonly written = new Map<string, StateFileEntry>();
     private readonly createdDirs = new Set<string>();
     private readonly removed = new Set<string>();
 
-    constructor(readonly file: string) {}
+    /**
+     * `projectRoot` is the project the state file belongs to: paths inside it are saved relative
+     * to it, and a path outside it that another project recorded is never removed (see `readState`).
+     */
+    constructor(
+        readonly file: string,
+        readonly projectRoot?: string,
+    ) {}
 
     /** Re-reads the file, when nothing is waiting to be saved. */
     refresh(): void {
@@ -85,7 +196,16 @@ export class StateStore {
 
     /** The state on disk. */
     saved(): StateFile {
-        this.loaded ??= loadState(this.file);
+        if (!this.loaded) {
+            const read = readState(this.file, this.projectRoot);
+
+            this.loaded = read.state;
+            this.foreign.clear();
+
+            for (const entry of read.foreign) {
+                this.foreign.set(entry.dest, entry);
+            }
+        }
 
         return this.loaded;
     }
@@ -109,7 +229,7 @@ export class StateStore {
             return undefined;
         }
 
-        return this.written.get(resolved) ?? this.saved().files.find((entry) => path.resolve(entry.dest) === resolved);
+        return this.written.get(resolved) ?? this.saved().files.find((entry) => path.resolve(entry.dest) === resolved) ?? this.foreign.get(resolved);
     }
 
     /** Records a file written. */
@@ -141,6 +261,7 @@ export class StateStore {
     commit(options: { dryRun?: boolean; resolvedVars?: Readonly<Record<string, string>> } = {}): StateFile {
         const now = this.current();
         const next: StateFile = {
+            ...(this.projectRoot === undefined ? {} : { projectRoot: path.resolve(this.projectRoot) }),
             lastBuild: new Date().toISOString(),
             resolvedVars: options.resolvedVars ? { ...options.resolvedVars } : now.resolvedVars,
             dirs: now.dirs.filter((dir) => fs.existsSync(dir)),
@@ -156,6 +277,7 @@ export class StateStore {
 
         saveState(this.file, next);
         this.loaded = next;
+        this.foreign.clear();
         this.written.clear();
         this.createdDirs.clear();
         this.removed.clear();
@@ -168,6 +290,7 @@ export class StateStore {
         this.written.clear();
         this.createdDirs.clear();
         this.removed.clear();
+        this.foreign.clear();
         this.loaded = emptyState();
 
         if (!fs.existsSync(this.file)) {

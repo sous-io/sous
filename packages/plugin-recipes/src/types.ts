@@ -611,6 +611,8 @@ export interface StoreGcReport {
     readonly bytesBefore: number;
     readonly bytesAfter: number;
     readonly dryRun: boolean;
+    /** The work directories an interrupted download left in the store root, removed (or, in a dry run, to be removed). */
+    readonly abandoned?: readonly string[];
 }
 
 /** The machine-wide recipe store. */

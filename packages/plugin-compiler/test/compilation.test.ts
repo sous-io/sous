@@ -7,6 +7,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { loadState } from "../src/state.js";
 import { compileOnce, copyFixture, errorsOf, makeCompiler, makeProject, type TestProject } from "./helpers.js";
 
 let project: TestProject;
@@ -267,8 +268,8 @@ describe("compiler.compile", () => {
             targets: [{ id: "docs", entryPoint: path.join(dir, "entry.md"), origin: { plugin: "p", recipe: "ns/r", repository: "repo" }, outputs: [{ destinationFile: dest }] }],
         });
 
-        const state = JSON.parse(fs.readFileSync(path.join(project.sousDir, "sous.state.json"), "utf8"));
-        const entry = state.files.find((file: { dest: string }) => file.dest === dest);
+        const state = loadState(path.join(project.sousDir, "sous.state.json"), project.root);
+        const entry = state.files.find((file) => file.dest === dest)!;
 
         expect(entry.srcHash).toMatch(/^[0-9a-f]{64}$/);
         expect(entry.destHash).toMatch(/^[0-9a-f]{64}$/);
@@ -288,7 +289,7 @@ describe("compiler.compile", () => {
 
         expect(result.ok).toBe(true);
         expect(fs.existsSync(dest)).toBe(true);
-        const state = JSON.parse(fs.readFileSync(path.join(project.sousDir, "sous.state.json"), "utf8"));
+        const state = loadState(path.join(project.sousDir, "sous.state.json"), project.root);
 
         expect(state.dirs).toEqual([project.at("brand"), project.at("brand", "new"), project.at("brand", "new", "dir")]);
     });
@@ -365,16 +366,17 @@ describe("compiler.compile", () => {
             const config = single(entry, dest);
 
             expect((await compileOnce(project, config)).result.ok).toBe(true);
-            const before = JSON.parse(fs.readFileSync(statePath, "utf8"));
+            const before = loadState(statePath, project.root);
 
             project.write("entry.md", "Before\n@missing.md\nAfter\n");
             const { result, compiler } = await compileOnce(project, config);
 
             expect(result.ok).toBe(false);
             expect(fs.readFileSync(dest, "utf8")).toBe("first build\n");
-            const after = JSON.parse(fs.readFileSync(statePath, "utf8"));
+            const after = loadState(statePath, project.root);
 
-            expect(after.files.find((file: { dest: string }) => file.dest === dest)).toEqual(before.files.find((file: { dest: string }) => file.dest === dest));
+            expect(after.files.find((file) => file.dest === dest)).toBeDefined();
+            expect(after.files.find((file) => file.dest === dest)).toEqual(before.files.find((file) => file.dest === dest));
             expect(compiler.output()).toContain("(not written because of an error; the previous copy stays)");
         });
 

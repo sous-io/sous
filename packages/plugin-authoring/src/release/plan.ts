@@ -35,7 +35,10 @@ export interface RecipeState {
     /** The version its manifest declares. */
     readonly version: string;
     readonly inScope: boolean;
-    /** The highest tagged version, when it was ever tagged. */
+    /**
+     * The tagged version it is compared against, when it was ever tagged: its own version when that
+     * is tagged, else the newest tagged version below it.
+     */
     readonly lastTagged?: string;
     readonly lastTag?: string;
     /** Whether its files differ from what that tag carries. */
@@ -375,10 +378,8 @@ async function readRecipeState(
     const key = recipe.key;
     const version = recipe.manifest.version;
     const mine = tags.filter((tag) => `${tag.namespace}/${tag.name}` === key);
-    const highest = mine
-        .map((tag) => tag.version)
-        .filter((value) => semver.valid(value) !== null)
-        .sort((left, right) => semver.rcompare(left, right))[0];
+    const currentVersionTagged = mine.some((tag) => tag.version === version);
+    const base = currentVersionTagged ? version : baseTagFor(version, mine.map((tag) => tag.version));
 
     const state: RecipeState = {
         recipe,
@@ -386,21 +387,39 @@ async function readRecipeState(
         version,
         inScope: coveredByScope(recipe, scope),
         changed: true,
-        currentVersionTagged: mine.some((tag) => tag.version === version),
-        ...(highest === undefined ? {} : { lastTagged: highest, lastTag: tagOfKey(key, highest) }),
+        currentVersionTagged,
+        ...(base === undefined ? {} : { lastTagged: base, lastTag: tagOfKey(key, base) }),
     };
 
-    if (highest === undefined) {
+    if (base === undefined) {
         return state;
     }
 
     // "Changed" is a content question, answered by hashing, as a consumer checks a cached copy.
     const workingHash = await tools.hash.hashDirectory(recipe.dir);
-    const taggedHash = await git.withTree(tagOfKey(key, highest), recipe.path, (dir) => tools.hash.hashDirectory(dir));
+    const taggedHash = await git.withTree(tagOfKey(key, base), recipe.path, (dir) => tools.hash.hashDirectory(dir));
 
     state.changed = !tools.hash.equal(workingHash, taggedHash);
 
     return state;
+}
+
+/**
+ * The tagged version an untagged manifest version is compared against: the newest one below it.
+ * When every tag is above it (or the manifest version is not valid semver), the newest tag.
+ * A version already tagged is compared against its own tag instead, so a run on an older commit
+ * is not compared against a release made after it.
+ *
+ * ```ts
+ * baseTagFor("1.0.1", ["1.0.0", "1.0.2"]);   // "1.0.0"
+ * baseTagFor("0.9.0", ["1.0.0"]);            // "1.0.0"
+ * ```
+ */
+function baseTagFor(version: string, tagged: readonly string[]): string | undefined {
+    const valid = tagged.filter((value) => semver.valid(value) !== null).sort((left, right) => semver.rcompare(left, right));
+    const below = semver.valid(version) === null ? undefined : valid.find((value) => semver.lt(value, version));
+
+    return below ?? valid[0];
 }
 
 function coveredByScope(recipe: ValidatedRecipe, scope: ReleaseScope): boolean {

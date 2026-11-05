@@ -114,7 +114,7 @@ describe("build.watch", () => {
         timers.fire();
 
         await vi.waitFor(() => expect(h.world.compileCalls).toHaveLength(1));
-        expect(h.world.compileCalls[0]).toEqual({ strict: true, changedFiles: [file, path.join(root, "skills", "a", "SKILL.md")] });
+        expect(h.world.compileCalls[0]).toEqual({ strict: true, changedFiles: [file, path.join(root, "skills", "a", "SKILL.md")], reportEnd: false });
         expect(h.world.resolveCalls).toEqual([]);
         expect(h.reporter.at("notice").join("\n")).toContain(`Change detected: ${file}`);
 
@@ -138,7 +138,7 @@ describe("build.watch", () => {
         await vi.waitFor(() => expect(watchers).toHaveLength(2));
         expect(watchers[0]!.closed).toBe(true);
         expect(h.engine.config.buildNumber).toBeGreaterThan(before);
-        expect(h.world.compileCalls).toEqual([{}]);
+        expect(h.world.compileCalls).toEqual([{ reportEnd: false }]);
         expect(h.reporter.at("notice").join("\n")).toContain("Config changed (");
 
         await session.stop();

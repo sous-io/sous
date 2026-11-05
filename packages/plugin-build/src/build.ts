@@ -112,6 +112,8 @@ async function runBuild(input: BuildInput, ctx: Context): Promise<BuildResult> {
                 ...(input.rebuild ? { rebuild: true } : {}),
                 ...(dryRun ? { dryRun: true } : {}),
                 ...(partial ? { changedFiles: input.changedFiles } : {}),
+                // "Done." is printed below, after the outputs this build removes.
+                reportEnd: false,
             })
         ).toPlain();
         ok = compiled.ok;
@@ -128,6 +130,12 @@ async function runBuild(input: BuildInput, ctx: Context): Promise<BuildResult> {
     }
 
     reportSkipped(ctx, skipped, skippedFiles, [...(cleared?.removed ?? []), ...(pruned?.removed ?? [])], dryRun);
+
+    if (compiled) {
+        const errors = compiled.problems.filter((problem) => problem.level === "error").length;
+
+        ctx.reporter.operationEnd(errors > 0 ? `Done with ${errors} error(s).` : "Done.", errors === 0);
+    }
 
     const watching = input.watch === true;
 

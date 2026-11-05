@@ -213,7 +213,7 @@ export interface CompilerAliases {
 
 /** One file the compiler wrote. */
 export interface StateFileEntry {
-    /** Absolute. */
+    /** Absolute in memory; on disk, relative to the project root when inside it. */
     dest: string;
     /** The source's hash (sha256 hex). */
     srcHash: string;
@@ -229,6 +229,11 @@ export interface StateFileEntry {
 
 /** The state file: every file sous wrote, and which recipe it came from. */
 export interface StateFile {
+    /**
+     * The project the state was written for. On disk, paths inside it are written relative to it;
+     * in memory every path is absolute. Missing from older state files, whose paths are all absolute.
+     */
+    projectRoot?: string;
     lastBuild: string;
     resolvedVars: Record<string, string>;
     /** Directories the compiler created, so pruning can remove them when empty. */
@@ -331,6 +336,11 @@ export interface CompileInput {
     /** Writes every output even when unchanged. */
     rebuild?: boolean;
     dryRun?: boolean;
+    /**
+     * Ends the report with `Done.` (`true` unless `false`). A caller that reports more steps after
+     * the compile (the build's prune) passes `false` and ends the report itself.
+     */
+    reportEnd?: boolean;
 }
 
 /** The result of `compiler.compile`. Errors are listed, never thrown, so every target compiles. */

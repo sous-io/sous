@@ -154,6 +154,57 @@ describe("buildReleasePlan()", () => {
     expect(errorsIn(result.problems)[0]!.message).toMatch(/Raise the version/);
   });
 
+  /**
+   * A run on an older commit, after a newer release was already tagged (two quick pushes to
+   * main, the first push's pipeline running last), compares the recipe against the tag of the
+   * version its own manifest declares, not the newest tag. That commit matches its own tag, so
+   * there is nothing to do and no error (gh-204, bug 29).
+   *
+   * // commit A: core/one 1.0.0, tagged core/one@1.0.0
+   * // commit B: core/one 1.0.1 with a change, tagged core/one@1.0.1
+   * // check out commit A, then plan with noBump
+   * // -> no releases, no errors; core/one skipped as unchanged since core/one@1.0.0
+   */
+  it("should compare an older commit against the tag of its own version", async () => {
+    const first = git(repo, "rev-parse", "HEAD").trim();
+
+    writeRecipe("one", "1.0.1");
+    writeFile(repo, "recipes/core/one/skills/one.md", "edited\n");
+    commitAll(repo, "raise one");
+    git(repo, "tag", "--annotate", "core/one@1.0.1", "--message", "release");
+    git(repo, "checkout", "--quiet", first);
+
+    const result = await plan({ scope: releaseScope(), noBump: true });
+
+    expect(errorsIn(result.problems)).toEqual([]);
+    expect(result.releases).toEqual([]);
+    expect(result.skipped.find((entry) => entry.key === "core/one")!.reason).toContain("core/one@1.0.0");
+  });
+
+  /**
+   * A version not tagged yet is compared against the newest tag below it, even when a higher
+   * version is already tagged: commit B raised core/one to 1.0.1, commit C to 1.0.2, and C's
+   * pipeline tagged 1.0.2 first. B's run publishes 1.0.1, released after 1.0.0.
+   */
+  it("should compare a new version against the newest tag below it", async () => {
+    writeRecipe("one", "1.0.1");
+    writeFile(repo, "recipes/core/one/skills/one.md", "one-oh-one\n");
+    commitAll(repo, "raise one to 1.0.1");
+    const middle = git(repo, "rev-parse", "HEAD").trim();
+
+    writeRecipe("one", "1.0.2");
+    writeFile(repo, "recipes/core/one/skills/one.md", "one-oh-two\n");
+    commitAll(repo, "raise one to 1.0.2");
+    git(repo, "tag", "--annotate", "core/one@1.0.2", "--message", "release");
+    git(repo, "checkout", "--quiet", middle);
+
+    const result = await plan({ scope: releaseScope(), noBump: true });
+
+    expect(errorsIn(result.problems)).toEqual([]);
+    expect(result.releases).toHaveLength(1);
+    expect(result.releases[0]).toMatchObject({ key: "core/one", to: "1.0.1", tag: "core/one@1.0.1", lastTagged: "1.0.0" });
+  });
+
   /** `--include-unchanged` releases everything in scope anyway. */
   it("should release an unchanged recipe when asked to", async () => {
     const result = await plan({

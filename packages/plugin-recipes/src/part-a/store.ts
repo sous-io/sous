@@ -33,6 +33,16 @@ const ACCESS_GRANULARITY_MS = 24 * 60 * 60 * 1000;
 const TEMP_PREFIX = ".sous-tmp-";
 const GIT_DIR_NAME = ".git";
 
+/** The prefixes of the work directories a download makes in the store root (`restore.ts`, `fetchRecipeTree`). */
+const DOWNLOAD_WORK_PREFIXES = [".sous-restore-", ".sous-fetch-"] as const;
+
+/**
+ * How long a download's work directory must have gone unchanged before it counts as abandoned. A
+ * build interrupted with Ctrl-C leaves its work directory behind; one younger than this may belong
+ * to a build running now, so it stays.
+ */
+export const ABANDONED_WORK_AGE_MS = 60 * 60 * 1000;
+
 /** How deep a listing walk looks for markers; a guard against link loops. */
 const MAX_STORE_DEPTH = 12;
 
@@ -86,6 +96,69 @@ function assertSafeSegment(value: string, label: string): void {
 
 async function removeTree(target: string): Promise<void> {
     await fs.rm(target, { recursive: true, force: true });
+}
+
+/**
+ * Removes the download work directories (`.sous-restore-*`, `.sous-fetch-*`) directly inside the
+ * store root that neither they nor anything directly inside them changed in the last
+ * `ABANDONED_WORK_AGE_MS`. A download removes its own when it finishes; these are what an
+ * interrupted one (Ctrl-C) left behind. Returns the directories removed, or that a dry run would
+ * remove. A directory that cannot be read or removed is skipped.
+ *
+ * ```ts
+ * await sweepAbandonedWork("/home/me/.sous/cache");
+ * // -> ["/home/me/.sous/cache/.sous-restore-Ab12Cd"]
+ * ```
+ */
+export async function sweepAbandonedWork(root: string, options: { dryRun?: boolean; now?: number } = {}): Promise<string[]> {
+    const cutoff = (options.now ?? Date.now()) - ABANDONED_WORK_AGE_MS;
+    const removed: string[] = [];
+    let children;
+
+    try {
+        children = await fs.readdir(root, { withFileTypes: true });
+    } catch {
+        return removed;
+    }
+
+    for (const child of children) {
+        if (!child.isDirectory() || !DOWNLOAD_WORK_PREFIXES.some((prefix) => child.name.startsWith(prefix))) {
+            continue;
+        }
+
+        const dir = path.join(root, child.name);
+
+        try {
+            if ((await newestChange(dir)) > cutoff) {
+                continue;
+            }
+
+            if (!options.dryRun) {
+                await removeTree(dir);
+            }
+
+            removed.push(dir);
+        } catch {
+            // Gone already (another build swept it), or not removable: leave it.
+        }
+    }
+
+    return removed;
+}
+
+/** The latest modification time of a directory and of everything directly inside it. */
+async function newestChange(dir: string): Promise<number> {
+    let newest = (await fs.stat(dir)).mtimeMs;
+
+    for (const name of await fs.readdir(dir)) {
+        try {
+            newest = Math.max(newest, (await fs.lstat(path.join(dir, name))).mtimeMs);
+        } catch {
+            // Removed while being read.
+        }
+    }
+
+    return newest;
 }
 
 /**
@@ -324,7 +397,9 @@ export class RecipeStore implements RecipesStore {
             bytesAfter -= entry.sizeBytes;
         }
 
-        return { evicted, kept, bytesBefore, bytesAfter, dryRun };
+        const abandoned = await sweepAbandonedWork(this.root, { dryRun });
+
+        return { evicted, kept, bytesBefore, bytesAfter, dryRun, abandoned };
     }
 
     /** Renames a staged entry over its home, moving any old one aside first. */

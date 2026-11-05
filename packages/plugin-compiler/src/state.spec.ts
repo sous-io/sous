@@ -7,8 +7,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { emptyState, hashContent, isProtectedPath, loadState, matchesFilter, saveState, StateService, StateStore } from "./state.js";
-import type { StateFileEntry } from "./types.js";
+import { emptyState, hashContent, isProtectedPath, loadState, matchesFilter, readState, saveState, StateService, StateStore } from "./state.js";
+import type { StateFile, StateFileEntry } from "./types.js";
 
 let dir: string;
 
@@ -67,6 +67,89 @@ describe("saveState()", () => {
         saveState(file, emptyState());
 
         expect(fs.readFileSync(file, "utf8")).toBe(JSON.stringify(emptyState(), null, 2));
+    });
+
+    /**
+     * With a `projectRoot`, paths inside the project are written relative to it, and paths outside
+     * it stay absolute.
+     *
+     * saveState(file, { projectRoot: "/p", files: ["/p/AGENTS.md", "/home/me/x.md"] });
+     * // -> "AGENTS.md", "/home/me/x.md"
+     */
+    it("should write paths inside the project relative to it", () => {
+        const file = path.join(dir, "state.json");
+        const root = path.join(dir, "p");
+        const outside = path.join(dir, "user", "x.md");
+
+        saveState(file, { ...emptyState(), projectRoot: root, dirs: [path.join(root, "skills")], files: [entry(path.join(root, "AGENTS.md")), entry(outside)] });
+
+        const onDisk = JSON.parse(fs.readFileSync(file, "utf8")) as StateFile;
+
+        expect(onDisk.projectRoot).toBe(root);
+        expect(onDisk.dirs).toEqual(["skills"]);
+        expect(onDisk.files.map((e) => e.dest)).toEqual(["AGENTS.md", outside]);
+    });
+});
+
+describe("readState()", () => {
+    /**
+     * Paths are read for the project at `projectRoot`: a relative path is the project's, read
+     * against the root; an absolute path inside the root is the project's; an absolute path
+     * outside it is the project's only when the file names this project, else it is foreign.
+     *
+     * // copied from /old: { projectRoot: "/old", files: ["AGENTS.md", "/home/me/x.md"] }
+     * readState(file, "/new");
+     * // -> state.files: ["/new/AGENTS.md"], foreign: ["/home/me/x.md"]
+     */
+    it("should read relative paths against the project and keep another project's outside paths apart", () => {
+        const file = path.join(dir, "state.json");
+        const root = path.join(dir, "new");
+        const outside = path.join(dir, "user", "x.md");
+
+        fs.writeFileSync(
+            file,
+            JSON.stringify({ ...emptyState(), projectRoot: path.join(dir, "old"), dirs: ["skills", path.join(dir, "user")], files: [entry("AGENTS.md"), entry(outside)] }),
+        );
+
+        const read = readState(file, root);
+
+        expect(read.state.projectRoot).toBe(root);
+        expect(read.state.files.map((e) => e.dest)).toEqual([path.join(root, "AGENTS.md")]);
+        expect(read.state.dirs).toEqual([path.join(root, "skills")]);
+        expect(read.foreign.map((e) => e.dest)).toEqual([outside]);
+    });
+
+    /**
+     * An older state file (every path absolute, no `projectRoot`) still reads: its paths inside the
+     * project are the project's, and those outside it are foreign, since nothing shows they were
+     * written for this project.
+     */
+    it("should read an older absolute-path state file, keeping outside paths apart", () => {
+        const file = path.join(dir, "state.json");
+        const root = path.join(dir, "b");
+        const inside = path.join(root, "AGENTS.md");
+        const otherProject = path.join(dir, "a", "AGENTS.md");
+
+        fs.writeFileSync(file, JSON.stringify({ ...emptyState(), files: [entry(inside), entry(otherProject)] }));
+
+        const read = readState(file, root);
+
+        expect(read.state.files.map((e) => e.dest)).toEqual([inside]);
+        expect(read.foreign.map((e) => e.dest)).toEqual([otherProject]);
+    });
+
+    /** A file that names this project keeps its outside paths as the project's own. */
+    it("should keep outside paths of a state file written for this project", () => {
+        const file = path.join(dir, "state.json");
+        const root = path.join(dir, "p");
+        const outside = path.join(dir, "user", "x.md");
+
+        fs.writeFileSync(file, JSON.stringify({ ...emptyState(), projectRoot: root, files: [entry(outside)] }));
+
+        const read = readState(file, root);
+
+        expect(read.state.files.map((e) => e.dest)).toEqual([outside]);
+        expect(read.foreign).toEqual([]);
     });
 });
 
@@ -135,6 +218,32 @@ describe("StateStore", () => {
         store.commit({ dryRun: true });
 
         expect(fs.existsSync(file)).toBe(false);
+    });
+
+    /**
+     * A foreign file (outside the project, recorded for another project) is not one of the
+     * project's files, so nothing removes it; a build may still overwrite it (`entry` finds it),
+     * and a commit forgets it unless the build wrote it again.
+     */
+    it("should keep another project's outside files out of its entries and forget them on commit", () => {
+        const file = path.join(dir, "state.json");
+        const root = path.join(dir, "b");
+        const foreign = path.join(dir, "user", "x.md");
+
+        fs.mkdirSync(path.dirname(foreign), { recursive: true });
+        fs.writeFileSync(foreign, "x");
+        fs.writeFileSync(file, JSON.stringify({ ...emptyState(), projectRoot: path.join(dir, "a"), files: [entry(foreign)] }));
+
+        const store = new StateStore(file, root);
+
+        expect(store.current().files).toEqual([]);
+        expect(store.entry(foreign)?.dest).toBe(foreign);
+
+        const saved = store.commit();
+
+        expect(saved.files).toEqual([]);
+        expect(saved.projectRoot).toBe(root);
+        expect(store.entry(foreign)).toBeUndefined();
     });
 
     /** Deleting the store removes the state file. */
