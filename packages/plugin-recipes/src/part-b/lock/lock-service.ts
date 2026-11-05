@@ -138,6 +138,34 @@ export class LockService implements RecipesLock {
             lockedRepos[entry.repo] ??= previous.repos[entry.repo];
         }
 
+        // A kept recipe keeps its holds too: a recipe it shares with an active one still lists it
+        // in `requestedBy`, with the version pinned for it alone when it had one, so the lockfile
+        // matches what a machine with the subscription switched on writes.
+        for (const [key, entry] of Object.entries(fresh.recipes)) {
+            const before = previous.recipes[key];
+            const holds = kept.filter((holder) => before?.requestedBy.includes(holder) === true && !entry.requestedBy.includes(holder));
+
+            if (before === undefined || holds.length === 0) {
+                continue;
+            }
+
+            const pins = { ...entry.pins };
+
+            for (const holder of holds) {
+                const pin = before.pins?.[holder];
+
+                if (pin !== undefined) {
+                    pins[holder] = pin;
+                }
+            }
+
+            recipes[key] = {
+                ...entry,
+                requestedBy: sortKeys([...entry.requestedBy, ...holds]),
+                ...(Object.keys(pins).length === 0 ? {} : { pins: sortObject(pins) }),
+            };
+        }
+
         return { formatVersion: 1, repos: sortObject(lockedRepos), recipes: sortRecipes(recipes) };
     }
 

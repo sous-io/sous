@@ -142,6 +142,57 @@ describe("LockService.fromResolved", () => {
         expect(next.recipes["workflow/alpha"].version).toBe("1.0.0");
     });
 
+    /**
+     * A switched-off subscription keeps its pins AND the holds they record (gh-204, bug 8; #181):
+     * a recipe it shares with an active one still lists it in `requestedBy`, with its own pin
+     * when it had one, and a recipe only it holds stays pinned.
+     *
+     * previous: support/base requestedBy [workflow/alpha, workflow/beta], pins { workflow/alpha: 0.9.0 }
+     * alpha switched off; beta resolved with support/base 1.0.0
+     * // -> support/base requestedBy [workflow/alpha, workflow/beta], pins { workflow/alpha: 0.9.0 }
+     */
+    it("should keep the holds a switched-off subscription records on recipes still resolved", async () => {
+        const baseHash = `sha256-${"b".repeat(64)}` as const;
+        const oldBaseHash = `sha256-${"c".repeat(64)}` as const;
+        const onlyHash = `sha256-${"d".repeat(64)}` as const;
+        const previous = pinned({
+            recipes: {
+                "workflow/alpha": { repo: "acme", version: "1.0.0", hash, requestedBy: ["project"], kind: "subscribes" },
+                "workflow/beta": { repo: "acme", version: "2.0.0", hash: resolvedBeta.hash, requestedBy: ["project"], kind: "subscribes" },
+                "support/base": {
+                    repo: "acme",
+                    version: "1.0.0",
+                    hash: baseHash,
+                    requestedBy: ["workflow/alpha", "workflow/beta"],
+                    kind: "depends",
+                    pins: { "workflow/alpha": { version: "0.9.0", hash: oldBaseHash } },
+                },
+                "support/only": { repo: "acme", version: "1.0.0", hash: onlyHash, requestedBy: ["workflow/alpha"], kind: "depends" },
+            },
+        });
+        const resolvedBase: ResolvedRecipe = {
+            ...resolvedBeta,
+            key: "support/base",
+            namespace: "support",
+            name: "base",
+            version: "1.0.0",
+            hash: baseHash,
+            tag: "support/base@1.0.0",
+            path: "recipes/support/base",
+            kind: "depends",
+            requestedBy: ["workflow/beta"],
+            ranges: [{ range: "^1.0.0", requestedBy: "workflow/beta" }],
+        };
+
+        const { lock } = await lockService(config({ "workflow/alpha": { enabled: false }, "workflow/beta": {} }));
+        const next = lock.fromResolved([resolvedBeta, resolvedBase], previous);
+
+        expect(Object.keys(next.recipes)).toEqual(["support/base", "support/only", "workflow/alpha", "workflow/beta"]);
+        expect(next.recipes["support/base"]).toEqual(previous.recipes["support/base"]);
+        expect(next.recipes["support/only"]).toEqual(previous.recipes["support/only"]);
+        expect(next).toEqual(previous);
+    });
+
     it("should keep the pins of a repository switched off on this machine", async () => {
         const { lock } = await lockService(config({ "workflow/alpha": {} }, { acme: { url: URL, enabled: false } }));
 
