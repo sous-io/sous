@@ -205,6 +205,31 @@ describe("the update plan outputs", () => {
         expect((outputs[1]?.result as ItemList).items).toEqual(["other at https://x/other, needed by workflow/a"]);
         expect(outputs.slice(2).map((output) => output.result?.toText())).toEqual(["The index of 'acme' could not be fetched, so its pins stay where they are. offline", "Switched off, so left alone: workflow/b."]);
     });
+
+    /**
+     * When an index could not be read and nothing moves, the headline does not claim every pin is
+     * the newest: sous could not check the pins of that repository (#204 bug 33).
+     *
+     * // nothing moves; 'sous-recipes' unreachable, no repository read
+     * // -> "Sous could not check for updates: it could not read the index of 'sous-recipes'."
+     */
+    it("should not say there is nothing to update when an index could not be read", () => {
+        const offline = {
+            ...plan,
+            diff: unchanged,
+            missingRepos: [],
+            switchedOff: [],
+            unreachable: [{ repo: "sous-recipes", reason: "Sous could not read github.com/sous-io/sous-recipes: git: Could not resolve host: github.com." }],
+        } as unknown as RecipeUpdatePlan;
+        const texts = updatePlanOutputs(offline).map((output) => output.result?.toText() ?? output.summary);
+
+        expect(texts.join("\n")).not.toContain("Nothing to update");
+        expect(texts[0]).toBe("Sous could not check for updates: it could not read the index of 'sous-recipes'.");
+
+        const partly = updatePlanOutputs({ ...offline, checked: ["acme"] } as RecipeUpdatePlan).map((output) => output.result?.toText() ?? output.summary);
+
+        expect(partly[0]).toBe("No updates found in the repositories sous could read. It could not read the index of 'sous-recipes', so the pins from it were not checked.");
+    });
 });
 
 describe("the shared pieces", () => {

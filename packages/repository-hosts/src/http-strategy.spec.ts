@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
+import { createHttp } from "@sous-io/plugin-host";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { RepositoryReadRequest } from "@sous-io/plugin-recipes/types";
 import { httpReadStrategy, isSignInPage } from "./http-strategy.js";
 import { hostContext, recordedHttp, type RecordedRoute } from "./testing.js";
@@ -104,6 +107,92 @@ describe("httpReadStrategy()", () => {
 
         expect(outcome.ok).toBe(false);
         expect(outcome.ok === false && outcome.reason).toMatch(/^could not connect: getaddrinfo ENOTFOUND/);
+    });
+});
+
+describe("httpReadStrategy() redirects, against local servers", () => {
+    const servers: Server[] = [];
+    const seen: Array<{ server: string; url: string; headers: IncomingHttpHeaders }> = [];
+    let first = "";
+    let second = "";
+
+    /** A server that records each request, and answers `/same` and `/cross` with a redirect. */
+    async function listen(name: string): Promise<string> {
+        const server = createServer((req, res) => {
+            seen.push({ server: name, url: req.url ?? "/", headers: req.headers });
+
+            if (req.url === "/same") {
+                res.writeHead(302, { Location: "/file" }).end();
+            } else if (req.url === "/cross") {
+                res.writeHead(302, { Location: `${second}/file` }).end();
+            } else {
+                res.writeHead(200, { "Content-Type": "application/json" }).end("{}");
+            }
+        });
+
+        servers.push(server);
+        await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+
+        return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    }
+
+    beforeAll(async () => {
+        first = await listen("first");
+        second = await listen("second");
+    });
+
+    afterAll(async () => {
+        await Promise.all(servers.map((server) => new Promise((resolve) => server.close(resolve))));
+    });
+
+    /** A token strategy that reads `path` from the first server, through the real `host.http`. */
+    function readFrom(path: string) {
+        const strategy = httpReadStrategy({ id: "http-token", label: "HTTP with token", usesToken: true, url: () => `${first}${path}` });
+
+        return strategy.read({ ...request, token: { value: "s3cret", source: "GITLAB_TOKEN" } }, hostContext({ services: { "host.http": createHttp() } }));
+    }
+
+    /**
+     * A redirect within the same origin (scheme, host and port) keeps the token.
+     *
+     * GET first/same (Authorization: Bearer s3cret) -> 302 /file -> GET first/file (Authorization: Bearer s3cret)
+     */
+    it("should keep the token on a redirect to the same origin", async () => {
+        seen.length = 0;
+
+        expect(await readFrom("/same")).toMatchObject({ ok: true, text: "{}" });
+        expect(seen.map((one) => [one.server, one.url, one.headers.authorization])).toEqual([
+            ["first", "/same", "Bearer s3cret"],
+            ["first", "/file", "Bearer s3cret"],
+        ]);
+    });
+
+    /**
+     * A redirect to another origin drops the token, so it never reaches a host it was not meant for.
+     *
+     * GET first/cross (Authorization: Bearer s3cret) -> 302 second/file -> GET second/file (no Authorization)
+     */
+    /**
+     * A failed connection keeps its cause (DNS, refused), not only "could not reach" (#204 bug 20).
+     *
+     * GET http://sous-test.invalid/sous.index.json
+     * // -> { ok: false, reason: "could not reach http://sous-test.invalid/sous.index.json: getaddrinfo ENOTFOUND sous-test.invalid" }
+     */
+    it("should keep the cause of a failed connection in the reason", async () => {
+        const strategy = httpReadStrategy({ id: "http", label: "HTTP without token", usesToken: false, url: () => "http://sous-test.invalid/sous.index.json" });
+        const outcome = await strategy.read(request, hostContext({ services: { "host.http": createHttp() } }));
+
+        expect(outcome.ok === false && outcome.reason).toMatch(/^could not reach http:\/\/sous-test\.invalid\/sous\.index\.json: getaddrinfo (ENOTFOUND|EAI_AGAIN) sous-test\.invalid$/);
+    });
+
+    it("should drop the token on a redirect to another origin", async () => {
+        seen.length = 0;
+
+        expect(await readFrom("/cross")).toMatchObject({ ok: true, text: "{}" });
+        expect(seen.map((one) => [one.server, one.url, one.headers.authorization])).toEqual([
+            ["first", "/cross", "Bearer s3cret"],
+            ["second", "/file", undefined],
+        ]);
     });
 });
 

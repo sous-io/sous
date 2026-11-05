@@ -1219,7 +1219,10 @@ export interface RecipeUpdatePlan {
     /** Variables the new versions declare that have no answer yet. */
     readonly newVariables: readonly PlannedQuestion[];
     readonly unreadable: string[];
+    /** Repositories whose index could not be read upstream, each with why, as a full sentence. */
     readonly unreachable: ReadonlyArray<{ readonly repo: string; readonly reason: string }>;
+    /** Repositories whose index was read upstream. Absent: not recorded. */
+    readonly checked?: readonly string[];
     /** Recipes held by a link, not updated. */
     readonly linked: string[];
     /** Recipes that ship with sous. */

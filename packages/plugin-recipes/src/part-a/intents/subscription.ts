@@ -55,7 +55,7 @@ import { planQuestions } from "../questions.js";
 import { lockDiffLines } from "../outputs.js";
 import { ensureRequiredPlugins, recipeDirectory } from "../required-plugins.js";
 import { needUrlError } from "../trust.js";
-import { describeUpdateScope, isEmptyUpdate, planUpdate, resolveTogether } from "../update-plan.js";
+import { describeUpdateScope, emptyUpdateHeadline, isEmptyUpdate, planUpdate, resolveTogether } from "../update-plan.js";
 import { describeError, nowIso, proposeRepoName, resolvedAtPin, sortBytewise } from "../util.js";
 import { subscriptionListOutputs } from "./catalog-outputs.js";
 import { acceptFirst, answer, answersFile, browsing, dryRun, inputSchema, latestFlag, noBuild, yes, yesFlag } from "./schema.js";
@@ -646,7 +646,7 @@ export function reportUpdatePlan(reporter: Reporter, plan: RecipeUpdatePlan): vo
     const scope = describeUpdateScope(plan.scope);
 
     if (isEmptyUpdate(plan)) {
-        reporter.notice(`Nothing to update: every pin in ${scope} is already the newest published version its range allows.`);
+        reporter.notice(emptyUpdateHeadline(plan));
     } else {
         reporter.list(plan.diff.unchanged ? ["No pin moves until the repositories below are trusted and read."] : lockDiffLines(plan.diff), { title: `Updating ${scope} changes the lockfile:` }, LogLevel.Notice);
     }

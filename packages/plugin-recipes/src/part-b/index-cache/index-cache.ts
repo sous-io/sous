@@ -101,6 +101,8 @@ export class IndexCacheCore {
     private readonly failedChecks = new Map<string, { at: number; error: unknown }>();
     /** Repositories whose stale fallback has been reported in this process. */
     private readonly staleNoticed = new Set<string>();
+    /** Upstream reads under way, by identity and whether they are `latest` reads. */
+    private readonly inFlight = new Map<string, Promise<CacheLookup>>();
 
     constructor(private readonly options: IndexCacheCoreOptions) {
         this.memory = new StrategyMemoryFile(options.strategiesFile);
@@ -227,6 +229,23 @@ export class IndexCacheCore {
             return this.staleOrThrow(target, cached, meta, failed.error);
         }
 
+        // Overlapping reads of one repository (every recipe of a build downloading at once) share
+        // one upstream read, and so one set of token lookups and one failure.
+        const key = `${target.identity}\u0000${options.latest === true ? "latest" : ""}`;
+        let pending = this.inFlight.get(key);
+
+        if (pending === undefined) {
+            pending = this.checkUpstream(target, cached, meta, options).finally(() => this.inFlight.delete(key));
+            this.inFlight.set(key, pending);
+        }
+
+        const lookup = await pending;
+
+        return lookup.repo === target.name ? lookup : { ...lookup, repo: target.name };
+    }
+
+    /** Reads upstream, falling back to the cached copy as `stale` when the read fails. */
+    private async checkUpstream(target: IndexTarget, cached: IndexFile | undefined, meta: IndexMeta | undefined, options: CoreGetOptions): Promise<CacheLookup> {
         try {
             const lookup = await this.refresh(target, options.signal, cached === undefined ? undefined : meta?.etag, options.hosts, options.latest === true);
 

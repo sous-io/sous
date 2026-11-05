@@ -116,6 +116,29 @@ describe("IndexCacheCore", () => {
         expect(Object.keys(lookup.index.recipes["workflow/alpha"].versions)).toEqual(["2.0.0"]);
     });
 
+    /**
+     * Reads of one repository that overlap share one upstream read, whether it works or fails: a
+     * build that downloads 16 recipes from one repository reads its index once (#204 bug 14).
+     *
+     * await Promise.all([core.get(target), core.get(target), core.get(target)]); // one read upstream
+     */
+    it("should share one upstream read among overlapping reads of the same repository", async () => {
+        const all = await Promise.all([core.get(target), core.get(target), core.get(target)]);
+
+        expect(all.map((lookup) => lookup.source)).toEqual(["network", "network", "network"]);
+        expect(reads).toHaveLength(1);
+
+        reads = [];
+        served = undefined;
+        core.forget(IDENTITY);
+
+        const failures = await Promise.all([core.get(target), core.get(target), core.get(target)].map((pending) => pending.catch((error: unknown) => error)));
+
+        expect(failures.every((error) => error instanceof IndexReadError)).toBe(true);
+        expect(new Set(failures).size).toBe(1);
+        expect(reads).toHaveLength(1);
+    });
+
     it("should look upstream with --latest even when the cache is fresh", async () => {
         await core.get(target);
 
