@@ -124,7 +124,7 @@ export function subscriptionRemoveOutputs(ctx: Pick<Context, "reporter">, result
         outputs.push(
             sentence(
                 result.optedOut
-                    ? `The subscription to '${result.key}' is one sous provides itself, so it was switched off rather than deleted: this project's config now records '${result.key}: { enabled: false }'. The repository it came from is still trusted.${pruneHint}`
+                    ? `The subscription to '${result.key}' is one sous provides itself, so it was switched off rather than deleted: this project's config now records '${result.key}: { enabled: false }'. Its pins stay in the lockfile, as for any switched-off subscription, and the repository it came from is still trusted.${pruneHint}`
                     : `The subscription to '${result.key}' is gone. The repositories it came from are still trusted; remove one of those deliberately if you want to withdraw that too.${pruneHint}`,
             ),
         );
@@ -216,6 +216,20 @@ export function subscriptionUpdateOutputs(ctx: Pick<Context, "reporter">, result
 
 // --- recipe.update ----------------------------------------------------------------------------------
 
+/**
+ * The note for a built-in subscription whose pins an update moves, saying why.
+ *
+ * ```ts
+ * builtInMoveNote({ key: "core", version: "1.0.16" });
+ * // "The subscription to 'core' is one sous provides itself and follows the installed sous, version 1.0.16, so this update moves its pins to that version."
+ * ```
+ */
+export function builtInMoveNote(entry: { readonly key: string; readonly version?: string }): string {
+    return entry.version === undefined
+        ? `The subscription to '${entry.key}' is one sous provides itself and follows the installed sous, so this update moves its pins to the version this installation of sous ships.`
+        : `The subscription to '${entry.key}' is one sous provides itself and follows the installed sous, version ${entry.version}, so this update moves its pins to that version.`;
+}
+
 /** The first line of a message, trimmed. */
 function firstLine(text: string): string {
     return (text.split("\n")[0] ?? "").trim();
@@ -281,7 +295,7 @@ export function updatePlanOutputs(plan: RecipeUpdatePlan): IntentOutput[] {
     for (const entry of plan.builtIn) {
         outputs.push(
             noteOutput(
-                `The subscription to '${entry.key}' is one sous provides itself, and it stays at ${entry.version === undefined ? "the version" : `version ${entry.version}, the version`} this installation of sous ships.`,
+                builtInMoveNote(entry),
             ),
         );
     }

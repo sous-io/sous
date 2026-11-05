@@ -151,6 +151,28 @@ describe("messages about preparing", () => {
     });
 
     /**
+     * A pin of the built-in `core` subscription moved to the installed sous version says why (#229).
+     *
+     * reportPrepared({ locked: { updated: [core/sous-skills 1.0.13 -> 1.0.16] }, followsSous: [{ key: "core/sous-skills", subscription: "core", version: "1.0.16" }] })
+     * // -> "core/sous-skills moved from version 1.0.13 to version 1.0.16, because the subscription to 'core' follows the installed sous, version 1.0.16."
+     */
+    it("should say why a built-in pin moved", () => {
+        const reporter = new BufferedReporter();
+
+        reportPrepared(
+            prepared({
+                locked: { ...NO_CHANGE, unchanged: false, updated: [{ key: "core/sous-skills", from: "1.0.13", to: "1.0.16" }] },
+                followsSous: [{ key: "core/sous-skills", subscription: "core", version: "1.0.16" }],
+            }),
+            reporter,
+        );
+
+        expect(reporter.messages.map((entry) => messageText(entry.message)).join("\n")).toContain(
+            "core/sous-skills moved from version 1.0.13 to version 1.0.16, because the subscription to 'core' follows the installed sous, version 1.0.16.",
+        );
+    });
+
+    /**
      * Nothing is said when nothing is newer; otherwise each newer version is listed with the pinned
      * one beside it, and a note says no pin changed.
      *

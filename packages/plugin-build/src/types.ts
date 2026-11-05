@@ -108,6 +108,12 @@ export interface BuildPrepareResult {
      * same recipe is asked instead; each carries its warning (`unanswerable`).
      */
     readonly unanswerable: readonly DefinedVariable[];
+    /**
+     * The pins held by a subscription sous provides itself (`core`), which follows the installed
+     * sous: `version` is that subscription's range, the installed sous version. A pin moved to it
+     * says why.
+     */
+    readonly followsSous?: ReadonlyArray<{ readonly key: string; readonly subscription: string; readonly version: string }>;
 }
 
 /** The warning for required variables nothing answered. */

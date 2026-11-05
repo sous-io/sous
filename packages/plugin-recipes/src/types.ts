@@ -1138,6 +1138,8 @@ export interface PlannedQuestions {
 /** `subscription.remove`. */
 export interface SubscriptionRemoveInput extends RecipeChangeFlags {
     ref: string;
+    /** Accepted for the same spelling as `subscription add` and `update`; removing asks nothing. */
+    yes?: boolean;
 }
 
 /** The result of `subscription.remove`. */

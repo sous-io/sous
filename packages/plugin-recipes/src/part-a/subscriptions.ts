@@ -60,7 +60,7 @@ export interface SubscriptionRemoval {
 
 /**
  * Plans removing one subscription. A subscription sous wrote can be removed; one sous provides
- * itself is switched off; one written in the project's own files is not sous's to edit, so that is
+ * itself is switched off, keeping its pins as `subscription disable` does; one written in the project's own files is not sous's to edit, so that is
  * an error naming the file and `subscription disable`, which switches it off from the managed file.
  */
 export async function planSubscriptionRemoval(ctx: Context, key: string, lock: Lockfile): Promise<SubscriptionRemoval> {
@@ -89,13 +89,18 @@ export async function planSubscriptionRemoval(ctx: Context, key: string, lock: L
         }
     }
 
+    // A built-in subscription is switched off, not removed, and a switched-off subscription keeps its pins.
+    if (builtIn) {
+        return { key, optedOut: true, after: lock, stayed: [] };
+    }
+
     let after = lock;
 
     for (const heldKey of held) {
         after = dropProjectHold(after, heldKey);
     }
 
-    return { key, optedOut: builtIn, after, stayed: stayedAfter(after, held) };
+    return { key, optedOut: false, after, stayed: stayedAfter(after, held) };
 }
 
 /** Writes a planned removal to `conf.d/510`: deletes the entry, or records `enabled: false` for a built-in one. */
