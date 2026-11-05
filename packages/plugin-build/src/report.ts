@@ -40,12 +40,15 @@ export function reportLinkedRepos(links: Readonly<Record<string, ResolvedLink>>,
         return;
     }
 
-    const lead = names.length === 1 ? "One repository is LINKED to a working copy on this machine." : `${names.length} repositories are LINKED to working copies on this machine.`;
+    const lead =
+        names.length === 1
+            ? "One repository is LINKED to a working copy on this machine. Its recipes are read from that checkout, so versions, the lockfile and freshness checks do not apply to it."
+            : `${names.length} repositories are LINKED to working copies on this machine. Their recipes are read from those checkouts, so versions, the lockfile and freshness checks do not apply to them.`;
 
     reporter.list(
         names.map((name) => `${name} -> ${links[name]!.path}`),
         {
-            title: `${lead} Their recipes are read from those checkouts, so versions, the lockfile and freshness checks do not apply to them.`,
+            title: lead,
             footer: "Run 'sous repo unlink <name>' to go back to the published versions.",
         },
         level,

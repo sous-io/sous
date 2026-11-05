@@ -143,6 +143,11 @@ export interface ConfigBuilder extends Reporter {
 export interface ContributorDefinition {
     /** Unique in the engine: `diagrams`, `confd/610-mac.jsonc`, `claude-code/defaults`. */
     id: string;
+    /**
+     * The file it reads, for a contributor that applies one config file. Messages about a value it
+     * set name this file instead of the id: `/work/app/.sous/sous.config.js`.
+     */
+    source?: string;
     /** Its config stage; stages run lowest first. Default `0`, shifted for plugins loaded during a stage. */
     stage?: number;
     /**

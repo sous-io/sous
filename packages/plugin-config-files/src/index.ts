@@ -6,7 +6,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { type ConfigBuilder, ConfigError, type ContributorDefinition, definePlugin, jsonSchema, type PluginDefinition, type Sous } from "@sous-io/plugin-api";
+import { type ConfigBuilder, ConfigError, type ContributorDefinition, definePlugin, jsonSchema, type PluginDefinition, type ProjectInfo, type Sous } from "@sous-io/plugin-api";
 import { EnvFilesService } from "./env/service.js";
 import { ConfigFilesLoaderImpl, mainCandidates } from "./loader.js";
 import { MAIN_CONFIG_BASE_NAME } from "./names.js";
@@ -48,7 +48,7 @@ export const configFilesPlugin: PluginDefinition = definePlugin({
         sous.services.add("config-files.loader", () => loader, { lifetime: "singleton" });
         sous.services.add("config-files.env", (_config, ctx) => new EnvFilesService(ctx.project, ctx.env), { lifetime: "singleton" });
 
-        sous.config.contribute(mainContributor(loader));
+        sous.config.contribute(mainContributor(loader, sous.project));
 
         // The patch files beside sous.config.*, in name order. They share its apply order, and their
         // ids (`config-files/…`) sort after `config-files.main` and in file-name order.
@@ -145,9 +145,12 @@ function createLoader(sous: Sous): ConfigFilesLoaderImpl {
  * re-runs whenever anything changes; its apply order puts its patch after every plugin's, so it
  * wins whatever a plugin set.
  */
-function mainContributor(loader: ConfigFilesLoaderImpl): ContributorDefinition {
+function mainContributor(loader: ConfigFilesLoaderImpl, project: ProjectInfo | undefined): ContributorDefinition {
+    const source = project === undefined ? undefined : (project.configPath ?? mainCandidates(project.sousDir)[0]);
+
     return {
         id: MAIN_CONTRIBUTOR,
+        ...(source === undefined ? {} : { source }),
         applyOrder: MAIN_APPLY_ORDER,
         async contribute(config) {
             const project = config.project;
@@ -189,6 +192,7 @@ export function fileContributor(loader: ConfigFilesLoaderImpl, file: string, id:
 
     return {
         id,
+        source: file,
         applyOrder: MAIN_APPLY_ORDER,
         // A patch file reads nothing, so it watches everything to re-apply after every change.
         ...(isPatch ? { monitors: [""] } : {}),

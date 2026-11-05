@@ -161,7 +161,7 @@ export function variableDetailOutputs(detail: VariableDetail, hidden: string, so
         status: candidate.envName === resolved?.source.envName ? `answered it, from ${sourceLabel(resolved.source.file)}` : "not set",
     }));
 
-    return [
+    return withOneLabelWidth([
         new IntentOutput({
             title: `${definition.name} (${key})`,
             result: new VariableSet({
@@ -189,7 +189,28 @@ export function variableDetailOutputs(detail: VariableDetail, hidden: string, so
         }),
         new IntentOutput({ result: new VariableSet(variableFacts(detail)) }),
         new IntentOutput({ result: new Table(LADDER_COLUMNS, rows, { title: "Environment variables sous looks at, most specific first" }) }),
-    ];
+    ]);
+}
+
+/**
+ * The outputs with every label block padded to one width, the longest label of any of them, so
+ * blocks printed one under another line their colons up.
+ */
+function withOneLabelWidth(outputs: IntentOutput[]): IntentOutput[] {
+    const sets = outputs.map((output) => output.result).filter((result): result is VariableSet => result instanceof VariableSet);
+    const labelWidth = Math.max(0, ...sets.flatMap((set) => set.entries.map((entry) => entry.label.length)));
+
+    return outputs.map((output) =>
+        output.result instanceof VariableSet
+            ? new IntentOutput({
+                  ...(output.title === undefined ? {} : { title: output.title }),
+                  ...(output.summary === undefined ? {} : { summary: output.summary }),
+                  ...(output.data === undefined ? {} : { data: output.data }),
+                  ...(output.style === undefined ? {} : { style: output.style }),
+                  result: new VariableSet(output.result.entries, { ...(output.result.title === undefined ? {} : { title: output.result.title }), labelWidth }),
+              })
+            : output,
+    );
 }
 
 /** One answer stored, with the notes under it. */

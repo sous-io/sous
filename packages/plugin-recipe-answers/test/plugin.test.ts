@@ -199,6 +199,23 @@ describe("plugin-recipe-answers through the engine", () => {
         expect(outputs.toPlain()).toMatchObject({ answered: true });
     });
 
+    /**
+     * `vars show` prints its two label blocks one under the other, so both should line their colons
+     * up at one width: the longest label of either (gh-229).
+     *
+     * Question     : ...
+     * For example  : ...
+     * storage-path : ...   (not "storage-path: ..." at a width of its own)
+     */
+    it("should line up both of vars show's label blocks at one width", async () => {
+        const outputs = await engine.handle.submit({ intent: "vars.show", input: { name: "apiUrl" } });
+        const [, block, facts] = outputs.toArray();
+        const sets = [block!.result as VariableSet, facts!.result as VariableSet];
+        const longest = Math.max(...sets.flatMap((set) => set.entries.map((entry) => entry.label.length)));
+
+        expect(sets.map((set) => set.labelWidth)).toEqual([longest, longest]);
+    });
+
     /** `vars ask` should title the run, then list the answers it stored under their own title. */
     it("should report the answers stored under their titles", async () => {
         const outputs = await engine.handle.submit(

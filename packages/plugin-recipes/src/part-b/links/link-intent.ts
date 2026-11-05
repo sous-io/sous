@@ -101,10 +101,6 @@ export async function linkRepo(input: RepoLinkInput, ctx: Context, runtime: Part
     // A checkout sous has just cloned is as current as upstream by definition; any other may be months old.
     const upstream = plan.kind === "cloned" ? {} : await compareUpstream(git, plan.directory, ctx);
 
-    ctx.reporter.problem(`The repository '${name}' is now LINKED. Its recipes are read from the checkout above, so versions, the lockfile and freshness checks no longer apply to it.`, {
-        hint: `Run 'sous repo unlink ${name}${scope === "global" ? " --global" : ""}' to go back to published versions.`,
-    });
-
     return {
         repo: name,
         path: link.path,
@@ -499,6 +495,12 @@ export function linkOutputs(result: RepoLinkResult) {
             Scope: result.scope === "global" ? "every project on this machine" : "this project",
             ...(result.recordedIn === undefined ? {} : { "Recorded in": result.recordedIn }),
         }),
+    );
+
+    // Said under the heading, right after the Checkout line, so "the checkout above" is the one just shown.
+    outputs.push(
+        sentence(`The repository '${result.repo}' is now LINKED. Its recipes are read from the checkout above, so versions, the lockfile and freshness checks no longer apply to it.`),
+        noteOutput(`Run 'sous repo unlink ${result.repo}${result.scope === "global" ? " --global" : ""}' to go back to published versions.`),
     );
 
     if (result.replaced !== undefined) {

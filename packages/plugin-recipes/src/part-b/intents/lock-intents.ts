@@ -179,7 +179,8 @@ export function lockShowOutputs(result: LockShowResult): IntentOutputs<LockShowR
     ];
 
     if (rows.length > 0) {
-        outputs.push(sentence(`This project's lockfile is ${result.path}.`));
+        // A label line, so a long path stays beside its label instead of wrapping onto a line of its own.
+        outputs.push(blockOutput({ Lockfile: result.path }));
     }
 
     return finish(outputs, result);

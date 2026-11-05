@@ -214,7 +214,7 @@ Inspects the built configuration; see [Inspecting and validating](config-inspect
 
 ```bash
 sous config show | jq .compilation
-sous config get compilation.targets[0].entryPoint --layers
+sous config get repos.sous-recipes.url --layers
 ```
 
 ## repo

@@ -144,6 +144,7 @@ function fileContributor(sous: Sous, file: ConfdFile): ContributorDefinition {
 
     return {
         id: contributorId(file.name),
+        source: file.path,
         applyOrder: confdApplyOrder(file.name),
         // A patch file reads nothing, so it watches everything to re-apply after every change.
         ...(isPatch ? { monitors: [""] } : {}),
