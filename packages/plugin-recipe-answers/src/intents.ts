@@ -59,11 +59,14 @@ function ladderFor(ctx: Context): Ladder {
 /** One variable as a listing shows it. */
 export function listingOf(variable: DefinedVariable, ladder: Ladder, hidden: string): VariableListing {
     const resolved = ladder.resolve(variable);
+    // A build takes the default when nothing answers, so the listing shows it in use (gh-229).
+    const fallback = resolved === undefined && variable.unanswerable === undefined ? variable.definition.default : undefined;
 
     return {
         variable,
         answered: resolved !== undefined,
         ...(resolved === undefined ? {} : { value: displayValue(resolved.value, variable.definition.secret, hidden), source: resolved.source }),
+        ...(fallback === undefined ? {} : { value: displayValue(String(fallback), variable.definition.secret, hidden), usesDefault: true }),
         storedAs: resolved?.source.envName ?? ladder.bareName(variable),
         storeIn: answerFileFor(variable.definition),
     };
@@ -86,9 +89,13 @@ export function detailOf(variable: DefinedVariable, ladder: Ladder, hidden: stri
     };
 }
 
-/** The variables a name names, or an error saying none does. */
-function variablesNamed(variables: readonly DefinedVariable[], name: string): DefinedVariable[] {
-    const matches = variables.filter((entry) => namesVariable(entry, name));
+/**
+ * The variables a name names, or an error saying none does. A name no variable has may be an
+ * environment name that answers some, as `vars list` shows under "Answered by" (gh-229 defect 7).
+ */
+function variablesNamed(variables: readonly DefinedVariable[], name: string, ladder: Ladder): DefinedVariable[] {
+    const byName = variables.filter((entry) => namesVariable(entry, name));
+    const matches = byName.length > 0 ? byName : variables.filter((entry) => ladder.candidates(entry).some((candidate) => candidate.envName === name));
 
     if (matches.length === 0) {
         throw new ConfigError(`No variable named '${name}' is in play.`, { details: ["Run 'sous vars list' to see every variable this project's recipes define."] });
@@ -127,11 +134,19 @@ export async function handleAsk(input: VarsAskInput, ctx: Context): Promise<Inte
             ? undefined
             : resolveEnvFile(input.envFile, { shared: store.envPath("shared"), local: store.envPath("local") }, root, ctx.cwd ?? root);
 
-    ctx.reporter.variables([
-        { label: "Definitions", value: definitionsLabel(input.file) },
-        { label: "Asking", value: describeSelection(input) },
-        ...(envFile === undefined ? [] : [{ label: "Env file", value: store.envPath(envFile) }]),
-    ]);
+    const reportSettings = (): void =>
+        ctx.reporter.variables([
+            { label: "Definitions", value: definitionsLabel(input.file) },
+            { label: "Asking", value: describeSelection(input) },
+            ...(envFile === undefined ? [] : [{ label: "Env file", value: store.envPath(envFile) }]),
+        ]);
+    // Run by a subscription (`within`), before its build: the settings are reported only when there
+    // is something to ask, or they would stand alone ahead of the build's output (gh-229).
+    const deferSettings = input.within !== undefined;
+
+    if (!deferSettings) {
+        reportSettings();
+    }
 
     if (dryRun) {
         ctx.reporter.dryRun("No answers will be written.");
@@ -162,7 +177,16 @@ export async function handleAsk(input: VarsAskInput, ctx: Context): Promise<Inte
 
     const ladder = ladderFor(ctx);
     const only = await resolveSelection(variables, ladder, input, ctx);
-    const run = { prompter: ctx.prompter, reporter: ctx.reporter, store, hidden, dryRun, ...(envFile === undefined ? {} : { envFile }), yes: input.yes === true };
+    const run = {
+        prompter: ctx.prompter,
+        reporter: ctx.reporter,
+        store,
+        hidden,
+        dryRun,
+        ...(envFile === undefined ? {} : { envFile }),
+        yes: input.yes === true,
+        ...(deferSettings ? { beforeReporting: reportSettings } : {}),
+    };
 
     // Answers given up front are checked and stored before anything is asked, so what is left is
     // what nobody answered.
@@ -177,6 +201,7 @@ export async function handleAsk(input: VarsAskInput, ctx: Context): Promise<Inte
         answered: [...given.stored, ...report.answered],
         inherited: report.inherited.map(({ variable, resolved }) => ({ variable, resolved: variable.definition.secret ? { ...resolved, value: hidden } : resolved })),
         skipped: report.skipped,
+        ...(report.wouldAsk.length === 0 ? {} : { wouldAsk: report.wouldAsk }),
         dryRun,
     };
 
@@ -184,7 +209,7 @@ export async function handleAsk(input: VarsAskInput, ctx: Context): Promise<Inte
         ctx.configChanged();
     }
 
-    const entries = result.answered.length > 0 || result.inherited.length > 0 || result.skipped.length > 0 ? askReportOutputs(result, hidden) : [];
+    const entries = result.answered.length > 0 || result.inherited.length > 0 || result.skipped.length > 0 || report.wouldAsk.length > 0 ? askReportOutputs(result, hidden) : [];
 
     return new IntentOutputs([new IntentOutput({ title: "Answering variables" }), ...entries]).withData(result);
 }
@@ -198,7 +223,7 @@ export async function handleList(input: VarsListInput, ctx: Context): Promise<In
     const opening = commandVariables(ctx, { Definitions: definitionsLabel(input.file) });
 
     if (input.name !== undefined) {
-        const details = variablesNamed(variables, input.name).map((variable) => detailOf(variable, ladder, hidden));
+        const details = variablesNamed(variables, input.name, ladder).map((variable) => detailOf(variable, ladder, hidden));
         const shown = details.flatMap((detail) => variableDetailOutputs(detail, hidden, ctx.project?.sousDir));
 
         return new IntentOutputs([opening, ...shown]).withData({ variables: details });
@@ -212,8 +237,8 @@ export async function handleList(input: VarsListInput, ctx: Context): Promise<In
 /** `vars.show`. Several matches are settled by `refs.picker` (`--accept-first`). */
 export async function handleShow(input: VarsShowInput, ctx: Context): Promise<IntentOutputs<VariableDetail>> {
     const variables = await ctx.services.get("recipe-answers.definitions").list(input.file === undefined ? {} : { file: resolveUserPath(input.file, ctx) });
-    const matches = variablesNamed(variables, input.name);
     const ladder = ladderFor(ctx);
+    const matches = variablesNamed(variables, input.name, ladder);
     const hidden = hiddenValue(ctx.services);
 
     const opening = commandVariables(ctx, { Definitions: definitionsLabel(input.file) });
@@ -332,7 +357,7 @@ export const varsIntents: IntentDefinition[] = [
         input: jsonSchema<VarsListInput>({
             type: "object",
             properties: {
-                name: { type: "string", description: "A variable's name (or its namespace/recipe.name key) to show in full" },
+                name: { type: "string", description: "A variable's name, its namespace/recipe.name key, or an environment variable name that answers it, to show in full" },
                 file: FILE_FIELD,
             },
             additionalProperties: false,
@@ -354,7 +379,7 @@ export const varsIntents: IntentDefinition[] = [
         input: jsonSchema<VarsShowInput>({
             type: "object",
             properties: {
-                name: { type: "string", description: "A variable's name, or its namespace/recipe.name key" },
+                name: { type: "string", description: "A variable's name, its namespace/recipe.name key, or an environment variable name that answers it" },
                 file: FILE_FIELD,
                 acceptFirst: { type: "boolean", default: false, description: "When the name matches several variables, take the first one listed" },
             },
@@ -366,7 +391,7 @@ export const varsIntents: IntentDefinition[] = [
             command: ["vars", "show"],
             aliases: [["var", "show"]],
             positional: ["name"],
-            examples: ["sous vars show apiUrl", "sous vars show workflow/task-files.apiUrl"],
+            examples: ["sous vars show apiUrl", "sous vars show workflow/task-files.apiUrl", "sous vars show SOUS_VAR_API_URL"],
         },
         requiresProject: true,
         handle: handleShow as unknown as IntentDefinition["handle"],

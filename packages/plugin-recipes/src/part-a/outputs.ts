@@ -104,6 +104,26 @@ export function underHeading(heading: string, outputs: readonly IntentOutput[]):
     return first.title === undefined ? [retitled(first, heading), ...rest] : [new IntentOutput({ title: heading }), first, ...rest];
 }
 
+/**
+ * What `vars.ask` gave, as a follow-up shows it: under "Variables", without its headings that have
+ * nothing under them (gh-229). When it asked nothing, its blocks keep their own titles ("Left
+ * unanswered") with no heading over them, and a run with nothing to say shows nothing.
+ *
+ * ```ts
+ * varsAskSection([{ title: "Answering variables" }, { title: "Left unanswered", result }]);
+ * // -> [{ title: "Left unanswered", result }]
+ * ```
+ */
+export function varsAskSection(outputs: readonly IntentOutput[]): IntentOutput[] {
+    const shown = outputs.filter((output) => output.result !== undefined || output.summary !== undefined);
+
+    if (shown.length === 0) {
+        return [];
+    }
+
+    return shown[0]!.title === undefined ? underHeading("Variables", shown) : shown;
+}
+
 // --- Finishing --------------------------------------------------------------------------------------
 
 /**
@@ -166,7 +186,7 @@ export function followUpOutputs(result: { readonly followUps?: readonly IntentFo
 
         const shown = entry.outputs.toArray();
 
-        outputs.push(...(entry.intent === "vars.ask" ? underHeading("Variables", shown) : shown));
+        outputs.push(...(entry.intent === "vars.ask" ? varsAskSection(shown) : shown));
 
         if (entry.intent === "build" && buildFailed(entry)) {
             failed = true;

@@ -6,6 +6,7 @@ import { describeSize, finish, lockDiffLines, plainFollowUps, questionPlanOutput
 import { namespaceListOutputs, recipeListOutputs, repoSearchOutputs, subscriptionListOutputs } from "./catalog-outputs.js";
 import { repoAddOutputs } from "./repo-outputs.js";
 import { subscriptionAddOutputs, updatePlanOutputs } from "./subscription-outputs.js";
+import { reportSubscriptionPlan } from "./subscription.js";
 
 /** A context outside any project, with a buffering reporter. */
 function fakeContext(): Context & { reporter: BufferedReporter } {
@@ -160,6 +161,48 @@ describe("the subscription outputs", () => {
             { intent: "vars.ask", result: { answered: 1 } },
             { intent: "build", result: { ok: true } },
         ]);
+    });
+
+    /**
+     * When vars.ask asked nothing, its outputs should show no heading without content: neither its
+     * own "Answering variables" nor a "Variables" heading over a block that has a title (gh-229).
+     *
+     * vars.ask outputs: ["Answering variables" (title only), "Left unanswered" (a list)]
+     * // -> titles: [..., "Left unanswered", "Build"]
+     */
+    it("should leave out headings with nothing under them when vars.ask asked nothing", () => {
+        const ask = new IntentOutputs([
+            new IntentOutput({ title: "Answering variables" }),
+            new IntentOutput({ title: "Left unanswered", result: new VariableSet([{ label: "extra", value: "no answer yet, and this variable is optional" }]) }),
+        ]);
+        const build = new IntentOutputs([new IntentOutput({ title: "Build", summary: "Built." })]);
+        const followUps: RanFollowUp[] = [
+            { intent: "vars.ask", result: {}, outputs: ask },
+            { intent: "build", result: { ok: true }, outputs: build },
+        ];
+        const outputs = subscriptionAddOutputs(fakeContext(), { ...base, followUps }).toArray();
+        const titleOnly = outputs.filter((output) => output.title !== undefined && output.result === undefined && output.summary === undefined);
+
+        expect(titleOnly).toEqual([]);
+        expect(outputs.map((output) => output.title)).toEqual(["Subscribing", "Lockfile", undefined, "Left unanswered", "Build"]);
+    });
+
+    /**
+     * Before the subscribe question, the plan should not promise questions: a recipe whose
+     * variables are all optional, or already answered, asks none (gh-229).
+     *
+     * reportSubscriptionPlan(reporter, "misc/stuff", recipe ref)
+     * // -> a line saying only variables that need an answer and have none are asked
+     */
+    it("should not promise questions before subscribing", () => {
+        const reporter = new BufferedReporter();
+
+        reportSubscriptionPlan(reporter, "misc/stuff", { kind: "recipe", name: "stuff", namespace: { kind: "namespace", name: "misc" } } as unknown as Parameters<typeof reportSubscriptionPlan>[2]);
+
+        const text = JSON.stringify(reporter.messages);
+
+        expect(text).not.toContain("The variables it publishes are asked about afterwards");
+        expect(text).toContain("that require an answer and have none yet are asked about afterwards");
     });
 
     /** A build that failed ends the command with exit code 1 and an error saying what is recorded. */

@@ -206,6 +206,46 @@ describe("sous vars commands", () => {
   );
 
   /**
+   * `sous vars ask --dry-run` with no terminal should list the questions a
+   * terminal would be asked and exit 0, not fail for want of answers (gh-204
+   * bug 34).
+   *
+   * sous vars ask --dry-run --file questions.yaml </dev/null
+   * // -> exit 0; "Questions that would be asked", apiToken, --answer apiToken=<value>
+   */
+  it(
+    "should list what a dry run would ask without a terminal, and exit 0",
+    () => {
+      const result = runSous(root, ["vars", "ask", "--dry-run", "--file", "questions.yaml"]);
+
+      expect(result.stderr).not.toContain("no terminal to ask on");
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("Questions that would be asked");
+      expect(result.stdout).toContain("--answer apiToken=<value>");
+      expect(fs.readFileSync(path.join(root, ".sous", ".env"), "utf8")).toBe("SOUS_VAR_API_URL=https://example.com\n");
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * `sous vars show` should take the environment name `sous vars list` shows
+   * under "Answered by" (gh-229 defect 7).
+   *
+   * sous vars show SOUS_VAR_API_URL --file questions.yaml
+   * // -> exit 0; shows apiUrl
+   */
+  it(
+    "should show a variable by the environment name that answered it",
+    () => {
+      const result = runSous(root, ["vars", "show", "SOUS_VAR_API_URL", "--file", "questions.yaml"]);
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("Which API should sous talk to?");
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
    * `sous vars ask` should succeed with nothing to ask when every variable is
    * already answered, listing the inherited answers and their sources.
    */

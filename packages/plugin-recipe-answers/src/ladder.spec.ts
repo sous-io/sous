@@ -125,4 +125,14 @@ describe("describeSource()", () => {
     it("should describe the rung, the name and the layer in plain language", () => {
         expect(describeSource({ rung: "shared", envName: "SOUS_VAR_API_URL", file: "shared" })).toBe("the shared scope name SOUS_VAR_API_URL, from the .env file");
     });
+
+    /**
+     * The declared-name rung should not say "name" twice (gh-204 bug 48).
+     *
+     * describeSource({ rung: "bare", envName: "MEMORY_ROOT", file: "shared" });
+     * // -> "the declared name MEMORY_ROOT, from the .env file"
+     */
+    it("should say 'name' once for the declared name", () => {
+        expect(describeSource({ rung: "bare", envName: "MEMORY_ROOT", file: "shared" })).toBe("the declared name MEMORY_ROOT, from the .env file");
+    });
 });

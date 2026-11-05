@@ -224,7 +224,7 @@ export function reportSubscriptionPlan(reporter: Reporter, key: string, ref: Nam
         [
             "The files it ships are compiled into this project's agent directories on the next build.",
             "Any scripts it ships can be run on this machine when an agent uses them. Sous does not run them itself, and cannot vouch for what they do.",
-            "The variables it publishes are asked about afterwards, and the answers are written to this project's env files.",
+            "Variables it publishes that require an answer and have none yet are asked about afterwards, and the answers are written to this project's env files.",
             "Its dependencies are pinned in this project's lockfile at the versions resolved now. A dependency in a repository this project does not trust is asked about by name first.",
         ],
         {
