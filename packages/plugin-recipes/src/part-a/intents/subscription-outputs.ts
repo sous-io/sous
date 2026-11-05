@@ -34,6 +34,7 @@ import {
     sentence,
     tableOutput,
     underHeading,
+    varsAskSection,
     type RanFollowUp,
 } from "../outputs.js";
 
@@ -187,7 +188,7 @@ export function subscriptionUpdateOutputs(ctx: Pick<Context, "reporter">, result
     const ask: RanFollowUp | undefined = followUpOf(result, "vars.ask");
 
     if (ask?.outputs !== undefined) {
-        outputs.push(...underHeading("Variables", ask.outputs.toArray()));
+        outputs.push(...varsAskSection(ask.outputs.toArray()));
     }
 
     reportCycles(ctx, result.plan.cycles, "That is unusual but not broken, and the lockfile was updated.");

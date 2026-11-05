@@ -6,6 +6,7 @@
 
 import path from "node:path";
 import { IntentOutput, type TableColumn, Table, VariableSet, type VariableEntry } from "@sous-io/plugin-api";
+import { answeredBy, inheritedSameness, OPTIONAL_HINT, OPTIONAL_REASON, reportedOnce } from "./ask.js";
 import { recipeKey } from "./definitions.js";
 import { describeSource, ENV_FILE_NAMES, RUNG_LABELS, SOURCE_LABELS } from "./ladder.js";
 import { displayValue } from "./sources.js";
@@ -58,10 +59,9 @@ function recipeLink(recipe: DefiningRecipe, label: string): VariableEntry {
 
 /**
  * The facts about one variable, in the order `vars show` prints them. A fact's later lines have an
- * empty label, continuing the first. With the project's `.sous/` directory, the storage path is the
- * env file's full path.
+ * empty label, continuing the first.
  */
-function variableFacts(detail: VariableDetail, sousDir: string | undefined): VariableEntry[] {
+function variableFacts(detail: VariableDetail): VariableEntry[] {
     const { variable } = detail;
     const { definition } = variable;
     const entries: VariableEntry[] = [];
@@ -91,7 +91,6 @@ function variableFacts(detail: VariableDetail, sousDir: string | undefined): Var
     } else if (variable.requiredBy !== undefined && variable.requiredBy.length > 0) {
         entries.push({ label: "combined-with", value: variable.requiredBy.map(recipeKey).join(", ") });
     }
-    entries.push({ label: "storage-path", value: sousDir === undefined ? envFileName(detail.storeIn) : path.join(sousDir, envFileName(detail.storeIn)) });
     entries.push({ label: "stored-as", value: detail.storedAs });
 
     detail.constraints.forEach((line, index) => entries.push({ label: index === 0 ? "constraints" : "", value: line }));
@@ -121,13 +120,15 @@ export function variableListOutput(listings: readonly VariableListing[], hidden:
             name: listing.variable.definition.name,
             recipe: recipeKey(listing.variable.recipe),
             envName: listing.source?.envName ?? "",
-            value: displayValue(listing.answered ? (listing.value ?? "") : undefined, listing.variable.definition.secret, hidden),
+            value: displayValue(listing.answered || listing.usesDefault === true ? (listing.value ?? "") : undefined, listing.variable.definition.secret, hidden),
             source:
                 listing.variable.unanswerable !== undefined
                     ? "not answerable alongside another version of this recipe"
-                    : listing.source === undefined
-                      ? "nothing yet"
-                      : `${rungLabel(listing.source.rung)}, ${sourceLabel(listing.source.file)}`,
+                    : listing.usesDefault === true
+                      ? "its default; no answer is stored"
+                      : listing.source === undefined
+                        ? "nothing yet"
+                        : `${rungLabel(listing.source.rung)}, ${sourceLabel(listing.source.file)}`,
         }));
 
     return new IntentOutput({
@@ -138,7 +139,16 @@ export function variableListOutput(listings: readonly VariableListing[], hidden:
     });
 }
 
-/** Everything about one variable: the question, its documentation, its facts and its ladder. */
+/** An env file by its full path when the project's `.sous/` directory is known, else by its name. */
+function envFileShown(file: string, sousDir: string | undefined): string {
+    return sousDir === undefined ? envFileName(file) : path.join(sousDir, envFileName(file));
+}
+
+/**
+ * Everything about one variable: the question, its documentation, its facts and its ladder. "Stored
+ * in" is where the value in scope came from; "Saved to" is where a new answer goes, which can differ
+ * (gh-229 defect 8).
+ */
 export function variableDetailOutputs(detail: VariableDetail, hidden: string, sousDir: string | undefined): IntentOutput[] {
     const { variable } = detail;
     const { definition } = variable;
@@ -159,11 +169,17 @@ export function variableDetailOutputs(detail: VariableDetail, hidden: string, so
                 About: definition.description,
                 "For example": String(definition.example),
                 Recipe: `${key} version ${variable.recipe.version} from ${variable.recipe.repo}`,
-                "Stored in": envFileName(detail.storeIn),
-                Value: displayValue(resolved === undefined ? undefined : resolved.value, definition.secret, hidden),
+                "Stored in": resolved === undefined ? "nowhere yet" : resolved.source.file === "shell" ? sourceLabel("shell") : envFileShown(resolved.source.file, sousDir),
+                "Saved to": `${envFileShown(detail.storeIn, sousDir)} (where new answers go)`,
+                Value:
+                    detail.usesDefault === true
+                        ? `${displayValue(detail.value, definition.secret, hidden)} (default)`
+                        : displayValue(resolved === undefined ? undefined : resolved.value, definition.secret, hidden),
                 Answer:
                     variable.unanswerable !== undefined
                         ? `none: this version of ${key} is not asked this variable, because another version of ${key} is`
+                        : detail.usesDefault === true
+                        ? "nothing in scope answers this variable, so its default is used"
                         : resolved === undefined
                         ? "nothing in scope answers this variable yet"
                         : detail.problem === undefined
@@ -171,7 +187,7 @@ export function variableDetailOutputs(detail: VariableDetail, hidden: string, so
                           : `the value in scope does not fit: ${detail.problem}`,
             }),
         }),
-        new IntentOutput({ result: new VariableSet(variableFacts(detail, sousDir)) }),
+        new IntentOutput({ result: new VariableSet(variableFacts(detail)) }),
         new IntentOutput({ result: new Table(LADDER_COLUMNS, rows, { title: "Environment variables sous looks at, most specific first" }) }),
     ];
 }
@@ -208,10 +224,10 @@ export function askReportOutputs(report: VarsAskResult, hidden: string): IntentO
             new IntentOutput({
                 title: "Answers already in scope",
                 result: new VariableSet(
-                    report.inherited.map((entry) => ({
+                    reportedOnce(report.inherited, inheritedSameness).map(({ entry, recipes, named }) => ({
                         label: entry.variable.definition.name,
                         value: displayValue(entry.resolved.value, entry.variable.definition.secret, hidden),
-                        detail: `from ${describeSource(entry.resolved.source)}`,
+                        detail: `from ${describeSource(entry.resolved.source)}${named ? `; used by ${recipes.join(", ")}` : ""}`,
                     })),
                 ),
             }),
@@ -231,7 +247,31 @@ export function askReportOutputs(report: VarsAskResult, hidden: string): IntentO
         outputs.push(
             new IntentOutput({
                 title: "Left unanswered",
-                result: new VariableSet(report.skipped.map((entry) => ({ label: entry.variable.definition.name, value: entry.reason }))),
+                result: new VariableSet(
+                    reportedOnce(report.skipped, (entry) => entry.reason).map(({ entry, recipes, named }) => ({
+                        label: entry.variable.definition.name,
+                        value: named ? `${entry.reason} (used by ${recipes.join(", ")})` : entry.reason,
+                    })),
+                ),
+            }),
+        );
+
+        if (report.skipped.some((entry) => entry.reason === OPTIONAL_REASON)) {
+            outputs.push(new IntentOutput({ summary: OPTIONAL_HINT }));
+        }
+    }
+
+    if (report.wouldAsk !== undefined && report.wouldAsk.length > 0) {
+        outputs.push(
+            new IntentOutput({
+                title: "Questions that would be asked",
+                result: new VariableSet(
+                    report.wouldAsk.flatMap((entry): VariableEntry[] => [
+                        { label: entry.variable.definition.name, value: entry.variable.definition.prompt, detail: recipeKey(entry.variable.recipe) },
+                        ...(entry.current === undefined ? [] : [{ label: "", value: `the value in scope does not fit: ${entry.current}` }]),
+                        { label: "", value: `answer it ahead of time with ${answeredBy(entry.variable)}` },
+                    ]),
+                ),
             }),
         );
     }

@@ -415,7 +415,7 @@ describe("askForMissing()", () => {
     it("should skip variables answered up front", async () => {
         const report = await askForMissing([variable()], ladder(), { skip: new Set(["misc/stuff.apiUrl"]) }, run().run);
 
-        expect(report).toEqual({ answered: [], inherited: [], skipped: [] });
+        expect(report).toEqual({ answered: [], inherited: [], skipped: [], wouldAsk: [] });
     });
 
     /**
@@ -460,6 +460,7 @@ describe("askSummary()", () => {
             "",
             "Left unanswered:",
             "  extra  no answer yet, and this variable is optional",
+            "To answer an optional variable, run 'sous vars ask <name>'. 'sous vars ask --all' asks every variable, including the ones already answered.",
         ]);
     });
 

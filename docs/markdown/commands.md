@@ -354,7 +354,8 @@ Inspects the questions the project's recipes ask, and the answers they hold; see
 [Recipe variables](repositories-variables.md). `sous vars` alone is `vars list`.
 
 - `vars list` lists every variable, with where its value came from.
-- `vars show NAME` shows everything about one variable.
+- `vars show NAME` shows everything about one variable. `NAME` may also be an environment variable name that
+  answers it.
 - `vars ask [NAME]` asks the questions and stores the answers in the `.sous` env files. `--env-file .env` or
   `--env-file .env.local` stores every answer of the run in that one file (committed, or this machine only); a
   secret or machine-specific variable headed for the committed `.env` is warned about and needs a yes (`--yes`).

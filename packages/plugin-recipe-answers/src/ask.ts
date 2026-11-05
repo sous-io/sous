@@ -59,6 +59,8 @@ export interface AskRun {
     readonly envFile?: EnvFileKind;
     /** `--yes`: the committed file may receive a secret or machine-specific answer without asking. */
     readonly yes?: boolean;
+    /** Called once, before the run reports anything while it runs (a warning, a note, a question). */
+    readonly beforeReporting?: () => void;
 }
 
 /** How the questions are picked. */
@@ -78,7 +80,18 @@ export interface AskReport {
     answered: AnsweredVariable[];
     inherited: Array<{ variable: DefinedVariable; resolved: ResolvedAnswer }>;
     skipped: Array<{ variable: DefinedVariable; reason: string }>;
+    /** On a dry run with no terminal: what a terminal would be asked. */
+    wouldAsk: Array<{ variable: DefinedVariable; current?: string }>;
 }
+
+/** The reason a run gives for an optional variable it did not ask. */
+export const OPTIONAL_REASON = "no answer yet, and this variable is optional";
+
+/**
+ * What a report says after leaving optional variables unanswered: how to answer them. `--all` asks
+ * again what is answered too, so the sentence says so.
+ */
+export const OPTIONAL_HINT = "To answer an optional variable, run 'sous vars ask <name>'. 'sous vars ask --all' asks every variable, including the ones already answered.";
 
 /** One question to ask, and the value Enter alone would accept. */
 interface PlannedQuestion {
@@ -313,7 +326,14 @@ export async function storeGivenAnswers(applicable: readonly ApplicableAnswer[],
  * each recipe needs first.
  */
 export async function askForMissing(variables: readonly DefinedVariable[], ladder: Ladder, options: AskOptions, run: AskRun): Promise<AskReport> {
-    const report: AskReport = { answered: [], inherited: [], skipped: [] };
+    const report: AskReport = { answered: [], inherited: [], skipped: [], wouldAsk: [] };
+    let announced = false;
+    const announce = (): void => {
+        if (!announced) {
+            announced = true;
+            run.beforeReporting?.();
+        }
+    };
     const pending: Array<{ variable: DefinedVariable; candidates: readonly LadderCandidate[]; current?: string }> = [];
     const questions: PlannedQuestion[] = [];
     const deferred: DefinedVariable[] = [];
@@ -327,6 +347,7 @@ export async function askForMissing(variables: readonly DefinedVariable[], ladde
 
         // Another version of this recipe is asked this name instead; this one gets no answer.
         if (variable.unanswerable !== undefined) {
+            announce();
             run.reporter.warning(variable.unanswerable);
             report.skipped.push({ variable, reason: unanswerableReason(variable) });
             continue;
@@ -356,7 +377,7 @@ export async function askForMissing(variables: readonly DefinedVariable[], ladde
         const mustAsk = invalid || (existing === undefined && definition.required) || options.reask === true || named;
 
         if (!mustAsk) {
-            report.skipped.push({ variable, reason: "no answer yet, and this variable is optional" });
+            report.skipped.push({ variable, reason: OPTIONAL_REASON });
             continue;
         }
 
@@ -364,6 +385,12 @@ export async function askForMissing(variables: readonly DefinedVariable[], ladde
         // Named or re-asked variables still need an answer of their own.
         if (!run.prompter.interactive && existing === undefined && !named && options.reask !== true && definition.default !== undefined && check(variable, String(definition.default)).ok) {
             report.skipped.push({ variable, reason: definition.secret ? "no answer yet, so its default is used" : `no answer yet, so its default is used: ${String(definition.default)}` });
+            continue;
+        }
+
+        // A dry run with nobody to ask lists the question instead of failing for want of an answer.
+        if (!run.prompter.interactive && run.dryRun) {
+            report.wouldAsk.push({ variable, ...(validity?.ok === false ? { current: validity.message } : {}) });
             continue;
         }
 
@@ -380,6 +407,10 @@ export async function askForMissing(variables: readonly DefinedVariable[], ladde
 
     if (pending.length > 0) {
         throw nonInteractiveError(pending);
+    }
+
+    if (questions.length > 0) {
+        announce();
     }
 
     // Said once per name, before any question, so the separate questions are no surprise.
@@ -413,6 +444,7 @@ export async function askForMissing(variables: readonly DefinedVariable[], ladde
             continue;
         }
 
+        announce();
         run.reporter.note(recipeOpeningLine(recipeKey(variable.recipe), 1));
         await runQuestion({ variable }, { index: 1, total: 1 }, ladder, run, report);
     }
@@ -574,6 +606,51 @@ async function storeAnswer(variable: DefinedVariable, value: string, plan: Stora
     };
 }
 
+/** One line of a run's report, standing for every recipe that shares it. */
+export interface ReportedOnce<T> {
+    readonly entry: T;
+    /** Each recipe the line stands for (`namespace/recipe`), in the order they came. */
+    readonly recipes: readonly string[];
+    /** Whether the recipes should be named: several share the line, or another line has the same name. */
+    readonly named: boolean;
+}
+
+/**
+ * Entries that say the same thing about one variable name, once each: recipes defining the same
+ * name share one answer, so their entries would repeat one line (gh-204 bug 48). `sameness` says
+ * what makes two entries the same line besides the name.
+ *
+ * ```ts
+ * reportedOnce([memoryRoot of misc/a, memoryRoot of misc/b], (entry) => entry.reason);
+ * // -> [{ entry: memoryRoot of misc/a, recipes: ["misc/a", "misc/b"], named: true }]
+ * ```
+ */
+export function reportedOnce<T extends { readonly variable: DefinedVariable }>(entries: readonly T[], sameness: (entry: T) => string): Array<ReportedOnce<T>> {
+    const lines = new Map<string, { entry: T; recipes: string[] }>();
+    const linesPerName = new Map<string, number>();
+
+    for (const entry of entries) {
+        const name = entry.variable.definition.name;
+        const key = JSON.stringify([name, sameness(entry)]);
+        const recipe = recipeKey(entry.variable.recipe);
+        const line = lines.get(key);
+
+        if (line === undefined) {
+            lines.set(key, { entry, recipes: [recipe] });
+            linesPerName.set(name, (linesPerName.get(name) ?? 0) + 1);
+        } else if (!line.recipes.includes(recipe)) {
+            line.recipes.push(recipe);
+        }
+    }
+
+    return [...lines.values()].map(({ entry, recipes }) => ({ entry, recipes, named: recipes.length > 1 || (linesPerName.get(entry.variable.definition.name) ?? 0) > 1 }));
+}
+
+/** What makes two answers already in scope the same line: the name and value that answered them. */
+export function inheritedSameness(entry: VarsAskResult["inherited"][number]): string {
+    return JSON.stringify([entry.resolved.source.envName, entry.resolved.source.file, entry.resolved.value]);
+}
+
 /**
  * The summary of a run, in plain lines: what was stored, what was already answered (always shown,
  * with where it came from, so an answer from elsewhere is never a surprise) and what was left.
@@ -584,10 +661,11 @@ export function askSummary(result: VarsAskResult, hidden: string): string[] {
     if (result.inherited.length > 0) {
         lines.push("Answers already in scope:");
 
-        for (const entry of result.inherited) {
+        for (const { entry, recipes, named } of reportedOnce(result.inherited, inheritedSameness)) {
             const shown = displayValue(entry.resolved.value, entry.variable.definition.secret, hidden);
+            const usedBy = named ? `; used by ${recipes.join(", ")}` : "";
 
-            lines.push(`  ${entry.variable.definition.name}  ${shown}  (from ${describeSource(entry.resolved.source)})`);
+            lines.push(`  ${entry.variable.definition.name}  ${shown}  (from ${describeSource(entry.resolved.source)}${usedBy})`);
         }
 
         lines.push("");
@@ -618,8 +696,22 @@ export function askSummary(result: VarsAskResult, hidden: string): string[] {
     if (result.skipped.length > 0) {
         lines.push("Left unanswered:");
 
-        for (const entry of result.skipped) {
-            lines.push(`  ${entry.variable.definition.name}  ${entry.reason}`);
+        for (const { entry, recipes, named } of reportedOnce(result.skipped, (skipped) => skipped.reason)) {
+            lines.push(`  ${entry.variable.definition.name}  ${entry.reason}${named ? ` (used by ${recipes.join(", ")})` : ""}`);
+        }
+
+        if (result.skipped.some((entry) => entry.reason === OPTIONAL_REASON)) {
+            lines.push(OPTIONAL_HINT);
+        }
+
+        lines.push("");
+    }
+
+    if (result.wouldAsk !== undefined && result.wouldAsk.length > 0) {
+        lines.push("Questions that would be asked:");
+
+        for (const entry of result.wouldAsk) {
+            lines.push(`  ${entry.variable.definition.name}  ${entry.variable.definition.prompt}  (${recipeKey(entry.variable.recipe)}; answer it with ${answeredBy(entry.variable)})`);
         }
 
         lines.push("");

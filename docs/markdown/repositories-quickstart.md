@@ -104,7 +104,8 @@ sous subscription add workflow/task-files
 ```
 
 Sous states what subscribing does, asks once, resolves the whole dependency closure, downloads it,
-then asks the questions the recipe publishes. Answering the confirmation and the two questions:
+then asks the questions the recipe requires that have no answer yet. Answering the confirmation and the
+two questions:
 
 ```text
 ➔ What was installed:
@@ -113,13 +114,14 @@ then asks the questions the recipe publishes. Answering the confirmation and the
   workflow/sub-agent-delegation  1.0.0    sous-recipes  needed by workflow/task-files
   workflow/task-files            1.0.2    sous-recipes  you subscribed to it
 
-➔ Variables:
-  Answers stored:
+➔ Answers stored:
       taskFileRoot       : .sous/tasks TASK_FILE_ROOT in .env
       ticketIdExample    : PROJ-1234 TICKET_ID_EXAMPLE in .env
 
-  Left unanswered:
+➔ Left unanswered:
       ticketPrefix       : no answer yet, and this variable is optional
+  To answer an optional variable, run 'sous vars ask <name>'. 'sous vars ask --all' asks every
+    variable, including the ones already answered.
 ```
 
 A script, a pipeline or a coding agent has no terminal to answer on, so it passes the answers in:

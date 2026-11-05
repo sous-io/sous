@@ -150,8 +150,9 @@ $ sous subscription add workflow/qa-variables
     into this project's agent directories.
   • Any scripts it ships can be run on this machine when an agent uses them. Sous does not
     run them itself, and it cannot vouch for what they do.
-// two more bullets: the variables it publishes are asked about at the end of the command and
-// written into this project's env files, and its dependencies are pinned in the lockfile
+// two more bullets: the variables it publishes that require an answer and have none yet are
+// asked about at the end of the command and written into this project's env files, and its
+// dependencies are pinned in the lockfile
   • If a dependency turns out to live in a repository this project does not trust, sous stops
     and asks about that repository by name before fetching anything from it.
 ? Proceed? (y/N) y

@@ -151,6 +151,8 @@ updated facts. When an answer is entered, two lines say what was stored and wher
 ```
 
 Every run ends with a three-part report: `Answers already in scope:`, `Answers stored:`, `Left unanswered:`.
+A name several recipes share is reported once, naming the recipes. When optional variables are left
+unanswered, the report ends with how to answer them: `sous vars ask <name>`, or `sous vars ask --all`.
 
 ## Where answers are stored
 
@@ -246,9 +248,18 @@ $ sous vars list
   qaTaskRoot      workflow/qa-variables  SOUS_VAR_QA_TASK_ROOT    .sous/qa-notes  shared scope, the .env file
 ```
 
+A variable nothing answers but whose definition has a default shows that default as its value, with the
+source `its default; no answer is stored`, because a build uses the default. `(unanswered)` means there is
+no answer and no default.
+
 `sous vars show <name>` prints one variable in full: the question, the publisher's description and example,
 the recipe and version that published it, the value in scope and whether it fits, the labeled facts the
-advanced view draws, and the ladder table above. The name may be bare or the full `namespace/recipe.name`.
+advanced view draws, and the ladder table above. `Stored in` names the file the value in scope came from (or
+the shell environment), and `Saved to` names the file a new answer goes to; the two differ when, say, a
+machine-specific answer was put in `.sous/.env` by hand. A default in use shows as `Value: PROJ- (default)`.
+The name may be bare, the full `namespace/recipe.name`, or an environment variable name that answers it,
+such as the one `sous vars list` shows under `Answered by`; a name that answers variables of several recipes
+lists them and asks which one, and `--accept-first` takes the first.
 
 `sous vars ask [name]` asks the questions the definitions imply and stores the answers.
 
@@ -265,7 +276,7 @@ advanced view draws, and the ladder table above. The name may be bare or the ful
 | `sous vars ask --env-file <file>` | Stores every answer of the run in `.sous/.env` (committed) or `.sous/.env.local` (this machine only); any spelling that names one is accepted, and a secret or machine-specific variable sent to the committed file needs a yes (`--yes`) |
 | `sous vars ask --answer <name>=<value>` | Answers one question ahead of time; repeat it for each answer |
 | `sous vars ask --answers-file <path>` | Reads answers from a YAML or JSON file of `name: value` pairs |
-| `sous vars ask --dry-run` | Reports what would be asked and written, without writing anything |
+| `sous vars ask --dry-run` | Reports what would be asked and written, without writing anything; with no terminal, it lists the questions it would ask instead of failing |
 | `sous vars ask --non-interactive` | Never asks; fails instead, naming the environment variable or flag that would answer each question |
 
 `<name>` is a reference, resolved like any sous ref; anything larger than a variable asks all its questions:
@@ -292,7 +303,7 @@ a name matches several things, sous lists them and asks; `--accept-first` takes 
 terminal fails naming it.
 
 ?> Bare `sous vars` is shorthand for `vars list`, and `sous vars <name>` for `vars show <name>`, which prints
-the same report (`vars show` spells the storage path out in full); `sous var list`, `sous var show` and
+the same report; `sous var list`, `sous var show` and
 `sous var ask` work too. A variable named `list`, `show` or `ask` collides with the subcommand, so reach it
 the long way: `sous vars show ask`.
 

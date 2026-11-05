@@ -221,8 +221,15 @@ export class Ladder implements RecipeAnswersLadder {
  * ```ts
  * describeSource({ rung: "shared", envName: "SOUS_VAR_API_URL", file: "shared" });
  * // -> "the shared scope name SOUS_VAR_API_URL, from the .env file"
+ *
+ * describeSource({ rung: "bare", envName: "MEMORY_ROOT", file: "shared" });
+ * // -> "the declared name MEMORY_ROOT, from the .env file"
  * ```
  */
 export function describeSource(source: AnswerSource): string {
-    return `the ${RUNG_LABELS[source.rung]} name ${source.envName}, from ${SOURCE_LABELS[source.file] ?? source.file}`;
+    const label = RUNG_LABELS[source.rung];
+    // "declared name" already says "name".
+    const named = label.endsWith(" name") ? label : `${label} name`;
+
+    return `the ${named} ${source.envName}, from ${SOURCE_LABELS[source.file] ?? source.file}`;
 }
