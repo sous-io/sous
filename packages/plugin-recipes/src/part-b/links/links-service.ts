@@ -163,8 +163,12 @@ export function describeLinkedRepos(links: Record<string, ResolvedLink>): string
     }
 
     return [
-        names.length === 1 ? "One repository is LINKED to a working copy on this machine." : `${names.length} repositories are LINKED to working copies on this machine.`,
-        "Their recipes are read from those checkouts, so versions, the lockfile and freshness checks do not apply to them.",
+        ...(names.length === 1
+            ? ["One repository is LINKED to a working copy on this machine.", "Its recipes are read from that checkout, so versions, the lockfile and freshness checks do not apply to it."]
+            : [
+                  `${names.length} repositories are LINKED to working copies on this machine.`,
+                  "Their recipes are read from those checkouts, so versions, the lockfile and freshness checks do not apply to them.",
+              ]),
         "",
         ...names.map((name) => `${name} -> ${links[name].path}`),
         "",

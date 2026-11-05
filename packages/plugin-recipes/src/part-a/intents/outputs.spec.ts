@@ -122,7 +122,8 @@ describe("the repository outputs", () => {
         expect(table?.title).toBe("Recipe versions this project pins");
         expect(payload.rows.map((row) => [row.key, row.heldBy])).toEqual([["workflow/a", "this project"], ["workflow/b", "workflow/a"]]);
         expect(payload.rowNotes).toEqual([undefined, "not built here: Switched off."]);
-        expect(closing?.summary).toBe("This project's lockfile is /p/.sous/sous.lock.json.");
+        // A label line, so a long path stays beside it rather than wrapping onto a line of its own (gh-229).
+        expect((closing?.result as VariableSet).toObject()).toEqual({ Lockfile: "/p/.sous/sous.lock.json" });
     });
 });
 

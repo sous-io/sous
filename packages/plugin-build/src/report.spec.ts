@@ -119,12 +119,15 @@ describe("messages about preparing", () => {
         expect(one.messages[0]).toMatchObject({ level: "warning", style: ReportEntryStyle.List });
         expect(messageText(one.messages[0]!.message)).toContain("One repository is LINKED to a working copy on this machine.");
         expect(messageText(one.messages[0]!.message)).toContain("acme -> /src/acme");
+        // One repository reads "its ... that checkout", not "their ... those checkouts" (gh-229).
+        expect(messageText(one.messages[0]!.message)).toContain("Its recipes are read from that checkout, so versions, the lockfile and freshness checks do not apply to it.");
 
         const two = new BufferedReporter();
 
         reportLinkedRepos({ a: { path: "/a" } as never, b: { path: "/b" } as never }, two, LogLevel.Notice);
         expect(two.messages[0]).toMatchObject({ level: "notice" });
         expect(messageText(two.messages[0]!.message)).toContain("2 repositories are LINKED");
+        expect(messageText(two.messages[0]!.message)).toContain("Their recipes are read from those checkouts");
     });
 
     /**

@@ -491,7 +491,8 @@ function tableEntry(layout: Layout, table: Table): Rendered {
         ...(notes === undefined ? {} : { rowNote: (_row: Record<string, unknown>, index: number) => (notes[index] === undefined ? undefined : layout.style.muted(`  ${notes[index]}`)) }),
     });
 
-    return { lines: [...titled, ...lines], gapBefore: titled.length, footer: true };
+    // A blank line after the rows, so what follows does not read as one more row.
+    return { lines: [...titled, ...lines], gapBefore: titled.length, gapAfter: 1, footer: true };
 }
 
 /** A problem: its summary in the level's color, then where, why and what to do, indented under it. */

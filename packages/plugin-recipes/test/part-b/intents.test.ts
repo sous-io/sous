@@ -6,7 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { JsonObject } from "@sous-io/plugin-api";
+import { messageText, type JsonObject } from "@sous-io/plugin-api";
 import { cleanTemp, fakeHost, fakeUrl, hashOf, indexFile, startEngine, tempDir, writeLockfile, writeRecipe, type FakeHostCalls, type FakeRepo } from "./helpers.js";
 
 const URL = fakeUrl("acme", "recipes");
@@ -166,6 +166,32 @@ describe("repo.link and repo.unlink", () => {
         expect(JSON.parse(fs.readFileSync(path.join(root, ".sous", "sous.links.json"), "utf8")).links.acme.path).toBe(dir);
         expect(fs.readFileSync(path.join(root, ".sous", ".gitignore"), "utf8")).toContain("sous.links.json");
         expect(fs.readFileSync(path.join(root, ".sous", "repos", ".gitignore"), "utf8")).toBe("*\n");
+    });
+
+    /**
+     * The "now LINKED" statement should come after the "Linking a repository" heading and the
+     * Checkout line it refers to, not before the heading as a warning printed while the command
+     * ran (gh-229).
+     *
+     * ▶ Linking a repository:
+     *   Repository : acme
+     *   Checkout   : /tmp/acme
+     *   The repository 'acme' is now LINKED. Its recipes are read from the checkout above, ...
+     */
+    it("should say the repository is now LINKED after the heading and the checkout", async () => {
+        const dir = checkout();
+        const { engine, reporter } = await startEngine({ root, home, data: config({ "workflow/alpha": {} }), hosts: [fakeHost([repo], calls)] });
+        const outputs = (await engine.handle.submit({ intent: "repo.link", input: { repo: "acme", path: dir } })).toArray();
+        const texts = outputs.map((output) => output.toText());
+        const heading = texts.findIndex((text) => text.startsWith("Linking a repository"));
+        const checkoutLine = texts.findIndex((text) => text.includes("Checkout") && text.includes(dir));
+        const linked = texts.findIndex((text) => text.includes("The repository 'acme' is now LINKED."));
+
+        expect(reporter.messages.map((message) => messageText(message.message))).not.toEqual(expect.arrayContaining([expect.stringContaining("now LINKED")]));
+        expect(heading).toBe(0);
+        expect(checkoutLine).toBeGreaterThanOrEqual(heading);
+        expect(linked).toBeGreaterThan(checkoutLine);
+        expect(texts[linked]).toContain("Its recipes are read from the checkout above");
     });
 
     it("should write nothing on a dry run", async () => {

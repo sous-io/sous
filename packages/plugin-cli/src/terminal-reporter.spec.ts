@@ -337,6 +337,7 @@ describe("TerminalReporter", () => {
                 "  ----",
                 "  a",
                 "  b",
+                " ",
                 "  Items:",
                 "    • one",
                 "    • two",
@@ -349,6 +350,30 @@ describe("TerminalReporter", () => {
                 "",
             ].join("\n"),
         );
+    });
+
+    /**
+     * A table ends with a blank line, so what follows it (`sous lock show`'s lockfile line) does not
+     * read as one more row, and a long path stays on its label's line (gh-229).
+     *
+     *   Recipe
+     *   ------
+     *   workflow/a
+     *
+     *   Lockfile: /a/very/long/.../sous.lock.json
+     */
+    it("should leave a blank line after a table and keep a long value on its label's line", () => {
+        const { stdout, reporter } = make();
+        const lockfile = `/home/someone/${"deeply-nested-directory/".repeat(3)}project/.sous/sous.lock.json`;
+
+        reporter.result(
+            new IntentOutputs([
+                new IntentOutput({ title: "Recipe versions this project pins", result: new Table([{ key: "key", header: "Recipe" }], [{ key: "workflow/a" }]) }),
+                new IntentOutput({ result: new VariableSet({ Lockfile: lockfile }) }),
+            ]),
+        );
+
+        expect(stdout.text).toContain(["  workflow/a", " ", `    Lockfile: ${lockfile}`, ""].join("\n"));
     });
 
     /** Verbatim text in a result is exactly as given, and empty text prints nothing. */

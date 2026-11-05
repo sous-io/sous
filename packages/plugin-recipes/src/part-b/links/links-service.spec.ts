@@ -109,10 +109,13 @@ describe("describeLinkedRepos()", () => {
         const one = { repo: "acme", path: "/x", origin: "path" as const, linkedAt: "", scope: "project" as const };
 
         expect(describeLinkedRepos({ acme: one })[0]).toBe("One repository is LINKED to a working copy on this machine.");
+        // One repository reads "its ... that checkout", not "their ... those checkouts" (gh-229).
+        expect(describeLinkedRepos({ acme: one })[1]).toBe("Its recipes are read from that checkout, so versions, the lockfile and freshness checks do not apply to it.");
 
         const lines = describeLinkedRepos({ zed: { ...one, repo: "zed", path: "/z" }, acme: one });
 
         expect(lines[0]).toBe("2 repositories are LINKED to working copies on this machine.");
+        expect(lines[1]).toBe("Their recipes are read from those checkouts, so versions, the lockfile and freshness checks do not apply to them.");
         expect(lines).toContain("acme -> /x");
         expect(lines.indexOf("acme -> /x")).toBeLessThan(lines.indexOf("zed -> /z"));
         expect(lines.at(-1)).toContain("sous repo unlink");
