@@ -88,6 +88,8 @@ export interface World {
     unanswerable: DefinedVariable[];
     // git
     branch: string | undefined;
+    /** What git prints on standard error when asked for the branch and it cannot tell. */
+    gitError?: string;
 }
 
 /** A fresh world for a project root. */
@@ -197,7 +199,15 @@ export function standIns(world: World): PluginDefinition[] {
     });
 
     const git = plugin("@sous-io/plugin-git", (sous) => {
-        sous.services.add("git.runner", () => ({ currentBranch: async () => world.branch }) as never, { lifetime: "singleton" });
+        sous.services.add(
+            "git.runner",
+            () =>
+                ({
+                    currentBranch: async () => world.branch,
+                    run: async (args: readonly string[]) => ({ args, exitCode: world.branch === undefined ? 128 : 0, stdout: world.branch ?? "", stderr: world.gitError ?? "", durationMs: 0 }),
+                }) as never,
+            { lifetime: "singleton" },
+        );
     });
 
     const compiler = plugin("@sous-io/plugin-compiler", (sous) => {

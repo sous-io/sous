@@ -57,6 +57,8 @@ export interface BuildPid {
 /** The facts the runtime context file holds. */
 export interface RuntimeContext {
     readonly branch?: string;
+    /** When `branch` is missing: the first line git printed on standard error, if it printed one. */
+    readonly branchProblem?: string;
     /** The active task file, when the branch matches. */
     readonly taskFile?: string;
     readonly outputPath: string;

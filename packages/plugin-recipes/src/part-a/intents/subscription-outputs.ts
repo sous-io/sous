@@ -228,10 +228,13 @@ export function subscriptionUpdateOutputs(ctx: Pick<Context, "reporter">, result
     reportCycles(ctx, result.plan.cycles, "That is unusual but not broken, and the lockfile was updated.");
 
     const build: RanFollowUp | undefined = followUpOf(result, "build");
+    // A subscription that could not be resolved kept its pins, so the sentence leaves it out by name.
+    const failed = result.plan.failed.map((entry) => entry.key);
+    const except = failed.length === 0 ? "" : ` except ${failed.join(", ")}, whose pins stay where they are`;
 
     outputs.push(
         sentence(
-            `The lockfile now pins the newest versions the ranges allow for ${scope}. This project's subscriptions are exactly as they were.` +
+            `The lockfile now pins the newest versions the ranges allow for ${scope}${except}. This project's subscriptions are exactly as they were.` +
                 (build?.outputs !== undefined || result.plan.diff.unchanged ? "" : " The project was not rebuilt."),
         ),
     );

@@ -356,7 +356,7 @@ export async function writeRuntimeContext(ctx: Context, dryRun: boolean): Promis
     const generated = await service.generate();
 
     if (generated && generated.branch === undefined) {
-        ctx.reporter.warn('Sous could not read the current git branch, so the runtime context says "unknown".');
+        ctx.reporter.warn(`Sous could not read the current git branch, so the runtime context says "unknown".${generated.branchProblem === undefined ? "" : ` Git said: ${generated.branchProblem}`}`);
     }
 
     const written = await service.write({ dryRun });

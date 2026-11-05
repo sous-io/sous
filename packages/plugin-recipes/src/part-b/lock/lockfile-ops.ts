@@ -7,6 +7,7 @@
  */
 
 import { ConfigError } from "@sous-io/plugin-api";
+import semver from "semver";
 import type { LockedRecipe, Lockfile } from "@sous-io/plugin-formats/types";
 import type { LockChange, LockDiff, ResolvedRecipe } from "../../types.js";
 import { PROJECT_HOLDER } from "../constants.js";
@@ -386,6 +387,7 @@ export function diffLockfiles(before: Lockfile, after: Lockfile): LockDiff {
  * Repository added: acme
  * Adding workflow/task-files version 1.2.0
  * Updating core/sous-skills from version 0.2.33 to version 0.2.34
+ * Moving acme/widget down from version 1.0.0 to version 0.1.0
  * Adding workflow/shared version 1.0.0 for workflow/a alone
  * Removing tools/old, which nothing needs any more
  * ```
@@ -404,7 +406,13 @@ export function describeLockDiff(diff: LockDiff): string[] {
     }
 
     for (const change of [...diff.updated].sort(byKey)) {
-        lines.push(`Updating ${change.key} from version ${change.from} to version ${change.to}${alone(change)}`);
+        const down = change.from !== undefined && change.to !== undefined && semver.valid(change.from) !== null && semver.valid(change.to) !== null && semver.lt(change.to, change.from);
+
+        lines.push(
+            down
+                ? `Moving ${change.key} down from version ${change.from} to version ${change.to}${alone(change)}`
+                : `Updating ${change.key} from version ${change.from} to version ${change.to}${alone(change)}`,
+        );
     }
 
     for (const change of [...diff.removed].sort(byKey)) {

@@ -282,6 +282,31 @@ describe("the build intent", () => {
     });
 
     /**
+     * When git refuses to say the branch, the warning gives git's first error line (#204 bug 49).
+     *
+     * sous build; // -> warning '... says "unknown". Git said: fatal: detected dubious ownership ...'
+     */
+    it("should give git's reason when it cannot read the branch", async () => {
+        const h = await harness({
+            world: (world) => {
+                world.branch = undefined;
+                world.gitError = "fatal: detected dubious ownership in repository at '/r'\nTo add an exception for this directory, call:";
+                world.config = {
+                    compilation: { targets: [target({ entryPoint: "/p/A.md", generateRuntimeContext: true })] },
+                    runtimeContext: { gitRoot: "/r", outputPath: "/r/ctx.md", taskFileRoot: "/r" },
+                };
+            },
+        });
+
+        await h.run("build");
+
+        const warnings = h.reporter.at("warning").join("\n");
+
+        expect(warnings).toContain(`says "unknown". Git said: fatal: detected dubious ownership in repository at '/r'`);
+        expect(warnings).not.toContain("To add an exception");
+    });
+
+    /**
      * --watch refuses to start when another live process holds the PID file.
      *
      * sous build --watch; // -> "A watcher is already running for project '<name>' (PID 1)..."
