@@ -18,7 +18,7 @@ describe("the build intent", () => {
         const result = await h.run<BuildResult>("build");
 
         expect(result).toMatchObject({ ok: true, dryRun: false, watching: false });
-        expect(h.world.compileCalls).toEqual([{}]);
+        expect(h.world.compileCalls).toEqual([{ reportEnd: false }]);
         expect(h.world.pruneCalls).toEqual([{ dryRun: false }]);
         expect(result.prepared.locked.unchanged).toBe(true);
     });
@@ -104,7 +104,7 @@ describe("the build intent", () => {
         const result = await h.run<BuildResult>("build", { dryRun: true });
 
         expect(result.dryRun).toBe(true);
-        expect(h.world.compileCalls).toEqual([{ dryRun: true }]);
+        expect(h.world.compileCalls).toEqual([{ dryRun: true, reportEnd: false }]);
         expect(h.world.pruneCalls).toEqual([{ dryRun: true }]);
         expect(h.world.lockWrites).toEqual([expect.objectContaining({ dryRun: true })]);
         expect(h.world.restoreCalls).toEqual([]);
@@ -121,7 +121,7 @@ describe("the build intent", () => {
 
         await h.run("build", { rebuild: true, strict: true });
         expect(h.world.pruneCalls).toEqual([{ all: true }, { dryRun: false }]);
-        expect(h.world.compileCalls).toEqual([{ strict: true, rebuild: true }]);
+        expect(h.world.compileCalls).toEqual([{ strict: true, rebuild: true, reportEnd: false }]);
     });
 
     /**
@@ -133,7 +133,7 @@ describe("the build intent", () => {
         const h = await harness();
         const result = await h.run<BuildResult>("build", { changedFiles: ["/p/AGENTS.md"] });
 
-        expect(h.world.compileCalls).toEqual([{ changedFiles: ["/p/AGENTS.md"] }]);
+        expect(h.world.compileCalls).toEqual([{ changedFiles: ["/p/AGENTS.md"], reportEnd: false }]);
         expect(h.world.resolveCalls).toEqual([]);
         expect(result.prepared.seeded).toEqual([]);
     });
