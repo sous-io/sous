@@ -72,7 +72,7 @@ describe("remote URLs", () => {
     });
 
     it("should generate a branch name from the local date and time", () => {
-        expect(checkout.generatedBranchName(new Date(2026, 0, 5, 9, 7))).toBe("sous/edit-20260105-0907");
+        expect(checkout.generatedBranchName(new Date(2026, 0, 5, 9, 7, 3))).toBe("sous/edit-20260105-090703");
     });
 });
 
@@ -125,6 +125,20 @@ describe("with a fake runner", () => {
 
         await checkout.fetchBranch(runner, "/r", "feature");
         expect(runner.calls.some((call) => call.startsWith("remote set-branches"))).toBe(false);
+    });
+
+    /**
+     * unusedBranchName should return the name when no local branch has it, else the first free `-2`, `-3`...
+     *
+     * unusedBranchName(git, dir, "sous/edit-20261104-225317"); // taken, and so is -2
+     * // -> "sous/edit-20261104-225317-3"
+     */
+    it("should add the first free suffix to a branch name that is taken", async () => {
+        const name = "sous/edit-20261104-225317";
+        const taken = (branch: string) => ({ [`show-ref --verify --quiet refs/heads/${branch}`]: { exitCode: 0 } });
+
+        expect(await checkout.unusedBranchName(fakeRunner({}), "/r", name)).toBe(name);
+        expect(await checkout.unusedBranchName(fakeRunner({ ...taken(name), ...taken(`${name}-2`) }), "/r", name)).toBe(`${name}-3`);
     });
 
     it("should name the step and carry git's message when fetching a branch fails", async () => {

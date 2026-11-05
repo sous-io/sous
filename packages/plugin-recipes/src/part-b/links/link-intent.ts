@@ -130,6 +130,12 @@ async function resolveRepo(input: RepoLinkInput, ctx: Context, inSlot: string | 
         return { name: input.repo, url: configured.url, added: [] };
     }
 
+    const sameAsTrusted = inSlot === undefined ? undefined : await trustedRepoOfCheckout(ctx, inSlot, trusted);
+
+    if (sameAsTrusted !== undefined) {
+        return { ...sameAsTrusted, added: [] };
+    }
+
     if (inSlot !== undefined || checkout.looksLikeRepoUrl(input.repo)) {
         const suggested = inSlot === undefined ? undefined : await suggestedName(ctx, inSlot);
         const outcome = (await ctx.run("repo.add", {
@@ -147,6 +153,32 @@ async function resolveRepo(input: RepoLinkInput, ctx: Context, inSlot: string | 
     throw new ConfigError(`'${input.repo}' is not a repository this project knows about, and it is neither a URL nor the path of a checkout on this machine.`, {
         details: [known.length > 0 ? `This project knows about: ${known.join(", ")}.` : "This project has no repositories configured yet.", "Add the repository first with 'sous repo add <url>', then link it by its short name."],
     });
+}
+
+/**
+ * The trusted repository a checkout is a clone of, judged by its `origin` remote, whatever spelling
+ * either URL uses (https, `git@host:owner/name`, `ssh://`, with or without `.git`).
+ *
+ * ```ts
+ * // repos.recipes.url = "https://github.com/acme/recipes", origin = "git@github.com:acme/recipes.git"
+ * await trustedRepoOfCheckout(ctx, checkoutDir, trusted); // { name: "recipes", url: "https://github.com/acme/recipes" }
+ * ```
+ */
+async function trustedRepoOfCheckout(ctx: Context, directory: string, trusted: ReturnType<typeof trustedRepos>): Promise<{ name: string; url: string } | undefined> {
+    const git = ctx.services.get("git.runner");
+    const origin = (await checkout.isGitCheckout(git, directory)) ? await checkout.remoteUrlOf(git, directory) : undefined;
+
+    if (origin === undefined) {
+        return undefined;
+    }
+
+    for (const [name, entry] of Object.entries(trusted)) {
+        if (typeof entry.url === "string" && checkout.sameRemote(entry.url, origin)) {
+            return { name, url: entry.url };
+        }
+    }
+
+    return undefined;
 }
 
 /** The short name a checkout's own manifest suggests. */
@@ -294,6 +326,11 @@ function describeBranchRequest(request: BranchRequest): string[] {
 async function applyBranchRequest(git: GitRunner, directory: string, request: BranchRequest, yes: boolean, ctx: Context): Promise<string[]> {
     if (!(await checkout.isGitCheckout(git, directory))) {
         throw new ConfigError(`${directory} is not a git checkout, so it has no branches to switch or create.`, { details: ["Link it without the branch flags, or turn it into a git repository first."] });
+    }
+
+    // A generated name may already be taken, by a link made earlier the same second: the next free `-2`, `-3`... is used.
+    if (request.generated && request.create !== undefined) {
+        request = { ...request, create: await checkout.unusedBranchName(git, directory, request.create) };
     }
 
     for (const name of [request.switchTo, request.create, request.from]) {
