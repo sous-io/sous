@@ -102,6 +102,31 @@ describe("parseLockfile()", () => {
   });
 
   /**
+   * A repository added by its SSH address keeps that address in the lockfile,
+   * in either spelling people copy from a host (gh-229).
+   *
+   * parseLockfile({ ..., repos: { recipes: { url: "git@gitlab.com:acme/recipes.git" } } });
+   * // -> accepted, url unchanged
+   */
+  it.each([
+    "git@gitlab.com:acme/recipes.git",
+    "git@gitlab.com:acme/platform/recipes",
+    "ssh://git@gitlab.com/acme/recipes.git",
+    "ssh://git@gitlab.example.com:2222/acme/recipes.git",
+  ])("should accept the SSH url %s", (url) => {
+    const parsed = parseLockfile(
+      {
+        formatVersion: 1,
+        repos: { recipes: { url, identity: "gitlab.com/acme/recipes", indexHash: HASH } },
+        recipes: {},
+      },
+      SOURCE
+    );
+
+    expect(parsed.repos["recipes"]!.url).toBe(url);
+  });
+
+  /**
    * The lockfile is machine-written, so an unknown key is a bug rather than an
    * extension.
    */
