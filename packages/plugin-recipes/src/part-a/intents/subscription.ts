@@ -32,6 +32,7 @@ import type {
     SubscriptionUpdateInput,
     SubscriptionUpdateResult,
 } from "../../types.js";
+import { reachableKeys, stillBuilt } from "../active.js";
 import { findInCatalog, latestVersion } from "../catalog.js";
 import { identityOf, loadCatalog, pickMatch, readingsOf, readUpstream, type CatalogContext } from "../catalog-context.js";
 import { isBuiltInEntry, USER_ADDED_BY } from "../defaults.js";
@@ -525,27 +526,59 @@ export async function toggleSubscription(input: SubscriptionToggleInput, ctx: Co
         });
     }
 
-    const changed = (configured[key]?.enabled !== false) !== enabled;
-    // A layer after 510 that sets `enabled` still wins: say so, and let it.
+    const wasOn = configured[key]?.enabled !== false;
+    // A layer after 510 that sets `enabled` decides the merged value, whatever 510 says.
     const later = laterSetters(ctx.config, key);
-    const edit = enabled ? await switchOn(ctx, key, changed && later.length === 0, input.dryRun === true) : await setSubscriptionEnabled(managed, key, false, input.dryRun === true);
+    const decidedBy = later[later.length - 1];
+    const effective = decidedBy === undefined ? enabled : wasOn;
+    const effectiveChanged = effective !== wasOn;
+    const edit = enabled ? await switchOn(ctx, key, !wasOn && decidedBy === undefined, input.dryRun === true) : await setSubscriptionEnabled(managed, key, false, input.dryRun === true);
+    const kept = effective ? [] : stillBuiltWhenOff(ctx, key);
+    const facts = {
+        key,
+        enabled,
+        file,
+        changed: edit.changed,
+        effective,
+        effectiveChanged,
+        ...(decidedBy === undefined ? {} : { decidedBy }),
+        ...(kept.length === 0 ? {} : { stillBuilt: kept }),
+    };
 
-    if (later.length > 0) {
-        ctx.reporter.warning(`${later[later.length - 1]} also sets subscriptions.${key}.enabled and is applied after conf.d/${SUBSCRIPTIONS_LAYER}, so its value still wins.`);
+    // Only when that later value disagrees is it worth a warning.
+    if (decidedBy !== undefined && effective !== enabled) {
+        ctx.reporter.warning(`${decidedBy} also sets subscriptions.${key}.enabled and is applied after conf.d/${SUBSCRIPTIONS_LAYER}, so its value still wins.`);
     }
 
     if (input.dryRun === true || !edit.changed) {
-        return { key, enabled, file, changed, dryRun: input.dryRun === true, followUps: [{ intent: "build", skipped: input.dryRun === true ? "--dry-run" : "nothing changed" }] };
+        return { ...facts, dryRun: input.dryRun === true, followUps: [{ intent: "build", skipped: input.dryRun === true ? "--dry-run" : "nothing changed" }] };
     }
 
     ctx.configChanged();
 
     // The build that follows must see the subscription switched.
-    if (changed && input.noBuild !== true) {
+    if (effectiveChanged && input.noBuild !== true) {
         await rebuild(ctx);
     }
 
-    return { key, enabled, file, changed, dryRun: false, followUps: changed ? [await buildFollowUp(ctx, input)] : [{ intent: "build", skipped: "nothing changed" }] };
+    return { ...facts, dryRun: false, followUps: effectiveChanged ? [await buildFollowUp(ctx, input)] : [{ intent: "build", skipped: "nothing changed" }] };
+}
+
+/**
+ * What switching one subscription off leaves built anyway: its recipes that the subscriptions
+ * still switched on depend on, one sentence each (#204 bug 24).
+ */
+function stillBuiltWhenOff(ctx: Context, key: string): string[] {
+    const subscriptions = { ...configuredSubscriptions(ctx.config), [key]: { ...configuredSubscriptions(ctx.config)[key], enabled: false } };
+
+    try {
+        const lock = ctx.services.get("recipes.lock").read();
+
+        return stillBuilt(lock, subscriptions, new Set(reachableKeys(lock, subscriptions))).map((entry) => entry.message);
+    } catch {
+        // A lockfile that cannot be read says nothing about what is built.
+        return [];
+    }
 }
 
 /**
@@ -559,6 +592,11 @@ export async function toggleSubscription(input: SubscriptionToggleInput, ctx: Co
 async function switchOn(ctx: Context, key: string, mustTurnOn: boolean, dryRun: boolean): Promise<{ readonly changed: boolean }> {
     const managed = ctx.services.get("confd.managed");
     const own = (await managedEntries<SubscriptionEntry>(managed, SUBSCRIPTIONS_LAYER, "subscriptions"))[key];
+
+    // 510 switches it on already: there is nothing to write, whatever a later file says.
+    if (own?.enabled === true) {
+        return { changed: false };
+    }
 
     if (own?.enabled === undefined) {
         // The 510 entry holds no `enabled`, so another file switches it off: only a value here wins.

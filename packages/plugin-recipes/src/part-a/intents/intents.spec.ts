@@ -8,7 +8,7 @@ import { showNamespace, showRecipe } from "./catalog.js";
 import { addRepo, listRepos, removeRepo, searchRepos } from "./repo.js";
 import { addSubscription, laterSetters, listSubscriptions, removeSubscription, toggleSubscription, updateSubscriptions } from "./subscription.js";
 import { planUpdate } from "../update-plan.js";
-import { updatePlanOutputs } from "./subscription-outputs.js";
+import { subscriptionToggleOutputs, updatePlanOutputs } from "./subscription-outputs.js";
 import { NoVersionSatisfiesError } from "../../part-b/resolver/resolve.js";
 
 const hash = "sha256-aa" as const;
@@ -257,6 +257,92 @@ describe("subscription.disable and subscription.enable", () => {
         expect(laterSetters(config, "workflow")).toEqual(["conf.d/610-mac.jsonc"]);
         await toggleSubscription({ ref: "workflow", noBuild: true }, ctx, true);
         expect(ctx.reporter.at("warning")[0]).toMatch(/conf.d\/610-mac.jsonc also sets subscriptions.workflow.enabled/);
+    });
+
+    /**
+     * With `enabled: true` in 510 and `false` in a later 520-local.jsonc, enabling warns that 520
+     * still wins, and the summary says the subscription is still off because of 520, not that it
+     * is now on (#204 bug 25).
+     *
+     * toggleSubscription({ ref: "workflow" }, ctx, true)
+     * // -> Enabled: no; "... is still switched off, because conf.d/520-local.jsonc switches it off ..."
+     */
+    it("should report a subscription a later layer keeps off as still off when enabling", async () => {
+        const { config } = setup({
+            data: { repos: {}, subscriptions: { workflow: { enabled: false } } },
+            managed: { "510-subscriptions.jsonc": { subscriptions: { workflow: { addedBy: "user", enabled: true } } } },
+            layers: { "subscriptions.workflow.enabled": ["confd/510-subscriptions.jsonc", "confd/520-local.jsonc"] },
+        });
+        const ctx = context(config, { intents: ["build"] });
+        const result = await toggleSubscription({ ref: "workflow" }, ctx, true);
+        const text = subscriptionToggleOutputs(ctx, result)
+            .toArray()
+            .map((output) => `${output.summary ?? ""}\n${output.result?.toText() ?? ""}`)
+            .join("\n");
+
+        expect(ctx.reporter.at("warning")[0]).toMatch(/conf.d\/520-local.jsonc also sets subscriptions.workflow.enabled/);
+        expect(text).toMatch(/Enabled\s*:?\s*no/);
+        expect(text).not.toContain("now switched on");
+        expect(text).toContain("still switched off, because conf.d/520-local.jsonc switches it off");
+        expect(result.followUps).toEqual([{ intent: "build", skipped: "nothing changed" }]);
+    });
+
+    /**
+     * Disabling there changes 510 from true to false. The summary says so rather than "nothing
+     * changed", and there is no warning, since 520 agrees (#204 bug 25).
+     *
+     * toggleSubscription({ ref: "workflow" }, ctx, false)
+     * // 510: enabled false; no warning; the summary names the change in 510
+     */
+    it("should report the change in 510 and not warn when a later layer agrees", async () => {
+        const { config, managed } = setup({
+            data: { repos: {}, subscriptions: { workflow: { enabled: false } } },
+            managed: { "510-subscriptions.jsonc": { subscriptions: { workflow: { addedBy: "user", enabled: true } } } },
+            layers: { "subscriptions.workflow.enabled": ["confd/510-subscriptions.jsonc", "confd/520-local.jsonc"] },
+        });
+        const ctx = context(config, { intents: ["build"] });
+        const result = await toggleSubscription({ ref: "workflow" }, ctx, false);
+        const text = subscriptionToggleOutputs(ctx, result)
+            .toArray()
+            .map((output) => `${output.summary ?? ""}\n${output.result?.toText() ?? ""}`)
+            .join("\n");
+
+        expect(managed.files["510-subscriptions.jsonc"]).toEqual({ subscriptions: { workflow: { addedBy: "user", enabled: false } } });
+        expect(ctx.reporter.at("warning")).toEqual([]);
+        expect(text).not.toContain("nothing changed");
+        expect(text).toContain("conf.d/510-subscriptions.jsonc now switches it off too");
+    });
+
+    /**
+     * Disabling a recipe that enabled recipes depend on changes nothing in the build; the output
+     * says so in one line naming them (#204 bug 24).
+     *
+     * toggleSubscription({ ref: "acme/base" }, ctx, false)
+     * // -> "acme/base is switched off but still built: acme/gadget and acme/widget depend on it."
+     */
+    it("should say when a disabled recipe is still built because enabled recipes depend on it", async () => {
+        const based: Lockfile = {
+            formatVersion: 1,
+            repos: { r: { url: "https://github.com/acme/r", identity: "github.com/acme/r" } },
+            recipes: {
+                "acme/base": { repo: "r", version: "1.0.0", hash, requestedBy: ["project", "acme/widget", "acme/gadget"], kind: "subscribes" },
+                "acme/widget": { repo: "r", version: "1.0.0", hash, requestedBy: ["project"], kind: "subscribes" },
+                "acme/gadget": { repo: "r", version: "1.0.0", hash, requestedBy: ["project"], kind: "subscribes" },
+            },
+        };
+        const { config } = setup({
+            data: { repos: { r: { url: "https://github.com/acme/r" } }, subscriptions: { "acme/base": {}, "acme/widget": {}, "acme/gadget": {} } },
+            managed: { "510-subscriptions.jsonc": { subscriptions: { "acme/base": { addedBy: "user" }, "acme/widget": { addedBy: "user" }, "acme/gadget": { addedBy: "user" } } } },
+            lock: based,
+        });
+        const ctx = context(config);
+        const result = await toggleSubscription({ ref: "acme/base", noBuild: true }, ctx, false);
+        const text = subscriptionToggleOutputs(ctx, result)
+            .toArray()
+            .map((output) => `${output.summary ?? ""}\n${output.result?.toText() ?? ""}`)
+            .join("\n");
+
+        expect(text).toContain("acme/base is switched off but still built: acme/gadget and acme/widget depend on it.");
     });
 
     /**

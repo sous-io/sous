@@ -8,8 +8,8 @@
 
 import type { BuiltConfig, ServiceReader } from "@sous-io/plugin-api";
 import type { ContentKind, Lockfile, VariableDefinition } from "@sous-io/plugin-formats/types";
-import type { ActiveRecipeContent, ActiveRecipeEntity, RecipesActive, SkippedRecipe } from "../types.js";
-import { emptyLockfile, keysHeldBySubscription, lockedClosure } from "./lock-holds.js";
+import type { ActiveRecipeContent, ActiveRecipeEntity, RecipesActive, SkippedRecipe, StillBuiltRecipe } from "../types.js";
+import { emptyLockfile, keysHeldBySubscription, lockedClosure, PROJECT_HOLDER } from "./lock-holds.js";
 import { configuredRepos, configuredSubscriptions, setBy } from "./project.js";
 import { compareBytewise } from "./util.js";
 
@@ -20,6 +20,63 @@ export function reachableKeys(lock: Lockfile, subscriptions: Record<string, { en
         .flatMap(([key]) => keysHeldBySubscription(lock, key));
 
     return lockedClosure(lock, roots);
+}
+
+/** Names joined for a sentence: `a`, `a and b`, `a, b and c`. */
+function joinNames(names: readonly string[]): string {
+    return names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/**
+ * The recipes of switched-off subscriptions that are built anyway, because built recipes depend
+ * on them, each with one sentence saying so.
+ *
+ * ```ts
+ * // acme/base switched off; built: acme/base, acme/widget, acme/gadget (both depend on acme/base)
+ * stillBuilt(lock, subscriptions, built);
+ * // -> [{ key: "acme/base", subscription: "acme/base", neededBy: ["acme/gadget", "acme/widget"],
+ * //       message: "acme/base is switched off but still built: acme/gadget and acme/widget depend on it." }]
+ * ```
+ *
+ * @param built - The keys built here: the active recipes, or the keys reached from the subscriptions switched on.
+ * @param setByOf - The file that switched a subscription off, when known.
+ */
+export function stillBuilt(
+    lock: Lockfile,
+    subscriptions: Record<string, { enabled?: boolean } | undefined>,
+    built: ReadonlySet<string>,
+    setByOf: (subscription: string) => string | undefined = () => undefined,
+): StillBuiltRecipe[] {
+    const found: StillBuiltRecipe[] = [];
+    const seen = new Set<string>();
+
+    for (const subscription of Object.keys(subscriptions).sort(compareBytewise)) {
+        if (subscriptions[subscription]?.enabled !== false) {
+            continue;
+        }
+
+        for (const key of keysHeldBySubscription(lock, subscription)) {
+            const neededBy = [...new Set(lock.recipes[key]!.requestedBy.filter((holder) => holder !== PROJECT_HOLDER && built.has(holder)))].sort(compareBytewise);
+
+            if (seen.has(key) || !built.has(key) || neededBy.length === 0) {
+                continue;
+            }
+
+            seen.add(key);
+
+            const setBy = setByOf(subscription);
+
+            found.push({
+                key,
+                subscription,
+                neededBy,
+                ...(setBy === undefined ? {} : { setBy }),
+                message: `${key} is switched off but still built: ${joinNames(neededBy)} ${neededBy.length === 1 ? "depends" : "depend"} on it.`,
+            });
+        }
+    }
+
+    return found;
 }
 
 /** `recipes.active`, for one built config. */
@@ -52,6 +109,12 @@ export class ActiveRecipes implements RecipesActive {
         this.skippedCache ??= this.findSkipped();
 
         return this.skippedCache;
+    }
+
+    switchedOffButBuilt(): StillBuiltRecipe[] {
+        const active = new Set(this.config.entities.list("active-recipe").map((entity) => entity.id));
+
+        return stillBuilt(this.lockfile(), configuredSubscriptions(this.config), active, (subscription) => setBy(this.config, ["subscriptions", subscription, "enabled"]));
     }
 
     contents(kind: ContentKind): ActiveRecipeContent[] {

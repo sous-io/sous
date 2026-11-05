@@ -129,6 +129,13 @@ async function runBuild(input: BuildInput, ctx: Context): Promise<BuildResult> {
 
     reportSkipped(ctx, skipped, skippedFiles, [...(cleared?.removed ?? []), ...(pruned?.removed ?? [])], dryRun);
 
+    // A switched-off recipe that switched-on recipes depend on is built anyway: say so, once each.
+    if (!partial) {
+        for (const recipe of ctx.services.get("recipes.active").switchedOffButBuilt?.() ?? []) {
+            ctx.reporter.notice(recipe.message);
+        }
+    }
+
     const watching = input.watch === true;
 
     if (watching) {

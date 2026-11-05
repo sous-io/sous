@@ -136,3 +136,47 @@ describe("recipes.active", () => {
         expect(active.get("workflow/task-files")?.version).toBe("2.0.0");
     });
 });
+
+describe("recipes.active switchedOffButBuilt()", () => {
+    /**
+     * A switched-off subscription whose recipe enabled recipes depend on is still built; one line
+     * says so and names them (#204 bug 24).
+     *
+     * // acme/base switched off; acme/widget and acme/gadget depend on it
+     * active.switchedOffButBuilt();
+     * // -> "acme/base is switched off but still built: acme/gadget and acme/widget depend on it."
+     */
+    it("should name the enabled recipes that keep a switched-off recipe built", () => {
+        const based: Lockfile = {
+            formatVersion: 1,
+            repos: { r: { url: "https://github.com/acme/r", identity: "github.com/acme/r" } },
+            recipes: {
+                "acme/base": { repo: "r", version: "1.0.0", hash, requestedBy: ["project", "acme/widget", "acme/gadget"], kind: "subscribes" },
+                "acme/widget": { repo: "r", version: "1.0.0", hash, requestedBy: ["project"], kind: "subscribes" },
+                "acme/gadget": { repo: "r", version: "1.0.0", hash, requestedBy: ["project"], kind: "subscribes" },
+                "acme/alone": { repo: "r", version: "1.0.0", hash, requestedBy: ["project"], kind: "subscribes" },
+            },
+        };
+        const config = builtConfig(
+            {
+                repos: { r: { url: "https://github.com/acme/r" } },
+                subscriptions: { "acme/base": { enabled: false }, "acme/widget": {}, "acme/gadget": {}, "acme/alone": { enabled: false } },
+            },
+            {
+                services: { "recipes.lock": memoryLock(based) },
+                entities: { "active-recipe": ["acme/base", "acme/widget", "acme/gadget"].map((id) => entity(id, "/nowhere")) },
+                layers: { "subscriptions.acme/base.enabled": ["confd/520-local.jsonc"] },
+            },
+        );
+
+        expect(new ActiveRecipes(config, config.services).switchedOffButBuilt()).toEqual([
+            {
+                key: "acme/base",
+                subscription: "acme/base",
+                neededBy: ["acme/gadget", "acme/widget"],
+                setBy: "conf.d/520-local.jsonc",
+                message: "acme/base is switched off but still built: acme/gadget and acme/widget depend on it.",
+            },
+        ]);
+    });
+});

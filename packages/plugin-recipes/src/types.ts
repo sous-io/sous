@@ -335,6 +335,19 @@ export interface SkippedRecipe {
     readonly message: string;
 }
 
+/** A recipe of a switched-off subscription that is built anyway, because switched-on recipes depend on it. */
+export interface StillBuiltRecipe {
+    readonly key: string;
+    /** The switched-off subscription that holds it. */
+    readonly subscription: string;
+    /** The switched-on recipes that depend on it, bytewise. */
+    readonly neededBy: readonly string[];
+    /** The file that switched the subscription off, when known (`conf.d/520-local.jsonc`). */
+    readonly setBy?: string;
+    /** One plain sentence: `acme/base is switched off but still built: acme/gadget and acme/widget depend on it.` */
+    readonly message: string;
+}
+
 /** One file of an active recipe's content. */
 export interface RecipeContentFile {
     /** Relative to the recipe, `/`-separated. */
@@ -377,6 +390,11 @@ export interface RecipesActive {
     get(key: string): ActiveRecipeEntity | undefined;
     /** Locked recipes that are not active here, and why. */
     skipped(): SkippedRecipe[];
+    /**
+     * Recipes of switched-off subscriptions that are active anyway, because switched-on recipes
+     * depend on them. Optional, so a stand-in may leave it out.
+     */
+    switchedOffButBuilt?(): StillBuiltRecipe[];
     /** Every active recipe's content of one kind (see {@link RecipesContents.of}). */
     contents(kind: ContentKind): ActiveRecipeContent[];
     /** Every variable the active recipes define, with the recipe defining it. */
@@ -1161,9 +1179,25 @@ export interface SubscriptionToggleInput extends RecipeChangeFlags {
 /** The result of `subscription.enable` and `subscription.disable`. */
 export interface SubscriptionToggleResult {
     readonly key: string;
+    /** What was asked for: true for `enable`, false for `disable`. */
     readonly enabled: boolean;
     readonly file: string;
+    /** Whether `conf.d/510-subscriptions.jsonc` changed (or would, on a dry run). */
     readonly changed: boolean;
+    /** Whether the subscription is switched on afterwards, in the merged config. */
+    readonly effective: boolean;
+    /** Whether `effective` differs from what it was before. */
+    readonly effectiveChanged: boolean;
+    /**
+     * A file applied after `conf.d/510` that also sets `enabled`, and so decides it
+     * (`conf.d/520-local.jsonc`).
+     */
+    readonly decidedBy?: string;
+    /**
+     * When it ends up switched off: its recipes that are built anyway, because switched-on recipes
+     * depend on them, one sentence each.
+     */
+    readonly stillBuilt?: readonly string[];
     readonly dryRun: boolean;
     readonly followUps: IntentFollowUp[];
 }

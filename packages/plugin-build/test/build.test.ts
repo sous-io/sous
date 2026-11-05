@@ -167,6 +167,26 @@ describe("the build intent", () => {
     });
 
     /**
+     * A switched-off recipe that switched-on recipes depend on is still built; the build says so
+     * in one line (#204 bug 24).
+     *
+     * $ sous build
+     * acme/base is switched off but still built: acme/gadget and acme/widget depend on it.
+     */
+    it("should say when a switched-off recipe is still built", async () => {
+        const message = "acme/base is switched off but still built: acme/gadget and acme/widget depend on it.";
+        const h = await harness({
+            world: (world) => {
+                world.stillBuilt = [{ key: "acme/base", subscription: "acme/base", neededBy: ["acme/gadget", "acme/widget"], message }];
+            },
+        });
+
+        await h.run("build");
+
+        expect(h.reporter.at("notice")).toContain(message);
+    });
+
+    /**
      * Linked repositories are announced on every full build; required variables with no answer
      * are warned about.
      *

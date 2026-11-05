@@ -138,6 +138,39 @@ export function subscriptionRemoveOutputs(ctx: Pick<Context, "reporter">, result
     );
 }
 
+/**
+ * What switching a subscription did, in one or two sentences: what changed in `conf.d/510`, and
+ * whether the subscription is on or off afterwards, naming the later file that decides it.
+ *
+ * ```text
+ * The subscription to 'acme/widget' is now switched off.
+ * conf.d/510-subscriptions.jsonc now switches 'acme/widget' on, but it is still switched off, because conf.d/520-local.jsonc switches it off and is applied after it.
+ * ```
+ */
+function toggleSummary(result: SubscriptionToggleResult): string {
+    const word = result.enabled ? "on" : "off";
+    const now = result.effective ? "on" : "off";
+    const layer = "conf.d/510-subscriptions.jsonc";
+
+    if (result.effective !== result.enabled) {
+        const why = `because ${result.decidedBy ?? "a later config file"} switches it ${now} and is applied after ${layer}`;
+
+        return result.changed
+            ? `${layer} now switches '${result.key}' ${word}, but it is still switched ${now}, ${why}.`
+            : `Nothing changed in ${layer}. The subscription to '${result.key}' is still switched ${now}, ${why}.`;
+    }
+
+    if (!result.changed) {
+        return `The subscription to '${result.key}' was already switched ${word}; nothing changed.`;
+    }
+
+    if (!result.effectiveChanged) {
+        return `The subscription to '${result.key}' was already switched ${word}${result.decidedBy === undefined ? "" : ` by ${result.decidedBy}`}; ${layer} now switches it ${word} too.`;
+    }
+
+    return `The subscription to '${result.key}' is now switched ${word}.${rebuilt(result) ? "" : " Run 'sous build' to bring the outputs in line."}`;
+}
+
 /** The outputs of `subscription.enable` and `subscription.disable`. */
 export function subscriptionToggleOutputs(ctx: Pick<Context, "reporter">, result: SubscriptionToggleResult) {
     const word = result.enabled ? "on" : "off";
@@ -147,14 +180,16 @@ export function subscriptionToggleOutputs(ctx: Pick<Context, "reporter">, result
         outputs.push(dryRunOutput("Nothing will be written."));
     }
 
-    outputs.push(blockOutput({ Subscription: result.key, Enabled: result.enabled ? "yes" : "no", "Recorded in": result.file }));
+    outputs.push(blockOutput({ Subscription: result.key, Enabled: result.effective ? "yes" : "no", "Recorded in": result.file }));
 
-    if (!result.changed) {
-        outputs.push(sentence(`The subscription to '${result.key}' was already switched ${word}; nothing changed.`));
-    } else if (result.dryRun) {
+    for (const line of result.stillBuilt ?? []) {
+        outputs.push(noteOutput(line));
+    }
+
+    if (result.dryRun && result.changed) {
         outputs.push(dryRunOutput(`Nothing was written. Run the same command without '--dry-run' to switch '${result.key}' ${word}.`));
     } else {
-        outputs.push(sentence(`The subscription to '${result.key}' is now switched ${word}.${rebuilt(result) ? "" : " Run 'sous build' to bring the outputs in line."}`));
+        outputs.push(sentence(toggleSummary(result)));
     }
 
     return finishWithFollowUps(

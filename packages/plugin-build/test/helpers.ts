@@ -42,6 +42,7 @@ import type {
     ResolveOptions,
     RestoreReport,
     SkippedRecipe,
+    StillBuiltRecipe,
 } from "@sous-io/plugin-recipes/types";
 import { createBuildPlugin, type BuildPluginOptions } from "../src/index.js";
 import packageJson from "../package.json" with { type: "json" };
@@ -78,6 +79,7 @@ export interface World {
     staleNoticed: Set<string>;
     active: ActiveRecipeEntity[];
     skipped: SkippedRecipe[];
+    stillBuilt: StillBuiltRecipe[];
     links: Record<string, ResolvedLink>;
     // memories
     memories: Memory[];
@@ -112,6 +114,7 @@ export function newWorld(root: string): World {
         staleNoticed: new Set(),
         active: [],
         skipped: [],
+        stillBuilt: [],
         links: {},
         memories: [],
         unanswered: [],
@@ -317,6 +320,7 @@ export function standIns(world: World): PluginDefinition[] {
             list: () => world.active,
             get: (key: string) => world.active.find((recipe) => recipe.id === key),
             skipped: () => world.skipped,
+            switchedOffButBuilt: () => world.stillBuilt,
             contents: () => [],
             variables: () => [],
         }));
