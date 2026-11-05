@@ -48,6 +48,35 @@ describe("build.prepare", () => {
     });
 
     /**
+     * A repository whose index hash the lockfile lacks regains it once the cache has one, though
+     * no pin changed; a dry run writes nothing (gh-204, bug 36).
+     *
+     * repos.acme without indexHash, cache hash H; // -> lockfile repos.acme.indexHash = H
+     */
+    it("should write a repository's missing index hash once the cache has one", async () => {
+        const setUp = () =>
+            harness({
+                world: (world) => {
+                    world.config = { subscriptions: { acme: {} } };
+                    world.lockfile = { formatVersion: 1, repos: { acme: { url: "https://x" } }, recipes: { "acme/jira": locked("1.0.0") } } as never;
+                    world.indexHashes = { acme: "sha256-h" };
+                },
+            });
+
+        const dry = await setUp();
+        await dry.run<BuildPrepareResult>("build.prepare", { offline: true, dryRun: true });
+        expect(dry.world.lockWrites).toEqual([]);
+
+        const h = await setUp();
+        const before = h.engine.config.buildNumber;
+        const result = await h.run<BuildPrepareResult>("build.prepare", { offline: true });
+
+        expect(h.world.lockfile.repos["acme"]?.indexHash).toBe("sha256-h");
+        expect(result.locked.unchanged).toBe(true);
+        expect(h.engine.config.buildNumber).toBe(before);
+    });
+
+    /**
      * What the store is missing is restored; skipped recipes and unanswered variables are listed;
      * active core recipes count as seeded; `build.prepared` fires with the result.
      *

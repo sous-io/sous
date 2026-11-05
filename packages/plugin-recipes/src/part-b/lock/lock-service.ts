@@ -138,7 +138,54 @@ export class LockService implements RecipesLock {
             lockedRepos[entry.repo] ??= previous.repos[entry.repo];
         }
 
+        // A kept recipe keeps its holds too: a recipe it shares with an active one still lists it
+        // in `requestedBy`, with the version pinned for it alone when it had one, so the lockfile
+        // matches what a machine with the subscription switched on writes.
+        for (const [key, entry] of Object.entries(fresh.recipes)) {
+            const before = previous.recipes[key];
+            const holds = kept.filter((holder) => before?.requestedBy.includes(holder) === true && !entry.requestedBy.includes(holder));
+
+            if (before === undefined || holds.length === 0) {
+                continue;
+            }
+
+            const pins = { ...entry.pins };
+
+            for (const holder of holds) {
+                const pin = before.pins?.[holder];
+
+                if (pin !== undefined) {
+                    pins[holder] = pin;
+                }
+            }
+
+            recipes[key] = {
+                ...entry,
+                requestedBy: sortKeys([...entry.requestedBy, ...holds]),
+                ...(Object.keys(pins).length === 0 ? {} : { pins: sortObject(pins) }),
+            };
+        }
+
         return { formatVersion: 1, repos: sortObject(lockedRepos), recipes: sortRecipes(recipes) };
+    }
+
+    /**
+     * Fills in a repository's missing `indexHash` from the cached index, so a lockfile written while
+     * the cache had no hash regains it without waiting for a pin to change. A hash already recorded
+     * is left alone: it names the index the pins were resolved against.
+     */
+    withIndexHashes(lockfile: Lockfile): Lockfile {
+        let changed = false;
+        const repos: Lockfile["repos"] = {};
+
+        for (const [name, entry] of Object.entries(lockfile.repos)) {
+            const indexHash = entry.indexHash === undefined ? this.indexHash(name) : undefined;
+
+            repos[name] = indexHash === undefined ? entry : { ...entry, indexHash };
+            changed ||= indexHash !== undefined;
+        }
+
+        return changed ? { ...lockfile, repos } : lockfile;
     }
 
     /** Drops one holder, refcounted (used by unsubscribing and removing a repository). */

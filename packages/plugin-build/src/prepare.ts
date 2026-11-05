@@ -113,6 +113,14 @@ async function prepareProject(input: BuildPrepareInput, ctx: Context): Promise<B
         }
     }
 
+    // A repository whose index hash the lockfile lacks regains it once the cache has one; no pin
+    // changes, so the config is not marked changed for it.
+    const hashed = lock.withIndexHashes(current);
+
+    if (hashed !== current && !dryRun) {
+        await lock.write(hashed);
+    }
+
     if (!locked.unchanged && !dryRun) {
         ctx.configChanged();
     }

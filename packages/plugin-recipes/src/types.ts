@@ -561,6 +561,11 @@ export interface RecipesLock {
     diff(before: Lockfile, after: Lockfile): LockDiff;
     /** The lockfile resolved recipes make, keeping entries for switched-off subscriptions. */
     fromResolved(resolved: readonly ResolvedRecipe[], previous?: Lockfile): Lockfile;
+    /**
+     * The same lockfile, with the hash of the cached index filled in for each trusted repository
+     * whose entry lacks one; the same object when there is nothing to fill in.
+     */
+    withIndexHashes(lockfile: Lockfile): Lockfile;
     /** Downloads every pinned recipe missing from the store. */
     restore(options?: { keys?: readonly string[]; signal?: AbortSignal }): Promise<RestoreReport>;
     /** One pinned recipe. */
