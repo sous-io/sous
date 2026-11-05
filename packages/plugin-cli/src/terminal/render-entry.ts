@@ -241,7 +241,9 @@ function renderPayload(layout: Layout, level: LogLevel, payload: Payload, style:
 
         const titled = payload.title !== undefined;
 
-        return { lines: [...(titled ? [layout.subheading(payload.title!)] : []), ...layout.variableLines(payload.entries)], gapBefore: titled ? 1 : 0, footer: true };
+        const width = payload.labelWidth === undefined ? {} : { labelWidth: payload.labelWidth };
+
+        return { lines: [...(titled ? [layout.subheading(payload.title!)] : []), ...layout.variableLines(payload.entries, width)], gapBefore: titled ? 1 : 0, footer: true };
     }
 
     if (payload instanceof Table) {

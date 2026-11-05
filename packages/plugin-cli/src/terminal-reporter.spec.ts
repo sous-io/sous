@@ -376,6 +376,25 @@ describe("TerminalReporter", () => {
         expect(stdout.text).toContain(["  workflow/a", " ", `    Lockfile: ${lockfile}`, ""].join("\n"));
     });
 
+    /**
+     * A label block given a `labelWidth` pads its labels to it, so two blocks printed one under
+     * the other line their colons up (gh-229, `sous vars show`).
+     *
+     * new VariableSet({ Value: "x" }, { labelWidth: 12 })   // "    Value       : x"
+     */
+    it("should pad a label block's labels to the width it gives", () => {
+        const { stdout, reporter } = make();
+
+        reporter.result(
+            new IntentOutputs([
+                new IntentOutput({ result: new VariableSet({ Value: "x" }, { labelWidth: 12 }) }),
+                new IntentOutput({ result: new VariableSet({ "storage-path": "y" }, { labelWidth: 12 }) }),
+            ]),
+        );
+
+        expect(stdout.text).toBe("    Value       : x\n    storage-path: y\n");
+    });
+
     /** Verbatim text in a result is exactly as given, and empty text prints nothing. */
     it("should print verbatim text exactly and nothing for empty text", () => {
         const { stdout, reporter } = make();
