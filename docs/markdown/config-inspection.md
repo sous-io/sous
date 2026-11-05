@@ -63,7 +63,7 @@ Prints one value by dot-path, with `[n]` for array indices:
 
 ```bash
 sous config get name
-sous config get compilation.targets[0].entryPoint
+sous config get repos.sous-recipes.url
 ```
 
 Scalars print raw (no quotes); objects and arrays print as pretty JSON. A missing path exits

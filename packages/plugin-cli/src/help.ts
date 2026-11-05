@@ -214,7 +214,11 @@ function flagText(flag: FlagSpec): string {
         parts.push("May be given more than once.");
     }
 
-    return parts.filter((part) => part !== "").join(" ");
+    const head = parts.slice(0, others.length > 0 ? 2 : 1).filter((part) => part !== "").join(" ");
+    const sentences = parts.slice(others.length > 0 ? 2 : 1);
+
+    // The sentences after the description are full sentences, so the description ends with a period before them.
+    return [sentences.length > 0 && head !== "" && !/[.!?]$/.test(head) ? `${head}.` : head, ...sentences].filter((part) => part !== "").join(" ");
 }
 
 function section(style: Style, title: string, lines: readonly string[]): string {

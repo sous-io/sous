@@ -395,4 +395,23 @@ describe("TerminalReporter", () => {
         warn.reporter.warn(new Error("Slow."));
         expect(warn.stderr.text).toContain("Warning: Slow.");
     });
+
+    /**
+     * A cause whose message the error above it already holds says nothing new, so its "Caused
+     * by:" line is left out (gh-204: a JSON syntax error printed its message twice).
+     *
+     * SousError("x.json failed to load: Not valid JSON.", { cause: SyntaxError("Not valid JSON.") })
+     * -> "Error: x.json failed to load: Not valid JSON." and nothing more
+     */
+    it("should not repeat a cause that says the same as the error above it", () => {
+        const { stderr, reporter } = make();
+        const parse = new SyntaxError("Not valid JSON.");
+
+        reporter.critical(new SousError("Not valid JSON.", { cause: parse }));
+        reporter.critical(new SousError("x.json failed to load: Not valid JSON.", { cause: parse }));
+
+        expect(stderr.text).toContain("Error: Not valid JSON.\n");
+        expect(stderr.text).toContain("Error: x.json failed to load: Not valid JSON.\n");
+        expect(stderr.text).not.toContain("Caused by");
+    });
 });

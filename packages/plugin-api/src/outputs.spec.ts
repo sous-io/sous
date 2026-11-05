@@ -80,6 +80,17 @@ describe("messages", () => {
         expect(messageText(error)).toBe("Could not download\nCaused by: DNS failed");
     });
 
+    /**
+     * A cause whose message the error above it already holds is left out of the text.
+     *
+     * Error("x.json failed to load: Not valid JSON.", { cause: Error("Not valid JSON.") }) → "x.json failed to load: Not valid JSON."
+     */
+    it("should leave out a cause the error above it already says", () => {
+        const error = new Error("x.json failed to load: Not valid JSON.", { cause: new SyntaxError("Not valid JSON.") });
+
+        expect(messageText(error)).toBe("x.json failed to load: Not valid JSON.");
+    });
+
     /** The level methods accept an Error, and result() reports outputs with the Result style. */
     it("should report errors and results", () => {
         const reporter = new BufferedReporter();

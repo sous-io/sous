@@ -96,7 +96,11 @@ export function messageText(message: ReportMessage): string {
     }
 
     if (message instanceof Error) {
-        return errorChain(message).map((error, index) => (index === 0 ? error.message : `Caused by: ${error.message}`)).join("\n");
+        // A cause whose message the error above it already holds is left out.
+        return errorChain(message)
+            .filter((error, index, chain) => index === 0 || !chain[index - 1]!.message.includes(error.message))
+            .map((error, index) => (index === 0 ? error.message : `Caused by: ${error.message}`))
+            .join("\n");
     }
 
     return message.toText();

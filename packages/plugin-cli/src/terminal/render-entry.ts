@@ -363,8 +363,12 @@ function renderError(layout: Layout, level: LogLevel, error: Error): Rendered {
     const [first, ...causes] = errorChain(error);
     const lines = [...wrapText(`${prefix}${first!.message}`, layout.wrapWidth).map((line) => paint(line)), ...detailsOf(first!, 2)];
 
+    let above = first!;
+
     for (const cause of causes) {
-        lines.push(...indented(`Caused by: ${cause.message}`, 2), ...detailsOf(cause, 4));
+        // A cause whose message the error above it already holds adds nothing but its details.
+        lines.push(...(above.message.includes(cause.message) ? detailsOf(cause, 2) : [...indented(`Caused by: ${cause.message}`, 2), ...detailsOf(cause, 4)]));
+        above = cause;
     }
 
     return level === "warning" ? { lines, gapBefore: 1, gapAfter: 1 } : { lines, gapBefore: 1 };

@@ -59,7 +59,7 @@ export const repoUnlinkInputSchema: SousSchema<RepoUnlinkInput> = jsonSchema<Rep
         yes,
         dryRun,
         noBuild: { type: "boolean", description: "Unlink without rebuilding the project" },
-        answer: { type: "array", items: { type: "string" }, description: "Answer a recipe question ahead of time: <name>=<value>; repeatable" },
+        answer: { type: "array", items: { type: "string" }, description: "Answer a recipe question ahead of time, as <name>=<value>" },
         answersFile: { type: "string", description: "A file of answers to recipe questions" },
     },
     required: ["repo"],
