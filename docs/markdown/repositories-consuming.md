@@ -329,8 +329,12 @@ What it will and will not do:
 - A repository whose index cannot be fetched is skipped and named, and its pins stay put.
 - A linked repository's pins move too, and the plan notes that builds keep reading the checkout
   until it is unlinked.
-- The built-in `core` subscription never moves: its range is exactly the running sous version, so
-  upgrading sous is what moves it.
+- The built-in `core` subscription follows the installed sous: its range is exactly the running sous
+  version, so upgrading sous is what moves it. When the lockfile still pins `core` at the version an
+  older sous installed, the plan lists that move as a change, and it is written with the rest. When
+  `core` is already at the installed version, the plan says nothing about it. `sous subscribe` and
+  `sous build` move it the same way, and say so: the subscribe plan names the move before it asks,
+  and the build says the pin moved because `core` follows the installed sous.
 
 It rebuilds the project afterwards. `--dry-run` fetches the indexes and prints the plan, and
 downloads no recipe and writes nothing, so the dependencies and questions of a version this machine
@@ -374,7 +378,8 @@ The `core` subscription is an ordinary config entry, explained under
 
 `sous subscription remove core` writes exactly that into the managed subscriptions layer, because
 there is no entry to delete: the one sous provides comes back on the next run, so only a recorded
-opt-out outlives it. `sous subscription add core` clears it again. If you remove `core`, make sure
+opt-out outlives it. Like any switched-off subscription, `core` keeps its pin in the lockfile.
+`sous subscription add core` clears the opt-out again. If you remove `core`, make sure
 something else tells your agents not to edit generated files.
 
 ## Switch a subscription off
@@ -392,6 +397,15 @@ sous subscription enable tool-usage/automated-browser-tasks
 Both edit `.sous/conf.d/510-subscriptions.jsonc` by key. That file is committed, so once the change is
 committed the subscription is switched off, or back on, for **everyone** using the project. `disable`
 writes `"enabled": false`; `enable` removes it again, so the file goes back to what it held before.
+When a later `conf.d` file also sets `enabled`, that file decides: the command warns when it
+disagrees, and its summary says whether the subscription ends up on or off, and which file decided.
+
+A recipe that switched-on recipes depend on is still built while switched off, because they need
+it. `disable` and every build say so in one line:
+
+```text
+acme/base is switched off but still built: acme/gadget and acme/widget depend on it.
+```
 
 ### On one machine only
 

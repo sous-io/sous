@@ -167,6 +167,26 @@ describe("the build intent", () => {
     });
 
     /**
+     * A switched-off recipe that switched-on recipes depend on is still built; the build says so
+     * in one line (#204 bug 24).
+     *
+     * $ sous build
+     * acme/base is switched off but still built: acme/gadget and acme/widget depend on it.
+     */
+    it("should say when a switched-off recipe is still built", async () => {
+        const message = "acme/base is switched off but still built: acme/gadget and acme/widget depend on it.";
+        const h = await harness({
+            world: (world) => {
+                world.stillBuilt = [{ key: "acme/base", subscription: "acme/base", neededBy: ["acme/gadget", "acme/widget"], message }];
+            },
+        });
+
+        await h.run("build");
+
+        expect(h.reporter.at("notice")).toContain(message);
+    });
+
+    /**
      * Linked repositories are announced on every full build; required variables with no answer
      * are warned about.
      *
@@ -259,6 +279,31 @@ describe("the build intent", () => {
 
         await noBranch.run("build");
         expect(noBranch.reporter.at("warning").join("\n")).toContain('says "unknown"');
+    });
+
+    /**
+     * When git refuses to say the branch, the warning gives git's first error line (#204 bug 49).
+     *
+     * sous build; // -> warning '... says "unknown". Git said: fatal: detected dubious ownership ...'
+     */
+    it("should give git's reason when it cannot read the branch", async () => {
+        const h = await harness({
+            world: (world) => {
+                world.branch = undefined;
+                world.gitError = "fatal: detected dubious ownership in repository at '/r'\nTo add an exception for this directory, call:";
+                world.config = {
+                    compilation: { targets: [target({ entryPoint: "/p/A.md", generateRuntimeContext: true })] },
+                    runtimeContext: { gitRoot: "/r", outputPath: "/r/ctx.md", taskFileRoot: "/r" },
+                };
+            },
+        });
+
+        await h.run("build");
+
+        const warnings = h.reporter.at("warning").join("\n");
+
+        expect(warnings).toContain(`says "unknown". Git said: fatal: detected dubious ownership in repository at '/r'`);
+        expect(warnings).not.toContain("To add an exception");
     });
 
     /**

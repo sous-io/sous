@@ -87,6 +87,22 @@ describe("runRelease()", () => {
         expect(lastTools.results[1]!.result!.toPlain()).toEqual({ items: ["core/example: 0.1.0  (already raised; the tag would be core/example@0.1.0)"] });
     });
 
+    /**
+     * When every version in the plan is already raised, the steps do not say to raise them (#204
+     * bug 49).
+     *
+     * // core/example: 0.1.0  (already raised; ...)
+     * // This run would: Regenerate sous.index.json ... (no "Raise the versions listed above")
+     */
+    it("should not say to raise versions that are already raised", async () => {
+        await release({ dryRun: true });
+
+        const steps = lastTools.results.map((output) => JSON.stringify(output.result?.toPlain() ?? {})).join("\n");
+
+        expect(steps).toContain("Regenerate");
+        expect(steps).not.toContain("Raise the versions");
+    });
+
     /** Outside a git repository the release says so plainly instead of showing git's own fatal line. */
     it("should say plainly that the directory is not in a git repository", async () => {
         fs.rmSync(path.join(repo, ".git"), { recursive: true, force: true });

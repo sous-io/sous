@@ -3,8 +3,10 @@
  *
  * Every trusted repository's index is read fresh; one that cannot be reached is reported, and its
  * pins stay. A ref narrows what may move; everything outside it is held at its locked version for as
- * long as its ranges allow. Subscriptions sous provides itself (`core`) never move: their range is
- * the running sous version. Switched-off subscriptions take no part, and keep their pins.
+ * long as its ranges allow. Subscriptions sous provides itself (`core`) follow the installed sous:
+ * their range is exactly the running sous version, so their pins move only when the lockfile pins
+ * another version, whatever the ref names, as the next build would move them anyway. Switched-off
+ * subscriptions take no part, and keep their pins.
  */
 
 import { SousError, type Context } from "@sous-io/plugin-api";
@@ -13,7 +15,7 @@ import type { IndexReadFailure, PlannedQuestion, RecipeRequest, RecipeUpdateInpu
 import { findInCatalog, namespaceOfKey, type CatalogInputs } from "./catalog.js";
 import { identityOf, pickMatch, readingsOf, repoSearchOrder } from "./catalog-context.js";
 import { isBuiltInEntry } from "./defaults.js";
-import { applyResolution, keysHeldBySubscription, lockedClosure, PROJECT_HOLDER, releaseDroppedHolds, type LockRepoInput } from "./lock-holds.js";
+import { applyResolution, builtInMoves, keysHeldBySubscription, lockedClosure, PROJECT_HOLDER, releaseDroppedHolds, type LockRepoInput } from "./lock-holds.js";
 import { definedVariables, plannedQuestionsOf } from "./questions.js";
 import { configuredSubscriptions, enabledSubscriptions, trustedRepos } from "./project.js";
 import { compareBytewise, describeError, sortBytewise } from "./util.js";
@@ -209,8 +211,12 @@ export async function planUpdate(input: RecipeUpdateInput, ctx: Context): Promis
     const unreachableNames = new Set(unreachable.map((entry) => entry.repo));
     const builtInKeys = Object.keys(subscriptions).filter((key) => isBuiltInEntry(subscriptions[key]));
     const builtInHeld = new Set(builtInKeys.flatMap((key) => keysHeldBySubscription(before, key)));
+    // The built-in pins the installed sous moves: those are resolved again, and nothing else of theirs.
+    const moves = builtInMoves(before, subscriptions);
+    const moving = new Set(moves.map((move) => move.key));
+    const builtInMoving = new Set(moves.map((move) => move.subscription));
 
-    const movable = (key: string, repo: string): boolean => !unreachableNames.has(repo) && !builtInHeld.has(key) && recipeInScope(scope, key, repo);
+    const movable = (key: string, repo: string): boolean => moving.has(key) || (!unreachableNames.has(repo) && !builtInHeld.has(key) && recipeInScope(scope, key, repo));
     const held = lockService.held(
         before,
         Object.entries(before.recipes)
@@ -244,7 +250,7 @@ export async function planUpdate(input: RecipeUpdateInput, ctx: Context): Promis
         return closure.some((held) => movable(held, before.recipes[held]!.repo)) || coverInScope(scope, parsed.cover, parsed.qualifier);
     };
 
-    const targets = sortBytewise(Object.keys(subscriptions)).filter((key) => !isBuiltInEntry(subscriptions[key]) && touches(key));
+    const targets = sortBytewise(Object.keys(subscriptions)).filter((key) => (isBuiltInEntry(subscriptions[key]) ? builtInMoving.has(key) : touches(key)));
     const failed: Array<{ key: string; reason: string }> = [];
     const requests: Array<{ key: string; request: RecipeRequest }> = [];
 
@@ -294,8 +300,8 @@ export async function planUpdate(input: RecipeUpdateInput, ctx: Context): Promis
         unreachable,
         checked,
         linked: sortBytewise(new Set(changed.map((recipe) => recipe.repo).filter((repo) => links?.get(repo) !== undefined))),
-        builtIn: builtInKeys
-            .filter((key) => keysHeldBySubscription(before, key).some((held) => recipeInScope(scope, held, before.recipes[held]!.repo)))
+        builtIn: sortBytewise(builtInMoving)
+            .filter((key) => resolvedSubscriptions.includes(key))
             .map((key) => ({ key, ...(subscriptions[key]?.range === undefined ? {} : { version: subscriptions[key]!.range }) })),
         switchedOff: sortBytewise(
             Object.keys(configured).filter((key) => {

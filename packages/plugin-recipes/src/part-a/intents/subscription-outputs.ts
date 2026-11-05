@@ -125,7 +125,7 @@ export function subscriptionRemoveOutputs(ctx: Pick<Context, "reporter">, result
         outputs.push(
             sentence(
                 result.optedOut
-                    ? `The subscription to '${result.key}' is one sous provides itself, so it was switched off rather than deleted: this project's config now records '${result.key}: { enabled: false }'. The repository it came from is still trusted.${pruneHint}`
+                    ? `The subscription to '${result.key}' is one sous provides itself, so it was switched off rather than deleted: this project's config now records '${result.key}: { enabled: false }'. Its pins stay in the lockfile, as for any switched-off subscription, and the repository it came from is still trusted.${pruneHint}`
                     : `The subscription to '${result.key}' is gone. The repositories it came from are still trusted; remove one of those deliberately if you want to withdraw that too.${pruneHint}`,
             ),
         );
@@ -139,6 +139,39 @@ export function subscriptionRemoveOutputs(ctx: Pick<Context, "reporter">, result
     );
 }
 
+/**
+ * What switching a subscription did, in one or two sentences: what changed in `conf.d/510`, and
+ * whether the subscription is on or off afterwards, naming the later file that decides it.
+ *
+ * ```text
+ * The subscription to 'acme/widget' is now switched off.
+ * conf.d/510-subscriptions.jsonc now switches 'acme/widget' on, but it is still switched off, because conf.d/520-local.jsonc switches it off and is applied after it.
+ * ```
+ */
+function toggleSummary(result: SubscriptionToggleResult): string {
+    const word = result.enabled ? "on" : "off";
+    const now = result.effective ? "on" : "off";
+    const layer = "conf.d/510-subscriptions.jsonc";
+
+    if (result.effective !== result.enabled) {
+        const why = `because ${result.decidedBy ?? "a later config file"} switches it ${now} and is applied after ${layer}`;
+
+        return result.changed
+            ? `${layer} now switches '${result.key}' ${word}, but it is still switched ${now}, ${why}.`
+            : `Nothing changed in ${layer}. The subscription to '${result.key}' is still switched ${now}, ${why}.`;
+    }
+
+    if (!result.changed) {
+        return `The subscription to '${result.key}' was already switched ${word}; nothing changed.`;
+    }
+
+    if (!result.effectiveChanged) {
+        return `The subscription to '${result.key}' was already switched ${word}${result.decidedBy === undefined ? "" : ` by ${result.decidedBy}`}; ${layer} now switches it ${word} too.`;
+    }
+
+    return `The subscription to '${result.key}' is now switched ${word}.${rebuilt(result) ? "" : " Run 'sous build' to bring the outputs in line."}`;
+}
+
 /** The outputs of `subscription.enable` and `subscription.disable`. */
 export function subscriptionToggleOutputs(ctx: Pick<Context, "reporter">, result: SubscriptionToggleResult) {
     const word = result.enabled ? "on" : "off";
@@ -148,14 +181,16 @@ export function subscriptionToggleOutputs(ctx: Pick<Context, "reporter">, result
         outputs.push(dryRunOutput("Nothing will be written."));
     }
 
-    outputs.push(blockOutput({ Subscription: result.key, Enabled: result.enabled ? "yes" : "no", "Recorded in": result.file }));
+    outputs.push(blockOutput({ Subscription: result.key, Enabled: result.effective ? "yes" : "no", "Recorded in": result.file }));
 
-    if (!result.changed) {
-        outputs.push(sentence(`The subscription to '${result.key}' was already switched ${word}; nothing changed.`));
-    } else if (result.dryRun) {
+    for (const line of result.stillBuilt ?? []) {
+        outputs.push(noteOutput(line));
+    }
+
+    if (result.dryRun && result.changed) {
         outputs.push(dryRunOutput(`Nothing was written. Run the same command without '--dry-run' to switch '${result.key}' ${word}.`));
     } else {
-        outputs.push(sentence(`The subscription to '${result.key}' is now switched ${word}.${rebuilt(result) ? "" : " Run 'sous build' to bring the outputs in line."}`));
+        outputs.push(sentence(toggleSummary(result)));
     }
 
     return finishWithFollowUps(
@@ -194,10 +229,13 @@ export function subscriptionUpdateOutputs(ctx: Pick<Context, "reporter">, result
     reportCycles(ctx, result.plan.cycles, "That is unusual but not broken, and the lockfile was updated.");
 
     const build: RanFollowUp | undefined = followUpOf(result, "build");
+    // A subscription that could not be resolved kept its pins, so the sentence leaves it out by name.
+    const failed = result.plan.failed.map((entry) => entry.key);
+    const except = failed.length === 0 ? "" : ` except ${failed.join(", ")}, whose pins stay where they are`;
 
     outputs.push(
         sentence(
-            `The lockfile now pins the newest versions the ranges allow for ${scope}. This project's subscriptions are exactly as they were.` +
+            `The lockfile now pins the newest versions the ranges allow for ${scope}${except}. This project's subscriptions are exactly as they were.` +
                 (build?.outputs !== undefined || result.plan.diff.unchanged ? "" : " The project was not rebuilt."),
         ),
     );
@@ -216,6 +254,20 @@ export function subscriptionUpdateOutputs(ctx: Pick<Context, "reporter">, result
 }
 
 // --- recipe.update ----------------------------------------------------------------------------------
+
+/**
+ * The note for a built-in subscription whose pins an update moves, saying why.
+ *
+ * ```ts
+ * builtInMoveNote({ key: "core", version: "1.0.16" });
+ * // "The subscription to 'core' is one sous provides itself and follows the installed sous, version 1.0.16, so this update moves its pins to that version."
+ * ```
+ */
+export function builtInMoveNote(entry: { readonly key: string; readonly version?: string }): string {
+    return entry.version === undefined
+        ? `The subscription to '${entry.key}' is one sous provides itself and follows the installed sous, so this update moves its pins to the version this installation of sous ships.`
+        : `The subscription to '${entry.key}' is one sous provides itself and follows the installed sous, version ${entry.version}, so this update moves its pins to that version.`;
+}
 
 /** The first line of a message, trimmed. */
 function firstLine(text: string): string {
@@ -282,7 +334,7 @@ export function updatePlanOutputs(plan: RecipeUpdatePlan): IntentOutput[] {
     for (const entry of plan.builtIn) {
         outputs.push(
             noteOutput(
-                `The subscription to '${entry.key}' is one sous provides itself, and it stays at ${entry.version === undefined ? "the version" : `version ${entry.version}, the version`} this installation of sous ships.`,
+                builtInMoveNote(entry),
             ),
         );
     }

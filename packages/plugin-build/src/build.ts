@@ -131,6 +131,13 @@ async function runBuild(input: BuildInput, ctx: Context): Promise<BuildResult> {
 
     reportSkipped(ctx, skipped, skippedFiles, [...(cleared?.removed ?? []), ...(pruned?.removed ?? [])], dryRun);
 
+    // A switched-off recipe that switched-on recipes depend on is built anyway: say so, once each.
+    if (!partial) {
+        for (const recipe of ctx.services.get("recipes.active").switchedOffButBuilt?.() ?? []) {
+            ctx.reporter.notice(recipe.message);
+        }
+    }
+
     if (compiled) {
         const errors = compiled.problems.filter((problem) => problem.level === "error").length;
 
@@ -357,7 +364,7 @@ export async function writeRuntimeContext(ctx: Context, dryRun: boolean): Promis
     const generated = await service.generate();
 
     if (generated && generated.branch === undefined) {
-        ctx.reporter.warn('Sous could not read the current git branch, so the runtime context says "unknown".');
+        ctx.reporter.warn(`Sous could not read the current git branch, so the runtime context says "unknown".${generated.branchProblem === undefined ? "" : ` Git said: ${generated.branchProblem}`}`);
     }
 
     const written = await service.write({ dryRun });

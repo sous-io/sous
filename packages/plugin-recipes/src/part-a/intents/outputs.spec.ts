@@ -5,7 +5,7 @@ import type { LockDiff, LockShowResult, PlannedQuestions, RecipeUpdatePlan, Repo
 import { describeSize, finish, lockDiffLines, plainFollowUps, questionPlanOutputs, underHeading, type RanFollowUp } from "../outputs.js";
 import { namespaceListOutputs, recipeListOutputs, repoSearchOutputs, subscriptionListOutputs } from "./catalog-outputs.js";
 import { repoAddOutputs } from "./repo-outputs.js";
-import { subscriptionAddOutputs, updatePlanOutputs } from "./subscription-outputs.js";
+import { subscriptionAddOutputs, subscriptionUpdateOutputs, updatePlanOutputs } from "./subscription-outputs.js";
 import { reportSubscriptionPlan } from "./subscription.js";
 
 /** A context outside any project, with a buffering reporter. */
@@ -273,6 +273,39 @@ describe("the update plan outputs", () => {
         const partly = updatePlanOutputs({ ...offline, checked: ["acme"] } as RecipeUpdatePlan).map((output) => output.result?.toText() ?? output.summary);
 
         expect(partly[0]).toBe("No updates found in the repositories sous could read. It could not read the index of 'sous-recipes', so the pins from it were not checked.");
+    });
+});
+
+describe("the subscription update outputs", () => {
+    /**
+     * When one subscription could not be resolved, the closing sentence does not claim every
+     * subscription was updated, and names the one that was not (#204 bug 49).
+     *
+     * // plan.failed: [{ key: "acme/retired", ... }]
+     * // -> "... for every subscription in this project except acme/retired, whose pins stay where they are. ..."
+     */
+    it("should not claim every subscription was updated when one could not be resolved", () => {
+        const plan = {
+            scope: { kind: "all" },
+            diff: { ...unchanged, unchanged: false, updated: [{ key: "workflow/a", from: "1.0.0", to: "1.1.0" }] },
+            lockfile: {},
+            missingRepos: [],
+            newVariables: [],
+            unreadable: [],
+            unreachable: [],
+            linked: [],
+            builtIn: [],
+            switchedOff: [],
+            failed: [{ key: "acme/retired", reason: "No version of acme/retired is published." }],
+            cycles: [],
+        } as unknown as RecipeUpdatePlan;
+        const text = subscriptionUpdateOutputs(fakeContext(), { plan, applied: true, nothingToUpdate: false, trusted: [], dryRun: false, followUps: [] })
+            .toArray()
+            .map((output) => output.summary ?? "")
+            .join("\n");
+
+        expect(text).not.toContain("for every subscription in this project.");
+        expect(text).toContain("for every subscription in this project except acme/retired, whose pins stay where they are.");
     });
 });
 

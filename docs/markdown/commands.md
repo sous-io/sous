@@ -309,7 +309,8 @@ Manages which recipes the project subscribes to. `REF` is `namespace` or `namesp
 - `subscription add` (or `sous subscribe`) subscribes, then builds so the recipe's files are on disk. Answer a
   recipe's questions ahead of time with `--answer <name>=<value>` or `--answers-file <path>`, and let it install
   the sous plugins it requires with `--install-plugins`.
-- `subscription remove` (or `sous unsubscribe`) removes a subscription and everything only it brought in.
+- `subscription remove` (or `sous unsubscribe`) removes a subscription and everything only it brought in. The
+  built-in `core` subscription is switched off instead, keeping its pin.
 - `subscription update [REF]` moves the lockfile's pins to the newest versions their ranges allow, then
   rebuilds. See [Moving to newer versions](repositories-consuming.md#moving-to-newer-versions).
 - `subscription disable REF` and `subscription enable REF` switch a subscription off or back on in

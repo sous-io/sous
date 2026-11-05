@@ -42,6 +42,7 @@ import type {
     ResolveOptions,
     RestoreReport,
     SkippedRecipe,
+    StillBuiltRecipe,
 } from "@sous-io/plugin-recipes/types";
 import { createBuildPlugin, type BuildPluginOptions } from "../src/index.js";
 import packageJson from "../package.json" with { type: "json" };
@@ -80,6 +81,7 @@ export interface World {
     staleNoticed: Set<string>;
     active: ActiveRecipeEntity[];
     skipped: SkippedRecipe[];
+    stillBuilt: StillBuiltRecipe[];
     links: Record<string, ResolvedLink>;
     // memories
     memories: Memory[];
@@ -88,6 +90,8 @@ export interface World {
     unanswerable: DefinedVariable[];
     // git
     branch: string | undefined;
+    /** What git prints on standard error when asked for the branch and it cannot tell. */
+    gitError?: string;
 }
 
 /** A fresh world for a project root. */
@@ -115,6 +119,7 @@ export function newWorld(root: string): World {
         staleNoticed: new Set(),
         active: [],
         skipped: [],
+        stillBuilt: [],
         links: {},
         memories: [],
         unanswered: [],
@@ -197,7 +202,15 @@ export function standIns(world: World): PluginDefinition[] {
     });
 
     const git = plugin("@sous-io/plugin-git", (sous) => {
-        sous.services.add("git.runner", () => ({ currentBranch: async () => world.branch }) as never, { lifetime: "singleton" });
+        sous.services.add(
+            "git.runner",
+            () =>
+                ({
+                    currentBranch: async () => world.branch,
+                    run: async (args: readonly string[]) => ({ args, exitCode: world.branch === undefined ? 128 : 0, stdout: world.branch ?? "", stderr: world.gitError ?? "", durationMs: 0 }),
+                }) as never,
+            { lifetime: "singleton" },
+        );
     });
 
     const compiler = plugin("@sous-io/plugin-compiler", (sous) => {
@@ -333,6 +346,7 @@ export function standIns(world: World): PluginDefinition[] {
             list: () => world.active,
             get: (key: string) => world.active.find((recipe) => recipe.id === key),
             skipped: () => world.skipped,
+            switchedOffButBuilt: () => world.stillBuilt,
             contents: () => [],
             variables: () => [],
         }));

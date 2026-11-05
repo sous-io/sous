@@ -55,9 +55,7 @@ export async function buildFollowUp(ctx: Context, flags: RecipeChangeFlags): Pro
         return { intent: "build", skipped: "no plugin provides build" };
     }
 
-    // The build reports as it goes, so its heading comes first, as before the refactor.
-    ctx.reporter.operationStart("Building the project");
-
+    // The build prints its own heading, "Building the project", when another command starts it.
     const built = await ctx.run("build", {});
 
     return { intent: "build", result: built.toPlain(), outputs: built };

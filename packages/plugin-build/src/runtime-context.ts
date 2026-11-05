@@ -42,6 +42,7 @@ export class RuntimeContextService implements BuildRuntimeContext {
         }
 
         const branch = await this.readBranch(settings.gitRoot);
+        const branchProblem = branch === undefined ? await this.branchProblem(settings.gitRoot) : undefined;
         const pattern = new RegExp(settings.branchPattern ?? DEFAULT_BRANCH_PATTERN);
         let taskFile: string | undefined;
         let taskContent: string | undefined;
@@ -60,6 +61,7 @@ export class RuntimeContextService implements BuildRuntimeContext {
 
         return {
             ...(branch === undefined ? {} : { branch }),
+            ...(branchProblem === undefined ? {} : { branchProblem }),
             ...(taskFile !== undefined && taskContent !== undefined ? { taskFile } : {}),
             outputPath: settings.outputPath,
             content,
@@ -78,6 +80,25 @@ export class RuntimeContextService implements BuildRuntimeContext {
             origin: { plugin: this.deps.plugin },
             ...(options.dryRun ? { dryRun: true } : {}),
         });
+    }
+
+    /**
+     * Why git could not tell the branch: the first line it prints on standard error when asked
+     * (`fatal: detected dubious ownership in repository at '/r'`), or `undefined` when it printed
+     * nothing or could not be run.
+     */
+    private async branchProblem(gitRoot: string): Promise<string | undefined> {
+        try {
+            const result = await this.deps.git().run(["symbolic-ref", "--short", "HEAD"], { cwd: gitRoot, reject: false });
+            const line = result.stderr
+                .split("\n")
+                .map((text) => text.trim())
+                .find((text) => text.length > 0);
+
+            return result.exitCode === 0 ? undefined : line;
+        } catch {
+            return undefined;
+        }
     }
 
     /** The branch, or `undefined` when git cannot tell (not a repository, a detached head). */

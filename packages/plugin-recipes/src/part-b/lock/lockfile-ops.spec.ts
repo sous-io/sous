@@ -146,6 +146,19 @@ describe("diffLockfiles and describeLockDiff", () => {
         ]);
     });
 
+    /**
+     * A pin moving to a lower version is worded as a move down, not as an update (#204 bug 49).
+     *
+     * describeLockDiff({ updated: [{ key: "acme/widget", from: "1.0.0", to: "0.1.0" }] })
+     * // -> ["Moving acme/widget down from version 1.0.0 to version 0.1.0"]
+     */
+    it("should word a move to a lower version as a move down", () => {
+        const before = lock({ "acme/widget": { repo: "acme", version: "1.0.0", hash: HASH, requestedBy: ["project"], kind: "subscribes" } });
+        const after = lock({ "acme/widget": { repo: "acme", version: "0.1.0", hash: HASH, requestedBy: ["project"], kind: "subscribes" } });
+
+        expect(describeLockDiff(diffLockfiles(before, after))).toEqual(["Moving acme/widget down from version 1.0.0 to version 0.1.0"]);
+    });
+
     it("should say nothing changed for equal lockfiles", () => {
         const diff = diffLockfiles(emptyLockfile(), emptyLockfile());
 

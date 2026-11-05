@@ -443,11 +443,12 @@ describe("the core namespace with no network", () => {
 
       expect(readSubscriptions()["core"]).toEqual({ enabled: false });
 
-      // The lockfile no longer pins the core recipe, and a build leaves it out.
+      // Switched off, like any switched-off subscription, core keeps its pin
+      // (#204 bug 26), and a build leaves it out.
       const lock = JSON.parse(
         fs.readFileSync(path.join(dropped, ".sous", "sous.lock.json"), "utf8")
       ) as { recipes: Record<string, unknown> };
-      expect(Object.keys(lock.recipes)).toEqual([]);
+      expect(Object.keys(lock.recipes)).toEqual(["core/sous-skills"]);
 
       expect(sousOffline(dropped, "build").status).toBe(0);
       expect(
@@ -476,7 +477,8 @@ describe("the core namespace with no network", () => {
 
       const addedBack = sousOffline(dropped, "subscription", "add", "core", "--yes");
       expect(addedBack.status).toBe(0);
-      expect(readSubscriptions()["core"]!.enabled).toBeUndefined();
+      // The opt-out is cleared, not replaced with an entry of the user's (#204 bug 26).
+      expect(readSubscriptions()["core"]).toBeUndefined();
 
       expect(sousOffline(dropped, "build").status).toBe(0);
       expect(

@@ -8,6 +8,7 @@ import { showNamespace, showRecipe } from "./catalog.js";
 import { addRepo, listRepos, removeRepo, searchRepos } from "./repo.js";
 import { addSubscription, laterSetters, listSubscriptions, removeSubscription, toggleSubscription, updateSubscriptions } from "./subscription.js";
 import { planUpdate } from "../update-plan.js";
+import { subscriptionToggleOutputs, updatePlanOutputs } from "./subscription-outputs.js";
 import { NoVersionSatisfiesError } from "../../part-b/resolver/resolve.js";
 
 const hash = "sha256-aa" as const;
@@ -259,6 +260,92 @@ describe("subscription.disable and subscription.enable", () => {
     });
 
     /**
+     * With `enabled: true` in 510 and `false` in a later 520-local.jsonc, enabling warns that 520
+     * still wins, and the summary says the subscription is still off because of 520, not that it
+     * is now on (#204 bug 25).
+     *
+     * toggleSubscription({ ref: "workflow" }, ctx, true)
+     * // -> Enabled: no; "... is still switched off, because conf.d/520-local.jsonc switches it off ..."
+     */
+    it("should report a subscription a later layer keeps off as still off when enabling", async () => {
+        const { config } = setup({
+            data: { repos: {}, subscriptions: { workflow: { enabled: false } } },
+            managed: { "510-subscriptions.jsonc": { subscriptions: { workflow: { addedBy: "user", enabled: true } } } },
+            layers: { "subscriptions.workflow.enabled": ["confd/510-subscriptions.jsonc", "confd/520-local.jsonc"] },
+        });
+        const ctx = context(config, { intents: ["build"] });
+        const result = await toggleSubscription({ ref: "workflow" }, ctx, true);
+        const text = subscriptionToggleOutputs(ctx, result)
+            .toArray()
+            .map((output) => `${output.summary ?? ""}\n${output.result?.toText() ?? ""}`)
+            .join("\n");
+
+        expect(ctx.reporter.at("warning")[0]).toMatch(/conf.d\/520-local.jsonc also sets subscriptions.workflow.enabled/);
+        expect(text).toMatch(/Enabled\s*:?\s*no/);
+        expect(text).not.toContain("now switched on");
+        expect(text).toContain("still switched off, because conf.d/520-local.jsonc switches it off");
+        expect(result.followUps).toEqual([{ intent: "build", skipped: "nothing changed" }]);
+    });
+
+    /**
+     * Disabling there changes 510 from true to false. The summary says so rather than "nothing
+     * changed", and there is no warning, since 520 agrees (#204 bug 25).
+     *
+     * toggleSubscription({ ref: "workflow" }, ctx, false)
+     * // 510: enabled false; no warning; the summary names the change in 510
+     */
+    it("should report the change in 510 and not warn when a later layer agrees", async () => {
+        const { config, managed } = setup({
+            data: { repos: {}, subscriptions: { workflow: { enabled: false } } },
+            managed: { "510-subscriptions.jsonc": { subscriptions: { workflow: { addedBy: "user", enabled: true } } } },
+            layers: { "subscriptions.workflow.enabled": ["confd/510-subscriptions.jsonc", "confd/520-local.jsonc"] },
+        });
+        const ctx = context(config, { intents: ["build"] });
+        const result = await toggleSubscription({ ref: "workflow" }, ctx, false);
+        const text = subscriptionToggleOutputs(ctx, result)
+            .toArray()
+            .map((output) => `${output.summary ?? ""}\n${output.result?.toText() ?? ""}`)
+            .join("\n");
+
+        expect(managed.files["510-subscriptions.jsonc"]).toEqual({ subscriptions: { workflow: { addedBy: "user", enabled: false } } });
+        expect(ctx.reporter.at("warning")).toEqual([]);
+        expect(text).not.toContain("nothing changed");
+        expect(text).toContain("conf.d/510-subscriptions.jsonc now switches it off too");
+    });
+
+    /**
+     * Disabling a recipe that enabled recipes depend on changes nothing in the build; the output
+     * says so in one line naming them (#204 bug 24).
+     *
+     * toggleSubscription({ ref: "acme/base" }, ctx, false)
+     * // -> "acme/base is switched off but still built: acme/gadget and acme/widget depend on it."
+     */
+    it("should say when a disabled recipe is still built because enabled recipes depend on it", async () => {
+        const based: Lockfile = {
+            formatVersion: 1,
+            repos: { r: { url: "https://github.com/acme/r", identity: "github.com/acme/r" } },
+            recipes: {
+                "acme/base": { repo: "r", version: "1.0.0", hash, requestedBy: ["project", "acme/widget", "acme/gadget"], kind: "subscribes" },
+                "acme/widget": { repo: "r", version: "1.0.0", hash, requestedBy: ["project"], kind: "subscribes" },
+                "acme/gadget": { repo: "r", version: "1.0.0", hash, requestedBy: ["project"], kind: "subscribes" },
+            },
+        };
+        const { config } = setup({
+            data: { repos: { r: { url: "https://github.com/acme/r" } }, subscriptions: { "acme/base": {}, "acme/widget": {}, "acme/gadget": {} } },
+            managed: { "510-subscriptions.jsonc": { subscriptions: { "acme/base": { addedBy: "user" }, "acme/widget": { addedBy: "user" }, "acme/gadget": { addedBy: "user" } } } },
+            lock: based,
+        });
+        const ctx = context(config);
+        const result = await toggleSubscription({ ref: "acme/base", noBuild: true }, ctx, false);
+        const text = subscriptionToggleOutputs(ctx, result)
+            .toArray()
+            .map((output) => `${output.summary ?? ""}\n${output.result?.toText() ?? ""}`)
+            .join("\n");
+
+        expect(text).toContain("acme/base is switched off but still built: acme/gadget and acme/widget depend on it.");
+    });
+
+    /**
      * Enabling removes the `enabled` that disabling wrote, so conf.d/510 returns to what it held
      * before, rather than keeping `"enabled": true` (#204 bug 13).
      *
@@ -364,6 +451,26 @@ describe("subscription.remove", () => {
         expect(managed.files["510-subscriptions.jsonc"]).toEqual({ subscriptions: { core: { enabled: false } } });
     });
 
+    /**
+     * Removing core switches it off, which keeps its pins, the same as `subscription disable core`
+     * (#204 bug 26).
+     *
+     * // lock: core/sous-skills 0.2.34
+     * removeSubscription({ ref: "core" }) // 510: { core: { enabled: false } }; lock unchanged
+     */
+    it("should keep the pins of a built-in subscription it switches off", async () => {
+        const corePinned: Lockfile = {
+            formatVersion: 1,
+            repos: { r: { url: "https://github.com/acme/r", identity: "github.com/acme/r" } },
+            recipes: { "core/sous-skills": { repo: "r", version: "0.2.34", hash, requestedBy: ["project"], kind: "subscribes" } },
+        };
+        const { config, lock } = setup({ data: { repos: {}, subscriptions: { core: { range: "0.2.34", addedBy: "sous" } } }, lock: corePinned });
+        const result = await removeSubscription({ ref: "core", noBuild: true }, context(config));
+
+        expect(result.diff.unchanged).toBe(true);
+        expect(lock.current.recipes["core/sous-skills"]).toEqual(corePinned.recipes["core/sous-skills"]);
+    });
+
     /** One written in the user's own file is not sous's to delete; the error names `disable`. */
     it("should refuse to delete what the user wrote", async () => {
         const { config } = setup({ data: { repos: {}, subscriptions: { workflow: {} } } });
@@ -387,6 +494,58 @@ describe("subscription.remove", () => {
 });
 
 describe("subscription.add", () => {
+    /**
+     * Adding back a built-in subscription that was switched off clears the opt-out, rather than
+     * replacing it with an entry of the user's (#204 bug 26), and asks for the version sous ships.
+     *
+     * // 510: { core: { enabled: false } }
+     * addSubscription({ ref: "core", yes: true }) // 510: {}; core resolved at range 0.2.34
+     */
+    it("should clear the opt-out when a built-in subscription is added back", async () => {
+        const indexes = { r: index({ "core/sous-skills": ["0.2.33", "0.2.34"] }) };
+        const { config, managed, resolver } = setup({
+            indexes,
+            data: { repos: { r: { url: "https://github.com/acme/r" } }, subscriptions: { core: { range: "0.2.34", addedBy: "sous", enabled: false } } },
+            managed: { "510-subscriptions.jsonc": { subscriptions: { core: { enabled: false } } } },
+            layers: { "subscriptions.core": ["recipes.core", "confd/510-subscriptions.jsonc"] },
+        });
+        const on = setup({ indexes, data: { repos: { r: { url: "https://github.com/acme/r" } }, subscriptions: { core: { range: "0.2.34", addedBy: "sous" } } } }).config;
+
+        await addSubscription({ ref: "core", yes: true, noBuild: true }, context(config, { intents: ["vars.ask", "build"], next: on }));
+
+        expect(managed.files["510-subscriptions.jsonc"]).toEqual({ subscriptions: {} });
+        expect(resolver.calls.flat().every((request) => request.range === "0.2.34")).toBe(true);
+    });
+
+    /**
+     * When the lockfile pins core at a version other than the installed sous, subscribing moves
+     * core too, and the plan shown before the question says so (#229). When core is already
+     * there, the plan says nothing about core.
+     *
+     * // core range 0.2.34 (the installed sous), lock core/sous-skills 0.2.33
+     * addSubscription({ ref: "workflow/task-files" })
+     * // -> "It also moves core/sous-skills from version 0.2.33 to version 0.2.34: ..."
+     */
+    it("should say before asking that subscribing also moves the built-in core pin", async () => {
+        const indexes = { r: index({ "workflow/task-files": ["1.0.0"], "core/sous-skills": ["0.2.33", "0.2.34"] }) };
+        const data = { repos: { r: { url: "https://github.com/acme/r" } }, subscriptions: { core: { range: "0.2.34", addedBy: "sous" } } };
+        const coreAt = (version: string): Lockfile => ({
+            formatVersion: 1,
+            repos: { r: { url: "https://github.com/acme/r", identity: "github.com/acme/r" } },
+            recipes: { "core/sous-skills": { repo: "r", version, hash, requestedBy: ["project"], kind: "subscribes" } },
+        });
+        const prompts = (version: string) => {
+            const ctx = context(setup({ indexes, data, lock: coreAt(version) }).config);
+
+            return addSubscription({ ref: "workflow/task-files", dryRun: true }, ctx).then(() => ctx.reporter.at("notice").join("\n"));
+        };
+
+        expect(await prompts("0.2.33")).toContain(
+            "It also moves core/sous-skills from version 0.2.33 to version 0.2.34, because the subscription to 'core' is one sous provides itself and follows the installed sous, version 0.2.34.",
+        );
+        expect(await prompts("0.2.34")).not.toContain("core");
+    });
+
     /** Subscribing resolves, writes the lockfile and conf.d/510, then runs vars.ask and build through ctx.run. */
     it("should subscribe and run the follow-ups", async () => {
         const indexes = { r: index({ "workflow/task-files": ["1.0.0", "1.1.0"] }, { "workflow/task-files@1.1.0": ["apiUrl"] }) };
@@ -635,6 +794,36 @@ describe("recipe.update and subscription.update", () => {
         expect(plan.newVariables).toMatchObject([{ recipe: "workflow/task-files", definition: { name: "newQuestion" }, answered: false }]);
         expect(plan.switchedOff).toEqual(["gone"]);
         expect(lock.current).toBe(pinned);
+    });
+
+    /**
+     * The built-in `core` subscription follows the installed sous: when the lockfile pins core at
+     * another version, the plan moves it and says why, rather than claiming core stays (#229
+     * defect 6). When core is already at the installed version, the plan says nothing about it.
+     *
+     * // core range 0.2.34 (the installed sous), lock core/sous-skills 0.2.33
+     * planUpdate({}) // diff: Updating core/sous-skills from version 0.2.33 to version 0.2.34
+     */
+    it("should move the built-in core pin to the installed sous version, and say nothing when it is there already", async () => {
+        const indexes = { r: index({ "workflow/task-files": ["1.0.0", "1.1.0"], "tools/helper": ["2.0.0"], "core/sous-skills": ["0.2.33", "0.2.34"] }) };
+        const coreAt = (version: string): Lockfile => ({
+            ...pinned,
+            recipes: { ...pinned.recipes, "core/sous-skills": { repo: "r", version, hash, requestedBy: ["project"], kind: "subscribes" } },
+        });
+
+        const behind = await planUpdate({}, context(setup({ data, lock: coreAt("0.2.33"), indexes }).config));
+        const behindText = updatePlanOutputs(behind).map((output) => output.result?.toText() ?? "").join("\n");
+
+        expect(behind.diff.updated).toContainEqual({ key: "core/sous-skills", from: "0.2.33", to: "0.2.34" });
+        expect(behind.lockfile.recipes["core/sous-skills"]?.version).toBe("0.2.34");
+        expect(behindText).not.toContain("stays at");
+        expect(behindText).toContain("The subscription to 'core' is one sous provides itself and follows the installed sous, version 0.2.34");
+
+        const current = await planUpdate({}, context(setup({ data, lock: coreAt("0.2.34"), indexes }).config));
+        const currentText = updatePlanOutputs(current).map((output) => output.result?.toText() ?? "").join("\n");
+
+        expect(current.diff.updated.map((change) => change.key)).toEqual(["workflow/task-files"]);
+        expect(currentText).not.toContain("'core'");
     });
 
     /** A ref narrows the scope; pins outside it are kept. */
