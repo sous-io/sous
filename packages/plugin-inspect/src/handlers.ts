@@ -4,7 +4,7 @@
  */
 
 import nodePath from "node:path";
-import { getAtPath, isPathPrefix, parsePath } from "@sous-io/documents";
+import { applyPatch, getAtPath, isPatch, isPathPrefix, parsePath, pathsOverlap } from "@sous-io/documents";
 import "@sous-io/plugin-variables/types";
 import "@sous-io/plugin-confd/types";
 import {
@@ -12,6 +12,8 @@ import {
     NotFoundError,
     SousError,
     type ConfigKeyEntity,
+    type ConfigLayer,
+    type PatchSet,
     type Context,
     type JsonObject,
     type JsonValue,
@@ -58,10 +60,13 @@ function layersOf(ctx: Context, path: string, policy: SecretPolicy): LayerView[]
     const sources = sourcesOf(ctx);
     const views: LayerView[] = [];
     let before: JsonValue | undefined;
+    const touching = target.some((segment) => typeof segment === "number")
+        ? itemLayers(ctx, target)
+        : ctx.config.layers(path).map((layer) => ({ layer, patch: layer.patch, target }));
 
-    for (const layer of ctx.config.layers(path)) {
+    for (const { layer, patch, target: at } of touching) {
         const view: LayerView = { ...redactLayer(layer, policy), ...withSource(sources.get(layer.contributor)) };
-        const after = valueAfter(view.patch, target);
+        const after = valueAfter(redactLayer({ ...layer, patch }, policy).patch, at);
 
         if (after === UNKNOWN) {
             views.push(view);
@@ -81,6 +86,114 @@ function layersOf(ctx: Context, path: string, policy: SecretPolicy): LayerView[]
 
 function withSource(source: string | undefined): { source?: string } {
     return source === undefined ? {} : { source };
+}
+
+/** A change that touches a path, with the index it used spelled out and the path as it stood then. */
+interface TouchingLayer {
+    readonly layer: ConfigLayer;
+    /** The change, with an `insertAt` at `"end"` given the index it landed at. */
+    readonly patch: Patch;
+    /** The path, with each index where the item stood right after this change. */
+    readonly target: readonly PathSegment[];
+}
+
+/**
+ * The changes to the item a path with an index names: `compilation.targets[0]` is the item that
+ * ends up first. Items move as others are added or removed before them, so the changes are
+ * replayed to learn where each `"end"` landed, then followed back from the last one, moving the
+ * index past each insert and removal before the item. A change to another item of the array is
+ * left out, and so is everything before the change that added the item.
+ *
+ * demo.list: [1, 2] set, 3 appended, 0 prepended -> [0, 1, 2, 3]
+ * demo.list[0] -> the prepend only
+ */
+function itemLayers(ctx: Context, target: readonly PathSegment[]): TouchingLayer[] {
+    const steps: { layer: ConfigLayer; patch: Patch }[] = [];
+    let config: JsonValue | undefined = {};
+
+    for (const contribution of ctx.config.contributions()) {
+        const record = (patch: Patch, helpers: readonly string[]): void => {
+            let applied = patch;
+
+            if (patch.op === "insertAt" && patch.index === "end") {
+                const array = getAtPath(config, parsePath(patch.path));
+                applied = { ...patch, index: Array.isArray(array) ? array.length : 0 };
+            }
+
+            let failed = false;
+            config = applyPatch(config, applied, { onProblem: () => void (failed = true) });
+
+            if (!failed) {
+                const { contributor, plugin, applyOrder, actualApplyOrder } = contribution;
+                steps.push({ layer: { contributor, plugin, patch, helpers, applyOrder, actualApplyOrder }, patch: applied });
+            }
+        };
+        const walkSet = (set: PatchSet, helpers: readonly string[]): void => {
+            for (const item of set.patches) {
+                if (isPatch(item)) {
+                    record(item, helpers);
+                } else {
+                    walkSet(item, [...helpers, item.name]);
+                }
+            }
+        };
+
+        walkSet(contribution.patches, []);
+    }
+
+    const found: TouchingLayer[] = [];
+    let at: PathSegment[] = [...target];
+
+    for (let index = steps.length - 1; index >= 0; index--) {
+        const { layer, patch } = steps[index]!;
+
+        if (patch.op === "insertAt" || patch.op === "removeIndex") {
+            const container = parsePath(patch.path);
+            const position = at[container.length];
+
+            if (container.length < at.length && isPathPrefix(container, at) && typeof position === "number") {
+                const changed = patch.index as number;
+
+                if (patch.op === "insertAt" && changed === position) {
+                    found.push({ layer, patch, target: at });
+                    break;
+                }
+
+                const moved = [...at];
+                moved[container.length] = patch.op === "insertAt" ? (changed < position ? position - 1 : position) : changed <= position ? position + 1 : position;
+                at = moved;
+                continue;
+            }
+
+            if (isPathPrefix(at, container)) {
+                found.push({ layer, patch, target: at });
+            }
+
+            continue;
+        }
+
+        if (pathsOverlap(primitiveTargetOf(patch), at)) {
+            found.push({ layer, patch, target: at });
+        }
+    }
+
+    return found.reverse();
+}
+
+/** The path a primitive change writes: the key or index it sets, or the array it changes. */
+function primitiveTargetOf(patch: Patch): PathSegment[] {
+    const container = parsePath(patch.path);
+
+    switch (patch.op) {
+        case "setKey":
+        case "deleteKey":
+        case "renameKey":
+            return [...container, patch.key];
+        case "insertAt":
+            return container;
+        default:
+            return [...container, patch.index];
+    }
 }
 
 /** Says a change's effect on a value cannot be read from the change alone. */
