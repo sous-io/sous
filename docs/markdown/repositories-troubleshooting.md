@@ -357,6 +357,11 @@ token in the environment only makes reading the index faster. `gh` and `glab` ar
 The order sous tries, and where it finds a token, are under
 [Private repositories](repositories-providers.md#private-repositories).
 
+The fixes follow from what the attempts said. When every attempt could not connect, the one fix is to
+check that this machine can reach the host, or to set `HTTPS_PROXY` on a network that needs a proxy;
+sous's HTTP reads honor `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY`. When git reached the repository and
+said it has no `sous.index.json`, the fix is to check the URL, and no token is offered.
+
 ## A recipe that requires a plugin
 
 A recipe may require a sous plugin from npm, with a version range. `sous subscription add` refuses such a

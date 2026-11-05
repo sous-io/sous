@@ -150,7 +150,7 @@ export class Layout {
         return `${prefix}${shown} ${entity}`;
     }
 
-    /** A warning block: a `WARNING:` banner, then the text, its capitalized words highlighted. */
+    /** A warning block: a `WARNING:` banner, then the text, its capitalized words highlighted. Each line keeps its own indentation. */
     warningLines(text: string): string[] {
         const style = this.style;
         const lines = [style.banner("   WARNING:   ")];
@@ -161,7 +161,8 @@ export class Layout {
                 continue;
             }
 
-            for (const wrapped of wrapText(line.trim(), this.wrapWidth - 2)) {
+            // A line keeps its own indentation, so lines indented under a heading stay under it.
+            for (const wrapped of wrapText(line.trimEnd(), this.wrapWidth - 2)) {
                 lines.push(indent(style.warning(highlightUpperCaseWords(wrapped, style.highlight))));
             }
         }

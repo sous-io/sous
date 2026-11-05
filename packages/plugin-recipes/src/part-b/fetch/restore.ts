@@ -10,6 +10,7 @@ import { ConfigError } from "@sous-io/plugin-api";
 import type { LockedRecipe, StoreEntry } from "@sous-io/plugin-formats/types";
 import type { EnsureInStoreTarget, EnsuredRecipe, RecipesStore, RepositoryHostEntity, StoreKey, RepositoryHostContext } from "../../types.js";
 import type { IndexCacheCore } from "../index-cache/index-cache.js";
+import { IndexReadError } from "../index-cache/read-chain.js";
 import { CORE_NAMESPACE, CORE_RECIPE_NAME, OFFICIAL_REPO_IDENTITY } from "../constants.js";
 import { hostFor, splitStoredKey } from "../support.js";
 
@@ -79,9 +80,19 @@ async function download(target: RestoreTarget, storeKey: StoreKey, deps: Restore
         version = recipe?.versions[target.entry.version];
     }
 
+    if ((recipe === undefined || version === undefined) && lookup.source === "stale") {
+        // Upstream could not be read, and the copy on this machine (perhaps only the seeded one)
+        // predates the pin: the failed read is the reason, not the version.
+        if (lookup.failure !== undefined) {
+            throw new IndexReadError(lookup.failure);
+        }
+
+        throw new ConfigError(`Sous could not read the index of '${target.repo}', so it cannot download '${target.key}' at version ${target.entry.version}: ${lookup.problem ?? "the read failed"}`);
+    }
+
     if (recipe === undefined || version === undefined) {
         throw new ConfigError(`The lockfile pins '${target.key}' at version ${target.entry.version} from '${target.repo}', and that repository's index does not offer it.`, {
-            details: ["Either the index could not be fetched, or the version was withdrawn upstream. Run 'sous repo list' to see what sous has."],
+            details: ["The index was read and does not list this version: it was withdrawn upstream, or never released. Run 'sous repo list' to see what sous has."],
         });
     }
 

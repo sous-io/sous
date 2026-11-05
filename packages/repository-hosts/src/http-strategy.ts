@@ -66,11 +66,11 @@ export function httpReadStrategy(options: HttpReadStrategyOptions): ExplainedRea
             const headers: Record<string, string> = {
                 Accept: "application/json",
                 ...options.headers?.(request),
-                ...(token === undefined ? {} : (options.authorization ?? bearer)(token)),
                 ...(request.etag === undefined ? {} : { "If-None-Match": request.etag }),
             };
+            const tokenHeaders = token === undefined ? {} : (options.authorization ?? bearer)(token);
 
-            return readOverHttp(options.url(request), headers, request, token !== undefined, ctx);
+            return readOverHttp(options.url(request), headers, tokenHeaders, request, token !== undefined, ctx);
         },
     };
 }
@@ -80,15 +80,21 @@ function bearer(token: RepositoryToken): Record<string, string> {
     return { Authorization: `Bearer ${token.value}` };
 }
 
-/** Requests the file, following ordinary redirects by hand, and says what the answer means. */
+/**
+ * Requests the file, following ordinary redirects by hand, and says what the answer means. The token
+ * headers go only to the origin (scheme, host and port) the request started at: a redirect to
+ * another origin is followed without them, as `fetch` itself does.
+ */
 async function readOverHttp(
     url: string,
     headers: Record<string, string>,
+    tokenHeaders: Record<string, string>,
     request: RepositoryReadRequest,
     withToken: boolean,
     ctx: RepositoryHostContext,
 ): Promise<RepositoryReadOutcome> {
     const http = ctx.services.get("host.http");
+    const origin = new URL(url).origin;
     let address = url;
 
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
@@ -96,13 +102,16 @@ async function readOverHttp(
 
         try {
             response = await http.get(address, {
-                headers,
+                headers: new URL(address).origin === origin ? { ...headers, ...tokenHeaders } : headers,
                 redirect: "manual",
                 label: `read ${request.path} from ${request.repository.host}`,
                 ...(ctx.signal === undefined ? {} : { signal: ctx.signal }),
             });
         } catch (error) {
-            return { ok: false, reason: `could not connect: ${firstLine(error)}` };
+            const said = firstLine(error);
+
+            // host.http's own wording already names the address and the cause (DNS, refused).
+            return { ok: false, reason: /^Sous could not reach /.test(said) ? said.replace(/^Sous could not reach /, "could not reach ").replace(/\.$/, "") : `could not connect: ${said}` };
         }
 
         if (response.status === 304) {

@@ -6,6 +6,7 @@
 
 import { ConfigError, isSousError } from "@sous-io/plugin-api";
 import type { RecipeDownloadAttempt } from "../../types.js";
+import { IndexReadError } from "../index-cache/read-chain.js";
 import { messageOf, plural } from "../support.js";
 
 /** One recipe that could not be made active, and why. */
@@ -32,17 +33,47 @@ export function describeFailures(failures: readonly RecipeFailure[]): { lines: s
     const lines: string[] = [];
     const attempts: RecipeDownloadAttempt[] = [];
 
-    for (const failure of failures) {
-        lines.push(`${failure.key}: ${messageOf(failure.error)}`);
+    for (const group of byIndexRead(failures)) {
+        const error = group[0]!.error;
 
-        for (const detail of isSousError(failure.error) ? failure.error.details : []) {
+        lines.push(`${group.map((failure) => failure.key).join(", ")}: ${messageOf(error)}`);
+
+        for (const detail of isSousError(error) ? error.details : []) {
             lines.push(`  ${detail}`);
         }
 
-        attempts.push(...attemptsOf(failure.error));
+        attempts.push(...attemptsOf(error));
     }
 
     return { lines, fixes: fixesFor(attempts) };
+}
+
+/**
+ * The failures in order, with those whose repository's index could not be read joined into one
+ * group per repository: that error is the same for every recipe of the repository, so it is told
+ * once, naming them all (#204 bug 14). Every other failure is a group of its own.
+ */
+export function byIndexRead(failures: readonly RecipeFailure[]): RecipeFailure[][] {
+    const groups: RecipeFailure[][] = [];
+    const byRepo = new Map<string, RecipeFailure[]>();
+
+    for (const failure of failures) {
+        const repo = failure.error instanceof IndexReadError ? failure.error.failure.repo : undefined;
+        const group = repo === undefined ? undefined : byRepo.get(repo);
+
+        if (group !== undefined) {
+            group.push(failure);
+            continue;
+        }
+
+        groups.push([failure]);
+
+        if (repo !== undefined) {
+            byRepo.set(repo, groups[groups.length - 1]!);
+        }
+    }
+
+    return groups;
 }
 
 /** The error a build throws when recipes it needs could not be downloaded. */

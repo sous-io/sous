@@ -9,7 +9,7 @@
 
 import { SousError, type Context } from "@sous-io/plugin-api";
 import type { IndexFile, Lockfile } from "@sous-io/plugin-formats/types";
-import type { PlannedQuestion, RecipeRequest, RecipeUpdateInput, RecipeUpdatePlan, RecipeUpdateScope, ResolvedRecipe, ResolveResult } from "../types.js";
+import type { IndexReadFailure, PlannedQuestion, RecipeRequest, RecipeUpdateInput, RecipeUpdatePlan, RecipeUpdateScope, ResolvedRecipe, ResolveResult } from "../types.js";
 import { findInCatalog, namespaceOfKey, type CatalogInputs } from "./catalog.js";
 import { identityOf, pickMatch, readingsOf, repoSearchOrder } from "./catalog-context.js";
 import { isBuiltInEntry } from "./defaults.js";
@@ -18,6 +18,7 @@ import { definedVariables, plannedQuestionsOf } from "./questions.js";
 import { configuredSubscriptions, enabledSubscriptions, trustedRepos } from "./project.js";
 import { compareBytewise, describeError, sortBytewise } from "./util.js";
 import { NoVersionSatisfiesError } from "../part-b/resolver/resolve.js";
+import { IndexReadError, readFailureSentence } from "../part-b/index-cache/read-chain.js";
 
 /** The scope in words, for a sentence that says what was updated. */
 export function describeUpdateScope(scope: RecipeUpdateScope): string {
@@ -72,12 +73,52 @@ export function isEmptyUpdate(plan: Pick<RecipeUpdatePlan, "diff" | "missingRepo
     return plan.diff.unchanged && plan.missingRepos.length === 0;
 }
 
+/**
+ * The headline of a plan that moves no pin. When an index could not be read, it does not claim
+ * every pin is the newest, since the pins from that repository were not checked (#204 bug 33).
+ *
+ * ```ts
+ * emptyUpdateHeadline({ scope: { kind: "all" }, unreachable: [{ repo: "sous-recipes", ... }], checked: [] });
+ * // -> "Sous could not check for updates: it could not read the index of 'sous-recipes'."
+ * ```
+ */
+export function emptyUpdateHeadline(plan: Pick<RecipeUpdatePlan, "scope" | "unreachable" | "checked">): string {
+    if (plan.unreachable.length === 0) {
+        return `Nothing to update: every pin in ${describeUpdateScope(plan.scope)} is already the newest published version its range allows.`;
+    }
+
+    const names = plan.unreachable.map((entry) => `'${entry.repo}'`);
+    const listed = names.length === 1 ? names[0]! : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+    const indexes = names.length === 1 ? `the index of ${listed}` : `the indexes of ${listed}`;
+
+    if ((plan.checked ?? []).length === 0) {
+        return `Sous could not check for updates: it could not read ${indexes}.`;
+    }
+
+    return `No updates found in the repositories sous could read. It could not read ${indexes}, so the pins from ${names.length === 1 ? "it" : "them"} were not checked.`;
+}
+
+/**
+ * Why an index could not be read: a failed read through the host's strategies as one full sentence
+ * naming each attempt, any other error as its own message.
+ */
+function unreadableReason(failure: IndexReadFailure | undefined, problem: string | undefined): string {
+    if (failure !== undefined) {
+        return readFailureSentence(failure);
+    }
+
+    return problem === undefined || problem.trim() === "" ? "The repository could not be reached." : problem;
+}
+
 /** Every trusted repository's index, read from upstream; unreachable ones fall back to the cache. */
-async function freshIndexes(ctx: Context): Promise<{ indexes: Map<string, IndexFile>; unreachable: Array<{ repo: string; reason: string }>; urls: Map<string, string | undefined> }> {
+async function freshIndexes(
+    ctx: Context,
+): Promise<{ indexes: Map<string, IndexFile>; unreachable: Array<{ repo: string; reason: string }>; checked: string[]; urls: Map<string, string | undefined> }> {
     const cache = ctx.services.get("recipes.index-cache");
     const repos = trustedRepos(ctx.config);
     const indexes = new Map<string, IndexFile>();
     const unreachable: Array<{ repo: string; reason: string }> = [];
+    const checked: string[] = [];
 
     for (const name of repoSearchOrder(ctx)) {
         try {
@@ -85,12 +126,16 @@ async function freshIndexes(ctx: Context): Promise<{ indexes: Map<string, IndexF
 
             // Upstream failed and the cached copy came back instead: plan with it, and say so.
             if (read.source === "stale") {
-                unreachable.push({ repo: name, reason: (read as { problem?: string }).problem ?? "The repository could not be reached." });
+                const stale = read as { problem?: string; failure?: IndexReadFailure };
+
+                unreachable.push({ repo: name, reason: unreadableReason(stale.failure, stale.problem) });
+            } else {
+                checked.push(name);
             }
 
             indexes.set(name, read.index);
         } catch (error) {
-            unreachable.push({ repo: name, reason: describeError(error) });
+            unreachable.push({ repo: name, reason: unreadableReason(error instanceof IndexReadError ? error.failure : undefined, describeError(error)) });
 
             const cached = cache.cached(name);
 
@@ -100,7 +145,7 @@ async function freshIndexes(ctx: Context): Promise<{ indexes: Map<string, IndexF
         }
     }
 
-    return { indexes, unreachable, urls: new Map(Object.entries(repos).map(([name, entry]) => [name, entry.url])) };
+    return { indexes, unreachable, checked, urls: new Map(Object.entries(repos).map(([name, entry]) => [name, entry.url])) };
 }
 
 /** Settles what an update covers: everything, or the repository, namespace or recipe a ref names. */
@@ -146,7 +191,7 @@ export async function planUpdate(input: RecipeUpdateInput, ctx: Context): Promis
     const lockService = ctx.services.get("recipes.lock");
     const resolver = ctx.services.get("recipes.resolver");
     const format = ctx.services.get("refs.format");
-    const { indexes, unreachable, urls } = await freshIndexes(ctx);
+    const { indexes, unreachable, checked, urls } = await freshIndexes(ctx);
     const catalog: CatalogInputs = {
         repos: [...indexes.entries()].map(([name, index]) => {
             const url = urls.get(name);
@@ -247,6 +292,7 @@ export async function planUpdate(input: RecipeUpdateInput, ctx: Context): Promis
         newVariables: await newVariables(ctx, changed, before, indexes),
         unreadable: sortBytewise(result.unreadable),
         unreachable,
+        checked,
         linked: sortBytewise(new Set(changed.map((recipe) => recipe.repo).filter((repo) => links?.get(repo) !== undefined))),
         builtIn: builtInKeys
             .filter((key) => keysHeldBySubscription(before, key).some((held) => recipeInScope(scope, held, before.recipes[held]!.repo)))

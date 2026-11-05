@@ -54,10 +54,12 @@ export interface WrapOptions {
 /**
  * Wraps a paragraph to a width, breaking on spaces and never inside a word. A word longer than the
  * width (a URL, a path) is left whole on a line of its own. Newlines in the text are kept, and each
- * line keeps its own indentation.
+ * line keeps its own indentation. The spaces between two words on one line are kept as written, so
+ * columns padded to line up stay lined up; a break drops them.
  *
  * ```ts
  * wrapText("one two three", 7, { hangingIndent: 0 }); // ["one two", "three"]
+ * wrapText("  git      denied", 80); // ["  git      denied"]
  * ```
  */
 export function wrapText(text: string, width: number, options: WrapOptions = {}): string[] {
@@ -67,10 +69,8 @@ export function wrapText(text: string, width: number, options: WrapOptions = {})
 
     for (const paragraph of String(text ?? "").split("\n")) {
         const leading = /^[ \t]*/.exec(paragraph)?.[0] ?? "";
-        const words = paragraph
-            .slice(leading.length)
-            .split(/\s+/)
-            .filter((word) => word.length > 0);
+        // Each word with the spaces written before it.
+        const words = [...paragraph.slice(leading.length).matchAll(/(\s*)(\S+)/g)].map((match) => ({ gap: match[1]!.replace(/[^ \t]/g, " ") || " ", word: match[2]! }));
 
         if (words.length === 0) {
             lines.push("");
@@ -81,14 +81,14 @@ export function wrapText(text: string, width: number, options: WrapOptions = {})
         let prefix = leading;
         let current = "";
 
-        for (const word of words) {
+        for (const { gap, word } of words) {
             if (current.length === 0) {
                 current = word;
                 continue;
             }
 
-            if (displayWidth(prefix) + displayWidth(current) + 1 + displayWidth(word) <= limit) {
-                current = `${current} ${word}`;
+            if (displayWidth(prefix) + displayWidth(current) + displayWidth(gap) + displayWidth(word) <= limit) {
+                current = `${current}${gap}${word}`;
                 continue;
             }
 

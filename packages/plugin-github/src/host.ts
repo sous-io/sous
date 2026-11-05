@@ -118,7 +118,12 @@ export function createGithubHost(options: GithubPluginOptions = {}): GithubRepos
         tokenSources: [
             envTokenSource({ variables, tokenHint: "a token that can read the repository" }),
             gitCredentialTokenSource(),
-            cliTokenSource({ id: "gh", command: GH.command, args: (repository) => ["auth", "token", "--hostname", repository.host] }),
+            cliTokenSource({
+                id: "gh",
+                command: GH.command,
+                args: (repository) => ["auth", "token", "--hostname", repository.host],
+                login: (repository) => `gh auth login --hostname ${repository.host}`,
+            }),
         ],
 
         readStrategies: [

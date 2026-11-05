@@ -16,7 +16,7 @@ import type {
     SubscriptionToggleResult,
     SubscriptionUpdateResult,
 } from "../../types.js";
-import { describeUpdateScope, isEmptyUpdate } from "../update-plan.js";
+import { describeUpdateScope, emptyUpdateHeadline, isEmptyUpdate } from "../update-plan.js";
 import {
     blockOutput,
     dryRunOutput,
@@ -229,7 +229,7 @@ export function updatePlanOutputs(plan: RecipeUpdatePlan): IntentOutput[] {
     const outputs: IntentOutput[] = [];
 
     if (isEmptyUpdate(plan)) {
-        outputs.push(sentence(`Nothing to update: every pin in ${describeUpdateScope(plan.scope)} is already the newest published version its range allows.`));
+        outputs.push(sentence(emptyUpdateHeadline(plan)));
     } else {
         outputs.push(
             listOutput(plan.diff.unchanged ? ["No pin moves until the repositories below are trusted and read."] : lockDiffLines(plan.diff), {

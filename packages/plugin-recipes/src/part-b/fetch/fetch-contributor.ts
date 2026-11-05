@@ -24,7 +24,7 @@ import { LinksFiles } from "../links/links-service.js";
 import type { PartBRuntime } from "../runtime.js";
 import { messageOf, splitStoredKey } from "../support.js";
 import { mapLinkedRecipes, type LinkedRecipe } from "./linked-recipes.js";
-import { describeFailures, downloadFailureError, type RecipeFailure } from "./download-failures.js";
+import { byIndexRead, describeFailures, downloadFailureError, type RecipeFailure } from "./download-failures.js";
 import { ensureInStore, findInStore } from "./restore.js";
 
 /** This plugin's options, under `plugins.options."@sous-io/plugin-recipes"`. */
@@ -80,8 +80,8 @@ export function fetchContributor(runtime: PartBRuntime): ContributorDefinition {
                     throw downloadFailureError(recipes.failed);
                 }
 
-                for (const failure of recipes.failed) {
-                    config.warn(`Skipped ${describeFailures([failure]).lines.join("\n")}`);
+                for (const group of byIndexRead(recipes.failed)) {
+                    config.warn(`Skipped ${describeFailures(group).lines.join("\n")}`);
                 }
 
                 const { fixes } = describeFailures(recipes.failed);

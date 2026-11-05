@@ -193,6 +193,23 @@ Fix one of these:
 A token reads only the index. Recipe files are downloaded with git, so building also needs git access.
 ```
 
+The fixes depend on what the attempts said:
+
+- Every attempt could not connect (DNS, a refused connection, a timeout): the only fix is to check
+  that the machine can reach the host, or to set `HTTPS_PROXY`. No token is offered.
+- git reached the repository and said it has no `sous.index.json`: the fix is to check the URL. No
+  token is offered, since the repository is not private.
+- A token was found and refused: the fix names where it came from (`GITLAB_TOKEN`, `git credential
+  fill`, `glab`) instead of asking you to set it.
+- `gh` or `glab` is installed but printed no token: the fixes include `gh auth login` or
+  `glab auth login` for the host.
+
+When a build needs several recipes from a repository whose index cannot be read, the index is read
+once, and the error is told once, naming every recipe it stopped.
+
+The HTTP reads honor `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY` (or their lowercase spellings), as
+git does.
+
 **A recipe's files** come from git itself: a shallow, blobless, sparse clone at the version's
 tag, fetching only the blobs inside that one recipe folder. That means git's own credentials
 apply, exactly as they would for a manual clone: credential helpers, the SSH agent, proxies and

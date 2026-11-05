@@ -44,7 +44,7 @@ export const hostPlugin: PluginDefinition = definePlugin({
         });
 
         sous.services.add("host.processes", (_config, ctx) => createProcesses({ env: ctx.env }), { lifetime: "singleton" });
-        sous.services.add("host.http", () => createHttp(), { lifetime: "singleton" });
+        sous.services.add("host.http", (_config, ctx) => createHttp({ env: () => ctx.env }), { lifetime: "singleton" });
         sous.services.add("host.globs", () => hostGlobs, { lifetime: "singleton" });
         sous.services.add("host.sous-home", (_config, ctx) => createSousHome(() => ctx.env), { lifetime: "singleton" });
         sous.services.add("host.gitignore", () => createGitignore(), { lifetime: "singleton" });

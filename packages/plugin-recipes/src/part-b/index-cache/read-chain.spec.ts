@@ -4,7 +4,7 @@ import path from "node:path";
 import { nullReporter } from "@sous-io/plugin-api";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { RepositoryHostContext, RepositoryHostEntity, RepositoryReadStrategy, RepositoryTokenSource } from "../../types.js";
-import { IndexReadError, readThroughChain, StrategyMemoryFile, type ChainRead } from "./read-chain.js";
+import { IndexReadError, readFailureSentence, readThroughChain, StrategyMemoryFile, type ChainRead } from "./read-chain.js";
 
 const repository = { host: "fake.test", owner: "acme", name: "recipes", httpsUrl: "https://fake.test/acme/recipes", sshUrl: "git@fake.test:acme/recipes.git" };
 const ctx = { reporter: nullReporter } as unknown as RepositoryHostContext;
@@ -163,6 +163,128 @@ describe("readThroughChain", () => {
         fs.writeFileSync(memory.file, "not json", "utf8");
 
         expect(memory.read()).toEqual({});
+    });
+});
+
+describe("readThroughChain: fixes chosen from what the attempts said (#204 bug 20)", () => {
+    const gitlab = { ...repository, host: "gitlab.com" };
+    const exportToken = "export GITLAB_TOKEN=<a token with read_repository>";
+    const gitAccess = "set up git access to gitlab.com (an SSH key, or a credential helper)";
+    const envSource: RepositoryTokenSource = {
+        id: "env",
+        label: "GITLAB_TOKEN",
+        token: async () => undefined,
+        find: async () => ({ missing: "GITLAB_TOKEN unset" }),
+        fix: () => exportToken,
+    } as RepositoryTokenSource;
+
+    /** A glab token source: installed or not, and signed in or out. */
+    function glab(state: "missing" | "signed-out"): RepositoryTokenSource {
+        return {
+            id: "glab",
+            label: "glab",
+            token: async () => undefined,
+            find: async () => ({ missing: state === "missing" ? undefined : "glab printed no token for gitlab.com" }),
+            fix: () => "glab auth login --hostname gitlab.com",
+        } as RepositoryTokenSource;
+    }
+
+    /** GitLab's chain, each strategy failing with the reason given. */
+    function gitlabRead(reasons: { http: string; git: string }, sources: RepositoryTokenSource[] = [envSource]): ChainRead {
+        const git: RepositoryReadStrategy = { ...strategy("git", reasons.git), label: "git", fix: (repo) => `set up git access to ${repo.host} (an SSH key, or a credential helper)` } as RepositoryReadStrategy;
+        const read = readOf([{ ...strategy("http-token", "ok", { usesToken: true }), label: "HTTP with token" }, { ...strategy("http", reasons.http), label: "HTTP without token" }, git], sources);
+
+        return { ...read, identity: "gitlab.com/acme/recipes", repository: gitlab };
+    }
+
+    async function failureOf(read: ChainRead): Promise<IndexReadError> {
+        return readThroughChain(read, memory, ctx).then(
+            () => expect.unreachable() as never,
+            (error: IndexReadError) => error,
+        );
+    }
+
+    /**
+     * Offline, every attempt failed to connect, so the only fix is the connection; no token advice.
+     *
+     * // http: could not connect (ENOTFOUND), git: Could not resolve host
+     * // -> ["check that this machine can reach gitlab.com, and set HTTPS_PROXY if this network needs a proxy"]
+     */
+    it("should offer only the network fix when every attempt could not connect", async () => {
+        const error = await failureOf(
+            gitlabRead({ http: "could not connect: Sous could not reach https://gitlab.com/x: getaddrinfo ENOTFOUND gitlab.com.", git: "unable to access 'https://gitlab.com/acme/recipes.git/': Could not resolve host: gitlab.com" }),
+        );
+
+        expect(error.failure.fixes).toEqual(["check that this machine can reach gitlab.com, and set HTTPS_PROXY if this network needs a proxy"]);
+        expect(error.message).not.toContain("A token reads only the index");
+    });
+
+    /**
+     * When git reached the repository and said the index file is not there, the repository is not
+     * private: the fix is the URL, and no token is offered.
+     *
+     * // git: path 'sous.index.json' does not exist in 'FETCH_HEAD'
+     * // -> ["check the URL: git reached gitlab.com/acme/recipes, but it has no sous.index.json, ..."]
+     */
+    it("should say the repository has no index, and offer no token, when git reached it", async () => {
+        const error = await failureOf(gitlabRead({ http: "404: no sous.index.json at HEAD, or the repository is private", git: "path 'sous.index.json' does not exist in 'FETCH_HEAD'" }));
+
+        expect(error.failure.fixes).toEqual([
+            "check the URL: git reached gitlab.com/acme/recipes, but it has no sous.index.json, so it is not a sous recipe repository, or nothing in it has been released yet",
+        ]);
+        expect(error.message).not.toContain("A token reads only the index");
+    });
+
+    /**
+     * A CLI that is installed but signed out gets its login command; one that is not installed gets nothing.
+     *
+     * // glab installed, no token -> fixes include "glab auth login --hostname gitlab.com"
+     * // glab not installed      -> they do not
+     */
+    it("should offer 'glab auth login' only when glab is installed and signed out", async () => {
+        const reasons = { http: "302 to sign-in page: the repository is private", git: "Permission denied (publickey)" };
+
+        expect((await failureOf(gitlabRead(reasons, [envSource, glab("signed-out")]))).failure.fixes).toEqual([exportToken, "glab auth login --hostname gitlab.com", gitAccess]);
+        expect((await failureOf(gitlabRead(reasons, [envSource, glab("missing")]))).failure.fixes).toEqual([exportToken, gitAccess]);
+    });
+
+    /**
+     * A token that was found and refused is named by where it came from, and its source's "export"
+     * line is not offered again.
+     *
+     * // GITLAB_TOKEN set, HTTP with token: 401 -> "replace the token in GITLAB_TOKEN: gitlab.com refused it ..."
+     */
+    it("should name the source of a refused token instead of asking to set it", async () => {
+        const set: RepositoryTokenSource = { ...envSource, find: async () => ({ token: { value: "wrong", source: "GITLAB_TOKEN" } }) } as RepositoryTokenSource;
+        const read = gitlabRead({ http: "302 to sign-in page: the repository is private", git: "Permission denied (publickey)" }, [set]);
+        const refusing = { ...strategy("http-token", "401: the token was refused", { usesToken: true }), label: "HTTP with token" };
+        const error = await failureOf({ ...read, host: { ...read.host, readStrategies: [refusing, ...read.host.readStrategies.slice(1)] } as RepositoryHostEntity });
+
+        expect(error.failure.fixes).toEqual(["replace the token in GITLAB_TOKEN with one that can read gitlab.com/acme/recipes: gitlab.com refused it", gitAccess]);
+    });
+});
+
+describe("readFailureSentence()", () => {
+    /**
+     * A read failure becomes one capitalized sentence naming each attempt, for a note with one line
+     * to give it (#204 bug 33).
+     *
+     * readFailureSentence({ repo: "github.com/sous-io/sous-recipes", attempts: [http, git] })
+     * // -> "Sous could not read github.com/sous-io/sous-recipes (HTTP without token: could not connect: …; git: Could not resolve host: github.com)."
+     */
+    it("should give the failure as one sentence that names each attempt", () => {
+        const sentence = readFailureSentence({
+            repo: "github.com/sous-io/sous-recipes",
+            attempts: [
+                { strategy: "HTTP without token", reason: "could not connect: Sous could not reach https://raw.githubusercontent.com/x: getaddrinfo ENOTFOUND raw.githubusercontent.com." },
+                { strategy: "git", reason: "Could not resolve host: github.com" },
+            ],
+            fixes: [],
+        });
+
+        expect(sentence).toBe(
+            "Sous could not read github.com/sous-io/sous-recipes (HTTP without token: could not connect: Sous could not reach https://raw.githubusercontent.com/x: getaddrinfo ENOTFOUND raw.githubusercontent.com; git: Could not resolve host: github.com).",
+        );
     });
 });
 
