@@ -152,7 +152,9 @@ download and nothing else.
 
 `sous repo gc` collects the store back to a size cap, least recently used first, never evicting
 an entry the lockfile of the project you run it in still pins; entries another project pins may
-go, because they are re-fetchable from that project's lockfile.
+go, because they are re-fetchable from that project's lockfile. It also removes the download
+folders (`.sous-restore-*`, `.sous-fetch-*`) that a build stopped with Ctrl-C left in the store,
+once they are more than an hour old; every download removes such folders too before it starts.
 
 ### Trust
 

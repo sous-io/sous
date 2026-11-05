@@ -106,6 +106,19 @@ describe("the repository outputs", () => {
         expect(outputs[3]?.summary).toBe("Nothing was removed. Everything listed above is re-fetchable from the lockfile that pins it.");
     });
 
+    /**
+     * The download folders an interrupted build left behind are listed before the closing
+     * sentence, which then says no recipe versions were removed rather than nothing.
+     */
+    it("should list the download folders an interrupted build left behind", () => {
+        const report = { evicted: [], kept: [], bytesBefore: 0, bytesAfter: 0, dryRun: false, abandoned: ["/h/cache/.sous-restore-x"] } as unknown as StoreGcReport;
+        const outputs = storeGcOutputs(report).toArray();
+
+        expect(outputs[1]?.result?.toText()).toContain("/h/cache/.sous-restore-x");
+        expect(outputs[1]?.result?.toText()).toContain("Download folders an interrupted build left behind, removed:");
+        expect(outputs[2]?.summary).toBe("The store is already inside its size cap, so no recipe versions were removed.");
+    });
+
     /** Pins show under the recipe, and a recipe not built here carries its reason as a row note. */
     it("should show what the lockfile pins, with a row note for a recipe not built here", () => {
         const result = {

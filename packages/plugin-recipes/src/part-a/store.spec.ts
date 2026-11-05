@@ -250,4 +250,42 @@ describe("RecipeStore", () => {
         expect(await store.has(older)).toBe(false);
         expect(await store.has(kept)).toBe(true);
     });
+
+    /**
+     * `gc` also removes the work directories an interrupted download (Ctrl-C) left in the store root
+     * (`.sous-restore-*`, `.sous-fetch-*`) more than an hour ago, and lists them; a younger one may
+     * belong to a build running now, so it stays. A dry run lists them and removes nothing.
+     *
+     * // <store>/.sous-restore-old (2 hours old), <store>/.sous-fetch-new (1 minute old)
+     * await store.gc();
+     * // -> { abandoned: ["<store>/.sous-restore-old"], ... }
+     */
+    it("should remove work directories an interrupted download left more than an hour ago", async () => {
+        const { store, root } = makeStore();
+        const age = (dir: string, ms: number): string => {
+            fs.mkdirSync(path.join(dir, "inner"), { recursive: true });
+
+            const when = new Date(Date.now() - ms);
+
+            fs.utimesSync(path.join(dir, "inner"), when, when);
+            fs.utimesSync(dir, when, when);
+
+            return dir;
+        };
+        const oldRestore = age(path.join(root, ".sous-restore-old"), 2 * 60 * 60 * 1000);
+        const oldFetch = age(path.join(root, ".sous-fetch-old"), 2 * 60 * 60 * 1000);
+        const fresh = age(path.join(root, ".sous-fetch-new"), 60 * 1000);
+
+        const dry = await store.gc({ dryRun: true });
+
+        expect([...(dry.abandoned ?? [])].sort()).toEqual([oldFetch, oldRestore]);
+        expect(fs.existsSync(oldRestore)).toBe(true);
+
+        const report = await store.gc();
+
+        expect([...(report.abandoned ?? [])].sort()).toEqual([oldFetch, oldRestore]);
+        expect(fs.existsSync(oldRestore)).toBe(false);
+        expect(fs.existsSync(oldFetch)).toBe(false);
+        expect(fs.existsSync(fresh)).toBe(true);
+    });
 });

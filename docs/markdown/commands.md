@@ -237,7 +237,8 @@ sous repo remove recipes --dry-run
 
 ### `sous repo gc`
 
-Shrinks this machine's recipe store down to its size limit.
+Shrinks this machine's recipe store down to its size limit. It also removes the download folders
+(`.sous-restore-*`) an interrupted build left in the store more than an hour ago.
 
 ```bash
 sous repo gc --dry-run

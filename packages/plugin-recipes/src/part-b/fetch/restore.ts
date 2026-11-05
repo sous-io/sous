@@ -10,6 +10,7 @@ import { ConfigError } from "@sous-io/plugin-api";
 import type { LockedRecipe, StoreEntry } from "@sous-io/plugin-formats/types";
 import type { EnsureInStoreTarget, EnsuredRecipe, RecipesStore, RepositoryHostEntity, StoreKey, RepositoryHostContext } from "../../types.js";
 import type { IndexCacheCore } from "../index-cache/index-cache.js";
+import { sweepAbandonedWork } from "../../part-a/store.js";
 import { CORE_NAMESPACE, CORE_RECIPE_NAME, OFFICIAL_REPO_IDENTITY } from "../constants.js";
 import { hostFor, splitStoredKey } from "../support.js";
 
@@ -92,6 +93,8 @@ async function download(target: RestoreTarget, storeKey: StoreKey, deps: Restore
     }
 
     await fs.mkdir(deps.store.root, { recursive: true });
+    // A build interrupted with Ctrl-C skips the cleanup below and leaves its work directory.
+    await sweepAbandonedWork(deps.store.root);
     const work = await fs.mkdtemp(path.join(deps.store.root, ".sous-restore-"));
     const fetchDir = path.join(work, storeKey.name || "recipe");
 
