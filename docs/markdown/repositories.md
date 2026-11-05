@@ -152,7 +152,9 @@ download and nothing else.
 
 `sous repo gc` collects the store back to a size cap, least recently used first, never evicting
 an entry the lockfile of the project you run it in still pins; entries another project pins may
-go, because they are re-fetchable from that project's lockfile.
+go, because they are re-fetchable from that project's lockfile. It also removes the download
+folders (`.sous-restore-*`, `.sous-fetch-*`) that a build stopped with Ctrl-C left in the store,
+once they are more than an hour old; every download removes such folders too before it starts.
 
 ### Trust
 
@@ -232,7 +234,7 @@ $ sous subscription list
 
 Both wirings are ordinary config entries a person could have written by hand, and either can be
 switched off: `sous subscription remove core` writes `subscriptions.core.enabled: false` for you,
-and `sous subscription add core` clears it again. See
+keeping core's pin in the lockfile, and `sous subscription add core` clears it again. See
 [Opt out of `core`](repositories-consuming.md#opt-out-of-core) for what you give up.
 
 ?> Subscribe to a whole namespace when it is one coherent set your team owns end to end. In the

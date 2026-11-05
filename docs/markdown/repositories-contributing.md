@@ -26,7 +26,7 @@ Starting runs one step, `sous repo link <repo> --latest --generate-branch`:
 - the repository is cloned into `.sous/repos/<owner>/<name>`, or the clone already there is reused;
 - its default branch is brought up to upstream's (anything that would discard local work is listed and asked
   about first; `--yes` answers);
-- a new branch named `sous/edit-<YYYYMMDD>-<HHMM>` is created from it, so the change never stacks on an old,
+- a new branch named `sous/edit-<YYYYMMDD>-<HHMMSS>` is created from it, so the change never stacks on an old,
   already-merged branch;
 - the project is pointed at the checkout, so builds read the repository from it instead of from a published
   version.

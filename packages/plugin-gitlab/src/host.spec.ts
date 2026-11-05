@@ -94,6 +94,18 @@ describe("the gitlab host", () => {
         expect(host.tokenSources?.map((source) => source.id)).toEqual(["env", "git-credential", "glab"]);
         expect(host.features).toEqual(["fetch", "submit", "proposals"]);
     });
+
+    /**
+     * The glab token source names its sign-in command as its fix, for when glab is installed but
+     * signed out (#204 bug 20).
+     *
+     * glabSource.fix(repository); // -> "glab auth login --hostname gitlab.com"
+     */
+    it("should offer 'glab auth login' as the glab token source's fix", () => {
+        const glab = host.tokenSources?.find((source) => source.id === "glab");
+
+        expect(glab?.fix?.(host.canonicalize("https://gitlab.com/acme/recipes"))).toBe("glab auth login --hostname gitlab.com");
+    });
 });
 
 describe("reading through the gitlab host", () => {

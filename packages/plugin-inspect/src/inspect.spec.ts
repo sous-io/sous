@@ -201,6 +201,36 @@ describe("config.get", () => {
             ["override/new", { from: 2, to: 3 }],
         ]);
     });
+
+    /**
+     * A path holding an index lists only the changes to that one item, following it as items
+     * before it are added or removed; the changes to the array's other items are left out
+     * (gh-229).
+     *
+     * demo.list: demo/main sets [1, 2], list/append adds 3 at the end, list/prepend adds 0 at the
+     * front, giving [0, 1, 2, 3].
+     *
+     * config get demo.list[0] --layers -> list/prepend only
+     * config get demo.list[1] --layers -> demo/main only, which set it to 1
+     * config get demo.list[3] --layers -> list/append only
+     */
+    it("should list only the changes to the item an index names", async () => {
+        const list = definePlugin({
+            name: "list",
+            version: "1.0.0",
+            dependsOn: {},
+            register(sous) {
+                sous.config.contribute({ id: "list/append", after: ["demo/main"], contribute: (config) => void config.atPath("demo.list").appendValue(3) });
+                sous.config.contribute({ id: "list/prepend", after: ["list/append"], contribute: (config) => void config.atPath("demo.list").prependValue(0) });
+            },
+        });
+        const layersAt = async (path: string) =>
+            (await run("config.get", { path, layers: true }, undefined, [list])).layers.map((l: any) => [l.contributor, l.change]);
+
+        expect(await layersAt("demo.list[0]")).toEqual([["list/prepend", { to: 0 }]]);
+        expect(await layersAt("demo.list[1]")).toEqual([["demo/main", { to: 1 }]]);
+        expect(await layersAt("demo.list[3]")).toEqual([["list/append", { to: 3 }]]);
+    });
 });
 
 describe("config.validate", () => {

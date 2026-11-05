@@ -176,6 +176,33 @@ describe("sous init in a directory that has never seen sous", () => {
   );
 
   /**
+   * The starter prompt's note that it is the source ("Edit this source ... never
+   * edit the compiled copy") should stay in the source only. Carried into the
+   * compiled AGENTS.md, it tells the reader of the compiled copy that it is the
+   * source (gh-229).
+   *
+   * .sous/memories/AGENTS.tpl.md -> holds "never edit the compiled copy"
+   * AGENTS.md                    -> does not
+   */
+  it(
+    "should keep the starter prompt's edit-this-source note out of the compiled AGENTS.md",
+    () => {
+      const project = freshProject("source-note");
+
+      const init = sous(project, ["init"]);
+      expect(init.status, init.stdout + init.stderr).toBe(0);
+
+      const source = fs.readFileSync(path.join(project, ".sous", "memories", "AGENTS.tpl.md"), "utf8");
+      expect(flatten(source)).toContain("never edit the compiled copy");
+      const agents = fs.readFileSync(path.join(project, "AGENTS.md"), "utf8");
+      expect(agents).not.toContain("Edit this");
+      expect(agents).not.toContain("compiled copy");
+      expect(agents).toContain("# source-note\n\n## Working in this project");
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
    * The ignore file should carry the sous-managed block, covering the state
    * file and the local answers file, and a `.sous/.gitignore` that already
    * held the block plus lines of its own should keep those lines and gain

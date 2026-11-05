@@ -96,8 +96,10 @@ export const config = {
 export function buildStarterPrompt(context: ScaffoldContext): string {
     return `# ${context.name}
 
+{% comment %}
 This file is compiled by sous into \`${STARTER_OUTPUT_NAME}\` at the project root. Edit this
 source, run \`sous build\`, and the compiled copy follows; never edit the compiled copy.
+{% endcomment -%}
 
 ## Working in this project
 

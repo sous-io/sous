@@ -172,7 +172,7 @@ export class CompilerRuntime {
         let store = this.stores.get(file);
 
         if (!store) {
-            store = new StateStore(file);
+            store = new StateStore(file, this.projectRoot());
             this.stores.set(file, store);
         }
 

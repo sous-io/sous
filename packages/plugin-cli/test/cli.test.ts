@@ -247,8 +247,8 @@ describe("the CLI front end", () => {
             const repo = await runCli([reposPlugin], ["repo", "add", "-h"]);
 
             expect(repo.stdout).toContain("USAGE\n  $ sous repo add URL [flags]\n  $ sous repo add COMMAND");
-            expect(repo.stdout).toMatch(/--mode <choice>\s+Whether to trust it One of: trusted, untrusted. Default: "trusted"./);
-            expect(repo.stdout).toMatch(/--tags <value>\s+Tags to give it Default: \[\]. May be given more than once./);
+            expect(repo.stdout).toMatch(/--mode <choice>\s+Whether to trust it. One of: trusted, untrusted. Default: "trusted"./);
+            expect(repo.stdout).toMatch(/--tags <value>\s+Tags to give it. Default: \[\]. May be given more than once./);
             expect(repo.stdout).toMatch(/-y, --yes\s+Add it without asking/);
             expect(repo.stdout).toMatch(/repo add alternate\s+Add an alternate location/);
         });

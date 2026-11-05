@@ -89,7 +89,7 @@ describe("plugin-recipe-answers through the engine", () => {
         expect(listings.variables.map((entry) => [entry.variable.key, entry.answered, entry.value, entry.storeIn])).toEqual([
             ["misc/stuff.apiUrl", true, "https://shell.example.com", "shared"],
             ["misc/stuff.apiToken", false, undefined, "local"],
-            ["workflow/task-files.taskRoot", false, undefined, "shared"],
+            ["workflow/task-files.taskRoot", false, ".sous/tasks", "shared"],
         ]);
     });
 
@@ -183,7 +183,7 @@ describe("plugin-recipe-answers through the engine", () => {
         expect((listing!.result as Table).rows.map((row) => [row.name, row.value])).toEqual([
             ["apiToken", "(unanswered)"],
             ["apiUrl", "https://shell.example.com"],
-            ["taskRoot", "(unanswered)"],
+            ["taskRoot", ".sous/tasks"],
         ]);
     });
 
@@ -194,9 +194,26 @@ describe("plugin-recipe-answers through the engine", () => {
 
         expect(block!.title).toBe("apiUrl (misc/stuff)");
         expect((block!.result as VariableSet).toObject()).toMatchObject({ Value: "https://shell.example.com", Answer: "the value in scope fits this definition" });
-        expect((facts!.result as VariableSet).entries.map((entry) => entry.label)).toEqual(expect.arrayContaining(["example", "required-by", "defined-by", "storage-path", "stored-as"]));
+        expect((facts!.result as VariableSet).entries.map((entry) => entry.label)).toEqual(expect.arrayContaining(["example", "required-by", "defined-by", "stored-as"]));
         expect((ladder!.result as Table).title).toBe("Environment variables sous looks at, most specific first");
         expect(outputs.toPlain()).toMatchObject({ answered: true });
+    });
+
+    /**
+     * `vars show` prints its two label blocks one under the other, so both should line their colons
+     * up at one width: the longest label of either (gh-229).
+     *
+     * Question     : ...
+     * For example  : ...
+     * storage-path : ...   (not "storage-path: ..." at a width of its own)
+     */
+    it("should line up both of vars show's label blocks at one width", async () => {
+        const outputs = await engine.handle.submit({ intent: "vars.show", input: { name: "apiUrl" } });
+        const [, block, facts] = outputs.toArray();
+        const sets = [block!.result as VariableSet, facts!.result as VariableSet];
+        const longest = Math.max(...sets.flatMap((set) => set.entries.map((entry) => entry.label.length)));
+
+        expect(sets.map((set) => set.labelWidth)).toEqual([longest, longest]);
     });
 
     /** `vars ask` should title the run, then list the answers it stored under their own title. */
@@ -263,5 +280,176 @@ describe("two versions of one recipe that cannot share an answer", () => {
         expect((skipped[0]!.result as VariableSet).entries.find((entry) => entry.label === "not-answerable")?.value).toContain(
             "The variable tone of support/base 2.0.0 cannot be answered alongside support/base 1.0.0",
         );
+    });
+});
+
+/** An engine over the given recipes, with the env files already holding `files`. */
+async function engineOver(
+    recipes: Parameters<typeof standInPlugins>[0],
+    files: { shared?: Record<string, string>; local?: Record<string, string> } = {},
+): Promise<{ engine: Engine; standIns: StandIns }> {
+    const memory = new MemoryEnv("/project/.sous", {});
+
+    Object.assign(memory.files.shared, files.shared ?? {});
+    Object.assign(memory.files.local, files.local ?? {});
+
+    const standIns = standInPlugins(recipes, memory);
+    const project = { root: "/project", sousDir: "/project/.sous", configPath: "/project/.sous/sous.config.json", confDir: "/project/.sous/conf.d" };
+    const engine = createEngine({ builtIns: [...standIns.plugins, recipeAnswersPlugin], env: {}, project, reporter: new BufferedReporter() });
+
+    await engine.buildConfig();
+
+    return { engine, standIns };
+}
+
+describe("vars output (gh-204, gh-229)", () => {
+    /**
+     * `vars ask --dry-run` without a terminal should list the questions it would ask and succeed,
+     * instead of failing because nobody can answer them (gh-204 bug 34).
+     *
+     * vars.ask { dryRun: true }, no terminal, apiUrl and region required and unanswered
+     * // -> wouldAsk: [apiUrl, region]; titled "Questions that would be asked"; nothing written
+     */
+    it("should list what a dry run would ask when there is no terminal", async () => {
+        const { engine, standIns } = await engineOver([activeRecipe("misc/stuff", [definition(), definition({ name: "region" })])]);
+        const outputs = await engine.handle.submit({ intent: "vars.ask", input: { dryRun: true } }, { prompter: nonInteractivePrompter });
+        const result = outputs.toPlain();
+
+        expect(result.wouldAsk?.map((entry) => entry.variable.key)).toEqual(["misc/stuff.apiUrl", "misc/stuff.region"]);
+        expect(outputs.toArray().map((output) => output.title)).toContain("Questions that would be asked");
+        expect(outputs.exitCode).toBeUndefined();
+        expect(standIns.env.files).toEqual({ shared: {}, local: {} });
+    });
+
+    /**
+     * A variable with a default and no answer should be listed and shown with its default in use,
+     * not as unanswered (gh-229).
+     *
+     * prefix: optional, default "PROJ-", nothing stored
+     * // -> list: value "PROJ-", source "its default; no answer is stored"; show: Value "PROJ- (default)"
+     */
+    it("should list and show a default in use", async () => {
+        const { engine } = await engineOver([activeRecipe("misc/stuff", [definition({ name: "prefix", required: false, default: "PROJ-" })])]);
+        const [, listing] = (await engine.handle.submit({ intent: "vars.list", input: {} })).toArray();
+
+        expect((listing!.result as Table).rows.map((row) => [row.name, row.value, row.source])).toEqual([["prefix", "PROJ-", "its default; no answer is stored"]]);
+
+        const [, block] = (await engine.handle.submit({ intent: "vars.show", input: { name: "prefix" } })).toArray();
+
+        expect((block!.result as VariableSet).toObject()).toMatchObject({ Value: "PROJ- (default)", Answer: "nothing in scope answers this variable, so its default is used" });
+    });
+
+    /**
+     * "Stored in" should name the file the value came from; where a new answer would go is shown
+     * apart from it (gh-229 defect 8).
+     *
+     * token: scope local; SOUS_VAR_TOKEN only in .sous/.env
+     * // -> Stored in: "/project/.sous/.env"; Saved to: "/project/.sous/.env.local (where new answers go)"
+     */
+    it("should say where the value is stored, apart from where new answers go", async () => {
+        const { engine } = await engineOver([activeRecipe("misc/stuff", [definition({ name: "token", scope: "local" })])], { shared: { SOUS_VAR_TOKEN: "abc" } });
+        const [, block, facts] = (await engine.handle.submit({ intent: "vars.show", input: { name: "token" } })).toArray();
+
+        expect((block!.result as VariableSet).toObject()).toMatchObject({ Value: "abc", "Stored in": "/project/.sous/.env", "Saved to": "/project/.sous/.env.local (where new answers go)" });
+        expect((facts!.result as VariableSet).entries.map((entry) => entry.label)).not.toContain("storage-path");
+    });
+
+    /**
+     * `vars show` should accept the environment name `vars list` shows under "Answered by", and
+     * offer every variable it answers when it answers several (gh-229 defect 7).
+     *
+     * vars.show { name: "MY_ENV_NAME" } -> misc/stuff.myVar
+     * vars.show { name: "SOUS_VAR_API_URL" } -> asks which of misc/other.apiUrl, misc/third.apiUrl
+     */
+    it("should show a variable by the environment name that answers it", async () => {
+        const { engine } = await engineOver(
+            [activeRecipe("misc/stuff", [definition({ name: "myVar", env: "MY_ENV_NAME" })]), activeRecipe("misc/other", [definition()]), activeRecipe("misc/third", [definition()])],
+            { shared: { MY_ENV_NAME: "x" } },
+        );
+        const detail = (await engine.handle.submit({ intent: "vars.show", input: { name: "MY_ENV_NAME" } })).toPlain();
+
+        expect(detail.variable.key).toBe("misc/stuff.myVar");
+
+        const third = engine.config.services.get("recipe-answers.definitions").listSync().find((entry) => entry.key === "misc/third.apiUrl")!;
+        const prompter = scriptedPrompter([third.ref]);
+        const second = (await engine.handle.submit({ intent: "vars.show", input: { name: "SOUS_VAR_API_URL" } }, { prompter })).toPlain();
+
+        expect(prompter.asked).toHaveLength(1);
+        expect(second.variable.key).toBe("misc/third.apiUrl");
+    });
+
+    /**
+     * When optional variables are left unanswered, the report should say how to answer them
+     * (gh-204 bug 35).
+     *
+     * vars.ask with only an optional variable left
+     * // -> a note naming 'sous vars ask <name>' and 'sous vars ask --all'
+     */
+    it("should say how to answer the optional variables it left", async () => {
+        const { engine } = await engineOver([activeRecipe("misc/stuff", [definition({ name: "extra", required: false })])]);
+        const outputs = (await engine.handle.submit({ intent: "vars.ask", input: {} }, { prompter: nonInteractivePrompter })).toArray();
+        const text = outputs.map((output) => output.summary ?? "").join("\n");
+
+        expect(text).toContain("sous vars ask <name>");
+        expect(text).toContain("sous vars ask --all");
+    });
+
+    /**
+     * A name several recipes share should be reported once, naming the recipes, under "Answers
+     * already in scope" and "Left unanswered" (gh-204 bug 48).
+     *
+     * memoryRoot answered by MEMORY_ROOT for three recipes; extra optional in two
+     * // -> one "memoryRoot" entry naming the three recipes; one "extra" entry naming both
+     */
+    it("should report a variable several recipes share once, naming them", async () => {
+        const shared = definition({ name: "memoryRoot", env: "MEMORY_ROOT" });
+        const extra = definition({ name: "extra", required: false });
+        const { engine } = await engineOver(
+            [activeRecipe("misc/a", [shared, extra]), activeRecipe("misc/b", [shared, extra]), activeRecipe("misc/c", [shared])],
+            { shared: { MEMORY_ROOT: "/m" } },
+        );
+        const outputs = (await engine.handle.submit({ intent: "vars.ask", input: {} }, { prompter: nonInteractivePrompter })).toArray();
+        const section = (title: string) => (outputs.find((output) => output.title === title)!.result as VariableSet).entries;
+
+        expect(section("Answers already in scope").map((entry) => [entry.label, entry.value, entry.detail])).toEqual([
+            ["memoryRoot", "/m", "from the declared name MEMORY_ROOT, from the .env file; used by misc/a, misc/b, misc/c"],
+        ]);
+        expect(section("Left unanswered").map((entry) => [entry.label, entry.value])).toEqual([["extra", "no answer yet, and this variable is optional (used by misc/a, misc/b)"]]);
+    });
+
+    /**
+     * Run for the recipes a subscription installed (`within`), with nothing to ask, `vars ask`
+     * should report nothing while it runs: the subscription runs it before the build, and its
+     * settings printed there would precede a step that never comes (gh-229).
+     *
+     * vars.ask { within: ["misc/stuff"] }, only an optional variable
+     * // -> nothing reported while it runs
+     */
+    it("should report nothing while it runs when a subscription has nothing to ask", async () => {
+        const { engine } = await engineOver([activeRecipe("misc/stuff", [definition({ name: "extra", required: false })])]);
+        const reporter = new BufferedReporter();
+
+        await engine.handle.submit({ intent: "vars.ask", input: { within: ["misc/stuff"] } }, { prompter: nonInteractivePrompter, reporter });
+
+        expect(reporter.messages).toEqual([]);
+    });
+
+    /**
+     * Run for a subscription with something to ask, the settings should still be reported, before
+     * the first question.
+     *
+     * vars.ask { within: ["misc/stuff"] }, apiUrl required, answered at the prompt
+     * // -> "Definitions" reported, then the question
+     */
+    it("should report its settings before the first question a subscription asks", async () => {
+        const { engine } = await engineOver([activeRecipe("misc/stuff", [definition()])]);
+        const reporter = new BufferedReporter();
+
+        await engine.handle.submit({ intent: "vars.ask", input: { within: ["misc/stuff"] } }, { prompter: scriptedPrompter(["https://a"]), reporter });
+
+        const styles = reporter.messages.map((entry) => entry.style);
+
+        expect(styles.indexOf(ReportEntryStyle.VariableList)).toBeGreaterThanOrEqual(0);
+        expect(styles.indexOf(ReportEntryStyle.VariableList)).toBeLessThan(styles.indexOf(ReportEntryStyle.Question));
     });
 });

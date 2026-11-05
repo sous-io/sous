@@ -299,6 +299,8 @@ export interface VarsAskResult {
     /** Variables already answered, left as they were. */
     readonly inherited: ReadonlyArray<{ readonly variable: DefinedVariable; readonly resolved: ResolvedAnswer }>;
     readonly skipped: ReadonlyArray<{ readonly variable: DefinedVariable; readonly reason: string }>;
+    /** On a dry run with no terminal: the variables a terminal would be asked about. */
+    readonly wouldAsk?: ReadonlyArray<{ readonly variable: DefinedVariable; readonly current?: string }>;
     readonly dryRun: boolean;
 }
 
@@ -317,6 +319,8 @@ export interface VariableListing {
     /** The answer, hidden when secret. */
     readonly value?: string;
     readonly source?: AnswerSource;
+    /** Nothing answers it, so its default is the value in use (`value` holds it). */
+    readonly usesDefault?: boolean;
     /** Where an answer would be stored. */
     readonly storedAs: string;
     readonly storeIn: EnvFileKind;

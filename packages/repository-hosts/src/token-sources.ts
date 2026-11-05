@@ -156,6 +156,8 @@ export function cliTokenSource(options: {
     id: string;
     command: string;
     args: (repository: CanonicalRepository) => string[];
+    /** The command that signs the CLI in, for the fix line when it is installed but gives no token. */
+    login?: (repository: CanonicalRepository) => string;
 }): ExplainedTokenSource {
     const { command } = options;
 
@@ -191,6 +193,9 @@ export function cliTokenSource(options: {
         },
 
         token: async () => undefined,
+
+        // The read chain offers it only when the CLI is installed and printed no token.
+        ...(options.login === undefined ? {} : { fix: options.login }),
     };
 
     source.token = tokenOf(source);

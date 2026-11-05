@@ -335,6 +335,19 @@ export interface SkippedRecipe {
     readonly message: string;
 }
 
+/** A recipe of a switched-off subscription that is built anyway, because switched-on recipes depend on it. */
+export interface StillBuiltRecipe {
+    readonly key: string;
+    /** The switched-off subscription that holds it. */
+    readonly subscription: string;
+    /** The switched-on recipes that depend on it, bytewise. */
+    readonly neededBy: readonly string[];
+    /** The file that switched the subscription off, when known (`conf.d/520-local.jsonc`). */
+    readonly setBy?: string;
+    /** One plain sentence: `acme/base is switched off but still built: acme/gadget and acme/widget depend on it.` */
+    readonly message: string;
+}
+
 /** One file of an active recipe's content. */
 export interface RecipeContentFile {
     /** Relative to the recipe, `/`-separated. */
@@ -377,6 +390,11 @@ export interface RecipesActive {
     get(key: string): ActiveRecipeEntity | undefined;
     /** Locked recipes that are not active here, and why. */
     skipped(): SkippedRecipe[];
+    /**
+     * Recipes of switched-off subscriptions that are active anyway, because switched-on recipes
+     * depend on them. Optional, so a stand-in may leave it out.
+     */
+    switchedOffButBuilt?(): StillBuiltRecipe[];
     /** Every active recipe's content of one kind (see {@link RecipesContents.of}). */
     contents(kind: ContentKind): ActiveRecipeContent[];
     /** Every variable the active recipes define, with the recipe defining it. */
@@ -561,6 +579,11 @@ export interface RecipesLock {
     diff(before: Lockfile, after: Lockfile): LockDiff;
     /** The lockfile resolved recipes make, keeping entries for switched-off subscriptions. */
     fromResolved(resolved: readonly ResolvedRecipe[], previous?: Lockfile): Lockfile;
+    /**
+     * The same lockfile, with the hash of the cached index filled in for each trusted repository
+     * whose entry lacks one; the same object when there is nothing to fill in.
+     */
+    withIndexHashes(lockfile: Lockfile): Lockfile;
     /** Downloads every pinned recipe missing from the store. */
     restore(options?: { keys?: readonly string[]; signal?: AbortSignal }): Promise<RestoreReport>;
     /** One pinned recipe. */
@@ -606,6 +629,8 @@ export interface StoreGcReport {
     readonly bytesBefore: number;
     readonly bytesAfter: number;
     readonly dryRun: boolean;
+    /** The work directories an interrupted download left in the store root, removed (or, in a dry run, to be removed). */
+    readonly abandoned?: readonly string[];
 }
 
 /** The machine-wide recipe store. */
@@ -1138,6 +1163,8 @@ export interface PlannedQuestions {
 /** `subscription.remove`. */
 export interface SubscriptionRemoveInput extends RecipeChangeFlags {
     ref: string;
+    /** Accepted for the same spelling as `subscription add` and `update`; removing asks nothing. */
+    yes?: boolean;
 }
 
 /** The result of `subscription.remove`. */
@@ -1159,9 +1186,25 @@ export interface SubscriptionToggleInput extends RecipeChangeFlags {
 /** The result of `subscription.enable` and `subscription.disable`. */
 export interface SubscriptionToggleResult {
     readonly key: string;
+    /** What was asked for: true for `enable`, false for `disable`. */
     readonly enabled: boolean;
     readonly file: string;
+    /** Whether `conf.d/510-subscriptions.jsonc` changed (or would, on a dry run). */
     readonly changed: boolean;
+    /** Whether the subscription is switched on afterwards, in the merged config. */
+    readonly effective: boolean;
+    /** Whether `effective` differs from what it was before. */
+    readonly effectiveChanged: boolean;
+    /**
+     * A file applied after `conf.d/510` that also sets `enabled`, and so decides it
+     * (`conf.d/520-local.jsonc`).
+     */
+    readonly decidedBy?: string;
+    /**
+     * When it ends up switched off: its recipes that are built anyway, because switched-on recipes
+     * depend on them, one sentence each.
+     */
+    readonly stillBuilt?: readonly string[];
     readonly dryRun: boolean;
     readonly followUps: IntentFollowUp[];
 }
@@ -1212,7 +1255,10 @@ export interface RecipeUpdatePlan {
     /** Variables the new versions declare that have no answer yet. */
     readonly newVariables: readonly PlannedQuestion[];
     readonly unreadable: string[];
+    /** Repositories whose index could not be read upstream, each with why, as a full sentence. */
     readonly unreachable: ReadonlyArray<{ readonly repo: string; readonly reason: string }>;
+    /** Repositories whose index was read upstream. Absent: not recorded. */
+    readonly checked?: readonly string[];
     /** Recipes held by a link, not updated. */
     readonly linked: string[];
     /** Recipes that ship with sous. */

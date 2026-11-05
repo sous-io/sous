@@ -9,6 +9,9 @@ type Lockfile = ReturnType<RecipesLock["read"]>;
 /** The holder a subscription's own pins are requested by. */
 const PROJECT_HOLDER = "project";
 
+/** The `addedBy` of a subscription sous provides itself. */
+const BUILT_IN_ADDED_BY = "sous";
+
 /** A lock diff that changed nothing. */
 export const NO_CHANGE: LockDiff = Object.freeze({
     added: [],
@@ -113,12 +116,21 @@ async function prepareProject(input: BuildPrepareInput, ctx: Context): Promise<B
         }
     }
 
+    // A repository whose index hash the lockfile lacks regains it once the cache has one; no pin
+    // changes, so the config is not marked changed for it.
+    const hashed = lock.withIndexHashes(current);
+
+    if (hashed !== current && !dryRun) {
+        await lock.write(hashed);
+    }
+
     if (!locked.unchanged && !dryRun) {
         ctx.configChanged();
     }
 
     const skipped = active.skipped();
     const { unanswered, unanswerable } = ctx.services.get("recipe-answers.answers").get();
+    const followsSous = builtInPins(subscriptions, current);
     const result: BuildPrepareResult = {
         seeded,
         locked,
@@ -128,6 +140,7 @@ async function prepareProject(input: BuildPrepareInput, ctx: Context): Promise<B
         skipped,
         unanswered,
         unanswerable,
+        ...(followsSous.length === 0 ? {} : { followsSous }),
     };
 
     await ctx.emit("build.prepared", result);
@@ -273,6 +286,25 @@ function isNewer(candidate: string, pinned: string): boolean {
 /** The subscriptions switched on on this machine. */
 export function switchedOn(subscriptions: Readonly<Record<string, SubscriptionEntry>>): Record<string, SubscriptionEntry> {
     return Object.fromEntries(Object.entries(subscriptions).filter(([, entry]) => entry.enabled !== false));
+}
+
+/**
+ * The pins held by the switched-on subscriptions sous provides itself (`addedBy: "sous"`, which is
+ * `core`), each with that subscription's range: the installed sous version.
+ *
+ * ```ts
+ * builtInPins({ core: { range: "1.0.16", addedBy: "sous" } }, lock); // lock pins core/sous-skills
+ * // -> [{ key: "core/sous-skills", subscription: "core", version: "1.0.16" }]
+ * ```
+ */
+export function builtInPins(subscriptions: Readonly<Record<string, SubscriptionEntry>>, lockfile: Lockfile): NonNullable<BuildPrepareResult["followsSous"]> {
+    return Object.entries(subscriptions)
+        .filter(([, entry]) => entry.addedBy === BUILT_IN_ADDED_BY && entry.range !== undefined)
+        .flatMap(([subscription, entry]) =>
+            Object.keys(lockfile.recipes)
+                .filter((key) => (key === subscription || key.startsWith(`${subscription}/`)) && lockfile.recipes[key]!.requestedBy.includes(PROJECT_HOLDER))
+                .map((key) => ({ key, subscription, version: entry.range! })),
+        );
 }
 
 /**

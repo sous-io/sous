@@ -157,6 +157,72 @@ describe("help in every form, and one confirmation flag", () => {
   );
 
   /**
+   * Help adds "May be given more than once." to every flag that may be repeated, so a
+   * flag's own description must not say it too. Before gh-229 the help printed
+   * "(repeatable) May be given more than once." and "Repeat it for each answer May be
+   * given more than once.".
+   *
+   * sous vars ask --help   // -> "--answer ... as <name>=<value>. May be given more than once."
+   */
+  it(
+    "should say only once that a flag may be repeated",
+    () => {
+      const inventory = JSON.parse(
+        fs.readFileSync(path.join(import.meta.dirname, "..", "fixtures", "command-inventory.json"), "utf8")
+      ) as { commands: Array<{ command: string[]; flags: Array<{ multiple?: boolean }> }> };
+      const repeating = inventory.commands.filter((entry) => entry.flags.some((flag) => flag.multiple === true));
+
+      expect(repeating.length).toBeGreaterThan(0);
+
+      for (const entry of repeating) {
+        const result = sous(projectRoot, ...entry.command, "--help");
+        const text = strip(result.stdout).replace(/\s+/g, " ");
+
+        expect(result.status, entry.command.join(" ")).toBe(0);
+        expect(text, entry.command.join(" ")).toContain("May be given more than once.");
+        expect(text, entry.command.join(" ")).not.toMatch(/(repeat|more than once)[^.]*\.? May be given more than once/i);
+        // The description ends its sentence before the one help adds.
+        expect(text, entry.command.join(" ")).not.toMatch(/[^.] May be given more than once/);
+      }
+
+      expect(strip(sous(projectRoot, "vars", "ask", "--help").stdout).replace(/\s+/g, " ")).toContain(
+        "--answer <value> Answer a variable ahead of its question, as <name>=<value>. May be given more than once."
+      );
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * Every example `sous config get --help` shows should work on a project whose first
+   * target is not the project's own prompt (the memories target of subscribed recipes
+   * comes first then, and has no `entryPoint`). This project's own config sets only
+   * an entry point, so each example is run here as it is printed.
+   *
+   * sous config get --help   // -> examples; each one exits 0 here
+   */
+  it(
+    "should show config get examples that work on any project",
+    () => {
+      const help = strip(sous(projectRoot, "config", "get", "--help").stdout);
+      const examples = help
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.startsWith("$ sous config get ") && !line.includes("PATH"))
+        .map((line) => line.slice("$ sous ".length).split(" "));
+
+      expect(examples.length).toBeGreaterThan(0);
+      expect(help).not.toContain("targets[0].entryPoint");
+
+      for (const words of examples) {
+        const result = sous(projectRoot, ...words);
+
+        expect(result.status, `${words.join(" ")}\n${result.stdout}${result.stderr}`).toBe(0);
+      }
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
    * `-h` is registered as an additional help flag, so it works everywhere
    * `--help` does, on a nested command as readily as on the root.
    *

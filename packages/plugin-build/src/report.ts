@@ -40,12 +40,15 @@ export function reportLinkedRepos(links: Readonly<Record<string, ResolvedLink>>,
         return;
     }
 
-    const lead = names.length === 1 ? "One repository is LINKED to a working copy on this machine." : `${names.length} repositories are LINKED to working copies on this machine.`;
+    const lead =
+        names.length === 1
+            ? "One repository is LINKED to a working copy on this machine. Its recipes are read from that checkout, so versions, the lockfile and freshness checks do not apply to it."
+            : `${names.length} repositories are LINKED to working copies on this machine. Their recipes are read from those checkouts, so versions, the lockfile and freshness checks do not apply to them.`;
 
     reporter.list(
         names.map((name) => `${name} -> ${links[name]!.path}`),
         {
-            title: `${lead} Their recipes are read from those checkouts, so versions, the lockfile and freshness checks do not apply to them.`,
+            title: lead,
             footer: "Run 'sous repo unlink <name>' to go back to the published versions.",
         },
         level,
@@ -57,8 +60,19 @@ function alone(change: { readonly holder?: string }): string {
     return change.holder === undefined ? "" : ` for ${change.holder} alone`;
 }
 
+/**
+ * Why a pin moved, when it moved because a subscription sous provides itself follows the installed
+ * sous: `, because the subscription to 'core' follows the installed sous, version 1.0.16`. Empty
+ * otherwise.
+ */
+function whyMoved(change: { readonly key: string; readonly to?: string; readonly holder?: string }, followsSous: BuildPrepareResult["followsSous"]): string {
+    const follows = change.holder === undefined ? followsSous?.find((entry) => entry.key === change.key && entry.version === change.to) : undefined;
+
+    return follows === undefined ? "" : `, because the subscription to '${follows.subscription}' follows the installed sous, version ${follows.version}`;
+}
+
 /** Reports pins that were added or moved, or says nothing. */
-function reportLocked(diff: LockDiff, reporter: Reporter): void {
+function reportLocked(diff: LockDiff, reporter: Reporter, followsSous?: BuildPrepareResult["followsSous"]): void {
     if (diff.unchanged || (diff.added.length === 0 && diff.updated.length === 0)) {
         return;
     }
@@ -66,7 +80,7 @@ function reportLocked(diff: LockDiff, reporter: Reporter): void {
     reporter.list(
         [
             ...diff.added.map((change) => `pinned: ${change.key} at version ${change.to ?? "?"}${alone(change)}.`),
-            ...diff.updated.map((change) => `${change.key} moved from version ${change.from ?? "?"} to version ${change.to ?? "?"}${alone(change)}.`),
+            ...diff.updated.map((change) => `${change.key} moved from version ${change.from ?? "?"} to version ${change.to ?? "?"}${alone(change)}${whyMoved(change, followsSous)}.`),
         ],
         {
             title: "Locking subscribed recipes",
@@ -205,7 +219,7 @@ export function reportUnanswerable(unanswerable: readonly DefinedVariable[], rep
 
 /** Reports what preparing did, as a build shows it. */
 export function reportPrepared(result: BuildPrepareResult, reporter: Reporter): void {
-    reportLocked(result.locked, reporter);
+    reportLocked(result.locked, reporter, result.followsSous);
     reportRestored(result.restored, reporter);
     reportRestoreFailures(result.restored, reporter);
     reportNewer(result.newer, reporter);

@@ -57,6 +57,8 @@ export interface BuildPid {
 /** The facts the runtime context file holds. */
 export interface RuntimeContext {
     readonly branch?: string;
+    /** When `branch` is missing: the first line git printed on standard error, if it printed one. */
+    readonly branchProblem?: string;
     /** The active task file, when the branch matches. */
     readonly taskFile?: string;
     readonly outputPath: string;
@@ -108,6 +110,12 @@ export interface BuildPrepareResult {
      * same recipe is asked instead; each carries its warning (`unanswerable`).
      */
     readonly unanswerable: readonly DefinedVariable[];
+    /**
+     * The pins held by a subscription sous provides itself (`core`), which follows the installed
+     * sous: `version` is that subscription's range, the installed sous version. A pin moved to it
+     * says why.
+     */
+    readonly followsSous?: ReadonlyArray<{ readonly key: string; readonly subscription: string; readonly version: string }>;
 }
 
 /** The warning for required variables nothing answered. */

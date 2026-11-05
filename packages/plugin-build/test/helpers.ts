@@ -42,6 +42,7 @@ import type {
     ResolveOptions,
     RestoreReport,
     SkippedRecipe,
+    StillBuiltRecipe,
 } from "@sous-io/plugin-recipes/types";
 import { createBuildPlugin, type BuildPluginOptions } from "../src/index.js";
 import packageJson from "../package.json" with { type: "json" };
@@ -72,12 +73,15 @@ export interface World {
     published: Record<string, { repo: string; version: string; namespace: string; requestedBy?: string[]; pins?: Record<string, string> }>;
     restoreCalls: Array<{ keys?: readonly string[] }>;
     restoreReport: RestoreReport;
+    /** The hash of each repository's cached index, which `withIndexHashes` fills in. */
+    indexHashes: Record<string, string>;
     indexes: { indexes: CachedIndex[]; failed: IndexReadFailure[] };
     indexCalls: number;
     /** Repositories whose stale fallback was already reported. */
     staleNoticed: Set<string>;
     active: ActiveRecipeEntity[];
     skipped: SkippedRecipe[];
+    stillBuilt: StillBuiltRecipe[];
     links: Record<string, ResolvedLink>;
     // memories
     memories: Memory[];
@@ -86,6 +90,8 @@ export interface World {
     unanswerable: DefinedVariable[];
     // git
     branch: string | undefined;
+    /** What git prints on standard error when asked for the branch and it cannot tell. */
+    gitError?: string;
 }
 
 /** A fresh world for a project root. */
@@ -107,11 +113,13 @@ export function newWorld(root: string): World {
         published: {},
         restoreCalls: [],
         restoreReport: { restored: [], alreadyPresent: [], failed: [] },
+        indexHashes: {},
         indexes: { indexes: [], failed: [] },
         indexCalls: 0,
         staleNoticed: new Set(),
         active: [],
         skipped: [],
+        stillBuilt: [],
         links: {},
         memories: [],
         unanswered: [],
@@ -194,7 +202,15 @@ export function standIns(world: World): PluginDefinition[] {
     });
 
     const git = plugin("@sous-io/plugin-git", (sous) => {
-        sous.services.add("git.runner", () => ({ currentBranch: async () => world.branch }) as never, { lifetime: "singleton" });
+        sous.services.add(
+            "git.runner",
+            () =>
+                ({
+                    currentBranch: async () => world.branch,
+                    run: async (args: readonly string[]) => ({ args, exitCode: world.branch === undefined ? 128 : 0, stdout: world.branch ?? "", stderr: world.gitError ?? "", durationMs: 0 }),
+                }) as never,
+            { lifetime: "singleton" },
+        );
     });
 
     const compiler = plugin("@sous-io/plugin-compiler", (sous) => {
@@ -293,6 +309,19 @@ export function standIns(world: World): PluginDefinition[] {
                         resolved.map((recipe) => [recipe.key, { repo: recipe.repo, version: recipe.version, hash: "h", requestedBy: ["project"], kind: "subscribes" }]),
                     ),
                 }) as unknown as Lockfile,
+            withIndexHashes: (lockfile: Lockfile) => {
+                const missing = Object.keys(lockfile.repos).filter((name) => lockfile.repos[name]!.indexHash === undefined && world.indexHashes[name] !== undefined);
+
+                if (missing.length === 0) {
+                    return lockfile;
+                }
+
+                const repos = Object.fromEntries(
+                    Object.entries(lockfile.repos).map(([name, entry]) => [name, missing.includes(name) ? { ...entry, indexHash: world.indexHashes[name] } : entry]),
+                );
+
+                return { ...lockfile, repos } as Lockfile;
+            },
             restore: async (options: { keys?: readonly string[] } = {}) => {
                 world.restoreCalls.push(options);
 
@@ -317,6 +346,7 @@ export function standIns(world: World): PluginDefinition[] {
             list: () => world.active,
             get: (key: string) => world.active.find((recipe) => recipe.id === key),
             skipped: () => world.skipped,
+            switchedOffButBuilt: () => world.stillBuilt,
             contents: () => [],
             variables: () => [],
         }));

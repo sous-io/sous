@@ -565,10 +565,17 @@ function reportPlan(tools: AuthoringTools, plan: ReleasePlan, context: { willTag
         );
     }
 
+    // A version already raised needs no step of its own.
+    const toRaise = plan.releases.filter((release) => release.bump !== undefined).length;
+    const raise =
+        toRaise === 0
+            ? []
+            : [toRaise === plan.releases.length ? "Raise the versions listed above, in the manifests that declare them." : "Raise the versions listed above that are not already raised, in the manifests that declare them."];
+
     tools.results.push(
         listOutput(
             [
-                "Raise the versions listed above, in the manifests that declare them.",
+                ...raise,
                 `Regenerate ${INDEX_FILE}, with each version's dependencies resolved.`,
                 "Commit the manifests and the index together.",
                 context.willTag ? "Cut one annotated tag per version, dependency-first." : `Cut no tags: this is the branch '${context.branch}', not the default one.`,

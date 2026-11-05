@@ -192,6 +192,7 @@ export function memoryLock(lockfile: Lockfile): RecipesLock & { current: Lockfil
         },
         diff,
         fromResolved: () => lockfile,
+        withIndexHashes: (current: Lockfile) => current,
         restore: async () => ({ restored: [], alreadyPresent: [], failed: [] }),
         get: (key: string) => lock.current.recipes[key],
         held: (current: Lockfile, except?: Iterable<string>) => heldVersions(current, except),

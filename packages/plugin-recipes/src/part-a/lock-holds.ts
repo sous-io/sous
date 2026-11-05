@@ -10,7 +10,9 @@
 
 import type { LockedRecipe, Lockfile } from "@sous-io/plugin-formats/types";
 import { PROJECT_HOLDER } from "../part-b/constants.js";
-import { removeHolder, withHolders } from "../part-b/lock/lockfile-ops.js";
+import semver from "semver";
+import { isBuiltInEntry } from "../part-b/core/core-recipe.js";
+import { keysHeldBySubscription, removeHolder, withHolders } from "../part-b/lock/lockfile-ops.js";
 import type { ResolvedRecipe } from "../types.js";
 import { compareBytewise } from "./util.js";
 
@@ -105,4 +107,49 @@ export function stayedAfter(after: Lockfile, held: Iterable<string>): Array<{ ke
         .filter((key) => Object.hasOwn(after.recipes, key))
         .sort(compareBytewise)
         .map((key) => ({ key, heldBy: [...after.recipes[key]!.requestedBy] }));
+}
+
+/** A pin a built-in subscription holds that the installed sous will move. */
+export interface BuiltInMove {
+    /** The built-in subscription (`core`). */
+    readonly subscription: string;
+    /** The pinned recipe (`core/sous-skills`). */
+    readonly key: string;
+    readonly from: string;
+    /** The version the subscription asks for: the installed sous version. */
+    readonly to: string;
+}
+
+/**
+ * The pins of switched-on built-in subscriptions that their range no longer allows. The built-in
+ * `core` subscription's range is exactly the installed sous version, so a lockfile written by an
+ * older sous pins core at a version the next build or update moves.
+ *
+ * ```ts
+ * // core: { range: "1.0.16", addedBy: "sous" }; lock: core/sous-skills 1.0.13
+ * builtInMoves(lock, subscriptions);
+ * // -> [{ subscription: "core", key: "core/sous-skills", from: "1.0.13", to: "1.0.16" }]
+ * ```
+ */
+export function builtInMoves(lock: Lockfile, subscriptions: Readonly<Record<string, { range?: string; enabled?: boolean; addedBy?: string } | undefined>>): BuiltInMove[] {
+    const moves: BuiltInMove[] = [];
+
+    for (const subscription of Object.keys(subscriptions).sort(compareBytewise)) {
+        const entry = subscriptions[subscription];
+        const to = entry?.range === undefined ? null : semver.valid(entry.range);
+
+        if (!isBuiltInEntry(entry) || entry?.enabled === false || to === null) {
+            continue;
+        }
+
+        for (const key of keysHeldBySubscription(lock, subscription)) {
+            const from = lock.recipes[key]!.version;
+
+            if (!semver.satisfies(from, to, { includePrerelease: true, loose: true })) {
+                moves.push({ subscription, key, from, to });
+            }
+        }
+    }
+
+    return moves;
 }

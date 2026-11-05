@@ -241,7 +241,9 @@ function renderPayload(layout: Layout, level: LogLevel, payload: Payload, style:
 
         const titled = payload.title !== undefined;
 
-        return { lines: [...(titled ? [layout.subheading(payload.title!)] : []), ...layout.variableLines(payload.entries)], gapBefore: titled ? 1 : 0, footer: true };
+        const width = payload.labelWidth === undefined ? {} : { labelWidth: payload.labelWidth };
+
+        return { lines: [...(titled ? [layout.subheading(payload.title!)] : []), ...layout.variableLines(payload.entries, width)], gapBefore: titled ? 1 : 0, footer: true };
     }
 
     if (payload instanceof Table) {
@@ -363,8 +365,12 @@ function renderError(layout: Layout, level: LogLevel, error: Error): Rendered {
     const [first, ...causes] = errorChain(error);
     const lines = [...wrapText(`${prefix}${first!.message}`, layout.wrapWidth).map((line) => paint(line)), ...detailsOf(first!, 2)];
 
+    let above = first!;
+
     for (const cause of causes) {
-        lines.push(...indented(`Caused by: ${cause.message}`, 2), ...detailsOf(cause, 4));
+        // A cause whose message the error above it already holds adds nothing but its details.
+        lines.push(...(above.message.includes(cause.message) ? detailsOf(cause, 2) : [...indented(`Caused by: ${cause.message}`, 2), ...detailsOf(cause, 4)]));
+        above = cause;
     }
 
     return level === "warning" ? { lines, gapBefore: 1, gapAfter: 1 } : { lines, gapBefore: 1 };
@@ -487,7 +493,8 @@ function tableEntry(layout: Layout, table: Table): Rendered {
         ...(notes === undefined ? {} : { rowNote: (_row: Record<string, unknown>, index: number) => (notes[index] === undefined ? undefined : layout.style.muted(`  ${notes[index]}`)) }),
     });
 
-    return { lines: [...titled, ...lines], gapBefore: titled.length, footer: true };
+    // A blank line after the rows, so what follows does not read as one more row.
+    return { lines: [...titled, ...lines], gapBefore: titled.length, gapAfter: 1, footer: true };
 }
 
 /** A problem: its summary in the level's color, then where, why and what to do, indented under it. */

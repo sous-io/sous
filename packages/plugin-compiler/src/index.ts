@@ -45,6 +45,7 @@ const compileInput = jsonSchema<CompileInput>({
         strict: { type: "boolean", description: "Warnings fail the compile." },
         rebuild: { type: "boolean", description: "Writes every output, changed or not." },
         dryRun: { type: "boolean", description: "Writes nothing." },
+        reportEnd: { type: "boolean", description: "Ends the report with 'Done.'. Default: true." },
     },
     additionalProperties: false,
 });

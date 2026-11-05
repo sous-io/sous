@@ -592,7 +592,10 @@ export class Engine {
                     this.baseLimits,
                 ).layers(path);
 
-                return layers.at(-1)?.contributor;
+                const contributor = layers.at(-1)?.contributor;
+                const source = outcome.records.find((record) => record.entry.id === contributor)?.entry.definition.source;
+
+                return source === undefined ? contributor : this.displayPath(source);
             }),
         );
 
@@ -603,6 +606,14 @@ export class Engine {
         }
 
         return deepFreeze(result.config);
+    }
+
+    /** A file as messages name it: from the project's root when it is inside it (`.sous/sous.config.js`), else in full. */
+    private displayPath(file: string): string {
+        const root = this.project?.root;
+        const relative = root === undefined ? file : path.relative(root, file);
+
+        return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative) ? relative : file;
     }
 
     /** `dependsOn`: every plugin a plugin needs is active, at a version in the range. */

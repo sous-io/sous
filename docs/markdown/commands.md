@@ -214,7 +214,7 @@ Inspects the built configuration; see [Inspecting and validating](config-inspect
 
 ```bash
 sous config show | jq .compilation
-sous config get compilation.targets[0].entryPoint --layers
+sous config get repos.sous-recipes.url --layers
 ```
 
 ## repo
@@ -237,7 +237,8 @@ sous repo remove recipes --dry-run
 
 ### `sous repo gc`
 
-Shrinks this machine's recipe store down to its size limit.
+Shrinks this machine's recipe store down to its size limit. It also removes the download folders
+(`.sous-restore-*`) an interrupted build left in the store more than an hour ago.
 
 ```bash
 sous repo gc --dry-run
@@ -308,7 +309,8 @@ Manages which recipes the project subscribes to. `REF` is `namespace` or `namesp
 - `subscription add` (or `sous subscribe`) subscribes, then builds so the recipe's files are on disk. Answer a
   recipe's questions ahead of time with `--answer <name>=<value>` or `--answers-file <path>`, and let it install
   the sous plugins it requires with `--install-plugins`.
-- `subscription remove` (or `sous unsubscribe`) removes a subscription and everything only it brought in.
+- `subscription remove` (or `sous unsubscribe`) removes a subscription and everything only it brought in. The
+  built-in `core` subscription is switched off instead, keeping its pin.
 - `subscription update [REF]` moves the lockfile's pins to the newest versions their ranges allow, then
   rebuilds. See [Moving to newer versions](repositories-consuming.md#moving-to-newer-versions).
 - `subscription disable REF` and `subscription enable REF` switch a subscription off or back on in
@@ -354,7 +356,8 @@ Inspects the questions the project's recipes ask, and the answers they hold; see
 [Recipe variables](repositories-variables.md). `sous vars` alone is `vars list`.
 
 - `vars list` lists every variable, with where its value came from.
-- `vars show NAME` shows everything about one variable.
+- `vars show NAME` shows everything about one variable. `NAME` may also be an environment variable name that
+  answers it.
 - `vars ask [NAME]` asks the questions and stores the answers in the `.sous` env files. `--env-file .env` or
   `--env-file .env.local` stores every answer of the run in that one file (committed, or this machine only); a
   secret or machine-specific variable headed for the committed `.env` is warned about and needs a yes (`--yes`).

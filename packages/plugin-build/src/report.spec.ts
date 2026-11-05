@@ -119,12 +119,15 @@ describe("messages about preparing", () => {
         expect(one.messages[0]).toMatchObject({ level: "warning", style: ReportEntryStyle.List });
         expect(messageText(one.messages[0]!.message)).toContain("One repository is LINKED to a working copy on this machine.");
         expect(messageText(one.messages[0]!.message)).toContain("acme -> /src/acme");
+        // One repository reads "its ... that checkout", not "their ... those checkouts" (gh-229).
+        expect(messageText(one.messages[0]!.message)).toContain("Its recipes are read from that checkout, so versions, the lockfile and freshness checks do not apply to it.");
 
         const two = new BufferedReporter();
 
         reportLinkedRepos({ a: { path: "/a" } as never, b: { path: "/b" } as never }, two, LogLevel.Notice);
         expect(two.messages[0]).toMatchObject({ level: "notice" });
         expect(messageText(two.messages[0]!.message)).toContain("2 repositories are LINKED");
+        expect(messageText(two.messages[0]!.message)).toContain("Their recipes are read from those checkouts");
     });
 
     /**
@@ -148,6 +151,28 @@ describe("messages about preparing", () => {
         expect(text).toContain("pinned: a/b at version 1.0.0.");
         expect(text).toContain("a/c moved from version 1.0.0 to version 1.1.0.");
         expect(text).toContain("Commit it");
+    });
+
+    /**
+     * A pin of the built-in `core` subscription moved to the installed sous version says why (#229).
+     *
+     * reportPrepared({ locked: { updated: [core/sous-skills 1.0.13 -> 1.0.16] }, followsSous: [{ key: "core/sous-skills", subscription: "core", version: "1.0.16" }] })
+     * // -> "core/sous-skills moved from version 1.0.13 to version 1.0.16, because the subscription to 'core' follows the installed sous, version 1.0.16."
+     */
+    it("should say why a built-in pin moved", () => {
+        const reporter = new BufferedReporter();
+
+        reportPrepared(
+            prepared({
+                locked: { ...NO_CHANGE, unchanged: false, updated: [{ key: "core/sous-skills", from: "1.0.13", to: "1.0.16" }] },
+                followsSous: [{ key: "core/sous-skills", subscription: "core", version: "1.0.16" }],
+            }),
+            reporter,
+        );
+
+        expect(reporter.messages.map((entry) => messageText(entry.message)).join("\n")).toContain(
+            "core/sous-skills moved from version 1.0.13 to version 1.0.16, because the subscription to 'core' follows the installed sous, version 1.0.16.",
+        );
     });
 
     /**

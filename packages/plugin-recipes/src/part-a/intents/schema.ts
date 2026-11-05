@@ -22,7 +22,7 @@ export const acceptFirst: JsonSchema = { type: "boolean", description: "When a r
 export const answer: JsonSchema = {
     type: "array",
     items: { type: "string" },
-    description: "Answer a recipe question ahead of time, as name=value (repeatable)",
+    description: "Answer a recipe question ahead of time, as <name>=<value>",
 };
 
 export const answersFile: JsonSchema = { type: "string", description: "A file of answers to recipe questions (YAML, JSON, JSONC or .env)" };

@@ -63,12 +63,18 @@ export class VariableSet extends Payload {
     readonly kind = "variable-set";
     readonly entries: readonly VariableEntry[];
     readonly title: string | undefined;
+    /**
+     * The width labels are padded to, so blocks shown one under another line their colons up.
+     * Default: the longest label of this set.
+     */
+    readonly labelWidth: number | undefined;
 
     /** @param entries - The pairs, or a record read as label and value pairs in its key order. */
-    constructor(entries: readonly VariableEntry[] | Readonly<Record<string, unknown>>, options: { title?: string } = {}) {
+    constructor(entries: readonly VariableEntry[] | Readonly<Record<string, unknown>>, options: { title?: string; labelWidth?: number } = {}) {
         super();
         this.entries = Array.isArray(entries) ? [...(entries as readonly VariableEntry[])] : Object.entries(entries).map(([label, value]) => ({ label, value }));
         this.title = options.title;
+        this.labelWidth = options.labelWidth;
     }
 
     /** The pairs as one object: `{ Repository: "/work/recipes" }`. A label used twice keeps its last value. */

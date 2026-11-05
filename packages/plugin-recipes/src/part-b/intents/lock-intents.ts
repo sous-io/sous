@@ -135,7 +135,9 @@ export async function collectStore(input: RepoGcInput, ctx: Context): Promise<St
 
     ctx.reporter.notice(
         report.evicted.length === 0
-            ? "The store is already inside its size cap, so nothing was removed."
+            ? (report.abandoned ?? []).length === 0
+                ? "The store is already inside its size cap, so nothing was removed."
+                : "The store is already inside its size cap, so no recipe versions were removed."
             : report.dryRun
               ? `Nothing was removed. ${plural(report.evicted.length, "entry", "entries")} would be evicted; each is re-fetchable from the lockfile that pins it.`
               : `Evicted ${plural(report.evicted.length, "entry", "entries")}; the next build that needs one downloads it again.`,
@@ -177,7 +179,8 @@ export function lockShowOutputs(result: LockShowResult): IntentOutputs<LockShowR
     ];
 
     if (rows.length > 0) {
-        outputs.push(sentence(`This project's lockfile is ${result.path}.`));
+        // A label line, so a long path stays beside its label instead of wrapping onto a line of its own.
+        outputs.push(blockOutput({ Lockfile: result.path }));
     }
 
     return finish(outputs, result);
@@ -224,10 +227,24 @@ export function storeGcOutputs(report: StoreGcReport): IntentOutputs<StoreGcRepo
         );
     }
 
+    const abandoned = report.abandoned ?? [];
+
+    if (abandoned.length > 0) {
+        outputs.push(
+            listOutput(abandoned, {
+                listTitle: report.dryRun
+                    ? "Download folders an interrupted build left behind, which a real run removes:"
+                    : "Download folders an interrupted build left behind, removed:",
+            }),
+        );
+    }
+
     outputs.push(
         sentence(
             report.evicted.length === 0
-                ? "The store is already inside its size cap, so nothing was removed."
+                ? abandoned.length === 0
+                    ? "The store is already inside its size cap, so nothing was removed."
+                    : "The store is already inside its size cap, so no recipe versions were removed."
                 : report.dryRun
                   ? "Nothing was removed. Everything listed above is re-fetchable from the lockfile that pins it."
                   : "Everything removed is re-fetchable from the lockfile that pins it; the next build that needs one will download it again.",

@@ -101,7 +101,12 @@ export function createGitlabHost(options: GitlabPluginOptions = {}): GitlabRepos
         tokenSources: [
             envTokenSource({ variables, tokenHint: "a token with read_repository" }),
             gitCredentialTokenSource(),
-            cliTokenSource({ id: "glab", command: GLAB.command, args: (repository) => ["config", "get", "token", "--host", repository.host] }),
+            cliTokenSource({
+                id: "glab",
+                command: GLAB.command,
+                args: (repository) => ["config", "get", "token", "--host", repository.host],
+                login: (repository) => `glab auth login --hostname ${repository.host}`,
+            }),
         ],
 
         readStrategies: [

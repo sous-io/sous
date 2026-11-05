@@ -5,7 +5,8 @@ import type { LockDiff, LockShowResult, PlannedQuestions, RecipeUpdatePlan, Repo
 import { describeSize, finish, lockDiffLines, plainFollowUps, questionPlanOutputs, underHeading, type RanFollowUp } from "../outputs.js";
 import { namespaceListOutputs, recipeListOutputs, repoSearchOutputs, subscriptionListOutputs } from "./catalog-outputs.js";
 import { repoAddOutputs } from "./repo-outputs.js";
-import { subscriptionAddOutputs, updatePlanOutputs } from "./subscription-outputs.js";
+import { subscriptionAddOutputs, subscriptionUpdateOutputs, updatePlanOutputs } from "./subscription-outputs.js";
+import { reportSubscriptionPlan } from "./subscription.js";
 
 /** A context outside any project, with a buffering reporter. */
 function fakeContext(): Context & { reporter: BufferedReporter } {
@@ -106,6 +107,19 @@ describe("the repository outputs", () => {
         expect(outputs[3]?.summary).toBe("Nothing was removed. Everything listed above is re-fetchable from the lockfile that pins it.");
     });
 
+    /**
+     * The download folders an interrupted build left behind are listed before the closing
+     * sentence, which then says no recipe versions were removed rather than nothing.
+     */
+    it("should list the download folders an interrupted build left behind", () => {
+        const report = { evicted: [], kept: [], bytesBefore: 0, bytesAfter: 0, dryRun: false, abandoned: ["/h/cache/.sous-restore-x"] } as unknown as StoreGcReport;
+        const outputs = storeGcOutputs(report).toArray();
+
+        expect(outputs[1]?.result?.toText()).toContain("/h/cache/.sous-restore-x");
+        expect(outputs[1]?.result?.toText()).toContain("Download folders an interrupted build left behind, removed:");
+        expect(outputs[2]?.summary).toBe("The store is already inside its size cap, so no recipe versions were removed.");
+    });
+
     /** Pins show under the recipe, and a recipe not built here carries its reason as a row note. */
     it("should show what the lockfile pins, with a row note for a recipe not built here", () => {
         const result = {
@@ -122,7 +136,8 @@ describe("the repository outputs", () => {
         expect(table?.title).toBe("Recipe versions this project pins");
         expect(payload.rows.map((row) => [row.key, row.heldBy])).toEqual([["workflow/a", "this project"], ["workflow/b", "workflow/a"]]);
         expect(payload.rowNotes).toEqual([undefined, "not built here: Switched off."]);
-        expect(closing?.summary).toBe("This project's lockfile is /p/.sous/sous.lock.json.");
+        // A label line, so a long path stays beside it rather than wrapping onto a line of its own (gh-229).
+        expect((closing?.result as VariableSet).toObject()).toEqual({ Lockfile: "/p/.sous/sous.lock.json" });
     });
 });
 
@@ -147,6 +162,48 @@ describe("the subscription outputs", () => {
             { intent: "vars.ask", result: { answered: 1 } },
             { intent: "build", result: { ok: true } },
         ]);
+    });
+
+    /**
+     * When vars.ask asked nothing, its outputs should show no heading without content: neither its
+     * own "Answering variables" nor a "Variables" heading over a block that has a title (gh-229).
+     *
+     * vars.ask outputs: ["Answering variables" (title only), "Left unanswered" (a list)]
+     * // -> titles: [..., "Left unanswered", "Build"]
+     */
+    it("should leave out headings with nothing under them when vars.ask asked nothing", () => {
+        const ask = new IntentOutputs([
+            new IntentOutput({ title: "Answering variables" }),
+            new IntentOutput({ title: "Left unanswered", result: new VariableSet([{ label: "extra", value: "no answer yet, and this variable is optional" }]) }),
+        ]);
+        const build = new IntentOutputs([new IntentOutput({ title: "Build", summary: "Built." })]);
+        const followUps: RanFollowUp[] = [
+            { intent: "vars.ask", result: {}, outputs: ask },
+            { intent: "build", result: { ok: true }, outputs: build },
+        ];
+        const outputs = subscriptionAddOutputs(fakeContext(), { ...base, followUps }).toArray();
+        const titleOnly = outputs.filter((output) => output.title !== undefined && output.result === undefined && output.summary === undefined);
+
+        expect(titleOnly).toEqual([]);
+        expect(outputs.map((output) => output.title)).toEqual(["Subscribing", "Lockfile", undefined, "Left unanswered", "Build"]);
+    });
+
+    /**
+     * Before the subscribe question, the plan should not promise questions: a recipe whose
+     * variables are all optional, or already answered, asks none (gh-229).
+     *
+     * reportSubscriptionPlan(reporter, "misc/stuff", recipe ref)
+     * // -> a line saying only variables that need an answer and have none are asked
+     */
+    it("should not promise questions before subscribing", () => {
+        const reporter = new BufferedReporter();
+
+        reportSubscriptionPlan(reporter, "misc/stuff", { kind: "recipe", name: "stuff", namespace: { kind: "namespace", name: "misc" } } as unknown as Parameters<typeof reportSubscriptionPlan>[2]);
+
+        const text = JSON.stringify(reporter.messages);
+
+        expect(text).not.toContain("The variables it publishes are asked about afterwards");
+        expect(text).toContain("that require an answer and have none yet are asked about afterwards");
     });
 
     /** A build that failed ends the command with exit code 1 and an error saying what is recorded. */
@@ -191,6 +248,64 @@ describe("the update plan outputs", () => {
         expect((outputs[0]?.result as ItemList).title).toBe("Updating every subscription in this project changes the lockfile:");
         expect((outputs[1]?.result as ItemList).items).toEqual(["other at https://x/other, needed by workflow/a"]);
         expect(outputs.slice(2).map((output) => output.result?.toText())).toEqual(["The index of 'acme' could not be fetched, so its pins stay where they are. offline", "Switched off, so left alone: workflow/b."]);
+    });
+
+    /**
+     * When an index could not be read and nothing moves, the headline does not claim every pin is
+     * the newest: sous could not check the pins of that repository (#204 bug 33).
+     *
+     * // nothing moves; 'sous-recipes' unreachable, no repository read
+     * // -> "Sous could not check for updates: it could not read the index of 'sous-recipes'."
+     */
+    it("should not say there is nothing to update when an index could not be read", () => {
+        const offline = {
+            ...plan,
+            diff: unchanged,
+            missingRepos: [],
+            switchedOff: [],
+            unreachable: [{ repo: "sous-recipes", reason: "Sous could not read github.com/sous-io/sous-recipes: git: Could not resolve host: github.com." }],
+        } as unknown as RecipeUpdatePlan;
+        const texts = updatePlanOutputs(offline).map((output) => output.result?.toText() ?? output.summary);
+
+        expect(texts.join("\n")).not.toContain("Nothing to update");
+        expect(texts[0]).toBe("Sous could not check for updates: it could not read the index of 'sous-recipes'.");
+
+        const partly = updatePlanOutputs({ ...offline, checked: ["acme"] } as RecipeUpdatePlan).map((output) => output.result?.toText() ?? output.summary);
+
+        expect(partly[0]).toBe("No updates found in the repositories sous could read. It could not read the index of 'sous-recipes', so the pins from it were not checked.");
+    });
+});
+
+describe("the subscription update outputs", () => {
+    /**
+     * When one subscription could not be resolved, the closing sentence does not claim every
+     * subscription was updated, and names the one that was not (#204 bug 49).
+     *
+     * // plan.failed: [{ key: "acme/retired", ... }]
+     * // -> "... for every subscription in this project except acme/retired, whose pins stay where they are. ..."
+     */
+    it("should not claim every subscription was updated when one could not be resolved", () => {
+        const plan = {
+            scope: { kind: "all" },
+            diff: { ...unchanged, unchanged: false, updated: [{ key: "workflow/a", from: "1.0.0", to: "1.1.0" }] },
+            lockfile: {},
+            missingRepos: [],
+            newVariables: [],
+            unreadable: [],
+            unreachable: [],
+            linked: [],
+            builtIn: [],
+            switchedOff: [],
+            failed: [{ key: "acme/retired", reason: "No version of acme/retired is published." }],
+            cycles: [],
+        } as unknown as RecipeUpdatePlan;
+        const text = subscriptionUpdateOutputs(fakeContext(), { plan, applied: true, nothingToUpdate: false, trusted: [], dryRun: false, followUps: [] })
+            .toArray()
+            .map((output) => output.summary ?? "")
+            .join("\n");
+
+        expect(text).not.toContain("for every subscription in this project.");
+        expect(text).toContain("for every subscription in this project except acme/retired, whose pins stay where they are.");
     });
 });
 

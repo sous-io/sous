@@ -1,6 +1,7 @@
 import { ConfigError } from "@sous-io/plugin-api";
 import { describe, expect, it } from "vitest";
 import type { RecipeDownloadAttempt } from "../../types.js";
+import { IndexReadError } from "../index-cache/read-chain.js";
 import { describeFailures, downloadFailureError } from "./download-failures.js";
 
 /** A download error as `fetchRecipeTree` throws it: git's reason per URL, and the attempts. */
@@ -75,6 +76,34 @@ describe("describeFailures()", () => {
 
         expect(lines[1]).toBe("  Either the index could not be fetched, or the version was withdrawn upstream. Run 'sous repo list' to see what sous has.");
         expect(fixes).toEqual([]);
+    });
+});
+
+describe("describeFailures() with an index that could not be read", () => {
+    /**
+     * Recipes that failed because their repository's index could not be read share one entry,
+     * which lists them, so the read failure is printed once per repository (#204 bug 14).
+     *
+     * describeFailures([a/one, a/two, a/three], each failing with the same index read failure)
+     * // lines: ["a/one, a/two, a/three: could not read gitlab.com/acme/recipes.\n  git  Could not resolve host: gitlab.com\n…"]
+     */
+    it("should print an index read failure once, listing every recipe it stopped", () => {
+        const failure = {
+            repo: "gitlab.com/acme/recipes",
+            attempts: [{ strategy: "git", reason: "Could not resolve host: gitlab.com" }],
+            fixes: ["check that this machine can reach gitlab.com, and set HTTPS_PROXY if this network needs a proxy"],
+        };
+        const shared = new IndexReadError(failure);
+        const { lines } = describeFailures([
+            { key: "a/one", error: shared },
+            { key: "a/two", error: shared },
+            // A separate read of the same repository, failing the same way, joins them too.
+            { key: "a/three", error: new IndexReadError(failure) },
+        ]);
+
+        expect(lines).toHaveLength(1);
+        expect(lines[0]).toBe(`a/one, a/two, a/three: ${shared.message}`);
+        expect(lines[0]!.match(/could not read gitlab\.com\/acme\/recipes\./g)).toHaveLength(1);
     });
 });
 

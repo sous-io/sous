@@ -216,18 +216,29 @@ export const byteCountSchema = z
   .min(0, "must not be negative");
 
 /**
- * Where a repository lives. A hosted repository is named by a URL; a repository
- * on this machine, which the `local` provider reads, is named by an absolute
- * path or by the same path in `file:///...` form (which is already a URL).
+ * The scp-like SSH address git accepts and hosts offer to copy: `git@gitlab.com:acme/recipes.git`.
+ * A user is required, so a Windows path such as `C:/recipes` never matches.
+ */
+const SCP_SSH_URL_PATTERN = /^[^@\s/:]+@[^@\s/:]+:[^\s]+$/;
+
+/**
+ * Where a repository lives. A hosted repository is named by a URL, including an
+ * SSH one in either spelling (`ssh://git@host/owner/name.git`, which is already
+ * a URL, or `git@host:owner/name.git`); a repository on this machine, which the
+ * `local` provider reads, is named by an absolute path or by the same path in
+ * `file:///...` form (which is already a URL).
  */
 export const repoUrlSchema = z.union([
   z.url(),
   z
     .string()
     .min(1, "must not be empty")
-    .refine((value) => value.startsWith("/") || /^[A-Za-z]:[\\/]/.test(value), {
-      message: "must be a repository URL, or an absolute path to one on this machine",
-    }),
+    .refine(
+      (value) => value.startsWith("/") || /^[A-Za-z]:[\\/]/.test(value) || SCP_SSH_URL_PATTERN.test(value),
+      {
+        message: "must be a repository URL, or an absolute path to one on this machine",
+      }
+    ),
 ]);
 
 /** An absolute filesystem path. */

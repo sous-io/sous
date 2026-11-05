@@ -21,6 +21,20 @@ describe("text helpers (ported from formatting.spec.ts)", () => {
         expect(wrapText("a b\nc d", 3)).toEqual(["a b", "c d"]);
     });
 
+    /**
+     * Runs of spaces inside a line are kept, so columns padded to line up (a read failure's
+     * attempts) stay lined up (#204 bug 42).
+     *
+     * wrapText("  HTTP with token      401: the token was refused", 100)
+     * // -> ["  HTTP with token      401: the token was refused"]
+     */
+    it("should keep the spaces that line up columns", () => {
+        const attempts = ["could not read gitlab.com/acme/recipes.", "  HTTP with token      401: the token was refused", "  git                  Permission denied (publickey)"].join("\n");
+
+        expect(wrapText(attempts, 100)).toEqual(attempts.split("\n"));
+        expect(wrapText("  git                  Permission denied (publickey)", 40)).toEqual(["  git                  Permission denied", "    (publickey)"]);
+    });
+
     it("should leave a word longer than the width whole, and measure without color", () => {
         expect(wrapText("see https://example.com/a/very/long/path now", 10, { hangingIndent: 0 })).toEqual(["see", "https://example.com/a/very/long/path", "now"]);
 
@@ -75,6 +89,24 @@ describe("Layout", () => {
         expect(plain().errorLines("Something broke.\nTry again.")).toEqual(["Error: Something broke.", "Try again."]);
         expect(plain().dryRunLines("File will not be written.")).toEqual(["    [Dry Run] File will not be written."]);
         expect(plain().warningLines("This is RISKY.")).toEqual(["   WARNING:   ", "  This is RISKY."]);
+    });
+
+    /**
+     * A warning keeps each line's own indentation and inner padding, so a read failure's attempts
+     * sit under their heading, lined up (#204 bug 42).
+     *
+     * warningLines("acme could not be checked upstream: could not read x.\n  git   Permission denied")
+     * // -> ["   WARNING:   ", "  acme could not be ...", "    git   Permission denied"]
+     */
+    it("should keep the indentation and columns of a warning's lines", () => {
+        const text = ["acme could not be checked upstream: could not read gitlab.com/acme/recipes.", "  HTTP without token   could not connect", "  git                  Permission denied (publickey)"].join("\n");
+
+        expect(plain().warningLines(text)).toEqual([
+            "   WARNING:   ",
+            "  acme could not be checked upstream: could not read gitlab.com/acme/recipes.",
+            "    HTTP without token   could not connect",
+            "    git                  Permission denied (publickey)",
+        ]);
     });
 
     it("should color through the style, and only when it is on", () => {

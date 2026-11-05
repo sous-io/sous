@@ -54,8 +54,10 @@ describe("compiler.prune", () => {
 
         expect(result).toEqual({ removed: [stale], dirsRemoved: [], dryRun: false });
         expect(fs.existsSync(stale)).toBe(false);
-        expect(loadState(statePath()).files.find((entry) => entry.dest === stale)).toBeUndefined();
+        expect(loadState(statePath(), project.root).files.find((entry) => entry.dest === stale)).toBeUndefined();
         expect(compiler.output()).toContain(`removed: ${stale}`);
+        expect(compiler.output().indexOf("Removed outputs")).toBeGreaterThan(-1);
+        expect(compiler.output().indexOf("Removed outputs")).toBeLessThan(compiler.output().indexOf(`removed: ${stale}`));
     });
 
     /** A plain build (compile, then prune) removes an output dropped from the config. */
@@ -73,7 +75,7 @@ describe("compiler.prune", () => {
 
         expect(fs.existsSync(stale)).toBe(false);
         expect(fs.existsSync(dest)).toBe(true);
-        expect(loadState(statePath()).files.map((entry) => entry.dest)).toEqual([dest]);
+        expect(loadState(statePath(), project.root).files.map((entry) => entry.dest)).toEqual([dest]);
     });
 
     /** A directory sous made is removed once its last file is pruned. */
@@ -85,7 +87,7 @@ describe("compiler.prune", () => {
         const { compiler, swap } = await swappable(single(src, stale));
 
         await compiler.compile();
-        expect(loadState(statePath()).dirs).toContain(subDir);
+        expect(loadState(statePath(), project.root).dirs).toContain(subDir);
 
         await swap(single(src, project.at("dest.md")));
 
@@ -93,7 +95,7 @@ describe("compiler.prune", () => {
 
         expect(result.dirsRemoved).toEqual([subDir]);
         expect(fs.existsSync(subDir)).toBe(false);
-        expect(loadState(statePath()).dirs).not.toContain(subDir);
+        expect(loadState(statePath(), project.root).dirs).not.toContain(subDir);
     });
 
     /** A directory that still holds a current output stays. */
@@ -134,7 +136,7 @@ describe("compiler.prune", () => {
         expect(result).toEqual({ removed: [stale], dirsRemoved: [], dryRun: true });
         expect(fs.existsSync(stale)).toBe(true);
         expect(compiler.output()).toContain(`would-remove: ${stale}`);
-        expect(loadState(statePath()).files.find((entry) => entry.dest === stale)).toBeDefined();
+        expect(loadState(statePath(), project.root).files.find((entry) => entry.dest === stale)).toBeDefined();
     });
 
     /**

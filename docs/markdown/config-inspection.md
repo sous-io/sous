@@ -63,14 +63,16 @@ Prints one value by dot-path, with `[n]` for array indices:
 
 ```bash
 sous config get name
-sous config get compilation.targets[0].entryPoint
+sous config get repos.sous-recipes.url
 ```
 
 Scalars print raw (no quotes); objects and arrays print as pretty JSON. A missing path exits
 non-zero with a message on stderr.
 
 `--layers` adds where the value came from: every file, recipe or plugin that changed the value at
-that path, in order, with its change. This answers "which file or plugin set this?" directly:
+that path, in order, with its change. For a path with an index, such as `compilation.targets[0]`, it
+lists only the changes to the item that ends up at that index, starting with the one that added
+it. This answers "which file or plugin set this?" directly:
 
 ```text
 $ sous config get subscriptions."tool-usage/automated-browser-tasks".enabled --layers

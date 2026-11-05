@@ -105,6 +105,38 @@ describe("recipes.fetch", () => {
         await expect(startEngine({ root, home, data: userConfig(), hosts: [fakeHost([repo], calls)] })).rejects.toThrow(/could not download a recipe/);
     });
 
+    /**
+     * Several recipes from one repository whose index cannot be read: the index is read once, and
+     * the error tells the read failure once, naming every recipe it stopped (#204 bug 14).
+     *
+     * // workflow/alpha, workflow/beta, workflow/gamma pinned from acme; acme offline
+     * // -> one index read; details: ["workflow/alpha, workflow/beta, workflow/gamma: could not read fake.test/acme/recipes. …"]
+     */
+    it("should read an unreachable repository's index once, and report it once for all its recipes", async () => {
+        const keys = ["workflow/alpha", "workflow/beta", "workflow/gamma"];
+
+        writeLockfile(
+            { root, sousDir: path.join(root, ".sous"), configPath: undefined, confDir: "" },
+            {
+                formatVersion: 1,
+                repos: { acme: { url: URL, identity: IDENTITY } },
+                recipes: Object.fromEntries(keys.map((key) => [key, { repo: "acme", version: "1.0.0", hash: hashOf(source), requestedBy: ["project"], kind: "subscribes" }])),
+            },
+        );
+        repo.offline = "network unreachable";
+
+        const data = userConfig({ subscriptions: Object.fromEntries(keys.map((key) => [key, {}])) });
+        const error = await startEngine({ root, home, data, hosts: [fakeHost([repo], calls)] }).then(
+            () => expect.unreachable() as never,
+            (caught: Error & { details?: string[] }) => caught,
+        );
+        const told = (error.details ?? []).join("\n");
+
+        expect(calls.reads).toHaveLength(1);
+        expect(told.match(/could not read fake\.test\/acme\/recipes\./g)).toHaveLength(1);
+        expect(told).toContain("workflow/alpha, workflow/beta, workflow/gamma: could not read fake.test/acme/recipes.");
+    });
+
     it("should skip what it cannot download when the plugin option fetch.missing is skip", async () => {
         repo.offline = "network unreachable";
 

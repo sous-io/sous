@@ -32,11 +32,12 @@ import type {
     SubscriptionUpdateInput,
     SubscriptionUpdateResult,
 } from "../../types.js";
+import { reachableKeys, stillBuilt } from "../active.js";
 import { findInCatalog, latestVersion } from "../catalog.js";
 import { identityOf, loadCatalog, pickMatch, readingsOf, readUpstream, type CatalogContext } from "../catalog-context.js";
-import { USER_ADDED_BY } from "../defaults.js";
+import { isBuiltInEntry, USER_ADDED_BY } from "../defaults.js";
 import { askFollowUp, buildFollowUp } from "../followups.js";
-import { applyResolution, keysHeldBySubscription, PROJECT_HOLDER, type LockRepoInput } from "../lock-holds.js";
+import { applyResolution, builtInMoves, keysHeldBySubscription, PROJECT_HOLDER, type BuiltInMove, type LockRepoInput } from "../lock-holds.js";
 import {
     clearSubscriptionEnabled,
     configuredSubscriptions,
@@ -55,11 +56,11 @@ import { planQuestions } from "../questions.js";
 import { lockDiffLines } from "../outputs.js";
 import { ensureRequiredPlugins, recipeDirectory } from "../required-plugins.js";
 import { needUrlError } from "../trust.js";
-import { describeUpdateScope, isEmptyUpdate, planUpdate, resolveTogether } from "../update-plan.js";
+import { describeUpdateScope, emptyUpdateHeadline, isEmptyUpdate, planUpdate, resolveTogether } from "../update-plan.js";
 import { describeError, nowIso, proposeRepoName, resolvedAtPin, sortBytewise } from "../util.js";
 import { subscriptionListOutputs } from "./catalog-outputs.js";
-import { acceptFirst, answer, answersFile, browsing, dryRun, inputSchema, latestFlag, noBuild, yes, yesFlag } from "./schema.js";
-import { recipeUpdateOutputs, subscriptionAddOutputs, subscriptionRemoveOutputs, subscriptionToggleOutputs, subscriptionUpdateOutputs } from "./subscription-outputs.js";
+import { acceptFirst, answer, answersFile, browsing, dryRun, inputSchema, latestFlag, noBuild, yes, yesFlag, yesFlagNoTrust } from "./schema.js";
+import { builtInMoveNote, recipeUpdateOutputs, subscriptionAddOutputs, subscriptionRemoveOutputs, subscriptionToggleOutputs, subscriptionUpdateOutputs } from "./subscription-outputs.js";
 
 /** The most rounds of "resolve, trust what is missing, resolve again" one command runs. */
 const MAX_TRUST_ROUNDS = 10;
@@ -135,6 +136,10 @@ async function resolveWrittenRef(input: SubscriptionAddInput, ctx: Context): Pro
     const trust = ctx.services.get("recipes.trust");
     let current = ctx;
     const trusted: string[] = [];
+
+    // Readings in a repository the project trusts come first (#204 bug 31): on GitLab a nested group
+    // reads several ways, and the first listed is the one '--accept-first' takes.
+    located.sort((left, right) => Number(trust.isTrusted(locationOf(right)!.identity)) - Number(trust.isTrusted(locationOf(left)!.identity)));
 
     if (!located.some((reading) => trust.isTrusted(locationOf(reading)!.identity))) {
         let chosen: NamedRef = located[0]!;
@@ -214,14 +219,21 @@ async function pickNamed(ctx: Context, catalog: CatalogContext, readings: readon
     return match.ref.kind === "recipe" && written.kind === "recipe" && written.range !== undefined ? { ...match.ref, range: written.range } : match.ref;
 }
 
-/** Reports what subscribing does to this project, before the subscribe question. */
-export function reportSubscriptionPlan(reporter: Reporter, key: string, ref: NamedRef): void {
+/**
+ * Reports what subscribing does to this project, before the subscribe question. `moves` are the
+ * built-in pins (`core`) that subscribing moves to the installed sous version as well.
+ */
+export function reportSubscriptionPlan(reporter: Reporter, key: string, ref: NamedRef, moves: readonly BuiltInMove[] = []): void {
     reporter.list(
         [
             "The files it ships are compiled into this project's agent directories on the next build.",
             "Any scripts it ships can be run on this machine when an agent uses them. Sous does not run them itself, and cannot vouch for what they do.",
-            "The variables it publishes are asked about afterwards, and the answers are written to this project's env files.",
+            "Variables it publishes that require an answer and have none yet are asked about afterwards, and the answers are written to this project's env files.",
             "Its dependencies are pinned in this project's lockfile at the versions resolved now. A dependency in a repository this project does not trust is asked about by name first.",
+            ...moves.map(
+                (move) =>
+                    `It also moves ${move.key} from version ${move.from} to version ${move.to}, because the subscription to '${move.subscription}' is one sous provides itself and follows the installed sous, version ${move.to}.`,
+            ),
         ],
         {
             title:
@@ -233,11 +245,16 @@ export function reportSubscriptionPlan(reporter: Reporter, key: string, ref: Nam
     );
 }
 
-/** The request a new subscription makes. */
-function newSubscriptionRequest(input: SubscriptionAddInput, ref: NamedRef): RecipeRequest {
+/**
+ * The request a new subscription makes. `builtInRange` is the range of a subscription sous provides
+ * itself (`core`: the running sous version), which adding it back asks for instead.
+ */
+function newSubscriptionRequest(input: SubscriptionAddInput, ref: NamedRef, builtInRange?: string): RecipeRequest {
+    const range = builtInRange ?? (ref.kind === "recipe" ? ref.range : undefined);
+
     return {
         ref,
-        ...(ref.kind === "recipe" && ref.range !== undefined ? { range: ref.range } : {}),
+        ...(range === undefined ? {} : { range }),
         ...(input.prerelease === true ? { prerelease: true } : {}),
         requestedBy: PROJECT_HOLDER,
         kind: "subscribes",
@@ -254,7 +271,14 @@ function newSubscriptionRequest(input: SubscriptionAddInput, ref: NamedRef): Rec
  * @param key - The new subscription's key; a subscription already configured under it is replaced.
  * @param alone - The new subscription's closure, resolved on its own (trust and downloads done).
  */
-async function resolveWithOthers(ctx: Context, input: SubscriptionAddInput, key: string, ref: NamedRef, alone: readonly ResolvedRecipe[]): Promise<{ all: ResolvedRecipe[]; resolved: ResolvedRecipe[] }> {
+async function resolveWithOthers(
+    ctx: Context,
+    input: SubscriptionAddInput,
+    key: string,
+    ref: NamedRef,
+    alone: readonly ResolvedRecipe[],
+    builtInRange?: string,
+): Promise<{ all: ResolvedRecipe[]; resolved: ResolvedRecipe[] }> {
     const resolver = ctx.services.get("recipes.resolver");
     const lock = ctx.services.get("recipes.lock");
     const requests: Array<{ key: string; request: RecipeRequest }> = [];
@@ -271,7 +295,7 @@ async function resolveWithOthers(ctx: Context, input: SubscriptionAddInput, key:
         }
     }
 
-    requests.push({ key, request: newSubscriptionRequest(input, ref) });
+    requests.push({ key, request: newSubscriptionRequest(input, ref, builtInRange) });
 
     const together = await resolveTogether(requests, (asked) => resolver.resolve(asked, lock.held(lock.read())));
     const refused = together.failed.find((entry) => entry.key === key);
@@ -289,13 +313,18 @@ async function resolveWithOthers(ctx: Context, input: SubscriptionAddInput, key:
 }
 
 /** Resolves a ref and everything beneath it, trusting new repositories as often as resolution turns them up. */
-async function resolveClosure(input: SubscriptionAddInput, ref: NamedRef, start: Context): Promise<{ resolved: ResolvedRecipe[]; unreadable: string[]; cycles: string[][]; trusted: string[]; ctx: Context }> {
+async function resolveClosure(
+    input: SubscriptionAddInput,
+    ref: NamedRef,
+    start: Context,
+    builtInRange?: string,
+): Promise<{ resolved: ResolvedRecipe[]; unreadable: string[]; cycles: string[][]; trusted: string[]; ctx: Context }> {
     const trusted: string[] = [];
     const tried = new Set<string>();
     let ctx = start;
 
     for (let round = 0; ; round++) {
-        const result = await ctx.services.get("recipes.resolver").resolve([newSubscriptionRequest(input, ref)], { ...(input.prerelease === true ? { prerelease: true } : {}) });
+        const result = await ctx.services.get("recipes.resolver").resolve([newSubscriptionRequest(input, ref, builtInRange)], { ...(input.prerelease === true ? { prerelease: true } : {}) });
         const missing: MissingRepo[] = result.missingRepos;
 
         // The index does not always say what a version depends on; then its manifest is read from
@@ -366,7 +395,9 @@ export async function addSubscription(input: SubscriptionAddInput, ctx: Context)
     const key = format.key(written.ref);
     const canonical = format.format(written.ref);
 
-    reportSubscriptionPlan(ctx.reporter, key, written.ref);
+    const moves = builtInMoves(written.ctx.services.get("recipes.lock").read(), enabledSubscriptions(written.ctx.config)).filter((move) => move.subscription !== key);
+
+    reportSubscriptionPlan(ctx.reporter, key, written.ref, moves);
 
     if (input.dryRun !== true && input.yes !== true) {
         const proceed = await ctx.prompter.confirm({ message: `Subscribe to '${canonical}'?`, answeredBy: "--yes", default: true });
@@ -376,9 +407,12 @@ export async function addSubscription(input: SubscriptionAddInput, ctx: Context)
         }
     }
 
-    const alone = await resolveClosure(input, written.ref, written.ctx);
+    // A subscription sous provides itself (`core`) keeps its own range: adding it back only switches it on.
+    const builtIn = configuredSubscriptions(written.ctx.config)[key];
+    const builtInRange = isBuiltInEntry(builtIn) ? builtIn?.range : undefined;
+    const alone = await resolveClosure(input, written.ref, written.ctx, builtInRange);
     const current = alone.ctx;
-    const settled = await resolveWithOthers(current, input, key, written.ref, alone.resolved);
+    const settled = await resolveWithOthers(current, input, key, written.ref, alone.resolved, builtInRange);
     const closure = { ...alone, resolved: settled.resolved };
     const lockService = current.services.get("recipes.lock");
     const before = lockService.read();
@@ -413,13 +447,18 @@ export async function addSubscription(input: SubscriptionAddInput, ctx: Context)
 
     const range = written.ref.kind === "recipe" ? written.ref.range : undefined;
 
-    await writeSubscriptionEntry(current.services.get("confd.managed"), key, {
-        ...(range === undefined ? {} : { range }),
-        ...(input.prerelease === true ? { prerelease: true } : {}),
-        ...(input.alwaysPull === true ? { alwaysPull: true } : {}),
-        addedAt: nowIso(),
-        addedBy: USER_ADDED_BY,
-    });
+    if (isBuiltInEntry(builtIn)) {
+        // Clears the opt-out `remove` or `disable` wrote, rather than replacing sous's entry with one of the user's.
+        await switchOn(current, key, builtIn?.enabled === false && laterSetters(current.config, key).length === 0, false);
+    } else {
+        await writeSubscriptionEntry(current.services.get("confd.managed"), key, {
+            ...(range === undefined ? {} : { range }),
+            ...(input.prerelease === true ? { prerelease: true } : {}),
+            ...(input.alwaysPull === true ? { alwaysPull: true } : {}),
+            addedAt: nowIso(),
+            addedBy: USER_ADDED_BY,
+        });
+    }
 
     const diff = await writeLock(current, after);
 
@@ -491,27 +530,59 @@ export async function toggleSubscription(input: SubscriptionToggleInput, ctx: Co
         });
     }
 
-    const changed = (configured[key]?.enabled !== false) !== enabled;
-    // A layer after 510 that sets `enabled` still wins: say so, and let it.
+    const wasOn = configured[key]?.enabled !== false;
+    // A layer after 510 that sets `enabled` decides the merged value, whatever 510 says.
     const later = laterSetters(ctx.config, key);
-    const edit = enabled ? await switchOn(ctx, key, changed && later.length === 0, input.dryRun === true) : await setSubscriptionEnabled(managed, key, false, input.dryRun === true);
+    const decidedBy = later[later.length - 1];
+    const effective = decidedBy === undefined ? enabled : wasOn;
+    const effectiveChanged = effective !== wasOn;
+    const edit = enabled ? await switchOn(ctx, key, !wasOn && decidedBy === undefined, input.dryRun === true) : await setSubscriptionEnabled(managed, key, false, input.dryRun === true);
+    const kept = effective ? [] : stillBuiltWhenOff(ctx, key);
+    const facts = {
+        key,
+        enabled,
+        file,
+        changed: edit.changed,
+        effective,
+        effectiveChanged,
+        ...(decidedBy === undefined ? {} : { decidedBy }),
+        ...(kept.length === 0 ? {} : { stillBuilt: kept }),
+    };
 
-    if (later.length > 0) {
-        ctx.reporter.warning(`${later[later.length - 1]} also sets subscriptions.${key}.enabled and is applied after conf.d/${SUBSCRIPTIONS_LAYER}, so its value still wins.`);
+    // Only when that later value disagrees is it worth a warning.
+    if (decidedBy !== undefined && effective !== enabled) {
+        ctx.reporter.warning(`${decidedBy} also sets subscriptions.${key}.enabled and is applied after conf.d/${SUBSCRIPTIONS_LAYER}, so its value still wins.`);
     }
 
     if (input.dryRun === true || !edit.changed) {
-        return { key, enabled, file, changed, dryRun: input.dryRun === true, followUps: [{ intent: "build", skipped: input.dryRun === true ? "--dry-run" : "nothing changed" }] };
+        return { ...facts, dryRun: input.dryRun === true, followUps: [{ intent: "build", skipped: input.dryRun === true ? "--dry-run" : "nothing changed" }] };
     }
 
     ctx.configChanged();
 
     // The build that follows must see the subscription switched.
-    if (changed && input.noBuild !== true) {
+    if (effectiveChanged && input.noBuild !== true) {
         await rebuild(ctx);
     }
 
-    return { key, enabled, file, changed, dryRun: false, followUps: changed ? [await buildFollowUp(ctx, input)] : [{ intent: "build", skipped: "nothing changed" }] };
+    return { ...facts, dryRun: false, followUps: effectiveChanged ? [await buildFollowUp(ctx, input)] : [{ intent: "build", skipped: "nothing changed" }] };
+}
+
+/**
+ * What switching one subscription off leaves built anyway: its recipes that the subscriptions
+ * still switched on depend on, one sentence each (#204 bug 24).
+ */
+function stillBuiltWhenOff(ctx: Context, key: string): string[] {
+    const subscriptions = { ...configuredSubscriptions(ctx.config), [key]: { ...configuredSubscriptions(ctx.config)[key], enabled: false } };
+
+    try {
+        const lock = ctx.services.get("recipes.lock").read();
+
+        return stillBuilt(lock, subscriptions, new Set(reachableKeys(lock, subscriptions))).map((entry) => entry.message);
+    } catch {
+        // A lockfile that cannot be read says nothing about what is built.
+        return [];
+    }
 }
 
 /**
@@ -525,6 +596,11 @@ export async function toggleSubscription(input: SubscriptionToggleInput, ctx: Co
 async function switchOn(ctx: Context, key: string, mustTurnOn: boolean, dryRun: boolean): Promise<{ readonly changed: boolean }> {
     const managed = ctx.services.get("confd.managed");
     const own = (await managedEntries<SubscriptionEntry>(managed, SUBSCRIPTIONS_LAYER, "subscriptions"))[key];
+
+    // 510 switches it on already: there is nothing to write, whatever a later file says.
+    if (own?.enabled === true) {
+        return { changed: false };
+    }
 
     if (own?.enabled === undefined) {
         // The 510 entry holds no `enabled`, so another file switches it off: only a value here wins.
@@ -642,7 +718,7 @@ export function reportUpdatePlan(reporter: Reporter, plan: RecipeUpdatePlan): vo
     const scope = describeUpdateScope(plan.scope);
 
     if (isEmptyUpdate(plan)) {
-        reporter.notice(`Nothing to update: every pin in ${scope} is already the newest published version its range allows.`);
+        reporter.notice(emptyUpdateHeadline(plan));
     } else {
         reporter.list(plan.diff.unchanged ? ["No pin moves until the repositories below are trusted and read."] : lockDiffLines(plan.diff), { title: `Updating ${scope} changes the lockfile:` }, LogLevel.Notice);
     }
@@ -689,7 +765,7 @@ export function reportUpdatePlan(reporter: Reporter, plan: RecipeUpdatePlan): vo
 
     for (const entry of plan.builtIn) {
         notes.push(
-            `The subscription to '${entry.key}' is one sous provides itself, and it stays at ${entry.version === undefined ? "the version" : `version ${entry.version}, the version`} this installation of sous ships.`,
+            builtInMoveNote(entry),
         );
     }
 
@@ -831,9 +907,9 @@ export function registerSubscriptionIntents(sous: Sous): void {
         intent: "subscription.remove",
         requiresProject: true,
         summary: "Remove a subscription and the recipes only it held",
-        input: inputSchema<SubscriptionRemoveInput>({ ref, dryRun, noBuild }, ["ref"]),
+        input: inputSchema<SubscriptionRemoveInput>({ ref, yes: { type: "boolean", description: "Answer yes to every question" }, dryRun, noBuild }, ["ref"]),
         changesConfig: true,
-        cli: { aliases: [["subscriptions", "remove"], ["unsubscribe"]], positional: ["ref"] },
+        cli: { aliases: [["subscriptions", "remove"], ["unsubscribe"]], positional: ["ref"], flags: { yes: yesFlagNoTrust } },
         handle: async (input, ctx) => subscriptionRemoveOutputs(ctx, await removeSubscription(input, ctx)),
     });
 

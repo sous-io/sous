@@ -69,6 +69,12 @@ export async function unlinkRepo(input: RepoUnlinkInput, ctx: Context, runtime: 
     await links.remove(name, scope);
     ctx.configChanged();
 
+    // The running config still reads the repository from the checkout; the pin update and the build
+    // after this read the pinned versions, so the config is rebuilt for the rest of the chain first.
+    if (ctx.chain !== undefined && !ctx.chain.parallel) {
+        await ctx.refreshConfig();
+    }
+
     let diff: RepoUnlinkResult["diff"];
     let published: UnlinkPublishedReport | undefined;
 
@@ -97,6 +103,7 @@ export async function unlinkRepo(input: RepoUnlinkInput, ctx: Context, runtime: 
 
     if (input.remove) {
         fs.rmSync(entry.path, { recursive: true, force: true });
+        removeEmptyParents(entry.path, removalRoot(scope, runtime, ctx));
         checkoutNote = `The checkout sous cloned at ${entry.path} was deleted.`;
     } else {
         checkoutNote = entry.origin === "clone" ? `The checkout sous cloned is still at ${entry.path}.` : `The checkout at ${entry.path} was yours to begin with, and has not been touched.`;
@@ -148,13 +155,42 @@ function assertRemovable(name: string, entry: ResolvedLink, scope: LinkScope, ru
         });
     }
 
-    const root = scope === "global" ? runtime.homePaths().repos : path.join(ctx.project?.sousDir ?? "", PROJECT_REPOS_DIRNAME);
+    const root = removalRoot(scope, runtime, ctx);
     const relative = path.relative(root, entry.path);
 
     if (relative === "" || relative.startsWith("..") || path.isAbsolute(relative)) {
         throw new ConfigError(`The checkout at ${entry.path} is not inside ${root}, where sous clones checkouts, so sous will not delete it.`, {
             details: ["Nothing was changed; unlink without '--remove' and delete it yourself if you want it gone."],
         });
+    }
+}
+
+/** The directory sous clones checkouts into, for a scope. */
+function removalRoot(scope: LinkScope, runtime: PartBRuntime, ctx: Context): string {
+    return scope === "global" ? runtime.homePaths().repos : path.join(ctx.project?.sousDir ?? "", PROJECT_REPOS_DIRNAME);
+}
+
+/** Removes the folders a deleted checkout sat in (`<owner>/` under the clone root) once they are empty, stopping at the root itself. */
+function removeEmptyParents(deleted: string, root: string): void {
+    const inside = (directory: string): boolean => {
+        const relative = path.relative(root, directory);
+
+        return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
+    };
+    let directory = path.dirname(deleted);
+
+    while (inside(directory)) {
+        try {
+            if (fs.readdirSync(directory).length > 0) {
+                return;
+            }
+
+            fs.rmdirSync(directory);
+        } catch {
+            return;
+        }
+
+        directory = path.dirname(directory);
     }
 }
 

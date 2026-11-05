@@ -337,6 +337,7 @@ describe("TerminalReporter", () => {
                 "  ----",
                 "  a",
                 "  b",
+                " ",
                 "  Items:",
                 "    • one",
                 "    • two",
@@ -349,6 +350,49 @@ describe("TerminalReporter", () => {
                 "",
             ].join("\n"),
         );
+    });
+
+    /**
+     * A table ends with a blank line, so what follows it (`sous lock show`'s lockfile line) does not
+     * read as one more row, and a long path stays on its label's line (gh-229).
+     *
+     *   Recipe
+     *   ------
+     *   workflow/a
+     *
+     *   Lockfile: /a/very/long/.../sous.lock.json
+     */
+    it("should leave a blank line after a table and keep a long value on its label's line", () => {
+        const { stdout, reporter } = make();
+        const lockfile = `/home/someone/${"deeply-nested-directory/".repeat(3)}project/.sous/sous.lock.json`;
+
+        reporter.result(
+            new IntentOutputs([
+                new IntentOutput({ title: "Recipe versions this project pins", result: new Table([{ key: "key", header: "Recipe" }], [{ key: "workflow/a" }]) }),
+                new IntentOutput({ result: new VariableSet({ Lockfile: lockfile }) }),
+            ]),
+        );
+
+        expect(stdout.text).toContain(["  workflow/a", " ", `    Lockfile: ${lockfile}`, ""].join("\n"));
+    });
+
+    /**
+     * A label block given a `labelWidth` pads its labels to it, so two blocks printed one under
+     * the other line their colons up (gh-229, `sous vars show`).
+     *
+     * new VariableSet({ Value: "x" }, { labelWidth: 12 })   // "    Value       : x"
+     */
+    it("should pad a label block's labels to the width it gives", () => {
+        const { stdout, reporter } = make();
+
+        reporter.result(
+            new IntentOutputs([
+                new IntentOutput({ result: new VariableSet({ Value: "x" }, { labelWidth: 12 }) }),
+                new IntentOutput({ result: new VariableSet({ "storage-path": "y" }, { labelWidth: 12 }) }),
+            ]),
+        );
+
+        expect(stdout.text).toBe("    Value       : x\n    storage-path: y\n");
     });
 
     /** Verbatim text in a result is exactly as given, and empty text prints nothing. */
@@ -394,5 +438,24 @@ describe("TerminalReporter", () => {
 
         warn.reporter.warn(new Error("Slow."));
         expect(warn.stderr.text).toContain("Warning: Slow.");
+    });
+
+    /**
+     * A cause whose message the error above it already holds says nothing new, so its "Caused
+     * by:" line is left out (gh-204: a JSON syntax error printed its message twice).
+     *
+     * SousError("x.json failed to load: Not valid JSON.", { cause: SyntaxError("Not valid JSON.") })
+     * -> "Error: x.json failed to load: Not valid JSON." and nothing more
+     */
+    it("should not repeat a cause that says the same as the error above it", () => {
+        const { stderr, reporter } = make();
+        const parse = new SyntaxError("Not valid JSON.");
+
+        reporter.critical(new SousError("Not valid JSON.", { cause: parse }));
+        reporter.critical(new SousError("x.json failed to load: Not valid JSON.", { cause: parse }));
+
+        expect(stderr.text).toContain("Error: Not valid JSON.\n");
+        expect(stderr.text).toContain("Error: x.json failed to load: Not valid JSON.\n");
+        expect(stderr.text).not.toContain("Caused by");
     });
 });
