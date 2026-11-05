@@ -287,9 +287,46 @@ describe("sous repo link branch flags and upstream report", () => {
         "feature"
       );
       expect(result.status, result.output).toBe(0);
-      expect(branchOf()).toMatch(/^sous\/edit-\d{8}-\d{4}$/);
+      expect(branchOf()).toMatch(/^sous\/edit-\d{8}-\d{6}$/);
       expect(result.output).toContain(`Created the branch '${branchOf()}'`);
       expect(git(checkout, "rev-parse", "HEAD")).toBe(git(author, "rev-parse", "feature"));
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * A generated name never collides with a branch the checkout already has,
+   * as when link, unlink (keeping the checkout) and link again run within the
+   * same second: the second name gets a suffix.
+   *
+   * sous repo link demo-recipes --generate-branch   // -> sous/edit-20261104-225317
+   * sous repo link demo-recipes --generate-branch   // -> sous/edit-20261104-225317-2 (same second)
+   */
+  it(
+    "should give a second generated branch a name of its own",
+    () => {
+      const first = runSous(projectRoot, env, "repo", "link", "demo-recipes", "--generate-branch");
+      expect(first.status, first.output).toBe(0);
+      const firstBranch = branchOf();
+
+      // Every name the next run could generate in the coming seconds is taken already.
+      const pad = (value: number) => String(value).padStart(2, "0");
+      const nameAt = (when: Date) =>
+        `sous/edit-${when.getFullYear()}${pad(when.getMonth() + 1)}${pad(when.getDate())}-` +
+        `${pad(when.getHours())}${pad(when.getMinutes())}${pad(when.getSeconds())}`;
+      const now = Date.now();
+      for (let offset = -1; offset <= 20; offset += 1) {
+        // A name an earlier run already took is left as it is.
+        spawnSync("git", ["branch", nameAt(new Date(now + offset * 1000)), "HEAD"], { cwd: checkout });
+      }
+
+      const second = runSous(projectRoot, env, "repo", "link", "demo-recipes", "--generate-branch");
+      expect(second.status, second.output).toBe(0);
+      const secondBranch = branchOf();
+
+      expect(secondBranch).not.toBe(firstBranch);
+      expect(secondBranch).toMatch(/^sous\/edit-\d{8}-\d{6}-2$/);
+      expect(second.output).toContain(`Created the branch '${secondBranch}'`);
     },
     CLI_TIMEOUT
   );
@@ -395,6 +432,92 @@ describe("sous repo link branch flags and upstream report", () => {
       expect(result.output).toContain("SHARED by every project on this machine");
       const globalCheckout = linkedPath(path.join(root, "sous-home"));
       expect(git(globalCheckout, "symbolic-ref", "--short", "HEAD")).toBe("feature");
+    },
+    CLI_TIMEOUT
+  );
+});
+
+/**
+ * `sous repo link <path>` on a checkout of a repository the project already
+ * trusts under another spelling of its URL: the checkout's `origin` says which
+ * repository it is, so the link goes to that one and nothing new is trusted.
+ */
+describe("sous repo link <path> for a checkout of a trusted repository", () => {
+  let tmp: TmpDir;
+  let root: string;
+  let projectRoot: string;
+  let checkout: string;
+  let env: NodeJS.ProcessEnv;
+
+  /** The project's links, and whether a repository was added to its config. */
+  const projectState = () => {
+    const map = JSON.parse(
+      fs.readFileSync(path.join(projectRoot, ".sous", "sous.links.json"), "utf8")
+    ) as { links: Record<string, { path: string }> };
+    const added = fs.existsSync(path.join(projectRoot, ".sous", "conf.d", "500-repos.jsonc"));
+    return { added, links: map.links };
+  };
+
+  beforeAll(() => {
+    tmp = makeTmpDir("sous-link-trusted-");
+    root = fs.realpathSync(tmp.path);
+    projectRoot = path.join(root, "project");
+    checkout = path.join(root, "checkout");
+    // Upstream is never reachable here: every ssh connection fails at once.
+    env = { SOUS_HOME: path.join(root, "sous-home"), GIT_SSH_COMMAND: "false" };
+
+    fs.mkdirSync(path.join(projectRoot, ".sous"), { recursive: true });
+    const init = runSous(root, env, "repo", "init", checkout, "--name", "recipes");
+    if (init.status !== 0) throw new Error(`repo init failed: ${init.output}`);
+    git(checkout, "init", "-q", "-b", "main");
+
+    fs.writeFileSync(
+      path.join(projectRoot, ".sous", "sous.config.json"),
+      JSON.stringify(
+        {
+          name: "link-trusted",
+          repos: {
+            "sous-recipes": { enabled: false },
+            recipes: { url: "https://example.invalid/acme/recipes" },
+          },
+        },
+        null,
+        2
+      ),
+      "utf8"
+    );
+  }, 120_000);
+
+  afterAll(() => {
+    tmp.cleanup();
+  });
+
+  /**
+   * The SSH spellings of the trusted https URL name the same repository.
+   *
+   * repos.recipes.url = https://example.invalid/acme/recipes
+   * origin            = git@example.invalid:acme/recipes.git
+   * sous repo link ../checkout   // -> linked as 'recipes', nothing added
+   */
+  it.each([
+    "git@example.invalid:acme/recipes.git",
+    "ssh://git@example.invalid/acme/recipes",
+    "https://example.invalid/acme/recipes.git",
+  ])(
+    "should link a checkout whose origin is %s to the trusted repository",
+    (origin) => {
+      spawnSync("git", ["remote", "remove", "origin"], { cwd: checkout });
+      git(checkout, "remote", "add", "origin", origin);
+
+      const result = runSous(projectRoot, env, "repo", "link", checkout, "--yes");
+
+      expect(result.status, result.output).toBe(0);
+      expect(result.output).not.toContain("a different one");
+      const state = projectState();
+      expect(state.added).toBe(false);
+      expect(result.output).not.toContain("trusted along the way");
+      expect(state.links["recipes"]?.path).toBe(checkout);
+      expect(Object.keys(state.links)).toEqual(["recipes"]);
     },
     CLI_TIMEOUT
   );

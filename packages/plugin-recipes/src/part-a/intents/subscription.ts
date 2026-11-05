@@ -136,6 +136,10 @@ async function resolveWrittenRef(input: SubscriptionAddInput, ctx: Context): Pro
     let current = ctx;
     const trusted: string[] = [];
 
+    // Readings in a repository the project trusts come first (#204 bug 31): on GitLab a nested group
+    // reads several ways, and the first listed is the one '--accept-first' takes.
+    located.sort((left, right) => Number(trust.isTrusted(locationOf(right)!.identity)) - Number(trust.isTrusted(locationOf(left)!.identity)));
+
     if (!located.some((reading) => trust.isTrusted(locationOf(reading)!.identity))) {
         let chosen: NamedRef = located[0]!;
 

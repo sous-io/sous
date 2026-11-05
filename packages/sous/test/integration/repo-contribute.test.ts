@@ -212,7 +212,7 @@ describe("sous repo contribute", () => {
 
       expect(result.status, result.output).toBe(0);
       expect(git(checkout(), "symbolic-ref", "--short", "HEAD")).toMatch(
-        /^sous\/edit-\d{8}-\d{4}$/
+        /^sous\/edit-\d{8}-\d{6}$/
       );
       expect(result.output).toContain("What this run did");
       expect(result.output).toContain("Linked 'demo-recipes' on a new branch");

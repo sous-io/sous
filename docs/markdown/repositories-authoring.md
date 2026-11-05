@@ -348,8 +348,9 @@ sous repo link my-recipes --global               # one checkout shared by every 
 ```
 
 A **path on its own** links the checkout already at that path; relative paths and `~` work, nothing is cloned, and
-the repository is added to the project first if it has not been added yet, under the short name its own manifest
-suggests. A **repository on its own** is cloned for you, into `.sous/repos/<owner>/<name>` or
+when the checkout's `origin` is a repository the project has already added, under any spelling of its URL (https,
+`git@host:owner/name`, `ssh://`, with or without `.git`), the link goes to that repository. Otherwise the
+repository is added to the project first, under the short name its own manifest suggests. A **repository on its own** is cloned for you, into `.sous/repos/<owner>/<name>` or
 `$SOUS_HOME/repos/<owner>/<name>` with `--global`; a directory already holding a checkout of the same remote is
 reused, so running it twice is harmless, and one holding a different remote is an error. A **repository followed by
 a path** links the checkout there and clones nothing; in every form the path must hold a repo manifest at its root,
@@ -388,7 +389,8 @@ moves to the newest version its range allows, after one plan and one question. S
 [Moving to newer versions](repositories-consuming.md#moving-to-newer-versions).
 
 The checkout stays where it is unless you pass `--remove`, because `sous repo submit` uses a leftover checkout to
-revise a proposal that is still open. `--remove` deletes it only when sous cloned it; a checkout you linked by
+revise a proposal that is still open. `--remove` deletes it only when sous cloned it, along with the
+`<owner>` folder it sat in once that is empty; a checkout you linked by
 path is yours, and sous refuses with an error. Before deleting, sous lists anything in the checkout that exists
 nowhere else (uncommitted changes, commits no remote has, and stashes) and asks; `--yes` answers ahead.
 
@@ -422,10 +424,12 @@ under a line naming the step. Each flag works on a checkout linked by path, too.
 ```bash
 sous repo link my-recipes --branch lc/their-change     # read from an existing branch
 sous repo link my-recipes --create-branch my-change    # start a new branch
-sous repo link my-recipes --generate-branch            # start one named sous/edit-<YYYYMMDD>-<HHMM>
+sous repo link my-recipes --generate-branch            # start one named sous/edit-<YYYYMMDD>-<HHMMSS>
 sous repo link my-recipes --generate-branch --from next  # start it from another branch
 sous repo link my-recipes --latest                     # bring the default branch up to upstream's
 ```
+
+When the generated name is already a branch in the checkout, `-2`, `-3` and so on is added to it.
 
 - `--branch <name>` switches with `git switch`, which also checks out a branch that exists only upstream. A clone
   sous makes holds only the default branch, so a branch that is not local is fetched first and added to the

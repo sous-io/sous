@@ -617,3 +617,88 @@ describe("sous repo unlink", () => {
     CLI_TIMEOUT
   );
 });
+
+describe("sous repo unlink rebuilds from the pinned versions", () => {
+  let repo: string;
+  let projectRoot: string;
+  let checkout: string;
+
+  /** The compiled skill a recipe writes into the project. */
+  const output = (name: string): string =>
+    fs.readFileSync(path.join(projectRoot, ".claude", "skills", name, "SKILL.md"), "utf8");
+
+  beforeAll(async () => {
+    repo = path.join(tmp.path, "rebuild-fixtures");
+    projectRoot = path.join(tmp.path, "rebuild-project");
+    checkout = path.join(tmp.path, "rebuild-checkout");
+
+    await buildFixtureRepo(repo, "fixtures", [
+      { namespace: "workflow", name: "alpha", version: "1.0.0", files: { "skills/alpha/SKILL.md": "# alpha\n" } },
+      { namespace: "workflow", name: "beta", version: "1.0.0", files: { "skills/beta/SKILL.md": "# beta\n" } },
+    ]);
+    makeProject(projectRoot, repo);
+    sousOk(projectRoot, "build");
+    gitIn(tmp.path, "clone", "--quiet", repo, checkout);
+  }, CLI_TIMEOUT);
+
+  /**
+   * The build that ends an unlink reads the pinned versions, not the checkout
+   * the unlink has just dropped, so an edit made in the checkout leaves the
+   * outputs at once.
+   *
+   * sous repo link fixtures <checkout>   (alpha's skill edited in the checkout)
+   * sous build                           // -> the edit is in .claude/skills/alpha
+   * sous repo unlink fixtures            // -> .claude/skills/alpha is "# alpha" again
+   */
+  it(
+    "should rebuild the outputs from the pinned versions, not the checkout it unlinked",
+    () => {
+      writeFixtureFile(
+        path.join(checkout, "recipes", "workflow", "alpha", "skills", "alpha", "SKILL.md"),
+        "# alpha\n\nAn edit made in the checkout.\n"
+      );
+      sousOk(projectRoot, "repo", "link", "fixtures", checkout);
+      sousOk(projectRoot, "build");
+      expect(output("alpha")).toContain("An edit made in the checkout.");
+
+      const result = sous(projectRoot, "repo", "unlink", "fixtures");
+
+      expect(result.status, result.output).toBe(0);
+      expect(output("alpha")).not.toContain("An edit made in the checkout.");
+      expect(output("alpha")).toContain("# alpha");
+    },
+    CLI_TIMEOUT
+  );
+
+  /**
+   * `--remove` deletes the checkout sous cloned and then builds from the
+   * pinned versions, which no longer needs the checkout; the namespace folder
+   * the clone sat in goes too once it is empty.
+   *
+   * sous repo link fixtures --yes          (clones into .sous/repos/<owner>/<name>)
+   * sous repo unlink fixtures --remove
+   * // -> exits 0, the checkout and its empty .sous/repos/<owner> folder are gone
+   */
+  it(
+    "should build after --remove without the deleted checkout, and remove its empty folder",
+    () => {
+      sousOk(projectRoot, "repo", "link", "fixtures", "--yes");
+      const links = JSON.parse(
+        fs.readFileSync(path.join(projectRoot, ".sous", "sous.links.json"), "utf8")
+      ) as { links: Record<string, { path: string; origin: string }> };
+      const cloned = links.links["fixtures"]!;
+      expect(cloned.origin).toBe("clone");
+      sousOk(projectRoot, "build");
+
+      const result = sous(projectRoot, "repo", "unlink", "fixtures", "--remove");
+
+      expect(result.status, result.output).toBe(0);
+      expect(result.output).not.toContain("File not found");
+      expect(fs.existsSync(cloned.path)).toBe(false);
+      expect(fs.existsSync(path.dirname(cloned.path))).toBe(false);
+      expect(fs.existsSync(path.join(projectRoot, ".sous", "repos"))).toBe(true);
+      expect(output("alpha")).toContain("# alpha");
+    },
+    CLI_TIMEOUT
+  );
+});

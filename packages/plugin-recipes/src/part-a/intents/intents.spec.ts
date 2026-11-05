@@ -562,6 +562,34 @@ describe("subscription.add", () => {
         expect(upstreamReads).toEqual(["r"]);
     });
 
+    /**
+     * A URL that reads as more than one repository (GitLab's nested groups) settles on the reading
+     * in the repository the project trusts, even when that reading is listed second, so
+     * `--accept-first` never takes a repository that does not exist (#204 bug 31).
+     *
+     * trusted: r = https://github.com/acme/r, publishing acme/widget
+     * addSubscription({ ref: "https://github.com/acme/r/acme/widget", acceptFirst: true })
+     * // readings: namespace 'widget' in github.com/acme/r/acme, recipe 'acme/widget' in github.com/acme/r
+     * // -> subscribes to acme/widget in r; nothing asks which repository was meant
+     */
+    it("should take the reading in a trusted repository when a URL reads as several", async () => {
+        const url = "https://github.com/acme/r/acme/widget";
+        const located = (identity: string) => ({ kind: "repo" as const, location: { identity, url: `https://${identity}`, provider: "github" } });
+        const readings = [
+            { kind: "namespace", name: "widget", repo: located("github.com/acme/r/acme") },
+            { kind: "recipe", name: "widget", namespace: { kind: "namespace", name: "acme", repo: located("github.com/acme/r") } },
+        ];
+        const refs = shortRefs();
+        const resolver = { ...refs.resolver, parse: (input: string) => (input.trim() === url ? { input, refs: readings, dropped: [], warnings: [], usedLookup: false } : refs.resolver.parse(input, "commandLine")) };
+        const picker = { pick: vi.fn(async (matches: unknown[]) => matches[0]) };
+        const { config } = setup({ indexes: { r: index({ "acme/widget": ["1.0.0"] }) }, services: { "refs.resolver": resolver, "refs.picker": picker } });
+
+        const result = await addSubscription({ ref: url, yes: true, acceptFirst: true, dryRun: true }, context(config));
+
+        expect(result).toMatchObject({ key: "acme/widget", trusted: [] });
+        expect(picker.pick).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ prompt: expect.stringContaining("more than one repository") }), expect.anything());
+    });
+
     /** A repository a dependency needs that has no URL stops the install, saying how to add it. */
     it("should stop on a repository it cannot trust", async () => {
         const { config } = setup({ missing: true });

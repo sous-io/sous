@@ -280,6 +280,23 @@ export async function localBranchExists(runner: GitRunner, directory: string, na
     return (await git(runner, ["show-ref", "--verify", "--quiet", `refs/heads/${name}`], directory)).exitCode === 0;
 }
 
+/**
+ * The name itself when no local branch has it, else the first of `<name>-2`, `<name>-3`... that is free.
+ *
+ * ```ts
+ * await unusedBranchName(git, dir, "sous/edit-20261104-225317"); // "sous/edit-20261104-225317-2" when the first is taken
+ * ```
+ */
+export async function unusedBranchName(runner: GitRunner, directory: string, name: string): Promise<string> {
+    let candidate = name;
+
+    for (let suffix = 2; await localBranchExists(runner, directory, candidate); suffix += 1) {
+        candidate = `${name}-${suffix}`;
+    }
+
+    return candidate;
+}
+
 /** Fetches one branch from upstream, and makes later fetches cover it (a single-branch clone cannot see it otherwise). */
 export async function fetchBranch(runner: GitRunner, directory: string, name: string): Promise<void> {
     await gitOrThrow(runner, ["fetch", "--quiet", UPSTREAM_REMOTE, `+refs/heads/${name}:refs/remotes/${UPSTREAM_REMOTE}/${name}`], directory, `Fetching the branch '${name}' from ${UPSTREAM_REMOTE}`);
@@ -338,11 +355,11 @@ export async function resetBranchToUpstream(runner: GitRunner, directory: string
     await gitOrThrow(runner, ["switch", "--discard-changes", "--force-create", name, `${UPSTREAM_REMOTE}/${name}`], directory, `Making the branch '${name}' match ${UPSTREAM_REMOTE}/${name}`);
 }
 
-/** A generated branch name: `sous/edit-YYYYMMDD-HHMM`. */
+/** A generated branch name: `sous/edit-YYYYMMDD-HHMMSS`. */
 export function generatedBranchName(now: Date = new Date()): string {
     const pad = (value: number): string => String(value).padStart(2, "0");
 
-    return `sous/edit-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+    return `sous/edit-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
 }
 
 /** Non-empty trimmed lines. */
