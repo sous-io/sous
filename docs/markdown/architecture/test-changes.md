@@ -1918,3 +1918,39 @@ All in `packages/plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022): a 
 - **Changed** "should pass --check and report the drift a merge will rewrite" (`plugin-authoring/src/release/release.spec.ts` and `sous/test/integration/repo-release.test.ts`), now "should pass --check and report drift that waits for the next release": it expects "The committed sous.index.json is out of date" and no "Merging rewrites".
   - **Why:** that drift (an older generator, an outdated description) publishes no version, and a release rewrites the index only when it publishes one, so the merge leaves the index as it is. The old wording promised a rewrite that never happened.
 - **New** in `release.spec.ts`: "should say a merge rewrites the index when it publishes a version" and "should say a removed recipe leaves the index at the next release that publishes".
+
+### Generated branch names go to the second (plugin-recipes; gh-229 defect 5)
+
+- **Changed** "should generate a branch name from the local date and time" (`plugin-recipes` `checkout.spec.ts`): it expects `sous/edit-20260105-090703`, with seconds. "should create a branch with a generated name from the --from base" (`sous/test/integration/repo-link-branches.test.ts`) and "should link the repository on a generated branch" (`repo-contribute.test.ts`) match `\d{8}-\d{6}`.
+  - **Why:** a name to the minute collided when a repository was linked twice in one minute. A name that is still taken gets `-2`, `-3`, and so on.
+
+### Stand-ins learn new service methods (plugin-build, plugin-recipes; gh-204 bugs 24 and 36)
+
+- **Changed** the stand-in services in `plugin-build/test/helpers.ts` (the lock service gains `withIndexHashes` and `world.indexHashes`; the active-recipes service gains `switchedOffButBuilt`; the git runner gains `run`) and the in-memory lock in `plugin-recipes/test/part-a/helpers.ts` (a pass-through `withIndexHashes`).
+  - **Why:** a build now fills in a repository's missing `indexHash` from the cache, and says when a switched-off recipe is still built for the recipes that need it.
+
+### The state file stores paths relative to its project (plugin-compiler, plugin-build; gh-229 defect 2)
+
+- **Changed** `plugin-compiler/test/prune.test.ts` and `compilation.test.ts`: they read the state file with `loadState(file, project.root)` instead of as raw JSON with absolute paths. The gh-127 test in `compilation.test.ts` also checks the entry it compares is defined.
+  - **Why:** the state file records its project root and stores paths inside it relative to it, so a copied project never prunes the original's outputs. Without the added check, the gh-127 comparison matched `undefined` to `undefined`.
+- **Changed** "should remove a file that is no longer in the config" (`prune.test.ts`): it also checks that removed files are listed under a heading before `Done.`.
+- **Changed** four tests in `plugin-build/test/build.test.ts` and two in `watch.test.ts`: the expected `compiler.compile` input includes `reportEnd: false`.
+  - **Why:** the build now prints `Done.` itself, after the outputs it removed.
+
+### Removing the built-in core subscription keeps its pin (gh-204 bug 26)
+
+- **Changed** "should record an opt-out when the built-in core subscription is removed" (`sous/test/integration/core-namespace.test.ts`): after `remove core` the lockfile still pins core, and after `add core` the core entry is gone from `510-subscriptions.jsonc` rather than replaced by a user entry.
+  - **Why:** the test asserted the bug. Switched off means skipped with its pins kept, the same as `disable core`, and adding core back only clears the opt-out.
+
+### Variables using their default (plugin-recipe-answers; gh-229, gh-204 bugs 34 and 35)
+
+- **Changed** "should skip variables answered up front" (`ask.spec.ts`): the report includes `wouldAsk: []`. "should summarize a run in plain lines" (`ask.spec.ts`) ends with the hint naming `sous vars ask <name>` and `--all`.
+- **Changed** "should list variables with their answers" and "should show the listing as command variables and a table" (`plugin-recipe-answers/test/plugin.test.ts`): `taskRoot` shows its default, `.sous/tasks`, not `undefined` or `(unanswered)`. "should show one variable as a block, its facts and its ladder" no longer expects a `storage-path` fact.
+  - **Why:** the build uses a default, so the listing shows it as the value in use. `vars show` now says where the value is stored and, on a separate "Saved to" line, where new answers go.
+
+### Help and table layout (plugin-cli; gh-204 bug 48, gh-229 formatting)
+
+- **Changed** "Whether to trust it. One of" and "Tags to give it. Default" (`plugin-cli/test/cli.test.ts`) and "How much to scale each diagram. Default: 1." (`sous/test/bin.test.ts`): a period now ends the description before the sentence the help adds.
+- **Changed** "should draw a result's outputs in order" (`plugin-cli/src/terminal-reporter.spec.ts`) and "should draw the outputs on standard output" (`plugin-cli/test/outputs.test.ts`): a blank line follows a table.
+- **Changed** the `lock show` test in `plugin-recipes/src/part-a/intents/outputs.spec.ts`: the footer is a `Lockfile` label line, so the path stays beside its label.
+  - **Why:** help read "…as <name>=<value> May be given more than once.", and a table ran straight into the line after it.
