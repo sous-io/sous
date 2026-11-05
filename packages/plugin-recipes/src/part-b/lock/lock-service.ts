@@ -169,6 +169,25 @@ export class LockService implements RecipesLock {
         return { formatVersion: 1, repos: sortObject(lockedRepos), recipes: sortRecipes(recipes) };
     }
 
+    /**
+     * Fills in a repository's missing `indexHash` from the cached index, so a lockfile written while
+     * the cache had no hash regains it without waiting for a pin to change. A hash already recorded
+     * is left alone: it names the index the pins were resolved against.
+     */
+    withIndexHashes(lockfile: Lockfile): Lockfile {
+        let changed = false;
+        const repos: Lockfile["repos"] = {};
+
+        for (const [name, entry] of Object.entries(lockfile.repos)) {
+            const indexHash = entry.indexHash === undefined ? this.indexHash(name) : undefined;
+
+            repos[name] = indexHash === undefined ? entry : { ...entry, indexHash };
+            changed ||= indexHash !== undefined;
+        }
+
+        return changed ? { ...lockfile, repos } : lockfile;
+    }
+
     /** Drops one holder, refcounted (used by unsubscribing and removing a repository). */
     removeHolder(lockfile: Lockfile, holder: string): Lockfile {
         return removeHolder(lockfile, holder, this.safePath());

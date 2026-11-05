@@ -315,7 +315,7 @@ Machine-written, committed, and the reason a fresh clone restores with no prompt
 
 | Field | Notes |
 |-------|-------|
-| `repos.<name>.url`, `.identity`, `.indexHash` | Where the repository lives, as recorded when it was added; the canonical identity the store and index cache file it under; and the hash of the index this lock was resolved against, when known |
+| `repos.<name>.url`, `.identity`, `.indexHash` | Where the repository lives, as recorded when it was added; the canonical identity the store and index cache file it under; and the hash of the index this lock was resolved against, when known. The URL may be an HTTPS or SSH URL (`git@gitlab.com:acme/recipes.git` or `ssh://git@gitlab.com/acme/recipes.git`) or an absolute path. A build fills in a missing `indexHash` from the cached index, and leaves one already recorded alone |
 | `recipes.<key>.repo`, `.version`, `.hash` | The project's short name for the repository, which must appear under `repos`; the version resolved; and the hash verified against the store after every fetch |
 | `recipes.<key>.requestedBy`, `.kind` | Who holds the entry, the literal `project` or the key of a recipe that requires it, and whether that holder is a `subscribes` or a `depends` |
 | `recipes.<key>.pins.<holder>.version`, `.hash` | A version pinned for one holder alone, keyed by that holder's recipe key; absent when every holder uses `version` |

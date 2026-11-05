@@ -72,6 +72,8 @@ export interface World {
     published: Record<string, { repo: string; version: string; namespace: string; requestedBy?: string[]; pins?: Record<string, string> }>;
     restoreCalls: Array<{ keys?: readonly string[] }>;
     restoreReport: RestoreReport;
+    /** The hash of each repository's cached index, which `withIndexHashes` fills in. */
+    indexHashes: Record<string, string>;
     indexes: { indexes: CachedIndex[]; failed: IndexReadFailure[] };
     indexCalls: number;
     /** Repositories whose stale fallback was already reported. */
@@ -107,6 +109,7 @@ export function newWorld(root: string): World {
         published: {},
         restoreCalls: [],
         restoreReport: { restored: [], alreadyPresent: [], failed: [] },
+        indexHashes: {},
         indexes: { indexes: [], failed: [] },
         indexCalls: 0,
         staleNoticed: new Set(),
@@ -293,6 +296,19 @@ export function standIns(world: World): PluginDefinition[] {
                         resolved.map((recipe) => [recipe.key, { repo: recipe.repo, version: recipe.version, hash: "h", requestedBy: ["project"], kind: "subscribes" }]),
                     ),
                 }) as unknown as Lockfile,
+            withIndexHashes: (lockfile: Lockfile) => {
+                const missing = Object.keys(lockfile.repos).filter((name) => lockfile.repos[name]!.indexHash === undefined && world.indexHashes[name] !== undefined);
+
+                if (missing.length === 0) {
+                    return lockfile;
+                }
+
+                const repos = Object.fromEntries(
+                    Object.entries(lockfile.repos).map(([name, entry]) => [name, missing.includes(name) ? { ...entry, indexHash: world.indexHashes[name] } : entry]),
+                );
+
+                return { ...lockfile, repos } as Lockfile;
+            },
             restore: async (options: { keys?: readonly string[] } = {}) => {
                 world.restoreCalls.push(options);
 

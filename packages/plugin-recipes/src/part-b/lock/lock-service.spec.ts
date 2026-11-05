@@ -200,6 +200,32 @@ describe("LockService.fromResolved", () => {
     });
 });
 
+describe("LockService.withIndexHashes", () => {
+    /**
+     * A repository entry the lockfile wrote while the cache had no hash regains the cached index's
+     * hash; one that already records a hash keeps it (gh-204, bug 36).
+     *
+     * repos.acme without indexHash, cached index meta hash H
+     * // -> repos.acme.indexHash = H
+     */
+    it("should fill in a missing index hash from the cache, and leave a recorded one alone", async () => {
+        const { engine, lock } = await lockService();
+        const cache = engine.config.services.get("recipes.index-cache");
+
+        expect(lock.withIndexHashes(pinned()).repos.acme.indexHash).toBeUndefined();
+
+        await cache.get("acme");
+        const cachedHash = cache.meta("acme")?.hash;
+
+        expect(cachedHash).toBeDefined();
+        expect(lock.withIndexHashes(pinned()).repos.acme.indexHash).toBe(cachedHash);
+
+        const recorded = pinned({ repos: { acme: { url: URL, identity: IDENTITY, indexHash: `sha256-${"0".repeat(64)}` } } });
+
+        expect(lock.withIndexHashes(recorded)).toBe(recorded);
+    });
+});
+
 describe("LockService.restore", () => {
     it("should download a pinned recipe the store lacks, then find it present", async () => {
         writeLock(pinned());
