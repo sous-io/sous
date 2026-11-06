@@ -10,10 +10,10 @@ export default {
     for (const a of ["pushOwnBranches=on-request", "openDraftPullRequests=on-request", "openPullRequests=on-request", "mergePullRequests=on-request", "releaseOrPublish=on-request", "createIssues=on-request", "commentOnIssuesAndPullRequests=on-request", "sendMessages=on-request"]) first.push("--answer", a);
     t.sous(first); // exits 1 on purpose: memoryRoot is still unanswered, but the subscription is written
 
-    await t.step("vars list shows each variable as unanswered", () => {
+    await t.step("vars list shows a variable with no answer as using its default", () => {
       const r = expectExit(t.sous(["vars", "list"]));
       expectIncludes(r.stderr + r.stdout, "memoryRoot", "vars list");
-      expectIncludes(r.stderr + r.stdout, "(unanswered)", "vars list");
+      expectIncludes(r.stderr + r.stdout, ".sous/memories", "vars list");
     });
 
     await t.step("vars list --json holds the variables", () => {
@@ -34,11 +34,8 @@ export default {
       expectIncludes(r.stderr, "vars list", "stderr");
     });
 
-    await t.step("a non-interactive vars ask with unanswered variables fails naming --answer", () => {
-      const r = t.sous(["vars", "ask", "--non-interactive"]);
-      assert.notEqual(r.code, 0);
-      expectIncludes(r.stderr, "--answer", "stderr");
-      expectIncludes(r.stderr, "SOUS_VAR_MEMORY_ROOT", "stderr");
+    await t.step("a non-interactive vars ask takes a required variable's default", () => {
+      expectExit(t.sous(["vars", "ask", "--non-interactive"]));
     });
 
     await t.step("vars ask --dry-run writes nothing", () => {

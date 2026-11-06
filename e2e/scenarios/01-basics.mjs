@@ -153,11 +153,12 @@ export default {
       assert.ok(t.exists(".sous/sous.config.js"));
     });
 
-    await t.step("clear without --yes and without a terminal fails naming --yes", () => {
+    await t.step("clear without --force and without a terminal fails naming --force", () => {
       expectExit(t.sous(["build"]));
       const r = t.sous(["clear"]);
       assert.notEqual(r.code, 0);
-      expectIncludes(r.stderr, "--yes", "clear stderr");
+      // --force is the flag's name; --yes is another name for it.
+      expectIncludes(r.stderr, "--force", "clear stderr");
       assert.ok(t.exists("AGENTS.md"));
     });
 
