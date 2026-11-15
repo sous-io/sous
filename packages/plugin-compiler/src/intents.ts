@@ -8,6 +8,7 @@ import { IntentOutputs, LogLevel, nullReporter, type Context, type Reporter } fr
 import type { LiquidEngines } from "@sous-io/plugin-liquid/types";
 import type { RefsParser } from "@sous-io/plugin-refs/types";
 import type { VariablesSecrets } from "@sous-io/plugin-variables/types";
+import { reportBackup } from "./backups.js";
 import { CompileRun, type EngineRequest } from "./compiler.js";
 import { createRenderFs } from "./liquid/render-fs.js";
 import type { CompilerRuntime } from "./runtime.js";
@@ -135,7 +136,12 @@ async function compileTargets(input: CompileInput, ctx: Context, runtime: Compil
         problems.push({ level: "warning", message });
     }
 
-    const run = new CompileRun(deps, { strict, ...(input.rebuild ? { rebuild: true } : {}), dryRun });
+    const run = new CompileRun(deps, {
+        strict,
+        ...(input.rebuild ? { rebuild: true } : {}),
+        dryRun,
+        ...(ctx.chain === undefined ? {} : { run: ctx.chain.id }),
+    });
     let units: CompileUnit[] = expanded.units;
 
     if (input.changedFiles !== undefined) {
@@ -223,13 +229,25 @@ async function pruneOutputs(input: CompilerPruneInput, ctx: Context, runtime: Co
         .map((entry) => path.resolve(entry.dest))
         .filter((dest) => !keep.has(dest) && !isProtectedPath(dest, protectedRoots));
     const writer = ctx.services.get("compiler.writer");
-    const { removed, dirsRemoved } = await writer.remove(candidates, { dryRun });
+    const { removed, dirsRemoved, backedUp } = await writer.remove(candidates, { dryRun, ...(ctx.chain === undefined ? {} : { run: ctx.chain.id }) });
+    const backups = new Map((backedUp ?? []).map((entry) => [entry.file, entry.backup]));
 
     if (input.report !== false && removed.length > 0) {
         ctx.reporter.stepStart(dryRun ? "Outputs that would be removed" : "Removed outputs");
 
         for (const file of removed) {
+            const backup = backups.get(file);
+
+            if (backup !== undefined) {
+                reportBackup(ctx.reporter, file, backup, dryRun);
+            }
+
             ctx.reporter.operation(dryRun ? "would-remove" : "removed", file);
+        }
+    } else {
+        // A caller that lists the removed files itself still shows every backup: where an edit went.
+        for (const [file, backup] of backups) {
+            reportBackup(ctx.reporter, file, backup, dryRun);
         }
     }
 
@@ -243,7 +261,7 @@ async function pruneOutputs(input: CompilerPruneInput, ctx: Context, runtime: Co
 
     await ctx.emit("compiler.pruned", { removed, dryRun });
 
-    return { removed, dirsRemoved, dryRun };
+    return { removed, dirsRemoved, ...(backedUp === undefined ? {} : { backedUp }), dryRun };
 }
 
 function messageOf(error: unknown): string {

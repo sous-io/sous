@@ -367,7 +367,13 @@ export async function writeRuntimeContext(ctx: Context, dryRun: boolean): Promis
         ctx.reporter.warn(`Sous could not read the current git branch, so the runtime context says "unknown".${generated.branchProblem === undefined ? "" : ` Git said: ${generated.branchProblem}`}`);
     }
 
-    const written = await service.write({ dryRun });
+    const written = await service.write({ dryRun, ...(ctx.chain === undefined ? {} : { run: ctx.chain.id }) });
+
+    if (written?.backup !== undefined) {
+        ctx.reporter.operation(dryRun ? "would-back-up" : "backed-up", written.file, {
+            note: `${dryRun ? "would back up" : "backed up"} to ${written.backup}`,
+        });
+    }
 
     await ctx.services.get("compiler.writer").commit({ dryRun });
 

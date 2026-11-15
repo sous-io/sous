@@ -51,11 +51,12 @@ export default {
       expectIncludes(r.stdout + r.stderr, "sous.config.js", "init --dry-run");
     });
 
-    await t.step("init writes .sous/ with the config, the AGENTS.md source and the first build", () => {
+    await t.step("init writes .sous/ with the config, the instructions source and the first build", () => {
       const r = expectExit(t.sous(["init"]));
       for (const file of [
         ".sous/sous.config.js",
-        ".sous/memories/AGENTS.tpl.md",
+        ".sous/memories/instructions.tpl.md",
+        ".sous/memories/project/overview.tpl.md",
         ".sous/.env",
         ".sous/.env.local.example",
         ".sous/.gitignore",
@@ -63,6 +64,7 @@ export default {
         ".sous/CLAUDE.md",
         ".sous/conf.d/README.md",
         "AGENTS.md",
+        "CLAUDE.md",
         ".sous/sous.lock.json",
       ]) assert.ok(t.exists(file), `missing ${file}`);
       assert.ok(t.exists(".claude/skills/about-sous/SKILL.md"), "core skills were not written");
@@ -71,7 +73,12 @@ export default {
 
     await t.step("init writes a .gitignore that keeps machine-local state out of git", () => {
       const ignore = t.read(".sous/.gitignore");
-      for (const entry of [".env.local", "sous.state.json"]) expectIncludes(ignore, entry, ".sous/.gitignore");
+      for (const entry of [".env.local", "sous.state.json", "backups/"]) expectIncludes(ignore, entry, ".sous/.gitignore");
+    });
+
+    await t.step("init gitignores the build output at the project root", () => {
+      const ignore = t.read(".gitignore");
+      for (const entry of ["/CLAUDE.md", "/AGENTS.md", "/.claude/skills/"]) expectIncludes(ignore, entry, ".gitignore");
     });
 
     await t.step("no Node warning appears on stderr of a plain build", () => {

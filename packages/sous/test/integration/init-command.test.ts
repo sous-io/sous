@@ -133,12 +133,14 @@ describe("sous init in a directory that has never seen sous", () => {
 
       for (const relative of [
         ".sous/sous.config.js",
-        ".sous/memories/AGENTS.tpl.md",
+        ".sous/memories/instructions.tpl.md",
+        ".sous/memories/project/overview.tpl.md",
         ".sous/.env",
         ".sous/.env.local.example",
         ".sous/.gitignore",
         ".sous/sous.lock.json",
         "AGENTS.md",
+        "CLAUDE.md",
         ".claude/skills/about-sous/SKILL.md",
       ]) {
         expect(fs.existsSync(path.join(project, relative)), relative).toBe(true);
@@ -160,7 +162,7 @@ describe("sous init in a directory that has never seen sous", () => {
       // no memories, so the view is empty: the line includes nothing, is not an
       // error, and is not left in the output as text.
       const source = fs.readFileSync(
-        path.join(project, ".sous", "memories", "AGENTS.tpl.md"),
+        path.join(project, ".sous", "memories", "instructions.tpl.md"),
         "utf8"
       );
       expect(source).toContain("@#memories/**/*.md");
@@ -176,28 +178,31 @@ describe("sous init in a directory that has never seen sous", () => {
   );
 
   /**
-   * The starter prompt's note that it is the source ("Edit this source ... never
-   * edit the compiled copy") should stay in the source only. Carried into the
-   * compiled AGENTS.md, it tells the reader of the compiled copy that it is the
-   * source (gh-229).
+   * The sources' notes that they are sources ("Never edit the compiled
+   * copies", "Written by `sous init`") should stay in the sources only.
+   * Carried into the compiled CLAUDE.md and AGENTS.md, they tell the reader of
+   * a compiled copy that it is the source (gh-229).
    *
    * .sous/memories/AGENTS.tpl.md -> holds "never edit the compiled copy"
    * AGENTS.md                    -> does not
    */
   it(
-    "should keep the starter prompt's edit-this-source note out of the compiled AGENTS.md",
+    "should keep the sources' edit-this-source notes out of the compiled CLAUDE.md and AGENTS.md",
     () => {
       const project = freshProject("source-note");
 
       const init = sous(project, ["init"]);
       expect(init.status, init.stdout + init.stderr).toBe(0);
 
-      const source = fs.readFileSync(path.join(project, ".sous", "memories", "AGENTS.tpl.md"), "utf8");
-      expect(flatten(source)).toContain("never edit the compiled copy");
-      const agents = fs.readFileSync(path.join(project, "AGENTS.md"), "utf8");
-      expect(agents).not.toContain("Edit this");
-      expect(agents).not.toContain("compiled copy");
-      expect(agents).toContain("# source-note\n\n## Working in this project");
+      const source = fs.readFileSync(path.join(project, ".sous", "memories", "instructions.tpl.md"), "utf8");
+      expect(flatten(source)).toContain("Never edit the compiled copies");
+
+      for (const name of ["CLAUDE.md", "AGENTS.md"]) {
+        const compiled = fs.readFileSync(path.join(project, name), "utf8");
+        expect(compiled).not.toContain("Never edit the compiled copies");
+        expect(compiled).not.toContain("Written by `sous init`");
+        expect(compiled.startsWith("# source-note\n\nThis project uses sous")).toBe(true);
+      }
     },
     CLI_TIMEOUT
   );

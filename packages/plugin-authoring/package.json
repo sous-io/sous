@@ -24,8 +24,10 @@
   "dependencies": {
     "@sous-io/documents": "workspace:*",
     "@sous-io/plugin-api": "workspace:*",
+    "@sous-io/plugin-config-files": "workspace:*",
     "@sous-io/plugin-formats": "workspace:*",
     "@sous-io/plugin-git": "workspace:*",
+    "@sous-io/plugin-init": "workspace:*",
     "@sous-io/plugin-recipes": "workspace:*",
     "@sous-io/plugin-refs": "workspace:*",
     "@sous-io/plugin-variables": "workspace:*",

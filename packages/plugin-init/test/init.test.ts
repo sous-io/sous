@@ -5,7 +5,7 @@ import { ConfigError, NonInteractiveError, ReportEntryStyle, VariableSet } from 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { handle } from "../src/init.js";
 import { IGNORE_BLOCK_END, IGNORE_BLOCK_START } from "@sous-io/plugin-host";
-import { STARTER_PROMPT_RELATIVE_PATH } from "../src/templates.js";
+import { STARTER_MEMORY_RELATIVE_PATH, STARTER_PROMPT_RELATIVE_PATH } from "../src/templates.js";
 import { initContext } from "./helpers.js";
 
 let tmp: string;
@@ -58,12 +58,14 @@ describe("init", () => {
         expect(result).toMatchObject({ root: projectRoot, sousDir, configPath: path.join(sousDir, "sous.config.js"), dryRun: false, kept: [] });
         expect(result.files.every((file) => path.isAbsolute(file))).toBe(true);
         expect(listTree(projectRoot)).toEqual([
+            ".gitignore",
             ".sous/.env",
             ".sous/.env.local.example",
             ".sous/.gitignore",
             ".sous/README.md",
             ".sous/conf.d/README.md",
             `.sous/${STARTER_PROMPT_RELATIVE_PATH}`,
+            `.sous/${STARTER_MEMORY_RELATIVE_PATH}`,
             ".sous/sous.config.js",
         ]);
         expect([...result.files].sort()).toEqual([...listTree(projectRoot).map((file) => path.join(projectRoot, file))].sort());
@@ -84,12 +86,18 @@ describe("init", () => {
 
         expect(text).not.toMatch(/_vars/);
         expect(text).not.toMatch(/projectRoot\s*"?:/);
-        expect(text).not.toContain(".claude");
+        // The only .claude path is the project-skills target's destination; recipe skills come from plugins.
+        expect(text.match(/\.claude/g)?.length).toBe(2);
         expect(fs.readFileSync(path.join(sousDir, STARTER_PROMPT_RELATIVE_PATH), "utf8")).not.toContain(".claude");
         expect(loaded).toMatchObject({ kind: "module" });
         expect(JSON.parse((loaded as unknown as { text: string }).text)).toMatchObject({
             name: "my-app",
-            compilation: { targets: [{ entryPoint: `\${sousDir}/${STARTER_PROMPT_RELATIVE_PATH}`, outputs: [{ destinationFile: "${projectRoot}/AGENTS.md" }] }] },
+            compilation: {
+                targets: [
+                    { entryPoint: `\${sousDir}/${STARTER_PROMPT_RELATIVE_PATH}`, outputs: [{ destinationFile: "${projectRoot}/CLAUDE.md" }, { destinationFile: "${projectRoot}/AGENTS.md" }] },
+                    { entryGlob: "${sousDir}/skills/**/*", globBase: "${sousDir}/skills", outputs: [{ destinationDir: "${projectRoot}/.claude/skills" }] },
+                ],
+            },
         });
 
         const other = path.join(tmp, "other");
@@ -175,7 +183,7 @@ describe("init", () => {
         const result = outputs.toPlain();
 
         expect(result.dryRun).toBe(true);
-        expect(result.files).toHaveLength(5);
+        expect(result.files).toHaveLength(7);
         expect(fs.existsSync(sousDir)).toBe(false);
         expect(recorded.runs).toEqual([]);
     });
@@ -356,5 +364,125 @@ describe("init inside another project", () => {
         expect(error).toBeInstanceOf(NonInteractiveError);
         expect((error as NonInteractiveError).answeredBy).toContain("--yes");
         expect(fs.existsSync(sousDir)).toBe(false);
+    });
+});
+
+describe("init importing a project's agent files", () => {
+    /** Writes files under the project root: `{ "docs/a.md": "text" }`. */
+    function write(files: Record<string, string>): void {
+        for (const [file, content] of Object.entries(files)) {
+            fs.mkdirSync(path.dirname(path.join(projectRoot, file)), { recursive: true });
+            fs.writeFileSync(path.join(projectRoot, file), content, "utf8");
+        }
+    }
+
+    /** A stand-in git runner that says every path is tracked, recording each command. */
+    function fakeGit(): { runner: unknown; commands: string[][] } {
+        const commands: string[][] = [];
+        const runner = {
+            run: async (args: string[]) => {
+                commands.push(args);
+
+                if (args[0] === "rev-parse") {
+                    return { args, exitCode: 0, stdout: "true", stderr: "", durationMs: 0 };
+                }
+
+                return { args, exitCode: 0, stdout: args[0] === "ls-files" ? args.slice(2).join("\n") : "", stderr: "", durationMs: 0 };
+            },
+        };
+
+        return { runner, commands };
+    }
+
+    /**
+     * An existing CLAUDE.md should be imported into .sous/memories/imported/, with no starter memory
+     * beside it; the root .gitignore should gain the build outputs; and git should stop tracking the
+     * root file, which stays on disk until the build compiles over it.
+     */
+    it("should import an existing CLAUDE.md and stop git tracking it", async () => {
+        write({ "CLAUDE.md": "# Rules\n\nKeep commits small.\n", ".gitignore": "node_modules/\n" });
+
+        const git = fakeGit();
+        const { ctx } = initContext({ services: { "git.runner": git.runner } });
+        const result = (await handle({ directory: projectRoot, noBuild: true }, ctx)).toPlain();
+
+        expect(fs.readFileSync(path.join(sousDir, "memories/imported/CLAUDE.md"), "utf8")).toBe("# Rules\n\nKeep commits small.\n");
+        expect(fs.existsSync(path.join(sousDir, STARTER_MEMORY_RELATIVE_PATH))).toBe(false);
+        expect(fs.readFileSync(path.join(projectRoot, ".gitignore"), "utf8")).toMatch(/node_modules\/[\s\S]*\/CLAUDE\.md\n\/AGENTS\.md\n\/\.claude\/skills\//);
+        expect(fs.existsSync(path.join(projectRoot, "CLAUDE.md"))).toBe(true);
+        expect(result.untracked).toEqual(["CLAUDE.md"]);
+        expect(git.commands).toContainEqual(["rm", "-r", "--cached", "--quiet", "--", "CLAUDE.md"]);
+    });
+
+    /**
+     * With included files and no terminal, init should fail naming the three switches and --yes,
+     * writing nothing; two switches together should be refused by name.
+     */
+    it("should name the include switches when it cannot ask, and refuse two of them", async () => {
+        write({ "CLAUDE.md": "@docs/a.md\n", "docs/a.md": "A\n" });
+
+        const error = await handle({ directory: projectRoot, noBuild: true }, initContext().ctx).catch((caught: unknown) => caught);
+
+        expect(error).toBeInstanceOf(NonInteractiveError);
+        expect((error as NonInteractiveError).answeredBy).toBe("--move-includes, --copy-includes, --leave-includes or --yes");
+        expect(fs.existsSync(sousDir)).toBe(false);
+
+        await expect(handle({ directory: projectRoot, moveIncludes: true, leaveIncludes: true }, initContext().ctx)).rejects.toThrow(/Pass only one of/);
+        expect(fs.existsSync(sousDir)).toBe(false);
+    });
+
+    /**
+     * Asked in a terminal, the user's answer should decide; --yes should move, and --leave-includes
+     * should leave the included file where it is with a #project include.
+     */
+    it("should follow the answer, --yes and the switches", async () => {
+        write({ "CLAUDE.md": "@docs/a.md\n", "docs/a.md": "A\n" });
+
+        const asked = initContext({ answers: ["copy"] });
+
+        await handle({ directory: projectRoot, noBuild: true }, asked.ctx);
+
+        expect(asked.recorded.asked).toEqual(["What should happen to the included file?"]);
+        expect(fs.existsSync(path.join(sousDir, "includes/docs/a.md"))).toBe(true);
+        expect(fs.existsSync(path.join(projectRoot, "docs/a.md"))).toBe(true);
+
+        fs.rmSync(sousDir, { recursive: true });
+        await handle({ directory: projectRoot, noBuild: true, leaveIncludes: true }, initContext().ctx);
+
+        expect(fs.readFileSync(path.join(sousDir, "memories/imported/CLAUDE.md"), "utf8")).toBe("@#project/docs/a.md\n");
+
+        fs.rmSync(sousDir, { recursive: true });
+        await handle({ directory: projectRoot, noBuild: true, yes: true }, initContext().ctx);
+
+        expect(fs.existsSync(path.join(projectRoot, "docs/a.md"))).toBe(false);
+        expect(fs.readFileSync(path.join(sousDir, "includes/docs/a.md"), "utf8")).toBe("A\n");
+    });
+
+    /** Skills in .claude/skills/ should move to .sous/skills/, which the config compiles back and SKILLS_ROOT names. */
+    it("should move existing skills and compile them back", async () => {
+        write({ ".claude/skills/deploy/SKILL.md": "---\nname: deploy\n---\n" });
+
+        await handle({ directory: projectRoot, noBuild: true }, initContext().ctx);
+
+        const config = fs.readFileSync(path.join(sousDir, "sous.config.js"), "utf8");
+
+        expect(fs.existsSync(path.join(sousDir, "skills/deploy/SKILL.md"))).toBe(true);
+        expect(fs.existsSync(path.join(projectRoot, ".claude/skills/deploy"))).toBe(false);
+        expect(config).toContain('entryGlob: "${sousDir}/skills/**/*"');
+        expect(config).toContain('destinationDir: "${projectRoot}/.claude/skills"');
+        expect(fs.readFileSync(path.join(sousDir, ".env"), "utf8")).toContain("\nSKILLS_ROOT=.sous/skills\n");
+    });
+
+    /** In a sous recipe repository with nothing to import, the starter memory should say it is a Sous Repo. */
+    it("should write the Sous Repo memory in a recipe repository", async () => {
+        write({ "sous.repo.yaml": "formatVersion: 1\nname: team\nrecipes: []\n" });
+
+        await handle({ directory: projectRoot, noBuild: true }, initContext().ctx);
+
+        const memory = fs.readFileSync(path.join(sousDir, "memories/project/sous-repo.tpl.md"), "utf8");
+
+        expect(memory).toContain("## This Is a Sous Repo");
+        expect(memory).toContain("`about-sous-repos`");
+        expect(fs.existsSync(path.join(sousDir, STARTER_MEMORY_RELATIVE_PATH))).toBe(false);
     });
 });

@@ -128,7 +128,9 @@ The rules for the list:
 - **C56.** A user can define a tool in the config and launch it with no plugin.
 - **C57.** A user can set where skills go (`recipes.skills.outputs`).
 - **C58.** A user can stop the compiler from overwriting files it did not write
-  (`compilation.overwriteUntracked: false`).
+  (`compilation.overwriteUntracked: false`). When it does overwrite or remove a file it did not
+  write, or an output edited by hand, it first copies the file to `.sous/backups/<date>/<time>/`
+  and says so.
 - **C59.** A user can switch any subscription off on one machine, keeping its pins for everyone else.
 - **C60.** A user can preview what a recipe update changes before applying it.
 - **C61.** A user can choose which messages a run shows with `--log-level <level>` (`debug`, `info`,
@@ -181,7 +183,24 @@ The rules for the list:
 - **C82.** A user can see each contributor's declared and actual apply order
   (`sous config show --layers`).
 
+## Users: Added Later
+
+- **C83.** A user can set an existing project up for sous without losing its agent files:
+  `sous init` imports the root `CLAUDE.md` or `AGENTS.md`, the files they include and the skills in
+  `.claude/skills/` into `.sous/`, and backs up everything it moves to `.sous/backups/<date>/<time>/`.
+- **C84.** A user can choose, per run or per file, whether `sous init` moves, copies or leaves the
+  files the existing instructions include (`--move-includes`, `--copy-includes`,
+  `--leave-includes`).
+- **C85.** A user's own compilation target wins over a plugin's or a recipe's target that would
+  write the same file, so a project skill replaces a recipe skill of the same name, with a warning.
+- **C86.** A user can set a new recipe repository up as a sous project in one command
+  (`sous repo init`, which runs `sous init`).
+
 ## Changes
+
+### 2026-11-15: Importing a project's agent files
+
+C83 to C86 added, from ADR 0024 (`sous init` imports a project's agent files).
 
 ### 2026-10-30: Apply orders
 

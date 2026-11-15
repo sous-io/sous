@@ -424,6 +424,8 @@ describe("compiler.compile", () => {
             project = makeProject();
             const plain = project.write("plain.md", "PLAIN\n");
             const out = project.at("out", "plain.md");
+
+            fs.mkdirSync(project.at("nothing"));
             const config = {
                 targets: [
                     { entryGlob: "nothing/**/*.md", outputs: [{ destinationDir: project.at("out") }] },
@@ -441,10 +443,26 @@ describe("compiler.compile", () => {
         /** Without strict mode a warning stays a warning. */
         it("should leave a warning a warning without strict mode", async () => {
             project = makeProject();
+            fs.mkdirSync(project.at("nothing"));
             const { result } = await compileOnce(project, { targets: [{ entryGlob: "nothing/**/*.md", outputs: [{ destinationDir: project.at("out") }] }] });
 
             expect(result.ok).toBe(true);
             expect(result.problems).toEqual([expect.objectContaining({ level: "warning", message: expect.stringContaining("Glob pattern matched no files") })]);
+        });
+
+        /**
+         * A glob target whose folder does not exist yet, such as the project-skills target sous
+         * init writes before the project has a skill, should compile nothing without a warning.
+         *
+         * { entryGlob: "${sousDir}/skills/**\/*" } with no .sous/skills/ folder
+         * // -> ok, no problems
+         */
+        it("should not warn about a glob whose folder does not exist yet", async () => {
+            project = makeProject();
+            const { result } = await compileOnce(project, { targets: [{ entryGlob: "nothing/**/*.md", outputs: [{ destinationDir: project.at("out") }] }] });
+
+            expect(result.ok).toBe(true);
+            expect(result.problems).toEqual([]);
         });
     });
 });

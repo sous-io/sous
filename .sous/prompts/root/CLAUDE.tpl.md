@@ -49,6 +49,12 @@ Rules for working here:
   source. Core and plugin-api never name a plugin.
 - A new command is a new intent in a plugin, not code in the CLI.
 - Changes to old tests are recorded in `docs/markdown/architecture/test-changes.md`.
+- A significant change updates every document that describes the behavior, in the same change:
+  `docs/markdown/`, the core skills in `recipes/core/sous-skills/`, help text and examples, and the
+  specifications. Search for them while planning the change; never leave them for later, and never
+  offer the user a later change for them. The user, 2026-11-15: "when we make any significant
+  change to shit like this, we will find and update the associated documentation, immediately.
+  Why would fucking wait, ever?"
 
 ## Build, Run and Test
 

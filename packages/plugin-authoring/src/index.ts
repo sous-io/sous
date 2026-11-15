@@ -29,6 +29,8 @@ export const authoringPlugin: PluginDefinition = definePlugin({
         "@sous-io/plugin-refs": `^${packageJson.version}`,
         "@sous-io/plugin-variables": `^${packageJson.version}`,
         "@sous-io/plugin-git": `^${packageJson.version}`,
+        "@sous-io/plugin-init": `^${packageJson.version}`,
+        "@sous-io/plugin-config-files": `^${packageJson.version}`,
     },
 
     register(sous) {
@@ -119,7 +121,7 @@ export const authoringPlugin: PluginDefinition = definePlugin({
 
         sous.intents.add({
             intent: "repo.init",
-            summary: "Create a new sous recipe repository in a directory",
+            summary: "Create a new sous recipe repository in a directory, then set it up for sous",
             input: initInput,
             cli: {
                 aliases: [["repos", "init"]],
@@ -129,8 +131,10 @@ export const authoringPlugin: PluginDefinition = definePlugin({
                     "sous repo init ./my-recipes",
                     "sous repo init ./my-recipes --name team-recipes --namespace workflow",
                     "sous repo init ./my-recipes --host github",
+                    "sous repo init ./my-recipes --leave-includes --no-build",
                     "sous repo init ./my-recipes --dry-run",
                 ],
+                flags: { yes: { short: "y" } },
             },
             agent: { usage: "Call this to scaffold a new recipe repository." },
             load: async () => (await import("./scaffold/scaffold.js")).handleInit,

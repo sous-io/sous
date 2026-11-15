@@ -26,8 +26,9 @@ echo 'name: my-project' > .sous/sous.config.yaml
 Everything else has a default: skills compile into `<project root>/.claude/skills` (where the
 Claude Code plugin built into sous puts them), and the lockfile, the state file and the `conf.d`
 files sous writes land under `.sous/`. Outside a
-walkthrough, `sous init` writes a fuller starting point (a commented config, a starter prompt,
-the env files and the ignore block) and runs the first build for you; the one-line config is
+walkthrough, `sous init` writes a fuller starting point (it imports the project's existing
+`CLAUDE.md`, `AGENTS.md` and skills, and writes a commented config, the source both instruction
+files compile from, the env files and the ignore blocks) and runs the first build for you; the one-line config is
 used here so that each step shows one thing. `SOUS_HOME` puts
 the machine-wide store somewhere throwaway, so this walkthrough leaves your real one alone. See
 [The config file](configuration.md) for the keys you will want later.
@@ -152,8 +153,10 @@ under
 
 ## 6. Start a repository of your own
 
-A recipe repository is not a sous project; it has no `.sous/` directory, and the three commands
-that work inside one do not look for a config. Run this outside your project:
+A recipe repository is also a sous project: `sous repo init` writes the repository, then runs
+`sous init` in it, so its agent instructions and skills are compiled from its own `.sous/`. The
+`sous repo` commands that work inside a repository find it by its `sous.repo.yaml`, not through
+that config. Run this outside your project:
 
 ```bash
 sous repo init ~/projects/my-recipes --name my-recipes --namespace workflow
@@ -167,13 +170,12 @@ sous repo init ~/projects/my-recipes --name my-recipes --namespace workflow
   wrote recipes/workflow/example/skills/example-skill/SKILL.tpl.md
   wrote README.md
   wrote CONTRIBUTING.md
-  wrote CLAUDE.md
-  wrote AGENTS.md
   wrote .github/workflows/sous-release.yml
   wrote .gitignore
 ```
 
-The scaffold validates as written, and every file it leaves is heavily commented. `sous.repo.yaml`
+The output goes on with what `sous init` writes and with its first build, which compiles
+`CLAUDE.md` and `AGENTS.md`. The scaffold validates as written, and every file it leaves is heavily commented. `sous.repo.yaml`
 declares the namespaces and lists every recipe folder; each folder's `sous.recipe.yaml` is one
 recipe, with its own version.
 

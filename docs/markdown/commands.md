@@ -14,9 +14,10 @@ and `--sous-confd <path>`. They point sous at a config file, a `.sous/` director
 instead of the one walk-up discovery would find. The environment variables `SOUS_CONFIG`, `SOUS_DIR` and
 `SOUS_CONFD` do the same; a flag beats its variable. See [Discovery and overrides](config-discovery.md).
 
-?> `repo init`, `repo release` and `repo submit` take none of these. They run inside a recipe repository, which
-has no `.sous/` directory to discover. `repo submit` may also be run from a project, which it finds by walking up
-from the working directory.
+?> `repo init`, `repo release` and `repo submit` take none of these. They work on a recipe repository, which
+they find by its `sous.repo.yaml`, not through a project's config. (A recipe repository is also a sous project,
+with a `.sous/` of its own, but these commands do not locate the repository through it.) `repo submit` may also be run from a project, which it
+finds by walking up from the working directory.
 
 ## Flags that answer questions
 
@@ -72,19 +73,65 @@ so on), and `sous search`, `sous subscribe` and `sous unsubscribe` are one-word 
 
 ### `sous init [DIRECTORY]`
 
-Sets a project up for sous, then runs the first build. It writes a commented `sous.config.js`, a starter prompt
-at `.sous/memories/AGENTS.tpl.md` that compiles to `AGENTS.md` at the project root, the `.sous/.env` and
-`.sous/.env.local.example` files, and the sous block in `.sous/.gitignore`. A project with a `package.json` also
+Sets a project up for sous: it imports the project's existing agent files into a new `.sous/` directory, then
+runs the first build. Sous owns all of a project's agent configuration from then on. `CLAUDE.md`, `AGENTS.md` and
+`.claude/skills/` at the project root become build output, so edit their sources under `.sous/` and run
+`sous build` after cloning.
+
+It writes a commented `sous.config.js`, the instructions source `.sous/memories/instructions.tpl.md` that the
+config compiles into both `CLAUDE.md` and `AGENTS.md` at the project root, the `.sous/.env` and
+`.sous/.env.local.example` files, the sous block in `.sous/.gitignore`, and a sous block in the project-root
+`.gitignore` that ignores `/CLAUDE.md`, `/AGENTS.md` and `/.claude/skills/`. A project with a `package.json` also
 gains `@sous-io/sous` as a devDependency at the running version; run your package manager's install afterwards.
 
-The starter prompt holds one line, `@#memories/**/*.md`, which includes every memory your subscribed recipes
-publish. Agent plugins can add more places for memories (the built-in Claude Code plugin adds `CLAUDE.md`).
+The instructions source holds two includes:
 
-A project whose `.sous/` already holds a config is left untouched. The config it writes is `sous.config.js`. `--no-build` skips the first build.
+```markdown
+@*/**/*.md
+@#memories/**/*.md
+```
+
+The first pulls in this project's own memories, every markdown file in a folder beside the source (such as
+`imported/` and `conventions/`). The second pulls in every memory the subscribed recipes publish. Because the
+config's target writes `CLAUDE.md`, the Claude Code plugin's own memory target for that file steps aside. An
+include that matches nothing stops a build, so the project's folder is never empty: when there was nothing to
+import, init writes a starter memory at `.sous/memories/project/overview.tpl.md` (or
+`.sous/memories/project/sous-repo.tpl.md` in a recipe repository, one with a `sous.repo.yaml`).
+
+What init imports, before the first build:
+
+- **The instructions.** A root `CLAUDE.md` or `AGENTS.md` is copied to `.sous/memories/imported/` as plain `.md`,
+  so Liquid never touches it. A file that is a symlink to the other, holds the same text, or only points at the
+  other (at most 3 non-blank lines and 400 characters, naming the other file) is skipped.
+- **The files they include.** A line holding only `@path.md` includes that file, and init follows those lines
+  through every included file. Each file is moved (the default), copied, or left where it is. A moved or copied
+  file goes to `.sous/includes/<its path from the project root>`, outside `memories/`, so it appears only where
+  its include line is. A README, and a file outside the project, always stay where they are; a file included by
+  a file that stays is copied rather than moved. Every `@` reference in a copied file is rewritten to work from
+  its new place, and an include that names a missing file becomes an HTML comment, with a warning.
+- **The skills.** Every folder in `.claude/skills/` moves to `.sous/skills/`. The config always has a target
+  that compiles `.sous/skills/` into `.claude/skills/`, and init writes `SKILLS_ROOT=.sous/skills` into
+  `.sous/.env`, so a skill the `create-skill` skill writes later is compiled too. Until the folder exists the
+  target compiles nothing, without a warning. A project skill with the same name as a recipe skill wins, and
+  the build warns that the recipe's copy was not written.
+
+Everything init moves is backed up first, to `.sous/backups/<YYYY-MM-DD>/<HHMM-SS>/<path>`, which git ignores.
+Git stops tracking the root `CLAUDE.md`, `AGENTS.md` and each moved skill folder (`git rm -r --cached`); the files
+stay on disk until the build compiles over them. `.claude/agents/`, `.claude/commands/` and
+`.claude/settings.json` are left alone.
+
+What happens to the included files is one question, asked once after init lists them: move them, copy them,
+leave them, or choose for each file. `--move-includes`, `--copy-includes` and `--leave-includes` answer it ahead
+of time, one at a time, and `--yes` accepts the default, move. A run with no terminal and none of these flags
+fails, naming them. `--dry-run` plans with the default and asks nothing.
+
+A project whose `.sous/` already holds a config is left untouched. `--no-build` skips the first build.
 
 ```bash
 sous init
 sous init --name "My Project"
+sous init --copy-includes
+sous init --dry-run
 ```
 
 ### `sous build`
@@ -129,6 +176,37 @@ The pieces of a build, run on their own:
 sous prune --dry-run
 sous clear --force
 ```
+
+### Backups before overwriting or removing
+
+Sous never destroys content it did not produce. Before `build`, `compile`, `prune` or `clear` overwrites or
+removes a file, it copies the file to a backup when sous did not write the file, or when sous wrote it but the
+file was edited by hand since (its content no longer matches the hash the state file recorded). A file whose
+content already matches what is about to be written needs no backup, and neither does an output that is still
+exactly as sous wrote it.
+
+Backups go to `.sous/backups/<YYYY-MM-DD>/<HHMM-SS>/`, followed by the file's path relative to the project root,
+in local time. Every backup of one run shares one timestamp folder. A file outside the project goes under
+`outside-project/` in that folder, followed by its absolute path without the leading slash, so
+`/home/me/.claude/CLAUDE.md` is backed up to `.sous/backups/2026-11-15/0912-04/outside-project/home/me/.claude/CLAUDE.md`.
+A backup is never overwritten: if one is already there, the new one gets `.1`, `.2` and so on after its name.
+
+Each backup is listed in the command's output, just before the line that says the file was written or removed.
+A dry run lists the backups it would make and writes nothing:
+
+```text
+  ↪ /work/app/CLAUDE.md (backed up to /work/app/.sous/backups/2026-11-15/0912-04/CLAUDE.md)
+  ✓ /work/app/CLAUDE.md
+  ↪ /work/app/notes.md (would back up to /work/app/.sous/backups/2026-11-15/0913-20/notes.md)
+  − /work/app/notes.md (would remove)
+```
+
+The first two lines come from a build, the last two from `sous prune --dry-run`.
+
+A build also puts an output edited by hand back to its compiled content, even when its source did not change,
+so the edit is backed up rather than silently kept as if sous had written it. With
+`compilation.overwriteUntracked: false`, a file sous did not write is left alone instead, so it needs no backup.
+Sous never deletes backups; remove old ones from `.sous/backups/` yourself.
 
 ### `sous launch TOOL...`
 
@@ -274,7 +352,11 @@ sous repo contribute workflow/task-files --finish --title "Clarify the resume st
 
 ### `sous repo init [DIRECTORY]`
 
-Creates a new recipe repository. See [Authoring a repository](repositories-authoring.md).
+Creates a new recipe repository, then runs [`sous init`](#sous-init-directory) in the same directory, so the
+repository is also a sous project whose `CLAUDE.md`, `AGENTS.md` and `.claude/skills/` are build output. It
+passes `--yes`, `--move-includes`, `--copy-includes`, `--leave-includes`, `--no-build` and `--dry-run` through to
+init. A directory that already holds a sous config keeps it, and init is skipped with a note. See
+[Authoring a repository](repositories-authoring.md).
 
 ```bash
 sous repo init ./my-recipes --name team-recipes --namespace workflow

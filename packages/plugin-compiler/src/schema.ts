@@ -64,8 +64,16 @@ export const compilationSchema = z
     .object({
         _vars: varsSchema.optional(),
         includeSourceComments: z.boolean().default(false),
-        overwriteUntracked: z.boolean().default(true),
-        stateFile: z.string().default(DEFAULT_STATE_FILE),
+        overwriteUntracked: z
+            .boolean()
+            .default(true)
+            .describe(
+                "Overwrite an output file sous did not write, and take it over. Sous copies the file to <sousDir>/backups/ first. With false, the file is left alone and the build warns.",
+            ),
+        stateFile: z
+            .string()
+            .default(DEFAULT_STATE_FILE)
+            .describe("Where sous records every file it wrote and the hash of what it wrote, which tells prune and clear what is theirs to remove and which outputs were edited by hand."),
         targets: z.array(targetSchema).default([]),
     })
     .strict();
@@ -88,7 +96,8 @@ export const CONFIG_KEYS: ConfigKeyEntity[] = [
     {
         id: "compilation",
         schema: compilationSchema,
-        description: "What to compile: targets, their outputs, source comments, the state file, overwriting files sous did not write.",
+        description:
+            "What to compile: targets, their outputs, source comments, the state file, overwriting files sous did not write. Content sous did not produce is backed up to <sousDir>/backups/ before it is overwritten or removed.",
     },
     {
         id: "_aliases",

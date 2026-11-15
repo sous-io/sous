@@ -83,8 +83,9 @@ export interface StepStartDetails {
  * - `skipped`: left alone on purpose (the note says why).
  * - `failed`: not done because of an error.
  * - `removed`: deleted, such as an output no target produces any more.
+ * - `backed-up`: copied to a backup before it was overwritten or removed; the note says where.
  */
-export type OperationAction = "written" | "would-write" | "unchanged" | "skipped" | "failed" | "removed" | "would-remove";
+export type OperationAction = "written" | "would-write" | "unchanged" | "skipped" | "failed" | "removed" | "would-remove" | "backed-up" | "would-back-up";
 
 /** {@link ReportEntryStyle.Operation}. */
 export interface OperationDetails {

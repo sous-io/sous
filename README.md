@@ -68,17 +68,34 @@ cd /path/to/your/project
 sous init
 ```
 
-`sous init` writes the project's `.sous/` directory and runs the first build. It creates a
-commented `sous.config.js` (pass `--format json` for a JSON config bound to the shipped
-schema), a starter prompt at `.sous/memories/AGENTS.tpl.md` that the config compiles to `AGENTS.md`
-at the project root (it includes every memory your subscribed recipes publish, with one line, `@#memories/**/*.md`), the two env files described below, and a `.sous/.gitignore` covering the
-files sous keeps local to one machine. A project with a `package.json` also gains `@sous-io/sous`
-as a devDependency at the running version, so the project pins the sous it builds with; run
-your package manager's install afterwards. The first build compiles the starter prompt and the
-`core` skills every project gets, and pins them in `.sous/sous.lock.json`. A project that
-already holds a config is left untouched.
+`sous init` imports the project's existing agent files into a new `.sous/` directory and runs
+the first build. From then on sous owns the project's agent configuration: `CLAUDE.md`,
+`AGENTS.md` and `.claude/skills/` at the project root are build output, gitignored, and
+compiled from the sources under `.sous/`. Edit the sources, and run `sous build` after cloning.
 
-The config it writes compiles one file:
+What init imports, backing up everything it moves to `.sous/backups/<date>/<time>/`:
+
+- A root `CLAUDE.md` or `AGENTS.md` is copied, as plain markdown, to `.sous/memories/imported/`.
+  One that is only a link to the other, a pointer to it, or the same text is skipped.
+- The files those instructions include (a line holding only `@path.md`) are moved to
+  `.sous/includes/`, copied there, or left where they are. Init asks once, and
+  `--move-includes` (the default), `--copy-includes`, `--leave-includes` or `--yes` answer
+  ahead of time.
+- The skills in `.claude/skills/` move to `.sous/skills/`, where the project's own skills live from
+  then on, and the config compiles them into `.claude/skills/`.
+  A project skill wins over a recipe skill of the same name.
+
+It also writes a commented `sous.config.js`, the source `.sous/memories/instructions.tpl.md`
+that the config compiles into both `CLAUDE.md` and `AGENTS.md`, the two env files described
+below, a `.sous/.gitignore` covering the files sous keeps local to one machine, and a sous block
+in the project's `.gitignore` for the root build output. When there was nothing to import, it
+writes a starter memory at `.sous/memories/project/overview.tpl.md`. A project with a
+`package.json` also gains `@sous-io/sous` as a devDependency at the running version, so the
+project pins the sous it builds with; run your package manager's install afterwards. The first
+build compiles the instructions and the `core` skills every project gets, and pins them in
+`.sous/sous.lock.json`. A project that already holds a config is left untouched.
+
+The config it writes compiles the instructions into both files:
 
 ```js
 export const config = {
@@ -86,12 +103,23 @@ export const config = {
   compilation: {
     targets: [
       {
-        entryPoint: "${sousDir}/memories/AGENTS.tpl.md",
-        outputs: [{ destinationFile: "${projectRoot}/AGENTS.md" }],
+        entryPoint: "${sousDir}/memories/instructions.tpl.md",
+        outputs: [
+          { destinationFile: "${projectRoot}/CLAUDE.md" },
+          { destinationFile: "${projectRoot}/AGENTS.md" },
+        ],
       },
     ],
   },
 };
+```
+
+The source includes the project's own memories first, every markdown file in a folder beside it,
+and then every memory the subscribed recipes publish:
+
+```markdown
+@*/**/*.md
+@#memories/**/*.md
 ```
 
 `${sousDir}` is the `.sous/` directory sous found, and `${projectRoot}` is the directory that
@@ -126,7 +154,7 @@ Useful commands:
 
 | Command | What it does |
 |---|---|
-| `sous init` | Set a project up: write `.sous/`, then run the first build |
+| `sous init` | Set a project up: import its agent files into a new `.sous/`, then run the first build |
 | `sous build` | Compile, then prune stale outputs |
 | `sous build --watch` | Rebuild on source changes |
 | `sous compile` | Compile only |

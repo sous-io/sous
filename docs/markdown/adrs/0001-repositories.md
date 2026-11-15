@@ -13,6 +13,10 @@ holds: a plugin, including one a recipe ships, may change the config. See
 [ADR 0017](0017-recipes-ship-plugins.md) and
 [Private GitLab Repositories and Switched-Off Subscriptions](../architecture/specifications/S4-private-gitlab-and-switched-off-subscriptions.md).
 
+!> **Superseded in part by [ADR 0024](0024-init-imports-agent-files.md) (2026-11-15):** a recipe repository
+is now also a sous project with a `.sous/` directory, because `sous repo init` runs `sous init`. The
+`sous repo` commands still find the repository by its manifest rather than by config discovery.
+
 This is the permanent decision record for the initial version of the repositories system. It
 records what was decided and why; the living answer to "how does it work right now?" is the
 [Repositories](repositories.md) documentation, and the process record, including the

@@ -133,6 +133,35 @@ describe("TerminalReporter", () => {
         );
     });
 
+    /**
+     * A backup is drawn as an operation whose note says where the file went, before the line that
+     * says the file was written or removed; a dry run says where it would go.
+     *
+     * reporter.operation("backed-up", "/a/CLAUDE.md", { note: "backed up to /a/.sous/backups/.../CLAUDE.md" });
+     * // ->   ↪ /a/CLAUDE.md (backed up to /a/.sous/backups/.../CLAUDE.md)
+     */
+    it("should draw a backup with where the file went", () => {
+        const { stderr, reporter } = make();
+
+        reporter.operationStart("Building the project");
+        reporter.operation("backed-up", "/a/CLAUDE.md", { note: "backed up to /a/.sous/backups/2026-11-15/0912-04/CLAUDE.md" });
+        reporter.operation("written", "/a/CLAUDE.md");
+        reporter.operation("would-back-up", "/a/D.md", { note: "would back up to /a/.sous/backups/2026-11-15/0912-04/D.md" });
+        reporter.operation("would-remove", "/a/D.md");
+
+        expect(stderr.text).toBe(
+            [
+                "▶ Building the project:",
+                " ",
+                "  ↪ /a/CLAUDE.md (backed up to /a/.sous/backups/2026-11-15/0912-04/CLAUDE.md)",
+                "  ✓ /a/CLAUDE.md",
+                "  ↪ /a/D.md (would back up to /a/.sous/backups/2026-11-15/0912-04/D.md)",
+                "  − /a/D.md (would remove)",
+                "",
+            ].join("\n"),
+        );
+    });
+
     /** A failed operation goes to standard error with a cross. */
     it("should send a failed operation to standard error", () => {
         const { stderr, reporter } = make();

@@ -34,12 +34,32 @@ describe("yieldToConfigTargets", () => {
         expect(kept!.outputs.map((output) => output.destination)).toEqual(["/project/OTHER.md"]);
     });
 
-    it("leaves recipe targets and plugin targets with no clash alone", () => {
+    it("leaves targets with no clash alone", () => {
         const mine = unit("OUT.md", ["/project/OUT.md"]);
-        const recipe = unit("r", ["/project/OUT.md"], { plugin: "@sous-io/plugin-skills", recipe: "a/b" });
+        const recipe = unit("r", ["/project/OTHER.md"], { plugin: "@sous-io/plugin-skills", recipe: "a/b" });
         const memories = unit("memories/claude-code", ["/project/CLAUDE.md"], { plugin: "@sous-io/plugin-memories" });
 
         expect(yieldToConfigTargets([mine, recipe, memories])).toEqual([mine, recipe, memories]);
+    });
+
+    /**
+     * A recipe's output that a config target also writes (a project skill with a recipe skill's
+     * name) should yield to the project's target, with a warning naming the file and the recipe.
+     */
+    it("should drop a recipe's clashing output with a warning", () => {
+        const mine = unit("deploy", ["/project/.claude/skills/deploy/SKILL.md"]);
+        const recipe = unit("r", ["/project/.claude/skills/deploy/SKILL.md"], { plugin: "@sous-io/plugin-skills", recipe: "workflow/deploy" });
+        const problems: CompileProblem[] = [];
+
+        expect(yieldToConfigTargets([recipe, mine], problems)).toEqual([mine]);
+        expect(problems).toEqual([
+            {
+                level: "warning",
+                message: "/project/.claude/skills/deploy/SKILL.md is written by this project's own target, so the copy from the recipe workflow/deploy is not written.",
+                target: "r",
+                file: "/project/r",
+            },
+        ]);
     });
 });
 
