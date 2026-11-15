@@ -62,8 +62,8 @@ describe("scaffoldRepo()", () => {
    *
    * await scaffoldRepo({ directory: "/tmp/my-recipes", sousVersion: "0.1.1" });
    * // -> writes sous.repo.yaml, sous.index.json, the example recipe, a README,
-   * //    CONTRIBUTING.md, CLAUDE.md, AGENTS.md, the release workflow and a
-   * //    .gitignore
+   * //    CONTRIBUTING.md, the release workflow and a .gitignore; no CLAUDE.md or
+   * //    AGENTS.md, which sous init compiles from .sous/
    */
   it("should write every file a new repository needs", async () => {
     const result = await scaffoldRepo({ directory: target, sousVersion: SOUS_VERSION });
@@ -76,8 +76,8 @@ describe("scaffoldRepo()", () => {
     expect(result.files).toContain("sous.index.json");
     expect(result.files).toContain("README.md");
     expect(result.files).toContain("CONTRIBUTING.md");
-    expect(result.files).toContain("CLAUDE.md");
-    expect(result.files).toContain("AGENTS.md");
+    expect(result.files).not.toContain("CLAUDE.md");
+    expect(result.files).not.toContain("AGENTS.md");
     expect(result.files).toContain(".gitignore");
     // No host was named or found, so no CI workflow: that is the host plugin's to write.
     expect(result.files.some((file) => file.startsWith(".github/"))).toBe(false);
@@ -115,41 +115,21 @@ describe("scaffoldRepo()", () => {
   });
 
   /**
-   * The scaffolded CLAUDE.md should be the entry point for an agent: it names
-   * the repository, the core skills that teach how a recipe repository works,
-   * and where those skills can be read online.
+   * The scaffolded CONTRIBUTING.md should name the repository and tell an
+   * agent to run sous build, which installs the core skills and compiles the
+   * instructions; the README should point at both.
    */
-  it("should write a CLAUDE.md that points an agent at the core skills", async () => {
-    await scaffoldRepo({ directory: target, sousVersion: SOUS_VERSION });
-
-    const claude = fs.readFileSync(path.join(target, "CLAUDE.md"), "utf8");
-
-    expect(claude.startsWith("# my-recipes\n")).toBe(true);
-    expect(claude).toContain("`about-sous-repos`");
-    expect(claude).toContain("`about-sous-recipes`");
-    expect(claude).toContain(
-      "https://github.com/sous-io/sous-recipes/tree/main/recipes/core/sous-skills/skills"
-    );
-
-    const agents = fs.readFileSync(path.join(target, "AGENTS.md"), "utf8");
-    expect(agents).toContain("`CLAUDE.md`");
-  });
-
-  /**
-   * The scaffolded CONTRIBUTING.md should name the repository and send an
-   * agent without the core skills to CLAUDE.md; the README should point at
-   * both.
-   */
-  it("should write a CONTRIBUTING.md that points at CLAUDE.md", async () => {
+  it("should write a CONTRIBUTING.md that says to run sous build", async () => {
     await scaffoldRepo({ directory: target, sousVersion: SOUS_VERSION });
 
     const contributing = fs.readFileSync(path.join(target, "CONTRIBUTING.md"), "utf8");
     expect(contributing.startsWith("# Contributing to my-recipes\n")).toBe(true);
-    expect(contributing).toContain("starts at `CLAUDE.md`");
+    expect(contributing).toContain("Run `sous build` after cloning");
 
     const readme = fs.readFileSync(path.join(target, "README.md"), "utf8");
     expect(readme).toContain("## Contributing");
     expect(readme).toContain("`CONTRIBUTING.md` says why");
+    expect(readme).toContain("run\n`sous build` after cloning");
     expect(readme).toContain("## License");
   });
 

@@ -72,6 +72,8 @@ const ACTIONS: Record<OperationAction, { glyph: string; word: string; keepNote: 
     failed: { glyph: "✗", word: "failed", keepNote: true },
     removed: { glyph: "−", word: "removed", keepNote: false },
     "would-remove": { glyph: "−", word: "would remove", keepNote: false },
+    "backed-up": { glyph: "↪", word: "backed up", keepNote: true },
+    "would-back-up": { glyph: "↪", word: "would back up", keepNote: true },
 };
 
 /**
@@ -446,6 +448,8 @@ function operation(layout: Layout, details: OperationDetails | undefined, messag
                 return [colors.red(action.glyph), colors.error(details.target)];
             case "removed":
             case "would-remove":
+            case "backed-up":
+            case "would-back-up":
                 return [colors.yellow(action.glyph), details.target];
             default:
                 return [colors.muted(action.glyph), colors.muted(details.target)];

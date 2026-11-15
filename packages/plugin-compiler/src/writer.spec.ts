@@ -8,6 +8,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { BackupClock, Backups } from "./backups.js";
 import { loadState, StateStore } from "./state.js";
 import { WriterService } from "./writer.js";
 
@@ -23,9 +24,21 @@ afterEach(() => {
     fs.rmSync(dir, { recursive: true, force: true });
 });
 
-function writer(options: { overwriteUntracked?: boolean; protectedRoots?: string[] } = {}): WriterService {
-    return new WriterService(store, { overwriteUntracked: options.overwriteUntracked ?? true, protectedRoots: options.protectedRoots ?? [] });
+function writer(options: { overwriteUntracked?: boolean; protectedRoots?: string[]; backups?: Backups } = {}): WriterService {
+    return new WriterService(store, {
+        overwriteUntracked: options.overwriteUntracked ?? true,
+        protectedRoots: options.protectedRoots ?? [],
+        ...(options.backups ? { backups: options.backups } : {}),
+    });
 }
+
+/** Backups under `<dir>/.sous/backups`, every run at 2026-11-15 09:12:04. */
+function fixedBackups(): Backups {
+    return new Backups(path.join(dir, ".sous", "backups"), dir, new BackupClock(() => new Date(2026, 10, 15, 9, 12, 4)));
+}
+
+/** Where a file directly under `dir` is backed up by `fixedBackups()`. */
+const backupOf = (name: string) => path.join(dir, ".sous", "backups", "2026-11-15", "0912-04", name);
 
 describe("WriterService.write()", () => {
     /** A new file is created with its directories, and recorded with where it came from. */
@@ -163,5 +176,153 @@ describe("WriterService.remove()", () => {
 
         expect((await w.remove([file], { dryRun: true })).removed).toEqual([file]);
         expect(fs.existsSync(file)).toBe(true);
+    });
+});
+
+describe("WriterService backups", () => {
+    /**
+     * Overwriting a file sous did not write should first copy it to the run's backup folder, and
+     * say where in the result.
+     *
+     * write("CLAUDE.md", "compiled") over the user's own CLAUDE.md
+     * // -> { action: "updated", backup: ".sous/backups/2026-11-15/0912-04/CLAUDE.md" }
+     */
+    it("should back up a file it did not write before overwriting it", async () => {
+        const file = path.join(dir, "CLAUDE.md");
+
+        fs.writeFileSync(file, "the user's own");
+
+        const written = await writer({ backups: fixedBackups() }).write(file, "compiled", { source: "s" });
+
+        expect(written).toMatchObject({ action: "updated", backup: backupOf("CLAUDE.md") });
+        expect(fs.readFileSync(backupOf("CLAUDE.md"), "utf8")).toBe("the user's own");
+        expect(fs.readFileSync(file, "utf8")).toBe("compiled");
+    });
+
+    /**
+     * Overwriting an output edited by hand since sous wrote it (its hash no longer matches the
+     * recorded destHash) should back up the edited copy first.
+     *
+     * write("a.md", "one"); edit a.md by hand; write("a.md", "two")
+     * // -> the hand-edited copy is in the backup folder
+     */
+    it("should back up a tracked output edited by hand before overwriting it", async () => {
+        const file = path.join(dir, "a.md");
+        const w = writer({ backups: fixedBackups() });
+
+        await w.write(file, "one", { source: "s" });
+        fs.writeFileSync(file, "one, edited by hand");
+
+        const written = await w.write(file, "two", { source: "s" });
+
+        expect(written.backup).toBe(backupOf("a.md"));
+        expect(fs.readFileSync(backupOf("a.md"), "utf8")).toBe("one, edited by hand");
+        expect(fs.readFileSync(file, "utf8")).toBe("two");
+    });
+
+    /**
+     * Content sous produced, and content already identical to what is being written, should not
+     * be backed up: nothing would be lost.
+     *
+     * write("a.md", "one"); write("a.md", "two")        // its own content: no backup
+     * user's "same" file; write("b.md", "same", force)  // identical: no backup
+     */
+    it("should not back up its own unchanged output or content identical to the new content", async () => {
+        const own = path.join(dir, "a.md");
+        const identical = path.join(dir, "b.md");
+        const w = writer({ backups: fixedBackups() });
+
+        await w.write(own, "one", { source: "s" });
+        fs.writeFileSync(identical, "same");
+
+        expect((await w.write(own, "two", { source: "s" })).backup).toBeUndefined();
+        expect((await w.write(own, "two", { source: "s", force: true })).backup).toBeUndefined();
+        expect((await w.write(identical, "same", { source: "s", force: true })).backup).toBeUndefined();
+        expect(fs.existsSync(path.join(dir, ".sous", "backups"))).toBe(false);
+    });
+
+    /**
+     * A dry run should say where a backup would go and write nothing: neither the backup nor the
+     * output.
+     *
+     * write("CLAUDE.md", "compiled", { dryRun: true }) over the user's own CLAUDE.md
+     * // -> { action: "would-update", backup: ".../CLAUDE.md" }, nothing on disk changed
+     */
+    it("should plan the backup and write nothing on a dry run", async () => {
+        const file = path.join(dir, "CLAUDE.md");
+
+        fs.writeFileSync(file, "the user's own");
+
+        const written = await writer({ backups: fixedBackups() }).write(file, "compiled", { source: "s", dryRun: true });
+
+        expect(written).toMatchObject({ action: "would-update", backup: backupOf("CLAUDE.md") });
+        expect(fs.existsSync(path.join(dir, ".sous", "backups"))).toBe(false);
+        expect(fs.readFileSync(file, "utf8")).toBe("the user's own");
+    });
+
+    /**
+     * With overwriteUntracked false, a file sous did not write should be skipped as before, and
+     * since it is not touched, not backed up.
+     */
+    it("should not back up a file it skips because overwriteUntracked is false", async () => {
+        const file = path.join(dir, "CLAUDE.md");
+
+        fs.writeFileSync(file, "the user's own");
+
+        const written = await writer({ overwriteUntracked: false, backups: fixedBackups() }).write(file, "compiled", { source: "s" });
+
+        expect(written.action).toBe("skipped-untracked");
+        expect(written.backup).toBeUndefined();
+        expect(fs.existsSync(path.join(dir, ".sous", "backups"))).toBe(false);
+    });
+
+    /**
+     * Removing an output edited by hand should back it up first; an output still as sous wrote it
+     * is removed without a backup. A dry run lists the backup it would make and writes nothing.
+     *
+     * remove(["edited.md", "own.md"])
+     * // -> { removed: [edited, own], backedUp: [{ file: edited, backup: ".../edited.md" }] }
+     */
+    it("should back up a hand-edited output before removing it, and only that one", async () => {
+        const edited = path.join(dir, "edited.md");
+        const own = path.join(dir, "own.md");
+        const w = writer({ backups: fixedBackups() });
+
+        await w.write(edited, "x", { source: "s" });
+        await w.write(own, "y", { source: "s" });
+        fs.writeFileSync(edited, "x, edited by hand");
+
+        const planned = await w.remove([edited, own], { dryRun: true });
+
+        expect(planned.backedUp).toEqual([{ file: edited, backup: backupOf("edited.md") }]);
+        expect(fs.existsSync(path.join(dir, ".sous", "backups"))).toBe(false);
+
+        const result = await w.remove([edited, own]);
+
+        expect(result.removed).toEqual([edited, own]);
+        expect(result.backedUp).toEqual([{ file: edited, backup: backupOf("edited.md") }]);
+        expect(fs.readFileSync(backupOf("edited.md"), "utf8")).toBe("x, edited by hand");
+        expect(fs.existsSync(edited)).toBe(false);
+        expect(fs.existsSync(backupOf("own.md"))).toBe(false);
+    });
+
+    /**
+     * Without a `backups` setting, backups should go in a `backups` directory beside the state
+     * file, at the path relative to the state's project.
+     *
+     * new StateStore("/p/.sous/sous.state.json", "/p") -> "/p/.sous/backups/<date>/<time>/CLAUDE.md"
+     */
+    it("should default to a backups directory beside the state file", async () => {
+        store = new StateStore(path.join(dir, ".sous", "sous.state.json"), dir);
+
+        const file = path.join(dir, "CLAUDE.md");
+
+        fs.writeFileSync(file, "the user's own");
+
+        const written = await writer().write(file, "compiled", { source: "s" });
+        const relative = path.relative(path.join(dir, ".sous", "backups"), written.backup!);
+
+        expect(relative).toMatch(/^\d{4}-\d{2}-\d{2}[\\/]\d{4}-\d{2}[\\/]CLAUDE\.md$/);
+        expect(fs.readFileSync(written.backup!, "utf8")).toBe("the user's own");
     });
 });

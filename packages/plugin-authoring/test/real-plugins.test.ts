@@ -43,6 +43,10 @@ const recipesStandIn = definePlugin({
     },
 });
 
+/** plugin-config-files and plugin-init, stood in: release never reaches them. */
+const configFilesStandIn = definePlugin({ name: "@sous-io/plugin-config-files", version: packageJson.version, register() {} });
+const initStandIn = definePlugin({ name: "@sous-io/plugin-init", version: packageJson.version, register() {} });
+
 describe("plugin-authoring with the real plugins", () => {
     /** Validation, the plan, the bump, the dependency-first tags and the resolved index, end to end. */
     it("should release a repository with a sibling dependency", async () => {
@@ -54,7 +58,7 @@ describe("plugin-authoring with the real plugins", () => {
         commitAll(repo, "two recipes");
 
         const engine = createEngine({
-            builtIns: [hostPlugin, gitPlugin, refsPlugin, formatsPlugin, variablesPlugin, recipesStandIn, authoringPlugin],
+            builtIns: [hostPlugin, gitPlugin, refsPlugin, formatsPlugin, variablesPlugin, recipesStandIn, configFilesStandIn, initStandIn, authoringPlugin],
             reporter: new BufferedReporter(),
             env: { HOME: tmp.path, SOUS_HOME: path.join(tmp.path, ".sous-home"), PATH: process.env.PATH },
             app: { name: "sous", version: "1.0.0-test" },

@@ -53,3 +53,4 @@
   - [0021: Reporting as levels and styles](adrs/0021-reporting-levels-and-styles.md)
   - [0022: Intents return outputs](adrs/0022-intents-return-outputs.md)
   - [0023: The project's lockfile is the only lock](adrs/0023-the-project-lockfile-is-the-only-lock.md)
+  - [0024: `sous init` imports a project's agent files](adrs/0024-init-imports-agent-files.md)

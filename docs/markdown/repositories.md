@@ -361,7 +361,7 @@ listed it), the error names it:
 
 ```text
   Error: Include not found: @~workflow/member/memories/member.md
-  in file: .sous/prompts/AGENTS.md
+  in file: .sous/memories/instructions.tpl.md
   namespace: workflow
   recipe: workflow/member
   The namespace "workflow" holds no recipe named "workflow/member".

@@ -8,6 +8,11 @@ plugin, and its first build runs the same build operation every front end uses
 ([ADR 0016](0016-intents-and-front-ends.md)). The scaffold no longer writes `projectRoot`, which
 sous now sets itself ([ADR 0018](0018-one-project-root.md)).
 
+!> **Superseded in part by [ADR 0024](0024-init-imports-agent-files.md) (2026-11-15):** `sous init` now
+imports a project's existing `CLAUDE.md`, `AGENTS.md`, the files they include and its skills before the
+first build, and the starter prompt is replaced by `.sous/memories/instructions.tpl.md`, compiled into both
+`CLAUDE.md` and `AGENTS.md`, which are gitignored build output.
+
 This record stands on its own; it amends nothing in [ADR 0001](0001-repositories.md) or
 [ADR 0002](0002-recipe-answers-in-templates.md), and everything both say still holds. The living
 answer to "how does it work right now?" is the `sous init` entry in the

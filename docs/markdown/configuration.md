@@ -45,6 +45,11 @@ need no target of their own: the built-in Claude Code plugin sends them to `.cla
 `recipes.skills.outputs` adds destinations of your own (see
 [Consuming recipes](repositories-consuming.md)).
 
+A target in your config wins over a plugin's or a recipe's target that would write the same file. A
+project that compiles its own `CLAUDE.md`, as the config `sous init` writes does, replaces the one the
+Claude Code plugin would build from recipe memories. A project skill with the same name as a recipe skill
+replaces it too, and the build warns that the recipe's copy was not written.
+
 A JSON config may set `"$schema"` to bind the `sous.config.schema.json` artifact shipped with
 sous for editor autocompletion; sous accepts and ignores the key.
 
@@ -169,6 +174,22 @@ Two more keys settle what plugins do:
 
 `sous plugins show` lists every plugin and what it adds. Recipes may ship plugins too; see
 [where plugins come from](architecture/specifications/S1-engine.md#where-plugins-come-from).
+
+## Outputs, the state file and backups
+
+Sous records every file it writes in the state file, `.sous/sous.state.json` by default
+(`compilation.stateFile` moves it), along with a hash of the content it wrote. `prune` and `clear` read
+it to know which files are sous's to remove.
+
+When a target's output already exists and sous did not write it, sous overwrites it and takes it
+over by default. Set `compilation.overwriteUntracked: false` to have sous leave such a file alone
+and warn instead.
+
+Sous never destroys content it did not produce. Before it overwrites or removes a file that it did
+not write, or one that was edited by hand since sous wrote it, it copies the file to
+`.sous/backups/<YYYY-MM-DD>/<HHMM-SS>/<path relative to the project root>` and lists the backup in
+the command's output. See [Backups before overwriting or
+removing](commands.md#backups-before-overwriting-or-removing) for the details.
 
 ## Where to go next
 

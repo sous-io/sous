@@ -10,6 +10,7 @@ import type { HostGlobs, HostSousHome } from "@sous-io/plugin-host/types";
 import type { HashNameContext } from "@sous-io/plugin-refs/types";
 import type { VarScope, VariablesResolver } from "@sous-io/plugin-variables/types";
 import { buildAliasMap, type AliasMap } from "./aliases.js";
+import { BackupClock, Backups } from "./backups.js";
 import type { IncludeEnvironment, ViewMap } from "./includes.js";
 import { DEFAULT_STATE_FILE } from "./schema.js";
 import { StateStore } from "./state.js";
@@ -48,6 +49,7 @@ export class CompilerRuntime {
     constructor(
         readonly source: RuntimeSource,
         private readonly stores: Map<string, StateStore>,
+        private readonly clock: BackupClock = new BackupClock(),
     ) {}
 
     /** The service context transforms and `#` names are given. */
@@ -180,6 +182,16 @@ export class CompilerRuntime {
     }
 
     /**
+     * Where the writer copies a file before it overwrites or removes content sous did not produce:
+     * `<sousDir>/backups` (beside the state file when there is no project), one timestamp folder per run.
+     */
+    backups(): Backups {
+        const dir = this.source.project ? path.join(this.source.project.sousDir, "backups") : path.join(path.dirname(this.stateFile()), "backups");
+
+        return new Backups(dir, this.source.project?.root, this.clock);
+    }
+
+    /**
      * Directories nothing is ever removed from, whatever the state file says: the project's linked
      * checkouts, the machine-wide ones, and the recipe store.
      */
@@ -204,12 +216,14 @@ export class CompilerRuntime {
 export class RuntimeCache {
     private readonly runtimes = new WeakMap<BuiltConfig, CompilerRuntime>();
     private readonly stores = new Map<string, StateStore>();
+    /** Shared by every config, so a run that rebuilds its config part way keeps its backup folder. */
+    private readonly clock = new BackupClock();
 
     for(source: RuntimeSource): CompilerRuntime {
         let runtime = this.runtimes.get(source.config);
 
         if (!runtime) {
-            runtime = new CompilerRuntime(source, this.stores);
+            runtime = new CompilerRuntime(source, this.stores, this.clock);
             this.runtimes.set(source.config, runtime);
         }
 

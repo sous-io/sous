@@ -34,7 +34,12 @@ Ruled by the user:
 - The one definition of the project root, with no override (2026-10-25).
 - Pointer files come from plugins, and each file is written once (2026-10-25).
 - Only `plugin-compiler` writes build outputs; it overwrites by default and takes ownership, and
-  `compilation.overwriteUntracked: false` opts out (2026-10-29).
+  `compilation.overwriteUntracked: false` opts out (2026-10-29). Before it overwrites or removes a
+  file it did not write, or an output edited by hand since it wrote it (its content no longer
+  matches the recorded `destHash`), it copies the file to
+  `<sousDir>/backups/<YYYY-MM-DD>/<HHMM-SS>/<path relative to the project root>`, one timestamp
+  folder per run and `outside-project/<absolute path>` for a file outside the project, and reports
+  each backup (2026-11-15).
 - One `harness` entity per tool, a `memory-target` entity with an optional `filter()` and
   `format()`, and a `skill-target` entity (2026-10-29).
 - What removing a repository deletes is read from the compiler's state file (2026-10-29).
@@ -160,7 +165,7 @@ Four packages are not plugins. Every other package is a built-in plugin, private
 | `plugin-memories` | memories: selecting them, the `memory-target` entity, the compilation targets for them, the `#memories` name |
 | `plugin-harnesses` | the `harness` entity, launching a harness, headless runs, the `tools` settings |
 | `plugin-authoring` | releasing, submitting and contributing to recipe repositories, scaffolding one |
-| `plugin-init` | scaffolding a project's `.sous/` (`sous init`) |
+| `plugin-init` | setting a project up for sous (`sous init`): importing its existing agent files, scaffolding its `.sous/` |
 | `plugin-update` | updating sous itself, installing plugins a recipe requires, the `package-manager` entity, scanning for installed plugins |
 | `plugin-inspect` (agent decision, which the user may overrule) | showing the engine's state: `config show`, `config get`, `plugins show`, timings |
 | `plugin-cli` | the CLI front end: commands generated from intents, terminal output and prompts, error messages and exit codes |
@@ -187,7 +192,9 @@ top      plugin-claude-code   plugin-github  plugin-gitlab  plugin-local   plugi
            │
          plugin-cli   plugin-mcp   plugin-inspect          (depend on nothing: they use intents by name)
            │
-         plugin-init   plugin-harnesses   plugin-authoring   plugin-update
+         plugin-authoring                                  (runs init after scaffolding a repository)
+           │
+         plugin-init   plugin-harnesses   plugin-update
            │
          plugin-build
            │
@@ -225,8 +232,8 @@ top      plugin-claude-code   plugin-github  plugin-gitlab  plugin-local   plugi
 | `plugin-memories` | `plugin-compiler`, `plugin-recipes`, `plugin-refs` |
 | `plugin-build` | `plugin-compiler`, `plugin-recipes`, `plugin-recipe-answers`, `plugin-git` |
 | `plugin-harnesses` | `plugin-build`, `plugin-host` |
-| `plugin-authoring` | `plugin-recipes`, `plugin-formats`, `plugin-refs`, `plugin-variables`, `plugin-git` |
-| `plugin-init` | `plugin-build`, `plugin-config-files` |
+| `plugin-authoring` | `plugin-recipes`, `plugin-formats`, `plugin-refs`, `plugin-variables`, `plugin-git`, `plugin-init`, `plugin-config-files` |
+| `plugin-init` | `plugin-build`, `plugin-config-files`, `plugin-host` |
 | `plugin-update` | `plugin-host` |
 | `plugin-cli`, `plugin-mcp`, `plugin-inspect` | nothing |
 | `plugin-npm`, `plugin-pnpm`, `plugin-yarn` | `plugin-update` |
@@ -481,7 +488,7 @@ add compilation targets to the config.
 | Compilation settings: targets, entry globs, `content` targets, outputs, runtime context | the `compilation` config key | `config-key` entity |
 | The built-in tags (`showVars`, `exportScalarVarsJs`, `getFiles`, `listFiles`) and filter (`bulletList`) | `liquid-tag`, `liquid-filter` entities | entities |
 | The state file: every file sous wrote, and which recipe it came from | `compiler.state` | service, config |
-| Writing outputs: overwrite and take ownership, unless `compilation.overwriteUntracked` is `false` | `compiler.writer` | service, config |
+| Writing outputs: overwrite and take ownership, unless `compilation.overwriteUntracked` is `false`; back up content sous did not produce before overwriting or removing it | `compiler.writer` | service, config |
 | Pruning outputs no target produces any more | `compiler.prune` | intent, internal |
 | The namespace resolver the `~` sigil uses | `compiler.namespace-resolver` | service type, implemented by `plugin-recipes` |
 | Announcing what a compile wrote | `compiler.wrote` | event |
@@ -496,6 +503,17 @@ A compilation target may give its source as `content`, a template string, instea
     "content": "@/home/luke/.sous/cache/.../workflow/github-projects/memories/board.md\n\n@...",
     "outputs": [{ "destinationFile": "/home/luke/code/acme/CLAUDE.md" }]
 }
+```
+
+The project's own targets win. When a target from the project's config writes a file that a plugin's
+target or a recipe's target would also write, the other target's output for that file is dropped,
+so two targets never write one file in turn. A plugin's target yields silently, because yielding is
+what it is for: a project that builds its own `CLAUDE.md` replaces the Claude Code memory target's.
+A recipe's output yields with a warning, so a project skill that shadows a recipe skill of the same
+name is never silent ([ADR 0024](../../adrs/0024-init-imports-agent-files.md)).
+
+```text
+/home/luke/code/acme/.claude/skills/review/SKILL.md is written by this project's own target, so the copy from the recipe workflow/review is not written.
 ```
 
 ### Build: `plugin-build`
@@ -599,16 +617,20 @@ A tool written under `tools` in the config launches with no plugin at all (G8, w
 | Releasing a recipe repository: validate, plan, tag, bump, changelog, settle, build the index | `repo.release` | intent |
 | Proposing changes to a recipe repository | `repo.submit` | intent |
 | Contributing: link, submit and unlink in one go | `repo.contribute` | intent; runs `repo.link`, `repo.submit`, `repo.unlink` |
-| Scaffolding a recipe repository (`sous repo init`) | `repo.init` | intent |
+| Scaffolding a recipe repository (`sous repo init`), then setting it up as a sous project | `repo.init` | intent; runs `init` |
 
 The CI workflow a scaffold writes comes from the `repository-host` entity (GitHub writes a GitHub
 Actions workflow, GitLab its own), so nothing host-specific lives outside the host plugins.
+
+After the scaffold, `repo.init` runs `init` in the same directory, passing its answers through, so a
+recipe repository is also a sous project; a directory that already holds a sous config keeps it, and
+`init` is not run ([ADR 0024](../../adrs/0024-init-imports-agent-files.md)).
 
 ### Project setup and updates: `plugin-init`, `plugin-update`
 
 | Concern | Owner | Package | Kind |
 | --- | --- | --- | --- |
-| Scaffolding a project's `.sous/` | `init` | `plugin-init` | intent |
+| Setting a project up: importing its existing agent files, scaffolding its `.sous/`, the first build | `init` | `plugin-init` | intent |
 | Updating sous itself (`sous update`) | `update` | `plugin-update` | intent |
 | Installing a plugin a recipe requires (`--install-plugins`) | `plugins.install` | `plugin-update` | intent |
 | Package managers: detecting one, listing installed packages, installing | `package-manager` | `plugin-update` | entity kind |
@@ -961,6 +983,13 @@ After: contributing moves to `plugin-authoring` (the `repo.contribute` intent), 
 None.
 
 ## Changes
+
+### 2026-11-15: Init imports agent files; the project's targets win over recipes'
+
+`init` now imports a project's existing agent files before its first build, and `repo.init` runs
+`init` after its scaffold, so `plugin-authoring` depends on `plugin-init` and sits above it. A
+recipe's output now yields to a target from the project's config that writes the same file, as a
+plugin's already did, with a warning (ADR 0024).
 
 ### 2026-10-30: No views; intents return outputs
 

@@ -1,18 +1,24 @@
 /**
- * The `init` intent: sets a project up for sous. It writes the `.sous/` directory a project needs
- * (a commented primary config (`sous.config.js`), the starter prompt that config compiles, the two answers files and
- * the sous-managed ignore block), then runs the first build through the one build path, which is
- * what seeds the `core` recipe and pins it in the lockfile.
+ * The `init` intent: sets a project up for sous. It imports the project's existing agent files
+ * (a root `CLAUDE.md` or `AGENTS.md`, the files they include, and the skills in `.claude/skills/`)
+ * into `.sous/`, writes the `.sous/` directory a project needs (a commented primary config, the
+ * source both instruction files compile from, a starter memory when there was nothing to import,
+ * the two answers files and the sous-managed ignore blocks), stops git tracking the files that are
+ * now build output, then runs the first build through the one build path, which is what seeds the
+ * `core` recipe and pins it in the lockfile.
  *
- * Every question has a flag: setting a project up inside another one is answered by `yes`.
- * Nothing prints or prompts directly.
+ * Every question has a flag: setting a project up inside another one is answered by `yes`, and what
+ * happens to the files the instructions include by `moveIncludes`, `copyIncludes` or
+ * `leaveIncludes` (`yes` picks the default, move). Nothing prints or prompts directly.
  */
 
 import path from "node:path";
 import { ConfigError, type Context, IntentOutput, IntentOutputs, ReportEntryStyle, TextBlock, VariableSet, type VariableEntry } from "@sous-io/plugin-api";
 import "@sous-io/plugin-build/types";
-import { findEnclosingProject, scaffoldProject } from "./scaffold.js";
-import { STARTER_OUTPUT_NAME, STARTER_PROMPT_RELATIVE_PATH } from "./templates.js";
+import type { GitRunner } from "@sous-io/plugin-git/types";
+import { applyImport, type ImportOutcome, type ImportScan, INCLUDES_DIR, type IncludeFate, type IncludedFile, scanImport, settleFates } from "./import.js";
+import { assertNoExistingConfig, findEnclosingProject, scaffoldProject, sousDirFor } from "./scaffold.js";
+import { STARTER_OUTPUT_NAMES, STARTER_PROMPT_RELATIVE_PATH } from "./templates.js";
 import type { InitInput, InitResult, PackageJsonOutcome } from "./types.js";
 
 /** The package `init` adds to a project's `package.json`. */
@@ -20,6 +26,9 @@ const SOUS_PACKAGE_NAME = "@sous-io/sous";
 
 /** The flag spelling the non-interactive error names. */
 const YES_FLAG = "--yes (also -y, --force)";
+
+/** The flags that answer what happens to the included files. */
+const INCLUDE_FLAGS = "--move-includes, --copy-includes, --leave-includes or --yes";
 
 /**
  * A project set up inside another one is a real choice, not a mistake sous should prevent: a
@@ -55,6 +64,111 @@ async function confirmNesting(ctx: Context, root: string, yes: boolean): Promise
     }
 }
 
+/** The include answer the flags give, if any. */
+function flaggedFate(input: InitInput): IncludeFate | undefined {
+    const flagged = [
+        ...(input.moveIncludes === true ? (["move"] as const) : []),
+        ...(input.copyIncludes === true ? (["copy"] as const) : []),
+        ...(input.leaveIncludes === true ? (["leave"] as const) : []),
+    ];
+
+    if (flagged.length > 1) {
+        throw new ConfigError("Pass only one of --move-includes, --copy-includes and --leave-includes.", {
+            details: ["Each one says what happens to every file the existing instructions include, so two of them contradict each other."],
+        });
+    }
+
+    return flagged[0];
+}
+
+/** Lists the included files, nested under the files that include them, before the question. */
+function reportIncludes(ctx: Context, scan: ImportScan): void {
+    const relative = (file: string) => path.relative(scan.root, file) || file;
+
+    ctx.reporter.operationStart("Files the existing instructions include");
+
+    for (const file of scan.includes) {
+        const by = file.includedBy.map(relative).join(", ");
+
+        ctx.reporter.detail(`${file.relative}, included by ${by}${file.pinned === undefined ? "" : ` (stays where it is: ${file.pinned})`}`);
+    }
+}
+
+/**
+ * What happens to the files the existing instructions include: the flag's answer, the default
+ * (move) under `yes` or in a dry run, or the user's answer.
+ *
+ * @throws NonInteractiveError when it has to ask and cannot.
+ */
+async function includeAnswer(ctx: Context, input: InitInput, scan: ImportScan, dryRun: boolean): Promise<IncludeFate | "choose"> {
+    const flagged = flaggedFate(input);
+    const movable = scan.includes.filter((file) => file.pinned === undefined);
+
+    if (flagged !== undefined) {
+        return flagged;
+    }
+
+    if (movable.length === 0 || input.yes === true || dryRun) {
+        return "move";
+    }
+
+    reportIncludes(ctx, scan);
+
+    return ctx.prompter.askChoice<IncludeFate | "choose">({
+        message: `What should happen to the ${movable.length === 1 ? "included file" : `${movable.length} included files`}?`,
+        choices: [
+            { label: "Move them into .sous/", value: "move", description: `to .sous/${INCLUDES_DIR}/, keeping their paths; each original is backed up, then removed` },
+            { label: "Copy them into .sous/", value: "copy", description: "the originals stay, so the two copies can drift apart" },
+            { label: "Leave them where they are", value: "leave", description: "sous includes them from where they are at every build" },
+            { label: "Choose for each file", value: "choose" },
+        ],
+        defaultIndex: 0,
+        answeredBy: INCLUDE_FLAGS,
+    });
+}
+
+/** Asks what happens to one included file. */
+function askForFile(ctx: Context): (file: IncludedFile) => Promise<IncludeFate> {
+    return (file) =>
+        ctx.prompter.askChoice<IncludeFate>({
+            message: `What should happen to ${file.relative}?`,
+            choices: [
+                { label: "Move it into .sous/", value: "move" },
+                { label: "Copy it into .sous/", value: "copy" },
+                { label: "Leave it where it is", value: "leave" },
+            ],
+            defaultIndex: 0,
+            answeredBy: INCLUDE_FLAGS,
+        });
+}
+
+/**
+ * Stops git tracking the paths that are now build output (the root instruction files) or moved
+ * (the skill folders), keeping the files on disk. Does nothing outside a git working tree, or
+ * without git. Returns the paths git stopped tracking, relative to the project root.
+ */
+async function untrack(ctx: Context, root: string, paths: readonly string[], dryRun: boolean): Promise<string[]> {
+    if (paths.length === 0 || !ctx.services.has("git.runner")) {
+        return [];
+    }
+
+    const git = ctx.services.get("git.runner") as GitRunner;
+    const inside = await git.run(["rev-parse", "--is-inside-work-tree"], { cwd: root, reject: false });
+
+    if (inside.exitCode !== 0 || inside.stdout.trim() !== "true") {
+        return [];
+    }
+
+    const listed = await git.run(["ls-files", "--", ...paths], { cwd: root, reject: false });
+    const tracked = paths.filter((candidate) => listed.stdout.split("\n").some((line: string) => line === candidate || line.startsWith(`${candidate}/`)));
+
+    if (tracked.length > 0 && !dryRun) {
+        await git.run(["rm", "-r", "--cached", "--quiet", "--", ...tracked], { cwd: root });
+    }
+
+    return tracked;
+}
+
 /** The "Dependency" row: where sous sits in `package.json`, or nothing without one. */
 function dependencyRow(outcome: PackageJsonOutcome): VariableEntry[] {
     if (outcome.kind === "no-package-json") {
@@ -70,6 +184,47 @@ function dependencyRow(outcome: PackageJsonOutcome): VariableEntry[] {
     return [{ label: "Dependency", value, detail: "added to devDependencies in package.json; run your package manager's install to fetch it" }];
 }
 
+/** Reports what the import did (or, in a dry run, would do). */
+function reportImport(ctx: Context, root: string, outcome: ImportOutcome, untracked: readonly string[], dryRun: boolean): void {
+    if (outcome.steps.length === 0 && untracked.length === 0) {
+        return;
+    }
+
+    const relative = (file: string) => path.relative(root, file) || file;
+    const would = (done: string, planned: string) => (dryRun ? planned : done);
+
+    ctx.reporter.operationStart("Importing the project's agent files");
+
+    for (const step of outcome.steps) {
+        const backup = step.backup === undefined ? "" : `; ${would("backed up to", "would back up to")} ${relative(step.backup)}`;
+
+        switch (step.kind) {
+            case "imported":
+                ctx.reporter.operation(dryRun ? "would-write" : "written", relative(step.dest!), { note: `${would("imported from", "would import from")} ${relative(step.source)}` });
+                break;
+            case "moved":
+                ctx.reporter.operation(dryRun ? "would-write" : "written", relative(step.dest!), { note: `${would("moved from", "would move from")} ${relative(step.source)}${backup}` });
+                break;
+            case "copied":
+                ctx.reporter.operation(dryRun ? "would-write" : "written", relative(step.dest!), { note: `${would("copied from", "would copy from")} ${relative(step.source)}; the original stays` });
+                break;
+            case "left":
+                ctx.reporter.operation("skipped", relative(step.source), { note: step.note ?? "left where it is; sous includes it from there" });
+                break;
+            case "skipped":
+                ctx.reporter.operation("skipped", relative(step.source), { note: `not imported: ${step.note}` });
+                break;
+            case "turned-off":
+                ctx.reporter.warn(`${relative(step.source)}: ${step.note}.`);
+                break;
+        }
+    }
+
+    for (const file of untracked) {
+        ctx.reporter.operation(dryRun ? "would-remove" : "removed", file, { note: `${would("git no longer tracks it", "git would stop tracking it")}; the file stays on disk` });
+    }
+}
+
 /**
  * Reports the files written (or, in a dry run, that would be), the ones kept and the `package.json`
  * change, relative to the project root. Returns whether anything was done.
@@ -77,10 +232,11 @@ function dependencyRow(outcome: PackageJsonOutcome): VariableEntry[] {
 function reportFiles(ctx: Context, result: InitResult): boolean {
     const added = result.packageJson.kind === "added" ? result.packageJson : undefined;
     const packageJsonFile = path.join(result.root, "package.json");
-    const files = result.files.filter((file) => !(added && file === packageJsonFile));
-    const anythingDone = files.length > 0 || result.kept.length > 0 || added !== undefined;
+    const imported = new Set(result.imported);
+    const files = result.files.filter((file) => !(added && file === packageJsonFile) && !imported.has(file));
+    const anythingDone = files.length > 0 || result.kept.length > 0 || added !== undefined || result.imported.length > 0;
 
-    if (anythingDone) {
+    if (files.length > 0 || result.kept.length > 0 || added !== undefined) {
         ctx.reporter.operationStart("Setting up the project");
     }
 
@@ -108,15 +264,28 @@ export async function handle(input: InitInput, ctx: Context): Promise<IntentOutp
     const name = (input.name ?? path.basename(root)).trim() || path.basename(root);
 
     await confirmNesting(ctx, root, input.yes === true);
+    assertNoExistingConfig(ctx, root);
 
-    const scaffold = await scaffoldProject(ctx, { root, name, dryRun });
+    // Planned and answered before anything is written, so a "no" or a missing flag writes nothing.
+    const scan = scanImport(root, sousDirFor(root));
+    const answer = await includeAnswer(ctx, input, scan, dryRun);
+    const fates = await settleFates(scan, answer, askForFile(ctx));
+
+    const scaffold = await scaffoldProject(ctx, { root, name, dryRun, starterMemory: scan.instructions.length === 0 });
+    const imported = applyImport(scan, fates, { dryRun });
+    const untracked = await untrack(ctx, root, imported.untrack, dryRun);
+
+    reportImport(ctx, root, imported, untracked, dryRun);
 
     const result: InitResult = {
         root,
         sousDir: scaffold.sousDir,
         configPath: scaffold.configPath,
-        files: scaffold.files,
+        files: [...scaffold.files, ...imported.written],
         kept: scaffold.kept,
+        imported: imported.written,
+        removed: imported.removed,
+        untracked,
         packageJson: scaffold.packageJson,
         dryRun,
     };
@@ -160,13 +329,16 @@ export async function handle(input: InitInput, ctx: Context): Promise<IntentOutp
 
 /** The closing outputs: what was set up, then the note about build output. The last carries the result. */
 function whatWasSetUp(result: InitResult): IntentOutput[] {
+    const outputs = STARTER_OUTPUT_NAMES.map((name) => path.join(result.root, name));
+
     return [
         new IntentOutput({
             title: "What was set up",
             result: new VariableSet([
                 { label: "Config", value: result.configPath },
-                { label: "Prompt source", value: path.join(result.sousDir, STARTER_PROMPT_RELATIVE_PATH) },
-                { label: "Compiled to", value: path.join(result.root, STARTER_OUTPUT_NAME) },
+                { label: "Instructions", value: path.join(result.sousDir, STARTER_PROMPT_RELATIVE_PATH) },
+                { label: "Compiled to", value: outputs[0] },
+                ...outputs.slice(1).map((value) => ({ label: "", value })),
                 { label: "Skills", value: path.join(result.root, ".claude", "skills") },
                 ...dependencyRow(result.packageJson),
                 { label: "Shared answers", value: path.join(result.sousDir, ".env"), detail: "committed" },
@@ -174,7 +346,7 @@ function whatWasSetUp(result: InitResult): IntentOutput[] {
             ]),
         }),
         new IntentOutput({
-            summary: `${STARTER_OUTPUT_NAME} and the skills directory are build output, compiled from the prompt source and from the recipes this project subscribes to; a build recompiles them. The config explains each of its blocks in its own comments.`,
+            summary: `${STARTER_OUTPUT_NAMES.join(", ")} and .claude/skills/ are build output, gitignored and compiled from the sources under .sous/ and from the recipes this project subscribes to; a build recompiles them. The config explains each of its blocks in its own comments.`,
             data: result,
         }),
     ];

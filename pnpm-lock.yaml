@@ -65,12 +65,18 @@ importers:
       '@sous-io/plugin-api':
         specifier: workspace:*
         version: link:../plugin-api
+      '@sous-io/plugin-config-files':
+        specifier: workspace:*
+        version: link:../plugin-config-files
       '@sous-io/plugin-formats':
         specifier: workspace:*
         version: link:../plugin-formats
       '@sous-io/plugin-git':
         specifier: workspace:*
         version: link:../plugin-git
+      '@sous-io/plugin-init':
+        specifier: workspace:*
+        version: link:../plugin-init
       '@sous-io/plugin-recipes':
         specifier: workspace:*
         version: link:../plugin-recipes
@@ -415,6 +421,9 @@ importers:
       '@sous-io/plugin-config-files':
         specifier: workspace:*
         version: link:../plugin-config-files
+      '@sous-io/plugin-git':
+        specifier: workspace:*
+        version: link:../plugin-git
       '@sous-io/plugin-host':
         specifier: workspace:*
         version: link:../plugin-host

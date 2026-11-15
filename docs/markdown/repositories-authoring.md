@@ -4,9 +4,11 @@ The guide to publishing recipes of your own: creating a repository, writing a re
 needs, cutting a release, editing a published repository in place, and proposing a change to somebody else's.
 [Repository file formats](repositories-file-formats.md) holds the schemas; this page is the workflow.
 
-?> A recipe repository is not a sous project. It has no `.sous/` directory, and `sous repo init` and `sous repo
-release` do not look for one. Run them from inside the repository itself. `sous repo submit` runs there too, and
-may also be run from a project that links the repository.
+?> A recipe repository is also a sous project: `sous repo init` sets one up with a `.sous/` directory of its
+own, so its `CLAUDE.md`, `AGENTS.md` and `.claude/skills/` are build output, and anyone who clones it runs
+`sous build`. `sous repo init` and `sous repo release` find the repository by its `sous.repo.yaml`, not through
+that config. Run them from inside the repository itself. `sous repo submit` runs there too, and may also be run
+from a project that links the repository.
 
 ## Create a repository
 
@@ -20,26 +22,35 @@ $ sous repo init ./my-recipes --name my-recipes --namespace workflow
   wrote recipes/workflow/example/skills/example-skill/SKILL.tpl.md
   wrote README.md
   wrote CONTRIBUTING.md
-  wrote CLAUDE.md
-  wrote AGENTS.md
   wrote .github/workflows/sous-release.yml
   wrote .gitignore
+// then sous init sets the repository up as a sous project, and runs its first build
 ```
 
 `--name` is the repository's short name (default: the directory's own name), `--namespace` the one namespace to
 declare (default: the repository's name), `--force` overwrites a repository that already exists, and `--dry-run`
-lists the files without writing them. The command asks nothing, and names are lowercase kebab-case, so `My-Recipes`
-yields `my-recipes`. Every file is read back through the schemas sous uses on published repositories, so the
-scaffold validates. The scaffold is files only: run `git init`, commit it, and add the remote you publish from
-before releasing, since `sous repo release` reads and writes tags and fails in a directory git does not track.
+lists the files without writing them. Names are lowercase kebab-case, so `My-Recipes` yields `my-recipes`. Every
+file is read back through the schemas sous uses on published repositories, so the scaffold validates. The scaffold
+is files only: run `git init`, commit it, and add the remote you publish from before releasing, since
+`sous repo release` reads and writes tags and fails in a directory git does not track.
+
+After the scaffold, the command runs [`sous init`](commands.md#sous-init-directory) in the same directory, so the
+repository is also a sous project. Init imports a `CLAUDE.md`, an `AGENTS.md` or skills in `.claude/skills/` that
+the directory already holds, and with nothing to import it writes a starter memory,
+`.sous/memories/project/sous-repo.tpl.md`, which says this is a sous recipe repository and names the core skills
+an agent loads before changing anything. It then runs the first build, which compiles `CLAUDE.md` and
+`AGENTS.md` and installs the core skills. The only question init can ask is what happens to files an existing
+`CLAUDE.md` or `AGENTS.md` includes; `--yes`, `--move-includes`, `--copy-includes` and `--leave-includes` answer it
+and are passed through, as are `--no-build` and `--dry-run`. A directory that already holds a sous config keeps
+it, and init is skipped with a note.
 
 ?> `repo init --force` means overwrite, not "answer yes". It is unrelated to the confirmation flag other
 commands spell `--yes`, `-y`, `--force` or `--trust`.
 
 `sous.repo.yaml` says what the repository publishes, `sous.index.json` is the catalog that `sous repo release`
-writes, and each recipe folder carries one `sous.recipe.yaml` beside the files it contributes. `CONTRIBUTING.md`,
-`CLAUDE.md` and `AGENTS.md` are for agents: they say that contribution instructions are written for agents, and
-point an agent at the sous core skills, which explain how a recipe repository works. The scaffold follows
+writes, and each recipe folder carries one `sous.recipe.yaml` beside the files it contributes. `CONTRIBUTING.md` is
+for agents: it says that contribution instructions are written for agents, and that `sous build` after cloning
+installs the sous core skills, which explain how a recipe repository works. The scaffold follows
 [`sous-io/sous-recipes`](https://github.com/sous-io/sous-recipes), a complete repository minus its recipes, and
 its placeholder skill is named `SKILL.tpl.md` because it ends with a footer that only a render fills in. Nothing else is
 fixed: recipe folders may live anywhere, and what makes a folder a recipe is that `sous.repo.yaml` lists its

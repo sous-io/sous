@@ -17,8 +17,9 @@ copies or renders files to their destinations in this project.
 ## Files You Must Never Edit
 
 Sous manages certain files in this project by compiling them from a central source.
-**You must never edit these directly.** Your changes will be silently overwritten the
-next time Sous runs:
+**You must never edit these directly.** Your changes will be overwritten the next time
+Sous runs. Sous copies the edited file to `.sous/backups/<date>/<time>/` first and says so
+in its output, but the edit no longer takes effect:
 
 - `.claude/`: Claude Code configuration, skills, and instructions
 - `.codex/`: Codex configuration and skills
@@ -27,6 +28,35 @@ next time Sous runs:
 
 If you need to change something in one of these files, the change must be made at the
 source, in the central configuration this project uses with Sous.
+
+## Where the Instructions Come From
+
+In a project `sous init` set up, Sous owns all agent configuration. The root `CLAUDE.md` and
+`AGENTS.md` are both compiled from `.sous/memories/instructions.tpl.md`, and they and
+`.claude/skills/` are gitignored build output, so `sous build` recreates them after a clone.
+That source holds no instructions itself; it includes:
+
+```markdown
+@*/**/*.md
+@#memories/**/*.md
+```
+
+- The first line pulls in this project's own memories: every markdown file in a folder beside
+  the source, such as `.sous/memories/imported/` (the `CLAUDE.md` or `AGENTS.md` the project had
+  before `sous init`), `.sous/memories/project/` or `.sous/memories/conventions/`. To change the
+  instructions, edit one of these files or add one, then run `sous build`. Keep at least one file
+  there: an include that matches nothing stops the build.
+- Files those memories include by a line holding only `@path.md` were moved or copied to
+  `.sous/includes/<their path from the project root>`, outside `memories/`, so each one appears
+  only where its include line is. Edit them there.
+- The second line pulls in the memories of every recipe this project subscribes to; change those
+  upstream, as described below.
+
+In a project `sous init` set up, the project's own skills live in `.sous/skills/` (the
+`skillsRoot` answer `sous init` writes), and the config compiles them into `.claude/skills/`;
+skills the project had in `.claude/skills/` before `sous init` were moved there. A project skill
+with the same name as a recipe skill wins, and the build warns that the recipe's copy was not
+written. Whatever `sous init` moved was backed up first to `.sous/backups/<date>/<time>/`.
 
 ## Changing a File That Came From a Recipe
 

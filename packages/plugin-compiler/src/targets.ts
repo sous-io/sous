@@ -4,6 +4,7 @@
  * substituted and `_if` conditions applied. Reads the disk only to expand globs.
  */
 
+import fs from "node:fs";
 import path from "node:path";
 import type { VarScope, VariablesResolver } from "@sous-io/plugin-variables/types";
 import { resolveAliasPrefix, type AliasMap } from "./aliases.js";
@@ -87,29 +88,43 @@ export function expandTargets(settings: CompilationSettings, env: ExpandEnvironm
         }
     });
 
-    return { units: yieldToConfigTargets(units), problems };
+    return { units: yieldToConfigTargets(units, problems), problems };
 }
 
 /**
- * Drops the outputs a plugin's own target (a memory target's `CLAUDE.md`, say) would write over a
- * file a target from the project's config writes: the user's own target wins, so the two never
- * write the same file in turn. Recipe targets are left alone. A unit left with no outputs is dropped.
+ * Drops the outputs a plugin's or a recipe's target would write over a file a target from the
+ * project's config writes: the user's own target wins, so the two never write the same file in
+ * turn. A unit left with no outputs is dropped. A recipe output that yields is reported as a warning
+ * in `problems`, so a project skill shadowing a recipe skill is never silent; a plugin's own target
+ * (a memory target's `CLAUDE.md`, say) yields without a word, because yielding is what it is for.
  *
  * ```ts
- * // the config builds CLAUDE.md from .sous/prompts/CLAUDE.md, plugin-memories adds memories/claude-code
+ * // the config builds CLAUDE.md from .sous/memories/instructions.tpl.md, plugin-memories adds memories/claude-code
  * yieldToConfigTargets(units);
  * // -> memories/claude-code is gone; the config's target writes CLAUDE.md alone
  * ```
  */
-export function yieldToConfigTargets(units: readonly CompileUnit[]): CompileUnit[] {
+export function yieldToConfigTargets(units: readonly CompileUnit[], problems: CompileProblem[] = []): CompileUnit[] {
     const fromConfig = new Set(
         units.filter((unit) => unit.origin === undefined).flatMap((unit) => unit.outputs.map((output) => output.destination)),
     );
-    const yields = (unit: CompileUnit) => unit.origin?.plugin !== undefined && unit.origin.recipe === undefined;
 
     return units.flatMap((unit) => {
-        if (!yields(unit) || !unit.outputs.some((output) => fromConfig.has(output.destination))) {
+        if (unit.origin === undefined || !unit.outputs.some((output) => fromConfig.has(output.destination))) {
             return [unit];
+        }
+
+        const recipe = unit.origin.recipe;
+
+        if (recipe !== undefined) {
+            for (const output of unit.outputs.filter((candidate) => fromConfig.has(candidate.destination))) {
+                problems.push({
+                    level: "warning",
+                    message: `${output.destination} is written by this project's own target, so the copy from the recipe ${recipe} is not written.`,
+                    target: unit.targetName,
+                    file: unit.source,
+                });
+            }
         }
 
         const outputs = unit.outputs.filter((output) => !fromConfig.has(output.destination));
@@ -185,11 +200,14 @@ function expandTarget(
         }
     }
 
-    if (files.length === 0) {
+    const globBase = target.globBase === undefined ? path.resolve(env.globs.staticBase(pattern.split(path.sep).join("/"))) : toPath(target.globBase, `${where}.globBase`);
+
+    // A target whose folder does not exist yet (the project-skills target `sous init` writes,
+    // before the first skill) has nothing to compile, which is not a mistake worth a warning on
+    // every build. A folder that exists but matches nothing still gets one.
+    if (files.length === 0 && fs.existsSync(globBase)) {
         problems.push({ level: "warning", message: `Glob pattern matched no files:\n${candidates.join("\n")}`, target: name });
     }
-
-    const globBase = target.globBase === undefined ? path.resolve(env.globs.staticBase(pattern.split(path.sep).join("/"))) : toPath(target.globBase, `${where}.globBase`);
 
     return files.map((source) => ({ ...base, source, label: source, globBase, outputs: outputsFor({ source, globBase }) }));
 }

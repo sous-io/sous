@@ -2,6 +2,10 @@
 
 **Status:** Accepted, 2026-09-29.
 
+!> **Superseded in part by [ADR 0024](0024-init-imports-agent-files.md) (2026-11-15):** the scaffold no
+longer writes `CLAUDE.md` or `AGENTS.md`. `sous repo init` runs `sous init` after the scaffold, so a recipe
+repository is a sous project whose `CLAUDE.md` and `AGENTS.md` are compiled build output.
+
 This record amends [ADR 0001](0001-repositories.md) in one place: what `sous repo init` scaffolds.
 Everything else it says about the command still holds. The living answer is
 [Create a repository](../repositories-authoring.md#create-a-repository).

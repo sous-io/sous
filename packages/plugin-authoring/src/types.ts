@@ -7,6 +7,8 @@
  * Other plugins import this file type-only.
  */
 
+import type {} from "@sous-io/plugin-init/types";
+import type {} from "@sous-io/plugin-config-files/types";
 import type { IndexFile } from "@sous-io/plugin-formats/types";
 import type {
     CheckoutFlags,
@@ -213,6 +215,16 @@ export interface RepoInitInput {
     /** The `repository-host` whose CI workflow and files it gets. Default: from the git remote, else none. */
     host?: string;
     dryRun?: boolean;
+    /** Passed to `init`, which runs next: accept every default answer. */
+    yes?: boolean;
+    /** Passed to `init`: move the files the existing instructions include (the default). */
+    moveIncludes?: boolean;
+    /** Passed to `init`: copy them, keeping the originals. */
+    copyIncludes?: boolean;
+    /** Passed to `init`: leave them where they are. */
+    leaveIncludes?: boolean;
+    /** Passed to `init`: skip the first build. */
+    noBuild?: boolean;
 }
 
 /** The result of `repo.init`. */

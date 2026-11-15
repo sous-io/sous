@@ -102,6 +102,7 @@ export const compilerPlugin: PluginDefinition = definePlugin({
                 return new WriterService(runtime.store(), {
                     overwriteUntracked: runtime.settings().overwriteUntracked,
                     protectedRoots: runtime.protectedRoots(),
+                    backups: runtime.backups(),
                 });
             },
             { lifetime: "config" },

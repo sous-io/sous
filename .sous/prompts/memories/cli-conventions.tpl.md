@@ -6,6 +6,13 @@ holds the mechanism, use it rather than building a second one beside it.
 - **Help describes precisely the thing it names, in one sentence.** No cross-references to other
   commands, no tips, no "see also". Command OUTPUT shows facts about what happened; it never
   ends in a footer hinting at some other command the reader might want.
+- **Names read like speech, and a small fixed set of choices gets one switch per choice.** Strip
+  the punctuation from a command or flag and it should sound like something one person would say
+  to another: `--move-includes`, `--copy-includes` and `--leave-includes` (help names the default),
+  never `--included-files <move|leave>`. A convention may force an exception, such as a `--no-`
+  form, but natural phrasing is always the aim. The user, 2026-11-15: "if I remove the special
+  characters, operators, and all of that, from <x>, does it sound like something a person would
+  say to another person? \"included files leave\" ... umm ... no. `--move-includes` ... yes."
 - **Topics are singular** (`repo`, `subscription`, `config`); `vars` is the deliberate plural.
   Every topic accepts both spellings, with the alternate hidden (`BUILT_IN_GROUPS` in
   `packages/plugin-cli/src/groups.ts`, whose `aliases` hold the hidden spelling).
