@@ -300,7 +300,7 @@ describe("sous repo link branch flags and upstream report", () => {
    * same second: the second name gets a suffix.
    *
    * sous repo link demo-recipes --generate-branch   // -> sous/edit-20261104-225317
-   * sous repo link demo-recipes --generate-branch   // -> sous/edit-20261104-225317-2 (same second)
+   * sous repo link demo-recipes --generate-branch   // -> sous/edit-20261104-225317-2 (same second; the first free suffix)
    */
   it(
     "should give a second generated branch a name of its own",
@@ -325,7 +325,9 @@ describe("sous repo link branch flags and upstream report", () => {
       const secondBranch = branchOf();
 
       expect(secondBranch).not.toBe(firstBranch);
-      expect(secondBranch).toMatch(/^sous\/edit-\d{8}-\d{6}-2$/);
+      // The suffix is the first free one: -2 usually, higher when an earlier test in this file
+      // generated a name in the same second.
+      expect(secondBranch).toMatch(/^sous\/edit-\d{8}-\d{6}-\d+$/);
       expect(second.output).toContain(`Created the branch '${secondBranch}'`);
     },
     CLI_TIMEOUT
