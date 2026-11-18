@@ -32,3 +32,4 @@ export {
 export { formatForPath, commentStyleForPath, type FileFormat } from "./formats.js";
 export { serializePatchSet, deserializePatchSet, parsePatch, parsePatchFile, PatchFormatError } from "./serialize.js";
 export { describePatch, describePatchSet } from "./describe.js";
+export { readComment, commentSource, setComment, removeComment, restoreCommentSource, CommentError, type CommentPlace, type CommentFormat } from "./comments.js";

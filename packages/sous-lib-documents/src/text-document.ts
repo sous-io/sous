@@ -4,13 +4,14 @@
  */
 import { parseDocument as parseYamlModel } from "yaml";
 import { applyPatch } from "./apply.js";
+import { commentSource, readComment, removeComment, restoreCommentSource, setComment, type CommentFormat, type CommentPlace } from "./comments.js";
 import { BaseDocument } from "./document.js";
 import { joinFrontmatter, splitFrontmatter, type FrontmatterParts } from "./frontmatter.js";
 import { getAtPath } from "./json.js";
 import { formatPath, parsePath } from "./path.js";
 import { detectLayout, editJsoncText, parseJsoncText, type RemovedJsoncText, type TextLayout } from "./jsonc-text.js";
 import { detectYamlStyle, editYamlText, parseYamlText, reprintYaml, yamlValue, type RemovedText, type YamlStyle } from "./yaml-text.js";
-import type { DocumentFormat, JsonValue, Patch, PatchProblem, PathSegment } from "./types.js";
+import type { DocumentFormat, JsonValue, Patch, PatchProblem, PathInput, PathSegment } from "./types.js";
 
 /**
  * A text document. Every change goes through primitives: each is first applied to the value (a
@@ -89,6 +90,47 @@ export class TextDocument extends BaseDocument {
      */
     reprinted(): boolean {
         return this.reprints > 0;
+    }
+
+    /**
+     * The comment before or after a key or list item (see `comments.ts`), markers taken off, or
+     * `undefined` when it has none. A Markdown document reads its frontmatter's comments.
+     *
+     * @throws CommentError for JSON, which has no comments, and for a node that shares its line.
+     */
+    comment(path: PathInput, place: CommentPlace): string | undefined {
+        return readComment(this.text, this.commentFormat(), path, place);
+    }
+
+    /** The comment before or after a node exactly as written, to put back with {@link restoreCommentSource}. */
+    commentSource(path: PathInput, place: CommentPlace): string {
+        return commentSource(this.text, this.commentFormat(), path, place);
+    }
+
+    /** Sets (adds or replaces) the comment before or after a node. Only the comment's bytes change. */
+    setComment(path: PathInput, place: CommentPlace, comment: string): void {
+        this.editComment(setComment(this.text, this.commentFormat(), path, place, comment));
+    }
+
+    /** Removes the comment before or after a node, if it has one. */
+    removeComment(path: PathInput, place: CommentPlace): void {
+        this.editComment(removeComment(this.text, this.commentFormat(), path, place));
+    }
+
+    /** Puts back what {@link commentSource} returned, byte for byte. */
+    restoreCommentSource(path: PathInput, place: CommentPlace, source: string): void {
+        this.editComment(restoreCommentSource(this.text, this.commentFormat(), path, place, source));
+    }
+
+    private commentFormat(): CommentFormat {
+        return this.format === "markdown" ? "yaml" : this.format;
+    }
+
+    private editComment(text: string): void {
+        if (text !== this.text) {
+            this.text = text;
+            this.edited = true;
+        }
     }
 
     protected readAt(path: readonly PathSegment[]): JsonValue | undefined {

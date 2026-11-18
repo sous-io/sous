@@ -56,6 +56,28 @@ doc.root().moveKeyBefore("env", "permissions");    // also moveKeyAfter, moveKey
 
 A key or item that is moved keeps its old text, comments included.
 
+### Comments
+
+JSONC (`//` and `/* */`), YAML (`#`) and Markdown frontmatter keep comments, and a document can read and write the comment attached to a key or list item: the comment lines directly above it (`"before"`) and the comment ending its line (`"after"`). Plain JSON has no comments, so a `json` document refuses with a `CommentError`.
+
+```ts
+const doc = parseDocument("tools:\n  - Read\n  - Bash\nmodel: opus\n", "yaml");
+
+doc.setComment("model", "before", "The model the reviewer runs on");
+doc.setComment("tools[1]", "after", "dangerous");
+doc.toString();
+// tools:
+//   - Read
+//   - Bash # dangerous
+// # The model the reviewer runs on
+// model: opus
+
+doc.comment("tools[1]", "after");     // "dangerous"
+doc.removeComment("model", "before");
+```
+
+A comment before takes the node's indentation and may have several lines (`"one\ntwo"`); a comment after is one line. Only the comment's own bytes change, in the file's line endings; a JSONC `/* */` comment that is replaced stays a block. "Directly above" means comment lines at the node's indentation with no blank line between. A value that shares its line with others (inside `[...]` or `{...}`, or `"a": 1, "b": 2`) has no comment of its own and is refused, and so is an edit that would change a value (a `#` inside a multi-line string). `doc.commentSource(path, place)` returns the comment exactly as written, and `doc.restoreCommentSource(path, place, source)` puts it back byte for byte, for undoing. The same functions work on text: `readComment`, `setComment`, `removeComment`, `commentSource`, `restoreCommentSource`.
+
 ### When YAML cannot be edited line by line
 
 A YAML edit is made to the text and then read back. When the editor cannot make it in place (a key written with `?`, a list item whose value starts on the line below its dash), the whole document is reprinted through the `yaml` package instead: comments survive, spacing may change, and `doc.reprinted()` returns `true`. An edit to a value a YAML anchor (`&name`) shares with its aliases (`*name`) throws, since it would change every copy. New values follow the file's style as far as the `yaml` package can write it: a list's dashes sit either `indent` or `indent - 2` columns right of their key.
@@ -90,6 +112,7 @@ An opening marker without its closing marker (or the reverse, or a marker twice)
 - `src/node.ts`: the operations on one place in a document.
 - `src/text-document.ts`, `src/value-document.ts`: documents backed by file text, and by plain values.
 - `src/jsonc-text.ts`, `src/yaml-text.ts`, `src/frontmatter.ts`: the format-specific editing.
+- `src/comments.ts`: the comments before and after a key or list item.
 - `src/lines.ts`: plain text files as lines, and managed blocks.
 - `src/formats.ts`: the format and comment style for a path.
 - `src/patch-set.ts`, `src/apply.ts`, `src/serialize.ts`: patch sets, applying them, and the patch file format.
