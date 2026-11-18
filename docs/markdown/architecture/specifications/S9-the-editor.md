@@ -159,7 +159,7 @@ that one definition, and every shorthand or alias is a name for one of them with
 
 Two groups: operations that state what must be true change the file only when it is not already
 true (the common ones); actions always act. Sous runs an action (`append`, `prepend`, `insertAt`,
-`removeAt`, `appendText`, `prependText`, `increment`, `decrement`, `toggle`) once per declaration,
+`insertBeforeWhere`, `insertAfterWhere`, `removeAt`, `appendText`, `prependText`, `increment`, `decrement`, `toggle`) once per declaration,
 when the entry is first applied, since repeating it on every build would add the item again each
 time.
 
@@ -167,16 +167,16 @@ time.
 | --- | --- |
 | 0 | `ensureFileExists`, `ensureDirectoryExists` |
 | 10 | `ensureObject`, `ensureList`, `wrapInList`, `unwrapList` |
-| 20 | `set` (`ifMissing`), `setIfEquals`, `renameKey` |
+| 20 | `set` (`ifMissing`), `setIfEquals`, `renameKey`, `copy` (`ifMissing`), `move` (`ifMissing`) |
 | 25 | `merge` (`ifMissing`), `replaceWhere`, `updateWhere`, `mergeWhere` |
 | 30 | `upsertWhere` |
-| 40 | `ensureIncludes` (`position`), `prependIfMissing`, `append` (`position`) |
+| 40 | `ensureIncludes` (`position`), `prependIfMissing`, `append` (`position`), `insertBeforeWhere`, `insertAfterWhere` |
 | 50 | `remove` (`values` or `where`), `removeAt`, `removeLine`, `delete`, `deleteIfEquals`, `deleteIfEmpty`, `deleteKeys`, `keepOnlyKeys` |
 | 60 | `ensureLine` (`position`), `ensureBlock`, `appendText`, `prependText`, `replaceText`, `replacePattern` |
 | 70 | `increment`, `decrement`, `toggle` |
 | 80 | `dedupe` (`by`) |
 | 90 | `sort` (`by`, `descending`) |
-| 95 | `sortKeys`, `moveKeyBefore`, `moveKeyAfter`, `moveKeyFirst`, `moveKeyLast` |
+| 95 | `sortKeys`, `moveKeyBefore`, `moveKeyAfter`, `moveKeyFirst`, `moveKeyLast`, `moveItem` (`item` or `where`, `position`) |
 
 Shorthands and aliases, each a name for the operation shown:
 
@@ -198,6 +198,7 @@ Shorthands and aliases, each a name for the operation shown:
 | `removeWhere`, `ensureNoItemWhere` | `remove` with `where` |
 | `ensureUnique`, `dedupeBy` | `dedupe` |
 | `ensureSorted`, `sortBy` | `sort` |
+| `moveItemWhere` | `moveItem` with `where` |
 | `createIfMissing` | `ensureFileExists` |
 
 `position` takes `first`, `last` (or `start`, `end`), an index from 0, `{ after: ... }`,
@@ -211,9 +212,36 @@ already there where it is (unlike `ensureFirst`, which moves it). The four key m
 when the key or the anchor is missing; like `sortKeys`, they are not undone and have no automatic
 assertion, since an order is not a value.
 
-Not built yet, from the list Luke accepted: `copy`, `move`, `insertBeforeWhere`,
-`insertAfterWhere`, `moveItem`, the comment operations (`setCommentBefore`, `setCommentAfter`,
-`removeComment`) and `selectDocument`. The reading operations of the list are the direct path's
+`copy` makes the value at `to` a copy of the value at `path`, read from the file on each build: a
+value already at `to` is recorded and replaced (put back by `down`), nothing happens while `path`
+is missing, and `ifMissing: true` fills only a missing `to`. `to` may not overlap `path`, and a `to`
+naming a list item replaces an item that is there (one past the end is skipped with a warning).
+It has no automatic assertion: the value is only known from the file, and a missing `path` is not
+an error.
+
+`move` takes the value at `path` (which must end in a key) to `to`. Within one object it is the
+library's rename, keeping the key's place, text and comments, and `down` renames it back. To
+another place it is a delete and a set; `down` sets the value back at `path` and moves the key back
+after the key that came before it, and restores what `to` held. A value already at `to` is
+replaced unless `ifMissing: true`. Nothing happens while `path` is missing. Its automatic assertion
+is that `path` does not exist (none with `ifMissing`, where the source may stay).
+
+`insertBeforeWhere` and `insertAfterWhere` are actions: they add `items` (or `item`) just before or
+after the first item matching `where`, even when an equal item is there, and at the end when no item
+matches (as `insertBefore` and `ensureLine` do with an anchor that is not found). A missing list is
+created; `down` removes each item added (at the index it was added at, or else the last equal one)
+and a list `up` created. The automatic assertion is that the list includes each item.
+
+`moveItem` puts the item equal to `item`, or the first matching `where`, at `position`: `first`,
+`last`, an index (counted in the list without the item), `{ before: item }`, `{ after: item }`,
+`{ beforeWhere: {...} }` or `{ afterWhere: {...} }`. It moves through the library's `move`, so the
+item keeps its text and the comment on its line. Nothing happens when the item, or the item to put
+it beside, is not found (as with the key moves), or when it is already in place. Unlike the key
+moves it is undone: `up` records where the item was, and `down` moves it back. It has no automatic
+assertion, since an item that is not in the list is not an error.
+
+Not built yet, from the list Luke accepted: the comment operations (`setCommentBefore`,
+`setCommentAfter`, `removeComment`) and `selectDocument`. The reading operations of the list are the direct path's
 document API (`exists`, `get`, `keys`, `length` and the rest on a node).
 
 ## Formats
@@ -453,3 +481,20 @@ no fix. The agent's choice of form; the check itself is the one S11 lists.
 declared an edit, and such a project's `.sous/.gitignore` does not list it, so the file showed up as
 new in git (found on Sous's own repository). The history is now written only when it records an
 entry or a created file, or when the file already exists. The agent's fix, in the finishing pass.
+
+### 2026-11-18: The operations that relocate values
+
+From the list Luke accepted, built in `operations-relocate.ts` and registered with the others:
+`copy` (`to`, `ifMissing`), `move` (`to`, `ifMissing`), the actions `insertBeforeWhere` and
+`insertAfterWhere` (`where`, `item` or `items`), and `moveItem` (`item` or `where`, `position`;
+`moveItemWhere` is the shorthand with `where`). `copy` and `move` replace a value already at `to`
+by default, like `set`, and `ifMissing: true` keeps it, like `set`'s option. A `move` within one
+object is a rename, which keeps the key's text and comments; a move to another object cannot keep a
+comment on the key's own line, since the library reuses a key's old text only in its own object.
+`move` refuses a `path` that is a list item: on the next build the index names the next item, so
+the move would repeat on a different item. The inserts follow `insertBefore` when nothing matches
+(the end) and `append` when the item is already there (added again, once per declaration).
+`moveItem` follows the key moves when the item or its anchor is missing (nothing happens), but is
+undone, as `ensureIncludes` undoes the moves it makes. So that a moved JSONC item keeps the comment
+on its line (`"b", // bee`), the document library now carries that comment with an item or key it
+removes and writes back. The agent's choices; not yet reviewed by Luke.

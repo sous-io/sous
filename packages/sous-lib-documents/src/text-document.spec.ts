@@ -325,6 +325,29 @@ describe("TextDocument (JSONC moves)", () => {
 
         expect(sorted).toBe('[\n  "a",\n  "b", // bee\n  /* c */ "c"\n]\n');
     });
+
+    /**
+     * An item or a key with a line to itself should take the comment after it on that line along
+     * when it moves, and moving it back should give the original text, byte for byte.
+     *
+     * [ "a", "b", // bee   "c" ]  -- move "b" first -->  [ "b", // bee   "a", "c" ]
+     */
+    it("should move an item or a key with the comment on its line", () => {
+        const text = '{\n  "list": [\n    "a",\n    "b", // bee\n    "c" /* sea */\n  ],\n  "x": 1, // ex\n  "y": 2\n}\n';
+        const first = edit(text, "jsonc", (doc) => doc.atPath("list").move(1, 0));
+
+        expect(first).toBe('{\n  "list": [\n    "b", // bee\n    "a",\n    "c" /* sea */\n  ],\n  "x": 1, // ex\n  "y": 2\n}\n');
+        expect(edit(first, "jsonc", (doc) => doc.atPath("list").move(0, 1))).toBe(text);
+
+        const last = edit(text, "jsonc", (doc) => doc.atPath("list").move(2, 0));
+
+        expect(last).toBe('{\n  "list": [\n    "c", /* sea */\n    "a",\n    "b" // bee\n  ],\n  "x": 1, // ex\n  "y": 2\n}\n');
+
+        const key = edit(text, "jsonc", (doc) => doc.root().moveKeyLast("x"));
+
+        expect(key).toBe('{\n  "list": [\n    "a",\n    "b", // bee\n    "c" /* sea */\n  ],\n  "y": 2,\n  "x": 1 // ex\n}\n');
+        expect(edit(key, "jsonc", (doc) => doc.root().moveKeyBefore("x", "y"))).toBe(text);
+    });
 });
 
 describe("TextDocument (YAML)", () => {

@@ -29,6 +29,7 @@ import {
 import { compareItems, contains, fingerprint, isSorted, matchesFields, sortOptions, toRegExp } from "./checks.js";
 import { commentStyleFor, linesOfText, openDocument, type EditorFormat } from "./documents-adapter.js";
 import type { FileSession } from "./session.js";
+import { registerRelocateOperations } from "./operations-relocate.js";
 import type { CheckSpec, OperationInfo, OperationScope } from "./types.js";
 
 /** An operation that cannot be made on this document as it is. Skipped with a warning, never thrown out. */
@@ -2077,6 +2078,7 @@ alias("sortBy", "sort", "sort with by", {
     },
 });
 alias("createIfMissing", "ensureFileExists", "ensureFileExists");
+registerRelocateOperations(definitions, aliases);
 
 // ---------------------------------------------------------------------------------------------
 // Lookup

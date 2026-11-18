@@ -101,5 +101,6 @@ export { declaredEntries } from "./intent.js";
 export { assertionsCheck, checkAssertions } from "./doctor-check.js";
 export { ALIASES, OPERATIONS, operationInfo, resolveOperation } from "./operations.js";
 export { editorSchema } from "./schema.js";
+export type { ItemPlace, RelocateOperations } from "./operations-relocate.js";
 
 export type * from "./types.js";

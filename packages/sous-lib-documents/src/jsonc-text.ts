@@ -68,6 +68,11 @@ export interface RemovedJsoncText {
     value: JsonValue;
     /** `"key": value` for a property, the value for an item. */
     text: string;
+    /**
+     * The comment that followed it on its own line (`// note`), when it had a line to itself; it
+     * goes back after the entry's comma, so a moved item keeps it.
+     */
+    comment?: string;
 }
 
 /**
@@ -116,10 +121,13 @@ class JsoncEditor {
                 const target = this.node([...path, last]);
                 const element = patch.op === "deleteKey" ? target.parent! : target;
 
+                const comment = this.lineComment(element);
+
                 this.removed.push({
                     where: whereOf(path, patch.op === "deleteKey" ? patch.key : undefined),
                     value: getAtPath(before, [...path, last]) as JsonValue,
                     text: this.text.slice(element.offset, element.offset + element.length),
+                    ...(comment === undefined ? {} : { comment }),
                 });
 
                 return this.removeElement(element);
@@ -135,9 +143,10 @@ class JsoncEditor {
 
                 const length = container.children?.length ?? 0;
                 const index = patch.index === "end" ? length : patch.index;
-                const entry = this.takeRemoved(whereOf(path), patch.value) ?? this.format(patch.value, this.childIndent(container));
+                const reused = this.takeRemoved(whereOf(path), patch.value);
+                const entry = reused?.text ?? this.format(patch.value, this.childIndent(container));
 
-                return this.insertElement(container, index, entry);
+                return this.insertElement(container, index, entry, reused?.comment);
             }
         }
     }
@@ -177,16 +186,35 @@ class JsoncEditor {
 
         const container = this.node(path.slice(0, depth));
         const reused = missing.length === 1 ? this.takeRemoved(whereOf(path.slice(0, depth), missing[0] as string), nested) : undefined;
-        const entry = reused ?? `${JSON.stringify(missing[0])}: ${this.format(nested, this.childIndent(container))}`;
+        const entry = reused?.text ?? `${JSON.stringify(missing[0])}: ${this.format(nested, this.childIndent(container))}`;
 
-        return this.insertElement(container, container.children?.length ?? 0, entry);
+        return this.insertElement(container, container.children?.length ?? 0, entry, reused?.comment);
     }
 
     /** The old text of an equal value removed from the same place, taken so it is used once. */
-    private takeRemoved(where: string, value: JsonValue): string | undefined {
+    private takeRemoved(where: string, value: JsonValue): RemovedJsoncText | undefined {
         const index = this.removed.findIndex((entry) => entry.where === where && JSON.stringify(entry.value) === JSON.stringify(value));
 
-        return index === -1 ? undefined : this.removed.splice(index, 1)[0]!.text;
+        return index === -1 ? undefined : this.removed.splice(index, 1)[0]!;
+    }
+
+    /**
+     * The comment after an element on its line (past its comma), when the element has the line to
+     * itself: `"b", // bee` gives `// bee`.
+     */
+    private lineComment(element: Node): string | undefined {
+        const end = element.offset + element.length;
+        const afterEnd = skipTrivia(this.text, end, false);
+        const tail = this.text[afterEnd] === "," ? afterEnd + 1 : end;
+        const lineEnd = endOfLineAfter(this.text, tail);
+
+        if (!isLineStart(this.text, element.offset) || lineEnd === -1) {
+            return undefined;
+        }
+
+        const comment = this.text.slice(tail, lineEnd).replace(/\r$/, "").trim();
+
+        return comment === "" ? undefined : comment;
     }
 
     private replaceValue(node: Node, value: JsonValue): Edit[] {
@@ -261,9 +289,13 @@ class JsoncEditor {
         return this.text[comma] === "," ? [{ offset: comma, length: 1, content: "" }] : [];
     }
 
-    /** Inserts an element's text (a `"key": value` entry or an array item) at an index. */
-    private insertElement(container: Node, index: number, entry: string): Edit[] {
+    /**
+     * Inserts an element's text (a `"key": value` entry or an array item) at an index. A `comment`
+     * goes after it on its line, when it gets a line to itself.
+     */
+    private insertElement(container: Node, index: number, entry: string, comment?: string): Edit[] {
         const children = container.children ?? [];
+        const note = comment === undefined ? "" : ` ${comment}`;
         const open = container.offset;
         const close = container.offset + container.length - 1;
 
@@ -273,7 +305,7 @@ class JsoncEditor {
             if (inner.includes("\n")) {
                 const indent = this.childIndent(container);
 
-                return [{ offset: open + 1, length: close - open - 1, content: `${this.layout.eol}${indent}${entry}${this.layout.eol}${lineIndent(this.text, open)}` }];
+                return [{ offset: open + 1, length: close - open - 1, content: `${this.layout.eol}${indent}${entry}${note}${this.layout.eol}${lineIndent(this.text, open)}` }];
             }
 
             const multiline = entry.includes("\n") || container.type === "object";
@@ -281,7 +313,7 @@ class JsoncEditor {
             if (multiline) {
                 const indent = this.childIndent(container);
 
-                return [{ offset: open + 1, length: close - open - 1, content: `${this.layout.eol}${indent}${entry}${this.layout.eol}${lineIndent(this.text, open)}` }];
+                return [{ offset: open + 1, length: close - open - 1, content: `${this.layout.eol}${indent}${entry}${note}${this.layout.eol}${lineIndent(this.text, open)}` }];
             }
 
             return [{ offset: open + 1, length: close - open - 1, content: entry }];
@@ -298,7 +330,7 @@ class JsoncEditor {
 
             const start = lineStartOf(this.text, before.offset);
 
-            return [{ offset: start, length: 0, content: `${lineIndent(this.text, before.offset)}${entry},${this.layout.eol}` }];
+            return [{ offset: start, length: 0, content: `${lineIndent(this.text, before.offset)}${entry},${note}${this.layout.eol}` }];
         }
 
         const last = children[children.length - 1]!;
@@ -322,7 +354,7 @@ class JsoncEditor {
                 : [{ offset: lastEnd, length: 0, content: `,${this.layout.eol}${indent}${entry}` }];
         }
 
-        const edits: Edit[] = [{ offset: lineEnd, length: 0, content: `${this.layout.eol}${indent}${entry}${trailingComma ? "," : ""}` }];
+        const edits: Edit[] = [{ offset: lineEnd, length: 0, content: `${this.layout.eol}${indent}${entry}${trailingComma ? "," : ""}${note}` }];
 
         if (!trailingComma) {
             edits.unshift({ offset: lastEnd, length: 0, content: "," });

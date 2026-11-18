@@ -133,12 +133,15 @@ action once, when the entry is first applied.
 | 20 | `set` | `value`, `ifMissing` | `ensureValue`, `replace`; with `ifMissing: true`: `setIfMissing`, `ensureDefault` |
 | 20 | `setIfEquals` | `value`, `equals` | |
 | 20 | `renameKey` | `name` | |
+| 20 | `copy` | `to`, `ifMissing` | |
+| 20 | `move` | `to`, `ifMissing` | |
 | 25 | `merge` | `value`, `ifMissing` | `ensureKeys`, `deepMerge`; with `ifMissing: true`: `mergeIfMissing` |
 | 25 | `replaceWhere`, `updateWhere`, `mergeWhere` | `where`, `item` or `value` | |
 | 30 | `upsertWhere` | `match`, `item` | `ensureItemWhere` |
 | 40 | `ensureIncludes` | `items` (or `item`), `position` | `appendIfMissing`, `union`; `ensureFirst`, `ensureLast`, `ensureAt` (with `index`) |
 | 40 | `prependIfMissing` | `items` (or `item`) | |
 | 40 | `append` (action) | `item` or `items`, `position` | `prepend`, `insertAt` (with `index`), `insertBefore`, `insertAfter` |
+| 40 | `insertBeforeWhere`, `insertAfterWhere` (actions) | `where`, `item` or `items` | |
 | 50 | `remove` | `values` or `where` | `removeValues`, `ensureExcludes`, `removeValue`; `removeWhere`, `ensureNoItemWhere` |
 | 50 | `removeAt` (action) | `index` | |
 | 50 | `delete` | | `ensureAbsent` |
@@ -154,6 +157,7 @@ action once, when the entry is first applied.
 | 95 | `sortKeys` | | |
 | 95 | `moveKeyBefore`, `moveKeyAfter` | `key`, `anchor` | |
 | 95 | `moveKeyFirst`, `moveKeyLast` | `key` | |
+| 95 | `moveItem` | `item` or `where`, `position` | with `where`: `moveItemWhere` |
 
 Every name in the last column is the same operation with an option set, so these two entries mean
 the same thing:
@@ -198,6 +202,114 @@ block's assertion fails.
 file in `.vscode/` is read as JSONC), YAML (comments are kept), the YAML frontmatter of a Markdown
 file (the body is kept byte for byte), and any other file as plain text lines, each keeping its own
 line ending. TOML files are skipped with a warning for now.
+
+### Copying a value
+
+`copy` makes the value at `to` a copy of the value at `path`, as it is in the file on each build. A
+value already at `to` is replaced, and put back when the entry goes away. Nothing happens while
+`path` is missing. With `ifMissing: true`, only a missing `to` is filled.
+
+```yaml
+- file: .claude/settings.json
+  copy:
+    path: env.ACME_HOME
+    to: env.ACME_HOME_FALLBACK
+    ifMissing: true
+```
+
+```ts
+settings.at("env.ACME_HOME").copy("env.ACME_HOME_FALLBACK", { ifMissing: true });
+```
+
+When you know the value when you write the entry, `set` says the same thing directly. `copy` is for
+a value that is only known from the file. A `to` that names a list item (`steps[1]`) replaces that
+item; to add to a list, use `ensureIncludes`. `copy` has no automatic assertion.
+
+### Moving a value
+
+`move` takes the value at `path` to `to`. Within one object it is a rename: the key keeps its
+place, its value's text and the comment on its line. To another object, the value is written at
+`to` in the file's style, and a comment on the moved key's own line stays behind (the document
+library keeps a key's text only within its own object). A value already at `to` is replaced; with
+`ifMissing: true` it is kept, and nothing moves. Nothing happens while `path` is missing.
+
+```yaml
+- file: .claude/settings.json
+  move:
+    path: env.ACME_DIR        # the old name
+    to: acme.dir
+```
+
+```ts
+settings.at("env.ACME_DIR").move("acme.dir");
+```
+
+When the entry goes away, the value goes back to `path`, in its old place among the keys, and what
+`to` held is put back. Its automatic assertion is that `path` no longer exists, so another edit
+that brings the old key back is reported.
+
+Other ways to say it: within one object, `renameKey` does the same (`renameKey: { path:
+env.ACME_DIR, name: ACME_HOME }`), but leaves both keys alone when the new name is taken. When you
+know the value, `set` at `to` plus `delete` at `path` says the same thing. `path` must end in a key:
+an item of a list is moved within its list with `moveItem`.
+
+### Inserting beside an item that matches
+
+`insertBeforeWhere` and `insertAfterWhere` add items just before or just after the first item whose
+fields match `where`. They are actions, like `append`: the items are added even if they are already
+there, and Sous does it once, when the entry is first applied. When no item matches, the items go
+at the end, as with `insertBefore` and an `after` or `before` line that is not found. A missing list
+is created; when the entry goes away, the items it added are removed (and a list it created).
+
+```yaml
+- file: .claude/settings.json
+  insertAfterWhere:
+    path: hooks.PreToolUse
+    where: { matcher: Bash }
+    item: { matcher: Bash, hooks: [{ type: command, command: acme-guard.sh }] }
+```
+
+```ts
+settings.at("hooks.PreToolUse").insertAfterWhere({ matcher: "Bash" }, { matcher: "Bash", hooks: [] });
+```
+
+Other ways to say it: when you can write out the whole item to put it beside, `insertBefore` and
+`insertAfter` (`append` with `position: { before: ... }`) do the same. When the item should be in
+the list once, whatever builds come and go, use a statement instead: `upsertWhere` (the list has an
+item with these fields, equal to this one) or `ensureIncludes`.
+
+### Moving a list item
+
+`moveItem` puts a list item, found by value (`item`) or by fields (`where`), at `position`: `first`,
+`last`, an index from 0 (counted in the list without the item), `{ before: item }`,
+`{ after: item }`, `{ beforeWhere: {...} }` or `{ afterWhere: {...} }`. The item moves with its own
+text and the comment on its line. Nothing happens when the item is not in the list, when the item
+to put it beside is not there, or when it is already in place. When the entry goes away, the item
+goes back where it was before Sous first moved it.
+
+```yaml
+- file: .claude/settings.json
+  moveItem:
+    path: permissions.allow
+    item: "Bash(git-commit.sh:*)"
+    position: { before: "Bash(*)" }
+
+- file: .claude/settings.json
+  moveItemWhere:
+    path: hooks.PreToolUse
+    where: { matcher: Bash }
+    position: first
+```
+
+```ts
+settings.at("permissions.allow").moveItem("Bash(git-commit.sh:*)", { before: "Bash(*)" });
+settings.at("hooks.PreToolUse").moveItemWhere({ matcher: "Bash" }, "first");
+```
+
+`moveItemWhere` is `moveItem` with `where`. Other ways to say it: `ensureFirst`, `ensureLast` and
+`ensureAt` (`ensureIncludes` with `position`) also put an item first, last or at an index, and add it
+when it is missing; `moveItem` only moves an item that is there. `moveItem` has no automatic
+assertion; add `assert: { first: ... }` (or `last`, `at`) when the place matters.
 
 ## Assertions
 
