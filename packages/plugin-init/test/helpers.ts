@@ -36,6 +36,13 @@ export const fakeLoader: Pick<ConfigFilesLoader, "findMain" | "load"> = {
     },
 };
 
+/** A stand-in for `formats.lockfile`: reads any object, writes indented JSON with a newline. */
+export const fakeLockfileFormat = {
+    parse: (value: unknown) => value,
+    stringify: (value: unknown) => `${JSON.stringify(value, null, 2)}\n`,
+    empty: () => ({ formatVersion: 1, repos: {}, recipes: {} }),
+};
+
 /** Options for {@link initContext}. */
 export interface InitContextOptions {
     /** The answers the prompter gives, in order; omitted means it cannot ask. */
@@ -73,6 +80,7 @@ export function initContext(options: InitContextOptions = {}): { ctx: Context; r
             sousHome: { paths: () => ({ root: "/nowhere-sous-home" }) } as never,
         }),
         "config-files.loader": { ...fakeLoader, ...options.loader },
+        "formats.lockfile": fakeLockfileFormat,
         ...options.services,
     };
     const ctx = {

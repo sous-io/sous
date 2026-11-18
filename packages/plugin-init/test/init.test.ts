@@ -67,6 +67,7 @@ describe("init", () => {
             ".sous/conf.d/README.md",
             `.sous/${STARTER_MEMORY_RELATIVE_PATH}`,
             ".sous/sous.config.jsonc",
+            ".sous/sous.lock.json",
         ]);
         expect([...result.files].sort()).toEqual([...listTree(projectRoot).map((file) => path.join(projectRoot, file))].sort());
     });
@@ -163,6 +164,25 @@ describe("init", () => {
         expect(fs.readFileSync(path.join(sousDir, ".gitignore"), "utf8").split("\n")).toContain("backups/");
     });
 
+    /**
+     * The lockfile should record the running version as migratedVersion, so a new project has no
+     * pending migrations; a lockfile already there keeps what it pins.
+     */
+    it("should store the running version as migratedVersion in the lockfile", async () => {
+        await handle({ directory: projectRoot, noBuild: true }, initContext({ version: "1.4.0" }).ctx);
+
+        expect(JSON.parse(fs.readFileSync(path.join(sousDir, "sous.lock.json"), "utf8"))).toEqual({ formatVersion: 1, repos: {}, recipes: {}, migratedVersion: "1.4.0" });
+
+        const other = path.join(tmp, "other");
+        const pinned = { formatVersion: 1, repos: { acme: { url: "https://example.test/acme" } }, recipes: {} };
+
+        fs.mkdirSync(path.join(other, ".sous"), { recursive: true });
+        fs.writeFileSync(path.join(other, ".sous/sous.lock.json"), JSON.stringify(pinned));
+        await handle({ directory: other, noBuild: true }, initContext({ version: "1.4.0" }).ctx);
+
+        expect(JSON.parse(fs.readFileSync(path.join(other, ".sous/sous.lock.json"), "utf8"))).toEqual({ ...pinned, migratedVersion: "1.4.0" });
+    });
+
     /** A .sous/ that already holds a primary config is refused by name and nothing is written. */
     it("should refuse a project that already holds a primary config", async () => {
         fs.mkdirSync(sousDir, { recursive: true });
@@ -224,7 +244,7 @@ describe("init", () => {
         const result = outputs.toPlain();
 
         expect(result.dryRun).toBe(true);
-        expect(result.files).toHaveLength(7);
+        expect(result.files).toHaveLength(8);
         expect(fs.existsSync(sousDir)).toBe(false);
         expect(recorded.runs).toEqual([]);
     });

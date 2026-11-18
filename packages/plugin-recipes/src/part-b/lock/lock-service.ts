@@ -74,7 +74,9 @@ export class LockService implements RecipesLock {
 
     async write(lockfile: Lockfile, options: { dryRun?: boolean } = {}): Promise<LockDiff> {
         const before = this.read();
-        const after = this.withIdentities({ ...lockfile, recipes: sortRecipes(lockfile.recipes) });
+        // The lockfiles a resolution builds know nothing of `migratedVersion`, so the one on disk is kept.
+        const migratedVersion = lockfile.migratedVersion ?? before.migratedVersion;
+        const after = this.withIdentities({ ...lockfile, recipes: sortRecipes(lockfile.recipes), ...(migratedVersion === undefined ? {} : { migratedVersion }) });
         const diff = this.diff(before, after);
 
         if (options.dryRun) {

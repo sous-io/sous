@@ -39,6 +39,9 @@ import {
 } from "./templates.js";
 import type { PackageJsonOutcome } from "./types.js";
 
+/** The lockfile's name inside `.sous/`. */
+const LOCKFILE_NAME = "sous.lock.json";
+
 /** The lines of the sous-managed block in `.sous/.gitignore`: what stays on this machine. */
 export const IGNORE_BLOCK_LINES: readonly string[] = ["sous.links.json", "sous.state.json", "sous.pid", ENV_LOCAL_NAME, "repos/", "backups/"];
 
@@ -203,11 +206,41 @@ export async function scaffoldProject(ctx: Context, options: ScaffoldOptions): P
         files.push(dependency.file);
     }
 
+    const lockfile = stampMigratedVersion(ctx, sousDir, identity.version, options.dryRun);
+
+    if (lockfile !== undefined) {
+        files.push(lockfile);
+    }
+
     if (!options.dryRun && !kept.includes(configPath)) {
         await verifyScaffold(ctx, configPath);
     }
 
     return { sousDir, configPath, files, kept, packageJson: dependency.outcome };
+}
+
+/**
+ * Records the running version as `migratedVersion` in `.sous/sous.lock.json`, so a new project has
+ * no pending migrations. The project does not exist yet for `recipes.lock`, the lockfile's owner,
+ * so the file is written the way that owner writes it: through `formats.lockfile`, in its one
+ * stable form. A lockfile already there keeps everything it pins. Returns the file when it
+ * changes (or, in a dry run, would).
+ */
+export function stampMigratedVersion(ctx: Context, sousDir: string, version: string, dryRun: boolean): string | undefined {
+    const format = ctx.services.get("formats.lockfile");
+    const file = path.join(sousDir, LOCKFILE_NAME);
+    const existing = fs.existsSync(file) ? format.parse(JSON.parse(fs.readFileSync(file, "utf8")), file) : format.empty();
+
+    if (existing.migratedVersion === version) {
+        return undefined;
+    }
+
+    if (!dryRun) {
+        fs.mkdirSync(sousDir, { recursive: true });
+        fs.writeFileSync(file, format.stringify({ ...existing, migratedVersion: version }), "utf8");
+    }
+
+    return file;
 }
 
 /**
