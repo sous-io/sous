@@ -186,6 +186,9 @@ importers:
 
   packages/plugin-compiler:
     dependencies:
+      '@sous-io/documents':
+        specifier: workspace:*
+        version: link:../documents
       '@sous-io/plugin-api':
         specifier: workspace:*
         version: link:../plugin-api
@@ -201,6 +204,9 @@ importers:
       '@sous-io/plugin-variables':
         specifier: workspace:*
         version: link:../plugin-variables
+      '@sous-io/sous-plugin-migrations':
+        specifier: workspace:*
+        version: link:../sous-plugin-migrations
       liquidjs:
         specifier: ^10.25.0
         version: 10.25.0

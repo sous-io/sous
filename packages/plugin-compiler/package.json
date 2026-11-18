@@ -22,11 +22,13 @@
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
+    "@sous-io/documents": "workspace:*",
     "@sous-io/plugin-api": "workspace:*",
     "@sous-io/plugin-host": "workspace:*",
     "@sous-io/plugin-liquid": "workspace:*",
     "@sous-io/plugin-refs": "workspace:*",
     "@sous-io/plugin-variables": "workspace:*",
+    "@sous-io/sous-plugin-migrations": "workspace:*",
     "liquidjs": "^10.25.0",
     "tiktoken": "^1.0.22",
     "zod": "^4.4.3"

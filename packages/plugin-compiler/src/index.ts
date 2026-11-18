@@ -9,6 +9,7 @@
 import { definePlugin, jsonSchema, type PluginDefinition, type SousSchema } from "@sous-io/plugin-api";
 import { AliasService } from "./aliases.js";
 import { filesContributor } from "./files.js";
+import { ifMigration } from "./if-migration.js";
 import { varOverridesContributor } from "./var-overrides.js";
 import { IncludeService } from "./includes.js";
 import { compile, prune } from "./intents.js";
@@ -93,6 +94,10 @@ export const compilerPlugin: PluginDefinition = definePlugin({
             sous.entities.add("liquid-filter", filter);
         }
 
+        // An output's removed `_if`, rewritten as the config expression that replaces it. Added only
+        // when the migrations plugin is loaded, which gives every plugin after it `sous.migrations`.
+        (sous as { migrations?: { add(migration: typeof ifMigration): void } }).migrations?.add(ifMigration);
+
         // Every file a build writes, listed while the config is built (globs matched here).
         sous.config.contribute(filesContributor({ plugin: PLUGIN_NAME, services: sous.services }));
         // compilation.varOverrides: variables for the listed files, by path.
@@ -145,4 +150,5 @@ export { IMPORT_TOKEN_PATTERN, IMPORTABLE_EXTENSIONS, importPath, isIncludableFi
 export { hashContent, isProtectedPath } from "./state.js";
 export type * from "./types.js";
 export { Backups, BackupClock, backupRelativePath, backupStamp } from "./backups.js";
+export { ifExpression, ifMigration, ifReplacementValue, IF_MIGRATION_VERSION, migrateIfConditions } from "./if-migration.js";
 export { createTokenCounter, type TokenCounter } from "./tokens.js";
