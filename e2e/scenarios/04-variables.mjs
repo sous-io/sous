@@ -119,7 +119,8 @@ export default {
 
     await t.step("the build now succeeds with every variable answered", () => {
       expectExit(t.sous(["build"], { env: { SOUS_VAR_SKILLS_ROOT: ".claude/skills" } }));
-      assert.ok(t.exists("AGENTS.md"));
+      // A core skill: an output every build writes, now that init compiles no AGENTS.md.
+      assert.ok(t.exists(".claude/skills/about-sous/SKILL.md"));
     });
   },
 };
