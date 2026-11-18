@@ -39,7 +39,7 @@ import {
 import type { PackageJsonOutcome } from "./types.js";
 
 /** The lines of the sous-managed block in `.sous/.gitignore`: what stays on this machine. */
-export const IGNORE_BLOCK_LINES: readonly string[] = ["sous.links.json", "sous.state.json", "sous.pid", ENV_LOCAL_NAME, "repos/", "backups/"];
+export const IGNORE_BLOCK_LINES: readonly string[] = ["sous.links.json", "sous.state.json", "sous.edits.json", "sous.pid", ENV_LOCAL_NAME, "repos/", "backups/"];
 
 /** The names a recipe repository's manifest may have, at its root. */
 const REPO_MANIFEST_NAMES = ["sous.repo.yaml", "sous.repo.yml", "sous.repo.json", "sous.repo.jsonc"];

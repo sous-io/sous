@@ -201,6 +201,7 @@ describe("init", () => {
         expect(written.split("\n").filter((line) => line === IGNORE_BLOCK_START)).toHaveLength(1);
         expect(written.split("\n").filter((line) => line === IGNORE_BLOCK_END)).toHaveLength(1);
         expect(written).toContain("sous.state.json");
+        expect(written).toContain("sous.edits.json");
         expect(written).toContain(".env.local");
     });
 
