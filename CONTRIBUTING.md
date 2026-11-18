@@ -34,6 +34,12 @@ Code plugin adds), which is gitignored build output.
 That is optional for contributing, but it is the fastest way to confirm a change to the
 compiler or the shared prompts does what you expect.
 
+A new git worktree lacks the gitignored files sous needs, its dependencies and its agent files.
+Run `scripts/init-new-worktree.sh` from inside the worktree (or point your IDE's
+"after a worktree is created" command at it): it copies the gitignored files listed at its top
+from the main checkout, runs `pnpm install`, then `pnpm sous:build`. It reads the paths from Orca's
+`ORCA_WORKTREE_PATH` and `ORCA_ROOT_PATH` when they are set, and from git otherwise.
+
 ## Before you open a PR
 
 - Add or update tests for behavior you change.
