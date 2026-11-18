@@ -178,8 +178,11 @@ anywhere in the file is left alone, and an `after` or `before` line that is not 
 
 `prependIfMissing` puts each missing item at the start, in the order given; an item already in the
 list stays where it is (`ensureFirst` would move it). The key moves (`moveKeyFirst` and the others)
-change nothing when the key or the anchor is missing. Like `sortKeys`, they are not undone when the
-entry goes away, since an order is not a value.
+change nothing when the key or the anchor is missing.
+
+An order is undone like a value: `sort`, `sortKeys` and the key moves record the order the list or
+object had before Sous first changed it, and put it back when the entry goes away; an item or key
+added since keeps its place. `dedupe` records each item it removed and where, and puts them back.
 
 `ensureBlock` keeps a block between two marker lines, written in the file's comment style (`#`,
 `//`, `<!-- -->`, `/* */`, `--` or `;`, from the file's name, or `comment` to choose):

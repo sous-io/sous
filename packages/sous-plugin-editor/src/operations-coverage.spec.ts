@@ -276,21 +276,8 @@ const KNOWN_DEFECTS: Record<string, string> = Object.fromEntries(
             'remove {"path":"people","where":{"id":2}}',
             'removeWhere {"path":"people","where":{"id":2}}',
             'ensureNoItemWhere {"path":"people","where":{"id":1}}',
+            'dedupeBy {"path":"people","by":"id"}',
         ].map((name) => [`${name} jsonc`, "JSONC: an object written among one-line objects is spread over several lines"]),
-        ...[
-            'sortKeys {"path":"options"}',
-            'moveKeyBefore {"path":"options","key":"nested","anchor":"x"}',
-            'moveKeyAfter {"path":"options","key":"x","anchor":"nested"}',
-            'moveKeyFirst {"path":"options","key":"nested"}',
-            'moveKeyLast {"path":"options","key":"x"}',
-            'sort {"path":"list"}',
-            'ensureSorted {"path":"list"}',
-            'sort {"path":"list","descending":true}',
-            'sortBy {"path":"people","by":"name"}',
-        ].flatMap((name) => ["jsonc", "yaml"].map((kind) => [`${name} ${kind}`, "an order is not undone"])),
-        ...['dedupe {"path":"list"}', 'ensureUnique {"path":"list"}', 'dedupeBy {"path":"people","by":"id"}'].flatMap((name) =>
-            ["jsonc", "yaml"].map((kind) => [`${name} ${kind}`, "the items a deduplication removed are not put back"]),
-        ),
         ...[
             'prependText {"path":"notes","value":">> "} yaml',
             'ensureLine {"path":"notes","line":"second"} yaml',
@@ -402,6 +389,68 @@ describe("files and folders through editor.apply", () => {
 
         expect(fs.existsSync(path.join(tmp.path, "docs"))).toBe(false);
         expect(fs.existsSync(path.join(tmp.path, "kept"))).toBe(true);
+    });
+});
+
+describe("undoing an order through editor.apply", () => {
+    /**
+     * A sort records the order the list had before Sous first sorted it, and undoing puts that
+     * order back. An item someone added since keeps its place, and the others go back into the
+     * places they hold.
+     *
+     * ["b", "a", "b"]  sort -> ["a", "b", "b"]; someone adds "c" first, the next build sorts it
+     * -> ["a", "b", "b", "c"]; undeclared -> ["b", "a", "b", "c"]
+     */
+    it("should put back a list's order, keeping an item added since in its place", async () => {
+        const entry = { file: "settings.yaml", sort: { path: "list" } };
+
+        project.write("settings.yaml", YAML);
+        await project.apply([entry]);
+        project.write("settings.yaml", yamlList("c", "a", "b", "b"));
+        await project.apply([entry]);
+
+        expect(project.read("settings.yaml")).toBe(yamlList("a", "b", "b", "c"));
+
+        await project.apply([]);
+        expect(project.read("settings.yaml")).toBe(yamlList("b", "a", "b", "c"));
+
+        const history = JSON.parse(project.read(".sous/sous.edits.json")!);
+
+        expect(history.entries).toEqual([]);
+    });
+
+    /**
+     * A key order is recorded the same way: `sortKeys` undone puts the keys back in the order they
+     * had, and a key added since keeps its place.
+     *
+     * { x, nested }  sortKeys -> { nested, x }; someone adds "added", the next build sorts it
+     * -> { added, nested, x }; undeclared -> { added, x, nested }
+     */
+    it("should put back an object's key order, keeping a key added since in its place", async () => {
+        const entry = { file: "settings.jsonc", sortKeys: { path: "options" } };
+
+        project.write("settings.jsonc", JSONC);
+        await project.apply([entry]);
+        project.write("settings.jsonc", change(JSONC, [J.options, '"options": { "nested": { "deep": true }, "x": 1, "added": 2 }']));
+        await project.apply([entry]);
+        await project.apply([]);
+
+        expect(project.read("settings.jsonc")).toBe(change(JSONC, [J.options, '"options": { "added": 2, "x": 1, "nested": { "deep": true } }']));
+    });
+
+    /**
+     * Removing duplicates records each item removed and where it was; undoing puts them back.
+     *
+     * ["b", "a", "b"]  dedupe -> ["b", "a"]; undeclared -> ["b", "a", "b"]
+     */
+    it("should put back the items a deduplication removed", async () => {
+        project.write("settings.yaml", YAML);
+        await project.apply([{ file: "settings.yaml", dedupe: { path: "list" } }]);
+
+        expect(JSON.parse(project.read(".sous/sous.edits.json")!).entries[0].steps[0].record).toEqual({ removed: [{ index: 2, item: "b" }] });
+
+        await project.apply([]);
+        expect(project.read("settings.yaml")).toBe(YAML);
     });
 });
 

@@ -208,8 +208,12 @@ means the end.
 
 `prependIfMissing` puts each missing item at the start, in the order given, and leaves an item
 already there where it is (unlike `ensureFirst`, which moves it). The four key moves change nothing
-when the key or the anchor is missing; like `sortKeys`, they are not undone and have no automatic
-assertion, since an order is not a value.
+when the key or the anchor is missing, and have no automatic assertion.
+
+An order is recorded like a value. `sort` records the list as it was before Sous first sorted it;
+`sortKeys` and the key moves record the object's key order. `down` puts that order back: the items
+or keys that were there take the places they hold now, in their recorded order, and one added since
+keeps its place. `dedupe` records each item it removed with its index, and `down` puts them back.
 
 Not built yet, from the list Luke accepted: `copy`, `move`, `insertBeforeWhere`,
 `insertAfterWhere`, `moveItem`, the comment operations (`setCommentBefore`, `setCommentAfter`,
@@ -417,7 +421,6 @@ The `editor` service, for direct usage: `open(file)` gives a file with `apply(op
 
 - The merge of the per-harness config builds must carry entries limited to one harness; the merge
   rule was written for compile outputs, and an edit is not an output.
-- Undoing a sort, a deduplication or a key order is not done: an order is not a value.
 
 ## Changes
 
@@ -453,3 +456,13 @@ no fix. The agent's choice of form; the check itself is the one S11 lists.
 declared an edit, and such a project's `.sous/.gitignore` does not list it, so the file showed up as
 new in git (found on Sous's own repository). The history is now written only when it records an
 entry or a created file, or when the file already exists. The agent's fix, in the finishing pass.
+
+### 2026-11-18: An order is undone
+
+`sort`, `dedupe`, `sortKeys` and the key moves were not undone ("an order is not a value"), against
+spec 12's rule that every operation defines `down` and undo restores what was there. Recording the
+order is cheap: the list as it was (or the key names), kept in the history like any previous value.
+So `sort` records the list before Sous first sorted it, the key operations record the key order,
+and `dedupe` records each item it removed with its index; `down` puts them back, and an item or key
+added since keeps its place. `sort` now moves items with the library's `sort`, so each keeps its
+own text. Found by running every operation through `editor.apply`; the agent's fix.
