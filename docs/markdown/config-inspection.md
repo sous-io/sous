@@ -107,3 +107,9 @@ exist:
 ```bash
 sous config set compilation.includeSourceComments false --file 600-settings.jsonc
 ```
+
+Every other line of the file stays byte for byte, in YAML as in JSON. Two YAML cases are the
+exception. A key written with `?` cannot be edited line by line, so the whole file is written again;
+its comments are kept, but its spacing may change. A value shared through a YAML anchor (`&name`) and
+its aliases (`*name`) is not set at all, since setting it would change every copy: the command stops
+with an error naming the key.
