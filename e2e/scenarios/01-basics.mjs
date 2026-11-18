@@ -220,11 +220,12 @@ export default {
       const dir = `${t.root}/plain-proj`;
       // The image points every repository's hooks at the read-only /e2e/hooks (the push allowlist);
       // this project never pushes, so it gets git's own hooks folder back for sous to write in.
-      t.sh(`mkdir -p ${dir} && cd ${dir} && git init -q && git config user.email e2e@example.test && git config user.name e2e && git config core.hooksPath .git/hooks`);
+      t.sh(`mkdir -p ${dir} && cd ${dir} && git init -q && git config user.email e2e@example.test && git config user.name e2e && git config core.hooksPath ${dir}/.git/hooks`);
       expectExit(t.sous(["init", "--yes"], { cwd: dir }));
       assert.ok(t.exists(".git/hooks/post-checkout", dir), "the hook was not written");
-      t.sh("git add -A && git commit -qm init && git worktree add -q ../plain-proj-wt", { cwd: dir });
-      assert.ok(t.exists(`${t.root}/plain-proj-wt/${SKILL}`), "the hook did not build the new worktree");
+      // `t.sh` runs a login shell, which resets PATH; the hook finds `sous` only on the PATH sous runs with.
+      const added = t.sh(`export PATH="${process.env.PATH}" && git add -A && git commit -qm init && git worktree add -q ../plain-proj-wt`, { cwd: dir });
+      assert.ok(t.exists(`${t.root}/plain-proj-wt/${SKILL}`), `the hook did not build the new worktree:\n${added.stdout}\n${added.stderr}`);
     });
   },
 };
