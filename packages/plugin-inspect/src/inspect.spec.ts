@@ -408,3 +408,71 @@ describe("outputs", () => {
         expect((timings.last()!.result as Table).title).toBe("Timings");
     });
 });
+
+/**
+ * Registers the harness `codex`, and contributes `demo.tool` (the build's harness, or `none`) and
+ * an edit to `editor.edits` that only the `codex` build makes.
+ */
+const harnessDemo = definePlugin({
+    name: "harness-demo",
+    version: "1.0.0",
+    register(sous) {
+        sous.entities.define("harness", jsonSchema({}));
+        sous.entities.add("harness", { id: "codex" } as never);
+        sous.entities.add("config-key", { id: "editor", schema: jsonSchema({}) });
+        sous.config.contribute({
+            id: "harness-demo/main",
+            contribute(config) {
+                const id = config.harness.id;
+
+                config.atPath("demo.tool").set(id === "" ? "none" : id);
+                config.atPath("editor").set({ edits: id === "codex" ? [{ file: "AGENTS.md" }] : [] });
+            },
+        });
+    },
+});
+
+describe("--harness", () => {
+    /** Without --harness the merged config shows; with it, that harness's own build. */
+    it("should show one harness's config", async () => {
+        const merged = await run("config.show", {}, EMPTY_PROJECT, [harnessDemo]);
+        const codex = await run("config.show", { harness: "codex" }, EMPTY_PROJECT, [harnessDemo]);
+
+        expect(merged.config.demo.tool).toBe("none");
+        expect(merged.config.editor.edits).toEqual([{ file: "AGENTS.md", harness: "codex" }]);
+        expect(merged.harness).toBeUndefined();
+        expect(codex.config.demo.tool).toBe("codex");
+        expect(codex.config.editor.edits).toEqual([{ file: "AGENTS.md" }]);
+        expect(codex.harness).toBe("codex");
+    });
+
+    it("should get one value from one harness's config", async () => {
+        expect((await run("config.get", { path: "demo.tool" }, EMPTY_PROJECT, [harnessDemo])).value).toBe("none");
+        expect((await run("config.get", { path: "demo.tool", harness: "codex" }, EMPTY_PROJECT, [harnessDemo])).value).toBe("codex");
+    });
+
+    /** A harness with no build is an error that names the ones built. */
+    it("should refuse a harness that has no build", async () => {
+        await expect(run("config.get", { path: "demo.tool", harness: "zed" }, EMPTY_PROJECT, [harnessDemo])).rejects.toThrow(/No config was built for the harness "zed"/);
+        await expect(run("config.show", { harness: "zed" })).rejects.toThrow(/No config was built for the harness "zed"/);
+    });
+
+    /** --layers names the build each change came from, once any came from a harness's build. */
+    it("should name the build in --layers", async () => {
+        const result = await run("config.get", { path: "editor.edits", layers: true }, EMPTY_PROJECT, [harnessDemo]);
+        const table = (await outputsOf("config.get", { path: "editor.edits", layers: true }, EMPTY_PROJECT, [harnessDemo])).toArray()[0]!.result as Table;
+
+        expect(result.layers.map((layer: any) => [layer.contributor, layer.build])).toEqual([
+            ["harness-demo/main", ""],
+            ["harness-demo/main", "codex"],
+        ]);
+        expect(table.rows.map((row) => row.source)).toEqual(["harness-demo/main (no harness)", "harness-demo/main (harness codex)"]);
+    });
+
+    /** A project with no harness sees the layers as before, with no build named. */
+    it("should not name the build when no change came from a harness's build", async () => {
+        const table = (await outputsOf("config.get", { path: "demo.count", layers: true })).toArray()[0]!.result as Table;
+
+        expect(table.rows.map((row) => row.source)).toEqual(["demo/main"]);
+    });
+});

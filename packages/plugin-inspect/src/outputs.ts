@@ -287,11 +287,14 @@ function layerTree(layers: readonly LayerView[]): Tree {
 
     const roots: OpenNode[] = [];
     let contributor: string | undefined;
+    let build: string | undefined;
+    const named = namesBuilds(layers);
 
     for (const layer of layers) {
-        if (layer.contributor !== contributor || roots.length === 0) {
+        if (layer.contributor !== contributor || layer.build !== build || roots.length === 0) {
             contributor = layer.contributor;
-            const details = [...(layer.source ? [layer.contributor] : []), layer.plugin, ...applyOrderText(layer)];
+            build = layer.build;
+            const details = [...(layer.source ? [layer.contributor] : []), layer.plugin, ...applyOrderText(layer), ...(named ? [buildText(layer)] : [])];
 
             roots.push({ label: layer.source ?? layer.contributor, detail: details.join(", "), children: [] });
         }
@@ -318,6 +321,19 @@ function layerTree(layers: readonly LayerView[]): Tree {
     return new Tree(roots as TreeNode[]);
 }
 
+/**
+ * Whether to name each change's config build: only when some change came from a harness's build,
+ * so a project with no harness sees what it always did.
+ */
+function namesBuilds(layers: readonly LayerView[]): boolean {
+    return layers.some((layer) => (layer.build ?? "") !== "");
+}
+
+/** The config build a change was made in: `no harness`, or `harness codex`. */
+function buildText(layer: LayerView): string {
+    return (layer.build ?? "") === "" ? "no harness" : `harness ${layer.build}`;
+}
+
 /** `apply order 50`, or `apply order 10, moved to 51` when `before` or `after` moved it. */
 function applyOrderText(layer: LayerView): string[] {
     return layer.actualApplyOrder === layer.applyOrder ? [`apply order ${layer.applyOrder}`] : [`apply order ${layer.applyOrder}, moved to ${layer.actualApplyOrder}`];
@@ -335,11 +351,13 @@ const LAYER_COLUMNS: TableColumn[] = [
  */
 function layerTable(result: ConfigGetResult): Table {
     const rows: Array<Record<string, string>> = [];
+    const named = namesBuilds(result.layers ?? []);
 
     for (const layer of result.layers ?? []) {
         const text = layer.change ? `${shownOrUnset(layer.change, "from")} -> ${shownOrUnset(layer.change, "to")}` : changeAt(layer.patch, result.path);
+        const source = layer.source ?? layer.contributor;
 
-        rows.push({ source: layer.source ?? layer.contributor, change: text });
+        rows.push({ source: named ? `${source} (${buildText(layer)})` : source, change: text });
 
         for (const line of annotationLines(layer)) {
             rows.push({ source: "", change: line });

@@ -9,6 +9,7 @@ export const configShowSchema: SousSchema<ConfigShowInput> = jsonSchema<ConfigSh
     properties: {
         layers: { type: "boolean", description: "Show each contributor's changes, in order, and the passes." },
         raw: { type: "boolean", description: "Show each config file as written, in order." },
+        harness: { type: "string", description: "Show this harness's own config build instead of the merged config." },
     },
 });
 
@@ -19,6 +20,7 @@ export const configGetSchema: SousSchema<ConfigGetInput> = jsonSchema<ConfigGetI
         path: { type: "string", description: "Path into the config, with [n] for array indices." },
         layers: { type: "boolean", description: "Show each contributor's changes to the value, in order." },
         raw: { type: "boolean", description: "Show each config file as written, in order." },
+        harness: { type: "string", description: "Read the value from this harness's own config build instead of the merged config." },
     },
     required: ["path"],
 });
