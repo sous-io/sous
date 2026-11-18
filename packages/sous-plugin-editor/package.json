@@ -1,0 +1,37 @@
+{
+  "name": "@sous-io/sous-plugin-editor",
+  "version": "1.0.19",
+  "description": "The editor: declared, recorded and undoable edits to files Sous does not own, the assertions on them, and the editor service.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "private": true,
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./types": {
+      "source": "./src/types.ts",
+      "types": "./dist/types.d.ts",
+      "default": "./dist/types.js"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@sous-io/documents": "workspace:*",
+    "@sous-io/plugin-api": "workspace:*",
+    "@sous-io/plugin-compiler": "workspace:*",
+    "@sous-io/plugin-variables": "workspace:*",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@sous-io/core": "workspace:*"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

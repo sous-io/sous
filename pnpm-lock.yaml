@@ -860,6 +860,9 @@ importers:
       '@sous-io/plugin-yarn':
         specifier: workspace:*
         version: link:../plugin-yarn
+      '@sous-io/sous-plugin-editor':
+        specifier: workspace:*
+        version: link:../sous-plugin-editor
       '@sous-io/sous-plugin-handlers':
         specifier: workspace:*
         version: link:../sous-plugin-handlers
@@ -875,6 +878,28 @@ importers:
       zod:
         specifier: ^4.4.3
         version: 4.4.3
+
+  packages/sous-plugin-editor:
+    dependencies:
+      '@sous-io/documents':
+        specifier: workspace:*
+        version: link:../documents
+      '@sous-io/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@sous-io/plugin-compiler':
+        specifier: workspace:*
+        version: link:../plugin-compiler
+      '@sous-io/plugin-variables':
+        specifier: workspace:*
+        version: link:../plugin-variables
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@sous-io/core':
+        specifier: workspace:*
+        version: link:../core
 
   packages/sous-plugin-handlers:
     dependencies:
