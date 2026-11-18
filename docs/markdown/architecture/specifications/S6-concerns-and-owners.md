@@ -194,9 +194,9 @@ top      plugin-claude-code   plugin-github  plugin-gitlab  plugin-local   plugi
            │
          plugin-authoring                                  (runs init after scaffolding a repository)
            │
-         plugin-init   plugin-harnesses   plugin-update
+         plugin-init   plugin-harnesses
            │
-         plugin-build
+         plugin-build   plugin-update
            │
          plugin-skills   plugin-memories
            │
@@ -233,7 +233,7 @@ top      plugin-claude-code   plugin-github  plugin-gitlab  plugin-local   plugi
 | `plugin-build` | `plugin-compiler`, `plugin-recipes`, `plugin-recipe-answers`, `plugin-git` |
 | `plugin-harnesses` | `plugin-build`, `plugin-host` |
 | `plugin-authoring` | `plugin-recipes`, `plugin-formats`, `plugin-refs`, `plugin-variables`, `plugin-git`, `plugin-init`, `plugin-config-files` |
-| `plugin-init` | `plugin-build`, `plugin-config-files`, `plugin-host` |
+| `plugin-init` | `plugin-build`, `plugin-config-files`, `plugin-host`, `plugin-update` |
 | `plugin-update` | `plugin-host` |
 | `plugin-cli`, `plugin-mcp`, `plugin-inspect` | nothing |
 | `plugin-npm`, `plugin-pnpm`, `plugin-yarn` | `plugin-update` |
@@ -631,9 +631,10 @@ recipe repository is also a sous project; a directory that already holds a sous 
 | Concern | Owner | Package | Kind |
 | --- | --- | --- | --- |
 | Setting a project up: importing its existing agent files, scaffolding its `.sous/`, the first build | `init` | `plugin-init` | intent |
+| Installing the git hooks that build Sous's output in a new worktree (`sous init hooks`, S14) | `init.hooks` | `plugin-init` | intent; asks `package-manager` for the install command |
 | Updating sous itself (`sous update`) | `update` | `plugin-update` | intent |
 | Installing a plugin a recipe requires (`--install-plugins`) | `plugins.install` | `plugin-update` | intent |
-| Package managers: detecting one, listing installed packages, installing | `package-manager` | `plugin-update` | entity kind |
+| Package managers: detecting one, listing installed packages, installing, a project's install command and the script run after it | `package-manager` | `plugin-update` | entity kind |
 | Scanning installed packages for plugins, when the config asks for it | `update.scan` | `plugin-update` | contributor; adds to the `plugins` key |
 
 ### Showing the engine's state: `plugin-inspect`
@@ -983,6 +984,14 @@ After: contributing moves to `plugin-authoring` (the `repo.contribute` intent), 
 None.
 
 ## Changes
+
+### 2026-11-18: `init.hooks`; `plugin-init` depends on `plugin-update`
+
+`plugin-init` gains the `init.hooks` intent (`sous init hooks`, S14), which asks the
+`package-manager` entities which manager owns the project, through `plugin-update`'s `ownerOf`, and
+for the install command and the script run after an install, two new members of the entity. So
+`plugin-init` depends on `plugin-update`, which moves a row down. Approved with S14, from Luke's
+ruling: "I want a new command: `sous init hooks` that all of this is packaged in."
 
 ### 2026-11-15: Init imports agent files; the project's targets win over recipes'
 
