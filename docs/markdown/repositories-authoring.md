@@ -78,11 +78,50 @@ contents:
 ```
 
 `contents` groups are what a subscribing project receives, one group per kind, each with `include` glob patterns
-relative to the recipe folder (and optional `exclude` patterns). The four kinds are `skills`, `memories`,
-`prompts` and `config`; the kind decides what happens to them in the subscriber's project, which the subscriber shapes with
+relative to the recipe folder (and optional `exclude` patterns). Sous registers four kinds, `skills`, `memories`,
+`prompts` and `config`, and a sous plugin may register more; the kind decides what happens to them in the subscriber's project, which the subscriber shapes with
 [`recipes`](repositories-file-formats.md#recipes-what-each-content-kind-does). Field tables are in the
 [recipe manifest](repositories-file-formats.md#sousrecipeyaml-the-recipe-manifest) reference, and recipe
 metadata is the source of truth for the version: never edit `sous.index.json` by hand.
+
+### Conditional contents, inline content and edits
+
+`contents` is added to the subscriber's config, so any of its values may be a
+[config expression](configuration.md#config-expressions), evaluated in the subscriber's project with the
+recipe's own answers. An optional part of a recipe is a variable the subscriber answers, and a condition on it:
+
+```yaml
+variables:
+  - name: jiraEnabled
+    type: boolean
+    prompt: Should the Jira capability be installed?
+    description: Installs the Jira skills. The default leaves them out.
+    example: "true"
+    default: false
+
+contents:
+  - kind: skills
+    include:
+      - skills/**/*
+    exclude:
+      - $if:
+          expr: "harness.id != 'claude-code'"
+          then: skills/session-harness/**/*
+      - $if:
+          expr: "jiraEnabled != true"
+          then: skills/jira-*/**/*
+```
+
+An `include` item may also be content written in place, with the path it is treated as having
+(`{ $inline: "...", path: skills/hello/SKILL.md }`), and a value anywhere may come from a file with
+`{ $file: documents/rules.json }`, relative to the recipe folder. A recipe can also change files it does
+not own, such as a setting in `.claude/settings.json`, with a top-level `edits` list. The forms are in
+[Contents are config](repositories-file-formats.md#contents-are-config) and
+[Edits](repositories-file-formats.md#edits).
+
+A kind that no plugin registers fails a subscriber's build. `sous repo release` refuses it when nothing the
+recipe names could register it (no `requires.plugins`, no `subscribes`, no plugin of its own), and warns
+otherwise, so a typo such as `claude-code-plugn` is caught before it is published.
 
 ### Shipping memories
 
@@ -136,7 +175,10 @@ requires:
         sous-plugin-claude-code: "^1.0.0"
 ```
 
-A subscriber is offered the missing plugin when they subscribe; see
+A subscriber is offered the missing plugin when they subscribe. When npm cannot install it, sous adds
+"Perhaps the required plugin ships as part of a recipe?": a plugin shipped inside a recipe has no npm
+name, and a recipe that needs one lists that recipe under `subscribes` (never `depends`, whose plugins are
+never loaded). See
 [Subscribe to a recipe](repositories-consuming.md#subscribe-to-a-recipe). How a plugin is written is in
 [the engine specification](architecture/specifications/S1-engine.md), under "Plugins".
 

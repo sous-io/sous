@@ -99,8 +99,8 @@ the full semantics.
 ## Config expressions
 
 A value in a JSON, JSONC or YAML config file may be an expression object, decided when sous builds
-the config instead of when the file is written. The reserved keys are `$expr`, `$if`, `$elseif` and
-`$else` (each `$if` and `$elseif` may carry a `:<name>` qualifier, and `$expr` a `:<language>` one).
+the config instead of when the file is written. The reserved keys are `$expr`, `$if`, `$elseif`,
+`$else` and `$file` (each `$if` and `$elseif` may carry a `:<name>` qualifier, and `$expr` a `:<language>` one).
 Liquid is the expression language. An expression can read `host.platform`, `env.<NAME>`, variables
 by their bare name, and recipe answers (except under `subscriptions` and `repos`).
 
@@ -127,6 +127,46 @@ is dropped and the subscription stays on. An expression may appear at any depth,
 arrays. An object mixing a reserved key with any other key is an error, so a typo such as `"$iff"`
 never passes through as config. The full rules are in
 [the design of config expressions](architecture/specifications/S5-config-expressions.md).
+
+An expression can also read `harness.id`, the coding tool the config is built for (`claude-code`, `codex`), which
+is the empty string when none is.
+
+### Values from a file: `$file`
+
+An object whose only key is `$file` stands in for the value a file holds, anywhere a value may go:
+
+```jsonc
+// conf.d/700-rules.jsonc
+{
+    "_vars": {
+        "banner": { "$file": "banner.txt" }
+    },
+    "recipes": {
+        "skills": {
+            "outputs": { "$file": "${projectRoot}/shared/skill-outputs.json" }
+        }
+    }
+}
+```
+
+The path is relative to the file that holds it, and `${name}` variables in it are filled in. A `.json`,
+`.jsonc`, `.yaml` or `.yml` file gives its structured value; any other file gives its text. A file whose name
+contains `.tpl.` is rendered as a Liquid template first; no other file's content is interpolated, so
+`${CLAUDE_PLUGIN_ROOT}` in it arrives as it is written. Watch mode rebuilds when the file changes.
+
+### Writing a literal `${`
+
+Write `$${name}` where a value must hold the text `${name}` for another tool to fill in:
+
+```jsonc
+{
+    "_vars": {
+        "startHook": "bash \"$${CLAUDE_PLUGIN_ROOT}/scripts/start.sh\""
+    }
+}
+```
+
+`${startHook}` gives `bash "${CLAUDE_PLUGIN_ROOT}/scripts/start.sh"`.
 
 ## Plugins
 

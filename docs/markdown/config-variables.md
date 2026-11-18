@@ -94,6 +94,12 @@ and then lists the variables that ARE in scope. There is no silent fallthrough: 
 similar action values additionally pass a strict substitution that fails on any leftover
 reference.
 
+## Writing a literal `${`
+
+`$${name}` is the text `${name}`, never a variable: write it where a value must carry a placeholder another
+tool fills in, such as `"bash \"$${CLAUDE_PLUGIN_ROOT}/x.sh\""`. An unknown name after `$${` is not an
+error.
+
 ## Path normalization
 
 Absolute `entryPoint`, `entryGlob`, `globBase`, `destinationFile` and `destinationDir` values

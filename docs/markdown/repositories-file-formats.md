@@ -77,7 +77,8 @@ contents:                           # what a subscriber actually receives
 | `version` | yes | An exact semantic version; the manifest is the source of truth and the git tag follows it |
 | `description` | no | Copied into the index at release time; shown by `sous recipe list` and `sous repo search` |
 | `depends`, `subscribes` | no | Build dependencies and co-subscriptions; within either list, no entry may repeat |
-| `contents`, `variables` | no | Contents default to an empty list, which is what a curated bundle publishes; a duplicated variable name, or two definitions claiming one `env`, is an error |
+| `contents`, `variables` | no | Contents default to an empty list, which is what a curated bundle publishes; a duplicated variable name, or two definitions claiming one `env`, is an error. Any value in `contents` may be an expression; see [Contents are config](#contents-are-config) |
+| `edits` | no | Changes to document files the recipe does not own; see [Edits](#edits) |
 | `submissions` | no | Whether this recipe takes proposed changes, winning over the repository's block; see [The submissions block](#the-submissions-block) |
 | `plugin` | no | A sous plugin the recipe ships: `bundle`, the path of one self-contained bundled file, and optionally `types`, its `.d.ts` file; see [Recipes that ship sous plugins](repositories-authoring.md#recipes-that-ship-sous-plugins) |
 | `requires` | no | `requires.plugins` maps npm sous plugin names to version ranges the recipe needs |
@@ -91,12 +92,72 @@ requires:
         sous-plugin-claude-code: "^1.0.0"
 ```
 
-`contents[].kind` is `skills`, `memories`, `prompts` or `config`; a sous plugin is not a content kind but the
-`plugin` field above. `skills` are
+`contents[].kind` names a content kind. Sous registers `skills`, `memories`, `prompts` and `config`; a sous plugin
+can register more (a `content-kind` entity), so any lowercase, hyphenated name is accepted here. A sous plugin is
+not a content kind but the `plugin` field above. `skills` are
 written to the destinations named by [`recipes`](#recipes-what-each-content-kind-does); `memories` are included
 into your instruction files by one line (see [Recipe memories](repositories-consuming.md#recipe-memories));
 each `config` file joins the subscriber's config, under the project's own files so the project wins; nothing takes `prompts` yet, and the build warns about a recipe that
 publishes them. `include` needs at least one glob, and both lists are recipe-relative.
+
+A kind no plugin registers stops a subscriber's build, naming the kind and the recipe. `sous repo release`
+refuses one when nothing the recipe names could register it (no `requires.plugins`, no `subscribes`, no
+`plugin` of its own), and warns otherwise.
+
+### Contents are config
+
+A subscriber's build adds each group of `contents` to its config under `recipes.contents`, so any value in a
+group may be a [config expression](configuration.md#config-expressions) (`$if`, `$elseif`, `$else`, `$expr`) or a
+`$file`, evaluated in the subscriber's project. A condition can read the recipe's own answers, `host.platform`,
+`harness.id` and `env.<NAME>`. An `include` item may also be inline content, with the path it is treated as
+having:
+
+```yaml
+contents:
+  - $if:                                      # a whole group, only for Claude Code
+      expr: "harness.id == 'claude-code'"
+      then:
+        kind: skills
+        include: [claude/**]
+  - kind: skills
+    include:
+      - skills/**/*
+      - $inline: |                            # inline content needs a path
+          Say hello.
+        path: skills/hello/SKILL.md
+    exclude:
+      - $if:                                  # one item, gated by a yes-or-no question
+          expr: "jiraEnabled != true"
+          then: skills/jira-*/**/*
+```
+
+`sous config show recipes.contents` shows what the groups gave. Inline content is never interpolated; it is a
+Liquid template only when its path contains `.tpl.`.
+
+### Edits
+
+`edits` lists changes to document files the recipe does not own, such as a setting in `.claude/settings.json`.
+Each entry names `file` (relative to the project root) and one or more operations, each holding its own
+parameters, or a file-less operation such as `ensureDirectoryExists`. A subscriber's build appends each entry to
+the config key `editor.edits`, with the recipe that declared it, and the editor plugin applies them. An entry may
+be an expression, and a value may come from a `$file`:
+
+```yaml
+edits:
+  - file: .claude/settings.json
+    ensureIncludes:
+      path: permissions.allow
+      items: ["Bash(git-commit.sh:*)"]
+  - $if:
+      expr: "harness.id == 'claude-code'"
+      then:
+        file: .claude/settings.json
+        set:
+          path: permissions.deny
+          value: { $file: documents/deny-rules.json }
+```
+
+The manifest checks only that each entry is an object naming an operation; the editor checks the operations.
 
 ### The submissions block
 
@@ -446,6 +507,10 @@ includes, so it is dropped from a recipe's layer with a warning.
   build's unincluded-memory warning never lists. The same entry forms as `first`.
 
 There is no `prompts` block.
+
+`recipes.contents` is a list sous writes itself while it builds the config: one entry per `contents` group of
+each subscribed recipe (`recipe`, `dir`, `kind`, `include`, `exclude`), its expressions evaluated. Read it with
+`sous config show recipes.contents`; plugins that publish a kind read it too.
 
 ## Managed config layers
 
