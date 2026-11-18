@@ -28,6 +28,7 @@ import { githubPlugin } from "@sous-io/plugin-github";
 import { gitlabPlugin } from "@sous-io/plugin-gitlab";
 import { localPlugin } from "@sous-io/plugin-local";
 import { claudeCodePlugin } from "@sous-io/plugin-claude-code";
+import { editorPlugin } from "@sous-io/sous-plugin-editor";
 import packageJson from "../package.json" with { type: "json" };
 
 /**
@@ -75,6 +76,7 @@ export const BUILT_IN_PLUGINS: readonly PluginDefinition[] = [
     recipeAnswersPlugin,
     skillsPlugin,
     memoriesPlugin,
+    editorPlugin,
     buildPlugin,
     harnessesPlugin,
     authoringPlugin,
