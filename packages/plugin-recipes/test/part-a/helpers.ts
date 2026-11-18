@@ -196,6 +196,11 @@ export function memoryLock(lockfile: Lockfile): RecipesLock & { current: Lockfil
         restore: async () => ({ restored: [], alreadyPresent: [], failed: [] }),
         get: (key: string) => lock.current.recipes[key],
         held: (current: Lockfile, except?: Iterable<string>) => heldVersions(current, except),
+        exists: () => true,
+        migratedVersion: () => lock.current.migratedVersion,
+        setMigratedVersion: async (version: string) => {
+            lock.current = { ...lock.current, migratedVersion: version };
+        },
     };
 
     return lock;

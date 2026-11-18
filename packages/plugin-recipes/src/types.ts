@@ -593,6 +593,15 @@ export interface RecipesLock {
      * `keepPins`): every locked version but those of the keys in `except`.
      */
     held(lockfile: Lockfile, except?: Iterable<string>): Pick<ResolveOptions, "keep" | "keepPins">;
+    /** Whether the project has a lockfile on disk yet. */
+    exists(): boolean;
+    /**
+     * The version of sous whose migrations the project last ran (`migratedVersion`), or undefined
+     * when the lockfile does not record one. Only the migrations plugin decides what it means.
+     */
+    migratedVersion(): string | undefined;
+    /** Records the version of sous whose migrations the project last ran, keeping everything else. */
+    setMigratedVersion(version: string, options?: { dryRun?: boolean }): Promise<void>;
 }
 
 // =============================================================================================
@@ -1412,6 +1421,8 @@ export interface RecipesFetchedPayload {
 export interface RecipesLockedPayload {
     readonly path: string;
     readonly diff: LockDiff;
+    /** Set when this write created the lockfile: the project had none before. */
+    readonly created?: boolean;
 }
 
 // =============================================================================================
