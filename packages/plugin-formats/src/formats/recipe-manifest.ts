@@ -38,6 +38,7 @@ import {
   submissionsSchema,
 } from "./common.js";
 import { variableDefinitionSchema } from "./variable-definition.js";
+import { recipeHandlersSchema } from "./recipe-handlers.js";
 
 // Variable definitions live in their own module, so the index can read them
 // without importing the ref parser this manifest needs; they are re-exported
@@ -201,6 +202,8 @@ export function createRecipeManifestSchema(check: DependencyRefChecker = acceptA
   plugin: recipePluginSchema.optional(),
   /** What this recipe needs that is not a recipe. */
   requires: recipeRequirementsSchema.optional(),
+  /** Each purpose's handlers: exported functions in the recipe's own files, run in the order listed. */
+  handlers: recipeHandlersSchema.optional(),
   });
 }
 

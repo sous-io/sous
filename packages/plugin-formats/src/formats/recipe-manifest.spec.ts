@@ -599,3 +599,48 @@ describe("the recipe plugin and requires blocks", () => {
     expect(expectRejectMessage({ ...validManifest(), requires: { plugins: { "sous-plugin-extra": "" } } })).toMatch(/version range/);
   });
 });
+
+describe("the recipe handlers block", () => {
+  /**
+   * A manifest may list, for each purpose, the exported functions to run, in order:
+   *
+   * handlers: { check: [{ file: "handlers/prerequisites.js", handler: "checkCommands" }] }
+   * // -> manifest.handlers.check[0].handler === "checkCommands"
+   */
+  it("should accept handlers for each purpose, keeping their order", () => {
+    const handlers = {
+      check: [
+        { file: "handlers/prerequisites.js", handler: "checkCommands" },
+        { file: "handlers/prerequisites.js", handler: "checkJiraSignIn" },
+      ],
+      configure: [{ file: "handlers/edits.js", handler: "declareEdits" }],
+      beforeBuild: [{ file: "handlers/build.js", handler: "before" }],
+      afterBuild: [{ file: "handlers/build.js", handler: "after" }],
+      uninstall: [{ file: "handlers/cleanup.js", handler: "removeSessionFiles" }],
+      migrate: [{ file: "handlers/migrate.js", handler: "migrate" }],
+    };
+    const manifest = parseRecipeManifest({ ...validManifest(), handlers }, SOURCE);
+
+    expect(manifest.handlers).toEqual(handlers);
+  });
+
+  /**
+   * The set of purposes is fixed: an unknown one is refused, naming it.
+   *
+   * handlers: { onSave: [...] }  // -> ConfigError naming onSave
+   */
+  it("should refuse a purpose that does not exist", () => {
+    expect(expectRejectMessage({ ...validManifest(), handlers: { onSave: [{ file: "a.js", handler: "a" }] } })).toMatch(/onSave/);
+  });
+
+  /**
+   * A handler file must be a plain path inside the recipe, and `handler` the name of a function.
+   *
+   * { file: "/etc/x.js", handler: "a" }          // -> refused: must be relative
+   * { file: "a.js", handler: "not a name" }      // -> refused
+   */
+  it("should refuse an absolute handler file and a handler that is not a function name", () => {
+    expect(expectRejectMessage({ ...validManifest(), handlers: { check: [{ file: "/etc/x.js", handler: "a" }] } })).toMatch(/must be relative/);
+    expect(expectRejectMessage({ ...validManifest(), handlers: { check: [{ file: "a.js", handler: "not a name" }] } })).toMatch(/exported function/);
+  });
+});

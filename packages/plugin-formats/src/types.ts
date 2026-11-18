@@ -192,6 +192,26 @@ export interface RecipeManifest extends Extensions {
     variables?: VariableDefinition[];
     plugin?: RecipePluginEntry;
     requires?: RecipeRequirements;
+    /** Each purpose's handlers, run in the order listed. */
+    handlers?: RecipeHandlers;
+}
+
+/** One handler a recipe lists: a file in the recipe and the function it exports. */
+export interface RecipeHandlerEntry extends Extensions {
+    /** Relative to the recipe: `handlers/prerequisites.js`. */
+    file: string;
+    /** The exported function: `checkCommands`. */
+    handler: string;
+}
+
+/** A recipe manifest's `handlers` block: each purpose's handlers, in run order. */
+export interface RecipeHandlers extends Extensions {
+    check?: RecipeHandlerEntry[];
+    configure?: RecipeHandlerEntry[];
+    beforeBuild?: RecipeHandlerEntry[];
+    afterBuild?: RecipeHandlerEntry[];
+    uninstall?: RecipeHandlerEntry[];
+    migrate?: RecipeHandlerEntry[];
 }
 
 // ---------------------------------------------------------------------------------------------
