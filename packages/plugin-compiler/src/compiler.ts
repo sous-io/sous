@@ -12,7 +12,8 @@ import { LogLevel, nullReporter, Reporting, type ProblemDetails, type Reporter, 
 import type { RefsParser } from "@sous-io/plugin-refs/types";
 import type { VarScope } from "@sous-io/plugin-variables/types";
 import { reportBackup } from "./backups.js";
-import { INCLUDE_LINE_PATTERN, looksLikeIncludeLine, splitIncludeQuery, stableVarsFingerprint } from "./paths.js";
+import { findImportTokens, scanMarkdown } from "./markdown.js";
+import { importPath, isIncludableFile, isSousIncludeForm, splitIncludeQuery, stableVarsFingerprint } from "./paths.js";
 import { hashContent } from "./state.js";
 import type { CompileUnit, UnitOutput } from "./targets.js";
 import type {
@@ -25,8 +26,11 @@ import type {
     TransformFile,
 } from "./types.js";
 
-/** One piece of a read file: a line of its own text, or a file it includes. */
-type Part = string | { file: string };
+/**
+ * One piece of a read file: a piece of its own text, or a file it includes. The pieces join with
+ * nothing between them. An include inside a line (`inline`) is trimmed when it is put in place.
+ */
+type Part = string | { file: string; inline: boolean };
 
 /** A file read for a unit. */
 interface FileNode {
@@ -394,9 +398,9 @@ export class CompileRun extends Reporting(Object) {
     /**
      * Reads a file and, recursively, everything it includes, rendering nothing. A file read already
      * for this unit is not read again, so a file may be included any number of times; only a cycle
-     * is an error.
+     * is an error. An included file's frontmatter is left out; the entry's is kept.
      */
-    private loadFile(file: string): FileNode | null {
+    private loadFile(file: string, included = false): FileNode | null {
         const known = this.nodes.get(file);
 
         if (known !== undefined) {
@@ -417,7 +421,7 @@ export class CompileRun extends Reporting(Object) {
 
             // Kept before its includes are read, so the graph lists parents first.
             this.nodes.set(file, node);
-            node.parts = this.processIncludes(content, path.dirname(file), file, file);
+            node.parts = this.processIncludes(content, path.dirname(file), file, file, included);
 
             return node;
         } catch (error) {
@@ -431,82 +435,114 @@ export class CompileRun extends Reporting(Object) {
     }
 
     /**
-     * Splits a file into its own lines and the files its include lines name. Lines inside fenced
-     * code blocks (``` or ~~~) stay as written, so include syntax can be shown in a document.
-     * A line that looks like an include but is not well formed is an error naming the line.
+     * Splits a file into its own text and the files its includes name, each include in its place.
+     *
+     * A line holding only one of Sous's own forms (a glob, `@~namespace/...`, `@#name/...`, a
+     * `${var}`, a `?name=value` query) is checked first, and is an error when it cannot be resolved,
+     * except a glob that matches nothing, whose line is removed. Every other `@path` is found by
+     * Claude Code's rule wherever it stands in Markdown text (not in code, HTML, comments,
+     * frontmatter or link destinations), and is an include only when it names a file of a type an
+     * include takes; otherwise it stays as written. An included file's frontmatter is left out.
      */
-    private processIncludes(content: string, baseDir: string, fromFile: string, where: string): Part[] {
-        const fenceOpen = /^ {0,3}(`{3,}|~{3,})/;
-        const fenceClose = /^ {0,3}(`{3,}|~{3,})[ \t]*$/;
+    private processIncludes(content: string, baseDir: string, fromFile: string, where: string, included = false): Part[] {
+        const layout = scanMarkdown(content, { claimLine: isSousIncludeForm });
+        const tokens = findImportTokens(content, layout.runs);
+        const references = [
+            ...layout.claimed.map((line) => ({ at: line.start, line })),
+            ...tokens.map((token) => ({ at: token.at, token })),
+        ].sort((left, right) => left.at - right.at);
         const out: Part[] = [];
-        let fenceChar: string | null = null;
-        let fenceLength = 0;
+        let cursor = included ? layout.bodyStart : 0;
 
-        for (const [lineIndex, line] of content.split("\n").entries()) {
-            if (fenceChar !== null) {
-                const close = fenceClose.exec(line);
+        for (const reference of references) {
+            const lineNumber = lineNumberAt(content, reference.at);
 
-                if (close && close[1]![0] === fenceChar && close[1]!.length >= fenceLength) {
-                    fenceChar = null;
+            if ("line" in reference) {
+                const { line } = reference;
+                const parts = this.includeLine(line.word, content.slice(line.start, line.end), baseDir, fromFile, where, lineNumber);
+
+                out.push(content.slice(cursor, line.start));
+
+                // A glob that matched nothing takes its whole line with it.
+                if (parts === null) {
+                    cursor = line.next;
+                    continue;
                 }
 
-                out.push(line);
+                out.push(...parts);
+                cursor = line.end;
                 continue;
             }
 
-            const open = fenceOpen.exec(line);
+            const { token } = reference;
+            const part = this.includeReference(token.run, baseDir, fromFile, lineNumber, isAloneOnLine(content, token.at, token.end));
 
-            if (open) {
-                fenceChar = open[1]![0]!;
-                fenceLength = open[1]!.length;
-                out.push(line);
+            if (part === undefined) {
                 continue;
             }
 
-            const trimmed = line.trimEnd();
-            const match = INCLUDE_LINE_PATTERN.exec(trimmed);
-
-            if (!match) {
-                if (looksLikeIncludeLine(trimmed)) {
-                    this.recordError(
-                        `Malformed include line: ${trimmed}`,
-                        { file: fromFile, line: lineIndex + 1 },
-                        {
-                            subject: where,
-                            line: lineIndex + 1,
-                            cause:
-                                `An include is "@" followed by a path that ends in .md, optionally followed by ` +
-                                `"?name=value". The path may hold letters, digits and . _ - / : $ { } * ? [ ] , ~ #.`,
-                            hint: `To write a line that starts with "@" as text, put a word after it.`,
-                        },
-                    );
-                }
-
-                out.push(line);
-                continue;
-            }
-
-            out.push(...this.includeLine(match[1]!.trim(), trimmed, baseDir, fromFile, where, lineIndex + 1));
+            out.push(content.slice(cursor, token.at), part);
+            cursor = token.end;
         }
 
-        return out;
+        out.push(content.slice(cursor));
+
+        return out.filter((part) => part !== "");
     }
 
-    /** The parts one include line becomes. */
-    private includeLine(includePath: string, line: string, baseDir: string, fromFile: string, where: string, lineNumber: number): Part[] {
+    /**
+     * The part a plain `@path` becomes: the file it names, or `undefined` when it is not an include
+     * (Claude Code's rule rejects it, it is written in one of Sous's own forms, which count only on
+     * a line of their own, or no file of a type an include takes is there). A cycle is an error.
+     */
+    private includeReference(run: string, baseDir: string, fromFile: string, lineNumber: number, alone: boolean): Part | undefined {
+        const includePath = importPath(run);
+
+        if (includePath === undefined || isSousIncludeForm(includePath)) {
+            return undefined;
+        }
+
+        const result = this.deps.includes.resolve(includePath, { fromFile, baseDir, scope: this.unit?.scope ?? {} });
+        const file = result.files.find((found) => isRegularFile(found) && isIncludableFile(found));
+
+        if (file === undefined) {
+            if (result.candidates[0] !== undefined) {
+                this.wanted.push(result.candidates[0]);
+            }
+
+            return undefined;
+        }
+
+        if (this.includeStack.includes(file)) {
+            this.recordError(`Circular dependency detected: ${this.includeStack.join(" -> ")} -> ${file}`, { file: fromFile, line: lineNumber }, { subject: fromFile, line: lineNumber });
+
+            return "";
+        }
+
+        return this.loadFile(file, true) === null ? "" : { file, inline: !alone };
+    }
+
+    /**
+     * The parts a line holding one of Sous's own include forms becomes, or `null` when it is a glob
+     * that matched nothing, which removes the line. A glob's matches of a type an include does not
+     * take are left out.
+     */
+    private includeLine(includePath: string, line: string, baseDir: string, fromFile: string, where: string, lineNumber: number): Part[] | null {
         const unitScope = this.unit?.scope ?? {};
         const result = this.deps.includes.resolve(includePath, { fromFile, baseDir, scope: unitScope });
+        const files = result.glob ? result.files.filter((file) => isIncludableFile(file)) : result.files;
+        const asText = `To write this line as text, put it in backticks, or put a backslash before the "@".`;
 
-        if (result.files.length === 0) {
-            // A view is a list that may be empty: a glob over it that selects nothing includes nothing.
-            if (result.view && result.glob && result.hashProblem === undefined) {
-                return [];
+        if (files.length === 0) {
+            // A glob that matches nothing does nothing, unless its recipe or name was not found.
+            if (result.glob && result.namespaceProblem === undefined && result.hashProblem === undefined) {
+                return null;
             }
 
             const malformed = this.malformedReference(includePath);
 
             if (malformed !== undefined) {
-                this.recordError(`Malformed include line: ${line}`, { file: fromFile, line: lineNumber }, { subject: where, line: lineNumber, cause: malformed });
+                this.recordError(`Malformed include line: ${line}`, { file: fromFile, line: lineNumber }, { subject: where, line: lineNumber, cause: malformed, hint: asText });
 
                 return [""];
             }
@@ -525,7 +561,7 @@ export class CompileRun extends Reporting(Object) {
             this.recordError(
                 `${result.glob ? "Include matched no files" : "Include not found"}: @${includePath}`,
                 { file: fromFile, line: lineNumber },
-                { subject: where, line: lineNumber, cause: explanation === undefined ? tried : `${explanation}\n${tried}` },
+                { subject: where, line: lineNumber, cause: explanation === undefined ? tried : `${explanation}\n${tried}`, hint: asText },
             );
 
             return [""];
@@ -533,14 +569,19 @@ export class CompileRun extends Reporting(Object) {
 
         const parts: Part[] = [];
 
-        for (const file of result.files) {
+        for (const [index, file] of files.entries()) {
+            if (index > 0) {
+                parts.push("\n");
+            }
+
             if (this.includeStack.includes(file)) {
                 this.recordError(`Circular dependency detected: ${this.includeStack.join(" -> ")} -> ${file}`, { file: fromFile, line: lineNumber }, { subject: fromFile, line: lineNumber });
-                parts.push("");
                 continue;
             }
 
-            parts.push(this.loadFile(file) === null ? "" : { file });
+            if (this.loadFile(file, true) !== null) {
+                parts.push({ file, inline: false });
+            }
         }
 
         return parts;
@@ -579,7 +620,7 @@ export class CompileRun extends Reporting(Object) {
     private async expand(file: string, vars: VarScope, entryDir: string): Promise<string> {
         const node = this.nodes.get(file)!;
         const nonce = Math.random().toString(36).slice(2);
-        const markers = new Map<string, string>();
+        const markers = new Map<string, Exclude<Part, string>>();
         const chunks = node.parts.map((part) => {
             if (typeof part === "string") {
                 return part;
@@ -587,11 +628,11 @@ export class CompileRun extends Reporting(Object) {
 
             const marker = `\u0001SOUS-INCLUDE-${nonce}-${markers.size}\u0001`;
 
-            markers.set(marker, part.file);
+            markers.set(marker, part);
 
             return marker;
         });
-        let text = chunks.join("\n");
+        let text = chunks.join("");
 
         if (node.isTpl) {
             const dir = path.dirname(node.path);
@@ -604,8 +645,11 @@ export class CompileRun extends Reporting(Object) {
                 continue;
             }
 
-            const body = await this.expand(child, vars, entryDir);
-            const comment = this.sourceComments ? `<!-- from: ${path.relative(this.deps.projectRoot, child)} -->\n` : "";
+            // A file named inside a line is trimmed, so it sits in the line's place without blank lines.
+            const expanded = await this.expand(child.file, vars, entryDir);
+            const body = child.inline ? expanded.trim() : expanded;
+            const from = `<!-- from: ${path.relative(this.deps.projectRoot, child.file)} -->`;
+            const comment = this.sourceComments ? (child.inline ? from : `${from}\n`) : "";
 
             text = text.split(marker).join(comment + body);
         }
@@ -644,6 +688,32 @@ function realPathOf(file: string): string {
     } catch {
         return file;
     }
+}
+
+function isRegularFile(file: string): boolean {
+    try {
+        return fs.statSync(file).isFile();
+    } catch {
+        return false;
+    }
+}
+
+/** The line number (from 1) of an offset in a text. */
+function lineNumberAt(text: string, offset: number): number {
+    let line = 1;
+
+    for (let index = text.indexOf("\n"); index !== -1 && index < offset; index = text.indexOf("\n", index + 1)) {
+        line += 1;
+    }
+
+    return line;
+}
+
+/** Whether `[at, end)` starts its line at the first column and only whitespace follows it. */
+function isAloneOnLine(text: string, at: number, end: number): boolean {
+    const lineEnd = text.indexOf("\n", end);
+
+    return (at === 0 || text[at - 1] === "\n") && text.slice(end, lineEnd === -1 ? text.length : lineEnd).trim() === "";
 }
 
 function modeOf(file: string): number | undefined {

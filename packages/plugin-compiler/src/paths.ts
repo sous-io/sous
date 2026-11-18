@@ -1,45 +1,116 @@
 /**
- * Small path helpers the compiler shares: include lines, `.tpl.` twins, alias keys, include
- * queries and where an output goes. Pure: nothing here reads the disk.
+ * Small path helpers the compiler shares: `@` references and include lines, the file types an
+ * include takes, `.tpl.` twins, alias keys, include queries and where an output goes. Pure: nothing
+ * here reads the disk.
  */
 
 import os from "node:os";
 import path from "node:path";
 
 /**
- * An include line: `@`, a path that ends in `.md` and an optional `?name=value` query, and nothing
- * else. The first character is a sigil, a variable, a dot, a `/` (an absolute path, as the memory
- * targets plugin-memories adds write), a letter, a digit or a glob character; the rest may hold
- * the characters of a path, a `${var}`, a glob and a recipe reference's `repo:` qualifier.
+ * Claude Code's rule for an `@` reference in Markdown text: an `@` at the start of a text or after
+ * whitespace, then a run of characters that are not whitespace, where a backslash keeps the space
+ * after it (`@my\ file.md`). Group 1 is the run, before it is cut at `#`.
  */
-export const INCLUDE_LINE_PATTERN =
-    /^@([~#/a-zA-Z0-9_.${}*?[][a-zA-Z0-9_\-/.:${}*?[\],!~#%+^()]*\.md(?:\?[^?\s]*=\S*)?)$/;
+export const IMPORT_TOKEN_PATTERN = /(?:^|\s)@((?:[^\s\\]|\\ )+)/g;
 
-/** Whether a line (trailing whitespace removed) is a well-formed include line. */
-export function isIncludeLine(line: string): boolean {
-    return INCLUDE_LINE_PATTERN.test(line);
+/**
+ * The path a reference names under Claude Code's rule, or `undefined` when Claude Code would not
+ * import it. The run is cut at its first `#`, `\ ` becomes a space, and the path must start with
+ * `./`, `~/`, `/` (and not be only `/`), or a letter, a digit, `.`, `_` or `-`. Trailing
+ * punctuation stays part of the path, so `@x.md.` names a file called `x.md.`.
+ *
+ * ```ts
+ * importPath("x.md#setup");     // "x.md"
+ * importPath("my\\ file.md");   // "my file.md"
+ * importPath("#memories/x.md"); // undefined: nothing is left before the "#"
+ * importPath("~ns/recipe/x");   // undefined
+ * ```
+ */
+export function importPath(run: string): string | undefined {
+    const hash = run.indexOf("#");
+    const cut = (hash === -1 ? run : run.slice(0, hash)).replaceAll("\\ ", " ");
+
+    if (cut === "") {
+        return undefined;
+    }
+
+    if (cut.startsWith("./") || cut.startsWith("~/") || (cut.startsWith("/") && cut !== "/")) {
+        return cut;
+    }
+
+    return /^[a-zA-Z0-9._-]/.test(cut) ? cut : undefined;
 }
 
 /**
- * Whether a line that is not a well-formed include still looks like one: it starts with `@` and is
- * a single path-like word, meaning it holds a `/` or a `.md`, or starts with a sigil or a variable
- * (`@~`, `@#`, `@.`, `@$`). A line that merely starts with `@` (a mention followed by words, or a
- * lone `@name`) does not.
+ * The file extensions Claude Code imports, copied from its bundled code (version 2.1.326) and
+ * compared in lower case. A file with no extension is imported too. Claude Code's own list also
+ * holds ".R", which can never match a lower-cased extension, so it is left out here.
+ */
+export const IMPORTABLE_EXTENSIONS: ReadonlySet<string> = new Set([
+    ".md", ".txt", ".text", ".json", ".yaml", ".yml", ".toml", ".xml", ".csv", ".html", ".htm", ".css", ".scss", ".sass",
+    ".less", ".js", ".ts", ".tsx", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".py", ".pyi", ".pyw", ".rb", ".erb", ".rake",
+    ".go", ".rs", ".java", ".kt", ".kts", ".scala", ".c", ".cpp", ".cc", ".cxx", ".h", ".hpp", ".hxx", ".cs", ".swift",
+    ".sh", ".bash", ".zsh", ".fish", ".ps1", ".bat", ".cmd", ".env", ".ini", ".cfg", ".conf", ".config", ".properties",
+    ".sql", ".graphql", ".gql", ".proto", ".vue", ".svelte", ".astro", ".ejs", ".hbs", ".pug", ".jade", ".php", ".pl",
+    ".pm", ".lua", ".r", ".dart", ".ex", ".exs", ".erl", ".hrl", ".clj", ".cljs", ".cljc", ".edn", ".hs", ".lhs", ".elm",
+    ".ml", ".mli", ".f", ".f90", ".f95", ".for", ".cmake", ".make", ".makefile", ".gradle", ".sbt", ".rst", ".adoc",
+    ".asciidoc", ".org", ".tex", ".latex", ".lock", ".log", ".diff", ".patch",
+]);
+
+/**
+ * Whether a file is of a type an include takes: its extension, in lower case, is one Claude Code
+ * imports, or it has none.
  *
  * ```ts
- * looksLikeIncludeLine("@docs/notes.txt");               // true: the include has no .md
- * looksLikeIncludeLine("@alice thanks for the review");  // false
- * looksLikeIncludeLine("@alice");                        // false
+ * isIncludableFile("/p/notes.TXT"); // true
+ * isIncludableFile("/p/README");    // true
+ * isIncludableFile("/p/logo.png");  // false
  * ```
  */
-export function looksLikeIncludeLine(line: string): boolean {
-    if (!/^@\S+$/.test(line)) {
-        return false;
-    }
+export function isIncludableFile(file: string): boolean {
+    const extension = path.extname(file).toLowerCase();
 
-    const word = line.slice(1);
+    return extension === "" || IMPORTABLE_EXTENSIONS.has(extension);
+}
 
-    return /[/]/.test(word) || /\.md\b/.test(word) || /^[~#.$]/.test(word);
+/** The characters a glob is made of (the set `host.globs` reads as glob syntax). */
+const GLOB_CHARS = /[*?[\]{}]/;
+
+/**
+ * Whether an include path is one of Sous's own forms, which Sous takes only from a line that holds
+ * nothing else: a recipe reference (`~namespace/...`), a `#name`, a `${var}`, a glob, or a path
+ * with a `?name=value` query. Any other path is a plain path, read by Claude Code's rule.
+ *
+ * ```ts
+ * isSousIncludeForm("~workflow/task-files/x.md"); // true
+ * isSousIncludeForm("#memories/a/b.md");          // true
+ * isSousIncludeForm("x.md?mood=calm");            // true
+ * isSousIncludeForm("~/notes.md");                // false: the home directory, a plain path
+ * isSousIncludeForm("docs/guide.md");             // false
+ * ```
+ */
+export function isSousIncludeForm(word: string): boolean {
+    const { path: bare, query } = splitIncludeQuery(word);
+
+    return /^~[^/]/.test(word) || word.startsWith("#") || word.includes("${") || GLOB_CHARS.test(bare) || query !== "";
+}
+
+/**
+ * Whether a line, alone, is an include Sous tries: `@` at the first column and one word, which is
+ * one of Sous's own forms or a path Claude Code's rule accepts. Whether the file exists is not
+ * checked; a plain path that names no file is left as text.
+ *
+ * ```ts
+ * isIncludeLine("@docs/notes.txt"); // true
+ * isIncludeLine("@alice");          // true: included only when a file "alice" exists
+ * isIncludeLine("@a.md extra");     // false: a reference inside a line, not an include line
+ * ```
+ */
+export function isIncludeLine(line: string): boolean {
+    const match = /^@(\S+)$/.exec(line.trimEnd());
+
+    return match !== null && (isSousIncludeForm(match[1]!) || importPath(match[1]!) !== undefined);
 }
 
 /** The marker that makes a file a template, always right before the final extension. */

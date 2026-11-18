@@ -338,21 +338,26 @@ describe("compiler.compile", () => {
         expect(output).toContain("REAL CONTENT");
     });
 
-    /** A line that looks like an include but is not well formed is an error naming the line. */
-    it("should report a malformed include line with its file and line", async () => {
+    /**
+     * A line holding one of Sous's own forms that cannot be resolved is an error naming the line,
+     * with a hint on writing it as text. A plain path that names no file is text, with no error.
+     */
+    it("should report a broken include line with its file and line", async () => {
         project = makeProject();
-        const entry = project.write("entry.md", "# Doc\n@docs/notes.txt\n@alice thanks\n");
+        const entry = project.write("entry.md", "# Doc\n@#nope/notes.md\n@docs/notes.txt\n@alice thanks\n");
 
         const { result, compiler } = await compileOnce(project, single(entry, project.at("out.md")));
 
         expect(result.ok).toBe(false);
-        expect(errorsOf(result)).toContain("Malformed include line: @docs/notes.txt");
+        expect(result.problems).toHaveLength(1);
+        expect(errorsOf(result)).toContain("Include not found: @#nope/notes.md");
         expect(result.problems[0]).toMatchObject({ level: "error", file: entry, line: 2 });
         expect(compiler.reporter.messages.find((entry) => entry.style === "problem")).toMatchObject({
             level: "error",
-            message: expect.stringContaining("Malformed include line: @docs/notes.txt"),
-            details: { subject: entry, line: 2 },
+            message: expect.stringContaining("Include not found: @#nope/notes.md"),
+            details: { subject: entry, line: 2, hint: 'To write this line as text, put it in backticks, or put a backslash before the "@".' },
         });
+        expect(errorsOf(result)).not.toContain("@docs/notes.txt");
         expect(errorsOf(result)).not.toContain("@alice");
     });
 
@@ -368,7 +373,7 @@ describe("compiler.compile", () => {
             expect((await compileOnce(project, config)).result.ok).toBe(true);
             const before = loadState(statePath, project.root);
 
-            project.write("entry.md", "Before\n@missing.md\nAfter\n");
+            project.write("entry.md", "Before\n@#project/missing.md\nAfter\n");
             const { result, compiler } = await compileOnce(project, config);
 
             expect(result.ok).toBe(false);
@@ -384,7 +389,7 @@ describe("compiler.compile", () => {
         it("should compile every target and list every error", async () => {
             project = makeProject();
             const good = project.write("good.md", "GOOD\n");
-            const bad = project.write("bad.md", "@missing.md\n");
+            const bad = project.write("bad.md", "@#project/missing.md\n");
             const loop = project.write("loop.md", "@loop.md\n");
             const out = (name: string) => project.at("out", name);
 
@@ -400,7 +405,7 @@ describe("compiler.compile", () => {
             expect(fs.readFileSync(out("good.md"), "utf8")).toBe("GOOD\n");
             expect(fs.existsSync(out("bad.md"))).toBe(false);
             expect(fs.existsSync(out("loop.md"))).toBe(false);
-            expect(errorsOf(result)).toContain("Include not found: @missing.md");
+            expect(errorsOf(result)).toContain("Include not found: @#project/missing.md");
             expect(errorsOf(result)).toContain("Circular dependency detected");
             expect(compiler.output()).toContain("Done with 2 error(s).");
             expect(result.problems.map((problem) => problem.target)).toEqual(["0", "1"]);
