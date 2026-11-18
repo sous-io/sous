@@ -156,6 +156,62 @@ describe("sous doctor", () => {
     });
 });
 
+describe("a fix that makes the config load again", () => {
+    /**
+     * A migration that repairs the config clears the config check's problem in the same run: the
+     * config is rebuilt after the fix, the config check is looked at again, and the checks skipped
+     * because the config did not load run now.
+     *
+     * sous doctor --yes   (the config fails until the "repair" check's fix runs)
+     * // -> The config loads: fixed (Fixed by: The repair is fine); "No problem remains."; exit code 0
+     */
+    it("should look at the config again and end clean", async () => {
+        const state = { fixed: false };
+        const reporter = new BufferedReporter();
+        const engine = createEngine({
+            builtIns: [
+                doctorPlugin,
+                definePlugin({
+                    name: "test-checks",
+                    register: (sous) => {
+                        sous.config.contribute({
+                            id: "breaks-until-repaired",
+                            contribute: () => {
+                                if (!state.fixed) {
+                                    throw new Error("an option a newer sous removed");
+                                }
+                            },
+                        });
+                        sous.entities.add("doctor-check", { ...brokenUntilFixed("repair", 400, state), confirm: false });
+                        sous.entities.add("doctor-check", { id: "needs-config", order: 300, description: "Needs the config", check: (_ctx, run) => (run.configFailed ? { status: "skipped", summary: "Skipped: the config did not load." } : { status: "ok" }) });
+                    },
+                }),
+            ],
+            app: { name: "sous", version: "1.2.0" },
+            project: { root: "/project", sousDir: "/project/.sous", configPath: "/project/.sous/sous.config.json", confDir: "/project/.sous/conf.d" },
+            reporter,
+        });
+
+        await engine.buildConfig().catch(() => undefined);
+        expect(engine.configError).toBeDefined();
+
+        const outputs = await engine.handle.submit({ intent: "doctor", input: { only: ["config", "needs-config", "repair"], yes: true } }, { reporter });
+        const result = outputs.toPlain() as unknown as DoctorResult;
+
+        expect(result.checks.map((check) => [check.id, check.problem])).toEqual([
+            ["config", false],
+            ["needs-config", false],
+            ["repair", false],
+        ]);
+        expect(result.checks[0]).toMatchObject({ found: { status: "problem" }, after: { status: "ok" }, resolvedBy: "The repair is fine" });
+        expect(result.checks[1]?.found).toEqual({ status: "ok" });
+        expect(result.problems).toBe(0);
+        expect(outputs.toText()).toContain("Fixed by: The repair is fine");
+        expect(outputs.toText()).toContain("No problem remains.");
+        expect(outputs.exitCode).toBeUndefined();
+    });
+});
+
 describe("the built-in checks", () => {
     /** Outside a plugin that provides them, the built-in checks skip themselves, saying why. */
     it("should skip the lockfile, variables and outputs checks when their owners are not loaded", async () => {

@@ -131,8 +131,13 @@ export interface DoctorCheckReport {
         | { readonly result: "applied"; readonly summary: string; readonly details?: readonly string[] }
         | { readonly result: "declined" | "dry-run" | "cannot-ask" }
         | { readonly result: "failed"; readonly error: string };
-    /** What the check found after the fix, when one ran. */
+    /** What the check found after the fix, when one ran, or after another check's fix made the config load. */
     readonly after?: DoctorCheckResult;
+    /**
+     * The check whose fix put this one's problem right, by its description, when that was another
+     * check: a migration that made the config load again clears the `config` check's problem.
+     */
+    readonly resolvedBy?: string;
     /** Whether a problem remains. */
     readonly problem: boolean;
 }

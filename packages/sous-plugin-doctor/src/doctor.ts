@@ -92,9 +92,58 @@ async function examine(check: DoctorCheckEntity, ctx: Context, run: DoctorRun): 
     }
 }
 
+/** Rebuilds the config after a fix, and says whether it loads now. */
+async function configLoadsNow(ctx: Context): Promise<boolean> {
+    try {
+        await ctx.refreshConfig();
+    } catch {
+        // A config that still does not load is reported by the checks as it was.
+    }
+
+    return ctx.engine.configError === undefined;
+}
+
+/**
+ * The reports of the checks that ran before a fix made the config load again, brought up to date:
+ * the `config` check is looked at again (its problem is gone, put right by `resolvedBy`), and a
+ * check that was skipped because the config did not load is examined now, fix and all.
+ *
+ * ```text
+ * The config loads ............ fixed   (Fixed by: Sous's migrations have run)
+ * The lockfile agrees ......... ok      (was: Skipped: the config did not load.)
+ * ```
+ */
+async function recheckAfterConfigLoads(
+    reports: readonly DoctorCheckReport[],
+    checks: readonly DoctorCheckEntity[],
+    resolvedBy: string,
+    ctx: Context,
+    run: DoctorRun,
+): Promise<DoctorCheckReport[]> {
+    const updated: DoctorCheckReport[] = [];
+
+    for (const report of reports) {
+        const check = checks.find((entry) => entry.id === report.id);
+
+        if (check === undefined || (!report.problem && report.found.status !== "skipped")) {
+            updated.push(report);
+        } else if (report.fix === undefined && report.found.status === "problem") {
+            const after = await look(check, ctx, run);
+
+            updated.push({ ...report, after, problem: after.status === "problem", ...(after.status === "ok" ? { resolvedBy } : {}) });
+        } else if (report.found.status === "skipped") {
+            updated.push(await examine(check, ctx, run));
+        } else {
+            updated.push(report);
+        }
+    }
+
+    return updated;
+}
+
 /** Runs the intent. */
 export async function handle(input: DoctorInput, ctx: Context): Promise<IntentOutputs<DoctorResult>> {
-    const run: DoctorRun = {
+    let run: DoctorRun = {
         dryRun: input.dryRun === true,
         yes: input.yes === true,
         answers: input.answer ?? [],
@@ -102,10 +151,19 @@ export async function handle(input: DoctorInput, ctx: Context): Promise<IntentOu
     };
     const only = input.only === undefined || input.only.length === 0 ? undefined : new Set(input.only);
     const checks = orderChecks(ctx.entities.list("doctor-check")).filter((check) => only === undefined || only.has(check.id));
-    const reports: DoctorCheckReport[] = [];
+    let reports: DoctorCheckReport[] = [];
 
     for (const check of checks) {
-        reports.push(await examine(check, ctx, run));
+        const report = await examine(check, ctx, run);
+
+        reports.push(report);
+
+        // A fix (a migration) may be what makes the config load again: the checks before it, and
+        // every one after it, then see the config as it is now, so a run whose fix worked ends clean.
+        if (run.configFailed && report.fix?.result === "applied" && (await configLoadsNow(ctx))) {
+            run = { ...run, configFailed: false };
+            reports = [...(await recheckAfterConfigLoads(reports.slice(0, -1), checks, report.description, ctx, run)), report];
+        }
     }
 
     const result: DoctorResult = { checks: reports, problems: reports.filter((report) => report.problem).length, dryRun: run.dryRun };
@@ -160,13 +218,19 @@ function nodeOf(report: DoctorCheckReport): TreeNode {
             break;
     }
 
+    if (report.resolvedBy !== undefined) {
+        children.push({ label: `Fixed by: ${report.resolvedBy}` });
+    }
+
     const hint = "hint" in final ? final.hint : undefined;
 
     if (hint !== undefined && final.status !== "ok") {
         children.push({ label: hint });
     }
 
-    return { label: report.description, detail: report.fix?.result === "applied" && final.status === "ok" ? "fixed" : statusOf(final), children };
+    const fixed = (report.fix?.result === "applied" || report.resolvedBy !== undefined) && final.status === "ok";
+
+    return { label: report.description, detail: fixed ? "fixed" : statusOf(final), children };
 }
 
 /** The outputs of `doctor`: every check and what became of it, then one sentence. */

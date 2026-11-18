@@ -236,3 +236,12 @@ Luke's ruling that `_if` is removed and existing configs are converted by a migr
 The three checks at 500, 600 and 700 are built, each by its owner: `plugin-init` (`git-hooks`, see
 S14), `sous-plugin-handlers` (`check-handlers`, see S13) and `sous-plugin-editor` (`assertions`,
 see S9). Each owner depends on `sous-plugin-doctor`.
+
+### 2026-11-18: A fix that makes the config load is seen in the same run
+
+When the config did not load and a fix then runs (in practice the migrations check's), `doctor`
+rebuilds the config (`ctx.refreshConfig()`). If it loads now, the `config` check is looked at again
+and shows as fixed, naming the check whose fix did it (`resolvedBy` in the report), and every
+earlier check that was skipped because the config did not load is examined, fix and all; the checks
+after it see the loaded config. Before, the run said "1 problem remains" although its own migration
+had repaired the config. The agent's change, in the finishing pass; not yet reviewed by Luke.

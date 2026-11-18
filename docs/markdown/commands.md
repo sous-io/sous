@@ -412,7 +412,8 @@ problem it finds, asking before each fix. Its checks, in order:
    their ranges still allow).
 3. Required recipe variables have answers (fix: ask them).
 4. Every migration for this version of sous has run (fix: run them). This check runs even when the config does
-   not load, since a migration may be what makes it load again (an option a newer sous removed).
+   not load, since a migration may be what makes it load again (an option a newer sous removed). When it does,
+   the config is read again in the same run: the first check shows as fixed, and the checks it had skipped run.
 5. The git hooks are turned on, when the project was set up with them (fix: `sous init hooks --install`). Sous
    reads what `sous init hooks` committed: hook files in `.husky/` holding its marked block. They are on when
    git's hooks folder is Husky's `.husky/_`, which the package manager's install sets up; a fresh clone whose
