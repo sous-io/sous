@@ -89,4 +89,10 @@ export const npmManager: NpmPackageManager = {
     globalInstallCommand(specs): PlannedCommand {
         return { command: "npm", args: ["i", "-g", ...specs] };
     },
+
+    installCommand(options): PlannedCommand {
+        return { command: "npm", args: ["install"], cwd: options.cwd };
+    },
+
+    afterInstallScript: "prepare",
 };

@@ -88,4 +88,10 @@ export const pnpmManager: PnpmPackageManager = {
     globalInstallCommand(specs): PlannedCommand {
         return { command: "pnpm", args: ["add", "-g", ...specs] };
     },
+
+    installCommand(options): PlannedCommand {
+        return { command: "pnpm", args: ["install"], cwd: options.cwd };
+    },
+
+    afterInstallScript: "prepare",
 };

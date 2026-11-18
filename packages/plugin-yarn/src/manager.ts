@@ -120,4 +120,11 @@ export const yarnManager: YarnPackageManager = {
     globalInstallCommand(specs): PlannedCommand {
         return { command: "yarn", args: ["global", "add", ...specs] };
     },
+
+    installCommand(options): PlannedCommand {
+        return { command: "yarn", args: ["install"], cwd: options.cwd };
+    },
+
+    // Yarn 2 and later do not run `prepare` on install.
+    afterInstallScript: "postinstall",
 };

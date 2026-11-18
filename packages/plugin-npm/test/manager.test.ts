@@ -117,6 +117,12 @@ describe("npm commands", () => {
         expect(npmManager.addCommand([spec], { section: "dependencies", workspaceRoot: true, cwd: "/p" }).args).toEqual(["i", "-E", spec]);
         expect(npmManager.globalInstallCommand?.([spec])).toEqual({ command: "npm", args: ["i", "-g", spec] });
     });
+
+    /** A project's install is `npm install`, and the script npm runs after it is `prepare`. */
+    it("should plan the project's install and name the script run after it", () => {
+        expect(npmManager.installCommand?.({ cwd: "/p" })).toEqual({ command: "npm", args: ["install"], cwd: "/p" });
+        expect(npmManager.afterInstallScript).toBe("prepare");
+    });
 });
 
 describe("npm plugin", () => {
