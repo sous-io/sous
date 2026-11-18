@@ -29,6 +29,7 @@
   - [Config expressions](architecture/specifications/S5-config-expressions.md)
   - [Which plugin does what](architecture/specifications/S6-concerns-and-owners.md)
   - [Everything sous can do](architecture/specifications/S7-capabilities.md)
+  - [One config build per harness](architecture/specifications/S8-per-harness-config-builds.md)
 - **ADRs**
   - [0001: Repositories](adrs/0001-repositories.md)
   - [0002: Recipe answers in the template scope](adrs/0002-recipe-answers-in-templates.md)
@@ -54,3 +55,4 @@
   - [0022: Intents return outputs](adrs/0022-intents-return-outputs.md)
   - [0023: The project's lockfile is the only lock](adrs/0023-the-project-lockfile-is-the-only-lock.md)
   - [0024: `sous init` imports a project's agent files](adrs/0024-init-imports-agent-files.md)
+  - [0024: One config build per harness](adrs/0024-one-config-build-per-harness.md)

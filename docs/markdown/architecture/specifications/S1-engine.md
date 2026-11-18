@@ -863,7 +863,9 @@ Timing is a core mechanism (L5, everything timed).
 - Budgets can be changed under the `budgets` config key. A budget set to `false` turns its report
   off.
 - Reports go to stderr, so they never mix with `--json` output.
-- `--timings` on any command prints every timing.
+- `--timings` on any command prints every timing. The config build's stages are
+  `config.build` (everything), `config.harness:<id>` (one harness's build, S8), `config.stage`,
+  `config.pass` (named `<id>/<stage>.<pass>` inside a harness's build) and `config.merge`.
 - Timing must cost almost nothing when nothing is over budget.
 
 ```text
@@ -921,6 +923,14 @@ project loads no other plugin:
 None. (The name `plugin-recipes` is an agent decision the user may overrule.)
 
 ## Changes
+
+### 2026-11-18: One config build per harness
+
+The engine builds the config once with no harness and once per registered harness, and merges the
+builds (S8). `BuiltConfig` gains `harness`, `harnesses` and `forHarness(id)`; core defines the
+entity kind `harness-list`; timing gains the categories `config.harness` (budget 200 ms) and
+`config.merge` (budget 20 ms). From Luke's accepted design: "I accept your recommendations"
+(2026-11-16).
 
 ### 2026-11-04: Only commands that read recipe files download them
 

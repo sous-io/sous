@@ -107,6 +107,9 @@ loading the config, and the result takes its place.
 
 - `host.platform`: Node's `process.platform` (`"win32"`, `"darwin"`, `"linux"` and the others Node
   lists).
+- `harness.id`: the harness the config build is for (`"codex"`), or the empty string `""` in the
+  build with no harness, never `undefined` (S8, one config build per harness). `harness` is a
+  built-in name like `host` and `env`, never looked up as a variable.
 - `env.<NAME>`: environment variables, after the env files load.
 - Variables, by their bare name, as a template reads them (`machineRole == 'laptop'`). Decided: an
   expression sees the `_vars` of every level that contains it (see "Variable scopes" in S2, config building).
@@ -568,4 +571,10 @@ None.
 
 ## Changes
 
-None yet.
+### 2026-11-18: Expressions read `harness.id`
+
+"What an Expression Can Read" gains `harness.id`, from Luke's accepted design for one config build
+per harness (S8): "I accept your recommendations" (2026-11-16). The evaluator keeps each build's
+records apart, since the builds run side by side; `evaluations(file, harness)` takes the build
+(default `""`), and an expression still unknown once the config settles names the harness build it
+was in.
