@@ -75,10 +75,12 @@ export function resolveBlock(
         progressed = false;
 
         for (const key of waiting) {
-            const substituted = substitute(entries.get(key)!, scope);
+            const written = entries.get(key)!;
 
-            if (references(substituted).length === 0) {
-                scope[key] = substituted;
+            // Resolved once every name it refers to is known. Read from the text as written, so an
+            // escaped `$${name}` (the literal `${name}` once substituted) never waits.
+            if (references(written).every((name) => Object.hasOwn(scope, name))) {
+                scope[key] = substitute(written, scope);
                 waiting.delete(key);
                 resolved.push(key);
                 progressed = true;
@@ -131,7 +133,7 @@ function unresolvedBlockError(
     const needs = new Map<string, string[]>();
 
     for (const key of waiting) {
-        needs.set(key, references(substitute(entries.get(key)!, scope)));
+        needs.set(key, references(entries.get(key)!).filter((name) => !Object.hasOwn(scope, name)));
     }
 
     const edges = new Map<string, string[]>();

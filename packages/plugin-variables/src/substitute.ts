@@ -7,8 +7,11 @@ import path from "node:path";
 import { ConfigError, type JsonValue } from "@sous-io/plugin-api";
 import type { VarScope } from "./types.js";
 
-/** One `${name}` reference. The name is everything up to the closing brace. */
-const REFERENCE = /\$\{([^}]+)\}/g;
+/**
+ * One `${name}` reference, or an escaped one: `$${name}` is the literal text `${name}`, never
+ * substituted. The name is everything up to the closing brace.
+ */
+const REFERENCE = /(\$?)\$\{([^}]+)\}/g;
 
 /**
  * Replaces every `${name}` the scope knows. Unknown references stay as written.
@@ -19,12 +22,22 @@ const REFERENCE = /\$\{([^}]+)\}/g;
  * ```
  */
 export function substitute(text: string, scope: VarScope): string {
-    return text.replace(REFERENCE, (match, name: string) => (Object.hasOwn(scope, name) ? scope[name]! : match));
+    return text.replace(REFERENCE, (match, escape: string, name: string) => {
+        if (escape !== "") {
+            // `$${name}` is the escape: the literal text `${name}`.
+            return match.slice(1);
+        }
+
+        return Object.hasOwn(scope, name) ? scope[name]! : match;
+    });
 }
 
-/** The names of every `${name}` in text, each once, in the order they first appear. */
+/**
+ * The names of every `${name}` in text, each once, in the order they first appear. An escaped
+ * `$${name}` is not a reference.
+ */
 export function references(text: string): string[] {
-    return [...new Set([...text.matchAll(REFERENCE)].map((match) => match[1]!))];
+    return [...new Set([...text.matchAll(REFERENCE)].filter((match) => match[1] === "").map((match) => match[2]!))];
 }
 
 /** The names in text that a scope does not resolve. With no scope, every name. */
@@ -37,8 +50,9 @@ export function unresolved(text: string, scope: VarScope = {}): string[] {
  * for every value sous acts on, so a typo fails loudly instead of leaving a literal `${var}` path.
  */
 export function substituteStrict(text: string, scope: VarScope, context: string): string {
+    // Read from the text as written: an escaped `$${name}` becomes `${name}` in the result.
+    const missing = unresolved(text, scope);
     const result = substitute(text, scope);
-    const missing = references(result);
 
     if (missing.length === 0) {
         return result;
