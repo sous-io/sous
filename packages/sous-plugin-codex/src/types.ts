@@ -24,22 +24,8 @@ export type CodexHarness = HarnessEntity & { id: CodexHarnessId };
 /** The skill target: `directory` is `.agents/skills`. */
 export type CodexSkillTarget = SkillTargetEntity & { id: CodexTargetId; harness: CodexHarnessId };
 
-/**
- * The fields of a `memory-target` that say where its file goes and what comes before the memories.
- * They are being added to `MemoryTargetEntity` itself in `@sous-io/plugin-memories` by a branch
- * built at the same time as this plugin; until that lands, this plugin declares them here.
- */
-export interface MemoryTargetOutputFields {
-    /** Where the file is written, as a config path: `${projectRoot}/AGENTS.override.md`. */
-    outputPath: string;
-    /** A file whose content is placed before the memories; skipped silently when it is missing. */
-    prependWith?: string;
-    /** A file at `outputPath` that Sous did not write is backed up, with a warning, before it is overwritten. */
-    backupExisting?: boolean;
-}
-
 /** The memory target, as this plugin adds it. */
-export type CodexMemoryTarget = MemoryTargetEntity & MemoryTargetOutputFields & { id: CodexTargetId; harness: CodexHarnessId };
+export type CodexMemoryTarget = MemoryTargetEntity & { id: CodexTargetId; harness: CodexHarnessId };
 
 /** The user's settings for the harness, under `tools.codex` (read when `launch` runs). */
 export type CodexToolSettings = ToolSettings;

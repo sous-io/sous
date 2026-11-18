@@ -10,10 +10,9 @@
 
 import path from "node:path";
 import type { ConfigBuilder, ContributorDefinition } from "@sous-io/plugin-api";
-import type { MemoryTargetEntity } from "@sous-io/plugin-memories/types";
 import type { SkillTargetEntity } from "@sous-io/plugin-skills/types";
 import { codexHarness, HARNESS_ID } from "./harness.js";
-import type { CodexPluginOptions, MemoryTargetOutputFields } from "./types.js";
+import type { CodexMemoryTarget, CodexPluginOptions } from "./types.js";
 
 /** The contributor's id. */
 export const TARGETS_CONTRIBUTOR = "codex/targets";
@@ -128,23 +127,13 @@ export function contributeTargets(config: ConfigBuilder): void {
     }
 
     const outputPath = configPath(options.memoriesOutputPath ?? DEFAULT_MEMORIES_OUTPUT_PATH);
-    const fields: MemoryTargetOutputFields = {
+    const memories: CodexMemoryTarget = {
+        id: TARGET_ID,
+        harness: HARNESS_ID,
         outputPath,
         prependWith: configPath(options.prependMemoriesWith ?? DEFAULT_PREPEND_MEMORIES_WITH),
         backupExisting: true,
     };
-
-    // THE ONE CAST. `outputPath`, `prependWith` and `backupExisting` are being added to
-    // `MemoryTargetEntity` by another branch built at the same time (build/claude-code). Until it
-    // lands, today's type lacks them; once it lands, this cast is a no-op and can be removed.
-    // `fileName` is kept for today's schema, which requires it.
-    const memories = {
-        id: TARGET_ID,
-        harness: HARNESS_ID,
-        fileName: path.posix.basename(outputPath),
-        readIn: "project-root",
-        ...fields,
-    } as MemoryTargetEntity & MemoryTargetOutputFields;
 
     config.addEntity("memory-target", memories);
 

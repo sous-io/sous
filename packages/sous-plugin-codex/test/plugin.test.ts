@@ -66,7 +66,7 @@ const stubs: PluginDefinition[] = [
     definePlugin({
         name: "@sous-io/plugin-memories",
         version: packageJson.version,
-        register: (sous) => sous.entities.define("memory-target", jsonSchema({ type: "object", required: ["id", "fileName"] })),
+        register: (sous) => sous.entities.define("memory-target", jsonSchema({ type: "object", required: ["id", "outputPath"] })),
     }),
 ];
 
@@ -130,8 +130,6 @@ describe("entities", () => {
         expect(built.entities.get("memory-target", "codex")).toEqual({
             id: "codex",
             harness: "codex",
-            fileName: "AGENTS.override.md",
-            readIn: "project-root",
             outputPath: "${projectRoot}/AGENTS.override.md",
             prependWith: "${projectRoot}/AGENTS.md",
             backupExisting: true,
@@ -151,7 +149,6 @@ describe("entities", () => {
         );
 
         expect(built.entities.get("memory-target", "codex")).toMatchObject({
-            fileName: "CODEX.md",
             outputPath: "${projectRoot}/docs/CODEX.md",
             prependWith: "${projectRoot}/docs/AGENTS.md",
         });
