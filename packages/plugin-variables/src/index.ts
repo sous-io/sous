@@ -35,7 +35,16 @@ export const variablesPlugin: PluginDefinition = definePlugin({
         // them) need scopes while the config is built, and only singletons can be used then.
         sous.services.add(
             "variables.resolver",
-            (_config, ctx) => new Resolver({ services: sous.services, engine: sous.engine, env: ctx.env, project: ctx.project }),
+            (_config, ctx) =>
+                new Resolver({
+                    services: sous.services,
+                    engine: sous.engine,
+                    env: ctx.env,
+                    // Read when used: `sous init` creates the project after this singleton is made.
+                    get project() {
+                        return ctx.project;
+                    },
+                }),
             { lifetime: "singleton" },
         );
         sous.services.add("variables.names", () => variablesNames, { lifetime: "singleton" });

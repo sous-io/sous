@@ -75,6 +75,41 @@ describe("ctx.refreshConfig()", () => {
         expect(builds).toBe(2);
     });
 
+    /**
+     * A singleton made while the config was built, before any project existed, should see the
+     * project a refresh finds (`sous init` writes the project, then builds in the same run).
+     *
+     * singleton made with no project -> refreshConfig({ locateProjectFrom }) -> ctx.project is the new project
+     */
+    it("should give a singleton made before the project existed the project a refresh finds", async () => {
+        const project = { root: "/work/new", sousDir: "/work/new/.sous", configPath: undefined, confDir: "/work/new/.sous/conf.d" };
+        const { engine } = makeEngine(
+            [
+                plugin("p", (sous) => {
+                    sous.services.add("p.where", (_config, ctx) => ({ root: () => ctx.project?.root }), { lifetime: "singleton" });
+                    sous.config.contribute({
+                        id: "early",
+                        contribute: () => void (sous.services.get("p.where" as never) as { root: () => string | undefined }).root(),
+                    });
+                    sous.intents.add({
+                        intent: "p.init",
+                        changesConfig: true,
+                        async handle(_input, ctx) {
+                            await ctx.refreshConfig({ locateProjectFrom: "/work/new" });
+
+                            return valued((ctx.services.get("p.where" as never) as { root: () => string | undefined }).root() ?? "none");
+                        },
+                    });
+                }),
+            ],
+            { locateProject: (directory) => (directory === "/work/new" ? project : undefined), cwd: "/work" },
+        );
+
+        await engine.buildConfig();
+
+        expect((await engine.submit({ intent: "p.init" })).toPlain()).toEqual({ value: "/work/new" });
+    });
+
     /** Only a series chain may refresh: a parallel chain gets a SousError. */
     it("should refuse a refresh in a parallel chain", async () => {
         const { engine } = makeEngine([
