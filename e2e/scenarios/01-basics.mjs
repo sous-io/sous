@@ -111,7 +111,8 @@ export default {
     await t.step("a build that writes an output shows its size as (~N tokens)", () => {
       t.sh(`rm -f ${SKILL}`);
       const r = expectExit(t.sous(["build"]));
-      assert.match(r.stderr + r.stdout, /✓ \S*about-sous\/SKILL\.md \(~\d+ tokens\)/);
+      // The count is grouped by thousands: "(~1,827 tokens)".
+      assert.match(r.stderr + r.stdout, /✓ \S*about-sous\/SKILL\.md \(~[\d,]+ tokens\)/);
     });
 
     await t.step("build --json prints exactly one JSON object on stdout", () => {
@@ -217,7 +218,9 @@ export default {
 
     await t.step("without a package.json, the post-checkout hook builds a new worktree", () => {
       const dir = `${t.root}/plain-proj`;
-      t.sh(`mkdir -p ${dir} && cd ${dir} && git init -q && git config user.email e2e@example.test && git config user.name e2e`);
+      // The image points every repository's hooks at the read-only /e2e/hooks (the push allowlist);
+      // this project never pushes, so it gets git's own hooks folder back for sous to write in.
+      t.sh(`mkdir -p ${dir} && cd ${dir} && git init -q && git config user.email e2e@example.test && git config user.name e2e && git config core.hooksPath .git/hooks`);
       expectExit(t.sous(["init", "--yes"], { cwd: dir }));
       assert.ok(t.exists(".git/hooks/post-checkout", dir), "the hook was not written");
       t.sh("git add -A && git commit -qm init && git worktree add -q ../plain-proj-wt", { cwd: dir });
