@@ -34,6 +34,25 @@ const TRUE_WORDS = new Set(["true", "yes", "y", "on", "1"]);
 /** The words accepted as a false answer for a boolean variable. */
 const FALSE_WORDS = new Set(["false", "no", "n", "off", "0"]);
 
+/**
+ * A boolean answer in its one stored form, `"true"` or `"false"`, from any word a boolean accepts
+ * (`yes`, `off`, `1`, ...); `undefined` for text that is not a boolean word.
+ *
+ * ```ts
+ * canonicalBoolean("No");  // -> "false"
+ * canonicalBoolean(true);  // -> "true"
+ * ```
+ */
+export function canonicalBoolean(value: string | boolean): "true" | "false" | undefined {
+    if (typeof value === "boolean") {
+        return value ? "true" : "false";
+    }
+
+    const word = value.trim().toLowerCase();
+
+    return TRUE_WORDS.has(word) ? "true" : FALSE_WORDS.has(word) ? "false" : undefined;
+}
+
 /** Every pattern an answer must match: the combined list, else the one `validate.pattern`. */
 export function patternsOf(definition: AnswerDefinition): readonly string[] {
     return definition.patterns ?? (definition.validate?.pattern === undefined ? [] : [definition.validate.pattern]);

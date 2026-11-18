@@ -19,6 +19,7 @@ import type {
 import type { ConfigLookup, VariableSourceEntity, VariablesResolver, VarScope } from "@sous-io/plugin-variables/types";
 import { ExpressionError, formatPath } from "./errors.js";
 import { hasExpressions, isExpressionObject, isPlainObject } from "./keys.js";
+import { liquidValues } from "@sous-io/plugin-liquid";
 import { LIQUID_LANGUAGE, renderLiquidTemplate } from "./liquid-language.js";
 import { parseExpressionObject, type ExpressionSource, type Plan, type WrittenValue } from "./parse.js";
 import type {
@@ -340,7 +341,22 @@ class LayerRun {
             return { unknown: { variables: missing, filters: [] } };
         }
 
-        return language.evaluate(expression.source, { ...this.builtIns(), vars }, ctx);
+        return language.evaluate(expression.source, { ...this.builtIns(), vars: this.typed(vars) }, ctx);
+    }
+
+    /**
+     * A scope with the boolean variables (a recipe variable of type boolean) as `true` and
+     * `false`, so a condition on an answer of `false` is false (ADR 0038). The declaring
+     * `variable-source` entities are read through the builder.
+     */
+    private typed(vars: VarScope): VarScope {
+        const names = new Set(
+            this.config
+                .entities("variable-source")
+                .flatMap((source) => source.booleans?.({ project: this.deps.project, env: this.config.env, config: this.lookup }) ?? []),
+        );
+
+        return names.size === 0 ? vars : liquidValues(vars, names);
     }
 
     /** `host`, `env` and `harness`, which every expression and every `.tpl.` file read with `$file` sees. */
@@ -406,7 +422,7 @@ class LayerRun {
 
         try {
             if (name.includes(".tpl.")) {
-                text = renderLiquidTemplate(text, { ...(vars ?? this.scope(path, levelVars)), ...this.builtIns() }, {
+                text = renderLiquidTemplate(text, { ...this.typed(vars ?? this.scope(path, levelVars)), ...this.builtIns() }, {
                     project: this.deps.project,
                     file: this.file,
                     path: formatPath(plan.path),

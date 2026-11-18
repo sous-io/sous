@@ -192,6 +192,23 @@ describe("harness.id", () => {
     });
 });
 
+describe("boolean variables (gh-161, ADR 0038)", () => {
+    /**
+     * A recipe variable of type boolean answered false is the text "false"; a condition on it
+     * takes the false branch, because the variable source names it a boolean.
+     *
+     * exclude: [{ $if: { expr: "jiraEnabled", then: "skills/jira/**" } }]  // jiraEnabled "false" -> dropped
+     */
+    it("should read a boolean answered false as false", () => {
+        const evaluator = createEvaluator({ services: services(), entities: noEntities, project: undefined, platform: "linux" });
+        const source = { id: "recipe-answers", description: "recipe answers", variables: () => ({}), booleans: () => ["jiraEnabled"] };
+        const { builder } = fakeBuilder({ _vars: { jiraEnabled: "false", other: "false" } }, { "variable-source": [source] });
+        const data = { a: { $if: "jiraEnabled" }, b: { $if: "other" }, c: { $if: { expr: "jiraEnabled != true", then: "off" } } } as unknown as JsonValue;
+
+        expect(evaluator.evaluateLayer(data, { file: "m", config: builder }).value).toEqual({ b: true, c: "off" });
+    });
+});
+
 describe("escapeVariables()", () => {
     /** Keys stay as they are; every string's `${` becomes `$${`. */
     it("should escape strings at any depth", () => {

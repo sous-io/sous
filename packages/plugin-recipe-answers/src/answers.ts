@@ -23,12 +23,15 @@
  * - `secrets`: every name some definition declares secret.
  *
  * A definition's `default` is the answer of last resort. Values are laid in as stored: nothing
- * here resolves a path or coerces a number.
+ * here resolves a path or coerces a number. A boolean is the exception (ADR 0038, amending ADR
+ * 0002): its answer is given as `"true"` or `"false"`, and the source declares its name a boolean,
+ * so templates and config expressions see `true` or `false`.
  */
 
 import type { VarScope } from "@sous-io/plugin-variables/types";
 import { recipeKey } from "./definitions.js";
 import type { Ladder } from "./ladder.js";
+import { canonicalBoolean } from "./validate.js";
 import type { DefinedVariable, RecipeAnswers, RecipeAnswersAnswers } from "./types.js";
 
 /** The answers of a project that defines no variables. */
@@ -36,21 +39,30 @@ export function noRecipeAnswers(): RecipeAnswers {
     return { merged: {}, byRecipe: {}, unanswered: [], unanswerable: [], secrets: new Set() };
 }
 
-/** The answer one definition renders with: what the ladder found, else its default. */
+/**
+ * The answer one definition renders with: what the ladder found, else its default. A boolean's
+ * answer is given in its one form, `"true"` or `"false"`, whatever word stored it (`yes`, `off`),
+ * so Liquid can see it as a boolean (ADR 0038).
+ */
 export function answerFor(variable: DefinedVariable, ladder: Pick<Ladder, "resolve">): string | undefined {
     if (variable.unanswerable !== undefined) {
         return undefined;
     }
 
     const resolved = ladder.resolve(variable);
+    const fallback = variable.definition.default;
+    const value = resolved !== undefined ? resolved.value : fallback === undefined ? undefined : String(fallback);
 
-    if (resolved !== undefined) {
-        return resolved.value;
+    if (value === undefined || variable.definition.type !== "boolean") {
+        return value;
     }
 
-    const fallback = variable.definition.default;
+    return canonicalBoolean(value) ?? value;
+}
 
-    return fallback === undefined ? undefined : String(fallback);
+/** The names of the boolean variables among the definitions (ADR 0038). */
+export function booleanNames(variables: readonly DefinedVariable[]): string[] {
+    return [...new Set(variables.filter((variable) => variable.definition.type === "boolean").map((variable) => variable.definition.name))];
 }
 
 /** Resolves every definition through the ladder, in the views a build needs. */

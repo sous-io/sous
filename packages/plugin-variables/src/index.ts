@@ -10,7 +10,7 @@ import { variablesNames } from "./names.js";
 import { Resolver } from "./resolver.js";
 import { CONFIG_KEYS, VARIABLE_SOURCE_SCHEMA } from "./schemas.js";
 import { Secrets } from "./secrets.js";
-import type { VariableSourceEntity } from "./types.js";
+import type { VariableSourceContext, VariableSourceEntity } from "./types.js";
 import type {} from "@sous-io/plugin-host/types";
 import "./types.js";
 import packageJson from "../package.json" with { type: "json" };
@@ -49,6 +49,14 @@ export const variablesPlugin: PluginDefinition = definePlugin({
             { lifetime: "config" },
         );
 
+        sous.services.add(
+            "variables.booleans",
+            (config, ctx) => ({
+                declared: () => declaredBooleans(ctx.entities.list("variable-source") as VariableSourceEntity[], { project: ctx.project, env: ctx.env, config }),
+            }),
+            { lifetime: "config" },
+        );
+
         sous.entities.define("variable-source", VARIABLE_SOURCE_SCHEMA, {
             description: "An extra source of config variables, such as recipe answers.",
         });
@@ -76,5 +84,10 @@ export const variablesPlugin: PluginDefinition = definePlugin({
 });
 
 export default variablesPlugin;
+
+/** Every name the given `variable-source` entities declare a boolean. */
+export function declaredBooleans(sources: readonly VariableSourceEntity[], ctx: VariableSourceContext): ReadonlySet<string> {
+    return new Set(sources.flatMap((source) => source.booleans?.(ctx) ?? []));
+}
 
 export type * from "./types.js";

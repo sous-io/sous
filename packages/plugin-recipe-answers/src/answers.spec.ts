@@ -1,7 +1,26 @@
 import { describe, expect, it } from "vitest";
 import { activeRecipe, definition, ladder, pinnedRecipe, variable } from "../test/stand-ins.js";
 import { definitionsFromRecipes } from "./definitions.js";
-import { AnswersService, answersForRecipe, computeAnswers, noRecipeAnswers, unansweredWarning } from "./answers.js";
+import { AnswersService, answersForRecipe, booleanNames, computeAnswers, noRecipeAnswers, unansweredWarning } from "./answers.js";
+import { recipeAnswersSource } from "./variable-source.js";
+
+describe("boolean answers (gh-161, ADR 0038)", () => {
+    /**
+     * A boolean's answer is given in its one form, whatever word stored it, and a default of
+     * `false` is `"false"`; the variable source names it a boolean, so Liquid sees `false`.
+     *
+     * jiraEnabled answered "No" -> "false"; default false -> "false"
+     */
+    it("should give a boolean answer as true or false, and name it a boolean", () => {
+        const flag = variable({ name: "jiraEnabled", type: "boolean", example: "true" });
+
+        expect(computeAnswers([flag], ladder({ shared: { SOUS_VAR_JIRA_ENABLED: "No" } })).merged).toEqual({ jiraEnabled: "false" });
+        expect(computeAnswers([variable({ name: "jiraEnabled", type: "boolean", example: "true", default: false })], ladder()).merged).toEqual({ jiraEnabled: "false" });
+        expect(computeAnswers([variable({ name: "jiraEnabled", type: "boolean", example: "true", default: true })], ladder()).merged).toEqual({ jiraEnabled: "true" });
+        expect(booleanNames([flag, variable()])).toEqual(["jiraEnabled"]);
+        expect(recipeAnswersSource([flag], { get: () => undefined, has: () => false } as never).booleans?.({} as never)).toEqual(["jiraEnabled"]);
+    });
+});
 
 describe("computeAnswers()", () => {
     /** A stored answer should land in the merged view under the definition's name. */
