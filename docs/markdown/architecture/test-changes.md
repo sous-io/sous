@@ -1982,3 +1982,18 @@ All in `packages/plugin-recipes/`. Ruling by the user, 2026-10-30 (ADR 0022): a 
 - **Changed** "should write a config without projectRoot or a skills directory" (`plugin-init/test/init.test.ts`): the config names `.claude/skills` once, as the project-skills target's destination, and lists that target.
 - **Changed** "should give a second generated branch a name of its own" (`sous/test/integration/repo-link-branches.test.ts`): it expects any numeric suffix, not exactly `-2`.
   - **Why:** the test before it can generate a name in the same second, which makes the first free suffix `-3`; the contract is that the second name gets a suffix of its own.
+
+### Includes follow Claude Code's imports; the glob order; empty globs (plugin-compiler, plugin-memories, sous)
+
+- **Changed** "should return every glob match in include order, case ignored" (was "...in bytewise order") and "should expand a glob under an alias base" (`plugin-compiler/src/includes.spec.ts`): `a.md, B.md, c.md` instead of `B.md, a.md, c.md`, and the base's own `one.md` before `deep/two.md`.
+  - **Why:** a glob's files now come folder by folder, case ignored (S10, rule 8).
+- **Changed** "should fail the build when a glob matches nothing" and "...a recipe glob matches nothing" (`plugin-compiler/test/includes.test.ts`) are now "should remove the line of a glob that matches nothing" and "...a recipe glob...": the build passes, the line is gone, nothing is reported.
+  - **Why:** a glob that matches nothing does nothing (S10, rule 4).
+- **Changed** "should fail the build on a malformed include line" (`includes.test.ts`) is now "should leave a plain path that names no file as text"; **changed** "should name the included file of a malformed include line" to "...of a broken include line", which uses `@#nope/x.md`.
+  - **Why:** `@docs/notes.txt` and `@broken/` are plain paths now, and a plain path that names no file is text with no message; only Sous's own forms can be broken.
+- **Changed** "should report a malformed include line with its file and line" (`plugin-compiler/test/compilation.test.ts`) to "should report a broken include line with its file and line", with `@#nope/notes.md` and the new hint (backticks or a backslash).
+- **Changed** "should keep the previous output and state entry when an include is missing", "should compile every target and list every error" (`compilation.test.ts`), "should name a content target by its id in errors" (`plugin-compiler/test/targets.test.ts`) and "should exit non-zero and keep the last good output" (`sous/test/integration/whole-build.test.ts`): the missing include is `@#project/missing.md` instead of `@missing.md`.
+  - **Why:** a missing plain path is no longer an error, so these tests use a Sous form, which still is.
+- **Changed** "should compile only the targets that read a changed file" (`targets.test.ts`): the target naming the missing `@later.md` is compiled and its output holds `@later.md`, instead of reporting "Include not found".
+- **Replaced** the `looksLikeIncludeLine` and `isIncludeLine` cases in `plugin-compiler/src/paths.spec.ts` with cases for `importPath`, `isIncludableFile`, `isSousIncludeForm` and the new `isIncludeLine`; `looksLikeIncludeLine` and `INCLUDE_LINE_PATTERN` are gone.
+- **New** `plugin-compiler/src/markdown.spec.ts` (the rows of the comparison with Claude Code), `plugin-compiler/src/globs.spec.ts` (the 21-row order table), "includes anywhere in Markdown text" and "should leave a glob's binary matches out" in `includes.test.ts`, and "should order a recipe's memories like a glob include" in `plugin-memories/src/listing.spec.ts`.
