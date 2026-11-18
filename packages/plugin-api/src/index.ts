@@ -16,6 +16,8 @@ export type * from "./registry.js";
 export type * from "./services.js";
 
 export { definePlugin } from "./plugin.js";
+export { HANDLER_PURPOSES } from "./handlers.js";
+export type * from "./handlers.js";
 export type * from "./plugin.js";
 
 export {

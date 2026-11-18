@@ -1,6 +1,7 @@
 import type { ContributorDefinition, RunPlan } from "./config.js";
 import type { Environment, EngineHandle, ProjectInfo } from "./context.js";
 import type { EntityKindOptions, EntityReader } from "./entities.js";
+import type { HandlerRegistry } from "./handlers.js";
 import type { EventFor, EventForPattern, EventPattern, EventPayload, Listener, ListenerOptions } from "./events.js";
 import type { IntentDefinition, IntentWrapper, IntentInputOf } from "./intents.js";
 import type { EntityKind, EntityType, IntentReturn, ServiceName, ServiceType } from "./registry.js";
@@ -138,6 +139,8 @@ export interface Sous {
     readonly intents: IntentRegistry;
     readonly services: ServiceRegistry;
     readonly entities: EntityRegistry;
+    /** Adds handlers: functions run for a purpose (`check`, `uninstall`, ...). Needs `@sous-io/sous-plugin-handlers`. */
+    readonly handlers: HandlerRegistry;
     readonly plugins: {
         /** Brings in another plugin as this one's own dependency; users may still disable it by name. */
         add(plugin: PluginDefinition | string): Promise<void>;
