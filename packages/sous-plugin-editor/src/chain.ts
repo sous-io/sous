@@ -144,6 +144,8 @@ export interface ValueOperations<R> {
     increment(value?: number): R;
     decrement(value?: number): R;
     toggle(): R;
+    // Comments
+    setCommentBefore(text: string): R;
 }
 
 /** One value inside a file: every operation, recorded at its path. */

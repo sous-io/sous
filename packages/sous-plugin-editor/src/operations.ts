@@ -28,6 +28,7 @@ import {
 } from "@sous-io/sous-lib-documents";
 import { compareItems, contains, fingerprint, isSorted, matchesFields, sortOptions, toRegExp } from "./checks.js";
 import { commentStyleFor, linesOfText, openDocument, type EditorFormat } from "./documents-adapter.js";
+import { commentOperations } from "./operations-comments.js";
 import type { FileSession } from "./session.js";
 import type { CheckSpec, OperationInfo, OperationScope } from "./types.js";
 
@@ -1952,6 +1953,8 @@ define({
     down: (ctx, _params, record) => restoreValue(ctx.node(), record),
     assertions: () => [],
 });
+
+commentOperations().forEach(define);
 
 // ---------------------------------------------------------------------------------------------
 // Aliases and shorthands
