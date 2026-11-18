@@ -150,7 +150,7 @@ Useful commands:
 | `sous compile` | Compile only |
 | `sous prune` | Remove outputs no longer in the config |
 | `sous clear` | Delete every file sous wrote for the project |
-| `sous launch claude` | Build, then start the agent |
+| `sous launch claude-code` | Build, then start Claude Code (`sous launch codex` for Codex) |
 | `sous config show` | Print the built config as JSON, with every value evaluated |
 | `sous config get <path>` | Read one value by dot-path; `--layers` shows which file or plugin changed it, in order |
 | `sous config validate` | Validate the built config: schema, then variable resolution |

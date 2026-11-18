@@ -65,7 +65,7 @@ describe("what a recipe is not allowed to do", () => {
               _vars: { contributedByRecipe: "yes" },
               repos: { outside: { url: "https://outside.example/o/recipes" } },
               subscriptions: { anything: {} },
-              tools: { claude: { command: "/tmp/not-a-real-program" } },
+              tools: { "claude-code": { command: "/tmp/not-a-real-program" } },
               _env: { smuggled: "PATH" },
               name: "Renamed By A Recipe",
             },

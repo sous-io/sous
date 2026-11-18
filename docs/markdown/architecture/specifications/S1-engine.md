@@ -455,9 +455,9 @@ sous.entities.define("harness", z.object({
 
 // plugin-claude-code adds one; launch reads the user's settings when it runs
 sous.entities.add("harness", {
-    id: "claude",
+    id: "claude-code",
     launch: (args, ctx) => {
-        const settings = ctx.config.get("tools.claude");
+        const settings = ctx.config.get("tools.claude-code");
 
         return spawnInteractive(settings?.command ?? "claude", [
             ...(settings?.args ?? []),

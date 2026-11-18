@@ -31,8 +31,8 @@ export interface CliSection {
     positional?: readonly string[];
     /**
      * Hands every token the command does not know (unknown flags, extra arguments, everything after
-     * `--`) to its last positional, in the order typed, instead of failing: `sous launch claude
-     * --resume -- -c` gives `tool: ["claude", "--resume", "-c"]`. The last positional must be an array.
+     * `--`) to its last positional, in the order typed, instead of failing: `sous launch claude-code
+     * --resume -- -c` gives `tool: ["claude-code", "--resume", "-c"]`. The last positional must be an array.
      */
     passThrough?: boolean;
     /** Example command lines for `--help`. */

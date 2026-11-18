@@ -81,7 +81,7 @@ describe("sous config commands", () => {
             },
           ],
         },
-        tools: { claude: { command: "claude" } },
+        tools: { "claude-code": { command: "claude" } },
       })
     );
 
@@ -157,7 +157,7 @@ describe("sous config commands", () => {
       expect(status).toBe(0);
       expect(ANSI_RE.test(stdout)).toBe(false);
       const tools = JSON.parse(stdout) as Record<string, { command: string }>;
-      expect(tools.claude.command).toBe("claude");
+      expect(tools["claude-code"]!.command).toBe("claude");
     },
     CLI_TIMEOUT
   );
@@ -241,7 +241,7 @@ describe("sous config commands", () => {
       expect(out).toContain("sous.config.json");
       expect(out).toContain("3"); // Layers
       expect(out).toContain("2"); // Targets
-      expect(out).toContain("claude"); // Tools
+      expect(out).toContain("claude-code"); // Tools
     },
     CLI_TIMEOUT
   );

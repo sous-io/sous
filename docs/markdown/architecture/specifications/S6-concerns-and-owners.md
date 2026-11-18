@@ -655,9 +655,9 @@ the method when it runs:
 ```ts
 // plugin-claude-code
 sous.entities.add("harness", {
-    id: "claude",
+    id: "claude-code",
     launch: (args, ctx) => {
-        const settings = ctx.config.get("tools.claude");
+        const settings = ctx.config.get("tools.claude-code");
 
         return spawnInteractive(settings?.command ?? "claude", [...(settings?.args ?? []), ...args], ctx);
     },

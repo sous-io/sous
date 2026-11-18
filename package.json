@@ -17,7 +17,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "sous:build": "./bin/sous build --rebuild",
-    "claude": "./bin/sous launch claude",
+    "claude": "./bin/sous launch claude-code",
     "schema:build": "tsx scripts/build-schema.mts",
     "version:sync": "tsx scripts/sync-core-version.mts",
     "e2e": "node e2e/run.mjs"
