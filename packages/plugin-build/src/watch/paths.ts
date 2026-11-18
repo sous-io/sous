@@ -122,6 +122,26 @@ export function classifyChange(file: string, set: WatchSet, globs: HostGlobs): C
     return set.globs.some((pattern) => globs.isMatch(posix, pattern)) ? "partial" : "ignored";
 }
 
+/**
+ * Whether an event changes which files a glob target lists: a file added or removed that matches a
+ * glob. The compiler lists a glob's files while the config is built, so such a change rebuilds the
+ * config, not only the outputs.
+ *
+ * ```ts
+ * changesListing("add", "/p/skills/new/SKILL.md", set, globs);    // true
+ * changesListing("change", "/p/skills/new/SKILL.md", set, globs); // false: the listing is the same
+ * ```
+ */
+export function changesListing(event: string, file: string, set: WatchSet, globs: HostGlobs): boolean {
+    if (event !== "add" && event !== "unlink") {
+        return false;
+    }
+
+    const posix = globs.toPosix(path.resolve(file));
+
+    return set.globs.some((pattern) => globs.isMatch(posix, pattern));
+}
+
 function isInside(child: string, parent: string): boolean {
     return child === parent || child.startsWith(parent.endsWith(path.sep) ? parent : parent + path.sep);
 }

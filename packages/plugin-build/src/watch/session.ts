@@ -23,7 +23,7 @@ export interface WatchSessionOptions {
 interface Trigger {
     files: string[];
     full: boolean;
-    /** Why, when no file changed (upstream moved, a person asked). */
+    /** Why, when no file changed (upstream moved, a person asked) or files were added under a glob target. */
     reason?: string;
     /** Facts listed under the reason. */
     details?: readonly string[];
@@ -153,7 +153,7 @@ export class WatchSession {
     // ------------------------------------------------------------------ the queue
 
     private onBatch(batch: ChangeBatch): void {
-        this.enqueue({ files: batch.files, full: batch.full });
+        this.enqueue({ files: batch.files, full: batch.full, ...(batch.reason === undefined ? {} : { reason: batch.reason }) });
     }
 
     private enqueue(trigger: Trigger): void {
