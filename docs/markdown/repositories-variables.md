@@ -382,7 +382,10 @@ answer while everything else, your templates included, renders the first definit
 tells you which names are in play.
 
 An answer is laid in exactly as it is stored: a path stays the string you typed, relative or absolute, and a
-number stays text. A template that needs an absolute path from a relative answer composes one under another
+number stays text. A `boolean` is the exception: its answer is `true` or `false` whatever word stored it
+(`yes`, `off`, `1`), and a template or a config condition sees a real boolean, so `{% if jiraEnabled %}` and
+`$if: jiraEnabled` take the false branch for an answer, or a default, of `false`. `${jiraEnabled}` still gives
+the text `false`. Compare a boolean with `true`, not with the text `"true"`. A template that needs an absolute path from a relative answer composes one under another
 name in `_vars`, for instance `taskFileDir: "${projectRoot}/${taskFileRoot}"`. `projectRoot` is set by sous
 (the directory holding `.sous/`); setting it in any `_vars` is an error.
 

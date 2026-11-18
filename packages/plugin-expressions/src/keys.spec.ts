@@ -3,11 +3,11 @@ import { chainOrder, compareBytes, hasExpressions, isExpressionObject, isReserve
 
 describe("reserved keys", () => {
     it("are the exact list of reserved keys", () => {
-        for (const key of ["$expr", "$expr:liquid", "$if", "$if:a", "$elseif", "$elseif:b", "$else", "$if:", "$expr:"]) {
+        for (const key of ["$expr", "$expr:liquid", "$if", "$if:a", "$elseif", "$elseif:b", "$else", "$if:", "$expr:", "$file"]) {
             expect(isReservedKey(key)).toBe(true);
         }
 
-        for (const key of ["$schema", "$iff", "$then", "$elsif", "$else:x", "if", "expr", "$IF"]) {
+        for (const key of ["$schema", "$iff", "$then", "$elsif", "$else:x", "if", "expr", "$IF", "$inline", "$file:x"]) {
             expect(isReservedKey(key)).toBe(false);
         }
     });

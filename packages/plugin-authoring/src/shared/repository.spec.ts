@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { makeTmpDir, type TmpDir } from "../../test/support/git-repo.js";
 import { testTools } from "../../test/support/standins.js";
 import { errorsIn, hasErrors, warningsIn } from "./problems.js";
-import { findRepoRoot as findRoot, validateRepo as validate, wellKnownEnvReason } from "./repository.js";
+import { checkContentKinds, findRepoRoot as findRoot, validateRepo as validate, wellKnownEnvReason } from "./repository.js";
 
 const tools = testTools();
 const findRepoRoot = (dir: string) => findRoot(tools, dir);
@@ -350,5 +350,52 @@ describe("wellKnownEnvReason()", () => {
     expect(wellKnownEnvReason("SOUS_HOME")).toMatch(/reserved by the system/);
     expect(wellKnownEnvReason("SOUS_VAR_API_URL")).toBeUndefined();
     expect(wellKnownEnvReason("MY_APP_URL")).toBeUndefined();
+  });
+});
+
+describe("checkContentKinds()", () => {
+  const kinds = ["skills", "memories", "prompts", "config"].map((id) => ({ id, description: id }));
+  const kindTools = { entities: { list: () => kinds } } as never;
+
+  /** A recipe as validateRepo gives it, with the given manifest parts. */
+  function validated(parts: Record<string, unknown>) {
+    return {
+      path: "recipes/acme/widget",
+      dir: "/repo/recipes/acme/widget",
+      manifestPath: "/repo/recipes/acme/widget/sous.recipe.yaml",
+      key: "acme/widget",
+      raw: {},
+      manifest: { formatVersion: 1, namespace: "acme", name: "widget", version: "1.0.0", contents: [], ...parts },
+    } as never;
+  }
+
+  /**
+   * Nothing the recipe names could register the kind: an error, since it is a typo.
+   *
+   * contents: [{ kind: claude-code-plugn, include: [plugin/**] }]  // -> error
+   */
+  it("should refuse a kind nothing could register", () => {
+    const problems = checkContentKinds(kindTools, "/repo", [validated({ contents: [{ kind: "claude-code-plugn", include: ["plugin/**"] }] })]);
+
+    expect(problems.map((problem) => problem.level)).toEqual(["error"]);
+    expect(problems[0]?.message).toContain("'claude-code-plugn'");
+  });
+
+  /** With requires.plugins, subscribes or a plugin of its own, something might: a warning naming them. */
+  it("should warn when a required plugin, a subscribed recipe or its own plugin could register it", () => {
+    const contents = [{ $if: { expr: "harness.id == 'claude-code'", then: { kind: "claude-code-plugin", include: ["plugin/**"] } } }];
+    const problems = checkContentKinds(kindTools, "/repo", [
+      validated({ contents, requires: { plugins: { "sous-plugin-x": "^1.0.0" } } }),
+      validated({ contents, subscribes: ["acme/plugin-carrier"] }),
+      validated({ contents, plugin: { bundle: "plugin/index.js" } }),
+    ]);
+
+    expect(problems.map((problem) => problem.level)).toEqual(["warning", "warning", "warning"]);
+    expect(problems[0]?.message).toContain("sous-plugin-x");
+  });
+
+  /** Registered kinds pass. */
+  it("should accept registered kinds", () => {
+    expect(checkContentKinds(kindTools, "/repo", [validated({ contents: [{ kind: "skills", include: ["skills/**"] }] })])).toEqual([]);
   });
 });

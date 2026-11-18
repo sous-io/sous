@@ -10,6 +10,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { ConfigError } from "@sous-io/plugin-api";
+import { possibleContentKinds } from "@sous-io/plugin-formats";
+import type {} from "@sous-io/plugin-recipes/types";
 import type { RecipeManifest, RepoManifest } from "@sous-io/plugin-formats/types";
 import type { ReleaseProblem } from "../types.js";
 import type { AuthoringTools } from "../tools.js";
@@ -162,8 +164,75 @@ export async function validateRepo(tools: AuthoringTools, rootDir: string): Prom
     }
 
     problems.push(...checkVariableEnvNames(tools, rootDir, recipes));
+    problems.push(...checkContentKinds(tools, rootDir, recipes));
 
     return { rootDir, manifestPath, manifest, recipes, problems };
+}
+
+/**
+ * Every content kind a manifest could publish (literal, or in any branch of an expression) that no
+ * `content-kind` entity registers here. Only plugins built into sous are sure to be loaded in a
+ * recipe repository, so the rule depends on whether anything could still provide the kind:
+ *
+ * - a recipe with no `requires.plugins`, no `subscribes` and no plugin of its own: an ERROR, since
+ *   nothing could ever register the kind (a typo such as `claude-code-plugn`);
+ * - otherwise a WARNING: a subscriber's build fails unless one of them provides it.
+ */
+export function checkContentKinds(tools: Pick<AuthoringTools, "entities">, rootDir: string, recipes: readonly ValidatedRecipe[]): ReleaseProblem[] {
+    let known: Set<string>;
+
+    try {
+        known = new Set(tools.entities.list("content-kind").map((kind) => kind.id));
+    } catch {
+        // No plugin defines content kinds here (plugin-recipes is not loaded): nothing to judge against.
+        return [];
+    }
+
+    if (known.size === 0) {
+        return [];
+    }
+
+    const problems: ReleaseProblem[] = [];
+
+    for (const recipe of recipes) {
+        const unknown = possibleContentKinds(recipe.manifest.contents ?? []).filter((kind) => !known.has(kind));
+
+        if (unknown.length === 0) {
+            continue;
+        }
+
+        const manifest = recipe.manifest;
+        const providers = [
+            ...Object.keys(manifest.requires?.plugins ?? {}).map((name) => `the plugin ${name} (requires.plugins)`),
+            ...(manifest.subscribes ?? []).map((ref) => `a plugin shipped by ${ref} (subscribes)`),
+            ...(manifest.plugin === undefined ? [] : ["the recipe's own plugin"]),
+        ];
+
+        for (const kind of unknown) {
+            problems.push(
+                providers.length === 0
+                    ? {
+                          level: "error",
+                          recipe: recipe.key,
+                          where: `${relative(rootDir, recipe.manifestPath)} contents`,
+                          message:
+                              `publishes content of the kind '${kind}', which no plugin registers, and nothing this recipe names could ` +
+                              `register it: it has no requires.plugins, no subscribes and no plugin of its own. Check the spelling; ` +
+                              `kinds registered here: ${[...known].sort().join(", ")}.`,
+                      }
+                    : {
+                          level: "warning",
+                          recipe: recipe.key,
+                          where: `${relative(rootDir, recipe.manifestPath)} contents`,
+                          message:
+                              `publishes content of the kind '${kind}', which no plugin loaded here registers. A subscriber's build ` +
+                              `fails unless one of these provides it: ${providers.join(", ")}.`,
+                      },
+            );
+        }
+    }
+
+    return problems;
 }
 
 /** Why an environment variable name deserves a warning, or `undefined` for an ordinary one. */

@@ -64,6 +64,11 @@ export interface LiquidEngineOptions {
     root?: string | readonly string[];
     /** Names declared secret. */
     secretNames?: Iterable<string>;
+    /**
+     * Names whose `"true"` and `"false"` values the engine sees as booleans (ADR 0038). Default:
+     * what `variables.booleans` declares, once the config is built.
+     */
+    booleanNames?: Iterable<string>;
     /** Handed to every tag and filter factory as `ctx.data`. */
     data?: Readonly<Record<string, unknown>>;
     /** Only these tags and filters, by id; default every one whose `purposes` allow it. */

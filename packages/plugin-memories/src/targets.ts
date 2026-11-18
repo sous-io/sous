@@ -35,8 +35,17 @@ export function pointerFileId(target: Pick<MemoryTargetEntity, "id">): string {
  * // -> "@/store/a/one/memories/m.md\n\n@/store/b/two/memories/n.md"
  * ```
  */
-export function defaultFormat(memories: readonly Pick<Memory, "path">[]): string {
-    return memories.map((memory) => `@${memory.path}`).join("\n\n");
+export function defaultFormat(memories: readonly Pick<Memory, "path" | "content">[]): string {
+    return memories.map((memory) => (memory.content === undefined ? `@${memory.path}` : inlineMemory(memory.content, memory.path))).join("\n\n");
+}
+
+/**
+ * Inline memory content as it goes into a memory file's template: no file holds it, so it is
+ * written in place. Only a `.tpl.` path is a template, so any other content is wrapped in
+ * `{% raw %}`, since the compiler renders the whole memory file as Liquid.
+ */
+export function inlineMemory(content: string, virtualPath: string): string {
+    return virtualPath.split(/[\\/]/).pop()!.includes(".tpl.") ? content : `{% raw %}${content}{% endraw %}`;
 }
 
 /** What one target takes, after its `filter()`. */
@@ -118,7 +127,8 @@ export function targetsContributor(plugin: string, services: ServiceReader): Con
                 recipes: config.entities("active-recipe") as MemoryRecipe[],
                 settings: readSettings(config),
                 globs,
-                contents: services.get("recipes.contents"),
+                // The `memories` entries of `recipes.contents` (law L8), read through the builder.
+                contents: services.get("recipes.contents").of(config, "memories"),
                 onWarning: (message) => {
                     if (!warned.has(message)) {
                         warned.add(message);

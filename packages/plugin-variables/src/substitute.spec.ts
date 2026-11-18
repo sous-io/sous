@@ -163,3 +163,18 @@ describe("normalizePath()", () => {
         expect(normalizePath("~/x", undefined)).toBe("~/x");
     });
 });
+
+describe("the $${ escape", () => {
+    /**
+     * `$${name}` is the literal text `${name}`: never substituted, never an unknown reference.
+     *
+     * substitute('bash "$${CLAUDE_PLUGIN_ROOT}/x.sh" ${a}', { a: "1" });  // 'bash "${CLAUDE_PLUGIN_ROOT}/x.sh" 1'
+     */
+    it("should write a literal ${name}", () => {
+        expect(substitute('bash "$${CLAUDE_PLUGIN_ROOT}/x.sh" ${a}', { a: "1", CLAUDE_PLUGIN_ROOT: "no" })).toBe('bash "${CLAUDE_PLUGIN_ROOT}/x.sh" 1');
+        expect(references("$${A} ${b}")).toEqual(["b"]);
+        expect(unresolved("$${A}")).toEqual([]);
+        expect(substituteStrict("$${A}", {}, "x")).toBe("${A}");
+        expect(substituteValue({ hooks: ["$${ROOT}/run"] }, {}, "edits")).toEqual({ hooks: ["${ROOT}/run"] });
+    });
+});

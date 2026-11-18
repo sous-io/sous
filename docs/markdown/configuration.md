@@ -224,8 +224,8 @@ the full semantics.
 ## Config expressions
 
 A value in a JSON, JSONC or YAML config file may be an expression object, decided when sous builds
-the config instead of when the file is written. The reserved keys are `$expr`, `$if`, `$elseif` and
-`$else` (each `$if` and `$elseif` may carry a `:<name>` qualifier, and `$expr` a `:<language>` one).
+the config instead of when the file is written. The reserved keys are `$expr`, `$if`, `$elseif`,
+`$else` and `$file` (each `$if` and `$elseif` may carry a `:<name>` qualifier, and `$expr` a `:<language>` one).
 Liquid is the expression language. An expression can read `host.platform`, `harness.id`,
 `env.<NAME>`, variables by their bare name, and recipe answers (except under `subscriptions` and
 `repos`).
@@ -286,6 +286,43 @@ the merged config keeps `false`:
 `sous config show --harness codex` prints the `codex` build itself. With no harness registered,
 sous builds the config once, as before. The design is in
 [One config build per harness](architecture/specifications/S8-per-harness-config-builds.md).
+
+### Values from a file: `$file`
+
+An object whose only key is `$file` stands in for the value a file holds, anywhere a value may go:
+
+```jsonc
+// conf.d/700-rules.jsonc
+{
+    "_vars": {
+        "banner": { "$file": "banner.txt" }
+    },
+    "recipes": {
+        "skills": {
+            "outputs": { "$file": "${projectRoot}/shared/skill-outputs.json" }
+        }
+    }
+}
+```
+
+The path is relative to the file that holds it, and `${name}` variables in it are filled in. A `.json`,
+`.jsonc`, `.yaml` or `.yml` file gives its structured value; any other file gives its text. A file whose name
+contains `.tpl.` is rendered as a Liquid template first; no other file's content is interpolated, so
+`${CLAUDE_PLUGIN_ROOT}` in it arrives as it is written. Watch mode rebuilds when the file changes.
+
+### Writing a literal `${`
+
+Write `$${name}` where a value must hold the text `${name}` for another tool to fill in:
+
+```jsonc
+{
+    "_vars": {
+        "startHook": "bash \"$${CLAUDE_PLUGIN_ROOT}/scripts/start.sh\""
+    }
+}
+```
+
+`${startHook}` gives `bash "${CLAUDE_PLUGIN_ROOT}/scripts/start.sh"`.
 
 ## Plugins
 

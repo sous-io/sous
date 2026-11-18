@@ -6,6 +6,7 @@ import { globSync } from "glob";
 import { afterEach, describe, expect, it } from "vitest";
 import { builtConfig, memoryLock } from "../../test/part-a/helpers.js";
 import type { ActiveRecipeEntity } from "../types.js";
+import { plainContentsEntries } from "../part-b/config-layers/config-layers.js";
 import { RecipeContents } from "./contents.js";
 import { ActiveRecipes, reachableKeys } from "./active.js";
 
@@ -59,20 +60,21 @@ function setup(recipeDir = "/nowhere") {
         hasGlob: (text: string) => /[*?{[]/.test(text),
         staticBase: (pattern: string) => pattern.split("/").slice(0, pattern.split("/").findIndex((part) => /[*?{[]/.test(part))).join("/") || "/",
     };
+    const taskFiles = entity("workflow/task-files", recipeDir, {
+        contents: [{ kind: "skills", include: ["skills/**/*.md"], exclude: ["skills/draft.md"] }],
+        variables: [{ name: "apiUrl", type: "url", prompt: "Where?", description: "", example: "https://x", required: true, secret: false, scope: "shared" }],
+    });
     const config = builtConfig(
         {
             repos: { r: { url: "https://github.com/acme/r" } },
             subscriptions: { "tool-usage/automated-browser-tasks": { enabled: false }, workflow: {} },
-        },
+            // What the recipes.manifests contributor adds from the manifest (law L8).
+            recipes: { contents: plainContentsEntries([taskFiles]) },
+        } as never,
         {
             services: { "recipes.lock": memoryLock(lock), "host.globs": globs, "recipes.contents": new RecipeContents({ get: () => globs } as never) },
             entities: {
-                "active-recipe": [
-                    entity("workflow/task-files", recipeDir, {
-                        contents: [{ kind: "skills", include: ["skills/**/*.md"], exclude: ["skills/draft.md"] }],
-                        variables: [{ name: "apiUrl", type: "url", prompt: "Where?", description: "", example: "https://x", required: true, secret: false, scope: "shared" }],
-                    }),
-                ],
+                "active-recipe": [taskFiles],
             },
             layers: { "subscriptions.tool-usage/automated-browser-tasks.enabled": ["confd/510-subscriptions.jsonc", "confd/610-mac.jsonc"] },
         },

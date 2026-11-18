@@ -81,6 +81,15 @@ export function watchSet(
         }
     }
 
+    // Files a `$file` value read are inputs to config building: a change rebuilds the config.
+    if (services.has("expressions.evaluator")) {
+        const evaluator = services.get("expressions.evaluator") as { files?(): string[] };
+
+        for (const file of evaluator.files?.() ?? []) {
+            fullRebuildPaths.add(file);
+        }
+    }
+
     for (const extra of config.get("watch")?.paths ?? []) {
         const resolved = absolute(resolver.substitute(extra, rootScope));
 

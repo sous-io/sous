@@ -12,7 +12,8 @@ import { minimatch } from "minimatch";
 import { BufferedReporter, definePlugin, jsonSchema, type PluginDefinition } from "@sous-io/plugin-api";
 import { createEngine, type Engine } from "@sous-io/core";
 import type { HostGlobs } from "@sous-io/plugin-host/types";
-import { RecipeContents } from "@sous-io/plugin-recipes";
+import { plainContentsEntries, RecipeContents } from "@sous-io/plugin-recipes";
+import type { ActiveRecipeContent, ActiveRecipeEntity } from "@sous-io/plugin-recipes/types";
 import type { MemoryGlobs, MemoryRecipe } from "../src/listing.js";
 import memoriesPlugin from "../src/index.js";
 import packageJson from "../package.json" with { type: "json" };
@@ -61,6 +62,13 @@ export const standInGlobs: MemoryGlobs & Pick<HostGlobs, "matchSync" | "staticBa
 
 /** `recipes.contents`: the real implementation, over the stand-in `host.globs`. */
 export const standInContents = new RecipeContents({ get: () => standInGlobs } as never);
+
+/** The `memories` entries the given recipes' manifests give, their files listed, as the build sees them. */
+export function memoryContentsOf(recipes: readonly ActiveRecipeEntity[]): ActiveRecipeContent[] {
+    const entries = plainContentsEntries(recipes);
+
+    return standInContents.of({ get: (key: string) => (key === "recipes.contents" ? entries : undefined) }, "memories");
+}
 
 /** A temporary directory, removed by `cleanup()`. */
 export function makeTmpDir(prefix = "sous-memories-"): { path: string; cleanup(): void } {
@@ -170,6 +178,11 @@ export function recipesStandIn(recipes: () => readonly Record<string, unknown>[]
                 contribute(config) {
                     for (const entry of recipes()) {
                         config.addEntity("active-recipe", entry as never);
+                    }
+
+                    // What the real recipes.manifests contributor adds from each manifest (law L8).
+                    for (const entry of plainContentsEntries(recipes() as never)) {
+                        config.atPath("recipes.contents").append(entry);
                     }
                 },
             });

@@ -21,8 +21,10 @@ export interface Memory {
     readonly repository?: string;
     /** Its path inside the recipe's memories, `/`-separated (as `#memories/<path>` names it). */
     readonly name: string;
-    /** Absolute. */
+    /** Absolute. For inline content, where it would be; no file exists there. */
     readonly path: string;
+    /** Set for inline content (`{ $inline, path }` in a manifest): the memory's text, which no file holds. */
+    readonly content?: string;
 }
 
 /** Where a harness reads a memory file. */

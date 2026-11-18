@@ -86,7 +86,7 @@ function buildEngine(deps: LiquidEngineDeps, options: LiquidEngineOptions): Liqu
         ...(root === undefined ? {} : { root }),
         ...(options.fs === undefined ? {} : { fs: options.fs }),
     };
-    const engine = new Liquid(liquidOptions);
+    const engine = withBooleans(new Liquid(liquidOptions), options.booleanNames ?? declaredBooleans(deps.services));
 
     // The secret names stay in the context, never in the template scope, so no dump can print them.
     const ctx: LiquidExtensionContext = Object.freeze({
@@ -121,6 +121,64 @@ function rootOf(root: LiquidEngineOptions["root"], project: ProjectInfo | undefi
     }
 
     return project ? [project.root] : undefined;
+}
+
+/**
+ * A scope with the values of the boolean variables as booleans: `"true"` becomes `true` and
+ * `"false"` becomes `false`, so `{% if name %}` takes the false branch for an answer of `false`
+ * (ADR 0038). Any other value, and every other name, is left as it is.
+ *
+ * ```ts
+ * liquidValues({ jiraEnabled: "false", mode: "false" }, new Set(["jiraEnabled"]));
+ * // -> { jiraEnabled: false, mode: "false" }
+ * ```
+ */
+export function liquidValues<T extends Readonly<Record<string, unknown>>>(scope: T, booleanNames: ReadonlySet<string>): T {
+    let out: Record<string, unknown> | undefined;
+
+    for (const name of booleanNames) {
+        const value = scope[name];
+
+        if (value === "true" || value === "false") {
+            out ??= { ...scope };
+            out[name] = value === "true";
+        }
+    }
+
+    return (out ?? scope) as T;
+}
+
+/** An engine whose every render and evaluation sees the boolean variables as booleans. */
+function withBooleans(engine: Liquid, names: Iterable<string>): Liquid {
+    const booleanNames = new Set(names);
+
+    if (booleanNames.size === 0) {
+        return engine;
+    }
+
+    const convert = (scope: unknown): unknown =>
+        scope !== null && typeof scope === "object" && Object.getPrototypeOf(scope) === Object.prototype
+            ? liquidValues(scope as Record<string, unknown>, booleanNames)
+            : scope;
+    const internal = engine as unknown as Record<"_render" | "_renderFile" | "_evalValue", (first: unknown, scope: unknown, ...rest: unknown[]) => unknown>;
+
+    for (const method of ["_render", "_renderFile", "_evalValue"] as const) {
+        const original = internal[method].bind(engine);
+
+        internal[method] = (first, scope, ...rest) => original(first, convert(scope), ...rest);
+    }
+
+    return engine;
+}
+
+/** The names `variables.booleans` declares, when plugin-variables is active and the config is built; none otherwise. */
+function declaredBooleans(services: ServiceReader): Iterable<string> {
+    try {
+        return services.has("variables.booleans") ? (services.get("variables.booleans") as unknown as { declared(): ReadonlySet<string> }).declared() : [];
+    } catch {
+        // A `config` service does not exist while the config is built.
+        return [];
+    }
 }
 
 /** The names `variables.secrets` declares, when plugin-variables is active; none otherwise. */

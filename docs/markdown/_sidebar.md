@@ -36,6 +36,7 @@
   - [The editor](architecture/specifications/S9-the-editor.md)
   - [What sous init writes, and sous init hooks](architecture/specifications/S14-init-and-git-hooks.md)
   - [Migrations, sous doctor, upgrade and update](architecture/specifications/S11-migrations-and-doctor.md)
+  - [Manifests as config](architecture/specifications/S12-manifests-as-config.md)
 - **ADRs**
   - [0001: Repositories](adrs/0001-repositories.md)
   - [0002: Recipe answers in the template scope](adrs/0002-recipe-answers-in-templates.md)
@@ -69,3 +70,6 @@
   - [0035: `sous init` writes a JSONC config and installs git hooks](adrs/0035-init-and-git-hooks.md)
   - [0030: Migrations, and `sous doctor`](adrs/0030-migrations.md)
   - [0031: `sous upgrade`, `sous update`, and short aliases](adrs/0031-upgrade-update-and-short-aliases.md)
+  - [0032: A recipe's manifest is added to the config](adrs/0032-manifests-as-config.md)
+  - [0033: Open content kinds, `$file`, and a literal `${`](adrs/0033-open-content-kinds-and-file-values.md)
+  - [0038: A boolean recipe answer is a boolean in Liquid](adrs/0038-boolean-answers.md)

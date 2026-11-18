@@ -13,7 +13,7 @@
 
 import type { ContributorDefinition, ServiceReader } from "@sous-io/plugin-api";
 import type { VariableSourceContext, VariableSourceEntity, VarScope } from "@sous-io/plugin-variables/types";
-import { answersForRecipe, computeAnswers } from "./answers.js";
+import { answersForRecipe, booleanNames, computeAnswers } from "./answers.js";
 import { definitionsFromRecipes } from "./definitions.js";
 import { buildLadder } from "./sources.js";
 import type { DefinedVariable, RecipeAnswers } from "./types.js";
@@ -51,6 +51,7 @@ export function recipeAnswersSource(variables: readonly DefinedVariable[], servi
             return answersForRecipe(answers(ctx), scopeKey);
         },
         secrets: () => variables.filter((entry) => entry.definition.secret).map((entry) => entry.definition.name),
+        booleans: () => booleanNames(variables),
         forbiddenUnder: FORBIDDEN_UNDER,
     };
 }

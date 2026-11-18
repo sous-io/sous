@@ -171,7 +171,7 @@ describe("scaffoldRepo()", () => {
     expect(recipe.namespace).toBe("my-recipes");
     expect(recipe.name).toBe(EXAMPLE_RECIPE_NAME);
     expect(recipe.version).toBe("0.1.0");
-    expect(recipe.contents[0]!.kind).toBe("skills");
+    expect(recipe.contents[0]).toMatchObject({ kind: "skills" });
 
     const indexPath = path.join(target, "sous.index.json");
     const index = parseIndexFile(

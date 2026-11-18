@@ -1,14 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { makeTmpDir, recipe as makeRecipe, standInContents, standInGlobs, write, type RecipeFixture } from "../test/stand-ins.js";
+import { makeTmpDir, memoryContentsOf, recipe as makeRecipe, standInGlobs, write, type RecipeFixture } from "../test/stand-ins.js";
 import { dependencyOrder, selectMemories, viewPath } from "./listing.js";
+import { defaultFormat } from "./targets.js";
 
 let tmp: { path: string; cleanup(): void };
 
 const recipe = (key: string, options?: RecipeFixture) => makeRecipe(tmp.path, key, options);
 const select = (recipes: ReturnType<typeof recipe>[], settings = {}, onWarning?: (m: string) => void) =>
-    selectMemories({ recipes, settings, globs: standInGlobs, contents: standInContents, ...(onWarning ? { onWarning } : {}) });
+    selectMemories({ recipes, settings, globs: standInGlobs, contents: memoryContentsOf(recipes as never), ...(onWarning ? { onWarning } : {}) });
 
 beforeEach(() => {
     tmp = makeTmpDir();
@@ -43,6 +44,26 @@ describe("dependencyOrder()", () => {
         const z = recipe("c/z");
 
         expect(dependencyOrder([x, y, z], standInGlobs.compareBytewise)).toEqual(["c/z", "a/x", "b/y"]);
+    });
+});
+
+describe("inline memories", () => {
+    /**
+     * Inline content (`{ $inline, path }`) is a memory with no file: it carries its text, and the
+     * default format writes the text in place instead of an `@` include.
+     *
+     * include: [{ $inline: "Be brief.", path: "memories/brief.md" }]
+     * // -> { name: "brief.md", content: "Be brief." }; defaultFormat -> "{% raw %}Be brief.{% endraw %}"
+     */
+    it("should list inline content and write it in place", () => {
+        const one = recipe("a/one", { files: [] });
+
+        (one.manifest as { contents: unknown[] }).contents = [{ kind: "memories", include: [{ $inline: "Be brief.", path: "memories/brief.md" }] }];
+
+        const { selected } = select([one]);
+
+        expect(selected.map((memory) => [memory.name, memory.content])).toEqual([["brief.md", "Be brief."]]);
+        expect(defaultFormat(selected)).toBe("{% raw %}Be brief.{% endraw %}");
     });
 });
 

@@ -17,7 +17,7 @@ export class ConfigSkillsSources implements SkillsSources {
     ) {}
 
     list(): SkillSource[] {
-        return this.find().skills.map(({ base: _base, ...source }) => source);
+        return this.find().skills.map(({ base: _base, inline: _inline, ...source }) => source);
     }
 
     recipes(): string[] {
@@ -32,7 +32,7 @@ export class ConfigSkillsSources implements SkillsSources {
     private find(): FoundSkills {
         this.found ??= findSkills({
             recipes: this.ctx.entities.list("active-recipe"),
-            contents: this.ctx.services.get("recipes.contents"),
+            contents: this.ctx.services.get("recipes.contents").of(this.config, "skills"),
             include: stringsOf(this.config.get("recipes.skills.include")),
             project: this.ctx.project,
         });

@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { globSync } from "glob";
 import { afterEach, describe, expect, it } from "vitest";
-import type { ActiveRecipeEntity } from "../types.js";
+import type { RecipeContentsEntry } from "../types.js";
 import { RecipeContents } from "./contents.js";
 
 const dirs: string[] = [];
@@ -18,6 +18,7 @@ const globs = {
     matchSync: (pattern: string, options: { cwd: string; dot?: boolean; ignore?: readonly string[] }) =>
         globSync(pattern, { cwd: options.cwd, dot: options.dot ?? false, nodir: true, ignore: [...(options.ignore ?? [])] }),
     sortBytewise: (items: Iterable<string>) => [...items].sort(),
+    isMatch: () => false,
     toPosix: (file: string) => file.split(path.sep).join("/"),
     hasGlob: (text: string) => /[*?{[]/.test(text),
     staticBase: (pattern: string) => {
@@ -28,21 +29,14 @@ const globs = {
     },
 };
 
-function recipe(dir: string, kind: "subscribes" | "depends", include: string[], exclude?: string[]): ActiveRecipeEntity {
-    return {
-        id: "a/b",
-        namespace: "a",
-        name: "b",
-        repo: "r",
-        identity: "x/r",
-        version: "1.0.0",
-        hash: "sha256-aa",
-        kind,
-        requestedBy: ["project"],
-        dir,
-        source: "store",
-        manifest: { formatVersion: 1, namespace: "a", name: "b", version: "1.0.0", contents: [{ kind: "memories", include, ...(exclude ? { exclude } : {}) }] },
-    } as ActiveRecipeEntity;
+/** A built config holding one `recipes.contents` entry of kind `memories`. */
+function config(dir: string, include: RecipeContentsEntry["include"], exclude?: string[]): { get(path: string): unknown } {
+    const entries: RecipeContentsEntry[] = [
+        { recipe: "a/b", dir, kind: "memories", include, ...(exclude ? { exclude } : {}) },
+        { recipe: "a/b", dir, kind: "skills", include: ["**"] },
+    ];
+
+    return { get: (key: string) => (key === "recipes.contents" ? entries : undefined) };
 }
 
 function tree(files: string[]): string {
@@ -70,7 +64,7 @@ describe("recipes.contents", () => {
      */
     it("should give each file the base of its pattern, once", () => {
         const dir = tree(["m/x/1.md", "other/2.md", "lone.md"]);
-        const [block] = contents.of([recipe(dir, "subscribes", ["m/**", "m/x/*.md", "other/*.md", "lone.md"])], "memories");
+        const [block] = contents.of(config(dir, ["m/**", "m/x/*.md", "other/*.md", "lone.md"]), "memories");
 
         expect(block?.files.map((file) => [file.path, path.relative(dir, file.base) || "."])).toEqual([
             ["m/x/1.md", "m"],
@@ -86,15 +80,28 @@ describe("recipes.contents", () => {
      */
     it("should list dot files and leave out excluded ones", () => {
         const dir = tree(["m/.hidden.md", "m/keep.md", "m/skip.md"]);
-        const [block] = contents.of([recipe(dir, "subscribes", ["m/**"], ["m/skip.md"])], "memories");
+        const [block] = contents.of(config(dir, ["m/**"], ["m/skip.md"]), "memories");
 
         expect(block?.files.map((file) => file.path)).toEqual(["m/.hidden.md", "m/keep.md"]);
     });
 
-    /** A recipe held only through `depends` publishes nothing. */
-    it("should skip recipes that are not subscribed", () => {
+    /** Only the entries of the kind asked for, read from the config. */
+    it("should read only the entries of one kind", () => {
         const dir = tree(["m/a.md"]);
 
-        expect(contents.of([recipe(dir, "depends", ["m/**"])], "memories")).toEqual([]);
+        expect(contents.entries(config(dir, ["m/**"]), "memories").map((entry) => entry.kind)).toEqual(["memories"]);
+        expect(contents.entries({ get: () => undefined }, "memories")).toEqual([]);
+    });
+
+    /**
+     * Inline content is listed at its path, with its content, though no file exists there.
+     *
+     * include [{ $inline: "# Hi", path: "m/hi.md" }]  // -> { path: "m/hi.md", content: "# Hi" }
+     */
+    it("should list inline content at its path", () => {
+        const dir = tree([]);
+        const [block] = contents.of(config(dir, [{ $inline: "# Hi $${X}", path: "m/hi.md" }]), "memories");
+
+        expect(block?.files).toEqual([{ path: "m/hi.md", file: path.join(dir, "m/hi.md"), base: path.join(dir, "m"), content: "# Hi ${X}" }]);
     });
 });

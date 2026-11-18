@@ -12,7 +12,7 @@ import {
     type Sous,
 } from "@sous-io/plugin-api";
 import { globSync } from "glob";
-import { RecipeContents } from "@sous-io/plugin-recipes";
+import { plainContentsEntries, RecipeContents } from "@sous-io/plugin-recipes";
 import type { ActiveRecipeEntity } from "@sous-io/plugin-recipes/types";
 import "../src/types.js";
 import packageJson from "../package.json" with { type: "json" };
@@ -107,10 +107,18 @@ export const standInContents = new RecipeContents({
         staticBase: (pattern: string) => pattern.split("/").filter((_part, index, all) => !all.slice(0, index + 1).some((part) => /[*?{[]/.test(part))).join("/") || "/",
         sortBytewise: (items: Iterable<string>) => [...items].sort(bytewise),
         toPosix: (file: string) => file.split(path.sep).join("/"),
+        isMatch: () => false,
     }),
 } as never);
 
-/** A stand-in for plugin-recipes: the `active-recipe` kind, and a contributor adding the given recipes. */
+/** A built config holding the `recipes.contents` entries the given recipes' manifests give. */
+export function contentsConfig(recipes: readonly ActiveRecipeEntity[]): { get(path: string): unknown } {
+    const entries = plainContentsEntries(recipes);
+
+    return { get: (key: string) => (key === "recipes.contents" ? entries : undefined) };
+}
+
+/** A stand-in for plugin-recipes: the `active-recipe` kind, and a contributor adding the given recipes and their `recipes.contents` entries. */
 export function recipesStandIn(recipes: readonly ActiveRecipeEntity[]): PluginDefinition {
     return definePlugin({
         name: "@sous-io/plugin-recipes",
@@ -123,6 +131,10 @@ export function recipesStandIn(recipes: readonly ActiveRecipeEntity[]): PluginDe
                 contribute(config) {
                     for (const recipe of recipes) {
                         config.addEntity("active-recipe", recipe);
+                    }
+
+                    for (const entry of plainContentsEntries(recipes)) {
+                        config.atPath("recipes.contents").append(entry);
                     }
                 },
             });

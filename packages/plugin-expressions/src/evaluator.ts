@@ -4,6 +4,8 @@
  * contributor's builder, so the file re-runs when one changes.
  */
 
+import fs from "node:fs";
+import nodePath from "node:path";
 import type {
     ConfigBuilder,
     EntityReader,
@@ -17,7 +19,8 @@ import type {
 import type { ConfigLookup, VariableSourceEntity, VariablesResolver, VarScope } from "@sous-io/plugin-variables/types";
 import { ExpressionError, formatPath } from "./errors.js";
 import { hasExpressions, isExpressionObject, isPlainObject } from "./keys.js";
-import { LIQUID_LANGUAGE } from "./liquid-language.js";
+import { liquidValues } from "@sous-io/plugin-liquid";
+import { LIQUID_LANGUAGE, renderLiquidTemplate } from "./liquid-language.js";
 import { parseExpressionObject, type ExpressionSource, type Plan, type WrittenValue } from "./parse.js";
 import type {
     EvaluatedExpression,
@@ -40,6 +43,11 @@ export interface EvaluatorDeps {
     readonly project: ProjectInfo | undefined;
     /** `host.platform`. Default: Node's `process.platform`. */
     readonly platform?: string;
+    /**
+     * `harness.id`: the harness the config is built for. Read on each use; `undefined` (or no
+     * function) gives the empty string, the build with no harness.
+     */
+    readonly harness?: () => string | undefined;
 }
 
 /** The evaluator, plus the check the plugin runs once the config has settled. */
@@ -49,6 +57,8 @@ export interface Evaluator extends ExpressionsEvaluator {
      *. The next layer evaluated starts a new build's records.
      */
     settle(): void;
+    /** Every file a `$file` value read in the latest build, absolute. */
+    files(): string[];
 }
 
 /** Names an expression reads that are never variables. */
@@ -59,7 +69,7 @@ const BUILT_IN_NAMES = new Set(["host", "harness", "env"]);
  * config build (the one with no harness, and one per harness, which may run side by side).
  */
 export function createEvaluator(deps: EvaluatorDeps): Evaluator {
-    const byFile = new Map<string, { harness: string; expressions: EvaluatedExpression[]; unsettled: UnsettledExpression[] }>();
+    const byFile = new Map<string, { harness: string; expressions: EvaluatedExpression[]; unsettled: UnsettledExpression[]; files: string[] }>();
     let stale = false;
 
     return {
@@ -73,7 +83,7 @@ export function createEvaluator(deps: EvaluatorDeps): Evaluator {
             const value = run.evaluate();
             const harness = harnessOf(options.config);
 
-            byFile.set(`${harness}\u0000${options.file}`, { harness, expressions: run.expressions, unsettled: run.unsettled });
+            byFile.set(`${harness}\u0000${options.file}`, { harness, expressions: run.expressions, unsettled: run.unsettled, files: [...run.files] });
 
             return { value, expressions: run.expressions, pending: run.unsettled.length > 0 } satisfies EvaluatedLayer;
         },
@@ -88,6 +98,9 @@ export function createEvaluator(deps: EvaluatorDeps): Evaluator {
         },
         unsettled() {
             return [...byFile.values()].flatMap((entry) => entry.unsettled);
+        },
+        files() {
+            return [...new Set([...byFile.values()].flatMap((entry) => entry.files))];
         },
         languages() {
             return deps.entities.list("expression-language").map((language) => language.id);
@@ -155,6 +168,10 @@ export function isTruthy(value: unknown): boolean {
 class LayerRun {
     readonly expressions: EvaluatedExpression[] = [];
     readonly unsettled: UnsettledExpression[] = [];
+    /** Every file a `$file` value read, absolute. */
+    readonly files = new Set<string>();
+    /** The `$file` files being read, innermost last, to catch a file that reads itself. */
+    private readonly reading: string[] = [];
 
     private readonly config: ConfigBuilder;
     private readonly file: string;
@@ -265,6 +282,10 @@ class LayerRun {
     }
 
     private evaluatePlan(plan: Plan, path: readonly PathSegment[], levelVars: VarScope): JsonValue | undefined {
+        if (plan.kind === "file") {
+            return this.fileValue(plan, path, levelVars);
+        }
+
         if (plan.kind === "value") {
             const outcome = this.run(plan.expression, path, levelVars);
 
@@ -335,11 +356,108 @@ class LayerRun {
             return { unknown: { variables: missing, filters: [] } };
         }
 
-        return language.evaluate(
-            expression.source,
-            { host: { platform: this.deps.platform ?? process.platform }, harness: { id: harnessOf(this.config) }, env: this.config.env, vars },
-            ctx,
+        return language.evaluate(expression.source, { ...this.builtIns(), vars: this.typed(vars) }, ctx);
+    }
+
+    /**
+     * A scope with the boolean variables (a recipe variable of type boolean) as `true` and
+     * `false`, so a condition on an answer of `false` is false (ADR 0038). The declaring
+     * `variable-source` entities are read through the builder.
+     */
+    private typed(vars: VarScope): VarScope {
+        const names = new Set(
+            this.config
+                .entities("variable-source")
+                .flatMap((source) => source.booleans?.({ project: this.deps.project, env: this.config.env, config: this.lookup }) ?? []),
         );
+
+        return names.size === 0 ? vars : liquidValues(vars, names);
+    }
+
+    /** `host`, `env` and `harness`, which every expression and every `.tpl.` file read with `$file` sees. */
+    private builtIns(): { host: { platform: string }; env: ConfigBuilder["env"]; harness: { id: string } } {
+        return {
+            host: { platform: this.deps.platform ?? process.platform },
+            env: this.config.env,
+            harness: { id: harnessOf(this.config) },
+        };
+    }
+
+    /**
+     * The value of a `$file` object: the file's content, parsed by its extension. The path is
+     * interpolated for `${name}` variables and is relative to the data's own folder. A `.tpl.` file
+     * is rendered as Liquid first; no other file's content is interpolated. Every `${` in what the
+     * file gives is escaped as `$${`, so the value reaches its reader exactly as the file holds it.
+     */
+    private fileValue(plan: Extract<Plan, { kind: "file" }>, path: readonly PathSegment[], levelVars: VarScope): JsonValue | undefined {
+        let written = plan.file;
+        let vars: VarScope | undefined;
+
+        if (written.includes("${")) {
+            if (!this.deps.services.has("variables.resolver")) {
+                throw new ExpressionError(this.file, plan.path, `holds the path ${JSON.stringify(written)}, whose variables cannot be filled in without plugin-variables.`);
+            }
+
+            const resolver: VariablesResolver = this.deps.services.get("variables.resolver");
+
+            vars = this.scope(path, levelVars);
+
+            const missing = resolver.unresolved(written, vars);
+
+            for (const name of resolver.references(written)) {
+                this.reads![name] = vars[name];
+            }
+
+            if (missing.length > 0) {
+                return this.pending(path, { variables: missing, filters: [] });
+            }
+
+            written = resolver.substitute(written, vars);
+        }
+
+        const absolute = nodePath.resolve(this.baseDir(), written);
+
+        if (this.reading.includes(absolute)) {
+            throw new ExpressionError(this.file, plan.path, `reads ${absolute}, which is already being read: a $file cannot read itself.`);
+        }
+
+        this.files.add(absolute);
+
+        let text: string;
+
+        try {
+            text = fs.readFileSync(absolute, "utf8");
+        } catch (error) {
+            throw new ExpressionError(this.file, plan.path, `names the file ${absolute}, which could not be read: ${(error as Error).message}`, { cause: error });
+        }
+
+        const name = nodePath.basename(absolute);
+
+        this.reading.push(absolute);
+
+        try {
+            if (name.includes(".tpl.")) {
+                text = renderLiquidTemplate(text, { ...this.typed(vars ?? this.scope(path, levelVars)), ...this.builtIns() }, {
+                    project: this.deps.project,
+                    file: this.file,
+                    path: formatPath(plan.path),
+                    env: this.config.env,
+                    entities: this.entities,
+                    services: this.deps.services,
+                });
+            }
+
+            const value = parseByExtension(text, name, this.deps.services, (reason) => new ExpressionError(this.file, plan.path, `names the file ${absolute}, which ${reason}`));
+
+            return escapeVariables(value);
+        } finally {
+            this.reading.pop();
+        }
+    }
+
+    /** The folder a relative `$file` path is resolved against. */
+    private baseDir(): string {
+        return this.options.baseDir ?? this.deps.project?.root ?? process.cwd();
     }
 
     /** The language an expression names, checked. */
@@ -381,7 +499,7 @@ class LayerRun {
         const level = path[0] === "compilation" ? "compilation" : "root";
 
         // The builder itself, so variable-source entities are read through it too (re-running the file).
-        return resolver.scopeIn(this.config, { level, extra: levelVars });
+        return resolver.scopeIn(this.config, { level, extra: levelVars, ...(this.options.scopeKey === undefined ? {} : { scopeKey: this.options.scopeKey }) });
     }
 
     /** Throws when an expression reads a variable its place forbids: recipe answers under `subscriptions` or `repos`. */
@@ -418,6 +536,62 @@ function forbiddenProblem(name: string, source: VariableSourceEntity): string {
     }
 
     return `reads ${name}, which comes from ${source.description}. An expression under ${under} cannot read ${source.description}.`;
+}
+
+/** What parsing a `$file`'s text needs: `formats.manifests` reads YAML, JSON and JSONC. */
+interface TextParser {
+    parseText(text: string, fileName: string): unknown;
+}
+
+/**
+ * A file's text as a value, by the extension of its name: JSON, JSONC and YAML give a structured
+ * value; anything else gives the text as a string. (`rules.tpl.json` is JSON.)
+ */
+export function parseByExtension(text: string, name: string, services: Pick<ServiceReader, "get" | "has">, fail: (reason: string) => Error): JsonValue {
+    const extension = nodePath.extname(name).toLowerCase();
+
+    if (![".json", ".jsonc", ".yaml", ".yml"].includes(extension)) {
+        return text;
+    }
+
+    try {
+        if (services.has("formats.manifests")) {
+            return toJson((services.get("formats.manifests") as unknown as TextParser).parseText(text, name)) ?? null;
+        }
+
+        if (extension === ".json") {
+            return toJson(JSON.parse(text)) ?? null;
+        }
+    } catch (error) {
+        throw fail(`could not be parsed: ${(error as Error).message}`);
+    }
+
+    throw fail("is YAML or JSONC, which needs plugin-formats to read.");
+}
+
+/**
+ * Escapes every `${` in the strings of a value as `$${`, so the value is never interpolated: what a
+ * `$file` gives reaches its reader as the file holds it. Keys are left alone.
+ *
+ * ```ts
+ * escapeVariables({ command: "bash ${CLAUDE_PLUGIN_ROOT}/x.sh" });
+ * // -> { command: "bash $${CLAUDE_PLUGIN_ROOT}/x.sh" }
+ * ```
+ */
+export function escapeVariables(value: JsonValue): JsonValue {
+    if (typeof value === "string") {
+        return value.split("${").join("$${");
+    }
+
+    if (Array.isArray(value)) {
+        return value.map(escapeVariables);
+    }
+
+    if (isPlainObject(value)) {
+        return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, escapeVariables(item)]));
+    }
+
+    return value;
 }
 
 /** Whether a path is one of the four `_vars` levels: root, compilation, a target, an output. */

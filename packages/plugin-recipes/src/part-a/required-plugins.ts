@@ -23,6 +23,12 @@ import type { RanFollowUp } from "./outputs.js";
 import { trustedRepos } from "./project.js";
 import { hasIntent } from "./util.js";
 
+/**
+ * The line added when installing a plugin named under `requires.plugins` fails: a plugin that
+ * ships inside a recipe has no npm name to match, so this is the most sous can say.
+ */
+export const REQUIRED_PLUGIN_HINT = "Perhaps the required plugin ships as part of a recipe?";
+
 /** The intent that installs plugins. */
 export const INSTALL_INTENT = "plugins.install";
 
@@ -204,7 +210,9 @@ export async function ensureRequiredPlugins(ctx: Context, resolved: readonly Res
 
     if (result.declined || (result.exitCode !== undefined && result.exitCode !== 0)) {
         throw new SousError(`Sous could not install ${specs.join(", ")}, so nothing was subscribed.`, {
-            details: [result.declined ? "The install was declined." : `${[result.command.command, ...result.command.args].join(" ")} exited with code ${result.exitCode}.`],
+            details: result.declined
+                ? ["The install was declined."]
+                : [`${[result.command.command, ...result.command.args].join(" ")} exited with code ${result.exitCode}.`, REQUIRED_PLUGIN_HINT],
         });
     }
 

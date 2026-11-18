@@ -14,7 +14,9 @@
 import { SousError } from "@sous-io/plugin-api";
 import type { IndexDependency, IndexFile, Lockfile, RecipeManifest } from "@sous-io/plugin-formats/types";
 import type { NamedRef, NamespaceRef, RecipeRef, SousRef } from "@sous-io/plugin-refs/types";
+import { isManifestExpression } from "@sous-io/plugin-formats";
 import semver from "semver";
+import { isInline } from "./contents.js";
 import type { NamespaceCoverage, NamespaceDetail, NamespaceListing, RecipeDetail, RecipeListing, VersionStatus } from "../types.js";
 import type { DependencySource } from "./declarations.js";
 import { compareBytewise } from "./util.js";
@@ -137,6 +139,27 @@ export function describedLocation(inputs: CatalogInputs, found: { repo: CatalogR
  *
  * @param manifest - The described version's manifest, when its files are on this machine.
  */
+/** What `recipe show` says of a value an expression decides when a subscriber's config is built. */
+export const CONDITIONAL_TEXT = "(conditional)";
+
+/**
+ * A manifest's `contents` group as `recipe show` lists it, before any expression is evaluated: an
+ * expression is shown as `(conditional)`, inline content as `(inline) <path>`.
+ */
+export function writtenGroup(written: unknown): { kind: string; include: string[] } {
+    if (isManifestExpression(written) || typeof written !== "object" || written === null) {
+        return { kind: CONDITIONAL_TEXT, include: [CONDITIONAL_TEXT] };
+    }
+
+    const group = written as { kind?: unknown; include?: unknown };
+    const include = Array.isArray(group.include) ? group.include : [];
+
+    return {
+        kind: typeof group.kind === "string" ? group.kind : CONDITIONAL_TEXT,
+        include: include.map((item) => (typeof item === "string" ? item : isInline(item) ? `(inline) ${item.path}` : CONDITIONAL_TEXT)),
+    };
+}
+
 export function describeRecipe(inputs: CatalogInputs, found: { repo: CatalogRepo; key: string }, manifest?: RecipeManifest): RecipeDetail {
     const subscriptions = new Set(inputs.subscriptions);
     const listing = recipeListing(found.key, found.repo, inputs, subscriptions);
@@ -152,11 +175,11 @@ export function describeRecipe(inputs: CatalogInputs, found: { repo: CatalogRepo
         versions: versionListings(entry.versions, listing.latest, listing.pinned),
         dependencies: dependencyListings(published?.dependencies, manifest, inputs),
         dependenciesRecorded: published?.dependencies !== undefined,
-        contents: (manifest?.contents ?? []).map((content) => ({
-            kind: content.kind,
-            include: [...content.include],
-            destinations: inputs.destinationsFor?.(content.kind) ?? [],
-        })),
+        contents: (manifest?.contents ?? []).map((written) => {
+            const content = writtenGroup(written);
+
+            return { ...content, destinations: inputs.destinationsFor?.(content.kind) ?? [] };
+        }),
         variables: manifest?.variables ?? published?.variables ?? [],
         manifestRead: manifest !== undefined,
     };

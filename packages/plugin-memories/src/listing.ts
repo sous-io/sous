@@ -17,15 +17,15 @@
 import path from "node:path";
 import { compareIncludeOrder } from "@sous-io/plugin-compiler";
 import type { HostGlobs } from "@sous-io/plugin-host/types";
-import type { ActiveRecipeEntity, RecipesContents } from "@sous-io/plugin-recipes/types";
+import type { ActiveRecipeContent, ActiveRecipeEntity } from "@sous-io/plugin-recipes/types";
 import { compileRecipeKeyFinder, compileRecipeKeyMatcher } from "./key-matcher.js";
 import type { MemoriesSettings, Memory } from "./types.js";
 
 /** The parts of `host.globs` the listing uses. */
 export type MemoryGlobs = Pick<HostGlobs, "isMatch" | "compareBytewise" | "realPathInside" | "toPosix">;
 
-/** The part of `recipes.contents` the listing uses. */
-export type MemoryContents = Pick<RecipesContents, "of">;
+/** The `memories` entries of `recipes.contents`, their files listed (`recipes.contents`' `of`). */
+export type MemoryContents = readonly ActiveRecipeContent[];
 
 /** The fields of an active recipe the listing reads. */
 export type MemoryRecipe = Pick<ActiveRecipeEntity, "id" | "repo" | "kind" | "requestedBy" | "dir" | "manifest">;
@@ -123,9 +123,14 @@ export function recipeMemories(
 ): Memory[] {
     const byFile = new Map<string, Memory>();
 
-    for (const content of contents.of([recipe], "memories")) {
-        for (const { file, base } of content.files) {
+    for (const content of contents.filter((entry) => entry.recipe === recipe.id)) {
+        for (const { file, base, content: text } of content.files) {
             if (byFile.has(file)) {
+                continue;
+            }
+
+            if (text !== undefined) {
+                byFile.set(file, { recipe: recipe.id, repository: recipe.repo, name: globs.toPosix(path.relative(base, file)), path: file, content: text });
                 continue;
             }
 

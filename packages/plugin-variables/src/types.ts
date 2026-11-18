@@ -58,6 +58,12 @@ export interface VariableSourceEntity {
     /** The names of the values it gives that are secret. */
     secrets?(ctx: VariableSourceContext): readonly string[];
     /**
+     * The names of the values it gives that are booleans, given as `"true"` or `"false"`. Liquid
+     * (templates and config expressions) sees them as `true` and `false`, so `{% if name %}` takes
+     * the false branch for `"false"`; `${name}` still gives the text (ADR 0038).
+     */
+    booleans?(ctx: VariableSourceContext): readonly string[];
+    /**
      * Top-level config keys under which an expression may not read these variables (recipe
      * answers: `subscriptions` and `repos`).
      */
@@ -166,6 +172,12 @@ export interface VariablesSecrets {
     hide(scope: VarScope, declared?: ReadonlySet<string>): Record<string, string>;
 }
 
+/** Which variables are booleans (ADR 0038). */
+export interface VariablesBooleans {
+    /** Every name a `variable-source` entity declares a boolean in this config. */
+    declared(): ReadonlySet<string>;
+}
+
 /** The root `_vars` and `_env` keys this plugin owns. */
 export interface VariablesConfig {
     /** Config variables, resolved in any order. Auto-variable names are refused. */
@@ -182,6 +194,8 @@ declare module "@sous-io/plugin-api" {
         "variables.names": VariablesNames;
         /** Secrets. */
         "variables.secrets": VariablesSecrets;
+        /** Which variables are booleans. */
+        "variables.booleans": VariablesBooleans;
     }
 
     interface SousEntities {

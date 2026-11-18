@@ -118,7 +118,7 @@ export class ActiveRecipes implements RecipesActive {
     }
 
     contents(kind: ContentKind): ActiveRecipeContent[] {
-        return this.services.get("recipes.contents").of(this.list(), kind);
+        return this.services.get("recipes.contents").of(this.config, kind);
     }
 
     variables(): Array<{ readonly recipe: ActiveRecipeEntity; readonly definition: VariableDefinition }> {

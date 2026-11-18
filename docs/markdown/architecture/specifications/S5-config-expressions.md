@@ -67,6 +67,8 @@ loading the config, and the result takes its place.
    - `$if`, and `$if:<name>`
    - `$elseif`, and `$elseif:<name>`
    - `$else`
+   - `$file` (added 2026-11-18; an object holding it holds no other key; see "`$file`: a Value
+     Read from a File")
 
 3. **No mixing.** (Accepted 2026-10-25.) An object holding a reserved key and any key that is not
    reserved is an error naming the file, the key path and the stray key, so a typo such as `"$iff"`
@@ -111,9 +113,11 @@ loading the config, and the result takes its place.
   build with no harness, never `undefined` (S8, one config build per harness). `harness` is a
   built-in name like `host` and `env`, never looked up as a variable.
 - `env.<NAME>`: environment variables, after the env files load.
+- `harness.id`: the harness the config is built for, or `""` (added 2026-11-18).
 - Variables, by their bare name, as a template reads them (`machineRole == 'laptop'`). Decided: an
   expression sees the `_vars` of every level that contains it (see "Variable scopes" in S2, config building).
 - Recipe answers, except in an expression under `subscriptions` or `repos` (see "Recipe answers" in S2, config building).
+  A `boolean` answer is `true` or `false`, not text (added 2026-11-18).
 
 ## Expression Languages
 
@@ -560,6 +564,53 @@ A value with three outcomes, written with qualifiers:
 }
 ```
 
+## `$file`: a Value Read from a File
+
+Added 2026-11-18 (see S12, manifests as config). An object whose only key is `$file` stands in for
+the value a file holds, anywhere in a JSON, JSONC or YAML config file and in a recipe's manifest.
+
+```jsonc
+{
+    "editorRules": {
+        "$if": {
+            "expr": "harness.id == 'claude-code'",
+            "then": { "$file": "rules/deny.json" }
+        }
+    }
+}
+```
+
+1. The path is relative to the file holding the object, and is interpolated for `${name}`
+   variables; a variable not known yet gives `undefined` for the pass, as an unknown variable does.
+2. `.json`, `.jsonc`, `.yaml` and `.yml` files give a structured value; any other file gives its
+   text. A file whose name contains `.tpl.` is rendered as Liquid first, with the variables,
+   `host`, `env` and `harness`.
+3. No other file's content is interpolated: every `${` in the value is escaped as `$${`.
+   Expressions inside the file are not evaluated.
+4. The file is an input to config building: watch mode rebuilds the config when it changes.
+5. An object holding `$file` and any other key, a path that is not a string, and a file that
+   cannot be read or parsed are errors naming the file and key path.
+
+## Writing a Literal `${`
+
+Added 2026-11-18. `$${name}` in a config value is the literal text `${name}`: the substitution that
+uses the value gives `${name}` and never reads it as a variable, so an unknown name is not an error.
+
+```jsonc
+{
+    "_vars": {
+        "hook": "bash \"$${CLAUDE_PLUGIN_ROOT}/scripts/start.sh\""
+    }
+}
+```
+
+`${hook}` then gives `bash "${CLAUDE_PLUGIN_ROOT}/scripts/start.sh"`.
+
+## `harness.id`
+
+An expression can read `harness.id`, the harness the config is built for (`claude-code`, `codex`).
+In the build with no harness it is the empty string, never missing.
+
 ## `.js` Layers Get No Expression Helper
 
 Ruled 2026-10-25: `builder` gets no method that evaluates an expression object. A `.js` or `.mjs`
@@ -578,3 +629,18 @@ per harness (S8): "I accept your recommendations" (2026-11-16). The evaluator ke
 records apart, since the builds run side by side; `evaluations(file, harness)` takes the build
 (default `""`), and an expression still unknown once the config settles names the harness build it
 was in.
+- **2026-11-18: `$file` added to the reserved keys**, by Luke's ruling (2026-11-17): "`b with the
+  general $include` is my answer", renamed: "Sure, we can use $file instead. Seems better, anyway."
+  Reason: a large value (a list of permission rules, a server definition) is easier to keep in a
+  file of its own format, and a recipe's manifest is now evaluated as config (S12). Its content is
+  not interpolated, as Luke ruled: "if a file contains `.tpl.`, its processed as a liquid template.
+  Otherwise, its not interpolated at all."
+- **2026-11-18: `$${` writes a literal `${`.** Luke asked for "a way to escape variables in
+  interpolation operations" (2026-11-17); the agent chose `$${`, the escape Docker Compose and
+  Terraform use, because a backslash must itself be escaped in JSON. Reason: a value such as a hook
+  command holds `${CLAUDE_PLUGIN_ROOT}`, which another tool fills in.
+- **2026-11-18: `harness.id` can be read**, the empty string when no harness is known (the build
+  contracts of the 2026-11-18 build; the per-harness builds set it).
+- **2026-11-18: a boolean recipe answer is a boolean in a condition.** A recipe variable of type
+  `boolean` answered `false` gives `false` to an expression, not the text `"false"`, which "Truth
+  and Falsehood" above says is true. Environment variables are unchanged: still text (S12).

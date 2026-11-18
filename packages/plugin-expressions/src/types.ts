@@ -91,6 +91,17 @@ export interface EvaluateLayerOptions {
     ownVars?: Readonly<Record<string, string>>;
     /** True for a recipe's config file: languages that run code are refused. */
     fromRecipe?: boolean;
+    /**
+     * The directory a relative `$file` path is resolved against: the folder of the file holding
+     * the data (a config file's folder, a recipe's folder). Default: the project root, else the
+     * working directory.
+     */
+    baseDir?: string;
+    /**
+     * A named variable scope laid over the root (a recipe's own answers: `namespace/recipe`), for
+     * data a recipe declared.
+     */
+    scopeKey?: string;
 }
 
 /** What evaluating a layer gave. */
@@ -127,6 +138,11 @@ export interface ExpressionsEvaluator {
     evaluations(file?: string, harness?: string): EvaluatedExpression[];
     /** Expressions still unknown in the latest pass of every config build; non-empty once the config settles means an error. */
     unsettled(): UnsettledExpression[];
+    /**
+     * Every file a `$file` value read in the latest build, absolute. They are inputs to config
+     * building: watch mode rebuilds the config when one changes.
+     */
+    files?(): string[];
     /** The languages known, in plugin order. */
     languages(): string[];
 }

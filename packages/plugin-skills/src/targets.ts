@@ -12,6 +12,7 @@ import type { ConfigBuilder, ServiceContext } from "@sous-io/plugin-api";
 import type { CompilationOutput, CompilationTarget, CompilationTransformEntity, TransformFile } from "@sous-io/plugin-compiler/types";
 import { skillDestinations, transformIdFor, type SkillDestination } from "./destinations.js";
 import { stringsOf } from "./settings.js";
+import type { RecipesContents } from "@sous-io/plugin-recipes/types";
 import { findSkills, type FindSkillsInput, type FoundSkill } from "./sources.js";
 import type { SkillFile, SkillTargetEntity } from "./types.js";
 
@@ -25,11 +26,10 @@ interface FileOrigin {
 }
 
 /** Adds the compilation targets for every skill. */
-export function contributeSkillTargets(config: ConfigBuilder, plugin: string, contents: FindSkillsInput["contents"]): void {
+export function contributeSkillTargets(config: ConfigBuilder, plugin: string, contents: Pick<RecipesContents, "of">): void {
     const outputs = stringsOf(config.atPath("recipes.skills.outputs").get());
     const include = stringsOf(config.atPath("recipes.skills.include").get());
     const targets = config.entities("skill-target");
-    const recipes = config.entities("active-recipe");
     const destinations = skillDestinations(outputs, targets);
 
     // With nowhere to write, nothing is added; the compile says why (see ./nowhere.ts).
@@ -37,7 +37,14 @@ export function contributeSkillTargets(config: ConfigBuilder, plugin: string, co
         return;
     }
 
-    const { skills } = findSkills({ recipes, contents, include, project: config.project });
+    // The `skills` entries of `recipes.contents` (law L8), read through the builder.
+    const input: FindSkillsInput = {
+        contents: contents.of(config, "skills"),
+        recipes: config.entities("active-recipe"),
+        include,
+        project: config.project,
+    };
+    const { skills } = findSkills(input);
 
     if (skills.length === 0) {
         return;
@@ -73,6 +80,25 @@ function compilationTarget(
     const fromBase = path.relative(skill.base, entryPoint).split(path.sep).join("/");
     const where =
         skill.recipe ?? `project:${projectRoot ? path.relative(projectRoot, skill.base).split(path.sep).join("/") || "." : skill.base}`;
+    const inline = skill.inline?.get(entryPoint);
+
+    if (inline !== undefined) {
+        // Inline content has no file: a `content` target writing each destination's file.
+        return {
+            id: `skills/${where}/${fromBase}`,
+            content: inlineTemplate(inline, fromBase),
+            origin: {
+                plugin,
+                ...(skill.recipe === undefined ? {} : { recipe: skill.recipe }),
+                ...(skill.repository === undefined ? {} : { repository: skill.repository }),
+            },
+            outputs: destinations.map((destination): CompilationOutput => {
+                const destinationFile = `${destination.dir.replace(/\/+$/, "")}/${fromBase}`;
+
+                return destination.transform ? { destinationFile, transforms: [destination.transform] } : { destinationFile };
+            }),
+        };
+    }
 
     return {
         id: `skills/${where}/${fromBase}`,
@@ -87,6 +113,15 @@ function compilationTarget(
             destination.transform ? { destinationDir: destination.dir, transforms: [destination.transform] } : { destinationDir: destination.dir },
         ),
     };
+}
+
+/**
+ * The template a `content` target compiles for inline content. The compiler renders every
+ * `content` source as Liquid, but only a `.tpl.` path is a template, so any other inline content is
+ * wrapped in `{% raw %}` and written as it is.
+ */
+export function inlineTemplate(content: string, virtualPath: string): string {
+    return path.posix.basename(virtualPath).includes(".tpl.") ? content : `{% raw %}${content}{% endraw %}`;
 }
 
 /** A skill target's transform, as the compiler calls it: each file told its skill and recipe. */

@@ -152,16 +152,46 @@ export interface VariableDefinition extends Extensions {
 // The recipe manifest (`sous.recipe.yaml`)
 // ---------------------------------------------------------------------------------------------
 
-/** A kind of content a recipe publishes. Plugins may read kinds of their own. */
+/** A kind of content a recipe publishes. A plugin adds a kind with a `content-kind` entity. */
 export type ContentKind = "skills" | "memories" | "prompts" | "config" | (string & {});
 
-/** One block of content a recipe publishes. */
-export interface RecipeContent extends Extensions {
+/**
+ * An object holding a config expression key (`$if`, `$elseif`, `$else`, `$expr`, each optionally
+ * qualified) or `$file`. In a manifest it is evaluated when a subscriber's config is built
+ * (specification S12), so the manifest itself holds it as written.
+ */
+export type ManifestExpression = { readonly [key: `$${string}`]: unknown };
+
+/** A value as a manifest may write it: the value itself, or an expression that gives it. */
+export type Expressible<T> = T | ManifestExpression;
+
+/** Content written in place of a file; `path` is the path it is treated as having. */
+export interface InlineContent {
+    $inline: string;
+    path: string;
+}
+
+/** One block of content a recipe publishes, after its expressions are evaluated. */
+export interface RecipeContentGroup extends Extensions {
     kind: ContentKind;
-    /** Glob patterns, relative to the recipe. */
-    include: string[];
+    /** Glob patterns relative to the recipe, or inline content. */
+    include: Array<string | InlineContent>;
     exclude?: string[];
 }
+
+/** One block of content as a manifest writes it: any value may be an expression. */
+export interface RecipeContent extends Extensions {
+    kind: Expressible<ContentKind>;
+    /** Glob patterns relative to the recipe, inline content, or expressions giving either. */
+    include: Array<Expressible<string | InlineContent>>;
+    exclude?: Expressible<Array<Expressible<string>>>;
+}
+
+/**
+ * One declared edit to a document file, as a manifest writes it (spec of the editor): `file` and
+ * one or more operation keys, or a file-less operation. The editor plugin checks the operations.
+ */
+export type RecipeEdit = Readonly<Record<string, unknown>>;
 
 /** The plugin a recipe ships: one bundled file, and optionally its types. */
 export interface RecipePluginEntry {
@@ -189,13 +219,15 @@ export interface RecipeManifest extends Extensions {
     depends?: string[];
     /** Refs of recipes the project also subscribes to. */
     subscribes?: string[];
-    /** Default `[]`. */
-    contents: RecipeContent[];
+    /** Default `[]`. A group may itself be an expression. */
+    contents: Array<Expressible<RecipeContent>>;
     variables?: VariableDefinition[];
     plugin?: RecipePluginEntry;
     requires?: RecipeRequirements;
     /** Each purpose's handlers, run in the order listed. */
     handlers?: RecipeHandlers;
+    /** Declared edits to document files; each entry may be an expression. */
+    edits?: Array<Expressible<RecipeEdit>>;
 }
 
 /** One handler a recipe lists: a file in the recipe and the function it exports. */

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   parseRecipeManifest,
+  possibleContentKinds,
   recipeManifestKey,
   recipeManifestSchema,
 } from "./recipe-manifest.js";
@@ -260,15 +261,63 @@ describe("recipe manifest dependency lists", () => {
 
 describe("recipe manifest contents", () => {
   /**
-   * A content group's kind decides where its files land, and only the four
-   * known kinds are accepted.
+   * Kinds are open: a plugin registers a kind, so the manifest accepts any
+   * kind name, and whether anything registered it is judged later.
+   *
+   * parseRecipeManifest({ ..., contents: [{ kind: "claude-code-plugin", ... }] });  // parses
    */
-  it("should reject an unknown content kind", () => {
+  it("should accept a kind no built-in plugin registers", () => {
+    const parsed = parseRecipeManifest(
+      { ...validManifest(), contents: [{ kind: "claude-code-plugin", include: ["plugin/**"] }] },
+      SOURCE
+    );
+
+    expect(parsed.contents).toEqual([{ kind: "claude-code-plugin", include: ["plugin/**"] }]);
+  });
+
+  /** A kind is still a name: lowercase words joined by hyphens. */
+  it("should reject a kind that is not a kind name", () => {
     const message = expectRejectMessage({
       ...validManifest(),
-      contents: [{ kind: "scripts", include: ["scripts/*.sh"] }],
+      contents: [{ kind: "Scripts Here", include: ["scripts/*.sh"] }],
     });
-    expect(message).toContain("contents[0].kind:");
+    expect(message).toContain("contents[0]");
+  });
+
+  /**
+   * Expressions are evaluated when a subscriber's config is built, so a
+   * manifest may write one for a whole group, for a kind, and for any item
+   * of include and exclude.
+   *
+   * contents:
+   *   - $if: { expr: "harness.id == 'claude-code'", then: { kind: skills, include: [claude/**] } }
+   *   - kind: skills
+   *     include: [skills/**, { $if: "jiraEnabled", then: jira/** }]
+   *     exclude: [{ $if: { expr: "jiraEnabled != true", then: skills/jira-* } }]
+   */
+  it("should accept expressions on a group, on include items and on exclude items", () => {
+    const contents = [
+      { $if: { expr: "harness.id == 'claude-code'", then: { kind: "skills", include: ["claude/**"] } } },
+      {
+        kind: { $expr: "'skills'" },
+        include: ["skills/**", { $if: { expr: "jiraEnabled", then: "jira/**" } }],
+        exclude: [{ $if: { expr: "jiraEnabled != true", then: "skills/jira-*/**" } }],
+      },
+    ];
+
+    expect(parseRecipeManifest({ ...validManifest(), contents }, SOURCE).contents).toEqual(contents);
+  });
+
+  /** Inline content needs a path, which is the path it is treated as having. */
+  it("should accept inline content with a path, and reject it without one", () => {
+    const inline = { $inline: "# Hello", path: "skills/hello/SKILL.md" };
+
+    expect(
+      parseRecipeManifest({ ...validManifest(), contents: [{ kind: "skills", include: [inline] }] }, SOURCE).contents
+    ).toEqual([{ kind: "skills", include: [inline] }]);
+    expect(
+      expectRejectMessage({ ...validManifest(), contents: [{ kind: "skills", include: [{ $inline: "# Hello" }] }] })
+    ).toContain("contents[0]");
   });
 
   /**
@@ -298,6 +347,40 @@ describe("recipe manifest contents", () => {
         contents: [{ kind: "skills", include: ["**/*.md"], exclude: ["/etc/passwd"] }],
       })
     ).toContain("contents[0].exclude[0]: an exclude pattern must be relative");
+  });
+});
+
+describe("recipe manifest edits", () => {
+  /**
+   * Only the outer shape is checked: a list of objects holding `file` and an
+   * operation, or a file-less operation. The editor checks the operations.
+   */
+  it("should accept edits with a file, file-less operations and expressions", () => {
+    const edits = [
+      { file: ".claude/settings.json", set: { path: "env.MODE", value: "strict" } },
+      { ensureDirectoryExists: { path: "docs/context" } },
+      { $if: { expr: "harness.id == 'codex'", then: { file: ".codex/config.toml", set: { path: "a", value: 1 } } } },
+    ];
+
+    expect(parseRecipeManifest({ ...validManifest(), edits }, SOURCE).edits).toEqual(edits);
+  });
+
+  /** An entry naming no operation does nothing, so it is refused. */
+  it("should reject an edit that names no operation", () => {
+    expect(expectRejectMessage({ ...validManifest(), edits: [{ file: "a.json" }] })).toContain("names no operation");
+  });
+});
+
+describe("possibleContentKinds()", () => {
+  /** Every kind a manifest could give, literal or inside an expression's branches. */
+  it("should list literal kinds and the kinds inside expressions", () => {
+    expect(
+      possibleContentKinds([
+        { kind: "skills", include: ["a"] },
+        { $if: { expr: "x", then: { kind: "notes", include: ["b"] } }, $else: { kind: "memories", include: ["c"] } },
+        { kind: { $if: [{ expr: "y", then: "claude-code-plugin" }] }, include: ["d"] },
+      ])
+    ).toEqual(["skills", "notes", "memories", "claude-code-plugin"]);
   });
 });
 

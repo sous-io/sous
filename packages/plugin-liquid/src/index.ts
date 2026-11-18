@@ -36,6 +36,6 @@ export const liquidPlugin: PluginDefinition = definePlugin({
 
 export default liquidPlugin;
 
-export { createLiquidEngines, filterAllowed, tagAllowed, CONFIG_EXPRESSION_PURPOSE, DEFAULT_PURPOSE } from "./engine.js";
+export { createLiquidEngines, filterAllowed, liquidValues, tagAllowed, CONFIG_EXPRESSION_PURPOSE, DEFAULT_PURPOSE } from "./engine.js";
 export type { LiquidEngineDeps } from "./engine.js";
 export type * from "./types.js";

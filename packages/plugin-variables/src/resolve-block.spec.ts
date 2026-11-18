@@ -150,3 +150,19 @@ describe("resolveBlock()", () => {
         expect(result.pending).toEqual(["a"]);
     });
 });
+
+describe("resolveBlock() and the $${ escape", () => {
+    /**
+     * An escaped `$${name}` resolves at once, to the literal `${name}`, and a value using it is
+     * not substituted again.
+     *
+     * resolve({ hook: "$${CLAUDE_PLUGIN_ROOT}/x.sh", cmd: "bash ${hook}" });
+     * // { hook: "${CLAUDE_PLUGIN_ROOT}/x.sh", cmd: "bash ${CLAUDE_PLUGIN_ROOT}/x.sh" }
+     */
+    it("should keep an escaped reference literal", () => {
+        expect(resolve({ hook: "$${CLAUDE_PLUGIN_ROOT}/x.sh", cmd: "bash ${hook}" })).toEqual({
+            hook: "${CLAUDE_PLUGIN_ROOT}/x.sh",
+            cmd: "bash ${CLAUDE_PLUGIN_ROOT}/x.sh",
+        });
+    });
+});

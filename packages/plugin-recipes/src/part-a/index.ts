@@ -8,7 +8,8 @@ import fs from "node:fs";
 import { jsonSchema, type ServiceReader, type Sous } from "@sous-io/plugin-api";
 import { createDirectories } from "@sous-io/plugin-host";
 import type { HostDirectories } from "@sous-io/plugin-host/types";
-import { RecipeContents } from "./contents.js";
+import { RECIPES_CONTENTS_KEY, RecipeContents } from "./contents.js";
+import { CONTENT_KIND, manifestsContributor, recipesContentsConfigKey, registerContentKinds, unknownKindsError } from "./manifests.js";
 import { ActiveRecipes } from "./active.js";
 import { configKeys, DEFAULT_STORE_MAX_BYTES } from "./config-keys.js";
 import { Declarations } from "./declarations.js";
@@ -41,6 +42,21 @@ export function registerPartA(sous: Sous): void {
     for (const key of configKeys()) {
         sous.entities.add("config-key", key);
     }
+
+    // Manifests as config (law L8): each active recipe's contents and edits become config values.
+    sous.entities.add("config-key", recipesContentsConfigKey);
+    registerContentKinds(sous);
+    sous.config.contribute(manifestsContributor(sous.services, ["recipes.fetch"]));
+
+    // A kind nobody registered is judged once the config has settled: a plugin a recipe ships may
+    // register its kind in a later pass than the one that first read the manifest.
+    sous.on("config.built", (event) => {
+        const error = unknownKindsError(event.payload.config.get(RECIPES_CONTENTS_KEY), event.payload.config.entities.list(CONTENT_KIND));
+
+        if (error !== undefined) {
+            throw error;
+        }
+    });
 
     sous.services.add("recipes.trust", (config, ctx) => new Trust(config, ctx.services), { lifetime: "config" });
     sous.services.add("recipes.active", (_config, ctx) => new ActiveRecipes(ctx.config, ctx.services), { lifetime: "config" });
