@@ -479,21 +479,21 @@ describe("resolveIncludeFiles()", () => {
   }
 
   /**
-   * A glob names every file it matches, in bytewise path order.
+   * A glob names every file it matches, case ignored (compareIncludeOrder).
    *
-   * resolveIncludeFiles("m/*.md") // -> m/B.md, m/a.md, m/c.md (uppercase sorts first)
+   * resolveIncludeFiles("m/*.md") // -> m/a.md, m/B.md, m/c.md
    *
    * The names differ by more than case, so they are three files on a
    * case-insensitive filesystem (Windows, macOS) too.
    */
-  it("should return every glob match in bytewise order", () => {
+  it("should return every glob match in include order, case ignored", () => {
     tmp = makeTmpDir();
     write("m/c.md");
     write("m/a.md");
     write("m/B.md");
     write("m/skip.txt");
     const out = resolveIncludeFiles("m/*.md", { baseDir: tmp.path });
-    expect(out.files.map((f) => path.basename(f))).toEqual(["B.md", "a.md", "c.md"]);
+    expect(out.files.map((f) => path.basename(f))).toEqual(["a.md", "B.md", "c.md"]);
     expect(out.glob).toBe(true);
   });
 
@@ -512,7 +512,8 @@ describe("resolveIncludeFiles()", () => {
   /**
    * A glob works under an alias base, `{a,b}` and `**` included.
    *
-   * resolveIncludeFiles("#project/**\/*.md", { aliases }) // -> every .md below the base
+   * resolveIncludeFiles("#project/**\/*.md", { aliases }) // -> every .md below the base,
+   * // the base's own files before its sub-folders'
    */
   it("should expand a glob under an alias base", () => {
     tmp = makeTmpDir();
@@ -524,8 +525,8 @@ describe("resolveIncludeFiles()", () => {
       baseDir: tmp.path,
     });
     expect(out.files.map((f) => path.relative(tmp.path, f))).toEqual([
-      path.join("root", "deep", "two.md"),
       path.join("root", "one.md"),
+      path.join("root", "deep", "two.md"),
     ]);
     const braces = resolveIncludeFiles("root/{one,deep/two}.md", { baseDir: tmp.path });
     expect(braces.files).toHaveLength(2);
