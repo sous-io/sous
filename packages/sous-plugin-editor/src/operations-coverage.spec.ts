@@ -284,7 +284,6 @@ const KNOWN_DEFECTS: Record<string, string> = Object.fromEntries(
             'ensureBlock {"path":"notes","name":"kw","content":"x"} yaml',
             'removeLine {"path":"notes","line":"hello"} yaml',
         ].map((name) => [name, "YAML: a string keeps a quoting or block style its old value needed"]),
-        ['removeLine {"path":"notes","line":"hello"} jsonc', "undoing removeLine adds a line break the text did not have"],
     ],
 );
 
@@ -477,6 +476,27 @@ describe("undoing replacePattern through editor.apply", () => {
 
         await project.apply([]);
         expect(project.read("notes.txt")).toBe("betA, gamma");
+    });
+});
+
+describe("undoing removeLine through editor.apply", () => {
+    /**
+     * A text emptied by removeLine cannot tell whether it ended in a line break, so the record
+     * says; undoing puts back exactly the text there was, with or without one.
+     *
+     * "only"   removeLine "only" -> ""; undeclared -> "only"
+     * "only\n" removeLine "only" -> ""; undeclared -> "only\n"
+     */
+    it("should put back the last line with or without its line break", async () => {
+        for (const original of ["only", "only\n", "a\r\nonly"]) {
+            const entry = { file: "notes.txt", removeLine: { line: "only" } };
+
+            project.write("notes.txt", original);
+            await project.apply([entry]);
+            await project.apply([]);
+
+            expect(project.read("notes.txt")).toBe(original);
+        }
     });
 });
 

@@ -330,7 +330,8 @@ function removeFirst(node: DocNode, value: JsonValue): void {
  */
 interface LinesAccess {
     readonly doc: LinesDocument;
-    save(): void;
+    /** Writes the lines back when they changed; `finish` adjusts the text first. */
+    save(finish?: (text: string) => string): void;
 }
 
 function linesAccess(ctx: OperationContext, operation: string, comment?: CommentStyle): LinesAccess {
@@ -341,9 +342,9 @@ function linesAccess(ctx: OperationContext, operation: string, comment?: Comment
 
         return {
             doc,
-            save: () => {
+            save: (finish = (text) => text) => {
                 if (doc.changed()) {
-                    ctx.session.setText(doc.toString());
+                    ctx.session.setText(finish(doc.toString()));
                 }
             },
         };
@@ -360,9 +361,9 @@ function linesAccess(ctx: OperationContext, operation: string, comment?: Comment
 
     return {
         doc,
-        save: () => {
+        save: (finish = (text) => text) => {
             if (doc.changed()) {
-                node.set(doc.toString());
+                node.set(finish(doc.toString()));
             }
         },
     };
@@ -1791,12 +1792,19 @@ define({
             .map((line, index) => (line === params.line ? index : -1))
             .filter((index) => index !== -1);
 
-        if (removed.length > 0) {
-            doc.remove(params.line as string);
-            save();
+        if (removed.length === 0) {
+            return { removed };
         }
 
-        return { removed };
+        // What a text left with no line break cannot say any more: whether it ended in one, and which.
+        const text = doc.toString();
+        const finalBreak = text.endsWith("\n");
+        const lineBreak = text.includes("\r\n") ? "\r\n" : "\n";
+
+        doc.remove(params.line as string);
+        save();
+
+        return { removed, finalBreak, lineBreak } as JsonValue;
     },
     down(ctx, params, record) {
         if (!isJsonObject(record)) return;
@@ -1806,12 +1814,21 @@ define({
         if (removed.length === 0) return;
 
         const { doc, save } = linesAccess(ctx, "removeLine");
+        const before = doc.toString();
+        const emptied = doc.length() === 0;
 
         for (const index of removed) {
             doc.replaceLines(Math.min(index, doc.length()), 0, [params.line as string]);
         }
 
-        save();
+        // A text with no line break left takes the recorded one, and an emptied text its final one.
+        save((text) => {
+            let restored = !before.includes("\n") && record.lineBreak === "\r\n" ? text.replace(/\r?\n/g, "\r\n") : text;
+
+            if (emptied && record.finalBreak === false) restored = restored.replace(/\r?\n$/, "");
+
+            return restored;
+        });
     },
     mergeRecords: keepEarlier,
     assertions: (params, path) => [{ check: "includesLine", arg: params.line!, path, not: true }],
