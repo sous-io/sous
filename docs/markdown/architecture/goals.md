@@ -32,7 +32,24 @@ reason.
 - **G8.** Every core feature works without any particular agent tool. Features that only one tool
   supports are additions on top, never replacements.
 - **G9.** Everything must be VERY fast.
+- **G10.** Config as desired state. Once the config is built, it holds everything sous needs to
+  know what it should make true: the desired state, and the inputs used to compute it (such as the
+  host's platform). Code that acts makes the project match the config. Which contributor set each
+  value is recorded beside the config, not in it.
+
+  > "once the config is built, it contains 100% of all information Sous needs to understand the
+  > desired state and how it was arrived at."
+  >
+  >   -- **Luke Chavers** in an agent session (2026-11-16)
 
 ## Changes
 
-None yet.
+- **2026-11-16: G10 added**, by Luke's ruling. Reason: the build already works this way (plugins
+  add compilation targets to the config, and the compiler makes the project match them), and Luke
+  wants it written down and kept as an ideal:
+
+  > "'Config as desired state' is something we should document and maintain as a goal and ideal"
+  >
+  >   -- **Luke Chavers** in an agent session (2026-11-16)
+
+  Law L8 (declarations as config) is the rule that serves this goal.
