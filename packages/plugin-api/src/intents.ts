@@ -97,7 +97,7 @@ export interface IntentDefinition<N extends string = string, S extends SousSchem
     /** Running it changes the config, so the engine rebuilds the config before the next chain. */
     changesConfig?: boolean;
     /**
-     * It can run when the config fails to build (`sous update` repairing a broken install): it runs
+     * It can run when the config fails to build (`sous upgrade` repairing a broken install): it runs
      * with whatever partial config the failed build reached (the plugins it activated, the values
      * it merged, unchecked), and the build's error is reported as a warning. Other intents fail
      * with that error.

@@ -6,7 +6,7 @@ It adds these commands:
 
 | Command | Does |
 | --- | --- |
-| `sous update` | updates sous globally and in this project, with the package manager that installed each copy |
+| `sous upgrade` | upgrades sous globally and in this project, with the package manager that installed each copy |
 | `sous plugins install` | installs npm plugins through the project's package manager |
 
 ## Using it from another plugin
@@ -14,7 +14,7 @@ It adds these commands:
 ```ts
 import type {} from "@sous-io/plugin-update/types";
 
-await ctx.run("update", { dryRun: true });
+await ctx.run("upgrade", { dryRun: true });
 ```
 
 ## Where things are

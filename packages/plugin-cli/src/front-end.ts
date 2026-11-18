@@ -55,7 +55,7 @@ export async function runCommandLine(engine: EngineHandle, argv: readonly string
         }
 
         // A config that failed to build stops every command except an intent that can run
-        // without it (`sous update`), as it did before the front end started.
+        // without it (`sous upgrade`), as it did before the front end started.
         if (engine.configError !== undefined && !(line.kind === "run" && engine.intents.get(line.command.intent)?.definition.toleratesConfigErrors === true)) {
             throw engine.configError;
         }

@@ -1,5 +1,5 @@
 /**
- * The `update` intent: moves sous itself to a newer (or a chosen) version, for the global install,
+ * The `upgrade` intent (`sous upgrade`): moves sous itself to a newer (or a chosen) version, for the global install,
  * the project's own install, or both, through whichever package manager owns each one.
  *
  * Every plan is worked out before anything runs: the registry is read, the installs are found and
@@ -41,11 +41,11 @@ export function requestOf(input: UpdateInput): VersionRequest {
 /** Checks the flags that cannot be combined. */
 function checkInput(input: UpdateInput): void {
     if (input.major && input.version !== undefined) {
-        throw new InputError("update", [{ path: "major", message: "cannot be combined with version" }]);
+        throw new InputError("upgrade", [{ path: "major", message: "cannot be combined with version" }]);
     }
 
     if (input.global && input.project) {
-        throw new InputError("update", [{ path: "global", message: "cannot be combined with project" }]);
+        throw new InputError("upgrade", [{ path: "global", message: "cannot be combined with project" }]);
     }
 }
 
@@ -299,7 +299,7 @@ export async function handle(input: UpdateInput, ctx: Context): Promise<IntentOu
 
     const result: UpdateResult = { ...base, outcomes, ...(build === undefined ? {} : { build }), failed };
 
-    // The CLI turns an error into exit code 1, as `sous update` always did when a step failed.
+    // The CLI turns an error into exit code 1, as `sous upgrade` (then `sous update`) always did when a step failed.
     if (failed) {
         throw new ConfigError("Not every step of the update succeeded.", {
             details: [...outcomes.map(describeOutcome), ...(build === undefined ? [] : [`Project build: ${build.result}`])],

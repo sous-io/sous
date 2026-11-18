@@ -25,7 +25,7 @@ function brokenPlugin(): PluginDefinition {
                     throw new ConfigError("The config file is broken.", { details: ["Fix line 3."] });
                 },
             });
-            sous.intents.add({ intent: "update", toleratesConfigErrors: true, handle: () => text("updated") });
+            sous.intents.add({ intent: "upgrade", toleratesConfigErrors: true, handle: () => text("upgraded") });
             sous.intents.add({ intent: "build", handle: () => text("built") });
         },
     });
@@ -77,10 +77,10 @@ describe("the CLI and the engine", () => {
 
     /** An intent that tolerates config errors runs, with the error as a warning. */
     it("should run an intent that tolerates config errors", async () => {
-        const run = await runBroken(["update"]);
+        const run = await runBroken(["upgrade"]);
 
-        expect(run.stdout).toContain("updated");
-        expect(run.stderr).toContain("The config could not be built, so update runs");
+        expect(run.stdout).toContain("upgraded");
+        expect(run.stderr).toContain("The config could not be built, so upgrade runs");
         expect(run.exitCode ?? 0).toBe(0);
     });
 });

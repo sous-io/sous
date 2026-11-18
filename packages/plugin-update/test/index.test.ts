@@ -27,24 +27,24 @@ describe("plugin-update registration", () => {
 
         expect(entities).toEqual(["package-manager"]);
         expect(contributors).toEqual(["update.scan"]);
-        expect(intents.map((intent) => intent.intent)).toEqual(["update", "plugins.install"]);
+        expect(intents.map((intent) => intent.intent)).toEqual(["upgrade", "plugins.install"]);
     });
 
     /** The old flags should survive: -y/--force/--yes, --pre, --dry-run, --no-build, --version, --major, --global, --project. */
-    it("should keep every flag of sous update", async () => {
+    it("should keep every flag sous update had, under sous upgrade", async () => {
         const { intents } = await register();
-        const update = intents.find((intent) => intent.intent === "update")!;
+        const update = intents.find((intent) => intent.intent === "upgrade")!;
         const properties = Object.keys((update.input as any)["~standard"].jsonSchema?.input({ target: "draft-2020-12" }).properties ?? {});
 
         expect(properties).toEqual(expect.arrayContaining(["major", "version", "prerelease", "global", "project", "yes", "dryRun", "noBuild"]));
         expect(update.cli?.flags).toMatchObject({ yes: { short: "y", aliases: ["force"] }, prerelease: { aliases: ["pre"] } });
     });
 
-    /** `sous update` must run when the config fails to build, since it is how a broken install is repaired. */
+    /** `sous upgrade` must run when the config fails to build, since it is how a broken install is repaired. */
     it("should let update run with a broken config", async () => {
         const { intents } = await register();
 
-        expect(intents.find((intent) => intent.intent === "update")?.toleratesConfigErrors).toBe(true);
+        expect(intents.find((intent) => intent.intent === "upgrade")?.toleratesConfigErrors).toBe(true);
         expect(intents.find((intent) => intent.intent === "plugins.install")?.toleratesConfigErrors).toBeUndefined();
     });
 

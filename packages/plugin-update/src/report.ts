@@ -1,5 +1,5 @@
 /**
- * What `update` and `plugins.install` show: the update plan or the summary of an update, and the
+ * What `upgrade` and `plugins.install` show: the update plan or the summary of an update, and the
  * plugins installed. Each builder returns outputs; the intents add the machine data.
  */
 
@@ -77,7 +77,7 @@ function buildFact(noBuild: boolean, buildDirectory: string | undefined): Variab
     return { label: "Then builds", value: "yes", detail: `with the new copy, in ${buildDirectory}` };
 }
 
-/** The block `sous update` opens with: where it ran, which installs, which version, the registry. */
+/** The block `sous upgrade` opens with: where it ran, which installs, which version, the registry. */
 export function updateCommandEntries(result: UpdateResult, input: UpdateInput, cwd: string | undefined): Record<string, unknown> {
     const installs = input.global === true ? "global only" : input.project === true ? "project only" : "global and project";
     const version =
@@ -138,7 +138,7 @@ function summaryRows(result: UpdateResult, globalCount: number): VariableEntry[]
 }
 
 /**
- * `sous update`: the block it opens with, the installs it cannot update, then each install's
+ * `sous upgrade`: the block it opens with, the installs it cannot update, then each install's
  * facts. A dry run ends there, with the command each install would run; a real run adds the
  * summary. The commands of a real run were reported as they ran, since their own output follows them.
  */

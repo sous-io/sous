@@ -1,6 +1,6 @@
 /**
  * The contract of plugin-update: updating sous itself
- * (`sous update`), installing plugins a recipe requires (`plugins.install`, `--install-plugins`),
+ * (`sous upgrade`), installing plugins a recipe requires (`plugins.install`, `--install-plugins`),
  * the `package-manager` entity, and the `update.scan` contributor, which adds installed plugins to
  * the `plugins` key when `plugins.discover` is `scan`.
  *
@@ -135,7 +135,7 @@ export interface UpdateBuild {
     readonly exitCode?: number;
 }
 
-/** The result of `update`. */
+/** The result of `upgrade`. */
 export interface UpdateResult {
     /** The registry URL the published versions were read from. */
     readonly registry: string;
@@ -178,7 +178,7 @@ export interface PluginsInstallResult {
 
 declare module "@sous-io/plugin-api" {
     interface SousIntents {
-        update: { input: UpdateInput; result: UpdateResult };
+        upgrade: { input: UpdateInput; result: UpdateResult };
         "plugins.install": { input: PluginsInstallInput; result: PluginsInstallResult };
     }
 
