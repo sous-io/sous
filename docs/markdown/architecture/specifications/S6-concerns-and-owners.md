@@ -690,7 +690,7 @@ recipe repository is also a sous project; a directory that already holds a sous 
 | --- | --- | --- | --- |
 | Setting a project up: importing its existing agent files, scaffolding its `.sous/`, the first build | `init` | `plugin-init` | intent |
 | Installing the git hooks that build Sous's output in a new worktree (`sous init hooks`, S14) | `init.hooks` | `plugin-init` | intent; asks `package-manager` for the install command |
-| Updating sous itself (`sous update`) | `update` | `plugin-update` | intent |
+| Upgrading sous itself (`sous upgrade`) | `upgrade` | `plugin-update` | intent |
 | Installing a plugin a recipe requires (`--install-plugins`) | `plugins.install` | `plugin-update` | intent |
 | Package managers: detecting one, listing installed packages, installing, a project's install command and the script run after it | `package-manager` | `plugin-update` | entity kind |
 | Scanning installed packages for plugins, when the config asks for it | `update.scan` | `plugin-update` | contributor; adds to the `plugins` key |

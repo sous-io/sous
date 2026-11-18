@@ -201,7 +201,7 @@ sous.intents.wrap("build", (next) => async (input, ctx) => {
 });
 ```
 
-7. An intent may declare `toleratesConfigErrors` (`sous update` does). When the config fails to
+7. An intent may declare `toleratesConfigErrors` (`sous upgrade` does). When the config fails to
    build, it still runs, with the partial config the failed build reached and the build's error as a
    warning. Every other intent fails with that error, and the CLI reports it for `--help` too.
 8. A chain gets the working directory of the front end that submitted it as `ctx.cwd`: the CLI
@@ -991,7 +991,7 @@ Made by the agent while the user was away; needs Luke's review.
   `vars.ask` and `build`; with the chain keeping the config it started with, the build compiled
   without the new recipe, which today's sous does not do. `build` (after preparing changes the
   lockfile), `subscription add`, `repo add` and `init` use it.
-- **`toleratesConfigErrors`** ("Intents", rule 7). Why: `sous update` must be able to repair an
+- **`toleratesConfigErrors`** ("Intents", rule 7). Why: `sous upgrade` must be able to repair an
   install whose config no longer builds, as it can today. The bin now starts the CLI even when the
   build fails; the CLI reports the build's error for every other command, `--help` included, as
   before.
