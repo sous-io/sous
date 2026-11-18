@@ -167,7 +167,7 @@ time.
 | --- | --- |
 | 0 | `ensureFileExists`, `ensureDirectoryExists` |
 | 10 | `ensureObject`, `ensureList`, `wrapInList`, `unwrapList` |
-| 20 | `set` (`ifMissing`), `setIfEquals`, `renameKey` |
+| 20 | `set` (`ifMissing`), `setIfEquals`, `renameKey`, `copy` (`ifMissing`) |
 | 25 | `merge` (`ifMissing`), `replaceWhere`, `updateWhere`, `mergeWhere` |
 | 30 | `upsertWhere` |
 | 40 | `ensureIncludes` (`position`), `prependIfMissing`, `append` (`position`) |
@@ -211,7 +211,14 @@ already there where it is (unlike `ensureFirst`, which moves it). The four key m
 when the key or the anchor is missing; like `sortKeys`, they are not undone and have no automatic
 assertion, since an order is not a value.
 
-Not built yet, from the list Luke accepted: `copy`, `move`, `insertBeforeWhere`,
+`copy` makes the value at `to` a copy of the value at `path`, read from the file on each build: a
+value already at `to` is recorded and replaced (put back by `down`), nothing happens while `path`
+is missing, and `ifMissing: true` fills only a missing `to`. `to` may not overlap `path`, and a `to`
+naming a list item replaces an item that is there (one past the end is skipped with a warning).
+It has no automatic assertion: the value is only known from the file, and a missing `path` is not
+an error.
+
+Not built yet, from the list Luke accepted: `move`, `insertBeforeWhere`,
 `insertAfterWhere`, `moveItem`, the comment operations (`setCommentBefore`, `setCommentAfter`,
 `removeComment`) and `selectDocument`. The reading operations of the list are the direct path's
 document API (`exists`, `get`, `keys`, `length` and the rest on a node).
@@ -453,3 +460,9 @@ no fix. The agent's choice of form; the check itself is the one S11 lists.
 declared an edit, and such a project's `.sous/.gitignore` does not list it, so the file showed up as
 new in git (found on Sous's own repository). The history is now written only when it records an
 entry or a created file, or when the file already exists. The agent's fix, in the finishing pass.
+
+### 2026-11-18: The operations that relocate values
+
+From the list Luke accepted, built in `operations-relocate.ts` and registered with the others:
+`copy` (`to`, `ifMissing`). It replaces a value already at `to` by default, like `set`, and
+`ifMissing: true` keeps it, like `set`'s option. The agent's choices; not yet reviewed by Luke.

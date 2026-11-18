@@ -26,6 +26,7 @@ import type { ConfigBuilder, DocumentNode } from "@sous-io/sous-plugin-api";
 import { ALIASES, chainParams, OPERATIONS } from "./operations.js";
 import { EDITS_KEY } from "./entries.js";
 import type { EditPosition } from "./types.js";
+import type { RelocateOperations } from "./operations-relocate.js";
 
 /** The settings of every entry a file handle records (spec 12). */
 export interface FileSettings {
@@ -145,6 +146,7 @@ export interface ValueOperations<R> {
     decrement(value?: number): R;
     toggle(): R;
 }
+export interface ValueOperations<R> extends RelocateOperations<R> {}
 
 /** One value inside a file: every operation, recorded at its path. */
 export interface ValueHandle extends ValueOperations<ValueHandle> {

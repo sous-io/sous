@@ -133,6 +133,7 @@ action once, when the entry is first applied.
 | 20 | `set` | `value`, `ifMissing` | `ensureValue`, `replace`; with `ifMissing: true`: `setIfMissing`, `ensureDefault` |
 | 20 | `setIfEquals` | `value`, `equals` | |
 | 20 | `renameKey` | `name` | |
+| 20 | `copy` | `to`, `ifMissing` | |
 | 25 | `merge` | `value`, `ifMissing` | `ensureKeys`, `deepMerge`; with `ifMissing: true`: `mergeIfMissing` |
 | 25 | `replaceWhere`, `updateWhere`, `mergeWhere` | `where`, `item` or `value` | |
 | 30 | `upsertWhere` | `match`, `item` | `ensureItemWhere` |
@@ -198,6 +199,28 @@ block's assertion fails.
 file in `.vscode/` is read as JSONC), YAML (comments are kept), the YAML frontmatter of a Markdown
 file (the body is kept byte for byte), and any other file as plain text lines, each keeping its own
 line ending. TOML files are skipped with a warning for now.
+
+### Copying a value
+
+`copy` makes the value at `to` a copy of the value at `path`, as it is in the file on each build. A
+value already at `to` is replaced, and put back when the entry goes away. Nothing happens while
+`path` is missing. With `ifMissing: true`, only a missing `to` is filled.
+
+```yaml
+- file: .claude/settings.json
+  copy:
+    path: env.ACME_HOME
+    to: env.ACME_HOME_FALLBACK
+    ifMissing: true
+```
+
+```ts
+settings.at("env.ACME_HOME").copy("env.ACME_HOME_FALLBACK", { ifMissing: true });
+```
+
+When you know the value when you write the entry, `set` says the same thing directly. `copy` is for
+a value that is only known from the file. A `to` that names a list item (`steps[1]`) replaces that
+item; to add to a list, use `ensureIncludes`. `copy` has no automatic assertion.
 
 ## Assertions
 
