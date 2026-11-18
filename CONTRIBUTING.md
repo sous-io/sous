@@ -12,7 +12,7 @@ pnpm test
 ```
 
 Node 22 is expected (see `.nvmrc`), and `package.json` requires `>=22`. Sous is a pnpm workspace:
-a small engine (`packages/core`), the plugin interface (`packages/sous-plugin-api`), one package per
+a small engine (`packages/sous-lib-core`), the plugin interface (`packages/sous-plugin-api`), one package per
 built-in plugin (`packages/sous-plugin-*`), and `packages/sous`, the published `@sous-io/sous`, which
 esbuild bundles into one file. Read the [laws](docs/markdown/architecture/laws.md),
 [goals](docs/markdown/architecture/goals.md) and

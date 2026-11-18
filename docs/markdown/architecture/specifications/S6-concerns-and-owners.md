@@ -144,8 +144,8 @@ Four packages are not plugins. Every other package is a built-in plugin, private
 
 | Package | Holds |
 | --- | --- |
-| `core` | the engine (see "Core") |
-| `documents` | surgical editing of JSON, JSONC and YAML documents, keeping comments, key order and formatting (see "The Document-Editing Package" in S2, config building); the config builder is built on it, and plugins reach it through the `documents.editor` service |
+| `sous-lib-core` | the engine (see "Core") |
+| `sous-lib-documents` | surgical editing of JSON, JSONC and YAML documents, keeping comments, key order and formatting (see "The Document-Editing Package" in S2, config building); the config builder is built on it, and plugins reach it through the `documents.editor` service |
 | `sous-plugin-api` | `definePlugin`, the empty `SousServices`, `SousIntents`, `SousEvents` and `SousEntities` interfaces, the `Reporter` and `Prompter` interfaces, the error classes |
 | `sous` | the published package: the bin, the hand-off to a project's own sous, finding the project, the list of built-in plugins, the bundle |
 | `sous-plugin-host` (agent decision, which the user may overrule) | the machine sous runs on: running processes, HTTP, globs and paths, sous home, sous's own self-describing directories, the sous block in `.gitignore`, package identity |
@@ -214,9 +214,9 @@ top      sous-plugin-claude-code   sous-plugin-codex   sous-plugin-github  sous-
            │
          sous-plugin-host
            │
-         sous-plugin-api   core   sous           (not plugins; every plugin uses sous-plugin-api's types)
+         sous-plugin-api   sous-lib-core   sous   (not plugins; every plugin uses sous-plugin-api's types)
            │
-         documents                  (not a plugin; core's config builder is built on it)
+         sous-lib-documents         (not a plugin; the engine's config builder is built on it)
 ```
 
 | Plugin | Depends on |
@@ -266,7 +266,7 @@ Grouped by package. Each table names the owner of each concern and its kind (ser
 entity kind, or a contributor). Intents shown are examples of the full set, which follows from
 today's commands.
 
-### The engine: `core`
+### The engine: `sous-lib-core`
 
 Ruled 2026-10-28: core holds only the engine. The details of each part are in S1 (the engine).
 

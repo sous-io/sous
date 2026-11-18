@@ -1,5 +1,5 @@
 /**
- * `@sous-io/documents`: surgical editing of JSON, JSONC and YAML documents and the YAML frontmatter
+ * `@sous-io/sous-lib-documents`: surgical editing of JSON, JSONC and YAML documents and the YAML frontmatter
  * of Markdown files, with every change expressed as primitive patches, and of plain text files as
  * lists of lines. An edit changes only what it names; every other byte stays. The config builder
  * is built on it.

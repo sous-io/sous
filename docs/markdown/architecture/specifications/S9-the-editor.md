@@ -218,7 +218,7 @@ document API (`exists`, `get`, `keys`, `length` and the rest on a node).
 
 ## Formats
 
-The format comes from the file's name, through `@sous-io/documents` (`formatForPath`): `.json`
+The format comes from the file's name, through `@sous-io/sous-lib-documents` (`formatForPath`): `.json`
 (`.jsonc` by convention for `tsconfig*.json`, `.vscode/*.json` and the like), `.jsonc`,
 `.yaml`/`.yml`, Markdown (`.md`, `.markdown`, `.mdx`, whose YAML frontmatter is the document and
 whose body is kept byte for byte), and anything else as plain text, a list of lines. The editor
@@ -424,7 +424,7 @@ The `editor` service, for direct usage: `open(file)` gives a file with `apply(op
 ### 2026-11-18: The editor is a thin layer over the document library
 
 The editor first carried its own plain text and frontmatter documents and its own block markers,
-because `@sous-io/documents` had none. The library now has them (`parseLines`, the `markdown`
+because `@sous-io/sous-lib-documents` had none. The library now has them (`parseLines`, the `markdown`
 format, `managedBlockMarkers`, `commentStyleForPath`), so the editor uses them and its copies are
 gone. What changed for a person: each line of a plain text file keeps its own line ending; a block
 added at the end of a file gets a blank line before it, as `sous init`'s blocks do; and a damaged

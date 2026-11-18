@@ -1,4 +1,4 @@
-import { applyPatches, flattenPatchSet, formatPath, parsePath, pathsOverlap, type PatchProblem } from "@sous-io/documents";
+import { applyPatches, flattenPatchSet, formatPath, parsePath, pathsOverlap, type PatchProblem } from "@sous-io/sous-lib-documents";
 import {
     type BuildHarness,
     ConfigError,

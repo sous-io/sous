@@ -4,7 +4,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { GitCloneOptions } from "@sous-io/sous-plugin-git/types";
-import { fakeGit, hostContext, readWith } from "@sous-io/repository-hosts/testing";
+import { fakeGit, hostContext, readWith } from "@sous-io/sous-lib-repository-hosts/testing";
 import { createLocalHost } from "./host.js";
 import { identityOwnerPath } from "./paths.js";
 

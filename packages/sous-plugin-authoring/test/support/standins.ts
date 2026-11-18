@@ -9,7 +9,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { parseDocument } from "@sous-io/documents";
+import { parseDocument } from "@sous-io/sous-lib-documents";
 import {
     BufferedReporter,
     ConfigError,

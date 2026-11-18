@@ -1,4 +1,4 @@
-import { formatPath, getAtPath, isPathPrefix, parsePath } from "@sous-io/documents";
+import { formatPath, getAtPath, isPathPrefix, parsePath } from "@sous-io/sous-lib-documents";
 import { type ConfigKeyEntity, type JsonObject, type JsonValue, type PathSegment, validateWith } from "@sous-io/sous-plugin-api";
 import type { StoredEntity } from "../entities/entity-registry.js";
 

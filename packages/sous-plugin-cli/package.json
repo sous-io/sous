@@ -20,7 +20,7 @@
     "@sous-io/sous-plugin-api": "workspace:*"
   },
   "devDependencies": {
-    "@sous-io/core": "workspace:*",
+    "@sous-io/sous-lib-core": "workspace:*",
     "zod": "^4.4.3"
   },
   "engines": {

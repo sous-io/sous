@@ -7,7 +7,7 @@
 import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { createEngine, type Engine } from "@sous-io/core";
+import { createEngine, type Engine } from "@sous-io/sous-lib-core";
 import {
     IntentOutputs,
     BufferedReporter,

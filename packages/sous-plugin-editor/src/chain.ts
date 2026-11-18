@@ -21,7 +21,7 @@
  * ```
  */
 
-import { deepEqual, type JsonObject, type JsonValue } from "@sous-io/documents";
+import { deepEqual, type JsonObject, type JsonValue } from "@sous-io/sous-lib-documents";
 import type { ConfigBuilder, DocumentNode } from "@sous-io/sous-plugin-api";
 import { ALIASES, chainParams, OPERATIONS } from "./operations.js";
 import { EDITS_KEY } from "./entries.js";

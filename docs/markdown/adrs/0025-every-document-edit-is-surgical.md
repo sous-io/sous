@@ -4,7 +4,7 @@
 
 The living answer is the section "The Document-Editing Package" of specification
 [S2](../architecture/specifications/S2-config-building.md), and the README of the package
-`packages/documents`.
+`packages/sous-lib-documents`.
 
 ## Context
 
@@ -17,7 +17,7 @@ show only the line that changed.
 The agreed meaning of a surgical edit: it changes only the values it was told to change, and leaves
 every other byte of the file as it was.
 
-`@sous-io/documents` already edited JSON and JSONC that way. YAML was not surgical: after any edit the
+`@sous-io/sous-lib-documents` already edited JSON and JSONC that way. YAML was not surgical: after any edit the
 `yaml` package reprinted the whole document, so comments survived but spacing and layout could change.
 There was no way to edit a Markdown file's frontmatter, or a plain text file such as `.gitignore`
 beyond the one block `host.gitignore` keeps.

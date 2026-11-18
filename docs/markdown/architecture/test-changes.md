@@ -549,7 +549,7 @@ path and 4-space indentation).
 ## sous-plugin-github, sous-plugin-gitlab, sous-plugin-local
 
 From `src/lib/repos/providers/*.spec.ts`, ported to `packages/sous-plugin-github`, `packages/sous-plugin-gitlab`,
-`packages/sous-plugin-local` and `packages/repository-hosts`.
+`packages/sous-plugin-local` and `packages/sous-lib-repository-hosts`.
 
 ### GitlabProvider "should read the index from the instance's raw endpoint"
 
@@ -1059,7 +1059,7 @@ in `test/support/standins.ts`. Expectations are otherwise unchanged, except for 
 
 ### Contributors that read sous.entities directly
 
-- **File:** `packages/core/test/config-loop.test.ts`
+- **File:** `packages/sous-lib-core/test/config-loop.test.ts`
 - **Before:** "should warn when a contributor reads sous.entities directly" expected a warning.
 - **Now:** "should note, at the debug level, ..." expects a debug message and no warning.
 - **Why:** the note is for the plugin's author. As a warning it printed on every command (the recipe
@@ -1067,7 +1067,7 @@ in `test/support/standins.ts`. Expectations are otherwise unchanged, except for 
 
 ### The contributor budget
 
-- **File:** `packages/core/test/timing.test.ts`
+- **File:** `packages/sous-lib-core/test/timing.test.ts`
 - **Before:** a contributor's default budget was 50ms.
 - **Now:** 100ms.
 - **Why:** the built-in core-recipe contributor measured 50–80ms on ordinary runs, so 50ms warned on
@@ -1130,7 +1130,7 @@ in `test/support/standins.ts`. Expectations are otherwise unchanged, except for 
 
 ## Switch-over: config and inspect (config show, get, validate)
 
-- **Test:** `packages/core/test/order-and-stages.test.ts`, the unknown top-level key message.
+- **Test:** `packages/sous-lib-core/test/order-and-stages.test.ts`, the unknown top-level key message.
   - **Before:** `mystery: Not a known config key. (set by confd/610-mac.jsonc)`.
   - **Now:** `mystery: Not a known config key; likely a typo. (set by confd/610-mac.jsonc)`.
   - **Why:** the old CLI said an unknown key was "likely a typo", and the old `config validate` test
@@ -1659,7 +1659,7 @@ Changes made when every message moved onto a level and a style (`BaseReporter`).
 
 ## intents return outputs (core)
 
-All in `packages/core/test/`. Ruling by the user, 2026-10-30 (ADR 0022): a handler returns `IntentOutputs`.
+All in `packages/sous-lib-core/test/`. Ruling by the user, 2026-10-30 (ADR 0022): a handler returns `IntentOutputs`.
 
 - **Every test whose handler, wrapper or `.after` / `.error` listener returned a bare value** (`chains.test.ts`, `engine-fixes.test.ts`, `engine-handle.test.ts`, `events.test.ts`, `plugins.test.ts`, `services-and-entities.test.ts`, `timing.test.ts`, `types.test.ts`)
   - **Before:** handlers returned strings, numbers, arrays, objects or nothing, and tests compared what `engine.submit` and `ctx.run` resolved with, for example `toBe("ok")` or `toEqual(["built", "first", "second"])`.

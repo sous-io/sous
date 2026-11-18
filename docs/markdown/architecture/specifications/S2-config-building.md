@@ -732,7 +732,7 @@ for files outside the config: sous plans to edit JSON and YAML files other tools
 Code's settings files, and already edits its own managed `conf.d` files key by key, keeping the
 user's comments and formatting (see "Sous's edits to the files it manages are surgical").
 
-So one package, `documents` (S6), edits a JSON, JSONC or YAML document, or the YAML frontmatter of a
+So one package, `sous-lib-documents` (S6), edits a JSON, JSONC or YAML document, or the YAML frontmatter of a
 Markdown file, surgically: an edit changes only the values it was told to change, and leaves every
 other byte of the file as it was. It also edits a plain text file, such as `.gitignore`, as a list
 of lines, and keeps named blocks in it between marker lines. `formatForPath(path)` says which of

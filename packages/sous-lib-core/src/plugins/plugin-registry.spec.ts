@@ -29,7 +29,7 @@ describe("PluginRegistry", () => {
         expect(registry.bySpecifier("./diagrams.mjs")).toBe(first);
         expect(registry.bySpecifier("./other.mjs")).toBeUndefined();
         expect(registry.index("sous-plugin-diagrams")).toBe(0);
-        expect(registry.index("@sous-io/core")).toBe(-1);
+        expect(registry.index("@sous-io/sous-lib-core")).toBe(-1);
         expect(registry.index("unknown")).toBe(Number.MAX_SAFE_INTEGER);
     });
 

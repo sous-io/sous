@@ -133,7 +133,7 @@ stand-ins rather than mocking modules:
   from `@sous-io/sous-plugin-api`.
 - Several plugin packages have a `makeEngine(...)` helper in `test/` that starts the engine with the
   plugins under test and a `BufferedReporter`.
-- `@sous-io/repository-hosts/testing` holds recorded HTTP responses, fake processes, a fake git
+- `@sous-io/sous-lib-repository-hosts/testing` holds recorded HTTP responses, fake processes, a fake git
   runner and a fake sous home for the repository host plugins.
 - Timing code takes its timers as a parameter, so a test drives them by hand (for example
   `ManualTimers` in `packages/sous-plugin-build/test/timers.ts`) instead of using fake timers.
@@ -166,7 +166,7 @@ equivalents of Istanbul's `/* istanbul ignore */` comments. Apply sparingly, onl
 genuinely unreachable branches, not to paper over missing tests.
 
 Coverage measures each package's `src/**/*.ts`, excluding the specs themselves. Give the reason
-after the marker, as `packages/documents/src/yaml-text.ts` does:
+after the marker, as `packages/sous-lib-documents/src/yaml-text.ts` does:
 `/* c8 ignore next: a complex YAML key, which a JSON path cannot name */`.
 
 # Other Skills

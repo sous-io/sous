@@ -30,7 +30,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@sous-io/core": "workspace:*",
+    "@sous-io/sous-lib-core": "workspace:*",
     "@types/semver": "^7.8.0"
   },
   "engines": {

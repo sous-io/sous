@@ -15,7 +15,7 @@ What it does:
 The `sous` package loads it as a built-in plugin. A test can run it against an engine:
 
 ```ts
-import { createEngine } from "@sous-io/core";
+import { createEngine } from "@sous-io/sous-lib-core";
 import { cliPlugin } from "@sous-io/sous-plugin-cli";
 
 const engine = createEngine({ builtIns: [cliPlugin, ...otherPlugins], cwd, env });

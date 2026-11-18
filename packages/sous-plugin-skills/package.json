@@ -28,7 +28,7 @@
     "glob": "^13.0.6"
   },
   "devDependencies": {
-    "@sous-io/core": "workspace:*"
+    "@sous-io/sous-lib-core": "workspace:*"
   },
   "engines": {
     "node": ">=22"

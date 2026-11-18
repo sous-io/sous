@@ -28,7 +28,7 @@
     "@sous-io/sous-plugin-variables": "workspace:*"
   },
   "devDependencies": {
-    "@sous-io/core": "workspace:*"
+    "@sous-io/sous-lib-core": "workspace:*"
   },
   "engines": {
     "node": ">=22"

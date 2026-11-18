@@ -5,7 +5,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { Engine } from "@sous-io/core";
+import type { Engine } from "@sous-io/sous-lib-core";
 import type { SousRef } from "@sous-io/sous-plugin-refs/types";
 import { cleanTemp, fakeHost, fakeUrl, hashOf, indexFile, startEngine, tempDir, writeRecipe, type FakeHostCalls, type FakeRepo } from "../part-b/helpers.js";
 import { CACHED_INDEX_LOOKUP_ID, FETCHED_INDEX_LOOKUP_ID } from "../../src/part-a/index-lookups.js";

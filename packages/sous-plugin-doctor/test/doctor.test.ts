@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { BufferedReporter, definePlugin, IntentOutputs, scriptedPrompter, type Prompter, type Sous } from "@sous-io/sous-plugin-api";
-import { createEngine } from "@sous-io/core";
+import { createEngine } from "@sous-io/sous-lib-core";
 import { orderChecks } from "../src/doctor.js";
 import { doctorPlugin } from "../src/index.js";
 import type { DoctorCheckEntity, DoctorResult } from "../src/types.js";

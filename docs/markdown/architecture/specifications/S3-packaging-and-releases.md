@@ -24,11 +24,12 @@ concern into its owner. Four packages are not plugins; every other package is a 
 
 ```text
 packages/
-    core/                     the engine
-    documents/                surgical JSON, JSONC and YAML editing; the config builder is built on it
-    sous-plugin-api/               the plugin interface (see "The Plugin Interface")
-    sous/                     the published package: the bin, the built-in plugin list, the bundle
-    sous-plugin-<concern>/    one package per built-in plugin
+    sous-lib-core/                the engine
+    sous-lib-documents/           surgical JSON, JSONC and YAML editing; the config builder is built on it
+    sous-lib-repository-hosts/    code the repository-host plugins share
+    sous-plugin-api/              the plugin interface (see "The Plugin Interface")
+    sous/                         the published package: the bin, the built-in plugin list, the bundle
+    sous-plugin-<concern>/        one package per built-in plugin
 ```
 
 S6 (concerns and owners), section "Packages", lists every package and what it holds.
@@ -106,7 +107,7 @@ Decided for the plugin:
 
 ## Bundling
 
-- `core` and every built-in plugin are private and bundled into `@sous-io/sous` when it is
+- `sous-lib-core` and every built-in plugin are private and bundled into `@sous-io/sous` when it is
   published. `@sous-io/sous-plugin-api` stays outside the bundle (see "The bundler"). Sous publishes
   compiled JavaScript, whatever language its source is written in.
 - The list of bundled packages does not change within a major version.
@@ -185,6 +186,20 @@ and plugin authors may write their plugins in either language.
 1. How the published package exposes its entry points.
 
 ## Changes
+
+### 2026-11-19: The library packages are `@sous-io/sous-lib-*`
+
+> "we will rename `documents` to `sous-lib-documents`, `core` to `sous-lib-core`,
+> `repository-hosts` to `sous-lib-repository-hosts`."
+>
+>   -- **Luke Chavers** in an agent session (2026-11-19)
+
+`packages/core` (`@sous-io/core`), `packages/documents` (`@sous-io/documents`) and
+`packages/repository-hosts` (`@sous-io/repository-hosts`) became `packages/sous-lib-core`
+(`@sous-io/sous-lib-core`), `packages/sous-lib-documents` (`@sous-io/sous-lib-documents`) and
+`packages/sous-lib-repository-hosts` (`@sous-io/sous-lib-repository-hosts`). All three stay
+private and bundled. `packages/sous` (`@sous-io/sous`) keeps its name. The name core registers its
+own entries under follows the package: `@sous-io/sous-lib-core`.
 
 ### 2026-11-19: The plugin interface is `@sous-io/sous-plugin-api`
 

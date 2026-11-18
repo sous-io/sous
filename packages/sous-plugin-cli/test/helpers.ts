@@ -1,5 +1,5 @@
 import { PassThrough } from "node:stream";
-import { createEngine } from "@sous-io/core";
+import { createEngine } from "@sous-io/sous-lib-core";
 import type { PluginDefinition } from "@sous-io/sous-plugin-api";
 import type { CliIo } from "../src/io.js";
 import { createCliPlugin } from "../src/plugin.js";

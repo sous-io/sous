@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createEngine } from "@sous-io/core";
-import { standInPlugins } from "@sous-io/repository-hosts/testing";
+import { createEngine } from "@sous-io/sous-lib-core";
+import { standInPlugins } from "@sous-io/sous-lib-repository-hosts/testing";
 import { localPlugin } from "../src/index.js";
 
 describe("sous-plugin-local in an engine", () => {

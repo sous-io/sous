@@ -1,7 +1,7 @@
 {
-  "name": "@sous-io/documents",
+  "name": "@sous-io/sous-lib-core",
   "version": "1.0.19",
-  "description": "Surgical editing of JSON, JSONC, YAML, Markdown frontmatter and plain text files",
+  "description": "The sous engine: config building, chains, intents, events, services, entities and budgets",
   "type": "module",
   "license": "Apache-2.0",
   "private": true,
@@ -16,14 +16,9 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p ."
   },
-  "dependencies": {
-    "jsonc-parser": "^3.3.1",
-    "yaml": "^2.9.0",
-    "@sous-io/sous-plugin-api": "workspace:*"
-  },
-  "devDependencies": {},
+  "dependencies": {"@sous-io/sous-plugin-api": "workspace:*", "@sous-io/sous-lib-documents": "workspace:*", "semver": "^7.8.5"},
+  "devDependencies": {"@types/semver": "^7.8.0"},
   "engines": {
     "node": ">=22"
-  },
-  "sideEffects": false
+  }
 }

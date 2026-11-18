@@ -10,7 +10,7 @@ import path from "node:path";
 import { globSync } from "glob";
 import { minimatch } from "minimatch";
 import { BufferedReporter, definePlugin, jsonSchema, type PluginDefinition } from "@sous-io/sous-plugin-api";
-import { createEngine, type Engine } from "@sous-io/core";
+import { createEngine, type Engine } from "@sous-io/sous-lib-core";
 import type { HostGlobs } from "@sous-io/sous-plugin-host/types";
 import { plainContentsEntries, RecipeContents } from "@sous-io/sous-plugin-recipes";
 import type { ActiveRecipeContent, ActiveRecipeEntity } from "@sous-io/sous-plugin-recipes/types";

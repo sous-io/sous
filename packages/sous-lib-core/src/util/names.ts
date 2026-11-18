@@ -3,7 +3,7 @@
  */
 
 /** The plugin name core registers its own entries under. */
-export const CORE_PLUGIN = "@sous-io/core";
+export const CORE_PLUGIN = "@sous-io/sous-lib-core";
 
 /**
  * A plugin's prefix: its package name without the scope and without `plugin-` or `sous-plugin-`.

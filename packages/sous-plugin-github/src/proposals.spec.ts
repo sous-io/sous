@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fakeProcesses, hostContext, type ProcessAnswer } from "@sous-io/repository-hosts/testing";
+import { fakeProcesses, hostContext, type ProcessAnswer } from "@sous-io/sous-lib-repository-hosts/testing";
 import { buildReleaseWorkflow, githubWorkflowFiles } from "./ci.js";
 import { createGithubHost } from "./host.js";
 import { checksOf } from "./proposals.js";

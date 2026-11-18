@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { deepEqual, getAtPath } from "@sous-io/documents";
+import { deepEqual, getAtPath } from "@sous-io/sous-lib-documents";
 import type { JsonValue, PathSegment } from "@sous-io/sous-plugin-api";
 import type { EntitySnapshot, StoredEntity } from "../entities/entity-registry.js";
 

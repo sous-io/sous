@@ -3,7 +3,7 @@
  * the `expect(...)` chain and the automatic assertions all use these definitions.
  */
 
-import { deepEqual, isJsonObject, parseLines, stableStringify, type JsonValue } from "@sous-io/documents";
+import { deepEqual, isJsonObject, parseLines, stableStringify, type JsonValue } from "@sous-io/sous-lib-documents";
 import { commentStyleFor, linesOfText } from "./documents-adapter.js";
 
 /** What a check reads: the file as it is about to be written. */

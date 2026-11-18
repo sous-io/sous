@@ -1,4 +1,4 @@
-# @sous-io/core
+# @sous-io/sous-lib-core
 
 The sous engine. It knows nothing about recipes, templates or commands; it only builds the config and runs plugins. Everything sous does comes from a plugin.
 
@@ -14,7 +14,7 @@ What it does:
 Front ends and tests start the engine, build the config, then hand control to a front end. Plugins never import this package; they use `@sous-io/sous-plugin-api`.
 
 ```ts
-import { createEngine } from "@sous-io/core";
+import { createEngine } from "@sous-io/sous-lib-core";
 
 const engine = createEngine({ builtIns: [myPlugin], cwd: process.cwd(), env: process.env });
 await engine.buildConfig();
@@ -36,5 +36,5 @@ await engine.frontEnd("cli").start(["config", "show"]);
 ## Testing
 
 ```bash
-pnpm --filter @sous-io/core test
+pnpm --filter @sous-io/sous-lib-core test
 ```

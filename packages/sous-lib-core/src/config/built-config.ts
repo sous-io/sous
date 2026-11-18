@@ -1,4 +1,4 @@
-import { getAtPath, isPatch, parsePath, pathsOverlap } from "@sous-io/documents";
+import { getAtPath, isPatch, parsePath, pathsOverlap } from "@sous-io/sous-lib-documents";
 import type {
     BuiltConfig,
     ConfigLayer,

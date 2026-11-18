@@ -26,10 +26,10 @@
     "@sous-io/sous-plugin-recipes": "workspace:*",
     "@sous-io/sous-plugin-host": "workspace:*",
     "@sous-io/sous-plugin-git": "workspace:*",
-    "@sous-io/repository-hosts": "workspace:*"
+    "@sous-io/sous-lib-repository-hosts": "workspace:*"
   },
   "devDependencies": {
-    "@sous-io/core": "workspace:*"
+    "@sous-io/sous-lib-core": "workspace:*"
   },
   "engines": {
     "node": ">=22"

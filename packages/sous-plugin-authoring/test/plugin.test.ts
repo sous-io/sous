@@ -7,7 +7,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createEngine } from "@sous-io/core";
+import { createEngine } from "@sous-io/sous-lib-core";
 import { cliPlugin, type CommandTree } from "@sous-io/sous-plugin-cli";
 import { BufferedReporter, definePlugin, IntentOutputs, jsonSchema, toJsonSchema, type PluginDefinition } from "@sous-io/sous-plugin-api";
 import type { RepositoryHostEntity } from "@sous-io/sous-plugin-recipes/types";

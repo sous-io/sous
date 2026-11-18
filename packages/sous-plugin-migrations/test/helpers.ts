@@ -5,7 +5,7 @@
  */
 
 import { BufferedReporter, definePlugin, type Prompter, type Sous } from "@sous-io/sous-plugin-api";
-import { createEngine } from "@sous-io/core";
+import { createEngine } from "@sous-io/sous-lib-core";
 import type { Lockfile } from "@sous-io/sous-plugin-formats/types";
 import { doctorPlugin } from "@sous-io/sous-plugin-doctor";
 import { migrationsPlugin } from "../src/index.js";

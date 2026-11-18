@@ -20,7 +20,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { getAtPath, isJsonObject, parsePath, pathsOverlap, isPathPrefix, type JsonValue } from "@sous-io/documents";
+import { getAtPath, isJsonObject, parsePath, pathsOverlap, isPathPrefix, type JsonValue } from "@sous-io/sous-lib-documents";
 import type { Reporter } from "@sous-io/sous-plugin-api";
 import { describeCheck, normalizeKind, runCheck, show, type CheckSubject } from "./checks.js";
 import { formatForFile } from "./documents-adapter.js";

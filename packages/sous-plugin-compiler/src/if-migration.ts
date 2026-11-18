@@ -9,7 +9,7 @@
  * ```
  *
  * - A config written as data (`.json`, `.jsonc`, `.yaml`, `.yml`, in `.sous/` and `.sous/conf.d/`)
- *   is edited surgically through `@sous-io/documents`: only the output that held `_if` changes,
+ *   is edited surgically through `@sous-io/sous-lib-documents`: only the output that held `_if` changes,
  *   and comments and layout elsewhere stay.
  * - A config written as code (`.js`, `.ts` and the like) cannot be edited by Sous, so each `_if`
  *   is reported with its file, its line and the text to write instead.
@@ -21,7 +21,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { isJsonObject, parseDocument, type DocNode, type DocumentFormat, type JsonObject, type JsonValue } from "@sous-io/documents";
+import { isJsonObject, parseDocument, type DocNode, type DocumentFormat, type JsonObject, type JsonValue } from "@sous-io/sous-lib-documents";
 import type { Context } from "@sous-io/sous-plugin-api";
 import type { MigrationDefinition, MigrationOutcome } from "@sous-io/sous-plugin-migrations/types";
 

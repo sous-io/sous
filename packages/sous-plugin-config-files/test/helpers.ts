@@ -5,7 +5,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createEngine, type Engine } from "@sous-io/core";
+import { createEngine, type Engine } from "@sous-io/sous-lib-core";
 import {
     BufferedReporter,
     definePlugin,

@@ -2,7 +2,7 @@
  * The `variables.resolver` service: `${var}` substitution, `_vars` resolution and the scope levels.
  */
 
-import { parsePath } from "@sous-io/documents";
+import { parsePath } from "@sous-io/sous-lib-documents";
 import type {
     BuiltConfig,
     ConfigBuilder,

@@ -16,7 +16,7 @@
  * changed in the copy is recorded through the builder as ordinary patches.
  */
 
-import { deepEqual, isJsonObject, toPlainJson } from "@sous-io/documents";
+import { deepEqual, isJsonObject, toPlainJson } from "@sous-io/sous-lib-documents";
 import { type ConfigBuilder, ConfigError, type DocumentNode, type JsonObject, type JsonValue } from "@sous-io/sous-plugin-api";
 import type { ConfigureFunction } from "./types.js";
 

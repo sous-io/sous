@@ -1,5 +1,5 @@
 import { BufferedReporter, definePlugin, type PluginDefinition, type ProjectInfo, type Sous } from "@sous-io/sous-plugin-api";
-import { createEngine } from "@sous-io/core";
+import { createEngine } from "@sous-io/sous-lib-core";
 import { liquidPlugin } from "../src/index.js";
 import type { LiquidEngines } from "../src/types.js";
 import packageJson from "../package.json" with { type: "json" };

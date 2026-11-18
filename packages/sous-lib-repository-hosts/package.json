@@ -1,5 +1,5 @@
 {
-  "name": "@sous-io/repository-hosts",
+  "name": "@sous-io/sous-lib-repository-hosts",
   "version": "1.0.19",
   "description": "What the repository-host plugins share: URL parsing, token sources, read strategies, the read chain.",
   "type": "module",

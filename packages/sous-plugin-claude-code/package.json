@@ -30,13 +30,13 @@
     "@sous-io/sous-plugin-recipes": "workspace:*",
     "@sous-io/sous-plugin-compiler": "workspace:*",
     "@sous-io/sous-plugin-migrations": "workspace:*",
-    "@sous-io/documents": "workspace:*",
+    "@sous-io/sous-lib-documents": "workspace:*",
     "@sous-io/sous-plugin-config-files": "workspace:*",
     "@sous-io/sous-plugin-confd": "workspace:*",
     "@sous-io/sous-plugin-build": "workspace:*"
   },
   "devDependencies": {
-    "@sous-io/core": "workspace:*",
+    "@sous-io/sous-lib-core": "workspace:*",
     "@sous-io/sous-plugin-doctor": "workspace:*"
   },
   "engines": {

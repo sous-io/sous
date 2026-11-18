@@ -22,7 +22,7 @@
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
-    "@sous-io/documents": "workspace:*",
+    "@sous-io/sous-lib-documents": "workspace:*",
     "@sous-io/sous-plugin-api": "workspace:*",
     "@sous-io/sous-plugin-compiler": "workspace:*",
     "@sous-io/sous-plugin-host": "workspace:*",
@@ -30,7 +30,7 @@
     "@sous-io/sous-plugin-refs": "workspace:*"
   },
   "devDependencies": {
-    "@sous-io/core": "workspace:*",
+    "@sous-io/sous-lib-core": "workspace:*",
     "glob": "^13.0.6",
     "minimatch": "^10.2.4"
   },

@@ -4,7 +4,7 @@
  */
 
 import nodePath from "node:path";
-import { applyPatch, getAtPath, isPatch, isPathPrefix, parsePath, pathsOverlap } from "@sous-io/documents";
+import { applyPatch, getAtPath, isPatch, isPathPrefix, parsePath, pathsOverlap } from "@sous-io/sous-lib-documents";
 import "@sous-io/sous-plugin-variables/types";
 import "@sous-io/sous-plugin-confd/types";
 import {

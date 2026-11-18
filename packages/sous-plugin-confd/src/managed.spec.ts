@@ -6,7 +6,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { parseDocument } from "@sous-io/documents";
+import { parseDocument } from "@sous-io/sous-lib-documents";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { makeTmpDir, type TmpDir } from "../test/helpers.js";
 import { ConfdManagedImpl, MANAGED_FILE_COMMENT, managedHeader } from "./managed.js";

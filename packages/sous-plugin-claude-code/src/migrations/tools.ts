@@ -16,7 +16,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { parseDocument } from "@sous-io/documents";
+import { parseDocument } from "@sous-io/sous-lib-documents";
 import type { Context } from "@sous-io/sous-plugin-api";
 import type {} from "@sous-io/sous-plugin-confd/types";
 import type {} from "@sous-io/sous-plugin-config-files/types";

@@ -7,7 +7,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createEngine, type Engine } from "@sous-io/core";
+import { createEngine, type Engine } from "@sous-io/sous-lib-core";
 import { BufferedReporter, definePlugin, jsonSchema, type JsonObject, type PluginDefinition, type ProjectInfo, type RunPlan } from "@sous-io/sous-plugin-api";
 import { formatsPlugin, hashDirectorySync } from "@sous-io/sous-plugin-formats";
 import type { ContentHash, IndexFile, RecipeManifest } from "@sous-io/sous-plugin-formats/types";

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { parseDocument } from "@sous-io/documents";
+import { parseDocument } from "@sous-io/sous-lib-documents";
 import { isSousErrorOfKind } from "@sous-io/sous-plugin-api";
 import type { RepositoryHostEntity, ScaffoldOptions } from "@sous-io/sous-plugin-recipes/types";
 import type { RepoInitInput } from "../types.js";

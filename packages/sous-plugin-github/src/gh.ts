@@ -3,7 +3,7 @@
  */
 
 import type { RepositoryHostCli } from "@sous-io/sous-plugin-recipes/types";
-import type { CanonicalRepository } from "@sous-io/repository-hosts";
+import type { CanonicalRepository } from "@sous-io/sous-lib-repository-hosts";
 
 /** `gh`. */
 export const GH: RepositoryHostCli = {

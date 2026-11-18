@@ -5,7 +5,7 @@
  * settles fails the build.
  */
 
-import { createEngine } from "@sous-io/core";
+import { createEngine } from "@sous-io/sous-lib-core";
 import {
     BufferedReporter,
     ConfigError,

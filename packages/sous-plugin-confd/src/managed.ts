@@ -17,7 +17,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { isJsonObject, parseDocument, parsePath, type TextDocument } from "@sous-io/documents";
+import { isJsonObject, parseDocument, parsePath, type TextDocument } from "@sous-io/sous-lib-documents";
 import { ConfigError, type DocumentNode, type JsonObject, type PatchSet } from "@sous-io/sous-plugin-api";
 import type { ConfdManaged, ManagedEditOptions, ManagedEditResult, ManagedLayerName } from "./types.js";
 

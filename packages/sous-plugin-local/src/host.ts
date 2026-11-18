@@ -19,7 +19,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { ConfigError } from "@sous-io/sous-plugin-api";
 import type { RepositoryHostContext, RepositoryReadStrategy } from "@sous-io/sous-plugin-recipes/types";
-import { copyRecipeTree, fetchRecipeTree, formatHostedLocator, gitFailureReason, type CanonicalRepository } from "@sous-io/repository-hosts";
+import { copyRecipeTree, fetchRecipeTree, formatHostedLocator, gitFailureReason, type CanonicalRepository } from "@sous-io/sous-lib-repository-hosts";
 import { identityOwnerPath, localRepoPath } from "./paths.js";
 import { assertLocalRepoDirectory } from "./repo-directory.js";
 import type { LocalRepositoryHost } from "./types.js";

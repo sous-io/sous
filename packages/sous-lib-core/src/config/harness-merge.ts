@@ -20,7 +20,7 @@
  * ```
  */
 
-import { stableStringify } from "@sous-io/documents";
+import { stableStringify } from "@sous-io/sous-lib-documents";
 import type { JsonObject, JsonValue, PathSegment } from "@sous-io/sous-plugin-api";
 
 /** The key an entry is marked with: `harness: "codex"`. */

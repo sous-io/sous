@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { parseDocument } from "@sous-io/documents";
+import { parseDocument } from "@sous-io/sous-lib-documents";
 
 /** The managed layer that holds the repositories a project trusts. */
 export const REPOS_LAYER_FILENAME = "500-repos.jsonc";

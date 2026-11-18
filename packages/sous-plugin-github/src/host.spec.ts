@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { ExplainedTokenSource } from "@sous-io/repository-hosts";
-import { fakeGit, fakeProcesses, firstToken, hostContext, readWith, recordedHttp, type RecordedRoute } from "@sous-io/repository-hosts/testing";
+import type { ExplainedTokenSource } from "@sous-io/sous-lib-repository-hosts";
+import { fakeGit, fakeProcesses, firstToken, hostContext, readWith, recordedHttp, type RecordedRoute } from "@sous-io/sous-lib-repository-hosts/testing";
 import { createGithubHost, githubApiFileUrl, githubRawFileUrl, readGithubLocation } from "./host.js";
 
 const host = createGithubHost();

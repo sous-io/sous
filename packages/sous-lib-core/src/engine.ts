@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
-import { deepFreeze, stableStringify } from "@sous-io/documents";
+import { deepFreeze, stableStringify } from "@sous-io/sous-lib-documents";
 import {
     type AppInfo,
     type BuildOptions,

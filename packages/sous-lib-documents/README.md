@@ -1,4 +1,4 @@
-# @sous-io/documents
+# @sous-io/sous-lib-documents
 
 Edits JSON, JSONC and YAML files, the YAML frontmatter of Markdown files, and plain text files such as `.gitignore`, surgically: an edit changes only the values it was told to change, and every other byte of the file stays as it was (comments, key order, indentation, quoting, blank lines, line endings, block and flow style).
 
@@ -9,7 +9,7 @@ Every edit to a structured document is a primitive patch (set, remove, append, a
 `formatForPath` says which format a file is edited in:
 
 ```ts
-import { formatForPath } from "@sous-io/documents";
+import { formatForPath } from "@sous-io/sous-lib-documents";
 
 formatForPath(".claude/settings.json");        // "json"
 formatForPath(".vscode/settings.json");        // "jsonc"
@@ -22,7 +22,7 @@ formatForPath("config.toml");                  // undefined: not supported yet
 ## JSON, JSONC, YAML and Markdown frontmatter
 
 ```ts
-import { parseDocument } from "@sous-io/documents";
+import { parseDocument } from "@sous-io/sous-lib-documents";
 
 const doc = parseDocument(fs.readFileSync(".pre-commit-config.yaml", "utf8"), "yaml");
 
@@ -63,7 +63,7 @@ A YAML edit is made to the text and then read back. When the editor cannot make 
 ## Plain text files, as lines
 
 ```ts
-import { commentStyleForPath, parseLines } from "@sous-io/documents";
+import { commentStyleForPath, parseLines } from "@sous-io/sous-lib-documents";
 
 const file = parseLines(fs.readFileSync(".gitignore", "utf8"), { comment: commentStyleForPath(".gitignore"), label: ".gitignore" });
 
@@ -97,5 +97,5 @@ An opening marker without its closing marker (or the reverse, or a marker twice)
 ## Testing
 
 ```bash
-corepack pnpm vitest run packages/documents
+corepack pnpm vitest run packages/sous-lib-documents
 ```

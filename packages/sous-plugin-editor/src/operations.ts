@@ -25,7 +25,7 @@ import {
     type LinePosition,
     type LinesDocument,
     type PathSegment,
-} from "@sous-io/documents";
+} from "@sous-io/sous-lib-documents";
 import { compareItems, contains, fingerprint, isSorted, matchesFields, sortOptions, toRegExp } from "./checks.js";
 import { commentStyleFor, linesOfText, openDocument, type EditorFormat } from "./documents-adapter.js";
 import type { FileSession } from "./session.js";

@@ -18,7 +18,7 @@ Sous is a TypeScript CLI that compiles markdown templates and manages output fil
 
 ## How Sous Is Built
 
-Sous is a small engine plus plugins. The engine (`packages/core`) only builds the config and runs
+Sous is a small engine plus plugins. The engine (`packages/sous-lib-core`) only builds the config and runs
 plugins; everything a user sees (commands, recipes, templates, compiling, updating) is a plugin that
 registers config contributors, intents, services, entities and event listeners. A built-in plugin
 and a plugin a user installs use the same interface.
@@ -27,8 +27,8 @@ The repository is a pnpm workspace. Every package is in `packages/`; run `ls pac
 
 - `packages/sous-plugin-api`: the plugin interface (`definePlugin`, the types, the error classes). The
   only package outside plugins depend on, and published on its own. Never put engine code here.
-- `packages/core`: the engine. It knows no plugin by name.
-- `packages/documents`: surgical JSON, JSONC and YAML editing, used by core and by plugins that edit
+- `packages/sous-lib-core`: the engine. It knows no plugin by name.
+- `packages/sous-lib-documents`: surgical JSON, JSONC and YAML editing, used by core and by plugins that edit
   config files.
 - `packages/sous-plugin-cli`: the command line, generated from the intents plugins register.
   `packages/sous-plugin-mcp` does the same for an MCP server.
@@ -38,7 +38,7 @@ The repository is a pnpm workspace. Every package is in `packages/`; run `ls pac
 - `packages/sous`: the published `@sous-io/sous`. It lists the built-in plugins in
   `src/built-ins.ts`, starts the engine with them and hands the command line to the CLI. Its bundle
   (`packages/sous/dist`) is what ships.
-- `packages/repository-hosts`: code shared by the GitHub, GitLab and local host plugins.
+- `packages/sous-lib-repository-hosts`: code shared by the GitHub, GitLab and local host plugins.
 
 Rules for working here:
 

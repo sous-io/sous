@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ConfigError, LoopError, type PatchSet } from "@sous-io/sous-plugin-api";
-import { deserializePatchSet, parsePatchFile, serializePatchSet } from "@sous-io/documents";
+import { deserializePatchSet, parsePatchFile, serializePatchSet } from "@sous-io/sous-lib-documents";
 import { contributorsPlugin, keysPlugin, makeEngine, plugin, userKeys } from "./helpers.js";
 
 describe("the config loop", () => {

@@ -14,8 +14,8 @@ import type {
     RepositoryHostContext,
     RepositoryHostEntity,
 } from "@sous-io/sous-plugin-recipes/types";
-import type { CanonicalRepository } from "@sous-io/repository-hosts";
-import { cliFailure, cliJson, cliOutput, firstUrlIn, runCli } from "@sous-io/repository-hosts";
+import type { CanonicalRepository } from "@sous-io/sous-lib-repository-hosts";
+import { cliFailure, cliJson, cliOutput, firstUrlIn, runCli } from "@sous-io/sous-lib-repository-hosts";
 import { GLAB, projectArg } from "./glab.js";
 
 /** What GitLab calls a proposal. */

@@ -7,7 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createEngine } from "@sous-io/core";
+import { createEngine } from "@sous-io/sous-lib-core";
 import { BufferedReporter, definePlugin, IntentOutputs, jsonSchema, type JsonObject } from "@sous-io/sous-plugin-api";
 import type { CompilationFile, CompilationTarget, StateFileEntry } from "@sous-io/sous-plugin-compiler/types";
 import { doctorPlugin } from "@sous-io/sous-plugin-doctor";

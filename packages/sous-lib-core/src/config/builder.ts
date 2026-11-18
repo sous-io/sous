@@ -1,4 +1,4 @@
-import { applyPatch, DocNode, formatPath, getAtPath, isPatch, parsePath, parsePatch, PatchRecorder } from "@sous-io/documents";
+import { applyPatch, DocNode, formatPath, getAtPath, isPatch, parsePath, parsePatch, PatchRecorder } from "@sous-io/sous-lib-documents";
 import {
     BaseReporter,
     type BuildHarness,

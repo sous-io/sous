@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fakeProcesses, hostContext, type ProcessAnswer } from "@sous-io/repository-hosts/testing";
+import { fakeProcesses, hostContext, type ProcessAnswer } from "@sous-io/sous-lib-repository-hosts/testing";
 import { buildGitlabPipeline, gitlabCiFiles } from "./ci.js";
 import { createGitlabHost } from "./host.js";
 import { statusOf } from "./proposals.js";

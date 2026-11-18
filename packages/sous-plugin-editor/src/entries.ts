@@ -5,7 +5,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { getAtPath, isJsonObject, isPathPrefix, parsePath, stableStringify, type JsonObject, type JsonValue, type Patch, type PatchSet, type PathSegment } from "@sous-io/documents";
+import { getAtPath, isJsonObject, isPathPrefix, parsePath, stableStringify, type JsonObject, type JsonValue, type Patch, type PatchSet, type PathSegment } from "@sous-io/sous-lib-documents";
 import type { Contribution } from "@sous-io/sous-plugin-api";
 import { ASSERT_SETTINGS, CHECKS, normalizeKind } from "./checks.js";
 import { isOperationName, OperationParamsError, resolveOperation, type ResolvedOperation } from "./operations.js";

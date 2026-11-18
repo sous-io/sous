@@ -22,12 +22,12 @@
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
-    "@sous-io/documents": "workspace:*",
+    "@sous-io/sous-lib-documents": "workspace:*",
     "@sous-io/sous-plugin-api": "workspace:*",
     "@sous-io/sous-plugin-host": "workspace:*"
   },
   "devDependencies": {
-    "@sous-io/core": "workspace:*"
+    "@sous-io/sous-lib-core": "workspace:*"
   },
   "engines": {
     "node": ">=22"

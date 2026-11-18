@@ -1,4 +1,4 @@
-import { createEngine, type Engine } from "@sous-io/core";
+import { createEngine, type Engine } from "@sous-io/sous-lib-core";
 import {
     BufferedReporter,
     type ConfigBuilder,

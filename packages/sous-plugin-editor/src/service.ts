@@ -18,7 +18,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { getAtPath, parsePath, type JsonObject, type JsonValue } from "@sous-io/documents";
+import { getAtPath, parsePath, type JsonObject, type JsonValue } from "@sous-io/sous-lib-documents";
 import { CHECKS, runCheck } from "./checks.js";
 import { formatForFile, type EditableDocument, type EditorFormat } from "./documents-adapter.js";
 import { createDirectories, removeEmptyDirectories } from "./apply.js";

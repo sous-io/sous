@@ -1,5 +1,5 @@
 /**
- * The editor's thin layer over `@sous-io/documents`. The library does the work: it chooses a
+ * The editor's thin layer over `@sous-io/sous-lib-documents`. The library does the work: it chooses a
  * file's format (`formatForPath`), parses JSON, JSONC, YAML and a Markdown file's frontmatter
  * (`parseDocument`), edits a plain text file as lines (`parseLines`), writes managed-block markers in
  * the file's comment style (`commentStyleForPath`), and keeps every byte an edit does not touch.
@@ -26,7 +26,7 @@ import {
     type LinesDocument,
     type PathInput,
     type TextDocument,
-} from "@sous-io/documents";
+} from "@sous-io/sous-lib-documents";
 
 /** The formats the editor knows, chosen from a file's name. */
 export type EditorFormat = "json" | "jsonc" | "yaml" | "markdown" | "text" | "toml";

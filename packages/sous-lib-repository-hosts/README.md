@@ -1,4 +1,4 @@
-# @sous-io/repository-hosts
+# @sous-io/sous-lib-repository-hosts
 
 Code the repository host plugins (GitHub, GitLab, local) share: addresses, token lookup, reading a repository over HTTP or git, and driving `gh` or `glab`.
 
@@ -7,7 +7,7 @@ It is a library, not a plugin: import it directly, not through `ctx`. It adds no
 ## Using it from another plugin
 
 ```ts
-import { splitRepoUrl } from "@sous-io/repository-hosts";
+import { splitRepoUrl } from "@sous-io/sous-lib-repository-hosts";
 
 const parts = splitRepoUrl("https://github.com/sous-io/sous-recipes");
 ```
@@ -23,5 +23,5 @@ const parts = splitRepoUrl("https://github.com/sous-io/sous-recipes");
 ## Testing
 
 ```bash
-pnpm --filter @sous-io/repository-hosts test
+pnpm --filter @sous-io/sous-lib-repository-hosts test
 ```

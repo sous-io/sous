@@ -126,7 +126,7 @@ function readSousVersion(repoRoot: string): string {
  * file keeps its layout.
  */
 async function syncPackageVersions(repoRoot: string, version: string): Promise<PackageSyncResult[]> {
-  const { parseDocument } = await import("../packages/documents/src/index.js");
+  const { parseDocument } = await import("../packages/sous-lib-documents/src/index.js");
   const packagesDir = path.join(repoRoot, "packages");
   if (!fs.existsSync(packagesDir)) return [];
 

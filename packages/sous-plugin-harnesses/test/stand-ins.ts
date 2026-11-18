@@ -7,7 +7,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createEngine, type Engine } from "@sous-io/core";
+import { createEngine, type Engine } from "@sous-io/sous-lib-core";
 import { BufferedReporter, definePlugin, IntentOutputs, type PluginDefinition, type ProjectInfo } from "@sous-io/sous-plugin-api";
 import type { HostPackage, HostProcesses, HostSousHome, ProcessResult } from "@sous-io/sous-plugin-host/types";
 import harnessesPlugin from "../src/index.js";

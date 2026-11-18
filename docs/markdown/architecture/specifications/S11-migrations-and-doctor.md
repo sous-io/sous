@@ -225,7 +225,7 @@ so it is pending for every project migrated by 1.0.19 or earlier, whether the ne
 patch or a minor). In each `.json`, `.jsonc`, `.yaml` or `.yml` file among `sous.config.*` and
 `conf.d/` (patch files left out), every item of an `outputs` list holding `_if` becomes
 `{ "$if": { "expr": "<name> == '<value>' and ...", "then": <the output without _if> } }`, edited
-through `@sous-io/documents`, so the rest of the file keeps its bytes. A config written as code is
+through `@sous-io/sous-lib-documents`, so the rest of the file keeps its bytes. A config written as code is
 reported, each `_if` with its file, line and the expression to write. An `_if` on a variable named
 `env` or `host` is left and reported, since an expression reads those names as Sous's own values.
 It is added only when the migrations plugin is loaded. The agent's choice of form, following

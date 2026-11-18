@@ -1,4 +1,4 @@
-import { createEngine } from "@sous-io/core";
+import { createEngine } from "@sous-io/sous-lib-core";
 import { BufferedReporter, definePlugin, type PluginDefinition, type Sous } from "@sous-io/sous-plugin-api";
 import { hostPlugin } from "@sous-io/sous-plugin-host";
 import { gitPlugin } from "../src/index.js";

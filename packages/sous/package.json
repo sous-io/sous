@@ -49,8 +49,8 @@
     "@sous-io/sous-plugin-api": "workspace:*"
   },
   "devDependencies": {
-    "@sous-io/core": "workspace:*",
-    "@sous-io/documents": "workspace:*",
+    "@sous-io/sous-lib-core": "workspace:*",
+    "@sous-io/sous-lib-documents": "workspace:*",
     "@sous-io/sous-plugin-authoring": "workspace:*",
     "@sous-io/sous-plugin-build": "workspace:*",
     "@sous-io/sous-plugin-claude-code": "workspace:*",

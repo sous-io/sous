@@ -28,9 +28,9 @@ import {
     readingsAfterRepository,
     splitRepoUrl,
     withoutGitSuffix,
-} from "@sous-io/repository-hosts";
+} from "@sous-io/sous-lib-repository-hosts";
 import type { RepositoryReadRequest } from "@sous-io/sous-plugin-recipes/types";
-import type { LocationReading, WrittenLocation } from "@sous-io/repository-hosts";
+import type { LocationReading, WrittenLocation } from "@sous-io/sous-lib-repository-hosts";
 import { gitlabCiFiles } from "./ci.js";
 import { GLAB } from "./glab.js";
 import { gitlabProposals } from "./proposals.js";

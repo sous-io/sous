@@ -1,13 +1,13 @@
 /**
  * Raising the version in a recipe manifest. A manifest is written by hand, and the scaffold is
- * mostly comments, so the file is edited in place through `@sous-io/documents`: only the version's
+ * mostly comments, so the file is edited in place through `@sous-io/sous-lib-documents`: only the version's
  * bytes change, comments and layout stay as the author left them.
  */
 
 import fs from "node:fs";
 import path from "node:path";
 import semver from "semver";
-import { parseDocument, type DocumentFormat } from "@sous-io/documents";
+import { parseDocument, type DocumentFormat } from "@sous-io/sous-lib-documents";
 import { ConfigError } from "@sous-io/sous-plugin-api";
 import type { ReleaseBump } from "../types.js";
 

@@ -22,7 +22,7 @@
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
-    "@sous-io/documents": "workspace:*",
+    "@sous-io/sous-lib-documents": "workspace:*",
     "@sous-io/sous-plugin-api": "workspace:*",
     "@sous-io/sous-plugin-doctor": "workspace:*",
     "@sous-io/sous-plugin-compiler": "workspace:*",
@@ -31,7 +31,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@sous-io/core": "workspace:*"
+    "@sous-io/sous-lib-core": "workspace:*"
   },
   "engines": {
     "node": ">=22"

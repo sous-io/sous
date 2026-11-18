@@ -275,7 +275,7 @@ describe("sync-core-version", () => {
     () => {
       writePackageJson("0.2.0");
       const pluginApi = writeWorkspacePackage("sous-plugin-api", "@sous-io/sous-plugin-api", "0.1.1");
-      const core = writeWorkspacePackage("core", "@sous-io/core", "0.2.0");
+      const core = writeWorkspacePackage("core", "@sous-io/sous-lib-core", "0.2.0");
       const coreBefore = fs.readFileSync(core, "utf8");
 
       const result = sync();

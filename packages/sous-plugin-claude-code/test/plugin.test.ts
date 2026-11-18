@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createEngine } from "@sous-io/core";
+import { createEngine } from "@sous-io/sous-lib-core";
 import { BufferedReporter, definePlugin, IntentOutputs, jsonSchema, type PluginDefinition } from "@sous-io/sous-plugin-api";
 import type { HostProcesses, ProcessResult } from "@sous-io/sous-plugin-host/types";
 import type { RunHeadlessResult } from "@sous-io/sous-plugin-harnesses/types";

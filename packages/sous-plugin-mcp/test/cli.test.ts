@@ -1,7 +1,7 @@
 import { PassThrough } from "node:stream";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { createEngine } from "@sous-io/core";
+import { createEngine } from "@sous-io/sous-lib-core";
 import { createCliPlugin } from "@sous-io/sous-plugin-cli";
 import { describe, expect, it } from "vitest";
 import { createMcpPlugin } from "../src/index.js";

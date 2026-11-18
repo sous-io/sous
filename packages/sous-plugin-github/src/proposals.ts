@@ -14,7 +14,7 @@ import type {
     RepositoryHostContext,
     RepositoryHostEntity,
 } from "@sous-io/sous-plugin-recipes/types";
-import { cliFailure, cliJson, cliOutput, firstUrlIn, runCli, type CanonicalRepository } from "@sous-io/repository-hosts";
+import { cliFailure, cliJson, cliOutput, firstUrlIn, runCli, type CanonicalRepository } from "@sous-io/sous-lib-repository-hosts";
 import { GH, ghEnv, repoArg } from "./gh.js";
 
 /** What GitHub calls a proposal. */

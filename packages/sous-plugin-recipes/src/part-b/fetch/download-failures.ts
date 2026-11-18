@@ -85,7 +85,7 @@ export function downloadFailureError(failures: readonly RecipeFailure[]): Config
     });
 }
 
-/** The clone attempts a download error carries (`RecipeDownloadError` in repository-hosts), or none. */
+/** The clone attempts a download error carries (`RecipeDownloadError` in sous-lib-repository-hosts), or none. */
 export function attemptsOf(error: unknown): readonly RecipeDownloadAttempt[] {
     const attempts = (error as { attempts?: unknown } | null)?.attempts;
 
