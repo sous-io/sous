@@ -197,8 +197,10 @@ like every other file sous writes, so `sous prune` removes what an unsubscribed 
 
 ## Recipe memories
 
-A memory is a recipe's fragment of an agent's instructions. Sous does not copy memories anywhere; your
-instruction source includes them. Put one line in the file your `AGENTS.md` or `CLAUDE.md` is built from:
+A memory is a recipe's fragment of an agent's instructions. Sous includes them into each coding tool's
+memories file (for Claude Code, `.claude/rules/SOUS-MEMORIES.md`; see
+[The memories file](configuration.md#the-memories-file)), through one line in that file's source,
+`.sous/MEMORIES.tpl.md`. The same line works in any file a target of yours compiles:
 
 ```text
 @#memories/**/*.md

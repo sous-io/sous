@@ -9,7 +9,7 @@ When a coding tool can do something natively, do it natively; sous exists for wh
 cannot do. Sous never wraps, replaces, or re-implements a capability an agent harness already
 provides well.
 
-*Example: sous compiles `CLAUDE.md` and skill files because no harness composes them from
+*Example: sous compiles a memories file (`.claude/rules/SOUS-MEMORIES.md` for Claude Code) and skill files because no harness composes them from
 shared, templated sources; it does not try to replace how the harness loads them.*
 
 ## 2. Fill the collective gaps

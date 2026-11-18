@@ -34,7 +34,7 @@ export const config = {
     ],
   },
   tools: {
-    claude: { command: "claude", promptFile: "${projectRoot}/CLAUDE.md" },
+    "claude-code": { command: "claude", args: ["--model", "opus"] },
   },
 };
 ```
@@ -51,6 +51,48 @@ A target in your config wins over a plugin's or a recipe's target that would wri
 project that compiles its own memories file replaces the one the Claude Code plugin would build; the
 config `sous init` writes compiles none, and leaves the memories to the plugin. A project skill with the same name as a recipe skill
 replaces it too, and the build warns that the recipe's copy was not written.
+
+### The memories file
+
+Each coding tool's plugin compiles one memories file, the file that tool reads into every session.
+For Claude Code it is `.claude/rules/SOUS-MEMORIES.md`, which Claude Code loads beside any `CLAUDE.md`
+the project has, so Sous never writes over the project's own instructions. Its source is
+`.sous/MEMORIES.tpl.md` when that file exists (`sous init` creates it). Otherwise the source is
+these two lines, read as if they were written in a file inside `.sous/`:
+
+```markdown
+@memories/**/*.md
+@#memories/**/*.md
+```
+
+The first line includes the project's own files under `.sous/memories/`, the second the memories of
+every recipe the project subscribes to. Remove a line to leave that part out; move a line to change
+the order. When the result is empty, no file is written, and a copy an earlier build wrote is
+removed. Sous creates the `.claude/rules/` folder.
+
+The Claude Code plugin's options move the file or switch it off:
+
+```jsonc
+{
+    "plugins": {
+        "options": {
+            "@sous-io/plugin-claude-code": {
+                // Where the memories file goes. Default: ${projectRoot}/.claude/rules/SOUS-MEMORIES.md
+                "memoriesOutputPath": "${projectRoot}/CLAUDE.md",
+                // false writes no memories file for Claude Code at all.
+                "memories": true
+            }
+        }
+    }
+}
+```
+
+A file Sous did not write that is already at `memoriesOutputPath` is backed up to `.sous/backups/`,
+with a warning, and replaced.
+
+?> Before version 1.0.20 the recipes' memories went into the root `CLAUDE.md`. A project upgraded
+from then is asked once, by `sous doctor` or `sous upgrade`, whether to move them to the new file
+(the default) or keep them in `CLAUDE.md` (`--answer claude-code.memories=keep`).
 
 A JSON config may set `"$schema"` to bind the `sous.config.schema.json` artifact shipped with
 sous for editor autocompletion; sous accepts and ignores the key.
