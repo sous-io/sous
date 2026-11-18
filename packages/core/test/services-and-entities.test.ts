@@ -317,7 +317,7 @@ describe("entities", () => {
 
         await engine.buildConfig();
 
-        expect(read!()).toEqual([[{ id: "one" }], { id: "one" }, false, [{ kind: "thing", id: "one", entry: { id: "one" }, plugin: "p" }], ["config-key", "plugin-locator"]]);
+        expect(read!()).toEqual([[{ id: "one" }], { id: "one" }, false, [{ kind: "thing", id: "one", entry: { id: "one" }, plugin: "p" }], ["config-key", "plugin-locator", "harness-list"]]);
         expect(reporter.at("warning").filter((m) => m.includes("directly"))).toEqual([]);
     });
 });

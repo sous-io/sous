@@ -1,6 +1,7 @@
 import { applyPatch, DocNode, formatPath, getAtPath, isPatch, parsePath, parsePatch, PatchRecorder } from "@sous-io/documents";
 import {
     BaseReporter,
+    type BuildHarness,
     Reporting,
     type ConfigBuilder,
     type ContributorInfo,
@@ -32,6 +33,8 @@ export interface BuilderServices {
     readonly env: Environment;
     /** What the front end is about to run, when it said. */
     readonly plan?: RunPlan;
+    /** The harness the build is for: `{ id: "" }` in the build with no harness. */
+    readonly harness: BuildHarness;
     log(level: LogLevel, message: string, details?: ReportDetails, style?: ReportEntryStyle): void;
 }
 
@@ -98,6 +101,10 @@ export class ConfigBuilderImpl extends Reporting(Object) implements ConfigBuilde
 
     get plan(): RunPlan | undefined {
         return this.services.plan;
+    }
+
+    get harness(): BuildHarness {
+        return this.services.harness;
     }
 
     /** This run's patch set. */

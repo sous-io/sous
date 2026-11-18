@@ -43,6 +43,10 @@ function subject(over: OverBudget): string {
     switch (over.category) {
         case "config.build":
             return over.name === "config" ? "building the config" : `building the ${over.name} config`;
+        case "config.harness":
+            return `building the config for the harness "${over.name}"`;
+        case "config.merge":
+            return "merging the per-harness configs";
         case "config.stage":
             return `config stage ${over.name}`;
         case "config.pass":

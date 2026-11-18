@@ -9,6 +9,7 @@ import {
     nullReporter,
     Reporting,
     SousError,
+    type BuildHarness,
     type BuiltConfig,
     type ConfigBuilder,
     type ContributorInfo,
@@ -29,6 +30,8 @@ class BuiltConfigBuilder extends Reporting(Object) implements ConfigBuilder {
     readonly env: Environment;
     /** Nothing is planned: this builder reads a config already built. */
     readonly plan: undefined = undefined;
+    /** The harness the built config was made for: `""` for the config every intent reads. */
+    readonly harness: BuildHarness;
 
     private readonly document: ReturnType<typeof createDocument>;
 
@@ -39,6 +42,7 @@ class BuiltConfigBuilder extends Reporting(Object) implements ConfigBuilder {
     ) {
         super();
         this.document = createDocument(config.value());
+        this.harness = { id: config.harness };
         this.contributor = { id: contributorId, plugin: ctx.plugin, stage: 0, pass: 0, run: 0 };
         this.project = ctx.project;
         this.env = ctx.env;
