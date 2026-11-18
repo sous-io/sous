@@ -1,8 +1,8 @@
 /**
- * The outputs of `subscription.add`, `.remove`, `.enable`, `.disable`, `.update` and `recipe.update`.
+ * The outputs of `subscription.add`, `.remove`, `.enable`, `.disable`, `update` and `update.plan`.
  *
  * The handlers already report some of this as they work: `subscription.add` and `.remove` note
- * their plan and what stays before they ask, and `subscription.update` reports its plan before its
+ * their plan and what stays before they ask, and `update` reports its plan before its
  * question. The outputs hold what was not reported: the blocks shown once the work is done.
  */
 
@@ -201,7 +201,7 @@ export function subscriptionToggleOutputs(ctx: Pick<Context, "reporter">, result
     );
 }
 
-/** The outputs of `subscription.update`. */
+/** The outputs of `update`. */
 export function subscriptionUpdateOutputs(ctx: Pick<Context, "reporter">, result: SubscriptionUpdateResult) {
     const scope = describeUpdateScope(result.plan.scope);
 
@@ -253,7 +253,7 @@ export function subscriptionUpdateOutputs(ctx: Pick<Context, "reporter">, result
     return finish(outputs, plainResult(result), { after: built.outputs, ...(built.failed ? { exitCode: 1 } : {}) });
 }
 
-// --- recipe.update ----------------------------------------------------------------------------------
+// --- update.plan ----------------------------------------------------------------------------------
 
 /**
  * The note for a built-in subscription whose pins an update moves, saying why.
@@ -346,7 +346,7 @@ export function updatePlanOutputs(plan: RecipeUpdatePlan): IntentOutput[] {
     return outputs;
 }
 
-/** The outputs of `recipe.update`: the plan, and that nothing was written. */
+/** The outputs of `update.plan`: the plan, and that nothing was written. */
 export function recipeUpdateOutputs(plan: RecipeUpdatePlan) {
-    return finish(underHeading("Update plan", [...updatePlanOutputs(plan), dryRunOutput("Nothing was written. Run 'sous subscription update' to apply it.")]), plan);
+    return finish(underHeading("Update plan", [...updatePlanOutputs(plan), dryRunOutput("Nothing was written. Run 'sous update' to apply it.")]), plan);
 }

@@ -188,7 +188,7 @@ export async function resolveUpdateScope(ctx: Context, input: RecipeUpdateInput,
         : { kind: "recipe", repo: chosen.repo.name, key: chosen.key };
 }
 
-/** `recipe.update`: what the lockfile would become, and everything worth knowing first. */
+/** `update.plan`: what the lockfile would become, and everything worth knowing first. */
 export async function planUpdate(input: RecipeUpdateInput, ctx: Context): Promise<RecipeUpdatePlan> {
     const lockService = ctx.services.get("recipes.lock");
     const resolver = ctx.services.get("recipes.resolver");

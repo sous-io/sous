@@ -299,7 +299,7 @@ export async function handle(input: UpdateInput, ctx: Context): Promise<IntentOu
 
     const result: UpdateResult = { ...base, outcomes, ...(build === undefined ? {} : { build }), failed };
 
-    // The CLI turns an error into exit code 1, as `sous upgrade` (then `sous update`) always did when a step failed.
+    // The CLI turns an error into exit code 1, as the command that upgrades sous always did when a step failed.
     if (failed) {
         throw new ConfigError("Not every step of the update succeeded.", {
             details: [...outcomes.map(describeOutcome), ...(build === undefined ? [] : [`Project build: ${build.result}`])],

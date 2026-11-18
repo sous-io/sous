@@ -1,7 +1,8 @@
 /**
- * The subscription intents: `subscription.add`, `.remove`, `.enable`, `.disable`, `.list`,
- * `.update`, and `recipe.update`, which plans an update and writes nothing (ported from
- * `subscription-service.ts` and `src/commands/subscription/`).
+ * The subscription intents: `subscription.add`, `.remove`, `.enable`, `.disable`, `.list`, then
+ * `update` (`sous update`, also `sous subscription update` and `sous recipe update`), which moves
+ * pinned versions forward, and the internal `update.plan`, which plans that and writes nothing
+ * (ported from `subscription-service.ts` and `src/commands/subscription/`).
  *
  * Subscribing asks nothing about variables itself: it subscribes, then runs `vars.ask` and `build`
  * through `ctx.run`. `enable` and `disable` overwrite only `enabled` in
@@ -711,7 +712,7 @@ export async function listSubscriptions(input: BrowsingFlags, ctx: Context): Pro
     return listings;
 }
 
-// --- subscription.update ----------------------------------------------------------------------------
+// --- update ---------------------------------------------------------------------------------------
 
 /** Reports the update plan before the update question. */
 export function reportUpdatePlan(reporter: Reporter, plan: RecipeUpdatePlan): void {
@@ -798,10 +799,10 @@ function plannedRecipes(lockfile: Lockfile, keys: readonly string[]): ResolvedRe
     });
 }
 
-/** `subscription.update`: plans with `recipe.update`, asks once, trusts what a newer version needs, then writes the lockfile. */
+/** `update` (`sous update`): plans with `update.plan`, asks once, trusts what a newer version needs, then writes the lockfile. */
 export async function updateSubscriptions(input: SubscriptionUpdateInput, ctx: Context): Promise<SubscriptionUpdateResult> {
     const planInput: RecipeUpdateInput = { ...(input.ref === undefined ? {} : { ref: input.ref }), ...(input.acceptFirst === undefined ? {} : { acceptFirst: input.acceptFirst }) };
-    let plan = (await ctx.run("recipe.update", planInput)).toPlain();
+    let plan = (await ctx.run("update.plan", planInput)).toPlain();
     const base = { trusted: [] as string[], dryRun: input.dryRun === true };
     const tried = new Set<string>();
 
@@ -867,7 +868,7 @@ export async function updateSubscriptions(input: SubscriptionUpdateInput, ctx: C
     };
 }
 
-/** Registers the subscription intents and `recipe.update`. */
+/** Registers the subscription intents, `update` and `update.plan`. */
 export function registerSubscriptionIntents(sous: Sous): void {
     const ref = { type: "string", description: "A namespace or a recipe: 'namespace', 'namespace/recipe', either with '@<range>' or as 'repository:ref'" } as const;
     const toggleInput = inputSchema<SubscriptionToggleInput>({ ref, dryRun, noBuild }, ["ref"]);
@@ -943,26 +944,38 @@ export function registerSubscriptionIntents(sous: Sous): void {
         handle: async (input, ctx) => subscriptionListOutputs(ctx, input, await listSubscriptions(input, ctx)),
     });
 
+    // `sous update` updates the project's recipes (it updated sous itself before 2026-11-18; that is
+    // `sous upgrade` now). `subscription update` and `recipe update` are the same command; the
+    // plan `recipe update` used to print is `sous update --dry-run`.
     sous.intents.add({
-        intent: "subscription.update",
+        intent: "update",
         needsRecipeFiles: true,
         requiresProject: true,
-        summary: "Move pinned versions to the newest their ranges allow",
+        summary: "Move this project's pinned recipe versions to the newest their ranges allow",
         input: inputSchema<SubscriptionUpdateInput>(
             { ref: { type: "string", description: "Only this repository, namespace or recipe" }, yes, acceptFirst, dryRun, noBuild, answer, answersFile },
         ),
         changesConfig: true,
-        cli: { aliases: [["subscriptions", "update"]], positional: ["ref"], flags: { yes: yesFlag } },
+        cli: {
+            aliases: [
+                ["subscription", "update"],
+                ["recipe", "update"],
+            ],
+            positional: ["ref"],
+            flags: { yes: yesFlag },
+            examples: ["sous update", "sous update --dry-run", "sous update workflow", "sous update workflow/task-files --yes"],
+        },
+        agent: { usage: "Run with dryRun first to see the plan; pass yes and answer to update without prompts." },
         handle: async (input, ctx) => subscriptionUpdateOutputs(ctx, await updateSubscriptions(input, ctx)),
     });
 
     sous.intents.add({
-        intent: "recipe.update",
+        intent: "update.plan",
         requiresProject: true,
         summary: "Plan an update of pinned versions, writing nothing",
         input: inputSchema<RecipeUpdateInput>({ ref: { type: "string", description: "Only this repository, namespace or recipe" }, acceptFirst }),
         parallel: true,
-        cli: { aliases: [["recipes", "update"]], positional: ["ref"] },
+        internal: true,
         handle: async (input, ctx) => recipeUpdateOutputs(await planUpdate(input, ctx)),
     });
 }
