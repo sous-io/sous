@@ -4,7 +4,7 @@
  * sous or a plugin provides. Each is a `hash-name` entity, and a plugin adds one the same way.
  */
 
-import type { SousSchema } from "@sous-io/plugin-api";
+import type { SousSchema } from "@sous-io/sous-plugin-api";
 import type { HashNameEntity } from "./types.js";
 
 /** The characters a `#` name may hold. */

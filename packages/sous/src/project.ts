@@ -1,6 +1,6 @@
 import { existsSync, statSync } from "node:fs";
 import path from "node:path";
-import type { Environment, ProjectInfo } from "@sous-io/plugin-api";
+import type { Environment, ProjectInfo } from "@sous-io/sous-plugin-api";
 
 /** The config file names looked for in `.sous/`, in this order. */
 export const CONFIG_FILE_NAMES = [

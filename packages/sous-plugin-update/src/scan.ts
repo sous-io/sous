@@ -4,7 +4,7 @@
  * engine loads what it adds and builds again.
  */
 
-import type { ContributorDefinition, ServiceContext, Sous } from "@sous-io/plugin-api";
+import type { ContributorDefinition, ServiceContext, Sous } from "@sous-io/sous-plugin-api";
 import type { PackageManagerEntity } from "./types.js";
 
 /** The contributor's id. */

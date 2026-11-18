@@ -3,7 +3,7 @@
  * `tools` that no plugin already provides, so such a tool launches with no plugin at all.
  */
 
-import type { ConfigBuilder, ContributorDefinition } from "@sous-io/plugin-api";
+import type { ConfigBuilder, ContributorDefinition } from "@sous-io/sous-plugin-api";
 import { TOOLS_KEY } from "./settings.js";
 import { toolHarness } from "./tool.js";
 

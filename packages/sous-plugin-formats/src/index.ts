@@ -6,7 +6,7 @@
  * parsing), and the only service `sous-plugin-formats` reads is `refs.resolver`, for the refs in a manifest.
  */
 
-import { definePlugin, SousError, type PluginDefinition, type ServiceContext } from "@sous-io/plugin-api";
+import { definePlugin, SousError, type PluginDefinition, type ServiceContext } from "@sous-io/sous-plugin-api";
 import { createManifests } from "./manifests.js";
 import {
   createRecipeManifestFormat,

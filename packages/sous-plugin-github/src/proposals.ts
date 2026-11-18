@@ -5,7 +5,7 @@
  * `gh pr list`, `gh pr view` and `gh pr edit`.
  */
 
-import { ConfigError } from "@sous-io/plugin-api";
+import { ConfigError } from "@sous-io/sous-plugin-api";
 import type {
     ProposalReview,
     ProposalState,

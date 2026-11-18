@@ -1,4 +1,4 @@
-import type { ConfigBuilder, DocumentNode, Sous } from "@sous-io/plugin-api";
+import type { ConfigBuilder, DocumentNode, Sous } from "@sous-io/sous-plugin-api";
 import { describe, expect, it } from "vitest";
 import { scanContributor } from "../src/scan.js";
 import { fakeManager, installedPackage } from "./helpers.js";

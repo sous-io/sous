@@ -8,7 +8,7 @@
 
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { BufferedReporter, definePlugin, type PluginDefinition, type ProjectInfo, type ServiceContext } from "@sous-io/plugin-api";
+import { BufferedReporter, definePlugin, type PluginDefinition, type ProjectInfo, type ServiceContext } from "@sous-io/sous-plugin-api";
 import { createEngine } from "@sous-io/core";
 import { hostPlugin } from "@sous-io/sous-plugin-host";
 import refsPlugin from "../src/index.js";

@@ -10,7 +10,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { ConfigError, LogLevel, SousError, type Context, type Reporter, type Sous } from "@sous-io/plugin-api";
+import { ConfigError, LogLevel, SousError, type Context, type Reporter, type Sous } from "@sous-io/sous-plugin-api";
 import type { Lockfile } from "@sous-io/sous-plugin-formats/types";
 import type { VariableRef } from "@sous-io/sous-plugin-refs/types";
 import semver from "semver";

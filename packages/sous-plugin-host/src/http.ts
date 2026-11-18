@@ -7,7 +7,7 @@
  * `EnvHttpProxyAgent` instead, which also honors `NO_PROXY`.
  */
 
-import { SousError, type Environment } from "@sous-io/plugin-api";
+import { SousError, type Environment } from "@sous-io/sous-plugin-api";
 import type { HostHttp, HttpRequest, HttpResponse } from "./types.js";
 
 /** How long a request may take when it names no limit. */

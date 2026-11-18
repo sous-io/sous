@@ -6,7 +6,7 @@
  * reachable upstream), so these outputs leave those notes out.
  */
 
-import { commandVariables, IntentOutput, type Context, type TableColumn, type VariableEntry } from "@sous-io/plugin-api";
+import { commandVariables, IntentOutput, type Context, type TableColumn, type VariableEntry } from "@sous-io/sous-plugin-api";
 import type {
     BrowsingFlags,
     CatalogShowInput,

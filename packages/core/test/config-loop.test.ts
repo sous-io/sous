@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ConfigError, LoopError, type PatchSet } from "@sous-io/plugin-api";
+import { ConfigError, LoopError, type PatchSet } from "@sous-io/sous-plugin-api";
 import { deserializePatchSet, parsePatchFile, serializePatchSet } from "@sous-io/documents";
 import { contributorsPlugin, keysPlugin, makeEngine, plugin, userKeys } from "./helpers.js";
 
@@ -374,7 +374,7 @@ describe("the config loop", () => {
      * check time) and appends a compilation target; the schema fills the defaults.
      */
     it("should run a contributor that reads its own key", async () => {
-        const { jsonSchema } = await import("@sous-io/plugin-api");
+        const { jsonSchema } = await import("@sous-io/sous-plugin-api");
         const diagrams = plugin("sous-plugin-diagrams", (sous) => {
             sous.entities.add("config-key", {
                 id: "diagrams",
@@ -759,7 +759,7 @@ describe("the config loop", () => {
         const contributors = [
             {
                 id: "700-base",
-                contribute: (config: import("@sous-io/plugin-api").ConfigBuilder) =>
+                contribute: (config: import("@sous-io/sous-plugin-api").ConfigBuilder) =>
                     config.root().merge({ compilation: { overwriteUntracked: true, targets: [{ id: "second" }] }, tools: { codex: {}, claude: {} } }),
             },
             ...files.map(([name, kind, text]) => {
@@ -767,7 +767,7 @@ describe("the config loop", () => {
 
                 previous = name;
 
-                return { id: name, after, contribute: (config: import("@sous-io/plugin-api").ConfigBuilder) => config.apply(parsePatchFile(text, kind, name)) };
+                return { id: name, after, contribute: (config: import("@sous-io/sous-plugin-api").ConfigBuilder) => config.apply(parsePatchFile(text, kind, name)) };
             }),
         ];
         const { engine } = makeEngine([keysPlugin("compilation", "tools", "_vars"), contributorsPlugin("sous-plugin-confd", contributors)]);

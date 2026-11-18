@@ -10,7 +10,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { EntityReader, JsonValue, ServiceReader } from "@sous-io/plugin-api";
+import type { EntityReader, JsonValue, ServiceReader } from "@sous-io/sous-plugin-api";
 import type { VariablesResolver, VarScope } from "@sous-io/sous-plugin-variables/types";
 import { createEvaluator, escapeVariables } from "./evaluator.js";
 import { fakeBuilder } from "../test/helpers.js";

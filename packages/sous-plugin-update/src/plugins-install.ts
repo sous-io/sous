@@ -5,7 +5,7 @@
  */
 
 import path from "node:path";
-import { ConfigError, InputError, IntentOutputs, type Context } from "@sous-io/plugin-api";
+import { ConfigError, InputError, IntentOutputs, type Context } from "@sous-io/sous-plugin-api";
 import "@sous-io/sous-plugin-host/types";
 import { ownerOf } from "./installs.js";
 import { pluginsInstallOutputs } from "./report.js";

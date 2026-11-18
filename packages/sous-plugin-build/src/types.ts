@@ -250,7 +250,7 @@ export interface BuildFilesChangedPayload {
     readonly full: boolean;
 }
 
-declare module "@sous-io/plugin-api" {
+declare module "@sous-io/sous-plugin-api" {
     interface SousServices {
         "build.pid": BuildPid;
         "build.runtime-context": BuildRuntimeContext;

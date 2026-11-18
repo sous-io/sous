@@ -25,7 +25,7 @@ and a plugin a user installs use the same interface.
 
 The repository is a pnpm workspace. Every package is in `packages/`; run `ls packages` for the list.
 
-- `packages/plugin-api`: the plugin interface (`definePlugin`, the types, the error classes). The
+- `packages/sous-plugin-api`: the plugin interface (`definePlugin`, the types, the error classes). The
   only package outside plugins depend on, and published on its own. Never put engine code here.
 - `packages/core`: the engine. It knows no plugin by name.
 - `packages/documents`: surgical JSON, JSONC and YAML editing, used by core and by plugins that edit
@@ -46,7 +46,7 @@ Rules for working here:
   `docs/markdown/architecture/` (goals, the specifications in `specifications/`) are the source of
   truth for how sous is built; where an older document, ADR or issue disagrees, they win.
 - A plugin talks to another plugin only through that plugin's `types.ts`, never by importing its
-  source. Core and plugin-api never name a plugin.
+  source. Core and sous-plugin-api never name a plugin.
 - A new command is a new intent in a plugin, not code in the CLI.
 - Changes to old tests are recorded in `docs/markdown/architecture/test-changes.md`.
 - A significant change updates every document that describes the behavior, in the same change:
@@ -61,7 +61,7 @@ Rules for working here:
 ```bash
 pnpm install
 ./bin/sous <command>      # runs sous from this checkout; rebuilds the bundle first when sources changed
-pnpm build                # build plugin-api, then the sous bundle
+pnpm build                # build sous-plugin-api, then the sous bundle
 pnpm typecheck            # tsc --noEmit in every package
 pnpm test                 # every package's tests (vitest)
 pnpm --filter @sous-io/sous-plugin-<name> test            # one package

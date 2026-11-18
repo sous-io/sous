@@ -8,7 +8,7 @@
  * `compilation.varOverrides` matches output paths; this is the one implementation.
  */
 
-import { ConfigError } from "@sous-io/plugin-api";
+import { ConfigError } from "@sous-io/sous-plugin-api";
 
 /** Tells whether text matches a glob: `host.globs.isMatch`, in a plugin. */
 export type GlobMatcher = (text: string, pattern: string) => boolean;

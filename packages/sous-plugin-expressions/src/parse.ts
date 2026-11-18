@@ -4,7 +4,7 @@
  * lists (1 to 4) is thrown here, naming the file and the key path.
  */
 
-import type { JsonValue, PathSegment } from "@sous-io/plugin-api";
+import type { JsonValue, PathSegment } from "@sous-io/sous-plugin-api";
 import { ExpressionError } from "./errors.js";
 import { chainOrder, FILE_KEY, isPlainObject, parseReservedKey, type ReservedKey } from "./keys.js";
 

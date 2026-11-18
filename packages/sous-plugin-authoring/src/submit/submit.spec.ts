@@ -10,7 +10,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { BufferedReporter, nonInteractivePrompter, SousError, type ChoiceQuestion, type Prompter } from "@sous-io/plugin-api";
+import { BufferedReporter, nonInteractivePrompter, SousError, type ChoiceQuestion, type Prompter } from "@sous-io/sous-plugin-api";
 import type { GitResult, GitRunner } from "@sous-io/sous-plugin-git/types";
 import type {
   ChangeProposal,

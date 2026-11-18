@@ -1,5 +1,5 @@
 import path from "node:path";
-import { type Context, LogLevel } from "@sous-io/plugin-api";
+import { type Context, LogLevel } from "@sous-io/sous-plugin-api";
 import { pathsToWatch, type WatchSet, watchSet } from "./paths.js";
 import { type ChangeBatch, ChangeBatcher, type FileWatcherHandle, realTimers, type Timers, type WatcherFactory } from "./watcher.js";
 import { DEFAULT_DEBOUNCE_MS } from "../schemas.js";

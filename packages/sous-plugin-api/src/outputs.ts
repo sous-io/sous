@@ -35,7 +35,7 @@ export abstract class Payload {
     /** The payload as plain text, one line per entry. */
     abstract toText(): string;
 
-    /** Whether a value is a payload, from any copy of plugin-api. */
+    /** Whether a value is a payload, from any copy of sous-plugin-api. */
     static is(value: unknown): value is Payload {
         return typeof value === "object" && value !== null && (value as { [PAYLOAD]?: unknown })[PAYLOAD] === true;
     }
@@ -312,7 +312,7 @@ export class IntentOutputs<T extends object = PlainObject> implements Iterable<I
         return new IntentOutputs<T>(new IntentOutput<T>({ ...init, data }));
     }
 
-    /** Whether a value is an `IntentOutputs`, from any copy of plugin-api. */
+    /** Whether a value is an `IntentOutputs`, from any copy of sous-plugin-api. */
     static is(value: unknown): value is IntentOutputs {
         return typeof value === "object" && value !== null && (value as { [OUTPUTS]?: unknown })[OUTPUTS] === true;
     }

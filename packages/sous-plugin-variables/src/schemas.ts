@@ -2,7 +2,7 @@
  * The schemas sous-plugin-variables registers: its two root config keys and the `variable-source` kind.
  */
 
-import type { ConfigKeyEntity, SousSchema, StandardSchemaV1 } from "@sous-io/plugin-api";
+import type { ConfigKeyEntity, SousSchema, StandardSchemaV1 } from "@sous-io/sous-plugin-api";
 import { isAutoVariable } from "./auto.js";
 
 type Issue = StandardSchemaV1.Issue;

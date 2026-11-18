@@ -9,7 +9,7 @@ import { isUtf8 } from "node:buffer";
 import fs from "node:fs";
 import path from "node:path";
 import type { Liquid } from "liquidjs";
-import { LogLevel, nullReporter, Reporting, type ProblemDetails, type Reporter, type ServiceContext } from "@sous-io/plugin-api";
+import { LogLevel, nullReporter, Reporting, type ProblemDetails, type Reporter, type ServiceContext } from "@sous-io/sous-plugin-api";
 import type { RefsParser } from "@sous-io/sous-plugin-refs/types";
 import type { VarScope } from "@sous-io/sous-plugin-variables/types";
 import { reportBackup } from "./backups.js";

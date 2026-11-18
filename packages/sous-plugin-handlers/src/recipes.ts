@@ -12,7 +12,7 @@
 
 import fs from "node:fs";
 import { pathToFileURL } from "node:url";
-import { HANDLER_PURPOSES, SousError, type ConfigBuilder, type ContributorDefinition } from "@sous-io/plugin-api";
+import { HANDLER_PURPOSES, SousError, type ConfigBuilder, type ContributorDefinition } from "@sous-io/sous-plugin-api";
 import { insideRecipe } from "@sous-io/sous-plugin-recipes";
 import type { ActiveRecipeEntity, RepoEntry } from "@sous-io/sous-plugin-recipes/types";
 import type { HandlerEntity, RecipeHandlerDeclaration } from "./types.js";

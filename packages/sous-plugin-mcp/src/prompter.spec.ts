@@ -1,5 +1,5 @@
 import type { ElicitRequestFormParams, ElicitResult } from "@modelcontextprotocol/sdk/types.js";
-import { CancelledError, NonInteractiveError } from "@sous-io/plugin-api";
+import { CancelledError, NonInteractiveError } from "@sous-io/sous-plugin-api";
 import { describe, expect, it } from "vitest";
 import { argumentFor, ElicitationPrompter } from "./prompter.js";
 

@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createEngine } from "@sous-io/core";
-import { DataValue, definePlugin, type IntentOutputs, jsonSchema, type PluginDefinition, type ProjectInfo, Table, TextBlock, Tree } from "@sous-io/plugin-api";
+import { DataValue, definePlugin, type IntentOutputs, jsonSchema, type PluginDefinition, type ProjectInfo, Table, TextBlock, Tree } from "@sous-io/sous-plugin-api";
 import { hostPlugin } from "@sous-io/sous-plugin-host";
 import { variablesPlugin } from "@sous-io/sous-plugin-variables";
 import { readdirSync, readFileSync } from "node:fs";

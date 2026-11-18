@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { isSousError } from "@sous-io/plugin-api";
+import { isSousError } from "@sous-io/sous-plugin-api";
 import type { HostProcesses, ProcessResult } from "@sous-io/sous-plugin-host/types";
 import { batchSshCommand, GIT_DOWNLOAD_TIMEOUT_MS, GitError } from "../src/index.js";
 import { git, realRunner, runnerOver } from "./helpers.js";

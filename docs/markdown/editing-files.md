@@ -288,7 +288,7 @@ adding them, and Sous undoes its edits; the plugin needs no uninstall code. Two 
 entries:
 
 ```ts
-import { definePlugin, type ContributorDefinition } from "@sous-io/plugin-api";
+import { definePlugin, type ContributorDefinition } from "@sous-io/sous-plugin-api";
 import { editor, expect } from "@sous-io/sous-plugin-editor";
 
 const editsContributor: ContributorDefinition = {

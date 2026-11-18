@@ -7,7 +7,7 @@
  * Other plugins import this file type-only.
  */
 
-import type { DocumentNode, JsonObject, PatchSet } from "@sous-io/plugin-api";
+import type { DocumentNode, JsonObject, PatchSet } from "@sous-io/sous-plugin-api";
 import type { ConfigFileFormat } from "@sous-io/sous-plugin-config-files/types";
 
 /** One file in `conf.d`. */
@@ -74,7 +74,7 @@ export interface ConfdManaged {
     header(name: ManagedLayerName, description: readonly string[]): string;
 }
 
-declare module "@sous-io/plugin-api" {
+declare module "@sous-io/sous-plugin-api" {
     interface SousServices {
         /** The `conf.d` files. */
         "confd.files": ConfdFiles;

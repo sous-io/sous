@@ -1,4 +1,4 @@
-import { BufferedReporter, IntentOutput, IntentOutputs, ItemList, ReportEntryStyle, Table, TextBlock, VariableSet, type Context } from "@sous-io/plugin-api";
+import { BufferedReporter, IntentOutput, IntentOutputs, ItemList, ReportEntryStyle, Table, TextBlock, VariableSet, type Context } from "@sous-io/sous-plugin-api";
 import { describe, expect, it } from "vitest";
 import { lockShowOutputs, storeGcOutputs } from "../../part-b/intents/lock-intents.js";
 import type { LockDiff, LockShowResult, PlannedQuestions, RecipeUpdatePlan, RepoAddResult, StoreGcReport, SubscriptionAddResult, SubscriptionListing } from "../../types.js";

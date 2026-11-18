@@ -17,7 +17,7 @@ This "topical skill" provides information about a specific concept: unit testing
 Vitest is the test runner. The repository is a pnpm workspace: every package under `packages/`
 has its own `vitest.config.ts`, built from the shared config in `packages/vitest.shared.ts`, and
 the root `vitest.config.ts` runs them all as projects. Tests import other workspace packages by
-name (`@sous-io/plugin-api`, `@sous-io/sous-plugin-<name>/types`); the shared config resolves each to
+name (`@sous-io/sous-plugin-api`, `@sous-io/sous-plugin-<name>/types`); the shared config resolves each to
 its TypeScript source, so no build is needed first.
 
 ```bash
@@ -125,12 +125,12 @@ afterEach(() => {
 Code that runs inside the engine receives its services through a context, so a test hands it
 stand-ins rather than mocking modules:
 
-- `BufferedReporter` (`@sous-io/plugin-api`) keeps every reported message; `reporter.at("warn")`
+- `BufferedReporter` (`@sous-io/sous-plugin-api`) keeps every reported message; `reporter.at("warn")`
   returns the text at one level, and `reporter.styled(style)` the messages of one style. Assert on
   those rather than capturing `console` or `process.stdout`.
 - `scriptedPrompter([answers])` answers questions in order and records what was `asked`;
   `nonInteractivePrompter` fails every question the way a run with no terminal does. Both come
-  from `@sous-io/plugin-api`.
+  from `@sous-io/sous-plugin-api`.
 - Several plugin packages have a `makeEngine(...)` helper in `test/` that starts the engine with the
   plugins under test and a `BufferedReporter`.
 - `@sous-io/repository-hosts/testing` holds recorded HTTP responses, fake processes, a fake git

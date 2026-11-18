@@ -9,7 +9,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import type { Environment, ProjectInfo } from "@sous-io/plugin-api";
+import type { Environment, ProjectInfo } from "@sous-io/sous-plugin-api";
 import { ENV_LOCAL_NAME, ENV_SHARED_NAME } from "../names.js";
 import { parseEnv } from "./env-file.js";
 

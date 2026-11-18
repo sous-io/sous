@@ -7,7 +7,7 @@ import {
     type EntityType,
     type SousSchema,
     validateWithSync,
-} from "@sous-io/plugin-api";
+} from "@sous-io/sous-plugin-api";
 
 /** A defined kind of entity. */
 export interface EntityKindRecord {

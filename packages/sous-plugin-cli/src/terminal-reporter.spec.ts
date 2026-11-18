@@ -1,4 +1,4 @@
-import { IntentOutput, IntentOutputs, ItemList, LOG_LEVELS, ReportEntryStyle, SousError, Table, TextBlock, Tree, VariableSet } from "@sous-io/plugin-api";
+import { IntentOutput, IntentOutputs, ItemList, LOG_LEVELS, ReportEntryStyle, SousError, Table, TextBlock, Tree, VariableSet } from "@sous-io/sous-plugin-api";
 import { describe, expect, it } from "vitest";
 import { TerminalReporter } from "./terminal-reporter.js";
 

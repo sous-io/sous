@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { ConfigError, NonInteractiveError, ReportEntryStyle, VariableSet } from "@sous-io/plugin-api";
+import { ConfigError, NonInteractiveError, ReportEntryStyle, VariableSet } from "@sous-io/sous-plugin-api";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { binEntryOf, handle, requestOf } from "../src/update.js";
 import { fakeManager, installedPackage, recordingContext } from "./helpers.js";

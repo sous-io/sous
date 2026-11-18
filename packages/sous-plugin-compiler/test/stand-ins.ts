@@ -9,7 +9,7 @@ import path from "node:path";
 import { globSync } from "glob";
 import { Liquid } from "liquidjs";
 import { minimatch } from "minimatch";
-import { ConfigError, definePlugin, jsonSchema, type PluginDefinition, type SousSchema } from "@sous-io/plugin-api";
+import { ConfigError, definePlugin, jsonSchema, type PluginDefinition, type SousSchema } from "@sous-io/sous-plugin-api";
 import type { HostGlobs, HostSousHome } from "@sous-io/sous-plugin-host/types";
 import type { LiquidEngineOptions, LiquidEngines, LiquidExtensionContext } from "@sous-io/sous-plugin-liquid/types";
 import type { HashNameEntity } from "@sous-io/sous-plugin-refs/types";

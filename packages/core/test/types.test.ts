@@ -1,5 +1,5 @@
 import { describe, expectTypeOf, it } from "vitest";
-import { IntentOutputs } from "@sous-io/plugin-api";
+import { IntentOutputs } from "@sous-io/sous-plugin-api";
 import type {
     AnyEvent,
     Context,
@@ -14,7 +14,7 @@ import type {
     IntentResult,
     ServiceType,
     Sous,
-} from "@sous-io/plugin-api";
+} from "@sous-io/sous-plugin-api";
 
 interface Renderer {
     render(source: string): string;
@@ -30,7 +30,7 @@ interface HarnessEntity {
 }
 
 // What sous-plugin-diagrams/src/types.ts would declare.
-declare module "@sous-io/plugin-api" {
+declare module "@sous-io/sous-plugin-api" {
     interface SousServices {
         "typed.renderer": Renderer;
     }

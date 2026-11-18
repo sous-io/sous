@@ -3,7 +3,7 @@
  * transcript when asked (recipe tests use it).
  */
 
-import { ConfigError, IntentOutputs, NotFoundError, type Context } from "@sous-io/plugin-api";
+import { ConfigError, IntentOutputs, NotFoundError, type Context } from "@sous-io/sous-plugin-api";
 import type { RunHeadlessInput, RunHeadlessResult } from "./types.js";
 
 /** Runs the intent. */

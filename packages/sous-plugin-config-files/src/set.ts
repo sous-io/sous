@@ -6,7 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { parseDocument, parsePath, toPlainJson } from "@sous-io/documents";
-import { type Context, InputError, IntentOutputs, type JsonValue, type ProjectInfo, SousError } from "@sous-io/plugin-api";
+import { type Context, InputError, IntentOutputs, type JsonValue, type ProjectInfo, SousError } from "@sous-io/sous-plugin-api";
 import { writeFileAtomically } from "./env/env-file.js";
 import { mainCandidates } from "./loader.js";
 import { formatOf, MAIN_CONFIG_FILE_NAMES } from "./names.js";

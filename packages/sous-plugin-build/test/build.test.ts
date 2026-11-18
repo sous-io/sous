@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { ConfigError, type ItemList, NonInteractiveError, NotFoundError, scriptedPrompter } from "@sous-io/plugin-api";
+import { ConfigError, type ItemList, NonInteractiveError, NotFoundError, scriptedPrompter } from "@sous-io/sous-plugin-api";
 import type { CompilerPruneResult } from "@sous-io/sous-plugin-compiler/types";
 import type { BuildResult, ClearResult, CompileCommandResult } from "../src/types.js";
 import { entry, harness, plugin, target } from "./helpers.js";

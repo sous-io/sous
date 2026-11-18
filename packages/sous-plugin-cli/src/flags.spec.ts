@@ -1,4 +1,4 @@
-import { toJsonSchema } from "@sous-io/plugin-api";
+import { toJsonSchema } from "@sous-io/sous-plugin-api";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { argumentsFromSchema, convertValue } from "./flags.js";

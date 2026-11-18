@@ -1,4 +1,4 @@
-# @sous-io/plugin-api
+# @sous-io/sous-plugin-api
 
 The interface for writing a sous plugin, and the one package of sous that outside plugins depend on. It holds `definePlugin`, the types, the `Reporter` and `Prompter` interfaces and the error classes. It has no dependencies.
 
@@ -7,7 +7,7 @@ The interface for writing a sous plugin, and the one package of sous that outsid
 A plugin is a module whose default export is `definePlugin({...})`. Its `register(sous)` runs once, when the plugin loads. Everything below goes inside it.
 
 ```ts
-import { definePlugin } from "@sous-io/plugin-api";
+import { definePlugin } from "@sous-io/sous-plugin-api";
 
 export default definePlugin({
     name: "sous-plugin-diagrams",
@@ -68,7 +68,7 @@ Add your plugin's names to the interfaces in this package (declaration merging),
 
 ```ts
 // In sous-plugin-diagrams: describe what it provides.
-declare module "@sous-io/plugin-api" {
+declare module "@sous-io/sous-plugin-api" {
     interface SousIntents {
         "diagrams.render": { input: { only?: string }; result: { rendered: number } };
     }
@@ -94,5 +94,5 @@ const { rendered } = await ctx.run("diagrams.render", { only: "intro" });
 ## Testing
 
 ```bash
-pnpm --filter @sous-io/plugin-api test
+pnpm --filter @sous-io/sous-plugin-api test
 ```

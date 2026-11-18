@@ -15,7 +15,7 @@
  */
 
 import path from "node:path";
-import { ConfigError, type ServiceContext } from "@sous-io/plugin-api";
+import { ConfigError, type ServiceContext } from "@sous-io/sous-plugin-api";
 import type { FormatParser, VariableDefinition } from "@sous-io/sous-plugin-formats/types";
 import type { ActiveRecipeEntity, RepoEntry } from "@sous-io/sous-plugin-recipes/types";
 import type { VariableRef } from "@sous-io/sous-plugin-refs/types";

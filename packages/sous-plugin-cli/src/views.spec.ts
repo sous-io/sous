@@ -1,4 +1,4 @@
-import { BufferedReporter, ReportEntryStyle, type Table } from "@sous-io/plugin-api";
+import { BufferedReporter, ReportEntryStyle, type Table } from "@sous-io/sous-plugin-api";
 import { describe, expect, it } from "vitest";
 import { thresholdOf } from "./front-end.js";
 import { reportTimings } from "./views.js";

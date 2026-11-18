@@ -1,4 +1,4 @@
-import { definePlugin, jsonSchema } from "@sous-io/plugin-api";
+import { definePlugin, jsonSchema } from "@sous-io/sous-plugin-api";
 import { z } from "zod";
 import { data, nothing, text } from "./outputs.js";
 

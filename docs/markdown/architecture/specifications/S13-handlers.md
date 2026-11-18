@@ -119,7 +119,7 @@ register(sous) {
 }
 ```
 
-`sous.handlers.add(purpose, { id, handle, order? })` is part of the plugin API (`@sous-io/plugin-api`). It
+`sous.handlers.add(purpose, { id, handle, order? })` is part of the plugin API (`@sous-io/sous-plugin-api`). It
 adds a `handler` entity of the registering plugin, `{ id, purpose, handle, order? }`; the kind is
 defined by `sous-plugin-handlers`. The handler's types (`HandlerTools`, the second argument of each
 purpose) reach plugin authors through `SousHandlerTypes`, which `sous-plugin-handlers` fills in by

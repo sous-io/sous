@@ -6,7 +6,7 @@
  * Other plugins import this file type-only.
  */
 
-import type { Environment, EntityReader, ProjectInfo, ServiceReader } from "@sous-io/plugin-api";
+import type { Environment, EntityReader, ProjectInfo, ServiceReader } from "@sous-io/sous-plugin-api";
 import type { FS, FilterImplOptions, Liquid, LiquidOptions } from "liquidjs";
 
 export type { FS, FilterImplOptions, Liquid, LiquidOptions };
@@ -85,7 +85,7 @@ export interface LiquidEngines {
     available(purpose?: LiquidPurpose): { tags: string[]; filters: string[] };
 }
 
-declare module "@sous-io/plugin-api" {
+declare module "@sous-io/sous-plugin-api" {
     interface SousServices {
         /** Building LiquidJS engines. */
         "liquid.engine": LiquidEngines;

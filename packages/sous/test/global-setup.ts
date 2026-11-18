@@ -11,10 +11,10 @@ declare module "vitest" {
 }
 
 /**
- * Builds what the bin tests run, once per test run: the compiled `@sous-io/plugin-api` (the bundle
+ * Builds what the bin tests run, once per test run: the compiled `@sous-io/sous-plugin-api` (the bundle
  * keeps it outside) and the bundle itself. The bundle goes into a directory of its own under
  * `dist/`, so test runs side by side never overwrite each other's bin; it must stay inside this
- * package so `@sous-io/plugin-api` resolves from it.
+ * package so `@sous-io/sous-plugin-api` resolves from it.
  */
 export default function setup(project: TestProject): () => void {
     const packageDir = path.resolve(import.meta.dirname, "..");
@@ -26,9 +26,9 @@ export default function setup(project: TestProject): () => void {
     const dir = mkdtempSync(path.join(testDist, "run-"));
     const bin = path.join(dir, "bin.js");
 
-    // Test runs side by side share plugin-api's dist/, so its build takes a lock where flock exists.
-    const pluginApi = path.join(packageDir, "..", "plugin-api");
-    const lock = path.join(testDist, "plugin-api.lock");
+    // Test runs side by side share sous-plugin-api's dist/, so its build takes a lock where flock exists.
+    const pluginApi = path.join(packageDir, "..", "sous-plugin-api");
+    const lock = path.join(testDist, "sous-plugin-api.lock");
 
     try {
         execFileSync("flock", [lock, process.execPath, tsc, "-p", "tsconfig.build.json"], { cwd: pluginApi });

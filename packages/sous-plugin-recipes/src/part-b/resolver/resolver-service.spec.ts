@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { JsonObject } from "@sous-io/plugin-api";
+import type { JsonObject } from "@sous-io/sous-plugin-api";
 import { cleanTemp, fakeHost, fakeUrl, indexFile, startEngine, tempDir } from "../../../test/part-b/helpers.js";
 import type { ResolverService } from "./resolver-service.js";
 

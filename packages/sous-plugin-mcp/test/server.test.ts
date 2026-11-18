@@ -1,5 +1,5 @@
 import { ElicitRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { DataValue, IntentOutputs, jsonSchema, type PluginDefinition } from "@sous-io/plugin-api";
+import { DataValue, IntentOutputs, jsonSchema, type PluginDefinition } from "@sous-io/sous-plugin-api";
 import { afterEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import type { McpCalledPayload } from "../src/types.js";

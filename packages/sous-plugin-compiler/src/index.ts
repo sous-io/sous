@@ -6,7 +6,7 @@
  * the built-in plugins only this one writes build outputs; others add compilation targets.
  */
 
-import { definePlugin, jsonSchema, type PluginDefinition, type SousSchema } from "@sous-io/plugin-api";
+import { definePlugin, jsonSchema, type PluginDefinition, type SousSchema } from "@sous-io/sous-plugin-api";
 import { AliasService } from "./aliases.js";
 import { filesContributor } from "./files.js";
 import { ifMigration } from "./if-migration.js";

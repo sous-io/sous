@@ -15,7 +15,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { globSync } from "glob";
-import type { ProjectInfo } from "@sous-io/plugin-api";
+import type { ProjectInfo } from "@sous-io/sous-plugin-api";
 import type { ActiveRecipeContent, ActiveRecipeEntity } from "@sous-io/sous-plugin-recipes/types";
 import type { SkillSource } from "./types.js";
 

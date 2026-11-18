@@ -8,7 +8,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { BufferedReporter, nonInteractivePrompter, scriptedPrompter, type Prompter } from "@sous-io/plugin-api";
+import { BufferedReporter, nonInteractivePrompter, scriptedPrompter, type Prompter } from "@sous-io/sous-plugin-api";
 import type { IndexFile } from "@sous-io/sous-plugin-formats/types";
 import { commitAll, git, initRepo, makeTmpDir, writeFile, type TmpDir } from "../../test/support/git-repo.js";
 import { testTools } from "../../test/support/standins.js";

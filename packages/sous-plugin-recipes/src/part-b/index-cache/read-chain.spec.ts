@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { nullReporter } from "@sous-io/plugin-api";
+import { nullReporter } from "@sous-io/sous-plugin-api";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { RepositoryHostContext, RepositoryHostEntity, RepositoryReadStrategy, RepositoryTokenSource } from "../../types.js";
 import { IndexReadError, readFailureSentence, readThroughChain, StrategyMemoryFile, type ChainRead } from "./read-chain.js";

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { nullReporter } from "@sous-io/plugin-api";
+import { nullReporter } from "@sous-io/sous-plugin-api";
 import { hashDirectorySync, indexFileFormat } from "@sous-io/sous-plugin-formats";
 import type { IndexFile, StoreEntry } from "@sous-io/sous-plugin-formats/types";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";

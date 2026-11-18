@@ -60,9 +60,9 @@ The maintainer wanted a plugin system, with the CLI and the MCP server as plugin
   started the operation supplies, so the same code works in the CLI, over MCP or in a GUI.
 - **The code becomes a pnpm monorepo**, one package per concern, bundled into the one published
   package, `@sous-io/sous`, which ships compiled JavaScript. The plugin interface,
-  `@sous-io/plugin-api`, is published on its own and is the only interface sous promises to keep
+  `@sous-io/sous-plugin-api`, is published on its own and is the only interface sous promises to keep
   stable for code outside the monorepo.
-- **Sous ships this as 1.0.0.** From then on, a breaking change to `@sous-io/plugin-api` needs a
+- **Sous ships this as 1.0.0.** From then on, a breaking change to `@sous-io/sous-plugin-api` needs a
   new major version.
 
 ## Consequences

@@ -19,7 +19,7 @@ import {
     type TimingEntry,
     type TreeNode,
     type VariableEntry,
-} from "@sous-io/plugin-api";
+} from "@sous-io/sous-plugin-api";
 import type { ConfigGetResult, ConfigShowResult, ConfigValidateResult, LayerView, RawConfigFile } from "./types.js";
 
 /** A value as JSON on one line, cut to `max` characters with an ellipsis. */

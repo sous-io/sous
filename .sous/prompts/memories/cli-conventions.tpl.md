@@ -66,8 +66,8 @@ holds the mechanism, use it rather than building a second one beside it.
   `readLocation`.
 - **A result is returned, never printed; everything else is reported, never formatted.** An intent
   returns `IntentOutputs` built from payloads (`VariableSet`, `Table`, ...;
-  `packages/plugin-api/src/outputs.ts`; ADR 0022); while it runs it reports through the level and
-  style methods (`BaseReporter`, `packages/plugin-api/src/reporter.ts`; ADR 0021). No caller writes
+  `packages/sous-plugin-api/src/outputs.ts`; ADR 0022); while it runs it reports through the level and
+  style methods (`BaseReporter`, `packages/sous-plugin-api/src/reporter.ts`; ADR 0021). No caller writes
   a glyph, pads a label, indents a line or joins lines with "\n". The CLI knows no domain: there are
   no per-intent views.
 - **How each payload, style and result looks is decided once, in `TerminalReporter`**

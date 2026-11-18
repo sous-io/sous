@@ -6,7 +6,7 @@
  * Other plugins import this file type-only.
  */
 
-import type { ConfigBuilder, Environment, JsonValue, PathInput, ProjectInfo } from "@sous-io/plugin-api";
+import type { ConfigBuilder, Environment, JsonValue, PathInput, ProjectInfo } from "@sous-io/sous-plugin-api";
 
 /** A variable scope: names to string values. */
 export type VarScope = Readonly<Record<string, string>>;
@@ -186,7 +186,7 @@ export interface VariablesConfig {
     _env?: Record<string, string>;
 }
 
-declare module "@sous-io/plugin-api" {
+declare module "@sous-io/sous-plugin-api" {
     interface SousServices {
         /** `${var}` substitution and scopes. */
         "variables.resolver": VariablesResolver;

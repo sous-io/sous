@@ -12,7 +12,7 @@
 
 import crypto from "node:crypto";
 import fs from "node:fs";
-import { SousError, type Context } from "@sous-io/plugin-api";
+import { SousError, type Context } from "@sous-io/sous-plugin-api";
 import type {} from "@sous-io/sous-plugin-recipes/types";
 import type {} from "@sous-io/sous-plugin-recipe-answers/types";
 import type {} from "@sous-io/sous-plugin-compiler/types";

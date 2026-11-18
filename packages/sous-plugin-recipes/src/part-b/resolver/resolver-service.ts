@@ -3,7 +3,7 @@
  * trusts, and which locked recipes the subscriptions switched on here reach.
  */
 
-import type { ServiceContext } from "@sous-io/plugin-api";
+import type { ServiceContext } from "@sous-io/sous-plugin-api";
 import type { IndexFile, Lockfile } from "@sous-io/sous-plugin-formats/types";
 import type { SousRef } from "@sous-io/sous-plugin-refs/types";
 import type { RecipeRequest, RecipesResolver, ResolvedRecipe, ResolveOptions, ResolveResult, SubscriptionEntry } from "../../types.js";

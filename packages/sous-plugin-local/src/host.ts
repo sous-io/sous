@@ -17,7 +17,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { ConfigError } from "@sous-io/plugin-api";
+import { ConfigError } from "@sous-io/sous-plugin-api";
 import type { RepositoryHostContext, RepositoryReadStrategy } from "@sous-io/sous-plugin-recipes/types";
 import { copyRecipeTree, fetchRecipeTree, formatHostedLocator, gitFailureReason, type CanonicalRepository } from "@sous-io/repository-hosts";
 import { identityOwnerPath, localRepoPath } from "./paths.js";

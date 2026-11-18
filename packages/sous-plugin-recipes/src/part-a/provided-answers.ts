@@ -8,7 +8,7 @@
  * checked here.
  */
 
-import { SousError, type Context } from "@sous-io/plugin-api";
+import { SousError, type Context } from "@sous-io/sous-plugin-api";
 import type { AnswerFlags, ResolvedRecipe } from "../types.js";
 import { definedVariables, type DefinedLike } from "./questions.js";
 

@@ -15,7 +15,7 @@ import type {
     PathSegment,
     ProjectInfo,
     ServiceReader,
-} from "@sous-io/plugin-api";
+} from "@sous-io/sous-plugin-api";
 import type { ConfigLookup, VariableSourceEntity, VariablesResolver, VarScope } from "@sous-io/sous-plugin-variables/types";
 import { ExpressionError, formatPath } from "./errors.js";
 import { hasExpressions, isExpressionObject, isPlainObject } from "./keys.js";

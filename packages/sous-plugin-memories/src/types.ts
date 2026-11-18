@@ -90,7 +90,7 @@ export interface MemoriesSettings {
     exclude: string[];
 }
 
-declare module "@sous-io/plugin-api" {
+declare module "@sous-io/sous-plugin-api" {
     interface SousServices {
         "memories.selection": MemoriesSelection;
     }

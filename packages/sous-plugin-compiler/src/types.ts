@@ -10,7 +10,7 @@
  * Other plugins import this file type-only.
  */
 
-import type { ServiceContext } from "@sous-io/plugin-api";
+import type { ServiceContext } from "@sous-io/sous-plugin-api";
 import type { VarScope } from "@sous-io/sous-plugin-variables/types";
 
 // ---------------------------------------------------------------------------------------------
@@ -515,7 +515,7 @@ export interface CompilerPrunedPayload {
     readonly dryRun: boolean;
 }
 
-declare module "@sous-io/plugin-api" {
+declare module "@sous-io/sous-plugin-api" {
     interface SousServices {
         /** Include resolution. */
         "compiler.includes": CompilerIncludes;

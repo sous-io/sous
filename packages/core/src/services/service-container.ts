@@ -7,7 +7,7 @@ import {
     type ServiceContext,
     type ServiceReader,
     SousError,
-} from "@sous-io/plugin-api";
+} from "@sous-io/sous-plugin-api";
 import type { Timer } from "../timing/timer.js";
 import type { ServicePicks, ServiceRegistry, ServiceProvider } from "./service-registry.js";
 import { timeService } from "./timed.js";

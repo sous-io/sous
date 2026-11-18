@@ -4,7 +4,7 @@
  * The contract other plugins code against is `./types.ts`.
  */
 
-import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";
+import { definePlugin, type PluginDefinition } from "@sous-io/sous-plugin-api";
 import { isAutoVariable } from "./auto.js";
 import { variablesNames } from "./names.js";
 import { Resolver } from "./resolver.js";

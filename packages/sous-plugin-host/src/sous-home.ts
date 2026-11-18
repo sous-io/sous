@@ -5,7 +5,7 @@
 
 import os from "node:os";
 import path from "node:path";
-import type { Environment } from "@sous-io/plugin-api";
+import type { Environment } from "@sous-io/sous-plugin-api";
 import type { HostSousHome, SousHomePaths } from "./types.js";
 
 /** The directory name used under the user's home directory. */

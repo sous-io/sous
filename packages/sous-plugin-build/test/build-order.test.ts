@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { IntentOutput, IntentOutputs, jsonSchema, type PluginDefinition } from "@sous-io/plugin-api";
+import { IntentOutput, IntentOutputs, jsonSchema, type PluginDefinition } from "@sous-io/sous-plugin-api";
 import type { EditorApplyInput, EditorApplyResult } from "@sous-io/sous-plugin-editor/types";
 import type { HandlerRunResult, HandlersIntentInput } from "@sous-io/sous-plugin-handlers/types";
 import type { BuildResult } from "../src/types.js";

@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { PluginError } from "@sous-io/plugin-api";
+import { PluginError } from "@sous-io/sous-plugin-api";
 import { createPackage } from "./package-identity.js";
 
 describe("host.package", () => {

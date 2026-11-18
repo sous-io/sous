@@ -1,4 +1,4 @@
-import { ConfigError, definePlugin } from "@sous-io/plugin-api";
+import { ConfigError, definePlugin } from "@sous-io/sous-plugin-api";
 import { beforeAll, describe, expect, it } from "vitest";
 import { buildRefs, printed, type Refs } from "../../test/fixtures.js";
 import { finishRef, splitter } from "./partial-ref.js";

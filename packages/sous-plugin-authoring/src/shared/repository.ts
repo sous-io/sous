@@ -9,7 +9,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { ConfigError } from "@sous-io/plugin-api";
+import { ConfigError } from "@sous-io/sous-plugin-api";
 import { possibleContentKinds } from "@sous-io/sous-plugin-formats";
 import type {} from "@sous-io/sous-plugin-recipes/types";
 import type { RecipeManifest, RepoManifest } from "@sous-io/sous-plugin-formats/types";

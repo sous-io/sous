@@ -2,7 +2,7 @@
  * Small helpers part A's modules share.
  */
 
-import type { Context } from "@sous-io/plugin-api";
+import type { Context } from "@sous-io/sous-plugin-api";
 import type { ResolvedPin, ResolvedRecipe } from "../types.js";
 
 /** The message of an error, whatever was thrown. */

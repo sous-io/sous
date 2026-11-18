@@ -4,7 +4,7 @@
  */
 
 import path from "node:path";
-import { IntentOutputs, LogLevel, nullReporter, type Context, type Reporter } from "@sous-io/plugin-api";
+import { IntentOutputs, LogLevel, nullReporter, type Context, type Reporter } from "@sous-io/sous-plugin-api";
 import type { LiquidEngines } from "@sous-io/sous-plugin-liquid/types";
 import type { RefsParser } from "@sous-io/sous-plugin-refs/types";
 import type { VariablesSecrets } from "@sous-io/sous-plugin-variables/types";

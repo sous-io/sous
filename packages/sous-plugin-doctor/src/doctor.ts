@@ -8,7 +8,7 @@
  * through `ctx.prompter`, which fails with the flag that answers it when there is no terminal.
  */
 
-import { IntentOutput, IntentOutputs, ReportEntryStyle, TextBlock, Tree, type Context, type TreeNode } from "@sous-io/plugin-api";
+import { IntentOutput, IntentOutputs, ReportEntryStyle, TextBlock, Tree, type Context, type TreeNode } from "@sous-io/sous-plugin-api";
 import type { DoctorCheckEntity, DoctorCheckReport, DoctorCheckResult, DoctorInput, DoctorResult, DoctorRun } from "./types.js";
 
 /** The flag that answers every question `sous doctor` asks. */

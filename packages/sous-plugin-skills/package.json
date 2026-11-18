@@ -22,7 +22,7 @@
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
-    "@sous-io/plugin-api": "workspace:*",
+    "@sous-io/sous-plugin-api": "workspace:*",
     "@sous-io/sous-plugin-compiler": "workspace:*",
     "@sous-io/sous-plugin-recipes": "workspace:*",
     "glob": "^13.0.6"

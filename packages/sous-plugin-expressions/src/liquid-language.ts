@@ -4,7 +4,7 @@
  * filter plugins add.
  */
 
-import { ConfigError, type EntityReader, type ServiceReader } from "@sous-io/plugin-api";
+import { ConfigError, type EntityReader, type ServiceReader } from "@sous-io/sous-plugin-api";
 import { CONFIG_EXPRESSION_PURPOSE, createLiquidEngines } from "@sous-io/sous-plugin-liquid";
 import { Liquid, Tokenizer, toValue } from "liquidjs";
 import { ExpressionError } from "./errors.js";

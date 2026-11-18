@@ -6,7 +6,7 @@
  * Other plugins import this file type-only.
  */
 
-import type { ConfigLayer, JsonObject, JsonValue, PluginInfo, TimingEntry } from "@sous-io/plugin-api";
+import type { ConfigLayer, JsonObject, JsonValue, PluginInfo, TimingEntry } from "@sous-io/sous-plugin-api";
 
 /** One contributor's change to a value, for `--layers`. */
 export interface LayerView extends ConfigLayer {
@@ -116,7 +116,7 @@ export interface TimingsShowInput {
     category?: string;
 }
 
-declare module "@sous-io/plugin-api" {
+declare module "@sous-io/sous-plugin-api" {
     interface SousIntents {
         "config.show": { input: ConfigShowInput; result: ConfigShowResult };
         "config.get": { input: ConfigGetInput; result: ConfigGetResult };

@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { InputError, type ServiceContext } from "@sous-io/plugin-api";
+import { InputError, type ServiceContext } from "@sous-io/sous-plugin-api";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MemoryEnv, readJson, secrets, serviceReader, variable } from "../test/stand-ins.js";
 import { answersFromData, collectAnswers, isEnvFile, matchAnswers, parseAnswerPair, PreanswersService } from "./preanswers.js";

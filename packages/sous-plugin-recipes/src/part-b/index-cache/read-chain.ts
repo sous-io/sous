@@ -6,7 +6,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { ConfigError } from "@sous-io/plugin-api";
+import { ConfigError } from "@sous-io/sous-plugin-api";
 import type { CanonicalRepository } from "@sous-io/sous-plugin-refs/types";
 import type {
     IndexReadFailure,

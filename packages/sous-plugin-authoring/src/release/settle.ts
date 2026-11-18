@@ -9,7 +9,7 @@
  * could be the wrong one. Two readings that both publish it are a tie, and an error.
  */
 
-import { ConfigError } from "@sous-io/plugin-api";
+import { ConfigError } from "@sous-io/sous-plugin-api";
 import type { IndexFile } from "@sous-io/sous-plugin-formats/types";
 import type { RefLocation, SousRef } from "@sous-io/sous-plugin-refs/types";
 import type { ReleaseProblem } from "../types.js";

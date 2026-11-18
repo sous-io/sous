@@ -10,7 +10,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import type { ConfigBuilder, ContributorDefinition } from "@sous-io/plugin-api";
+import type { ConfigBuilder, ContributorDefinition } from "@sous-io/sous-plugin-api";
 import type { RecipeContentGroup } from "@sous-io/sous-plugin-formats/types";
 import { inlineText, isInline, RecipeContents } from "../../part-a/contents.js";
 import type { ActiveRecipeEntity, RecipeContentsEntry } from "../../types.js";

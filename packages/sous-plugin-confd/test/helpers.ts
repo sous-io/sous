@@ -14,7 +14,7 @@ import {
     type JsonValue,
     type PluginDefinition,
     type ProjectInfo,
-} from "@sous-io/plugin-api";
+} from "@sous-io/sous-plugin-api";
 import type { ExpressionsEvaluator } from "@sous-io/sous-plugin-expressions/types";
 import type { HostGlobs } from "@sous-io/sous-plugin-host/types";
 import { configFilesPlugin } from "@sous-io/sous-plugin-config-files";

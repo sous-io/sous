@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { minimatch } from "minimatch";
-import { ConfigError } from "@sous-io/plugin-api";
+import { ConfigError } from "@sous-io/sous-plugin-api";
 import { compilePatternFinder, compilePatternList, isRegexSpelling } from "./pattern-list.js";
 
 const isMatch = (key: string, pattern: string) => minimatch(key, pattern);

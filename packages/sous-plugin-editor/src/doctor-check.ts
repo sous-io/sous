@@ -6,7 +6,7 @@
  * recipe's author must put right.
  */
 
-import { BufferedReporter, type Context } from "@sous-io/plugin-api";
+import { BufferedReporter, type Context } from "@sous-io/sous-plugin-api";
 import { DOCTOR_CHECK_ORDER, type DoctorCheckEntity, type DoctorCheckResult, type DoctorRun } from "@sous-io/sous-plugin-doctor";
 import { applyIntent } from "./intent.js";
 import type { AssertionOutcome, EditorApplyResult } from "./types.js";

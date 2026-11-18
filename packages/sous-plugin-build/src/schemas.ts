@@ -4,7 +4,7 @@
  * from the same JSON Schema.
  */
 
-import { jsonSchema, type SousSchema } from "@sous-io/plugin-api";
+import { jsonSchema, type SousSchema } from "@sous-io/sous-plugin-api";
 import type {
     BuildInput,
     BuildPrepareInput,

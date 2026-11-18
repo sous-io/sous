@@ -4,7 +4,7 @@
  */
 
 import path from "node:path";
-import { ConfigError } from "@sous-io/plugin-api";
+import { ConfigError } from "@sous-io/sous-plugin-api";
 import { isAutoVariable } from "./auto.js";
 import { references, substitute } from "./substitute.js";
 import type { VarScope } from "./types.js";

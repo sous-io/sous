@@ -3,7 +3,7 @@
  * chosen place, remove one, and keep a named block between two marker lines. Every line an edit
  * does not touch stays byte for byte, its own line ending included.
  */
-import { ConfigError } from "@sous-io/plugin-api";
+import { ConfigError } from "@sous-io/sous-plugin-api";
 
 /** How a file type writes a comment: `#` for `.gitignore`, `<!--` and `-->` for Markdown. */
 export interface CommentStyle {

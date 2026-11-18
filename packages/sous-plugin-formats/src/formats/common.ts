@@ -10,7 +10,7 @@
 
 import { z } from "zod";
 import semver from "semver";
-import { ConfigError } from "@sous-io/plugin-api";
+import { ConfigError } from "@sous-io/sous-plugin-api";
 import {
   CONTENT_HASH_PATTERN,
   ENV_VAR_NAME_PATTERN,

@@ -1,4 +1,4 @@
-import { type EngineHandle, type Environment, IntentOutput, IntentOutputs, isLogLevel, isSousErrorOfKind, LogLevel, SousError, TextBlock, type Reporter, type RunPlan, type SubmitOptions } from "@sous-io/plugin-api";
+import { type EngineHandle, type Environment, IntentOutput, IntentOutputs, isLogLevel, isSousErrorOfKind, LogLevel, SousError, TextBlock, type Reporter, type RunPlan, type SubmitOptions } from "@sous-io/sous-plugin-api";
 import type { Command, CommandTree } from "./command-tree.js";
 import { COMPLETE_COMMAND } from "./completion.js";
 import { describeError, errorForDisplay } from "./errors.js";

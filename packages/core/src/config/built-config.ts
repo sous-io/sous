@@ -10,7 +10,7 @@ import type {
     PathInput,
     PathSegment,
     ServiceReader,
-} from "@sous-io/plugin-api";
+} from "@sous-io/sous-plugin-api";
 import type { EntitySnapshot } from "../entities/entity-registry.js";
 import { type Limits, resolveLimits } from "../limits.js";
 import { CORE_PLUGIN } from "../util/names.js";

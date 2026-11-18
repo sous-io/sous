@@ -9,7 +9,7 @@
  */
 
 import path from "node:path";
-import type { Context } from "@sous-io/plugin-api";
+import type { Context } from "@sous-io/sous-plugin-api";
 import type { RecipeManifest } from "@sous-io/sous-plugin-formats/types";
 import type { SousRef } from "@sous-io/sous-plugin-refs/types";
 import type { BrowsingFlags, CachedIndex } from "../types.js";

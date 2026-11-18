@@ -1,5 +1,5 @@
 // Bundles the published package (S3, "The bundler"): one ES module with core and every built-in
-// plugin inside, and @sous-io/plugin-api outside, so plugins share sous's copy of it.
+// plugin inside, and @sous-io/sous-plugin-api outside, so plugins share sous's copy of it.
 //
 // Two files come out: `sous.js`, the bundle, and `bin.js`, the command, a few lines that turn on
 // Node's compile cache and then import the bundle. The cache keeps the compiled bundle on disk
@@ -25,7 +25,7 @@ await esbuild.build({
     target: "node22",
     format: "esm",
     outfile: bundleFile,
-    external: ["@sous-io/plugin-api"],
+    external: ["@sous-io/sous-plugin-api"],
     conditions: ["source"],
     mainFields: ["module", "main"],
     splitting: false,

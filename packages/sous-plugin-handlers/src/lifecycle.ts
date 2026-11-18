@@ -15,7 +15,7 @@
  * All the state is kept per engine, in the closure `registerLifecycle` makes.
  */
 
-import type { Context, Sous } from "@sous-io/plugin-api";
+import type { Context, Sous } from "@sous-io/sous-plugin-api";
 import type {} from "@sous-io/sous-plugin-recipes/types";
 import type { LockChange } from "@sous-io/sous-plugin-recipes/types";
 

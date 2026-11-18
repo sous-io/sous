@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { ConfigError, NonInteractiveError } from "@sous-io/plugin-api";
+import { ConfigError, NonInteractiveError } from "@sous-io/sous-plugin-api";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { HOOK_BLOCK_START } from "../src/hooks.js";
 import { handle } from "../src/init-hooks.js";

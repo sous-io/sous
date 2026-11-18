@@ -1,4 +1,4 @@
-import type { Reporter, TimingEntry } from "@sous-io/plugin-api";
+import type { Reporter, TimingEntry } from "@sous-io/sous-plugin-api";
 
 /**
  * Reports every timing of the run, for `--timings`: one row per key, slowest total first.

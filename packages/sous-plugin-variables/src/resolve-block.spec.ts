@@ -1,4 +1,4 @@
-import { isSousErrorOfKind, type SousError } from "@sous-io/plugin-api";
+import { isSousErrorOfKind, type SousError } from "@sous-io/sous-plugin-api";
 import { describe, expect, it } from "vitest";
 import { resolveBlock } from "./resolve-block.js";
 

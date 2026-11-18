@@ -8,7 +8,7 @@
  */
 
 import path from "node:path";
-import type { ConfigBuilder, ServiceContext } from "@sous-io/plugin-api";
+import type { ConfigBuilder, ServiceContext } from "@sous-io/sous-plugin-api";
 import type { CompilationOutput, CompilationTarget, CompilationTransformEntity, TransformFile } from "@sous-io/sous-plugin-compiler/types";
 import { skillDestinations, transformIdFor, type SkillDestination } from "./destinations.js";
 import { stringsOf } from "./settings.js";

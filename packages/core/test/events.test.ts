@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CancelledError, type CustomEvent, IntentOutputs, LoopError } from "@sous-io/plugin-api";
+import { CancelledError, type CustomEvent, IntentOutputs, LoopError } from "@sous-io/sous-plugin-api";
 import { contributorsPlugin, keysPlugin, makeEngine, nothing, plugin, valued } from "./helpers.js";
 
 describe("events", () => {

@@ -7,7 +7,7 @@
  * Other plugins import this file type-only.
  */
 
-import type { IntentRequest } from "@sous-io/plugin-api";
+import type { IntentRequest } from "@sous-io/sous-plugin-api";
 
 /** One MCP tool made from an intent. */
 export interface McpToolDefinition {
@@ -61,7 +61,7 @@ export interface McpCalledPayload {
     readonly durationMs: number;
 }
 
-declare module "@sous-io/plugin-api" {
+declare module "@sous-io/sous-plugin-api" {
     interface SousServices {
         "mcp.tools": McpTools;
     }

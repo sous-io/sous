@@ -1,5 +1,5 @@
 import { createEngine } from "@sous-io/core";
-import { ConfigError, definePlugin, type PluginDefinition } from "@sous-io/plugin-api";
+import { ConfigError, definePlugin, type PluginDefinition } from "@sous-io/sous-plugin-api";
 import { describe, expect, it } from "vitest";
 import { createCliPlugin } from "../src/plugin.js";
 import { fakeIo, runCli } from "./helpers.js";

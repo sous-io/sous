@@ -7,7 +7,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { ConfigError, NotFoundError, type ServiceContext } from "@sous-io/plugin-api";
+import { ConfigError, NotFoundError, type ServiceContext } from "@sous-io/sous-plugin-api";
 import type { LockedRecipe, Lockfile } from "@sous-io/sous-plugin-formats/types";
 import type { LockDiff, RecipesLock, RepoEntry, ResolvedRecipe, RestoreReport, SubscriptionEntry } from "../../types.js";
 import { LOCKFILE_NAME } from "../constants.js";

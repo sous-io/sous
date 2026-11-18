@@ -8,7 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import semver from "semver";
 import { parseDocument, type DocumentFormat } from "@sous-io/documents";
-import { ConfigError } from "@sous-io/plugin-api";
+import { ConfigError } from "@sous-io/sous-plugin-api";
 import type { ReleaseBump } from "../types.js";
 
 /** Every way `--bump` can raise a version. */

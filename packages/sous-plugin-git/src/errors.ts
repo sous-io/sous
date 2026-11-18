@@ -1,6 +1,6 @@
 /** The error `git.runner` throws when git fails. */
 
-import { SousError } from "@sous-io/plugin-api";
+import { SousError } from "@sous-io/sous-plugin-api";
 import type { GitResult } from "./types.js";
 
 /** The exit code git is given when it ran out of time (the code of `timeout(1)`). */

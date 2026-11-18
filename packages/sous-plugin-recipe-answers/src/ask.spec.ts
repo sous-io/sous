@@ -1,4 +1,4 @@
-import { BufferedReporter, NonInteractiveError, nonInteractivePrompter, nullReporter, ReportEntryStyle, type Prompter, scriptedPrompter, type VariableSet } from "@sous-io/plugin-api";
+import { BufferedReporter, NonInteractiveError, nonInteractivePrompter, nullReporter, ReportEntryStyle, type Prompter, scriptedPrompter, type VariableSet } from "@sous-io/sous-plugin-api";
 import type { EnvFileKind } from "@sous-io/sous-plugin-config-files/types";
 import { describe, expect, it } from "vitest";
 import { activeRecipe, definition, ladder, pinnedRecipe, silentPrompter, variable } from "../test/stand-ins.js";

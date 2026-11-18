@@ -14,7 +14,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import type { ConfigBuilder, ContributorDefinition } from "@sous-io/plugin-api";
+import type { ConfigBuilder, ContributorDefinition } from "@sous-io/sous-plugin-api";
 import type { FormatsManifests, Lockfile, RecipeManifest } from "@sous-io/sous-plugin-formats/types";
 import type { ActiveRecipeEntity, RepoEntry, RepositoryHostEntity, StoreSettings, SubscriptionEntry } from "../../types.js";
 import { CONTRIBUTORS, CORE_RECIPE_KEY, LOCKFILE_NAME, OFFICIAL_REPO_IDENTITY } from "../constants.js";

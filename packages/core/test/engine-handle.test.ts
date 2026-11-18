@@ -12,7 +12,7 @@ describe("the engine handle", () => {
      *.
      */
     it("should expose the engine to plugins and front ends", async () => {
-        let handleSeen: import("@sous-io/plugin-api").EngineHandle | undefined;
+        let handleSeen: import("@sous-io/sous-plugin-api").EngineHandle | undefined;
         const { engine } = makeEngine(
             [
                 plugin("sous-plugin-cli", (sous) => {

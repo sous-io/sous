@@ -1,4 +1,4 @@
-import { IntentOutputs, isSousErrorOfKind, scriptedPrompter, type BuiltConfig, type JsonObject } from "@sous-io/plugin-api";
+import { IntentOutputs, isSousErrorOfKind, scriptedPrompter, type BuiltConfig, type JsonObject } from "@sous-io/sous-plugin-api";
 import type { IndexFile, Lockfile } from "@sous-io/sous-plugin-formats/types";
 import { describe, expect, it, vi } from "vitest";
 import { builtConfig, context, memoryLock, memoryManaged, serviceReader, shortRefs } from "../../../test/part-a/helpers.js";

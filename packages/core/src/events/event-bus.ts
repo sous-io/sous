@@ -1,4 +1,4 @@
-import type { EventPattern, ListenerOptions } from "@sous-io/plugin-api";
+import type { EventPattern, ListenerOptions } from "@sous-io/sous-plugin-api";
 import { matchesWildcard } from "../util/names.js";
 import type { BaseEvent } from "./event-objects.js";
 

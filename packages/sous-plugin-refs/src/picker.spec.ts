@@ -1,4 +1,4 @@
-import { BufferedReporter, ConfigError, NonInteractiveError, nonInteractivePrompter, scriptedPrompter } from "@sous-io/plugin-api";
+import { BufferedReporter, ConfigError, NonInteractiveError, nonInteractivePrompter, scriptedPrompter } from "@sous-io/sous-plugin-api";
 import { beforeAll, describe, expect, it } from "vitest";
 import { buildRefs, recipeRef, type Refs } from "../test/fixtures.js";
 import { resolvedRefFacts } from "./picker.js";

@@ -4,7 +4,7 @@
  * `--latest`, `--remote`).
  */
 
-import { jsonSchema, type CliFlagOptions, type JsonSchema, type SousSchema } from "@sous-io/plugin-api";
+import { jsonSchema, type CliFlagOptions, type JsonSchema, type SousSchema } from "@sous-io/sous-plugin-api";
 
 /** An object schema of the given properties, the `required` ones listed. */
 export function inputSchema<T>(properties: Record<string, JsonSchema>, required: readonly string[] = []): SousSchema<T, T> {

@@ -4,7 +4,7 @@
  * a different memories file, memories off) are part of the config.
  */
 
-import type { ConfigBuilder, ContributorDefinition } from "@sous-io/plugin-api";
+import type { ConfigBuilder, ContributorDefinition } from "@sous-io/sous-plugin-api";
 import type { MemoryTargetEntity } from "@sous-io/sous-plugin-memories/types";
 import type { SkillTargetEntity } from "@sous-io/sous-plugin-skills/types";
 import { HARNESS_ID } from "./harness.js";

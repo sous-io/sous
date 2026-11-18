@@ -37,7 +37,7 @@ runFromSource(import.meta.url);
 
 const { createEngine } = await import("../packages/core/src/index.js");
 const { BUILT_IN_PLUGINS, sousVersion } = await import("../packages/sous/src/index.js");
-const { toJsonSchema } = await import("../packages/plugin-api/src/index.js");
+const { toJsonSchema } = await import("../packages/sous-plugin-api/src/index.js");
 const { parsePath } = await import("../packages/documents/src/index.js");
 
 type JsonSchema = Record<string, unknown>;

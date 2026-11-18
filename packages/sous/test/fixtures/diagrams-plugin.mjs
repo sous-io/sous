@@ -1,6 +1,6 @@
 // A plugin as an outside author writes one: plain JavaScript, zod for the schema, and only
-// definePlugin from @sous-io/plugin-api.
-import { definePlugin, IntentOutputs } from "@sous-io/plugin-api";
+// definePlugin from @sous-io/sous-plugin-api.
+import { definePlugin, IntentOutputs } from "@sous-io/sous-plugin-api";
 import { z } from "zod";
 
 export default definePlugin({

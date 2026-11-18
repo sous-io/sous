@@ -10,7 +10,7 @@
  * Other plugins import this file type-only.
  */
 
-import type { Prompter, Reporter } from "@sous-io/plugin-api";
+import type { Prompter, Reporter } from "@sous-io/sous-plugin-api";
 import type {} from "@sous-io/sous-plugin-confd/types";
 import type {} from "@sous-io/sous-plugin-recipes/types";
 import type { EnvFileKind } from "@sous-io/sous-plugin-config-files/types";
@@ -373,7 +373,7 @@ export interface AskIo {
     readonly reporter: Reporter;
 }
 
-declare module "@sous-io/plugin-api" {
+declare module "@sous-io/sous-plugin-api" {
     interface SousServices {
         "recipe-answers.definitions": RecipeAnswersDefinitions;
         "recipe-answers.ladder": RecipeAnswersLadder;

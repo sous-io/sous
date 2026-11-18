@@ -12,7 +12,7 @@
  * Other plugins import this file type-only.
  */
 
-import type { Prompter, Reporter, ServiceContext } from "@sous-io/plugin-api";
+import type { Prompter, Reporter, ServiceContext } from "@sous-io/sous-plugin-api";
 import type {
     ContentHash,
     ContentKind,
@@ -1482,7 +1482,7 @@ export interface RecipesLockedPayload {
 // Declarations
 // =============================================================================================
 
-declare module "@sous-io/plugin-api" {
+declare module "@sous-io/sous-plugin-api" {
     interface SousServices {
         /** Trust. */
         "recipes.trust": RecipesTrust;

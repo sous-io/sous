@@ -17,7 +17,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { ConfigError, type Context, IntentOutput, IntentOutputs, VariableSet } from "@sous-io/plugin-api";
+import { ConfigError, type Context, IntentOutput, IntentOutputs, VariableSet } from "@sous-io/sous-plugin-api";
 import "@sous-io/sous-plugin-config-files/types";
 import type { GitRunner } from "@sous-io/sous-plugin-git/types";
 import "@sous-io/sous-plugin-host/types";

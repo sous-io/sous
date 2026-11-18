@@ -6,7 +6,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { BufferedReporter, type JsonObject, type JsonValue } from "@sous-io/plugin-api";
+import { BufferedReporter, type JsonObject, type JsonValue } from "@sous-io/sous-plugin-api";
 import { applyEdits, type DeclaredEntry } from "../src/apply.js";
 import type { EditorFormat } from "../src/documents-adapter.js";
 import { declarerLabel, entryIdentity, normalizeEntry } from "../src/entries.js";

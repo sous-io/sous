@@ -13,7 +13,7 @@ import {
     type Environment,
     type ProjectInfo,
     type ServiceReader,
-} from "@sous-io/plugin-api";
+} from "@sous-io/sous-plugin-api";
 import type {
     LiquidEngineOptions,
     LiquidEngines,

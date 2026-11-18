@@ -1,5 +1,5 @@
 import { createEngine, type Engine } from "@sous-io/core";
-import { BufferedReporter, ReportEntryStyle, Table, VariableSet, NonInteractiveError, nonInteractivePrompter, scriptedPrompter, type ServiceContext } from "@sous-io/plugin-api";
+import { BufferedReporter, ReportEntryStyle, Table, VariableSet, NonInteractiveError, nonInteractivePrompter, scriptedPrompter, type ServiceContext } from "@sous-io/sous-plugin-api";
 import type { VariableSourceEntity } from "@sous-io/sous-plugin-variables/types";
 import { beforeEach, describe, expect, it } from "vitest";
 import recipeAnswersPlugin from "../src/index.js";

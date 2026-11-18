@@ -3,7 +3,7 @@
  * the one list (before the refactor, `config-kernel.mjs` kept a second, smaller one).
  */
 
-import type { ProjectInfo } from "@sous-io/plugin-api";
+import type { ProjectInfo } from "@sous-io/sous-plugin-api";
 import type { AutoVariableName } from "./types.js";
 
 /** Every auto-variable name. */

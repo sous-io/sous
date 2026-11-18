@@ -5,7 +5,7 @@
  * The contract other plugins code against is `./types.ts`.
  */
 
-import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";
+import { definePlugin, type PluginDefinition } from "@sous-io/sous-plugin-api";
 import type {} from "@sous-io/sous-plugin-host/types";
 import { targetsContributor } from "./targets.js";
 import "./types.js";

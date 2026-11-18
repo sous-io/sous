@@ -1,4 +1,4 @@
-import { ConflictError, type IntentInfo, toJsonSchema } from "@sous-io/plugin-api";
+import { ConflictError, type IntentInfo, toJsonSchema } from "@sous-io/sous-plugin-api";
 import { argumentsFromSchema, type CommandArguments } from "./flags.js";
 import type { CliGroupEntity } from "./types.js";
 

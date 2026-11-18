@@ -6,7 +6,7 @@
  * `bulletList`) are `liquid-tag` and `liquid-filter` entities sous-plugin-compiler adds.
  */
 
-import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";
+import { definePlugin, type PluginDefinition } from "@sous-io/sous-plugin-api";
 import { createLiquidEngines } from "./engine.js";
 import { liquidFilterSchema, liquidTagSchema } from "./entity-schemas.js";
 import "./types.js";

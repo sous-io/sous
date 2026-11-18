@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { isSousErrorOfKind } from "@sous-io/plugin-api";
+import { isSousErrorOfKind } from "@sous-io/sous-plugin-api";
 import { linksMapFormat } from "@sous-io/sous-plugin-formats";
 import { createGitignore, IGNORE_BLOCK_START } from "@sous-io/sous-plugin-host";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";

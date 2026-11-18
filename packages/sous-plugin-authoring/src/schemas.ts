@@ -3,7 +3,7 @@
  * every question an intent may ask names the field that answers it.
  */
 
-import { jsonSchema, type JsonSchema } from "@sous-io/plugin-api";
+import { jsonSchema, type JsonSchema } from "@sous-io/sous-plugin-api";
 import type { RepoContributeInput, RepoInitInput, RepoReleaseInput, RepoSubmitInput } from "./types.js";
 
 const yes: JsonSchema = { type: "boolean", description: "Answer yes to every confirmation, so nothing is asked" };

@@ -6,7 +6,7 @@
  * The contract other plugins code against is `./types.ts`.
  */
 
-import { definePlugin, HANDLER_PURPOSES, jsonSchema, type Context, type HandlerPurpose, type PluginDefinition, type SousSchema } from "@sous-io/plugin-api";
+import { definePlugin, HANDLER_PURPOSES, jsonSchema, type Context, type HandlerPurpose, type PluginDefinition, type SousSchema } from "@sous-io/sous-plugin-api";
 import type {} from "@sous-io/sous-plugin-host/types";
 import type {} from "@sous-io/sous-plugin-recipes/types";
 import { configureContributor } from "./configure.js";

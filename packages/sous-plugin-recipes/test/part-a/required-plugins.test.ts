@@ -6,7 +6,7 @@
 
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { definePlugin, IntentOutputs, jsonSchema, scriptedPrompter, type Context, type SousError } from "@sous-io/plugin-api";
+import { definePlugin, IntentOutputs, jsonSchema, scriptedPrompter, type Context, type SousError } from "@sous-io/sous-plugin-api";
 import type { PluginsInstallInput } from "@sous-io/sous-plugin-update/types";
 import { cleanTemp, fakeHost, fakeUrl, hashOf, indexFile, startEngine, tempDir, writeRecipe, type FakeRepo } from "../part-b/helpers.js";
 import { ensureRequiredPlugins, unmetRequirements, type RequirementFlags } from "../../src/part-a/required-plugins.js";

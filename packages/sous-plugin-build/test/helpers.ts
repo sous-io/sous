@@ -17,7 +17,7 @@ import {
     type Prompter,
     type ProjectInfo,
     type Sous,
-} from "@sous-io/plugin-api";
+} from "@sous-io/sous-plugin-api";
 import type {
     CompilationTarget,
     CompileInput,

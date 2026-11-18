@@ -6,7 +6,7 @@
  * `process.cwd()`.
  */
 
-import { definePlugin, jsonSchema, type PluginDefinition } from "@sous-io/plugin-api";
+import { definePlugin, jsonSchema, type PluginDefinition } from "@sous-io/sous-plugin-api";
 import { createDirectories } from "./directories.js";
 import { createGitignore } from "./gitignore.js";
 import { hostGlobs } from "./globs.js";

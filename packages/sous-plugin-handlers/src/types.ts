@@ -14,10 +14,10 @@
  * ```
  */
 
-import type { BuiltConfig, ConfigBuilder, Context, Environment, HandlerPurpose, ProjectInfo } from "@sous-io/plugin-api";
+import type { BuiltConfig, ConfigBuilder, Context, Environment, HandlerPurpose, ProjectInfo } from "@sous-io/sous-plugin-api";
 import type { ProcessResult } from "@sous-io/sous-plugin-host/types";
 
-export type { HandlerPurpose } from "@sous-io/plugin-api";
+export type { HandlerPurpose } from "@sous-io/sous-plugin-api";
 
 // ---------------------------------------------------------------------------------------------
 // The handler entity
@@ -214,7 +214,7 @@ export interface HandlersSystem {
     appVersion(name: string): Promise<string | undefined>;
 }
 
-declare module "@sous-io/plugin-api" {
+declare module "@sous-io/sous-plugin-api" {
     interface SousHandlerTypes {
         tools: HandlerTools;
         inputs: HandlerInputs;

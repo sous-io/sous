@@ -11,7 +11,7 @@
  */
 
 import semver from "semver";
-import { ConfigError } from "@sous-io/plugin-api";
+import { ConfigError } from "@sous-io/sous-plugin-api";
 import type { DependencyKind, IndexDependency, IndexFile, IndexVersion } from "@sous-io/sous-plugin-formats/types";
 import type { RefLocation, RepoRef, SousRef } from "@sous-io/sous-plugin-refs/types";
 import type { MissingRepo, ResolvedPin, ResolvedRecipe, ResolveResult } from "../../types.js";

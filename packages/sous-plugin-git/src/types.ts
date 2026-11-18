@@ -3,7 +3,7 @@
  * caller (providers, releases, links, the runtime context). Other plugins import this file type-only.
  */
 
-import type { Environment } from "@sous-io/plugin-api";
+import type { Environment } from "@sous-io/sous-plugin-api";
 
 /** How to run one git command. */
 export interface GitRunOptions {
@@ -95,7 +95,7 @@ export interface GitRunner {
     readRemoteFile(url: string, path: string, options?: GitReadRemoteFileOptions): Promise<string>;
 }
 
-declare module "@sous-io/plugin-api" {
+declare module "@sous-io/sous-plugin-api" {
     interface SousServices {
         /** The one git runner. */
         "git.runner": GitRunner;

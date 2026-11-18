@@ -16,7 +16,7 @@
  * `varMappings` in any config file, and the files merge like anything else.
  */
 
-import { ConfigError, InputError, type ServiceContext } from "@sous-io/plugin-api";
+import { ConfigError, InputError, type ServiceContext } from "@sous-io/sous-plugin-api";
 import type { DefinedVariable, MappingTarget, RecipeAnswersMappings } from "./types.js";
 
 /** The managed file the records are written to. */

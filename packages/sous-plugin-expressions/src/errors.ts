@@ -1,4 +1,4 @@
-import { ConfigError, formatIssuePath, type PathSegment, type SousErrorOptions } from "@sous-io/plugin-api";
+import { ConfigError, formatIssuePath, type PathSegment, type SousErrorOptions } from "@sous-io/sous-plugin-api";
 
 /** A key path as errors print it: `subscriptions."x/y".enabled`, or `(root)`. */
 export function formatPath(path: readonly PathSegment[]): string {

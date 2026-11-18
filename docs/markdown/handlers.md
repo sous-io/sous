@@ -142,7 +142,7 @@ A plugin registers the same functions inside `register`, with `sous.handlers.add
 plugin registers has an `id`, which names it when sous times it or reports it as slow or failing:
 
 ```ts
-import { definePlugin } from "@sous-io/plugin-api";
+import { definePlugin } from "@sous-io/sous-plugin-api";
 
 /** Reports the commands the knowledge worker needs. */
 async function checkCommands(sous) {

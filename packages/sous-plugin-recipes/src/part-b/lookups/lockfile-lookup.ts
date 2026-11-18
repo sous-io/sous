@@ -3,7 +3,7 @@
  * reading names. Asked when a caller selects it by id or by the `lockfile` or `installed` tag.
  */
 
-import type { ServiceContext } from "@sous-io/plugin-api";
+import type { ServiceContext } from "@sous-io/sous-plugin-api";
 import type { Lockfile } from "@sous-io/sous-plugin-formats/types";
 import type { RefLookupEntity, RefMatch, SousRef } from "@sous-io/sous-plugin-refs/types";
 import { sortKeys, splitStoredKey } from "../support.js";

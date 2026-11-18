@@ -2,7 +2,7 @@
  * Helpers for `ref-splitter` entities: leaving a finished reading alone, and finishing one.
  */
 
-import type { ServiceContext } from "@sous-io/plugin-api";
+import type { ServiceContext } from "@sous-io/sous-plugin-api";
 import type { PartialRef, RefSplitterEntity, SousRef } from "../types.js";
 
 /** A URL that names its scheme, such as `https://` or `github://`. */

@@ -1,6 +1,6 @@
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { BufferedReporter, IntentOutputs, nonInteractivePrompter, scriptedPrompter, type IntentInput, type Prompter } from "@sous-io/plugin-api";
+import { BufferedReporter, IntentOutputs, nonInteractivePrompter, scriptedPrompter, type IntentInput, type Prompter } from "@sous-io/sous-plugin-api";
 import type { RepoLinkResult, RepoUnlinkResult } from "@sous-io/sous-plugin-recipes/types";
 import type { SousRef } from "@sous-io/sous-plugin-refs/types";
 import { commitAll, git, initRepo, makeTmpDir, writeFile, type TmpDir } from "../../test/support/git-repo.js";

@@ -1,4 +1,4 @@
-import { IntentOutputs, ConflictError, type IntentInfo } from "@sous-io/plugin-api";
+import { IntentOutputs, ConflictError, type IntentInfo } from "@sous-io/sous-plugin-api";
 import { describe, expect, it } from "vitest";
 import { CommandTree } from "./command-tree.js";
 

@@ -1,4 +1,4 @@
-import { type IntentInfo, type IntentRequest, InputError, toJsonSchema } from "@sous-io/plugin-api";
+import { type IntentInfo, type IntentRequest, InputError, toJsonSchema } from "@sous-io/sous-plugin-api";
 import type { McpSettings, McpToolDefinition, McpTools } from "./types.js";
 
 /** The tools and the problems found while making them. */

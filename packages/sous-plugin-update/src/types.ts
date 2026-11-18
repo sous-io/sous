@@ -8,7 +8,7 @@
  * `host.processes`. Other plugins import this file type-only.
  */
 
-import type { ServiceContext } from "@sous-io/plugin-api";
+import type { ServiceContext } from "@sous-io/sous-plugin-api";
 
 /** Where a package is installed. */
 export type InstallScope = "project" | "global";
@@ -200,7 +200,7 @@ export interface PluginsInstallResult {
     readonly dryRun: boolean;
 }
 
-declare module "@sous-io/plugin-api" {
+declare module "@sous-io/sous-plugin-api" {
     interface SousIntents {
         upgrade: { input: UpdateInput; result: UpdateResult };
         "plugins.install": { input: PluginsInstallInput; result: PluginsInstallResult };

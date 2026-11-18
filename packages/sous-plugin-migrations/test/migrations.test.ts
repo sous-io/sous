@@ -1,4 +1,4 @@
-import { ConfigError, IntentOutputs, scriptedPrompter, SousError, type Context } from "@sous-io/plugin-api";
+import { ConfigError, IntentOutputs, scriptedPrompter, SousError, type Context } from "@sous-io/sous-plugin-api";
 import { describe, expect, it } from "vitest";
 import type { MigrationDefinition, MigrationsRunResult } from "../src/types.js";
 import { emptyLock, engineWith, type LockState } from "./helpers.js";

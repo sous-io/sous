@@ -5,7 +5,7 @@
  * recipes that define none.
  */
 
-import type { ServiceContext } from "@sous-io/plugin-api";
+import type { ServiceContext } from "@sous-io/sous-plugin-api";
 import type { RefLookupEntity } from "@sous-io/sous-plugin-refs/types";
 import { matchVariables } from "./matching.js";
 import { buildLadder } from "./sources.js";

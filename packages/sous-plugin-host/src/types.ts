@@ -3,7 +3,7 @@
  * service here is a `singleton`; none reads the config. Other plugins import this file type-only.
  */
 
-import type { Environment } from "@sous-io/plugin-api";
+import type { Environment } from "@sous-io/sous-plugin-api";
 
 // ---------------------------------------------------------------------------------------------
 // host.processes
@@ -308,7 +308,7 @@ export interface HostPackage {
 // Declarations
 // ---------------------------------------------------------------------------------------------
 
-declare module "@sous-io/plugin-api" {
+declare module "@sous-io/sous-plugin-api" {
     interface SousServices {
         /** Running a subprocess, timed. */
         "host.processes": HostProcesses;

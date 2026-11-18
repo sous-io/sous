@@ -13,7 +13,7 @@
 
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { InputError, type ServiceContext } from "@sous-io/plugin-api";
+import { InputError, type ServiceContext } from "@sous-io/sous-plugin-api";
 import { namesVariable, recipeKey } from "./definitions.js";
 import { resolveUserPath } from "./paths.js";
 import type { ApplicableAnswer, DefinedVariable, ProvidedAnswer, ProvidedAnswerInputs, RecipeAnswersPreanswers } from "./types.js";

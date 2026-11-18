@@ -7,7 +7,7 @@
  * import this file type-only.
  */
 
-import type { Prompter, Reporter, ServiceContext } from "@sous-io/plugin-api";
+import type { Prompter, Reporter, ServiceContext } from "@sous-io/sous-plugin-api";
 
 // ---------------------------------------------------------------------------------------------
 // Refs
@@ -498,7 +498,7 @@ export interface HashNameEntity {
 // Declarations
 // ---------------------------------------------------------------------------------------------
 
-declare module "@sous-io/plugin-api" {
+declare module "@sous-io/sous-plugin-api" {
     interface SousServices {
         /** Reading a ref into every reading. */
         "refs.parser": RefsParser;

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { isSousErrorOfKind } from "@sous-io/plugin-api";
+import { isSousErrorOfKind } from "@sous-io/sous-plugin-api";
 import { createGitRunner, LF_CHECKOUT_OPTIONS } from "@sous-io/sous-plugin-git";
 import type { GitResult, GitRunner } from "@sous-io/sous-plugin-git/types";
 import { createProcesses } from "@sous-io/sous-plugin-host";

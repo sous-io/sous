@@ -4,7 +4,7 @@
  * each kind of failure seen. Network advice is given only when git could not reach a host.
  */
 
-import { ConfigError, isSousError } from "@sous-io/plugin-api";
+import { ConfigError, isSousError } from "@sous-io/sous-plugin-api";
 import type { RecipeDownloadAttempt } from "../../types.js";
 import { IndexReadError } from "../index-cache/read-chain.js";
 import { messageOf, plural } from "../support.js";

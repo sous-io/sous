@@ -4,11 +4,11 @@
  *
  * The version comes from `packages/sous/package.json`, the package published
  * as `@sous-io/sous`. Every other `packages/<name>/package.json` shares that
- * one version, because they are released together: `@sous-io/plugin-api` is
+ * one version, because they are released together: `@sous-io/sous-plugin-api` is
  * published beside `@sous-io/sous`, and `pnpm publish` turns the `workspace:*`
- * range `@sous-io/sous` depends on it with into the version plugin-api's own
- * package.json declares at that moment. A plugin-api left behind would make
- * the published sous ask for an older plugin-api. So the script writes the
+ * range `@sous-io/sous` depends on it with into the version sous-plugin-api's own
+ * package.json declares at that moment. A sous-plugin-api left behind would make
+ * the published sous ask for an older sous-plugin-api. So the script writes the
  * version into each of them.
  *
  * VERSION PARITY is a hard rule of the repositories design: every project's

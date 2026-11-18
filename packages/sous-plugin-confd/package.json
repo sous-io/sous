@@ -23,7 +23,7 @@
   },
   "dependencies": {
     "@sous-io/documents": "workspace:*",
-    "@sous-io/plugin-api": "workspace:*",
+    "@sous-io/sous-plugin-api": "workspace:*",
     "@sous-io/sous-plugin-config-files": "workspace:*",
     "@sous-io/sous-plugin-expressions": "workspace:*",
     "@sous-io/sous-plugin-host": "workspace:*",

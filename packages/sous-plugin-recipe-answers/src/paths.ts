@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { ProjectInfo } from "@sous-io/plugin-api";
+import type { ProjectInfo } from "@sous-io/sous-plugin-api";
 
 /** What resolving a path a user wrote needs. */
 export interface PathBase {

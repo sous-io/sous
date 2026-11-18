@@ -1,4 +1,4 @@
-import { BaseReporter, type Environment, LogLevel, messageText, type ProgressEvent, type ReportDetails, ReportEntryStyle, type ReportMessage } from "@sous-io/plugin-api";
+import { BaseReporter, type Environment, LogLevel, messageText, type ProgressEvent, type ReportDetails, ReportEntryStyle, type ReportMessage } from "@sous-io/sous-plugin-api";
 import type { OutputStream } from "./io.js";
 import { BLANK, Layout } from "./terminal/layout.js";
 import { type Rendered, renderEntry, type RenderState } from "./terminal/render-entry.js";

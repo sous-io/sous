@@ -11,7 +11,7 @@
   "homepage": "https://sous.io",
   "bugs": "https://github.com/sous-io/sous/issues",
   "scripts": {
-    "build": "pnpm --filter @sous-io/plugin-api build && pnpm --filter @sous-io/sous build",
+    "build": "pnpm --filter @sous-io/sous-plugin-api build && pnpm --filter @sous-io/sous build",
     "typecheck": "pnpm -r exec tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

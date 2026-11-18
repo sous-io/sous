@@ -258,7 +258,7 @@ export interface AuthoringSubmittedPayload {
     readonly proposal?: ProposalSummary;
 }
 
-declare module "@sous-io/plugin-api" {
+declare module "@sous-io/sous-plugin-api" {
     interface SousIntents {
         "repo.release": { input: RepoReleaseInput; result: RepoReleaseResult };
         "repo.submit": { input: RepoSubmitInput; result: RepoSubmitResult };

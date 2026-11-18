@@ -1182,7 +1182,7 @@ in `test/support/standins.ts`. Expectations are otherwise unchanged, except for 
   0.2.30 to 0.2.34?"` and `pass '--yes'`.
 - **Now:** expects `Error: sous needed to ask "Update the global install from 0.2.30 to 0.2.34?"` and
   `Pass --yes`.
-- **Why:** a question that cannot be asked is one error for every command now (plugin-api's
+- **Why:** a question that cannot be asked is one error for every command now (sous-plugin-api's
   `NonInteractiveError`), with that wording. The exit code (1) and what it names are the same.
 
 ### `update`, the plugin tests
@@ -1241,7 +1241,7 @@ tests had been written against the first new layout, and were brought in line:
 ### A question that cannot be asked exits 1
 
 - **Files:** `packages/sous-plugin-cli/test/cli.test.ts` ("should fail a question it cannot ask"),
-  `packages/sous-plugin-cli/src/errors.spec.ts`, `packages/plugin-api/src/errors.spec.ts`
+  `packages/sous-plugin-cli/src/errors.spec.ts`, `packages/sous-plugin-api/src/errors.spec.ts`
 - **Before:** `NonInteractiveError` exited 2, and the CLI printed only the error.
 - **Now:** it exits 1, and the command's help follows the error on standard error.
 - **Why:** the old CLI exited 2 only for command lines it could not parse, and printed the help under
@@ -1332,7 +1332,7 @@ tests had been written against the first new layout, and were brought in line:
   the same message, now about that path. One test was added: every other
   `packages/<name>/package.json` is set to the same version (only its `version` value changes),
   and a package already at it is left byte for byte, because every workspace package is released
-  at one version and `pnpm pack` writes plugin-api's version into the published sous's dependency.
+  at one version and `pnpm pack` writes sous-plugin-api's version into the published sous's dependency.
 
 ## Switch-over: subscriptions and catalog
 

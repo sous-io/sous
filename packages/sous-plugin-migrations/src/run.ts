@@ -18,7 +18,7 @@
  * returned outputs.
  */
 
-import { InputError, IntentOutput, IntentOutputs, ItemList, ReportEntryStyle, SousError, TextBlock, type Context } from "@sous-io/plugin-api";
+import { InputError, IntentOutput, IntentOutputs, ItemList, ReportEntryStyle, SousError, TextBlock, type Context } from "@sous-io/sous-plugin-api";
 import type {} from "@sous-io/sous-plugin-recipes/types";
 import { isVersion, semverLess, versionReached, versionToStore } from "./pending.js";
 import type { MigrationEntity, MigrationQuestion, MigrationReport, MigrationsRunInput, MigrationsRunResult, PlannedAnswer, UnansweredQuestion } from "./types.js";

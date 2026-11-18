@@ -11,7 +11,7 @@
  * depends on the subscriptions, so an answer could switch off the recipe that asked for it.
  */
 
-import type { ContributorDefinition, ServiceReader } from "@sous-io/plugin-api";
+import type { ContributorDefinition, ServiceReader } from "@sous-io/sous-plugin-api";
 import type { VariableSourceContext, VariableSourceEntity, VarScope } from "@sous-io/sous-plugin-variables/types";
 import { answersForRecipe, booleanNames, computeAnswers } from "./answers.js";
 import { definitionsFromRecipes } from "./definitions.js";

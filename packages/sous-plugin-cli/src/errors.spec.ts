@@ -1,4 +1,4 @@
-import { InputError, NonInteractiveError, SousError } from "@sous-io/plugin-api";
+import { InputError, NonInteractiveError, SousError } from "@sous-io/sous-plugin-api";
 import { describe, expect, it } from "vitest";
 import type { Command } from "./command-tree.js";
 import { viewError } from "./errors.js";

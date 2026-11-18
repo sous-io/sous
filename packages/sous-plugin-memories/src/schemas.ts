@@ -3,7 +3,7 @@
  * config key. Written with `jsonSchema`, so the plugin needs no schema library.
  */
 
-import { jsonSchema, type SousSchema, type StandardSchemaV1 } from "@sous-io/plugin-api";
+import { jsonSchema, type SousSchema, type StandardSchemaV1 } from "@sous-io/sous-plugin-api";
 import { compileRecipeKeyMatcher } from "./key-matcher.js";
 import { EXCLUDE_KEY, FIRST_KEY } from "./listing.js";
 import type { MemoriesSettings, MemoryTargetEntity } from "./types.js";

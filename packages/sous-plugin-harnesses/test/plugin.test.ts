@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { definePlugin } from "@sous-io/plugin-api";
+import { definePlugin } from "@sous-io/sous-plugin-api";
 import variablesPlugin from "@sous-io/sous-plugin-variables";
 import { MAX_ARGUMENT_BYTES } from "../src/tool.js";
 import type { RunHeadlessResult } from "../src/types.js";

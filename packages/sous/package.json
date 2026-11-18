@@ -46,7 +46,7 @@
     "postpack": "node scripts/pack-files.mjs clean"
   },
   "dependencies": {
-    "@sous-io/plugin-api": "workspace:*"
+    "@sous-io/sous-plugin-api": "workspace:*"
   },
   "devDependencies": {
     "@sous-io/core": "workspace:*",

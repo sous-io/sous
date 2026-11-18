@@ -123,7 +123,7 @@ export interface EntityRegistry extends EntityReader {
  * its own with declaration merging and adds it with `sous.extensions.add`:
  *
  * ```ts
- * declare module "@sous-io/plugin-api" {
+ * declare module "@sous-io/sous-plugin-api" {
  *     interface SousExtensions {
  *         migrations: { add(migration: MigrationDefinition): void };
  *     }

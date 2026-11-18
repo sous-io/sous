@@ -24,7 +24,7 @@ describe("published packages", () => {
     it("should each name this repository and its own directory", () => {
         const published = publishedPackages();
 
-        expect(published.map((pkg) => pkg.json.name).sort()).toEqual(["@sous-io/plugin-api", "@sous-io/sous"]);
+        expect(published.map((pkg) => pkg.json.name).sort()).toEqual(["@sous-io/sous", "@sous-io/sous-plugin-api"]);
 
         for (const pkg of published) {
             expect(pkg.json.repository?.url, pkg.json.name).toBe("git+https://github.com/sous-io/sous.git");

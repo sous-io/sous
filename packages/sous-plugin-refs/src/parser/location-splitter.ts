@@ -7,7 +7,7 @@
  * GitLab nested group does not say where the project path ends).
  */
 
-import type { ServiceContext } from "@sous-io/plugin-api";
+import type { ServiceContext } from "@sous-io/sous-plugin-api";
 import { hostedIds, schemesOf, tryLocationFor } from "../locations/locations.js";
 import type { PartialRef, RefSplitterEntity, RefsLocations, RepoRef, RepositoryLocator } from "../types.js";
 import { finishRef, splitter } from "./partial-ref.js";

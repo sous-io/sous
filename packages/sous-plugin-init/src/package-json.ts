@@ -7,7 +7,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { ConfigError } from "@sous-io/plugin-api";
+import { ConfigError } from "@sous-io/sous-plugin-api";
 import type { PackageJsonOutcome } from "./types.js";
 
 /** A planned edit: the outcome, and the new file text when the file changes. */

@@ -9,7 +9,7 @@
 
 import path from "node:path";
 import type { RecipeManifest, RepoManifest, VariableDefinition } from "@sous-io/sous-plugin-formats/types";
-import { IntentOutput, ItemList, ReportEntryStyle, TextBlock, type Reporter } from "@sous-io/plugin-api";
+import { IntentOutput, ItemList, ReportEntryStyle, TextBlock, type Reporter } from "@sous-io/sous-plugin-api";
 import type { AuthoringTools } from "../tools.js";
 import type { RepoGit } from "../shared/git.js";
 import { MANIFEST_EXTENSIONS, type RepoValidation } from "../shared/repository.js";

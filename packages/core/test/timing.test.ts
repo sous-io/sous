@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BufferedReporter, type Prompter, TIMING_CATEGORIES } from "@sous-io/plugin-api";
+import { BufferedReporter, type Prompter, TIMING_CATEGORIES } from "@sous-io/sous-plugin-api";
 import { createEngine, DEFAULT_BUDGETS } from "../src/index.js";
 import { Timer } from "../src/timing/timer.js";
 import { contributorsPlugin, keysPlugin, makeEngine, manualClock, nothing, plugin, valued } from "./helpers.js";

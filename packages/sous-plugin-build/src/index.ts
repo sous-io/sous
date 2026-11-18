@@ -7,7 +7,7 @@
  * recipes plugin locks and restores; recipe-answers says what is unanswered.
  */
 
-import { definePlugin, type PluginDefinition, type ServiceReader } from "@sous-io/plugin-api";
+import { definePlugin, type PluginDefinition, type ServiceReader } from "@sous-io/sous-plugin-api";
 import { isProcessAlive, PidFile } from "./pid.js";
 import { RuntimeContextService } from "./runtime-context.js";
 import {

@@ -13,7 +13,7 @@
  * ```
  */
 
-import type { Context } from "@sous-io/plugin-api";
+import type { Context } from "@sous-io/sous-plugin-api";
 
 /** What `sous doctor` was asked to do, as every check and fix sees it. */
 export interface DoctorRun {
@@ -150,7 +150,7 @@ export interface DoctorResult {
     readonly dryRun: boolean;
 }
 
-declare module "@sous-io/plugin-api" {
+declare module "@sous-io/sous-plugin-api" {
     interface SousEntities {
         "doctor-check": DoctorCheckEntity;
     }

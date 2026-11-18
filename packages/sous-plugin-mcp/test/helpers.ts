@@ -3,7 +3,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { ClientCapabilities, LoggingMessageNotification } from "@modelcontextprotocol/sdk/types.js";
 import { LoggingMessageNotificationSchema } from "@modelcontextprotocol/sdk/types.js";
 import { createEngine, type Engine } from "@sous-io/core";
-import { BufferedReporter, definePlugin, type PluginDefinition, type ProjectInfo, type Sous } from "@sous-io/plugin-api";
+import { BufferedReporter, definePlugin, type PluginDefinition, type ProjectInfo, type Sous } from "@sous-io/sous-plugin-api";
 import { createMcpPlugin } from "../src/index.js";
 import type { McpServeResult } from "../src/types.js";
 

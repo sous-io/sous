@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ConfigError, type ContributorDefinition, jsonSchema, type JsonObject, type Sous } from "@sous-io/plugin-api";
+import { ConfigError, type ContributorDefinition, jsonSchema, type JsonObject, type Sous } from "@sous-io/sous-plugin-api";
 import { contributorsPlugin, keysPlugin, makeEngine, plugin, userKeys } from "./helpers.js";
 
 /** A plugin that defines the `harness` kind and registers the given harnesses. */

@@ -4,7 +4,7 @@
  * `variable-source` entity and the intents read answers the same way.
  */
 
-import type { Environment, ServiceReader } from "@sous-io/plugin-api";
+import type { Environment, ServiceReader } from "@sous-io/sous-plugin-api";
 import type { VariableDefinition } from "@sous-io/sous-plugin-formats/types";
 import type { EnvFileKind } from "@sous-io/sous-plugin-config-files/types";
 import type { ConfigLookup } from "@sous-io/sous-plugin-variables/types";

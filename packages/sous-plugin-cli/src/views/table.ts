@@ -8,7 +8,7 @@
  * important columns step aside when the window is too narrow to hold everything.
  */
 
-import type { ColumnAlign, ColumnKind, ColumnOverflow, ColumnPriority, TableColumn, TruncateSide } from "@sous-io/plugin-api";
+import type { ColumnAlign, ColumnKind, ColumnOverflow, ColumnPriority, TableColumn, TruncateSide } from "@sous-io/sous-plugin-api";
 import { createStyle, type Style } from "./style.js";
 import { DEFAULT_WRAP_COLUMNS, displayWidth, terminalColumns, wrapText } from "./text.js";
 

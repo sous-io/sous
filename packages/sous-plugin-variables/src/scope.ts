@@ -10,7 +10,7 @@
  * ```
  */
 
-import { ConfigError, type Environment, type ProjectInfo, SousError } from "@sous-io/plugin-api";
+import { ConfigError, type Environment, type ProjectInfo, SousError } from "@sous-io/sous-plugin-api";
 import { autoVariableError, resolveBlock } from "./resolve-block.js";
 import { isAutoVariable } from "./auto.js";
 import type { ConfigLookup, ScopeOrigin, ScopeRequest, VariableSourceContext, VariableSourceEntity } from "./types.js";

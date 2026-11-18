@@ -21,7 +21,7 @@ import fsPromises from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
 import { parse as parseJsonc, printParseErrorCode, type ParseError } from "jsonc-parser";
-import { ConfigError, NotFoundError } from "@sous-io/plugin-api";
+import { ConfigError, NotFoundError } from "@sous-io/sous-plugin-api";
 import {
   MANIFEST_EXTENSIONS,
   RECIPE_MANIFEST_BASENAME,

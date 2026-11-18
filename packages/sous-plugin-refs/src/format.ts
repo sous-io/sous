@@ -3,7 +3,7 @@
  * and reading the stored `namespace/recipe` keys.
  */
 
-import { ConfigError, type ServiceContext } from "@sous-io/plugin-api";
+import { ConfigError, type ServiceContext } from "@sous-io/sous-plugin-api";
 import { KIND_LABELS, locationOf, namespaceOf, rangeOf, recipeOf, repoOf } from "./parts.js";
 import type { NamedRef, NamespaceRef, RecipeRef, RefSource, RefsFormat, RefsLocations, RepoRef, SousRef } from "./types.js";
 

@@ -4,7 +4,7 @@
  * The contract other plugins code against is `./types.ts`.
  */
 
-import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";
+import { definePlugin, type PluginDefinition } from "@sous-io/sous-plugin-api";
 import { configGet, configShow, configValidate, pluginsShow, timingsShow } from "./handlers.js";
 import { configGetSchema, configShowSchema, pluginsShowSchema, timingsShowSchema } from "./schemas.js";
 import "./types.js";

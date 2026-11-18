@@ -15,7 +15,7 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { ConfigError, NotFoundError } from "@sous-io/plugin-api";
+import { ConfigError, NotFoundError } from "@sous-io/sous-plugin-api";
 import type { ContentHash, IndexFile, WritableFormatParser } from "@sous-io/sous-plugin-formats/types";
 import type {
     CachedIndex,

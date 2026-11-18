@@ -2,7 +2,7 @@
  * `lock.rebuild`, `lock.show` and `repo.gc`: the intents over the lockfile and the store.
  */
 
-import { ConfigError, type IntentOutput, type IntentOutputs, type Context, type TableColumn } from "@sous-io/plugin-api";
+import { ConfigError, type IntentOutput, type IntentOutputs, type Context, type TableColumn } from "@sous-io/sous-plugin-api";
 import type {
     LockRebuildInput,
     LockRebuildResult,

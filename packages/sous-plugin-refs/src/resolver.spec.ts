@@ -1,4 +1,4 @@
-import { ConfigError, definePlugin } from "@sous-io/plugin-api";
+import { ConfigError, definePlugin } from "@sous-io/sous-plugin-api";
 import { beforeAll, describe, expect, it } from "vitest";
 import { catalogLookup, catalogRepo } from "../test/catalog-lookup.js";
 import { buildRefs, lookupsPlugin, type Refs } from "../test/fixtures.js";

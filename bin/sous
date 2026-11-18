@@ -21,9 +21,9 @@ done
 REPO_DIR="$(cd -P "$(dirname "$SOURCE")/.." > /dev/null && pwd)"
 SOUS_PACKAGE="$REPO_DIR/packages/sous"
 BUNDLE="$SOUS_PACKAGE/dist/sous.js"
-PLUGIN_API="$REPO_DIR/packages/plugin-api"
+PLUGIN_API="$REPO_DIR/packages/sous-plugin-api"
 
-# The bundle keeps @sous-io/plugin-api outside, so its compiled copy must exist too.
+# The bundle keeps @sous-io/sous-plugin-api outside, so its compiled copy must exist too.
 if [ ! -f "$PLUGIN_API/dist/index.js" ] || [ -n "$(find "$PLUGIN_API/src" -newer "$PLUGIN_API/dist/index.js" -print -quit)" ]; then
   (cd "$PLUGIN_API" && node "$REPO_DIR/node_modules/typescript/bin/tsc" -p tsconfig.build.json) >&2 || exit 1
 fi

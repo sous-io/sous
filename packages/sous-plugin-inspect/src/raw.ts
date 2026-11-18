@@ -5,7 +5,7 @@
  */
 
 import path from "node:path";
-import type { ProjectInfo, ServiceReader } from "@sous-io/plugin-api";
+import type { ProjectInfo, ServiceReader } from "@sous-io/sous-plugin-api";
 import "@sous-io/sous-plugin-confd/types";
 import "@sous-io/sous-plugin-config-files/types";
 import { KEY_NAME_POLICY, redactText, type SecretPolicy } from "./redact.js";

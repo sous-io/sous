@@ -43,7 +43,7 @@ concerns and owners).
 5. Services, with their three lifetimes, wrapping and replacing.
 6. Entities: defining kinds, adding entries, and reading them through the builder.
 7. Loop detection, and the time budgets.
-8. The empty type interfaces in `@sous-io/plugin-api`: `SousServices`, `SousIntents`, `SousEvents`
+8. The empty type interfaces in `@sous-io/sous-plugin-api`: `SousServices`, `SousIntents`, `SousEvents`
    and `SousEntities`.
 
 The engine has five kinds of things:
@@ -508,14 +508,14 @@ entities   <kind>                  harness   skill-target   memory-target   conf
 
 ## Types Across Plugins
 
-`@sous-io/plugin-api` declares four empty interfaces: `SousServices`, `SousIntents`, `SousEvents` and
+`@sous-io/sous-plugin-api` declares four empty interfaces: `SousServices`, `SousIntents`, `SousEvents` and
 `SousEntities`. A plugin adds its own entries to them (TypeScript declaration merging), and a plugin
 that imports its types sees them. At runtime, everything is looked up by its string name, so two
 copies of a package never confuse anything.
 
 ```ts
 // sous-plugin-diagrams/src/types.ts
-declare module "@sous-io/plugin-api" {
+declare module "@sous-io/sous-plugin-api" {
     interface SousServices {
         "diagrams.renderer": Renderer;
     }
@@ -663,7 +663,7 @@ Every message goes through one method of the reporter, `log(level, message, deta
   `warn()` and `emerg()`; `warning()` and above also take an `Error`), one or more per style
   (`operationStart(name, level = LogLevel.Notice)`, `variables(entries)`, ...), and `result(outputs)`.
 
-All of them are defined once, in `BaseReporter` (plugin-api). `Reporter`, the type plugins see, is
+All of them are defined once, in `BaseReporter` (sous-plugin-api). `Reporter`, the type plugins see, is
 derived from it; every reporter extends it; the `Reporting` mixin copies its convenience methods onto
 any other class, and a contributor's `ConfigBuilder` reports the same way.
 

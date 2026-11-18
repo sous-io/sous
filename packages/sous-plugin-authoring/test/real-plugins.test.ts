@@ -8,7 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createEngine } from "@sous-io/core";
-import { BufferedReporter, definePlugin } from "@sous-io/plugin-api";
+import { BufferedReporter, definePlugin } from "@sous-io/sous-plugin-api";
 import type { IndexFile } from "@sous-io/sous-plugin-formats/types";
 import formatsPlugin from "@sous-io/sous-plugin-formats";
 import gitPlugin from "@sous-io/sous-plugin-git";

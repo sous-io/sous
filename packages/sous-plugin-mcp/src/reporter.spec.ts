@@ -1,5 +1,5 @@
 import type { ServerNotification } from "@modelcontextprotocol/sdk/types.js";
-import { IntentOutputs, type LogLevel, ReportEntryStyle, TextBlock, VariableSet } from "@sous-io/plugin-api";
+import { IntentOutputs, type LogLevel, ReportEntryStyle, TextBlock, VariableSet } from "@sous-io/sous-plugin-api";
 import { describe, expect, it } from "vitest";
 import { McpReporter } from "./reporter.js";
 

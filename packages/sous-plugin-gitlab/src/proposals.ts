@@ -6,7 +6,7 @@
  * push, so `canPush` answers "cannot tell" and `fork` refuses with the manual route.
  */
 
-import { ConfigError } from "@sous-io/plugin-api";
+import { ConfigError } from "@sous-io/sous-plugin-api";
 import type {
     ProposalState,
     ProposalStatus,

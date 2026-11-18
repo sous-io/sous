@@ -5,7 +5,7 @@
  */
 
 import path from "node:path";
-import type { BuiltConfig, EntityReader, Environment, ProjectInfo, ServiceContext, ServiceReader } from "@sous-io/plugin-api";
+import type { BuiltConfig, EntityReader, Environment, ProjectInfo, ServiceContext, ServiceReader } from "@sous-io/sous-plugin-api";
 import type { HostGlobs, HostSousHome } from "@sous-io/sous-plugin-host/types";
 import type { HashNameContext } from "@sous-io/sous-plugin-refs/types";
 import type { VarScope, VariablesResolver } from "@sous-io/sous-plugin-variables/types";

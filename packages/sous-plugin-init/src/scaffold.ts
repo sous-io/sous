@@ -16,7 +16,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { ConfigError, type Context } from "@sous-io/plugin-api";
+import { ConfigError, type Context } from "@sous-io/sous-plugin-api";
 import "@sous-io/sous-plugin-config-files/types";
 import "@sous-io/sous-plugin-host/types";
 import { planPackageJson } from "./package-json.js";

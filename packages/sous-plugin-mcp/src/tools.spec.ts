@@ -1,4 +1,4 @@
-import { type IntentInfo, InputError, jsonSchema } from "@sous-io/plugin-api";
+import { type IntentInfo, InputError, jsonSchema } from "@sous-io/sous-plugin-api";
 import { describe, expect, it } from "vitest";
 import { buildTools, createMcpTools, matchesGlob, toolDescription, toolInputSchema, toolName, toolOutputSchema } from "./tools.js";
 

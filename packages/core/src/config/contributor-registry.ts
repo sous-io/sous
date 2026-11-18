@@ -1,4 +1,4 @@
-import { type ContributorDefinition, SousError } from "@sous-io/plugin-api";
+import { type ContributorDefinition, SousError } from "@sous-io/sous-plugin-api";
 import { DEFAULT_APPLY_ORDER, MAX_APPLY_ORDER, MIN_APPLY_ORDER } from "./order.js";
 
 /** A contributor, with the plugin that added it and its resolved order declarations. */

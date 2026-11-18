@@ -3,7 +3,7 @@
  * plugins installed. Each builder returns outputs; the intents add the machine data.
  */
 
-import { IntentOutput, ReportEntryStyle, TextBlock, VariableSet, type VariableEntry } from "@sous-io/plugin-api";
+import { IntentOutput, ReportEntryStyle, TextBlock, VariableSet, type VariableEntry } from "@sous-io/sous-plugin-api";
 import type { PlannedCommand, PluginsInstallResult, UpdateInput, UpdatePlan, UpdateResult } from "./types.js";
 
 /** A command as a person would type it. */

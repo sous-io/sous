@@ -19,7 +19,7 @@
  * environment variables that would answer it, most specific first.
  */
 
-import { LogLevel, NonInteractiveError, type Prompter, type Reporter } from "@sous-io/plugin-api";
+import { LogLevel, NonInteractiveError, type Prompter, type Reporter } from "@sous-io/sous-plugin-api";
 import type { EnvFileKind } from "@sous-io/sous-plugin-config-files/types";
 import type { VariableDefinition } from "@sous-io/sous-plugin-formats/types";
 import { recipeKey } from "./definitions.js";

@@ -9,7 +9,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import type { ServiceContext } from "@sous-io/plugin-api";
+import type { ServiceContext } from "@sous-io/sous-plugin-api";
 import type {
     DependencySection,
     InstalledPackage,

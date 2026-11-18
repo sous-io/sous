@@ -1,4 +1,4 @@
-import type { CliSection, JsonSchema } from "@sous-io/plugin-api";
+import type { CliSection, JsonSchema } from "@sous-io/sous-plugin-api";
 import { toKebab } from "./words.js";
 
 /** How a flag's value is read from the command line. */

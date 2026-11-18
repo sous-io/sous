@@ -6,7 +6,7 @@
  */
 
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import { definePlugin, IntentOutputs, jsonSchema, type PluginDefinition } from "@sous-io/plugin-api";
+import { definePlugin, IntentOutputs, jsonSchema, type PluginDefinition } from "@sous-io/sous-plugin-api";
 import { buildTools, createMcpTools } from "./tools.js";
 import type { McpServeInput, McpSettings } from "./types.js";
 import packageJson from "../package.json" with { type: "json" };

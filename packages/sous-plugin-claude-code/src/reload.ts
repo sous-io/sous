@@ -14,7 +14,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import type { Sous } from "@sous-io/plugin-api";
+import type { Sous } from "@sous-io/sous-plugin-api";
 import type {} from "@sous-io/sous-plugin-build/types";
 import type { WriteAction } from "@sous-io/sous-plugin-compiler/types";
 

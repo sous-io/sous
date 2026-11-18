@@ -9,7 +9,7 @@ import {
     SousError,
     BufferedReporter,
     IntentOutputs,
-} from "@sous-io/plugin-api";
+} from "@sous-io/sous-plugin-api";
 import { contributorsPlugin, keysPlugin, makeEngine, plugin } from "./helpers.js";
 
 function gate(): { promise: Promise<void>; open: () => void } {

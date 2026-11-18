@@ -16,7 +16,7 @@ import {
     type JsonValue,
     type Patch,
     type ProjectInfo,
-} from "@sous-io/plugin-api";
+} from "@sous-io/sous-plugin-api";
 import type { ExpressionsEvaluator } from "@sous-io/sous-plugin-expressions/types";
 import type { HostGlobs } from "@sous-io/sous-plugin-host/types";
 import { type LegacyRunner, mergeLegacy, moduleConfigure, moduleExports } from "./module-file.js";

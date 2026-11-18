@@ -6,7 +6,7 @@
  */
 
 import path from "node:path";
-import { commandVariables, IntentOutput, IntentOutputs, ItemList, ReportEntryStyle, TextBlock, type Context, type EntityReader, type Environment, type Prompter, type Reporter } from "@sous-io/plugin-api";
+import { commandVariables, IntentOutput, IntentOutputs, ItemList, ReportEntryStyle, TextBlock, type Context, type EntityReader, type Environment, type Prompter, type Reporter } from "@sous-io/sous-plugin-api";
 import type {
     FormatParser,
     FormatsManifests,

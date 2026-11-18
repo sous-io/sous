@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ConfigError, jsonSchema } from "@sous-io/plugin-api";
+import { ConfigError, jsonSchema } from "@sous-io/sous-plugin-api";
 import { contributorsPlugin, keysPlugin, makeEngine, plugin, userKeys } from "./helpers.js";
 
 describe("order and stages", () => {

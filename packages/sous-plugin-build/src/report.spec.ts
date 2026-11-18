@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BufferedReporter, ItemList, LogLevel, messageText, ReportEntryStyle } from "@sous-io/plugin-api";
+import { BufferedReporter, ItemList, LogLevel, messageText, ReportEntryStyle } from "@sous-io/sous-plugin-api";
 import type { DefinedVariable } from "@sous-io/sous-plugin-recipe-answers/types";
 import { prunedForSkippedLine, reportLinkedRepos, reportPrepared, reportUnanswered, reportUnincludedMemories, skippedLine } from "./report.js";
 import type { BuildPrepareResult } from "./types.js";

@@ -10,7 +10,7 @@
  * config, so a later layer that sets `enabled: false` switches a subscription off.
  */
 
-import { LogLevel, SousError, type BuiltConfig, type Context, type Reporter, type Sous } from "@sous-io/plugin-api";
+import { LogLevel, SousError, type BuiltConfig, type Context, type Reporter, type Sous } from "@sous-io/sous-plugin-api";
 import type { Lockfile } from "@sous-io/sous-plugin-formats/types";
 import type { NamedRef, SousRef } from "@sous-io/sous-plugin-refs/types";
 import semver from "semver";

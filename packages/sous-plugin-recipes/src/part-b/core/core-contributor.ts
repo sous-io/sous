@@ -15,7 +15,7 @@
  */
 
 import fs from "node:fs";
-import type { ContributorDefinition } from "@sous-io/plugin-api";
+import type { ContributorDefinition } from "@sous-io/sous-plugin-api";
 import { CONTRIBUTORS, CORE_NAMESPACE, OFFICIAL_REPO_NAME } from "../constants.js";
 import type { PartBRuntime } from "../runtime.js";
 import { messageOf } from "../support.js";

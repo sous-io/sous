@@ -49,7 +49,7 @@ import {
     type TimingCategory,
     type Timings,
     validateWith,
-} from "@sous-io/plugin-api";
+} from "@sous-io/sous-plugin-api";
 import { type ActivePlugin, type BuildOutcome, ConfigBuild, WHAT_IF_PLUGIN } from "./config/build.js";
 import { BuiltConfigImpl } from "./config/built-config.js";
 import { ContributorRegistry } from "./config/contributor-registry.js";

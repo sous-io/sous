@@ -4,7 +4,7 @@
  * the run, so ten handlers asking about `git` look once.
  */
 
-import type { Environment } from "@sous-io/plugin-api";
+import type { Environment } from "@sous-io/sous-plugin-api";
 import type { HostProcesses } from "@sous-io/sous-plugin-host/types";
 import type { HandlersSystem } from "./types.js";
 

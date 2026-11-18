@@ -90,7 +90,7 @@ rule 7 (one intent per operation) were later restated for the engine:
    Inversify. An intent is registered with `sous.intents.add`, and an entity kind with
    `sous.entities.define`.
 2. **Each plugin declares its own types.** A plugin adds its services, intents, events and entity
-   kinds to the empty interfaces in `@sous-io/plugin-api`, in its own package's `types` entry. A
+   kinds to the empty interfaces in `@sous-io/sous-plugin-api`, in its own package's `types` entry. A
    plugin that uses them imports those types only, and lists the owner in `dependsOn`. This is what
    lets `sous-plugin-compiler` use a namespace resolver that `sous-plugin-recipes` implements, without either
    importing the other's code.
@@ -146,7 +146,7 @@ Four packages are not plugins. Every other package is a built-in plugin, private
 | --- | --- |
 | `core` | the engine (see "Core") |
 | `documents` | surgical editing of JSON, JSONC and YAML documents, keeping comments, key order and formatting (see "The Document-Editing Package" in S2, config building); the config builder is built on it, and plugins reach it through the `documents.editor` service |
-| `plugin-api` | `definePlugin`, the empty `SousServices`, `SousIntents`, `SousEvents` and `SousEntities` interfaces, the `Reporter` and `Prompter` interfaces, the error classes |
+| `sous-plugin-api` | `definePlugin`, the empty `SousServices`, `SousIntents`, `SousEvents` and `SousEntities` interfaces, the `Reporter` and `Prompter` interfaces, the error classes |
 | `sous` | the published package: the bin, the hand-off to a project's own sous, finding the project, the list of built-in plugins, the bundle |
 | `sous-plugin-host` (agent decision, which the user may overrule) | the machine sous runs on: running processes, HTTP, globs and paths, sous home, sous's own self-describing directories, the sous block in `.gitignore`, package identity |
 | `sous-plugin-git` | the one git runner |
@@ -214,7 +214,7 @@ top      sous-plugin-claude-code   sous-plugin-codex   sous-plugin-github  sous-
            │
          sous-plugin-host
            │
-         plugin-api   core   sous           (not plugins; every plugin uses plugin-api's types)
+         sous-plugin-api   core   sous           (not plugins; every plugin uses sous-plugin-api's types)
            │
          documents                  (not a plugin; core's config builder is built on it)
 ```
@@ -312,7 +312,7 @@ root is the parent of the directory holding that file, as `sousDir` is defined t
   writes `projectRoot: "${sousDir}/.."` by hand, and every existing `${projectRoot}` keeps working.
 - Setting `projectRoot` in any `_vars` is an error saying that sous sets it.
 
-### `plugin-api`
+### `sous-plugin-api`
 
 | Concern | Owner |
 | --- | --- |

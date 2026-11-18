@@ -1,5 +1,5 @@
 import os from "node:os";
-import { definePlugin, IntentOutput, IntentOutputs, jsonSchema, LOG_LEVELS, TextBlock, VariableSet, type PluginDefinition } from "@sous-io/plugin-api";
+import { definePlugin, IntentOutput, IntentOutputs, jsonSchema, LOG_LEVELS, TextBlock, VariableSet, type PluginDefinition } from "@sous-io/sous-plugin-api";
 import { CommandTree, type CommandPicks } from "./command-tree.js";
 import { viewError } from "./errors.js";
 import { commandLineNeedsConfig, commandLinePlan, runCommandLine } from "./front-end.js";

@@ -11,7 +11,7 @@
  * the repository that publishes it is used.
  */
 
-import { ConfigError, IntentOutput, IntentOutputs, ReportEntryStyle, VariableSet, type Context, type IntentInput, type IntentResult } from "@sous-io/plugin-api";
+import { ConfigError, IntentOutput, IntentOutputs, ReportEntryStyle, VariableSet, type Context, type IntentInput, type IntentResult } from "@sous-io/sous-plugin-api";
 import type { SousRef } from "@sous-io/sous-plugin-refs/types";
 import type { RepoContributeInput, RepoContributeResult } from "../types.js";
 import { listOutput, outputsOf, textOutput, toolsFrom, type AuthoringTools } from "../tools.js";

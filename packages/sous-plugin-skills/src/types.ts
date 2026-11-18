@@ -9,7 +9,7 @@
  * Other plugins import this file type-only.
  */
 
-import type { ServiceContext } from "@sous-io/plugin-api";
+import type { ServiceContext } from "@sous-io/sous-plugin-api";
 import type { TransformFile } from "@sous-io/sous-plugin-compiler/types";
 
 /** One skill file on its way to a skill target, as a transform sees it. */
@@ -69,7 +69,7 @@ export interface SkillsSettings {
     include: string[];
 }
 
-declare module "@sous-io/plugin-api" {
+declare module "@sous-io/sous-plugin-api" {
     interface SousServices {
         "skills.sources": SkillsSources;
     }

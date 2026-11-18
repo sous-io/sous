@@ -16,7 +16,7 @@
  * which kinds exist; a kind nobody registered is an error once the config has settled.
  */
 
-import { type ConfigBuilder, ConfigError, type ContributorDefinition, type JsonValue, type ServiceReader, type Sous, jsonSchema } from "@sous-io/plugin-api";
+import { type ConfigBuilder, ConfigError, type ContributorDefinition, type JsonValue, type ServiceReader, type Sous, jsonSchema } from "@sous-io/sous-plugin-api";
 import { parseRecipeContentGroup } from "@sous-io/sous-plugin-formats";
 import type { ActiveRecipeEntity, ContentKindEntity, RecipeContentsEntry } from "../types.js";
 import { RECIPES_CONTENTS_KEY } from "./contents.js";

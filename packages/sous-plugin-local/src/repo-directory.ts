@@ -11,7 +11,7 @@
  */
 
 import { statSync, type Stats } from "node:fs";
-import { ConfigError } from "@sous-io/plugin-api";
+import { ConfigError } from "@sous-io/sous-plugin-api";
 import { MANIFEST_EXTENSIONS, REPO_MANIFEST_BASENAME } from "@sous-io/sous-plugin-formats";
 import type { FormatsManifests } from "@sous-io/sous-plugin-formats/types";
 

@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import type { EntityReader, ServiceReader } from "@sous-io/plugin-api";
+import type { EntityReader, ServiceReader } from "@sous-io/sous-plugin-api";
 import { createLiquidEngines, liquidValues } from "./engine.js";
 
 const noEntities = { get: () => undefined, list: () => [], has: () => false, describe: () => [], kinds: () => [] } as unknown as EntityReader;

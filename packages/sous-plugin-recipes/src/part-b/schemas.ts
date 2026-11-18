@@ -3,7 +3,7 @@
  * and MCP get flags and tools from the same JSON Schema.
  */
 
-import { jsonSchema, type SousSchema } from "@sous-io/plugin-api";
+import { jsonSchema, type SousSchema } from "@sous-io/sous-plugin-api";
 import type { ActiveRecipeEntity, LockRebuildInput, RepoGcInput, RepoLinkInput, RepoUnlinkInput } from "../types.js";
 
 const dryRun = { type: "boolean", description: "Print what would change without writing anything" } as const;

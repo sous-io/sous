@@ -6,7 +6,7 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
-import { SousError, type ConfigBuilder, type Context, type Environment, type ProjectInfo, type ServiceReader } from "@sous-io/plugin-api";
+import { SousError, type ConfigBuilder, type Context, type Environment, type ProjectInfo, type ServiceReader } from "@sous-io/sous-plugin-api";
 import type {} from "@sous-io/sous-plugin-host/types";
 import type {} from "@sous-io/sous-plugin-recipe-answers/types";
 import type {} from "@sous-io/sous-plugin-variables/types";

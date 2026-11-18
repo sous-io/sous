@@ -1,4 +1,4 @@
-import type { TimingCategory, TimingEntry, Timings } from "@sous-io/plugin-api";
+import type { TimingCategory, TimingEntry, Timings } from "@sous-io/sous-plugin-api";
 import { type Budget, BudgetTable } from "./budgets.js";
 
 interface MutableEntry {

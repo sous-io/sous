@@ -4,7 +4,7 @@
  */
 
 import path from "node:path";
-import { ConfigError, type JsonValue } from "@sous-io/plugin-api";
+import { ConfigError, type JsonValue } from "@sous-io/sous-plugin-api";
 import type { VarScope } from "./types.js";
 
 /**

@@ -3,7 +3,7 @@
  */
 
 import path from "node:path";
-import { ConfigError } from "@sous-io/plugin-api";
+import { ConfigError } from "@sous-io/sous-plugin-api";
 import type { EnvFileKind } from "@sous-io/sous-plugin-config-files/types";
 import { ENV_FILE_NAMES } from "./ladder.js";
 

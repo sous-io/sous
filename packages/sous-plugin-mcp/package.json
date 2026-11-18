@@ -23,7 +23,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
-    "@sous-io/plugin-api": "workspace:*"
+    "@sous-io/sous-plugin-api": "workspace:*"
   },
   "devDependencies": {
     "@sous-io/core": "workspace:*",

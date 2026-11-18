@@ -4,8 +4,8 @@
  * network or runs a process.
  */
 
-import { BufferedReporter, definePlugin, NotFoundError } from "@sous-io/plugin-api";
-import type { BuiltConfig, Environment, PluginDefinition, ProjectInfo, SousSchema } from "@sous-io/plugin-api";
+import { BufferedReporter, definePlugin, NotFoundError } from "@sous-io/sous-plugin-api";
+import type { BuiltConfig, Environment, PluginDefinition, ProjectInfo, SousSchema } from "@sous-io/sous-plugin-api";
 import type { GitResult, GitRunner, GitRunOptions } from "@sous-io/sous-plugin-git/types";
 import type { HostHttp, HostProcesses, HostSousHome, HttpRequest, HttpResponse, ProcessOptions, ProcessResult } from "@sous-io/sous-plugin-host/types";
 import type { RepositoryHostContext, RepositoryHostEntity, RepositoryReadOutcome, RepositoryReadRequest, RepositoryToken } from "@sous-io/sous-plugin-recipes/types";

@@ -1,5 +1,5 @@
 {
-  "name": "@sous-io/plugin-api",
+  "name": "@sous-io/sous-plugin-api",
   "version": "1.0.19",
   "description": "The plugin interface of sous: definePlugin, the shared type interfaces, Reporter, Prompter and the error classes",
   "type": "module",
@@ -7,7 +7,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sous-io/sous.git",
-    "directory": "packages/plugin-api"
+    "directory": "packages/sous-plugin-api"
   },
   "private": false,
   "exports": {

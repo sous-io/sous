@@ -22,7 +22,7 @@ import {
     type ReportDetails,
     type ReportEntryStyle,
     type Reporter,
-} from "@sous-io/plugin-api";
+} from "@sous-io/sous-plugin-api";
 import type { EntityRegistry, StoredEntity } from "../entities/entity-registry.js";
 import { entitySignature, type Read, type View } from "./reads.js";
 

@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import type { ConfigBuilder, JsonValue } from "@sous-io/plugin-api";
+import type { ConfigBuilder, JsonValue } from "@sous-io/sous-plugin-api";
 import type { ActiveRecipeEntity } from "../types.js";
 import { BUILT_IN_CONTENT_KINDS, contentsEntry, manifestsContributor, unknownKindsError } from "./manifests.js";
 

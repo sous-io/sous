@@ -16,7 +16,7 @@ import {
     PluginError,
     type ProjectInfo,
     type RunPlan,
-} from "@sous-io/plugin-api";
+} from "@sous-io/sous-plugin-api";
 import type { EntityRegistry, StoredEntity } from "../entities/entity-registry.js";
 import { EntitySnapshot } from "../entities/entity-registry.js";
 import type { Limits } from "../limits.js";

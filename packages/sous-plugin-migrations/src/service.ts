@@ -4,7 +4,7 @@
  * by its owner, `recipes.lock`; this service only decides what it means.
  */
 
-import type { ServiceContext } from "@sous-io/plugin-api";
+import type { ServiceContext } from "@sous-io/sous-plugin-api";
 import type {} from "@sous-io/sous-plugin-recipes/types";
 import { isVersion, orderMigrations, pendingMigrations } from "./pending.js";
 import type { MigrationEntity, MigrationsService } from "./types.js";

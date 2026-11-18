@@ -24,7 +24,7 @@ import {
     type TreeNode,
     type VariableEntry,
     VariableSet,
-} from "@sous-io/plugin-api";
+} from "@sous-io/sous-plugin-api";
 import { HelpPage } from "../help-page.js";
 import { renderBanner } from "../views/banner.js";
 import { colorizeJson } from "../views/json.js";

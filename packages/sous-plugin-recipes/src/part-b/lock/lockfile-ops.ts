@@ -6,7 +6,7 @@
  * holder does, so dropping one recipe never removes something another recipe still needs.
  */
 
-import { ConfigError } from "@sous-io/plugin-api";
+import { ConfigError } from "@sous-io/sous-plugin-api";
 import semver from "semver";
 import type { LockedRecipe, Lockfile } from "@sous-io/sous-plugin-formats/types";
 import type { LockChange, LockDiff, ResolvedRecipe } from "../../types.js";

@@ -1,4 +1,4 @@
-import type { SousSchema } from "@sous-io/plugin-api";
+import type { SousSchema } from "@sous-io/sous-plugin-api";
 import type { CommandTree } from "./command-tree.js";
 
 /**
@@ -72,7 +72,7 @@ export interface CliErrors {
     view(error: unknown, options?: { debug?: boolean }): CliErrorView;
 }
 
-declare module "@sous-io/plugin-api" {
+declare module "@sous-io/sous-plugin-api" {
     interface SousEntities {
         "cli-global-argument": CliGlobalArgumentEntity;
         "cli-group": CliGroupEntity;

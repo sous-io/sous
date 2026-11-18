@@ -7,7 +7,7 @@
  * entity read needs no dependency, so this plugin depends on nothing above it.
  */
 
-import { definePlugin, jsonSchema, type PluginDefinition } from "@sous-io/plugin-api";
+import { definePlugin, jsonSchema, type PluginDefinition } from "@sous-io/sous-plugin-api";
 import { createRefsFormat } from "./format.js";
 import { hashNameSchema, projectHashName } from "./hash-names.js";
 import { createRefsLocations } from "./locations/locations.js";

@@ -32,9 +32,9 @@ importers:
       '@sous-io/documents':
         specifier: workspace:*
         version: link:../documents
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
       semver:
         specifier: ^7.8.5
         version: 7.8.5
@@ -45,9 +45,9 @@ importers:
 
   packages/documents:
     dependencies:
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
       jsonc-parser:
         specifier: ^3.3.1
         version: 3.3.1
@@ -55,13 +55,11 @@ importers:
         specifier: ^2.9.0
         version: 2.9.0
 
-  packages/plugin-api: {}
-
   packages/repository-hosts:
     dependencies:
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
       '@sous-io/sous-plugin-git':
         specifier: workspace:*
         version: link:../sous-plugin-git
@@ -77,9 +75,9 @@ importers:
 
   packages/sous:
     dependencies:
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
     devDependencies:
       '@sous-io/core':
         specifier: workspace:*
@@ -202,14 +200,16 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
 
+  packages/sous-plugin-api: {}
+
   packages/sous-plugin-authoring:
     dependencies:
       '@sous-io/documents':
         specifier: workspace:*
         version: link:../documents
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
       '@sous-io/sous-plugin-config-files':
         specifier: workspace:*
         version: link:../sous-plugin-config-files
@@ -250,9 +250,9 @@ importers:
 
   packages/sous-plugin-build:
     dependencies:
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
       '@sous-io/sous-plugin-compiler':
         specifier: workspace:*
         version: link:../sous-plugin-compiler
@@ -299,9 +299,9 @@ importers:
       '@sous-io/documents':
         specifier: workspace:*
         version: link:../documents
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
       '@sous-io/sous-plugin-build':
         specifier: workspace:*
         version: link:../sous-plugin-build
@@ -342,9 +342,9 @@ importers:
 
   packages/sous-plugin-cli:
     dependencies:
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
     devDependencies:
       '@sous-io/core':
         specifier: workspace:*
@@ -355,9 +355,9 @@ importers:
 
   packages/sous-plugin-codex:
     dependencies:
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
       '@sous-io/sous-plugin-harnesses':
         specifier: workspace:*
         version: link:../sous-plugin-harnesses
@@ -380,9 +380,9 @@ importers:
       '@sous-io/documents':
         specifier: workspace:*
         version: link:../documents
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
       '@sous-io/sous-plugin-host':
         specifier: workspace:*
         version: link:../sous-plugin-host
@@ -423,9 +423,9 @@ importers:
       '@sous-io/documents':
         specifier: workspace:*
         version: link:../documents
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
       '@sous-io/sous-plugin-config-files':
         specifier: workspace:*
         version: link:../sous-plugin-config-files
@@ -448,9 +448,9 @@ importers:
       '@sous-io/documents':
         specifier: workspace:*
         version: link:../documents
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
       '@sous-io/sous-plugin-expressions':
         specifier: workspace:*
         version: link:../sous-plugin-expressions
@@ -470,9 +470,9 @@ importers:
 
   packages/sous-plugin-doctor:
     dependencies:
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
     devDependencies:
       '@sous-io/core':
         specifier: workspace:*
@@ -498,9 +498,9 @@ importers:
       '@sous-io/documents':
         specifier: workspace:*
         version: link:../documents
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
       '@sous-io/sous-plugin-compiler':
         specifier: workspace:*
         version: link:../sous-plugin-compiler
@@ -523,9 +523,9 @@ importers:
 
   packages/sous-plugin-expressions:
     dependencies:
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
       '@sous-io/sous-plugin-liquid':
         specifier: workspace:*
         version: link:../sous-plugin-liquid
@@ -545,9 +545,9 @@ importers:
 
   packages/sous-plugin-formats:
     dependencies:
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
       '@sous-io/sous-plugin-refs':
         specifier: workspace:*
         version: link:../sous-plugin-refs
@@ -573,9 +573,9 @@ importers:
 
   packages/sous-plugin-git:
     dependencies:
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
       '@sous-io/sous-plugin-host':
         specifier: workspace:*
         version: link:../sous-plugin-host
@@ -586,12 +586,12 @@ importers:
 
   packages/sous-plugin-github:
     dependencies:
-      '@sous-io/plugin-api':
-        specifier: workspace:*
-        version: link:../plugin-api
       '@sous-io/repository-hosts':
         specifier: workspace:*
         version: link:../repository-hosts
+      '@sous-io/sous-plugin-api':
+        specifier: workspace:*
+        version: link:../sous-plugin-api
       '@sous-io/sous-plugin-git':
         specifier: workspace:*
         version: link:../sous-plugin-git
@@ -608,12 +608,12 @@ importers:
 
   packages/sous-plugin-gitlab:
     dependencies:
-      '@sous-io/plugin-api':
-        specifier: workspace:*
-        version: link:../plugin-api
       '@sous-io/repository-hosts':
         specifier: workspace:*
         version: link:../repository-hosts
+      '@sous-io/sous-plugin-api':
+        specifier: workspace:*
+        version: link:../sous-plugin-api
       '@sous-io/sous-plugin-git':
         specifier: workspace:*
         version: link:../sous-plugin-git
@@ -630,9 +630,9 @@ importers:
 
   packages/sous-plugin-handlers:
     dependencies:
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
       '@sous-io/sous-plugin-doctor':
         specifier: workspace:*
         version: link:../sous-plugin-doctor
@@ -658,9 +658,9 @@ importers:
 
   packages/sous-plugin-harnesses:
     dependencies:
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
       '@sous-io/sous-plugin-build':
         specifier: workspace:*
         version: link:../sous-plugin-build
@@ -677,9 +677,9 @@ importers:
 
   packages/sous-plugin-host:
     dependencies:
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
       glob:
         specifier: ^13.0.6
         version: 13.0.6
@@ -696,9 +696,9 @@ importers:
 
   packages/sous-plugin-init:
     dependencies:
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
       '@sous-io/sous-plugin-build':
         specifier: workspace:*
         version: link:../sous-plugin-build
@@ -727,9 +727,9 @@ importers:
       '@sous-io/documents':
         specifier: workspace:*
         version: link:../documents
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
       '@sous-io/sous-plugin-confd':
         specifier: workspace:*
         version: link:../sous-plugin-confd
@@ -749,9 +749,9 @@ importers:
 
   packages/sous-plugin-liquid:
     dependencies:
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
       '@sous-io/sous-plugin-host':
         specifier: workspace:*
         version: link:../sous-plugin-host
@@ -765,12 +765,12 @@ importers:
 
   packages/sous-plugin-local:
     dependencies:
-      '@sous-io/plugin-api':
-        specifier: workspace:*
-        version: link:../plugin-api
       '@sous-io/repository-hosts':
         specifier: workspace:*
         version: link:../repository-hosts
+      '@sous-io/sous-plugin-api':
+        specifier: workspace:*
+        version: link:../sous-plugin-api
       '@sous-io/sous-plugin-formats':
         specifier: workspace:*
         version: link:../sous-plugin-formats
@@ -793,9 +793,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.32.2
         version: 1.32.2(zod@4.4.3)
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
     devDependencies:
       '@sous-io/core':
         specifier: workspace:*
@@ -812,9 +812,9 @@ importers:
       '@sous-io/documents':
         specifier: workspace:*
         version: link:../documents
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
       '@sous-io/sous-plugin-compiler':
         specifier: workspace:*
         version: link:../sous-plugin-compiler
@@ -840,9 +840,9 @@ importers:
 
   packages/sous-plugin-migrations:
     dependencies:
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
       '@sous-io/sous-plugin-doctor':
         specifier: workspace:*
         version: link:../sous-plugin-doctor
@@ -865,9 +865,9 @@ importers:
 
   packages/sous-plugin-npm:
     dependencies:
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
       '@sous-io/sous-plugin-host':
         specifier: workspace:*
         version: link:../sous-plugin-host
@@ -881,9 +881,9 @@ importers:
 
   packages/sous-plugin-pnpm:
     dependencies:
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
       '@sous-io/sous-plugin-host':
         specifier: workspace:*
         version: link:../sous-plugin-host
@@ -897,9 +897,9 @@ importers:
 
   packages/sous-plugin-recipe-answers:
     dependencies:
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
       '@sous-io/sous-plugin-confd':
         specifier: workspace:*
         version: link:../sous-plugin-confd
@@ -925,9 +925,9 @@ importers:
 
   packages/sous-plugin-recipes:
     dependencies:
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
       '@sous-io/sous-plugin-compiler':
         specifier: workspace:*
         version: link:../sous-plugin-compiler
@@ -971,9 +971,9 @@ importers:
 
   packages/sous-plugin-refs:
     dependencies:
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
       '@sous-io/sous-plugin-host':
         specifier: workspace:*
         version: link:../sous-plugin-host
@@ -990,9 +990,9 @@ importers:
 
   packages/sous-plugin-skills:
     dependencies:
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
       '@sous-io/sous-plugin-compiler':
         specifier: workspace:*
         version: link:../sous-plugin-compiler
@@ -1009,9 +1009,9 @@ importers:
 
   packages/sous-plugin-update:
     dependencies:
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
       '@sous-io/sous-plugin-host':
         specifier: workspace:*
         version: link:../sous-plugin-host
@@ -1031,9 +1031,9 @@ importers:
       '@sous-io/documents':
         specifier: workspace:*
         version: link:../documents
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
       '@sous-io/sous-plugin-host':
         specifier: workspace:*
         version: link:../sous-plugin-host
@@ -1044,9 +1044,9 @@ importers:
 
   packages/sous-plugin-yarn:
     dependencies:
-      '@sous-io/plugin-api':
+      '@sous-io/sous-plugin-api':
         specifier: workspace:*
-        version: link:../plugin-api
+        version: link:../sous-plugin-api
       '@sous-io/sous-plugin-host':
         specifier: workspace:*
         version: link:../sous-plugin-host

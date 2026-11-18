@@ -1,4 +1,4 @@
-import { BaseReporter, errorChain, type LogLevel, messageText, Payload, type ProgressEvent, type ReportDetails, ReportEntryStyle, type ReportMessage } from "@sous-io/plugin-api";
+import { BaseReporter, errorChain, type LogLevel, messageText, Payload, type ProgressEvent, type ReportDetails, ReportEntryStyle, type ReportMessage } from "@sous-io/sous-plugin-api";
 import type { ServerNotification } from "@modelcontextprotocol/sdk/types.js";
 
 /** What {@link McpReporter} sends through: one client, in the context of one tool call. */

@@ -7,7 +7,7 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { Environment } from "@sous-io/plugin-api";
+import type { Environment } from "@sous-io/sous-plugin-api";
 import type { HostProcesses, ProcessResult } from "@sous-io/sous-plugin-host/types";
 import { GIT_TIMEOUT_EXIT_CODE, GitError } from "./errors.js";
 import type { GitResult, GitRunner, GitRunOptions, GitStatusEntry } from "./types.js";

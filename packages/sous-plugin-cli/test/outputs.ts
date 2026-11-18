@@ -1,4 +1,4 @@
-import { DataValue, IntentOutput, IntentOutputs, TextBlock } from "@sous-io/plugin-api";
+import { DataValue, IntentOutput, IntentOutputs, TextBlock } from "@sous-io/sous-plugin-api";
 
 /** Outputs holding a plain object: shown as JSON, and what `--json` and a calling intent read. */
 export function data<T extends object>(value: T): IntentOutputs<T> {

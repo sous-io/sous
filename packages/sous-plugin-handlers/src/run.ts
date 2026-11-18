@@ -4,7 +4,7 @@
  * and handed to the chain's reporter, which belongs to the command: a handler never prints.
  */
 
-import { IntentOutput, IntentOutputs, messageText, SousError, type Context, type HandlerPurpose } from "@sous-io/plugin-api";
+import { IntentOutput, IntentOutputs, messageText, SousError, type Context, type HandlerPurpose } from "@sous-io/sous-plugin-api";
 import { createTools, ReportCollector } from "./tools.js";
 import type { HandlerEntity, HandlerReportEntry, HandlerRun, HandlerRunResult, RunHandlersOptions } from "./types.js";
 

@@ -3,7 +3,7 @@
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { PluginError } from "@sous-io/plugin-api";
+import { PluginError } from "@sous-io/sous-plugin-api";
 import type { HostPackage, PackageIdentity } from "./types.js";
 
 /** The package names the installed sous may have. */

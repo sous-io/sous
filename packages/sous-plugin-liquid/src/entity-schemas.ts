@@ -3,7 +3,7 @@
  * JSON Schema has no function type, so a small check on top makes sure the factory is a function.
  */
 
-import { jsonSchema, type JsonSchema, type SousSchema } from "@sous-io/plugin-api";
+import { jsonSchema, type JsonSchema, type SousSchema } from "@sous-io/sous-plugin-api";
 
 const PURPOSES: JsonSchema = { type: "array", items: { type: "string" } };
 

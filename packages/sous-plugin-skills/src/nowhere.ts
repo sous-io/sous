@@ -6,7 +6,7 @@
  * early pass may lack a skill target that a plugin loaded later adds.
  */
 
-import type { Context } from "@sous-io/plugin-api";
+import type { Context } from "@sous-io/sous-plugin-api";
 import { skillDestinations } from "./destinations.js";
 import { stringsOf } from "./settings.js";
 import type { SkillSource, SkillsSources } from "./types.js";

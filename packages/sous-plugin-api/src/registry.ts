@@ -7,7 +7,7 @@ import type { ConfigBuiltPayload } from "./events.js";
  * give the names their types.
  *
  * ```ts
- * declare module "@sous-io/plugin-api" {
+ * declare module "@sous-io/sous-plugin-api" {
  *     interface SousServices {
  *         "diagrams.renderer": Renderer;
  *     }

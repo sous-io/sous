@@ -14,7 +14,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import type { BuiltConfig, ConfigBuilder, ContributorDefinition, EntityReader, ServiceReader } from "@sous-io/plugin-api";
+import type { BuiltConfig, ConfigBuilder, ContributorDefinition, EntityReader, ServiceReader } from "@sous-io/sous-plugin-api";
 import type { HashNameContext } from "@sous-io/sous-plugin-refs/types";
 import type { ScopeRequest, VarScope, VariablesResolver } from "@sous-io/sous-plugin-variables/types";
 import { buildAliasMap, resolveAliasPrefix, type AliasMap } from "./aliases.js";

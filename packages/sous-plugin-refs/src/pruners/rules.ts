@@ -4,7 +4,7 @@
  * to fix it.
  */
 
-import { ConfigError, type ServiceContext } from "@sous-io/plugin-api";
+import { ConfigError, type ServiceContext } from "@sous-io/sous-plugin-api";
 import { locationOf, repoOf } from "../parts.js";
 import type { DroppedRef, RefPruneResult, RefPrunerEntity, RefSource, SousRef } from "../types.js";
 

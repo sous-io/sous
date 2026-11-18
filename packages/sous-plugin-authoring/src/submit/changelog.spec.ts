@@ -7,7 +7,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { BufferedReporter } from "@sous-io/plugin-api";
+import { BufferedReporter } from "@sous-io/sous-plugin-api";
 import type { RecipeManifest, VariableDefinition } from "@sous-io/sous-plugin-formats/types";
 import { commitAll, git, initRepo, makeTmpDir, writeFile, type TmpDir } from "../../test/support/git-repo.js";
 import { realGit, recipeManifestParser, repoManifestParser, testTools } from "../../test/support/standins.js";

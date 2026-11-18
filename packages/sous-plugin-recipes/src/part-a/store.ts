@@ -17,7 +17,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { ConfigError } from "@sous-io/plugin-api";
+import { ConfigError } from "@sous-io/sous-plugin-api";
 import type { ContentHash, StoreEntry } from "@sous-io/sous-plugin-formats/types";
 import type { RecipesStore, StoreGcOptions, StoreGcReport, StoreHit, StoreKey } from "../types.js";
 

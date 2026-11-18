@@ -18,7 +18,7 @@
  * ```
  */
 
-import { ConfigError, type ServiceContext } from "@sous-io/plugin-api";
+import { ConfigError, type ServiceContext } from "@sous-io/sous-plugin-api";
 import type { IndexFile } from "@sous-io/sous-plugin-formats/types";
 import type { HostGlobs } from "@sous-io/sous-plugin-host/types";
 import { isGlobName, locationOf } from "@sous-io/sous-plugin-refs";

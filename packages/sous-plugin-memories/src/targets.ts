@@ -22,7 +22,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { ConfigBuilder, ContributorDefinition, ProjectInfo, ServiceReader } from "@sous-io/plugin-api";
+import type { ConfigBuilder, ContributorDefinition, ProjectInfo, ServiceReader } from "@sous-io/sous-plugin-api";
 import type { CompilationOutput, CompilationTarget, CompilationTransformEntity } from "@sous-io/sous-plugin-compiler/types";
 import { selectMemories, type MemoryGlobs, type MemoryRecipe } from "./listing.js";
 import type { MemoriesSettings, Memory, MemoryTargetEntity } from "./types.js";

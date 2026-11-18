@@ -1,4 +1,4 @@
-import type { JsonObject, TimingCategory } from "@sous-io/plugin-api";
+import type { JsonObject, TimingCategory } from "@sous-io/sous-plugin-api";
 
 /**
  * The default budget of every timing category, in milliseconds. These are first guesses; core

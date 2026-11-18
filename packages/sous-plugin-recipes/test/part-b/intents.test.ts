@@ -6,7 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { messageText, type JsonObject } from "@sous-io/plugin-api";
+import { messageText, type JsonObject } from "@sous-io/sous-plugin-api";
 import { cleanTemp, fakeHost, fakeUrl, hashOf, indexFile, startEngine, tempDir, writeLockfile, writeRecipe, type FakeHostCalls, type FakeRepo } from "./helpers.js";
 
 const URL = fakeUrl("acme", "recipes");

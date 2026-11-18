@@ -6,7 +6,7 @@
  * question. The outputs hold what was not reported: the blocks shown once the work is done.
  */
 
-import { IntentOutput, type Context, type TableColumn } from "@sous-io/plugin-api";
+import { IntentOutput, type Context, type TableColumn } from "@sous-io/sous-plugin-api";
 import type {
     PlannedQuestion,
     RecipeUpdatePlan,

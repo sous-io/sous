@@ -13,7 +13,7 @@ import type {
     PathInput,
     ProjectInfo,
     ServiceReader,
-} from "@sous-io/plugin-api";
+} from "@sous-io/sous-plugin-api";
 import type {} from "@sous-io/sous-plugin-host/types";
 import { buildAutoVariables, isAutoVariable } from "./auto.js";
 import { resolveBlock } from "./resolve-block.js";

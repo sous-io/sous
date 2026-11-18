@@ -11,7 +11,7 @@ import type {
     ProjectInfo,
     RefreshConfigOptions,
     Reporter,
-} from "@sous-io/plugin-api";
+} from "@sous-io/sous-plugin-api";
 import type { BuiltConfigImpl } from "./config/built-config.js";
 import type { Frame } from "./util/frames.js";
 

@@ -6,7 +6,7 @@
  * other locked recipe is skipped, with one sentence saying why, and keeps its pins.
  */
 
-import type { BuiltConfig, ServiceReader } from "@sous-io/plugin-api";
+import type { BuiltConfig, ServiceReader } from "@sous-io/sous-plugin-api";
 import type { ContentKind, Lockfile, VariableDefinition } from "@sous-io/sous-plugin-formats/types";
 import type { ActiveRecipeContent, ActiveRecipeEntity, RecipesActive, SkippedRecipe, StillBuiltRecipe } from "../types.js";
 import { emptyLockfile, keysHeldBySubscription, lockedClosure, PROJECT_HOLDER } from "./lock-holds.js";

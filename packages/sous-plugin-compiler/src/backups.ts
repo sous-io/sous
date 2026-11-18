@@ -7,7 +7,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import type { Reporter } from "@sous-io/plugin-api";
+import type { Reporter } from "@sous-io/sous-plugin-api";
 
 /** The folder backups of a file outside the project go under, inside the timestamp folder. */
 export const OUTSIDE_PROJECT_DIR = "outside-project";

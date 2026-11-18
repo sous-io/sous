@@ -1,4 +1,4 @@
-import type { IntentOutputs } from "@sous-io/plugin-api";
+import type { IntentOutputs } from "@sous-io/sous-plugin-api";
 import type { InputStream } from "./io.js";
 
 /** The line watch mode shows under its output, as before the refactor. */

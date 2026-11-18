@@ -5,8 +5,8 @@
  * here reaches singletons only.
  */
 
-import type { BuiltConfig, EntityReader, Reporter, RunPlan, ServiceReader, Sous } from "@sous-io/plugin-api";
-import { nullReporter } from "@sous-io/plugin-api";
+import type { BuiltConfig, EntityReader, Reporter, RunPlan, ServiceReader, Sous } from "@sous-io/sous-plugin-api";
+import { nullReporter } from "@sous-io/sous-plugin-api";
 import type {} from "@sous-io/sous-plugin-formats/types";
 import type {} from "@sous-io/sous-plugin-git/types";
 import type { SousHomePaths } from "@sous-io/sous-plugin-host/types";

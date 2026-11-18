@@ -4,7 +4,7 @@
  */
 
 import path from "node:path";
-import { jsonSchema, type Context } from "@sous-io/plugin-api";
+import { jsonSchema, type Context } from "@sous-io/sous-plugin-api";
 import type {} from "@sous-io/sous-plugin-variables/types";
 import type { ToolSettings } from "./types.js";
 

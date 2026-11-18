@@ -4,7 +4,7 @@
  */
 
 import { afterEach, describe, expect, it } from "vitest";
-import type { JsonObject } from "@sous-io/plugin-api";
+import type { JsonObject } from "@sous-io/sous-plugin-api";
 import { makeCompiler, makeProject, type TestProject } from "./helpers.js";
 
 let project: TestProject;

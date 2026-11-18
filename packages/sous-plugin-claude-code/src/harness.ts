@@ -9,7 +9,7 @@
  * than regret inspecificity later"; Luke, 2026-11-17).
  */
 
-import { SousError } from "@sous-io/plugin-api";
+import { SousError } from "@sous-io/sous-plugin-api";
 import type { HarnessEntity, HeadlessRun, Transcript } from "@sous-io/sous-plugin-harnesses/types";
 import { launchArguments, toolSettings } from "@sous-io/sous-plugin-harnesses";
 import type {} from "@sous-io/sous-plugin-host/types";

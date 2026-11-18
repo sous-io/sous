@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";
+import { definePlugin, type PluginDefinition } from "@sous-io/sous-plugin-api";
 import { definitionFromModule, PluginRegistry } from "./plugin-registry.js";
 
 const hooks = (definitions: Record<string, PluginDefinition>, registered: string[] = []) => ({

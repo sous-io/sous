@@ -1,4 +1,4 @@
-import type { Environment } from "@sous-io/plugin-api";
+import type { Environment } from "@sous-io/sous-plugin-api";
 
 /** Paints a piece of text, or returns it as it is when color is off. */
 export type Paint = (text: string) => string;

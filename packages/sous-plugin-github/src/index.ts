@@ -4,7 +4,7 @@
  * The contract other plugins code against is `./types.ts`.
  */
 
-import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";
+import { definePlugin, type PluginDefinition } from "@sous-io/sous-plugin-api";
 import { createGithubHost } from "./host.js";
 import type { GithubPluginOptions } from "./types.js";
 import packageJson from "../package.json" with { type: "json" };

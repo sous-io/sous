@@ -7,7 +7,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { ConfigError } from "@sous-io/plugin-api";
+import { ConfigError } from "@sous-io/sous-plugin-api";
 import type { LinkOrigin, LinksMap, WritableFormatParser } from "@sous-io/sous-plugin-formats/types";
 import type { HostDirectories, HostGitignore } from "@sous-io/sous-plugin-host/types";
 import type { LinkScope, RecipesLinks, ResolvedLink } from "../../types.js";

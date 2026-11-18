@@ -7,7 +7,7 @@
  * Other plugins import this file type-only.
  */
 
-import type { ConfigBuilder, EntityReader, Environment, JsonValue, ProjectInfo, ServiceReader } from "@sous-io/plugin-api";
+import type { ConfigBuilder, EntityReader, Environment, JsonValue, ProjectInfo, ServiceReader } from "@sous-io/sous-plugin-api";
 import type { VarScope } from "@sous-io/sous-plugin-variables/types";
 
 /** What an expression can read. */
@@ -147,7 +147,7 @@ export interface ExpressionsEvaluator {
     languages(): string[];
 }
 
-declare module "@sous-io/plugin-api" {
+declare module "@sous-io/sous-plugin-api" {
     interface SousServices {
         /** Evaluating config expressions. */
         "expressions.evaluator": ExpressionsEvaluator;

@@ -17,7 +17,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import type { Context } from "@sous-io/plugin-api";
+import type { Context } from "@sous-io/sous-plugin-api";
 import type { GitRunner } from "@sous-io/sous-plugin-git/types";
 import { DOCTOR_CHECK_ORDER, type DoctorCheckEntity, type DoctorCheckResult } from "@sous-io/sous-plugin-doctor";
 import { DEFAULT_HOOKS, HOOK_BLOCK_START, HUSKY_DIR, PULL_HOOKS } from "./hooks.js";

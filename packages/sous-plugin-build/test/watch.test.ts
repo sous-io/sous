@@ -2,7 +2,7 @@ import { EventEmitter } from "node:events";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { messageText } from "@sous-io/plugin-api";
+import { messageText } from "@sous-io/sous-plugin-api";
 import type { BuildResult, BuildWatchResult } from "../src/types.js";
 import type { SignalSource } from "../src/watch/intent.js";
 import type { WatchSession } from "../src/watch/session.js";

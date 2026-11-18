@@ -17,7 +17,7 @@ import {
     type JsonObject,
     type Prompter,
     type ServiceReader,
-} from "@sous-io/plugin-api";
+} from "@sous-io/sous-plugin-api";
 import type { ConfdManaged } from "@sous-io/sous-plugin-confd/types";
 import type { Lockfile } from "@sous-io/sous-plugin-formats/types";
 import type { NamedRef, RefsFormat, RefsResolver, SousRef } from "@sous-io/sous-plugin-refs/types";

@@ -3,7 +3,7 @@
  * `_vars` levels over each other, and an evaluator wired to both.
  */
 
-import type { ConfigBuilder, EntityReader, JsonValue, PathInput, ServiceReader } from "@sous-io/plugin-api";
+import type { ConfigBuilder, EntityReader, JsonValue, PathInput, ServiceReader } from "@sous-io/sous-plugin-api";
 import type { LiquidFilterEntity } from "@sous-io/sous-plugin-liquid/types";
 import type { ConfigLookup, ScopeRequest, VariableSourceEntity, VariablesResolver, VarScope } from "@sous-io/sous-plugin-variables/types";
 import { createEvaluator, type Evaluator } from "../src/evaluator.js";

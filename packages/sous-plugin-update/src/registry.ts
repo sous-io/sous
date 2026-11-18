@@ -7,7 +7,7 @@
  * a test never reaches the network.
  */
 
-import { ConfigError, type Environment } from "@sous-io/plugin-api";
+import { ConfigError, type Environment } from "@sous-io/sous-plugin-api";
 import type { HostHttp } from "@sous-io/sous-plugin-host/types";
 import { PACKAGE_NAME } from "./installs.js";
 import { parseRegistryMetadata, type RegistryMetadata } from "./versions.js";

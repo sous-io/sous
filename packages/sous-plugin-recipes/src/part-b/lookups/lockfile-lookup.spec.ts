@@ -1,6 +1,6 @@
 import { hostGlobs } from "@sous-io/sous-plugin-host";
 import type { Lockfile } from "@sous-io/sous-plugin-formats/types";
-import type { ServiceContext } from "@sous-io/plugin-api";
+import type { ServiceContext } from "@sous-io/sous-plugin-api";
 import type { SousRef } from "@sous-io/sous-plugin-refs/types";
 import { describe, expect, it } from "vitest";
 import { LOCKFILE_LOOKUP_ID, lockfileLookup, matchPinned } from "./lockfile-lookup.js";

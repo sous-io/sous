@@ -7,7 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createEngine, type Engine } from "@sous-io/core";
-import { BufferedReporter, definePlugin, type JsonObject, type PluginDefinition, type Sous } from "@sous-io/plugin-api";
+import { BufferedReporter, definePlugin, type JsonObject, type PluginDefinition, type Sous } from "@sous-io/sous-plugin-api";
 import type { HashNameEntity } from "@sous-io/sous-plugin-refs/types";
 import { compilerPlugin } from "../src/index.js";
 import type { CompileInput, CompileResult, CompilerPruneInput, CompilerPruneResult } from "../src/types.js";

@@ -6,7 +6,7 @@ import {
     type Prompter,
     type QuestionBase,
     type ValueQuestion,
-} from "@sous-io/plugin-api";
+} from "@sous-io/sous-plugin-api";
 import type { InputStream, OutputStream } from "./io.js";
 
 /** A terminal's standard input, which can turn its echo off. */

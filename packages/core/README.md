@@ -11,7 +11,7 @@ What it does:
 
 ## Using it from code
 
-Front ends and tests start the engine, build the config, then hand control to a front end. Plugins never import this package; they use `@sous-io/plugin-api`.
+Front ends and tests start the engine, build the config, then hand control to a front end. Plugins never import this package; they use `@sous-io/sous-plugin-api`.
 
 ```ts
 import { createEngine } from "@sous-io/core";

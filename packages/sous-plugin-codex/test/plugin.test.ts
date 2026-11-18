@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createEngine } from "@sous-io/core";
-import { BufferedReporter, definePlugin, IntentOutputs, jsonSchema, type PluginDefinition } from "@sous-io/plugin-api";
+import { BufferedReporter, definePlugin, IntentOutputs, jsonSchema, type PluginDefinition } from "@sous-io/sous-plugin-api";
 import type { HostProcesses } from "@sous-io/sous-plugin-host/types";
 import harnessesPlugin from "@sous-io/sous-plugin-harnesses";
 import codexPlugin from "../src/index.js";

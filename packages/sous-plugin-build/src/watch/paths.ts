@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { BuiltConfig, ProjectInfo } from "@sous-io/plugin-api";
+import type { BuiltConfig, ProjectInfo } from "@sous-io/sous-plugin-api";
 import type { HostGlobs } from "@sous-io/sous-plugin-host/types";
 
 /** What watch mode watches. */

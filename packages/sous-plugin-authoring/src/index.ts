@@ -7,7 +7,7 @@
  * entity; nothing host-specific lives here.
  */
 
-import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";
+import { definePlugin, type PluginDefinition } from "@sous-io/sous-plugin-api";
 import { contributeInput, initInput, releaseInput, submitInput } from "./schemas.js";
 import "./types.js";
 import packageJson from "../package.json" with { type: "json" };

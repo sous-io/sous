@@ -16,7 +16,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import type { ServiceReader } from "@sous-io/plugin-api";
+import type { ServiceReader } from "@sous-io/sous-plugin-api";
 import type { ContentKind, InlineContent } from "@sous-io/sous-plugin-formats/types";
 import type { ActiveRecipeContent, ContentsConfig, RecipeContentFile, RecipeContentsEntry, RecipesContents } from "../types.js";
 

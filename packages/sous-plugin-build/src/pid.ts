@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { ProjectInfo } from "@sous-io/plugin-api";
+import type { ProjectInfo } from "@sous-io/sous-plugin-api";
 import type { BuildPid } from "./types.js";
 
 /** The PID file's name inside `.sous/`, as before the refactor. */

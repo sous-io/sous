@@ -1,5 +1,5 @@
 import { formatPath, getAtPath, isPathPrefix, parsePath } from "@sous-io/documents";
-import { type ConfigKeyEntity, type JsonObject, type JsonValue, type PathSegment, validateWith } from "@sous-io/plugin-api";
+import { type ConfigKeyEntity, type JsonObject, type JsonValue, type PathSegment, validateWith } from "@sous-io/sous-plugin-api";
 import type { StoredEntity } from "../entities/entity-registry.js";
 
 /** The result of checking a config. */

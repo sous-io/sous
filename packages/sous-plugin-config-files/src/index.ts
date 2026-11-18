@@ -6,7 +6,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { type ConfigBuilder, ConfigError, type ContributorDefinition, definePlugin, jsonSchema, type PluginDefinition, type ProjectInfo, type Sous } from "@sous-io/plugin-api";
+import { type ConfigBuilder, ConfigError, type ContributorDefinition, definePlugin, jsonSchema, type PluginDefinition, type ProjectInfo, type Sous } from "@sous-io/sous-plugin-api";
 import { EnvFilesService } from "./env/service.js";
 import { ConfigFilesLoaderImpl, mainCandidates } from "./loader.js";
 import { MAIN_CONFIG_BASE_NAME } from "./names.js";

@@ -7,7 +7,7 @@
  * through the chain's prompter, and `--yes` answers it ahead of time.
  */
 
-import { LogLevel, NonInteractiveError, SousError, type ConfigReader, type Reporter, type ServiceReader, type VariableEntry } from "@sous-io/plugin-api";
+import { LogLevel, NonInteractiveError, SousError, type ConfigReader, type Reporter, type ServiceReader, type VariableEntry } from "@sous-io/sous-plugin-api";
 import type { ChainIo, ConfirmTrustOptions, ConfirmTrustResult, MissingRepo, RecipesTrust, RepoEntry } from "../types.js";
 import { USER_ADDED_BY } from "./defaults.js";
 import { trustedRepos, writeRepoEntry } from "./project.js";

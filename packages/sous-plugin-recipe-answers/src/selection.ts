@@ -15,7 +15,7 @@
  * ```
  */
 
-import { ConfigError, isSousErrorOfKind, NonInteractiveError, type Prompter, type Reporter, type ServiceReader } from "@sous-io/plugin-api";
+import { ConfigError, isSousErrorOfKind, NonInteractiveError, type Prompter, type Reporter, type ServiceReader } from "@sous-io/sous-plugin-api";
 import type { RefKind, SousRef } from "@sous-io/sous-plugin-refs/types";
 import { recipeKey } from "./definitions.js";
 import type { Ladder } from "./ladder.js";

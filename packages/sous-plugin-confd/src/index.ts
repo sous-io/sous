@@ -5,7 +5,7 @@
  */
 
 import fs from "node:fs";
-import { ConfigError, type ContributorDefinition, definePlugin, type PluginDefinition, type Sous } from "@sous-io/plugin-api";
+import { ConfigError, type ContributorDefinition, definePlugin, type PluginDefinition, type Sous } from "@sous-io/sous-plugin-api";
 import type {} from "@sous-io/sous-plugin-config-files/types";
 import type {} from "@sous-io/sous-plugin-host/types";
 import { ConfdFilesImpl, contributorId, duplicateBaseNames, listConfdFiles } from "./files.js";

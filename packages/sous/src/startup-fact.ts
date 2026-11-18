@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import type { Environment, ProjectInfo } from "@sous-io/plugin-api";
+import type { Environment, ProjectInfo } from "@sous-io/sous-plugin-api";
 import { resolveSousHomePaths } from "@sous-io/sous-plugin-host";
 
 /** The file the last successful config build leaves its startup fact in. */

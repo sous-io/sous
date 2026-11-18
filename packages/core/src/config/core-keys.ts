@@ -1,4 +1,4 @@
-import { type ConfigKeyEntity, jsonSchema } from "@sous-io/plugin-api";
+import { type ConfigKeyEntity, jsonSchema } from "@sous-io/sous-plugin-api";
 
 const stringList = { type: "array", items: { type: "string" }, default: [] } as const;
 const pickTable = { type: "object", additionalProperties: { type: "string" }, default: {} } as const;

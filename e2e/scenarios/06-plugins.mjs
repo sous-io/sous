@@ -2,7 +2,7 @@ import path from "node:path";
 import { assert, expectExit, expectIncludes, parseJson } from "../lib/harness.mjs";
 
 const PLUGIN = `
-import { definePlugin, IntentOutput, IntentOutputs, VariableSet, jsonSchema } from "@sous-io/plugin-api";
+import { definePlugin, IntentOutput, IntentOutputs, VariableSet, jsonSchema } from "@sous-io/sous-plugin-api";
 
 export default definePlugin({
   name: "e2e-hello-plugin",
@@ -59,9 +59,9 @@ export default {
     const dir = path.join(t.root, "e2e-plugin");
     t.write("package.json", JSON.stringify({ name: "e2e-hello-plugin", version: "1.2.3", type: "module", main: "index.mjs" }), dir);
     t.write("index.mjs", PLUGIN, dir);
-    await t.step("an outside plugin can be installed next to its plugin-api", () => {
+    await t.step("an outside plugin can be installed next to its sous-plugin-api", () => {
       const sousVersion = t.sousVersion.replace(/^v/, "");
-      expectExit(t.sh(`npm i --no-audit --no-fund @sous-io/plugin-api@${sousVersion}`, { cwd: dir, timeout: 240_000 }));
+      expectExit(t.sh(`npm i --no-audit --no-fund @sous-io/sous-plugin-api@${sousVersion}`, { cwd: dir, timeout: 240_000 }));
     });
 
     await t.step("plugins.load in a conf.d file loads the plugin", () => {

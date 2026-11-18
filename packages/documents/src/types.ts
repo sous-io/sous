@@ -5,10 +5,10 @@
  * {@link Patch}es, grouped into named {@link PatchSet}s. Primitives are plain
  * JSON, so any set of changes serializes to JSON and back.
  *
- * The JSON, path and patch types are owned by `@sous-io/plugin-api` (plugins see them there);
+ * The JSON, path and patch types are owned by `@sous-io/sous-plugin-api` (plugins see them there);
  * this package re-exports them and adds the types only document editing needs.
  */
-import type { Patch, PathSegment, JsonValue } from "@sous-io/plugin-api";
+import type { Patch, PathSegment, JsonValue } from "@sous-io/sous-plugin-api";
 
 export type {
     JsonValue,
@@ -28,7 +28,7 @@ export type {
     PatchSet,
     ValueType,
     DocumentNode,
-} from "@sous-io/plugin-api";
+} from "@sous-io/sous-plugin-api";
 
 /** A patch that could not be applied, and why. Applying carries on without it. */
 export interface PatchProblem {

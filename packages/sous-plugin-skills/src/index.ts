@@ -4,7 +4,7 @@
  * The contract other plugins code against is `./types.ts`.
  */
 
-import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";
+import { definePlugin, type PluginDefinition } from "@sous-io/sous-plugin-api";
 import { skillWarnings } from "./nowhere.js";
 import { ConfigSkillsSources } from "./service.js";
 import { skillsConfigKey } from "./settings.js";

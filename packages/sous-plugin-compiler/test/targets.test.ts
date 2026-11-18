@@ -8,7 +8,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { definePlugin, type JsonObject } from "@sous-io/plugin-api";
+import { definePlugin, type JsonObject } from "@sous-io/sous-plugin-api";
 import type { CompilationTarget, CompilationTransformEntity } from "../src/types.js";
 import { compileOnce, errorsOf, makeCompiler, makeProject, type TestProject } from "./helpers.js";
 

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { BufferedReporter, definePlugin, IntentOutputs, scriptedPrompter, type Prompter, type Sous } from "@sous-io/plugin-api";
+import { BufferedReporter, definePlugin, IntentOutputs, scriptedPrompter, type Prompter, type Sous } from "@sous-io/sous-plugin-api";
 import { createEngine } from "@sous-io/core";
 import { orderChecks } from "../src/doctor.js";
 import { doctorPlugin } from "../src/index.js";

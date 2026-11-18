@@ -13,7 +13,7 @@
  */
 
 import path from "node:path";
-import { definePlugin, jsonSchema, type PluginDefinition } from "@sous-io/plugin-api";
+import { definePlugin, jsonSchema, type PluginDefinition } from "@sous-io/sous-plugin-api";
 import { createTokenCounter } from "@sous-io/sous-plugin-compiler";
 import type {} from "@sous-io/sous-plugin-variables/types";
 import { assertionsCheck } from "./doctor-check.js";

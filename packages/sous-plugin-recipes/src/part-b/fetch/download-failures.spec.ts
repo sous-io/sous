@@ -1,4 +1,4 @@
-import { ConfigError } from "@sous-io/plugin-api";
+import { ConfigError } from "@sous-io/sous-plugin-api";
 import { describe, expect, it } from "vitest";
 import type { RecipeDownloadAttempt } from "../../types.js";
 import { IndexReadError } from "../index-cache/read-chain.js";

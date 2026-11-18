@@ -8,7 +8,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { BufferedReporter, definePlugin, IntentOutputs, jsonSchema, type PluginDefinition, type ProjectInfo } from "@sous-io/plugin-api";
+import { BufferedReporter, definePlugin, IntentOutputs, jsonSchema, type PluginDefinition, type ProjectInfo } from "@sous-io/sous-plugin-api";
 import { createEngine, type Engine } from "@sous-io/core";
 import { hostPlugin } from "@sous-io/sous-plugin-host";
 import type { LockDiff } from "@sous-io/sous-plugin-recipes/types";

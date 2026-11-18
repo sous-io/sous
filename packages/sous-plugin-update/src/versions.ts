@@ -6,7 +6,7 @@
  * fetched or installed, so a dry run and a real run choose exactly alike.
  */
 
-import { ConfigError } from "@sous-io/plugin-api";
+import { ConfigError } from "@sous-io/sous-plugin-api";
 import semver from "semver";
 import type { VersionDirection } from "./types.js";
 

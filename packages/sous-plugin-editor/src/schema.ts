@@ -4,7 +4,7 @@
  * a missing parameter or a short form is a `ConfigError` naming the entry.
  */
 
-import type { ConfigKeyEntity } from "@sous-io/plugin-api";
+import type { ConfigKeyEntity } from "@sous-io/sous-plugin-api";
 import { z } from "zod";
 import { normalizeEntry } from "./entries.js";
 

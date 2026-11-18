@@ -6,7 +6,7 @@
  * the change; `vars.ask` refreshes it again after answering, so `build` sees the answers.
  */
 
-import type { Context } from "@sous-io/plugin-api";
+import type { Context } from "@sous-io/sous-plugin-api";
 import type { AnswerFlags, RecipeChangeFlags } from "../types.js";
 import type { RanFollowUp } from "./outputs.js";
 import { hasIntent } from "./util.js";

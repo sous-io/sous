@@ -5,7 +5,7 @@
  */
 
 import fs from "node:fs";
-import { jsonSchema, type ServiceReader, type Sous } from "@sous-io/plugin-api";
+import { jsonSchema, type ServiceReader, type Sous } from "@sous-io/sous-plugin-api";
 import { createDirectories } from "@sous-io/sous-plugin-host";
 import type { HostDirectories } from "@sous-io/sous-plugin-host/types";
 import { RECIPES_CONTENTS_KEY, RecipeContents } from "./contents.js";

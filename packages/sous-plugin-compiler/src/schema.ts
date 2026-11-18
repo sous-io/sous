@@ -4,7 +4,7 @@
  * `destinationFiles` is an error naming the file that wrote it, not an output quietly dropped.
  */
 
-import type { ConfigKeyEntity } from "@sous-io/plugin-api";
+import type { ConfigKeyEntity } from "@sous-io/sous-plugin-api";
 import { z } from "zod";
 import { compilePatternList } from "@sous-io/sous-plugin-host";
 import { isReservedAliasName } from "./aliases.js";

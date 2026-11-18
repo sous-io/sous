@@ -25,7 +25,7 @@
  */
 
 import path from "node:path";
-import type { ConfigBuilder, ContributorDefinition, ServiceReader } from "@sous-io/plugin-api";
+import type { ConfigBuilder, ContributorDefinition, ServiceReader } from "@sous-io/sous-plugin-api";
 import type { CompilationTarget } from "@sous-io/sous-plugin-compiler/types";
 import type { ActiveRecipeContent, ContentKindEntity, RecipesContents } from "@sous-io/sous-plugin-recipes/types";
 import { HARNESS_ID } from "./harness.js";

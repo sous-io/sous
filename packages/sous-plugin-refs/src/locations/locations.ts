@@ -3,7 +3,7 @@
  * `repository-host` entities. Which hosts exist is theirs to say; nothing here knows any host.
  */
 
-import { ConfigError, type EntityReader } from "@sous-io/plugin-api";
+import { ConfigError, type EntityReader } from "@sous-io/sous-plugin-api";
 import type { CanonicalRepository, RefLocation, RefsLocations, RepositoryLocator } from "../types.js";
 import { repositoryIdentity, shortNameFromIdentity } from "./identity.js";
 

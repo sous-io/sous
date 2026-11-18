@@ -1,4 +1,4 @@
-import type { ServiceContext } from "@sous-io/plugin-api";
+import type { ServiceContext } from "@sous-io/sous-plugin-api";
 import { describe, expect, it } from "vitest";
 import { MemoryConfd, names, serviceReader, variable } from "../test/stand-ins.js";
 import { formatMappingTarget, mappedNamesFor, mappingMatches, MappingsService, mappingTargetFor, parseMappingTarget, VAR_MAPPINGS_FILE } from "./mappings.js";

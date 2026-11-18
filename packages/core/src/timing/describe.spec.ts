@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { TimingCategory } from "@sous-io/plugin-api";
+import type { TimingCategory } from "@sous-io/sous-plugin-api";
 import { describeOverBudget } from "./describe.js";
 
 const over = (category: TimingCategory, name: string, plugin?: string) => ({ key: `${category}:${name}`, category, name, plugin, ms: 12.4, budgetMs: 5 });

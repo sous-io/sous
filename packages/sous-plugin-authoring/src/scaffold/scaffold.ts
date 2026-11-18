@@ -15,7 +15,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { ConfigError, IntentOutput, IntentOutputs, ReportEntryStyle, Table, VariableSet, type Context } from "@sous-io/plugin-api";
+import { ConfigError, IntentOutput, IntentOutputs, ReportEntryStyle, Table, VariableSet, type Context } from "@sous-io/sous-plugin-api";
 import type { RepositoryHostEntity, ScaffoldFile } from "@sous-io/sous-plugin-recipes/types";
 import type { RepoInitInput, RepoInitResult } from "../types.js";
 import { outputsOf, textOutput, toolsFrom, type AuthoringTools } from "../tools.js";

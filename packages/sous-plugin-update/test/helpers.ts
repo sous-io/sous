@@ -4,7 +4,7 @@
  * real install.
  */
 
-import { BufferedReporter, type Context, type Prompter, scriptedPrompter, type ServiceContext } from "@sous-io/plugin-api";
+import { BufferedReporter, type Context, type Prompter, scriptedPrompter, type ServiceContext } from "@sous-io/sous-plugin-api";
 import type { HostHttp, HostProcesses, InteractiveProcessOptions, InteractiveProcessResult } from "@sous-io/sous-plugin-host/types";
 import type {
     InstalledPackage,

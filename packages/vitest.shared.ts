@@ -17,14 +17,14 @@ const sourceAliases: Record<string, string> = {
 };
 
 /**
- * `packages/plugin-api` and every `packages/sous-plugin-*` package, by its `@sous-io/...` name: its root and its `types`
+ * Every `packages/sous-plugin-*` package (the plugin API and every built-in plugin), by its `@sous-io/...` name: its root and its `types`
  * entry, each resolved to source.
  */
 function pluginAliases(): Record<string, string> {
     const aliases: Record<string, string> = {};
 
     for (const entry of readdirSync(packagesDir, { withFileTypes: true })) {
-        if (entry.isDirectory() && (entry.name.startsWith("plugin-") || entry.name.startsWith("sous-plugin-"))) {
+        if (entry.isDirectory() && entry.name.startsWith("sous-plugin-")) {
             aliases[`@sous-io/${entry.name}/types`] = path.join(packagesDir, entry.name, "src/types.ts");
             aliases[`@sous-io/${entry.name}`] = path.join(packagesDir, entry.name, "src/index.ts");
         }

@@ -1,4 +1,4 @@
-import { ConfigError } from "@sous-io/plugin-api";
+import { ConfigError } from "@sous-io/sous-plugin-api";
 import type { HostHttp, HttpRequest } from "@sous-io/sous-plugin-host/types";
 import { describe, expect, it } from "vitest";
 import { ABBREVIATED_METADATA_TYPE, DEFAULT_REGISTRY, fetchPublishedVersions, packageMetadataUrl, registryBaseUrl } from "../src/registry.js";

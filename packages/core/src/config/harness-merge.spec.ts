@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { JsonObject } from "@sous-io/plugin-api";
+import type { JsonObject } from "@sous-io/sous-plugin-api";
 import { CORE_HARNESS_LISTS, EACH, markOf, mergeHarnessBuilds, overlapsList, parseListPath } from "./harness-merge.js";
 
 const LISTS = CORE_HARNESS_LISTS.map((list) => parseListPath(list.path));

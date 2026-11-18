@@ -6,7 +6,7 @@
  * `./types.ts`.
  */
 
-import { definePlugin, jsonSchema, type PluginDefinition } from "@sous-io/plugin-api";
+import { definePlugin, jsonSchema, type PluginDefinition } from "@sous-io/sous-plugin-api";
 import { AnswersService, computeAnswers } from "./answers.js";
 import { DefinitionsService } from "./definitions.js";
 import { varsIntents } from "./intents.js";

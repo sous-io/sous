@@ -1,4 +1,4 @@
-import type { IntentOutputs, Reporter } from "@sous-io/plugin-api";
+import type { IntentOutputs, Reporter } from "@sous-io/sous-plugin-api";
 import type { OutputStream } from "../io.js";
 
 /** What showing a command's outputs needs. */

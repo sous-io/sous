@@ -7,7 +7,7 @@
  * sous wrote an entry, and so may remove it.
  */
 
-import type { BuiltConfig, ConfigReader } from "@sous-io/plugin-api";
+import type { BuiltConfig, ConfigReader } from "@sous-io/sous-plugin-api";
 import type { ConfdManaged, ManagedEditResult } from "@sous-io/sous-plugin-confd/types";
 import type { RepoEntry, SubscriptionEntry } from "../types.js";
 import { withoutDisabled } from "./defaults.js";

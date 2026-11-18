@@ -2,7 +2,7 @@
  * The `launch` intent: builds, then starts a harness (today's `sous launch`).
  */
 
-import { ConfigError, IntentOutputs, NotFoundError, SousError, type Context } from "@sous-io/plugin-api";
+import { ConfigError, IntentOutputs, NotFoundError, SousError, type Context } from "@sous-io/sous-plugin-api";
 import type { BuildResult } from "@sous-io/sous-plugin-build/types";
 import type { HarnessLaunchResult, LaunchInput, LaunchResult } from "./types.js";
 

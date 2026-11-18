@@ -5,7 +5,7 @@
  * variable and environment-variable cases move with their lookups to sous-plugin-recipe-answers.
  */
 
-import { nonInteractivePrompter } from "@sous-io/plugin-api";
+import { nonInteractivePrompter } from "@sous-io/sous-plugin-api";
 import { describe, expect, it } from "vitest";
 import type { RefKind } from "../src/types.js";
 import { catalogLookup, catalogRepo, type CatalogRepo } from "./catalog-lookup.js";

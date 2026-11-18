@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { IntentOutputs, jsonSchema } from "@sous-io/plugin-api";
+import { IntentOutputs, jsonSchema } from "@sous-io/sous-plugin-api";
 import type { DoctorCheckResult } from "@sous-io/sous-plugin-doctor";
 import { checkHandlersCheck } from "../src/doctor-check.js";
 import type { HandlerRunResult } from "../src/types.js";

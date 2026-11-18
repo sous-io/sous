@@ -3,7 +3,7 @@
  * and its key path.
  */
 
-import { ConfigError, isSousErrorOfKind } from "@sous-io/plugin-api";
+import { ConfigError, isSousErrorOfKind } from "@sous-io/sous-plugin-api";
 import { describe, expect, it } from "vitest";
 import { ExpressionError } from "../src/errors.js";
 import { answersSource, evaluate, jsLanguage, makeEvaluator } from "./helpers.js";

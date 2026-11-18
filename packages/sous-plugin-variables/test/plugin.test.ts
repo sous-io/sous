@@ -1,4 +1,4 @@
-import type { ConfigBuilder, Sous } from "@sous-io/plugin-api";
+import type { ConfigBuilder, Sous } from "@sous-io/sous-plugin-api";
 import { describe, expect, it } from "vitest";
 import { RESERVED_NAMES_CONTRIBUTOR } from "../src/index.js";
 import type { VariableSourceEntity } from "../src/types.js";

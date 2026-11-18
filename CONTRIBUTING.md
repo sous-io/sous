@@ -12,7 +12,7 @@ pnpm test
 ```
 
 Node 22 is expected (see `.nvmrc`), and `package.json` requires `>=22`. Sous is a pnpm workspace:
-a small engine (`packages/core`), the plugin interface (`packages/plugin-api`), one package per
+a small engine (`packages/core`), the plugin interface (`packages/sous-plugin-api`), one package per
 built-in plugin (`packages/sous-plugin-*`), and `packages/sous`, the published `@sous-io/sous`, which
 esbuild bundles into one file. Read the [laws](docs/markdown/architecture/laws.md),
 [goals](docs/markdown/architecture/goals.md) and
@@ -22,7 +22,7 @@ is built; they rank above every other document.
 - `pnpm test` runs every package's tests, including the end-to-end tests in
   `packages/sous/test/integration/`, which run the bundled `sous` as a process.
 - `pnpm typecheck` type-checks every package (esbuild strips types without checking them).
-- `pnpm build` builds `@sous-io/plugin-api` and the bundle, `packages/sous/dist/bin.js`.
+- `pnpm build` builds `@sous-io/sous-plugin-api` and the bundle, `packages/sous/dist/bin.js`.
 
 Run the CLI from a clone with `./bin/sous <command>`: it rebuilds the bundle when a package's
 source changed, then runs it. To get `sous` on your PATH, link that script (for example

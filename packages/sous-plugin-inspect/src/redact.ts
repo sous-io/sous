@@ -4,8 +4,8 @@
  * when that service is not there, a key is taken as a secret by its name alone.
  */
 
-import type { JsonObject, JsonValue, Patch } from "@sous-io/plugin-api";
-import type { ConfigLayer } from "@sous-io/plugin-api";
+import type { JsonObject, JsonValue, Patch } from "@sous-io/sous-plugin-api";
+import type { ConfigLayer } from "@sous-io/sous-plugin-api";
 import type { VariablesSecrets } from "@sous-io/sous-plugin-variables/types";
 
 /** What stands in for a secret's value. */

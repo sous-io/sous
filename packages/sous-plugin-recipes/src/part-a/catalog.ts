@@ -11,7 +11,7 @@
  * come from `refs.resolver`; the caller passes them in.
  */
 
-import { SousError } from "@sous-io/plugin-api";
+import { SousError } from "@sous-io/sous-plugin-api";
 import type { IndexDependency, IndexFile, Lockfile, RecipeManifest } from "@sous-io/sous-plugin-formats/types";
 import type { NamedRef, NamespaceRef, RecipeRef, SousRef } from "@sous-io/sous-plugin-refs/types";
 import { isManifestExpression } from "@sous-io/sous-plugin-formats";

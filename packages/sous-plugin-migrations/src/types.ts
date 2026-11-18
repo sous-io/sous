@@ -29,7 +29,7 @@
  * ```
  */
 
-import type { Context } from "@sous-io/plugin-api";
+import type { Context } from "@sous-io/sous-plugin-api";
 
 /** One option of a question with choices. */
 export interface MigrationChoice {
@@ -171,7 +171,7 @@ export interface MigrationsRunResult {
     readonly dryRun: boolean;
 }
 
-declare module "@sous-io/plugin-api" {
+declare module "@sous-io/sous-plugin-api" {
     interface SousExtensions {
         /** Sous's own migrations: `sous.migrations.add({ version, order, up })`. */
         migrations: {

@@ -19,7 +19,7 @@ import {
     type Context,
     type TableColumn,
     type VariableEntry,
-} from "@sous-io/plugin-api";
+} from "@sous-io/sous-plugin-api";
 import type { IntentFollowUp, LockDiff, PlannedQuestion, PlannedQuestions } from "../types.js";
 import { describeLockDiff } from "../part-b/lock/lockfile-ops.js";
 

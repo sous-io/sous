@@ -3,7 +3,7 @@
  * its memories file. Both run once per project, through `sous upgrade` or `sous doctor`.
  */
 
-import type { Sous } from "@sous-io/plugin-api";
+import type { Sous } from "@sous-io/sous-plugin-api";
 import type {} from "@sous-io/sous-plugin-migrations/types";
 import { memoriesMigration } from "./memories.js";
 import { toolsKeyMigration } from "./tools.js";

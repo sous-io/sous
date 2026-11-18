@@ -5,7 +5,7 @@
  * intents or events of its own.
  */
 
-import type { PluginLocatorEntity } from "@sous-io/plugin-api";
+import type { PluginLocatorEntity } from "@sous-io/sous-plugin-api";
 import type {} from "@sous-io/sous-plugin-host/types";
 import type { PackageManagerEntity } from "@sous-io/sous-plugin-update/types";
 

@@ -1,4 +1,4 @@
-import { IntentOutputs, jsonSchema, type IntentInfo } from "@sous-io/plugin-api";
+import { IntentOutputs, jsonSchema, type IntentInfo } from "@sous-io/sous-plugin-api";
 import { describe, expect, it } from "vitest";
 import { CommandTree } from "./command-tree.js";
 import { globalSpecs } from "./globals.js";

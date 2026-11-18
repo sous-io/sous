@@ -115,7 +115,7 @@ export interface InitResult {
     readonly dryRun: boolean;
 }
 
-declare module "@sous-io/plugin-api" {
+declare module "@sous-io/sous-plugin-api" {
     interface SousIntents {
         init: { input: InitInput; result: InitResult };
         "init.hooks": { input: InitHooksInput; result: InitHooksResult };

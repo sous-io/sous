@@ -22,7 +22,7 @@ import {
     type EntityReader,
     type Prompter,
     type Reporter,
-} from "@sous-io/plugin-api";
+} from "@sous-io/sous-plugin-api";
 import type {
     ContentHash,
     FormatParser,

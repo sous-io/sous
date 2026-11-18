@@ -13,7 +13,7 @@
  * What one adds is this contributor's patch, so it is undone when the handler stops being listed.
  */
 
-import { messageText, type ConfigBuilder, type ContributorDefinition, type ServiceReader } from "@sous-io/plugin-api";
+import { messageText, type ConfigBuilder, type ContributorDefinition, type ServiceReader } from "@sous-io/sous-plugin-api";
 import { RECIPE_HANDLERS_CONTRIBUTOR } from "./recipes.js";
 import { orderHandlers } from "./run.js";
 import { createConfigureTools, ReportCollector } from "./tools.js";

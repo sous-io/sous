@@ -2,7 +2,7 @@
  * The `skill-target` entity kind: a place a harness reads skills from.
  */
 
-import { jsonSchema } from "@sous-io/plugin-api";
+import { jsonSchema } from "@sous-io/sous-plugin-api";
 import type { SkillTargetEntity } from "./types.js";
 
 /** The kind's name. */

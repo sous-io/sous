@@ -1,4 +1,4 @@
-import { ConfigError } from "@sous-io/plugin-api";
+import { ConfigError } from "@sous-io/sous-plugin-api";
 import { beforeAll, describe, expect, it } from "vitest";
 import { buildRefs, gitlabHost, type Refs } from "../../test/fixtures.js";
 import { readingsAfterRepository, splitRepoUrl } from "./host-helpers.js";

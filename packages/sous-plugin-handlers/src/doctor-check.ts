@@ -4,7 +4,7 @@
  * (a command that is not installed, a tool that is not signed in) is the person's to put right.
  */
 
-import { BufferedReporter, type Context } from "@sous-io/plugin-api";
+import { BufferedReporter, type Context } from "@sous-io/sous-plugin-api";
 import { DOCTOR_CHECK_ORDER, type DoctorCheckEntity, type DoctorCheckResult, type DoctorRun } from "@sous-io/sous-plugin-doctor";
 import { runHandlers } from "./run.js";
 

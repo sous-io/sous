@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { definePlugin, type JsonObject } from "@sous-io/plugin-api";
+import { definePlugin, type JsonObject } from "@sous-io/sous-plugin-api";
 import type { Lockfile } from "@sous-io/sous-plugin-formats/types";
 import { cleanTemp, fakeHost, fakeUrl, hashOf, indexFile, startEngine, tempDir, writeRecipe, type FakeHostCalls, type FakeRepo } from "../../../test/part-b/helpers.js";
 import type { RecipesLockedPayload, ResolvedRecipe } from "../../types.js";

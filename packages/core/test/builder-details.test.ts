@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ConfigError, jsonSchema } from "@sous-io/plugin-api";
+import { ConfigError, jsonSchema } from "@sous-io/sous-plugin-api";
 import { contributorsPlugin, keysPlugin, makeEngine, plugin } from "./helpers.js";
 
 const anything = { "~standard": { version: 1 as const, vendor: "t", validate: (value: unknown) => ({ value }) } };
@@ -158,7 +158,7 @@ describe("the builder, in detail", () => {
                     return {
                         default: {
                             name: `plugin-${k}`,
-                            register: (sous: import("@sous-io/plugin-api").Sous) =>
+                            register: (sous: import("@sous-io/sous-plugin-api").Sous) =>
                                 sous.config.contribute({ id: `c${k}`, contribute: (config) => config.atPath("latest").set(k) }),
                         },
                     };

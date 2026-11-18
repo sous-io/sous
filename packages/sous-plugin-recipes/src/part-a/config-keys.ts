@@ -3,7 +3,7 @@
  * their schemas and defaults.
  */
 
-import { jsonSchema, type ConfigKeyEntity, type JsonSchema, type SousSchema } from "@sous-io/plugin-api";
+import { jsonSchema, type ConfigKeyEntity, type JsonSchema, type SousSchema } from "@sous-io/sous-plugin-api";
 import semver from "semver";
 import { REPO_NAME_PATTERN } from "./util.js";
 

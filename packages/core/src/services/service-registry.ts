@@ -1,4 +1,4 @@
-import { ConflictError, type ServiceFactory, type ServiceLifetime, type ServiceWrapper } from "@sous-io/plugin-api";
+import { ConflictError, type ServiceFactory, type ServiceLifetime, type ServiceWrapper } from "@sous-io/sous-plugin-api";
 
 /** One way to make a service: an `add` or a `replace`. */
 export interface ServiceProvider {

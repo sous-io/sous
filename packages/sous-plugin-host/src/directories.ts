@@ -7,7 +7,7 @@
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import type { EntityReader } from "@sous-io/plugin-api";
+import type { EntityReader } from "@sous-io/sous-plugin-api";
 import { compareBytewise } from "./globs.js";
 import { KNOWN_READMES } from "./readmes.js";
 import type { DirectoryReadme, EnsuredDirectory, HostDirectories, HostSousHome, SousDirectoryKind } from "./types.js";

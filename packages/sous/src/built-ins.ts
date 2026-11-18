@@ -1,4 +1,4 @@
-import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";
+import { definePlugin, type PluginDefinition } from "@sous-io/sous-plugin-api";
 import { cliPlugin } from "@sous-io/sous-plugin-cli";
 import { hostPlugin } from "@sous-io/sous-plugin-host";
 import { gitPlugin } from "@sous-io/sous-plugin-git";

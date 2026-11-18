@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type BuiltConfig, ConfigError, IntentOutputs, jsonSchema, SousError } from "@sous-io/plugin-api";
+import { type BuiltConfig, ConfigError, IntentOutputs, jsonSchema, SousError } from "@sous-io/sous-plugin-api";
 import { keysPlugin, makeEngine, nothing, plugin, valued } from "./helpers.js";
 
 /** A plugin whose `value` key comes from a variable the test changes between builds. */

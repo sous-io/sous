@@ -5,7 +5,7 @@
  */
 
 import path from "node:path";
-import { IntentOutput, type TableColumn, Table, VariableSet, type VariableEntry } from "@sous-io/plugin-api";
+import { IntentOutput, type TableColumn, Table, VariableSet, type VariableEntry } from "@sous-io/sous-plugin-api";
 import { answeredBy, inheritedSameness, OPTIONAL_HINT, OPTIONAL_REASON, reportedOnce } from "./ask.js";
 import { recipeKey } from "./definitions.js";
 import { describeSource, ENV_FILE_NAMES, RUNG_LABELS, SOURCE_LABELS } from "./ladder.js";

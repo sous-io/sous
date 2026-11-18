@@ -16,7 +16,7 @@
  */
 
 import fs from "node:fs";
-import { ConfigError, IntentOutputs, ReportEntryStyle, type Context } from "@sous-io/plugin-api";
+import { ConfigError, IntentOutputs, ReportEntryStyle, type Context } from "@sous-io/sous-plugin-api";
 import type { IndexFile } from "@sous-io/sous-plugin-formats/types";
 import type { ReleasePlanEntry, ReleaseProblem, RepoReleaseInput, RepoReleaseResult } from "../types.js";
 import { listOutput, outputsOf, textOutput, toolsFrom, type AuthoringTools } from "../tools.js";

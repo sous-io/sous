@@ -416,7 +416,7 @@ export interface FormatsRecipeHash {
 // Declarations
 // ---------------------------------------------------------------------------------------------
 
-declare module "@sous-io/plugin-api" {
+declare module "@sous-io/sous-plugin-api" {
     interface SousServices {
         /** `sous.lock.json`. */
         "formats.lockfile": WritableFormatParser<Lockfile>;

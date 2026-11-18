@@ -9,7 +9,7 @@ import {
     SetLevelRequestSchema,
     type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
-import { type Context, type IntentOutputs, isSousError, type LogLevel, messageText } from "@sous-io/plugin-api";
+import { type Context, type IntentOutputs, isSousError, type LogLevel, messageText } from "@sous-io/sous-plugin-api";
 import { ElicitationPrompter } from "./prompter.js";
 import { McpReporter } from "./reporter.js";
 import type { McpServeResult, McpToolDefinition, McpTools } from "./types.js";

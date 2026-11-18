@@ -11,7 +11,7 @@
  * adding a splitter.
  */
 
-import { ConfigError, type ServiceContext } from "@sous-io/plugin-api";
+import { ConfigError, type ServiceContext } from "@sous-io/sous-plugin-api";
 import { REF_KINDS } from "../parts.js";
 import type { PartialRef, RefParseResult, RefSplitterEntity, RefsParser, SousRef } from "../types.js";
 

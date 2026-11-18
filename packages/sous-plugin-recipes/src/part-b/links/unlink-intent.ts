@@ -6,7 +6,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { ConfigError, LogLevel, isSousError, isSousErrorOfKind, type Context, type IntentOutput } from "@sous-io/plugin-api";
+import { ConfigError, LogLevel, isSousError, isSousErrorOfKind, type Context, type IntentOutput } from "@sous-io/sous-plugin-api";
 import type { LinkScope, RepoUnlinkInput, RepoUnlinkResult, ResolvedLink, SubscriptionEntry, UnlinkPublishedReport } from "../../types.js";
 import { PROJECT_REPOS_DIRNAME } from "../constants.js";
 import { blockOutput, dryRunOutput, finish, followUpOutputs, noteOutput, plainResult, sentence, underHeading, type RanFollowUp } from "../../part-a/outputs.js";

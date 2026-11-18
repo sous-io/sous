@@ -5,7 +5,7 @@
  * the JSON on standard output stays clean.
  */
 
-import type { Context, IntentBeforeEvent } from "@sous-io/plugin-api";
+import type { Context, IntentBeforeEvent } from "@sous-io/sous-plugin-api";
 import type { MigrationsService } from "./types.js";
 
 /**

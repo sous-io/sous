@@ -1,4 +1,4 @@
-import type { VariableEntry } from "@sous-io/plugin-api";
+import type { VariableEntry } from "@sous-io/sous-plugin-api";
 import type { Style } from "../views/style.js";
 import { renderTable, type TableColumn, type TableOptions } from "../views/table.js";
 import { displayWidth, indent, wrapColumnsOf, wrapText, type WrapOptions } from "../views/text.js";

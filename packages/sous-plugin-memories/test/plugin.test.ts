@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { ConfigError } from "@sous-io/plugin-api";
+import { ConfigError } from "@sous-io/sous-plugin-api";
 import type { CompilationTarget } from "@sous-io/sous-plugin-compiler/types";
 import type { HashNameContext, HashNameEntity } from "@sous-io/sous-plugin-refs/types";
 import type { MemoryTargetEntity } from "../src/types.js";

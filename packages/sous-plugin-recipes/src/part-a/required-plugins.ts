@@ -15,7 +15,7 @@
  * (the same download a build would make) and its manifest read from there.
  */
 
-import { SousError, type Context } from "@sous-io/plugin-api";
+import { SousError, type Context } from "@sous-io/sous-plugin-api";
 import type {} from "@sous-io/sous-plugin-update/types";
 import semver from "semver";
 import type { ResolvedRecipe } from "../types.js";

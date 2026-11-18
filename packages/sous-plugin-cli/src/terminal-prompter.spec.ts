@@ -1,5 +1,5 @@
 import { PassThrough } from "node:stream";
-import { NonInteractiveError } from "@sous-io/plugin-api";
+import { NonInteractiveError } from "@sous-io/sous-plugin-api";
 import { describe, expect, it } from "vitest";
 import { canPrompt, TerminalPrompter } from "./terminal-prompter.js";
 

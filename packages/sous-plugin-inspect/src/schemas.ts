@@ -1,6 +1,6 @@
 /** The input schemas of sous-plugin-inspect's intents. */
 
-import { jsonSchema, type SousSchema } from "@sous-io/plugin-api";
+import { jsonSchema, type SousSchema } from "@sous-io/sous-plugin-api";
 import type { ConfigGetInput, ConfigShowInput, PluginsShowInput, TimingsShowInput } from "./types.js";
 
 /** `config.show`. */

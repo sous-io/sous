@@ -16,7 +16,7 @@
  */
 
 import path from "node:path";
-import type { Context } from "@sous-io/plugin-api";
+import type { Context } from "@sous-io/sous-plugin-api";
 import type {} from "@sous-io/sous-plugin-variables/types";
 import { compareBytewise } from "./util.js";
 

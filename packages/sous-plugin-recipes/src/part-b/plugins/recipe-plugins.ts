@@ -13,7 +13,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import type { ContributorDefinition } from "@sous-io/plugin-api";
+import type { ContributorDefinition } from "@sous-io/sous-plugin-api";
 import type { ActiveRecipeEntity, RepoEntry } from "../../types.js";
 import { CONTRIBUTORS, TYPES_DIRNAME } from "../constants.js";
 

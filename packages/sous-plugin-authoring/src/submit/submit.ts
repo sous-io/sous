@@ -15,7 +15,7 @@
  */
 
 import path from "node:path";
-import { ConfigError, IntentOutput, ReportEntryStyle, VariableSet, type Context, type IntentOutputs, type Reporter, type VariableEntry } from "@sous-io/plugin-api";
+import { ConfigError, IntentOutput, ReportEntryStyle, VariableSet, type Context, type IntentOutputs, type Reporter, type VariableEntry } from "@sous-io/sous-plugin-api";
 import type { CanonicalRepository } from "@sous-io/sous-plugin-refs/types";
 import type { ProposalStatus, ProposalSummary, RepositoryHostContext, RepositoryHostEntity } from "@sous-io/sous-plugin-recipes/types";
 import type { RepoSubmitInput, RepoSubmitResult } from "../types.js";

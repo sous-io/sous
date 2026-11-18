@@ -4,7 +4,7 @@
  * fetched; the pushed copies are the remote-tracking branches a push leaves behind.
  */
 
-import { ConfigError, type IntentResult } from "@sous-io/plugin-api";
+import { ConfigError, type IntentResult } from "@sous-io/sous-plugin-api";
 import type { ProposalSummary } from "@sous-io/sous-plugin-recipes/types";
 import { FORK_REMOTE, lines, UPSTREAM_REMOTE, type RepoGit } from "../shared/git.js";
 

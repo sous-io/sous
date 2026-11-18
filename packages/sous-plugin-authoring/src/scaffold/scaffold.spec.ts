@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { parseDocument } from "@sous-io/documents";
-import { isSousErrorOfKind } from "@sous-io/plugin-api";
+import { isSousErrorOfKind } from "@sous-io/sous-plugin-api";
 import type { RepositoryHostEntity, ScaffoldOptions } from "@sous-io/sous-plugin-recipes/types";
 import type { RepoInitInput } from "../types.js";
 import { git, initRepo, makeTmpDir, type TmpDir } from "../../test/support/git-repo.js";

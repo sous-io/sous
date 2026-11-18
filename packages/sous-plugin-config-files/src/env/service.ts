@@ -3,7 +3,7 @@
  */
 
 import path from "node:path";
-import { type Environment, type ProjectInfo, SousError } from "@sous-io/plugin-api";
+import { type Environment, type ProjectInfo, SousError } from "@sous-io/sous-plugin-api";
 import { ENV_LOCAL_NAME, ENV_SHARED_NAME } from "../names.js";
 import type { ConfigFilesEnv, EnvFileChange, EnvFileKind, EnvFilePaths, EnvFileValues, EnvFileWriteOptions } from "../types.js";
 import { parseEnv, readEnvFile, readEnvFileMap, removeEntry, renderEnvFile, setEntry, writeEnvFile } from "./env-file.js";

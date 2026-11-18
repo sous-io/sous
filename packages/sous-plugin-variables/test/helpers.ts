@@ -8,7 +8,7 @@ import {
     type PluginDefinition,
     type ProjectInfo,
     type Sous,
-} from "@sous-io/plugin-api";
+} from "@sous-io/sous-plugin-api";
 import type { HostPackage, HostSousHome } from "@sous-io/sous-plugin-host/types";
 import { variablesPlugin } from "../src/index.js";
 import type { VariableSourceEntity } from "../src/types.js";

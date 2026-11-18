@@ -12,7 +12,7 @@
  */
 
 import path from "node:path";
-import type { ContributorDefinition, ServiceReader } from "@sous-io/plugin-api";
+import type { ContributorDefinition, ServiceReader } from "@sous-io/sous-plugin-api";
 import { compilePatternList } from "@sous-io/sous-plugin-host";
 import type { VarScope, VariablesResolver } from "@sous-io/sous-plugin-variables/types";
 import { FILES_CONTRIBUTOR, LISTING_STAGE } from "./files.js";

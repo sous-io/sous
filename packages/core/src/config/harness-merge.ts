@@ -21,7 +21,7 @@
  */
 
 import { stableStringify } from "@sous-io/documents";
-import type { JsonObject, JsonValue, PathSegment } from "@sous-io/plugin-api";
+import type { JsonObject, JsonValue, PathSegment } from "@sous-io/sous-plugin-api";
 
 /** The key an entry is marked with: `harness: "codex"`. */
 export const HARNESS_MARK = "harness";

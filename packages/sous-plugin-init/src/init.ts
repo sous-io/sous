@@ -19,7 +19,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { ConfigError, type Context, IntentOutput, IntentOutputs, ReportEntryStyle, TextBlock, VariableSet, type VariableEntry } from "@sous-io/plugin-api";
+import { ConfigError, type Context, IntentOutput, IntentOutputs, ReportEntryStyle, TextBlock, VariableSet, type VariableEntry } from "@sous-io/sous-plugin-api";
 import "@sous-io/sous-plugin-build/types";
 import type { GitRunner } from "@sous-io/sous-plugin-git/types";
 import { applyImport, type ImportOutcome, type ImportScan, INCLUDES_DIR, type IncludeFate, type IncludedFile, scanImport, settleFates } from "./import.js";

@@ -17,7 +17,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { isJsonObject, type JsonValue } from "@sous-io/documents";
-import { IntentOutput, IntentOutputs, type BuiltConfig, type Context } from "@sous-io/plugin-api";
+import { IntentOutput, IntentOutputs, type BuiltConfig, type Context } from "@sous-io/sous-plugin-api";
 import { Backups, createTokenCounter } from "@sous-io/sous-plugin-compiler";
 import type {} from "@sous-io/sous-plugin-host/types";
 import type { VariablesResolver } from "@sous-io/sous-plugin-variables/types";

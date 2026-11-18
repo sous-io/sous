@@ -22,7 +22,7 @@
  */
 
 import { deepEqual, type JsonObject, type JsonValue } from "@sous-io/documents";
-import type { ConfigBuilder, DocumentNode } from "@sous-io/plugin-api";
+import type { ConfigBuilder, DocumentNode } from "@sous-io/sous-plugin-api";
 import { ALIASES, chainParams, OPERATIONS } from "./operations.js";
 import { EDITS_KEY } from "./entries.js";
 import type { EditPosition } from "./types.js";

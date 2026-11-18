@@ -9,7 +9,7 @@
  */
 
 import path from "node:path";
-import type { Context } from "@sous-io/plugin-api";
+import type { Context } from "@sous-io/sous-plugin-api";
 import type { VariableDefinition } from "@sous-io/sous-plugin-formats/types";
 import type { PlannedQuestion, PlannedQuestions, ResolvedRecipe } from "../types.js";
 import { recipeDirectory } from "./required-plugins.js";

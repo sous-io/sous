@@ -1,4 +1,4 @@
-import { commandVariables, definePlugin, IntentOutput, IntentOutputs, ReportEntryStyle, SousError, Table, TextBlock, VariableSet } from "@sous-io/plugin-api";
+import { commandVariables, definePlugin, IntentOutput, IntentOutputs, ReportEntryStyle, SousError, Table, TextBlock, VariableSet } from "@sous-io/sous-plugin-api";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { fakeIo, runCli } from "./helpers.js";

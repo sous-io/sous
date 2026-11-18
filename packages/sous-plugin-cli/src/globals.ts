@@ -1,4 +1,4 @@
-import { type JsonSchema, toJsonSchema } from "@sous-io/plugin-api";
+import { type JsonSchema, toJsonSchema } from "@sous-io/sous-plugin-api";
 import { type FlagSpec, type ValueKind } from "./flags.js";
 import type { CliGlobalArgumentEntity } from "./types.js";
 

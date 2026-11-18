@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { definePlugin, PluginError } from "@sous-io/plugin-api";
+import { definePlugin, PluginError } from "@sous-io/sous-plugin-api";
 import { contributorsPlugin, keysPlugin, makeEngine, nothing, plugin } from "./helpers.js";
 
 /** A plugin module's source: it sets `loaded.<name>` to true, so tests see it ran. */

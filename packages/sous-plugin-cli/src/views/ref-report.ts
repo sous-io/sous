@@ -1,4 +1,4 @@
-import type { ResolvedReferenceFacts, VariableEntry } from "@sous-io/plugin-api";
+import type { ResolvedReferenceFacts, VariableEntry } from "@sous-io/sous-plugin-api";
 import { BLANK, Layout } from "../terminal/layout.js";
 import type { Style } from "./style.js";
 

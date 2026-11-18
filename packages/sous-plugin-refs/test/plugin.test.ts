@@ -3,7 +3,7 @@
  * `#project`, and how it stands with nothing above it loaded.
  */
 
-import { ConfigError, definePlugin } from "@sous-io/plugin-api";
+import { ConfigError, definePlugin } from "@sous-io/sous-plugin-api";
 import { describe, expect, it } from "vitest";
 import { buildRefs } from "./fixtures.js";
 

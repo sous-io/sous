@@ -6,7 +6,7 @@
 import { spawn, spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { constants, existsSync, promises as fs } from "node:fs";
 import path from "node:path";
-import { SousError, type Environment } from "@sous-io/plugin-api";
+import { SousError, type Environment } from "@sous-io/sous-plugin-api";
 import type {
     HostProcesses,
     InteractiveProcessOptions,

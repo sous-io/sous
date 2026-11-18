@@ -6,7 +6,7 @@ import {
     jsonSchema,
     type PluginDefinition,
     type Sous,
-} from "@sous-io/plugin-api";
+} from "@sous-io/sous-plugin-api";
 import { createEngine, type Engine, type EngineOptions } from "../src/index.js";
 
 /** A plugin that owns the given top-level config keys, with schemas that accept anything. */

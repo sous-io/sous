@@ -1,4 +1,4 @@
-import { IntentOutputs, type Context } from "@sous-io/plugin-api";
+import { IntentOutputs, type Context } from "@sous-io/sous-plugin-api";
 import type { LockDiff, RecipesLock, ResolvedRecipe, ResolveResult, RestoreReport, SubscriptionEntry } from "@sous-io/sous-plugin-recipes/types";
 import semver from "semver";
 import type { BuildPrepareInput, BuildPrepareResult } from "./types.js";

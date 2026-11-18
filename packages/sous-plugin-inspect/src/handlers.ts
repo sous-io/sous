@@ -22,7 +22,7 @@ import {
     type PathSegment,
     type PluginInfo,
     type TimingEntry,
-} from "@sous-io/plugin-api";
+} from "@sous-io/sous-plugin-api";
 import { configGetOutputs, configShowOutputs, configValidateOutputs, pluginsShowOutputs, timingsShowOutput } from "./outputs.js";
 import { readRawConfigFiles } from "./raw.js";
 import { KEY_NAME_POLICY, redactLayer, redactUnder, redactValue, servicePolicy, type SecretPolicy } from "./redact.js";

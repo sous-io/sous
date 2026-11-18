@@ -18,7 +18,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { isJsonObject, parseDocument, parsePath, type TextDocument } from "@sous-io/documents";
-import { ConfigError, type DocumentNode, type JsonObject, type PatchSet } from "@sous-io/plugin-api";
+import { ConfigError, type DocumentNode, type JsonObject, type PatchSet } from "@sous-io/sous-plugin-api";
 import type { ConfdManaged, ManagedEditOptions, ManagedEditResult, ManagedLayerName } from "./types.js";
 
 /** The policy every managed file states in its header. */

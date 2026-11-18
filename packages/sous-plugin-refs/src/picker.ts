@@ -11,7 +11,7 @@
  *   - a run that cannot ask fails, naming the question and the flag that answers it.
  */
 
-import { ConfigError, NonInteractiveError } from "@sous-io/plugin-api";
+import { ConfigError, NonInteractiveError } from "@sous-io/sous-plugin-api";
 import { formatter, refKey } from "./format.js";
 import { KIND_LABELS, namespaceOf, recipeOf, repoOf } from "./parts.js";
 import type { RefPickIo, RefPickOptions, RefsLocations, RefsPicker, ResolvedRefFacts, SousRef } from "./types.js";

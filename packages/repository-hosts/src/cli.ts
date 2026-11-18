@@ -3,8 +3,8 @@
  * changes needs one; reading never does.
  */
 
-import { ConfigError } from "@sous-io/plugin-api";
-import type { Environment } from "@sous-io/plugin-api";
+import { ConfigError } from "@sous-io/sous-plugin-api";
+import type { Environment } from "@sous-io/sous-plugin-api";
 import type { ProcessResult } from "@sous-io/sous-plugin-host/types";
 import type { RepositoryAuthStatus, RepositoryHostCli, RepositoryHostContext } from "@sous-io/sous-plugin-recipes/types";
 import { commandDirectory } from "./token-sources.js";

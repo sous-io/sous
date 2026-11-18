@@ -14,7 +14,7 @@ import {
     type ContributorDefinition,
     type JsonValue,
     type PluginDefinition,
-} from "@sous-io/plugin-api";
+} from "@sous-io/sous-plugin-api";
 import { describe, expect, it } from "vitest";
 import { expressionsPlugin } from "../src/index.js";
 import { hostPlugin } from "@sous-io/sous-plugin-host";

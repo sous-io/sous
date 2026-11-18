@@ -17,7 +17,7 @@
  */
 
 import { deepEqual, isJsonObject, toPlainJson } from "@sous-io/documents";
-import { type ConfigBuilder, ConfigError, type DocumentNode, type JsonObject, type JsonValue } from "@sous-io/plugin-api";
+import { type ConfigBuilder, ConfigError, type DocumentNode, type JsonObject, type JsonValue } from "@sous-io/sous-plugin-api";
 import type { ConfigureFunction } from "./types.js";
 
 /** The members of the builder; every other property of the first argument is a config key. */

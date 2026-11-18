@@ -1,4 +1,4 @@
-import { type PluginDefinition, PluginError } from "@sous-io/plugin-api";
+import { type PluginDefinition, PluginError } from "@sous-io/sous-plugin-api";
 import { CORE_PLUGIN } from "../util/names.js";
 
 /** One loaded plugin. Its code stays in memory for the life of the process. */

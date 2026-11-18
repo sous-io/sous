@@ -4,7 +4,7 @@
  * Nothing is downloaded unless `--latest` is given.
  */
 
-import { SousError, type Context, type Sous } from "@sous-io/plugin-api";
+import { SousError, type Context, type Sous } from "@sous-io/sous-plugin-api";
 import semver from "semver";
 import type { BrowsingFlags, CatalogShowInput, NamespaceDetail, RecipeDetail } from "../../types.js";
 import { describedLocation, describeNamespace, describeRecipe, findInCatalog, listNamespaces, listRecipes, unknownRefError } from "../catalog.js";

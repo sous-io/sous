@@ -5,7 +5,7 @@
  * The contract other plugins code against is `./types.ts`.
  */
 
-import { definePlugin, jsonSchema, type PluginDefinition } from "@sous-io/plugin-api";
+import { definePlugin, jsonSchema, type PluginDefinition } from "@sous-io/sous-plugin-api";
 import { BUILT_IN_CHECKS } from "./checks.js";
 import type { DoctorCheckEntity, DoctorInput } from "./types.js";
 import "./types.js";

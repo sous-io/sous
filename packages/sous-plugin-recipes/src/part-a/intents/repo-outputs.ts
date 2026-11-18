@@ -6,7 +6,7 @@
  * command shows after its work was done.
  */
 
-import type { Context, TableColumn } from "@sous-io/plugin-api";
+import type { Context, TableColumn } from "@sous-io/sous-plugin-api";
 import type { RepoAddResult, RepoRemoveResult, RepoTrustResult } from "../../types.js";
 import {
     blockOutput,

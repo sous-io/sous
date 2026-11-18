@@ -3,8 +3,8 @@
  * gives the same answers the `memories.targets` contributor worked from.
  */
 
-import type { ConfigReader, ServiceContext } from "@sous-io/plugin-api";
-import { NotFoundError } from "@sous-io/plugin-api";
+import type { ConfigReader, ServiceContext } from "@sous-io/sous-plugin-api";
+import { NotFoundError } from "@sous-io/sous-plugin-api";
 import { selectMemories, type MemoryGlobs, type MemoryRecipe, type MemorySelectionResult } from "./listing.js";
 import type { MemoriesSelection, MemoriesSettings, Memory } from "./types.js";
 

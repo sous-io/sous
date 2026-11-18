@@ -15,7 +15,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { ConfigError, LogLevel, type Context, type IntentOutput } from "@sous-io/plugin-api";
+import { ConfigError, LogLevel, type Context, type IntentOutput } from "@sous-io/sous-plugin-api";
 import type { GitRunner } from "@sous-io/sous-plugin-git/types";
 import type { LinkOrigin } from "@sous-io/sous-plugin-formats/types";
 import type { RepoLinkInput, RepoLinkResult, UpstreamComparison } from "../../types.js";

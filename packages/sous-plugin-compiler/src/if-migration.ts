@@ -22,7 +22,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { isJsonObject, parseDocument, type DocNode, type DocumentFormat, type JsonObject, type JsonValue } from "@sous-io/documents";
-import type { Context } from "@sous-io/plugin-api";
+import type { Context } from "@sous-io/sous-plugin-api";
 import type { MigrationDefinition, MigrationOutcome } from "@sous-io/sous-plugin-migrations/types";
 
 /** The version of sous that removed `_if`, whose migrations a project upgraded past it runs. */

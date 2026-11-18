@@ -1,4 +1,4 @@
-import { definePlugin, SousError } from "@sous-io/plugin-api";
+import { definePlugin, SousError } from "@sous-io/sous-plugin-api";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { askingPlugin, loudPlugin, namespacesPlugin, reposPlugin, verbosePlugin } from "./fixtures.js";

@@ -5,7 +5,7 @@ import {
     type IntentInfo,
     type IntentWrapper,
     SousError,
-} from "@sous-io/plugin-api";
+} from "@sous-io/sous-plugin-api";
 
 /** One registered intent. */
 export interface IntentEntry extends IntentInfo {

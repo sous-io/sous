@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect as check, it } from "vitest";
-import { BufferedReporter, definePlugin, jsonSchema, type ConfigBuilder, type PluginDefinition } from "@sous-io/plugin-api";
+import { BufferedReporter, definePlugin, jsonSchema, type ConfigBuilder, type PluginDefinition } from "@sous-io/sous-plugin-api";
 import { createEngine } from "@sous-io/core";
 import { doctorPlugin } from "@sous-io/sous-plugin-doctor";
 import editorPlugin, { editor, expect } from "../src/index.js";

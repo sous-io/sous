@@ -6,7 +6,7 @@
  * Other plugins import this file type-only.
  */
 
-import type { ConfigBuilder, Environment, JsonValue, Patch, PatchSet } from "@sous-io/plugin-api";
+import type { ConfigBuilder, Environment, JsonValue, Patch, PatchSet } from "@sous-io/sous-plugin-api";
 
 // ---------------------------------------------------------------------------------------------
 // config-files.loader
@@ -181,7 +181,7 @@ export interface ConfigFilesKeys {
     name?: string;
 }
 
-declare module "@sous-io/plugin-api" {
+declare module "@sous-io/sous-plugin-api" {
     interface SousServices {
         /** Reading one config file. */
         "config-files.loader": ConfigFilesLoader;

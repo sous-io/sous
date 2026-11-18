@@ -6,7 +6,7 @@ import {
     type Prompter,
     type QuestionBase,
     type ValueQuestion,
-} from "@sous-io/plugin-api";
+} from "@sous-io/sous-plugin-api";
 import type { ElicitRequestFormParams, ElicitResult } from "@modelcontextprotocol/sdk/types.js";
 
 /** What {@link ElicitationPrompter} asks through. */

@@ -14,7 +14,7 @@ import {
     jsonSchema,
     ReportEntryStyle,
     TextBlock,
-} from "@sous-io/plugin-api";
+} from "@sous-io/sous-plugin-api";
 import type { EnvFileKind } from "@sous-io/sous-plugin-config-files/types";
 import { askForMissing, type AnswerStore, storeGivenAnswers } from "./ask.js";
 import { resolveEnvFile } from "./env-file.js";

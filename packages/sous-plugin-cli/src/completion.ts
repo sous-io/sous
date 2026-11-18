@@ -1,4 +1,4 @@
-import { IntentOutput, IntentOutputs, jsonSchema, TextBlock, type IntentDefinition } from "@sous-io/plugin-api";
+import { IntentOutput, IntentOutputs, jsonSchema, TextBlock, type IntentDefinition } from "@sous-io/sous-plugin-api";
 import type { CommandNode, CommandTree } from "./command-tree.js";
 import { globalSpecs } from "./globals.js";
 

@@ -8,7 +8,7 @@
  * The contract other plugins code against is `./types.ts`.
  */
 
-import { definePlugin, jsonSchema, type PluginDefinition } from "@sous-io/plugin-api";
+import { definePlugin, jsonSchema, type PluginDefinition } from "@sous-io/sous-plugin-api";
 import { DOCTOR_CHECK_ORDER, type DoctorCheckEntity } from "@sous-io/sous-plugin-doctor";
 import type {} from "@sous-io/sous-plugin-recipes/types";
 import { pendingNotice } from "./notice.js";

@@ -83,7 +83,7 @@ export function configure(config) {
 the same input. When a `.js` file changes on disk during watch mode, it is imported again.
 
 Some of the builder's operations (the full list, with each one's documentation, is the `DocumentNode`
-type in `packages/plugin-api/src/node.ts`):
+type in `packages/sous-plugin-api/src/node.ts`):
 
 ```js
 const node = config.atPath("compilation.targets");

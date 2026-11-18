@@ -7,7 +7,7 @@ name: Release
 #
 # The repository is a pnpm workspace. Its root package.json is private and is
 # never published; what ships is `packages/sous` (`@sous-io/sous`, a bundled
-# bin) and `packages/plugin-api` (`@sous-io/plugin-api`, which sous depends on
+# bin) and `packages/sous-plugin-api` (`@sous-io/sous-plugin-api`, which sous depends on
 # and plugin authors code against). Every workspace package shares ONE
 # version, and `packages/sous/package.json` is where it is read and raised.
 #
@@ -29,7 +29,7 @@ name: Release
 # npm's trusted publishing binds this repository's publishing rights to the
 # workflow FILE `publish.yml` (configured on npmjs.com under EACH package's
 # Settings, then Trusted publishing: org `sous-io`, repo `sous`, workflow
-# `publish.yml`; both @sous-io/sous and @sous-io/plugin-api need it). Renaming
+# `publish.yml`; both @sous-io/sous and @sous-io/sous-plugin-api need it). Renaming
 # this file breaks publishing until someone updates that setting by hand. The display name above is free to change; the file name
 # is not.
 #
@@ -149,9 +149,9 @@ jobs:
       # One version everywhere. The script copies the version just settled in
       # packages/sous/package.json into every other packages/*/package.json:
       # `pnpm publish` and `pnpm pack` turn sous's `workspace:*` dependency on
-      # plugin-api into whatever version plugin-api's package.json declares, so
-      # a plugin-api left behind would make the published sous ask for an
-      # older plugin-api.
+      # sous-plugin-api into whatever version sous-plugin-api's package.json declares, so
+      # a sous-plugin-api left behind would make the published sous ask for an
+      # older sous-plugin-api.
       #
       # Version parity: the packaged core recipe's version is always exactly the
       # package's version, because every project's implicit `core` subscription
@@ -272,7 +272,7 @@ jobs:
       #
       # Each package is packed by pnpm and uploaded by npm. pnpm has to do the
       # packing: only pnpm turns the `workspace:*` dependency sous has on
-      # plugin-api into a real version range, and `pnpm pack` also runs
+      # sous-plugin-api into a real version range, and `pnpm pack` also runs
       # packages/sous's prepack and postpack scripts, which bundle the bin and
       # copy recipes/, docs/markdown/*.md and sous.config.schema.json in from
       # the repository root for the duration of the pack. npm has to do the
@@ -283,17 +283,17 @@ jobs:
       # directly, rather than through `pnpm publish`, keeps that true whatever
       # pnpm does internally from one release of pnpm to the next.
       #
-      # plugin-api goes first, because the sous just published depends on it at
-      # exactly this version; for a moment in between, the new plugin-api is on
+      # sous-plugin-api goes first, because the sous just published depends on it at
+      # exactly this version; for a moment in between, the new sous-plugin-api is on
       # npm with nothing using it yet, which is harmless. The other way round, a
-      # sous could be installable before the plugin-api it needs.
+      # sous could be installable before the sous-plugin-api it needs.
       #
       # A version already on npm is not published again, so a manual re-run for
       # an existing tag (to finish a run that failed after publishing one or
       # both packages) passes through this job instead of failing on the
       # registry's refusal.
-      - name: Build plugin-api
-        run: pnpm --filter @sous-io/plugin-api build
+      - name: Build sous-plugin-api
+        run: pnpm --filter @sous-io/sous-plugin-api build
 
       - name: Publish, unless this version is already on npm
         env:
@@ -323,7 +323,7 @@ jobs:
             echo "Published $name@$VERSION."
           }
 
-          publish @sous-io/plugin-api packages/plugin-api
+          publish @sous-io/sous-plugin-api packages/sous-plugin-api
           publish @sous-io/sous packages/sous
 
   recipes:

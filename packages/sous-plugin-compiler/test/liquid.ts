@@ -5,7 +5,7 @@
  */
 
 import type { Liquid } from "liquidjs";
-import type { EntityReader, ServiceReader } from "@sous-io/plugin-api";
+import type { EntityReader, ServiceReader } from "@sous-io/sous-plugin-api";
 import type { LiquidExtensionContext, LiquidFilterEntity, LiquidTagEntity } from "@sous-io/sous-plugin-liquid/types";
 import { globFiles as globFilesWith, type GlobFilesOptions } from "../src/liquid/glob-files.js";
 import { bulletListFilter, exportScalarVarsJsTag, getFilesTag, listFilesTag, showVarsTag } from "../src/liquid/tags.js";

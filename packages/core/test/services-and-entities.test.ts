@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ConfigError, ConflictError, IntentOutputs, jsonSchema, NotFoundError, SousError } from "@sous-io/plugin-api";
+import { ConfigError, ConflictError, IntentOutputs, jsonSchema, NotFoundError, SousError } from "@sous-io/sous-plugin-api";
 import { contributorsPlugin, keysPlugin, makeEngine, plugin } from "./helpers.js";
 
 describe("services", () => {

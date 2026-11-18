@@ -6,7 +6,7 @@
  * Other plugins import this file type-only.
  */
 
-import type { JsonObject, JsonValue } from "@sous-io/plugin-api";
+import type { JsonObject, JsonValue } from "@sous-io/sous-plugin-api";
 import type { EditableDocument, EditorFormat } from "./documents-adapter.js";
 
 export type { EditableDocument, EditorFormat } from "./documents-adapter.js";
@@ -276,7 +276,7 @@ export interface EditorService {
     checks(): string[];
 }
 
-declare module "@sous-io/plugin-api" {
+declare module "@sous-io/sous-plugin-api" {
     interface SousServices {
         /** The editor: surgical edits to JSON, JSONC, YAML, Markdown frontmatter and plain text. */
         editor: EditorService;

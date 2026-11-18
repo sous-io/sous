@@ -14,7 +14,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { commandVariables, ConfigError, InputError, IntentOutputs, LogLevel, SousError, type Context } from "@sous-io/plugin-api";
+import { commandVariables, ConfigError, InputError, IntentOutputs, LogLevel, SousError, type Context } from "@sous-io/sous-plugin-api";
 import "@sous-io/sous-plugin-host/types";
 import { discoverInstalls, readPackageJson, realpathOr } from "./installs.js";
 import { buildUpdatePlans, type PlannedUpdate } from "./plan.js";

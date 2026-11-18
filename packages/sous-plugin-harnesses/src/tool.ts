@@ -4,7 +4,7 @@
  */
 
 import fs from "node:fs";
-import { ConfigError, SousError, type Context } from "@sous-io/plugin-api";
+import { ConfigError, SousError, type Context } from "@sous-io/sous-plugin-api";
 import type {} from "@sous-io/sous-plugin-host/types";
 import { promptFilePath, toolSettings, type PartialToolSettings } from "./settings.js";
 import type { HarnessEntity, HarnessLaunchResult, HeadlessRequest, HeadlessRun } from "./types.js";

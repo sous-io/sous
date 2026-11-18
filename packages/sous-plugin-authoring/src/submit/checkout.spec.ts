@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { scriptedPrompter } from "@sous-io/plugin-api";
+import { scriptedPrompter } from "@sous-io/sous-plugin-api";
 import type { ResolvedLink } from "@sous-io/sous-plugin-recipes/types";
 import { git, initRepo, makeTmpDir, writeFile, type TmpDir } from "../../test/support/git-repo.js";
 import { memoryLinks, testTools } from "../../test/support/standins.js";

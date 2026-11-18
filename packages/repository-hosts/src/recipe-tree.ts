@@ -5,7 +5,7 @@
 
 import { cp, mkdir, mkdtemp, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
-import { ConfigError } from "@sous-io/plugin-api";
+import { ConfigError } from "@sous-io/sous-plugin-api";
 import type { RecipeDownloadAttempt, RecipeDownloadProblem, RepositoryHostContext } from "@sous-io/sous-plugin-recipes/types";
 import type {} from "@sous-io/sous-plugin-git/types";
 import { firstLine } from "./http-strategy.js";

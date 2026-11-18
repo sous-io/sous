@@ -1,4 +1,4 @@
-import type { IntentDefinition, Sous } from "@sous-io/plugin-api";
+import type { IntentDefinition, Sous } from "@sous-io/sous-plugin-api";
 import { describe, expect, it } from "vitest";
 import { PLUGIN_NAME, updatePlugin } from "../src/index.js";
 

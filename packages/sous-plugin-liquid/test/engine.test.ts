@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { Liquid, type FS } from "liquidjs";
-import { ConfigError, NotFoundError, PluginError } from "@sous-io/plugin-api";
+import { ConfigError, NotFoundError, PluginError } from "@sous-io/sous-plugin-api";
 import { engines, plugin, projectAt } from "./helpers.js";
 import type { LiquidExtensionContext, LiquidFilterEntity, LiquidTagEntity } from "../src/types.js";
 

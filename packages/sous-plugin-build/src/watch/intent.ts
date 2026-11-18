@@ -1,4 +1,4 @@
-import { IntentOutputs, type Context } from "@sous-io/plugin-api";
+import { IntentOutputs, type Context } from "@sous-io/sous-plugin-api";
 import { watcherRunningError } from "../build.js";
 import { projectLabel } from "../pid.js";
 import type { BuildWatchInput, BuildWatchResult } from "../types.js";

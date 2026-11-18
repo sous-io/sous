@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { isSousErrorOfKind } from "@sous-io/plugin-api";
+import { isSousErrorOfKind } from "@sous-io/sous-plugin-api";
 import type { ContentHash, StoreEntry } from "@sous-io/sous-plugin-formats/types";
 import { afterEach, describe, expect, it } from "vitest";
 import type { StoreKey } from "../types.js";

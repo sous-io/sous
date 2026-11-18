@@ -5,7 +5,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { definePlugin } from "@sous-io/plugin-api";
+import { definePlugin } from "@sous-io/sous-plugin-api";
 import { configFilesPlugin } from "../src/index.js";
 import { makeEngine, makeProject, type TestProject } from "./helpers.js";
 

@@ -7,7 +7,7 @@
  */
 
 import fs from "node:fs";
-import type { Sous } from "@sous-io/plugin-api";
+import type { Sous } from "@sous-io/sous-plugin-api";
 import type {} from "@sous-io/sous-plugin-compiler/types";
 import type { StoreSettings } from "../types.js";
 import { CONTRIBUTORS, DEFAULT_FRESHNESS_SECONDS } from "./constants.js";

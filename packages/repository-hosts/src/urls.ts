@@ -10,7 +10,7 @@
  * ```
  */
 
-import { ConfigError } from "@sous-io/plugin-api";
+import { ConfigError } from "@sous-io/sous-plugin-api";
 import { buildCanonicalRepository, defaultLocator, normalizeRepoUrl, readingsAfterRepository, splitRepoUrl, withoutGitSuffix } from "@sous-io/sous-plugin-refs";
 import type { CanonicalRepository } from "@sous-io/sous-plugin-refs/types";
 

@@ -1,4 +1,4 @@
-import { BufferedReporter, isSousErrorOfKind, nonInteractivePrompter, scriptedPrompter } from "@sous-io/plugin-api";
+import { BufferedReporter, isSousErrorOfKind, nonInteractivePrompter, scriptedPrompter } from "@sous-io/sous-plugin-api";
 import { describe, expect, it } from "vitest";
 import { builtConfig, memoryManaged, serviceReader } from "../../test/part-a/helpers.js";
 import type { MissingRepo } from "../types.js";

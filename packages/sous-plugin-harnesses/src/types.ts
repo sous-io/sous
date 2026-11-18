@@ -7,7 +7,7 @@
  * Other plugins import this file type-only.
  */
 
-import type { Context } from "@sous-io/plugin-api";
+import type { Context } from "@sous-io/sous-plugin-api";
 import type { BuildResult } from "@sous-io/sous-plugin-build/types";
 
 /** How an interactive session ended. */
@@ -139,7 +139,7 @@ export interface HarnessesLaunchedPayload {
     readonly session: number;
 }
 
-declare module "@sous-io/plugin-api" {
+declare module "@sous-io/sous-plugin-api" {
     interface SousIntents {
         launch: { input: LaunchInput; result: LaunchResult };
         "harness.run-headless": { input: RunHeadlessInput; result: RunHeadlessResult };

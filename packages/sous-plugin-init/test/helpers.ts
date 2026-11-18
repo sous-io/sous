@@ -6,7 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { BufferedReporter, type Context, IntentOutputs, scriptedPrompter } from "@sous-io/plugin-api";
+import { BufferedReporter, type Context, IntentOutputs, scriptedPrompter } from "@sous-io/sous-plugin-api";
 import type { BuildResult } from "@sous-io/sous-plugin-build/types";
 import type { ConfigFilesLoader } from "@sous-io/sous-plugin-config-files/types";
 import { createDirectories, createGitignore } from "@sous-io/sous-plugin-host";

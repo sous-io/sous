@@ -4,7 +4,7 @@
  */
 
 import type { Memory } from "@sous-io/sous-plugin-memories/types";
-import { LogLevel, type Reporter } from "@sous-io/plugin-api";
+import { LogLevel, type Reporter } from "@sous-io/sous-plugin-api";
 import type { DefinedVariable } from "@sous-io/sous-plugin-recipe-answers/types";
 import type { LockDiff, ResolvedLink, RestoreReport, SkippedRecipe } from "@sous-io/sous-plugin-recipes/types";
 import type { BuildPrepareResult, UnansweredWarning } from "./types.js";

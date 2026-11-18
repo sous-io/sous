@@ -4,7 +4,7 @@
  * subscription does to the lockfile, refcounted.
  */
 
-import { SousError, type Context } from "@sous-io/plugin-api";
+import { SousError, type Context } from "@sous-io/sous-plugin-api";
 import type { Lockfile } from "@sous-io/sous-plugin-formats/types";
 import type { NamedRef } from "@sous-io/sous-plugin-refs/types";
 import type { SubscriptionEntry } from "../types.js";

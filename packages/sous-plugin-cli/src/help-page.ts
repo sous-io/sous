@@ -1,4 +1,4 @@
-import { Payload, type PlainObject } from "@sous-io/plugin-api";
+import { Payload, type PlainObject } from "@sous-io/sous-plugin-api";
 import type { CommandNode } from "./command-tree.js";
 import { type HelpContext, renderHelp } from "./help.js";
 import type { Style } from "./views/style.js";

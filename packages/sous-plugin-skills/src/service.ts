@@ -2,7 +2,7 @@
  * The `skills.sources` service (config lifetime): where skills come from, for the built config.
  */
 
-import type { ConfigReader, ServiceContext } from "@sous-io/plugin-api";
+import type { ConfigReader, ServiceContext } from "@sous-io/sous-plugin-api";
 import { stringsOf } from "./settings.js";
 import { findSkills, type FoundSkills } from "./sources.js";
 import type { SkillSource, SkillsSources } from "./types.js";

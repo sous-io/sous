@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Contribution } from "@sous-io/plugin-api";
+import type { Contribution } from "@sous-io/sous-plugin-api";
 import { declarerLabel, entryIdentity, listOwners, normalizeEntry } from "./entries.js";
 
 describe("normalizeEntry()", () => {

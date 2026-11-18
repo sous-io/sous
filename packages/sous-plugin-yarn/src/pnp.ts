@@ -7,7 +7,7 @@ import { createRequire } from "node:module";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import type { PluginLocatorEntity } from "@sous-io/plugin-api";
+import type { PluginLocatorEntity } from "@sous-io/sous-plugin-api";
 import type { InstalledPackage } from "@sous-io/sous-plugin-update/types";
 import type { YarnPnpLocator } from "./types.js";
 import { declaredIn, findUp, isSousPlugin, readPackageJson, realpathOr } from "./node-modules.js";

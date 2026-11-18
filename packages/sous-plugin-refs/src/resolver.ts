@@ -8,7 +8,7 @@
  * `refs.picker`'s job.
  */
 
-import { ConfigError, type ServiceContext } from "@sous-io/plugin-api";
+import { ConfigError, type ServiceContext } from "@sous-io/sous-plugin-api";
 import { refIdentity } from "./format.js";
 import { parseError } from "./parser/parser.js";
 import { qualificationOf, REF_KINDS } from "./parts.js";

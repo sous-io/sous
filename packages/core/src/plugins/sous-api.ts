@@ -24,7 +24,7 @@ import type {
     SousExtensionFactory,
     SousExtensions,
     SousSchema,
-} from "@sous-io/plugin-api";
+} from "@sous-io/sous-plugin-api";
 import type { EntitySnapshot } from "../entities/entity-registry.js";
 import type { PluginRecord } from "./plugin-registry.js";
 

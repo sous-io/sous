@@ -17,7 +17,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { parseDocument } from "@sous-io/documents";
-import type { Context } from "@sous-io/plugin-api";
+import type { Context } from "@sous-io/sous-plugin-api";
 import type {} from "@sous-io/sous-plugin-confd/types";
 import type {} from "@sous-io/sous-plugin-config-files/types";
 import type { MigrationDefinition, MigrationOutcome } from "@sous-io/sous-plugin-migrations/types";

@@ -20,7 +20,7 @@
  * its parts, since `_` is both the separator and a legal character.
  */
 
-import type { Environment } from "@sous-io/plugin-api";
+import type { Environment } from "@sous-io/sous-plugin-api";
 import type { EnvFileKind, EnvFileValues } from "@sous-io/sous-plugin-config-files/types";
 import type { VariablesNames } from "@sous-io/sous-plugin-variables/types";
 import { mappedNamesFor } from "./mappings.js";

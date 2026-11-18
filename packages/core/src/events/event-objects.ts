@@ -1,4 +1,4 @@
-import type { EventBase } from "@sous-io/plugin-api";
+import type { EventBase } from "@sous-io/sous-plugin-api";
 
 /**
  * The event objects listeners receive. One class per kind; each shares {@link BaseEvent}'s

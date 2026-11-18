@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { Context } from "@sous-io/plugin-api";
+import type { Context } from "@sous-io/sous-plugin-api";
 import { checkGitHooks, gitHooksCheck, hooksWithBlock } from "./doctor-check.js";
 import { HOOK_BLOCK_END, HOOK_BLOCK_START } from "./hooks.js";
 

@@ -1,4 +1,4 @@
-import { isSousErrorOfKind } from "@sous-io/plugin-api";
+import { isSousErrorOfKind } from "@sous-io/sous-plugin-api";
 
 /** Whether a value is a `ConfigError`. */
 export function isConfigError(value: unknown): boolean {

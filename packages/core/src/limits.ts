@@ -1,4 +1,4 @@
-import type { JsonObject } from "@sous-io/plugin-api";
+import type { JsonObject } from "@sous-io/sous-plugin-api";
 
 /**
  * The loop-detection limits. They are first guesses; a project changes them

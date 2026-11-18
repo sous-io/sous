@@ -3,7 +3,7 @@
  * from.
  */
 
-import { type ConfigKeyEntity, jsonSchema } from "@sous-io/plugin-api";
+import { type ConfigKeyEntity, jsonSchema } from "@sous-io/sous-plugin-api";
 import type { SkillsSettings } from "./types.js";
 
 /** The key's path. */

@@ -1,4 +1,4 @@
-import { type InputError, isSousError, isSousErrorOfKind, SousError } from "@sous-io/plugin-api";
+import { type InputError, isSousError, isSousErrorOfKind, SousError } from "@sous-io/sous-plugin-api";
 import type { Command } from "./command-tree.js";
 import type { CliErrorView } from "./types.js";
 

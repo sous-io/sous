@@ -9,7 +9,7 @@
  * subscriptions take no part, and keep their pins.
  */
 
-import { SousError, type Context } from "@sous-io/plugin-api";
+import { SousError, type Context } from "@sous-io/sous-plugin-api";
 import type { IndexFile, Lockfile } from "@sous-io/sous-plugin-formats/types";
 import type { IndexReadFailure, PlannedQuestion, RecipeRequest, RecipeUpdateInput, RecipeUpdatePlan, RecipeUpdateScope, ResolvedRecipe, ResolveResult } from "../types.js";
 import { findInCatalog, namespaceOfKey, type CatalogInputs } from "./catalog.js";

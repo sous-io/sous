@@ -14,7 +14,7 @@ import {
     type PluginDefinition,
     type Prompter,
     type ServiceReader,
-} from "@sous-io/plugin-api";
+} from "@sous-io/sous-plugin-api";
 import type { ConfdManaged, ManagedEditResult } from "@sous-io/sous-plugin-confd/types";
 import type { ConfigFilesEnv, EnvFileKind, EnvFileValues } from "@sous-io/sous-plugin-config-files/types";
 import type { FormatParser, VariableDefinition } from "@sous-io/sous-plugin-formats/types";

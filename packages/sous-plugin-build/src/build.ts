@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import "@sous-io/sous-plugin-memories/types";
 import path from "node:path";
-import { commandVariables, ConfigError, type Context, IntentOutput, IntentOutputs, ItemList, LogLevel, NotFoundError, ReportEntryStyle, SousError } from "@sous-io/plugin-api";
+import { commandVariables, ConfigError, type Context, IntentOutput, IntentOutputs, ItemList, LogLevel, NotFoundError, ReportEntryStyle, SousError } from "@sous-io/sous-plugin-api";
 import type { CompileResult, CompilerPruneResult, WrittenFile } from "@sous-io/sous-plugin-compiler/types";
 import type { SkippedRecipe } from "@sous-io/sous-plugin-recipes/types";
 import type { EditorApplyResult } from "@sous-io/sous-plugin-editor/types";
