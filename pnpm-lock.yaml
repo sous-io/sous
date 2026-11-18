@@ -129,6 +129,12 @@ importers:
       '@sous-io/plugin-variables':
         specifier: workspace:*
         version: link:../plugin-variables
+      '@sous-io/sous-plugin-editor':
+        specifier: workspace:*
+        version: link:../sous-plugin-editor
+      '@sous-io/sous-plugin-handlers':
+        specifier: workspace:*
+        version: link:../sous-plugin-handlers
       chokidar:
         specifier: ^5.0.0
         version: 5.0.0

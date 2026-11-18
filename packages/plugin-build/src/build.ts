@@ -4,6 +4,9 @@ import path from "node:path";
 import { commandVariables, ConfigError, type Context, IntentOutput, IntentOutputs, ItemList, LogLevel, NotFoundError, ReportEntryStyle, SousError } from "@sous-io/plugin-api";
 import type { CompileResult, CompilerPruneResult, WrittenFile } from "@sous-io/plugin-compiler/types";
 import type { SkippedRecipe } from "@sous-io/plugin-recipes/types";
+import type { EditorApplyResult } from "@sous-io/sous-plugin-editor/types";
+import { checksFailedError, runHandlerPurpose } from "@sous-io/sous-plugin-handlers";
+import type { HandlerRunResult } from "@sous-io/sous-plugin-handlers/types";
 import { projectLabel } from "./pid.js";
 import { NO_CHANGE, NOTHING_RESTORED } from "./prepare.js";
 import { prunedForSkippedLine, reportLinkedRepos, reportPrepared, reportUnincludedMemories, skippedLine } from "./report.js";
@@ -22,9 +25,16 @@ import type {
 /**
  * `build`: the one build path, used by `build`, `prune`, `launch`, `init` and every intent
  * that changes recipes. In order: announce linked repositories, prepare (`build.prepare`), report
- * what preparing did, write the runtime context file, compile (`compiler.compile`), prune
- * (`compiler.prune`), and say which locked recipes were skipped and what of theirs was pruned
- *. With `watch`, it then starts `build.watch`.
+ * what preparing did, run the `check` handlers (a failed one stops the build here, before anything
+ * in the project is written), run the `beforeBuild` handlers, write the runtime context file,
+ * compile (`compiler.compile`), prune (`compiler.prune`), apply the declared edits
+ * (`editor.apply`), run the `afterBuild` handlers, and say which locked recipes were skipped and
+ * what of theirs was pruned. With `watch`, it then starts `build.watch`.
+ *
+ * The handlers and the editor run only when their plugins are loaded, and not when the build
+ * compiles nothing (`prune`). A dry run runs the `check` handlers, which only report, and no
+ * `beforeBuild` or `afterBuild` handler, which act; the editor works out its changes and writes
+ * nothing.
  *
  * A partial rebuild (`changedFiles`, from watch mode) prepares nothing: the config did not change,
  * so neither did the recipes it needs.
@@ -43,7 +53,15 @@ function buildOutputs<T extends { readonly ok: boolean }>(input: BuildInput | Co
     const flags: Record<string, unknown> = {};
     const given = input as Record<string, unknown>;
 
-    for (const [label, key] of [["Rebuild", "rebuild"], ["Dry Run", "dryRun"], ["No Compile", "noCompile"], ["No Prune", "noPrune"]] as const) {
+    for (const [label, key] of [
+        ["Rebuild", "rebuild"],
+        ["Dry Run", "dryRun"],
+        ["No Compile", "noCompile"],
+        ["No Prune", "noPrune"],
+        ["Keep Going", "keepGoing"],
+        ["Ignore Failed Assertions", "ignoreFailedAssertions"],
+        ["Ignore Failed Checks", "ignoreFailedChecks"],
+    ] as const) {
         if (given[key] === true) {
             flags[label] = true;
         }
@@ -93,13 +111,31 @@ async function runBuild(input: BuildInput, ctx: Context): Promise<BuildResult> {
     // What each skipped recipe had written, read before anything is removed.
     const skipped = partial ? [] : prepared.skipped;
     const skippedFiles = filesOfSkipped(ctx, skipped);
+    const ignoreFailedChecks = input.ignoreFailedChecks === true || input.keepGoing === true;
+    const ignoreFailedAssertions = input.ignoreFailedAssertions === true || input.keepGoing === true;
+    const compiling = input.noCompile !== true;
+
+    let checks: HandlerRunResult | undefined;
+    let beforeBuild: HandlerRunResult | undefined;
+
+    if (compiling) {
+        // The checks come after preparing, since a recipe's handlers are in its fetched files, and
+        // before anything in the project is written.
+        checks = await runHandlers(ctx, "check", ignoreFailedChecks ? { ignoreFailedChecks: true } : {});
+
+        if (checks?.failed) {
+            throw checksFailedError(checks);
+        }
+
+        beforeBuild = dryRun ? undefined : await runHandlers(ctx, "beforeBuild");
+    }
 
     let ok = true;
     let compiled: BuildResult["compiled"];
     let runtimeContext: WrittenFile | undefined;
     let cleared: CompilerPruneResult | undefined;
 
-    if (!input.noCompile) {
+    if (compiling) {
         // --rebuild starts from a clean slate: everything written before is removed first.
         if (input.rebuild && !dryRun) {
             cleared = (await ctx.run("compiler.prune", { all: true, ...report })).toPlain();
@@ -129,6 +165,21 @@ async function runBuild(input: BuildInput, ctx: Context): Promise<BuildResult> {
         pruned = (await ctx.run("compiler.prune", { dryRun, ...report })).toPlain();
     }
 
+    // The editor runs after the compiler, because a recipe may edit a file the compiler writes. A
+    // failed assertion at level error leaves that file unwritten and fails the build; the other
+    // files are written.
+    let edits: EditorApplyResult | undefined;
+    let afterBuild: HandlerRunResult | undefined;
+
+    if (compiling && ok) {
+        if (hasIntent(ctx, "editor.apply")) {
+            edits = (await ctx.run("editor.apply", { dryRun, ignoreFailedAssertions })).toPlain();
+            ok = edits.ok;
+        }
+
+        afterBuild = dryRun ? undefined : await runHandlers(ctx, "afterBuild");
+    }
+
     reportSkipped(ctx, skipped, skippedFiles, [...(cleared?.removed ?? []), ...(pruned?.removed ?? [])], dryRun);
 
     // A switched-off recipe that switched-on recipes depend on is built anyway: say so, once each.
@@ -140,8 +191,18 @@ async function runBuild(input: BuildInput, ctx: Context): Promise<BuildResult> {
 
     if (compiled) {
         const errors = compiled.problems.filter((problem) => problem.level === "error").length;
+        const failedAssertions = edits === undefined || edits.ok ? 0 : failedAssertionCount(edits);
 
-        ctx.reporter.operationEnd(errors > 0 ? `Done with ${errors} error(s).` : "Done.", errors === 0);
+        if (errors > 0) {
+            ctx.reporter.operationEnd(`Done with ${errors} error(s).`, false);
+        } else if (failedAssertions > 0) {
+            ctx.reporter.operationEnd(
+                `Done, but ${failedAssertions === 1 ? "an assertion" : `${failedAssertions} assertions`} failed, and the file${failedAssertions === 1 ? " it checks was" : "s they check were"} not written.`,
+                false,
+            );
+        } else {
+            ctx.reporter.operationEnd("Done.", true);
+        }
     }
 
     const watching = input.watch === true;
@@ -152,6 +213,8 @@ async function runBuild(input: BuildInput, ctx: Context): Promise<BuildResult> {
             ...(input.rebuild ? { rebuild: true } : {}),
             ...(input.noPrune ? { noPrune: true } : {}),
             ...(dryRun ? { dryRun: true } : {}),
+            ...(ignoreFailedChecks ? { ignoreFailedChecks: true } : {}),
+            ...(ignoreFailedAssertions ? { ignoreFailedAssertions: true } : {}),
         });
     }
 
@@ -161,9 +224,36 @@ async function runBuild(input: BuildInput, ctx: Context): Promise<BuildResult> {
         ...(compiled ? { compiled } : {}),
         ...(pruned ? { pruned } : {}),
         ...(runtimeContext ? { runtimeContext } : {}),
+        ...(checks ? { checks } : {}),
+        ...(beforeBuild ? { beforeBuild } : {}),
+        ...(edits ? { edits } : {}),
+        ...(afterBuild ? { afterBuild } : {}),
         dryRun,
         watching,
     };
+}
+
+/** Whether an intent is loaded and active: the handlers and the editor are plugins a build can be without. */
+function hasIntent(ctx: Context, intent: string): boolean {
+    return ctx.engine.intents.get(intent) !== undefined;
+}
+
+/** How many assertions at level error failed in an editor run that did not ignore them. */
+function failedAssertionCount(edits: EditorApplyResult): number {
+    return edits.assertions.filter((outcome) => !outcome.passed && outcome.silenced !== true && outcome.level === "error").length;
+}
+
+/** Runs one purpose's handlers when the handlers plugin is loaded. */
+async function runHandlers(
+    ctx: Context,
+    purpose: "check" | "beforeBuild" | "afterBuild",
+    input: { ignoreFailedChecks?: boolean } = {},
+): Promise<HandlerRunResult | undefined> {
+    if (!hasIntent(ctx, `handlers.${purpose}`)) {
+        return undefined;
+    }
+
+    return runHandlerPurpose(ctx, purpose, input);
 }
 
 /** The commands whose own output already says a build is happening, or that are a build. */

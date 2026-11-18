@@ -76,6 +76,9 @@ export const buildInputSchema: SousSchema<BuildInput> = jsonSchema<BuildInput>({
             items: { type: "string" },
             description: "Only rebuild the targets that include one of these files, preparing nothing",
         },
+        ignoreFailedAssertions: boolean("Print a failed assertion as a warning and end the build as successful"),
+        ignoreFailedChecks: boolean("Print an error from a check handler as a warning and build anyway"),
+        keepGoing: boolean("Ignore failed assertions and failed checks: the same as passing both flags above"),
     },
     additionalProperties: false,
 });
@@ -136,6 +139,8 @@ export const watchInputSchema: SousSchema<BuildWatchInput> = jsonSchema<BuildWat
         rebuild: boolean("Reprocess all outputs on every change"),
         noPrune: boolean("Skip the prune step on every build"),
         dryRun: boolean("Write nothing on any build"),
+        ignoreFailedAssertions: boolean("Print failed assertions as warnings on every build"),
+        ignoreFailedChecks: boolean("Print errors from check handlers as warnings on every build"),
     },
     additionalProperties: false,
 });

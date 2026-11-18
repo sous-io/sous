@@ -232,13 +232,17 @@ export class WatchSession {
             ...(input.dryRun ? { dryRun: true } : {}),
             ...(changedFiles && !input.rebuild ? { changedFiles } : {}),
         };
+        const ignoring = {
+            ...(input.ignoreFailedAssertions ? { ignoreFailedAssertions: true } : {}),
+            ...(input.ignoreFailedChecks ? { ignoreFailedChecks: true } : {}),
+        };
         const io = { reporter: ctx.reporter, prompter: ctx.prompter, globals: ctx.globals };
 
         if (input.compileOnly) {
             return ctx.engine.submit({ intent: "compile", input: flags }, io).then((outputs) => outputs.toPlain());
         }
 
-        return ctx.engine.submit({ intent: "build", input: { ...flags, ...(input.noPrune ? { noPrune: true } : {}) } }, io).then((outputs) => outputs.toPlain());
+        return ctx.engine.submit({ intent: "build", input: { ...flags, ...ignoring, ...(input.noPrune ? { noPrune: true } : {}) } }, io).then((outputs) => outputs.toPlain());
     }
 
     // ------------------------------------------------------------------ polling upstream

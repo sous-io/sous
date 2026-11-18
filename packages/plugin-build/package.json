@@ -30,6 +30,8 @@
     "@sous-io/plugin-recipe-answers": "workspace:*",
     "@sous-io/plugin-recipes": "workspace:*",
     "@sous-io/plugin-variables": "workspace:*",
+    "@sous-io/sous-plugin-editor": "workspace:*",
+    "@sous-io/sous-plugin-handlers": "workspace:*",
     "chokidar": "^5.0.0",
     "semver": "^7.8.5"
   },
