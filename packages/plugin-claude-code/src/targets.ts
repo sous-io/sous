@@ -1,7 +1,7 @@
 /**
- * The skill target and memory target for Claude Code. They come from a contributor, not from
- * `register`, because this plugin's options (a different skills directory, memories off) are part of
- * the config.
+ * The skill target, the memory target and the pointer file for Claude Code. They come from a
+ * contributor, not from `register`, because this plugin's options (a different skills directory,
+ * a different memories file, memories off) are part of the config.
  */
 
 import type { ConfigBuilder, ContributorDefinition } from "@sous-io/plugin-api";
@@ -19,10 +19,24 @@ export const TARGET_ID = "claude-code";
 /** Where Claude Code reads skills from, under the project root. */
 export const SKILLS_DIRECTORY = ".claude/skills";
 
-/** The file Claude Code reads into every session. */
-export const MEMORY_FILE = "CLAUDE.md";
+/**
+ * Where the memories file goes by default: a rules file, which Claude Code loads beside any
+ * `CLAUDE.md` the project has, so sous never writes over the project's own instructions (spec 15).
+ */
+export const MEMORIES_OUTPUT_PATH = "${projectRoot}/.claude/rules/SOUS-MEMORIES.md";
 
-/** Adds the skill target, and the memory target unless the plugin's `memories` option is `false`. */
+/** The file Claude Code reads in every directory it works in, which a pointer file is made of. */
+export const POINTER_FILE = "CLAUDE.md";
+
+/**
+ * Adds the skill target, the memory target unless the plugin's `memories` option is `false`, and
+ * the `CLAUDE.md` pointer file every folder sous creates gets.
+ *
+ * ```ts
+ * // plugins.options."@sous-io/plugin-claude-code": { memoriesOutputPath: "${projectRoot}/CLAUDE.md" }
+ * // -> memory-target { id: "claude-code", harness: "claude-code", outputPath: "${projectRoot}/CLAUDE.md", backupExisting: true }
+ * ```
+ */
 export function contributeTargets(config: ConfigBuilder): void {
     const options = config.options<ClaudeCodePluginOptions>() ?? {};
     const skills: SkillTargetEntity = {
@@ -34,13 +48,16 @@ export function contributeTargets(config: ConfigBuilder): void {
 
     config.addEntity("skill-target", skills);
 
+    // Claude Code reads CLAUDE.md in every directory it works in, so each folder sous creates gets one
+    // pointing at the folder's README.
+    config.addEntity("pointer-file", { id: TARGET_ID, fileName: POINTER_FILE });
+
     if (options.memories !== false) {
         const memories: MemoryTargetEntity = {
             id: TARGET_ID,
             harness: HARNESS_ID,
-            fileName: MEMORY_FILE,
-            // Claude Code reads CLAUDE.md in every directory it works in, so a pointer file is made of it too.
-            readIn: "any-directory",
+            outputPath: options.memoriesOutputPath ?? MEMORIES_OUTPUT_PATH,
+            backupExisting: true,
         };
 
         config.addEntity("memory-target", memories);

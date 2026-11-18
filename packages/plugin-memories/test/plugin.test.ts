@@ -5,7 +5,8 @@ import { ConfigError } from "@sous-io/plugin-api";
 import type { CompilationTarget } from "@sous-io/plugin-compiler/types";
 import type { HashNameContext, HashNameEntity } from "@sous-io/plugin-refs/types";
 import type { MemoryTargetEntity } from "../src/types.js";
-import { makeEngine, makeTmpDir, plugin, recipe } from "./stand-ins.js";
+import { defaultFormat, skipEmptyTransform } from "../src/targets.js";
+import { makeEngine, makeTmpDir, plugin, recipe, write } from "./stand-ins.js";
 
 let tmp: { path: string; cleanup(): void };
 
@@ -36,110 +37,122 @@ const compilationTargets = (config: { get(path: string): unknown }) =>
 
 describe("memory targets", () => {
     /**
-     * Each memory target becomes one `content` compilation target, id `memories/<target id>`, whose
-     * default content is one `@<absolute path>` include line per memory, written to the target's file
-     * at the project root.
+     * With no `.sous/MEMORIES.tpl.md`, the source is the default: the project's own memories as one
+     * glob line (when `.sous/memories/` holds any), then one include line per recipe memory. The
+     * output is the target's `outputPath`, marked with its harness.
      *
-     * claude-code (CLAUDE.md) with a/one and b/two
-     * // -> { id: "memories/claude-code", content: "@.../a/one/memories/m.md\n\n@.../b/two/memories/m.md",
-     * //      outputs: [{ destinationFile: "${projectRoot}/CLAUDE.md" }] }
+     * claude-code -> { id: "memories/claude-code",
+     * //   content: "@${sousDir}/memories/**\/*.md\n\n@.../a/one/memories/m.md\n\n@.../b/two/memories/m.md",
+     * //   transforms: ["memories/skip-empty"],
+     * //   outputs: [{ destinationFile: "${projectRoot}/.claude/rules/SOUS-MEMORIES.md", harness: "claude-code", backupExisting: true }] }
      */
-    it("should add one content compilation target per memory target, with an include line per memory", async () => {
+    it("should compile the default source into the target's outputPath", async () => {
         const one = recipe(tmp.path, "a/one");
         const two = recipe(tmp.path, "b/two");
-        const { engine } = makeEngine([one, two], [targets({ id: "claude-code", harness: "claude", fileName: "CLAUDE.md" })]);
-        const built = await engine.buildConfig();
+        const project = path.join(tmp.path, "project");
 
-        expect(compilationTargets(built)).toEqual([
+        write(project, ".sous/memories/project.tpl.md", "# Project");
+
+        const { engine } = makeEngine(
+            [one, two],
+            [targets({ id: "claude-code", harness: "claude-code", outputPath: ".claude/rules/SOUS-MEMORIES.md", backupExisting: true })],
+            project,
+        );
+
+        expect(compilationTargets(await engine.buildConfig())).toEqual([
             {
                 id: "memories/claude-code",
-                content: `@${path.join(one.dir, "memories/m.md")}\n\n@${path.join(two.dir, "memories/m.md")}`,
+                content: `@\${sousDir}/memories/**/*.md\n\n@${path.join(one.dir, "memories/m.md")}\n\n@${path.join(two.dir, "memories/m.md")}`,
+                transforms: ["memories/skip-empty"],
                 origin: { plugin: "@sous-io/plugin-memories" },
-                outputs: [{ destinationFile: "${projectRoot}/CLAUDE.md" }],
+                outputs: [{ destinationFile: "${projectRoot}/.claude/rules/SOUS-MEMORIES.md", harness: "claude-code", backupExisting: true }],
             },
         ]);
     });
 
     /**
-     * `directory` puts the file below the project root.
+     * `.sous/MEMORIES.tpl.md`, when it exists, is the whole source; a `prependWith` file that exists
+     * comes first. A variable path is kept as written.
      *
-     * { fileName: "AGENTS.md", directory: "docs/agents" } -> "${projectRoot}/docs/agents/AGENTS.md"
+     * MEMORIES.tpl.md and AGENTS.md exist, prependWith "AGENTS.md", outputPath "${projectRoot}/AGENTS.override.md"
+     * // -> content "@${projectRoot}/AGENTS.md\n\n@${sousDir}/MEMORIES.tpl.md"
      */
-    it("should write the file into the target's directory", async () => {
-        const { engine } = makeEngine([recipe(tmp.path, "a/one")], [targets({ id: "codex", fileName: "AGENTS.md", directory: "docs/agents/" })]);
+    it("should use .sous/MEMORIES.tpl.md as the source, after the file to prepend", async () => {
+        const project = path.join(tmp.path, "project");
 
-        expect(compilationTargets(await engine.buildConfig())[0]?.outputs).toEqual([{ destinationFile: "${projectRoot}/docs/agents/AGENTS.md" }]);
-    });
+        write(project, ".sous/MEMORIES.tpl.md", "@#memories/**/*.md\n");
+        write(project, "AGENTS.md", "# Agents");
 
-    /**
-     * The order is: the selection, the target's filter(), then its format(), and both get the builder
-     * so they can read the config.
-     *
-     * filter keeps a/*; format writes "# <prefix>" from the config, then the names
-     */
-    it("should run the filter, then the format, with the config builder", async () => {
-        const seen: string[][] = [];
-        const target: MemoryTargetEntity = {
-            id: "custom",
-            fileName: "NOTES.md",
-            filter: (memory) => memory.recipe.startsWith("a/"),
-            format: (memories, config) => {
-                seen.push(memories.map((memory) => memory.recipe));
-
-                return [`# ${config.atPath("notes.title").valueOr("Notes")}`, ...memories.map((m) => `- ${m.recipe}/${m.name}`)].join("\n");
-            },
-        };
-        const keys = plugin("notes-key", (sous) => sous.entities.add("config-key", { id: "notes", schema: { "~standard": { version: 1, vendor: "t", validate: (value) => ({ value }) } } }));
         const { engine } = makeEngine(
-            [recipe(tmp.path, "a/one"), recipe(tmp.path, "a/two"), recipe(tmp.path, "b/three")],
-            [targets(target), keys, settings({ notes: { title: "Team" } })],
+            [recipe(tmp.path, "a/one")],
+            [targets({ id: "codex", harness: "codex", outputPath: "${projectRoot}/AGENTS.override.md", prependWith: "AGENTS.md" })],
+            project,
         );
-        const built = await engine.buildConfig();
+        const [target] = compilationTargets(await engine.buildConfig());
 
-        expect(compilationTargets(built)[0]?.content).toBe("# Team\n- a/one/m.md\n- a/two/m.md");
-        expect(seen.at(-1)).toEqual(["a/one", "a/two"]);
+        expect(target?.content).toBe("@${projectRoot}/AGENTS.md\n\n@${sousDir}/MEMORIES.tpl.md");
+        expect(target?.outputs).toEqual([{ destinationFile: "${projectRoot}/AGENTS.override.md", harness: "codex" }]);
     });
 
     /**
-     * Sous says nothing about what a filter left out.
+     * A `prependWith` file that does not exist is skipped without a word.
      *
-     * a filter that takes nothing -> no message at all
+     * prependWith "AGENTS.md", which is missing -> content holds only the recipe memory; no message
      */
-    it("should not report what a filter left out", async () => {
-        const { engine, reporter } = makeEngine(
-            [recipe(tmp.path, "a/one")],
-            [targets({ id: "picky", fileName: "PICKY.md", filter: () => false, format: () => "# Picky" })],
-        );
+    it("should skip a missing file to prepend silently", async () => {
+        const one = recipe(tmp.path, "a/one");
+        const { engine, reporter } = makeEngine([one], [targets({ id: "codex", outputPath: "AGENTS.override.md", prependWith: "AGENTS.md" })], path.join(tmp.path, "p"));
 
-        await engine.buildConfig();
-
+        expect(compilationTargets(await engine.buildConfig())[0]?.content).toBe(`@${path.join(one.dir, "memories/m.md")}`);
         expect(reporter.messages.filter((message) => message.level !== "debug")).toEqual([]);
     });
 
     /**
-     * An empty content means nothing to write, so no target is added and any existing file is left alone.
+     * Inline content from a manifest has no file, so the default source writes it in place.
      *
-     * no active recipes -> compilation.targets has no memories target
+     * { $inline: "Be brief.", path: "memories/brief.md" } -> "{% raw %}Be brief.{% endraw %}"
+     */
+    it("should write a recipe's inline memory in place", () => {
+        expect(defaultFormat([{ path: "/store/a/one/memories/brief.md", content: "Be brief." }])).toBe("{% raw %}Be brief.{% endraw %}");
+    });
+
+    /**
+     * With nothing that could be in the file, no target is added, so a file an earlier build wrote
+     * is removed by the prune.
+     *
+     * no MEMORIES.tpl.md, no .sous/memories/, no recipes -> no memories target
      */
     it("should add no compilation target when there is nothing to write", async () => {
-        const { engine } = makeEngine([], [targets({ id: "claude-code", fileName: "CLAUDE.md" })]);
+        const { engine } = makeEngine([], [targets({ id: "claude-code", outputPath: ".claude/rules/SOUS-MEMORIES.md" })], path.join(tmp.path, "p"));
 
         expect(compilationTargets(await engine.buildConfig())).toEqual([]);
     });
 
     /**
-     * recipes.memories.first and .exclude shape every target's content.
+     * Outside a project there is no `.sous/` to read a source from, so nothing is added.
+     */
+    it("should add nothing outside a project", async () => {
+        const { engine } = makeEngine([recipe(tmp.path, "a/one")], [targets({ id: "claude-code", outputPath: "X.md" })]);
+
+        expect(compilationTargets(await engine.buildConfig())).toEqual([]);
+    });
+
+    /**
+     * recipes.memories.first and .exclude shape the recipe memories in the default source.
      *
      * first ["z/*"], exclude ["b/*"] with a/one, b/two, z/last -> z/last, a/one
      */
-    it("should apply recipes.memories.first and .exclude before the target sees the memories", async () => {
+    it("should apply recipes.memories.first and .exclude to the recipe memories", async () => {
         const recipes = [recipe(tmp.path, "a/one"), recipe(tmp.path, "b/two"), recipe(tmp.path, "z/last")];
-        const { engine } = makeEngine(recipes, [
-            targets({ id: "list", fileName: "LIST.md", format: (memories) => memories.map((m) => m.recipe).join(",") }),
-            settings({ recipes: { memories: { first: ["z/*"], exclude: ["b/*"] } } }),
-        ]);
+        const { engine } = makeEngine(
+            recipes,
+            [targets({ id: "list", outputPath: "LIST.md" }), settings({ recipes: { memories: { first: ["z/*"], exclude: ["b/*"] } } })],
+            path.join(tmp.path, "p"),
+        );
 
-        expect(compilationTargets(await engine.buildConfig())[0]?.content).toBe("z/last,a/one");
+        expect(compilationTargets(await engine.buildConfig())[0]?.content).toBe(
+            `@${path.join(tmp.path, "store/z/last/memories/m.md")}\n\n@${path.join(tmp.path, "store/a/one/memories/m.md")}`,
+        );
     });
 
     /**
@@ -149,65 +162,53 @@ describe("memory targets", () => {
      */
     it("should pick up memory targets the config creates", async () => {
         const late = plugin("late", (sous) =>
-            sous.config.contribute({ id: "late", contribute: (config) => config.addEntity("memory-target", { id: "late", fileName: "LATE.md" }) }),
+            sous.config.contribute({ id: "late", contribute: (config) => config.addEntity("memory-target", { id: "late", outputPath: "LATE.md" }) }),
         );
-        const { engine } = makeEngine([recipe(tmp.path, "a/one")], [late]);
+        const { engine } = makeEngine([recipe(tmp.path, "a/one")], [late], path.join(tmp.path, "p"));
 
         expect(compilationTargets(await engine.buildConfig()).map((target) => target.id)).toEqual(["memories/late"]);
     });
 
     /**
-     * A memory target's filter and format must be functions.
+     * A field memory targets had before 1.1.0 is refused by name.
      *
-     * { filter: "a/*" } -> ConfigError naming the entity
+     * { fileName: "CLAUDE.md" } -> ConfigError naming the entity and "outputPath"
      */
-    it("should refuse a memory target whose filter is not a function", async () => {
-        const { engine } = makeEngine([], [targets({ id: "bad", fileName: "BAD.md", filter: "a/*" as never })]);
+    it("should refuse a memory target written for the old fields", async () => {
+        const { engine } = makeEngine([], [targets({ id: "old", outputPath: "X.md", fileName: "CLAUDE.md" } as never)]);
 
-        await expect(engine.buildConfig()).rejects.toThrow(/"memory-target" entity "bad"/);
+        await expect(engine.buildConfig()).rejects.toThrow(/"memory-target" entity "old"/);
     });
 });
 
-describe("pointer files", () => {
+describe("the skip-empty transform", () => {
     /**
-     * A memory target read in any directory also names a pointer file; one read only at the project
-     * root does not.
+     * A memories file that compiled to nothing but white space is left out; anything else passes.
      *
-     * claude-code (any-directory), codex (project-root) -> pointer-file CLAUDE.md only
+     * " \n" -> undefined; "# x" -> the file
      */
-    it("should add a pointer-file entity for each memory target read in any directory", async () => {
-        const { engine } = makeEngine(
-            [],
-            [
-                targets(
-                    { id: "claude-code", fileName: "CLAUDE.md", readIn: "any-directory" },
-                    { id: "codex", fileName: "AGENTS.md" },
-                ),
-            ],
-        );
-        const built = await engine.buildConfig();
+    it("should leave out a file with nothing in it", async () => {
+        const file = { source: "s", destination: "/p/X.md", content: " \n" };
 
-        expect(built.entities.list("pointer-file")).toEqual([{ id: "memories/claude-code", fileName: "CLAUDE.md" }]);
+        expect(await skipEmptyTransform.transform(file, {} as never)).toBeUndefined();
+        expect(await skipEmptyTransform.transform({ ...file, content: "# x" }, {} as never)).toEqual({ ...file, content: "# x" });
     });
 });
 
 describe("memories.selection", () => {
     /**
-     * After the build, the service gives the selection, each target's memories after its filter, and
-     * what the selection excluded with the setting that did it.
+     * After the build, the service gives the selection, each target's memories (the whole
+     * selection), and what the selection excluded with the setting that did it.
      *
-     * exclude ["b/*"]; target "a-only" filters to a/* -> selected a/one, z/last; forTarget a/one; excluded b/two
+     * exclude ["b/*"] -> selected a/one, z/last; forTarget the same; excluded b/two
      */
     it("should give the selection, each target's memories and the excluded ones", async () => {
         const recipes = [recipe(tmp.path, "a/one"), recipe(tmp.path, "b/two"), recipe(tmp.path, "z/last")];
-        const { engine } = makeEngine(recipes, [
-            targets({ id: "a-only", fileName: "A.md", filter: (memory) => memory.recipe.startsWith("a/") }),
-            settings({ recipes: { memories: { exclude: ["b/*"] } } }),
-        ]);
+        const { engine } = makeEngine(recipes, [targets({ id: "t", outputPath: "T.md" }), settings({ recipes: { memories: { exclude: ["b/*"] } } })]);
         const selection = (await engine.buildConfig()).services.get("memories.selection");
 
         expect(selection.selected().map((memory) => memory.recipe)).toEqual(["a/one", "z/last"]);
-        expect(selection.forTarget("a-only").map((memory) => memory.recipe)).toEqual(["a/one"]);
+        expect(selection.forTarget("t").map((memory) => memory.recipe)).toEqual(["a/one", "z/last"]);
         expect(selection.excluded().map(({ memory, by }) => [memory.recipe, by])).toEqual([["b/two", "recipes.memories.exclude[0]"]]);
         expect(() => selection.forTarget("nope")).toThrow('No memory target "nope" exists.');
     });
@@ -276,7 +277,7 @@ describe("recipes.memories", () => {
         // A junction on Windows, where a file symlink needs elevated rights; the type is ignored elsewhere.
         fs.symlinkSync(outside, path.join(one.dir, "memories", "leak"), "junction");
 
-        const { engine, reporter } = makeEngine([one], [targets({ id: "t", fileName: "T.md" })]);
+        const { engine, reporter } = makeEngine([one], [targets({ id: "t", outputPath: "T.md" })], path.join(tmp.path, "p"));
 
         await engine.buildConfig();
         await engine.buildConfig();

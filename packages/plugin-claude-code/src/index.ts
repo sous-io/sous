@@ -37,5 +37,5 @@ export default claudeCodePlugin;
 export type * from "./types.js";
 
 export { claudeHarness } from "./harness.js";
-export { contributeTargets, SKILLS_DIRECTORY, MEMORY_FILE } from "./targets.js";
+export { contributeTargets, MEMORIES_OUTPUT_PATH, POINTER_FILE, SKILLS_DIRECTORY } from "./targets.js";
 export { finalText, parseStream, transcriptEntries } from "./transcript.js";

@@ -60,7 +60,10 @@ const stubs: PluginDefinition[] = [
     definePlugin({
         name: "@sous-io/plugin-host",
         version: packageJson.version,
-        register: (sous) => sous.services.add("host.processes", () => processes, { lifetime: "singleton" }),
+        register: (sous) => {
+            sous.services.add("host.processes", () => processes, { lifetime: "singleton" });
+            sous.entities.define("pointer-file", jsonSchema({ type: "object", required: ["id", "fileName"] }));
+        },
     }),
     definePlugin({
         name: "@sous-io/plugin-build",
@@ -76,7 +79,7 @@ const stubs: PluginDefinition[] = [
     definePlugin({
         name: "@sous-io/plugin-memories",
         version: packageJson.version,
-        register: (sous) => sous.entities.define("memory-target", jsonSchema({ type: "object", required: ["id", "fileName"] })),
+        register: (sous) => sous.entities.define("memory-target", jsonSchema({ type: "object", required: ["id", "outputPath"] })),
     }),
 ];
 
@@ -131,7 +134,26 @@ describe("entities", () => {
 
         expect(built.entities.get("harness", "claude-code")).toMatchObject({ id: "claude-code" });
         expect(built.entities.get("skill-target", "claude-code")).toMatchObject({ harness: "claude-code", directory: ".claude/skills" });
-        expect(built.entities.get("memory-target", "claude-code")).toMatchObject({ harness: "claude-code", fileName: "CLAUDE.md", readIn: "any-directory" });
+        expect(built.entities.get("memory-target", "claude-code")).toEqual({
+            id: "claude-code",
+            harness: "claude-code",
+            outputPath: "${projectRoot}/.claude/rules/SOUS-MEMORIES.md",
+            backupExisting: true,
+        });
+        expect(built.entities.get("pointer-file", "claude-code")).toEqual({ id: "claude-code", fileName: "CLAUDE.md" });
+    });
+
+    /**
+     * memoriesOutputPath moves the memories file, for example back to the root CLAUDE.md.
+     *
+     * { memoriesOutputPath: "${projectRoot}/CLAUDE.md" } -> memory-target outputPath "${projectRoot}/CLAUDE.md"
+     */
+    it("lets memoriesOutputPath move the memories file", async () => {
+        const { config: built } = await engineFor(tmp(), {
+            plugins: { options: { "@sous-io/plugin-claude-code": { memoriesOutputPath: "${projectRoot}/CLAUDE.md" } } },
+        });
+
+        expect(built.entities.get("memory-target", "claude-code")?.outputPath).toBe("${projectRoot}/CLAUDE.md");
     });
 
     it("lets the plugin's options move the skills and turn memories off", async () => {

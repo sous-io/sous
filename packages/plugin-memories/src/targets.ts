@@ -1,34 +1,55 @@
 /**
- * The `memories.targets` contributor: one `content` compilation
- * target per `memory-target` entity, and a `pointer-file` entity for every memory target
- * read in any directory.
+ * The `memories.targets` contributor: one `content` compilation target per `memory-target` entity,
+ * compiled from the memories source into the target's `outputPath`.
  *
- * The order is: the active recipes' memories, the config's selection, the target's `filter()`, then
- * its `format()`. Sous does not report what a filter left out; a plugin that wants the user to know
- * says so itself.
+ * The source is the project's `.sous/MEMORIES.tpl.md` when it exists. Otherwise it is the default,
+ * the two lines spec 15 names, read as if written in a file inside `.sous/`:
+ *
+ * ```markdown
+ * @memories/**\/*.md      <- the project's own files under .sous/memories/
+ * @#memories/**\/*.md     <- the subscribed recipes' memories
+ * ```
+ *
+ * The default is written out as the include lines it stands for: the project's files as one glob
+ * line, and the recipes' memories as one line per memory, in selection order, so a memory a
+ * manifest gives inline (`{ $inline, path }`), which no file holds, is written in place.
+ *
+ * A target's `prependWith` file, when it exists, is included before the source. A file that
+ * compiles to nothing is not written, and a copy an earlier build wrote is removed (the
+ * `memories/skip-empty` transform leaves it out, so the prune removes it).
  */
 
-import type { ConfigBuilder, ContributorDefinition, ServiceReader } from "@sous-io/plugin-api";
-import type { CompilationTarget } from "@sous-io/plugin-compiler/types";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import type { ConfigBuilder, ContributorDefinition, ProjectInfo, ServiceReader } from "@sous-io/plugin-api";
+import type { CompilationOutput, CompilationTarget, CompilationTransformEntity } from "@sous-io/plugin-compiler/types";
 import { selectMemories, type MemoryGlobs, type MemoryRecipe } from "./listing.js";
 import type { MemoriesSettings, Memory, MemoryTargetEntity } from "./types.js";
 
 /** The contributor's id. */
 export const TARGETS_CONTRIBUTOR = "memories.targets";
 
+/** The memories source a project may write, inside `.sous/`. */
+export const MEMORIES_SOURCE = "MEMORIES.tpl.md";
+
+/** The project's own memories folder, inside `.sous/`. */
+export const PROJECT_MEMORIES_DIR = "memories";
+
+/** The default source, as spec 15 names it: what `sous init` writes into `.sous/MEMORIES.tpl.md`. */
+export const DEFAULT_SOURCE_LINES = ["@memories/**/*.md", "@#memories/**/*.md"] as const;
+
+/** The transform that leaves out a memories file that compiled to nothing. */
+export const SKIP_EMPTY_TRANSFORM = "memories/skip-empty";
+
 /** The id of the compilation target a memory target becomes: `memories/claude-code`. */
 export function compilationTargetId(target: Pick<MemoryTargetEntity, "id">): string {
     return `memories/${target.id}`;
 }
 
-/** The id of the pointer-file entity a memory target read in any directory becomes. */
-export function pointerFileId(target: Pick<MemoryTargetEntity, "id">): string {
-    return `memories/${target.id}`;
-}
-
 /**
- * The default `format()`: one compiler `@` include line per memory, with a blank line between, so
- * the compiler pulls each memory in.
+ * One compiler `@` include line per recipe memory, with a blank line between. Inline content is
+ * written in place.
  *
  * ```ts
  * defaultFormat([{ path: "/store/a/one/memories/m.md" }, { path: "/store/b/two/memories/n.md" }]);
@@ -48,46 +69,138 @@ export function inlineMemory(content: string, virtualPath: string): string {
     return virtualPath.split(/[\\/]/).pop()!.includes(".tpl.") ? content : `{% raw %}${content}{% endraw %}`;
 }
 
-/** What one target takes, after its `filter()`. */
-export function memoriesForTarget(
-    target: MemoryTargetEntity,
-    selected: readonly Memory[],
-    config: ConfigBuilder,
-): Memory[] {
-    return target.filter ? selected.filter((memory) => target.filter!(memory, config)) : [...selected];
-}
+/**
+ * A path from a memory target as a config path: absolute and variable paths as written, anything
+ * else under `${projectRoot}`.
+ *
+ * ```ts
+ * configPath(".claude/rules/SOUS-MEMORIES.md");   // -> "${projectRoot}/.claude/rules/SOUS-MEMORIES.md"
+ * configPath("${projectRoot}/CLAUDE.md");         // -> "${projectRoot}/CLAUDE.md"
+ * ```
+ */
+export function configPath(file: string): string {
+    const trimmed = file.trim();
 
-/** Where a target's file is written, as a config path with `${projectRoot}`. */
-export function destinationFile(target: Pick<MemoryTargetEntity, "directory" | "fileName">): string {
-    const directory = (target.directory ?? "").replace(/^\.?\/+|\/+$/g, "");
+    if (trimmed.startsWith("${") || trimmed.startsWith("~/") || path.isAbsolute(trimmed)) {
+        return trimmed;
+    }
 
-    return directory === "" ? `\${projectRoot}/${target.fileName}` : `\${projectRoot}/${directory}/${target.fileName}`;
+    return `\${projectRoot}/${trimmed.replace(/^\.\/+/, "")}`;
 }
 
 /**
- * The compilation target for one memory target, or `undefined` when its content is empty (nothing
- * to write, so an existing file is left alone).
+ * Where a config path is on disk, for checking that a file exists: `${projectRoot}`, `${sousDir}`
+ * and `~/` are filled in. A path naming any other variable gives `undefined`.
  */
-export function compilationTargetFor(
-    target: MemoryTargetEntity,
-    selected: readonly Memory[],
-    config: ConfigBuilder,
-    plugin: string,
-): CompilationTarget | undefined {
-    const memories = memoriesForTarget(target, selected, config);
-    const content = target.format ? target.format(memories, config) : defaultFormat(memories);
+export function diskPath(file: string, project: Pick<ProjectInfo, "root" | "sousDir">): string | undefined {
+    const filled = configPath(file)
+        .replace(/^~\//, `${os.homedir()}/`)
+        .replace(/\$\{projectRoot\}/g, project.root)
+        .replace(/\$\{sousDir\}/g, project.sousDir);
 
-    if (content === "") {
+    return filled.includes("${") ? undefined : path.resolve(project.root, filled);
+}
+
+/** Whether a folder holds a Markdown file anywhere below it. */
+function holdsMarkdown(dir: string): boolean {
+    let entries: fs.Dirent[];
+
+    try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+        return false;
+    }
+
+    return entries.some((entry) => (entry.isDirectory() ? holdsMarkdown(path.join(dir, entry.name)) : entry.name.endsWith(".md")));
+}
+
+/** What the compilation target for one memory target is made from. */
+export interface MemoriesSource {
+    readonly project: Pick<ProjectInfo, "root" | "sousDir">;
+    /** The recipe memories, in selection order. */
+    readonly selected: readonly Memory[];
+    /** Whether a file exists. Default: `fs.existsSync`. */
+    readonly exists?: (file: string) => boolean;
+}
+
+/**
+ * The template content for one memory target, or `undefined` when nothing could be in it (no
+ * source file, no file to prepend, no project memories and no recipe memories).
+ *
+ * ```ts
+ * // no .sous/MEMORIES.tpl.md; .sous/memories/project.tpl.md; recipe memory /store/a/one/memories/m.md
+ * memoriesContent({ id: "claude-code", outputPath: ".claude/rules/SOUS-MEMORIES.md" }, source);
+ * // -> "@${sousDir}/memories/**\/*.md\n\n@/store/a/one/memories/m.md"
+ *
+ * // with .sous/MEMORIES.tpl.md, and prependWith "AGENTS.md", which exists
+ * // -> "@${projectRoot}/AGENTS.md\n\n@${sousDir}/MEMORIES.tpl.md"
+ * ```
+ */
+export function memoriesContent(target: Pick<MemoryTargetEntity, "prependWith">, source: MemoriesSource): string | undefined {
+    const exists = source.exists ?? fs.existsSync;
+    const parts: string[] = [];
+
+    if (typeof target.prependWith === "string" && target.prependWith.trim() !== "") {
+        const file = diskPath(target.prependWith, source.project);
+
+        if (file !== undefined && exists(file)) {
+            parts.push(`@${configPath(target.prependWith)}`);
+        }
+    }
+
+    if (exists(path.join(source.project.sousDir, MEMORIES_SOURCE))) {
+        parts.push(`@\${sousDir}/${MEMORIES_SOURCE}`);
+    } else {
+        if (holdsMarkdown(path.join(source.project.sousDir, PROJECT_MEMORIES_DIR))) {
+            parts.push(`@\${sousDir}/${PROJECT_MEMORIES_DIR}/**/*.md`);
+        }
+
+        if (source.selected.length > 0) {
+            parts.push(defaultFormat(source.selected));
+        }
+    }
+
+    return parts.length === 0 ? undefined : parts.join("\n\n");
+}
+
+/**
+ * The compilation target for one memory target, or `undefined` when nothing could be in it.
+ *
+ * ```ts
+ * compilationTargetFor({ id: "claude-code", harness: "claude-code", outputPath: ".claude/rules/SOUS-MEMORIES.md" }, source, "@sous-io/plugin-memories");
+ * // -> { id: "memories/claude-code", content: "...", transforms: ["memories/skip-empty"],
+ * //      origin: { plugin: "@sous-io/plugin-memories" },
+ * //      outputs: [{ destinationFile: "${projectRoot}/.claude/rules/SOUS-MEMORIES.md", harness: "claude-code" }] }
+ * ```
+ */
+export function compilationTargetFor(target: MemoryTargetEntity, source: MemoriesSource, plugin: string): CompilationTarget | undefined {
+    const content = memoriesContent(target, source);
+
+    if (content === undefined) {
         return undefined;
     }
+
+    const output: CompilationOutput = {
+        destinationFile: configPath(target.outputPath),
+        ...(typeof target.harness === "string" && target.harness !== "" ? { harness: target.harness } : {}),
+        ...(target.backupExisting === true ? { backupExisting: true } : {}),
+    };
 
     return {
         id: compilationTargetId(target),
         content,
+        transforms: [SKIP_EMPTY_TRANSFORM],
         origin: { plugin },
-        outputs: [{ destinationFile: destinationFile(target) }],
+        outputs: [output],
     };
 }
+
+/** The transform that leaves out a memories file with nothing but white space in it. */
+export const skipEmptyTransform: CompilationTransformEntity = {
+    id: SKIP_EMPTY_TRANSFORM,
+    description: "Leaves out a memories file that compiled to nothing, so no empty file is written and an earlier copy is removed.",
+    transform: (file) => (typeof file.content === "string" && file.content.trim() === "" ? undefined : file),
+};
 
 /** Reads `recipes.memories` through the builder, so a change re-runs the contributor. */
 export function readSettings(config: ConfigBuilder): Partial<MemoriesSettings> {
@@ -111,14 +224,9 @@ export function targetsContributor(plugin: string, services: ServiceReader): Con
 
         contribute(config) {
             const targets = config.entities("memory-target");
+            const project = config.project;
 
-            for (const target of targets) {
-                if (target.readIn === "any-directory") {
-                    config.addEntity("pointer-file", { id: pointerFileId(target), fileName: target.fileName });
-                }
-            }
-
-            if (targets.length === 0) {
+            if (targets.length === 0 || project === undefined) {
                 return;
             }
 
@@ -138,7 +246,7 @@ export function targetsContributor(plugin: string, services: ServiceReader): Con
             });
 
             for (const target of targets) {
-                const compilation = compilationTargetFor(target, selected, config, plugin);
+                const compilation = compilationTargetFor(target, { project, selected }, plugin);
 
                 if (compilation) {
                     config.atPath(["compilation", "targets"]).appendValue(compilation);

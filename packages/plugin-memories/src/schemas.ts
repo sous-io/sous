@@ -32,27 +32,36 @@ function refine<T>(base: SousSchema<T, T>, extra: (value: T) => Issue[]): SousSc
     };
 }
 
-/** The `memory-target` entity kind. `filter` and `format`, when given, must be functions. */
+/**
+ * The `memory-target` entity kind. The fields it had before 1.1.0 (`fileName`, `directory`,
+ * `readIn`, `filter`, `format`) are refused by name, so a plugin written for them fails clearly.
+ */
 export const memoryTargetSchema: SousSchema<MemoryTargetEntity, MemoryTargetEntity> = refine(
     jsonSchema<MemoryTargetEntity>({
         type: "object",
-        required: ["id", "fileName"],
+        required: ["id", "outputPath"],
         properties: {
-            id: { type: "string", description: "The target's id: `claude-code`." },
-            harness: { type: "string", description: "The `harness` entity that reads the file." },
-            fileName: { type: "string", description: "The file name: `CLAUDE.md`, `AGENTS.md`." },
-            readIn: {
-                enum: ["project-root", "any-directory"],
-                default: "project-root",
-                description: "Where the harness reads the file; `any-directory` also makes it a pointer file.",
+            id: { type: "string", minLength: 1, description: "The target's id: `claude-code`, `codex`." },
+            harness: { type: "string", description: "The `harness` entity that reads the file; its output is marked with it." },
+            outputPath: {
+                type: "string",
+                minLength: 1,
+                description: "The file to write; `${projectRoot}` and other variables allowed, a relative path is under the project root.",
             },
-            directory: { type: "string", description: "Where the file is written, relative to the project root." },
+            prependWith: { type: "string", description: "A file included before the memories; skipped when it does not exist." },
+            backupExisting: {
+                type: "boolean",
+                description: "Back up, warn about and overwrite a file sous did not write at outputPath.",
+            },
         },
     }),
     (target) =>
-        (["filter", "format"] as const)
-            .filter((name) => target[name] !== undefined && typeof target[name] !== "function")
-            .map((name) => ({ path: [name], message: "Expected a function." })),
+        (["fileName", "directory", "readIn", "filter", "format"] as const)
+            .filter((name) => (target as unknown as Record<string, unknown>)[name] !== undefined)
+            .map((name) => ({
+                path: [name],
+                message: `"${name}" was removed from memory targets in sous 1.1.0: a memory target names the file it writes with "outputPath", and its content comes from .sous/MEMORIES.tpl.md.`,
+            })),
 );
 
 /** One list of recipe keys: globs, or `/.../` regular expressions that must compile. */

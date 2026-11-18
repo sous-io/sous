@@ -5,9 +5,7 @@
 
 import type { ConfigReader, ServiceContext } from "@sous-io/plugin-api";
 import { NotFoundError } from "@sous-io/plugin-api";
-import { builderOver } from "./built-config-builder.js";
 import { selectMemories, type MemoryGlobs, type MemoryRecipe, type MemorySelectionResult } from "./listing.js";
-import { memoriesForTarget, TARGETS_CONTRIBUTOR } from "./targets.js";
 import type { MemoriesSelection, MemoriesSettings, Memory } from "./types.js";
 
 /** `memories.selection`, for one built config. */
@@ -30,9 +28,8 @@ export class MemoriesSelectionService implements MemoriesSelection {
             throw new NotFoundError("memory-target", targetId, `No memory target "${targetId}" exists.`);
         }
 
-        const builder = builderOver(this.ctx.config, this.ctx, TARGETS_CONTRIBUTOR);
-
-        return memoriesForTarget(target, this.select().selected, builder);
+        // Every target's file takes the whole selection through `@#memories/**/*.md`.
+        return this.selected();
     }
 
     excluded(): Array<{ readonly memory: Memory; readonly by: string }> {

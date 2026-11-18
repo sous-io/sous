@@ -6,7 +6,7 @@
  *
  * ```ts
  * destinationsFor(ctx, "skills");   // ["/project/.claude/skills"]
- * destinationsFor(ctx, "memories"); // ["/project/CLAUDE.md"]
+ * destinationsFor(ctx, "memories"); // ["/project/.claude/rules/SOUS-MEMORIES.md"]
  * ```
  *
  * A `${var}` in a path is filled in the way the build fills it in (`variables.resolver`: the
@@ -27,8 +27,7 @@ interface SkillTargetShape {
 
 /** What a `memory-target` entity says, read loosely: plugin-recipes does not depend on plugin-memories. */
 interface MemoryTargetShape {
-    readonly fileName?: unknown;
-    readonly directory?: unknown;
+    readonly outputPath?: unknown;
 }
 
 /** The entities of a kind another plugin defines; none when no plugin defines it. */
@@ -53,6 +52,11 @@ function resolveVariables(ctx: Partial<Pick<Context, "services">>, value: string
     } catch {
         return value;
     }
+}
+
+/** Fills in `${projectRoot}`, which every memory target's path may start with, even with no resolver. */
+function withProjectRoot(value: string, root: string | undefined): string {
+    return root === undefined ? value : value.replace(/\$\{projectRoot\}/g, root);
 }
 
 /** A path under the project root, unless it is absolute or holds a variable. */
@@ -86,8 +90,8 @@ export function destinationsFor(ctx: Pick<Context, "entities" | "config" | "proj
     if (kind === "memories") {
         return distinct(
             listOf<MemoryTargetShape>(ctx, "memory-target")
-                .filter((target): target is { fileName: string; directory?: unknown } => typeof target.fileName === "string" && target.fileName.length > 0)
-                .map((target) => underRoot(root, path.join(typeof target.directory === "string" ? target.directory : "", target.fileName))),
+                .filter((target): target is { outputPath: string } => typeof target.outputPath === "string" && target.outputPath.length > 0)
+                .map((target) => underRoot(root, resolveVariables(ctx, withProjectRoot(target.outputPath, root)))),
         );
     }
 
