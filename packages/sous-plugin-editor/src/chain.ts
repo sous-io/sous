@@ -25,6 +25,7 @@ import { deepEqual, type JsonObject, type JsonValue } from "@sous-io/sous-lib-do
 import type { ConfigBuilder, DocumentNode } from "@sous-io/sous-plugin-api";
 import { ALIASES, chainParams, OPERATIONS } from "./operations.js";
 import { EDITS_KEY } from "./entries.js";
+import { addSelectDocument } from "./operations-comments.js";
 import type { EditPosition } from "./types.js";
 
 /** The settings of every entry a file handle records (spec 12). */
@@ -195,6 +196,8 @@ export interface FileHandle extends ValueOperations<ValueHandle> {
     readonly characterCount: SizeReference;
     /** The file's size in tokens (`o200k_base`, approximate for any one model): a reference for `expect`, not a number. */
     readonly tokenCount: SizeReference;
+    /** One document (from 0) of a YAML file holding several: every operation recorded through it carries `document: index`. */
+    selectDocument(index: number): FileHandle;
 }
 
 /** The entry point: `editor(config).file(path)`. */
@@ -716,3 +719,5 @@ for (const [name, measure] of [
         configurable: true,
     });
 }
+
+addSelectDocument(FileHandleImpl, ValueHandleImpl);

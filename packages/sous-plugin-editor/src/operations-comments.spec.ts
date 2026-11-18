@@ -239,3 +239,141 @@ describe("removeComment", () => {
         expect(() => resolveOperation("removeComment", { path: "a", before: "yes" })).toThrow(/true or false/);
     });
 });
+
+const STREAM = `# Web, as three documents
+---
+kind: Service
+metadata:
+  name: web
+---
+kind: Deployment
+spec:
+  replicas: 1 # one for now
+---
+kind: ConfigMap
+data:
+  mode: loose
+`;
+
+describe("selectDocument (document: <index>)", () => {
+    /**
+     * An operation with `document` acts on that document of a YAML file holding several; every
+     * other byte stays, and removing the declaration gives the file back byte for byte.
+     *
+     * set { document: 1, path: spec.replicas, value: 3 }   // only "replicas: 1" changes
+     */
+    it("should edit the first, middle and last document and undo it", async () => {
+        await roundTrip(
+            "deploy/web.yaml",
+            STREAM,
+            [{ entry: { file: "deploy/web.yaml", set: { document: 0, path: "metadata.name", value: "api" } } }],
+            STREAM.replace("name: web", "name: api"),
+        );
+        await roundTrip(
+            "deploy/web.yaml",
+            STREAM,
+            [{ entry: { file: "deploy/web.yaml", set: { document: 1, path: "spec.replicas", value: 3 } } }],
+            STREAM.replace("replicas: 1", "replicas: 3"),
+        );
+        await roundTrip(
+            "deploy/web.yaml",
+            STREAM,
+            [{ entry: { file: "deploy/web.yaml", set: { document: 2, path: "data.tags", value: ["a"] } } }],
+            `${STREAM}  tags:\n    - a\n`,
+        );
+    });
+
+    /**
+     * Several documents in one entry's `operations` list, and comments in a document, all undone together.
+     */
+    it("should edit values and comments in several documents of one file", async () => {
+        await roundTrip(
+            "deploy/web.yaml",
+            STREAM,
+            [{
+                entry: {
+                    file: "deploy/web.yaml",
+                    operations: [
+                        { setCommentAfter: { document: 1, path: "spec.replicas", text: "three in production" } },
+                        { set: { document: 1, path: "spec.replicas", value: 3 } },
+                        { setCommentBefore: { document: 2, path: "data.mode", text: "Set by Sous" } },
+                    ],
+                },
+            }],
+            STREAM.replace("replicas: 1 # one for now", "replicas: 3 # three in production").replace("  mode: loose", "  # Set by Sous\n  mode: loose"),
+        );
+    });
+
+    /**
+     * A file with one document is document 0; an index past the last document, and a file that is
+     * not YAML, skip the edit with a warning and leave the file alone.
+     */
+    it("should treat a single document as document 0 and skip a missing one", async () => {
+        await roundTrip("a.yaml", "a: 1\n", [{ entry: { file: "a.yaml", set: { document: 0, path: "a", value: 2 } } }], "a: 2\n");
+
+        write(tmp.path, "deploy/web.yaml", STREAM);
+        write(tmp.path, "b.jsonc", "{}\n");
+
+        const { reporter } = await apply(tmp.path, [
+            { entry: { file: "deploy/web.yaml", set: { document: 3, path: "a", value: 1 } } },
+            { entry: { file: "b.jsonc", set: { document: 0, path: "a", value: 1 } } },
+        ]);
+        const warnings = reporter.at("warning").join("\n");
+
+        expect(warnings).toMatch(/holds 3 documents, so it has no document 3/);
+        expect(warnings).toMatch(/Only a YAML file holds several documents/);
+        expect(read(tmp.path, "deploy/web.yaml")).toBe(STREAM);
+        expect(read(tmp.path, "b.jsonc")).toBe("{}\n");
+    });
+
+    /**
+     * Without `document`, a file holding several documents cannot be parsed as one: it is skipped.
+     */
+    it("should skip an operation without document on a file holding several", async () => {
+        write(tmp.path, "deploy/web.yaml", STREAM);
+
+        const { reporter } = await apply(tmp.path, [{ entry: { file: "deploy/web.yaml", set: { path: "kind", value: "x" } } }]);
+
+        expect(reporter.at("warning").join("\n")).toMatch(/multiple documents/);
+        expect(read(tmp.path, "deploy/web.yaml")).toBe(STREAM);
+    });
+
+    /**
+     * `document` is a whole number from 0, on an operation that acts inside a document; with it,
+     * no automatic assertion is implied.
+     */
+    it("should check the document parameter and imply no assertion", () => {
+        expect(() => resolveOperation("set", { document: -1, path: "a", value: 1 })).toThrow(/whole number from 0/);
+        expect(() => resolveOperation("set", { document: "1", path: "a", value: 1 })).toThrow(/whole number from 0/);
+        expect(() => resolveOperation("ensureFileExists", { document: 0 })).toThrow(/whole file/);
+        expect(() => resolveOperation("ensureLine", { document: 0, line: "x" })).toThrow(/whole file's text/);
+
+        const step = resolveOperation("set", { document: 1, path: "a", value: 1 });
+
+        expect(step.definition.assertions(step.params, step.path)).toEqual([]);
+    });
+
+    /**
+     * The chain's `selectDocument(index)` writes `document` on every operation recorded through it.
+     *
+     * editor(config).file("web.yaml").selectDocument(1).at("spec.replicas").set(3);
+     * // -> { file: "web.yaml", set: { path: "spec.replicas", value: 3, document: 1 } }
+     */
+    it("should be recorded by the chain's selectDocument", () => {
+        const config = createDocument({});
+        const file = editor(config as unknown as ConfigBuilder).file("web.yaml");
+
+        file.selectDocument(1).at("spec.replicas").set(3);
+        file.selectDocument(2).sortKeys();
+        file.selectDocument(0).at("kind").setCommentAfter("x");
+        file.at("kind").set("Service");
+
+        expect(config.atPath(EDITS_KEY).get()).toEqual([
+            { file: "web.yaml", set: { path: "spec.replicas", value: 3, document: 1 } },
+            { file: "web.yaml", sortKeys: { document: 2 } },
+            { file: "web.yaml", setCommentAfter: { path: "kind", text: "x", document: 0 } },
+            { file: "web.yaml", set: { path: "kind", value: "Service" } },
+        ]);
+        expect(() => file.selectDocument(-1)).toThrow(/whole number from 0/);
+    });
+});
