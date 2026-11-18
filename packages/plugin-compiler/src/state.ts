@@ -9,9 +9,9 @@ import fs from "node:fs";
 import path from "node:path";
 import type { CompilerState, StateFile, StateFileEntry, StateFilter } from "./types.js";
 
-/** A SHA-256 hex hash of a string. */
-export function hashContent(content: string): string {
-    return crypto.createHash("sha256").update(content, "utf8").digest("hex");
+/** A SHA-256 hex hash of a string (its UTF-8 bytes) or of bytes: the same hash for the same bytes. */
+export function hashContent(content: string | Uint8Array): string {
+    return typeof content === "string" ? crypto.createHash("sha256").update(content, "utf8").digest("hex") : crypto.createHash("sha256").update(content).digest("hex");
 }
 
 /** An empty state. */

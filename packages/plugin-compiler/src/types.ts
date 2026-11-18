@@ -302,7 +302,10 @@ export interface WriteOptions {
     dryRun?: boolean;
     /** Writes even when the content is unchanged. */
     force?: boolean;
-    /** The file mode to give it (a copied source's own). Default: `0o755` for `.sh`, otherwise left as it is. */
+    /**
+     * The file mode to give it: an untemplated source's own, or, for a template whose source is
+     * executable, the source's. Default: `0o755` for `.sh`, otherwise left as it is.
+     */
     mode?: number;
     /** Which run the write belongs to (the chain's id): every backup of one run goes in one timestamp folder. */
     run?: number;
@@ -332,7 +335,8 @@ export interface RemovedFiles {
  * output edited by hand since it wrote it), it copies the file to `<sousDir>/backups/`.
  */
 export interface CompilerWriter {
-    write(file: string, content: string, options: WriteOptions): Promise<WrittenFile>;
+    /** Writes text as UTF-8, and bytes as they are (a binary file copied unchanged). */
+    write(file: string, content: string | Uint8Array, options: WriteOptions): Promise<WrittenFile>;
     /** Removes files the compiler wrote, and directories it created that are left empty. */
     remove(files: readonly string[], options?: RemoveOptions): Promise<RemovedFiles>;
     /** Saves the state file after a run. */
