@@ -37,7 +37,26 @@ changes only by an explicit ruling from Luke, recorded under "Changes" with its 
   >   -- **Luke Chavers** in an agent session (2026-10-28)
 - **L7.** When two approaches serve the goals equally, choose the one that gives users and plugins
   more versatility.
+- **L8.** Declarations as config. Anything that declares what sous should do or produce (a recipe
+  manifest, and every file like it added later) is added to the config as values, by a
+  contributor, during config building. Other contributors respond to those values by adding more
+  config. Code that acts reads the finished config, and never reads the declaration's source
+  itself. All new code and every refactor of existing code follows this law.
+
+  > "I want us to implement a rule, or law, that all new code and all refactors of existing code
+  > should follow this concept, unless it is definitely impractical (which should lead to
+  > discussion)."
+  >
+  >   -- **Luke Chavers** in an agent session (2026-11-16)
+
+  Where following it looks impractical, the opening rule of this file applies: stop and ask Luke.
 
 ## Changes
 
-None yet.
+- **2026-11-16: L8 added**, by Luke's ruling. Reason: a recipe manifest states what a recipe wants
+  to exist in a project, yet its `contents` list was read from the manifest by a service and never
+  became config values, so it had no key paths, no record of who set each value and no expression
+  evaluation. Luke wants manifests, and everything like them added later, to work as the rest of
+  the engine does: plugins add config, then intents act on it. Code written before this date that
+  reads a declaration's source directly is brought in line when it is next refactored; the first
+  such change is named "manifests as config" and moves a manifest's entries into the config.
