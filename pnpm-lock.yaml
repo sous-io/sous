@@ -863,6 +863,9 @@ importers:
       '@sous-io/plugin-yarn':
         specifier: workspace:*
         version: link:../plugin-yarn
+      '@sous-io/sous-plugin-codex':
+        specifier: workspace:*
+        version: link:../sous-plugin-codex
       '@sous-io/sous-plugin-doctor':
         specifier: workspace:*
         version: link:../sous-plugin-doctor
