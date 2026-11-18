@@ -16,14 +16,18 @@ import {
     deepEqual,
     formatPath,
     isJsonObject,
+    parseLines,
     parsePath,
+    type CommentStyle,
     type DocNode,
     type JsonObject,
     type JsonValue,
+    type LinePosition,
+    type LinesDocument,
     type PathSegment,
 } from "@sous-io/documents";
-import { blockMarkers, commentStyleFor, compareItems, contains, fingerprint, findBlock, isSorted, matchesFields, sortOptions, toRegExp, type CommentStyle } from "./checks.js";
-import { joinLines, openDocument, splitLines, type EditorFormat } from "./documents-adapter.js";
+import { compareItems, contains, fingerprint, isSorted, matchesFields, sortOptions, toRegExp } from "./checks.js";
+import { commentStyleFor, linesOfText, openDocument, type EditorFormat } from "./documents-adapter.js";
 import type { FileSession } from "./session.js";
 import type { CheckSpec, OperationInfo, OperationScope } from "./types.js";
 
@@ -319,42 +323,78 @@ function removeFirst(node: DocNode, value: JsonValue): void {
     }
 }
 
-/** Lines to edit: the whole text at the root, or a string value at a path. */
+/**
+ * Lines to edit, as the library's lines document: the whole text at the root, or a string value at
+ * a path. `save` writes the document back when it changed; every line it did not touch keeps its
+ * bytes and its line ending.
+ */
 interface LinesAccess {
-    get(): string[];
-    set(lines: string[]): void;
+    readonly doc: LinesDocument;
+    save(): void;
 }
 
-function linesAccess(ctx: OperationContext, operation: string): LinesAccess {
-    if (ctx.path === "") {
-        return {
-            get: () => splitLines(ctx.session.text()).lines,
-            set: (lines) => {
-                const { eol, finalNewline } = splitLines(ctx.session.text());
+function linesAccess(ctx: OperationContext, operation: string, comment?: CommentStyle): LinesAccess {
+    const options = { comment: comment ?? commentStyleFor(ctx.session.file), label: ctx.session.file };
 
-                ctx.session.setText(joinLines(lines, eol, finalNewline));
+    if (ctx.path === "") {
+        const doc = parseLines(ctx.session.text(), options);
+
+        return {
+            doc,
+            save: () => {
+                if (doc.changed()) {
+                    ctx.session.setText(doc.toString());
+                }
             },
         };
     }
 
     const node = ctx.node();
+    const value = node.get();
+
+    if (value !== undefined && typeof value !== "string") {
+        throw new EditNotPossible(`'${operation}' needs text at ${node.pathString}, and the value there is not a string.`);
+    }
+
+    const doc = parseLines(value ?? "", options);
 
     return {
-        get() {
-            const value = node.get();
-
-            if (value === undefined) {
-                return [];
+        doc,
+        save: () => {
+            if (doc.changed()) {
+                node.set(doc.toString());
             }
-
-            if (typeof value !== "string") {
-                throw new EditNotPossible(`'${operation}' needs text at ${node.pathString}, and the value there is not a string.`);
-            }
-
-            return splitLines(value).lines;
         },
-        set: (lines) => node.set(lines.join("\n")),
     };
+}
+
+/** A position as the library's lines document takes it. An index counts from 0; a line from 1. */
+function linePosition(position: Position): LinePosition {
+    switch (position.kind) {
+        case "start":
+            return "start";
+        case "index":
+            return { line: position.index + 1 };
+        case "after":
+            return { after: typeof position.anchor === "string" ? position.anchor : JSON.stringify(position.anchor) };
+        case "before":
+            return { before: typeof position.anchor === "string" ? position.anchor : JSON.stringify(position.anchor) };
+        default:
+            return "end";
+    }
+}
+
+/** Runs a block operation, turning a damaged block (a marker without its pair) into a skipped edit. */
+function onBlock<T>(operation: string, act: () => T): T {
+    try {
+        return act();
+    } catch (error) {
+        if (error instanceof Error && error.name === "ConfigError") {
+            throw new EditNotPossible(`'${operation}': ${error.message}`);
+        }
+
+        throw error;
+    }
 }
 
 /** Text to edit: the whole file at the root, or a string value at a path. */
@@ -406,7 +446,11 @@ export function contentText(content: JsonValue | undefined, format: EditorFormat
         return doc.toString();
     }
 
-    return Array.isArray(content) ? joinLines(content.map((line) => (typeof line === "string" ? line : JSON.stringify(line))), "\n", true) : JSON.stringify(content);
+    if (!Array.isArray(content)) {
+        return JSON.stringify(content);
+    }
+
+    return content.length === 0 ? "" : `${content.map((line) => (typeof line === "string" ? line : JSON.stringify(line))).join("\n")}\n`;
 }
 
 /** One recorded value change: a path, whether it existed, and what it was. */
@@ -576,15 +620,19 @@ function fieldsParam(raw: JsonObject, key: string, operation: string): JsonObjec
     return value;
 }
 
+/**
+ * The comment style a block's markers are written in: `comment` when given (`"#"`, or
+ * `{ start: "/*", end: "*\/" }`), otherwise the file's own.
+ */
 function commentOf(ctx: OperationContext, params: JsonObject): CommentStyle {
     const comment = params.comment;
 
     if (typeof comment === "string") {
-        return { start: comment };
+        return { open: comment };
     }
 
     if (isJsonObject(comment) && typeof comment.start === "string") {
-        return typeof comment.end === "string" ? { start: comment.start, end: comment.end } : { start: comment.start };
+        return typeof comment.end === "string" ? { open: comment.start, close: comment.end } : { open: comment.start };
     }
 
     return commentStyleFor(ctx.session.file);
@@ -938,23 +986,93 @@ define({
             throw new EditNotPossible(`'sortKeys' needs an object at ${node.pathString || "the root"}, and the value there is not one.`);
         }
 
-        const keys = Object.keys(value);
-        const sorted = [...keys].sort((a, b) => compareItems(a, b));
-
-        if (keys.every((key, index) => key === sorted[index])) {
-            return null;
-        }
-
-        for (const key of sorted) {
-            node.atPath([key]).delete();
-            node.atPath([key]).set(value[key]!);
-        }
+        // The library moves each key with its own text, so comments and layout stay with it.
+        node.sortKeys((a, b) => compareItems(a, b));
 
         return null;
     },
     down() {},
     assertions: (_params, path) => [{ check: "sortedKeys", arg: true, path }],
 });
+
+/** The object at an operation's path, or `undefined` when there is nothing there. */
+function objectAt(ctx: OperationContext, operation: string): DocNode | undefined {
+    const node = ctx.node();
+    const value = node.get();
+
+    if (value === undefined) {
+        return undefined;
+    }
+
+    if (!isJsonObject(value)) {
+        throw new EditNotPossible(`'${operation}' needs an object at ${node.pathString || "the root"}, and the value there is not one.`);
+    }
+
+    return node;
+}
+
+for (const [name, where] of [
+    ["moveKeyBefore", "before"],
+    ["moveKeyAfter", "after"],
+] as const) {
+    define({
+        name,
+        order: 95,
+        scope: "document",
+        summary: `The object's key \`key\` comes just ${where} the key \`anchor\`. Nothing happens when either is missing. Not undone: an order is not a value.`,
+        params: ["key", "anchor"],
+        args: ["key", "anchor"],
+        normalize(raw) {
+            requireString(raw, "key", name);
+            requireString(raw, "anchor", name);
+
+            return raw;
+        },
+        up(ctx, params) {
+            const node = objectAt(ctx, name);
+
+            if (node !== undefined) {
+                if (where === "before") node.moveKeyBefore(params.key as string, params.anchor as string);
+                else node.moveKeyAfter(params.key as string, params.anchor as string);
+            }
+
+            return null;
+        },
+        down() {},
+        assertions: () => [],
+    });
+}
+
+for (const [name, where] of [
+    ["moveKeyFirst", "first"],
+    ["moveKeyLast", "last"],
+] as const) {
+    define({
+        name,
+        order: 95,
+        scope: "document",
+        summary: `The object's key \`key\` comes ${where}. Nothing happens when it is missing. Not undone: an order is not a value.`,
+        params: ["key"],
+        args: ["key"],
+        normalize(raw) {
+            requireString(raw, "key", name);
+
+            return raw;
+        },
+        up(ctx, params) {
+            const node = objectAt(ctx, name);
+
+            if (node !== undefined && node.keys().includes(params.key as string)) {
+                if (where === "first") node.moveKeyFirst(params.key as string);
+                else node.moveKeyLast(params.key as string);
+            }
+
+            return null;
+        },
+        down() {},
+        assertions: () => [],
+    });
+}
 
 define({
     name: "delete",
@@ -1176,6 +1294,46 @@ define({
 
         return items.map((item) => ({ check: "includes", arg: item, path }));
     },
+});
+
+define({
+    name: "prependIfMissing",
+    order: 40,
+    scope: "document",
+    summary:
+        "The list contains each of these items; a missing one goes at the start, in the order given. An item already there stays where it is.",
+    params: ["items", "item"],
+    args: ["items"],
+    normalize(raw) {
+        return { ...without(raw, "item"), items: itemsOf(raw, "prependIfMissing") };
+    },
+    up(ctx, params) {
+        const node = ctx.node();
+        const items = params.items as JsonValue[];
+        const added: JsonValue[] = [];
+
+        prepareList(node, "prependIfMissing");
+
+        // Last first, so the items that were missing end up at the start in the order given.
+        for (const item of [...items].reverse()) {
+            if (node.prependIfMissing(item)) {
+                added.unshift(item);
+            }
+        }
+
+        return { added };
+    },
+    down(ctx, _params, record) {
+        if (!isJsonObject(record)) return;
+
+        const node = ctx.node();
+
+        for (const item of (record.added as JsonValue[] | undefined) ?? []) {
+            removeFirst(node, item);
+        }
+    },
+    mergeRecords: joinLists("added"),
+    assertions: (params, path) => (params.items as JsonValue[]).map((item) => ({ check: "includes", arg: item, path })),
 });
 
 define({
@@ -1500,28 +1658,26 @@ define({
         return raw;
     },
     up(ctx, params) {
-        const access = linesAccess(ctx, "ensureLine");
-        const lines = access.get();
+        const { doc, save } = linesAccess(ctx, "ensureLine");
 
-        if (lines.includes(params.line as string)) {
+        if (doc.includes(params.line as string)) {
             return { added: false };
         }
 
-        lines.splice(placementIndex(lines, parsePosition(params.position)), 0, params.line as string);
-        access.set(lines);
+        doc.insert(params.line as string, linePosition(parsePosition(params.position)));
+        save();
 
         return { added: true };
     },
     down(ctx, params, record) {
         if (!isJsonObject(record) || record.added !== true) return;
 
-        const access = linesAccess(ctx, "ensureLine");
-        const lines = access.get();
-        const index = lines.indexOf(params.line as string);
+        const { doc, save } = linesAccess(ctx, "ensureLine");
+        const index = doc.indexOf(params.line as string);
 
         if (index !== -1) {
-            lines.splice(index, 1);
-            access.set(lines);
+            doc.replaceLines(index, 1, []);
+            save();
         }
     },
     mergeRecords: keepEarlier,
@@ -1541,18 +1697,16 @@ define({
         return raw;
     },
     up(ctx, params) {
-        const access = linesAccess(ctx, "removeLine");
-        const lines = access.get();
-        const removed: number[] = [];
+        const { doc, save } = linesAccess(ctx, "removeLine");
+        const removed = doc
+            .lines()
+            .map((line, index) => (line === params.line ? index : -1))
+            .filter((index) => index !== -1);
 
-        for (let index = lines.length - 1; index >= 0; index--) {
-            if (lines[index] === params.line) {
-                lines.splice(index, 1);
-                removed.unshift(index);
-            }
+        if (removed.length > 0) {
+            doc.remove(params.line as string);
+            save();
         }
-
-        if (removed.length > 0) access.set(lines);
 
         return { removed };
     },
@@ -1563,14 +1717,13 @@ define({
 
         if (removed.length === 0) return;
 
-        const access = linesAccess(ctx, "removeLine");
-        const lines = access.get();
+        const { doc, save } = linesAccess(ctx, "removeLine");
 
         for (const index of removed) {
-            lines.splice(Math.min(index, lines.length), 0, params.line as string);
+            doc.replaceLines(Math.min(index, doc.length()), 0, [params.line as string]);
         }
 
-        access.set(lines);
+        save();
     },
     mergeRecords: keepEarlier,
     assertions: (params, path) => [{ check: "includesLine", arg: params.line!, path, not: true }],
@@ -1592,50 +1745,42 @@ define({
         return raw;
     },
     up(ctx, params): JsonValue {
-        const comment = commentOf(ctx, params);
-        const access = linesAccess(ctx, "ensureBlock");
-        const lines = access.get();
-        const content = splitLines(params.content as string).lines;
-        const found = findBlock(lines, params.name as string, comment);
+        const { doc, save } = linesAccess(ctx, "ensureBlock", commentOf(ctx, params));
+        const name = params.name as string;
+        const content = linesOfText(params.content as string);
 
-        if (found !== undefined) {
-            const current = lines.slice(found.begin + 1, found.end);
+        return onBlock("ensureBlock", (): JsonValue => {
+            const current = doc.block(name);
 
-            if (deepEqual(current, content)) {
+            if (current !== undefined && deepEqual(current, content)) {
                 return { created: false };
             }
 
-            lines.splice(found.begin + 1, found.end - found.begin - 1, ...content);
-            access.set(lines);
+            doc.setBlock(name, content, linePosition(parsePosition(params.position)));
+            save();
 
-            return { created: false, previous: current.join("\n") };
-        }
-
-        const markers = blockMarkers(params.name as string, comment);
-
-        lines.splice(placementIndex(lines, parsePosition(params.position)), 0, markers.begin, ...content, markers.end);
-        access.set(lines);
-
-        return { created: true };
+            return current === undefined ? { created: true } : { created: false, previous: current.join("\n") };
+        });
     },
     down(ctx, params, record) {
         if (!isJsonObject(record)) return;
 
-        const access = linesAccess(ctx, "ensureBlock");
-        const lines = access.get();
-        const found = findBlock(lines, params.name as string, commentOf(ctx, params));
+        const { doc, save } = linesAccess(ctx, "ensureBlock", commentOf(ctx, params));
+        const name = params.name as string;
 
-        if (found === undefined) return;
+        onBlock("ensureBlock", () => {
+            if (!doc.hasBlock(name)) return;
 
-        if (record.created === true) {
-            lines.splice(found.begin, found.end - found.begin + 1);
-        } else if (typeof record.previous === "string") {
-            lines.splice(found.begin + 1, found.end - found.begin - 1, ...splitLines(record.previous).lines);
-        } else {
-            return;
-        }
+            if (record.created === true) {
+                doc.removeBlock(name);
+            } else if (typeof record.previous === "string") {
+                doc.setBlock(name, linesOfText(record.previous));
+            } else {
+                return;
+            }
 
-        access.set(lines);
+            save();
+        });
     },
     mergeRecords: (previous, next) => (isJsonObject(previous) && (previous.created === true || previous.previous !== undefined) ? previous : next),
     assertions: (params, path) => [{ check: "includesBlock", arg: { name: params.name!, content: params.content! }, path }],

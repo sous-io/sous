@@ -3,8 +3,8 @@
  * the `expect(...)` chain and the automatic assertions all use these definitions.
  */
 
-import { deepEqual, isJsonObject, stableStringify, type JsonValue } from "@sous-io/documents";
-import { splitLines } from "./documents-adapter.js";
+import { deepEqual, isJsonObject, parseLines, stableStringify, type JsonValue } from "@sous-io/documents";
+import { commentStyleFor, linesOfText } from "./documents-adapter.js";
 
 /** What a check reads: the file as it is about to be written. */
 export interface CheckSubject {
@@ -128,10 +128,10 @@ export function fingerprint(item: JsonValue, by?: string): string {
     return stableStringify(by !== undefined && isJsonObject(item) ? (item[by] ?? null) : item);
 }
 
-/** The lines of the value at a path, or of the whole text at the root. */
-export function linesOf(subject: CheckSubject, path: string): string[] | undefined {
+/** The text of the value at a path, or the whole text at the root; `undefined` when there is none. */
+function textAt(subject: CheckSubject, path: string): string | undefined {
     if (path === "") {
-        return subject.fileExists() ? splitLines(subject.text()).lines : undefined;
+        return subject.fileExists() ? subject.text() : undefined;
     }
 
     if (!subject.parsed()) {
@@ -140,7 +140,32 @@ export function linesOf(subject: CheckSubject, path: string): string[] | undefin
 
     const value = subject.value(path);
 
-    return typeof value === "string" ? splitLines(value).lines : undefined;
+    return typeof value === "string" ? value : undefined;
+}
+
+/** The lines of the value at a path, or of the whole text at the root. */
+export function linesOf(subject: CheckSubject, path: string): string[] | undefined {
+    const text = textAt(subject, path);
+
+    return text === undefined ? undefined : linesOfText(text);
+}
+
+/**
+ * The lines inside a managed block, in the file's comment style; `undefined` when the block is
+ * missing, or damaged (a marker line without its pair).
+ */
+function blockAt(subject: CheckSubject, path: string, name: string): string[] | undefined {
+    const text = textAt(subject, path);
+
+    if (text === undefined) {
+        return undefined;
+    }
+
+    try {
+        return parseLines(text, { comment: commentStyleFor(subject.file), label: subject.file }).block(name);
+    } catch {
+        return undefined;
+    }
 }
 
 /** A regular expression from `"^a"` or `"/^a/i"`. */
@@ -148,49 +173,6 @@ export function toRegExp(pattern: string): RegExp {
     const literal = /^\/(.*)\/([dgimsuvy]*)$/s.exec(pattern);
 
     return literal ? new RegExp(literal[1]!, literal[2]) : new RegExp(pattern);
-}
-
-/** The marker lines of a managed block, in a comment style. */
-export function blockMarkers(name: string, comment: CommentStyle): { begin: string; end: string } {
-    const wrap = (text: string) => (comment.end === undefined ? `${comment.start} ${text}` : `${comment.start} ${text} ${comment.end}`);
-
-    return {
-        begin: wrap(`>>> sous managed: ${name} (do not edit between these markers)`),
-        end: wrap(`<<< sous managed: ${name}`),
-    };
-}
-
-/** How a file type writes a comment. */
-export interface CommentStyle {
-    start: string;
-    end?: string;
-}
-
-/** The comment style of a file, from its name. */
-export function commentStyleFor(file: string): CommentStyle {
-    const name = file.toLowerCase();
-
-    if (/\.(md|markdown|mdx|html?|xml|svg|vue)$/.test(name)) return { start: "<!--", end: "-->" };
-    if (/\.(jsonc|json5|js|cjs|mjs|ts|cts|mts|jsx|tsx|java|kt|go|rs|c|cc|cpp|h|hpp|cs|swift|scss|less|php|dart)$/.test(name)) return { start: "//" };
-    if (/\.css$/.test(name)) return { start: "/*", end: "*/" };
-    if (/\.(sql|lua)$/.test(name)) return { start: "--" };
-    if (/\.(ini)$/.test(name)) return { start: ";" };
-
-    return { start: "#" };
-}
-
-/** Where a managed block is in a list of lines: the marker indexes, or `undefined`. */
-export function findBlock(lines: readonly string[], name: string, comment: CommentStyle): { begin: number; end: number } | undefined {
-    const markers = blockMarkers(name, comment);
-    const begin = lines.findIndex((line) => line.trim() === markers.begin);
-
-    if (begin === -1) {
-        return undefined;
-    }
-
-    const end = lines.findIndex((line, index) => index > begin && line.trim() === markers.end);
-
-    return end === -1 ? undefined : { begin, end };
 }
 
 function textOf(arg: JsonValue): string {
@@ -387,22 +369,16 @@ const CHECK_LIST: CheckDefinition[] = [
             name: "includesBlock",
             reads: "text",
             evaluate(subject, arg, path) {
-                const lines = linesOf(subject, path);
                 const name = isJsonObject(arg) ? arg.name : arg;
+                const block = typeof name === "string" ? blockAt(subject, path, name) : undefined;
 
-                if (lines === undefined || typeof name !== "string") {
+                if (block === undefined) {
                     return false;
                 }
 
-                const found = findBlock(lines, name, commentStyleFor(subject.file));
+                const content = isJsonObject(arg) && typeof arg.content === "string" ? linesOfText(arg.content) : undefined;
 
-                if (found === undefined) {
-                    return false;
-                }
-
-                const content = isJsonObject(arg) && typeof arg.content === "string" ? splitLines(arg.content).lines : undefined;
-
-                return content === undefined || deepEqual(lines.slice(found.begin + 1, found.end), content);
+                return content === undefined || deepEqual(block, content);
             },
             describe: (arg) => `contain the managed block ${show(isJsonObject(arg) ? (arg.name ?? null) : arg)}`,
         },

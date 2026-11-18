@@ -183,4 +183,71 @@ describe("editor.apply", () => {
         check(read(tmp.path, ".claude/settings.json")).not.toContain("MODE");
         check(read(tmp.path, ".claude/settings.json")).toMatch(/"allow": \[\s*"x"\s*\]/);
     });
+
+    /**
+     * A YAML file, a Markdown file's frontmatter and a .gitignore are each edited through the
+     * document library: the edit changes only what it names, every other byte stays (comments,
+     * the Markdown body, a CRLF line), and undoing puts each file back byte for byte.
+     *
+     * .pre-commit-config.yaml   set default_stages: [pre-commit]
+     * .claude/agents/review.md  set model: opus (frontmatter)
+     * .gitignore                ensureLine "dist/", ensureBlock "kw"
+     */
+    it("should edit YAML, frontmatter and a .gitignore through the library, keeping untouched bytes", async () => {
+        const yaml = "# hooks for this repo\nrepos:\n  - repo: local   # ours\n    hooks: []\n";
+        const markdown = "---\nname: review\nmodel: sonnet # cheap\n---\n# Review\n\nKeep  this   body\r\nexactly.\n";
+        const ignore = "node_modules/\r\n# local files\n.env.local";
+
+        write(tmp.path, ".pre-commit-config.yaml", yaml);
+        write(tmp.path, ".claude/agents/review.md", markdown);
+        write(tmp.path, ".gitignore", ignore);
+
+        let declare = true;
+        const { engine } = makeEngine(
+            plugin("sous-plugin-formats", (config) => {
+                if (!declare) return;
+
+                config.atPath("editor.edits").appendValue({ file: ".pre-commit-config.yaml", set: { path: "default_stages", value: ["pre-commit"] } });
+                config.atPath("editor.edits").appendValue({ file: ".claude/agents/review.md", set: { path: "model", value: "opus" } });
+                config.atPath("editor.edits").appendValue({
+                    file: ".gitignore",
+                    ensureLine: { line: "dist/", position: { after: "node_modules/" } },
+                    ensureBlock: { name: "kw", content: "docs/context/.kw-session-*" },
+                });
+            }),
+        );
+
+        await engine.buildConfig();
+
+        const result = (await engine.submit({ intent: "test.apply", input: {} })).toPlain() as unknown as EditorApplyResult;
+
+        check(result.ok).toBe(true);
+        check(read(tmp.path, ".pre-commit-config.yaml")).toBe(`${yaml}default_stages:\n  - pre-commit\n`);
+        check(read(tmp.path, ".claude/agents/review.md")).toBe("---\nname: review\nmodel: opus # cheap\n---\n# Review\n\nKeep  this   body\r\nexactly.\n");
+        check(read(tmp.path, ".gitignore")).toBe(
+            [
+                "node_modules/\r\n",
+                "dist/\r\n",
+                "# local files\n",
+                ".env.local\r\n",
+                "\r\n",
+                "# >>> sous managed: kw (do not edit between these markers)\r\n",
+                "docs/context/.kw-session-*\r\n",
+                "# <<< sous managed: kw",
+            ].join(""),
+        );
+
+        // A second run changes nothing.
+        const again = (await engine.submit({ intent: "test.apply", input: {} })).toPlain() as unknown as EditorApplyResult;
+
+        check(again.files.every((file) => file.action === "unchanged")).toBe(true);
+
+        declare = false;
+        await engine.buildConfig();
+        await engine.submit({ intent: "test.apply", input: {} });
+
+        check(read(tmp.path, ".pre-commit-config.yaml")).toBe(yaml);
+        check(read(tmp.path, ".claude/agents/review.md")).toBe(markdown);
+        check(read(tmp.path, ".gitignore")).toBe(ignore);
+    });
 });
