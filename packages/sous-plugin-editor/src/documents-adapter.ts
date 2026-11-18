@@ -20,6 +20,7 @@ import {
     formatForPath,
     parseDocument,
     parseLines,
+    parseYamlStream,
     type CommentStyle,
     type DocNode,
     type JsonValue,
@@ -45,6 +46,44 @@ export interface EditableDocument {
     value(): JsonValue;
     /** The text, with every edit made. Unchanged documents give back their text byte for byte. */
     toString(): string;
+    /** The comments before and after its keys and list items; absent for plain text, which has no keys. */
+    readonly comments?: DocumentComments;
+}
+
+/** Reading and writing the comment before or after a key or list item (the library's `TextDocument`). */
+export type DocumentComments = Pick<TextDocument, "comment" | "commentSource" | "setComment" | "removeComment" | "restoreCommentSource">;
+
+/** A document of a YAML file holding several that is not there, or a file that cannot hold several. */
+export class NoSuchDocumentError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = "NoSuchDocumentError";
+    }
+}
+
+/**
+ * Opens one document of a YAML file holding several (`---` between them), by its index from 0.
+ * Its text is the whole file, the other documents byte for byte as they were. A file with one
+ * document has document 0 only.
+ *
+ * @throws NoSuchDocumentError when the format is not YAML or there is no document at the index.
+ * @throws Error when the text cannot be parsed.
+ */
+export function openStreamDocument(text: string, format: EditorFormat, index: number): EditableDocument {
+    if (format !== "yaml") {
+        throw new NoSuchDocumentError(`Only a YAML file holds several documents; this one is ${format === "text" ? "plain text" : format.toUpperCase()}.`);
+    }
+
+    const stream = parseYamlStream(text);
+    let doc: TextDocument;
+
+    try {
+        doc = stream.document(index);
+    } catch (error) {
+        throw new NoSuchDocumentError(error instanceof Error ? error.message : String(error));
+    }
+
+    return { ...wrapTextDocument(doc, format), toString: () => stream.toString() };
 }
 
 /** A format the editor recognizes but cannot edit yet. */
@@ -122,6 +161,7 @@ function wrapTextDocument(doc: TextDocument, format: EditorFormat): EditableDocu
         atPath: (path) => doc.atPath(path),
         value: () => doc.value(),
         toString: () => doc.toString(),
+        comments: doc,
     };
 }
 

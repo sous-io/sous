@@ -785,6 +785,28 @@ doc.root().merge(data);
 doc.toString();                // the edited text: every untouched byte as it was
 ```
 
+The comment attached to a key or list item, in JSONC, YAML and Markdown frontmatter (plain JSON has
+none, and refuses): the comment lines directly above it, and the comment ending its line. A comment
+is not a value, so these edit the text directly and make no `Patch`:
+
+```ts
+doc.setComment("model", "before", "Chosen by the platform team");   // add or replace; several lines allowed
+doc.setComment("tools[1]", "after", "dangerous");                    // one line
+doc.comment("model", "before");                                      // "Chosen by the platform team"
+doc.removeComment("model", "after");
+doc.commentSource("model", "before");    // the exact bytes, to put back with restoreCommentSource
+```
+
+A YAML file holding several documents separated by `---` lines, which `parseDocument` refuses:
+
+```ts
+const stream = parseYamlStream(text);
+
+stream.count();
+stream.document(1).atPath("spec.replicas").set(3);   // a document like any other
+stream.toString();                                   // the other documents byte for byte
+```
+
 A plain text file, as lines:
 
 ```ts
@@ -806,6 +828,22 @@ previewed or dry-run before it is written.
 None.
 
 ## Changes
+
+### 2026-11-18: Comments, and a YAML file holding several documents
+
+"The Document-Editing Package" gains the two things the editor's comment operations and
+`selectDocument` (S9) need, from the operation list Luke accepted, under his ruling that every edit
+is surgical:
+
+- Reading, setting and removing the comment before or after a key or list item, in JSONC (`//` and
+  `/* */`), YAML and Markdown frontmatter. Only the comment's bytes change, in the file's line
+  endings; new comment lines take the node's indentation; a replaced `/* */` stays a block. An edit
+  that would change a value, a value sharing its line with others, and plain JSON are refused.
+- `parseYamlStream`: one document of a YAML file holding several, by index, written back with the
+  others byte for byte. What `parseDocument` does with such a file is unchanged: it refuses it
+  ("Source contains multiple documents").
+
+The API shape is the agent's; not yet reviewed by Luke.
 
 ### 2026-11-18: One build per harness
 

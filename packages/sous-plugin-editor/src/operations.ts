@@ -28,6 +28,7 @@ import {
 } from "@sous-io/sous-lib-documents";
 import { compareItems, contains, fingerprint, isSorted, matchesFields, sortOptions, toRegExp } from "./checks.js";
 import { commentStyleFor, linesOfText, openDocument, type EditorFormat } from "./documents-adapter.js";
+import { commentOperations, inDocument } from "./operations-comments.js";
 import type { FileSession } from "./session.js";
 import { registerRelocateOperations } from "./operations-relocate.js";
 import type { CheckSpec, OperationInfo, OperationScope } from "./types.js";
@@ -100,7 +101,7 @@ export interface AliasDefinition {
 // Helpers
 // ---------------------------------------------------------------------------------------------
 
-const COMMON = ["path", "assertion"];
+const COMMON = ["path", "assertion", "document"];
 
 function changed(record: JsonValue | undefined): boolean {
     if (!isJsonObject(record)) {
@@ -648,7 +649,7 @@ const definitions: OperationDefinition[] = [];
 function define(definition: Omit<OperationDefinition, "params" | "normalize"> & { params: readonly string[]; normalize?: (raw: JsonObject) => JsonObject }): void {
     const allowed = new Set([...COMMON, ...definition.params]);
 
-    definitions.push({
+    definitions.push(inDocument({
         ...definition,
         normalize(raw) {
             for (const key of Object.keys(raw)) {
@@ -667,7 +668,7 @@ function define(definition: Omit<OperationDefinition, "params" | "normalize"> & 
 
             return definition.normalize ? definition.normalize(raw) : raw;
         },
-    });
+    }));
 }
 
 // --- Files and folders (spec 12) ---------------------------------------------------------------
@@ -1953,6 +1954,8 @@ define({
     down: (ctx, _params, record) => restoreValue(ctx.node(), record),
     assertions: () => [],
 });
+
+commentOperations().forEach(define);
 
 // ---------------------------------------------------------------------------------------------
 // Aliases and shorthands

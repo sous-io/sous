@@ -177,6 +177,7 @@ time.
 | 80 | `dedupe` (`by`) |
 | 90 | `sort` (`by`, `descending`) |
 | 95 | `sortKeys`, `moveKeyBefore`, `moveKeyAfter`, `moveKeyFirst`, `moveKeyLast`, `moveItem` (`item` or `where`, `position`) |
+| 100 | `setCommentBefore` (`text`), `setCommentAfter` (`text`), `removeComment` (`before`, `after`) |
 
 Shorthands and aliases, each a name for the operation shown:
 
@@ -240,8 +241,42 @@ it beside, is not found (as with the key moves), or when it is already in place.
 moves it is undone: `up` records where the item was, and `down` moves it back. It has no automatic
 assertion, since an item that is not in the list is not an error.
 
-Not built yet, from the list Luke accepted: the comment operations (`setCommentBefore`,
-`setCommentAfter`, `removeComment`) and `selectDocument`. The reading operations of the list are the direct path's
+**Comments.** A comment belongs to a key or a list item: the comment lines directly above it (at its
+indentation, no blank line between) and the comment ending its line. `setCommentBefore` and
+`setCommentAfter` replace it or add one (`text` is the words, without the marker; a comment after
+is one line); `removeComment` removes the one `before: true` or `after: true` names, or both. `up`
+records the comment's exact bytes and `down` puts them back, so an undo is byte for byte. JSONC,
+YAML and Markdown frontmatter have comments; on plain JSON, and on a value sharing its line with
+others, the edit is skipped with a warning. They imply no automatic assertion: no check reads a
+comment, and a check that cannot fail would say nothing. They run last (order 100), after every
+operation that adds or moves keys.
+
+**`selectDocument`: one document of a YAML file holding several.** It is not an operation key of
+its own: it is the `document` parameter every operation that acts inside a document takes,
+beside `path`, and the chain's `selectDocument(index)`, which writes `document` on every operation
+recorded through it.
+
+```yaml
+- file: deploy/web.yaml
+  set:
+    document: 1        # from 0
+    path: spec.replicas
+    value: 3
+```
+
+Why a parameter and not an operation that selects for the others: what an operation needs is
+inside its object, including where it acts (`path`), and an entry-level default was rejected
+(above); an operation that only selected would change nothing itself, so it would have no `up`
+and `down` of its own, and its effect on the others would depend on order, which breaks the undo
+(run in reverse, the others would undo before the selection). As a parameter, `document` is kept
+in the history with each operation, so the undo acts on the same document. Every other document,
+and every `---` line, stays byte for byte. A file with one document is document 0; an index past
+the last document skips the edit with a warning; an operation without `document` on a file holding
+several skips the file, as any file Sous cannot parse. An operation with `document` gets no
+automatic assertion (an assertion reads the whole file, which such a file is not as one value), and
+the text operations take `document` only with a `path`.
+
+Every operation of the list Luke accepted is built. The reading operations of the list are the direct path's
 document API (`exists`, `get`, `keys`, `length` and the rest on a node).
 
 ## Formats
@@ -498,3 +533,12 @@ the move would repeat on a different item. The inserts follow `insertBefore` whe
 undone, as `ensureIncludes` undoes the moves it makes. So that a moved JSONC item keeps the comment
 on its line (`"b", // bee`), the document library now carries that comment with an item or key it
 removes and writes back. The agent's choices; not yet reviewed by Luke.
+### 2026-11-18: The comment operations and `selectDocument`
+
+Built from the list Luke accepted: `setCommentBefore`, `setCommentAfter` and `removeComment`, on
+the document library's new comment editing, and `selectDocument`, on its new YAML stream. The
+choices are the agent's, not yet reviewed by Luke: the parameter names (`text`; `before` and
+`after` as switches); no automatic assertion for a comment; order 100; and `selectDocument` as a
+`document` parameter on every operation plus a chain method, rather than an operation key of its
+own (reasons under Operations). Not done: assertions cannot target one document of such a file,
+and no operation adds a new document to it.

@@ -13,6 +13,7 @@ export { DocNode, type ItemPredicate } from "./node.js";
 export { BaseDocument } from "./document.js";
 export { ValueDocument, createDocument } from "./value-document.js";
 export { TextDocument, parseDocument } from "./text-document.js";
+export { YamlStream, parseYamlStream } from "./yaml-stream.js";
 export { splitFrontmatter, joinFrontmatter, type FrontmatterParts } from "./frontmatter.js";
 export {
     LinesDocument,
@@ -32,3 +33,4 @@ export {
 export { formatForPath, commentStyleForPath, type FileFormat } from "./formats.js";
 export { serializePatchSet, deserializePatchSet, parsePatch, parsePatchFile, PatchFormatError } from "./serialize.js";
 export { describePatch, describePatchSet } from "./describe.js";
+export { readComment, commentSource, setComment, removeComment, restoreCommentSource, CommentError, type CommentPlace, type CommentFormat } from "./comments.js";

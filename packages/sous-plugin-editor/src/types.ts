@@ -36,6 +36,8 @@ export interface OperationCommon {
     path?: string;
     /** `"none"` drops the automatic assertion that goes with this operation. */
     assertion?: "none";
+    /** In a YAML file holding several documents (`---` between them), the one to act on, from 0 (spec 07, `selectDocument`). */
+    document?: number;
 }
 
 /** One operation, as written in an entry: its name and its object. */

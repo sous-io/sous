@@ -73,6 +73,8 @@ function needsDocument(step: { op: string; params: Record<string, unknown> } | R
     const target = "definition" in step ? step.path : ((step.params.path as string | undefined) ?? "");
 
     if (name === "ensureFileExists" || name === "ensureDirectoryExists") return false;
+    // One document of a YAML file holding several: the whole file does not parse as one, and need not.
+    if (step.params.document !== undefined) return false;
 
     return !(TEXT_OPERATIONS.has(name) && target === "");
 }

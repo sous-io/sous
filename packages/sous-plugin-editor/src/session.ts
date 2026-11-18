@@ -4,7 +4,7 @@
  * the text; a structured one on the document. Switching between them keeps every edit.
  */
 
-import { openDocument, type EditableDocument, type EditorFormat } from "./documents-adapter.js";
+import { NoSuchDocumentError, openDocument, openStreamDocument, type EditableDocument, type EditorFormat } from "./documents-adapter.js";
 
 /** A file Sous cannot parse, or a format it cannot edit. Its edits are skipped, never failed. */
 export class UnparseableFileError extends Error {
@@ -18,6 +18,8 @@ export class UnparseableFileError extends Error {
 export class FileSession {
     private current: string | undefined;
     private doc: EditableDocument | undefined;
+    /** Which document of a YAML file holding several the open document is; `undefined` for the whole file. */
+    private docIndex: number | undefined;
 
     /**
      * @param file - The file, absolute (used in messages).
@@ -39,15 +41,26 @@ export class FileSession {
 
     /**
      * The document, opened from the text now (an empty document for a missing file, which the
-     * first edit creates).
+     * first edit creates). With an index, one document of a YAML file holding several (`---`
+     * between them); its text is the whole file, with the other documents as they were.
      *
      * @throws UnparseableFileError when the text cannot be parsed or the format cannot be edited.
+     * @throws NoSuchDocumentError when the file has no document at that index, or is not YAML.
      */
-    document(): EditableDocument {
+    document(index?: number): EditableDocument {
+        if (this.doc !== undefined && this.docIndex !== index) {
+            // Another document of the file: keep this one's edits in the text, then open that one.
+            this.current = this.final();
+            this.doc = undefined;
+        }
+
         if (this.doc === undefined) {
             try {
-                this.doc = openDocument(this.current ?? "", this.format);
+                this.doc = index === undefined ? openDocument(this.current ?? "", this.format) : openStreamDocument(this.current ?? "", this.format, index);
+                this.docIndex = index;
             } catch (error) {
+                if (error instanceof NoSuchDocumentError) throw error;
+
                 throw new UnparseableFileError(this.file, error);
             }
         }

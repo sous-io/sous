@@ -158,6 +158,12 @@ action once, when the entry is first applied.
 | 95 | `moveKeyBefore`, `moveKeyAfter` | `key`, `anchor` | |
 | 95 | `moveKeyFirst`, `moveKeyLast` | `key` | |
 | 95 | `moveItem` | `item` or `where`, `position` | with `where`: `moveItemWhere` |
+| 100 | `setCommentBefore` | `text` | |
+| 100 | `setCommentAfter` | `text` | |
+| 100 | `removeComment` | `before`, `after` | |
+
+Besides `path` (and `assertion`), every operation that acts inside a document also takes
+`document`: see [A YAML file holding several documents](#a-yaml-file-holding-several-documents).
 
 Every name in the last column is the same operation with an option set, so these two entries mean
 the same thing:
@@ -198,9 +204,72 @@ A block added at the end of a file gets a blank line before it. If a marker line
 appears twice, Sous does not guess where the block ends: it skips the edit with a warning, and the
 block's assertion fails.
 
+### Comments
+
+A comment belongs to a key or a list item: the comment lines directly above it (at its
+indentation, with no blank line between) and the comment at the end of its line. `setCommentBefore`
+and `setCommentAfter` replace the comment there, or add one; `removeComment` takes it away
+(`before: true` or `after: true` for only one; neither for both). `text` is the comment's words,
+without `#` or `//`. A comment before may have several lines; a comment after is one line.
+
+```yaml
+- file: .claude/agents/reviewer.md
+  setCommentBefore:
+    path: model
+    text: |-
+      Chosen by the platform team.
+      Ask in #platform before changing it.
+  setCommentAfter:
+    path: tools[1]
+    text: needed by the release script
+```
+
+```markdown
+---
+name: reviewer
+# Chosen by the platform team.
+# Ask in #platform before changing it.
+model: opus
+tools:
+  - Read
+  - Bash # needed by the release script
+---
+```
+
+Only the comment's own bytes change, in the file's line endings, and undoing puts back exactly what
+was there. This works in JSONC, YAML and Markdown frontmatter. Plain JSON has no comments, so
+on a `.json` file (such as `.claude/settings.json`) the edit is skipped with a warning. A value
+that shares its line with others (inside `[...]` or `{...}`) has no comment of its own and is
+skipped too. No assertion is checked for a comment.
+
+### A YAML file holding several documents
+
+A YAML file can hold several documents separated by `---` lines, as a Kubernetes manifest does.
+A path cannot say which document it means, so an operation on such a file names one with
+`document`, its index from 0. Every other document, and every `---` line, stays byte for byte:
+
+```yaml
+- file: deploy/web.yaml
+  set:
+    document: 1
+    path: spec.replicas
+    value: 3
+  setCommentAfter:
+    document: 1
+    path: spec.replicas
+    text: three in production
+```
+
+`document` goes inside each operation, beside `path`, so one entry can edit several documents. On a
+file with one document, `document: 0` is that document. An index past the last document skips the
+edit with a warning; an operation without `document` on a file holding several skips the file, as
+any file Sous cannot parse. An operation with `document` gets no automatic assertion, and
+`ensureLine` and the other text operations take `document` only with the `path` of a string in it.
+
 **Formats:** JSON, JSONC (comments, key order and layout are kept; a `tsconfig*.json` or a `.json`
 file in `.vscode/` is read as JSONC), YAML (comments are kept), the YAML frontmatter of a Markdown
-file (the body is kept byte for byte), and any other file as plain text lines, each keeping its own
+file (the body is kept byte for byte), a YAML file holding several documents (one at a time, with
+`document`), and any other file as plain text lines, each keeping its own
 line ending. TOML files are skipped with a warning for now.
 
 ### Copying a value
@@ -444,7 +513,11 @@ an operation that carries the condition (`setIfMissing`, `setIfEquals`) or an as
 
 - `editor(config).file(path, { once, rollback, backupBeforeChange, backupOnRemoval })` gives a file;
   `.at(path)` a value in it. Every operation and every other name is a method: its main parameters in
-  order, then an options object (`.ensureLine("x", { position: "start" })`).
+  order, then an options object (`.ensureLine("x", { position: "start" })`). Comments too:
+  `.at("model").setCommentBefore("Chosen by the platform team")`.
+- `.selectDocument(index)` on a file gives one document of a YAML file holding several; every
+  operation recorded through it carries `document: index`
+  (`editor(config).file("deploy/web.yaml").selectDocument(1).at("spec.replicas").set(3)`).
 - `.withoutAssertion()` after an operation drops its automatic check;
   `settings.silence("permissions", ["sorted"])`, with `.thisKeyOnly()`, `.belowOnly()` or
   `.except([...])`, and `settings.withoutAutomaticAssertions()` silence more.
