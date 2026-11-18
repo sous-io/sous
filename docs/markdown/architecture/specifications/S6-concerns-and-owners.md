@@ -436,7 +436,9 @@ The name is an agent decision, which the user may overrule; the concern is every
 | Trust: which repositories the project accepts recipes from; nothing inside an untrusted repository runs | `recipes.trust` | service, config; `repo.trust` intent |
 | Subscriptions (`conf.d/510`) | `subscription.add`, `.remove`, `.enable`, `.disable`, `.list` | intents |
 | Which recipes are active on this machine: reached from the subscriptions in force (S4, private GitLab and switched-off subscriptions) | `recipes.active` | service, config |
-| Which files a recipe publishes: its manifest `contents` globbed, each file with the base of the include pattern that matched it; plugins that consume a content kind (skills, memories) ask here and never glob a manifest themselves | `recipes.contents` | service, singleton |
+| Each active recipe's manifest added to the config (law L8): `contents` groups to the `recipes.contents` key, `edits` to `editor.edits`, expressions evaluated (S12) | `recipes.manifests` | contributor |
+| The kinds of content a manifest may publish; `skills`, `memories`, `prompts`, `config` registered here, others by plugins; an unregistered kind is an error once the config is built | `content-kind` | entity kind |
+| Which files a recipe publishes: a reader of the `recipes.contents` key, each file with the base of the include pattern that matched it; plugins that consume a content kind (skills, memories) ask here and never read a manifest themselves | `recipes.contents` | service, singleton |
 | Resolving subscriptions to versions, and keeping only what is reachable | `recipes.resolver` | service, config |
 | The lockfile | `recipes.lock` | service, config; `lock.rebuild` intent |
 | Downloading what subscribed recipes need, during config building, cached | `recipes.fetch` | contributor |
@@ -983,6 +985,13 @@ After: contributing moves to `plugin-authoring` (the `repo.contribute` intent), 
 None.
 
 ## Changes
+
+### 2026-11-18: Manifests as config
+
+The `recipes.manifests` contributor and the `content-kind` entity kind join plugin-recipes, and the
+`recipes.contents` service becomes a reader of the `recipes.contents` config key (S12). Reason: law
+L8, "manifests as config", ruled by Luke on 2026-11-16 ("One plugin, perhaps `plugin-recipes`, adds
+every manifest to the config. Then, another plugin ... responds to those new entries.").
 
 ### 2026-11-15: Init imports agent files; the project's targets win over recipes'
 

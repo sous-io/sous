@@ -29,6 +29,7 @@
   - [Config expressions](architecture/specifications/S5-config-expressions.md)
   - [Which plugin does what](architecture/specifications/S6-concerns-and-owners.md)
   - [Everything sous can do](architecture/specifications/S7-capabilities.md)
+  - [Manifests as config](architecture/specifications/S12-manifests-as-config.md)
 - **ADRs**
   - [0001: Repositories](adrs/0001-repositories.md)
   - [0002: Recipe answers in the template scope](adrs/0002-recipe-answers-in-templates.md)
@@ -54,3 +55,6 @@
   - [0022: Intents return outputs](adrs/0022-intents-return-outputs.md)
   - [0023: The project's lockfile is the only lock](adrs/0023-the-project-lockfile-is-the-only-lock.md)
   - [0024: `sous init` imports a project's agent files](adrs/0024-init-imports-agent-files.md)
+  - [0032: A recipe's manifest is added to the config](adrs/0032-manifests-as-config.md)
+  - [0033: Open content kinds, `$file`, and a literal `${`](adrs/0033-open-content-kinds-and-file-values.md)
+  - [0038: A boolean recipe answer is a boolean in Liquid](adrs/0038-boolean-answers.md)
