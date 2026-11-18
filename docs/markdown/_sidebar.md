@@ -54,3 +54,4 @@
   - [0022: Intents return outputs](adrs/0022-intents-return-outputs.md)
   - [0023: The project's lockfile is the only lock](adrs/0023-the-project-lockfile-is-the-only-lock.md)
   - [0024: `sous init` imports a project's agent files](adrs/0024-init-imports-agent-files.md)
+  - [0029: Every output file is a config entry, and variables by output path](adrs/0029-outputs-are-config-entries-and-var-overrides.md)
