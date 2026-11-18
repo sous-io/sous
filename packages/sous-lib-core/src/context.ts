@@ -14,6 +14,7 @@ import type {
 } from "@sous-io/sous-plugin-api";
 import type { BuiltConfigImpl } from "./config/built-config.js";
 import type { Frame } from "./util/frames.js";
+import { formerPluginName } from "./util/names.js";
 
 /** One chain, while it runs. */
 export class ChainState implements ChainInfo {
@@ -108,7 +109,9 @@ export function createContext(host: CallHost, call: CallState, plugin: string): 
         chain: call.chain,
         engine: host.handle,
         options<T = JsonObject>(): T | undefined {
-            return config().get<T>(["plugins", "options", plugin]);
+            const former = formerPluginName(plugin);
+
+            return config().get<T>(["plugins", "options", plugin]) ?? (former === undefined ? undefined : config().get<T>(["plugins", "options", former]));
         },
         run: ((intent: string, input?: unknown) => host.run(intent, input, call)) as Context["run"],
         emit: ((name: string, payload?: EventPayload<string>) => host.emitCustom(name, payload, call)) as Context["emit"],

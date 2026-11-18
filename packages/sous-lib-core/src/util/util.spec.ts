@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { countFrames, describeFramePath, framePath, pushFrame } from "./frames.js";
-import { matchesWildcard, namePrefix, pluginPrefix } from "./names.js";
+import { currentPluginName, formerPluginName, matchesWildcard, namePrefix, pluginPrefix } from "./names.js";
 import { stableKey } from "./stable.js";
 
 describe("stableKey()", () => {
@@ -60,5 +60,21 @@ describe("names", () => {
         expect(matchesWildcard("confd/*", "confd/610-mac.jsonc")).toBe(true);
         expect(matchesWildcard("a.(b)", "a.(b)")).toBe(true);
         expect(matchesWildcard("a*", "b")).toBe(false);
+    });
+
+    /**
+     * A built-in plugin's name from before 1.0.20 maps to its name now, and back; every other
+     * plugin is left alone.
+     *
+     * currentPluginName("@sous-io/plugin-codex") -> "@sous-io/sous-plugin-codex"
+     */
+    it("should map built-in plugin names from before 1.0.20 to the current ones", () => {
+        expect(currentPluginName("@sous-io/plugin-claude-code")).toBe("@sous-io/sous-plugin-claude-code");
+        expect(currentPluginName("@sous-io/sous-plugin-codex")).toBe("@sous-io/sous-plugin-codex");
+        expect(currentPluginName("@sous-io/plugin-api")).toBe("@sous-io/sous-plugin-api");
+        expect(currentPluginName("sous-plugin-diagrams")).toBe("sous-plugin-diagrams");
+        expect(formerPluginName("@sous-io/sous-plugin-codex")).toBe("@sous-io/plugin-codex");
+        expect(formerPluginName("@sous-io/core")).toBeUndefined();
+        expect(formerPluginName("@acme/sous-plugin-x")).toBeUndefined();
     });
 });

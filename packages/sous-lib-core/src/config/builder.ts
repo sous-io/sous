@@ -24,6 +24,7 @@ import {
     type Reporter,
 } from "@sous-io/sous-plugin-api";
 import type { EntityRegistry, StoredEntity } from "../entities/entity-registry.js";
+import { formerPluginName } from "../util/names.js";
 import { entitySignature, type Read, type View } from "./reads.js";
 
 /** What a builder needs from the engine. */
@@ -162,7 +163,11 @@ export class ConfigBuilderImpl extends Reporting(Object) implements ConfigBuilde
     }
 
     options<T = JsonObject>(): T | undefined {
-        return this.backend.read(["plugins", "options", this.contributor.plugin]) as T | undefined;
+        const own = this.backend.read(["plugins", "options", this.contributor.plugin]) as T | undefined;
+        // A built-in plugin's options may still be written under its name from before 1.0.20.
+        const former = own === undefined ? formerPluginName(this.contributor.plugin) : undefined;
+
+        return former === undefined ? own : (this.backend.read(["plugins", "options", former]) as T | undefined);
     }
 
     protected get reporter(): Reporter {

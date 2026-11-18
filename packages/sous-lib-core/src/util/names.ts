@@ -19,6 +19,42 @@ export function pluginPrefix(pluginName: string): string {
     return bare.replace(/^sous-plugin-/, "").replace(/^plugin-/, "");
 }
 
+/** How a built-in plugin's package name starts, since sous 1.0.20. */
+const BUILT_IN_PREFIX = "@sous-io/sous-plugin-";
+
+/** How it started before: `@sous-io/plugin-<name>`. */
+const FORMER_BUILT_IN_PREFIX = "@sous-io/plugin-";
+
+/**
+ * The name a built-in plugin had before sous 1.0.20, when the built-in plugins were
+ * `@sous-io/plugin-<name>`; `undefined` for any other plugin. A project's config may still name a
+ * plugin that way under `plugins.options`, `plugins.disabled` and the `replace` tables.
+ *
+ * ```ts
+ * formerPluginName("@sous-io/sous-plugin-codex");   // "@sous-io/plugin-codex"
+ * formerPluginName("sous-plugin-diagrams");         // undefined
+ * ```
+ */
+export function formerPluginName(pluginName: string): string | undefined {
+    return pluginName.startsWith(BUILT_IN_PREFIX) ? `${FORMER_BUILT_IN_PREFIX}${pluginName.slice(BUILT_IN_PREFIX.length)}` : undefined;
+}
+
+/**
+ * A plugin name as it is now: a built-in plugin's name from before sous 1.0.20 becomes its new one;
+ * every other name is returned as it is.
+ *
+ * ```ts
+ * currentPluginName("@sous-io/plugin-claude-code");   // "@sous-io/sous-plugin-claude-code"
+ * currentPluginName("@sous-io/plugin-api");           // "@sous-io/sous-plugin-api"
+ * currentPluginName("sous-plugin-diagrams");          // "sous-plugin-diagrams"
+ * ```
+ */
+export function currentPluginName(pluginName: string): string {
+    return pluginName.startsWith(FORMER_BUILT_IN_PREFIX)
+        ? `${BUILT_IN_PREFIX}${pluginName.slice(FORMER_BUILT_IN_PREFIX.length)}`
+        : pluginName;
+}
+
 /** The first part of a dotted name: `diagrams.render` → `diagrams`. */
 export function namePrefix(name: string): string {
     const dot = name.indexOf(".");

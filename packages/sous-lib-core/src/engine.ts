@@ -74,7 +74,7 @@ import { DEFAULT_BUDGETS, type Budget } from "./timing/budgets.js";
 import { describeOverBudget } from "./timing/describe.js";
 import { type OverBudget, Timer } from "./timing/timer.js";
 import { countFrames, describeFramePath, type Frame, pushFrame } from "./util/frames.js";
-import { CORE_PLUGIN, namePrefix, pluginPrefix } from "./util/names.js";
+import { CORE_PLUGIN, formerPluginName, namePrefix, pluginPrefix } from "./util/names.js";
 import { stableKey } from "./util/stable.js";
 
 /** How to start an engine. */
@@ -456,8 +456,15 @@ export class Engine {
             builtIn: record.builtIn,
             loadedBy: record.loadedBy ?? (record.specifier ? "plugins.load" : undefined),
             registrations: [...record.registrations],
-            options: this.current.get<JsonObject>(["plugins", "options", record.name]),
+            options: this.current.get<JsonObject>(["plugins", "options", record.name]) ?? this.formerOptions(record.name),
         }));
+    }
+
+    /** A built-in plugin's options written under its name from before 1.0.20, if any. */
+    private formerOptions(pluginName: string): JsonObject | undefined {
+        const former = formerPluginName(pluginName);
+
+        return former === undefined ? undefined : this.current.get<JsonObject>(["plugins", "options", former]);
     }
 
     /** The intents front ends generate commands and tools from. */

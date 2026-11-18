@@ -22,7 +22,7 @@ import { EntitySnapshot } from "../entities/entity-registry.js";
 import type { Limits } from "../limits.js";
 import type { PluginRecord } from "../plugins/plugin-registry.js";
 import type { Timer } from "../timing/timer.js";
-import { CORE_PLUGIN } from "../util/names.js";
+import { CORE_PLUGIN, currentPluginName } from "../util/names.js";
 import { ConfigBuilderImpl } from "./builder.js";
 import { type ContributorEntry, toEntry } from "./contributor-registry.js";
 import { sortContributors } from "./order.js";
@@ -651,7 +651,10 @@ export function readPluginSettings(config: JsonValue): { load: string[]; disable
     const strings = (value: JsonValue | undefined): string[] =>
         Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 
-    return { load: strings(plugins?.load), disabled: strings(plugins?.disabled) };
+    // A built-in plugin may still be disabled by its name from before 1.0.20 (`@sous-io/plugin-<name>`).
+    const disabled = strings(plugins?.disabled);
+
+    return { load: strings(plugins?.load), disabled: [...new Set([...disabled, ...disabled.map(currentPluginName)])] };
 }
 
 /** The path a primitive changes: the key or item it targets. */

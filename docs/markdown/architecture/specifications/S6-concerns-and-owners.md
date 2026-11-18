@@ -1043,6 +1043,16 @@ None.
 
 ## Changes
 
+### 2026-11-18: The built-in plugins are `@sous-io/sous-plugin-*`; their old names still work
+
+Luke's ruling (2026-11-17): "We will rename the package syntax to `@sous-io/sous-plugin-*` and the
+folders to `sous-plugin-*`." Every built-in plugin moved from `@sous-io/plugin-<name>` in
+`packages/plugin-<name>` to `@sous-io/sous-plugin-<name>` in `packages/sous-plugin-<name>`.
+The plugin interface moved too, to `@sous-io/sous-plugin-api` (S3, 2026-11-19). Because a project's config names
+built-in plugins, core reads the old name as the new one in `plugins.options` (the new name wins
+when both are written), `plugins.disabled`, `services.replace` and `intents.replace`. The agent's
+choice of how old names keep working, in the finishing pass.
+
 ### 2026-11-18: Codex is a built-in plugin
 
 `sous-plugin-codex` is a new built-in plugin (S16), loaded right after `sous-plugin-claude-code`. This

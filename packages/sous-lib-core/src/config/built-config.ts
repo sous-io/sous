@@ -13,7 +13,7 @@ import type {
 } from "@sous-io/sous-plugin-api";
 import type { EntitySnapshot } from "../entities/entity-registry.js";
 import { type Limits, resolveLimits } from "../limits.js";
-import { CORE_PLUGIN } from "../util/names.js";
+import { CORE_PLUGIN, currentPluginName } from "../util/names.js";
 import type { ActivePlugin, ContributorRecord } from "./build.js";
 import { primitiveTarget, WHAT_IF_PLUGIN } from "./build.js";
 import { type ListSegment, overlapsList } from "./harness-merge.js";
@@ -210,5 +210,10 @@ function pickTable(section: JsonValue | undefined): Readonly<Record<string, stri
         return {};
     }
 
-    return Object.fromEntries(Object.entries(replace).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
+    // A pick may still name a built-in plugin by its name from before 1.0.20.
+    return Object.fromEntries(
+        Object.entries(replace)
+            .filter((entry): entry is [string, string] => typeof entry[1] === "string")
+            .map(([name, plugin]) => [name, currentPluginName(plugin)]),
+    );
 }

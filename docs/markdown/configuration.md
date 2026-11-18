@@ -394,13 +394,20 @@ There is no separate bootstrap config and no `"sous"` key in `package.json`.
             "sous-plugin-old-thing"
         ],
         "options": {
-            "sous-plugin-claude-code": {
-                "model": "opus"
+            "@sous-io/sous-plugin-claude-code": {
+                "memoriesOutputPath": "${projectRoot}/CLAUDE.md"
             }
         }
     }
 }
 ```
+
+?> Before version 1.0.20 the built-in plugins were named `@sous-io/plugin-<name>`, such as
+`@sous-io/plugin-claude-code`; they are now `@sous-io/sous-plugin-<name>`. A config that still uses the old
+name under `plugins.options`, `plugins.disabled`, `services.replace` or `intents.replace` keeps working, and
+the new name wins when both are written. The package plugins are written against moved too, from
+`@sous-io/plugin-api` to `@sous-io/sous-plugin-api`; a plugin that still imports the old name keeps working
+with the copy it installed.
 
 Two more keys settle what plugins do:
 

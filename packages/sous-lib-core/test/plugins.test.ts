@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { definePlugin, PluginError } from "@sous-io/sous-plugin-api";
+import { definePlugin, IntentOutputs, PluginError } from "@sous-io/sous-plugin-api";
 import { contributorsPlugin, keysPlugin, makeEngine, nothing, plugin } from "./helpers.js";
 
 /** A plugin module's source: it sets `loaded.<name>` to true, so tests see it ran. */
@@ -251,6 +251,51 @@ describe("plugin lifecycle", () => {
 
         expect(built.get("loaded")).toBeUndefined();
         expect(engine.pluginInfo().map((info) => info.name)).not.toContain("relative-plugin");
+    });
+
+    /**
+     * A project's config written before 1.0.20 names the built-in plugins `@sous-io/plugin-<name>`.
+     * Those names still work: in plugins.options (read by config.options(), ctx.options() and
+     * pluginInfo), in plugins.disabled and in the replace tables. The current name wins when both
+     * are written.
+     *
+     * plugins.options."@sous-io/plugin-thing": { model: "opus" }   -> config.options() of @sous-io/sous-plugin-thing
+     * plugins.disabled: ["@sous-io/plugin-old"]                     -> @sous-io/sous-plugin-old does not load
+     */
+    it("should accept a built-in plugin's name from before 1.0.20 in plugins.options, plugins.disabled and replace", async () => {
+        const seen: unknown[] = [];
+        const thing = plugin("@sous-io/sous-plugin-thing", (sous) => {
+            sous.config.contribute({ id: "reads-own", contribute: (config) => void seen.push(config.options()) });
+            sous.intents.add({ intent: "thing.options", handle: (_input, ctx) => IntentOutputs.of({ value: ctx.options() ?? null }) });
+        });
+        const old = contributorsPlugin("@sous-io/sous-plugin-old", [{ id: "old", contribute: (config) => config.atPath("loaded.old").set(true) }]);
+        const other = plugin("@sous-io/sous-plugin-other", (sous) => sous.intents.add({ intent: "thing.options", handle: () => IntentOutputs.of({ value: "other" }) }));
+        const user = (values: Record<string, unknown>) => contributorsPlugin("user", [{ id: "user", contribute: (config) => config.root().merge(values as never) }]);
+
+        const { engine } = makeEngine([
+            keysPlugin("loaded"),
+            thing,
+            old,
+            other,
+            user({
+                plugins: { options: { "@sous-io/plugin-thing": { model: "opus" } }, disabled: ["@sous-io/plugin-old"] },
+                intents: { replace: { "thing.options": "@sous-io/plugin-thing" } },
+            }),
+        ]);
+        const built = await engine.buildConfig();
+
+        expect(seen.at(-1)).toEqual({ model: "opus" });
+        expect((await engine.submit({ intent: "thing.options" })).toPlain()).toEqual({ value: { model: "opus" } });
+        expect(engine.pluginInfo().find((info) => info.name === "@sous-io/sous-plugin-thing")?.options).toEqual({ model: "opus" });
+        expect(built.get("loaded")).toBeUndefined();
+
+        const both = makeEngine([
+            thing,
+            user({ plugins: { options: { "@sous-io/plugin-thing": { model: "old" }, "@sous-io/sous-plugin-thing": { model: "new" } } } }),
+        ]);
+
+        await both.engine.buildConfig();
+        expect(seen.at(-1)).toEqual({ model: "new" });
     });
 
     /**

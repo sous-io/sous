@@ -20,9 +20,15 @@ import { PNP_FILE, findPnpFile, pnpInstalled } from "./pnp.js";
 /** The name of this plugin, whose options say which command to run. */
 const PLUGIN = "@sous-io/sous-plugin-yarn";
 
+/** Its name before sous 1.0.20, under which a project's config may still hold its options. */
+const FORMER_PLUGIN = "@sous-io/plugin-yarn";
+
 /** The command to run: the `command` option, or `yarn`. */
 function commandOf(ctx: ServiceContext): string {
-    return ctx.config.get<YarnPluginOptions>(["plugins", "options", PLUGIN])?.command ?? "yarn";
+    // The options may still be written under this plugin's name from before 1.0.20.
+    const options = ctx.config.get<YarnPluginOptions>(["plugins", "options", PLUGIN]) ?? ctx.config.get<YarnPluginOptions>(["plugins", "options", FORMER_PLUGIN]);
+
+    return options?.command ?? "yarn";
 }
 
 /** Whether a file exists in a directory. */

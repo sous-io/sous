@@ -38,6 +38,9 @@ export const REMOVE_LINE_QUESTION = "claude-code.memories.remove-line";
 /** The plugin's name, whose options hold `memoriesOutputPath`. */
 const PLUGIN = "@sous-io/sous-plugin-claude-code";
 
+/** Its name before sous 1.0.20, under which a project's config may still hold its options. */
+const FORMER_PLUGIN = "@sous-io/plugin-claude-code";
+
 /** The config path of the option the `keep` answer writes. */
 export const OUTPUT_PATH_KEY = `plugins.options."${PLUGIN}".memoriesOutputPath`;
 
@@ -107,7 +110,8 @@ export interface MemoriesSituation {
 
 /** This plugin's options, from the config. */
 function options(ctx: Pick<Context, "config">): ClaudeCodePluginOptions {
-    return ctx.config.get<ClaudeCodePluginOptions>(["plugins", "options", PLUGIN]) ?? {};
+    // The options may still be written under this plugin's name from before 1.0.20.
+    return ctx.config.get<ClaudeCodePluginOptions>(["plugins", "options", PLUGIN]) ?? ctx.config.get<ClaudeCodePluginOptions>(["plugins", "options", FORMER_PLUGIN]) ?? {};
 }
 
 /** The root `CLAUDE.md`. */
