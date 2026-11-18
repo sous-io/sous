@@ -5,7 +5,7 @@ import { ConfigError, NonInteractiveError, ReportEntryStyle, VariableSet } from 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { handle } from "../src/init.js";
 import { IGNORE_BLOCK_END, IGNORE_BLOCK_START } from "@sous-io/plugin-host";
-import { STARTER_MEMORY_RELATIVE_PATH, STARTER_PROMPT_RELATIVE_PATH } from "../src/templates.js";
+import { MEMORIES_SOURCE_RELATIVE_PATH, STARTER_MEMORY_RELATIVE_PATH } from "../src/templates.js";
 import { initContext } from "./helpers.js";
 
 let tmp: string;
@@ -55,48 +55,45 @@ describe("init", () => {
         const outputs = await handle({ directory: projectRoot, noBuild: true }, ctx);
         const result = outputs.toPlain();
 
-        expect(result).toMatchObject({ root: projectRoot, sousDir, configPath: path.join(sousDir, "sous.config.js"), dryRun: false, kept: [] });
+        expect(result).toMatchObject({ root: projectRoot, sousDir, configPath: path.join(sousDir, "sous.config.jsonc"), dryRun: false, kept: [] });
         expect(result.files.every((file) => path.isAbsolute(file))).toBe(true);
         expect(listTree(projectRoot)).toEqual([
             ".gitignore",
             ".sous/.env",
             ".sous/.env.local.example",
             ".sous/.gitignore",
+            `.sous/${MEMORIES_SOURCE_RELATIVE_PATH}`,
             ".sous/README.md",
             ".sous/conf.d/README.md",
-            `.sous/${STARTER_PROMPT_RELATIVE_PATH}`,
             `.sous/${STARTER_MEMORY_RELATIVE_PATH}`,
-            ".sous/sous.config.js",
+            ".sous/sous.config.jsonc",
         ]);
         expect([...result.files].sort()).toEqual([...listTree(projectRoot).map((file) => path.join(projectRoot, file))].sort());
     });
 
     /**
-     * The config should never set projectRoot (sous sets it, and setting it is an error), never name
-     * .claude/skills (plugins supply skill targets), and should name the project after the directory
-     * unless told otherwise.
+     * The config should never set projectRoot (sous sets it, and setting it is an error), should
+     * hold no compile target but the project's own skills (no root AGENTS.md or CLAUDE.md; the
+     * memories file is a plugin's), should point at the schema published with the running version,
+     * and should name the project after the directory unless told otherwise.
      */
-    it("should write a config without projectRoot or a skills directory", async () => {
-        const { ctx } = initContext();
+    it("should write a config whose only target is the project's skills", async () => {
+        const { ctx } = initContext({ version: "1.2.3" });
 
         await handle({ directory: projectRoot, noBuild: true }, ctx);
 
-        const text = fs.readFileSync(path.join(sousDir, "sous.config.js"), "utf8");
-        const loaded = await initContext().ctx.services.get("config-files.loader").load(path.join(sousDir, "sous.config.js"));
+        const text = fs.readFileSync(path.join(sousDir, "sous.config.jsonc"), "utf8");
+        const loaded = await initContext().ctx.services.get("config-files.loader").load(path.join(sousDir, "sous.config.jsonc"));
 
         expect(text).not.toMatch(/_vars/);
-        expect(text).not.toMatch(/projectRoot\s*"?:/);
-        // The only .claude path is the project-skills target's destination; recipe skills come from plugins.
-        expect(text.match(/\.claude/g)?.length).toBe(2);
-        expect(fs.readFileSync(path.join(sousDir, STARTER_PROMPT_RELATIVE_PATH), "utf8")).not.toContain(".claude");
-        expect(loaded).toMatchObject({ kind: "module" });
-        expect(JSON.parse((loaded as unknown as { text: string }).text)).toMatchObject({
+        expect(text).not.toMatch(/"projectRoot"\s*:/);
+        expect(text).not.toMatch(/AGENTS\.md|CLAUDE\.md|entryPoint/);
+        expect(loaded).toMatchObject({ kind: "data", format: "jsonc" });
+        expect((loaded as unknown as { data: unknown }).data).toEqual({
+            $schema: "https://raw.githubusercontent.com/sous-io/sous/v1.2.3/sous.config.schema.json",
             name: "my-app",
             compilation: {
-                targets: [
-                    { entryPoint: `\${sousDir}/${STARTER_PROMPT_RELATIVE_PATH}`, outputs: [{ destinationFile: "${projectRoot}/CLAUDE.md" }, { destinationFile: "${projectRoot}/AGENTS.md" }] },
-                    { entryGlob: "${sousDir}/skills/**/*", globBase: "${sousDir}/skills", outputs: [{ destinationDir: "${projectRoot}/.claude/skills" }] },
-                ],
+                targets: [{ entryGlob: "${sousDir}/skills/**/*", globBase: "${sousDir}/skills", outputs: [{ destinationDir: "${projectRoot}/.claude/skills" }] }],
             },
         });
 
@@ -104,22 +101,66 @@ describe("init", () => {
 
         fs.mkdirSync(other);
         await handle({ directory: other, name: "Other Project", noBuild: true }, initContext().ctx);
-        expect(fs.readFileSync(path.join(other, ".sous/sous.config.js"), "utf8")).toContain('name: "Other Project"');
+        expect(fs.readFileSync(path.join(other, ".sous/sous.config.jsonc"), "utf8")).toContain('"name": "Other Project"');
     });
 
-    /** The config should be written as sous.config.js, comments and all. */
-    it("should write a JavaScript config", async () => {
+    /** The config should be written as sous.config.jsonc, comments and all, and no sous.config.js. */
+    it("should write a JSONC config with its comments", async () => {
         const outputs = await handle({ directory: projectRoot, noBuild: true }, initContext().ctx);
         const result = outputs.toPlain();
 
-        expect(result.configPath).toBe(path.join(sousDir, "sous.config.js"));
-        expect(fs.existsSync(path.join(sousDir, "sous.config.jsonc"))).toBe(false);
+        expect(result.configPath).toBe(path.join(sousDir, "sous.config.jsonc"));
+        expect(fs.existsSync(path.join(sousDir, "sous.config.js"))).toBe(false);
 
         const text = fs.readFileSync(result.configPath, "utf8");
 
-        expect(text).toContain('name: "my-app"');
-        expect(text).not.toMatch(/_vars|projectRoot:/);
         expect(text).toMatch(/^\/\/ The primary sous config for my-app\./);
+        expect(text).toContain("// Shown in command output. Any string.\n");
+        expect(text).toContain(`\`.sous/${MEMORIES_SOURCE_RELATIVE_PATH}\``);
+    });
+
+    /**
+     * The memories source should hold the two default lines, each on its own line after a comment
+     * naming both; the starter memory should hold the generic text and no include line.
+     */
+    it("should write the memories source with the two default lines, and a starter memory without includes", async () => {
+        await handle({ directory: projectRoot, noBuild: true }, initContext().ctx);
+
+        const source = fs.readFileSync(path.join(sousDir, MEMORIES_SOURCE_RELATIVE_PATH), "utf8");
+        const starter = fs.readFileSync(path.join(sousDir, STARTER_MEMORY_RELATIVE_PATH), "utf8");
+
+        expect(source.endsWith("{% endcomment -%}\n@memories/**/*.md\n@#memories/**/*.md\n")).toBe(true);
+        expect(source).toMatch(/^\{% comment %\}\n/);
+        expect(source).toContain("Removing a line removes that part");
+        expect(starter).toMatch(/^# my-app\n\n\{% comment %\}\n/);
+        expect(starter).toContain("## Working in this project\n\n- Describe the project here: what it is, how it is built, and how it is tested.\n");
+        expect(starter).toContain("`.sous/MEMORIES.tpl.md` controls what is included and in what order.\n");
+        expect(starter.split("\n").filter((line) => line.startsWith("@"))).toEqual([]);
+    });
+
+    /**
+     * The project's .gitignore should gain, once, the marked block of what a build writes outside
+     * .sous/, keeping the lines already there; .sous/.gitignore should ignore backups/.
+     */
+    it("should write the ignore entries for the outputs into the project's .gitignore", async () => {
+        fs.writeFileSync(path.join(projectRoot, ".gitignore"), "node_modules/\n");
+
+        await handle({ directory: projectRoot, noBuild: true }, initContext().ctx);
+
+        expect(fs.readFileSync(path.join(projectRoot, ".gitignore"), "utf8")).toBe(
+            [
+                "node_modules/",
+                "",
+                IGNORE_BLOCK_START,
+                "/.claude/rules/SOUS-MEMORIES.md",
+                "/.claude/skills/",
+                "/.claude/agents/",
+                "/AGENTS.override.md",
+                IGNORE_BLOCK_END,
+                "",
+            ].join("\n"),
+        );
+        expect(fs.readFileSync(path.join(sousDir, ".gitignore"), "utf8").split("\n")).toContain("backups/");
     });
 
     /** A .sous/ that already holds a primary config is refused by name and nothing is written. */
@@ -165,7 +206,7 @@ describe("init", () => {
         expect(dry.last()?.style).toBe(ReportEntryStyle.DryRun);
         expect(dry.last()?.result?.toText()).toMatch(/^Nothing was written\./);
         expect(real.first()?.title).toBe("What was set up");
-        expect((real.first()?.result as VariableSet).toObject()).toMatchObject({ Config: path.join(sousDir, "sous.config.js") });
+        expect((real.first()?.result as VariableSet).toObject()).toMatchObject({ Config: path.join(sousDir, "sous.config.jsonc"), Memories: path.join(sousDir, MEMORIES_SOURCE_RELATIVE_PATH) });
         expect(real.last()?.summary).toMatch(/build output/);
     });
 
@@ -319,7 +360,7 @@ describe("init build", () => {
         const { ctx } = initContext({ build: { ok: false } });
 
         await expect(handle({ directory: projectRoot }, ctx)).rejects.toThrow(/set up, but the first build failed/);
-        expect(fs.existsSync(path.join(sousDir, "sous.config.js"))).toBe(true);
+        expect(fs.existsSync(path.join(sousDir, "sous.config.jsonc"))).toBe(true);
     });
 });
 
@@ -396,22 +437,50 @@ describe("init importing a project's agent files", () => {
 
     /**
      * An existing CLAUDE.md should be imported into .sous/memories/imported/, with no starter memory
-     * beside it; the root .gitignore should gain the build outputs; and git should stop tracking the
-     * root file, which stays on disk until the build compiles over it.
+     * beside it. Sous no longer writes the root file, so it moves: it is backed up, removed, and
+     * git stops tracking it. The root .gitignore does not list it.
      */
-    it("should import an existing CLAUDE.md and stop git tracking it", async () => {
+    it("should import an existing CLAUDE.md, back it up and move it out of the root", async () => {
         write({ "CLAUDE.md": "# Rules\n\nKeep commits small.\n", ".gitignore": "node_modules/\n" });
 
         const git = fakeGit();
         const { ctx } = initContext({ services: { "git.runner": git.runner } });
         const result = (await handle({ directory: projectRoot, noBuild: true }, ctx)).toPlain();
+        const backups = listTree(path.join(sousDir, "backups"));
 
         expect(fs.readFileSync(path.join(sousDir, "memories/imported/CLAUDE.md"), "utf8")).toBe("# Rules\n\nKeep commits small.\n");
         expect(fs.existsSync(path.join(sousDir, STARTER_MEMORY_RELATIVE_PATH))).toBe(false);
-        expect(fs.readFileSync(path.join(projectRoot, ".gitignore"), "utf8")).toMatch(/node_modules\/[\s\S]*\/CLAUDE\.md\n\/AGENTS\.md\n\/\.claude\/skills\//);
-        expect(fs.existsSync(path.join(projectRoot, "CLAUDE.md"))).toBe(true);
+        expect(fs.readFileSync(path.join(projectRoot, ".gitignore"), "utf8")).not.toContain("CLAUDE.md");
+        expect(fs.existsSync(path.join(projectRoot, "CLAUDE.md"))).toBe(false);
+        expect(backups).toHaveLength(1);
+        expect(backups[0]).toMatch(/^\d{4}-\d{2}-\d{2}\/\d{4}-\d{2}\/CLAUDE\.md$/);
+        expect(result.removed).toContain(path.join(projectRoot, "CLAUDE.md"));
         expect(result.untracked).toEqual(["CLAUDE.md"]);
         expect(git.commands).toContainEqual(["rm", "-r", "--cached", "--quiet", "--", "CLAUDE.md"]);
+    });
+
+    /** A CLAUDE.md that only points at AGENTS.md is not imported, but moves away with it. */
+    it("should move a pointer CLAUDE.md away with the AGENTS.md it points at", async () => {
+        write({ "CLAUDE.md": "@AGENTS.md\n", "AGENTS.md": "# Rules\n" });
+
+        await handle({ directory: projectRoot, noBuild: true }, initContext().ctx);
+
+        expect(fs.existsSync(path.join(sousDir, "memories/imported/CLAUDE.md"))).toBe(false);
+        expect(fs.readFileSync(path.join(sousDir, "memories/imported/AGENTS.md"), "utf8")).toBe("# Rules\n");
+        expect(fs.existsSync(path.join(projectRoot, "CLAUDE.md"))).toBe(false);
+        expect(fs.existsSync(path.join(projectRoot, "AGENTS.md"))).toBe(false);
+        expect(listTree(path.join(sousDir, "backups")).map((file) => file.split("/").pop())).toEqual(["AGENTS.md", "CLAUDE.md"]);
+    });
+
+    /** A dry run plans the move and removes nothing. */
+    it("should leave the root instruction files in place on a dry run", async () => {
+        write({ "CLAUDE.md": "# Rules\n" });
+
+        const result = (await handle({ directory: projectRoot, dryRun: true }, initContext().ctx)).toPlain();
+
+        expect(result.removed).toEqual([path.join(projectRoot, "CLAUDE.md")]);
+        expect(fs.readFileSync(path.join(projectRoot, "CLAUDE.md"), "utf8")).toBe("# Rules\n");
+        expect(fs.existsSync(sousDir)).toBe(false);
     });
 
     /**
@@ -446,12 +515,15 @@ describe("init importing a project's agent files", () => {
         expect(fs.existsSync(path.join(sousDir, "includes/docs/a.md"))).toBe(true);
         expect(fs.existsSync(path.join(projectRoot, "docs/a.md"))).toBe(true);
 
+        // Each run moves CLAUDE.md into .sous/, so it is put back before the next one.
         fs.rmSync(sousDir, { recursive: true });
+        write({ "CLAUDE.md": "@docs/a.md\n" });
         await handle({ directory: projectRoot, noBuild: true, leaveIncludes: true }, initContext().ctx);
 
         expect(fs.readFileSync(path.join(sousDir, "memories/imported/CLAUDE.md"), "utf8")).toBe("@#project/docs/a.md\n");
 
         fs.rmSync(sousDir, { recursive: true });
+        write({ "CLAUDE.md": "@docs/a.md\n" });
         await handle({ directory: projectRoot, noBuild: true, yes: true }, initContext().ctx);
 
         expect(fs.existsSync(path.join(projectRoot, "docs/a.md"))).toBe(false);
@@ -464,12 +536,12 @@ describe("init importing a project's agent files", () => {
 
         await handle({ directory: projectRoot, noBuild: true }, initContext().ctx);
 
-        const config = fs.readFileSync(path.join(sousDir, "sous.config.js"), "utf8");
+        const config = fs.readFileSync(path.join(sousDir, "sous.config.jsonc"), "utf8");
 
         expect(fs.existsSync(path.join(sousDir, "skills/deploy/SKILL.md"))).toBe(true);
         expect(fs.existsSync(path.join(projectRoot, ".claude/skills/deploy"))).toBe(false);
-        expect(config).toContain('entryGlob: "${sousDir}/skills/**/*"');
-        expect(config).toContain('destinationDir: "${projectRoot}/.claude/skills"');
+        expect(config).toContain('"entryGlob": "${sousDir}/skills/**/*"');
+        expect(config).toContain('"destinationDir": "${projectRoot}/.claude/skills"');
         expect(fs.readFileSync(path.join(sousDir, ".env"), "utf8")).toContain("\nSKILLS_ROOT=.sous/skills\n");
     });
 
@@ -479,10 +551,10 @@ describe("init importing a project's agent files", () => {
 
         await handle({ directory: projectRoot, noBuild: true }, initContext().ctx);
 
-        const memory = fs.readFileSync(path.join(sousDir, "memories/project/sous-repo.tpl.md"), "utf8");
+        const memory = fs.readFileSync(path.join(sousDir, STARTER_MEMORY_RELATIVE_PATH), "utf8");
 
         expect(memory).toContain("## This Is a Sous Repo");
         expect(memory).toContain("`about-sous-repos`");
-        expect(fs.existsSync(path.join(sousDir, STARTER_MEMORY_RELATIVE_PATH))).toBe(false);
+        expect(memory).not.toContain("## Working in this project");
     });
 });

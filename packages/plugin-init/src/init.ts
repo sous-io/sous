@@ -2,9 +2,8 @@
  * The `init` intent: sets a project up for sous. It imports the project's existing agent files
  * (a root `CLAUDE.md` or `AGENTS.md`, the files they include, and the skills in `.claude/skills/`)
  * into `.sous/`, writes the `.sous/` directory a project needs (a commented primary config, the
- * source both instruction files compile from, a starter memory when there was nothing to import,
- * the two answers files and the sous-managed ignore blocks), stops git tracking the files that are
- * now build output, then runs the first build through the one build path, which is what seeds the
+ * memories source, a starter memory when there was nothing to import, the two answers files and
+ * the sous-managed ignore blocks), stops git tracking the files it moved, then runs the first build through the one build path, which is what seeds the
  * `core` recipe and pins it in the lockfile.
  *
  * Every question has a flag: setting a project up inside another one is answered by `yes`, and what
@@ -18,7 +17,7 @@ import "@sous-io/plugin-build/types";
 import type { GitRunner } from "@sous-io/plugin-git/types";
 import { applyImport, type ImportOutcome, type ImportScan, INCLUDES_DIR, type IncludeFate, type IncludedFile, scanImport, settleFates } from "./import.js";
 import { assertNoExistingConfig, findEnclosingProject, scaffoldProject, sousDirFor } from "./scaffold.js";
-import { STARTER_OUTPUT_NAMES, STARTER_PROMPT_RELATIVE_PATH } from "./templates.js";
+import { MEMORIES_SOURCE_RELATIVE_PATH } from "./templates.js";
 import type { InitInput, InitResult, PackageJsonOutcome } from "./types.js";
 
 /** The package `init` adds to a project's `package.json`. */
@@ -200,7 +199,8 @@ function reportImport(ctx: Context, root: string, outcome: ImportOutcome, untrac
 
         switch (step.kind) {
             case "imported":
-                ctx.reporter.operation(dryRun ? "would-write" : "written", relative(step.dest!), { note: `${would("imported from", "would import from")} ${relative(step.source)}` });
+                ctx.reporter.operation(dryRun ? "would-write" : "written", relative(step.dest!), { note: `${would("imported from", "would import from")} ${relative(step.source)}${backup}` });
+                ctx.reporter.operation(dryRun ? "would-remove" : "removed", relative(step.source), { note: `${would("moved", "would move")} into .sous/; a build no longer writes it` });
                 break;
             case "moved":
                 ctx.reporter.operation(dryRun ? "would-write" : "written", relative(step.dest!), { note: `${would("moved from", "would move from")} ${relative(step.source)}${backup}` });
@@ -212,7 +212,11 @@ function reportImport(ctx: Context, root: string, outcome: ImportOutcome, untrac
                 ctx.reporter.operation("skipped", relative(step.source), { note: step.note ?? "left where it is; sous includes it from there" });
                 break;
             case "skipped":
-                ctx.reporter.operation("skipped", relative(step.source), { note: `not imported: ${step.note}` });
+                if (step.backup === undefined) {
+                    ctx.reporter.operation("skipped", relative(step.source), { note: `not imported: ${step.note}` });
+                } else {
+                    ctx.reporter.operation(dryRun ? "would-remove" : "removed", relative(step.source), { note: `not imported: ${step.note}${backup}` });
+                }
                 break;
             case "turned-off":
                 ctx.reporter.warn(`${relative(step.source)}: ${step.note}.`);
@@ -329,16 +333,13 @@ export async function handle(input: InitInput, ctx: Context): Promise<IntentOutp
 
 /** The closing outputs: what was set up, then the note about build output. The last carries the result. */
 function whatWasSetUp(result: InitResult): IntentOutput[] {
-    const outputs = STARTER_OUTPUT_NAMES.map((name) => path.join(result.root, name));
-
     return [
         new IntentOutput({
             title: "What was set up",
             result: new VariableSet([
                 { label: "Config", value: result.configPath },
-                { label: "Instructions", value: path.join(result.sousDir, STARTER_PROMPT_RELATIVE_PATH) },
-                { label: "Compiled to", value: outputs[0] },
-                ...outputs.slice(1).map((value) => ({ label: "", value })),
+                { label: "Memories", value: path.join(result.sousDir, MEMORIES_SOURCE_RELATIVE_PATH), detail: "what the memories file includes, and in what order" },
+                { label: "Project memories", value: path.join(result.sousDir, "memories") },
                 { label: "Skills", value: path.join(result.root, ".claude", "skills") },
                 ...dependencyRow(result.packageJson),
                 { label: "Shared answers", value: path.join(result.sousDir, ".env"), detail: "committed" },
@@ -346,7 +347,7 @@ function whatWasSetUp(result: InitResult): IntentOutput[] {
             ]),
         }),
         new IntentOutput({
-            summary: `${STARTER_OUTPUT_NAMES.join(", ")} and .claude/skills/ are build output, gitignored and compiled from the sources under .sous/ and from the recipes this project subscribes to; a build recompiles them. The config explains each of its blocks in its own comments.`,
+            summary: `The memories file and .claude/skills/ are build output, gitignored and compiled from the sources under .sous/ and from the recipes this project subscribes to; a build recompiles them. The config explains each of its blocks in its own comments.`,
             data: result,
         }),
     ];

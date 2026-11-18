@@ -1,5 +1,7 @@
 /**
- * Scaffolding a project's `.sous/` directory, which is what `sous init` does.
+ * Scaffolding a project's `.sous/` directory, which is what `sous init` does: the primary config
+ * (`sous.config.jsonc`), the memories source (`MEMORIES.tpl.md`), a starter memory, the two answers
+ * files and the sous-managed ignore blocks.
  *
  * The scaffold is planned in memory first and only then written. It refuses to touch a project that
  * is already set up: a `.sous/` directory holding a primary config is left exactly as it is. Any
@@ -19,21 +21,20 @@ import "@sous-io/plugin-config-files/types";
 import "@sous-io/plugin-host/types";
 import { planPackageJson } from "./package-json.js";
 import {
-    buildConfigJs,
+    buildConfigJsonc,
     buildEnvDefaults,
     buildEnvLocalExample,
+    buildMemoriesSource,
     buildRepoStarterMemory,
     buildStarterMemory,
-    buildStarterPrompt,
     CONFD_DIR_NAME,
     CONFIG_FILE_NAME,
     ENV_DEFAULTS_NAME,
     ENV_LOCAL_NAME,
+    MEMORIES_SOURCE_RELATIVE_PATH,
     SOUS_DIR_NAME,
-    REPO_STARTER_MEMORY_RELATIVE_PATH,
     ROOT_IGNORE_LINES,
     STARTER_MEMORY_RELATIVE_PATH,
-    STARTER_PROMPT_RELATIVE_PATH,
     type ScaffoldContext,
 } from "./templates.js";
 import type { PackageJsonOutcome } from "./types.js";
@@ -146,12 +147,10 @@ export async function scaffoldProject(ctx: Context, options: ScaffoldOptions): P
     // Planned first, so a package.json that cannot be read stops the run before anything is written.
     const dependency = planPackageJson(root, identity.name, identity.version);
     const planned: Array<{ file: string; contents: string }> = [
-        { file: configPath, contents: buildConfigJs(context) },
-        { file: path.join(sousDir, STARTER_PROMPT_RELATIVE_PATH), contents: buildStarterPrompt() },
+        { file: configPath, contents: buildConfigJsonc(context) },
+        { file: path.join(sousDir, MEMORIES_SOURCE_RELATIVE_PATH), contents: buildMemoriesSource() },
         ...(options.starterMemory === true
-            ? isRecipeRepository(root)
-                ? [{ file: path.join(sousDir, REPO_STARTER_MEMORY_RELATIVE_PATH), contents: buildRepoStarterMemory(context) }]
-                : [{ file: path.join(sousDir, STARTER_MEMORY_RELATIVE_PATH), contents: buildStarterMemory(context) }]
+            ? [{ file: path.join(sousDir, STARTER_MEMORY_RELATIVE_PATH), contents: isRecipeRepository(root) ? buildRepoStarterMemory(context) : buildStarterMemory(context) }]
             : []),
         { file: path.join(sousDir, ENV_DEFAULTS_NAME), contents: buildEnvDefaults(context) },
         { file: path.join(sousDir, `${ENV_LOCAL_NAME}.example`), contents: buildEnvLocalExample(context) },
@@ -188,7 +187,8 @@ export async function scaffoldProject(ctx: Context, options: ScaffoldOptions): P
         files.push(ignore.file);
     }
 
-    // The files a build writes at the project root are build output, so git ignores them.
+    // What a build writes outside .sous/ is build output, so git ignores it. Written once, here;
+    // no build keeps this block current.
     const rootIgnore = await ctx.services.get("host.gitignore").write(path.join(root, ".gitignore"), ROOT_IGNORE_LINES, { dryRun: options.dryRun });
 
     if (rootIgnore.changed) {

@@ -186,7 +186,10 @@ describe("applyImport()", () => {
         expect(outcome.nothingImported).toBe(false);
     });
 
-    /** A copy should leave the original in place, and a dry run should write nothing at all. */
+    /**
+     * A copy should leave the included original in place, and a dry run should write nothing at
+     * all. The only backup is of the root instruction file, which always moves.
+     */
     it("should keep the original on a copy, and write nothing on a dry run", async () => {
         write({ "CLAUDE.md": "@docs/a.md\n", "docs/a.md": "A\n" });
 
@@ -199,7 +202,8 @@ describe("applyImport()", () => {
         applyImport(copied.scan, copied.fates, { dryRun: false });
 
         expect(fs.readFileSync(path.join(root, "docs/a.md"), "utf8")).toBe("A\n");
-        expect(fs.existsSync(path.join(sousDir, "backups"))).toBe(false);
+        expect(fs.existsSync(path.join(root, "CLAUDE.md"))).toBe(false);
+        expect(fs.readdirSync(path.join(sousDir, "backups"), { recursive: true }).filter((entry) => String(entry).endsWith(".md")).map((entry) => path.basename(String(entry)))).toEqual(["CLAUDE.md"]);
     });
 });
 

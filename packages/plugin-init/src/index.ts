@@ -63,18 +63,18 @@ export const initPlugin: PluginDefinition = definePlugin({
 export default initPlugin;
 
 export {
-    buildConfigJs,
+    buildConfigJsonc,
     buildEnvDefaults,
     buildEnvLocalExample,
+    buildMemoriesSource,
     buildRepoStarterMemory,
     buildStarterMemory,
-    buildStarterPrompt,
     CONFIG_FILE_NAME,
-    REPO_STARTER_MEMORY_RELATIVE_PATH,
+    configSchemaUrl,
+    MEMORIES_DEFAULT_LINES,
+    MEMORIES_SOURCE_RELATIVE_PATH,
     ROOT_IGNORE_LINES,
     STARTER_MEMORY_RELATIVE_PATH,
-    STARTER_OUTPUT_NAMES,
-    STARTER_PROMPT_RELATIVE_PATH,
 } from "./templates.js";
 export { applyImport, findReferences, rewriteReferences, scanImport, settleFates } from "./import.js";
 export { planPackageJson } from "./package-json.js";
