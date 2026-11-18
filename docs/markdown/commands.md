@@ -269,9 +269,38 @@ the build, but only after every target is compiled and every error listed. An ou
 not written, so the copy from the last good build stays in place. A build also warns about every recipe memory
 that no output includes; see [Recipe memories](repositories-consuming.md#recipe-memories).
 
+After preparing the recipes, one build runs these steps, in this order:
+
+1. The `check` handlers of the recipes and plugins (see [Handlers](handlers.md)). An error from one stops the
+   build here, before anything in the project is written, and the build ends with exit code 1. A warning is
+   printed and the build goes on.
+2. The `beforeBuild` handlers.
+3. The compiler, then the prune of outputs the config no longer produces.
+4. The declared edits to files sous does not own, and their assertions (see
+   [Editing files Sous does not own](editing-files.md)). An assertion at level error that fails leaves that one
+   file unwritten; every other file is written, and the build ends with exit code 1.
+5. The `afterBuild` handlers.
+
+A compile error skips steps 4 and 5. Three flags let a build finish in spite of failures. Each failure is still
+printed, as a warning, and the build ends as successful. There is no setting that makes this permanent: it is a
+choice made on each run.
+
+| Flag | What it lets through |
+| --- | --- |
+| `--ignore-failed-checks` | An error a `check` handler reports |
+| `--ignore-failed-assertions` | A failed assertion at level error; the file is then written |
+| `--keep-going` | Both |
+
+`--dry-run` runs the `check` handlers (they only report), works out every edit and checks every assertion, and
+writes nothing; it runs no `beforeBuild` or `afterBuild` handler, since those act. Watch mode runs every step on
+each rebuild, with the flags it was started with. `sous prune` runs none of the handlers and no edits. The other
+commands that build (`init`, `launch`, `subscription add` and the like) run the same steps without these flags,
+so a failed check stops them too; run `sous build --ignore-failed-checks` first when that is what you want.
+
 ```bash
 sous build
 sous build --watch
+sous build --keep-going
 ```
 
 ### `sous compile`, `sous prune`, `sous clear`
@@ -378,8 +407,18 @@ problem it finds, asking before each fix. Its checks, in order:
 2. The lockfile agrees with the subscriptions (fix: write the lockfile the subscriptions make, keeping every pin
    their ranges still allow).
 3. Required recipe variables have answers (fix: ask them).
-4. Every migration for this version of sous has run (fix: run them).
-5. The files sous wrote are present and unchanged (fix: build).
+4. Every migration for this version of sous has run (fix: run them). This check runs even when the config does
+   not load, since a migration may be what makes it load again (an option a newer sous removed).
+5. The git hooks are turned on, when the project was set up with them (fix: `sous init hooks --install`). Sous
+   reads what `sous init hooks` committed: hook files in `.husky/` holding its marked block. They are on when
+   git's hooks folder is Husky's `.husky/_`, which the package manager's install sets up; a fresh clone whose
+   install has not run is what this finds. A project without a `package.json` keeps its hook outside git, so a
+   new clone cannot tell, and the check says so.
+6. The `check` handlers of the recipes and plugins report no errors. Their errors are a problem and their
+   warnings a warning, one line each. No fix: what they report is yours to put right.
+7. Every assertion on the files sous edits holds, checked without writing anything. A failed assertion at level
+   error is a problem; one at level warn is a warning. No fix.
+8. The files sous wrote are present and unchanged (fix: build).
 
 Plugins add checks of their own. `--dry-run` reports and changes nothing; `--yes` applies every fix without
 asking and takes the default answer to each migration's question; `--answer <name>=<value>` answers one

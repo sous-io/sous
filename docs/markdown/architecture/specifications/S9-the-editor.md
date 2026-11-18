@@ -430,4 +430,19 @@ gone. What changed for a person: each line of a plain text file keeps its own li
 added at the end of a file gets a blank line before it, as `sous init`'s blocks do; and a damaged
 block is skipped instead of a second one being added. The operations the library made cheap were
 built: `prependIfMissing`, `moveKeyBefore`, `moveKeyAfter`, `moveKeyFirst` and `moveKeyLast`.
-`sortKeys` now moves each key with its comments. (The agent's work, joining the merged pieces.)
+`sortKeys` now moves each key with its comments. The agent's work while joining the merged pieces;
+not yet reviewed by Luke.
+
+### 2026-11-18: The history and backups are ignored in a project set up before the editor
+
+`sous init` writes `sous.edits.json` and `backups/` into `.sous/.gitignore`'s managed block, but a
+project set up before the editor existed has neither line. The first `editor.apply` that writes
+(not a dry run, in a project that declares an edit or has a history) adds both to the block through
+`host.gitignore`. A history file configured outside `.sous/` is the project's to ignore. The
+agent's choice; not yet reviewed by Luke.
+
+### 2026-11-18: `sous doctor` checks the assertions
+
+The editor adds the `doctor-check` `assertions` (order 700): `editor.apply`'s dry run, with nothing
+printed, then a failed assertion at level error is a problem and one at level warn a warning. It has
+no fix. The agent's choice of form; the check itself is the one S11 lists.

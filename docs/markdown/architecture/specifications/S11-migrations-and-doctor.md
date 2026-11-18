@@ -210,4 +210,29 @@ an error naming both.
 
 ## Changes
 
-None yet.
+### 2026-11-18: Migrations run when the config does not load
+
+A config may fail to load because it uses an option a newer sous removed, which is what a migration
+repairs (the first is the `_if` one below). So `migrations.run` tolerates config errors, and the
+`migrations` doctor check looks for pending migrations even when the config failed; it skips only
+when the lockfile cannot be read. Before, both refused, and a project whose config used `_if` could
+never be migrated. The agent's change; not yet reviewed by Luke.
+
+### 2026-11-18: The `_if` migration
+
+`plugin-compiler` adds `compiler/if-to-expression` at version `1.0.20` (the release after 1.0.19,
+so it is pending for every project migrated by 1.0.19 or earlier, whether the next release is a
+patch or a minor). In each `.json`, `.jsonc`, `.yaml` or `.yml` file among `sous.config.*` and
+`conf.d/` (patch files left out), every item of an `outputs` list holding `_if` becomes
+`{ "$if": { "expr": "<name> == '<value>' and ...", "then": <the output without _if> } }`, edited
+through `@sous-io/documents`, so the rest of the file keeps its bytes. A config written as code is
+reported, each `_if` with its file, line and the expression to write. An `_if` on a variable named
+`env` or `host` is left and reported, since an expression reads those names as Sous's own values.
+It is added only when the migrations plugin is loaded. The agent's choice of form, following
+Luke's ruling that `_if` is removed and existing configs are converted by a migration.
+
+### 2026-11-18: The git hooks, check handlers and assertions checks are built
+
+The three checks at 500, 600 and 700 are built, each by its owner: `plugin-init` (`git-hooks`, see
+S14), `sous-plugin-handlers` (`check-handlers`, see S13) and `sous-plugin-editor` (`assertions`,
+see S9). Each owner depends on `sous-plugin-doctor`.
