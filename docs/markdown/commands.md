@@ -93,9 +93,8 @@ The instructions source holds two includes:
 
 The first pulls in this project's own memories, every markdown file in a folder beside the source (such as
 `imported/` and `conventions/`). The second pulls in every memory the subscribed recipes publish. Because the
-config's target writes `CLAUDE.md`, the Claude Code plugin's own memory target for that file steps aside. An
-include that matches nothing stops a build, so the project's folder is never empty: when there was nothing to
-import, init writes a starter memory at `.sous/memories/project/overview.tpl.md` (or
+config's target writes `CLAUDE.md`, the Claude Code plugin's own memory target for that file steps aside. When
+there was nothing to import, init writes a starter memory at `.sous/memories/project/overview.tpl.md` (or
 `.sous/memories/project/sous-repo.tpl.md` in a recipe repository, one with a `sous.repo.yaml`).
 
 What init imports, before the first build:

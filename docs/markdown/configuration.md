@@ -67,24 +67,61 @@ project.
 
 ## Include syntax
 
-A line holding only `@path` includes that file's content. A path may be:
+Sous reads `@path` the way Claude Code reads an import, and puts the file's text where the name stands. An
+`@path` counts anywhere in a line of Markdown text when the `@` starts the line or follows a space:
 
-- relative to the including file (`@sections/context.md`);
+```markdown
+@sections/context.md
+- @sections/rules.md
+See @docs/guide.md for details.
+```
+
+A name alone on a line is replaced by the file's whole text. A name inside a line is replaced by the file's text
+with its leading and trailing whitespace trimmed, so `See @docs/guide.md for details.` reads as one sentence.
+
+A plain path may be:
+
+- relative to the including file (`@sections/context.md`, `@../shared/rules.md`);
+- home-relative (`@~/notes/private.md`) or absolute (`@/srv/notes.md`);
+- an alias from `_aliases`, by its first segment (`@myAlias/doc.md`).
+
+The path ends at the first space (write `@my\ file.md` for a space in a name) and at the first `#`
+(`@guide.md#setup` includes `guide.md`). Punctuation right after it is part of the path, so `see @guide.md.` names
+a file called `guide.md.`, which does not exist. The file may be of any text type Claude Code imports (`.md`,
+`.txt`, `.json`, `.yaml`, `.sh`, `.py` and about a hundred more, in any case) or have no extension (`@README`).
+
+**A plain path that names no file is left as written, with no message**, as Claude Code does, so a mention such as
+`@alice` or `@scope/package` stays text. A typo in a file name therefore does not fail the build; the text simply
+does not appear.
+
+Sous's own forms count only on a line that holds nothing else, and are checked before the plain path:
+
 - `${var}` substituted (`@${projectRoot}/prompts/x.md`);
-- home-relative (`@~/notes/private.md`);
-- an alias from `_aliases`, by its first segment (`@myAlias/doc.md`);
 - a name sous or a plugin registers, written with the `#` sigil: `#project` is the project root
   (`@#project/prompts/intro.md`);
 - a recipe file, written with the `~` sigil and the recipe's namespace (`@~workflow/task-files/_partials/resume.md`);
 - a view: `@#memories/**/*.md` includes every active recipe's memories (see
-  [Recipe memories](repositories-consuming.md#recipe-memories)).
+  [Recipe memories](repositories-consuming.md#recipe-memories));
+- glob syntax (`*`, `**`, `?`, `[..]`, `{a,b}`), which includes every text file it matches;
+- a `?name=value` query after the path (`@part.md?mood=calm`).
 
-A path may use glob syntax (`*`, `**`, `?`, `[..]`, `{a,b}`) and then includes every file it matches, in bytewise
-path order. The same file may be included in more than one place; a circular include is an error, as is a line
-that looks like an include (`@docs/notes.txt`, `@~workflow/missing`) but cannot be resolved, which fails the
-build naming the file and the line. A line inside a fenced code block is left as written. An alias name may not
-start with `~` or `#`. [Including recipe files in your own templates](repositories.md#including-recipe-files-in-your-own-templates)
-has the namespace rules.
+One of these forms that cannot be resolved fails the build, naming the file and the line. A glob that matches
+nothing does nothing: its line is removed from the output, with no message. A glob's files come in this order: at
+each folder its own files first, then its sub-folders, with the same rule inside each; names are compared one
+character at a time ignoring case, with `_` before every other character and digits before letters, so
+`_intro.md`, `0002-setup.md`, `0010-setup.md`, `10-setup.md`, `2-setup.md`, `apple.md`, `Zebra.md`, then
+`api/routes.md`.
+
+The frontmatter of every included file is removed; the including file keeps its own. The same file may be
+included in more than one place; a circular include is an error. An alias name may not start with `~` or `#`.
+[Including recipe files in your own templates](repositories.md#including-recipe-files-in-your-own-templates) has
+the namespace rules.
+
+To write an `@path` as text, escape it the way you would for Claude Code: put it in backticks (`` `@docs/x.md` ``)
+or put a backslash before the `@` (`\@docs/x.md`). Sous also leaves alone a name in a fenced or indented code
+block, an HTML block or comment, the frontmatter at the top of the file, a link's destination or an image's text,
+and an `@` that follows anything but a space (`(@x.md)`, `"@x.md"`, `name@x.md`). Sous does not escape text it
+leaves in its output: a name Sous left as text is read again by Claude Code, from the output file's folder.
 
 ## Composition
 
