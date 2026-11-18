@@ -2,6 +2,8 @@ node_modules
 node_modules/
 dist/
 coverage/
+# The packages `pnpm e2e --local` packs from this checkout.
+/e2e/.local/
 deprecated/
 settings.local.js
 /docs/notes

@@ -13,27 +13,57 @@ function pickOldVersion(t) {
 }
 
 let NEW = "latest";
+
+/**
+ * What a package manager installs to get sous: the published version, or with `--local` the two
+ * files packed from this checkout. The packed sous depends on the packed plugin interface at a
+ * version npm may not have, so each manager is pointed at the file for it too.
+ */
+function sousInstall(t, pm) {
+  if (!t.local) return { packageJson: {}, specs: `@sous-io/sous@${NEW}` };
+  const api = `file:${t.local.api}`;
+  const overrides = {
+    npm: { overrides: { "@sous-io/sous-plugin-api": api } },
+    pnpm: { pnpm: { overrides: { "@sous-io/sous-plugin-api": api } } },
+    yarn: { resolutions: { "@sous-io/sous-plugin-api": api } },
+  }[pm];
+  const specs = pm === "yarn" ? `@sous-io/sous@file:${t.local.sous}` : `${t.local.api} ${t.local.sous}`;
+  return { packageJson: overrides, specs };
+}
+
+function packageJson(name, extra) {
+  return `echo '${JSON.stringify({ name, private: true, ...extra })}' > package.json`;
+}
+
 function managers() {
   return [
     {
       id: "npm",
-      setup: (t, dir) => expectExit(t.sh(`echo '{"name":"pm-npm","private":true}' > package.json && npm i --no-audit --no-fund @sous-io/sous@${NEW}`, { cwd: dir, timeout: 240_000 })),
+      setup: (t, dir) => {
+        const { packageJson: extra, specs } = sousInstall(t, "npm");
+        return expectExit(t.sh(`${packageJson("pm-npm", extra)} && npm i --no-audit --no-fund ${specs}`, { cwd: dir, timeout: 240_000 }));
+      },
       lockfile: "package-lock.json",
     },
     {
       id: "pnpm",
-      setup: (t, dir) => expectExit(t.sh(`echo '{"name":"pm-pnpm","private":true}' > package.json && pnpm add @sous-io/sous@${NEW}`, { cwd: dir, timeout: 240_000 })),
+      setup: (t, dir) => {
+        const { packageJson: extra, specs } = sousInstall(t, "pnpm");
+        return expectExit(t.sh(`${packageJson("pm-pnpm", extra)} && pnpm add ${specs}`, { cwd: dir, timeout: 240_000 }));
+      },
       lockfile: "pnpm-lock.yaml",
     },
     {
       id: "yarn-pnp",
-      setup: (t, dir) =>
-        expectExit(
+      setup: (t, dir) => {
+        const { packageJson: extra, specs } = sousInstall(t, "yarn");
+        return expectExit(
           t.sh(
-            `echo '{"name":"pm-yarn","private":true}' > package.json && corepack use yarn@4 >/dev/null 2>&1; yarn config set nodeLinker pnp >/dev/null && yarn config set npmMinimalAgeGate 0 >/dev/null && touch yarn.lock && yarn add @sous-io/sous@${NEW}`,
+            `${packageJson("pm-yarn", extra)} && corepack use yarn@4 >/dev/null 2>&1; yarn config set nodeLinker pnp >/dev/null && yarn config set npmMinimalAgeGate 0 >/dev/null && touch yarn.lock && yarn add ${specs}`,
             { cwd: dir, timeout: 300_000 },
           ),
-        ),
+        );
+      },
       lockfile: "yarn.lock",
       launcher: ["yarn", "sous"],
     },

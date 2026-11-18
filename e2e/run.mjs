@@ -3,17 +3,19 @@
 // and prints a pass/fail summary.
 //
 //   node e2e/run.mjs [--version <npm version or tag>] [--node 22|24] [--only <scenario,...>] [--verbose]
+//   node e2e/run.mjs --local [...]   # this checkout, built and packed, instead of a published version
 //
 // Not part of CI; run it by hand with `pnpm e2e`.
 
 import { spawn, spawnSync } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 function parseArgs(argv) {
-  const options = { version: "latest", node: ["22", "24"], only: null, verbose: false };
+  const options = { version: "latest", node: ["22", "24"], only: null, verbose: false, local: false };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     const next = () => {
@@ -25,9 +27,10 @@ function parseArgs(argv) {
     else if (arg === "--node") options.node = next().split(",");
     else if (arg === "--only") options.only = next();
     else if (arg === "--verbose") options.verbose = true;
+    else if (arg === "--local") options.local = true;
     else if (arg === "--help" || arg === "-h") {
       process.stdout.write(
-        "Usage: node e2e/run.mjs [--version <npm version or tag>] [--node 22|24] [--only <scenario,...>] [--verbose]\n",
+        "Usage: node e2e/run.mjs [--version <npm version or tag> | --local] [--node 22|24] [--only <scenario,...>] [--verbose]\n",
       );
       process.exit(0);
     } else fail(`Unknown option ${arg}.`);
@@ -65,6 +68,31 @@ function scrubber(tokens) {
   return (text) => secrets.reduce((acc, s) => acc.split(s).join("***"), text);
 }
 
+/**
+ * `--local`: builds this checkout's two published packages and packs them into `e2e/.local/`
+ * (git-ignored), which the container sees through the read-only mount and installs instead of a
+ * version from npm. Returns the version they carry.
+ */
+function packLocal() {
+  const root = path.resolve(here, "..");
+  const out = path.join(here, ".local");
+  fs.mkdirSync(out, { recursive: true });
+  for (const file of fs.readdirSync(out)) if (file.endsWith(".tgz")) fs.unlinkSync(path.join(out, file));
+  const pnpm = (args, cwd = root) => {
+    const r = spawnSync("corepack", ["pnpm", ...args], { cwd, encoding: "utf8" });
+    if (r.status !== 0) fail(`corepack pnpm ${args.join(" ")} failed:\n${r.stderr}${r.stdout}`);
+  };
+  pnpm(["--filter", "@sous-io/sous-plugin-api", "build"]);
+  pnpm(["--filter", "@sous-io/sous", "build"]);
+  for (const dir of ["packages/sous-plugin-api", "packages/sous"]) pnpm(["pack", "--pack-destination", out], path.join(root, dir));
+  // Fixed names, so the container finds them whatever the version.
+  for (const file of fs.readdirSync(out)) {
+    if (file.startsWith("sous-io-sous-plugin-api-")) fs.renameSync(path.join(out, file), path.join(out, "sous-plugin-api.tgz"));
+    else if (file.startsWith("sous-io-sous-")) fs.renameSync(path.join(out, file), path.join(out, "sous.tgz"));
+  }
+  return JSON.parse(fs.readFileSync(path.join(root, "packages/sous/package.json"), "utf8")).version;
+}
+
 function dockerBuild(nodeMajor, scrub) {
   const tag = `sous-e2e:node${nodeMajor}`;
   const r = spawnSync("docker", ["build", "-q", "--build-arg", `NODE=${nodeMajor}`, "-t", tag, here], {
@@ -78,6 +106,7 @@ function runContainer({ tag, nodeMajor, options, tokens, runId, scrub }) {
   return new Promise((resolve) => {
     const args = ["run", "--rm", "-v", `${here}:/e2e:ro`, "-e", "GITHUB_TOKEN", "-e", "GITLAB_TOKEN"];
     args.push("-e", `SOUS_VERSION=${options.version}`, "-e", `E2E_RUN_ID=${runId}-n${nodeMajor}`);
+    if (options.local) args.push("-e", "E2E_LOCAL=1");
     if (options.only) args.push("-e", `E2E_ONLY=${options.only}`);
     args.push(tag, "node", "/e2e/container-main.mjs");
     const child = spawn("docker", args, { env: { ...process.env, ...tokens } });
@@ -140,10 +169,11 @@ function indent(text, pad) {
 
 const options = parseArgs(process.argv.slice(2));
 if (spawnSync("docker", ["version"], { stdio: "ignore" }).status !== 0) fail("Docker is not available.");
+if (options.local) options.version = packLocal();
 const tokens = collectTokens();
 const scrub = scrubber(tokens);
 process.stdout.write(
-  `sous e2e: version ${options.version}, Node ${options.node.join(" and ")}, GitHub token ${tokens.GITHUB_TOKEN ? "present" : "absent"}, GitLab token ${tokens.GITLAB_TOKEN ? "present" : "absent"}\n`,
+  `sous e2e: version ${options.version}${options.local ? " (this checkout, packed)" : ""}, Node ${options.node.join(" and ")}, GitHub token ${tokens.GITHUB_TOKEN ? "present" : "absent"}, GitLab token ${tokens.GITLAB_TOKEN ? "present" : "absent"}\n`,
 );
 const runId = Date.now().toString(36);
 const tags = options.node.map((n) => ({ n, tag: dockerBuild(n, scrub) }));
