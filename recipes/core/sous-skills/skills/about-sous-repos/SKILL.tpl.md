@@ -179,9 +179,10 @@ because `sous repo release` reads and writes tags. Every new recipe folder is th
 
 After the scaffold it runs `sous init` in the same directory, so the repository is also a sous
 project. Init imports any `CLAUDE.md`, `AGENTS.md` or `.claude/skills/` already there; with nothing
-to import, it writes `.sous/memories/project/sous-repo.tpl.md`, a memory saying this is a sous
-recipe repository and naming the core skills an agent loads before changing anything. Its first
-build compiles `CLAUDE.md` and `AGENTS.md`. `--yes`, `--move-includes`, `--copy-includes`,
+to import, it writes `.sous/memories/project.tpl.md`, a memory saying this is a sous recipe
+repository and naming the core skills an agent loads before changing anything. Its first build
+compiles the memories file (`.claude/rules/SOUS-MEMORIES.md` for Claude Code) and installs the
+core skills. `--yes`, `--move-includes`, `--copy-includes`,
 `--leave-includes`, `--no-build` and `--dry-run` pass through to init. A directory that already
 holds a sous config keeps it, and init is skipped with a note.
 

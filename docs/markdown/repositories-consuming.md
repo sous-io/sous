@@ -230,11 +230,11 @@ When a build finds a memory an active recipe publishes that no include of any ou
 or the view) and `exclude` does not name, it warns, naming the memory and the line to add. Subscribing alone
 includes nothing, and the warning is how that is never silent.
 
-?> In sous 1.0 an agent's plugin can also name the instruction file that agent reads in every session
-(`CLAUDE.md` for the Claude Code plugin built into sous). Sous then writes that file with one `@` include
-line for each memory `recipes.memories` selects, so the memories reach the agent without a line of your own.
-When a target in your own config writes the same file, your target wins and the plugin's steps aside; your source then includes the memories with the
-`@#memories/**/*.md` line above.
+?> Each coding tool's plugin built into sous also compiles one memories file, the file that tool reads in
+every session: `.claude/rules/SOUS-MEMORIES.md` for Claude Code, and `AGENTS.override.md` for Codex once a
+project turns Codex on. Its source, `.sous/MEMORIES.tpl.md`, holds the `@#memories/**/*.md` line above, so the
+memories reach the agent without a line of your own (see [The memories file](configuration.md#the-memories-file)).
+When a target in your own config writes the same file, your target wins and the plugin's steps aside.
 
 ## Answer the questions
 
