@@ -167,6 +167,11 @@ describe("plugin-authoring", () => {
         expect(fs.existsSync(path.join(directory, "sous.repo.yaml"))).toBe(true);
         // Then sous init runs in the same directory, with init's own flags passed through.
         expect(initRuns.at(-1)).toEqual({ directory, name: "my-recipes", yes: false, dryRun: false });
+
+        // The git hook flags go through to init too.
+        await engine.handle.submit({ intent: "repo.init", input: { directory: path.join(tmp.path, "hooked"), hooks: false, pullHooks: true, install: false } });
+
+        expect(initRuns.at(-1)).toMatchObject({ hooks: false, pullHooks: true, install: false });
     });
 
     /** A release run through the engine fires `authoring.released` with what it published. */
