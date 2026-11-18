@@ -388,10 +388,7 @@ describe("insertBeforeWhere and insertAfterWhere", () => {
         expect(jsonc.after).toBe(`{
     "hooks": [
         { "id": "lint", "run": "pnpm lint" }, // first
-        {
-            "id": "types",
-            "run": "tsc"
-        },
+        { "id": "types", "run": "tsc" },
         { "id": "test", "run": "pnpm test" }
     ]
 }

@@ -313,6 +313,10 @@ describe("every operation through editor.apply", () => {
 
         for (const name of ["ensureFileExists", "createIfMissing", "ensureDirectoryExists"]) covered.add(name);
 
+        // Run through editor.apply in their own files: operations-relocate.spec.ts and operations-comments.spec.ts.
+        for (const name of ["copy", "move", "insertBeforeWhere", "insertAfterWhere", "moveItem", "moveItemWhere"]) covered.add(name);
+        for (const name of ["setCommentBefore", "setCommentAfter", "removeComment"]) covered.add(name);
+
         expect([...OPERATIONS.keys(), ...ALIASES.keys()].filter((name) => !covered.has(name))).toEqual([]);
     });
 });
