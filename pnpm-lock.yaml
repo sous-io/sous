@@ -436,6 +436,9 @@ importers:
       '@sous-io/plugin-update':
         specifier: workspace:*
         version: link:../plugin-update
+      '@sous-io/sous-plugin-doctor':
+        specifier: workspace:*
+        version: link:../sous-plugin-doctor
     devDependencies:
       '@sous-io/core':
         specifier: workspace:*
@@ -936,6 +939,9 @@ importers:
       '@sous-io/plugin-variables':
         specifier: workspace:*
         version: link:../plugin-variables
+      '@sous-io/sous-plugin-doctor':
+        specifier: workspace:*
+        version: link:../sous-plugin-doctor
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -964,6 +970,9 @@ importers:
       '@sous-io/plugin-variables':
         specifier: workspace:*
         version: link:../plugin-variables
+      '@sous-io/sous-plugin-doctor':
+        specifier: workspace:*
+        version: link:../sous-plugin-doctor
     devDependencies:
       '@sous-io/core':
         specifier: workspace:*
