@@ -17,12 +17,28 @@ export function launchable(ctx: Pick<Context, "entities">): string[] {
         .map((harness) => harness.id);
 }
 
+/**
+ * The tools a name that was not found probably meant: those whose id starts with it and a hyphen.
+ * A harness id names its tool in full (`claude-code`, not `claude`), so a short name gets a hint
+ * rather than working as an alias.
+ *
+ * ```ts
+ * meant("claude", ["claude-code", "codex"]);
+ * // -> ["Did you mean: sous launch claude-code"]
+ * ```
+ */
+export function meant(id: string, available: readonly string[]): string[] {
+    const close = available.filter((candidate) => candidate.startsWith(`${id}-`));
+
+    return close.length === 0 ? [] : [`Did you mean: ${close.map((candidate) => `sous launch ${candidate}`).join(", or ")}`];
+}
+
 /** Runs the intent. */
 export async function handle(input: LaunchInput, ctx: Context): Promise<IntentOutputs<LaunchResult>> {
     const [id, ...passThrough] = input.tool;
 
     if (id === undefined) {
-        throw new ConfigError("Name the tool to launch, such as: sous launch claude", { details: [`Available tools: ${launchable(ctx).join(", ") || "(none)"}`] });
+        throw new ConfigError("Name the tool to launch, such as: sous launch claude-code", { details: [`Available tools: ${launchable(ctx).join(", ") || "(none)"}`] });
     }
 
     const harness = ctx.entities.get("harness", id);
@@ -31,7 +47,7 @@ export async function handle(input: LaunchInput, ctx: Context): Promise<IntentOu
         const where = ctx.project?.configPath ? ` in ${ctx.project.configPath}` : "";
 
         throw new NotFoundError("harness", id, `Tool '${id}' not found${where}.`, {
-            details: [`Available tools: ${launchable(ctx).join(", ") || "(none)"}`],
+            details: [...meant(id, launchable(ctx)), `Available tools: ${launchable(ctx).join(", ") || "(none)"}`],
         });
     }
 

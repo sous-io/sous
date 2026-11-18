@@ -126,12 +126,12 @@ process.exit(${exitCode});
 const calls = (log: string) => fs.readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l) as { args: string[]; stdin: string });
 
 describe("entities", () => {
-    it("adds the claude harness, and the claude-code skill and memory targets", async () => {
+    it("adds the claude-code harness, and the claude-code skill and memory targets", async () => {
         const { config: built } = await engineFor(tmp());
 
-        expect(built.entities.get("harness", "claude")).toMatchObject({ id: "claude" });
-        expect(built.entities.get("skill-target", "claude-code")).toMatchObject({ harness: "claude", directory: ".claude/skills" });
-        expect(built.entities.get("memory-target", "claude-code")).toMatchObject({ harness: "claude", fileName: "CLAUDE.md", readIn: "any-directory" });
+        expect(built.entities.get("harness", "claude-code")).toMatchObject({ id: "claude-code" });
+        expect(built.entities.get("skill-target", "claude-code")).toMatchObject({ harness: "claude-code", directory: ".claude/skills" });
+        expect(built.entities.get("memory-target", "claude-code")).toMatchObject({ harness: "claude-code", fileName: "CLAUDE.md", readIn: "any-directory" });
     });
 
     it("lets the plugin's options move the skills and turn memories off", async () => {
@@ -143,25 +143,25 @@ describe("entities", () => {
         expect(built.entities.get("memory-target", "claude-code")).toBeUndefined();
     });
 
-    it("keeps the claude harness, not a generic tool, when tools.claude is written", async () => {
-        const { config: built } = await engineFor(tmp(), { tools: { claude: { args: ["--x"] } } });
+    it("keeps the claude-code harness, not a generic tool, when tools.claude-code is written", async () => {
+        const { config: built } = await engineFor(tmp(), { tools: { "claude-code": { args: ["--x"] } } });
 
-        expect(built.entities.describe("harness").map((r) => [r.id, r.plugin])).toEqual([["claude", "@sous-io/plugin-claude-code"]]);
+        expect(built.entities.describe("harness").map((r) => [r.id, r.plugin])).toEqual([["claude-code", "@sous-io/plugin-claude-code"]]);
     });
 });
 
 describe("launch", () => {
-    it("runs the claude command with the tools.claude args, then the user's", async () => {
+    it("runs the claude command with the tools.claude-code args, then the user's", async () => {
         const root = tmp();
         const fake = fakeClaude(root);
-        const { engine } = await engineFor(root, { tools: { claude: { command: process.execPath, args: [fake.file, "--model", "opus"] } } });
+        const { engine } = await engineFor(root, { tools: { "claude-code": { command: process.execPath, args: [fake.file, "--model", "opus"] } } });
 
-        await engine.submit({ intent: "launch", input: { tool: ["claude", "--resume"] } });
+        await engine.submit({ intent: "launch", input: { tool: ["claude-code", "--resume"] } });
 
         expect(calls(fake.log)[0]!.args).toEqual(["--model", "opus", "--resume"]);
     });
 
-    it("uses the command `claude` when tools.claude names none", async () => {
+    it("uses the command `claude` when tools.claude-code names none", async () => {
         const root = tmp();
         const seen: string[] = [];
         const spy = definePlugin({
@@ -177,7 +177,7 @@ describe("launch", () => {
         });
 
         await engine.buildConfig();
-        await engine.submit({ intent: "launch", input: { tool: ["claude"], noBuild: true } });
+        await engine.submit({ intent: "launch", input: { tool: ["claude-code"], noBuild: true } });
 
         expect(seen).toEqual(["claude"]);
     });
@@ -187,23 +187,23 @@ describe("headless runs and transcripts", () => {
     it("runs `claude -p --output-format stream-json` with the prompt on stdin and reads the answer", async () => {
         const root = tmp();
         const fake = fakeClaude(root);
-        const { engine } = await engineFor(root, { tools: { claude: { command: process.execPath, headless: { args: [fake.file] } } } });
+        const { engine } = await engineFor(root, { tools: { "claude-code": { command: process.execPath, headless: { args: [fake.file] } } } });
         const { run } = (await engine.submit({ intent: "harness.run-headless", input: { prompt: "say hi", model: "sonnet" } })).toPlain() as unknown as RunHeadlessResult;
 
         expect(calls(fake.log)[0]).toEqual({
             args: ["-p", "--output-format", "stream-json", "--verbose", "--model", "sonnet"],
             stdin: "say hi",
         });
-        expect(run).toMatchObject({ harness: "claude", exitCode: 0, output: "Done." });
+        expect(run).toMatchObject({ harness: "claude-code", exitCode: 0, output: "Done." });
     });
 
     it("reads the transcript: system, assistant text, tool call, tool result", async () => {
         const root = tmp();
         const fake = fakeClaude(root);
-        const { engine } = await engineFor(root, { tools: { claude: { command: process.execPath, headless: { args: [fake.file] } } } });
+        const { engine } = await engineFor(root, { tools: { "claude-code": { command: process.execPath, headless: { args: [fake.file] } } } });
         const { transcript } = (await engine.submit({ intent: "harness.run-headless", input: { prompt: "x", transcript: true } })).toPlain() as unknown as RunHeadlessResult;
 
-        expect(transcript?.harness).toBe("claude");
+        expect(transcript?.harness).toBe("claude-code");
         expect(transcript?.entries).toEqual([
             { role: "system", text: "Session started (fake-model)" },
             { role: "assistant", text: "Let me look." },
@@ -216,7 +216,7 @@ describe("headless runs and transcripts", () => {
     it("reports a non-zero exit with the answer it had", async () => {
         const root = tmp();
         const fake = fakeClaude(root, 3);
-        const { engine } = await engineFor(root, { tools: { claude: { command: process.execPath, headless: { args: [fake.file] } } } });
+        const { engine } = await engineFor(root, { tools: { "claude-code": { command: process.execPath, headless: { args: [fake.file] } } } });
         const { run } = (await engine.submit({ intent: "harness.run-headless", input: { prompt: "x" } })).toPlain() as unknown as RunHeadlessResult;
 
         expect(run.exitCode).toBe(3);

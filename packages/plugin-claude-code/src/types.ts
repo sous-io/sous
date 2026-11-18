@@ -1,6 +1,6 @@
 /**
  * The contract of plugin-claude-code: everything sous
- * knows about Claude Code, as entities: a `harness` (`claude`), a `skill-target` (`.claude/skills`)
+ * knows about Claude Code, as entities: a `harness` (`claude-code`), a `skill-target` (`.claude/skills`)
  * and a `memory-target` (`CLAUDE.md`, read in any directory, so it is also a pointer file). It
  * declares no services, intents or events; nothing depends on it.
  *
@@ -13,7 +13,7 @@ import type { MemoryTargetEntity } from "@sous-io/plugin-memories/types";
 import type { SkillTargetEntity } from "@sous-io/plugin-skills/types";
 
 /** The ids of the entities this plugin adds. */
-export type ClaudeCodeHarnessId = "claude";
+export type ClaudeCodeHarnessId = "claude-code";
 
 /** The `skill-target` and `memory-target` id. */
 export type ClaudeCodeTargetId = "claude-code";
@@ -27,7 +27,7 @@ export type ClaudeCodeSkillTarget = SkillTargetEntity & { id: ClaudeCodeTargetId
 /** The memory target: `fileName` is `CLAUDE.md`, `readIn` is `any-directory`. */
 export type ClaudeCodeMemoryTarget = MemoryTargetEntity & { id: ClaudeCodeTargetId; harness: ClaudeCodeHarnessId };
 
-/** The user's settings for the harness, under `tools.claude` (read when `launch` runs). */
+/** The user's settings for the harness, under `tools.claude-code` (read when `launch` runs). */
 export type ClaudeToolSettings = ToolSettings;
 
 /** This plugin's options (`plugins.options."@sous-io/plugin-claude-code"`). */

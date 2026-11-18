@@ -7,6 +7,7 @@
 import type { ConfigBuilder, ContributorDefinition } from "@sous-io/plugin-api";
 import type { MemoryTargetEntity } from "@sous-io/plugin-memories/types";
 import type { SkillTargetEntity } from "@sous-io/plugin-skills/types";
+import { HARNESS_ID } from "./harness.js";
 import type { ClaudeCodePluginOptions } from "./types.js";
 
 /** The contributor's id. */
@@ -26,7 +27,7 @@ export function contributeTargets(config: ConfigBuilder): void {
     const options = config.options<ClaudeCodePluginOptions>() ?? {};
     const skills: SkillTargetEntity = {
         id: TARGET_ID,
-        harness: "claude",
+        harness: HARNESS_ID,
         directory: options.skillsDirectory ?? SKILLS_DIRECTORY,
         description: "Claude Code reads skills from .claude/skills.",
     };
@@ -36,7 +37,7 @@ export function contributeTargets(config: ConfigBuilder): void {
     if (options.memories !== false) {
         const memories: MemoryTargetEntity = {
             id: TARGET_ID,
-            harness: "claude",
+            harness: HARNESS_ID,
             fileName: MEMORY_FILE,
             // Claude Code reads CLAUDE.md in every directory it works in, so a pointer file is made of it too.
             readIn: "any-directory",

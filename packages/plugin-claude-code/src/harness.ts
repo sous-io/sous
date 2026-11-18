@@ -1,8 +1,12 @@
 /**
- * The `claude` harness: Claude Code's `claude` command, started interactively or headless.
+ * The `claude-code` harness: Claude Code's `claude` command, started interactively or headless.
  *
- * The user's settings are `tools.claude` (`command`, `args`, `promptFile`, `headless`), read when a
- * method runs. With nothing set, the command is `claude`.
+ * The user's settings are `tools.claude-code` (`command`, `args`, `promptFile`, `headless`), read
+ * when a method runs. With nothing set, the command is `claude`.
+ *
+ * The id was `claude` before 1.1.0. It names the tool, not the company or the command, so a later
+ * harness for another Claude product cannot be confused with it ("its better to be overly verbose
+ * than regret inspecificity later"; Luke, 2026-11-17).
  */
 
 import { SousError } from "@sous-io/plugin-api";
@@ -13,9 +17,9 @@ import { finalText, parseStream, transcriptEntries, type ClaudeRaw } from "./tra
 import type { ClaudeCodePluginOptions, ClaudeCodeHarness } from "./types.js";
 
 /** The harness's id, and the key its settings are under. */
-export const HARNESS_ID = "claude";
+export const HARNESS_ID = "claude-code";
 
-/** The command used when `tools.claude.command` is not set. */
+/** The command used when `tools.claude-code.command` is not set. */
 export const DEFAULT_COMMAND = "claude";
 
 /** The arguments every headless run gets. */
@@ -68,7 +72,7 @@ export const claudeHarness: ClaudeCodeHarness = {
 
         return { harness: HARNESS_ID, entries: transcriptEntries(parseStream(raw?.stdout ?? "")) };
     },
-} satisfies HarnessEntity & { id: "claude" };
+} satisfies HarnessEntity & { id: "claude-code" };
 
 /** Extra command-line arguments a caller passes in `options.args`. */
 function passed(options: Readonly<Record<string, unknown>> | undefined): string[] {
