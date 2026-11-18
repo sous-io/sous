@@ -340,6 +340,10 @@
                       "description": "The harness this output belongs to (claude-code, codex). Templates read it as harness.id.",
                       "type": "string",
                       "minLength": 1
+                    },
+                    "backupExisting": {
+                      "description": "When true, a file sous did not write at the destination is backed up, a warning is given, and it is overwritten, whatever compilation.overwriteUntracked says.",
+                      "type": "boolean"
                     }
                   },
                   "additionalProperties": false
@@ -351,6 +355,29 @@
             ],
             "additionalProperties": false
           }
+        }
+      },
+      "additionalProperties": false
+    },
+    "editor": {
+      "description": "Edits to files Sous does not own (editor.edits), applied, recorded and undone by the editor.",
+      "type": "object",
+      "properties": {
+        "edits": {
+          "default": [],
+          "description": "The master list of edits to files Sous does not own: each entry names a file and one or more operations, an assertion or a silence. Sous applies them after the compiler, records them, and undoes the ones no longer declared.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "historyFile": {
+          "description": "Where Sous records the edits it applied, so it can undo them. Default: <sousDir>/sous.edits.json (git-ignored).",
+          "type": "string"
         }
       },
       "additionalProperties": false
@@ -668,6 +695,74 @@
     "recipes": {
       "type": "object",
       "properties": {
+        "contents": {
+          "description": "What each active recipe's manifest publishes, one entry per contents group, added by plugin-recipes (read-only in practice).",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "object",
+            "required": [
+              "recipe",
+              "dir",
+              "kind",
+              "include"
+            ],
+            "properties": {
+              "recipe": {
+                "type": "string"
+              },
+              "dir": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "include": {
+                "type": "array"
+              },
+              "exclude": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "handlers": {
+          "description": "The handlers the active recipes' manifests list, one entry each.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "recipe",
+              "purpose",
+              "file",
+              "handler"
+            ],
+            "properties": {
+              "recipe": {
+                "type": "string"
+              },
+              "purpose": {
+                "enum": [
+                  "check",
+                  "configure",
+                  "beforeBuild",
+                  "afterBuild",
+                  "uninstall",
+                  "migrate"
+                ]
+              },
+              "file": {
+                "type": "string"
+              },
+              "handler": {
+                "type": "string"
+              }
+            }
+          }
+        },
         "memories": {
           "description": "Which recipe memories memory targets and the #memories view take, and in what order.",
           "type": "object",
