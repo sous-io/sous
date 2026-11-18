@@ -17,6 +17,7 @@ import type {
     ContentHash,
     ContentKind,
     DependencyKind,
+    InlineContent,
     IndexDependency,
     IndexFile,
     LinkOrigin,
@@ -350,9 +351,9 @@ export interface StillBuiltRecipe {
 
 /** One file of an active recipe's content. */
 export interface RecipeContentFile {
-    /** Relative to the recipe, `/`-separated. */
+    /** Relative to the recipe, `/`-separated. For inline content, its `path`. */
     readonly path: string;
-    /** Absolute. */
+    /** Absolute. For inline content, where it would be: the recipe's folder joined with its `path`; no file exists there. */
     readonly file: string;
     /**
      * The absolute directory a consumer names the file relative to: the static part of the include
@@ -360,27 +361,79 @@ export interface RecipeContentFile {
      * that file's directory).
      */
     readonly base: string;
+    /** Set for inline content (`{ $inline, path }`): the content itself, which no file holds. */
+    readonly content?: string;
+}
+
+/**
+ * A `content-kind` entity: a kind of content a recipe's manifest may publish. plugin-recipes
+ * registers `skills`, `memories`, `prompts` and `config`; a plugin adds its own, and its
+ * contributor responds to the `recipes.contents` entries of that kind.
+ *
+ * ```ts
+ * sous.entities.add("content-kind", { id: "claude-code-plugin", description: "A Claude Code plugin folder." });
+ * ```
+ */
+export interface ContentKindEntity {
+    /** The kind's name, as a manifest writes it after `kind:`. */
+    id: string;
+    /** What content of this kind is, for errors and listings. */
+    description: string;
+}
+
+/**
+ * One entry of the config key `recipes.contents`: one `contents` group of one active recipe held
+ * through `subscribes`, its expressions evaluated. The `recipes.manifests` contributor adds them,
+ * in recipe-key order then manifest order (law L8, declarations as config).
+ *
+ * ```jsonc
+ * {
+ *     "recipe": "acme/widget",
+ *     "dir": "/home/me/.sous/store/github.com/acme/recipes/acme/widget/1.2.0",
+ *     "kind": "skills",
+ *     "include": ["skills/**", { "$inline": "# Hello", "path": "skills/hello/SKILL.md" }],
+ *     "exclude": ["skills/private/**"]
+ * }
+ * ```
+ */
+export interface RecipeContentsEntry {
+    /** The recipe that declared it: `namespace/recipe`. */
+    readonly recipe: string;
+    /** The recipe's folder, absolute; `include` and `exclude` are relative to it. */
+    readonly dir: string;
+    readonly kind: ContentKind;
+    /** Glob patterns relative to `dir`, or inline content. */
+    readonly include: ReadonlyArray<string | InlineContent>;
+    readonly exclude?: readonly string[];
 }
 
 /** The fields of an active recipe that listing its content reads. */
 export type ContentRecipe = Pick<ActiveRecipeEntity, "id" | "kind" | "dir" | "manifest">;
 
-/** One content block of a recipe, its files listed. */
-export interface ActiveRecipeContent<R extends ContentRecipe = ActiveRecipeEntity> {
-    readonly recipe: R;
+/** One `recipes.contents` entry, its files listed. */
+export interface ActiveRecipeContent {
+    /** The recipe that declared it: `namespace/recipe`. */
+    readonly recipe: string;
     readonly kind: ContentKind;
+    readonly entry: RecipeContentsEntry;
     /** Bytewise within each include pattern, in the order of the block's `include` list; a file matched by two patterns is listed once, under the first. */
     readonly files: readonly RecipeContentFile[];
 }
 
+/** Reading config values: a built config, or a contributor's builder (its reads are then recorded). */
+export type ContentsConfig = { get(path: string): unknown } | { atPath(path: string): { get(): unknown } };
+
 /**
- * Which files recipes publish. Dot files count, `exclude` patterns are applied, links whose target
- * is not a file are left out, and only recipes held through `subscribes` contribute (one held
- * only through `depends` is a library whose files never enter the project's output).
+ * Which files recipes publish: a reader of the config key `recipes.contents`. Dot files count,
+ * `exclude` patterns are applied, and links whose target is not a file are left out.
  */
 export interface RecipesContents {
-    /** The content blocks of one kind in the given recipes, in the recipes' order. */
-    of<R extends ContentRecipe>(recipes: readonly R[], kind: ContentKind): Array<ActiveRecipeContent<R>>;
+    /** The `recipes.contents` entries of one kind, in config order. */
+    entries(config: ContentsConfig, kind: ContentKind): RecipeContentsEntry[];
+    /** One entry's files. */
+    files(entry: RecipeContentsEntry): RecipeContentFile[];
+    /** The entries of one kind, each with its files: `entries` then `files`. */
+    of(config: ContentsConfig, kind: ContentKind): ActiveRecipeContent[];
 }
 
 /** Which recipes are active on this machine. */
@@ -395,7 +448,7 @@ export interface RecipesActive {
      * depend on them. Optional, so a stand-in may leave it out.
      */
     switchedOffButBuilt?(): StillBuiltRecipe[];
-    /** Every active recipe's content of one kind (see {@link RecipesContents.of}). */
+    /** Every active recipe's content of one kind, read from `recipes.contents` (see {@link RecipesContents.of}). */
     contents(kind: ContentKind): ActiveRecipeContent[];
     /** Every variable the active recipes define, with the recipe defining it. */
     variables(): Array<{ readonly recipe: ActiveRecipeEntity; readonly definition: VariableDefinition }>;
@@ -1474,6 +1527,8 @@ declare module "@sous-io/plugin-api" {
         "repository-host": RepositoryHostEntity;
         /** A recipe active on this machine. */
         "active-recipe": ActiveRecipeEntity;
+        /** A kind of content a recipe may publish. */
+        "content-kind": ContentKindEntity;
     }
 
     interface SousConfig {

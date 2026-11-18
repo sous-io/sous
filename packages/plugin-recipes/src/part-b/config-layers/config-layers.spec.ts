@@ -4,7 +4,7 @@ import { hostGlobs } from "@sous-io/plugin-host";
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanTemp, tempDir, writeRecipe } from "../../../test/part-b/helpers.js";
 import type { ActiveRecipeEntity } from "../../types.js";
-import { filterRecipeConfigLayer, readRecipeConfigLayers, RECIPE_CONFIG_ALLOWED_KEYS } from "./config-layers.js";
+import { filterRecipeConfigLayer, plainContentsEntries, readRecipeConfigLayers, RECIPE_CONFIG_ALLOWED_KEYS } from "./config-layers.js";
 
 afterEach(() => cleanTemp());
 
@@ -70,12 +70,17 @@ const io = {
     parse: (text: string, file: string) => parseManifestText(text, file),
 };
 
+/** The layers the `recipes.contents` entries of these recipes name, as the contributor adds them. */
+function readLayers(recipes: ActiveRecipeEntity[], with_: Parameters<typeof readRecipeConfigLayers>[1]) {
+    return readRecipeConfigLayers(plainContentsEntries(recipes), with_);
+}
+
 describe("readRecipeConfigLayers()", () => {
     it("should read a subscribed recipe's layers in recipe-key then path order, filtered", () => {
         const base = tempDir();
         const b = writeRecipe(path.join(base, "b"), { namespace: "acme", name: "b", version: "1.0.0" }, { "config/b.yaml": "_vars:\n  from: b\n" });
         const a = writeRecipe(path.join(base, "a"), { namespace: "acme", name: "a", version: "1.0.0" }, { "config/2.json": '{"_vars": {"two": 2}}', "config/1.jsonc": '// c\n{"_vars": {"one": 1}, "repos": {}}' });
-        const { layers, warnings } = readRecipeConfigLayers([active(b, "acme/b", [{ kind: "config", include: ["config/*"] }]), active(a, "acme/a", [{ kind: "config", include: ["config/*"] }])], io);
+        const { layers, warnings } = readLayers([active(b, "acme/b", [{ kind: "config", include: ["config/*"] }]), active(a, "acme/a", [{ kind: "config", include: ["config/*"] }])], io);
 
         expect(layers.map((layer) => [layer.recipeKey, path.basename(layer.path)])).toEqual([
             ["acme/a", "1.jsonc"],
@@ -89,20 +94,20 @@ describe("readRecipeConfigLayers()", () => {
     it("should skip recipes held only as build dependencies, and other content kinds", () => {
         const dir = writeRecipe(path.join(tempDir(), "a"), { namespace: "acme", name: "a", version: "1.0.0" }, { "config/a.yaml": "_vars: {}\n" });
 
-        expect(readRecipeConfigLayers([active(dir, "acme/a", [{ kind: "config", include: ["config/*"] }], "depends")], io).layers).toEqual([]);
-        expect(readRecipeConfigLayers([active(dir, "acme/a", [{ kind: "skills", include: ["config/*"] }])], io).layers).toEqual([]);
+        expect(readLayers([active(dir, "acme/a", [{ kind: "config", include: ["config/*"] }], "depends")], io).layers).toEqual([]);
+        expect(readLayers([active(dir, "acme/a", [{ kind: "skills", include: ["config/*"] }])], io).layers).toEqual([]);
     });
 
     it("should honour excludes", () => {
         const dir = writeRecipe(path.join(tempDir(), "a"), { namespace: "acme", name: "a", version: "1.0.0" }, { "config/a.yaml": "_vars: {}\n", "config/b.yaml": "_vars: {}\n" });
-        const { layers } = readRecipeConfigLayers([active(dir, "acme/a", [{ kind: "config", include: ["config/*"], exclude: ["config/b.yaml"] }])], io);
+        const { layers } = readLayers([active(dir, "acme/a", [{ kind: "config", include: ["config/*"], exclude: ["config/b.yaml"] }])], io);
 
         expect(layers.map((layer) => path.basename(layer.path))).toEqual(["a.yaml"]);
     });
 
     it("should refuse program code and skip formats it does not read, with one warning each", () => {
         const dir = writeRecipe(path.join(tempDir(), "a"), { namespace: "acme", name: "a", version: "1.0.0" }, { "config/run.js": "export default {}", "config/run.ts": "", "config/notes.toml": "" });
-        const { layers, warnings } = readRecipeConfigLayers([active(dir, "acme/a", [{ kind: "config", include: ["config/*"] }])], io);
+        const { layers, warnings } = readLayers([active(dir, "acme/a", [{ kind: "config", include: ["config/*"] }])], io);
 
         expect(layers).toEqual([]);
         expect(warnings).toHaveLength(2);
@@ -113,7 +118,7 @@ describe("readRecipeConfigLayers()", () => {
 
     it("should warn about a layer it cannot parse and merge nothing from it", () => {
         const dir = writeRecipe(path.join(tempDir(), "a"), { namespace: "acme", name: "a", version: "1.0.0" }, { "config/bad.json": "{ nope" });
-        const { layers, warnings } = readRecipeConfigLayers([active(dir, "acme/a", [{ kind: "config", include: ["config/*"] }])], io);
+        const { layers, warnings } = readLayers([active(dir, "acme/a", [{ kind: "config", include: ["config/*"] }])], io);
 
         expect(layers).toEqual([]);
         expect(warnings[0]).toContain("could not read");

@@ -1,7 +1,16 @@
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { activeRecipe, makeTmpDir, standInContents, projectIn, type TmpDir, write } from "../test/helpers.js";
-import { findSkills } from "./sources.js";
+import type { ActiveRecipeEntity } from "@sous-io/plugin-recipes/types";
+import { activeRecipe, contentsConfig, makeTmpDir, standInContents, projectIn, type TmpDir, write } from "../test/helpers.js";
+import { findSkills as findSkillsIn, type FindSkillsInput } from "./sources.js";
+
+/**
+ * findSkills over active recipes: their manifests' `contents` become `recipes.contents` entries,
+ * as plugin-recipes' `recipes.manifests` contributor adds them, and the `skills` ones are listed.
+ */
+function findSkills(input: Omit<FindSkillsInput, "contents" | "recipes"> & { recipes: ActiveRecipeEntity[]; contents: typeof standInContents }) {
+    return findSkillsIn({ ...input, contents: input.contents.of(contentsConfig(input.recipes), "skills") });
+}
 
 let tmp: TmpDir;
 let recipeDir: string;
@@ -65,6 +74,25 @@ describe("findSkills()", () => {
         const { skills } = findSkills({ recipes: [recipe], contents: standInContents, include: [], project: undefined });
 
         expect(skills.map((skill) => skill.name)).toEqual(["greeting"]);
+    });
+
+    /**
+     * Inline content (`{ $inline, path }`) is a skill file with no file behind it: the skill lists
+     * it, and carries its content by absolute path.
+     *
+     * include: [{ $inline: "# Hi", path: "skills/hi/SKILL.md" }]
+     * // -> { name: "hi", files: ["SKILL.md"], inline: Map { "<recipe>/skills/hi/SKILL.md" => "# Hi" } }
+     */
+    it("should find a skill written inline", () => {
+        const recipe = activeRecipe(recipeDir);
+
+        recipe.manifest.contents = [{ kind: "skills", include: [{ $inline: "# Hi", path: "skills/hi/SKILL.md" }] }];
+
+        const [skill] = findSkills({ recipes: [recipe], contents: standInContents, include: [], project: undefined }).skills;
+
+        expect(skill?.name).toBe("hi");
+        expect(skill?.files).toEqual(["SKILL.md"]);
+        expect([...(skill?.inline ?? [])]).toEqual([[path.join(recipeDir, "skills", "hi", "SKILL.md"), "# Hi"]]);
     });
 
     /**

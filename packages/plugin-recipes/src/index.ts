@@ -40,3 +40,5 @@ export default recipesPlugin;
 
 export type * from "./types.js";
 export { RecipeContents } from "./part-a/contents.js";
+export { plainContentsEntries } from "./part-b/config-layers/config-layers.js";
+export { BUILT_IN_CONTENT_KINDS, CONTENT_KIND } from "./part-a/manifests.js";

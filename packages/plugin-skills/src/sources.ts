@@ -16,13 +16,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { globSync } from "glob";
 import type { ProjectInfo } from "@sous-io/plugin-api";
-import type { ActiveRecipeContent, ActiveRecipeEntity, RecipesContents } from "@sous-io/plugin-recipes/types";
+import type { ActiveRecipeContent, ActiveRecipeEntity } from "@sous-io/plugin-recipes/types";
 import type { SkillSource } from "./types.js";
 
 /** One skill, with the directory its output paths mirror under. */
 export interface FoundSkill extends SkillSource {
     /** The directory above the skill: the static part of the include pattern, absolute. */
     readonly base: string;
+    /** The skill's inline files (`{ $inline, path }` in a manifest), by absolute path: no file exists there. */
+    readonly inline?: ReadonlyMap<string, string>;
 }
 
 /** Something wrong with the user's own skill directories. */
@@ -34,10 +36,10 @@ export interface SkillProblem {
 
 /** What {@link findSkills} looks at. */
 export interface FindSkillsInput {
-    /** The active recipes, in lockfile order. */
-    readonly recipes: readonly ActiveRecipeEntity[];
-    /** Which files the recipes publish (`recipes.contents`). */
-    readonly contents: Pick<RecipesContents, "of">;
+    /** The `skills` entries of `recipes.contents`, their files listed (`recipes.contents`' `of`). */
+    readonly contents: readonly ActiveRecipeContent[];
+    /** The active recipes, for each one's repository. */
+    readonly recipes: readonly Pick<ActiveRecipeEntity, "id" | "repo">[];
     /** `recipes.skills.include`. */
     readonly include: readonly string[];
     readonly project: ProjectInfo | undefined;
@@ -62,8 +64,10 @@ export function findSkills(input: FindSkillsInput): FoundSkills {
     const skills: FoundSkill[] = [];
     const problems: SkillProblem[] = [];
 
-    for (const content of input.contents.of(input.recipes, "skills")) {
-        skills.push(...recipeSkills(content));
+    const repositories = new Map(input.recipes.map((recipe) => [recipe.id, recipe.repo]));
+
+    for (const content of input.contents) {
+        skills.push(...recipeSkills(content, repositories.get(content.recipe)));
     }
 
     input.include.forEach((entry, index) => {
@@ -88,18 +92,33 @@ export function findSkills(input: FindSkillsInput): FoundSkills {
     return { skills, problems };
 }
 
-/** The skills of one content block of an active recipe. */
-function recipeSkills(content: ActiveRecipeContent): FoundSkill[] {
+/** The skills of one `recipes.contents` entry. */
+function recipeSkills(content: ActiveRecipeContent, repository: string | undefined): FoundSkill[] {
     const byBase = new Map<string, string[]>();
+    const inline = new Map<string, string>();
 
-    for (const { base, file } of content.files) {
+    for (const { base, file, content: text } of content.files) {
         byBase.set(base, [...(byBase.get(base) ?? []), file]);
+
+        if (text !== undefined) {
+            inline.set(file, text);
+        }
     }
 
-    return groupSkills(
-        { origin: "recipe", recipe: content.recipe.id, repository: content.recipe.repo },
+    const skills = groupSkills(
+        { origin: "recipe", recipe: content.recipe, ...(repository === undefined ? {} : { repository }) },
         [...byBase].map(([base, files]) => ({ base, files })),
     );
+
+    if (inline.size === 0) {
+        return skills;
+    }
+
+    return skills.map((skill) => {
+        const own = new Map([...inline].filter(([file]) => skill.files.some((relative) => path.join(skill.dir, relative) === file)));
+
+        return own.size === 0 ? skill : { ...skill, inline: own };
+    });
 }
 
 /** Splits files into skills by the first directory under their base. */

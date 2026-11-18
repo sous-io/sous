@@ -11,7 +11,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { ConfigBuilder, ContributorDefinition } from "@sous-io/plugin-api";
-import type { ActiveRecipeEntity } from "../../types.js";
+import type { RecipeContentGroup } from "@sous-io/plugin-formats/types";
+import { inlineText, isInline, RecipeContents } from "../../part-a/contents.js";
+import type { ActiveRecipeEntity, RecipeContentsEntry } from "../../types.js";
 import { CONTRIBUTORS } from "../constants.js";
 import type { RecipesPluginOptions } from "../fetch/fetch-contributor.js";
 import type { PartBRuntime } from "../runtime.js";
@@ -101,9 +103,31 @@ export interface RecipeConfigLayer {
     readonly config: Record<string, unknown>;
 }
 
-/** Every config layer of the active recipes held through `subscribes`, by recipe key then path, and warnings. */
+/**
+ * The `recipes.contents` entries an active recipe's manifest gives, as the `recipes.manifests`
+ * contributor adds them when its manifest holds no expressions: only for a recipe held through
+ * `subscribes`. For tests and callers holding entities rather than a config.
+ */
+export function plainContentsEntries(recipes: readonly ActiveRecipeEntity[]): RecipeContentsEntry[] {
+    return recipes
+        .filter((recipe) => recipe.kind === "subscribes")
+        .flatMap((recipe) =>
+            (recipe.manifest.contents as RecipeContentGroup[]).map((group) => ({
+                recipe: recipe.id,
+                dir: recipe.dir,
+                kind: group.kind,
+                include: group.include,
+                ...(group.exclude === undefined ? {} : { exclude: group.exclude }),
+            })),
+        );
+}
+
+/**
+ * Every config layer the `config` entries of `recipes.contents` name, by recipe key then path, and
+ * warnings. An inline layer (`{ $inline, path }`) is read by its path's extension.
+ */
 export function readRecipeConfigLayers(
-    recipes: readonly ActiveRecipeEntity[],
+    entries: readonly RecipeContentsEntry[],
     io: {
         readonly match: (patterns: readonly string[], cwd: string, ignore: readonly string[]) => string[];
         readonly parse: (text: string, fileName: string) => unknown;
@@ -114,20 +138,32 @@ export function readRecipeConfigLayers(
     const warnings: string[] = [];
     const executable: string[] = [];
     const unsupported: string[] = [];
+    const byRecipe = new Map<string, RecipeContentsEntry[]>();
 
-    for (const recipe of [...recipes].sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))) {
-        if (recipe.kind !== "subscribes") {
-            continue;
+    for (const entry of entries) {
+        if (entry.kind === "config") {
+            byRecipe.set(entry.recipe, [...(byRecipe.get(entry.recipe) ?? []), entry]);
         }
+    }
 
+    for (const recipeId of [...byRecipe.keys()].sort((left, right) => (left < right ? -1 : left > right ? 1 : 0))) {
+        const recipe = { id: recipeId };
         const found = new Set<string>();
+        const inline = new Map<string, string>();
 
-        for (const content of recipe.manifest.contents ?? []) {
-            if (content.kind !== "config") {
-                continue;
+        for (const content of byRecipe.get(recipeId)!) {
+            const patterns = content.include.filter((item): item is string => typeof item === "string");
+
+            for (const item of content.include) {
+                if (isInline(item)) {
+                    const file = path.normalize(path.join(content.dir, item.path));
+
+                    inline.set(file, inlineText(item));
+                    found.add(file);
+                }
             }
 
-            for (const file of io.match(content.include, recipe.dir, content.exclude ?? [])) {
+            for (const file of patterns.length === 0 ? [] : io.match(patterns, content.dir, content.exclude ?? [])) {
                 const extension = path.extname(file).toLowerCase();
 
                 if ((RECIPE_LAYER_EXECUTABLE_EXTENSIONS as readonly string[]).includes(extension)) {
@@ -144,7 +180,7 @@ export function readRecipeConfigLayers(
             let raw: unknown;
 
             try {
-                raw = io.parse(fs.readFileSync(file, "utf8"), file);
+                raw = io.parse(inline.get(file) ?? fs.readFileSync(file, "utf8"), file);
             } catch (error) {
                 warnings.push(`The recipe ${recipe.id} contributes a config layer sous could not read, so none of it was merged (${file}): ${messageOf(error)}`);
                 continue;
@@ -174,20 +210,22 @@ export function readRecipeConfigLayers(
 export function configLayersContributor(runtime: PartBRuntime): ContributorDefinition {
     return {
         id: CONTRIBUTORS.configLayers,
-        after: [CONTRIBUTORS.fetch],
+        // After recipes.manifests, whose recipes.contents entries it reads.
+        after: [CONTRIBUTORS.fetch, "recipes.manifests"],
         before: ["@sous-io/plugin-config-files", "config-files.*", "confd/*"],
 
         contribute(config: ConfigBuilder) {
-            const recipes = config.entities("active-recipe");
+            // The `config` entries of `recipes.contents` (law L8): never the manifests themselves.
+            const entries = new RecipeContents(runtime.services).entries(config, "config");
 
-            if (recipes.length === 0) {
+            if (entries.length === 0) {
                 return;
             }
 
             const globs = runtime.services.get("host.globs");
             const manifests = runtime.services.get("formats.manifests");
             const extraKeys = config.options<RecipesPluginOptions>()?.configLayers?.allowedKeys ?? [];
-            const { layers, warnings } = readRecipeConfigLayers(recipes, {
+            const { layers, warnings } = readRecipeConfigLayers(entries, {
                 match: (patterns, cwd, ignore) => globs.matchSync(patterns, { cwd, ignore, absolute: true }),
                 parse: (text, file) => manifests.parseText(text, file),
                 extraKeys,
