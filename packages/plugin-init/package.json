@@ -26,7 +26,8 @@
     "@sous-io/plugin-build": "workspace:*",
     "@sous-io/plugin-config-files": "workspace:*",
     "@sous-io/plugin-git": "workspace:*",
-    "@sous-io/plugin-host": "workspace:*"
+    "@sous-io/plugin-host": "workspace:*",
+    "@sous-io/plugin-update": "workspace:*"
   },
   "devDependencies": {
     "@sous-io/core": "workspace:*"

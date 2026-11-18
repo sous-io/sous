@@ -427,6 +427,9 @@ importers:
       '@sous-io/plugin-host':
         specifier: workspace:*
         version: link:../plugin-host
+      '@sous-io/plugin-update':
+        specifier: workspace:*
+        version: link:../plugin-update
     devDependencies:
       '@sous-io/core':
         specifier: workspace:*

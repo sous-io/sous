@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { handle } from "../src/init.js";
 import { IGNORE_BLOCK_END, IGNORE_BLOCK_START } from "@sous-io/plugin-host";
 import { MEMORIES_SOURCE_RELATIVE_PATH, STARTER_MEMORY_RELATIVE_PATH } from "../src/templates.js";
-import { initContext } from "./helpers.js";
+import { fakeGitRunner, fakePnpm, fakeProcesses, initContext } from "./helpers.js";
 
 let tmp: string;
 let projectRoot: string;
@@ -576,5 +576,101 @@ describe("init importing a project's agent files", () => {
         expect(memory).toContain("## This Is a Sous Repo");
         expect(memory).toContain("`about-sous-repos`");
         expect(memory).not.toContain("## Working in this project");
+    });
+});
+
+describe("init and the git hooks", () => {
+    /** A context whose git repository's top is the project root, with a pnpm stand-in. */
+    function gitContext(options: { answers?: unknown[]; top?: string } = {}) {
+        const git = fakeGitRunner({ top: options.top ?? projectRoot });
+        const processes = fakeProcesses();
+        const context = initContext({ answers: options.answers ?? [], managers: [fakePnpm], services: { "git.runner": git.runner, "host.processes": processes.processes } });
+
+        return { ...context, ran: processes.ran };
+    }
+
+    beforeEach(() => {
+        fs.mkdirSync(path.join(projectRoot, ".git"));
+    });
+
+    /** With a .git folder, init asks before writing anything; a yes installs post-checkout, then builds. */
+    it("should ask whether to install the hooks when there is a .git folder", async () => {
+        const { ctx, recorded } = gitContext({ answers: [true, false] });
+        const result = (await handle({ directory: projectRoot }, ctx)).toPlain();
+
+        expect(recorded.asked).toEqual([
+            "Install git hooks, so each new worktree and each checked-out branch gets Sous's output?",
+            "Also install post-merge and post-rewrite, so the same runs after a pull and a rebase?",
+        ]);
+        expect(result.hooks).toMatchObject({ installed: true, via: "git", hooks: ["post-checkout"] });
+        expect(fs.existsSync(path.join(projectRoot, ".git/hooks/post-checkout"))).toBe(true);
+        expect(recorded.runs.map((run) => run.intent)).toEqual(["init.hooks", "build"]);
+    });
+
+    /** With no terminal and no flag, the error names --hooks, --no-hooks and --yes, and nothing is written. */
+    it("should name the hook flags when it cannot ask, writing nothing", async () => {
+        const error = await handle({ directory: projectRoot }, gitContext().ctx).catch((caught: unknown) => caught);
+
+        expect(error).toBeInstanceOf(NonInteractiveError);
+        expect((error as NonInteractiveError).answeredBy).toBe("--hooks or --no-hooks (or --yes)");
+        expect(fs.existsSync(sousDir)).toBe(false);
+    });
+
+    /** --no-hooks installs none and asks nothing; with no .git folder nothing is offered. */
+    it("should install no hooks under --no-hooks, or without a .git folder", async () => {
+        const declined = gitContext();
+        const result = (await handle({ directory: projectRoot, hooks: false, noBuild: true }, declined.ctx)).toPlain();
+
+        expect(result.hooks).toBeUndefined();
+        expect(declined.recorded.asked).toEqual([]);
+
+        fs.rmSync(sousDir, { recursive: true });
+        fs.rmSync(path.join(projectRoot, ".git"), { recursive: true });
+
+        const bare = gitContext();
+
+        expect((await handle({ directory: projectRoot, noBuild: true }, bare.ctx)).toPlain().hooks).toBeUndefined();
+        expect(bare.recorded.asked).toEqual([]);
+    });
+
+    /**
+     * With a package.json, --yes installs the hooks without the pull hooks and runs the install,
+     * whose script runs sous build, so init skips its own build.
+     */
+    it("should skip its own build when the install it ran builds", async () => {
+        fs.writeFileSync(path.join(projectRoot, "package.json"), '{ "name": "my-app" }\n');
+
+        const { ctx, recorded, ran } = gitContext();
+        const outputs = await handle({ directory: projectRoot, yes: true }, ctx);
+        const result = outputs.toPlain();
+
+        expect(result.hooks).toMatchObject({ installed: true, via: "husky", hooks: ["post-checkout"], install: { outcome: "ran" } });
+        expect(ran).toEqual([{ command: "pnpm", args: ["install"] }]);
+        expect(recorded.runs.map((run) => run.intent)).toEqual(["init.hooks"]);
+        expect(result.build).toBeUndefined();
+        expect(outputs.last()?.summary).toMatch(/^The first build ran in 'pnpm install', through the "prepare" script\./);
+        expect(JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf8")).devDependencies).toEqual({ "@sous-io/sous": "0.1.1", husky: "^9.1.7" });
+    });
+
+    /** Declining the install leaves the build to init, as before. */
+    it("should build by itself when the install is declined", async () => {
+        fs.writeFileSync(path.join(projectRoot, "package.json"), '{ "name": "my-app" }\n');
+
+        const { ctx, recorded, ran } = gitContext();
+        const result = (await handle({ directory: projectRoot, hooks: true, pullHooks: false, install: false }, ctx)).toPlain();
+
+        expect(result.hooks).toMatchObject({ installed: true, install: { outcome: "skipped" } });
+        expect(ran).toEqual([]);
+        expect(recorded.runs.map((run) => run.intent)).toEqual(["init.hooks", "build"]);
+    });
+
+    /** Below the top of the repository, init says why it installed no hooks and goes on. */
+    it("should report, and go on, when .sous/ is not at the top of the repository", async () => {
+        const { ctx, recorded } = gitContext({ top: tmp });
+        const result = (await handle({ directory: projectRoot, hooks: true, noBuild: true }, ctx)).toPlain();
+
+        expect(result.hooks).toMatchObject({ installed: false, manual: [expect.stringContaining("post-checkout hook"), expect.stringContaining('(cd "my-app" && sous build)')] });
+        expect(recorded.reporter.at("warning").join("\n")).toContain("Sous did not install the git hooks.");
+        expect(fs.existsSync(path.join(sousDir, "sous.config.jsonc"))).toBe(true);
     });
 });

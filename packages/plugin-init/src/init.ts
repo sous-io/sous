@@ -6,25 +6,36 @@
  * the sous-managed ignore blocks), stops git tracking the files it moved, then runs the first build through the one build path, which is what seeds the
  * `core` recipe and pins it in the lockfile.
  *
- * Every question has a flag: setting a project up inside another one is answered by `yes`, and what
+ * In a project with a `.git` folder it offers the git hooks (`init.hooks`, `sous init hooks`). When
+ * the install the hooks run also runs `sous build` through the package script, init skips its own
+ * build; when the install is declined, it builds by itself.
+ *
+ * Every question has a flag: setting a project up inside another one is answered by `yes`, what
  * happens to the files the instructions include by `moveIncludes`, `copyIncludes` or
- * `leaveIncludes` (`yes` picks the default, move). Nothing prints or prompts directly.
+ * `leaveIncludes` (`yes` picks the default, move), and the hooks by `hooks`, `pullHooks` and
+ * `install` (`yes` installs the hooks without the pull hooks, and runs the install). Nothing prints
+ * or prompts directly.
  */
 
+import fs from "node:fs";
 import path from "node:path";
 import { ConfigError, type Context, IntentOutput, IntentOutputs, ReportEntryStyle, TextBlock, VariableSet, type VariableEntry } from "@sous-io/plugin-api";
 import "@sous-io/plugin-build/types";
 import type { GitRunner } from "@sous-io/plugin-git/types";
 import { applyImport, type ImportOutcome, type ImportScan, INCLUDES_DIR, type IncludeFate, type IncludedFile, scanImport, settleFates } from "./import.js";
 import { assertNoExistingConfig, findEnclosingProject, scaffoldProject, sousDirFor } from "./scaffold.js";
+import { askPullHooks, type HooksSupport, hooksSupport } from "./init-hooks.js";
 import { MEMORIES_SOURCE_RELATIVE_PATH } from "./templates.js";
-import type { InitInput, InitResult, PackageJsonOutcome } from "./types.js";
+import type { InitHooksResult, InitInput, InitResult, PackageJsonOutcome } from "./types.js";
 
 /** The package `init` adds to a project's `package.json`. */
 const SOUS_PACKAGE_NAME = "@sous-io/sous";
 
 /** The flag spelling the non-interactive error names. */
 const YES_FLAG = "--yes (also -y, --force)";
+
+/** The flags that answer whether to install the git hooks. */
+const HOOKS_FLAGS = "--hooks or --no-hooks (or --yes)";
 
 /** The flags that answer what happens to the included files. */
 const INCLUDE_FLAGS = "--move-includes, --copy-includes, --leave-includes or --yes";
@@ -274,6 +285,7 @@ export async function handle(input: InitInput, ctx: Context): Promise<IntentOutp
     const scan = scanImport(root, sousDirFor(root));
     const answer = await includeAnswer(ctx, input, scan, dryRun);
     const fates = await settleFates(scan, answer, askForFile(ctx));
+    const hooks = await hooksAnswer(ctx, input, root, dryRun);
 
     const scaffold = await scaffoldProject(ctx, { root, name, dryRun, starterMemory: scan.instructions.length === 0 });
     const imported = applyImport(scan, fates, { dryRun });
@@ -281,7 +293,7 @@ export async function handle(input: InitInput, ctx: Context): Promise<IntentOutp
 
     reportImport(ctx, root, imported, untracked, dryRun);
 
-    const result: InitResult = {
+    let result: InitResult = {
         root,
         sousDir: scaffold.sousDir,
         configPath: scaffold.configPath,
@@ -295,21 +307,33 @@ export async function handle(input: InitInput, ctx: Context): Promise<IntentOutp
     };
 
     const anythingDone = reportFiles(ctx, result);
+    const installedHooks = hooks === undefined ? undefined : await installHooks(ctx, input, root, hooks, dryRun);
+    const hookOutputs = installedHooks?.outputs ?? [];
+
+    if (installedHooks !== undefined) {
+        result = { ...result, hooks: installedHooks.result };
+    }
 
     if (dryRun) {
         return anythingDone
-            ? new IntentOutputs<InitResult>(
+            ? new IntentOutputs<InitResult>([
+                  ...hookOutputs,
                   new IntentOutput({
                       result: new TextBlock("Nothing was written. Run the same command without '--dry-run' to set the project up."),
                       style: ReportEntryStyle.DryRun,
                       data: result,
                   }),
-              )
+              ])
             : IntentOutputs.of<InitResult>(result);
     }
 
     if (input.noBuild) {
-        return new IntentOutputs<InitResult>([...whatWasSetUp(result)]);
+        return new IntentOutputs<InitResult>([...hookOutputs, ...whatWasSetUp(result)]);
+    }
+
+    // The install the hooks ran also ran 'sous build', through the package script.
+    if (result.hooks?.installed === true && result.hooks.install?.outcome === "ran") {
+        return new IntentOutputs<InitResult>([...hookOutputs, ...whatWasSetUp(result, `The first build ran in '${result.hooks.install.command}', through the "${result.hooks.script?.name}" script.`)]);
     }
 
     // The build must read the config just written: rebuild it for the rest of this chain.
@@ -328,11 +352,72 @@ export async function handle(input: InitInput, ctx: Context): Promise<IntentOutp
         );
     }
 
-    return new IntentOutputs<InitResult>([...built.toArray(), ...whatWasSetUp({ ...result, build })]);
+    return new IntentOutputs<InitResult>([...hookOutputs, ...built.toArray(), ...whatWasSetUp({ ...result, build })]);
+}
+
+/** What init does about the git hooks, when it installs them: whether it can, and with the pull hooks or not. */
+interface HooksAnswer {
+    readonly support: HooksSupport;
+    readonly pullHooks: boolean;
+}
+
+/**
+ * Whether to install the git hooks, asked before anything is written: the flag's answer
+ * (`--hooks`, `--no-hooks`); nothing without a `.git` folder; yes under `yes` or in a dry run
+ * (the default); else the user's answer. With hooks, whether to install the pull hooks too.
+ *
+ * @throws NonInteractiveError when it has to ask and cannot.
+ */
+async function hooksAnswer(ctx: Context, input: InitInput, root: string, dryRun: boolean): Promise<HooksAnswer | undefined> {
+    const wanted =
+        input.hooks ??
+        (!fs.existsSync(path.join(root, ".git"))
+            ? false
+            : input.yes === true || dryRun
+              ? true
+              : await ctx.prompter.confirm({
+                    message: "Install git hooks, so each new worktree and each checked-out branch gets Sous's output?",
+                    default: true,
+                    answeredBy: HOOKS_FLAGS,
+                }));
+
+    if (!wanted) {
+        return undefined;
+    }
+
+    const support = await hooksSupport(ctx, root);
+
+    return { support, pullHooks: support.supported ? await askPullHooks(ctx, input, dryRun) : false };
+}
+
+/**
+ * Installs the git hooks through `init.hooks`. Where hooks cannot be installed (the project is not
+ * at the top of its git repository), says why and names the lines to add by hand, without failing
+ * the init. Under `noBuild`, the install (which builds) runs only when `--install` asks for it.
+ */
+async function installHooks(ctx: Context, input: InitInput, root: string, answer: HooksAnswer, dryRun: boolean): Promise<{ result: InitHooksResult; outputs: IntentOutput[] }> {
+    const { support } = answer;
+
+    if (!support.supported) {
+        ctx.reporter.problem("Sous did not install the git hooks.", { cause: support.reason, subject: root, ...(support.manual.length === 0 ? {} : { hint: support.manual.join("\n") }) });
+
+        return { result: { installed: false, root, reason: support.reason, manual: support.manual, dryRun }, outputs: [] };
+    }
+
+    const install = input.install ?? (input.noBuild === true ? false : undefined);
+    const ran = await ctx.run("init.hooks", {
+        directory: root,
+        pullHooks: answer.pullHooks,
+        yes: input.yes === true,
+        dryRun,
+        ...(install === undefined ? {} : { install }),
+    });
+
+    return { result: ran.toPlain(), outputs: ran.toArray().map((output) => new IntentOutput({ ...output, data: undefined })) };
 }
 
 /** The closing outputs: what was set up, then the note about build output. The last carries the result. */
-function whatWasSetUp(result: InitResult): IntentOutput[] {
+function whatWasSetUp(result: InitResult, built?: string): IntentOutput[] {
     return [
         new IntentOutput({
             title: "What was set up",
@@ -347,7 +432,7 @@ function whatWasSetUp(result: InitResult): IntentOutput[] {
             ]),
         }),
         new IntentOutput({
-            summary: `The memories file and .claude/skills/ are build output, gitignored and compiled from the sources under .sous/ and from the recipes this project subscribes to; a build recompiles them. The config explains each of its blocks in its own comments.`,
+            summary: `${built === undefined ? "" : `${built} `}The memories file and .claude/skills/ are build output, gitignored and compiled from the sources under .sous/ and from the recipes this project subscribes to; a build recompiles them. The config explains each of its blocks in its own comments.`,
             data: result,
         }),
     ];
