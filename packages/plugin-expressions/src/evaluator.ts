@@ -43,11 +43,6 @@ export interface EvaluatorDeps {
     readonly project: ProjectInfo | undefined;
     /** `host.platform`. Default: Node's `process.platform`. */
     readonly platform?: string;
-    /**
-     * `harness.id`: the harness the config is built for. Read on each use; `undefined` (or no
-     * function) gives the empty string, the build with no harness.
-     */
-    readonly harness?: () => string | undefined;
 }
 
 /** The evaluator, plus the check the plugin runs once the config has settled. */

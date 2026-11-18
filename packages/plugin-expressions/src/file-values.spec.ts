@@ -83,9 +83,11 @@ function run(data: unknown, options: { vars?: Record<string, string>; harness?: 
         entities: noEntities,
         project: undefined,
         platform: "linux",
-        ...(options.harness === undefined ? {} : { harness: () => options.harness }),
     });
     const { builder } = fakeBuilder({ _vars: options.vars ?? {} });
+
+    // The engine gives each config build its harness on the builder.
+    Object.assign(builder, { harness: { id: options.harness ?? "" } });
     const result = evaluator.evaluateLayer(data as JsonValue, { file: "sous.recipe.yaml", config: builder, baseDir: dir });
 
     return { ...result, evaluator };
