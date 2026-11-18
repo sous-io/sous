@@ -8,6 +8,7 @@ import type { HostProcesses, ProcessResult } from "@sous-io/plugin-host/types";
 import type { RunHeadlessResult } from "@sous-io/plugin-harnesses/types";
 import type { CompilationTarget } from "@sous-io/plugin-compiler/types";
 import type { ActiveRecipeContent } from "@sous-io/plugin-recipes/types";
+import type { MigrationDefinition } from "@sous-io/sous-plugin-migrations/types";
 import { spawn } from "node:child_process";
 import harnessesPlugin from "@sous-io/plugin-harnesses";
 import claudeCodePlugin from "../src/index.js";
@@ -97,6 +98,12 @@ const stubs: PluginDefinition[] = [
             );
         },
     }),
+    // sous.migrations, which the migrations plugin adds; what is added is kept in `world.migrations`.
+    definePlugin({
+        name: "@sous-io/sous-plugin-migrations",
+        version: packageJson.version,
+        register: (sous) => sous.extensions.add("migrations", () => ({ add: (migration) => world.migrations.push(migration) })),
+    }),
     // The compilation key plugin-compiler owns.
     definePlugin({
         name: "@sous-io/plugin-compiler",
@@ -106,10 +113,11 @@ const stubs: PluginDefinition[] = [
 ];
 
 /** What the recipes stand-in gives as each kind's `recipes.contents`; reset after each test. */
-const world: { contents: Record<string, ActiveRecipeContent[]> } = { contents: {} };
+const world: { contents: Record<string, ActiveRecipeContent[]>; migrations: MigrationDefinition[] } = { contents: {}, migrations: [] };
 
 afterEach(() => {
     world.contents = {};
+    world.migrations = [];
 });
 
 function config(values: Record<string, unknown>): PluginDefinition {

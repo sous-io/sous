@@ -36,7 +36,8 @@
     "@sous-io/plugin-build": "workspace:*"
   },
   "devDependencies": {
-    "@sous-io/core": "workspace:*"
+    "@sous-io/core": "workspace:*",
+    "@sous-io/sous-plugin-doctor": "workspace:*"
   },
   "engines": {
     "node": ">=22"

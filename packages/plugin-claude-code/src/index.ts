@@ -8,8 +8,10 @@
 
 import { definePlugin, type PluginDefinition } from "@sous-io/plugin-api";
 import type {} from "@sous-io/plugin-host/types";
+import type {} from "@sous-io/sous-plugin-migrations/types";
 import { claudeHarness } from "./harness.js";
 import { CONTENT_KINDS, kindsContributor } from "./kinds.js";
+import { registerMigrations } from "./migrations/index.js";
 import { registerReloadLine } from "./reload.js";
 import { targetsContributor } from "./targets.js";
 import "./types.js";
@@ -30,6 +32,7 @@ export const claudeCodePlugin: PluginDefinition = definePlugin({
         "@sous-io/plugin-host": `^${packageJson.version}`,
         "@sous-io/plugin-recipes": `^${packageJson.version}`,
         "@sous-io/plugin-compiler": `^${packageJson.version}`,
+        "@sous-io/sous-plugin-migrations": `^${packageJson.version}`,
     },
 
     register(sous) {
@@ -49,6 +52,7 @@ export const claudeCodePlugin: PluginDefinition = definePlugin({
         });
 
         registerReloadLine(sous);
+        registerMigrations(sous);
     },
 });
 
@@ -58,6 +62,9 @@ export type * from "./types.js";
 
 export { claudeHarness } from "./harness.js";
 export { AGENT_KIND, AGENTS_DIRECTORY, contentTargets, PLUGIN_KIND } from "./kinds.js";
+export { MIGRATIONS_VERSION } from "./migrations/index.js";
+export { memoriesMigration, migrateMemories } from "./migrations/memories.js";
+export { migrateToolsKey, toolsKeyMigration } from "./migrations/tools.js";
 export { pluginFolderOf, reloadLine } from "./reload.js";
 export { contributeTargets, MEMORIES_OUTPUT_PATH, outputDirectory, POINTER_FILE, SKILLS_DIRECTORY } from "./targets.js";
 export { finalText, parseStream, transcriptEntries } from "./transcript.js";

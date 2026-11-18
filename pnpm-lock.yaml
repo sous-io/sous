@@ -185,6 +185,9 @@ importers:
       '@sous-io/core':
         specifier: workspace:*
         version: link:../core
+      '@sous-io/sous-plugin-doctor':
+        specifier: workspace:*
+        version: link:../sous-plugin-doctor
 
   packages/plugin-cli:
     dependencies:
