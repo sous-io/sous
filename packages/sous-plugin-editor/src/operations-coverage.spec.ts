@@ -278,12 +278,6 @@ const KNOWN_DEFECTS: Record<string, string> = Object.fromEntries(
             'ensureNoItemWhere {"path":"people","where":{"id":1}}',
             'dedupeBy {"path":"people","by":"id"}',
         ].map((name) => [`${name} jsonc`, "JSONC: an object written among one-line objects is spread over several lines"]),
-        ...[
-            'prependText {"path":"notes","value":">> "} yaml',
-            'ensureLine {"path":"notes","line":"second"} yaml',
-            'ensureBlock {"path":"notes","name":"kw","content":"x"} yaml',
-            'removeLine {"path":"notes","line":"hello"} yaml',
-        ].map((name) => [name, "YAML: a string keeps a quoting or block style its old value needed"]),
     ],
 );
 

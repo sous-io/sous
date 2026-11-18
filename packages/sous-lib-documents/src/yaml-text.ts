@@ -110,13 +110,14 @@ export function detectYamlStyle(text: string): YamlStyle {
                 seqFound = true;
             }
 
-            if (isScalar(value) && typeof value.value === "string" && value.type !== undefined && value.type in counts) {
+            // Only a string that could be written bare counts: the style of one that could not was not a choice.
+            if (isScalar(value) && typeof value.value === "string" && value.type !== undefined && value.type in counts && naturalStringType(value.value) === "PLAIN") {
                 counts[value.type as keyof typeof counts]++;
             }
         },
         Seq(_, seq) {
             for (const item of seq.items) {
-                if (isScalar(item) && typeof item.value === "string" && item.type !== undefined && item.type in counts) {
+                if (isScalar(item) && typeof item.value === "string" && item.type !== undefined && item.type in counts && naturalStringType(item.value) === "PLAIN") {
                     counts[item.type as keyof typeof counts]++;
                 }
             }
@@ -739,14 +740,31 @@ class YamlTextEditor {
 
     // Writing new values.
 
-    /** A node for a value, written like the node it replaces when there is one. */
+    /**
+     * A node for a value, written like the node it replaces when there is one. A string takes the
+     * old string's quoting or block style only when the author chose it: a style the old value
+     * needed (`">> x"` must be quoted, a text of several lines is a block) says nothing about the
+     * new one, which is written in the file's usual style. A text of several lines is a block
+     * (`|-`) unless the author chose otherwise.
+     *
+     * ```yaml
+     * notes: ">> hello"   # set to "hello" -> notes: hello
+     * notes: "hello"      # set to "bye"   -> notes: "bye"
+     * ```
+     */
     private makeNode(value: JsonValue, like?: ParsedNode | null): Node {
         const node = new Document().createNode(value) as Node;
 
         if (isScalar(node) && typeof value === "string") {
-            if (isScalar(like) && typeof like.value === "string" && like.type !== undefined) {
-                node.type = like.type;
-            } else {
+            const chosen =
+                isScalar(like) && typeof like.value === "string" && like.type !== undefined && naturalStringType(like.value) === "PLAIN"
+                    ? like.type
+                    : undefined;
+            const lines = value.includes("\n");
+
+            if (chosen !== undefined && !(lines && chosen === "PLAIN")) {
+                node.type = chosen;
+            } else if (!lines) {
                 node.type = this.style.stringType;
             }
         }
@@ -855,6 +873,20 @@ function indentLines(text: string, column: number): string {
     const pad = " ".repeat(column);
 
     return text.replace(/\n/g, `\n${pad}`);
+}
+
+/**
+ * The style the `yaml` package gives a string left to itself: `PLAIN` when it can be written
+ * bare, otherwise the quoting or block style it needs.
+ *
+ * naturalStringType("hello");     // "PLAIN"
+ * naturalStringType(">> hello");  // "QUOTE_DOUBLE"
+ * naturalStringType("a\nb");      // "BLOCK_LITERAL"
+ */
+function naturalStringType(value: string): Scalar.Type {
+    const first = new Document(value).toString()[0];
+
+    return first === '"' ? "QUOTE_DOUBLE" : first === "'" ? "QUOTE_SINGLE" : first === "|" ? "BLOCK_LITERAL" : first === ">" ? "BLOCK_FOLDED" : "PLAIN";
 }
 
 function lineStartOf(text: string, offset: number): number {
