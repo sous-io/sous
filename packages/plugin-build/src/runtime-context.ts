@@ -68,7 +68,7 @@ export class RuntimeContextService implements BuildRuntimeContext {
         };
     }
 
-    async write(options: { dryRun?: boolean } = {}): Promise<WrittenFile | undefined> {
+    async write(options: { dryRun?: boolean; run?: number } = {}): Promise<WrittenFile | undefined> {
         const context = await this.generate();
 
         if (!context) {
@@ -79,6 +79,7 @@ export class RuntimeContextService implements BuildRuntimeContext {
             source: RUNTIME_CONTEXT_SOURCE,
             origin: { plugin: this.deps.plugin },
             ...(options.dryRun ? { dryRun: true } : {}),
+            ...(options.run === undefined ? {} : { run: options.run }),
         });
     }
 

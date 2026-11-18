@@ -34,10 +34,10 @@ export default {
       expectIncludes(r.stderr + r.stdout, "sous.repo.yaml", "repo init --dry-run");
     });
 
-    await t.step("repo init writes a repository scaffold with an example recipe", () => {
+    await t.step("repo init writes a repository scaffold with an example recipe, set up for sous", () => {
       t.sh(`git init -q ${local}`);
       expectExit(t.sous(["repo", "init", local, "--name", "e2e-local", "--namespace", "e2e"], { cwd: t.root }));
-      for (const f of ["sous.repo.yaml", "sous.index.json", "recipes/e2e/example/sous.recipe.yaml", "recipes/e2e/example/skills/example-skill/SKILL.tpl.md", "README.md"]) {
+      for (const f of ["sous.repo.yaml", "sous.index.json", "recipes/e2e/example/sous.recipe.yaml", "recipes/e2e/example/skills/example-skill/SKILL.tpl.md", "README.md", ".sous/sous.config.js", ".sous/memories/project/sous-repo.tpl.md", "CLAUDE.md", ".claude/skills/about-sous-repos/SKILL.md"]) {
         assert.ok(fs.existsSync(path.join(local, f)), `missing ${f}`);
       }
     });

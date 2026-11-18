@@ -23,7 +23,7 @@ describe("plugin-init registration", () => {
 
         const schema = (init!.input as any)["~standard"].jsonSchema?.input({ target: "draft-2020-12" });
 
-        expect(Object.keys(schema.properties)).toEqual(["directory", "name", "yes", "dryRun", "noBuild"]);
+        expect(Object.keys(schema.properties)).toEqual(["directory", "name", "yes", "moveIncludes", "copyIncludes", "leaveIncludes", "dryRun", "noBuild"]);
     });
 
     /** Its handler should load on demand. */

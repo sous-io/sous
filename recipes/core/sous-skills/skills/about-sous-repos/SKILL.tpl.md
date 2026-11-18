@@ -19,9 +19,12 @@ metadata:
 
 A **recipe** is a versioned bundle of agent instructions (skills, memories, prompts and config
 layers) that sous installs into every project subscribed to it. A **recipe repository** is a git
-repository that publishes recipes. It is not a sous project and needs no `.sous/` directory; the
-commands that work on it (`sous repo release`, `sous repo submit`) run from anywhere inside it,
-and find its root by walking up to the first directory holding a repo manifest.
+repository that publishes recipes. It is also a sous project, with a `.sous/` directory of its own:
+its `CLAUDE.md`, `AGENTS.md` and `.claude/skills/` are build output, compiled from the sources under
+`.sous/`, so NEVER edit the compiled copies, and run `sous build` after cloning. The commands that
+work on the repository itself (`sous repo release`, `sous repo submit`) run from anywhere inside it,
+and find its root by walking up to the first directory holding a repo manifest, not through that
+config.
 
 Everything here holds for every recipe repository, the official `sous-io/sous-recipes` included.
 For one recipe (its manifest, version, variables, contents and dependencies), YOU MUST load
@@ -168,10 +171,19 @@ yet, then unlinks with `--update`.
 
 `sous repo init [dir]` writes a new recipe repository into the directory (the current one by
 default): the repo manifest, an empty index, one example recipe with its manifest and a
-placeholder skill, a README, `CONTRIBUTING.md`, `CLAUDE.md` and `AGENTS.md` for agents, the release
-workflow and a `.gitignore`. `sous-io/sous-recipes` is the model a scaffold follows: a new repository
-is as complete as it, minus its recipes. It does not run git: run `git init`, commit, and add a
-remote before the first release, because `sous repo release` reads and writes tags. Every new recipe folder is then listed under `recipes` in `sous.repo.yaml`.
+placeholder skill, a README, `CONTRIBUTING.md` for agents, the release workflow and a `.gitignore`.
+`sous-io/sous-recipes` is the model a scaffold follows: a new repository is as complete as it, minus
+its recipes. It does not run git: run `git init`, commit, and add a remote before the first release,
+because `sous repo release` reads and writes tags. Every new recipe folder is then listed under
+`recipes` in `sous.repo.yaml`.
+
+After the scaffold it runs `sous init` in the same directory, so the repository is also a sous
+project. Init imports any `CLAUDE.md`, `AGENTS.md` or `.claude/skills/` already there; with nothing
+to import, it writes `.sous/memories/project/sous-repo.tpl.md`, a memory saying this is a sous
+recipe repository and naming the core skills an agent loads before changing anything. Its first
+build compiles `CLAUDE.md` and `AGENTS.md`. `--yes`, `--move-includes`, `--copy-includes`,
+`--leave-includes`, `--no-build` and `--dry-run` pass through to init. A directory that already
+holds a sous config keeps it, and init is skipped with a note.
 
 ## Source for this Skill
 

@@ -11,6 +11,7 @@ import type { Liquid } from "liquidjs";
 import { LogLevel, nullReporter, Reporting, type ProblemDetails, type Reporter, type ServiceContext } from "@sous-io/plugin-api";
 import type { RefsParser } from "@sous-io/plugin-refs/types";
 import type { VarScope } from "@sous-io/plugin-variables/types";
+import { reportBackup } from "./backups.js";
 import { INCLUDE_LINE_PATTERN, looksLikeIncludeLine, splitIncludeQuery, stableVarsFingerprint } from "./paths.js";
 import { hashContent } from "./state.js";
 import type { CompileUnit, UnitOutput } from "./targets.js";
@@ -76,6 +77,8 @@ export interface CompileOptions {
     readonly strict?: boolean;
     readonly rebuild?: boolean;
     readonly dryRun?: boolean;
+    /** Which run this is (the chain's id): every backup of one run goes in one timestamp folder. */
+    readonly run?: number;
 }
 
 /** What a run did. */
@@ -266,8 +269,10 @@ export class CompileRun extends Reporting(Object) {
         if (!this.options.rebuild && transforms.length === 0 && tracked?.srcHash === sourceHash) {
             const existing = readText(output.destination);
 
-            // Written again unchanged, which records the target and origin of an older entry.
-            if (existing !== undefined) {
+            // Written again unchanged, which records the target and origin of an older entry. An
+            // output edited by hand since is compiled again instead, so the edit is backed up and
+            // replaced rather than recorded as sous's own.
+            if (existing !== undefined && hashContent(existing) === tracked.destHash) {
                 await this.write({ source: unit.label, destination: output.destination, content: existing }, sourceHash, base, undefined);
 
                 return;
@@ -335,11 +340,17 @@ export class CompileRun extends Reporting(Object) {
                 ...(this.options.dryRun ? { dryRun: true } : {}),
                 ...(this.options.rebuild ? { force: true } : {}),
                 ...(mode === undefined ? {} : { mode }),
+                ...(this.options.run === undefined ? {} : { run: this.options.run }),
             });
             const counted = written.action === "created" || written.action === "updated";
             const tokens = counted && this.deps.countTokens ? this.deps.countTokens(file.content) : undefined;
 
             this.outputs.push({ ...base, ...written, ...(tokens === undefined ? {} : { tokens }) });
+
+            if (written.backup !== undefined) {
+                reportBackup(this.reporter, written.file, written.backup, this.options.dryRun === true);
+            }
+
             this.reportWritten(written.file, written.action, tokens);
         } catch (error) {
             this.recordError(`Failed to write ${file.destination}`, { file: file.destination }, { subject: file.destination, cause: messageOf(error) });

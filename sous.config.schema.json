@@ -63,7 +63,7 @@
       }
     },
     "compilation": {
-      "description": "What to compile: targets, their outputs, source comments, the state file, overwriting files sous did not write.",
+      "description": "What to compile: targets, their outputs, source comments, the state file, overwriting files sous did not write. Content sous did not produce is backed up to <sousDir>/backups/ before it is overwritten or removed.",
       "type": "object",
       "properties": {
         "_vars": {
@@ -81,10 +81,12 @@
         },
         "overwriteUntracked": {
           "default": true,
+          "description": "Overwrite an output file sous did not write, and take it over. Sous copies the file to <sousDir>/backups/ first. With false, the file is left alone and the build warns.",
           "type": "boolean"
         },
         "stateFile": {
           "default": "${sousDir}/sous.state.json",
+          "description": "Where sous records every file it wrote and the hash of what it wrote, which tells prune and clear what is theirs to remove and which outputs were edited by hand.",
           "type": "string"
         },
         "targets": {

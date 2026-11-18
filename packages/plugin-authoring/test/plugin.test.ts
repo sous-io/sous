@@ -9,7 +9,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createEngine } from "@sous-io/core";
 import { cliPlugin, type CommandTree } from "@sous-io/plugin-cli";
-import { BufferedReporter, definePlugin, toJsonSchema, type PluginDefinition } from "@sous-io/plugin-api";
+import { BufferedReporter, definePlugin, IntentOutputs, jsonSchema, toJsonSchema, type PluginDefinition } from "@sous-io/plugin-api";
 import type { RepositoryHostEntity } from "@sous-io/plugin-recipes/types";
 import { authoringPlugin } from "../src/index.js";
 import type { AuthoringReleasedPayload } from "../src/types.js";
@@ -50,6 +50,27 @@ function standIn(name: string, services: Record<string, unknown>, entities: Arra
     });
 }
 
+/** The `init` runs `repo.init` chained into, recorded. */
+const initRuns: unknown[] = [];
+
+/** plugin-init, stood in: an `init` intent that records its input and does nothing. */
+const initStandIn = definePlugin({
+    name: "@sous-io/plugin-init",
+    version: packageJson.version,
+    register(sous) {
+        sous.intents.add({
+            intent: "init",
+            summary: "Set a project up for sous",
+            input: jsonSchema({ type: "object" }),
+            handle: async (input: unknown) => {
+                initRuns.push(input);
+
+                return IntentOutputs.of({});
+            },
+        } as never);
+    },
+});
+
 /** A host that scaffolds one CI file. */
 const host = {
     id: "github",
@@ -82,6 +103,8 @@ function engineWith(extra: PluginDefinition[] = [], reporter = new BufferedRepor
         }),
         standIn("@sous-io/plugin-variables", { "variables.names": variableNames }),
         standIn("@sous-io/plugin-recipes", {}, [["repository-host", host]]),
+        standIn("@sous-io/plugin-config-files", { "config-files.loader": { findMain: () => undefined } }),
+        initStandIn,
         authoringPlugin,
         ...extra,
     ];
@@ -142,6 +165,8 @@ describe("plugin-authoring", () => {
 
         expect(result.files).toContain(".github/workflows/sous-release.yml");
         expect(fs.existsSync(path.join(directory, "sous.repo.yaml"))).toBe(true);
+        // Then sous init runs in the same directory, with init's own flags passed through.
+        expect(initRuns.at(-1)).toEqual({ directory, name: "my-recipes", yes: false, dryRun: false });
     });
 
     /** A release run through the engine fires `authoring.released` with what it published. */

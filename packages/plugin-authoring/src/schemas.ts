@@ -95,6 +95,11 @@ export const initInput = jsonSchema<RepoInitInput>({
             type: "string",
             description: "The repository host whose CI workflow and files to add, such as 'github' (default: from the git remote, else none)",
         },
+        yes: { type: "boolean", description: "Accept the default answer to every question sous init asks, which this command runs next" },
+        moveIncludes: { type: "boolean", description: "Move the files an existing CLAUDE.md or AGENTS.md includes into .sous/includes/ (the default)" },
+        copyIncludes: { type: "boolean", description: "Copy the files an existing CLAUDE.md or AGENTS.md includes into .sous/includes/, keeping the originals" },
+        leaveIncludes: { type: "boolean", description: "Leave the files an existing CLAUDE.md or AGENTS.md includes where they are" },
+        noBuild: { type: "boolean", description: "Set the repository up for sous without running its first build" },
         dryRun: { ...dryRun, description: "Print the files that would be written without writing them" },
     },
 });

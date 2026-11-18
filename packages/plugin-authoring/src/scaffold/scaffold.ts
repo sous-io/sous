@@ -1,9 +1,13 @@
 /**
  * `repo.init`: scaffolds a new recipe repository, modeled on `sous-io/sous-recipes`: a repository
  * manifest, one example recipe with a placeholder skill, an empty but valid index, a README, a
- * `CONTRIBUTING.md`, a `CLAUDE.md` and an `AGENTS.md`, and a `.gitignore`. The CI workflow and any other
- * host files come from the `repository-host` entity (`scaffoldFiles`), so nothing host-specific lives
- * here.
+ * `CONTRIBUTING.md` and a `.gitignore`. The CI workflow and any other host files come from the
+ * `repository-host` entity (`scaffoldFiles`), so nothing host-specific lives here.
+ *
+ * Then it runs `init` in the same directory, so the repository is also a sous project: `init`
+ * imports any `CLAUDE.md`, `AGENTS.md` and skills already there (or, with nothing to import, writes a
+ * memory saying this is a sous recipe repository), and compiles the agent instructions from
+ * `.sous/`. A directory that already holds a sous config keeps it, and `init` is not run.
  *
  * The scaffold is planned in memory, written, and read back with the very parsers sous reads a real
  * repository with; a scaffold sous cannot read is reported against the file it just wrote.
@@ -11,15 +15,13 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { ConfigError, IntentOutput, ReportEntryStyle, Table, VariableSet, type Context, type IntentOutputs } from "@sous-io/plugin-api";
+import { ConfigError, IntentOutput, IntentOutputs, ReportEntryStyle, Table, VariableSet, type Context } from "@sous-io/plugin-api";
 import type { RepositoryHostEntity, ScaffoldFile } from "@sous-io/plugin-recipes/types";
 import type { RepoInitInput, RepoInitResult } from "../types.js";
 import { outputsOf, textOutput, toolsFrom, type AuthoringTools } from "../tools.js";
 import { INDEX_FILE, RECIPE_MANIFEST_FILE, REPO_MANIFEST_FILE } from "../shared/repository.js";
 import { hostForUrl } from "../submit/submit.js";
 import {
-    buildAgentsMd,
-    buildClaudeMd,
     buildContributing,
     buildExampleSkill,
     buildGitignore,
@@ -40,12 +42,43 @@ export interface ScaffoldOptions {
     readonly now?: Date;
 }
 
-/** The intent's handler. */
+/** The intent's handler: the scaffold, then `init` in the same directory. */
 export async function handleInit(input: RepoInitInput, ctx: Context): Promise<IntentOutputs<RepoInitResult>> {
     const tools = toolsFrom(ctx);
     const result = await scaffoldRepo(tools, input, { cwd: ctx.cwd });
+    const scaffolded = outputsOf(tools, result);
+    const configured = ctx.services.get("config-files.loader").findMain(path.join(result.directory, ".sous"));
 
-    return outputsOf(tools, result);
+    if (configured !== undefined) {
+        return new IntentOutputs<RepoInitResult>([
+            ...scaffolded.toArray().slice(0, -1),
+            textOutput(`${configured} already exists, so the repository keeps its sous config and 'sous init' was not run.`, ReportEntryStyle.Note),
+            ...scaffolded.toArray().slice(-1),
+        ]);
+    }
+
+    const initialized = await ctx.run("init", {
+        directory: result.directory,
+        name: result.name,
+        yes: input.yes === true,
+        dryRun: result.dryRun,
+        ...(input.moveIncludes === undefined ? {} : { moveIncludes: input.moveIncludes }),
+        ...(input.copyIncludes === undefined ? {} : { copyIncludes: input.copyIncludes }),
+        ...(input.leaveIncludes === undefined ? {} : { leaveIncludes: input.leaveIncludes }),
+        ...(input.noBuild === undefined ? {} : { noBuild: input.noBuild }),
+    });
+
+    // init's outputs go before the scaffold's "What to do next", which stays at the end with the
+    // closing output that carries the result.
+    const outputs = scaffolded.toArray();
+    const next = outputs.findIndex((output) => output.title === "What to do next");
+    const split = next === -1 ? outputs.length - 1 : next;
+
+    return new IntentOutputs<RepoInitResult>([
+        ...outputs.slice(0, split),
+        ...initialized.toArray().map((output) => new IntentOutput({ ...output, data: undefined })),
+        ...outputs.slice(split),
+    ]);
 }
 
 /** Creates a recipe repository in a directory. */
@@ -157,8 +190,6 @@ function planFiles(tools: AuthoringTools, context: ScaffoldContext): ScaffoldFil
         { path: `${recipeDir}/skills/example-skill/SKILL.tpl.md`, content: buildExampleSkill(context) },
         { path: "README.md", content: buildReadme(context) },
         { path: "CONTRIBUTING.md", content: buildContributing(context) },
-        { path: "CLAUDE.md", content: buildClaudeMd(context) },
-        { path: "AGENTS.md", content: buildAgentsMd() },
         { path: ".gitignore", content: buildGitignore() },
     ];
 }

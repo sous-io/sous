@@ -72,8 +72,11 @@ export interface BuildRuntimeContext {
     settings(): RuntimeContextSettings | undefined;
     /** Works out the context, writing nothing. */
     generate(): Promise<RuntimeContext | undefined>;
-    /** Writes the file through `compiler.writer`. */
-    write(options?: { dryRun?: boolean }): Promise<WrittenFile | undefined>;
+    /**
+     * Writes the file through `compiler.writer`. `run` names the run (the chain's id), so a backup
+     * of a hand-edited file goes in the same timestamp folder as the rest of the build's backups.
+     */
+    write(options?: { dryRun?: boolean; run?: number }): Promise<WrittenFile | undefined>;
 }
 
 // ---------------------------------------------------------------------------------------------

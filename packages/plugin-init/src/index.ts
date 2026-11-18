@@ -20,7 +20,10 @@ const initInput = jsonSchema<InitInput>({
     properties: {
         directory: { type: "string", description: "Project directory to set up (defaults to the current one)." },
         name: { type: "string", description: "Display name for the project (defaults to the directory's own name)." },
-        yes: { type: "boolean", default: false, description: "Answer yes to the one question init can ask: setting a project up inside another one." },
+        yes: { type: "boolean", default: false, description: "Accept the default answer to every question init asks: set the project up even inside another one, and move the included files." },
+        moveIncludes: { type: "boolean", default: false, description: "Move the files the existing CLAUDE.md or AGENTS.md include into .sous/includes/ (the default)." },
+        copyIncludes: { type: "boolean", default: false, description: "Copy the files the existing CLAUDE.md or AGENTS.md include into .sous/includes/, keeping the originals." },
+        leaveIncludes: { type: "boolean", default: false, description: "Leave the files the existing CLAUDE.md or AGENTS.md include where they are." },
         dryRun: { type: "boolean", default: false, description: "Show the files that would be written without writing them." },
         noBuild: { type: "boolean", default: false, description: "Write the setup without running the first build." },
     },
@@ -41,16 +44,16 @@ export const initPlugin: PluginDefinition = definePlugin({
     register(sous) {
         sous.intents.add({
             intent: "init",
-            summary: "Set a project up for sous: write its .sous/ directory, then run the first build",
+            summary: "Set a project up for sous: import its agent files into a new .sous/ directory, then run the first build",
             input: initInput,
             changesConfig: true,
             cli: {
                 positional: ["directory"],
-                examples: ["sous init", "sous init ./my-project", "sous init --name 'My Project' --no-build", "sous init --dry-run"],
+                examples: ["sous init", "sous init ./my-project", "sous init --name 'My Project' --no-build", "sous init --leave-includes", "sous init --dry-run"],
                 flags: { yes: { short: "y", aliases: ["force"] } },
             },
             agent: {
-                usage: "Set up a new project. Pass yes so no question is asked, and dryRun first to see the files.",
+                usage: "Set up a new project. Pass yes so no question is asked (or moveIncludes, copyIncludes or leaveIncludes to choose what happens to the files the existing instructions include), and dryRun first to see the files.",
             },
             load: () => import("./init.js"),
         });
@@ -59,7 +62,21 @@ export const initPlugin: PluginDefinition = definePlugin({
 
 export default initPlugin;
 
-export { buildConfigJs, buildEnvDefaults, buildEnvLocalExample, buildStarterPrompt, CONFIG_FILE_NAME, STARTER_OUTPUT_NAME, STARTER_PROMPT_RELATIVE_PATH } from "./templates.js";
+export {
+    buildConfigJs,
+    buildEnvDefaults,
+    buildEnvLocalExample,
+    buildRepoStarterMemory,
+    buildStarterMemory,
+    buildStarterPrompt,
+    CONFIG_FILE_NAME,
+    REPO_STARTER_MEMORY_RELATIVE_PATH,
+    ROOT_IGNORE_LINES,
+    STARTER_MEMORY_RELATIVE_PATH,
+    STARTER_OUTPUT_NAMES,
+    STARTER_PROMPT_RELATIVE_PATH,
+} from "./templates.js";
+export { applyImport, findReferences, rewriteReferences, scanImport, settleFates } from "./import.js";
 export { planPackageJson } from "./package-json.js";
-export { IGNORE_BLOCK_LINES, scaffoldProject, sousDirFor } from "./scaffold.js";
+export { IGNORE_BLOCK_LINES, isRecipeRepository, scaffoldProject, sousDirFor } from "./scaffold.js";
 export type * from "./types.js";

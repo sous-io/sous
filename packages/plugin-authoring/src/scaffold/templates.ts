@@ -308,8 +308,9 @@ ${noun(context)} through your repository host's own command line tool.
 ## Contributing
 
 Improvements are welcome, including new recipes. Contribution instructions in this repository are
-written for agents: \`CONTRIBUTING.md\` says why, and \`CLAUDE.md\` is where an agent without the sous
-core skills starts.
+written for agents: \`CONTRIBUTING.md\` says why. This repository is also a sous project, so run
+\`sous build\` after cloning: it compiles the agent instructions (\`CLAUDE.md\`, \`AGENTS.md\`) and
+skills from the sources in \`.sous/\`.
 
 ## Using it
 
@@ -362,70 +363,16 @@ Any agent working in this repository is assumed to have, at minimum, the sous co
 everything an agent needs to know to contribute: how a recipe is written, how its version is raised,
 and how a change is checked, proposed and released.
 
-An agent without those skills starts at \`CLAUDE.md\`, at the root of this repository.
+This repository is also a sous project. Run \`sous build\` after cloning: it installs those skills
+and compiles \`CLAUDE.md\` and \`AGENTS.md\` from the sources in \`.sous/\`.
 `;
-}
-
-/** Where the sous core skills can be read online, at their latest published version. */
-const CORE_SKILLS_URL =
-  "https://github.com/sous-io/sous-recipes/tree/main/recipes/core/sous-skills/skills";
-
-/** The official recipe repository every scaffold is modeled on. */
-const MODEL_REPOSITORY_URL = "https://github.com/sous-io/sous-recipes";
-
-/**
- * The root `CLAUDE.md`: the entry point for an agent working in the repository.
- * It points at the sous core skills rather than restating them, because they
- * are the source of truth for how a recipe repository works. It follows
- * `sous-io/sous-recipes`' own `CLAUDE.md`, minus what is only true there.
- *
- * @param context - The repository being scaffolded.
- */
-export function buildClaudeMd(context: ScaffoldContext): string {
-  return `# ${context.name}
-
-This is a sous recipe repository. It publishes recipes: versioned bundles of agent skills, memories
-and partials that sous installs into the projects that subscribe to them.
-
-## Recipe Repositories Are Part of Sous
-
-Writing a recipe, raising its version, checking a change, proposing it and releasing it all work
-here exactly as they do in any other sous recipe repository. How a recipe repository works is part
-of sous itself, so the sous core skills teach it, and they are the official source of truth for it.
-This file does not repeat them. The agent MUST read these before changing anything here:
-
-- \`about-sous-repos\`: a recipe repository as a whole; the repo manifest, namespaces, the index,
-  release tags, what happens to a pull request and a merge, and proposing a change.
-- \`about-sous-recipes\`: one recipe; its manifest, how its version is raised, its variables, its
-  contents, its dependencies and its partials.
-- \`about-agent-skills\`: how a skill is written, including the rules every new skill follows.
-
-An agent in a project that uses sous already has these skills. An agent that cannot install sous or
-use it reads them directly, as plain markdown files, online, at their latest published version:
-
-- ${CORE_SKILLS_URL}
-
-## Where This Repository Came From
-
-\`sous repo init\` created this repository, modeled on \`sous-io/sous-recipes\`, the official recipe
-repository. Its files show a complete repository in use:
-
-- ${MODEL_REPOSITORY_URL}
-`;
-}
-
-/**
- * The root `AGENTS.md`: one line sending an agent that reads `AGENTS.md`
- * rather than `CLAUDE.md` to the same instructions.
- */
-export function buildAgentsMd(): string {
-  return "Read `CLAUDE.md` in this directory; it holds the instructions for agents working in this\nrepository.\n";
 }
 
 /**
  * The repository's `.gitignore`. A recipe repository holds text, so this stays
- * short: editor and operating system leftovers, and the machine-local files
- * sous writes when the repository is linked into a project.
+ * short: editor and operating system leftovers. `sous init`, which `sous repo
+ * init` runs next, adds its own block for the files a build writes, and keeps
+ * sous's machine-local files out of git with `.sous/.gitignore`.
  */
 export function buildGitignore(): string {
   return `# Operating system and editor leftovers
@@ -435,13 +382,6 @@ Thumbs.db
 
 # Dependencies, if a recipe ever needs any
 node_modules/
-
-# Machine-local sous files, written when this repository is used from a project
-.sous/sous.state.json
-.sous/sous.pid
-.sous/sous.links.json
-.sous/repos/
-.sous/.env.local
 `;
 }
 

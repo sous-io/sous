@@ -45,6 +45,8 @@ export interface InitContextOptions {
     version?: string;
     /** Changes to the loader. */
     loader?: Partial<ConfigFilesLoader>;
+    /** More services, such as a stand-in `git.runner`. */
+    services?: Record<string, unknown>;
 }
 
 /** What the context saw. */
@@ -71,6 +73,7 @@ export function initContext(options: InitContextOptions = {}): { ctx: Context; r
             sousHome: { paths: () => ({ root: "/nowhere-sous-home" }) } as never,
         }),
         "config-files.loader": { ...fakeLoader, ...options.loader },
+        ...options.services,
     };
     const ctx = {
         plugin: "@sous-io/plugin-init",

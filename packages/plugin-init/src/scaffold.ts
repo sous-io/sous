@@ -3,10 +3,10 @@
  *
  * The scaffold is planned in memory first and only then written. It refuses to touch a project that
  * is already set up: a `.sous/` directory holding a primary config is left exactly as it is. Any
- * other file the scaffold would write that already exists is kept as it is and reported. Two files
- * are merged rather than replaced: `.sous/.gitignore`, whose sous-managed block is applied by
- * `host.gitignore`, so running the scaffold over an existing ignore file never duplicates an entry;
- * and the project's `package.json`, when there is one.
+ * other file the scaffold would write that already exists is kept as it is and reported. Three files
+ * are merged rather than replaced: `.sous/.gitignore` and the project-root `.gitignore`, whose
+ * sous-managed blocks are applied by `host.gitignore`, so running the scaffold over an existing
+ * ignore file never duplicates an entry; and the project's `package.json`, when there is one.
  *
  * Once written, the config is read back through `config-files.loader`, so a scaffold sous itself
  * cannot load is never reported as a success.
@@ -22,19 +22,32 @@ import {
     buildConfigJs,
     buildEnvDefaults,
     buildEnvLocalExample,
+    buildRepoStarterMemory,
+    buildStarterMemory,
     buildStarterPrompt,
     CONFD_DIR_NAME,
     CONFIG_FILE_NAME,
     ENV_DEFAULTS_NAME,
     ENV_LOCAL_NAME,
     SOUS_DIR_NAME,
+    REPO_STARTER_MEMORY_RELATIVE_PATH,
+    ROOT_IGNORE_LINES,
+    STARTER_MEMORY_RELATIVE_PATH,
     STARTER_PROMPT_RELATIVE_PATH,
     type ScaffoldContext,
 } from "./templates.js";
 import type { PackageJsonOutcome } from "./types.js";
 
 /** The lines of the sous-managed block in `.sous/.gitignore`: what stays on this machine. */
-export const IGNORE_BLOCK_LINES: readonly string[] = ["sous.links.json", "sous.state.json", "sous.pid", ENV_LOCAL_NAME, "repos/"];
+export const IGNORE_BLOCK_LINES: readonly string[] = ["sous.links.json", "sous.state.json", "sous.pid", ENV_LOCAL_NAME, "repos/", "backups/"];
+
+/** The names a recipe repository's manifest may have, at its root. */
+const REPO_MANIFEST_NAMES = ["sous.repo.yaml", "sous.repo.yml", "sous.repo.json", "sous.repo.jsonc"];
+
+/** Whether `root` is a sous recipe repository: it holds a repo manifest. */
+export function isRecipeRepository(root: string): boolean {
+    return REPO_MANIFEST_NAMES.some((name) => fs.existsSync(path.join(root, name)));
+}
 
 /** What to scaffold, and where. */
 export interface ScaffoldOptions {
@@ -42,6 +55,8 @@ export interface ScaffoldOptions {
     root: string;
     name: string;
     dryRun: boolean;
+    /** Whether to write a starter memory: nothing was imported. */
+    starterMemory?: boolean;
 }
 
 /** What a scaffold did. */
@@ -132,7 +147,12 @@ export async function scaffoldProject(ctx: Context, options: ScaffoldOptions): P
     const dependency = planPackageJson(root, identity.name, identity.version);
     const planned: Array<{ file: string; contents: string }> = [
         { file: configPath, contents: buildConfigJs(context) },
-        { file: path.join(sousDir, STARTER_PROMPT_RELATIVE_PATH), contents: buildStarterPrompt(context) },
+        { file: path.join(sousDir, STARTER_PROMPT_RELATIVE_PATH), contents: buildStarterPrompt() },
+        ...(options.starterMemory === true
+            ? isRecipeRepository(root)
+                ? [{ file: path.join(sousDir, REPO_STARTER_MEMORY_RELATIVE_PATH), contents: buildRepoStarterMemory(context) }]
+                : [{ file: path.join(sousDir, STARTER_MEMORY_RELATIVE_PATH), contents: buildStarterMemory(context) }]
+            : []),
         { file: path.join(sousDir, ENV_DEFAULTS_NAME), contents: buildEnvDefaults(context) },
         { file: path.join(sousDir, `${ENV_LOCAL_NAME}.example`), contents: buildEnvLocalExample(context) },
     ];
@@ -166,6 +186,13 @@ export async function scaffoldProject(ctx: Context, options: ScaffoldOptions): P
 
     if (ignore.changed) {
         files.push(ignore.file);
+    }
+
+    // The files a build writes at the project root are build output, so git ignores them.
+    const rootIgnore = await ctx.services.get("host.gitignore").write(path.join(root, ".gitignore"), ROOT_IGNORE_LINES, { dryRun: options.dryRun });
+
+    if (rootIgnore.changed) {
+        files.push(rootIgnore.file);
     }
 
     if (dependency.contents !== undefined && dependency.file !== undefined) {

@@ -273,6 +273,20 @@ export interface WrittenFile {
     readonly bytes: number;
     readonly target?: string;
     readonly origin?: CompilationOrigin;
+    /**
+     * Where the file's previous content was copied before it was overwritten (or, on a dry run,
+     * would be): set only when that content was not sous's own, because sous did not write the
+     * file or it was edited by hand since.
+     */
+    readonly backup?: string;
+}
+
+/** One file copied to a backup before it was overwritten or removed. */
+export interface BackedUpFile {
+    /** The file. */
+    readonly file: string;
+    /** Its backup: `<sousDir>/backups/<YYYY-MM-DD>/<HHMM-SS>/<path relative to the project root>`. */
+    readonly backup: string;
 }
 
 /** How to write one output. */
@@ -290,17 +304,37 @@ export interface WriteOptions {
     force?: boolean;
     /** The file mode to give it (a copied source's own). Default: `0o755` for `.sh`, otherwise left as it is. */
     mode?: number;
+    /** Which run the write belongs to (the chain's id): every backup of one run goes in one timestamp folder. */
+    run?: number;
+}
+
+/** How to remove files. */
+export interface RemoveOptions {
+    /** Removes nothing. */
+    dryRun?: boolean;
+    /** Which run the removal belongs to (the chain's id): every backup of one run goes in one timestamp folder. */
+    run?: number;
+}
+
+/** What removing files did. */
+export interface RemovedFiles {
+    removed: string[];
+    dirsRemoved: string[];
+    /** The files backed up before they were removed (or, on a dry run, that would be); missing when none. */
+    backedUp?: BackedUpFile[];
 }
 
 /**
  * Writing outputs: overwrites and takes ownership, unless
  * `compilation.overwriteUntracked` is `false`. Every write is recorded in the state file.
- * The one way any plugin writes a build output (the runtime context file included).
+ * The one way any plugin writes a build output (the runtime context file included). Before it
+ * overwrites or removes a file whose content sous did not produce (a file it did not write, or an
+ * output edited by hand since it wrote it), it copies the file to `<sousDir>/backups/`.
  */
 export interface CompilerWriter {
     write(file: string, content: string, options: WriteOptions): Promise<WrittenFile>;
     /** Removes files the compiler wrote, and directories it created that are left empty. */
-    remove(files: readonly string[], options?: { dryRun?: boolean }): Promise<{ removed: string[]; dirsRemoved: string[] }>;
+    remove(files: readonly string[], options?: RemoveOptions): Promise<RemovedFiles>;
     /** Saves the state file after a run. */
     commit(options?: { dryRun?: boolean; resolvedVars?: VarScope }): Promise<void>;
 }
@@ -366,6 +400,8 @@ export interface CompilerPruneInput {
 export interface CompilerPruneResult {
     readonly removed: string[];
     readonly dirsRemoved: string[];
+    /** The files backed up before they were removed, because they were edited by hand; missing when none. */
+    readonly backedUp?: BackedUpFile[];
     readonly dryRun: boolean;
 }
 
