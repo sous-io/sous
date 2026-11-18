@@ -185,6 +185,45 @@ describe("editor.apply", () => {
     });
 
     /**
+     * A project set up before the editor existed has no history line in `.sous/.gitignore`'s
+     * managed block: the first run that applies an edit adds it and `backups/`; a dry run, and a
+     * project that declares no edit and has no history, gain nothing.
+     *
+     * editor.apply with one entry -> host.gitignore.add(".sous/.gitignore", ["sous.edits.json", "backups/"])
+     */
+    it("should add the history file and backups/ to .sous/.gitignore once the editor writes", async () => {
+        const added: Array<{ file: string; lines: readonly string[] }> = [];
+        const host = definePlugin({
+            name: "test-host",
+            version: "1.0.0",
+            register(sous) {
+                sous.services.add("host.gitignore", () => ({ add: async (file: string, lines: readonly string[]) => void added.push({ file, lines }) }) as never, {
+                    lifetime: "singleton",
+                });
+            },
+        });
+        let declare = false;
+        const { engine } = makeEngine(
+            host,
+            plugin("sous-plugin-lines", (config) => {
+                if (declare) config.atPath("editor.edits").appendValue({ file: "a.json", set: { path: "a", value: 1 } });
+            }),
+        );
+
+        await engine.buildConfig();
+        await engine.submit({ intent: "test.apply", input: {} });
+        check(added).toEqual([]);
+
+        declare = true;
+        await engine.buildConfig();
+        await engine.submit({ intent: "test.apply", input: { dryRun: true } });
+        check(added).toEqual([]);
+
+        await engine.submit({ intent: "test.apply", input: {} });
+        check(added).toEqual([{ file: path.join(tmp.path, ".sous", ".gitignore"), lines: ["sous.edits.json", "backups/"] }]);
+    });
+
+    /**
      * A YAML file, a Markdown file's frontmatter and a .gitignore are each edited through the
      * document library: the edit changes only what it names, every other byte stays (comments,
      * the Markdown body, a CRLF line), and undoing puts each file back byte for byte.

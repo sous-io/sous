@@ -930,6 +930,9 @@ importers:
       '@sous-io/plugin-compiler':
         specifier: workspace:*
         version: link:../plugin-compiler
+      '@sous-io/plugin-host':
+        specifier: workspace:*
+        version: link:../plugin-host
       '@sous-io/plugin-variables':
         specifier: workspace:*
         version: link:../plugin-variables

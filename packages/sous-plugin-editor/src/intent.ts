@@ -14,10 +14,12 @@
  * ```
  */
 
+import fs from "node:fs";
 import path from "node:path";
 import { isJsonObject, type JsonValue } from "@sous-io/documents";
 import { IntentOutput, IntentOutputs, type BuiltConfig, type Context } from "@sous-io/plugin-api";
 import { Backups, createTokenCounter } from "@sous-io/plugin-compiler";
+import type {} from "@sous-io/plugin-host/types";
 import type { VariablesResolver } from "@sous-io/plugin-variables/types";
 import { applyEdits, type DeclaredEntry } from "./apply.js";
 import { declarerLabel, EDITS_KEY, entryIdentity, listOwners, normalizeEntry } from "./entries.js";
@@ -88,6 +90,27 @@ export function declaredEntries(
     return { entries, complete };
 }
 
+/**
+ * Makes sure `.sous/.gitignore`'s managed block holds the history file and `backups/`, so neither
+ * reaches git. `sous init` writes both into a new project's block; a project set up before the
+ * editor existed gains them here, the first time the editor writes. A history file outside `.sous/`
+ * is the project's to ignore. A damaged block is reported and left alone.
+ */
+export async function ensureIgnored(ctx: Context, sousDir: string, historyFile: string): Promise<void> {
+    if (!ctx.services.has("host.gitignore")) {
+        return;
+    }
+
+    const relative = path.relative(sousDir, historyFile);
+    const lines = [...(relative.startsWith("..") || path.isAbsolute(relative) ? [] : [relative.split(path.sep).join("/")]), "backups/"];
+
+    try {
+        await ctx.services.get("host.gitignore").add(path.join(sousDir, ".gitignore"), lines);
+    } catch (error) {
+        ctx.reporter.warning(`Sous could not add ${lines.join(" and ")} to .sous/.gitignore: ${error instanceof Error ? error.message : String(error)}`);
+    }
+}
+
 /** The handler of `editor.apply`. */
 export async function applyIntent(input: EditorApplyInput, ctx: Context): Promise<IntentOutputs<EditorApplyResult>> {
     const project = ctx.project;
@@ -113,6 +136,7 @@ export async function applyIntent(input: EditorApplyInput, ctx: Context): Promis
         // Undo only after a config build that succeeded, and only when every entry could be read:
         // otherwise an entry that failed to load would look the same as one that was removed.
         const undo = complete && ctx.engine.configError === undefined;
+        const hadHistory = fs.existsSync(historyFile);
         const result = await applyEdits(
             entries,
             {
@@ -125,6 +149,11 @@ export async function applyIntent(input: EditorApplyInput, ctx: Context): Promis
             { dryRun, ignoreFailedAssertions: input.ignoreFailedAssertions === true, undo },
             (op) => OPERATIONS.get(op),
         );
+
+        // Only a project that uses the editor gains the lines: one with entries, or with a history.
+        if (!dryRun && (entries.length > 0 || hadHistory)) {
+            await ensureIgnored(ctx, project.sousDir, historyFile);
+        }
 
         return new IntentOutputs<EditorApplyResult>(new IntentOutput({ data: result }), result.ok ? {} : { exitCode: 1 });
     } finally {
