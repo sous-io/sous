@@ -39,7 +39,7 @@ export function ifReplacement(output: Record<string, unknown>): string {
 const outputSchema = z
     .object({
         /** Removed; kept only to say what to write instead (see `ifReplacement`). */
-        _if: z.unknown().optional(),
+        _if: z.unknown().optional().describe("Removed. Write the condition as a config expression on the output: { \"$if\": { \"expr\": \"...\", \"then\": { ...the output... } } }."),
         _vars: varsSchema.optional(),
         destinationFile: z.string().optional(),
         destinationDir: z.string().optional(),
