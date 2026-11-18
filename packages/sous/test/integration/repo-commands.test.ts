@@ -179,9 +179,12 @@ describe("sous repo init / link / unlink", () => {
       ).toBe(true);
       expect(fs.existsSync(path.join(sourceRepo, "README.md"))).toBe(true);
       expect(fs.existsSync(path.join(sourceRepo, "CONTRIBUTING.md"))).toBe(true);
-      expect(fs.existsSync(path.join(sourceRepo, "CLAUDE.md"))).toBe(true);
-      expect(fs.existsSync(path.join(sourceRepo, "AGENTS.md"))).toBe(true);
       expect(fs.existsSync(path.join(sourceRepo, ".gitignore"))).toBe(true);
+      // The repository is set up for sous too: its instructions are a project memory, and no
+      // root CLAUDE.md or AGENTS.md is written (each coding tool's plugin compiles the memories).
+      expect(fs.existsSync(path.join(sourceRepo, ".sous", "memories", "project.tpl.md"))).toBe(true);
+      expect(fs.existsSync(path.join(sourceRepo, "CLAUDE.md"))).toBe(false);
+      expect(fs.existsSync(path.join(sourceRepo, "AGENTS.md"))).toBe(false);
     },
     CLI_TIMEOUT
   );
