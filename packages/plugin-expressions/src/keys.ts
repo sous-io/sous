@@ -10,14 +10,23 @@ export type ReservedKey =
     /** `$if` / `$elseif`, or with `:<name>` (`name` is `""` for `"$if:"`, an error later). */
     | { readonly kind: "if" | "elseif"; readonly key: string; readonly name: string | undefined }
     /** `$else`. */
-    | { readonly kind: "else"; readonly key: string };
+    | { readonly kind: "else"; readonly key: string }
+    /** `$file`: the value comes from a file. */
+    | { readonly kind: "file"; readonly key: string };
 
 const QUALIFIED = /^\$(expr|if|elseif)(?::(.*))?$/s;
+
+/** The reserved key whose object stands in for a value read from a file. */
+export const FILE_KEY = "$file";
 
 /** What a key means, or `undefined` when it is not one of the reserved keys (`$schema`, `$iff`). */
 export function parseReservedKey(key: string): ReservedKey | undefined {
     if (key === "$else") {
         return { kind: "else", key };
+    }
+
+    if (key === FILE_KEY) {
+        return { kind: "file", key };
     }
 
     const match = QUALIFIED.exec(key);

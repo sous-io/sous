@@ -52,10 +52,34 @@ function evaluateLiquid(expression: string, scope: ExpressionScope, ctx: Express
     }
 
     const value = guard(expression, ctx, () =>
-        engine.evalValueSync(expression, { ...scope.vars, host: scope.host, env: scope.env }),
+        engine.evalValueSync(expression, { ...scope.vars, host: scope.host, env: scope.env, harness: scope.harness ?? { id: "" } }),
     );
 
     return { value: toValue(value) };
+}
+
+/**
+ * Renders a `.tpl.` file a `$file` value reads, as Liquid, with the same filters config
+ * expressions have. A render error is a `ConfigError` naming the file and key path.
+ *
+ * ```ts
+ * renderLiquidTemplate('{"mode": "{{ mode }}"}', { mode: "strict" }, ctx);  // -> '{"mode": "strict"}'
+ * ```
+ */
+export function renderLiquidTemplate(text: string, scope: Readonly<Record<string, unknown>>, ctx: ExpressionLanguageContext): string {
+    const engine = engineFor(ctx);
+
+    try {
+        return engine.parseAndRenderSync(text, { ...scope }) as string;
+    } catch (error) {
+        if (error instanceof ConfigError) {
+            throw error;
+        }
+
+        const reason = error instanceof Error ? error.message : String(error);
+
+        throw new ExpressionError(ctx.file, ctx.path, `reads a template that failed to render: ${reason}`, { cause: error });
+    }
 }
 
 /**

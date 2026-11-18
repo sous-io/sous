@@ -14,6 +14,11 @@ import type { VarScope } from "@sous-io/plugin-variables/types";
 export interface ExpressionScope {
     /** `host.platform`: Node's `process.platform`. */
     readonly host: { readonly platform: string };
+    /**
+     * `harness.id`: the harness this config is built for (`claude-code`, `codex`), or `""` in the
+     * build with no harness. Never missing, so a condition on it never waits for a later pass.
+     */
+    readonly harness?: { readonly id: string };
     /** `env.<NAME>`, after the env files load. */
     readonly env: Environment;
     /** Variables by bare name: the `_vars` of every level containing the expression, recipe answers where allowed. */
@@ -86,6 +91,17 @@ export interface EvaluateLayerOptions {
     ownVars?: Readonly<Record<string, string>>;
     /** True for a recipe's config file: languages that run code are refused. */
     fromRecipe?: boolean;
+    /**
+     * The directory a relative `$file` path is resolved against: the folder of the file holding
+     * the data (a config file's folder, a recipe's folder). Default: the project root, else the
+     * working directory.
+     */
+    baseDir?: string;
+    /**
+     * A named variable scope laid over the root (a recipe's own answers: `namespace/recipe`), for
+     * data a recipe declared.
+     */
+    scopeKey?: string;
 }
 
 /** What evaluating a layer gave. */
@@ -117,6 +133,11 @@ export interface ExpressionsEvaluator {
     evaluations(file?: string): EvaluatedExpression[];
     /** Expressions still unknown in the latest pass; non-empty once the config settles means an error. */
     unsettled(): UnsettledExpression[];
+    /**
+     * Every file a `$file` value read in the latest build, absolute. They are inputs to config
+     * building: watch mode rebuilds the config when one changes.
+     */
+    files?(): string[];
     /** The languages known, in plugin order. */
     languages(): string[];
 }

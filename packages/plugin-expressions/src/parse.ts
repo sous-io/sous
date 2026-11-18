@@ -6,7 +6,7 @@
 
 import type { JsonValue, PathSegment } from "@sous-io/plugin-api";
 import { ExpressionError } from "./errors.js";
-import { chainOrder, isPlainObject, parseReservedKey, type ReservedKey } from "./keys.js";
+import { chainOrder, FILE_KEY, isPlainObject, parseReservedKey, type ReservedKey } from "./keys.js";
 
 /** One expression string, and where it was written. */
 export interface ExpressionSource {
@@ -32,12 +32,17 @@ export interface Branch {
 /** What an expression object says. */
 export type Plan =
     | { readonly kind: "value"; readonly expression: ExpressionSource }
-    | { readonly kind: "chain"; readonly branches: readonly Branch[]; readonly otherwise: WrittenValue | undefined };
+    | { readonly kind: "chain"; readonly branches: readonly Branch[]; readonly otherwise: WrittenValue | undefined }
+    | { readonly kind: "file"; readonly file: string; readonly path: readonly PathSegment[] };
 
 type ChainKey = Extract<ReservedKey, { kind: "if" | "elseif" }>;
 
 /** Reads an expression object. `path` is the key path of the object itself. */
 export function parseExpressionObject(object: Record<string, JsonValue>, path: readonly PathSegment[], file: string): Plan {
+    if (Object.hasOwn(object, FILE_KEY)) {
+        return parseFileObject(object, path, file);
+    }
+
     const exprKeys: Array<Extract<ReservedKey, { kind: "expr" }>> = [];
     const ifs: ChainKey[] = [];
     const elseifs: ChainKey[] = [];
@@ -53,6 +58,8 @@ export function parseExpressionObject(object: Record<string, JsonValue>, path: r
             exprKeys.push(reserved);
         } else if (reserved.kind === "else") {
             hasElse = true;
+        } else if (reserved.kind === "file") {
+            // Read by parseFileObject, above.
         } else {
             (reserved.kind === "if" ? ifs : elseifs).push(reserved);
         }
@@ -108,6 +115,32 @@ export function parseExpressionObject(object: Record<string, JsonValue>, path: r
         branches,
         otherwise: hasElse ? { value: object.$else!, path: [...path, "$else"] } : undefined,
     };
+}
+
+/**
+ * Reads a `$file` object: `$file` must be its only key, and its value a non-empty path string.
+ *
+ * ```ts
+ * parseFileObject({ $file: "documents/deny-rules.json" }, ["edits", 0, "set", "value"], "sous.recipe.yaml");
+ * // -> { kind: "file", file: "documents/deny-rules.json", path: [..., "$file"] }
+ * ```
+ */
+function parseFileObject(object: Record<string, JsonValue>, path: readonly PathSegment[], file: string): Plan {
+    const others = Object.keys(object).filter((key) => key !== FILE_KEY);
+
+    if (others.length > 0) {
+        throw new ExpressionError(file, path, `mixes "$file" with ${list(others)}.`, {
+            details: ["An object holding $file stands in for the file's value, so it holds no other key. Wrap it in $if to choose it conditionally."],
+        });
+    }
+
+    const value = object[FILE_KEY];
+
+    if (typeof value !== "string" || value.trim() === "") {
+        throw new ExpressionError(file, [...path, FILE_KEY], `is ${describe(value ?? null)}. $file takes the path of a file, as a string.`);
+    }
+
+    return { kind: "file", file: value, path: [...path, FILE_KEY] };
 }
 
 /** Where a key sits in its chain, which decides whether a fallback is allowed in it. */

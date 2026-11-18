@@ -110,7 +110,7 @@ export class ConfigFilesLoaderImpl implements ConfigFilesLoader {
         try {
             switch (file.kind) {
                 case "data":
-                    this.mergeData(config, file.data, label, options.fromRecipe === true);
+                    this.mergeData(config, file.data, label, options.fromRecipe === true, path.dirname(file.path));
                     break;
                 case "patch":
                     config.apply(file.patches as readonly Patch[]);
@@ -139,9 +139,12 @@ export class ConfigFilesLoaderImpl implements ConfigFilesLoader {
         return file;
     }
 
-    /** Applies data as one merge at the root, its expressions evaluated first. */
-    mergeData(config: ConfigBuilder, data: unknown, label: string, fromRecipe = false): void {
-        const evaluated = this.evaluate(config, data as JsonValue, label, fromRecipe);
+    /**
+     * Applies data as one merge at the root, its expressions evaluated first. `baseDir` is the
+     * folder a relative `$file` path in it is resolved against: the file's own folder.
+     */
+    mergeData(config: ConfigBuilder, data: unknown, label: string, fromRecipe = false, baseDir?: string): void {
+        const evaluated = this.evaluate(config, data as JsonValue, label, fromRecipe, baseDir);
 
         if (evaluated === undefined || evaluated === null) {
             return;
@@ -155,14 +158,14 @@ export class ConfigFilesLoaderImpl implements ConfigFilesLoader {
         config.root().merge(evaluated);
     }
 
-    private evaluate(config: ConfigBuilder, data: JsonValue, label: string, fromRecipe: boolean): JsonValue | undefined {
+    private evaluate(config: ConfigBuilder, data: JsonValue, label: string, fromRecipe: boolean, baseDir: string | undefined): JsonValue | undefined {
         const evaluator = this.host.evaluator();
 
         if (evaluator === undefined || !evaluator.hasExpressions(data)) {
             return data;
         }
 
-        return evaluator.evaluateLayer(data, { file: label, config, ownVars: ownVars(data), fromRecipe }).value;
+        return evaluator.evaluateLayer(data, { file: label, config, ownVars: ownVars(data), fromRecipe, ...(baseDir === undefined ? {} : { baseDir }) }).value;
     }
 
     private async read(file: string): Promise<LoadedConfigFile> {
@@ -206,7 +209,7 @@ export class ConfigFilesLoaderImpl implements ConfigFilesLoader {
                         path: file,
                         sousDir: this.host.project?.sousDir,
                         confDir: this.host.project?.confDir,
-                        mergeData: (config, data) => this.mergeData(config, data, label),
+                        mergeData: (config, data) => this.mergeData(config, data, label, false, path.dirname(file)),
                         loadInto: (draft, specifier, glob, run) => this.loadInto(draft, specifier, glob, run, file),
                     });
 
