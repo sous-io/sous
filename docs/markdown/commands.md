@@ -69,6 +69,20 @@ Every topic answers to both spellings of its name (`repo` and `repos`, `subscrip
 so on), and `sous search`, `sous subscribe` and `sous unsubscribe` are one-word forms of `repo search`,
 `subscription add` and `subscription remove`.
 
+Some topics and commands also have a short form. A topic's short form reaches every command under it, and the
+short forms combine: `sous ns ls` is `sous namespace list`.
+
+| Short form | Stands for | Example |
+|---|---|---|
+| `ns` | `namespace` | `sous ns show core` |
+| `sub` | `subscription` | `sous sub add workflow/task-files` |
+| `rc` | `recipe` | `sous rc show omakase/house` |
+| `cfg` | `config` | `sous cfg get compilation` |
+| `ls` | `list`, in `namespace`, `recipe`, `repo`, `subscription` and `vars` | `sous repo ls` |
+| `rm` | `remove`, in `repo` and `subscription` | `sous sub rm workflow/task-files` |
+
+Every command's `--help` lists the other spellings it answers to, under ALIASES.
+
 ## Top-level commands
 
 ### `sous init [DIRECTORY]`
@@ -231,16 +245,59 @@ Searches the recipes every trusted repository publishes, by name or description.
 sous search task
 ```
 
-### `sous update`
+### `sous update [REF]`
 
-Updates sous itself: the global install, the project's own install, or both, each through the package manager
-that installed it. It prints every plan and asks before each install. By default each install moves to the
-newest version in its current major; `--major` goes past it and `--version <version|range|tag>` picks one, a
-downgrade included. See [Updating](README.md#updating).
+Moves the lockfile's pins to the newest versions their ranges allow, then rebuilds: every subscription, or only
+the repository, namespace or recipe `REF` names. `--dry-run` prints the plan and changes nothing. It asks before
+it changes anything and before trusting a repository a newer version needs; `--yes` answers yes, and
+`--answer <name>=<value>` or `--answers-file <path>` answer a new version's questions ahead of time.
+`sous subscription update` and `sous recipe update` are other spellings of it. See
+[Moving to newer versions](repositories-consuming.md#moving-to-newer-versions).
 
 ```bash
 sous update --dry-run
-sous update --version next
+sous update workflow/task-files --yes
+```
+
+### `sous upgrade`
+
+Upgrades sous itself: the global install, the project's own install, or both, each through the package manager
+that installed it. It prints every plan and asks before each install. By default each install moves to the
+newest version in its current major; `--major` goes past it and `--version <version|range|tag>` picks one, a
+downgrade included. After the project's install moves to a newer version, the new copy runs the
+[migrations](#sous-doctor) that version brings, then builds the project; `--answer <name>=<value>` answers a
+migration's question ahead of time. See [Upgrading](README.md#upgrading).
+
+```bash
+sous upgrade --dry-run
+sous upgrade --version next
+```
+
+### `sous doctor`
+
+Checks the project's health, runs the migrations a newer version of sous brought, and offers to fix each
+problem it finds, asking before each fix. Its checks, in order:
+
+1. The config loads.
+2. The lockfile agrees with the subscriptions (fix: write the lockfile the subscriptions make, keeping every pin
+   their ranges still allow).
+3. Required recipe variables have answers (fix: ask them).
+4. Every migration for this version of sous has run (fix: run them).
+5. The files sous wrote are present and unchanged (fix: build).
+
+Plugins add checks of their own. `--dry-run` reports and changes nothing; `--yes` applies every fix without
+asking and takes the default answer to each migration's question; `--answer <name>=<value>` answers one
+question, a migration's or a recipe variable's; `--only <check>` runs one check. It ends with exit code 1 when a
+problem remains. A migration waiting for an answer nobody could give (no terminal, no `--yes`, no `--answer`)
+is listed with the `--answer` that gives it, and does not change the exit code.
+
+A migration brings a project's files in line with a newer version of sous. Each runs once for the project: the
+lockfile records the version of sous whose migrations the project last ran. While one is waiting, every other
+command prints one line saying so, and carries on.
+
+```bash
+sous doctor --dry-run
+sous doctor --yes
 ```
 
 ### `sous mcp`
@@ -393,8 +450,7 @@ Manages which recipes the project subscribes to. `REF` is `namespace` or `namesp
   the sous plugins it requires with `--install-plugins`.
 - `subscription remove` (or `sous unsubscribe`) removes a subscription and everything only it brought in. The
   built-in `core` subscription is switched off instead, keeping its pin.
-- `subscription update [REF]` moves the lockfile's pins to the newest versions their ranges allow, then
-  rebuilds. See [Moving to newer versions](repositories-consuming.md#moving-to-newer-versions).
+- `subscription update [REF]` is [`sous update`](#sous-update-ref).
 - `subscription disable REF` and `subscription enable REF` switch a subscription off or back on in
   `conf.d/510-subscriptions.jsonc`, leaving the rest of that file as it is.
 - `subscription list` lists the subscriptions, switched-off ones included, with their pins and latest versions.
@@ -402,7 +458,7 @@ Manages which recipes the project subscribes to. `REF` is `namespace` or `namesp
 ```bash
 sous subscribe workflow/task-files@^1.2.0 --answer apiUrl=https://api.example.com
 sous subscription disable tool-usage/automated-browser-tasks
-sous subscription update
+sous sub ls
 ```
 
 ## namespace and recipe

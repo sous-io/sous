@@ -41,15 +41,16 @@ output. When the two versions differ, one line on standard error names the versi
 to; `--verbose` announces every hand-off and adds where both installs are. Set
 `SOUS_NO_DELEGATE=1` to run the copy you invoked instead.
 
-To update, run `sous update`. It updates the global install, the project's own install, or both
+To upgrade sous, run `sous upgrade`. It upgrades the global install, the project's own install, or both
 (whichever this directory has), through the package manager that installed each one (npm, pnpm or
 Yarn), and asks before each one. By default each install moves to the newest version in its current
 major; `--major` goes past it and `--version <version|range|tag>` picks one (a downgrade included).
-`sous update --help` lists the rest. After a project update, the new copy builds the project, so its
-lockfile moves to the new version too.
+`sous upgrade --help` lists the rest. After a project upgrade, the new copy runs the migrations its
+version brings, then builds the project, so its lockfile moves to the new version too. To move the
+project's recipes to newer versions, run `sous update`.
 
 ```bash
-sous update --dry-run     # show what would be installed where, and install nothing
+sous upgrade --dry-run    # show what would be installed where, and install nothing
 ```
 
 Or run it from a clone (useful when developing sous itself):

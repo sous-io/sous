@@ -114,15 +114,16 @@ export default {
       assert.equal(t.read(".sous/sous.lock.json"), before);
     });
 
-    await t.step("subscription update --dry-run writes nothing", () => {
+    await t.step("update --dry-run writes nothing", () => {
       const before = t.read(".sous/sous.lock.json");
-      expectExit(t.sous(["subscription", "update", "--dry-run"]));
+      expectExit(t.sous(["update", "--dry-run"]));
       assert.equal(t.read(".sous/sous.lock.json"), before);
     });
 
-    await t.step("recipe update plans an update and writes nothing", () => {
+    await t.step("recipe update and subscription update, other spellings of update, plan with --dry-run", () => {
       const before = t.read(".sous/sous.lock.json");
-      expectExit(t.sous(["recipe", "update"]));
+      expectExit(t.sous(["recipe", "update", "--dry-run"]));
+      expectExit(t.sous(["sub", "update", "--dry-run"]));
       assert.equal(t.read(".sous/sous.lock.json"), before);
     });
 
