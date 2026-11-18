@@ -170,13 +170,13 @@ time.
 | 20 | `set` (`ifMissing`), `setIfEquals`, `renameKey` |
 | 25 | `merge` (`ifMissing`), `replaceWhere`, `updateWhere`, `mergeWhere` |
 | 30 | `upsertWhere` |
-| 40 | `ensureIncludes` (`position`), `append` (`position`) |
+| 40 | `ensureIncludes` (`position`), `prependIfMissing`, `append` (`position`) |
 | 50 | `remove` (`values` or `where`), `removeAt`, `removeLine`, `delete`, `deleteIfEquals`, `deleteIfEmpty`, `deleteKeys`, `keepOnlyKeys` |
 | 60 | `ensureLine` (`position`), `ensureBlock`, `appendText`, `prependText`, `replaceText`, `replacePattern` |
 | 70 | `increment`, `decrement`, `toggle` |
 | 80 | `dedupe` (`by`) |
 | 90 | `sort` (`by`, `descending`) |
-| 95 | `sortKeys` |
+| 95 | `sortKeys`, `moveKeyBefore`, `moveKeyAfter`, `moveKeyFirst`, `moveKeyLast` |
 
 Shorthands and aliases, each a name for the operation shown:
 
@@ -206,24 +206,35 @@ states (the items are there, moved if needed); `after` and `before` only place a
 `ensureLine` every position only places a missing line; an `after` or `before` that is not found
 means the end.
 
-Not built yet, from the list Luke accepted: `copy`, `move`, `moveKeyBefore`, `moveKeyAfter`,
-`moveKeyFirst`, `moveKeyLast`, `insertBeforeWhere`, `insertAfterWhere`, `moveItem`,
-`prependIfMissing`, the comment operations (`setCommentBefore`, `setCommentAfter`,
+`prependIfMissing` puts each missing item at the start, in the order given, and leaves an item
+already there where it is (unlike `ensureFirst`, which moves it). The four key moves change nothing
+when the key or the anchor is missing; like `sortKeys`, they are not undone and have no automatic
+assertion, since an order is not a value.
+
+Not built yet, from the list Luke accepted: `copy`, `move`, `insertBeforeWhere`,
+`insertAfterWhere`, `moveItem`, the comment operations (`setCommentBefore`, `setCommentAfter`,
 `removeComment`) and `selectDocument`. The reading operations of the list are the direct path's
 document API (`exists`, `get`, `keys`, `length` and the rest on a node).
 
 ## Formats
 
-The format comes from the file's name: `.json`, `.jsonc`, `.yaml`/`.yml`, Markdown (`.md`,
-`.markdown`, `.mdx`, whose YAML frontmatter is the document and whose body is kept byte for byte),
-and anything else as plain text, a list of lines. Edits to JSON and JSONC keep comments, key order,
+The format comes from the file's name, through `@sous-io/documents` (`formatForPath`): `.json`
+(`.jsonc` by convention for `tsconfig*.json`, `.vscode/*.json` and the like), `.jsonc`,
+`.yaml`/`.yml`, Markdown (`.md`, `.markdown`, `.mdx`, whose YAML frontmatter is the document and
+whose body is kept byte for byte), and anything else as plain text, a list of lines. The editor
+is a thin layer over that library: it parses, edits and writes every format, and a plain text
+file's lines keep their own line endings. Edits to JSON and JSONC keep comments, key order,
 indentation and line endings. TOML is recognized and skipped with a warning until the document
 library edits it. The text operations (`ensureLine`, `removeLine`, `ensureBlock`, `appendText`,
 `prependText`, `replaceText`, `replacePattern`) act on the file's whole text when they have no
 `path`, and on a string value when they do.
 
 A block Sous keeps in a text file sits between `>>> sous managed: <name> (do not edit between these
-markers)` and `<<< sous managed: <name>`, in the file type's comment style (`#`, `//`, `<!-- -->`).
+markers)` and `<<< sous managed: <name>`, in the file type's comment style (`#`, `//`, `<!-- -->`,
+`/* */`, `--`, `;`), written by the library's `managedBlockMarkers`. A block added at the end of a
+file is separated from the line before it by a blank line. A block whose markers are damaged (one
+without the other, or either twice) is never guessed at: the edit is skipped with a warning, and its
+assertion fails.
 
 ## Applying the List
 
@@ -410,4 +421,13 @@ The `editor` service, for direct usage: `open(file)` gives a file with `apply(op
 
 ## Changes
 
-None yet.
+### 2026-11-18: The editor is a thin layer over the document library
+
+The editor first carried its own plain text and frontmatter documents and its own block markers,
+because `@sous-io/documents` had none. The library now has them (`parseLines`, the `markdown`
+format, `managedBlockMarkers`, `commentStyleForPath`), so the editor uses them and its copies are
+gone. What changed for a person: each line of a plain text file keeps its own line ending; a block
+added at the end of a file gets a blank line before it, as `sous init`'s blocks do; and a damaged
+block is skipped instead of a second one being added. The operations the library made cheap were
+built: `prependIfMissing`, `moveKeyBefore`, `moveKeyAfter`, `moveKeyFirst` and `moveKeyLast`.
+`sortKeys` now moves each key with its comments. (The agent's work, joining the merged pieces.)
