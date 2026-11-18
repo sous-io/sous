@@ -128,6 +128,59 @@ describe("expressions in the config loop", () => {
         await expect(engine.buildConfig()).rejects.toThrow(/reads githubProjectId, which is an answer to a recipe/);
     });
 
+    /**
+     * `harness.id` is the harness of the config build: "" in the build with no harness, never
+     * undefined, so a condition on it settles; each harness's build reads its own id.
+     */
+    it("reads harness.id: empty in the build with no harness, the id in each harness's build", async () => {
+        const harnesses = definePlugin({
+            name: "test-harnesses",
+            version: "1.0.0",
+            register(sous) {
+                sous.entities.define("harness", jsonSchema({}));
+                sous.entities.add("harness", { id: "codex" } as never);
+            },
+        });
+        const engine = engineWith(
+            harnesses,
+            filesPlugin([
+                {
+                    file: "a-610.jsonc",
+                    data: { flags: { tool: { $expr: "harness.id" }, codex: { $if: "harness.id == 'codex'", $else: false } } },
+                },
+            ]),
+        );
+
+        const built = await engine.buildConfig();
+        const evaluator = built.services.get("expressions.evaluator");
+
+        expect(built.get("flags")).toEqual({ tool: "", codex: false });
+        expect(built.forHarness("codex")!.get("flags")).toEqual({ tool: "codex", codex: true });
+        expect(evaluator.evaluations("a-610.jsonc").map((record) => record.value)).toEqual(["", false]);
+        expect(evaluator.evaluations("a-610.jsonc", "codex").map((record) => record.value)).toEqual(["codex", true]);
+        expect(evaluator.unsettled()).toEqual([]);
+    });
+
+    it("names the harness build when an expression there never settles", async () => {
+        const harnesses = definePlugin({
+            name: "test-harnesses",
+            version: "1.0.0",
+            register(sous) {
+                sous.entities.define("harness", jsonSchema({}));
+                sous.entities.add("harness", { id: "codex" } as never);
+            },
+        });
+        const engine = engineWith(
+            harnesses,
+            filesPlugin([{ file: "a-610.jsonc", data: { flags: { x: { $if: { expr: "harness.id == 'codex'", then: { $expr: "machineRole" } } } } } }]),
+        );
+        const error = await engine.buildConfig().catch((caught: unknown) => caught);
+
+        expect(error).toBeInstanceOf(ConfigError);
+        expect((error as Error).message).toMatch(/machineRole/);
+        expect((error as ConfigError).details).toContain('This is in the config build for the harness "codex".');
+    });
+
     it("lists the languages, Liquid first", async () => {
         const engine = engineWith(filesPlugin([]));
         const built = await engine.buildConfig();

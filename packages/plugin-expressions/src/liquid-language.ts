@@ -52,7 +52,7 @@ function evaluateLiquid(expression: string, scope: ExpressionScope, ctx: Express
     }
 
     const value = guard(expression, ctx, () =>
-        engine.evalValueSync(expression, { ...scope.vars, host: scope.host, env: scope.env }),
+        engine.evalValueSync(expression, { ...scope.vars, host: scope.host, harness: scope.harness, env: scope.env }),
     );
 
     return { value: toValue(value) };
