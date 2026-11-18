@@ -112,6 +112,11 @@ describe("pnpm commands", () => {
         expect(pnpmManager.installCommand?.({ cwd: "/p" })).toEqual({ command: "pnpm", args: ["install"], cwd: "/p" });
         expect(pnpmManager.afterInstallScript).toBe("prepare");
     });
+
+    /** After sous changed package.json, the install may update the lockfile, even in CI. */
+    it("should unfreeze the lockfile when the install follows a change to package.json", () => {
+        expect(pnpmManager.installCommand?.({ cwd: "/p", updateLockfile: true })?.args).toEqual(["install", "--no-frozen-lockfile"]);
+    });
 });
 
 describe("pnpm plugin", () => {

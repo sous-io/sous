@@ -32,8 +32,13 @@ import type { GitHookName, HookFileChange, InitHooksInput, InitHooksResult } fro
 export interface HooksRun extends HookCommand {
     /** The package manager's id, with a `package.json`. */
     readonly manager?: string;
-    /** The install command, with a `package.json`. */
+    /** The install command the hook runs, with a `package.json`. */
     readonly install?: PlannedCommand;
+    /**
+     * The install `sous init hooks` runs right away, after adding Husky to `package.json`: the same
+     * command, allowed to update the lockfile even in CI.
+     */
+    readonly installNow?: PlannedCommand;
 }
 
 /** Whether hooks can be installed for a project, and if not, why and what to add by hand. */
@@ -78,7 +83,9 @@ export async function planRun(ctx: Context, root: string): Promise<HooksRun> {
         });
     }
 
-    return { command: commandLine(install), via: "husky", script, manager: owner.detection.id, install };
+    const installNow = owner.entity.installCommand?.({ cwd: root, updateLockfile: true }) ?? install;
+
+    return { command: commandLine(install), via: "husky", script, manager: owner.detection.id, install, installNow };
 }
 
 /**
@@ -196,7 +203,7 @@ function changeNote(change: HookFileChange["change"], dryRun: boolean): string |
  * otherwise the user is asked. A failure is reported, not thrown: the hooks are in place either way.
  */
 async function runInstall(ctx: Context, input: InitHooksInput, run: HooksRun, dryRun: boolean): Promise<NonNullable<Extract<InitHooksResult, { installed: true }>["install"]>> {
-    const install = run.install!;
+    const install = run.installNow ?? run.install!;
     const command = commandLine(install);
 
     if (input.install === false) {

@@ -197,7 +197,9 @@ git worktree add / git checkout <branch>
   name keeps what it has, and Sous's part runs after it. The guard `|| exit 0` means a missing `sous` command (an
   install without dev dependencies) or a failed build prints its error and does not fail the install. At the
   end, sous offers to run the install, which installs Husky and so turns the hooks on (`--install`,
-  `--no-install`; `--yes` runs it). Sous does not look for other hook managers: installing Husky points git at
+  `--no-install`; `--yes` runs it). Since sous has just added Husky to `package.json`, that install may update the
+  lockfile even where the manager would freeze it in CI (`pnpm install --no-frozen-lockfile`,
+  `yarn install --no-immutable` for Yarn 2 and later); the hook itself runs the plain install. Sous does not look for other hook managers: installing Husky points git at
   `.husky/`, so another manager's hooks stop running until the project sorts that out.
 - **Without one:** the repository's own `post-checkout` hook (in `.git/hooks/`, or wherever `core.hooksPath`
   points) runs `sous build` directly, and does nothing when there is no `sous` command.

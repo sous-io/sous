@@ -201,6 +201,18 @@ describe("yarn commands", () => {
         expect(yarnManager.installCommand?.({ cwd: dir })).toEqual({ command: "yarn", args: ["install"], cwd: dir });
         expect(yarnManager.afterInstallScript).toBe("postinstall");
     });
+
+    /**
+     * After sous changed package.json, Yarn 2 and later may update the lockfile even in CI; Yarn 1
+     * does not freeze it and has no such flag.
+     */
+    it("should unfreeze the lockfile for Yarn 2 and later when the install follows a change to package.json", () => {
+        write("yarn.lock", "# yarn lockfile v1\n");
+        expect(yarnManager.installCommand?.({ cwd: dir, updateLockfile: true })?.args).toEqual(["install"]);
+        fs.rmSync(path.join(dir, "yarn.lock"));
+        write("yarn.lock", "__metadata:\n  version: 8\n");
+        expect(yarnManager.installCommand?.({ cwd: dir, updateLockfile: true })?.args).toEqual(["install", "--no-immutable"]);
+    });
 });
 
 describe("yarn-pnp locator", () => {

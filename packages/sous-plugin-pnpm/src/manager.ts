@@ -96,7 +96,7 @@ export const pnpmManager: PnpmPackageManager = {
     },
 
     installCommand(options): PlannedCommand {
-        return { command: "pnpm", args: ["install"], cwd: options.cwd };
+        return { command: "pnpm", args: ["install", ...(options.updateLockfile === true ? ["--no-frozen-lockfile"] : [])], cwd: options.cwd };
     },
 
     afterInstallScript: "prepare",

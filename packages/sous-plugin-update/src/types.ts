@@ -72,8 +72,14 @@ export interface PackageManagerEntity {
     addCommand(specs: readonly string[], options: AddOptions): PlannedCommand;
     /** The command that installs packages globally. */
     globalInstallCommand?(specs: readonly string[]): PlannedCommand;
-    /** The command that installs every dependency a project declares (`pnpm install`). */
-    installCommand?(options: { readonly cwd: string }): PlannedCommand;
+    /**
+     * The command that installs every dependency a project declares (`pnpm install`). With
+     * `updateLockfile`, the install follows a change sous made to `package.json`, so the lockfile
+     * must be allowed to change even where the manager would otherwise refuse to (pnpm and Yarn
+     * freeze the lockfile when `CI` is set): `pnpm install --no-frozen-lockfile`,
+     * `yarn install --no-immutable`.
+     */
+    installCommand?(options: { readonly cwd: string; readonly updateLockfile?: boolean }): PlannedCommand;
     /**
      * The `package.json` script the manager runs after installing a project's own dependencies,
      * and not when the package is installed as someone else's dependency: `prepare` for npm and

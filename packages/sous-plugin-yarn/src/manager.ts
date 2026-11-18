@@ -128,7 +128,8 @@ export const yarnManager: YarnPackageManager = {
     },
 
     installCommand(options): PlannedCommand {
-        return { command: "yarn", args: ["install"], cwd: options.cwd };
+        // Yarn 2 and later freeze the lockfile in CI; Yarn 1 does not, and has no such flag.
+        return { command: "yarn", args: ["install", ...(options.updateLockfile === true && isBerry(options.cwd) ? ["--no-immutable"] : [])], cwd: options.cwd };
     },
 
     // Yarn 2 and later do not run `prepare` on install.
