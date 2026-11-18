@@ -348,7 +348,10 @@ published identity and then the path inside it, on a line of its own. Any part m
 @~workflow/qa-helper/_partials/*.md
 ```
 
-A glob includes every file it matches, in bytewise path order. The `~` is required. A bare `@path` is always a relative path or a declared alias, so an include
+A glob includes every file it matches: at each folder its own files first, then its sub-folders, names
+compared ignoring case, with `_` first, then digits, then letters (see
+[Include syntax](configuration.md#include-syntax)); a glob that matches nothing includes nothing and its line
+is removed. The `~` is required. A bare `@path` is always a relative path or a declared alias, so an include
 line can never quietly stop meaning a file on disk. In your own templates, `~<namespace>`
 resolves against every recipe the lockfile pins, whatever brought it in: a recipe you subscribe
 to, a member of a set you subscribe to, or a library another recipe depends on. Inside a recipe,

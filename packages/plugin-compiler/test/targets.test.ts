@@ -252,10 +252,10 @@ describe("content targets", () => {
     /** A `content` target's errors name it by its id. */
     it("should name a content target by its id in errors", async () => {
         project = makeProject();
-        const { result, compiler } = await compileOnce(project, { targets: [{ id: "generated/x", content: "@missing.md\n", outputs: [{ destinationFile: project.at("x.md") }] }] });
+        const { result, compiler } = await compileOnce(project, { targets: [{ id: "generated/x", content: "@#project/missing.md\n", outputs: [{ destinationFile: project.at("x.md") }] }] });
 
         expect(result.ok).toBe(false);
-        expect(errorsOf(result)).toContain("Include not found: @missing.md");
+        expect(errorsOf(result)).toContain("Include not found: @#project/missing.md");
         expect(compiler.reporter.messages.find((entry) => entry.style === "problem")?.details).toMatchObject({ subject: "generated/x", line: 1 });
         expect(result.problems[0]?.target).toBe("generated/x");
     });
@@ -362,7 +362,8 @@ describe("choosing targets", () => {
 
         expect(project.exists("out/a.md")).toBe(true);
         expect(project.exists("out/b.md")).toBe(false);
-        expect(compiler.output()).toContain("Include not found: @later.md");
+        // A plain path that names no file stays as text, but the target still reads it.
+        expect(project.read("out/c.md")).toBe("@later.md\n");
 
         const none = await compiler.compile({ changedFiles: ["unrelated.md"] });
 

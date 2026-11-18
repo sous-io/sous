@@ -18,7 +18,11 @@
  *    so an alias may add to a real directory of the same name.
  * 6. Every candidate that is not a glob is followed by its `.tpl.` twin.
  *
- * A glob names every file it matches, in bytewise order.
+ * A glob names every file it matches, in the order of `compareIncludeOrder` (globs.ts): at each
+ * folder its own files first, then its sub-folders.
+ *
+ * Which `@` references in a file are includes, and where they may stand, is decided by the
+ * compiler (`markdown.ts` and `compiler.ts`); this module only resolves a path it is given.
  */
 
 import fs from "node:fs";
@@ -27,7 +31,7 @@ import type { HashViewFile } from "@sous-io/plugin-refs/types";
 import type { VarScope } from "@sous-io/plugin-variables/types";
 import type { AliasMap } from "./aliases.js";
 import { expandPattern, type Globs } from "./globs.js";
-import { expandHome, isIncludeLine, looksLikeIncludeLine, splitAliasKey, splitIncludeQuery, withTemplateTwins } from "./paths.js";
+import { expandHome, isIncludeLine, splitAliasKey, splitIncludeQuery, withTemplateTwins } from "./paths.js";
 import type {
     CompilerIncludes,
     DroppedRecipe,
@@ -352,10 +356,6 @@ export class IncludeService implements CompilerIncludes {
 
     isIncludeLine(line: string): boolean {
         return isIncludeLine(line);
-    }
-
-    looksLikeIncludeLine(line: string): boolean {
-        return !isIncludeLine(line) && looksLikeIncludeLine(line);
     }
 
     resolve(rawPath: string, context: IncludeContext): IncludeResolution {

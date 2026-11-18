@@ -68,6 +68,20 @@ describe("selectMemories()", () => {
     });
 
     /**
+     * Within a recipe, memories come in the order of a glob include: a folder's own files before
+     * its sub-folders, case ignored, `_` first, then digits, then letters.
+     *
+     * memories/{Zebra,apple,10-x,2-x,_intro}.md and memories/api/a.md
+     * // -> _intro.md, 10-x.md, 2-x.md, apple.md, Zebra.md, api/a.md
+     */
+    it("should order a recipe's memories like a glob include", () => {
+        const files = ["memories/api/a.md", "memories/Zebra.md", "memories/apple.md", "memories/2-x.md", "memories/10-x.md", "memories/_intro.md"];
+        const one = recipe("c/one", { files, include: ["memories/**/*.md"] });
+
+        expect(select([one]).selected.map((memory) => memory.name)).toEqual(["_intro.md", "10-x.md", "2-x.md", "apple.md", "Zebra.md", "api/a.md"]);
+    });
+
+    /**
      * A content block's exclude patterns leave files out, and a file two patterns match is listed once.
      *
      * include ["memories/*.md", "memories/a.md"], exclude ["memories/skip.md"] -> a.md, b.md

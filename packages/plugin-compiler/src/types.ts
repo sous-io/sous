@@ -172,7 +172,7 @@ export interface IncludeGroup {
 
 /** What an include resolved to. */
 export interface IncludeResolution {
-    /** The files included, in order (a glob's in bytewise order). */
+    /** The files included, in order (a glob's in the order of `compareIncludeOrder`). */
     readonly files: string[];
     /** Every path tried, for the error. */
     readonly candidates: string[];
@@ -187,10 +187,11 @@ export interface IncludeResolution {
 
 /** Include resolution: include lines and `{% render %}` paths, `@`, `~` and `#`. */
 export interface CompilerIncludes {
-    /** Whether a line is a well-formed include line. */
+    /**
+     * Whether a line, alone, is an include Sous tries: one of Sous's own forms, or a plain path
+     * Claude Code's rule accepts. Whether the file exists is not checked.
+     */
     isIncludeLine(line: string): boolean;
-    /** Whether a line looks like an include but is not well formed (a compile error). */
-    looksLikeIncludeLine(line: string): boolean;
     /** Resolves an include path. */
     resolve(path: string, context: IncludeContext): IncludeResolution;
     /** Describes a failed `~` include for an error (`formatNamespaceProblem`). */

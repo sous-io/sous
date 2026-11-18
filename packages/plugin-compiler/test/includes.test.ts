@@ -122,21 +122,36 @@ describe("include globs and the # sigil", () => {
         expect(output).not.toContain("TWO-Z");
     });
 
-    it("should fail the build when a glob matches nothing", async () => {
+    /** A glob that matches nothing does nothing: its line is removed, and nothing is reported. */
+    it("should remove the line of a glob that matches nothing", async () => {
         project = makeProject();
-        const { ok, log } = await compileEntry(write("p/ENTRY.md", "@missing/*.md\n"));
+        const { ok, output, problems } = await compileEntry(write("p/ENTRY.md", "before\n@missing/*.md\nafter\n"));
 
-        expect(ok).toBe(false);
-        expect(log).toContain("Include matched no files: @missing/*.md");
+        expect(ok).toBe(true);
+        expect(output).toBe("before\nafter\n");
+        expect(problems).toEqual([]);
     });
 
-    it("should fail the build when a recipe glob matches nothing", async () => {
+    it("should remove the line of a recipe glob that matches nothing", async () => {
         project = makeProject();
         const resolver = seedRecipes();
-        const { ok, log } = await compileEntry(write("project/ENTRY.md", "@~*/*/nothing-here/*.md\n"), { resolver });
+        const { ok, output, problems } = await compileEntry(write("project/ENTRY.md", "@~*/*/nothing-here/*.md\nrest\n"), { resolver });
 
-        expect(ok).toBe(false);
-        expect(log).toContain("Include matched no files");
+        expect(ok).toBe(true);
+        expect(output).toBe("rest\n");
+        expect(problems).toEqual([]);
+    });
+
+    /** A glob's matches of a type an include does not take are left out. */
+    it("should leave a glob's binary matches out", async () => {
+        project = makeProject();
+        write("p/parts/a.md", "AAA");
+        write("p/parts/b.png", "PNG");
+        write("p/parts/c.txt", "CCC");
+        const { ok, output } = await compileEntry(write("p/ENTRY.md", "@parts/*\n"));
+
+        expect(ok).toBe(true);
+        expect(output).toBe("AAA\nCCC\n");
     });
 
     it("should include the same file twice", async () => {
@@ -174,24 +189,36 @@ describe("include globs and the # sigil", () => {
         expect(log).toContain("Circular dependency detected");
     });
 
-    it("should fail the build on a malformed include line", async () => {
+    /** A plain path that names no file is not an include: it stays as written, silently. */
+    it("should leave a plain path that names no file as text", async () => {
         project = makeProject();
-        const entry = write("p/ENTRY.md", "top\n\n@docs/notes.txt\n");
-        const { ok, log, output, problems } = await compileEntry(entry);
+        const { ok, output, problems } = await compileEntry(write("p/ENTRY.md", "top\n\n@docs/notes.txt\n@missing.md\n@broken/\n"));
 
-        expect(ok).toBe(false);
-        expect(output).toBe("");
-        expect(log).toContain("Malformed include line: @docs/notes.txt");
-        expect(problems[0]).toMatchObject({ level: "error", file: entry, line: 3 });
-        expect(log).toContain("ENTRY.md");
+        expect(ok).toBe(true);
+        expect(output).toBe("top\n\n@docs/notes.txt\n@missing.md\n@broken/\n");
+        expect(problems).toEqual([]);
     });
 
-    it("should name the included file of a malformed include line", async () => {
+    /** Any file type Claude Code imports is included, as is a file with no extension. */
+    it("should include a text file of any type Claude Code imports", async () => {
         project = makeProject();
-        const inner = write("p/inner.md", "ok\n@~/bad path.md\n@broken/\n");
+        write("p/docs/notes.txt", "NOTES");
+        write("p/README", "READ ME");
+        write("p/data.JSON", "{}");
+        write("p/logo.png", "PNG");
+        const { ok, output } = await compileEntry(write("p/ENTRY.md", "@docs/notes.txt\n@README\n@data.JSON\n@logo.png\n"));
+
+        expect(ok).toBe(true);
+        expect(output).toBe("NOTES\nREAD ME\n{}\n@logo.png\n");
+    });
+
+    it("should name the included file of a broken include line", async () => {
+        project = makeProject();
+        const inner = write("p/inner.md", "ok\n@~/bad path.md\n@#nope/x.md\n");
         const { ok, problems } = await compileEntry(write("p/ENTRY.md", "@inner.md\n"));
 
         expect(ok).toBe(false);
+        expect(problems).toHaveLength(1);
         expect(problems[0]).toMatchObject({ file: inner, line: 3 });
     });
 
@@ -373,6 +400,162 @@ describe("include globs and the # sigil", () => {
         expect(ok).toBe(false);
         expect(output).not.toContain("SECRET");
         expect(log).toContain("points outside the recipe");
+    });
+});
+
+/** Includes that follow Claude Code's imports (spec 17, "Decisions"). */
+describe("includes anywhere in Markdown text", () => {
+    /** A name inside a line is replaced where it stands by the file's text, trimmed. */
+    it("should put a file named inside a line in its place, trimmed", async () => {
+        project = makeProject();
+        write("p/x.md", "\n  BODY\n\n");
+        const { ok, output } = await compileEntry(write("p/ENTRY.md", "See @x.md for details.\n"));
+
+        expect(ok).toBe(true);
+        expect(output).toBe("See BODY for details.\n");
+    });
+
+    /** A file named alone on a line replaces the line with its full text, as before. */
+    it("should put a file named alone on a line in its place, untrimmed", async () => {
+        project = makeProject();
+        write("p/x.md", "BODY\n");
+        const { output } = await compileEntry(write("p/ENTRY.md", "top\n@x.md\nend\n"));
+
+        expect(output).toBe("top\nBODY\n\nend\n");
+    });
+
+    it("should include after a list, heading or quote marker, indented, and in emphasis or link text", async () => {
+        project = makeProject();
+        write("p/x.md", "X");
+        const entry = write("p/ENTRY.md", "- @x.md\n\n1. @x.md\n\n# @x.md\n\n> @x.md\n\n  @x.md\n\n**@x.md** [@x.md](https://example.com) | @x.md |\n");
+        const { ok, output } = await compileEntry(entry);
+
+        expect(ok).toBe(true);
+        expect(output).toBe("- X\n\n1. X\n\n# X\n\n> X\n\n  X\n\n**X** [X](https://example.com) | X |\n");
+    });
+
+    it("should leave every escape Claude Code honours as written", async () => {
+        project = makeProject();
+        write("p/x.md", "X");
+        const text = [
+            "`@x.md` and ``@x.md``",
+            "",
+            "```",
+            "@x.md",
+            "```",
+            "",
+            "~~~",
+            "@x.md",
+            "~~~",
+            "",
+            "    @x.md",
+            "",
+            "<!--",
+            "@x.md",
+            "-->",
+            "",
+            "<div>",
+            "@x.md",
+            "</div>",
+            "",
+            "[link](@x.md) ![@x.md](x.png) \\@x.md (@x.md) \"@x.md\" see:@x.md text@x.md",
+            "",
+        ].join("\n");
+        const { ok, output } = await compileEntry(write("p/ENTRY.md", text));
+
+        expect(ok).toBe(true);
+        expect(output).toBe(text);
+    });
+
+    /** The entry's frontmatter is kept and not scanned; an included file's is removed. */
+    it("should remove an included file's frontmatter and keep the entry's", async () => {
+        project = makeProject();
+        write("p/x.md", "---\ntitle: inner\n---\nBODY\n");
+        const { ok, output } = await compileEntry(write("p/ENTRY.md", "---\nname: top\nsee: @x.md\n---\n@x.md\nAnd @x.md.\nAnd @x.md here.\n"));
+
+        expect(ok).toBe(true);
+        expect(output).toBe("---\nname: top\nsee: @x.md\n---\nBODY\n\nAnd @x.md.\nAnd BODY here.\n");
+    });
+
+    /** Claude Code's path forms: cut at `#`, an escaped space, a leading dash, `~/` for home. */
+    it("should read a path as Claude Code does", async () => {
+        project = makeProject();
+        write("p/x.md", "X");
+        write("p/my file.md", "SPACED");
+        write("p/-dash.md", "DASH");
+        const { ok, output } = await compileEntry(write("p/ENTRY.md", "@x.md#section\n@my\\ file.md\n@-dash.md\n@my file.md\n"));
+
+        expect(ok).toBe(true);
+        expect(output).toBe("X\nSPACED\nDASH\n@my file.md\n");
+    });
+
+    /** A name that matches no file, a folder, or a mention stays as written, with no message. */
+    it("should leave a name that is not a file as text, silently", async () => {
+        project = makeProject();
+        write("p/docs/a.md", "A");
+        write("p/alice", "ALICE'S FILE");
+        const { ok, output, problems } = await compileEntry(write("p/ENTRY.md", "@bob thanks, see @docs and @scope/package.\n@alice please review\n"));
+
+        expect(ok).toBe(true);
+        expect(problems).toEqual([]);
+        expect(output).toBe("@bob thanks, see @docs and @scope/package.\nALICE'S FILE please review\n");
+    });
+
+    /** Sous's own forms count only alone on a line; inside a line they are text. */
+    it("should leave Sous's own forms inside a line as text", async () => {
+        project = makeProject();
+        write("p/parts/a.md", "A");
+        write("root/x.md", "X");
+        const text = "See @parts/*.md, @#project/x.md, @x.md?a=b and @${dir}/x.md here.\n";
+        const { ok, output } = await compileEntry(write("p/ENTRY.md", text), { aliases: { "#project": [at("root")] } });
+
+        expect(ok).toBe(true);
+        expect(output).toBe(text);
+    });
+
+    /** A plain path that leads outside the project is included with no check, as before. */
+    it("should include a plain path outside the entry's folder", async () => {
+        project = makeProject();
+        write("outside/x.md", "OUTSIDE");
+        const { output } = await compileEntry(write("p/ENTRY.md", "Read @../outside/x.md now.\n"));
+
+        expect(output).toBe("Read OUTSIDE now.\n");
+    });
+
+    it("should include a file named twice each time, and still catch a cycle inside a line", async () => {
+        project = makeProject();
+        write("p/x.md", "X");
+        write("p/a.md", "A sees @b.md");
+        write("p/b.md", "B sees @a.md");
+        const twice = await compileEntry(write("p/ENTRY.md", "@x.md and @x.md\n@x.md\n"));
+
+        expect(twice.output).toBe("X and X\nX\n");
+
+        const loop = await compileEntry(write("p/ENTRY.md", "Start @a.md\n"));
+
+        expect(loop.ok).toBe(false);
+        expect(loop.log).toContain("Circular dependency detected");
+    });
+
+    /** A template keeps the place of a file named inside one of its lines while it renders. */
+    it("should put a file named inside a template's line in its place after rendering", async () => {
+        project = makeProject();
+        write("p/x.md", "X");
+        const { ok, output } = await compileEntry(write("p/ENTRY.tpl.md", "{% if true %}Hello {{ who }}, see @x.md.{% endif %} And @x.md\n"), { vars: { who: "you" } });
+
+        expect(ok).toBe(true);
+        expect(output).toBe("Hello you, see @x.md. And X\n");
+    });
+
+    /** A file named inside an included file resolves from that file's folder. */
+    it("should resolve a name inside an included file from that file's folder", async () => {
+        project = makeProject();
+        write("p/sub/inner.md", "Inner sees @deep.md here.");
+        write("p/sub/deep.md", "DEEP");
+        write("p/deep.md", "WRONG");
+        const { output } = await compileEntry(write("p/ENTRY.md", "@sub/inner.md\n"));
+
+        expect(output).toBe("Inner sees DEEP here.\n");
     });
 });
 

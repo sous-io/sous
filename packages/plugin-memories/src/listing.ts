@@ -8,11 +8,14 @@
  *
  * Order: a recipe comes after every active recipe it depends on or subscribes to, ties by recipe
  * key (bytewise), and the recipes matching `recipes.memories.first` move to the front in that same
- * relative order. Within a recipe, files are in bytewise order of their names. The memories of
+ * relative order. Within a recipe, files are in the order a glob include gives its files
+ * (`compareIncludeOrder`: a folder's own files before its sub-folders, case ignored, `_` first,
+ * then digits, then letters). The memories of
  * recipes matching `recipes.memories.exclude` are left out, and listed as excluded.
  */
 
 import path from "node:path";
+import { compareIncludeOrder } from "@sous-io/plugin-compiler";
 import type { HostGlobs } from "@sous-io/plugin-host/types";
 import type { ActiveRecipeEntity, RecipesContents } from "@sous-io/plugin-recipes/types";
 import { compileRecipeKeyFinder, compileRecipeKeyMatcher } from "./key-matcher.js";
@@ -109,7 +112,7 @@ export function dependencyOrder(
 }
 
 /**
- * Every memory one recipe publishes, in bytewise order of their names. A file that is a link
+ * Every memory one recipe publishes, in the order of `compareIncludeOrder` on their names. A file that is a link
  * leading outside the recipe's directory is skipped, with a warning.
  */
 export function recipeMemories(
@@ -143,7 +146,7 @@ export function recipeMemories(
         }
     }
 
-    return [...byFile.values()].sort((a, b) => globs.compareBytewise(a.name, b.name));
+    return [...byFile.values()].sort((a, b) => compareIncludeOrder(a.name, b.name));
 }
 
 /**

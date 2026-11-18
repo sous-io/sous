@@ -1,35 +1,83 @@
 /**
- * The compiler's path helpers. The `looksLikeIncludeLine` and `destinationDir` cases are ported from
- * today's `src/lib/markdown-compiler.spec.ts`; `inferGlobBase` is `host.globs.staticBase` now.
+ * The compiler's path helpers. The `destinationDir` cases are ported from today's
+ * `src/lib/markdown-compiler.spec.ts`; `inferGlobBase` is `host.globs.staticBase` now. The
+ * reference rules follow Claude Code's own (spec 17, "The Two Rules").
  */
 
 import { describe, expect, it } from "vitest";
-import { expandHome, isIncludeLine, looksLikeIncludeLine, resolveOutputPath, stableVarsFingerprint } from "./paths.js";
+import { expandHome, importPath, isIncludableFile, isIncludeLine, isSousIncludeForm, resolveOutputPath, stableVarsFingerprint } from "./paths.js";
 
-describe("looksLikeIncludeLine", () => {
-    /** A single path-like word starting with `@` looks like an include. */
-    it("should accept a single path-like word", () => {
-        for (const line of ["@docs/notes.txt", "@notes.md.bak", "@~workflow/x", "@#project", "@./x", "@${root}"]) {
-            expect(looksLikeIncludeLine(line), line).toBe(true);
+describe("importPath", () => {
+    /** Claude Code's acceptance: `./`, `~/`, `/` (not alone), or a letter, digit, `.`, `_` or `-`. */
+    it("should accept what Claude Code imports", () => {
+        expect(importPath("x.md")).toBe("x.md");
+        expect(importPath("./x.md")).toBe("./x.md");
+        expect(importPath("~/notes.md")).toBe("~/notes.md");
+        expect(importPath("/abs/x.md")).toBe("/abs/x.md");
+        expect(importPath("-dash.md")).toBe("-dash.md");
+        expect(importPath("_x.md")).toBe("_x.md");
+        expect(importPath("README")).toBe("README");
+        expect(importPath("https://example.com/x.md")).toBe("https://example.com/x.md");
+    });
+
+    /** The run is cut at its first `#`, and a backslash keeps the space after it. */
+    it("should cut at # and keep an escaped space", () => {
+        expect(importPath("x.md#section")).toBe("x.md");
+        expect(importPath("my\\ file.md")).toBe("my file.md");
+    });
+
+    /** No trailing punctuation is stripped: it stays part of the path. */
+    it("should keep trailing punctuation", () => {
+        for (const run of ["x.md.", "x.md,", "x.md)", "x.md:", "x.md;", "x.md!", "x.md?"]) {
+            expect(importPath(run), run).toBe(run);
         }
     });
 
-    /** Prose that merely starts with `@` is left alone. */
-    it("should reject ordinary prose", () => {
-        for (const line of ["@alice thanks for the review", "@alice", "@bob,", "@", "@a b/c", "text @x/y"]) {
-            expect(looksLikeIncludeLine(line), line).toBe(false);
+    /** What Claude Code does not import. */
+    it("should reject what Claude Code does not import", () => {
+        for (const run of ["/", "\"x.md\"", "'x.md'", "@x.md", "#memories/x.md", "~ns/recipe/x.md", "${root}/x.md", "*.md", "(x.md)"]) {
+            expect(importPath(run), run).toBeUndefined();
+        }
+    });
+});
+
+describe("isIncludableFile", () => {
+    /** Claude Code's list, in lower case, or no extension. */
+    it("should take the text types Claude Code imports, in any case, and files with no extension", () => {
+        for (const file of ["/p/x.md", "/p/X.MD", "/p/x.txt", "/p/x.json", "/p/x.sh", "/p/README", "/p/.env", "/p/x.tpl.md", "/p/x.R"]) {
+            expect(isIncludableFile(file), file).toBe(true);
+        }
+
+        for (const file of ["/p/logo.png", "/p/x.pdf", "/p/x.zip", "/p/x.bak"]) {
+            expect(isIncludableFile(file), file).toBe(false);
+        }
+    });
+});
+
+describe("isSousIncludeForm", () => {
+    /** Sous's own forms, taken only from a line of their own. */
+    it("should recognise Sous's own forms", () => {
+        for (const word of ["~ns/r/x.md", "~other-repo:ns/r/x.md", "#project/x.md", "#memories/**/*.md", "${root}/x.md", "parts/*.md", "a*b*.md", "x.md?mood=calm"]) {
+            expect(isSousIncludeForm(word), word).toBe(true);
+        }
+    });
+
+    /** Plain paths, `~/` among them, are not Sous forms. */
+    it("should leave plain paths to Claude Code's rule", () => {
+        for (const word of ["x.md", "~/x.md", "./x.md", "/abs/x.md", "docs:x.md", "README", "x.md#section"]) {
+            expect(isSousIncludeForm(word), word).toBe(false);
         }
     });
 });
 
 describe("isIncludeLine", () => {
-    /** An include is `@`, a path ending in `.md`, and an optional query. */
-    it("should accept well-formed include lines only", () => {
-        for (const line of ["@a.md", "@./x.md", "@~ns/r/x.md", "@#project/x.md", "@${root}/x.md", "@parts/*.md", "@x.md?mood=calm", "@repo:ns/r/x.md", "@/abs/path/x.md"]) {
+    /** A line holding only `@` and a Sous form or a path Claude Code accepts. */
+    it("should accept a line holding one include", () => {
+        for (const line of ["@a.md", "@./x.md", "@~ns/r/x.md", "@#project/x.md", "@${root}/x.md", "@parts/*.md", "@x.md?mood=calm", "@/abs/path/x.md", "@a.txt", "@README", "@x.md  "]) {
             expect(isIncludeLine(line), line).toBe(true);
         }
 
-        for (const line of ["@a.txt", "@a.md extra", "a.md", "@x.md@^1"]) {
+        for (const line of ["@a.md extra", "a.md", "  @a.md", "@\"x.md\"", "@@x.md", "@"]) {
             expect(isIncludeLine(line), line).toBe(false);
         }
     });

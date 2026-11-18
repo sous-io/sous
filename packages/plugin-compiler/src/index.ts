@@ -131,7 +131,9 @@ export const compilerPlugin: PluginDefinition = definePlugin({
 export default compilerPlugin;
 
 export { AliasService, buildAliasMap, resolveAliasPrefix } from "./aliases.js";
+export { compareIncludeOrder } from "./globs.js";
 export { describeNamespaceProblem, IncludeService, planInclude, resolveIncludeFiles } from "./includes.js";
-export { INCLUDE_LINE_PATTERN, looksLikeIncludeLine, resolveOutputPath, splitAliasKey, splitIncludeQuery, templateTwin } from "./paths.js";
+export { findImportTokens, frontmatterEnd, scanMarkdown, stripFrontmatter } from "./markdown.js";
+export { IMPORT_TOKEN_PATTERN, IMPORTABLE_EXTENSIONS, importPath, isIncludableFile, isIncludeLine, isSousIncludeForm, resolveOutputPath, splitAliasKey, splitIncludeQuery, templateTwin } from "./paths.js";
 export { hashContent, isProtectedPath } from "./state.js";
 export type * from "./types.js";
