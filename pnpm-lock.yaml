@@ -863,6 +863,9 @@ importers:
       '@sous-io/plugin-yarn':
         specifier: workspace:*
         version: link:../plugin-yarn
+      '@sous-io/sous-plugin-codex':
+        specifier: workspace:*
+        version: link:../sous-plugin-codex
       '@sous-io/sous-plugin-doctor':
         specifier: workspace:*
         version: link:../sous-plugin-doctor
@@ -887,6 +890,28 @@ importers:
       zod:
         specifier: ^4.4.3
         version: 4.4.3
+
+  packages/sous-plugin-codex:
+    dependencies:
+      '@sous-io/plugin-api':
+        specifier: workspace:*
+        version: link:../plugin-api
+      '@sous-io/plugin-harnesses':
+        specifier: workspace:*
+        version: link:../plugin-harnesses
+      '@sous-io/plugin-host':
+        specifier: workspace:*
+        version: link:../plugin-host
+      '@sous-io/plugin-memories':
+        specifier: workspace:*
+        version: link:../plugin-memories
+      '@sous-io/plugin-skills':
+        specifier: workspace:*
+        version: link:../plugin-skills
+    devDependencies:
+      '@sous-io/core':
+        specifier: workspace:*
+        version: link:../core
 
   packages/sous-plugin-doctor:
     dependencies:
