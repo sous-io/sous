@@ -1,7 +1,7 @@
 /**
  * Which format a file is edited in, and how it writes comments, chosen from its path.
  */
-import { HASH_COMMENTS, HTML_COMMENTS, SLASH_COMMENTS, type CommentStyle } from "./lines.js";
+import { CSS_COMMENTS, DASH_COMMENTS, HASH_COMMENTS, HTML_COMMENTS, SEMICOLON_COMMENTS, SLASH_COMMENTS, type CommentStyle } from "./lines.js";
 import type { DocumentFormat } from "./types.js";
 
 /**
@@ -72,8 +72,8 @@ export function formatForPath(path: string): FileFormat | undefined {
 
 /**
  * How a file writes comments, from its path: HTML comments for Markdown, HTML, XML and SVG; `//`
- * for JavaScript, TypeScript, JSONC and the C family; `#` for everything else (`.gitignore`,
- * shell, YAML, TOML, `.env`).
+ * for JavaScript, TypeScript, JSONC and the C family; `/* *\/` for CSS; `--` for SQL and Lua; `;`
+ * for INI; `#` for everything else (`.gitignore`, shell, YAML, TOML, `.env`).
  *
  * ```ts
  * commentStyleForPath(".gitignore");   // { open: "#" }
@@ -89,8 +89,20 @@ export function commentStyleForPath(path: string): CommentStyle {
         return HTML_COMMENTS;
     }
 
-    if ([".js", ".mjs", ".cjs", ".ts", ".mts", ".cts", ".jsx", ".tsx", ".jsonc", ".json5", ".c", ".h", ".cc", ".cpp", ".hpp", ".cs", ".java", ".kt", ".go", ".rs", ".swift", ".scss", ".less"].includes(extension)) {
+    if ([".js", ".mjs", ".cjs", ".ts", ".mts", ".cts", ".jsx", ".tsx", ".jsonc", ".json5", ".c", ".h", ".cc", ".cpp", ".hpp", ".cs", ".java", ".kt", ".go", ".rs", ".swift", ".scss", ".less", ".php", ".dart"].includes(extension)) {
         return SLASH_COMMENTS;
+    }
+
+    if (extension === ".css") {
+        return CSS_COMMENTS;
+    }
+
+    if (extension === ".sql" || extension === ".lua") {
+        return DASH_COMMENTS;
+    }
+
+    if (extension === ".ini") {
+        return SEMICOLON_COMMENTS;
     }
 
     return HASH_COMMENTS;

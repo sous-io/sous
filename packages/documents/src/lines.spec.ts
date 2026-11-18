@@ -82,6 +82,32 @@ describe("LinesDocument", () => {
     });
 
     /**
+     * replaceLines and setLines should change only the lines in range or that differ, keeping
+     * every other line's ending, and a missing final line break missing.
+     *
+     * parseLines("a\r\nb\nc").setLines(["a", "x", "c"]);   // "a\r\nx\r\nc"
+     */
+    it("should replace a range of lines and set the lines, changing only what differs", () => {
+        const file = parseLines("a\r\nb\nc");
+
+        file.setLines(["a", "x", "c"]);
+        expect(file.toString()).toBe("a\r\nx\r\nc");
+
+        file.replaceLines(1, 1, []);
+        expect(file.toString()).toBe("a\r\nc");
+
+        file.replaceLines(0, 0, ["first"]);
+        expect(file.lines()).toEqual(["first", "a", "c"]);
+        expect(() => file.replaceLines(2, 5, [])).toThrow(RangeError);
+
+        const same = parseLines("a\nb\n");
+
+        same.setLines(["a", "b"]);
+        expect(same.changed()).toBe(false);
+        expect(same.toString()).toBe("a\nb\n");
+    });
+
+    /**
      * Each line should keep its own line ending; new lines take the file's; a file with no
      * final line break keeps having none; an empty file gets one.
      */

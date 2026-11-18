@@ -67,5 +67,9 @@ describe("commentStyleForPath()", () => {
         expect(commentStyleForPath(".gitignore")).toBe(HASH_COMMENTS);
         expect(commentStyleForPath("config.toml")).toBe(HASH_COMMENTS);
         expect(commentStyleForPath("Makefile")).toBe(HASH_COMMENTS);
+        expect(commentStyleForPath("site.css")).toEqual({ open: "/*", close: "*/" });
+        expect(commentStyleForPath("schema.sql")).toEqual({ open: "--" });
+        expect(commentStyleForPath("setup.ini")).toEqual({ open: ";" });
+        expect(commentStyleForPath("index.php")).toBe(SLASH_COMMENTS);
     });
 });
