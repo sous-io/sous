@@ -24,6 +24,7 @@
   "dependencies": {
     "@sous-io/documents": "workspace:*",
     "@sous-io/plugin-api": "workspace:*",
+    "@sous-io/sous-plugin-doctor": "workspace:*",
     "@sous-io/plugin-compiler": "workspace:*",
     "@sous-io/plugin-host": "workspace:*",
     "@sous-io/plugin-variables": "workspace:*",

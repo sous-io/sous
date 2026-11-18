@@ -3,6 +3,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect as check, it } from "vitest";
 import { BufferedReporter, definePlugin, jsonSchema, type ConfigBuilder, type PluginDefinition } from "@sous-io/plugin-api";
 import { createEngine } from "@sous-io/core";
+import { doctorPlugin } from "@sous-io/sous-plugin-doctor";
 import editorPlugin, { editor, expect } from "../src/index.js";
 import type { EditorApplyResult } from "../src/types.js";
 import { makeTmpDir, read, write } from "./helpers.js";
@@ -53,7 +54,7 @@ function makeEngine(...plugins: PluginDefinition[]) {
     fs.mkdirSync(sousDir, { recursive: true });
 
     const engine = createEngine({
-        builtIns: [...standIns, editorPlugin, runner, ...plugins],
+        builtIns: [...standIns, doctorPlugin, editorPlugin, runner, ...plugins],
         reporter,
         project: { root: tmp.path, sousDir, configPath: undefined, confDir: path.join(sousDir, "conf.d") },
         cwd: tmp.path,
@@ -288,5 +289,49 @@ describe("editor.apply", () => {
         check(read(tmp.path, ".pre-commit-config.yaml")).toBe(yaml);
         check(read(tmp.path, ".claude/agents/review.md")).toBe(markdown);
         check(read(tmp.path, ".gitignore")).toBe(ignore);
+    });
+});
+
+describe("the assertions doctor check", () => {
+    /**
+     * `sous doctor --only assertions` works out the edits and checks every assertion without
+     * writing: a failed assertion at level error is a problem, and the files stay as they were.
+     *
+     * assert a.json includes "x" (it does not) -> problem; a.json unchanged
+     */
+    it("should report a failing assertion as a problem without writing anything", async () => {
+        write(tmp.path, "a.json", '{ "list": [] }\n');
+
+        let holds = false;
+        const { engine } = makeEngine(
+            plugin("sous-plugin-asserts", (config) => {
+                config.atPath("editor.edits").appendValue({ file: "a.json", set: { path: "other", value: 1 } });
+                config.atPath("editor.edits").appendValue({ file: "a.json", assert: { path: "list", includes: "x", message: "x must be listed." } });
+
+                if (holds) config.atPath("editor.edits").appendValue({ file: "a.json", ensureIncludes: { path: "list", items: ["x"] } });
+            }),
+        );
+
+        await engine.buildConfig();
+
+        const report = (await engine.submit({ intent: "doctor", input: { only: ["assertions"], dryRun: true } })).toPlain() as unknown as {
+            checks: Array<{ id: string; found: { status: string; details?: string[] } }>;
+        };
+
+        check(report.checks).toHaveLength(1);
+        check(report.checks[0]!.found.status).toBe("problem");
+        check(report.checks[0]!.found.details?.[0]).toContain("a.json");
+        check(read(tmp.path, "a.json")).toBe('{ "list": [] }\n');
+        check(fs.existsSync(path.join(tmp.path, ".sous", "sous.edits.json"))).toBe(false);
+
+        holds = true;
+        await engine.buildConfig();
+
+        const fixed = (await engine.submit({ intent: "doctor", input: { only: ["assertions"], dryRun: true } })).toPlain() as unknown as {
+            checks: Array<{ found: { status: string } }>;
+        };
+
+        check(fixed.checks[0]!.found.status).toBe("ok");
+        check(read(tmp.path, "a.json")).toBe('{ "list": [] }\n');
     });
 });

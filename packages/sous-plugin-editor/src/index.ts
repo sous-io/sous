@@ -16,6 +16,7 @@ import path from "node:path";
 import { definePlugin, jsonSchema, type PluginDefinition } from "@sous-io/plugin-api";
 import { createTokenCounter } from "@sous-io/plugin-compiler";
 import type {} from "@sous-io/plugin-variables/types";
+import { assertionsCheck } from "./doctor-check.js";
 import { applyIntent } from "./intent.js";
 import { EDITOR_CONFIG_KEY } from "./schema.js";
 import { EditorServiceImpl } from "./service.js";
@@ -46,6 +47,7 @@ export const editorPlugin: PluginDefinition = definePlugin({
     dependsOn: {
         "@sous-io/plugin-compiler": `^${packageJson.version}`,
         "@sous-io/plugin-variables": `^${packageJson.version}`,
+        "@sous-io/sous-plugin-doctor": `^${packageJson.version}`,
     },
 
     register(sous) {
@@ -82,6 +84,8 @@ export const editorPlugin: PluginDefinition = definePlugin({
             input: applyInput,
             handle: (input, ctx) => applyIntent(input, ctx),
         });
+
+        sous.entities.add("doctor-check", assertionsCheck);
     },
 });
 
@@ -94,6 +98,7 @@ export { formatForFile, openDocument, UnsupportedFormatError } from "./documents
 export { DEFAULT_SETTINGS, EDITS_KEY, normalizeEntry } from "./entries.js";
 export { HISTORY_FILE_NAME } from "./history.js";
 export { declaredEntries } from "./intent.js";
+export { assertionsCheck, checkAssertions } from "./doctor-check.js";
 export { ALIASES, OPERATIONS, operationInfo, resolveOperation } from "./operations.js";
 export { editorSchema } from "./schema.js";
 
