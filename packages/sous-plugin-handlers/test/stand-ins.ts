@@ -12,6 +12,7 @@ import { BufferedReporter, definePlugin, IntentOutputs, jsonSchema, type PluginD
 import { createEngine, type Engine } from "@sous-io/core";
 import { hostPlugin } from "@sous-io/plugin-host";
 import type { LockDiff } from "@sous-io/plugin-recipes/types";
+import { doctorPlugin } from "@sous-io/sous-plugin-doctor";
 import handlersPlugin from "../src/index.js";
 
 /** A temporary directory, removed by `cleanup()`. Links are followed, so paths compare equal. */
@@ -167,7 +168,7 @@ export function makeEngine(
     const engine = createEngine({
         project: projectAt(root),
         env: { PATH: process.env.PATH ?? "" },
-        builtIns: [hostPlugin, recipesStandIn(state, next), handlersPlugin, ...extra],
+        builtIns: [hostPlugin, recipesStandIn(state, next), doctorPlugin, handlersPlugin, ...extra],
         reporter,
     });
 

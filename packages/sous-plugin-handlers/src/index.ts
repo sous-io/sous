@@ -10,6 +10,7 @@ import { definePlugin, HANDLER_PURPOSES, jsonSchema, type Context, type HandlerP
 import type {} from "@sous-io/plugin-host/types";
 import type {} from "@sous-io/plugin-recipes/types";
 import { configureContributor } from "./configure.js";
+import { checkHandlersCheck } from "./doctor-check.js";
 import { registerLifecycle } from "./lifecycle.js";
 import { recipeDeclarationsContributor, recipeHandlersContributor, RECIPE_HANDLERS_KEY } from "./recipes.js";
 import { handlerOutputs, runHandlers } from "./run.js";
@@ -126,6 +127,7 @@ export const handlersPlugin: PluginDefinition = definePlugin({
     dependsOn: {
         "@sous-io/plugin-host": `^${packageJson.version}`,
         "@sous-io/plugin-recipes": `^${packageJson.version}`,
+        "@sous-io/sous-plugin-doctor": `^${packageJson.version}`,
     },
 
     register(sous) {
@@ -177,6 +179,8 @@ export const handlersPlugin: PluginDefinition = definePlugin({
         });
 
         registerLifecycle(sous);
+
+        sous.entities.add("doctor-check", checkHandlersCheck);
     },
 });
 
@@ -187,5 +191,6 @@ export { createHandlersSystem, versionIn } from "./system.js";
 export { recipeHandlerId, RECIPE_HANDLERS_KEY } from "./recipes.js";
 export { recordMoves, runPendingMigrations } from "./lifecycle.js";
 export { CONFIGURE_CONTRIBUTOR } from "./configure.js";
+export { checkHandlers, checkHandlersCheck } from "./doctor-check.js";
 
 export type * from "./types.js";
