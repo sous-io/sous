@@ -122,10 +122,37 @@ export interface CompilationListing {
     problems: CompilationFileProblem[];
 }
 
+/**
+ * One rule of `compilation.varOverrides`: variables for every file whose path matches. Each of
+ * `match` and `exclude` is one entry or a list; an entry is a glob, or a regular expression when
+ * written between two slashes. A rule's variables win over the output's own; a later rule wins over
+ * an earlier one for a name both set. The path matched is the one Sous planned to write, before
+ * any transform.
+ *
+ * ```js
+ * compilation: {
+ *     varOverrides: [
+ *         {
+ *             match: "${projectRoot}/.claude/**",
+ *             exclude: ["/\\.local\\./"],
+ *             _vars: { tool: "claude" },
+ *         },
+ *     ],
+ * },
+ * ```
+ */
+export interface CompilationVarOverride {
+    match: string | string[];
+    exclude?: string | string[];
+    _vars: Record<string, string>;
+}
+
 /** The `compilation` config key, with its defaults filled in. */
 export interface CompilationSettings {
     /** Variables of the compilation scope. */
     _vars?: Record<string, string>;
+    /** Variables by output path. Default `[]`. */
+    varOverrides?: CompilationVarOverride[];
     /** Every file a build writes, listed while the config is built. Set by Sous. */
     files?: CompilationFile[];
     /** What listing the files found. Set by Sous. */

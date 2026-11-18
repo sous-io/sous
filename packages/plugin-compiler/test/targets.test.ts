@@ -199,6 +199,7 @@ describe("outputs", () => {
             overwriteUntracked: true,
             stateFile: "${sousDir}/sous.state.json",
             targets: [],
+            varOverrides: [],
             // Listed by the compiler's contributor while the config is built: nothing to list.
             files: [],
             listing: { targets: 0, problems: [] },

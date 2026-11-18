@@ -6,6 +6,7 @@
 
 import type { ConfigKeyEntity } from "@sous-io/plugin-api";
 import { z } from "zod";
+import { compilePatternList } from "@sous-io/plugin-host";
 import { isReservedAliasName } from "./aliases.js";
 
 /** Where the state file goes when the config says nothing. */
@@ -133,10 +134,40 @@ const listingSchema = z
     })
     .strict();
 
+/** One pattern or several: each a glob, or a regular expression written `/.../`. */
+const patternsSchema = z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]);
+
+/** One rule of `compilation.varOverrides`. A `/.../` entry that is not a valid regular expression is refused. */
+const varOverrideSchema = z
+    .object({
+        match: patternsSchema.describe("The output paths the rule applies to: a glob, or a regular expression written /.../, or a list of them."),
+        exclude: patternsSchema.optional().describe("Output paths the rule leaves out, though match takes them."),
+        _vars: varsSchema.describe("The variables to set. They win over the output's own _vars; a later rule wins over an earlier one."),
+    })
+    .strict()
+    .superRefine((rule, ctx) => {
+        for (const key of ["match", "exclude"] as const) {
+            const value = rule[key];
+            const entries = value === undefined ? [] : typeof value === "string" ? [value] : value;
+
+            entries.forEach((entry, index) => {
+                try {
+                    compilePatternList([entry], typeof value === "string" ? key : `${key}[${index}]`, () => false);
+                } catch (error) {
+                    ctx.addIssue({ code: "custom", path: typeof value === "string" ? [key] : [key, index], message: error instanceof Error ? error.message : String(error) });
+                }
+            });
+        }
+    });
+
 /** The `compilation` key. */
 export const compilationSchema = z
     .object({
         _vars: varsSchema.optional(),
+        varOverrides: z
+            .array(varOverrideSchema)
+            .default([])
+            .describe("Variables for every output whose path matches a pattern, outputs a plugin or a recipe added included. A rule wins over the output's own _vars."),
         files: z.array(fileSchema).optional().describe("Every file a build writes, listed while the config is built. Set by sous; anything written here is replaced."),
         listing: listingSchema.optional().describe("What listing compilation.files found. Set by sous."),
         includeSourceComments: z.boolean().default(false),
