@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { child, deepEqual, deepFreeze, getAtPath, isJsonObject, setOwn, stableStringify, toPlainJson, typeOfValue } from "./json.js";
+import { child, compareValues, deepEqual, deepFreeze, getAtPath, isJsonObject, setOwn, stableStringify, toPlainJson, typeOfValue } from "./json.js";
 
 describe("toPlainJson()", () => {
     /**
@@ -197,5 +197,20 @@ describe("setOwn()", () => {
         setOwn(target, "__proto__", 2);
         expect(Object.getOwnPropertyDescriptor(target, "__proto__")?.value).toBe(2);
         expect(Object.getPrototypeOf(target)).toBe(Object.prototype);
+    });
+});
+
+describe("compareValues()", () => {
+    /**
+     * compareValues should order kinds (null, booleans, numbers, strings, arrays, objects), then
+     * values within a kind, strings by code point and containers by their stable text.
+     *
+     * ["b", 2, null, "a", true].sort(compareValues);   // [null, true, 2, "a", "b"]
+     */
+    it("should order values by kind, then by value", () => {
+        expect(["b", 2, null, "a", true, false, { a: 1 }, [2], [1], 1].sort(compareValues))
+            .toEqual([null, false, true, 1, 2, "a", "b", [1], [2], { a: 1 }]);
+        expect(compareValues("B", "a")).toBeLessThan(0);
+        expect(compareValues({ b: 1, a: 2 }, { a: 2, b: 1 })).toBe(0);
     });
 });

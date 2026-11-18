@@ -45,8 +45,11 @@ export interface ApplyOptions {
     onProblem?: (problem: PatchProblem) => void;
 }
 
-/** The formats a text document can be in. */
-export type DocumentFormat = "json" | "jsonc" | "yaml";
+/**
+ * The formats a text document can be in. `markdown` is the YAML frontmatter of a Markdown file:
+ * the document is the frontmatter, and the body is kept as it is.
+ */
+export type DocumentFormat = "json" | "jsonc" | "yaml" | "markdown";
 
 /**
  * What a `DocNode` reads from and writes to. The in-memory document, the text documents and

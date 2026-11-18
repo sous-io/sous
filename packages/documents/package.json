@@ -1,7 +1,7 @@
 {
   "name": "@sous-io/documents",
   "version": "1.0.19",
-  "description": "Surgical JSON, JSONC and YAML editing, expressed as primitive patches",
+  "description": "Surgical editing of JSON, JSONC, YAML, Markdown frontmatter and plain text files",
   "type": "module",
   "license": "Apache-2.0",
   "private": true,

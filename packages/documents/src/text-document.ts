@@ -1,13 +1,15 @@
 /**
- * Documents edited as text: JSON, JSONC and YAML files, changed surgically so comments, key order
- * and formatting are kept.
+ * Documents edited as text: JSON, JSONC and YAML files, and the YAML frontmatter of Markdown
+ * files, changed surgically so every line an edit does not touch stays as it was.
  */
-import type { Document } from "yaml";
+import { parseDocument as parseYamlModel } from "yaml";
 import { applyPatch } from "./apply.js";
 import { BaseDocument } from "./document.js";
+import { joinFrontmatter, splitFrontmatter, type FrontmatterParts } from "./frontmatter.js";
 import { getAtPath } from "./json.js";
-import { detectLayout, editJsoncText, parseJsoncText, type TextLayout } from "./jsonc-text.js";
-import { editYaml, parseYamlText, yamlValue } from "./yaml-text.js";
+import { formatPath, parsePath } from "./path.js";
+import { detectLayout, editJsoncText, parseJsoncText, type RemovedJsoncText, type TextLayout } from "./jsonc-text.js";
+import { detectYamlStyle, editYamlText, parseYamlText, reprintYaml, yamlValue, type RemovedText, type YamlStyle } from "./yaml-text.js";
 import type { DocumentFormat, JsonValue, Patch, PatchProblem, PathSegment } from "./types.js";
 
 /**
@@ -20,26 +22,50 @@ import type { DocumentFormat, JsonValue, Patch, PatchProblem, PathSegment } from
  * doc.atPath(["subscriptions", "workflow/x", "enabled"]).set(false);
  * fs.writeFileSync(file, doc.toString());   // comments and layout kept
  * ```
+ *
+ * A `markdown` document is the YAML frontmatter of a Markdown file; the body is never changed:
+ *
+ * ```ts
+ * const doc = parseDocument("---\nmodel: sonnet\n---\n# Reviewer\n", "markdown");
+ *
+ * doc.atPath("model").set("opus");
+ * doc.toString();   // "---\nmodel: opus\n---\n# Reviewer\n"
+ * ```
  */
 export class TextDocument extends BaseDocument {
     private current: JsonValue;
+    /** The text being edited: the whole file, or a Markdown file's frontmatter YAML. */
     private text: string;
-    private readonly yaml: Document | undefined;
+    private readonly original: string;
     private readonly layout: TextLayout;
-    /** Whether any YAML edit was made; until one is, the original text is given back byte for byte. */
-    private yamlEdited = false;
+    private readonly yamlStyle: YamlStyle | undefined;
+    private readonly frontmatter: FrontmatterParts | undefined;
+    /** The text of keys and items YAML edits removed, reused when the same value is put back. */
+    private readonly removed: RemovedText[] = [];
+    private readonly removedJsonc: RemovedJsoncText[] = [];
+    private edited = false;
+    private reprints = 0;
 
     constructor(text: string, readonly format: DocumentFormat) {
         super();
-        this.text = text;
-        this.layout = detectLayout(text);
+        this.original = text;
 
-        if (format === "yaml") {
-            this.yaml = parseYamlText(text);
-            this.current = yamlValue(this.yaml);
+        if (format === "markdown") {
+            this.frontmatter = splitFrontmatter(text);
+            this.text = this.frontmatter.yaml ?? "";
         } else {
-            this.yaml = undefined;
+            this.frontmatter = undefined;
+            this.text = text;
+        }
+
+        this.layout = detectLayout(this.text);
+
+        if (format === "yaml" || format === "markdown") {
+            this.current = yamlValue(parseYamlText(this.text));
+            this.yamlStyle = detectYamlStyle(this.frontmatter === undefined ? this.text : this.frontmatter.yaml ?? this.frontmatter.body);
+        } else {
             this.current = parseJsoncText(text);
+            this.yamlStyle = undefined;
         }
     }
 
@@ -48,14 +74,21 @@ export class TextDocument extends BaseDocument {
         return this.current;
     }
 
-    /** The edited text. */
+    /** The edited text. Until something changes, the original text, byte for byte. */
     override toString(): string {
-        if (this.yaml === undefined || !this.yamlEdited) {
-            return this.text;
+        if (!this.edited) {
+            return this.original;
         }
 
-        // The yaml package reprints the whole document; flow collections keep their tight padding.
-        return this.yaml.toString({ flowCollectionPadding: false });
+        return this.frontmatter === undefined ? this.text : joinFrontmatter(this.frontmatter, this.text);
+    }
+
+    /**
+     * Whether an edit to this YAML document could not be made surgically, so the whole document
+     * was reprinted (comments kept, spacing and layout possibly changed). Always `false` for JSON.
+     */
+    reprinted(): boolean {
+        return this.reprints > 0;
     }
 
     protected readAt(path: readonly PathSegment[]): JsonValue | undefined {
@@ -75,21 +108,84 @@ export class TextDocument extends BaseDocument {
             return problem;
         }
 
-        if (this.yaml !== undefined) {
-            editYaml(this.yaml, patch);
-            this.yamlEdited = true;
-        } else {
-            this.text = editJsoncText(this.text, patch, before, after, this.layout);
-        }
-
+        this.text = this.yamlStyle === undefined
+            ? editJsoncText(this.text, patch, before, after, this.layout, this.removedJsonc)
+            : this.editYaml(patch, after, this.yamlStyle);
         this.current = after;
+        this.edited = true;
 
         return undefined;
+    }
+
+    /**
+     * Edits the YAML text surgically, and checks the result reads back as the expected value.
+     * When it cannot, or the check fails, reprints the whole document instead, and checks that.
+     *
+     * @throws Error when neither text reads back as the expected value: an edit to a value a YAML
+     *   anchor (`&name`) shares with its aliases (`*name`), which would change every copy.
+     */
+    private editYaml(patch: Patch, after: JsonValue, style: YamlStyle): string {
+        let surgical: string | undefined;
+
+        try {
+            surgical = editYamlText(this.text, patch, after, style, this.removed);
+        } catch {
+            // A path through an alias, say, which the text editor does not follow.
+            surgical = undefined;
+        }
+
+        if (surgical !== undefined && readsAs(surgical, after)) {
+            return surgical;
+        }
+
+        let reprinted: string | undefined;
+        let cause: unknown;
+
+        try {
+            reprinted = reprintYaml(this.text, patch);
+        } catch (error) {
+            cause = error;
+        }
+
+        if (reprinted === undefined || !readsAs(reprinted, after)) {
+            throw new Error(`The YAML document cannot be edited at ${describeTarget(patch)}: the value there is shared `
+                + "through a YAML anchor (&name) and its aliases (*name), or reached through one, so it cannot be changed in one place.",
+            cause === undefined ? undefined : { cause });
+        }
+
+        this.reprints++;
+
+        return reprinted;
+    }
+}
+
+/** Where a primitive acts, as a path for a message. */
+function describeTarget(patch: Patch): string {
+    const last = "key" in patch ? patch.key : "index" in patch ? patch.index : undefined;
+    const where = last === undefined ? patch.path : formatPath([...parsePath(patch.path), ...(last === "end" ? [] : [last])]);
+
+    return where === "" ? "the root" : where;
+}
+
+/** Whether YAML text parses, as one document, to exactly this value, key order included. */
+function readsAs(text: string, value: JsonValue): boolean {
+    const doc = parseYamlModel(text);
+
+    if (doc.errors.length > 0) {
+        return false;
+    }
+
+    try {
+        return JSON.stringify(doc.toJS() ?? {}) === JSON.stringify(value);
+    } catch {
+        // An alias whose anchor the edit removed.
+        return false;
     }
 }
 
 /**
- * Parses JSON, JSONC or YAML text into a document to edit surgically. Empty text is `{}`.
+ * Parses JSON, JSONC, YAML, or the YAML frontmatter of a Markdown file, into a document to edit
+ * surgically. Empty text, and a Markdown file with no frontmatter, is `{}`.
  *
  * @throws Error when the text cannot be parsed, naming where.
  */

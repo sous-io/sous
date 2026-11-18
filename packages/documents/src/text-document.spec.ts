@@ -307,6 +307,26 @@ describe("TextDocument (JSONC)", () => {
     });
 });
 
+describe("TextDocument (JSONC moves)", () => {
+    /**
+     * A key or an item removed and set again with the same value, as moving and sorting do,
+     * should be written back with its old text, comments inside it included.
+     */
+    it("should move keys and items with their own text", () => {
+        const text = edit(SUBSCRIPTIONS, "jsonc", (doc) => {
+            doc.atPath("subscriptions").moveKeyLast("tool-usage/automated-browser-tasks");
+            doc.root().moveKeyFirst("repos");
+        });
+
+        expect(text).toContain('"prerelease": false, // never take betas');
+        expect(Object.keys(parseJsoncText(text) as object)).toEqual(["repos", "subscriptions"]);
+
+        const sorted = edit('[\n  "b", // bee\n  /* c */ "c",\n  "a"\n]\n', "jsonc", (doc) => doc.root().sort());
+
+        expect(sorted).toBe('[\n  "a",\n  "b", // bee\n  /* c */ "c"\n]\n');
+    });
+});
+
 describe("TextDocument (YAML)", () => {
     /**
      * Setting a scalar should keep the comment beside it.

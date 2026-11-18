@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { isPatch, flattenPatchSet } from "./patch-set.js";
 import { parseJsoncText } from "./jsonc-text.js";
 import { parseDocument, type TextDocument } from "./text-document.js";
+import { splitFrontmatter } from "./frontmatter.js";
 import type { DocumentFormat } from "./types.js";
 
 /**
@@ -61,9 +62,33 @@ compilation:
     - id: memories
   tags: [a, b, a]
 `,
+    markdown: `---
+# The project's config
+name: demo # the project name
+tools:
+  codex:
+    command: codex
+  claude:
+    command: claude # the default harness
+compilation:
+  # what gets compiled
+  targets:
+    - id: skills
+    - id: diagrams
+    - id: memories
+  tags: [a, b, a]
+---
+# Demo
+
+The body: never touched.
+`,
 };
 
 function valueOf(text: string, format: DocumentFormat): unknown {
+    if (format === "markdown") {
+        return parseYaml(splitFrontmatter(text).yaml ?? "") ?? {};
+    }
+
     return format === "yaml" ? parseYaml(text) : parseJsoncText(text);
 }
 
@@ -82,9 +107,14 @@ function checked(doc: TextDocument, format: DocumentFormat): string {
         expect(text).toContain("/* the default harness */");
     }
 
-    if (format === "yaml") {
+    if (format === "yaml" || format === "markdown") {
         expect(text).toContain("# The project's config");
         expect(text).toContain("# the default harness");
+        expect(doc.reprinted()).toBe(false);
+    }
+
+    if (format === "markdown") {
+        expect(splitFrontmatter(text).body).toBe("# Demo\n\nThe body: never touched.\n");
     }
 
     for (const patch of flattenPatchSet(doc.patches())) {
@@ -94,7 +124,7 @@ function checked(doc: TextDocument, format: DocumentFormat): string {
     return text;
 }
 
-describe.each(["json", "jsonc", "yaml"] as const)("every node operation on %s", (format) => {
+describe.each(["json", "jsonc", "yaml", "markdown"] as const)("every node operation on %s", (format) => {
     /** An untouched document prints back exactly as it was read, byte for byte. */
     it("should print an untouched file back byte for byte", () => {
         expect(open(format).toString()).toBe(FILES[format]);
@@ -137,8 +167,8 @@ describe.each(["json", "jsonc", "yaml"] as const)("every node operation on %s", 
 
         expect(doc.atPath("name").get()).toBe("renamed");
         expect(doc.atPath("tools.claude").get()).toEqual({ command: "claude", model: "opus" });
-        expect(text).toContain(format === "yaml" ? "  tags: [a, b, a]\n" : '"tags": ["a", "b", "a"]');
-        expect(text).toContain(format === "yaml" ? "    - id: diagrams\n" : '{ "id": "diagrams" }');
+        expect(text).toContain(format !== "json" && format !== "jsonc" ? "  tags: [a, b, a]\n" : '"tags": ["a", "b", "a"]');
+        expect(text).toContain(format !== "json" && format !== "jsonc" ? "    - id: diagrams\n" : '{ "id": "diagrams" }');
     });
 
     /** delete removes a key; rename renames one, keeping its place. */

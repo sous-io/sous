@@ -5,7 +5,7 @@
  */
 import { applyEdits, findNodeAtLocation, parse, parseTree, type Edit, type Node, type ParseError } from "jsonc-parser";
 import { child, getAtPath, isJsonObject } from "./json.js";
-import { parsePath } from "./path.js";
+import { formatPath, parsePath } from "./path.js";
 import type { JsonValue, Patch, PathSegment } from "./types.js";
 
 /** How the text is laid out: one level of indentation, and the line ending. */
@@ -58,17 +58,38 @@ export function parseJsoncText(text: string): JsonValue {
 }
 
 /**
- * Applies one primitive to JSON or JSONC text. `before` is the document's value before the patch
- * and `after` its value after; the patch is known to apply.
+ * The text of a property or an array item an edit removed, kept so that putting the same value
+ * back in the same place (as moving a key or sorting a list does) writes the old text, with its
+ * comments, instead of new text.
  */
-export function editJsoncText(text: string, patch: Patch, before: JsonValue | undefined, after: JsonValue, layout: TextLayout): string {
+export interface RemovedJsoncText {
+    /** The container's path and the key, or the container's path and `[]` for an array item. */
+    where: string;
+    value: JsonValue;
+    /** `"key": value` for a property, the value for an item. */
+    text: string;
+}
+
+/**
+ * Applies one primitive to JSON or JSONC text. `before` is the document's value before the patch
+ * and `after` its value after; the patch is known to apply. `removed` carries the text of what
+ * earlier edits removed, from one edit to the next.
+ */
+export function editJsoncText(
+    text: string,
+    patch: Patch,
+    before: JsonValue | undefined,
+    after: JsonValue,
+    layout: TextLayout,
+    removed: RemovedJsoncText[] = [],
+): string {
     const tree = text.trim() === "" ? undefined : parseTree(text, [], { allowTrailingComma: true });
 
     if (tree === undefined) {
         return stringify(after, "", layout) + layout.eol;
     }
 
-    const editor = new JsoncEditor(text, tree, layout);
+    const editor = new JsoncEditor(text, tree, layout, removed);
     const path = parsePath(patch.path);
 
     return applyEdits(text, editor.edits(patch, path, before));
@@ -76,7 +97,12 @@ export function editJsoncText(text: string, patch: Patch, before: JsonValue | un
 
 /** Computes the text edits for one primitive. */
 class JsoncEditor {
-    constructor(private readonly text: string, private readonly tree: Node, private readonly layout: TextLayout) {}
+    constructor(
+        private readonly text: string,
+        private readonly tree: Node,
+        private readonly layout: TextLayout,
+        private readonly removed: RemovedJsoncText[],
+    ) {}
 
     edits(patch: Patch, path: PathSegment[], before: JsonValue | undefined): Edit[] {
         switch (patch.op) {
@@ -86,9 +112,17 @@ class JsoncEditor {
                 return this.replaceValue(this.node([...path, patch.index]), patch.value);
             case "deleteKey":
             case "removeIndex": {
-                const target = this.node([...path, patch.op === "deleteKey" ? patch.key : patch.index]);
+                const last = patch.op === "deleteKey" ? patch.key : patch.index;
+                const target = this.node([...path, last]);
+                const element = patch.op === "deleteKey" ? target.parent! : target;
 
-                return this.removeElement(patch.op === "deleteKey" ? target.parent! : target);
+                this.removed.push({
+                    where: whereOf(path, patch.op === "deleteKey" ? patch.key : undefined),
+                    value: getAtPath(before, [...path, last]) as JsonValue,
+                    text: this.text.slice(element.offset, element.offset + element.length),
+                });
+
+                return this.removeElement(element);
             }
             case "renameKey":
                 return this.rename(path, patch.key, patch.to);
@@ -101,8 +135,9 @@ class JsoncEditor {
 
                 const length = container.children?.length ?? 0;
                 const index = patch.index === "end" ? length : patch.index;
+                const entry = this.takeRemoved(whereOf(path), patch.value) ?? this.format(patch.value, this.childIndent(container));
 
-                return this.insertElement(container, index, this.format(patch.value, this.childIndent(container)));
+                return this.insertElement(container, index, entry);
             }
         }
     }
@@ -141,9 +176,17 @@ class JsoncEditor {
         }
 
         const container = this.node(path.slice(0, depth));
-        const entry = `${JSON.stringify(missing[0])}: ${this.format(nested, this.childIndent(container))}`;
+        const reused = missing.length === 1 ? this.takeRemoved(whereOf(path.slice(0, depth), missing[0] as string), nested) : undefined;
+        const entry = reused ?? `${JSON.stringify(missing[0])}: ${this.format(nested, this.childIndent(container))}`;
 
         return this.insertElement(container, container.children?.length ?? 0, entry);
+    }
+
+    /** The old text of an equal value removed from the same place, taken so it is used once. */
+    private takeRemoved(where: string, value: JsonValue): string | undefined {
+        const index = this.removed.findIndex((entry) => entry.where === where && JSON.stringify(entry.value) === JSON.stringify(value));
+
+        return index === -1 ? undefined : this.removed.splice(index, 1)[0]!.text;
     }
 
     private replaceValue(node: Node, value: JsonValue): Edit[] {
@@ -310,6 +353,11 @@ class JsoncEditor {
 
         return this.text[offset] === "\n" ? 1 : 0;
     }
+}
+
+/** Where a removed property (with its key) or array item (without) was, as a {@link RemovedJsoncText} key. */
+function whereOf(path: PathSegment[], key?: string): string {
+    return `${formatPath(path)}\u0000${key ?? "[]"}`;
 }
 
 /** JSON text for a value, indented to sit at `indent`. Empty containers stay `{}` and `[]`. */
