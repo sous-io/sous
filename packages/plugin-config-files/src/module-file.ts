@@ -34,6 +34,7 @@ const BUILDER_MEMBERS = new Set<string | symbol>([
     "contributor",
     "project",
     "env",
+    "harness",
 ]);
 
 /** What a module file exports, sorted out. */
