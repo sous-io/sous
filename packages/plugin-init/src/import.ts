@@ -1,15 +1,17 @@
 /**
  * Importing a project's existing agent files into `.sous/`, which `sous init` does before the first
- * build, so the build that compiles `CLAUDE.md`, `AGENTS.md` and `.claude/skills/` never loses what a
- * person wrote there.
+ * build, so the instructions a person wrote reach the memories file sous compiles, and the build
+ * that compiles `.claude/skills/` never loses what a person wrote there.
  *
  * - **Instruction files.** A root `CLAUDE.md` or `AGENTS.md` is copied, as plain markdown (no
  *   `.tpl.`, so a `{{` in it stays literal), to `.sous/memories/imported/`. A file that is only a
- *   link to the other, only points at it, or holds the same text is skipped.
+ *   link to the other, only points at it, or holds the same text is skipped. Both root files are
+ *   then backed up and removed, imported or skipped: sous no longer writes them, and a coding tool
+ *   that read them beside the compiled memories file would read the same text twice.
  * - **Included files.** A line holding only `@path.md` is an include, for Claude Code and for sous
  *   alike. Every file the instructions include, and every file those include, is moved or copied
  *   to `.sous/includes/<its path from the project root>`, or left where it is, as the user chooses.
- *   The included files live outside `.sous/memories/` because the starter source includes every
+ *   The included files live outside `.sous/memories/` because the memories source includes every
  *   file under that folder, and an included file must be pulled in only where its include line is.
  * - **References.** Every `@path` a copied file holds is rewritten so it still finds its file:
  *   includes relative to the file's new place, and other references (which Claude Code resolves
@@ -24,7 +26,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-/** The instruction files sous compiles at the project root, in the order they are imported. */
+/** The instruction files a project may have at its root, in the order they are imported. */
 export const INSTRUCTION_FILES = ["CLAUDE.md", "AGENTS.md"] as const;
 
 /** Where imported instruction files go, relative to `.sous/`. */
@@ -446,7 +448,7 @@ export function rewriteReferences(
             }
 
             if (isMarkdown(reference.token) && importedInstructions.has(target)) {
-                // Both instruction files are included by the starter source already.
+                // Both imported instruction files are under memories/, which the memories source includes already.
                 lines[reference.line] = "";
                 continue;
             }
@@ -538,15 +540,32 @@ export function applyImport(scan: ImportScan, fates: Map<string, IncludeFate>, o
         return { kind, source, dest, ...(note === undefined ? {} : { note }) };
     };
 
-    // Both root files become build output, so git stops tracking both, imported or not.
+    // Sous no longer writes either root file: the memories file its coding-tool plugins compile
+    // replaces them. So both move out of the way, imported or not, each backed up first, and git
+    // stops tracking them; left in place, a coding tool would read the same instructions twice.
+    const moveAway = (file: string): string => {
+        const backup = backUp(file);
+
+        if (!options.dryRun) {
+            fs.rmSync(file);
+        }
+
+        removed.push(file);
+        untrack.push(posix(path.relative(scan.root, file)));
+
+        return backup;
+    };
+
     for (const skip of scan.skipped) {
-        steps.push({ kind: "skipped", source: skip.source, note: skip.reason });
-        untrack.push(posix(path.relative(scan.root, skip.source)));
+        const backup = moveAway(skip.source);
+
+        steps.push({ kind: "skipped", source: skip.source, backup, note: skip.reason });
     }
 
     for (const instruction of scan.instructions) {
-        steps.push(copyOver(instruction.source, instruction.dest, "imported"));
-        untrack.push(posix(path.relative(scan.root, instruction.source)));
+        const step = copyOver(instruction.source, instruction.dest, "imported");
+
+        steps.push({ ...step, backup: moveAway(instruction.source) });
     }
 
     for (const file of scan.includes) {

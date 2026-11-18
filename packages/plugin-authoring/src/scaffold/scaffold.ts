@@ -66,6 +66,9 @@ export async function handleInit(input: RepoInitInput, ctx: Context): Promise<In
         ...(input.copyIncludes === undefined ? {} : { copyIncludes: input.copyIncludes }),
         ...(input.leaveIncludes === undefined ? {} : { leaveIncludes: input.leaveIncludes }),
         ...(input.noBuild === undefined ? {} : { noBuild: input.noBuild }),
+        ...(input.hooks === undefined ? {} : { hooks: input.hooks }),
+        ...(input.pullHooks === undefined ? {} : { pullHooks: input.pullHooks }),
+        ...(input.install === undefined ? {} : { install: input.install }),
     });
 
     // init's outputs go before the scaffold's "What to do next", which stays at the end with the

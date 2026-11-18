@@ -73,35 +73,56 @@ so on), and `sous search`, `sous subscribe` and `sous unsubscribe` are one-word 
 
 ### `sous init [DIRECTORY]`
 
-Sets a project up for sous: it imports the project's existing agent files into a new `.sous/` directory, then
-runs the first build. Sous owns all of a project's agent configuration from then on. `CLAUDE.md`, `AGENTS.md` and
-`.claude/skills/` at the project root become build output, so edit their sources under `.sous/` and run
-`sous build` after cloning.
+Sets a project up for sous: it imports the project's existing agent files into a new `.sous/` directory, offers
+the git hooks, then runs the first build. Sous owns all of a project's agent configuration from then on. What a
+build writes (the memories file, such as `.claude/rules/SOUS-MEMORIES.md` for Claude Code, and `.claude/skills/`)
+is build output, so edit the sources under `.sous/` and run `sous build` after cloning.
 
-It writes a commented `sous.config.js`, the instructions source `.sous/memories/instructions.tpl.md` that the
-config compiles into both `CLAUDE.md` and `AGENTS.md` at the project root, the `.sous/.env` and
-`.sous/.env.local.example` files, the sous block in `.sous/.gitignore`, and a sous block in the project-root
-`.gitignore` that ignores `/CLAUDE.md`, `/AGENTS.md` and `/.claude/skills/`. A project with a `package.json` also
-gains `@sous-io/sous` as a devDependency at the running version; run your package manager's install afterwards.
+It writes:
 
-The instructions source holds two includes:
+- `.sous/sous.config.jsonc`, the primary config: JSON with comments that explain each block, and a `$schema`
+  pointing at the config schema published with the running version, so an editor completes and checks it. Its
+  one target compiles the project's own skills; it compiles no `AGENTS.md` or `CLAUDE.md`. A project may still
+  write a `sous.config.js` by hand instead.
+- `.sous/MEMORIES.tpl.md`, the source of the memories file each coding-tool plugin compiles. It holds the two
+  default lines under a comment saying what each includes:
 
-```markdown
-@*/**/*.md
-@#memories/**/*.md
-```
+  ```markdown
+  @memories/**/*.md
+  @#memories/**/*.md
+  ```
 
-The first pulls in this project's own memories, every markdown file in a folder beside the source (such as
-`imported/` and `conventions/`). The second pulls in every memory the subscribed recipes publish. Because the
-config's target writes `CLAUDE.md`, the Claude Code plugin's own memory target for that file steps aside. When
-there was nothing to import, init writes a starter memory at `.sous/memories/project/overview.tpl.md` (or
-`.sous/memories/project/sous-repo.tpl.md` in a recipe repository, one with a `sous.repo.yaml`).
+  The first includes the project's own memories, every markdown file under `.sous/memories/`; the second, every
+  memory the subscribed recipes publish. Removing a line removes that part, and moving a line changes the order.
+- `.sous/memories/project.tpl.md`, a starter memory with generic text to replace ("Describe the project here: what
+  it is, how it is built, and how it is tested."), when there was nothing to import. In a recipe repository (one
+  with a `sous.repo.yaml`) it says instead that the repository is a Sous Repo, and names the core skills.
+- `.sous/.env`, `.sous/.env.local.example`, and the sous block in `.sous/.gitignore` (which ignores, among
+  others, `backups/`).
+- `.sous/sous.lock.json` with `migratedVersion` set to the running version, so a new project has no migrations
+  pending.
+- Once, a sous block in the project's own `.gitignore`, listing what the builds write outside `.sous/`:
+
+  ```text
+  # >>> sous managed (do not edit between these markers)
+  /.claude/rules/SOUS-MEMORIES.md
+  /.claude/skills/
+  /.claude/agents/
+  /AGENTS.override.md
+  # <<< sous managed
+  ```
+
+  No build keeps this block current. A project that commits its own skills or agents removes that line.
+
+A project with a `package.json` also gains `@sous-io/sous` as a devDependency at the running version.
 
 What init imports, before the first build:
 
 - **The instructions.** A root `CLAUDE.md` or `AGENTS.md` is copied to `.sous/memories/imported/` as plain `.md`,
   so Liquid never touches it. A file that is a symlink to the other, holds the same text, or only points at the
-  other (at most 3 non-blank lines and 400 characters, naming the other file) is skipped.
+  other (at most 3 non-blank lines and 400 characters, naming the other file) is skipped. No build writes the
+  root files any more, so both are then backed up and removed, imported or skipped: a coding tool that read
+  them beside the memories file would read the same instructions twice.
 - **The files they include.** A line holding only `@path.md` includes that file, and init follows those lines
   through every included file. Each file is moved (the default), copied, or left where it is. A moved or copied
   file goes to `.sous/includes/<its path from the project root>`, outside `memories/`, so it appears only where
@@ -115,14 +136,21 @@ What init imports, before the first build:
   the build warns that the recipe's copy was not written.
 
 Everything init moves is backed up first, to `.sous/backups/<YYYY-MM-DD>/<HHMM-SS>/<path>`, which git ignores.
-Git stops tracking the root `CLAUDE.md`, `AGENTS.md` and each moved skill folder (`git rm -r --cached`); the files
-stay on disk until the build compiles over them. `.claude/agents/`, `.claude/commands/` and
-`.claude/settings.json` are left alone.
+Git stops tracking the root `CLAUDE.md`, `AGENTS.md` and each moved skill folder (`git rm -r --cached`).
+`.claude/agents/`, `.claude/commands/` and `.claude/settings.json` are left alone.
 
 What happens to the included files is one question, asked once after init lists them: move them, copy them,
 leave them, or choose for each file. `--move-includes`, `--copy-includes` and `--leave-includes` answer it ahead
 of time, one at a time, and `--yes` accepts the default, move. A run with no terminal and none of these flags
 fails, naming them. `--dry-run` plans with the default and asks nothing.
+
+In a project with a `.git` folder, init asks whether to install the git hooks, which
+[`sous init hooks`](#sous-init-hooks-directory) describes, and then whether to add the ones that run after a pull.
+`--hooks` and `--no-hooks` answer the first question, `--pull-hooks` and `--no-pull-hooks` the second, and `--yes`
+installs the hooks without the pull ones. With a `package.json`, the hooks run the package manager's install,
+and init then offers to run it (`--install`, `--no-install`; `--yes` runs it). That install runs `sous build`
+through the package script, so init skips its own build; when the install is declined, init builds by itself.
+`--no-build` also leaves the install out, unless `--install` asks for it.
 
 A project whose `.sous/` already holds a config is left untouched. `--no-build` skips the first build.
 
@@ -130,7 +158,75 @@ A project whose `.sous/` already holds a config is left untouched. `--no-build` 
 sous init
 sous init --name "My Project"
 sous init --copy-includes
+sous init --yes --pull-hooks
+sous init --no-hooks
 sous init --dry-run
+```
+
+### `sous init hooks [DIRECTORY]`
+
+Installs the git hooks that give a new worktree, and each checked-out branch, Sous's output. Sous's output is
+git-ignored, so a new worktree starts without it; git runs `post-checkout` whenever a worktree is created or a
+branch is checked out, whoever runs git (a person, Claude Code, the Claude Desktop app, an IDE).
+
+```text
+git worktree add / git checkout <branch>
+  -> .husky/post-checkout runs `pnpm install`
+     -> pnpm runs the "prepare" script
+        -> sous build
+```
+
+- **With a `package.json`:** Husky is added as a dev dependency, and `.husky/post-checkout` runs the package
+  manager's install (`npm install`, `pnpm install` or `yarn install`, by the manager sous detects) on every
+  branch checkout. The script the manager runs after an install runs Husky and `sous build`: `prepare` for npm
+  and pnpm, `postinstall` for Yarn, whose newer versions skip `prepare` on install. A script already under that
+  name keeps what it has, and Sous's part runs after it. The guard `|| exit 0` means a missing `sous` command (an
+  install without dev dependencies) or a failed build prints its error and does not fail the install. At the
+  end, sous offers to run the install, which installs Husky and so turns the hooks on (`--install`,
+  `--no-install`; `--yes` runs it). Sous does not look for other hook managers: installing Husky points git at
+  `.husky/`, so another manager's hooks stop running until the project sorts that out.
+- **Without one:** the repository's own `post-checkout` hook (in `.git/hooks/`, or wherever `core.hooksPath`
+  points) runs `sous build` directly, and does nothing when there is no `sous` command.
+
+`post-checkout` is installed by default. Sous asks whether to add `post-merge` (after a pull that merges) and
+`post-rewrite` (after a rebase, including a pull set to rebase); `--pull-hooks` and `--no-pull-hooks` answer, and
+`--yes` leaves them out. Each hook prints a failure and exits 0, so git carries on.
+
+The hook for pnpm, `.husky/post-checkout`:
+
+```sh
+# >>> sous managed: init hooks (do not edit between these markers)
+# After a checkout, install the dependencies; the "prepare" script then runs `sous build`, so the
+# files Sous writes match this checkout. A failure is printed, and git carries on.
+if [ "$3" = "1" ]; then
+  pnpm install || echo "sous: 'pnpm install' failed after a checkout; git carried on." >&2
+fi
+# <<< sous managed: init hooks
+```
+
+And the script it adds to a `package.json` that had none:
+
+```json
+{
+  "scripts": {
+    "prepare": "husky && sous build || exit 0"
+  }
+}
+```
+
+A hook file that already exists keeps its lines and gains Sous's block after them; running the command again
+replaces the block and changes nothing else. Installing the hooks is a one-time action: no build puts them back,
+since a project may change them.
+
+Only a project whose `.sous/` is at the top of its git repository is supported, since the hook, the install and
+the build all run there. Anywhere else (a project in a folder of a monorepo, say) the command stops, says why,
+and prints the lines to add by hand. `--dry-run` shows the files and the install command and changes nothing.
+
+```bash
+sous init hooks
+sous init hooks --pull-hooks
+sous init hooks --yes --no-install
+sous init hooks --dry-run
 ```
 
 ### `sous build`
@@ -353,7 +449,7 @@ sous repo contribute workflow/task-files --finish --title "Clarify the resume st
 ### `sous repo init [DIRECTORY]`
 
 Creates a new recipe repository, then runs [`sous init`](#sous-init-directory) in the same directory, so the
-repository is also a sous project whose `CLAUDE.md`, `AGENTS.md` and `.claude/skills/` are build output. It
+repository is also a sous project whose memories file and `.claude/skills/` are build output. It
 passes `--yes`, `--move-includes`, `--copy-includes`, `--leave-includes`, `--no-build` and `--dry-run` through to
 init. A directory that already holds a sous config keeps it, and init is skipped with a note. See
 [Authoring a repository](repositories-authoring.md).

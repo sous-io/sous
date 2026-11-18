@@ -72,6 +72,14 @@ export interface PackageManagerEntity {
     addCommand(specs: readonly string[], options: AddOptions): PlannedCommand;
     /** The command that installs packages globally. */
     globalInstallCommand?(specs: readonly string[]): PlannedCommand;
+    /** The command that installs every dependency a project declares (`pnpm install`). */
+    installCommand?(options: { readonly cwd: string }): PlannedCommand;
+    /**
+     * The `package.json` script the manager runs after installing a project's own dependencies,
+     * and not when the package is installed as someone else's dependency: `prepare` for npm and
+     * pnpm, `postinstall` for Yarn, whose newer versions do not run `prepare` on install.
+     */
+    readonly afterInstallScript?: "prepare" | "postinstall";
 }
 
 /** Which version an update moves to. */

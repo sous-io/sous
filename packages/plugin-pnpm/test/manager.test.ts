@@ -106,6 +106,12 @@ describe("pnpm commands", () => {
         expect(pnpmManager.addCommand([spec], { section: "dependencies", workspaceRoot: false, cwd: "/p" }).args).toEqual(["add", "-E", spec]);
         expect(pnpmManager.globalInstallCommand?.([spec])).toEqual({ command: "pnpm", args: ["add", "-g", spec] });
     });
+
+    /** A project's install is `pnpm install`, and the script pnpm runs after it is `prepare`. */
+    it("should plan the project's install and name the script run after it", () => {
+        expect(pnpmManager.installCommand?.({ cwd: "/p" })).toEqual({ command: "pnpm", args: ["install"], cwd: "/p" });
+        expect(pnpmManager.afterInstallScript).toBe("prepare");
+    });
 });
 
 describe("pnpm plugin", () => {

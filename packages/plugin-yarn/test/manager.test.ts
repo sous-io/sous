@@ -195,6 +195,12 @@ describe("yarn commands", () => {
         expect(yarnManager.addCommand([spec], { section: "devDependencies", workspaceRoot: true, cwd: dir }).args).toEqual(["add", "-D", "-E", spec]);
         expect(yarnManager.globalInstallCommand?.([spec])).toEqual({ command: "yarn", args: ["global", "add", spec] });
     });
+
+    /** A project's install is `yarn install`; Yarn 2 and later skip `prepare`, so the script is `postinstall`. */
+    it("should plan the project's install and name the script run after it", () => {
+        expect(yarnManager.installCommand?.({ cwd: dir })).toEqual({ command: "yarn", args: ["install"], cwd: dir });
+        expect(yarnManager.afterInstallScript).toBe("postinstall");
+    });
 });
 
 describe("yarn-pnp locator", () => {

@@ -107,6 +107,24 @@ describe("LockService.write", () => {
         expect(locked).toEqual([{ path: lock.path(), diff }]);
         expect((await lock.write(pinned())).unchanged).toBe(true);
     });
+
+    /**
+     * migratedVersion, written once by `sous init`, should survive a later write of a lockfile
+     * built without it (a resolution's), and a lockfile that sets it should replace it.
+     */
+    it("should keep the migratedVersion on disk when the new lockfile has none", async () => {
+        const { lock } = await lockService();
+
+        await lock.write({ formatVersion: 1, repos: {}, recipes: {}, migratedVersion: "1.2.3" });
+        await lock.write(pinned());
+
+        expect(lock.read().migratedVersion).toBe("1.2.3");
+        expect(JSON.parse(fs.readFileSync(lock.path(), "utf8")).migratedVersion).toBe("1.2.3");
+
+        await lock.write(pinned({ migratedVersion: "1.3.0" }));
+
+        expect(lock.read().migratedVersion).toBe("1.3.0");
+    });
 });
 
 describe("LockService.fromResolved", () => {

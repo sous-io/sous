@@ -96,6 +96,8 @@ export interface Lockfile {
     formatVersion: FormatVersion;
     repos: Record<string, LockedRepo>;
     recipes: Record<string, LockedRecipe>;
+    /** The version of sous whose migrations the project has had; `sous init` writes the running version. */
+    migratedVersion?: string;
 }
 
 // ---------------------------------------------------------------------------------------------

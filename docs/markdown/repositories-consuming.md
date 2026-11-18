@@ -207,8 +207,8 @@ instruction source includes them. Put one line in the file your `AGENTS.md` or `
 `#memories` is a view: it lists the memories of every recipe you hold directly (a subscription to it, to its
 namespace, or a co-subscription of a recipe you hold) at the virtual path
 `#memories/<namespace>/<recipe>/<path>`, and the line includes each one. A recipe held only through `depends`
-adds none. `sous init` writes this line into the source it compiles into `CLAUDE.md` and `AGENTS.md`,
-`.sous/memories/instructions.tpl.md`, after a line that includes the project's own memories.
+adds none. `sous init` writes this line into `.sous/MEMORIES.tpl.md`, the source of the memories file, after
+a line that includes the project's own memories.
 
 Memories come in dependency order (a recipe after the recipes it depends on, ties by recipe key). Two config
 lists under `recipes.memories` shape the rest, each entry a glob over `namespace/recipe` keys or a regular
@@ -231,8 +231,7 @@ includes nothing, and the warning is how that is never silent.
 ?> In sous 1.0 an agent's plugin can also name the instruction file that agent reads in every session
 (`CLAUDE.md` for the Claude Code plugin built into sous). Sous then writes that file with one `@` include
 line for each memory `recipes.memories` selects, so the memories reach the agent without a line of your own.
-When a target in your own config writes the same file, as the config `sous init` writes does for `CLAUDE.md`
-and `AGENTS.md`, your target wins and the plugin's steps aside; your source then includes the memories with the
+When a target in your own config writes the same file, your target wins and the plugin's steps aside; your source then includes the memories with the
 `@#memories/**/*.md` line above.
 
 ## Answer the questions

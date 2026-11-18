@@ -100,6 +100,9 @@ export const initInput = jsonSchema<RepoInitInput>({
         copyIncludes: { type: "boolean", description: "Copy the files an existing CLAUDE.md or AGENTS.md includes into .sous/includes/, keeping the originals" },
         leaveIncludes: { type: "boolean", description: "Leave the files an existing CLAUDE.md or AGENTS.md includes where they are" },
         noBuild: { type: "boolean", description: "Set the repository up for sous without running its first build" },
+        hooks: { type: "boolean", description: "Install the git hooks that build Sous's output in each new worktree (--no-hooks: do not)" },
+        pullHooks: { type: "boolean", description: "Also install the git hooks that run after a pull and a rebase" },
+        install: { type: "boolean", description: "Run the package manager's install after installing the git hooks (--no-install: do not)" },
         dryRun: { ...dryRun, description: "Print the files that would be written without writing them" },
     },
 });

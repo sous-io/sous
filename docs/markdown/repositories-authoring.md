@@ -5,7 +5,7 @@ needs, cutting a release, editing a published repository in place, and proposing
 [Repository file formats](repositories-file-formats.md) holds the schemas; this page is the workflow.
 
 ?> A recipe repository is also a sous project: `sous repo init` sets one up with a `.sous/` directory of its
-own, so its `CLAUDE.md`, `AGENTS.md` and `.claude/skills/` are build output, and anyone who clones it runs
+own, so its memories file and `.claude/skills/` are build output, and anyone who clones it runs
 `sous build`. `sous repo init` and `sous repo release` find the repository by its `sous.repo.yaml`, not through
 that config. Run them from inside the repository itself. `sous repo submit` runs there too, and may also be run
 from a project that links the repository.
@@ -37,12 +37,12 @@ is files only: run `git init`, commit it, and add the remote you publish from be
 After the scaffold, the command runs [`sous init`](commands.md#sous-init-directory) in the same directory, so the
 repository is also a sous project. Init imports a `CLAUDE.md`, an `AGENTS.md` or skills in `.claude/skills/` that
 the directory already holds, and with nothing to import it writes a starter memory,
-`.sous/memories/project/sous-repo.tpl.md`, which says this is a sous recipe repository and names the core skills
-an agent loads before changing anything. It then runs the first build, which compiles `CLAUDE.md` and
-`AGENTS.md` and installs the core skills. The only question init can ask is what happens to files an existing
-`CLAUDE.md` or `AGENTS.md` includes; `--yes`, `--move-includes`, `--copy-includes` and `--leave-includes` answer it
-and are passed through, as are `--no-build` and `--dry-run`. A directory that already holds a sous config keeps
-it, and init is skipped with a note.
+`.sous/memories/project.tpl.md`, which says this is a sous recipe repository and names the core skills an agent
+loads before changing anything. It then runs the first build, which compiles the memories file and installs the
+core skills. Init asks what happens to files an existing `CLAUDE.md` or `AGENTS.md` includes, and, in a directory
+with a `.git` folder, whether to install the git hooks; `--yes`, `--move-includes`, `--copy-includes` and
+`--leave-includes` are passed through, as are `--no-build` and `--dry-run`, and `--yes` installs the hooks. A
+directory that already holds a sous config keeps it, and init is skipped with a note.
 
 ?> `repo init --force` means overwrite, not "answer yes". It is unrelated to the confirmation flag other
 commands spell `--yes`, `-y`, `--force` or `--trust`.

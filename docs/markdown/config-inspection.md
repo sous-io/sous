@@ -115,10 +115,10 @@ All three commands honor the same config-locating flags and env vars as every ot
 
 `sous config set <path> <value>` writes one value into a config file, changing only that key, so
 comments, key order and formatting stay. The value is read as JSON when it is valid JSON, else as
-text. Without `--file` it writes the main config (`sous.config.json`, `.jsonc` or `.yaml`). Sous
-cannot edit code, and `sous init` writes the main config as `sous.config.js`; for such a project
-pass `--file` with a JSON, JSONC or YAML file, which is created in `.sous/conf.d/` when it does not
-exist:
+text. Without `--file` it writes the main config (`sous.config.json`, `.jsonc` or `.yaml`), which
+is `sous.config.jsonc` in a project `sous init` set up. Sous cannot edit code; for a project whose
+main config is a `sous.config.js` written by hand, pass `--file` with a JSON, JSONC or YAML file,
+which is created in `.sous/conf.d/` when it does not exist:
 
 ```bash
 sous config set compilation.includeSourceComments false --file 600-settings.jsonc

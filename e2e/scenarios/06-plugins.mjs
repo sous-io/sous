@@ -111,7 +111,7 @@ export default {
     await t.step("a recipe that ships a sous plugin adds its command once the repository is trusted", () => {
       const repo = path.join(t.root, "plugin-recipes");
       t.sh(`git init -q ${repo}`);
-      expectExit(t.sous(["repo", "init", repo, "--name", "plugrepo", "--namespace", "plug"], { cwd: t.root }));
+      expectExit(t.sous(["repo", "init", repo, "--name", "plugrepo", "--namespace", "plug", "--no-hooks"], { cwd: t.root }));
       const manifestPath = "recipes/plug/example/sous.recipe.yaml";
       t.write(manifestPath, t.read(manifestPath, repo).replace(/^contents:/m, "plugin:\n  bundle: plugin/index.js\n\ncontents:"), repo);
       t.write(

@@ -100,5 +100,6 @@ export const updatePlugin: PluginDefinition = definePlugin({
 
 export default updatePlugin;
 
+export { ownerOf } from "./installs.js";
 export { scanContributor, SCAN_CONTRIBUTOR } from "./scan.js";
 export type * from "./types.js";

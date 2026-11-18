@@ -82,7 +82,8 @@ export default {
       for (const a of CONDUCT_ANSWERS) args.push("--answer", a);
       args.push("--answer", "skillsRoot=.claude/skills");
       expectExit(t.sous(args));
-      assert.ok(t.exists("AGENTS.md"));
+      // A core skill: an output every build writes, now that init compiles no AGENTS.md.
+      assert.ok(t.exists(".claude/skills/about-sous/SKILL.md"));
     });
 
     await t.step("subscription list --json is { subscriptions: [...] } with the new one", () => {

@@ -63,14 +63,89 @@ export function planPackageJson(projectRoot: string, packageName: string, versio
         }
     }
 
+    return {
+        file,
+        contents: serialize(raw, { ...pkg, devDependencies: withDevDependency(pkg, packageName, version) }),
+        outcome: { kind: "added", section: "devDependencies", range: version },
+    };
+}
+
+/** `devDependencies` with one more entry, sorted the way npm keeps it. */
+function withDevDependency(pkg: Record<string, unknown>, name: string, range: string): Record<string, unknown> {
     const existing = typeof pkg.devDependencies === "object" && pkg.devDependencies !== null ? (pkg.devDependencies as Record<string, unknown>) : {};
-    const devDependencies = Object.fromEntries(Object.entries({ ...existing, [packageName]: version }).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+
+    return Object.fromEntries(Object.entries({ ...existing, [name]: range }).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+}
+
+/** The object as the file's text, keeping the file's indentation and trailing newline. */
+function serialize(raw: string, pkg: Record<string, unknown>): string {
     const indent = raw.match(/^(\s+)"/m)?.[1] ?? "  ";
     const newline = raw.endsWith("\n") ? "\n" : "";
 
+    return JSON.stringify(pkg, null, indent) + newline;
+}
+
+/** Whether the package declares a dependency, in either section. */
+function declares(pkg: Record<string, unknown>, name: string): boolean {
+    return (["dependencies", "devDependencies"] as const).some((section) => {
+        const deps = pkg[section];
+
+        return typeof deps === "object" && deps !== null && name in deps;
+    });
+}
+
+/** The `package.json` edit `sous init hooks` makes. */
+export interface HooksPackageJsonPlan {
+    readonly file: string;
+    /** The complete new file, when it changes. */
+    readonly contents?: string;
+    /** Whether Husky was added to `devDependencies`. */
+    readonly huskyAdded: boolean;
+    /** The script that runs `sous build` after an install, as it will read. */
+    readonly script: { readonly name: string; readonly text: string; readonly changed: boolean };
+}
+
+/**
+ * Works out the edit `sous init hooks` makes to a `package.json`: Husky in `devDependencies` when
+ * neither section has it, and the script the package manager runs after an install
+ * (`scriptName`) running Husky and `sous build`, added to the script already there.
+ *
+ * @param compose - Works out the script's new text from its current one; `undefined` when it already does both.
+ * @throws ConfigError when the file is not a JSON object.
+ */
+export function planHooksPackageJson(projectRoot: string, scriptName: string, huskyRange: string, compose: (existing: string | undefined) => string | undefined): HooksPackageJsonPlan {
+    const file = path.join(projectRoot, "package.json");
+    const raw = fs.readFileSync(file, "utf8");
+    let pkg: Record<string, unknown>;
+
+    try {
+        pkg = JSON.parse(raw) as Record<string, unknown>;
+    } catch (error) {
+        throw new ConfigError(`'sous init hooks' would add a script to ${file}, but could not read it as JSON.`, { details: [(error as Error).message], cause: error });
+    }
+
+    if (typeof pkg !== "object" || pkg === null || Array.isArray(pkg)) {
+        throw new ConfigError(`'sous init hooks' would add a script to ${file}, but it does not hold a JSON object.`);
+    }
+
+    const scripts = typeof pkg.scripts === "object" && pkg.scripts !== null ? (pkg.scripts as Record<string, unknown>) : {};
+    const current = typeof scripts[scriptName] === "string" ? (scripts[scriptName] as string) : undefined;
+    const composed = compose(current);
+    const huskyAdded = !declares(pkg, "husky");
+    let next = pkg;
+
+    if (huskyAdded) {
+        next = { ...next, devDependencies: withDevDependency(next, "husky", huskyRange) };
+    }
+
+    if (composed !== undefined) {
+        next = { ...next, scripts: { ...scripts, [scriptName]: composed } };
+    }
+
     return {
         file,
-        contents: JSON.stringify({ ...pkg, devDependencies }, null, indent) + newline,
-        outcome: { kind: "added", section: "devDependencies", range: version },
+        ...(next === pkg ? {} : { contents: serialize(raw, next) }),
+        huskyAdded,
+        script: { name: scriptName, text: composed ?? current ?? "", changed: composed !== undefined },
     };
 }

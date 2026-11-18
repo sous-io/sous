@@ -170,10 +170,11 @@ export function createScenarioContext(name) {
       return dir;
     },
 
-    // A project that has been through `sous init --no-build`.
+    // A project that has been through `sous init --no-build --no-hooks`. The project is a git
+    // repository, so init would ask about the git hooks; --no-hooks answers.
     initializedProject(options = {}) {
       const dir = t.project(options);
-      expectExit(t.sous(["init", "--no-build"], { cwd: dir }));
+      expectExit(t.sous(["init", "--no-build", "--no-hooks"], { cwd: dir }));
       return dir;
     },
 

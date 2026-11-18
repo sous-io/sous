@@ -99,6 +99,11 @@ export const lockfileSchema = z
     repos: z.record(repoNameSchema, lockedRepoSchema),
     /** Every locked recipe, keyed `namespace/recipe`. */
     recipes: z.record(recipeKeySchema, lockedRecipeSchema),
+    /**
+     * The version of sous whose migrations the project has had. `sous init`
+     * writes the running version, so a new project has none pending.
+     */
+    migratedVersion: semverVersionSchema.optional(),
   })
   .superRefine((lock, ctx) => {
     // A recipe pointing at a repo the lockfile does not describe cannot be

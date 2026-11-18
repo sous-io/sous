@@ -225,6 +225,12 @@ export interface RepoInitInput {
     leaveIncludes?: boolean;
     /** Passed to `init`: skip the first build. */
     noBuild?: boolean;
+    /** Passed to `init`: install the git hooks, or not. */
+    hooks?: boolean;
+    /** Passed to `init`: also install the hooks that run after a pull and a rebase. */
+    pullHooks?: boolean;
+    /** Passed to `init`: run the package manager's install after installing the hooks. */
+    install?: boolean;
 }
 
 /** The result of `repo.init`. */

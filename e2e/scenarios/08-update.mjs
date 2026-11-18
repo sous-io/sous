@@ -1,5 +1,5 @@
 import path from "node:path";
-import { assert, expectExit, expectIncludes, parseJson, run } from "../lib/harness.mjs";
+import { assert, expectExit, expectIncludes, expectNotIncludes, parseJson, run } from "../lib/harness.mjs";
 
 // `sous update` and `init` care about the package manager that installed sous, so each manager
 // gets a project with sous installed by it.
@@ -68,10 +68,25 @@ export default {
 
       await t.step(`${pm.id}: init works with this package manager`, () => {
         if (!ready) t.skip("install failed");
-        const r = sous(["init", "--yes"]);
+        // The git hooks are their own step below, so this one stays about init.
+        const r = sous(["init", "--yes", "--no-hooks"]);
         assert.equal(r.code, 0, r.stderr + r.stdout);
-        assert.ok(t.exists(".sous/sous.config.js", dir));
+        assert.ok(t.exists(".sous/sous.config.jsonc", dir));
         initOk = true;
+      });
+
+      await t.step(`${pm.id}: init hooks --yes sets up Husky, the install hook and the script, and runs the install`, () => {
+        if (!ready) t.skip("install failed");
+        if (!initOk) t.skip("init did not produce a loadable config, see the init step");
+        const r = sous(["init", "hooks", "--yes"]);
+        assert.equal(r.code, 0, r.stderr + r.stdout);
+        const script = pm.id.startsWith("yarn") ? "postinstall" : "prepare";
+        const pkg = JSON.parse(t.read("package.json", dir));
+        expectIncludes(pkg.scripts?.[script] ?? "", "husky && sous build || exit 0", `the ${script} script`);
+        expectIncludes(t.read(".husky/post-checkout", dir), `${pm.id.split("-")[0]} install || echo`, ".husky/post-checkout");
+        expectNotIncludes(r.stderr + r.stdout, "exited with code", "the install");
+        // Husky turns the hooks on by pointing git at its folder when the install runs it.
+        expectIncludes(t.sh("git config core.hooksPath", { cwd: dir }).stdout, ".husky", "core.hooksPath");
       });
 
       await t.step(`${pm.id}: update --project --dry-run names ${pm.id} and installs nothing`, () => {

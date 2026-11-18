@@ -43,7 +43,7 @@ export default {
 
     await t.step("config get --layers shows who set the value", () => {
       const r = expectExit(t.sous(["config", "get", "name", "--layers"]));
-      expectIncludes(r.stdout + r.stderr, "sous.config.js", "layers");
+      expectIncludes(r.stdout + r.stderr, "sous.config.jsonc", "layers");
     });
 
     await t.step("config show --layers lists each contributor", () => {
@@ -110,37 +110,41 @@ export default {
       assert.equal(expectExit(t.sous(["config", "get", "compilation.includeSourceComments"])).stdout.trim(), "false");
     });
 
-    await t.step("config set without --file on the starter .js config explains why it cannot edit it", () => {
+    await t.step("config set without --file edits the starter JSONC config, keeping its comments", () => {
+      const before = t.read(".sous/sous.config.jsonc");
+      expectExit(t.sous(["config", "set", "name", "changed"]));
+      const after = t.read(".sous/sous.config.jsonc");
+      expectIncludes(after, "// Shown in command output. Any string.", "comment kept");
+      expectIncludes(after, '"name": "changed"', "the new name");
+      assert.equal(expectExit(t.sous(["config", "get", "name"])).stdout.trim(), "changed");
+      t.write(".sous/sous.config.jsonc", before);
+    });
+
+    await t.step("config set without --file on a .js config written by hand explains why it cannot edit it", () => {
+      t.sh("mv .sous/sous.config.jsonc /tmp/keep.jsonc");
+      t.write(".sous/sous.config.js", 'export const config = { name: "js-name" };\n');
       const r = t.sous(["config", "set", "name", "other"]);
       assert.notEqual(r.code, 0);
       expectIncludes(r.stderr, "--file", "stderr");
-    });
-
-    await t.step("config set works on a JSONC primary config", () => {
-      t.sh("mv .sous/sous.config.js /tmp/keep.js");
-      t.write(".sous/sous.config.jsonc", '// primary\n{ "name": "jsonc-name" }\n');
-      expectExit(t.sous(["config", "set", "name", "changed"]));
-      expectIncludes(t.read(".sous/sous.config.jsonc"), "// primary", "comment kept");
-      assert.equal(expectExit(t.sous(["config", "get", "name"])).stdout.trim(), "changed");
-      t.sh("rm .sous/sous.config.jsonc; mv /tmp/keep.js .sous/sous.config.js");
+      t.sh("rm .sous/sous.config.js; mv /tmp/keep.jsonc .sous/sous.config.jsonc");
     });
 
     await t.step("a CommonJS module.exports sous.config.js loads", () => {
-      t.sh("mv .sous/sous.config.js /tmp/keep.js");
+      t.sh("mv .sous/sous.config.jsonc /tmp/keep.jsonc");
       t.write(".sous/sous.config.js", 'module.exports = { name: "cjs-name" };\n');
       const r = expectExit(t.sous(["config", "get", "name"]));
       assert.equal(r.stdout.trim(), "cjs-name");
       assert.doesNotMatch(r.stderr, /Warning: (Failed|To load)/);
-      t.sh("mv /tmp/keep.js .sous/sous.config.js");
+      t.sh("rm .sous/sous.config.js; mv /tmp/keep.jsonc .sous/sous.config.jsonc");
     });
 
     await t.step("an ES module sous.config.mjs loads with no Node warning", () => {
-      t.sh("mv .sous/sous.config.js /tmp/keep.js");
+      t.sh("mv .sous/sous.config.jsonc /tmp/keep.jsonc");
       t.write(".sous/sous.config.mjs", 'export const config = { name: "mjs-name" };\n');
       const r = expectExit(t.sous(["config", "get", "name"]));
       assert.equal(r.stdout.trim(), "mjs-name");
       assert.doesNotMatch(withoutTimingNoise(r.stderr), /Warning/);
-      t.sh("rm .sous/sous.config.mjs; mv /tmp/keep.js .sous/sous.config.js");
+      t.sh("rm .sous/sous.config.mjs; mv /tmp/keep.jsonc .sous/sous.config.jsonc");
     });
 
     await t.step("--config points sous at another config file", () => {

@@ -36,10 +36,12 @@ export default {
 
     await t.step("repo init writes a repository scaffold with an example recipe, set up for sous", () => {
       t.sh(`git init -q ${local}`);
-      expectExit(t.sous(["repo", "init", local, "--name", "e2e-local", "--namespace", "e2e"], { cwd: t.root }));
-      for (const f of ["sous.repo.yaml", "sous.index.json", "recipes/e2e/example/sous.recipe.yaml", "recipes/e2e/example/skills/example-skill/SKILL.tpl.md", "README.md", ".sous/sous.config.js", ".sous/memories/project/sous-repo.tpl.md", "CLAUDE.md", ".claude/skills/about-sous-repos/SKILL.md"]) {
+      // The directory is a git repository, so init asks about the git hooks; --no-hooks answers.
+      expectExit(t.sous(["repo", "init", local, "--name", "e2e-local", "--namespace", "e2e", "--no-hooks"], { cwd: t.root }));
+      for (const f of ["sous.repo.yaml", "sous.index.json", "recipes/e2e/example/sous.recipe.yaml", "recipes/e2e/example/skills/example-skill/SKILL.tpl.md", "README.md", ".sous/sous.config.jsonc", ".sous/MEMORIES.tpl.md", ".sous/memories/project.tpl.md", ".claude/skills/about-sous-repos/SKILL.md"]) {
         assert.ok(fs.existsSync(path.join(local, f)), `missing ${f}`);
       }
+      assert.match(fs.readFileSync(path.join(local, ".sous/memories/project.tpl.md"), "utf8"), /This Is a Sous Repo/);
     });
 
     await t.step("repo release --check passes on a fresh scaffold", () => {
@@ -102,7 +104,7 @@ export default {
         assert.equal(clone.code, 0, clone.stderr);
         const hasRepo = fs.existsSync(path.join(work, "sous.repo.yaml"));
         if (!hasRepo) {
-          expectExit(t.sous(["repo", "init", work, "--name", name.toLowerCase(), "--namespace", "e2e", "--host", target.kind], { cwd: t.root }));
+          expectExit(t.sous(["repo", "init", work, "--name", name.toLowerCase(), "--namespace", "e2e", "--host", target.kind, "--no-hooks"], { cwd: t.root }));
           t.sh("git add -A && git commit -qm 'Scaffold the recipe repository'", { cwd: work });
         }
         // A new recipe unique to this run, copied from the scaffold's example recipe.
