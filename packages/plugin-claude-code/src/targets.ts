@@ -64,6 +64,25 @@ export function contributeTargets(config: ConfigBuilder): void {
     }
 }
 
+/**
+ * A directory from this plugin's options as an output directory: absolute and variable paths as
+ * written, anything else under `${projectRoot}`, with no trailing slash.
+ *
+ * ```ts
+ * outputDirectory(".claude/skills");   // -> "${projectRoot}/.claude/skills"
+ * outputDirectory("/abs/skills/");     // -> "/abs/skills"
+ * ```
+ */
+export function outputDirectory(directory: string): string {
+    const trimmed = directory.trim().replace(/\/+$/, "");
+
+    if (trimmed.startsWith("${") || trimmed.startsWith("/") || /^[A-Za-z]:[\\/]/.test(trimmed)) {
+        return trimmed;
+    }
+
+    return `\${projectRoot}/${trimmed.replace(/^\.\/+/, "")}`;
+}
+
 /** The contributor. */
 export const targetsContributor: ContributorDefinition = {
     id: TARGETS_CONTRIBUTOR,

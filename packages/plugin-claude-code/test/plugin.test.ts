@@ -6,9 +6,12 @@ import { createEngine } from "@sous-io/core";
 import { BufferedReporter, definePlugin, IntentOutputs, jsonSchema, type PluginDefinition } from "@sous-io/plugin-api";
 import type { HostProcesses, ProcessResult } from "@sous-io/plugin-host/types";
 import type { RunHeadlessResult } from "@sous-io/plugin-harnesses/types";
+import type { CompilationTarget } from "@sous-io/plugin-compiler/types";
+import type { ActiveRecipeContent } from "@sous-io/plugin-recipes/types";
 import { spawn } from "node:child_process";
 import harnessesPlugin from "@sous-io/plugin-harnesses";
 import claudeCodePlugin from "../src/index.js";
+import { pluginFolderOf, registerReloadLine, reloadLine } from "../src/reload.js";
 import packageJson from "../package.json" with { type: "json" };
 
 const dirs: string[] = [];
@@ -81,7 +84,33 @@ const stubs: PluginDefinition[] = [
         version: packageJson.version,
         register: (sous) => sous.entities.define("memory-target", jsonSchema({ type: "object", required: ["id", "outputPath"] })),
     }),
+    // The content-kind kind and recipes.contents plugin-recipes owns; recipes.contents gives `world.contents`.
+    definePlugin({
+        name: "@sous-io/plugin-recipes",
+        version: packageJson.version,
+        register: (sous) => {
+            sous.entities.define("content-kind", jsonSchema({ type: "object", required: ["id", "description"] }));
+            sous.services.add(
+                "recipes.contents",
+                () => ({ of: (_config: unknown, kind: string) => world.contents[kind] ?? [], entries: () => [], files: () => [] }) as never,
+                { lifetime: "singleton" },
+            );
+        },
+    }),
+    // The compilation key plugin-compiler owns.
+    definePlugin({
+        name: "@sous-io/plugin-compiler",
+        version: packageJson.version,
+        register: (sous) => sous.entities.add("config-key", { id: "compilation", schema: jsonSchema({}) }),
+    }),
 ];
+
+/** What the recipes stand-in gives as each kind's `recipes.contents`; reset after each test. */
+const world: { contents: Record<string, ActiveRecipeContent[]> } = { contents: {} };
+
+afterEach(() => {
+    world.contents = {};
+});
 
 function config(values: Record<string, unknown>): PluginDefinition {
     return definePlugin({
@@ -249,5 +278,155 @@ describe("headless runs and transcripts", () => {
 
         expect(finalText([{ type: "assistant", message: { content: [{ type: "text", text: "partial" }] } }])).toBe("partial");
         expect(finalText([])).toBe("");
+    });
+});
+
+/** One recipe's content of a kind, as `recipes.contents` lists it: each path relative to the pattern's fixed part. */
+function content(recipe: string, kind: string, base: string, files: string[], inline: Record<string, string> = {}): ActiveRecipeContent {
+    const dir = path.dirname(base);
+
+    return {
+        recipe,
+        kind,
+        entry: { recipe, dir, kind, include: [] },
+        files: [
+            ...files.map((file) => ({ path: path.relative(dir, path.join(base, file)), file: path.join(base, file), base })),
+            ...Object.entries(inline).map(([file, text]) => ({ path: path.relative(dir, path.join(base, file)), file: path.join(base, file), base, content: text })),
+        ],
+    };
+}
+
+const targetsOf = (built: { get(path: string): unknown }) => (built.get("compilation.targets") as CompilationTarget[] | undefined) ?? [];
+
+describe("content kinds", () => {
+    it("registers claude-code-plugin and claude-code-agent", async () => {
+        const { config: built } = await engineFor(tmp());
+
+        expect(built.entities.list("content-kind").map((kind) => kind.id).sort()).toEqual(["claude-code-agent", "claude-code-plugin"]);
+    });
+
+    /**
+     * A plugin folder goes under Claude Code's skills directory, at its path from the include
+     * pattern's fixed part, marked for Claude Code.
+     *
+     * recipe a/harness, include plugins/**: plugins/session-harness/.claude-plugin/plugin.json
+     * // -> { entryPoint: ".../plugins/session-harness/.claude-plugin/plugin.json", globBase: ".../plugins",
+     * //      outputs: [{ destinationDir: "${projectRoot}/.claude/skills", harness: "claude-code" }] }
+     */
+    it("writes a claude-code-plugin folder under .claude/skills, marked for Claude Code", async () => {
+        const base = path.resolve("/store/a/harness/plugins");
+
+        world.contents["claude-code-plugin"] = [
+            content("a/harness", "claude-code-plugin", base, ["session-harness/.claude-plugin/plugin.json", "session-harness/scripts/run.tpl.sh"]),
+        ];
+
+        const { config: built } = await engineFor(tmp());
+        const origin = { plugin: "@sous-io/plugin-claude-code", recipe: "a/harness" };
+        const outputs = [{ destinationDir: "${projectRoot}/.claude/skills", harness: "claude-code" }];
+
+        expect(targetsOf(built)).toEqual([
+            {
+                id: "claude-code-plugin/a/harness/session-harness/.claude-plugin/plugin.json",
+                entryPoint: path.join(base, "session-harness/.claude-plugin/plugin.json"),
+                globBase: base,
+                origin,
+                outputs,
+            },
+            {
+                id: "claude-code-plugin/a/harness/session-harness/scripts/run.tpl.sh",
+                entryPoint: path.join(base, "session-harness/scripts/run.tpl.sh"),
+                globBase: base,
+                origin,
+                outputs,
+            },
+        ]);
+    });
+
+    /** The skillsDirectory option moves plugins with the skills. */
+    it("follows the skillsDirectory option for plugins", async () => {
+        world.contents["claude-code-plugin"] = [content("a/harness", "claude-code-plugin", path.resolve("/store/a/harness/plugins"), ["sh/.claude-plugin/plugin.json"])];
+
+        const { config: built } = await engineFor(tmp(), { plugins: { options: { "@sous-io/plugin-claude-code": { skillsDirectory: "agents/skills" } } } });
+
+        expect(targetsOf(built)[0]?.outputs).toEqual([{ destinationDir: "${projectRoot}/agents/skills", harness: "claude-code" }]);
+    });
+
+    /**
+     * Agent files go to .claude/agents/, keeping their sub-folders; inline content is written from a
+     * content target, rendered only when its path holds `.tpl.`.
+     *
+     * agents/reviewer.tpl.md, agents/review/security.md, inline agents/inline.md
+     * // -> destinationDir .claude/agents (twice), destinationFile .claude/agents/inline.md
+     */
+    it("writes claude-code-agent files to .claude/agents, keeping sub-folders", async () => {
+        const base = path.resolve("/store/a/agents/agents");
+
+        world.contents["claude-code-agent"] = [content("a/agents", "claude-code-agent", base, ["reviewer.tpl.md", "review/security.md"], { "inline.md": "Be brief." })];
+
+        const { config: built } = await engineFor(tmp());
+        const targets = targetsOf(built);
+
+        expect(targets.map((target) => target.id)).toEqual([
+            "claude-code-agent/a/agents/reviewer.tpl.md",
+            "claude-code-agent/a/agents/review/security.md",
+            "claude-code-agent/a/agents/inline.md",
+        ]);
+        expect(targets[1]).toMatchObject({
+            entryPoint: path.join(base, "review/security.md"),
+            globBase: base,
+            outputs: [{ destinationDir: "${projectRoot}/.claude/agents", harness: "claude-code" }],
+        });
+        expect(targets[2]).toMatchObject({
+            content: "{% raw %}Be brief.{% endraw %}",
+            outputs: [{ destinationFile: "${projectRoot}/.claude/agents/inline.md", harness: "claude-code" }],
+        });
+    });
+});
+
+describe("the /reload-plugins line", () => {
+    it("finds the nearest folder holding .claude-plugin/plugin.json, inside the project", () => {
+        const root = path.resolve("/p");
+        const manifest = path.join(root, ".claude/skills/sh/.claude-plugin/plugin.json");
+        const exists = (file: string) => file === manifest;
+
+        expect(pluginFolderOf(path.join(root, ".claude/skills/sh/hooks/hooks.json"), root, exists)).toBe(path.join(root, ".claude/skills/sh"));
+        expect(pluginFolderOf(manifest, root, exists)).toBe(path.join(root, ".claude/skills/sh"));
+        expect(pluginFolderOf(path.join(root, ".claude/skills/plain/SKILL.md"), root, exists)).toBeUndefined();
+        // A plugin removed whole: its manifest is among the removed files.
+        const removed = new Set([path.join(root, ".claude/skills/gone/.claude-plugin/plugin.json")]);
+
+        expect(pluginFolderOf(path.join(root, ".claude/skills/gone/x.md"), root, () => false, removed)).toBe(path.join(root, ".claude/skills/gone"));
+    });
+
+    it("words the line for one plugin, several, and a dry run", () => {
+        expect(reloadLine([], false)).toBeUndefined();
+        expect(reloadLine(["sh"], false)).toBe("A Claude Code plugin changed (sh). Run /reload-plugins in any open Claude Code session.");
+        expect(reloadLine(["sh", "kw", "sh"], true)).toBe(
+            "Claude Code plugins would change (kw, sh). Run /reload-plugins in any open Claude Code session after the build.",
+        );
+    });
+
+    /**
+     * What the compiler wrote and the prune removed during one build decides the line, printed once
+     * when the build ends; unchanged files do not count.
+     */
+    it("prints the line when a build changed a plugin's files, and not otherwise", () => {
+        const root = path.resolve("/p");
+        const handlers = new Map<string, (event: unknown, ctx: unknown) => void>();
+        const notices: string[] = [];
+        const ctx = { chain: { id: 7 }, project: { root }, reporter: { notice: (line: string) => notices.push(line) } };
+        const hooks = path.join(root, ".claude/skills/sh/hooks/hooks.json");
+        const exists = (file: string) => file === path.join(root, ".claude/skills/sh/.claude-plugin/plugin.json");
+
+        registerReloadLine({ on: ((name: string, handler: (event: unknown, ctx: unknown) => void) => handlers.set(name, handler)) as never }, exists);
+
+        handlers.get("compiler.wrote")!({ payload: { dryRun: false, files: [{ file: hooks, action: "unchanged" }] } }, ctx);
+        handlers.get("build.after")!({}, ctx);
+        expect(notices).toEqual([]);
+
+        handlers.get("compiler.wrote")!({ payload: { dryRun: false, files: [{ file: hooks, action: "updated" }] } }, ctx);
+        handlers.get("compiler.pruned")!({ payload: { dryRun: false, removed: [path.join(root, ".claude/skills/plain/SKILL.md")] } }, ctx);
+        handlers.get("build.after")!({}, ctx);
+        expect(notices).toEqual(["A Claude Code plugin changed (sh). Run /reload-plugins in any open Claude Code session."]);
     });
 });

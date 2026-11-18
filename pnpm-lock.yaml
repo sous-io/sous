@@ -145,9 +145,24 @@ importers:
 
   packages/plugin-claude-code:
     dependencies:
+      '@sous-io/documents':
+        specifier: workspace:*
+        version: link:../documents
       '@sous-io/plugin-api':
         specifier: workspace:*
         version: link:../plugin-api
+      '@sous-io/plugin-build':
+        specifier: workspace:*
+        version: link:../plugin-build
+      '@sous-io/plugin-compiler':
+        specifier: workspace:*
+        version: link:../plugin-compiler
+      '@sous-io/plugin-confd':
+        specifier: workspace:*
+        version: link:../plugin-confd
+      '@sous-io/plugin-config-files':
+        specifier: workspace:*
+        version: link:../plugin-config-files
       '@sous-io/plugin-harnesses':
         specifier: workspace:*
         version: link:../plugin-harnesses
@@ -157,9 +172,15 @@ importers:
       '@sous-io/plugin-memories':
         specifier: workspace:*
         version: link:../plugin-memories
+      '@sous-io/plugin-recipes':
+        specifier: workspace:*
+        version: link:../plugin-recipes
       '@sous-io/plugin-skills':
         specifier: workspace:*
         version: link:../plugin-skills
+      '@sous-io/sous-plugin-migrations':
+        specifier: workspace:*
+        version: link:../sous-plugin-migrations
     devDependencies:
       '@sous-io/core':
         specifier: workspace:*
