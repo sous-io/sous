@@ -44,8 +44,9 @@ function sous(...args: string[]): { status: number | null; output: string } {
 
 /**
  * Writes the project's config (with the given `recipes` block) and its instruction source. The
- * project builds its own CLAUDE.md, so Claude Code's memory target (which would otherwise write
- * every memory into CLAUDE.md) yields to it, and memories reach the output only by include lines.
+ * project builds its own CLAUDE.md and switches Claude Code's memories file off (which would
+ * otherwise include every memory in `.claude/rules/SOUS-MEMORIES.md`), so memories reach an output
+ * only by the include lines written here.
  */
 function configure(prompt: string, recipes: unknown = undefined, fileName = "AGENTS.md"): void {
   writeFixtureFile(
@@ -53,6 +54,7 @@ function configure(prompt: string, recipes: unknown = undefined, fileName = "AGE
     [
       "export const config = {",
       '  repos: { "sous-recipes": { enabled: false } },',
+      '  plugins: { options: { "@sous-io/plugin-claude-code": { memories: false } } },',
       '  _vars: { projectRoot: "${sousDir}/.." },',
       recipes === undefined ? "" : `  recipes: ${JSON.stringify(recipes)},`,
       "  compilation: { targets: [{",
