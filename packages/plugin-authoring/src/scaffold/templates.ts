@@ -309,8 +309,8 @@ ${noun(context)} through your repository host's own command line tool.
 
 Improvements are welcome, including new recipes. Contribution instructions in this repository are
 written for agents: \`CONTRIBUTING.md\` says why. This repository is also a sous project, so run
-\`sous build\` after cloning: it compiles the agent instructions (\`CLAUDE.md\`, \`AGENTS.md\`) and
-skills from the sources in \`.sous/\`.
+\`sous build\` after cloning: it compiles the agent instructions (the memories file each coding
+tool reads) and skills from the sources in \`.sous/\`.
 
 ## Using it
 
@@ -364,7 +364,7 @@ everything an agent needs to know to contribute: how a recipe is written, how it
 and how a change is checked, proposed and released.
 
 This repository is also a sous project. Run \`sous build\` after cloning: it installs those skills
-and compiles \`CLAUDE.md\` and \`AGENTS.md\` from the sources in \`.sous/\`.
+and compiles the agent instructions from the sources in \`.sous/\`.
 `;
 }
 
