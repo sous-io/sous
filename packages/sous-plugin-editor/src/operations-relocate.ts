@@ -10,7 +10,23 @@
 
 import { deepEqual, formatPath, isJsonObject, isPathPrefix, parsePath, type DocNode, type JsonObject, type JsonValue, type PathSegment } from "@sous-io/sous-lib-documents";
 import { matchesFields } from "./checks.js";
-import { EditNotPossible, OperationParamsError, type AliasDefinition, type ImpliedCheck, type OperationContext, type OperationDefinition } from "./operations.js";
+import { EditNotPossible, OperationParamsError, parsePosition, type AliasDefinition, type ImpliedCheck, type OperationContext, type OperationDefinition } from "./operations.js";
+
+/**
+ * Where `moveItem` puts an item: `first`, `last` (or `start`, `end`), an index from 0, just
+ * before or after another item (`{ before: value }`, `{ after: value }`), or just before or after
+ * the first item matching some fields (`{ beforeWhere: {...} }`, `{ afterWhere: {...} }`).
+ */
+export type ItemPlace =
+    | "first"
+    | "last"
+    | "start"
+    | "end"
+    | number
+    | { before: JsonValue }
+    | { after: JsonValue }
+    | { beforeWhere: JsonObject }
+    | { afterWhere: JsonObject };
 
 /** The chain methods of these operations; `ValueOperations` in `chain.ts` extends this. */
 export interface RelocateOperations<R> {
@@ -22,6 +38,10 @@ export interface RelocateOperations<R> {
     insertBeforeWhere(where: object, item: unknown): R;
     /** Adds the item just after the first item matching `where` (an action). */
     insertAfterWhere(where: object, item: unknown): R;
+    /** Moves the item equal to `item` to a place in the list. */
+    moveItem(item: unknown, position: ItemPlace): R;
+    /** Moves the first item matching `where` to a place in the list. */
+    moveItemWhere(where: object, position: ItemPlace): R;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -53,6 +73,24 @@ function definition(spec: Omit<OperationDefinition, "normalize"> & { normalize?:
             checkPathParam(raw, "path", spec.name);
 
             return spec.normalize ? spec.normalize(raw) : raw;
+        },
+    };
+}
+
+/** Builds a shorthand, checking its parameters the way `alias` in `operations.ts` does. */
+function shorthand(spec: Omit<AliasDefinition, "toCore"> & { toCore?: (raw: JsonObject) => JsonObject }): AliasDefinition {
+    const allowed = new Set([...commonParams(), ...spec.params]);
+
+    return {
+        ...spec,
+        toCore(raw) {
+            for (const key of Object.keys(raw)) {
+                if (!allowed.has(key)) {
+                    throw new OperationParamsError(`'${spec.name}' has no parameter '${key}'. Its parameters: ${["path", ...spec.params].join(", ")}.`);
+                }
+            }
+
+            return spec.toCore ? spec.toCore(raw) : raw;
         },
     };
 }
@@ -453,6 +491,170 @@ function insertWhereDefinition(name: "insertBeforeWhere" | "insertAfterWhere"): 
 }
 
 // ---------------------------------------------------------------------------------------------
+// moveItem
+// ---------------------------------------------------------------------------------------------
+
+/** A place read from `position`. */
+type Place =
+    | { kind: "start" }
+    | { kind: "end" }
+    | { kind: "index"; index: number }
+    | { kind: "before" | "after"; anchor: JsonValue; where: boolean };
+
+/** Reads `moveItem`'s `position`. @throws OperationParamsError */
+function readPlace(value: JsonValue | undefined, operation: string): Place {
+    const message = `'${operation}': 'position' must be first, last, an index from 0, { before: item }, { after: item }, { beforeWhere: {...} } or { afterWhere: {...} }.`;
+
+    if (value === undefined || value === null) {
+        throw new OperationParamsError(`'${operation}' needs 'position', where the item goes.`);
+    }
+
+    if (isJsonObject(value)) {
+        for (const side of ["before", "after"] as const) {
+            const fields = value[`${side}Where`];
+
+            if (fields !== undefined) {
+                if (!isJsonObject(fields)) {
+                    throw new OperationParamsError(`'${operation}': '${side}Where' must be an object of fields to match.`);
+                }
+
+                return { kind: side, anchor: fields, where: true };
+            }
+
+            if (value[side] !== undefined) {
+                return { kind: side, anchor: value[side]!, where: false };
+            }
+        }
+
+        if (value.line !== undefined) {
+            throw new OperationParamsError(message);
+        }
+    }
+
+    let position: ReturnType<typeof parsePosition>;
+
+    try {
+        position = parsePosition(value, operation);
+    } catch {
+        throw new OperationParamsError(message);
+    }
+
+    switch (position.kind) {
+        case "start":
+            return { kind: "start" };
+        case "index":
+            return { kind: "index", index: position.index };
+        default:
+            return { kind: "end" };
+    }
+}
+
+/** Finds the item by value or by fields. */
+function findItem(items: readonly JsonValue[], params: JsonObject): number {
+    return params.where !== undefined
+        ? items.findIndex((item) => matchesFields(item, params.where!))
+        : items.findIndex((item) => deepEqual(item, params.item));
+}
+
+function moveItemDefinition(): OperationDefinition {
+    return definition({
+        name: "moveItem",
+        order: 95,
+        scope: "document",
+        summary:
+            "The list item equal to `item` (or the first matching `where`) is at `position`: first, last, an index, or just before or after another item. Nothing happens when the item, or the item to put it beside, is not in the list. Undone by moving it back.",
+        params: ["item", "where", "position"],
+        args: ["item", "position"],
+        normalize(raw) {
+            if ((raw.item === undefined) === (raw.where === undefined)) {
+                throw new OperationParamsError("'moveItem' needs exactly one of 'item' (the item itself) and 'where' (fields it has).");
+            }
+
+            if (raw.where !== undefined) {
+                fieldsParam(raw, "where", "moveItem");
+            }
+
+            readPlace(raw.position, "moveItem");
+
+            return raw;
+        },
+        up(ctx, params): JsonValue {
+            const node = ctx.node();
+            const value = node.get();
+
+            if (value === undefined) {
+                return { moved: false };
+            }
+
+            if (!Array.isArray(value)) {
+                throw notAList("moveItem", node);
+            }
+
+            const from = findItem(value, params);
+
+            if (from === -1) {
+                return { moved: false };
+            }
+
+            const item = value[from]!;
+            // Places count in the list without the item, which is where it is put back.
+            const others = value.filter((_, index) => index !== from);
+            const place = readPlace(params.position, "moveItem");
+            let to: number;
+
+            switch (place.kind) {
+                case "start":
+                    to = 0;
+                    break;
+                case "end":
+                    to = others.length;
+                    break;
+                case "index":
+                    to = Math.min(place.index, others.length);
+                    break;
+                default: {
+                    const at = place.where
+                        ? others.findIndex((other) => matchesFields(other, place.anchor))
+                        : others.findIndex((other) => deepEqual(other, place.anchor));
+
+                    if (at === -1) {
+                        return { moved: false };
+                    }
+
+                    to = place.kind === "before" ? at : at + 1;
+                }
+            }
+
+            if (to === from) {
+                return { moved: false };
+            }
+
+            // The library removes the item and inserts it again, writing back its old text.
+            node.move(from, to);
+
+            return { moved: true, item, from, to };
+        },
+        down(ctx, _params, record) {
+            if (!acted(record)) return;
+
+            const entry = record as JsonObject;
+            const node = ctx.node();
+            const list = listOf(node);
+            const to = entry.to as number;
+            const at = deepEqual(list[to], entry.item) ? to : list.findIndex((item) => deepEqual(item, entry.item));
+
+            if (at !== -1) {
+                node.move(at, Math.min(entry.from as number, list.length - 1));
+            }
+        },
+        mergeRecords: keepEarlier,
+        // No automatic assertion: an item that is not in the list is not an error, and an order is
+        // checked by the author's own assertion when it matters (`first`, `last`, `at`).
+        assertions: () => [],
+    });
+}
+
+// ---------------------------------------------------------------------------------------------
 // Registering
 // ---------------------------------------------------------------------------------------------
 
@@ -463,11 +665,22 @@ function insertWhereDefinition(name: "insertBeforeWhere" | "insertAfterWhere"): 
  * registerRelocateOperations(definitions, aliases);
  * ```
  */
-export function registerRelocateOperations(definitions: OperationDefinition[], _aliases: AliasDefinition[]): void {
+export function registerRelocateOperations(definitions: OperationDefinition[], aliases: AliasDefinition[]): void {
     definitions.push(
         copyDefinition(),
         moveDefinition(),
         insertWhereDefinition("insertBeforeWhere"),
         insertWhereDefinition("insertAfterWhere"),
+        moveItemDefinition(),
+    );
+
+    aliases.push(
+        shorthand({
+            name: "moveItemWhere",
+            target: "moveItem",
+            means: "moveItem with where: {...}",
+            params: ["where", "position"],
+            args: ["where", "position"],
+        }),
     );
 }

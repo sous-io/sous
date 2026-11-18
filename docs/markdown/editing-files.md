@@ -157,6 +157,7 @@ action once, when the entry is first applied.
 | 95 | `sortKeys` | | |
 | 95 | `moveKeyBefore`, `moveKeyAfter` | `key`, `anchor` | |
 | 95 | `moveKeyFirst`, `moveKeyLast` | `key` | |
+| 95 | `moveItem` | `item` or `where`, `position` | with `where`: `moveItemWhere` |
 
 Every name in the last column is the same operation with an option set, so these two entries mean
 the same thing:
@@ -276,6 +277,39 @@ Other ways to say it: when you can write out the whole item to put it beside, `i
 `insertAfter` (`append` with `position: { before: ... }`) do the same. When the item should be in
 the list once, whatever builds come and go, use a statement instead: `upsertWhere` (the list has an
 item with these fields, equal to this one) or `ensureIncludes`.
+
+### Moving a list item
+
+`moveItem` puts a list item, found by value (`item`) or by fields (`where`), at `position`: `first`,
+`last`, an index from 0 (counted in the list without the item), `{ before: item }`,
+`{ after: item }`, `{ beforeWhere: {...} }` or `{ afterWhere: {...} }`. The item moves with its own
+text and the comment on its line. Nothing happens when the item is not in the list, when the item
+to put it beside is not there, or when it is already in place. When the entry goes away, the item
+goes back where it was before Sous first moved it.
+
+```yaml
+- file: .claude/settings.json
+  moveItem:
+    path: permissions.allow
+    item: "Bash(git-commit.sh:*)"
+    position: { before: "Bash(*)" }
+
+- file: .claude/settings.json
+  moveItemWhere:
+    path: hooks.PreToolUse
+    where: { matcher: Bash }
+    position: first
+```
+
+```ts
+settings.at("permissions.allow").moveItem("Bash(git-commit.sh:*)", { before: "Bash(*)" });
+settings.at("hooks.PreToolUse").moveItemWhere({ matcher: "Bash" }, "first");
+```
+
+`moveItemWhere` is `moveItem` with `where`. Other ways to say it: `ensureFirst`, `ensureLast` and
+`ensureAt` (`ensureIncludes` with `position`) also put an item first, last or at an index, and add it
+when it is missing; `moveItem` only moves an item that is there. `moveItem` has no automatic
+assertion; add `assert: { first: ... }` (or `last`, `at`) when the place matters.
 
 ## Assertions
 

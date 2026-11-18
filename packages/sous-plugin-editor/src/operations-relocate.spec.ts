@@ -521,3 +521,178 @@ describe("insertBeforeWhere and insertAfterWhere", () => {
 `);
     });
 });
+
+const LIST_JSONC = `{
+    "allow": [
+        "Read",
+        "Bash(git:*)", // git only
+        "Write",
+        "Edit"
+    ]
+}
+`;
+
+const LIST_YAML = `allow:
+  - Read
+  - Bash(git:*) # git only
+  - Write
+  - Edit
+`;
+
+describe("moveItem", () => {
+    /**
+     * The item moves with its own text and the comment on its line, and a rollback puts it back.
+     *
+     * moveItem: { path: allow, item: "Bash(git:*)", position: first }
+     */
+    it("should move an item first with its comment in JSONC and YAML, and undo it byte for byte", async () => {
+        const jsonc = await roundTrip("s.jsonc", LIST_JSONC, { moveItem: { path: "allow", item: "Bash(git:*)", position: "first" } });
+
+        expect(jsonc.after).toBe(`{
+    "allow": [
+        "Bash(git:*)", // git only
+        "Read",
+        "Write",
+        "Edit"
+    ]
+}
+`);
+        expect(jsonc.afterAgain).toBe(jsonc.after);
+        expect(jsonc.undone).toBe(LIST_JSONC);
+
+        const yaml = await roundTrip("s.yaml", LIST_YAML, { moveItem: { path: "allow", item: "Bash(git:*)", position: "first" } });
+
+        expect(yaml.after).toBe("allow:\n  - Bash(git:*) # git only\n  - Read\n  - Write\n  - Edit\n");
+        expect(yaml.undone).toBe(LIST_YAML);
+    });
+
+    /**
+     * Every place: last, an index (counted without the item), before and after an item, and
+     * before and after the first item matching some fields.
+     */
+    it("should move to last, an index, and before or after another item", async () => {
+        const cases: Array<[JsonObject["position"], string]> = [
+            ["last", "allow:\n  - Read\n  - Write\n  - Edit\n  - Bash(git:*) # git only\n"],
+            [2, "allow:\n  - Read\n  - Write\n  - Bash(git:*) # git only\n  - Edit\n"],
+            [99, "allow:\n  - Read\n  - Write\n  - Edit\n  - Bash(git:*) # git only\n"],
+            [{ before: "Edit" }, "allow:\n  - Read\n  - Write\n  - Bash(git:*) # git only\n  - Edit\n"],
+            [{ after: "Edit" }, "allow:\n  - Read\n  - Write\n  - Edit\n  - Bash(git:*) # git only\n"],
+        ];
+
+        for (const [position, expected] of cases) {
+            const { after, undone } = await roundTrip("s.yaml", LIST_YAML, { moveItem: { path: "allow", item: "Bash(git:*)", position } });
+
+            expect(after, JSON.stringify(position)).toBe(expected);
+            expect(undone, JSON.stringify(position)).toBe(LIST_YAML);
+        }
+
+        const people = "people:\n  - id: 1\n    name: ann\n  - id: 2\n    name: bob\n  - id: 3\n    name: cy\n";
+        const byFields = await roundTrip("p.yaml", people, { moveItem: { path: "people", where: { name: "cy" }, position: { beforeWhere: { id: 1 } } } });
+
+        expect(byFields.after).toBe("people:\n  - id: 3\n    name: cy\n  - id: 1\n    name: ann\n  - id: 2\n    name: bob\n");
+        expect(byFields.undone).toBe(people);
+
+        const afterWhere = await roundTrip("p.yaml", people, { moveItemWhere: { path: "people", where: { id: 1 }, position: { afterWhere: { id: 2 } } } });
+
+        expect(afterWhere.after).toBe("people:\n  - id: 2\n    name: bob\n  - id: 1\n    name: ann\n  - id: 3\n    name: cy\n");
+        expect(afterWhere.undone).toBe(people);
+    });
+
+    /**
+     * Nothing to move: the item is not in the list, the item to put it beside is not, the list is
+     * missing, or the item is already in place. The file is left as it is, without a warning.
+     */
+    it("should do nothing when the item or the anchor is not found, or it is already in place", async () => {
+        const entries: JsonObject[] = [
+            { moveItem: { path: "allow", item: "Nope", position: "first" } },
+            { moveItem: { path: "allow", item: "Write", position: { before: "Nope" } } },
+            { moveItem: { path: "allow", where: { id: 1 }, position: "first" } },
+            { moveItem: { path: "missing", item: "x", position: "first" } },
+            { moveItem: { path: "allow", item: "Read", position: "first" } },
+            { moveItem: { path: "allow", item: "Write", position: { after: "Bash(git:*)" } } },
+        ];
+
+        for (const entry of entries) {
+            const { after, applied } = await roundTrip("s.yaml", LIST_YAML, entry);
+
+            expect(after, JSON.stringify(entry)).toBe(LIST_YAML);
+            expect(applied.reporter.at("warning"), JSON.stringify(entry)).toEqual([]);
+        }
+    });
+
+    /**
+     * A value that is not a list is skipped with a warning.
+     */
+    it("should skip a value that is not a list", async () => {
+        const { after, applied } = await roundTrip("s.yaml", "allow: Read\n", { moveItem: { path: "allow", item: "Read", position: "last" } });
+
+        expect(after).toBe("allow: Read\n");
+        expect(applied.reporter.at("warning").join("\n")).toMatch(/needs a list at allow/);
+    });
+
+    /**
+     * A later build that finds the item already in place changes nothing, and the rollback still
+     * goes back to where it was before Sous first moved it.
+     */
+    it("should roll back to the original place after several builds", async () => {
+        const entry: TestEntry = { entry: { file: "s.jsonc", moveItem: { path: "allow", item: "Edit", position: "first" } } };
+
+        write(tmp.path, "s.jsonc", LIST_JSONC);
+        await apply(tmp.path, [entry]);
+        await apply(tmp.path, [entry]);
+
+        const third = await apply(tmp.path, [entry]);
+
+        expect(third.result.files).toEqual([{ file: "s.jsonc", action: "unchanged" }]);
+
+        await apply(tmp.path, []);
+
+        expect(read(tmp.path, "s.jsonc")).toBe(LIST_JSONC);
+    });
+
+    /**
+     * Parameters: exactly one of `item` and `where`, and a `position` it understands.
+     * `moveItemWhere` is `moveItem` with `where`.
+     */
+    it("should check its parameters", () => {
+        expect(() => resolveOperation("moveItem", { path: "a", position: "first" })).toThrow(/exactly one of 'item'/);
+        expect(() => resolveOperation("moveItem", { path: "a", item: 1, where: { id: 1 }, position: "first" })).toThrow(/exactly one of 'item'/);
+        expect(() => resolveOperation("moveItem", { path: "a", item: 1 })).toThrow(/needs 'position'/);
+        expect(() => resolveOperation("moveItem", { path: "a", item: 1, position: "middle" })).toThrow(/'position' must be/);
+        expect(() => resolveOperation("moveItem", { path: "a", item: 1, position: { line: 2 } })).toThrow(/'position' must be/);
+        expect(() => resolveOperation("moveItem", { path: "a", item: 1, position: { beforeWhere: "x" } })).toThrow(/object of fields/);
+
+        const resolved = resolveOperation("moveItemWhere", { path: "a", where: { id: 1 }, position: "last" });
+
+        expect(resolved.definition.name).toBe("moveItem");
+        expect(resolved.params).toEqual({ path: "a", where: { id: 1 }, position: "last" });
+        expect(() => resolveOperation("moveItemWhere", { path: "a", item: 1, position: "last" })).toThrow(/no parameter 'item'/);
+        expect(OPERATIONS.get("moveItem")!.order).toBe(95);
+        expect(OPERATIONS.get("moveItem")!.assertions({ item: 1, position: "first" }, "a")).toEqual([]);
+    });
+
+    /**
+     * The chain: `settings.at("allow").moveItem("Edit", "first")` and
+     * `.moveItemWhere({ id: 3 }, { after: ... })`.
+     */
+    it("should be recorded by the chain and applied", async () => {
+        write(tmp.path, "s.yaml", LIST_YAML);
+
+        const entries = recorded((config) => {
+            const allow = editor(config).file("s.yaml").at("allow");
+
+            allow.moveItem("Edit", "first");
+            allow.moveItem("Read", { after: "Write" });
+        });
+
+        expect(entries).toEqual([
+            { file: "s.yaml", moveItem: { path: "allow", item: "Edit", position: "first" } },
+            { file: "s.yaml", moveItem: { path: "allow", item: "Read", position: { after: "Write" } } },
+        ]);
+        expect(chainParams("moveItemWhere", [{ id: 3 }, "last"])).toEqual({ where: { id: 3 }, position: "last" });
+
+        await applyRecorded(entries);
+
+        expect(read(tmp.path, "s.yaml")).toBe("allow:\n  - Edit\n  - Bash(git:*) # git only\n  - Write\n  - Read\n");
+    });
+});

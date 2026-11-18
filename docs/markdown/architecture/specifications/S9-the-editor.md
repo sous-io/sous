@@ -176,7 +176,7 @@ time.
 | 70 | `increment`, `decrement`, `toggle` |
 | 80 | `dedupe` (`by`) |
 | 90 | `sort` (`by`, `descending`) |
-| 95 | `sortKeys`, `moveKeyBefore`, `moveKeyAfter`, `moveKeyFirst`, `moveKeyLast` |
+| 95 | `sortKeys`, `moveKeyBefore`, `moveKeyAfter`, `moveKeyFirst`, `moveKeyLast`, `moveItem` (`item` or `where`, `position`) |
 
 Shorthands and aliases, each a name for the operation shown:
 
@@ -198,6 +198,7 @@ Shorthands and aliases, each a name for the operation shown:
 | `removeWhere`, `ensureNoItemWhere` | `remove` with `where` |
 | `ensureUnique`, `dedupeBy` | `dedupe` |
 | `ensureSorted`, `sortBy` | `sort` |
+| `moveItemWhere` | `moveItem` with `where` |
 | `createIfMissing` | `ensureFileExists` |
 
 `position` takes `first`, `last` (or `start`, `end`), an index from 0, `{ after: ... }`,
@@ -231,8 +232,16 @@ matches (as `insertBefore` and `ensureLine` do with an anchor that is not found)
 created; `down` removes each item added (at the index it was added at, or else the last equal one)
 and a list `up` created. The automatic assertion is that the list includes each item.
 
-Not built yet, from the list Luke accepted: `moveItem`, the comment operations
-(`setCommentBefore`, `setCommentAfter`, `removeComment`) and `selectDocument`. The reading operations of the list are the direct path's
+`moveItem` puts the item equal to `item`, or the first matching `where`, at `position`: `first`,
+`last`, an index (counted in the list without the item), `{ before: item }`, `{ after: item }`,
+`{ beforeWhere: {...} }` or `{ afterWhere: {...} }`. It moves through the library's `move`, so the
+item keeps its text and the comment on its line. Nothing happens when the item, or the item to put
+it beside, is not found (as with the key moves), or when it is already in place. Unlike the key
+moves it is undone: `up` records where the item was, and `down` moves it back. It has no automatic
+assertion, since an item that is not in the list is not an error.
+
+Not built yet, from the list Luke accepted: the comment operations (`setCommentBefore`,
+`setCommentAfter`, `removeComment`) and `selectDocument`. The reading operations of the list are the direct path's
 document API (`exists`, `get`, `keys`, `length` and the rest on a node).
 
 ## Formats
@@ -476,12 +485,16 @@ entry or a created file, or when the file already exists. The agent's fix, in th
 ### 2026-11-18: The operations that relocate values
 
 From the list Luke accepted, built in `operations-relocate.ts` and registered with the others:
-`copy` (`to`, `ifMissing`), `move` (`to`, `ifMissing`), and the actions `insertBeforeWhere` and
-`insertAfterWhere` (`where`, `item` or `items`). `copy` and `move` replace a value already at `to`
+`copy` (`to`, `ifMissing`), `move` (`to`, `ifMissing`), the actions `insertBeforeWhere` and
+`insertAfterWhere` (`where`, `item` or `items`), and `moveItem` (`item` or `where`, `position`;
+`moveItemWhere` is the shorthand with `where`). `copy` and `move` replace a value already at `to`
 by default, like `set`, and `ifMissing: true` keeps it, like `set`'s option. A `move` within one
 object is a rename, which keeps the key's text and comments; a move to another object cannot keep a
 comment on the key's own line, since the library reuses a key's old text only in its own object.
 `move` refuses a `path` that is a list item: on the next build the index names the next item, so
 the move would repeat on a different item. The inserts follow `insertBefore` when nothing matches
-(the end) and `append` when the item is already there (added again, once per declaration). The
-agent's choices; not yet reviewed by Luke.
+(the end) and `append` when the item is already there (added again, once per declaration).
+`moveItem` follows the key moves when the item or its anchor is missing (nothing happens), but is
+undone, as `ensureIncludes` undoes the moves it makes. So that a moved JSONC item keeps the comment
+on its line (`"b", // bee`), the document library now carries that comment with an item or key it
+removes and writes back. The agent's choices; not yet reviewed by Luke.
