@@ -8,7 +8,9 @@ user-level config (nothing is read from `~/.sous`) and no multi-project map.
 
 Exactly one primary config lives inside `.sous/`: `sous.config.js`, `sous.config.mjs`,
 `sous.config.ts`, `sous.config.json`, `sous.config.jsonc`, or `sous.config.yaml`. Two or more candidates is an
-error, never a silent first-match. A typical config:
+error, never a silent first-match. `sous init` writes `sous.config.jsonc`: JSON with comments, which
+`sous config set` can change in place, keeping the comments, as it cannot a code config. A config
+written by hand may use any of the formats. A typical config, as JavaScript:
 
 ```js
 export const config = {
@@ -46,8 +48,8 @@ need no target of their own: the built-in Claude Code plugin sends them to `.cla
 [Consuming recipes](repositories-consuming.md)).
 
 A target in your config wins over a plugin's or a recipe's target that would write the same file. A
-project that compiles its own `CLAUDE.md`, as the config `sous init` writes does, replaces the one the
-Claude Code plugin would build from recipe memories. A project skill with the same name as a recipe skill
+project that compiles its own memories file replaces the one the Claude Code plugin would build; the
+config `sous init` writes compiles none, and leaves the memories to the plugin. A project skill with the same name as a recipe skill
 replaces it too, and the build warns that the recipe's copy was not written.
 
 A JSON config may set `"$schema"` to bind the `sous.config.schema.json` artifact shipped with

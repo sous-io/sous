@@ -7,6 +7,7 @@ It adds these commands:
 | Command | Does |
 | --- | --- |
 | `sous init [directory]` | creates `.sous/`; `--no-build` skips the first build, `--dry-run` writes nothing |
+| `sous init hooks [directory]` | installs the git hooks that build Sous's output in a new worktree; `--pull-hooks` adds `post-merge` and `post-rewrite` |
 
 ## Using it from another plugin
 
