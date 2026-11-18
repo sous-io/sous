@@ -2,7 +2,7 @@
 
 # Prepares a new git worktree of this repository so it is ready to work in: copies the gitignored
 # files a fresh worktree lacks from the main checkout, installs the dependencies, and builds the
-# agent files (CLAUDE.md, AGENTS.md, .claude/) with this worktree's own sous.
+# agent files (such as CLAUDE.md and .claude/) with this worktree's own sous.
 #
 # Point an IDE's "run after a worktree is created" setting at it, or run it by hand from inside a
 # worktree. Running it again is safe: it never overwrites a file the worktree already has.
